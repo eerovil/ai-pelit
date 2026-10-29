@@ -98,6 +98,7 @@ def win_puhelinkoppi(page):
     assert page.evaluate("result.kind") == "win"
 
 
+@pytest.mark.games("puhelinkoppi")
 def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -129,6 +130,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v2" in text
 
 
+@pytest.mark.games("sormiskeitti")
 def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -150,6 +152,7 @@ def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     assert [s["score"] for s in fake.scores.values()] == [best_cm]
 
 
+@pytest.mark.games("sormiskeitti")
 def test_a_tap_on_the_list_never_reaches_the_game(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -162,6 +165,7 @@ def test_a_tap_on_the_list_never_reaches_the_game(site, context, fake):
     assert page.evaluate("st") == st
 
 
+@pytest.mark.games("hiihto")
 def test_hiihto_keeps_one_list_per_course(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -219,6 +223,7 @@ def test_the_admin_is_told_when_a_name_is_already_someone_elses(site, context, f
     assert fake.players["a" * 32]["status"] == "rejected"
 
 
+@pytest.mark.games("puhelinkoppi")
 @pytest.mark.parametrize("status, says", [(409, "nimi on jo käytössä"), (429, "ei voitu vielä tallentaa")])
 def test_a_refused_name_says_why_instead_of_waiting(site, context, fake, status, says):
     site.build(ROOT / "games")
@@ -249,6 +254,7 @@ def test_the_admin_never_approves_a_name_they_did_not_see(site, context, fake):
     assert fake.players["a" * 32]["status"] == "pending"
 
 
+@pytest.mark.games("hiihto")
 @pytest.mark.parametrize("refusal", [429, 403, 503])
 def test_a_score_the_server_turns_away_for_now_is_sent_later(site, context, fake, refusal):
     site.build(ROOT / "games")

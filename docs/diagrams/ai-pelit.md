@@ -22,7 +22,8 @@ flowchart TD
     C -. kopioi teksti .-> H[AgentDeck: uusi Work ai-pelit-repoon]
     H --> L[Agentti aloittaa Workin]
     L --> M[Agentti kirjoittaa games/slug/vN/ ja game.json]
-    M --> N[PR, katselmointi, automaattinen merge]
+    M --> T[PR:n testit: vain muuttuneet pelit]
+    T --> N[PR, katselmointi, automaattinen merge]
     N --> O[Cloudflare Pages julkaisee]
     O --> B
   end
@@ -31,6 +32,7 @@ flowchart TD
   class F,G,P teal
   class H violet
   class L,M,N rose
+  class T amber
   class O green
 ```
 
@@ -53,4 +55,5 @@ flowchart TD
 - **Service worker antaa välimuistista**: `public/sw.js`: the shell and `catalog.json` network-first, version folders cache-first once played. The shelf is cached as `./` only, because Pages redirects `index.html` to `./`; `public/404.html` answers missing files so Pages never sends the shelf in their place. `/api/` (the high-score lists, see `tuloslistat.md`) always goes to the network.
 - **AgentDeck: uusi Work ai-pelit-repoon**: Eero writes "Uusi peli: …" or "<peli> v<N>: …"; each game page shows that text ready to copy.
 - **Agentti kirjoittaa games/slug/vN/ ja game.json**: a new version is always a new folder; old version folders are never edited.
+- **PR:n testit: vain muuttuneet pelit**: `.github/workflows/ci.yml` runs pytest with `--changed-since origin/main` on a pull request; `tests/conftest.py` keeps a game's own tests (`tests/test_<slug>*.py`, or marked `@pytest.mark.games("<slug>")`) only when the change touches `games/<slug>/` or those tests, and keeps every test when anything outside `games/` (other than docs) changes. A push to `main` runs everything (#37).
 - **Cloudflare Pages julkaisee**: `.github/workflows/ci.yml`: tests, then `wrangler pages deploy` to the `ai-pelit` Pages project (ai-pelit.pages.dev, custom domain pelit.vilpponen.fi) with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets; without them the job stops green. `pelit` is a CNAME to `ai-pelit.pages.dev` at hostingpalvelu.fi.

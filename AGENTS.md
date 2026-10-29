@@ -66,7 +66,11 @@ high-score lists (#25), then play counts (#26).
 ## Before you mark the pull request ready
 
 - `python3 -m pytest -q`, `npm test` and `python3 scripts/build.py` pass. On a PR also
-  `python3 scripts/check_immutable.py origin/main`.
+  `python3 scripts/check_immutable.py origin/main`. CI runs pytest with `--changed-since origin/main`
+  on a pull request: a game's own tests run only when the change touches `games/<slug>/` or that
+  game's test file, and everything runs when anything outside `games/` changes (#37). So name a
+  game's tests `tests/test_<slug>.py` (or `test_<slug>_<more>.py`, dashes as underscores), or mark a
+  test that plays a game with `@pytest.mark.games("<slug>")`. Locally the same flag saves time.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
 - The use-case walkthrough is: open the shelf, open the game, play one round, go back.
