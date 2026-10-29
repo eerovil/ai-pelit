@@ -7,6 +7,7 @@ goes.
 """
 
 import asyncio
+import hashlib
 import json
 import re
 from urllib.parse import parse_qs, urlparse
@@ -39,7 +40,7 @@ class Relay:
         url = urlparse(ws.url)
         code = url.path.rsplit("/", 1)[1].upper()
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
-        me, name, host = q["id"], q["name"], q.get("host") == "1"
+        me, name, host = hashlib.sha256(q["key"].encode()).hexdigest()[:32], q["name"], q.get("host") == "1"
         if me in self.blocked:
             close(ws, 1001, "")
             return
@@ -62,6 +63,7 @@ class Relay:
             close(old, 4000, "Avattu toisaalla")
         ws.on_message(lambda m: self.message(room, me, m))
         ws.on_close(lambda code, reason: self.closed(room, me, ws))
+        ws.send(json.dumps({"t": "you", "id": me}))
         self.peers(room)
 
     def message(self, room, me, text):
@@ -264,8 +266,11 @@ def test_each_phone_sees_its_own_view_and_the_host_runs_the_rules(phones):
     # The host reaches the base first: the guest is caught on both phones.
     host.evaluate("player.x = 15; player.y = 23")
     guest.wait_for_function("player.st === 'caught' && msg === 'Sinut kirkattiin! 😱'")
-    # The round plays out; both phones go back to the room and keep their own tally.
+    # The round plays out; both phones go back to the room and keep their own tally. The guest is
+    # slower to get there than the host, and still keeps its result.
     host.evaluate("timer = 0.1")
+    guest.wait_for_function("phase === 'end'", timeout=8000)
+    guest.evaluate("endT = 3")
     host.wait_for_function("phase === 'room'", timeout=8000)
     guest.wait_for_function("phase === 'room'", timeout=8000)
     assert guest.locator("#roomResult").inner_text() == "Sinut kirkattiin!"
@@ -277,6 +282,29 @@ def test_each_phone_sees_its_own_view_and_the_host_runs_the_rules(phones):
     host.click("#startRound")
     guest.wait_for_function("phase === 'count' && seeker === player")
     assert host.errors == guest.errors == []
+
+
+def test_a_phone_reloaded_mid_round_gets_the_round_back(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    start(host, [guest], host_seeks=True)
+    where = host.evaluate("[r2(people[1].x), r2(people[1].y)]")
+    # The new page's socket replaces the old one at once: the room never sees the phone go.
+    guest.reload()
+    guest.wait_for_function("phase === 'seek' && player.name === 'Aino' && seeker.name === 'Eero'", timeout=8000)
+    assert guest.evaluate("[r2(player.x), r2(player.y)]") == where
+    assert host.evaluate("people[1].ctrl") == "remote"
+    # The same phone opens the join link in a second tab while the first is still connected: the
+    # room swaps the socket without the phone ever going offline, and the new tab gets the round.
+    tab = guest.context.new_page()
+    tab.errors = []
+    tab.on("pageerror", lambda e: tab.errors.append(str(e)))
+    phones.relay.attach(tab)
+    tab.goto(guest.url.split("?")[0] + f"?huone={code}")
+    tab.wait_for_function("phase === 'seek' && player.name === 'Aino'", timeout=8000)
+    guest.wait_for_function("!net.on && document.getElementById('netErr').textContent === 'Avattu toisaalla'")
+    assert host.evaluate("waiting.length") == 0
+    assert host.errors == guest.errors == tab.errors == []
 
 
 def test_the_round_waits_for_a_phone_that_drops_off(phones):

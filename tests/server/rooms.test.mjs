@@ -18,7 +18,7 @@ globalThis.WebSocketPair = class {
 // Node's Response refuses status 101; Cloudflare's takes it with the client end of the socket.
 globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket; } };
 
-const { Room, MAX_PLAYERS, IDLE } = await import('../../rooms/worker.js');
+const { Room, MAX_PLAYERS, IDLE, publicId } = await import('../../rooms/worker.js');
 const { handle } = await import('../../server/api.js');
 
 function fakeCtx() {
@@ -40,14 +40,18 @@ function fakeCtx() {
   return ctx;
 }
 
-const id = (c) => c.repeat(32);
-const H = id('a'), A = id('b'), B = id('c');
+// Each phone's secret key, and the public id the room makes of it.
+const key = (c) => c.repeat(32);
+const K = { H: key('a'), A: key('b'), B: key('c') };
+const H = await publicId(K.H), A = await publicId(K.A), B = await publicId(K.B);
+const keyOf = { [H]: K.H, [A]: K.A, [B]: K.B };
+const id = async (c) => { const k = key(c), i = await publicId(k); keyOf[i] = k; return i; };
 
 function setup() {
   const ctx = fakeCtx(), room = new Room(ctx, {});
   // Joins and returns the server end of the socket (what the room sees); `.client` is the phone's.
   const join = async (who, name, host = false, code = 'KISA') => {
-    const q = new URLSearchParams({ id: who, name });
+    const q = new URLSearchParams({ key: keyOf[who], name });
     if (host) q.set('host', '1');
     const res = await room.fetch(new Request(`https://pelit.test/api/rooms/${code}?${q}`, { headers: { upgrade: 'websocket' } }));
     assert.equal(res.status, 101);
@@ -94,11 +98,11 @@ test('the host speaks to all or to one; the others speak only to the host', asyn
 test('a room takes five phones; one that drops off keeps its place and can come back', async () => {
   const { room, join } = setup();
   const h = await join(H, 'Eero', true);
-  const ids = [A, B, id('d'), id('e')];
+  const ids = [A, B, await id('d'), await id('e')];
   const socks = [];
   for (const [i, who] of ids.entries()) socks.push(await join(who, `P${i}`));
   assert.equal(MAX_PLAYERS, 5);
-  const sixth = await join(id('f'), 'Kuudes');
+  const sixth = await join(await id('f'), 'Kuudes');
   assert.equal(sixth.client.closed.code, 4001);
   // Aino's phone drops off: the host sees her as off, and her place is kept.
   socks[0].server.close(1006, '');
@@ -107,6 +111,21 @@ test('a room takes five phones; one that drops off keeps its place and can come 
   const back = await join(A, 'P0');
   assert.equal(back.refused, null);
   assert.equal(h.server.last('peers').members.find((m) => m.id === A).on, true);
+});
+
+test('a phone hears its own public id, never a key; a copied id makes a new phone', async () => {
+  const { join } = setup();
+  const h = await join(H, 'Eero', true);
+  assert.deepEqual(h.server.sent[0], { t: 'you', id: H });
+  assert.notEqual(H, K.H);
+  assert.ok(!JSON.stringify(h.server.sent).includes(K.H));
+  // A guest who sends the host's public id as its key gets an id of its own, and is not the host.
+  keyOf.fake = H;
+  const fake = await join('fake', 'Eero');
+  const mine = fake.client.peer.sent.find((m) => m.t === 'you').id;
+  assert.notEqual(mine, H);
+  assert.equal(h.server.closed, null);
+  assert.equal(h.server.last('peers').host, H);
 });
 
 test('the same phone joining again replaces its old socket', async () => {
@@ -140,7 +159,7 @@ test('leaving with bye frees the place; a code in use is refused to another host
 
 test('bad codes, ids and names are refused before the room', async () => {
   const { room } = setup();
-  const res = await room.fetch(new Request('https://pelit.test/api/rooms/KISA?id=nope&name=Eero&host=1', { headers: { upgrade: 'websocket' } }));
+  const res = await room.fetch(new Request('https://pelit.test/api/rooms/KISA?key=nope&name=Eero&host=1', { headers: { upgrade: 'websocket' } }));
   assert.equal(res.status, 400);
 });
 

@@ -813,10 +813,13 @@ const netEl = document.getElementById('net'), $ = id => document.getElementById(
 const ROOM_KEY = KEY + 'huone'; // sessionStorage: the room this tab is in, to rejoin after a reload
 const LETTERS = 'ABCDEFGHJKLMNPRSTUVY';
 const NICKS = ['Siili', 'Orava', 'Kettu', 'Jänis', 'Pöllö', 'Ilves', 'Hirvi', 'Majava'];
-const myId = load('id', null) || (() => {
-  const id = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
-  save('id', id); return id;
+// This phone's secret key, never shown to the others; the room answers with the public id it
+// makes of it ({t: 'you'}), which is how everyone else knows this phone.
+const myKey = load('id', null) || (() => {
+  const key = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+  save('id', key); return key;
 })();
+let myId = '';
 let myName = load('nimi', '') || NICKS[Math.floor(Math.random() * NICKS.length)];
 let waiting = []; // the people the round is waiting for
 const r2 = v => Math.round(v * 100) / 100;
@@ -833,7 +836,7 @@ function connect() {
   clearTimeout(net.timer);
   const u = new URL('../../../api/rooms/' + net.code, location.href);
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
-  u.search = new URLSearchParams(Object.assign({ id: myId, name: myName }, net.host ? { host: '1' } : {}));
+  u.search = new URLSearchParams(Object.assign({ key: myKey, name: myName }, net.host ? { host: '1' } : {}));
   let ws;
   try { ws = new WebSocket(u); } catch (e) { return; }
   net.ws = ws;
@@ -874,22 +877,26 @@ function leaveRoom(why) {
 }
 
 function onNet(m) {
+  // Every new connection: the room says who this phone is, and a guest says hello to the host,
+  // which sends the round back if this phone is in it (after a reload or a dropped connection).
+  if (m.t === 'you') { myId = m.id; if (!net.host) net.send({ t: 'hello' }); return; }
   if (m.t === 'peers') {
-    const was = net.online;
     net.members = m.members || []; net.hostId = m.host;
     net.online = new Set(net.members.filter(x => x.on).map(x => x.id));
     if (!net.joined) {
       net.joined = true;
       try { sessionStorage.setItem(ROOM_KEY, JSON.stringify({ code: net.code, host: net.host })); } catch (e) { /* private mode */ }
-      // A host that comes back without its round (a reload) sends everyone back to the room.
+      // A host that comes back without its round (a reload) sends everyone back to the room. Only
+      // then: after an ordinary round each phone goes back on its own, keeping its result.
       if (net.host && !racing()) net.send({ t: 'lobby' });
     }
-    if (net.host) hostPeers(was);
+    if (net.host) hostPeers();
     else if (!net.members.some(x => x.id === net.hostId)) return leaveRoom('Huone suljettiin.');
     renderNet();
     return;
   }
   if (net.host) {
+    if (m.t === 'hello') hostHello(m.from);
     if (m.t === 'me') {
       const p = people.find(q => q.id && q.id === m.from && q.ctrl === 'remote');
       if (p && racing() && [m.x, m.y, m.a].every(Number.isFinite)) {
@@ -932,19 +939,18 @@ function startMulti() {
   setupRound(next || cast[Math.floor(Math.random() * humans.length)]);
   net.send(snapshot());
 }
-// Someone came or went: a phone back in the round gets the round; a new one waits for the next.
-function hostPeers(was) {
+// Someone left the room for good: a computer player takes over their player.
+function hostPeers() {
   if (!racing()) return;
-  for (const p of people) {
-    if (!p.id) continue;
-    const member = net.members.find(m => m.id === p.id);
-    if (!member) { if (p.ctrl === 'remote') toBot(p); continue; } // left the room for good
-    if (net.online.has(p.id) && !was.has(p.id)) {
-      if (p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
-      net.send(snapshot(p.id));
-    }
-  }
-  for (const m of net.members) if (m.on && !was.has(m.id) && !people.some(p => p.id === m.id)) net.send({ t: 'wait', to: m.id });
+  for (const p of people) if (p.id && p.ctrl === 'remote' && !net.members.some(m => m.id === p.id)) toBot(p);
+}
+// A phone connected (again): one in the round gets the round as it is; a new one waits for the next.
+function hostHello(id) {
+  if (!racing()) return;
+  const p = people.find(q => q.id === id);
+  if (!p) { net.send({ t: 'wait', to: id }); return; }
+  if (p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
+  net.send(snapshot(id));
 }
 // The round waits while a phone in it is away, and while the host itself has no connection.
 function paused() {
@@ -1035,7 +1041,6 @@ function openNet() {
 }
 function showRoom() {
   phase = 'room'; joy = null;
-  if (net.host) net.send({ t: 'lobby' });
   openNet();
   const res = $('roomResult');
   if (played) [res.textContent, res.className] = result(); else { res.textContent = ''; res.className = ''; }

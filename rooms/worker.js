@@ -1,6 +1,10 @@
 // Live game rooms (#27): one Durable Object per 4-letter room code, holding the phones of one
 // game together over WebSockets. Phones reach it through the site's own address:
-// pelit.vilpponen.fi/api/rooms/<CODE>?id=<id>&name=<name>[&host=1] (server/api.js forwards it).
+// pelit.vilpponen.fi/api/rooms/<CODE>?key=<key>&name=<name>[&host=1] (server/api.js forwards it).
+//
+// `key` is the phone's own secret. The room never shows it: a phone's public id is a hash of its
+// key, sent back to it alone as {t: 'you', id}, and everyone else knows it only by that id. So
+// nobody can take another phone's place (or the host's) by copying an id from `peers`.
 //
 // The room is only a relay with a member list. The phone that made the room (the host) runs the
 // game; the room passes the host's messages on to the others (all of them, or the one named in
@@ -12,10 +16,16 @@
 // Sockets use the hibernation API, so a quiet room costs nothing while it waits.
 
 const CODE = /^[A-Z]{4}$/;
-const ID = /^[a-f0-9]{32}$/;
+const KEY = /^[a-f0-9]{32}$/;
 export const MAX_PLAYERS = 5;
 export const IDLE = 6 * 3600e3; // an empty room is forgotten after this long
 const MSG_MAX = 16000;
+
+// A phone's public id: the first 32 hex digits of SHA-256 of its secret key.
+export async function publicId(key) {
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
+  return [...hash.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export function cleanName(name) {
   if (typeof name !== 'string') return '';
@@ -52,9 +62,10 @@ export class Room {
     if (request.headers.get('upgrade') !== 'websocket') return new Response('websocket only', { status: 426 });
     const url = new URL(request.url);
     const code = (url.pathname.split('/').pop() || '').toUpperCase();
-    const id = url.searchParams.get('id') || '', name = cleanName(url.searchParams.get('name'));
+    const key = url.searchParams.get('key') || '', name = cleanName(url.searchParams.get('name'));
     const wantsHost = url.searchParams.get('host') === '1';
-    if (!CODE.test(code) || !ID.test(id) || !name) return new Response('bad code, id or name', { status: 400 });
+    if (!CODE.test(code) || !KEY.test(key) || !name) return new Response('bad code, key or name', { status: 400 });
+    const id = await publicId(key);
 
     let room = await this.load();
     const open = this.open();
@@ -78,6 +89,7 @@ export class Room {
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
     pair[1].serializeAttachment({ id, host: id === room.host });
+    send(pair[1], JSON.stringify({ t: 'you', id }));
     this.peers();
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
