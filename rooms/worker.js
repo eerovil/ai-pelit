@@ -90,7 +90,7 @@ export class Room {
     this.ctx.acceptWebSocket(pair[1]);
     pair[1].serializeAttachment({ id, host: id === room.host });
     send(pair[1], JSON.stringify({ t: 'you', id }));
-    this.peers();
+    await this.peers();
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -106,7 +106,7 @@ export class Room {
       delete room.members[me.id];
       await this.store(room);
       try { ws.close(1000, 'Poistuit'); } catch (e) { /* gone */ }
-      this.peers(ws);
+      await this.peers(ws);
       await this.maybeEmpty(ws);
       return;
     }
@@ -121,7 +121,7 @@ export class Room {
   }
 
   async webSocketClose(ws) {
-    this.peers(ws);
+    await this.peers(ws);
     await this.maybeEmpty(ws);
   }
 
@@ -140,9 +140,10 @@ export class Room {
     }
   }
 
-  // Tells everyone who is in the room and who is connected right now.
-  peers(closing) {
-    const room = this.room;
+  // Tells everyone who is in the room and who is connected right now. After hibernation the
+  // object wakes up new, so the room is read from storage first.
+  async peers(closing) {
+    const room = await this.load();
     if (!room) return;
     const open = this.open(closing), on = new Set(open.map((o) => o.id));
     const text = JSON.stringify({

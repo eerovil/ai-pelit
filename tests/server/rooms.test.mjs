@@ -128,6 +128,18 @@ test('a phone hears its own public id, never a key; a copied id makes a new phon
   assert.equal(h.server.last('peers').host, H);
 });
 
+test('after hibernation a new Room over the same storage and sockets still tells who left', async () => {
+  const { ctx, join } = setup();
+  const h = await join(H, 'Eero', true), a = await join(A, 'Aino');
+  // Cloudflare wakes a hibernated object as a new instance: storage and sockets stay, memory not.
+  const woken = new Room(ctx, {});
+  a.server.close(1001, '');
+  await woken.webSocketClose(a.server);
+  assert.deepEqual(h.server.last('peers').members, [{ id: H, name: 'Eero', on: true }, { id: A, name: 'Aino', on: false }]);
+  await woken.webSocketMessage(h.server, JSON.stringify({ t: 's', n: 2 }));
+  assert.equal(a.server.last('s'), undefined);
+});
+
 test('the same phone joining again replaces its old socket', async () => {
   const { join } = setup();
   await join(H, 'Eero', true);
