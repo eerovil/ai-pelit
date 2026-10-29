@@ -33,19 +33,22 @@ function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } 
 let level = Math.max(1, Math.floor(load('taso', 1)) || 1);
 let best = Math.max(level, Math.floor(load('paras', 1)) || 1);
 let catches = Math.max(0, Math.floor(load('kopit', 0)) || 0);
+let challenges = Math.max(0, Math.floor(load('haasteet', 0)) || 0);
 
-// What each level asks. Every level wants the screen up; later ones want more turns in the air,
-// and the top end pointing away from you so you could read it.
+// A catch screen up always passes the level. Each level from 2 on also has an optional extra
+// challenge: more turns in the air, and the top end pointing away from you so you could read it.
 function spec(n) {
   const table = [[0, false], [1, false], [1, true], [2, false], [2, true], [3, true]];
   const [turns, readable] = n <= table.length ? table[n - 1] : [n - 3, true];
   return { turns, readable };
 }
+function hasChallenge(n) { const s = spec(n); return s.turns > 0 || s.readable; }
 function specText(n) {
   const s = spec(n);
-  let t = s.turns === 0 ? 'Heitä ja ota koppi ruutu ylöspäin' : `Vähintään ${s.turns} ${s.turns === 1 ? 'kierros' : 'kierrosta'} ja ruutu ylöspäin`;
-  if (s.readable) t += ', yläpää poispäin';
-  return t;
+  if (!hasChallenge(n)) return 'Heitä ja ota koppi ruutu ylöspäin';
+  let t = s.turns ? `vähintään ${s.turns} ${s.turns === 1 ? 'kierros' : 'kierrosta'}` : '';
+  if (s.readable) t += (t ? ', ' : '') + 'yläpää poispäin';
+  return `Koppi ruutu ylöspäin. Lisähaaste: ${t}`;
 }
 
 // ---- Vectors and quaternions ----
@@ -100,13 +103,15 @@ const F = [0, Math.sin(TILT), -Math.cos(TILT)];  // towards the fingertips, away
 const REST = PD / 2 + 0.004;                      // phone centre above the palm when held
 const REACH_X = 0.085, REACH_F = 0.11;
 const HAND_MIN_Y = -0.3, HAND_MAX_Y = 0.6;  // how far the hand reaches down and up (m)
-function hand() { return [handX, handY, 0]; }
+const HAND_Z = 0.45, HAND_Z_SPEED = 1.5;     // the arm reaches this far forward or back (m), this fast (m/s)
+const THROW_Z = 0.06;
+function hand() { return [handX, handY, handZ]; }
 
-let state, pos, vel, q, w, handX, handY, halfFlips, flipSign, settle, result, resultT, camY, swipe, shake, dip, noise = 0.03;
+let state, pos, vel, q, w, handX, handY, handZ, halfFlips, flipSign, settle, result, resultT, camY, swipe, shake, dip, noise = 0.03;
 
 function newRound() {
   state = 'ready';
-  handX = 0; handY = 0;
+  handX = 0; handY = 0; handZ = 0;
   pos = mul(N, REST); vel = [0, 0, 0]; w = [0, 0, 0];
   q = qFromAxes(cross(F, N), F, N);
   halfFlips = 0; flipSign = 1; settle = null; result = null; camY = 0; swipe = null; shake = 0; dip = 0;
@@ -114,11 +119,12 @@ function newRound() {
 newRound();
 
 // Throw from the palm. v0 is the upward speed (m/s), wx the flip, wy the twist about the long
-// axis (rad/s), vx the sideways drift (m/s).
-function launch({ v0, wx = 0, wy = 0, vx = 0 }) {
+// axis (rad/s), vx the sideways drift (m/s), vz towards you (m/s). By default the tilted palm
+// pushes the phone a little towards you, as a real one does.
+function launch({ v0, wx = 0, wy = 0, vx = 0, vz = v0 * THROW_Z }) {
   const r = () => (Math.random() * 2 - 1) * noise; // no hand throws perfectly
   w = [wx + r(), wy + r(), r()];
-  vel = [vx, v0, 0];
+  vel = [vx, v0, vz + r() * 3];
   halfFlips = 0; flipSign = 1;
   state = 'air';
   sound('whoosh');
@@ -145,6 +151,8 @@ function step(dt) {
     const n = Math.ceil(dt / 0.001), h = dt / n;
     for (let i = 0; i < n; i++) {
       physics(h);
+      // The arm reaches forward or back under the phone by itself; the finger steers the rest.
+      if (state === 'air') handZ = Math.max(-HAND_Z, Math.min(HAND_Z, handZ + Math.max(-HAND_Z_SPEED * h, Math.min(HAND_Z_SPEED * h, pos[2] - handZ))));
       if (state === 'air' && vel[1] < 0) {
         const rel = sub(pos, hand()), h = dot(rel, N);
         // Only a phone coming down onto the palm is caught; one the hand was raised past falls on.
@@ -176,7 +184,7 @@ function caught() {
   if (Math.hypot(...y1) < 0.05) y1 = F;
   y1 = norm(y1);
   const lateral = Math.max(-0.03, Math.min(0.03, pos[0] - handX));
-  settle = { t: 0, q0: q, q1: qFromAxes(cross(y1, z1), y1, z1), p0: pos, p1: add([handX + lateral, handY, 0], mul(N, REST)), up, readable: dot(y1, F) > 0.5 };
+  settle = { t: 0, q0: q, q1: qFromAxes(cross(y1, z1), y1, z1), p0: pos, p1: add([handX + lateral, handY, handZ], mul(N, REST)), up, readable: dot(y1, F) > 0.5 };
   vel = [0, 0, 0]; w = [0, 0, 0];
   state = 'settle'; dip = 1;
   sound('catch');
@@ -186,15 +194,14 @@ function caught() {
 function judge() {
   const s = spec(level), turns = Math.floor(halfFlips / 2);
   if (!settle.up) return finish('down');
-  if (turns < s.turns) return finish('turns');
-  if (s.readable && !settle.readable) return finish('backwards');
-  finish('win');
+  finish('win', hasChallenge(level) ? turns >= s.turns && (!s.readable || settle.readable) : null);
 }
 
-function finish(kind) {
+function finish(kind, extra = null) {
   state = 'result'; resultT = performance.now();
   const turns = Math.floor(halfFlips / 2);
-  result = { kind, turns, level };
+  result = { kind, turns, level, extra };
+  if (extra) { challenges++; save('haasteet', challenges); }
   if (kind === 'drop') { shake = 1; sound('crash'); if (navigator.vibrate) try { navigator.vibrate([60, 40, 60]); } catch (e) {} }
   else if (kind === 'win') {
     sound('win');
@@ -206,10 +213,9 @@ function finish(kind) {
 function resultText(r) {
   const k = `${r.turns} ${r.turns === 1 ? 'kierros' : 'kierrosta'}`;
   switch (r.kind) {
-    case 'win': return ['KOPPI! 🎉', `Taso ${r.level} läpi · ${k}`];
+    case 'win': return ['KOPPI! 🎉', `Taso ${r.level} läpi · ${k}`,
+      r.extra === null ? '' : r.extra ? 'Lisähaaste onnistui! ⭐' : 'Lisähaaste jäi tällä kertaa'];
     case 'down': return ['Väärin päin!', `Ruutu jäi alaspäin · ${k}`];
-    case 'turns': return ['Koppi, mutta…', `${k}, tarvitaan ${spec(r.level).turns}`];
-    case 'backwards': return ['Ylösalaisin!', 'Yläpää osoittaa sinua kohti'];
     default: return ['Kolaus!', 'Puhelin putosi lattialle'];
   }
 }
@@ -253,7 +259,7 @@ function drawRoom() {
 }
 
 const SKIN = [236, 186, 150];
-function handPt(a, b, lift = 0) { return add([handX, handY - 0.006 - dip * 0.02, 0], add(add(mul([1, 0, 0], a), mul(F, b)), mul(N, lift))); }
+function handPt(a, b, lift = 0) { return add([handX, handY - 0.006 - dip * 0.02, handZ], add(add(mul([1, 0, 0], a), mul(F, b)), mul(N, lift))); }
 function drawHand() {
   const P = (a, b, l) => project(handPt(a, b, l));
   const s = lit(N);
@@ -323,7 +329,7 @@ function drawHud() {
   x.textAlign = 'right'; x.fillStyle = '#fff';
   x.font = 'bold 20px system-ui,sans-serif'; x.fillText(`Taso ${level}`, W - 14, top + 18);
   x.font = '13px system-ui,sans-serif'; x.fillStyle = 'rgba(255,255,255,.7)';
-  x.fillText(`Paras ${best} · Kopit ${catches}`, W - 14, top + 38);
+  x.fillText(`Paras ${best} · Kopit ${catches} · ⭐ ${challenges}`, W - 14, top + 38);
   x.textAlign = 'center';
   x.font = '15px system-ui,sans-serif'; x.fillStyle = '#ffe9a8';
   wrap(specText(level), W / 2, top + 72, W - 40, 19);
@@ -344,13 +350,14 @@ function drawHud() {
   }
   x.shadowBlur = 0;
   if (state === 'result') {
-    const [big, small] = resultText(result);
-    x.fillStyle = 'rgba(10,12,20,.72)'; x.fillRect(0, H * 0.34, W, 120);
+    const [big, small, extra] = resultText(result);
+    x.fillStyle = 'rgba(10,12,20,.72)'; x.fillRect(0, H * 0.34, W, 142);
     x.fillStyle = result.kind === 'win' ? '#7dffa8' : '#ffb3a8';
     x.font = 'bold 34px system-ui,sans-serif'; x.fillText(big, W / 2, H * 0.34 + 48);
     x.fillStyle = '#fff'; x.font = '15px system-ui,sans-serif'; x.fillText(small, W / 2, H * 0.34 + 76);
+    if (extra) { x.fillStyle = result.extra ? '#ffe9a8' : 'rgba(255,255,255,.75)'; x.fillText(extra, W / 2, H * 0.34 + 99); }
     x.fillStyle = 'rgba(255,255,255,.6)'; x.font = '13px system-ui,sans-serif';
-    x.fillText(result.kind === 'win' ? 'Napauta: seuraava taso' : 'Napauta: yritä uudestaan', W / 2, H * 0.34 + 102);
+    x.fillText(result.kind === 'win' ? 'Napauta: seuraava taso' : 'Napauta: yritä uudestaan', W / 2, H * 0.34 + 126);
   }
 }
 function wrap(text, cx, y, maxW, lh) {

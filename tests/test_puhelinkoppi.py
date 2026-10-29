@@ -56,17 +56,41 @@ def test_a_catch_screen_up_passes_the_level_and_is_kept_after_a_reload(site, con
     # A straight throw lands screen up.
     page.evaluate("newRound(); launch({ v0: 3 })")
     assert page.evaluate(FLY, 3) == "result"
-    assert page.evaluate("result") == {"kind": "win", "turns": 0, "level": 1}
+    assert page.evaluate("result") == {"kind": "win", "turns": 0, "level": 1, "extra": None}
     page.reload()
-    assert page.evaluate("[level, best, catches]") == [2, 2, 1]
-    # Level 2 wants a full turn: a straight throw is not enough, and a missed hand drops it.
+    assert page.evaluate("[level, best, catches, challenges]") == [2, 2, 1, 0]
+    # Level 2's extra challenge wants a full turn, but a catch screen up still passes the level.
     page.evaluate("noise = 0; launch({ v0: 3 })")
     page.evaluate(FLY, 3)
-    assert page.evaluate("result.kind") == "turns"
-    page.evaluate("newRound(); launch({ v0: 3, vx: 0.5 })")
+    assert page.evaluate("result") == {"kind": "win", "turns": 0, "level": 2, "extra": False}
+    # One full end-over-end turn: passed, with the extra challenge.
+    page.evaluate("noise = 0; newRound(); launch({ v0: 4, wx: 2 * Math.PI / (2 * 4 / 9.81) })")
+    page.evaluate(FLY, 3)
+    assert page.evaluate("result") == {"kind": "win", "turns": 1, "level": 3, "extra": True}
+    page.reload()
+    assert page.evaluate("[level, catches, challenges]") == [4, 3, 1]
+    # A hand that is not under the phone drops it, and the level stays.
+    page.evaluate("noise = 0; newRound(); launch({ v0: 3, vx: 0.5 })")
     page.evaluate(FLY, 3)
     assert page.evaluate("result.kind") == "drop"
-    assert page.evaluate("level") == 2
+    assert page.evaluate("level") == 4
+
+
+def test_the_phone_flies_in_depth_too_and_the_arm_reaches_for_it(site, context):
+    page = open_game(site, context)
+    # Thrown a little towards you, the arm follows it in depth and catches it there.
+    page.evaluate("launch({ v0: 4, vz: 0.3 })")
+    page.evaluate("for (let i = 0; i < 30; i++) step(1 / 60)")
+    z, hz = page.evaluate("[pos[2], handZ]")
+    assert z > 0.1 and abs(hz - z) < 0.02
+    assert page.evaluate(FLY, 3) == "result"
+    assert page.evaluate("result.kind") == "win"
+    assert page.evaluate("pos[2]") > 0.2
+    # Thrown farther than the arm reaches, it falls past the hand.
+    page.evaluate("newRound(); launch({ v0: 4, vz: -0.8 })")
+    page.evaluate(FLY, 3)
+    assert page.evaluate("result.kind") == "drop"
+    assert page.evaluate("handZ") == -page.evaluate("HAND_Z")
 
 
 def test_the_hand_carries_the_phone_and_a_flick_up_throws_it(site, context):
