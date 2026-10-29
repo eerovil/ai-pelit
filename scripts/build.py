@@ -28,8 +28,13 @@ THUMB_SIZE = (360, 480)
 
 
 def webp_size(data: bytes) -> tuple[int, int] | None:
-    """Width and height of a WebP image, read from its header; None when it is not one."""
+    """Width and height of a WebP image, read from its header; None when it is not one.
+
+    A file cut short is not one either: the RIFF header gives the whole file's length.
+    tests/test_build.py decodes every real game's picture with Pillow as well."""
     if len(data) < 30 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        return None
+    if int.from_bytes(data[4:8], "little") + 8 != len(data):
         return None
     kind = data[12:16]
     if kind == b"VP8 " and data[23:26] == b"\x9d\x01\x2a":

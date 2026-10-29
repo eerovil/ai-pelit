@@ -1,3 +1,4 @@
+import base64
 import json
 import subprocess
 
@@ -30,6 +31,8 @@ def small_webp():
         (lambda d: (d / "thumb.webp").unlink(), "thumb.webp is missing"),
         (lambda d: (d / "thumb.webp").write_bytes(b"ei kuva"), "not a WebP image"),
         (lambda d: (d / "thumb.webp").write_bytes(small_webp()), "found 3 x 4"),
+        # The right size in its header, but cut short.
+        (lambda d: (d / "thumb.webp").write_bytes(THUMB[:-4]), "not a WebP image"),
     ],
 )
 def test_build_refuses_a_broken_game(tmp_path, breakage, message):
@@ -83,7 +86,7 @@ def test_each_game_has_its_picture_under_a_name_that_changes_with_it(tmp_path):
     assert not (tmp_path / "a" / "games" / "peli" / "thumb.webp").exists()
     # A version's own file of the same name is part of the game and is published.
     (games / "peli" / "v1" / "thumb.webp").write_bytes(b"pelin oma kuva")
-    (games / "peli" / "thumb.webp").write_bytes(THUMB + b"\x00")
+    (games / "peli" / "thumb.webp").write_bytes(base64.b64decode("UklGRi4AAABXRUJQVlA4TCEAAAAvZ8F3AAdQniIXpf8BAkmb98+/7RH9z93/+3//7//9ZwwA"))
     assert (tmp_path / "a" / "games" / "peli" / "v1").is_dir()
     second = build.build(games, ROOT / "public", tmp_path / "b")
     assert (tmp_path / "b" / "games" / "peli" / "v1" / "thumb.webp").read_bytes() == b"pelin oma kuva"
@@ -100,9 +103,13 @@ def test_make_thumb_crops_a_screenshot_to_3_by_4(tmp_path):
         assert (img.format, img.size) == ("WEBP", (360, 480))
 
 
-def test_every_real_game_has_a_picture_of_the_right_size():
+def test_every_real_game_has_a_picture_that_opens():
+    Image = pytest.importorskip("PIL.Image")
     for game_dir in (ROOT / "games").iterdir():
         assert build.webp_size((game_dir / "thumb.webp").read_bytes()) == (360, 480), game_dir.name
+        with Image.open(game_dir / "thumb.webp") as img:
+            img.load()
+            assert (img.format, img.size) == ("WEBP", (360, 480)), game_dir.name
 
 
 def git(cwd, *args):
