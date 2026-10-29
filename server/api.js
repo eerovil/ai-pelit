@@ -28,6 +28,7 @@ export const GAMES = {
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
   puhelinkoppi: { order: 'high', boards: /^main$/ }, // highest level reached
   hiihto: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest time per course, seconds
+  piano: { order: 'high', boards: /^main$/ }, // most points in one game
 };
 
 const ID = /^[a-f0-9]{32}$/;

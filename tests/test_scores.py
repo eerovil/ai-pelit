@@ -444,3 +444,16 @@ def test_a_slow_answer_for_an_earlier_course_never_shows_under_a_later_one(site,
     assert page.locator(".score-list .board").input_value() == "2"
     assert "Bertta" in page.locator(".score-list").inner_text()
     assert "Aino" not in page.locator(".score-list").inner_text()
+
+
+def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, fake):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(f"{site.url}games/piano/v1/")
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
+    page.click("#go")
+    page.evaluate("score = 300; lives = 1; miss(0, 'Ohi!')")
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    [(key, row)] = fake.scores.items()
+    assert key[:2] == ("piano", "main")
+    assert row == {"score": 300, "version": 1, "level": 1}
