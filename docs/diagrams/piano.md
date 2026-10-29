@@ -1,9 +1,10 @@
 # Piano: one game, from the first note to the last heart
 
-How a game of Piano plays (v1). Notes of a familiar tune fall down four lanes, and the
+How a game of Piano plays (v1, v2). Notes of a familiar tune fall down four lanes, and the
 player presses the lane's key at the bottom when a note reaches the line, which plays that
 note. Each finished song is a level; the next song is a little faster. A missed note or a
-press with no note near the line costs one of three hearts.
+press with no note near the line costs one of three hearts. From v2 the score is also kept
+after every finished song, not only when the last heart goes, and there are nine songs.
 
 ```mermaid
 flowchart TD
@@ -19,7 +20,8 @@ flowchart TD
   I --> J[Ohi meni!: putki katkeaa, sydän menee]
   H --> K{Kappale lopussa?}
   K -- Ei --> B
-  K -- Kyllä --> L[Seuraava taso: uusi kappale vähän nopeammin]
+  K -- Kyllä --> V[Tulos talteen ja tuloslistalle]
+  V --> L[Seuraava taso: uusi kappale vähän nopeammin]
   L --> B
   G --> M{Sydämiä jäljellä?}
   J --> M
@@ -32,6 +34,7 @@ flowchart TD
   class L green
   class G,I,J rose
   class N,O violet
+  class V green
 ```
 
 ## Colours
@@ -39,18 +42,19 @@ flowchart TD
 - **blue**: what the player sees and does
 - **amber**: a check that decides the path
 - **teal**: a hit: points and the note's sound
-- **green**: on to a faster song
+- **green**: a finished song: the score is kept (v2) and a faster song starts
 - **rose**: a miss that costs a heart
 - **violet**: the end of the game and what is saved
 
 ## Boxes
 
-- **Kappale alkaa: nuotit putoavat neljää kaistaa**: `startLevel()` → `levelNotes()` in `games/piano/v1/index.html`. Four songs in `SONGS` (Tuiki tuiki tähtönen, Ukko Nooa, Jaakko kulta, Oodi ilolle), then round again. `nextLane()` puts each note one lane right for a step up in the tune, one left for a step down, two for a leap, and the same lane for a repeated note.
+- **Kappale alkaa: nuotit putoavat neljää kaistaa**: `startLevel()` → `levelNotes()` in `games/piano/v1/index.html`. Four songs in `SONGS` (Tuiki tuiki tähtönen, Ukko Nooa, Jaakko kulta, Oodi ilolle), then round again; v2 has nine, adding Maija pikkuinen, Piippolan vaari, Lontoon silta, Paljon onnea vaan and Kulkuset. `nextLane()` puts each note one lane right for a step up in the tune, one left for a step down, two for a leap, and the same lane for a repeated note. From v2 a leap that would go past the edge takes one step instead of turning right round.
 - **Painat kaistan nappia**: the `pointerdown` handler: anywhere in a lane below the top bar counts as that lane's key, so several fingers can play at once.
 - **Onko tämän kaistan nuotti viivalla?**: `tap()` takes the nearest unplayed note of that lane within `GOOD` (0.16 s); within `PERFECT` (0.07 s) is "Nappiin!".
 - **Nappiin!: 100 p x putki-kerroin**: `mult()`: every 10 hits in a row add one to the multiplier, up to x4.
 - **Nuotti soi**: `piano()`: a triangle wave with a quiet octave above it and a long fade, at the note's pitch.
 - **Nuotti putoaa viivan ohi**: `update()` marks a note missed once it is more than `GOOD` past the line.
 - **Seuraava taso: uusi kappale vähän nopeammin**: `speedOf()`: each level plays 10 % faster, and `lead()` makes the notes fall a little faster too. The highest level reached is saved as `ai-pelit:piano:taso`.
+- **Tulos talteen ja tuloslistalle**: v2 `songDone()` → `keepScore()`: saves the record and calls `AiPelitScores.submit(score)` after every finished song, so a run counts even if the phone is closed mid-song; the banner of the next level says "Tulos tallennettu". While the high-score list (or its first nickname question) is open, `update()` holds the song still.
 - **Peli päättyi: ennätys ja paras taso talteen**: `gameOver()` saves the best score as `ai-pelit:piano:ennatys`.
 - **Pisteet tuloslistalle**: `AiPelitScores.submit(score)`; the list is set up as `piano` in `GAMES` in `public/scores.js` and `server/api.js`.
