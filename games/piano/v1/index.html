@@ -146,7 +146,8 @@ function startLevel() {
   // A note at t = 0 starts at the top of the screen, so the first one has time to fall.
   now = -lead(level) - 0.6;
   banner = { s: 'Taso ' + level, sub: cur.song.name, t: 1.8 };
-  if (level > topLevel) { topLevel = level; save('taso', topLevel); }
+  // Saved from level 1 on, so even a first game's score carries its level to the list.
+  topLevel = Math.max(topLevel, level); save('taso', topLevel);
 }
 
 const mult = () => 1 + Math.min(3, Math.floor(combo / 10));
