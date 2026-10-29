@@ -180,10 +180,14 @@ function airStep(h) {
   if (low <= FLOOR) land(b, low);
 }
 
+// Whole turns in a flight, from the body's rotation between letting go and the catch or touchdown
+// alone; half a turn or more counts as one more (1.5 turns is a double).
+function turns(rot) { return Math.floor(Math.abs(rot) / TAU + 0.5); }
+
 function grab() {
   const w = L / icAir(s);
   const cross = pos[0] * vel[1] - pos[1] * vel[0];
-  const rot = phi - flight.phi0, n = Math.round(Math.abs(rot) / TAU);
+  const n = turns(phi - flight.phi0);
   const halves = Math.round(Math.abs(tauT - flight.tau0) / Math.PI);
   let t = Math.atan2(pos[0], -pos[1]);
   th = phi + wrap(t - phi);
@@ -202,8 +206,7 @@ function grab() {
 function land(b, low) {
   const a = wrap(phi), w = L / icAir(s), aEff = a + w * LAND_LOOK;
   const onFeet = b.foot[1] - low < 0.12 && Math.abs(a) < 1.2;
-  const rel = wrap(flight.phi0) + (phi - flight.phi0);
-  const saltos = Math.abs(Math.round(rel / TAU));
+  const saltos = turns(phi - flight.phi0);
   const halves = Math.round(Math.abs(tau - flight.tau0) / Math.PI);
   const fulls = Math.floor(halves / 2);
   const base = ['Alastulo', 'Voltti alas', 'Kaksoisvoltti alas', 'Kolmoisvoltti alas', 'Nelinkertainen voltti alas'][Math.min(4, saltos)];

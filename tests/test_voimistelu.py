@@ -151,3 +151,17 @@ def test_the_score_board_fits_a_small_screen_however_many_elements(site, browser
     assert lay["recordY"] < lay["tapY"] - 15
     assert page.evaluate("result.names.length") == 37
     ctx.close()
+
+
+def test_the_saltos_in_a_dismount_count_only_the_turns_in_the_air(site, context):
+    page = open_game(site, context)
+    assert page.evaluate("[turns(0.49 * TAU), turns(0.5 * TAU), turns(-1.5 * TAU), turns(2.2 * TAU)]") == [0, 1, 2, 2]
+    # Let go just before and just after the handstand, then the same flight: the same dismount.
+    got = []
+    for phi in ("Math.PI - 0.01", "Math.PI + 0.01"):
+        got.append(page.evaluate(f"""() => {{ newRoutine(); elements = [];
+          launchAir({{ x: 0, y: 0.9, vy: 3, phi: {phi}, w: 3 * TAU / 1.6 }}); hold = true;
+          for (let t = 0; t < 3 && mode === 'air'; t += 1 / 240) step(1 / 240);
+          return [Math.abs(phi - flight.phi0) / TAU, touch.saltos, elements[0].name]; }}"""))
+    assert abs(got[0][0] - got[1][0]) < 1e-9
+    assert got[0][1:] == got[1][1:]
