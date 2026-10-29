@@ -27,9 +27,10 @@
   #multi{font:800 17px system-ui,sans-serif;padding:11px 18px;border:0;border-radius:16px;color:#fff;background:#7a3b8f;box-shadow:0 4px 0 #4f2260;margin-top:4px}
   #multi:active{transform:translateY(3px);box-shadow:none}
   /* Playing with friends: making or joining a room, and the room between rounds. */
-  #net{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 22px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:rgba(246,239,220,.97);text-align:center;touch-action:manipulation;overflow-y:auto}
+  #net{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 22px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:rgba(246,239,220,.97);text-align:center;touch-action:manipulation;overflow-y:auto}
   #net.hidden,#net .hidden,#pause.hidden{display:none}
   #net h2{margin:0;font-size:24px;color:#7a3b8f}
+  #joinView,#roomView{display:flex;flex-direction:column;align-items:center;gap:8px}
   #net label{font-size:14px;font-weight:700;color:#6a5638;display:flex;flex-direction:column;gap:4px;align-items:center}
   #net input{font:800 20px system-ui,sans-serif;padding:8px 10px;border:2px solid #c9b48a;border-radius:12px;width:200px;text-align:center;background:#fff;color:#2b2416}
   #codeIn{width:110px;letter-spacing:4px;text-transform:uppercase}
@@ -41,7 +42,7 @@
   .or{margin:2px 0;font-size:13px;color:#8a7658}
   .codeLabel{margin:0;font-size:13px;font-weight:700;color:#8a7658}
   #code{margin:-6px 0 0;font:900 46px/1.1 system-ui,sans-serif;letter-spacing:8px;color:#2b2416}
-  #qr{width:150px;height:150px;image-rendering:pixelated;background:#fff;border-radius:8px}
+  #qr{width:150px;height:150px;flex:none;image-rendering:pixelated;background:#fff;border-radius:8px}
   #members{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:220px}
   #members li{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;background:rgba(255,255,255,.7);border-radius:10px;padding:5px 10px}
   #members li.off{opacity:.5}
@@ -81,7 +82,7 @@
     <p id="roomResult"></p>
     <p class="codeLabel">Huoneen koodi</p>
     <p id="code"></p>
-    <canvas id="qr" width="150" height="150"></canvas>
+    <canvas id="qr" width="300" height="300"></canvas>
     <p class="or">Kaverit liittyvät koodilla tai skannaamalla kuvan.</p>
     <ul id="members"></ul>
     <p id="roomInfo"></p>
@@ -1057,7 +1058,7 @@ function renderNet() {
   const online = net.members.filter(m => m.on).length;
   let info;
   if (!net.connected) info = 'Yhdistetään…';
-  else if (net.host) info = online < 2 ? 'Odotetaan kavereita…' : `${online} pelaajaa. Tyhjät paikat täyttävät tietokonepelaajat.`;
+  else if (net.host) info = online < 2 ? 'Odotetaan kavereita…' : online < 5 ? `${online} pelaajaa. Tyhjät paikat täyttävät tietokonepelaajat.` : '5 pelaajaa – huone on täynnä.';
   else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : `Odotetaan, että ${hostName()} aloittaa kierroksen…`;
   if (net.host && played && nextSeeker) info += ` Seuraavaksi etsii ${nextSeeker === player ? 'sinä' : nextSeeker.name}.`;
   $('roomInfo').textContent = info;
