@@ -9,6 +9,9 @@ Safe to run again; run it after adding a file to migrations/, before that change
   they are missing, and applies every migrations/*.sql not yet applied, recording each in the
   same `d1_migrations` table `wrangler d1 migrations apply` uses.
 - Binds them as `DB` on the Pages project `ai-pelit` (production and preview).
+- Binds the live game rooms (#27) as `ROOMS`: the `Room` Durable Object of the `ai-pelit-rooms`
+  Worker (rooms/). Deploy that Worker once first (`npx wrangler deploy -c rooms/wrangler.toml`;
+  CI deploys it on every merge after that), or this step is skipped with a note.
 - Makes the `ADMIN_KEY` secret (the nickname admin's key) when it is missing, and saves it on
   this host in ~/.local/share/ai-pelit/admin-key (mode 600). It is never printed.
 
@@ -28,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROJECT = "ai-pelit"
 DATABASES = {"production": "ai-pelit", "preview": "ai-pelit-preview"}
 KEY_FILE = Path.home() / ".local/share/ai-pelit/admin-key"
+ROOMS_SCRIPT, ROOMS_CLASS = "ai-pelit-rooms", "Room"
 
 
 def api(method: str, path: str, body=None):
@@ -68,6 +72,14 @@ def migrate(db: str, name: str) -> None:
         query(db, "INSERT INTO d1_migrations (name) VALUES (?)", [f.name])
 
 
+def rooms_namespace() -> str | None:
+    for ns in api("GET", "/workers/durable_objects/namespaces"):
+        if ns.get("script") == ROOMS_SCRIPT and ns.get("class") == ROOMS_CLASS:
+            return ns["id"]
+    print(f"  no {ROOMS_SCRIPT} Worker yet: deploy rooms/ first, then run this again to bind ROOMS")
+    return None
+
+
 def admin_key() -> str:
     if KEY_FILE.is_file():
         return KEY_FILE.read_text().strip()
@@ -85,6 +97,7 @@ def main() -> int:
             sys.exit(f"set {var}")
     configs = {}
     key = admin_key()
+    rooms = rooms_namespace()
     for env, name in DATABASES.items():
         db = database(name)
         print(f"{name}: {db}")
@@ -93,8 +106,11 @@ def main() -> int:
             "d1_databases": {"DB": {"id": db}},
             "env_vars": {"ADMIN_KEY": {"type": "secret_text", "value": key}},
         }
+        if rooms:
+            configs[env]["durable_object_namespaces"] = {"ROOMS": {"namespace_id": rooms}}
     api("PATCH", f"/pages/projects/{PROJECT}", {"deployment_configs": configs})
-    print(f"pages project {PROJECT}: DB and ADMIN_KEY bound (they apply from the next deploy)")
+    bound = "DB, ADMIN_KEY and ROOMS" if rooms else "DB and ADMIN_KEY"
+    print(f"pages project {PROJECT}: {bound} bound (they apply from the next deploy)")
     return 0
 
 

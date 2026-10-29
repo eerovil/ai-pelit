@@ -1,0 +1,1212 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Kirkkis</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#24351c;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#2b2416}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(246,239,220,.94);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:38px;line-height:1.1;color:#7a3b8f;text-shadow:0 3px 0 #dcc3e6}
+  #sub{margin:-4px 0 4px;font-size:15px;font-weight:700;color:#8b6aa0}
+  #result{margin:0;font-size:22px;font-weight:800;max-width:320px}
+  #result.win{color:#3f8a3a}#result.lose{color:#c4432f}
+  #info{margin:0;font-size:15px;font-weight:600;color:#6a5638;max-width:320px;line-height:1.4}
+  .row{display:flex;gap:12px;margin-top:6px}
+  .row button{font:800 20px system-ui,sans-serif;padding:13px 18px;border:0;border-radius:16px;color:#fff;min-width:130px}
+  #hide{background:#4f9a3a;box-shadow:0 4px 0 #2f6a22}
+  #seek{background:#d0533b;box-shadow:0 4px 0 #8f3020}
+  .row button:active{transform:translateY(3px);box-shadow:none}
+  .row button.next{outline:4px solid #f2c94c;outline-offset:2px}
+  #total{margin:4px 0 0;font-size:14px;color:#8a7658}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#7d6a4c;max-width:320px}
+  #multi{font:800 17px system-ui,sans-serif;padding:11px 18px;border:0;border-radius:16px;color:#fff;background:#7a3b8f;box-shadow:0 4px 0 #4f2260;margin-top:4px}
+  #multi:active{transform:translateY(3px);box-shadow:none}
+  /* Playing with friends: making or joining a room, and the room between rounds. */
+  #net{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 22px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:rgba(246,239,220,.97);text-align:center;touch-action:manipulation;overflow-y:auto}
+  #net.hidden,#net .hidden,#pause.hidden{display:none}
+  #net h2{margin:0;font-size:24px;color:#7a3b8f}
+  #net label{font-size:14px;font-weight:700;color:#6a5638;display:flex;flex-direction:column;gap:4px;align-items:center}
+  #net input{font:800 20px system-ui,sans-serif;padding:8px 10px;border:2px solid #c9b48a;border-radius:12px;width:200px;text-align:center;background:#fff;color:#2b2416}
+  #codeIn{width:110px;letter-spacing:4px;text-transform:uppercase}
+  .joinrow{display:flex;gap:8px;align-items:center}
+  #net button{font:800 18px system-ui,sans-serif;padding:11px 18px;border:0;border-radius:14px;color:#fff;background:#4f9a3a;box-shadow:0 4px 0 #2f6a22}
+  #net button:active{transform:translateY(3px);box-shadow:none}
+  #net button:disabled{background:#b8ad95;box-shadow:none}
+  #net button.plain{background:none;box-shadow:none;color:#7d6a4c;font-size:15px;text-decoration:underline;padding:6px}
+  .or{margin:2px 0;font-size:13px;color:#8a7658}
+  .codeLabel{margin:0;font-size:13px;font-weight:700;color:#8a7658}
+  #code{margin:-6px 0 0;font:900 46px/1.1 system-ui,sans-serif;letter-spacing:8px;color:#2b2416}
+  #qr{width:150px;height:150px;image-rendering:pixelated;background:#fff;border-radius:8px}
+  #members{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:220px}
+  #members li{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;background:rgba(255,255,255,.7);border-radius:10px;padding:5px 10px}
+  #members li.off{opacity:.5}
+  #members i{width:14px;height:14px;border-radius:50%;display:inline-block;flex:none}
+  #roomResult{margin:0;font-size:20px;font-weight:800}
+  #roomResult.win{color:#3f8a3a}#roomResult.lose{color:#c4432f}
+  #roomInfo,#netErr{margin:0;font-size:14px;font-weight:600;color:#6a5638;max-width:300px}
+  #netErr{color:#c4432f}
+  #pause{position:fixed;left:16px;right:16px;top:40%;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px;border-radius:16px;background:rgba(30,20,40,.88);color:#fff;text-align:center;font-weight:700}
+  #pause p{margin:0;font-size:17px}
+  #pause button{font:800 16px system-ui,sans-serif;padding:9px 16px;border:0;border-radius:12px;background:#f2c94c;color:#2b2416}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>⛪ Kirkkis</h1>
+  <p id="sub">Kirkonrotta</p>
+  <p id="result"></p>
+  <p id="info"></p>
+  <div class="row"><button id="hide">🙈 Piiloudu</button><button id="seek">👀 Etsi</button></div>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="total"></p>
+  <p class="help">Yksi on etsijä, muut piiloutuvat. Jokainen näkee vain oman näkökenttänsä. Kun etsijä näkee piiloutujan, hänen pitää juosta pesään ja huutaa ”Kirkkis!”. Jos piiloutuja ehtii pesään ensin, hän pelastuu. Liiku vetämällä sormea ruudulla – katse kääntyy sinne, minne kuljet.</p>
+</div>
+<div id="net" class="hidden">
+  <h2>👥 Kavereiden kanssa</h2>
+  <div id="joinView">
+    <label>Nimesi <input id="nameIn" maxlength="16" autocomplete="off" enterkeyhint="done"></label>
+    <p></p>
+    <button id="create">Luo huone</button>
+    <p class="or">tai liity kaverin huoneeseen koodilla</p>
+    <div class="joinrow"><input id="codeIn" maxlength="4" placeholder="KOOD" autocapitalize="characters" autocomplete="off" enterkeyhint="go"><button id="join">Liity</button></div>
+  </div>
+  <div id="roomView" class="hidden">
+    <p id="roomResult"></p>
+    <p class="codeLabel">Huoneen koodi</p>
+    <p id="code"></p>
+    <canvas id="qr" width="150" height="150"></canvas>
+    <p class="or">Kaverit liittyvät koodilla tai skannaamalla kuvan.</p>
+    <ul id="members"></ul>
+    <p id="roomInfo"></p>
+    <button id="startRound" class="hidden">Aloita kierros</button>
+  </div>
+  <p id="netErr"></p>
+  <button id="netBack" class="plain">Takaisin</button>
+</div>
+<div id="pause" class="hidden"><p id="pauseText"></p><button id="goOn" class="hidden">Jatka ilman heitä</button></div>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const fog = document.createElement('canvas'), fx = fog.getContext('2d');
+const menu = document.getElementById('menu');
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:kirkkis:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+const stats = Object.assign({ kierrokset: 0, pelastuit: 0, kirkattiin: 0, kirkkasit: 0 }, load('tilasto', {}));
+
+// ---------- The yard, in metres (y grows down the screen) ----------
+const WW = 30, WH = 44;
+const BASE = { x: 15, y: 22 }, BASE_POLE = 0.3, BASE_REACH = 1.4;
+const BODY = 0.36;               // a player's radius
+const FOV = 110 * Math.PI / 180; // the field of view, and how far it reaches
+const RANGE = 10, NEAR = 1.3;    // anyone this close is heard and seen, whichever way you look
+const BUSH_SEEN = 2.4;           // someone inside a bush is seen only from this close
+const COUNT = 10, SEEK_TIME = 100;
+const SPEED = 4.0, BOT_HIDE = 3.4, BOT_RUN = 3.7, BOT_SEEK = 3.5, BOT_RACE = 3.85;
+
+// Solid things block both walking and sight.
+const SOLIDS = [
+  { k: 'talo', x: 2, y: 2, w: 10, h: 7 },
+  { k: 'sauna', x: 21, y: 3, w: 6, h: 5 },
+  { k: 'vaja', x: 3, y: 34, w: 6, h: 5 },
+  { k: 'auto', x: 21, y: 34, w: 2.2, h: 4.4 },
+  { k: 'halot', x: 23.5, y: 24, w: 4, h: 1.2 },
+  { k: 'aita', x: 6, y: 17, w: 0.8, h: 9 },
+  { k: 'maja', x: 21.5, y: 14.5, w: 3, h: 3 },
+  { k: 'puu', x: 10, y: 13, r: 0.9 },
+  { k: 'puu', x: 19, y: 29, r: 0.9 },
+  { k: 'puu', x: 26, y: 41, r: 0.9 },
+  { k: 'puu', x: 7, y: 30, r: 0.9 },
+  { k: 'puu', x: 27, y: 9.5, r: 0.8 },
+  { k: 'kivi', x: 13, y: 37, r: 1.2 },
+];
+// Bushes can be walked into; whoever is inside is seen only from close by.
+const BUSHES = [
+  { x: 15, y: 11, r: 1.5 }, { x: 3, y: 13, r: 1.4 }, { x: 27.5, y: 19, r: 1.4 }, { x: 11, y: 27, r: 1.5 },
+  { x: 26, y: 30, r: 1.4 }, { x: 16, y: 41, r: 1.5 }, { x: 2.5, y: 24, r: 1.3 }, { x: 9, y: 41.5, r: 1.3 },
+];
+
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+const rand = (a, b) => a + Math.random() * (b - a);
+function bushAt(px, py) { return BUSHES.find(b => Math.hypot(px - b.x, py - b.y) < b.r - 0.15) || null; }
+
+// ---------- Sight: rays against the solid things ----------
+function rayRect(ox, oy, dx, dy, r) {
+  let t0 = -Infinity, t1 = Infinity;
+  if (dx === 0) { if (ox < r.x || ox > r.x + r.w) return Infinity; }
+  else { let a = (r.x - ox) / dx, b = (r.x + r.w - ox) / dx; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); }
+  if (dy === 0) { if (oy < r.y || oy > r.y + r.h) return Infinity; }
+  else { let a = (r.y - oy) / dy, b = (r.y + r.h - oy) / dy; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); }
+  if (t0 > t1 || t1 < 0) return Infinity;
+  return Math.max(0, t0);
+}
+function rayCirc(ox, oy, dx, dy, s) {
+  const px = ox - s.x, py = oy - s.y, b = px * dx + py * dy, d = b * b - (px * px + py * py - s.r * s.r);
+  if (d < 0) return Infinity;
+  const q = Math.sqrt(d);
+  if (-b - q >= 0) return -b - q;
+  return -b + q >= 0 ? 0 : Infinity;
+}
+// How far one can see from (ox, oy) in the direction a.
+function castRay(ox, oy, a, max) {
+  const dx = Math.cos(a), dy = Math.sin(a);
+  let t = max;
+  if (dx > 0) t = Math.min(t, (WW - ox) / dx); else if (dx < 0) t = Math.min(t, -ox / dx);
+  if (dy > 0) t = Math.min(t, (WH - oy) / dy); else if (dy < 0) t = Math.min(t, -oy / dy);
+  for (const s of SOLIDS) t = Math.min(t, s.r ? rayCirc(ox, oy, dx, dy, s) : rayRect(ox, oy, dx, dy, s));
+  return t;
+}
+function clearSight(a, b) { const d = dist(a, b); return castRay(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x), d) >= d - 0.05; }
+
+// Can o see the point p? The counting seeker has their eyes shut.
+function seesPoint(o, p) {
+  if (o.st === 'count') return false;
+  const d = dist(o, p);
+  if (d < NEAR) return true;
+  if (d > RANGE) return false;
+  if (Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - o.a)) > FOV / 2) return false;
+  return clearSight(o, p);
+}
+function canSee(o, t) {
+  if (o === t) return true;
+  if (!seesPoint(o, t)) return false;
+  return !bushAt(t.x, t.y) || dist(o, t) < BUSH_SEEN;
+}
+// Has o looked into this hiding place? A bush only counts from as close as someone in it is seen.
+function spotChecked(o, s) { return seesPoint(o, s) && (!s.bush || dist(o, s) < BUSH_SEEN); }
+// The outline of what o sees: a fan of rays across the field of view.
+function viewPoly(o) {
+  const pts = [], n = 64;
+  for (let i = 0; i <= n; i++) {
+    const a = o.a - FOV / 2 + FOV * i / n, d = castRay(o.x, o.y, a, RANGE);
+    pts.push(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d);
+  }
+  return pts;
+}
+
+// ---------- Walking: a grid of free cells and A* paths across it ----------
+const CELL = 0.5, GW = WW / CELL, GH = WH / CELL;
+const blocked = new Uint8Array(GW * GH);
+function solidNear(px, py, m) {
+  if (px < m || py < m || px > WW - m || py > WH - m) return true;
+  if (Math.hypot(px - BASE.x, py - BASE.y) < BASE_POLE + m) return true;
+  for (const s of SOLIDS) {
+    if (s.r) { if (Math.hypot(px - s.x, py - s.y) < s.r + m) return true; }
+    else if (px > s.x - m && px < s.x + s.w + m && py > s.y - m && py < s.y + s.h + m) return true;
+  }
+  return false;
+}
+for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) blocked[j * GW + i] = solidNear((i + 0.5) * CELL, (j + 0.5) * CELL, BODY + 0.08) ? 1 : 0;
+const cellOf = (px, py) => Math.max(0, Math.min(GH - 1, Math.floor(py / CELL))) * GW + Math.max(0, Math.min(GW - 1, Math.floor(px / CELL)));
+const walkable = (px, py) => !blocked[cellOf(px, py)];
+function nearestFree(k) {
+  if (!blocked[k]) return k;
+  const ci = k % GW, cj = (k - ci) / GW;
+  for (let r = 1; r < 20; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+    const i = ci + di, j = cj + dj;
+    if (i >= 0 && j >= 0 && i < GW && j < GH && !blocked[j * GW + i]) return j * GW + i;
+  }
+  return k;
+}
+function clearWalk(ax, ay, bx, by) {
+  const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 0.2);
+  for (let i = 1; i <= n; i++) if (!walkable(ax + (bx - ax) * i / n, ay + (by - ay) * i / n)) return false;
+  return true;
+}
+function findPath(from, to) {
+  const s = nearestFree(cellOf(from.x, from.y)), g = nearestFree(cellOf(to.x, to.y)), N = GW * GH;
+  const cost = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+  const heap = [], hf = [];
+  const push = (k, f) => { heap.push(k); hf.push(f); let i = heap.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (hf[p] <= hf[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; [hf[p], hf[i]] = [hf[i], hf[p]]; i = p; } };
+  const pop = () => { const top = heap[0], lk = heap.pop(), lf = hf.pop();
+    if (heap.length) { heap[0] = lk; hf[0] = lf; let i = 0;
+      for (;;) { const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < heap.length && hf[l] < hf[m]) m = l; if (r < heap.length && hf[r] < hf[m]) m = r;
+        if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; [hf[m], hf[i]] = [hf[i], hf[m]]; i = m; } }
+    return top; };
+  const gi = g % GW, gj = (g - gi) / GW;
+  const h = k => { const di = Math.abs(k % GW - gi), dj = Math.abs(Math.floor(k / GW) - gj); return Math.max(di, dj) + 0.414 * Math.min(di, dj); };
+  cost[s] = 0; push(s, h(s));
+  while (heap.length) {
+    const k = pop();
+    if (done[k]) continue;
+    done[k] = 1;
+    if (k === g) break;
+    const ki = k % GW, kj = (k - ki) / GW;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      if (!di && !dj) continue;
+      const i = ki + di, j = kj + dj;
+      if (i < 0 || j < 0 || i >= GW || j >= GH) continue;
+      const n = j * GW + i;
+      if (blocked[n] || done[n]) continue;
+      if (di && dj && (blocked[kj * GW + i] || blocked[j * GW + ki])) continue; // no cutting corners
+      const nc = cost[k] + (di && dj ? 1.414 : 1);
+      if (nc < cost[n]) { cost[n] = nc; prev[n] = k; push(n, nc + h(n)); }
+    }
+  }
+  if (!done[g]) return [];
+  const cells = [];
+  for (let k = g; k !== -1 && k !== s; k = prev[k]) cells.push(k);
+  cells.reverse();
+  const pts = cells.map(k => ({ x: (k % GW + 0.5) * CELL, y: (Math.floor(k / GW) + 0.5) * CELL }));
+  if (pts.length && walkable(to.x, to.y)) pts[pts.length - 1] = { x: to.x, y: to.y };
+  // Straighten the path: keep only the corners.
+  const out = [];
+  let at = from, i = 0;
+  while (i < pts.length) {
+    let j = pts.length - 1;
+    while (j > i && !clearWalk(at.x, at.y, pts[j].x, pts[j].y)) j--;
+    out.push(pts[j]); at = pts[j]; i = j + 1;
+  }
+  return out;
+}
+
+// Hiding places: free spots that cannot be seen from the base, or inside a bush.
+const SPOTS = [];
+for (let sy = 1.5; sy < WH - 1; sy += 1.5) for (let sx = 1.5; sx < WW - 1; sx += 1.5) {
+  if (!walkable(sx, sy) || Math.hypot(sx - BASE.x, sy - BASE.y) < 7) continue;
+  const bush = !!bushAt(sx, sy);
+  if (bush || !clearSight(BASE, { x: sx, y: sy })) SPOTS.push({ x: sx, y: sy, bush, seen: -99 });
+}
+
+// Pushes a body out of solid things and keeps it inside the fence.
+function collide(p) {
+  for (const s of SOLIDS) {
+    let nx, ny, r;
+    if (s.r) { nx = s.x; ny = s.y; r = s.r; }
+    else { nx = Math.max(s.x, Math.min(s.x + s.w, p.x)); ny = Math.max(s.y, Math.min(s.y + s.h, p.y)); r = 0; }
+    const dx = p.x - nx, dy = p.y - ny, d = Math.hypot(dx, dy);
+    if (d < r + BODY) {
+      if (d > 1e-6) { p.x = nx + dx / d * (r + BODY); p.y = ny + dy / d * (r + BODY); }
+      else p.y = s.r ? s.y + s.r + BODY : s.y - BODY;
+    }
+  }
+  const dx = p.x - BASE.x, dy = p.y - BASE.y, d = Math.hypot(dx, dy);
+  if (d < BASE_POLE + BODY && d > 1e-6) { p.x = BASE.x + dx / d * (BASE_POLE + BODY); p.y = BASE.y + dy / d * (BASE_POLE + BODY); }
+  p.x = Math.max(BODY, Math.min(WW - BODY, p.x)); p.y = Math.max(BODY, Math.min(WH - BODY, p.y));
+}
+
+// ---------- Players ----------
+// `ctrl` says who moves a person on this phone: 'me' (this phone's finger), 'bot' (the computer,
+// run by the phone that runs the round), 'remote' (another phone, as the host hears it) or 'net'
+// (anyone, as a guest phone hears it from the host).
+function person(name, color, isPlayer) {
+  return { name, color, isPlayer, ctrl: isPlayer ? 'me' : 'bot', id: null, x: BASE.x, y: BASE.y, a: 0, role: 'hider', st: 'hiding', left: false,
+           path: [], goal: null, repath: 0, look: 0, brave: 30, saw: null, peek: false, run: false, spot: null, bubble: '', bt: 0, moving: 0, stuck: 0, lx: 0, ly: 0 };
+}
+const COLORS = ['#f2c94c', '#e46a9b', '#4a8fe0', '#9b6ae0', '#e07b3a'];
+const BOT_NAMES = ['Aino', 'Eetu', 'Iida', 'Onni', 'Venla'];
+// Alone: the player and four computer players, as in v1. With friends the cast is made per round.
+const SOLO = [person('Sinä', COLORS[0], true), ...BOT_NAMES.slice(0, 4).map((n, i) => person(n, COLORS[i + 1]))];
+let player = SOLO[0], people = SOLO, bots = SOLO.slice(1);
+let seeker = bots[0], nextSeeker = null, firstCaught = null;
+let played = false, phase = 'menu', timer = 0, time = 0, msg = '', msgT = 0, endT = 0, spotScan = 0;
+const hiders = () => people.filter(p => p.role === 'hider');
+const active = p => p.st === 'hiding' || p.st === 'spotted';
+function say(p, text, t = 1.8) { p.bubble = text; p.bt = t; }
+function toast(text, t = 2) { msg = text; msgT = t; }
+// "Ainon", "Mikaelin": the genitive of a name, for "Näin Ainon!".
+const gen = n => /[aeiouyäö]$/i.test(n) ? n + 'n' : n + 'in';
+
+// Something the players should hear about. The phone running the round passes it on to the others,
+// and each phone tells it from its own player's side ("Sinut nähtiin!" or "Näit Ainon!").
+function happen(ev) { if (net.on && net.host) net.events.push(ev); show(ev); }
+function show(ev) {
+  const p = people[ev[1]];
+  switch (ev[0]) {
+    case 'count':
+      if (seeker === player) toast('Laske silmät kiinni!', 2);
+      else { say(seeker, '1, 2, 3…', 2); toast(`${seeker.name} laskee – piiloudu!`, 2.5); }
+      break;
+    case 'ready': say(seeker, 'Valmis tai ei, täältä tullaan!', 2.2); sfx.ready(); break;
+    case 'say': if (p) say(p, ev[2], ev[3]); break;
+    case 'spot':
+      if (!p) break;
+      if (seeker === player) toast(`Näit ${gen(p.name)}! Pesään!`);
+      else if (p === player) toast('Sinut nähtiin! Juokse pesään!');
+      say(seeker, `Näin ${p === player ? 'sinut' : gen(p.name)}!`);
+      sfx.spot();
+      break;
+    case 'save':
+      if (!p) break;
+      say(p, 'Kirkkis minä!', 2);
+      if (p === player) toast('Pelastuit! 🎉', 2.5); else if (seeker === player) toast(`${p.name} pelastui`);
+      sfx.save();
+      break;
+    case 'kirk': {
+      const seen = ev[1].map(i => people[i]).filter(Boolean);
+      say(seeker, 'Kirkkis ' + seen.map(h => h === player ? 'sinä' : h.name).join(', ') + '!', 2.4);
+      if (seen.includes(player)) toast('Sinut kirkattiin! 😱', 2.5); else if (seeker === player) toast('Kirkkis! ✋', 1.6);
+      sfx.kirkkis();
+      break;
+    }
+    case 'timeup': toast('Aika loppui!', 2); break;
+  }
+}
+
+function useSolo() { people = SOLO; player = SOLO[0]; bots = SOLO.slice(1); }
+function newRound(role) {
+  useSolo();
+  setupRound(role === 'seek' ? player : (nextSeeker && bots.includes(nextSeeker) ? nextSeeker : bots[Math.floor(Math.random() * bots.length)]));
+}
+// Puts everyone at the base, the seeker counting, and the computer hiders off to their places.
+function setupRound(who) {
+  seeker = who;
+  firstCaught = null;
+  people.forEach((p, i) => {
+    const a = i / people.length * Math.PI * 2;
+    p.x = BASE.x + Math.cos(a) * 1.1; p.y = BASE.y + Math.sin(a) * 1.1; p.a = a;
+    p.role = p === seeker ? 'seeker' : 'hider'; p.st = p === seeker ? 'count' : 'hiding';
+    p.left = false; p.path = []; p.goal = null; p.repath = 0; p.run = false; p.spot = null; p.bt = 0; p.look = 0;
+    p.brave = rand(20, 55); p.saw = null; p.peek = false;
+  });
+  seeker.a = Math.atan2(BASE.y - seeker.y, BASE.x - seeker.x); // face the base, eyes shut
+  SPOTS.forEach(s => { s.seen = -99; });
+  // Each hiding bot picks its own place, away from the others'.
+  const taken = [];
+  for (const b of bots) {
+    if (b === seeker) continue;
+    const free = SPOTS.filter(s => dist(s, BASE) < 19 && taken.every(t => dist(t, s) > 4));
+    b.spot = free[Math.floor(Math.random() * free.length)] || SPOTS[0];
+    taken.push(b.spot); b.goal = b.spot;
+  }
+  phase = 'count'; timer = COUNT; msg = ''; msgT = 0; joy = null; waiting = [];
+  show(['count', 0]);
+  menu.classList.add('hidden'); netEl.classList.add('hidden');
+}
+// A computer player takes over someone who left: a hider gets the nearest hiding place.
+function toBot(p) {
+  p.ctrl = 'bot'; p.path = []; p.repath = 0; p.run = false; p.peek = false; p.brave = rand(10, 30);
+  if (p.role === 'hider') {
+    p.spot = SPOTS.reduce((a, s) => dist(p, s) < dist(p, a) ? s : a, SPOTS[0]);
+    p.goal = active(p) ? (p.st === 'spotted' ? BASE : p.spot) : null;
+  } else p.goal = null;
+  if (!bots.includes(p)) bots.push(p);
+}
+
+// ---------- Rules ----------
+function startSeek() {
+  phase = 'seek'; timer = SEEK_TIME; seeker.st = 'seek';
+  happen(['ready', 0]);
+}
+function spot(h) {
+  h.st = 'spotted';
+  happen(['spot', people.indexOf(h)]);
+}
+function rules() {
+  for (const h of hiders()) {
+    if (!active(h)) continue;
+    if (!h.left && dist(h, BASE) > 5) h.left = true;
+    // A hider who touches the base first is free.
+    if (h.left && dist(h, BASE) < BASE_REACH) {
+      h.st = 'saved';
+      happen(['save', people.indexOf(h)]);
+      continue;
+    }
+    if (h.st === 'hiding' && canSee(seeker, h)) spot(h);
+  }
+  // The seeker at the base calls out everyone they have seen.
+  const seen = hiders().filter(h => h.st === 'spotted');
+  if (seeker.st === 'seek' && seen.length && dist(seeker, BASE) < BASE_REACH) {
+    seen.forEach(h => { h.st = 'caught'; h.run = false; if (!firstCaught) firstCaught = h; });
+    happen(['kirk', seen.map(h => people.indexOf(h))]);
+  }
+  if (!hiders().some(active)) end();
+  else if (timer <= 0) {
+    hiders().filter(active).forEach(h => { h.st = 'saved'; });
+    happen(['timeup', 0]); end();
+  }
+}
+function end() {
+  // As in the playground, the first one caught seeks next.
+  roundOver(firstCaught || seeker);
+  if (net.on && net.host) { hostSend(); net.send({ t: 'end', next: people.indexOf(nextSeeker), p: stateOf() }); }
+}
+// Every phone keeps its own player's tally.
+function roundOver(next) {
+  phase = 'end'; endT = 2.2; played = true; joy = null;
+  stats.kierrokset++;
+  if (seeker === player) stats.kirkkasit += hiders().filter(h => h.st === 'caught').length;
+  else if (player.st === 'saved') stats.pelastuit++; else stats.kirkattiin++;
+  save('tilasto', stats);
+  nextSeeker = next;
+}
+
+// ---------- Bots ----------
+function steer(p, speed, dt) {
+  if (p.goal && (p.repath <= 0 || !p.path.length && dist(p, p.goal) > 0.4)) { p.path = findPath(p, p.goal); p.repath = 1.5; }
+  p.repath -= dt;
+  while (p.path.length && dist(p, p.path[0]) < 0.25) p.path.shift();
+  if (!p.path.length) { p.moving = 0; return; }
+  const t = p.path[0], d = dist(p, t), s = Math.min(speed * dt, d);
+  const a = Math.atan2(t.y - p.y, t.x - p.x);
+  p.x += Math.cos(a) * s; p.y += Math.sin(a) * s; collide(p);
+  p.moving = s / dt; p.want = a;
+  // Stuck against a corner: plan again.
+  p.stuck += dt;
+  if (p.stuck > 0.8) { if (Math.hypot(p.x - p.lx, p.y - p.ly) < 0.2) p.repath = 0; p.lx = p.x; p.ly = p.y; p.stuck = 0; }
+}
+function turnTo(p, a, rate, dt) { const d = wrap(a - p.a); p.a = wrap(p.a + Math.max(-rate * dt, Math.min(rate * dt, d))); }
+
+function seekerBot(p, dt) {
+  if (p.st === 'count') return;
+  const seen = hiders().filter(h => h.st === 'spotted');
+  if (seen.length) {
+    if (p.goal !== BASE) { p.goal = BASE; p.repath = 0; }
+    steer(p, BOT_RACE, dt);
+    turnTo(p, p.want ?? p.a, 8, dt);
+    return;
+  }
+  if (p.goal === BASE) p.goal = null;
+  if (p.look > 0) { // Arrived: a look all around.
+    p.look -= dt; p.moving = 0; p.a = wrap(p.a + dt * 4.2);
+    return;
+  }
+  if (!p.goal || dist(p, p.goal) < 0.5) {
+    if (p.goal) { p.look = 1.5; p.goal = null; return; }
+    let best = null, bs = Infinity;
+    for (const s of SPOTS) {
+      if (time - s.seen < 30) continue;
+      const sc = dist(p, s) + 0.5 * dist(s, BASE) + Math.random() * 8;
+      if (sc < bs) { bs = sc; best = s; }
+    }
+    p.goal = best || SPOTS[Math.floor(Math.random() * SPOTS.length)]; p.repath = 0;
+  }
+  steer(p, BOT_SEEK, dt);
+  turnTo(p, (p.want ?? p.a) + Math.sin(time * 2.3) * 0.6, 6, dt);
+}
+
+function hiderBot(p, dt) {
+  if (!active(p)) { // Out of the round: wait beside the base.
+    const i = people.indexOf(p) - 1;
+    const bench = { x: BASE.x - 3 + i * 1.3, y: BASE.y + (p.st === 'caught' ? 3 : -3) };
+    if (p.goal !== p.bench) { p.bench = bench; p.goal = bench; p.repath = 0; }
+    steer(p, 2.5, dt); if (p.moving) turnTo(p, p.want, 6, dt);
+    return;
+  }
+  const sees = canSee(p, seeker);
+  if (p.st === 'spotted' || p.run) {
+    if (p.goal !== BASE) { p.goal = BASE; p.repath = 0; }
+    steer(p, BOT_RUN, dt); turnTo(p, p.want ?? p.a, 8, dt);
+    return;
+  }
+  if (sees) p.saw = { x: seeker.x, y: seeker.y, t: time };
+  if (phase === 'seek') {
+    p.brave -= dt;
+    const mine = dist(p, BASE) + 4, ago = p.saw ? time - p.saw.t : Infinity;
+    const away = Math.abs(wrap(Math.atan2(p.y - seeker.y, p.x - seeker.x) - seeker.a)) > FOV / 2 + 0.3;
+    // Run when the seeker is seen far off and looking elsewhere, or was seen going far just now.
+    // A seeker last seen guarding the base is not gambled against.
+    const go = sees ? dist(seeker, BASE) > mine && away
+      : ago < 6 ? dist(p.saw, BASE) > mine
+      : p.peek && dist(p, BASE) < 8 && clearSight(p, BASE);
+    if (go) { p.run = true; p.peek = false; happen(['say', people.indexOf(p), '💨', 1]); return; }
+    // Brave enough: creep toward the base to peek. A seeker guarding it sends one back.
+    if (sees && dist(seeker, BASE) < 6) { if (p.peek) { p.peek = false; p.goal = p.spot; p.repath = 0; } p.brave = Math.max(p.brave, rand(12, 30)); }
+    else if (!p.peek && p.brave <= 0) { p.peek = true; p.goal = BASE; p.repath = 0; }
+    if (p.peek) { steer(p, 2.2, dt); turnTo(p, p.want ?? p.a, 6, dt); return; }
+  }
+  steer(p, phase === 'count' ? BOT_HIDE : 2, dt);
+  if (p.moving) turnTo(p, p.want, 7, dt);
+  else turnTo(p, sees ? Math.atan2(seeker.y - p.y, seeker.x - p.x) : Math.atan2(BASE.y - p.y, BASE.x - p.x) + Math.sin(time * 0.9 + p.x) * 0.9, 3, dt);
+}
+
+// ---------- The player's finger: a joystick wherever it lands ----------
+let joy = null;
+function movePlayer(dt) {
+  player.moving = 0;
+  if (!joy || (seeker === player && player.st === 'count') || phase === 'room') return;
+  const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy);
+  if (d < 6) return;
+  const a = Math.atan2(dy, dx);
+  turnTo(player, a, 12, dt);
+  const s = SPEED * Math.min(1, Math.max(0, (d - 10) / 40));
+  player.x += Math.cos(a) * s * dt; player.y += Math.sin(a) * s * dt; collide(player);
+  player.moving = s;
+}
+c.addEventListener('pointerdown', e => { unlock(); if (phase !== 'menu' && phase !== 'room') { joy = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY }; c.setPointerCapture(e.pointerId); } });
+c.addEventListener('pointermove', e => { if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
+const lift = e => { if (joy && e.pointerId === joy.id) joy = null; };
+c.addEventListener('pointerup', lift); c.addEventListener('pointercancel', lift);
+
+// ---------- One step of the game ----------
+// Alone, and on the phone that made the room, this runs the round. A guest phone runs guestStep().
+function step(dt) {
+  time += dt;
+  for (const p of people) if (p.bt > 0) p.bt -= dt;
+  if (msgT > 0) msgT -= dt;
+  if (phase === 'menu' || phase === 'room') return;
+  if (net.on && !net.host) return guestStep(dt);
+  if (net.on) {
+    hostTick(dt);
+    if (paused()) return;
+  }
+  if (phase === 'end') { endT -= dt; if (endT <= 0) afterRound(); }
+  else timer -= dt;
+  movePlayer(dt);
+  for (const b of bots) if (b.ctrl === 'bot') b === seeker ? seekerBot(b, dt) : hiderBot(b, dt);
+  if (phase === 'count' && timer <= 0) startSeek();
+  if (phase === 'seek') {
+    rules();
+    // The seeker remembers which hiding places they have already looked at.
+    if ((spotScan -= dt) <= 0) { spotScan = 0.25; for (const s of SPOTS) if (spotChecked(seeker, s)) s.seen = time; }
+  }
+}
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'sine', vol = 0.08, to = 0, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+const sfx = {
+  ready() { [392, 523].forEach((f, i) => tone(f, 0.16, 'triangle', 0.08, 0, i * 0.16)); },
+  spot() { tone(880, 0.12, 'square', 0.05); tone(1175, 0.16, 'square', 0.05, 0, 0.12); },
+  kirkkis() { [659, 523, 392].forEach((f, i) => tone(f, 0.18, 'triangle', 0.09, 0, i * 0.15)); },
+  save() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.14, 'triangle', 0.08, 0, i * 0.1)); },
+};
+
+// ---------- Drawing ----------
+let W, H, DPR, S, safeT = 0, safeB = 0, camX = BASE.x, camY = BASE.y;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = fog.width = W * DPR; c.height = fog.height = H * DPR;
+  S = Math.min(W / 12, H / 19); // pixels per metre
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+}
+addEventListener('resize', resize); resize();
+const sx = px => (px - camX) * S + W / 2, sy = py => (py - camY) * S + H / 2;
+function world(ctx) { ctx.setTransform(DPR * S, 0, 0, DPR * S, DPR * (W / 2 - camX * S), DPR * (H / 2 - camY * S)); }
+function rrect(ctx, a, b, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(a, b, w, h, r) : ctx.rect(a, b, w, h); }
+
+function drawYard() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.fillStyle = '#24351c'; x.fillRect(0, 0, W, H);
+  world(x);
+  x.fillStyle = '#7cbf5a'; x.fillRect(0, 0, WW, WH);
+  x.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < WW; i += 3) x.fillRect(i, 0, 1.5, WH);
+  // Gravel around the base, and a path to the house.
+  x.fillStyle = '#d8c79a'; x.beginPath(); x.arc(BASE.x, BASE.y, 2.4, 0, 7); x.fill();
+  x.fillRect(BASE.x - 0.6, 9, 1.2, BASE.y - 9);
+  x.strokeStyle = '#8a6a3c'; x.lineWidth = 0.25; x.strokeRect(0.1, 0.1, WW - 0.2, WH - 0.2);
+  for (const s of SOLIDS) drawSolid(s);
+  // The base: a post with a little church on it.
+  x.fillStyle = '#7a4e2a'; x.beginPath(); x.arc(BASE.x, BASE.y, BASE_POLE, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(122,59,143,0.5)'; x.lineWidth = 0.08; x.setLineDash([0.3, 0.2]);
+  x.beginPath(); x.arc(BASE.x, BASE.y, BASE_REACH, 0, 7); x.stroke(); x.setLineDash([]);
+}
+function drawSolid(s) {
+  const k = s.k;
+  if (s.r) {
+    if (k === 'kivi') { x.fillStyle = '#9a9a96'; x.beginPath(); x.arc(s.x, s.y, s.r, 0, 7); x.fill(); x.fillStyle = '#b8b8b2'; x.beginPath(); x.arc(s.x - 0.3, s.y - 0.3, s.r * 0.55, 0, 7); x.fill(); return; }
+    x.fillStyle = '#2f6b2a'; x.beginPath(); x.arc(s.x, s.y, s.r + 0.5, 0, 7); x.fill();
+    x.fillStyle = '#3f8a35'; x.beginPath(); x.arc(s.x - 0.25, s.y - 0.25, s.r * 0.9, 0, 7); x.fill();
+    return;
+  }
+  const col = { talo: ['#c85b45', '#a7432f'], sauna: ['#6b4a35', '#55392a'], vaja: ['#b3382c', '#8f2a20'], maja: ['#e6b84a', '#c99a2e'],
+                halot: ['#9a6a3a', '#7a4e2a'], aita: ['#2f6b2a', '#255522'], auto: ['#3f7fd0', '#2c5fa0'] }[k];
+  x.fillStyle = col[1]; rrect(x, s.x, s.y, s.w, s.h, k === 'auto' ? 0.5 : 0.15); x.fill();
+  x.fillStyle = col[0]; rrect(x, s.x + 0.12, s.y + 0.12, s.w - 0.24, s.h - 0.24, k === 'auto' ? 0.45 : 0.1); x.fill();
+  if (k === 'talo' || k === 'sauna' || k === 'vaja' || k === 'maja') { // a roof ridge
+    x.strokeStyle = 'rgba(0,0,0,0.25)'; x.lineWidth = 0.12; x.beginPath();
+    if (s.w > s.h) { x.moveTo(s.x + 0.3, s.y + s.h / 2); x.lineTo(s.x + s.w - 0.3, s.y + s.h / 2); }
+    else { x.moveTo(s.x + s.w / 2, s.y + 0.3); x.lineTo(s.x + s.w / 2, s.y + s.h - 0.3); }
+    x.stroke();
+  }
+  if (k === 'auto') { x.fillStyle = '#bfe0f5'; x.fillRect(s.x + 0.35, s.y + 0.9, s.w - 0.7, 0.7); x.fillRect(s.x + 0.35, s.y + s.h - 1.3, s.w - 0.7, 0.5); }
+  if (k === 'halot') { x.fillStyle = '#d8b07a'; for (let i = 0.35; i < s.w; i += 0.5) { x.beginPath(); x.arc(s.x + i, s.y + s.h / 2, 0.2, 0, 7); x.fill(); } }
+}
+function drawBushes() {
+  for (const b of BUSHES) {
+    x.globalAlpha = bushAt(player.x, player.y) === b ? 0.55 : 0.96;
+    x.fillStyle = '#3d8a33';
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; x.beginPath(); x.arc(b.x + Math.cos(a) * b.r * 0.45, b.y + Math.sin(a) * b.r * 0.45, b.r * 0.6, 0, 7); x.fill(); }
+    x.fillStyle = '#56a845'; x.beginPath(); x.arc(b.x - 0.2, b.y - 0.2, b.r * 0.55, 0, 7); x.fill();
+  }
+  x.globalAlpha = 1;
+}
+function drawCone(p, fill) {
+  const pts = viewPoly(p);
+  x.fillStyle = fill; x.beginPath(); x.moveTo(p.x, p.y);
+  for (let i = 0; i < pts.length; i += 2) x.lineTo(pts[i], pts[i + 1]);
+  x.closePath(); x.fill();
+}
+function drawPerson(p) {
+  const out = !active(p) && p.role === 'hider';
+  x.globalAlpha = out ? 0.6 : 1;
+  x.fillStyle = 'rgba(0,0,0,0.2)'; x.beginPath(); x.arc(p.x + 0.08, p.y + 0.1, BODY, 0, 7); x.fill();
+  x.fillStyle = p.color; x.beginPath(); x.arc(p.x, p.y, BODY, 0, 7); x.fill();
+  x.lineWidth = p.isPlayer ? 0.1 : 0.06; x.strokeStyle = p.isPlayer ? '#fff' : 'rgba(0,0,0,0.4)'; x.stroke();
+  if (p.role === 'seeker') { x.strokeStyle = '#d0302a'; x.lineWidth = 0.12; x.beginPath(); x.arc(p.x, p.y, BODY * 0.72, p.a + 1.2, p.a + 5.1); x.stroke(); }
+  // Eyes look where the field of view points; shut while counting.
+  const ex = Math.cos(p.a), ey = Math.sin(p.a), nx = -ey, ny = ex;
+  for (const side of [-1, 1]) {
+    const px = p.x + ex * 0.18 + nx * side * 0.12, py = p.y + ey * 0.18 + ny * side * 0.12;
+    if (p.st === 'count') { x.strokeStyle = '#222'; x.lineWidth = 0.05; x.beginPath(); x.moveTo(px - nx * 0.05, py - ny * 0.05); x.lineTo(px + nx * 0.05, py + ny * 0.05); x.stroke(); }
+    else { x.fillStyle = '#fff'; x.beginPath(); x.arc(px, py, 0.08, 0, 7); x.fill(); x.fillStyle = '#222'; x.beginPath(); x.arc(px + ex * 0.03, py + ey * 0.03, 0.045, 0, 7); x.fill(); }
+  }
+  x.globalAlpha = 1;
+}
+function label(p, text, y, font, color) {
+  x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,0.5)'; x.strokeText(text, sx(p.x), y); x.fillStyle = color; x.fillText(text, sx(p.x), y);
+}
+function drawBubble(p) {
+  x.font = '700 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  const w = x.measureText(p.bubble).width + 16, bx = Math.max(4, Math.min(W - w - 4, sx(p.x) - w / 2)), by = sy(p.y) - BODY * S - 34;
+  x.globalAlpha = Math.min(1, p.bt * 3);
+  x.fillStyle = '#fff'; rrect(x, bx, by, w, 24, 10); x.fill();
+  x.beginPath(); x.moveTo(sx(p.x) - 5, by + 23); x.lineTo(sx(p.x) + 5, by + 23); x.lineTo(sx(p.x), by + 30); x.fill();
+  x.fillStyle = '#2b2416'; x.fillText(p.bubble, bx + w / 2, by + 12);
+  x.globalAlpha = 1;
+}
+
+function draw() {
+  // The camera follows the player but stays over the yard.
+  const hw = W / 2 / S, hh = H / 2 / S;
+  camX = WW > 2 * hw ? Math.max(hw, Math.min(WW - hw, player.x)) : WW / 2;
+  camY = WH > 2 * hh ? Math.max(hh - 1.5, Math.min(WH - hh + 1.5, player.y)) : WH / 2;
+  drawYard();
+  const playing = phase !== 'menu' && phase !== 'room';
+  const shown = people.filter(p => p === player || (playing && canSee(player, p)));
+  for (const p of shown) if (p !== player && (p === seeker ? p.st === 'seek' : active(p))) drawCone(p, p === seeker ? 'rgba(220,40,30,0.16)' : 'rgba(255,255,255,0.08)');
+  for (const p of shown) if (p !== player) drawPerson(p);
+  drawBushes();
+  drawPerson(player);
+
+  // The fog: only what the player sees is clear.
+  fx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  fx.globalCompositeOperation = 'source-over'; fx.clearRect(0, 0, W, H);
+  fx.fillStyle = 'rgba(10,16,30,0.66)'; fx.fillRect(0, 0, W, H);
+  if (player.st !== 'count') {
+    world(fx); fx.globalCompositeOperation = 'destination-out'; fx.fillStyle = '#000';
+    const pts = viewPoly(player);
+    fx.beginPath(); fx.moveTo(player.x, player.y);
+    for (let i = 0; i < pts.length; i += 2) fx.lineTo(pts[i], pts[i + 1]);
+    fx.closePath(); fx.fill();
+    fx.beginPath(); fx.arc(player.x, player.y, NEAR, 0, 7); fx.fill();
+  }
+  x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(fog, 0, 0);
+
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (const p of shown) {
+    if (p !== player && p.st === 'spotted' && phase !== 'count') label(p, '❗', sy(p.y) - BODY * S - 12, '700 18px system-ui', '#ffd23a');
+    if (p.bt > 0) drawBubble(p);
+    else if (p !== player) label(p, p.name, sy(p.y) + BODY * S + 10, '600 11px system-ui', '#fff');
+  }
+  if (player.bt > 0 && !shown.includes(player)) drawBubble(player);
+  // Words from the seeker are heard even when the seeker is out of sight.
+  if (playing && seeker !== player && seeker.bt > 0 && !shown.includes(seeker)) {
+    x.font = '700 14px system-ui'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,0.9)';
+    x.fillText(`${seeker.name}: ${seeker.bubble}`, W / 2, H - safeB - 64);
+  }
+  if (playing) { drawBaseArrow(); drawHud(); }
+  if (joy && phase !== 'menu') {
+    x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 3; x.beginPath(); x.arc(joy.ox, joy.oy, 46, 0, 7); x.stroke();
+    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy), k = d > 46 ? 46 / d : 1;
+    x.fillStyle = 'rgba(255,255,255,0.6)'; x.beginPath(); x.arc(joy.ox + dx * k, joy.oy + dy * k, 18, 0, 7); x.fill();
+  }
+  if (phase === 'count' && seeker === player) {
+    x.fillStyle = 'rgba(8,10,20,0.92)'; x.fillRect(0, 0, W, H);
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+    x.font = '800 26px system-ui'; x.fillText('Silmät kiinni!', W / 2, H * 0.36);
+    x.font = '800 80px system-ui'; x.fillText(Math.ceil(timer), W / 2, H * 0.5);
+    x.font = '600 15px system-ui'; x.fillStyle = '#c9c4d8'; x.fillText('Muut piiloutuvat…', W / 2, H * 0.62);
+  }
+  if (msgT > 0) {
+    x.globalAlpha = Math.min(1, msgT * 3);
+    x.font = '800 20px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const w = x.measureText(msg).width + 28, y = safeT + 96;
+    x.fillStyle = 'rgba(30,20,40,0.78)'; rrect(x, W / 2 - w / 2, y - 20, w, 40, 14); x.fill();
+    x.fillStyle = '#fff'; x.fillText(msg, W / 2, y);
+    x.globalAlpha = 1;
+  }
+}
+// An arrow on the screen's edge toward the base when it is out of view.
+function drawBaseArrow() {
+  const bx = sx(BASE.x), by = sy(BASE.y), m = 34;
+  if (bx > m && bx < W - m && by > safeT + 80 && by < H - safeB - m) return;
+  const a = Math.atan2(by - H / 2, bx - W / 2);
+  const k = Math.min((W / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (H / 2 - m - 40) / Math.abs(Math.sin(a) || 1e-6));
+  const ax = W / 2 + Math.cos(a) * k, ay = H / 2 + Math.sin(a) * k;
+  x.save(); x.translate(ax, ay); x.rotate(a);
+  x.fillStyle = 'rgba(122,59,143,0.85)'; x.beginPath(); x.moveTo(16, 0); x.lineTo(-6, -11); x.lineTo(-6, 11); x.fill();
+  x.restore();
+  x.font = '18px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('⛪', ax - Math.cos(a) * 22, ay - Math.sin(a) * 22);
+}
+function drawHud() {
+  const x0 = 92, y0 = safeT + 8, w = W - x0 - 8;
+  x.fillStyle = 'rgba(255,255,255,0.88)'; rrect(x, x0, y0, w, 52, 12); x.fill();
+  x.textBaseline = 'middle'; x.textAlign = 'left'; x.fillStyle = '#2b2416'; x.font = '800 14px system-ui';
+  const t = Math.max(0, Math.ceil(timer));
+  let head;
+  if (phase === 'count') head = seeker === player ? `Lasket… ${t}` : `${seeker.name} laskee: ${t}`;
+  else if (seeker === player) head = '👀 Etsit';
+  else head = { hiding: '🙈 Piilossa', spotted: '❗ Nähty – pesään!', saved: '✅ Pelastuit', caught: '✋ Kirkattu' }[player.st] || '';
+  x.fillText(head, x0 + 10, y0 + 15);
+  if (phase !== 'count') { x.textAlign = 'right'; x.fillText(`${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`, x0 + w - 10, y0 + 15); }
+  // Every hider and what has become of them.
+  x.textAlign = 'center'; x.font = '700 11px system-ui';
+  const hs = hiders(), gap = Math.min(52, (w - 12) / hs.length);
+  hs.forEach((h, i) => {
+    const cx = x0 + 10 + gap * i + gap / 2 - 4, cy = y0 + 38;
+    x.fillStyle = h.color; x.beginPath(); x.arc(cx - 12, cy, 6, 0, 7); x.fill();
+    if (h.isPlayer) { x.strokeStyle = '#2b2416'; x.lineWidth = 2; x.stroke(); }
+    x.fillStyle = '#2b2416'; x.fillText({ hiding: '🙈', spotted: '❗', saved: '✅', caught: '✋' }[h.st], cx + 6, cy);
+  });
+}
+
+// ---------- Menu ----------
+// What became of this phone's player in the round just played.
+function result() {
+  const caught = hiders().filter(h => h.st === 'caught');
+  if (seeker === player) return caught.length ? [`Kirkkasit ${caught.length}/${hiders().length}!`, 'win'] : ['Kaikki pelastuivat!', 'lose'];
+  return player.st === 'caught' ? ['Sinut kirkattiin!', 'lose'] : ['Pelastuit! 🎉', 'win'];
+}
+function showMenu() {
+  phase = 'menu'; joy = null;
+  const res = document.getElementById('result'), info = document.getElementById('info');
+  const hideB = document.getElementById('hide'), seekB = document.getElementById('seek');
+  res.className = ''; res.textContent = ''; info.textContent = '';
+  if (played) {
+    [res.textContent, res.className] = result();
+    info.textContent = nextSeeker === player ? 'Sinä etsit seuraavaksi.' : `Seuraavaksi etsii ${nextSeeker.name}.`;
+  }
+  hideB.classList.toggle('next', !!nextSeeker && nextSeeker !== player);
+  seekB.classList.toggle('next', nextSeeker === player);
+  document.getElementById('total').textContent = stats.kierrokset
+    ? `Kierroksia ${stats.kierrokset} · pelastuit ${stats.pelastuit} · kirkkasit ${stats.kirkkasit}` : '';
+  netEl.classList.add('hidden');
+  menu.classList.remove('hidden');
+}
+document.getElementById('hide').addEventListener('click', () => { unlock(); newRound('hide'); });
+document.getElementById('seek').addEventListener('click', () => { unlock(); newRound('seek'); });
+function afterRound() { if (net.on) showRoom(); else showMenu(); }
+
+// ---------- Playing with friends (#27) ----------
+// One phone makes a room and runs the round: the computer players, the rules, the clock. Every
+// phone moves its own player and sends where it is; the host sends everyone the round 12 times a
+// second, and each phone draws it from its own player's eyes. The room itself is a relay on this
+// site's /api/rooms/<CODE> (rooms/worker.js). When a phone in the round drops off, the round
+// pauses until it is back, or until the host lets a computer player take over.
+const netEl = document.getElementById('net'), $ = id => document.getElementById(id);
+const ROOM_KEY = KEY + 'huone'; // sessionStorage: the room this tab is in, to rejoin after a reload
+const LETTERS = 'ABCDEFGHJKLMNPRSTUVY';
+const NICKS = ['Siili', 'Orava', 'Kettu', 'Jänis', 'Pöllö', 'Ilves', 'Hirvi', 'Majava'];
+const myId = load('id', null) || (() => {
+  const id = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+  save('id', id); return id;
+})();
+let myName = load('nimi', '') || NICKS[Math.floor(Math.random() * NICKS.length)];
+let waiting = []; // the people the round is waiting for
+const r2 = v => Math.round(v * 100) / 100;
+
+const net = {
+  on: false, host: false, code: '', ws: null, connected: false, joined: false, tries: 0, timer: 0,
+  members: [], hostId: '', events: [], sendT: 0, meT: 0, pz: [], wait: false, round: 0, online: new Set(),
+  send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); },
+};
+const hostOn = () => net.members.some(m => m.id === net.hostId && m.on);
+const hostName = () => (net.members.find(m => m.id === net.hostId) || {}).name || 'huoneen tekijä';
+
+function connect() {
+  clearTimeout(net.timer);
+  const u = new URL('../../../api/rooms/' + net.code, location.href);
+  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+  u.search = new URLSearchParams(Object.assign({ id: myId, name: myName }, net.host ? { host: '1' } : {}));
+  let ws;
+  try { ws = new WebSocket(u); } catch (e) { return; }
+  net.ws = ws;
+  ws.onopen = () => { if (net.ws === ws) { net.connected = true; renderNet(); } };
+  ws.onmessage = e => { if (net.ws !== ws) return; let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
+  ws.onclose = e => {
+    if (net.ws !== ws) return;
+    net.ws = null; net.connected = false;
+    if (!net.on) return;
+    // A code someone else is using: a new room gets a new code.
+    if (e.code === 4009 && net.host && !net.joined) { net.code = newCode(); return connect(); }
+    if (e.code >= 4000 && e.code < 4100) return leaveRoom(e.reason || 'Yhteys katkesi.');
+    if (!net.joined && ++net.tries >= 3) return leaveRoom('Ei yhteyttä. Kokeile hetken päästä uudelleen.');
+    net.timer = setTimeout(connect, Math.min(4000, 700 * (net.tries + 1)));
+    renderNet();
+  };
+  renderNet();
+}
+function newCode() { let c = ''; for (let i = 0; i < 4; i++) c += LETTERS[Math.floor(Math.random() * LETTERS.length)]; return c; }
+function enterRoom(code, host) {
+  net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0;
+  net.members = []; net.hostId = host ? myId : ''; net.round = 0; net.wait = false; net.pz = [];
+  played = false; nextSeeker = null;
+  $('netErr').textContent = '';
+  phase = 'room';
+  showRoom();
+  connect();
+}
+function leaveRoom(why) {
+  const ws = net.ws;
+  if (net.host) net.send({ t: 'close' });
+  net.send({ t: 'bye' });
+  net.on = false; net.ws = null; net.connected = false; clearTimeout(net.timer);
+  if (ws) try { ws.close(1000, 'Poistui'); } catch (e) { /* gone */ }
+  try { sessionStorage.removeItem(ROOM_KEY); } catch (e) { /* private mode */ }
+  useSolo(); played = false; nextSeeker = null; waiting = []; msgT = 0;
+  if (why) { phase = 'menu'; openNet(); $('netErr').textContent = why; } else showMenu();
+}
+
+function onNet(m) {
+  if (m.t === 'peers') {
+    const was = net.online;
+    net.members = m.members || []; net.hostId = m.host;
+    net.online = new Set(net.members.filter(x => x.on).map(x => x.id));
+    if (!net.joined) {
+      net.joined = true;
+      try { sessionStorage.setItem(ROOM_KEY, JSON.stringify({ code: net.code, host: net.host })); } catch (e) { /* private mode */ }
+      // A host that comes back without its round (a reload) sends everyone back to the room.
+      if (net.host && !racing()) net.send({ t: 'lobby' });
+    }
+    if (net.host) hostPeers(was);
+    else if (!net.members.some(x => x.id === net.hostId)) return leaveRoom('Huone suljettiin.');
+    renderNet();
+    return;
+  }
+  if (net.host) {
+    if (m.t === 'me') {
+      const p = people.find(q => q.id && q.id === m.from && q.ctrl === 'remote');
+      if (p && racing() && [m.x, m.y, m.a].every(Number.isFinite)) {
+        p.x = Math.max(0, Math.min(WW, m.x)); p.y = Math.max(0, Math.min(WH, m.y)); p.a = m.a; p.moving = +m.m || 0;
+      }
+    }
+    return;
+  }
+  if (m.t === 'start') guestStart(m);
+  else if (m.t === 's') guestState(m);
+  else if (m.t === 'end') { guestState(m); roundOver(people[m.next] || seeker); }
+  else if (m.t === 'wait') { net.wait = true; renderNet(); }
+  else if (m.t === 'lobby') { if (phase !== 'room') { played = false; showRoom(); } }
+  else if (m.t === 'close') leaveRoom('Huone suljettiin.');
+}
+const racing = () => phase === 'count' || phase === 'seek' || phase === 'end';
+
+// ----- On the host -----
+// The round as the others need it: where everyone is, which way they look, and their state.
+const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0)]);
+function snapshot(to) {
+  return { t: 'start', to, round: net.round, seeker: people.indexOf(seeker), ph: phase, tm: r2(timer), p: stateOf(),
+           people: people.map(p => ({ n: p.name, c: p.color, id: p.id })) };
+}
+function startMulti() {
+  const humans = net.members.filter(m => m.on).slice(0, 5);
+  if (humans.length < 2 || !net.connected) return;
+  unlock();
+  const cast = humans.map((m, i) => {
+    const p = person(m.name, COLORS[i], m.id === myId);
+    p.id = m.id; p.ctrl = m.id === myId ? 'me' : 'remote';
+    return p;
+  });
+  const taken = new Set(cast.map(p => p.name.toLowerCase()));
+  for (const n of BOT_NAMES) if (cast.length < 5 && !taken.has(n.toLowerCase())) cast.push(person(n, COLORS[cast.length]));
+  people = cast; player = cast.find(p => p.isPlayer); bots = cast.filter(p => p.ctrl === 'bot');
+  // The first one caught last round seeks; the first round, a phone picked at random.
+  const next = nextSeeker && cast.find(p => (nextSeeker.id ? p.id === nextSeeker.id : !p.id && p.name === nextSeeker.name));
+  net.round++; net.events = []; net.sendT = 0;
+  setupRound(next || cast[Math.floor(Math.random() * humans.length)]);
+  net.send(snapshot());
+}
+// Someone came or went: a phone back in the round gets the round; a new one waits for the next.
+function hostPeers(was) {
+  if (!racing()) return;
+  for (const p of people) {
+    if (!p.id) continue;
+    const member = net.members.find(m => m.id === p.id);
+    if (!member) { if (p.ctrl === 'remote') toBot(p); continue; } // left the room for good
+    if (net.online.has(p.id) && !was.has(p.id)) {
+      if (p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
+      net.send(snapshot(p.id));
+    }
+  }
+  for (const m of net.members) if (m.on && !was.has(m.id) && !people.some(p => p.id === m.id)) net.send({ t: 'wait', to: m.id });
+}
+// The round waits while a phone in it is away, and while the host itself has no connection.
+function paused() {
+  if (phase === 'end') return false;
+  waiting = people.filter(p => p.ctrl === 'remote' && !net.online.has(p.id));
+  return waiting.length > 0 || !net.connected;
+}
+function hostTick(dt) {
+  if ((net.sendT -= dt) > 0) return;
+  net.sendT = paused() ? 0.5 : 1 / 12;
+  hostSend();
+}
+function hostSend() {
+  net.send({ t: 's', ph: phase, tm: r2(timer), p: stateOf(), ev: net.events.splice(0), pz: waiting.map(p => p.name) });
+}
+$('goOn').addEventListener('click', () => { waiting.forEach(toBot); waiting = []; });
+
+// ----- On a guest phone -----
+function guestStart(m) {
+  const cast = m.people.map(q => {
+    const p = person(q.n, q.c, q.id === myId);
+    p.id = q.id; p.ctrl = q.id === myId ? 'me' : 'net';
+    return p;
+  });
+  const me = cast.find(p => p.isPlayer);
+  if (!me) return;
+  people = cast; player = me; bots = [];
+  seeker = people[m.seeker] || people[0];
+  people.forEach(p => { p.role = p === seeker ? 'seeker' : 'hider'; });
+  firstCaught = null; joy = null; net.wait = false; net.round = m.round;
+  guestState(m, true);
+  phase = m.ph; timer = m.tm;
+  if (m.ph === 'count' && m.tm > COUNT - 1) show(['count', 0]);
+  menu.classList.add('hidden'); netEl.classList.add('hidden');
+}
+function guestState(m, snap) {
+  if (!m.p || m.p.length !== people.length) return;
+  m.p.forEach((q, i) => {
+    const p = people[i];
+    p.st = q[3];
+    if (p === player && !snap) return; // this phone moves its own player
+    p.tx = q[0]; p.ty = q[1]; p.a = q[2]; p.moving = q[4];
+    if (snap) { p.x = q[0]; p.y = q[1]; }
+  });
+  if ((m.ph === 'count' || m.ph === 'seek') && (phase === 'count' || phase === 'seek')) phase = m.ph;
+  if (Number.isFinite(m.tm)) timer = m.tm;
+  net.pz = m.pz || [];
+  for (const ev of m.ev || []) show(ev);
+}
+function guestStep(dt) {
+  if (phase === 'end') { endT -= dt; if (endT <= 0) showRoom(); return; }
+  if (!net.connected || !hostOn() || net.pz.length) return;
+  timer -= dt;
+  movePlayer(dt);
+  // The others glide to where the host last saw them.
+  const k = Math.min(1, dt * 12);
+  for (const p of people) if (p !== player && p.tx !== undefined) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+  if ((net.meT -= dt) <= 0) {
+    net.meT = 0.1;
+    net.send({ t: 'me', x: r2(player.x), y: r2(player.y), a: r2(player.a), m: r2(player.moving) });
+  }
+}
+
+// ----- The pause notice -----
+let pauseShown = '';
+function pauseBox() {
+  let text = '', canGoOn = false;
+  if (net.on && racing() && phase !== 'end') {
+    if (!net.connected) text = 'Yhteys katkesi – yhdistetään…';
+    else if (!net.host && !hostOn()) text = `⏸ Odotetaan, että ${hostName()} palaa…`;
+    else if (net.host && waiting.length) { text = `⏸ Odotetaan: ${waiting.map(p => p.name).join(', ')}`; canGoOn = true; }
+    else if (!net.host && net.pz.length) text = `⏸ Odotetaan: ${net.pz.join(', ')}`;
+  }
+  const key = text + canGoOn;
+  if (key === pauseShown) return;
+  pauseShown = key;
+  $('pause').classList.toggle('hidden', !text);
+  $('pauseText').textContent = text;
+  $('goOn').classList.toggle('hidden', !canGoOn);
+}
+
+// ----- The room screen -----
+function openNet() {
+  menu.classList.add('hidden');
+  netEl.classList.remove('hidden');
+  $('nameIn').value = myName;
+  renderNet();
+}
+function showRoom() {
+  phase = 'room'; joy = null;
+  if (net.host) net.send({ t: 'lobby' });
+  openNet();
+  const res = $('roomResult');
+  if (played) [res.textContent, res.className] = result(); else { res.textContent = ''; res.className = ''; }
+}
+function renderNet() {
+  $('joinView').classList.toggle('hidden', net.on);
+  $('roomView').classList.toggle('hidden', !net.on);
+  $('netBack').textContent = net.on ? 'Poistu huoneesta' : 'Takaisin';
+  if (!net.on) return;
+  if ($('code').textContent !== net.code) { $('code').textContent = net.code; drawQR($('qr'), joinLink()); }
+  const ul = $('members');
+  ul.textContent = '';
+  net.members.forEach((m, i) => {
+    const li = document.createElement('li'), dot = document.createElement('i');
+    dot.style.background = COLORS[i % COLORS.length];
+    li.append(dot, (m.id === net.hostId ? '👑 ' : '') + m.name + (m.id === myId ? ' (sinä)' : '') + (m.on ? '' : ' – ei yhteyttä'));
+    li.classList.toggle('off', !m.on);
+    ul.append(li);
+  });
+  const online = net.members.filter(m => m.on).length;
+  let info;
+  if (!net.connected) info = 'Yhdistetään…';
+  else if (net.host) info = online < 2 ? 'Odotetaan kavereita…' : `${online} pelaajaa. Tyhjät paikat täyttävät tietokonepelaajat.`;
+  else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : `Odotetaan, että ${hostName()} aloittaa kierroksen…`;
+  if (net.host && played && nextSeeker) info += ` Seuraavaksi etsii ${nextSeeker === player ? 'sinä' : nextSeeker.name}.`;
+  $('roomInfo').textContent = info;
+  $('startRound').classList.toggle('hidden', !net.host);
+  $('startRound').disabled = online < 2 || !net.connected;
+  $('startRound').textContent = played ? 'Uusi kierros' : 'Aloita kierros';
+}
+const joinLink = () => location.origin + location.pathname + '?huone=' + net.code;
+function takeName() {
+  const n = $('nameIn').value.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+  if (n) { myName = n; save('nimi', n); }
+}
+$('multi').addEventListener('click', () => { unlock(); openNet(); $('netErr').textContent = ''; });
+$('create').addEventListener('click', () => { unlock(); takeName(); enterRoom(newCode(), true); });
+function joinTyped() {
+  unlock(); takeName();
+  const code = $('codeIn').value.trim().toUpperCase();
+  if (!/^[A-Z]{4}$/.test(code)) { $('netErr').textContent = 'Koodissa on neljä kirjainta.'; return; }
+  enterRoom(code, false);
+}
+$('join').addEventListener('click', joinTyped);
+$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') joinTyped(); });
+$('startRound').addEventListener('click', startMulti);
+$('netBack').addEventListener('click', () => { if (net.on) leaveRoom(); else showMenu(); });
+
+// ----- A QR code of the join link, drawn here (byte mode, error correction M, versions 1-9) -----
+function qrMatrix(text) {
+  const ECC = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22], BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5];
+  const rawModules = v => { let r = (16 * v + 128) * v + 64; if (v >= 2) { const n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; } return r; };
+  const bit = (x, i) => ((x >>> i) & 1) !== 0;
+  const mul = (x, y) => { let z = 0; for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11d); z ^= ((y >>> i) & 1) * x; } return z; };
+  const bytes = [...new TextEncoder().encode(text)];
+  let v = 1;
+  while (v <= 9 && 12 + bytes.length * 8 > (Math.floor(rawModules(v) / 8) - ECC[v] * BLOCKS[v]) * 8) v++;
+  if (v > 9) return null;
+  const nData = Math.floor(rawModules(v) / 8) - ECC[v] * BLOCKS[v];
+  const bits = [], put = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+  put(4, 4); put(bytes.length, 8); bytes.forEach(b => put(b, 8));
+  put(0, Math.min(4, nData * 8 - bits.length)); put(0, (8 - bits.length % 8) % 8);
+  for (let pad = 0xec; bits.length < nData * 8; pad ^= 0xec ^ 0x11) put(pad, 8);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = b << 1 | bits[i + j]; data.push(b); }
+  // Reed-Solomon error correction, block by block, then interleaved.
+  const ecl = ECC[v], nb = BLOCKS[v], raw = Math.floor(rawModules(v) / 8), nShort = nb - raw % nb, shortLen = Math.floor(raw / nb);
+  const div = new Array(ecl).fill(0); div[ecl - 1] = 1;
+  for (let i = 0, root = 1; i < ecl; i++) { for (let j = 0; j < ecl; j++) { div[j] = mul(div[j], root); if (j + 1 < ecl) div[j] ^= div[j + 1]; } root = mul(root, 2); }
+  const blocks = [];
+  for (let i = 0, k = 0; i < nb; i++) {
+    const d = data.slice(k, k += shortLen - ecl + (i < nShort ? 0 : 1)), rem = new Array(ecl).fill(0);
+    for (const b of d) { const f = b ^ rem.shift(); rem.push(0); div.forEach((c, j) => { rem[j] ^= mul(c, f); }); }
+    if (i < nShort) d.push(0);
+    blocks.push(d.concat(rem));
+  }
+  const all = [];
+  for (let i = 0; i < blocks[0].length; i++) blocks.forEach((b, j) => { if (i !== shortLen - ecl || j >= nShort) all.push(b[i]); });
+  // The modules: finders, timing, alignment, version and format, then the data in a zigzag.
+  const size = v * 4 + 17, m = [], fn = [];
+  for (let y = 0; y < size; y++) { m.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
+  const set = (x, y, d) => { m[y][x] = d; fn[y][x] = true; };
+  for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+  for (const [cx, cy] of [[3, 3], [size - 4, 3], [3, size - 4]]) for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+    const d = Math.max(Math.abs(dx), Math.abs(dy)), x = cx + dx, y = cy + dy;
+    if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4);
+  }
+  const ap = [];
+  if (v > 1) { const n = Math.floor(v / 7) + 2, stepA = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2; ap.push(6); for (let p = v * 4 + 10; ap.length < n; p -= stepA) ap.splice(1, 0, p); }
+  for (let i = 0; i < ap.length; i++) for (let j = 0; j < ap.length; j++) {
+    if ((i === 0 && j === 0) || (i === 0 && j === ap.length - 1) || (i === ap.length - 1 && j === 0)) continue;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(ap[i] + dx, ap[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+  }
+  const format = mask => {
+    let rem = mask; for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const b = (mask << 10 | rem) ^ 0x5412; // level M is 00
+    for (let i = 0; i <= 5; i++) set(8, i, bit(b, i));
+    set(8, 7, bit(b, 6)); set(8, 8, bit(b, 7)); set(7, 8, bit(b, 8));
+    for (let i = 9; i < 15; i++) set(14 - i, 8, bit(b, i));
+    for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(b, i));
+    for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(b, i));
+    set(8, size - 8, true);
+  };
+  format(0);
+  if (v >= 7) {
+    let rem = v; for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+    const b = v << 12 | rem;
+    for (let i = 0; i < 18; i++) { const a = size - 11 + i % 3, c = Math.floor(i / 3); set(a, c, bit(b, i)); set(c, a, bit(b, i)); }
+  }
+  for (let right = size - 1, i = 0; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+      const x = right - j, y = ((right + 1) & 2) === 0 ? size - 1 - vert : vert;
+      if (!fn[y][x] && i < all.length * 8) { m[y][x] = bit(all[i >>> 3], 7 - (i & 7)); i++; }
+    }
+  }
+  // Pick the mask that leaves the fewest long runs, 2×2 blocks and imbalance.
+  const MASKS = [(x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, x => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+    (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => x * y % 2 + x * y % 3 === 0,
+    (x, y) => (x * y % 2 + x * y % 3) % 2 === 0, (x, y) => ((x + y) % 2 + x * y % 3) % 2 === 0];
+  const flip = k => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && MASKS[k](x, y)) m[y][x] = !m[y][x]; };
+  const penalty = () => {
+    let p = 0, dark = 0;
+    for (let a = 0; a < size; a++) for (const horiz of [true, false]) {
+      let run = 1;
+      for (let b = 1; b <= size; b++) {
+        const same = b < size && (horiz ? m[a][b] === m[a][b - 1] : m[b][a] === m[b - 1][a]);
+        if (same) run++; else { if (run >= 5) p += run - 2; run = 1; }
+      }
+    }
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (m[y][x]) dark++;
+      if (x < size - 1 && y < size - 1 && m[y][x] === m[y][x + 1] && m[y][x] === m[y + 1][x] && m[y][x] === m[y + 1][x + 1]) p += 3;
+    }
+    return p + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+  };
+  let best = 0, bestP = Infinity;
+  for (let k = 0; k < 8; k++) { flip(k); format(k); const p = penalty(); if (p < bestP) { bestP = p; best = k; } flip(k); }
+  flip(best); format(best);
+  return m;
+}
+function drawQR(cv, text) {
+  const m = qrMatrix(text), g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  if (!m) return;
+  const n = m.length + 8, k = Math.floor(cv.width / n), o = Math.floor((cv.width - k * n) / 2) + 4 * k;
+  g.fillStyle = '#000';
+  m.forEach((row, y) => row.forEach((d, x) => { if (d) g.fillRect(o + x * k, o + y * k, k, k); }));
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  // Once the player is out, the rest of the round plays out faster (alone only: friends still play).
+  const out = !net.on && phase === 'seek' && player.role === 'hider' && !active(player);
+  for (let i = 0; i < (out ? 3 : 1); i++) step(dt);
+  draw();
+  pauseBox();
+  requestAnimationFrame(frame);
+}
+// A join link (?huone=KOOD) joins at once; a reload goes back to the room this tab was in.
+(function start() {
+  const q = new URLSearchParams(location.search).get('huone');
+  let back = null;
+  try { back = JSON.parse(sessionStorage.getItem(ROOM_KEY) || 'null'); } catch (e) { /* private mode */ }
+  if (q) history.replaceState(null, '', location.pathname);
+  if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) enterRoom(q.toUpperCase(), false);
+  else if (back && /^[A-Z]{4}$/.test(back.code)) enterRoom(back.code, !!back.host);
+  else showMenu();
+})();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

@@ -48,6 +48,13 @@ high-score lists (#25).
   score, `AiPelitScores.board(id, label)` picks a per-course list. The game must also be in
   `GAMES` in `server/api.js` (which way is better). Scores wait on the phone while offline.
   Nicknames are one per phone, and show on lists only once approved at `/yllapito/`.
+- **Live rooms (multiplayer).** `/api/rooms/<CODE>` is a WebSocket to a room: one Durable
+  Object per 4-letter code in the `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project
+  as `ROOMS`. The room only relays: the phone that made it (the host) runs the game and sends it to
+  the others; theirs go to the host. Up to 5 phones. A game copies the client from Kirkkis v2
+  (`net`, `connect()`, `qrMatrix()`), keeps its solo mode, and must keep working with no room.
+  CI deploys `rooms/` before the site; a change to it must keep every published version's
+  messages working.
 - `public/scores.js` is shared by every version that uses it: change it only in ways every one of
   them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
