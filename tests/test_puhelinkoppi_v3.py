@@ -74,3 +74,19 @@ def test_the_spin_buttons_pick_the_spin_only_before_the_throw(site, context):
     page.wait_for_function("document.getElementById('spins').classList.contains('off')")
     page.evaluate("pick; document.querySelector('#spins button[data-spin=kierre]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
     assert page.evaluate("spin") == "voltti"
+
+
+def test_a_catch_screen_down_or_a_drop_ends_the_streak_but_keeps_the_record(site, context):
+    page = open_game(site, context)
+    for ending, throw in [("down", "launch({ v0: 3, wx: 5 })"), ("drop", "launch({ v0: 3, vx: 0.5 })")]:
+        page.evaluate("localStorage.setItem('ai-pelit:puhelinkoppi:putki-nyt', '3');"
+                      "localStorage.setItem('ai-pelit:puhelinkoppi:putki', '5')")
+        page.reload()
+        page.evaluate("noise = 0")
+        assert page.evaluate("[streak, record]") == [3, 5]
+        page.evaluate(throw)
+        page.evaluate(FLY, 4)
+        assert page.evaluate("[result.kind, streak, record]") == [ending, 0, 5]
+        assert page.evaluate("localStorage.getItem('ai-pelit:puhelinkoppi:putki-nyt')") == "0"
+        page.reload()
+        assert page.evaluate("[streak, record]") == [0, 5]
