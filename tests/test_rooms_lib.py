@@ -181,6 +181,13 @@ def start(host, guests):
     host.wait_for_function("demo.clock > 1")
 
 
+def test_a_page_that_never_opens_the_room_has_no_errors(phones):
+    page = phones("Eero")
+    page.wait_for_timeout(700)  # the pause notice is checked every 250 ms
+    assert page.errors == []
+    assert page.locator("#aipr").count() == 0
+
+
 def test_phones_meet_by_code_and_by_link(phones):
     host, code = make_room(phones)
     assert re.fullmatch(r"[A-Z]{4}", code)
