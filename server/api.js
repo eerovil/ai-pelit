@@ -8,7 +8,9 @@
 //   POST /api/scores           {player, game, board, version, score} -> {best, rank}
 //   GET  /api/scores?game=&board=&player=                    -> {rows, mine}
 //   GET  /api/admin/players    (X-Admin-Key)                 -> {players}
-//   POST /api/admin/players    (X-Admin-Key) {id, status}    -> {name, status}
+//   POST /api/admin/players    (X-Admin-Key) {id, name, status} -> {name, status}
+//   POST /api/plays            {game, version}               -> {ok}
+//   GET  /api/plays                                          -> {games: {<slug>: total}}
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
@@ -180,6 +182,52 @@ async function list(env, url) {
   return json({ rows, mine });
 }
 
+// Play counts (#26): back.js sends one count each time a game version opens. Anonymous by
+// Eero's choice: a row is game, version, UTC day and a number, nothing about the phone.
+const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const CATALOG_TTL = 60e3;
+let catalog = null, catalogAt = 0;
+
+// The games and versions the site has, from its own catalog.json, so a made-up game gets no
+// row. Without env.ASSETS (the tests) any well-formed slug and version is taken. When the
+// catalog cannot be read, the last one read is used; with none yet, null and no count is taken.
+async function knownVersions(env, url) {
+  if (!env.ASSETS) return 'any';
+  if (!catalog || Date.now() - catalogAt > CATALOG_TTL) {
+    try {
+      const res = await env.ASSETS.fetch(new URL('/catalog.json', url));
+      if (!res.ok) return catalog;
+      const data = await res.json();
+      catalog = new Map(data.games.map((g) => [g.slug, new Set(g.versions.map((v) => v.n))]));
+      catalogAt = Date.now();
+    } catch (e) {
+      return catalog;
+    }
+  }
+  return catalog;
+}
+
+async function addPlay(env, url, body) {
+  const game = String(body.game || ''), version = Number(body.version);
+  if (!SLUG.test(game)) return fail(400, 'bad game');
+  if (!Number.isInteger(version) || version < 1 || version > 999) return fail(400, 'bad version');
+  const known = await knownVersions(env, url);
+  if (!known) return fail(503, 'no catalog');
+  if (known !== 'any' && !(known.get(game) && known.get(game).has(version))) return fail(404, 'no such version');
+  await env.DB.prepare(
+    `INSERT INTO plays (game, version, day, n) VALUES (?, ?, ?, 1)
+     ON CONFLICT (game, version, day) DO UPDATE SET n = n + 1`
+  ).bind(game, version, now().slice(0, 10)).run();
+  return json({ ok: true });
+}
+
+async function playTotals(env) {
+  const { results } = await env.DB.prepare('SELECT game, SUM(n) AS n FROM plays GROUP BY game').all();
+  const games = {};
+  for (const r of results) games[r.game] = r.n;
+  return json({ games });
+}
+
 function isAdmin(request, env) {
   const key = request.headers.get('x-admin-key') || '';
   return !!env.ADMIN_KEY && key === env.ADMIN_KEY;
@@ -195,23 +243,39 @@ async function adminPlayers(env) {
 }
 
 async function adminDecide(env, body) {
-  const id = String(body.id || ''), status = body.status;
+  const id = String(body.id || ''), status = body.status, expected = body.name;
   if (!ID.test(id)) return fail(400, 'bad id');
   if (status !== 'approved' && status !== 'rejected') return fail(400, 'status is approved or rejected');
+  // The name the admin saw: a decision on a name the phone has since changed is refused, so no
+  // name is ever approved unseen.
+  if (typeof expected !== 'string') return fail(400, 'name needed');
   const p = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(id).first();
   if (!p) return fail(404, 'unknown player');
-  if (status === 'approved') {
-    // An approved name is locked to this phone for good. A rejected player's name was freed,
-    // and another phone may hold it now: then it cannot be approved.
-    const key = nameKey(p.name);
-    if (!(await claim(env, key, id, 1))) return fail(409, 'name taken by another player');
-    await env.DB.prepare('UPDATE names SET locked = 1 WHERE name_key = ?').bind(key).run();
-  } else {
+  if (p.name !== expected) return fail(409, 'name changed');
+  const t = now();
+  if (status === 'rejected') {
+    const res = await env.DB.prepare("UPDATE players SET status = 'rejected', updated_at = ? WHERE id = ? AND name = ?")
+      .bind(t, id, expected).run();
+    if (!res.meta.changes) return fail(409, 'name changed');
     // Rejecting the player frees every name it held.
     await env.DB.prepare('DELETE FROM names WHERE player = ?').bind(id).run();
+    return json({ name: expected, status });
   }
-  await env.DB.prepare('UPDATE players SET status = ?, updated_at = ? WHERE id = ?').bind(status, now(), id).run();
-  return json({ name: p.name, status });
+  // An approved name is locked to this phone for good. A rejected player's name was freed, and
+  // another phone may hold it now: then it cannot be approved. The lock is taken before the
+  // status changes, and undone if the phone changed name in between.
+  const key = nameKey(expected);
+  const before = await env.DB.prepare('SELECT player, locked FROM names WHERE name_key = ?').bind(key).first();
+  if (!(await claim(env, key, id, 1))) return fail(409, 'name taken by another player');
+  await env.DB.prepare('UPDATE names SET locked = 1 WHERE name_key = ? AND player = ?').bind(key, id).run();
+  const res = await env.DB.prepare("UPDATE players SET status = 'approved', updated_at = ? WHERE id = ? AND name = ?")
+    .bind(t, id, expected).run();
+  if (!res.meta.changes) {
+    if (!before) await env.DB.prepare('DELETE FROM names WHERE name_key = ? AND player = ?').bind(key, id).run();
+    else if (!before.locked) await env.DB.prepare('UPDATE names SET locked = 0 WHERE name_key = ? AND player = ?').bind(key, id).run();
+    return fail(409, 'name changed');
+  }
+  return json({ name: expected, status });
 }
 
 async function route(request, env) {
@@ -228,6 +292,11 @@ async function route(request, env) {
   if (path === '/api/scores' && method === 'POST') {
     const body = await readBody(request);
     return body ? addScore(env, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/plays' && method === 'GET') return playTotals(env);
+  if (path === '/api/plays' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? addPlay(env, url, body) : fail(400, 'bad body');
   }
   if (path === '/api/admin/players') {
     if (!isAdmin(request, env)) return fail(403, 'admin key needed');

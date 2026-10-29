@@ -75,7 +75,9 @@
           return post('scores', { player: playerId(), game: q.game, board: q.board, version: q.version, score: q.score })
             .then(function (b) {
               if (b.httpStatus === 404) { save(K + 'lahetetty', ''); return false; } // server forgot us: register again
-              if (b.httpStatus >= 500) return false;
+              // Kept for later unless the server took it. Only a 400 (a score it can never take)
+              // is dropped, so one bad item cannot block the queue for good.
+              if (b.httpStatus !== 400 && (b.httpStatus < 200 || b.httpStatus > 299)) return false;
               var now = load(QUEUE, {});
               if (now[key] && now[key].score === q.score) { delete now[key]; save(QUEUE, now); }
               return true;

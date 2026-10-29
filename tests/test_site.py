@@ -19,6 +19,10 @@ def errors_on(page):
 
 def test_every_real_version_loads_without_errors(site, context):
     catalog = site.build(ROOT / "games")
+    # The test server has no /api/: answer the play counts (#26) every page sends as the real one does.
+    context.route("**/api/plays", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body='{"ok": true}' if route.request.method == "POST" else '{"games": {}}'))
     page = context.new_page()
     found = errors_on(page)
     for game in catalog["games"]:

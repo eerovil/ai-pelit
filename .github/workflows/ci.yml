@@ -82,5 +82,6 @@ jobs:
         run: |
           curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://ai-pelit.pages.dev/catalog.json > /dev/null
           curl -fsS --retry 6 --retry-delay 5 --retry-all-errors 'https://ai-pelit.pages.dev/api/scores?game=hiihto&board=taso-1' > /dev/null
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://ai-pelit.pages.dev/api/plays > /dev/null
           # A room answers a plain GET with 426 (WebSocket only) once ROOMS is bound; 503 if not.
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://ai-pelit.pages.dev/api/rooms/TEST)" = 426

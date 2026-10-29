@@ -14,7 +14,7 @@ export function makeD1() {
     bind: (...a) => statement(sql, a),
     first: async () => db.prepare(sql).get(...args) ?? null,
     all: async () => ({ results: db.prepare(sql).all(...args) }),
-    run: async () => db.prepare(sql).run(...args),
+    run: async () => ({ meta: { changes: Number(db.prepare(sql).run(...args).changes) } }),
   });
   return { prepare: (sql) => statement(sql), raw: db };
 }

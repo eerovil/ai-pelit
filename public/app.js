@@ -59,7 +59,10 @@
         el('a', { class: 'card-main', href: '#/' + game.slug }, [
           el('h2', { text: game.title }),
           el('p', { text: game.description }),
-          el('p', { class: 'muted', text: 'v' + v.n + ' · ' + fiDate(v.date) + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '') }),
+          el('p', { class: 'muted' }, [
+            document.createTextNode('v' + v.n + ' · ' + fiDate(v.date) + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
+            el('span', { class: 'plays', text: playsText(game.slug) }),
+          ]),
         ]),
         el('a', { class: 'button', href: playUrl(game.slug, v.n), text: 'Pelaa' }),
       ]));
@@ -68,6 +71,33 @@
     children.push(copyBox('Uusi peli', 'Uusi peli: '));
     view.replaceChildren.apply(view, children);
     showWaitingNames();
+    loadPlays();
+  }
+
+  // Play counts (#26): how many times each game has been opened, all versions together, on
+  // every phone. The last answer is kept on the phone, so the shelf shows it at once and offline.
+  var PLAYS_KEY = 'ai-pelit:_pelikerrat:yhteensa';
+  var plays = {};
+  try { plays = JSON.parse(localStorage.getItem(PLAYS_KEY)) || {}; } catch (e) {}
+
+  function playsText(slug) {
+    var n = plays[slug];
+    if (!n) return '';
+    return ' · pelattu ' + n + (n === 1 ? ' kerran' : ' kertaa');
+  }
+
+  function loadPlays() {
+    fetch('api/plays', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) {
+        if (!b || !b.games) return;
+        plays = b.games;
+        try { localStorage.setItem(PLAYS_KEY, JSON.stringify(plays)); } catch (e) {}
+        Array.prototype.forEach.call(view.querySelectorAll('.card[data-slug] .plays'), function (span) {
+          span.textContent = playsText(span.closest('.card').getAttribute('data-slug'));
+        });
+      })
+      .catch(function () {});
   }
 
   // On the admin's phone only (it holds the key yllapito/ saved): how many nicknames wait.
