@@ -1,0 +1,13 @@
+{
+  "title": "Kirkkis",
+  "description": "Kirkonrotta pihalla: piiloudu tai etsi, ja jokainen näkee vain oman näkökenttänsä.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: piiloudu tai etsi neljää tietokonepelaajaa pihalla, jossa jokainen näkee vain oman näkökenttänsä, ja ehdi pesään huutamaan ”Kirkkis!”.",
+      "request": "Kirkkis peli. Eli kirkonrotta. Yksi on etsijä, kaikilla on oma näkökenttä",
+      "issue": "eerovil/ai-pelit#20"
+    }
+  ]
+}
