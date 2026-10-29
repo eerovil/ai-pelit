@@ -50,13 +50,24 @@ high-score lists (#25), then play counts (#26).
 
 - **High scores.** A version opts in with
   `<script src="../../../scores.js" data-game="<slug>" data-order="high|low" data-corner="bottom-right"></script>`
-  and calls `AiPelitScores.submit(score)` when a round ends; `AiPelitScores.format(fn)` shows a
-  score, `AiPelitScores.board(id, label)` picks a per-course list. The game must also be in
-  `GAMES` in `server/api.js` (which way is better). Scores wait on the phone while offline.
-  Nicknames are one per phone, and show on lists only once approved at `/yllapito/`.
+  and calls `AiPelitScores.submit(score)` when a round ends; `AiPelitScores.board(id, label)`
+  picks a per-course list. Everything else about a game's list lives outside the game, so a
+  change to it needs no new version: `GAMES` in `public/scores.js` (how a score reads, and
+  where the game saves its level, which is sent with each score and shown beside it) and
+  `GAMES` in `server/api.js` (which way is better, which lists). Scores wait on the phone while
+  offline, and a round that beats neither the score nor the level is not sent. The shelf shows
+  each game's no. 1 on its card and its top 10 on its page (`data-shelf`). Nicknames are one
+  per phone, and show on lists only once approved at `/yllapito/`.
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
+- **Live rooms (multiplayer).** `/api/rooms/<CODE>` is a WebSocket to a room: one Durable
+  Object per 4-letter code in the `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project
+  as `ROOMS`. The room only relays: the phone that made it (the host) runs the game and sends it to
+  the others; theirs go to the host. Up to 5 phones. A game copies the client from Kirkkis v2
+  (`net`, `connect()`, `qrMatrix()`), keeps its solo mode, and must keep working with no room.
+  CI deploys `rooms/` before the site; a change to it must keep every published version's
+  messages working.
 - `public/scores.js` is shared by every version that uses it: change it only in ways every one of
   them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with

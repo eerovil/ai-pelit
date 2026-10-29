@@ -12,6 +12,9 @@ https://pelit.vilpponen.fi/
 - Osassa peleistä on netin tuloslista (🏆 Tulokset). Nimimerkki valitaan kerran puhelimelle, ja se
   näkyy listoilla, kun ylläpitäjä on hyväksynyt sen osoitteessa `/yllapito/`. Ilman verkkoa
   tulos odottaa puhelimessa ja lähtee myöhemmin.
+- Kirkkistä (v2) voi pelata kavereiden kanssa: yksi puhelin luo huoneen, muut liittyvät
+  neljän kirjaimen koodilla tai QR-koodilla. 2–5 puhelinta, tyhjät paikat täyttävät
+  tietokonepelaajat.
 - Uusi peli tai versio tehdään AgentDeckissä: uusi Work tähän repoon.
 
 ## How it works
@@ -24,10 +27,12 @@ https://pelit.vilpponen.fi/
   `back.js` (the "‹ Pelit" chip every game includes), `scores.js` (high-score lists) and
   `yllapito/` (approving nicknames).
 - `functions/`, `server/`, `migrations/` — the site's `/api/` on Cloudflare Pages Functions and D1;
-  `scripts/cloudflare_setup.py` sets them up. See "Online extras" in AGENTS.md.
+  `scripts/cloudflare_setup.py` sets them up. `rooms/` is the Worker that holds the live game
+  rooms (a Durable Object per room code). See "Online extras" in AGENTS.md.
 - `scripts/build.py` builds `_site/` with `catalog.json`; `scripts/check_immutable.py` guards
   published versions. A merge to `main` deploys to Cloudflare Pages, project `ai-pelit` (`.github/workflows/ci.yml`).
 - [docs/diagrams/ai-pelit.md](docs/diagrams/ai-pelit.md) draws the whole flow;
-  [docs/diagrams/tuloslistat.md](docs/diagrams/tuloslistat.md) the high-score lists.
+  [docs/diagrams/tuloslistat.md](docs/diagrams/tuloslistat.md) the high-score lists;
+  [docs/diagrams/moninpeli.md](docs/diagrams/moninpeli.md) playing with friends.
 
 Rules for agents making games: [AGENTS.md](AGENTS.md).
