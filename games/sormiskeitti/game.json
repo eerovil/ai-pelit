@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio, tuotu sivulta eero.vilpponen.fi/sormiskeitti/.",
       "request": "",
       "issue": null
+    },
+    {
+      "n": 2,
+      "date": "2026-10-29",
+      "note": "Sormet irtoavat ilmassa ja antavat lisävauhtia, ja katto nousee loivemmin, joten jokainen taso on läpäistävissä.",
+      "request": "Sormiskeitti v2 (sormiskeitti): Tasoa 8 ei voi läpäistä. Pitäisikö sormet \"irrota\" ilmalennossa.",
+      "issue": "eerovil/ai-pelit#2"
     }
   ]
 }
