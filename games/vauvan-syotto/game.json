@@ -1,0 +1,13 @@
+{
+  "title": "Vauvan syöttäminen",
+  "description": "Syötä vauva kylläiseksi ennen kuin mieli loppuu.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: lusikka suuhun kun suu on auki, lusikka vauvan käteen (se pudottaa sen), ja apuna video, lentokone ja laulu.",
+      "request": "Uusi peli. Vauvan syöttäminen. Toimintoja ainakin vauvalle lusikan antaminen käteen, se pudottaa sen. Power up voisi olla videon näyttäminen, ja keksi itse lisää",
+      "issue": "eerovil/ai-pelit#11"
+    }
+  ]
+}
