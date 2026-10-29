@@ -329,6 +329,30 @@ def test_a_phone_away_when_the_round_ends_gets_its_result_once(phones):
     assert host.errors == guest.errors == third.errors == []
 
 
+def test_a_phone_reloaded_while_away_hears_the_round_before_its_end(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    third = join(phones, "Iida", code)
+    start(host, [guest, third])
+    first = host.evaluate("demo.round")
+    phones.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1")
+    host.click("#aipr-goOn")
+    host.evaluate("end()")
+    start(host, [third])
+    # Aino's page reloads as her phone comes back: a fresh page, which knows no round yet.
+    phones.relay.back(guest)
+    guest.reload()
+    guest.wait_for_function("demo.results.length === 1 && demo.phase === 'room'", timeout=8000)
+    assert guest.evaluate("demo.results") == [first]
+    starts = guest.evaluate("demo.log.filter(l => l[0] === 'start')")
+    assert starts == [["start", first, True]]
+    assert text(guest, "result") == "Kierros 1 valmis"
+    # The round Iida is playing now is not Aino's: she waits for the next one.
+    assert text(guest, "info") == "Kierros on käynnissä – pääset mukaan seuraavaan."
+    assert host.errors == guest.errors == third.errors == []
+
+
 def test_a_result_heard_twice_counts_once(phones):
     host, code = make_room(phones)
     guest = join(phones, "Aino", code)

@@ -185,20 +185,30 @@
   }
 
   // ---- On the host ----
-  // A phone connected (again): one in the round gets the round as it is (and anything it missed);
-  // one that is not waits for the next round.
+  // A phone connected (again): one in the round gets the round as it is, and anything it missed;
+  // one that is not waits for the next round. A round always reaches it before its messages, so
+  // a reloaded page knows the round before it hears how it ended.
   function onHello(id) {
-    (net.owed[id] || []).forEach(function (m) { sendRaw(Object.assign({}, m, { to: id })); });
+    var owed = net.owed[id] || [], started = {};
     delete net.owed[id];
     sendRaw({ t: '_pz', to: id, names: waitingFor() });
     if (!net.round) { sendRaw({ t: '_lobby', to: id }); return; }
-    if (inRound(id)) {
+    var mine = inRound(id);
+    if (mine) {
       if (net.released[id]) { delete net.released[id]; fire('back', id); }
       sendRaw({ t: '_start', to: id, round: net.round.id, players: net.round.players, over: net.round.over });
-      fire('hello', id);
-    } else if (racing()) {
-      sendRaw({ t: '_wait', to: id });
+      started[net.round.id] = true;
     }
+    // Earlier rounds it missed the end of: each one's start (as over), then what was kept for it.
+    owed.forEach(function (o) {
+      if (!started[o.round]) {
+        started[o.round] = true;
+        sendRaw({ t: '_start', to: id, round: o.round, players: o.players, over: true });
+      }
+      sendRaw(Object.assign({}, o.msg, { to: id }));
+    });
+    if (mine) fire('hello', id);
+    else if (racing()) sendRaw({ t: '_wait', to: id });
     update();
   }
 
@@ -537,7 +547,8 @@
       if (!net.host || !net.round) return;
       sendRaw(msg);
       net.round.players.forEach(function (p) {
-        if (p.id !== net.me && !net.online[p.id]) (net.owed[p.id] = net.owed[p.id] || []).push(msg);
+        if (p.id === net.me || net.online[p.id]) return;
+        (net.owed[p.id] = net.owed[p.id] || []).push({ round: net.round.id, players: net.round.players, msg: msg });
       });
     },
     // Host: the round is over. Phones in it that come back later still get it (as over).

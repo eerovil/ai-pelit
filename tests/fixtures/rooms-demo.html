@@ -33,7 +33,7 @@ R.on('message', (m, from) => {
     return;
   }
   if (m.t === 's' && m.round === demo.round) { demo.dots = m.dots; demo.clock = m.clock; }
-  if (m.t === 'end') finish(m);
+  if (m.t === 'end' && m.round === demo.round) finish(m); // a game knows the round it ends
 });
 R.on('hello', id => { if (demo.phase === 'play') R.send({ t: 's', round: demo.round, dots: demo.dots, clock: demo.clock }, id); });
 R.on('continue', ids => { demo.bots.push(...ids); demo.log.push(['continue', ids]); });
