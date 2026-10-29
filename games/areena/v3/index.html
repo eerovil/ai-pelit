@@ -347,7 +347,6 @@ nameIn.addEventListener('keydown', e => { if (e.key === 'Enter') document.getEle
 // both ways round. With no room the game is the same as v2.
 const R = window.AiPelitRooms;
 let net = null;
-function myFightName() { return playerName || R.name(); }
 function nameFromMenu() { playerName = nameIn.value.trim().slice(0, 14); save('nimi', playerName); }
 document.getElementById('multi').addEventListener('click', () => {
   unlock(); nameIn.blur(); nameFromMenu(); R.open();
@@ -357,11 +356,13 @@ document.getElementById('multi').addEventListener('click', () => {
 });
 
 function onlineFight(s) {
+  // Names are the room's, as its player list shows them (the room screen's name field may change them).
+  const mine = s.players.find(p => p.id === R.me) || { name: playerName || R.name() };
   const other = s.players.find(p => p.id !== R.me) || { id: '', name: 'Kaveri' };
   net = { host: s.host, round: s.round, other: other.id, sendT: 0, inT: 0, bot: false, done: false,
-    gin: { mx: 0, my: 0, sword: false, bow: false, dash: false, lead: 1 }, dashN: 0, seenDash: 0, fresh: true };
-  me = fighter(AW / 2, AH - 60, myFightName(), '#3d8bfd', '#1f4fa8', false);
-  foe = fighter(AW / 2, 60, other.name, '#e5484d', '#8f1d22', true);
+    gin: { mx: 0, my: 0, sword: false, bow: false, dash: false, lead: 1 }, dashN: 0, seenDash: 0, sid: Math.random().toString(36).slice(2, 8), fresh: true };
+  me = fighter(AW / 2, AH - 60, String(mine.name).slice(0, 16), '#3d8bfd', '#1f4fa8', false);
+  foe = fighter(AW / 2, 60, String(other.name).slice(0, 16), '#e5484d', '#8f1d22', true);
   arrows = []; puffs = []; texts = []; shake = 0; slow = 1;
   ai.mode = 'melee'; ai.modeT = 1.5; ai.think = 0; ai.retreat = 0; ai.wait = -1;
   pad.id = null; for (const k in held) delete held[k];
@@ -384,7 +385,7 @@ function friendInput() {
 const r2 = v => Math.round(v * 100) / 100;
 function pack(f) { return [f.x, f.y, f.hp, f.fx, f.fy, f.swing, f.side, f.dash, f.flash, f.shot, f.ammo, f.swordCd, f.bowCd, f.dashCd].map(r2); }
 function sendState(to) {
-  R.send({ t: 's', round: net.round, st: state, T: r2(stateT), a: pack(me), b: pack(foe), n: me.name,
+  R.send({ t: 's', round: net.round, st: state, T: r2(stateT), a: pack(me), b: pack(foe),
     ar: arrows.map(s => [s.x, s.y, s.vx, s.vy].map(Math.round)) }, to);
 }
 R.on('hello', id => { if (net && net.host && state !== 'room') sendState(id); });
@@ -396,8 +397,9 @@ R.on('message', (m, from) => {
   if (net.host) {
     if (m.t === 'in' && from === net.other) {
       net.gin = { mx: +m.mx || 0, my: +m.my || 0, sword: !!m.sw, bow: !!m.bw };
+      // Dodges are counted per page load of the friend's phone: a reloaded page starts again at 0.
+      if (m.sid !== net.sid) { net.sid = m.sid; net.seenDash = 0; net.dashN = 0; }
       net.dashN = Math.max(net.dashN, +m.d || 0);
-      if (m.n) foe.name = String(m.n).slice(0, 14);
     }
     return;
   }
@@ -425,7 +427,6 @@ function unpack(f, a) {
 function guestState(m) {
   const before = state;
   unpack(foe, m.a); unpack(me, m.b);
-  foe.name = String(m.n || foe.name).slice(0, 14);
   net.fresh = false;
   const gone = arrows.length > m.ar.length ? arrows.slice(m.ar.length) : [];
   gone.forEach(s => puffs.push({ x: s.x, y: s.y, t: 0.3 }));
@@ -446,20 +447,19 @@ function guestStep(dt) {
   if ((net.inT -= dt) <= 0) {
     net.inT = 1 / 30;
     // Turned round for the host, whose view is the other way up.
-    R.send({ t: 'in', mx: r2(-inp.mx), my: r2(-inp.my), sw: inp.sword ? 1 : 0, bw: inp.bow ? 1 : 0, d: net.dashN, n: me.name });
+    R.send({ t: 'in', mx: r2(-inp.mx), my: r2(-inp.my), sw: inp.sword ? 1 : 0, bw: inp.bow ? 1 : 0, d: net.dashN, sid: net.sid });
   }
 }
 
 // The host decides the winner and tells the friend; both go back to the room screen.
 function endOnline() {
-  const m = { t: 'end', round: net.round, w: me.hp > 0 ? R.me : net.other, n: [me.name, foe.name] };
+  const m = { t: 'end', round: net.round, w: me.hp > 0 ? R.me : net.other };
   R.deliver(m); R.endRound();
   finishOnline(m);
 }
 function finishOnline(m) {
   if (!net || net.done) return;
   net.done = true;
-  if (!net.host && Array.isArray(m.n)) foe.name = String(m.n[0]).slice(0, 14);
   const won = m.w === R.me;
   state = 'room';
   pad.id = null; for (const k in held) delete held[k];

@@ -123,3 +123,47 @@ def test_v3_a_friend_away_at_the_end_gets_the_result_after_a_reload(two_phones):
     guest.wait_for_function("document.getElementById('aipr-result')?.innerText === '💀 Eero voitti'", timeout=8000)
     assert guest.evaluate("state") == "room"
     assert host.errors == [] and guest.errors == []
+
+
+def open_fight(two_phones, guest_room_name=None):
+    host = two_phones("Eero")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    guest = two_phones("Aino")
+    if guest_room_name:
+        guest.fill("#aipr-name", guest_room_name)
+    guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-start")
+    for p in (host, guest):
+        p.wait_for_function("net && state === 'fight'", timeout=8000)
+    return host, guest
+
+
+def test_v3_a_name_changed_on_the_room_screen_is_the_fighters_name(two_phones):
+    host, guest = open_fight(two_phones, "Aino K")
+    assert host.locator("#aipr-members li").all_inner_texts() == ["👑 Eero (sinä)", "Aino K"]
+    assert host.evaluate("[me.name, foe.name]") == ["Eero", "Aino K"]
+    assert guest.evaluate("[me.name, foe.name]") == ["Aino K", "Eero"]
+    host.wait_for_timeout(500)
+    assert host.evaluate("foe.name") == "Aino K"
+
+
+DODGE = """(() => { const c = document.getElementById('c'), b = buttons().find(b => b.k === 'dash');
+  const ev = t => c.dispatchEvent(new PointerEvent(t, {pointerId: 7, clientX: b.x, clientY: b.y, bubbles: true, cancelable: true}));
+  ev('pointerdown'); setTimeout(() => ev('pointerup'), 50); })()"""
+
+
+def test_v3_the_friend_can_dodge_before_and_after_reloading(two_phones):
+    host, guest = open_fight(two_phones)
+    for _ in range(2):
+        host.wait_for_function("foe.dashCd <= 0", timeout=5000)
+        guest.evaluate(DODGE)
+        host.wait_for_function("foe.dashCd > 0.5", timeout=3000)
+    guest.reload()
+    guest.wait_for_function("net && state === 'fight' && !AiPelitRooms.paused", timeout=10000)
+    host.wait_for_function("!AiPelitRooms.paused && foe.dashCd <= 0", timeout=10000)
+    guest.evaluate(DODGE)
+    host.wait_for_function("foe.dashCd > 0.5", timeout=3000)
+    assert host.errors == [] and guest.errors == []
