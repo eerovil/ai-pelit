@@ -137,3 +137,18 @@ def test_a_raised_hand_catches_the_phone_higher_up(site, context):
     page.evaluate("for (let i = 0; i < 120 && !(vel[1] < 0 && pos[1] < 0.1); i++) step(1 / 60); handY = 0.4")
     page.evaluate(FLY, 3)
     assert page.evaluate("result.kind") == "drop"
+
+
+def test_a_drag_after_the_catch_leaves_the_phone_on_the_palm(site, context):
+    page = open_game(site, context)
+    page.evaluate("launch({ v0: 3 }); vel[1] = 6")
+    page.mouse.move(180, 600)
+    page.mouse.down()
+    page.mouse.move(185, 600)
+    page.evaluate(FLY, 3)
+    assert page.evaluate("state") == "result"
+    hand = page.evaluate("[handX, handY]")
+    page.mouse.move(300, 400)
+    page.mouse.up()
+    assert page.evaluate("[handX, handY]") == hand
+    assert page.evaluate("Math.abs(dot(sub(pos, hand()), N) - REST) + Math.abs(pos[0] - handX)") < 0.035

@@ -400,6 +400,8 @@ function onDown(e) {
 function onMove(e) {
   if (!swipe) return;
   e.preventDefault();
+  // Once the phone is in the hand (settling or the result), the hand holds still.
+  if (state !== 'ready' && state !== 'air' && state !== 'drop') { swipe = null; return; }
   moveHand(e.clientX - swipe.lx, e.clientY - swipe.ly);
   swipe.lx = e.clientX; swipe.ly = e.clientY;
   if (!swipe.hand && state === 'ready') {
