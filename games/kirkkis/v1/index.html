@@ -129,6 +129,8 @@ function canSee(o, t) {
   if (!seesPoint(o, t)) return false;
   return !bushAt(t.x, t.y) || dist(o, t) < BUSH_SEEN;
 }
+// Has o looked into this hiding place? A bush only counts from as close as someone in it is seen.
+function spotChecked(o, s) { return seesPoint(o, s) && (!s.bush || dist(o, s) < BUSH_SEEN); }
 // The outline of what o sees: a fan of rays across the field of view.
 function viewPoly(o) {
   const pts = [], n = 64;
@@ -444,7 +446,7 @@ function step(dt) {
   if (phase === 'seek') {
     rules();
     // The seeker remembers which hiding places they have already looked at.
-    if ((spotScan -= dt) <= 0) { spotScan = 0.25; for (const s of SPOTS) if (seesPoint(seeker, s)) s.seen = time; }
+    if ((spotScan -= dt) <= 0) { spotScan = 0.25; for (const s of SPOTS) if (spotChecked(seeker, s)) s.seen = time; }
   }
 }
 

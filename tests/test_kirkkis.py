@@ -37,6 +37,18 @@ def test_sight_is_a_field_of_view_blocked_by_walls_and_bushes(site, context):
                     "bushFar": False, "bushNear": True, "shut": False}
 
 
+def test_a_bush_counts_as_searched_only_from_close_enough_to_see_into_it(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { const s = SPOTS.find(s => s.bush && Math.hypot(s.x - 15, s.y - 11) < 1);
+      const far = { x: s.x, y: s.y + 6, a: -Math.PI / 2, st: 'seek' }, near = { x: s.x, y: s.y + 2, a: -Math.PI / 2, st: 'seek' };
+      return [seesPoint(far, s), spotChecked(far, s), spotChecked(near, s)]; }""")
+    assert r == [True, False, True]
+    # In play: a seeker passing a bush at 6 m leaves it on the list of places to search.
+    page.evaluate("newRound('seek'); for (let i = 0; i < 301; i++) step(1 / 30)")
+    page.evaluate("""() => { seeker.x = 15; seeker.y = 17; seeker.a = -Math.PI / 2; SPOTS.forEach(s => { s.seen = -99; }); spotScan = 0; step(1 / 30); }""")
+    assert page.evaluate("SPOTS.filter(s => s.bush && Math.hypot(s.x - 15, s.y - 11) < 1.6).every(s => s.seen < 0)")
+
+
 def test_every_hiding_place_is_out_of_sight_of_the_base_and_reachable(site, context):
     page = open_game(site, context)
     r = page.evaluate("""() => SPOTS.map(s => [s.bush || !clearSight(BASE, s), findPath(BASE, s).length > 0, dist(s, BASE) >= 7])""")
