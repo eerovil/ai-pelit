@@ -14,6 +14,7 @@ var SHELL = [
   'app.css',
   'back.js',
   'scores.js',
+  'rooms.js',
   'catalog.json',
   'manifest.webmanifest',
   'icons/icon-192.png',

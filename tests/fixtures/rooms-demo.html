@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Huonetesti</title>
+<style>html,body{margin:0;height:100dvh;font:16px system-ui,sans-serif}#menu{padding:60px 20px}#menu.hidden{display:none}</style>
+</head>
+<body>
+<!-- A test-only game on public/rooms.js (#34): each phone moves a dot, the host runs a clock that
+     stands still while the round is paused, and the host ends the round with everyone's dots. -->
+<div id="menu"><h1>Huonetesti</h1><button id="multi">👥 Pelaa kavereiden kanssa</button></div>
+<script src="../../../rooms.js" data-game="__GAME__" data-min="2" data-max="__MAX__"></script>
+<script>
+'use strict';
+const R = window.AiPelitRooms;
+const demo = window.demo = { phase: 'menu', round: '', players: [], dots: {}, clock: 0, results: [], log: [], bots: [] };
+const menu = document.getElementById('menu');
+document.getElementById('multi').addEventListener('click', () => R.open());
+
+R.on('start', s => {
+  demo.log.push(['start', s.round, s.over]);
+  demo.round = s.round; demo.players = s.players; demo.bots = [];
+  if (s.over) return;
+  demo.phase = 'play'; demo.clock = 0;
+  demo.dots = {};
+  s.players.forEach((p, i) => { demo.dots[p.id] = [i, 0]; });
+  menu.classList.add('hidden');
+});
+R.on('message', (m, from) => {
+  if (R.isHost) {
+    if (m.t === 'me' && demo.phase === 'play' && demo.dots[from]) demo.dots[from] = [m.x, m.y];
+    return;
+  }
+  if (m.t === 's' && m.round === demo.round) { demo.dots = m.dots; demo.clock = m.clock; }
+  if (m.t === 'end') finish(m);
+});
+R.on('hello', id => { if (demo.phase === 'play') R.send({ t: 's', round: demo.round, dots: demo.dots, clock: demo.clock }, id); });
+R.on('continue', ids => { demo.bots.push(...ids); demo.log.push(['continue', ids]); });
+R.on('back', id => { demo.bots = demo.bots.filter(b => b !== id); demo.log.push(['back', id]); });
+R.on('lobby', () => { demo.phase = 'room'; demo.log.push(['lobby']); });
+R.on('leave', why => { demo.phase = 'menu'; demo.log.push(['leave', why]); });
+R.on('menu', () => { demo.phase = 'menu'; menu.classList.remove('hidden'); });
+
+window.move = (x, y) => { demo.dots[R.me] = [x, y]; R.send({ t: 'me', x, y }); };
+// Host: ends the round with everyone's dots.
+window.end = () => {
+  const m = { t: 'end', round: demo.round, dots: demo.dots };
+  R.deliver(m);
+  R.endRound();
+  finish(m);
+};
+function finish(m) {
+  demo.dots = m.dots;
+  if (R.once(m.round)) demo.results.push(m.round);
+  demo.phase = 'room';
+  R.backToRoom('Kierros ' + demo.results.length + ' valmis', 'win');
+}
+setInterval(() => {
+  if (!R.isHost || demo.phase !== 'play' || R.paused) return;
+  demo.clock += 1;
+  R.send({ t: 's', round: demo.round, dots: demo.dots, clock: demo.clock });
+}, 100);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

@@ -51,15 +51,34 @@ high-score lists (#25), then play counts (#26).
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
-- **Live rooms (multiplayer).** `/api/rooms/<CODE>` is a WebSocket to a room: one Durable
-  Object per 4-letter code in the `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project
-  as `ROOMS`. The room only relays: the phone that made it (the host) runs the game and sends it to
-  the others; theirs go to the host. Up to 5 phones. A game copies the client from Kirkkis v2
-  (`net`, `connect()`, `qrMatrix()`), keeps its solo mode, and must keep working with no room.
-  CI deploys `rooms/` before the site; a change to it must keep every published version's
-  messages working.
-- `public/scores.js` is shared by every version that uses it: change it only in ways every one of
-  them keeps working with.
+- **Live rooms (multiplayer).** A version opts in with
+  `<script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5"></script>` before
+  its own script (#34), and a "👥 Pelaa kavereiden kanssa" button that calls
+  `AiPelitRooms.open()`. Do not copy Kirkkis v2's own room code; it predates the library.
+  `rooms.js` draws the room screen (code, QR link, players, "Aloita kierros"), reconnects, rejoins
+  after a reload, sends a typed code from another game or version to the room's own, and pauses
+  the round while a phone in it is away (with "Jatka ilman heitä" on the host). The game keeps the
+  game: the phone that made the room (the host) runs the round and the others draw it.
+  - `on('start', s => …)` on every phone: `s.players` (`[{id, name}]`, the connected phones in
+    room order), `s.round`, `s.host`, `s.over` (a finished round sent to a phone that missed it).
+  - `send(msg, to)` (host: to all or one id; a guest: to the host) and `on('message', (msg, from) => …)`.
+    A message's `t` must not start with `_`; `you`, `peers`, `hello`, `bye` are taken too.
+  - Host: `on('hello', id => …)` sends a returning phone the round as it is; `deliver(msg)` sends the
+    round's end to every phone in it, now or when it is back; `endRound()`. `on('continue', ids)`
+    and `on('back', id)`: the computer takes over, and gives back, a phone's player.
+  - Every phone: `paused` (stop the clock while true), `once(round)` (save a result only when true),
+    `backToRoom(text, 'win'|'lose')` after the game's own end screen, `note(text)`,
+    `on('lobby')` (the host lost the round: stop it), `on('leave', why)` and `on('menu')` (show the
+    game's menu again), `me`, `isHost`, `inRoom`.
+  - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
+  - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
+    that plays the room in Playwright.
+  - The room is `/api/rooms/<CODE>`, a WebSocket to one Durable Object per 4-letter code in the
+    `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project as `ROOMS`. It only relays, and
+    keeps the host's `game`, `v` and `max` (2–8). CI deploys `rooms/` before the site; a change to
+    it must keep every published version's messages working.
+- `public/scores.js` and `public/rooms.js` are shared by every version that uses them: change them
+  only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`; on this host they are in `~/.local/share/ruokalista/cloudflare.env`)

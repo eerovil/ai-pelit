@@ -23,8 +23,8 @@ https://pelit.vilpponen.fi/
 - `games/<slug>/v<N>/` — one self-contained version; never changed after merge.
 - `games/<slug>/game.json` — title, description, and the version list.
 - `public/` — the shelf (`index.html`, `app.js`), the service worker (`sw.js`), the manifest,
-  `back.js` (the "‹ Pelit" chip every game includes), `scores.js` (high-score lists) and
-  `yllapito/` (approving nicknames).
+  `back.js` (the "‹ Pelit" chip every game includes), `scores.js` (high-score lists), `rooms.js`
+  (playing with friends in a live room) and `yllapito/` (approving nicknames).
 - `functions/`, `server/`, `migrations/` — the site's `/api/` on Cloudflare Pages Functions and D1;
   `scripts/cloudflare_setup.py` sets them up. `rooms/` is the Worker that holds the live game
   rooms (a Durable Object per room code). See "Online extras" in AGENTS.md.
