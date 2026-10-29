@@ -73,7 +73,8 @@ high-score lists (#25), then play counts (#26).
     room order), `s.round`, `s.host`, `s.over` (a finished round sent to a phone that missed it).
   - `send(msg, to)` (host: to all or one id; a guest: to the host) and `on('message', (msg, from) => …)`.
     A message's `t` must not start with `_`; `you`, `peers`, `hello`, `bye` are taken too. A phone
-    that is not in the round (it joined late) hears none of its messages.
+    that is not in the round (it joined late) hears none of its messages. A code typed for a room
+    made by Kirkkis v2 (which names no game) is refused with "Huone on toisessa pelissä.".
   - Host: `on('hello', id => …)` sends a returning phone the round as it is; `deliver(msg)` sends the
     round's end to every phone in it, now or when it is back; `endRound()`. `on('continue', ids)`
     and `on('back', id)`: the computer takes over, and gives back, a phone's player.

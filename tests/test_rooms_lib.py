@@ -406,6 +406,24 @@ def test_a_typed_code_from_another_version_opens_the_rooms_version(phones):
     assert guest.errors == away.errors == []
 
 
+def test_a_room_that_does_not_say_its_game_is_refused(phones):
+    # Kirkkis v2 makes its rooms without saying its game; a game on rooms.js must not join one.
+    old = phones("Eero")
+    old.evaluate("""() => { const u = new URL('../../../api/rooms/VANH', location.href); u.protocol = 'ws:';
+      u.search = new URLSearchParams({ key: 'f'.repeat(32), name: 'Eero', host: '1' }); window.oldWs = new WebSocket(u); }""")
+    old.wait_for_function("window.oldWs.readyState === 1")
+    guest = phones("Aino")
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", "VANH")
+    guest.click("#aipr-joinBtn")
+    guest.wait_for_function("document.getElementById('aipr-err').textContent === 'Huone on toisessa pelissä.'")
+    assert not guest.evaluate("AiPelitRooms.inRoom")
+    assert guest.evaluate("location.pathname").endswith("/games/huonetesti/v2/")
+    # It left the room again: only the old game's phone is in it.
+    assert list(phones.relay.rooms["VANH"]["members"].values()) == ["Eero"]
+    assert guest.errors == []
+
+
 def test_a_room_takes_as_many_phones_as_the_game_says(phones):
     host, code = make_room(phones, "pieni/v1/")
     guests = [join(phones, n, code, "pieni/v1/") for n in ["Aino", "Eetu"]]

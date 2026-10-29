@@ -158,8 +158,11 @@
     net.online = {};
     net.members.forEach(function (x) { if (x.on) net.online[x.id] = true; });
     if (!net.joined) {
+      // A room that does not say its game was made by a game from before this file (Kirkkis v2),
+      // whose messages this game does not speak: leave it, and say why.
+      if (!net.host && (!m.game || !m.v)) return leave('Huone on toisessa pelissä.');
       // A room made in another game or version: open that one, in this room.
-      if (!net.host && m.game && (m.game !== GAME || m.v !== VERSION)) {
+      if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
         var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
         net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
         location.replace(to.href);
