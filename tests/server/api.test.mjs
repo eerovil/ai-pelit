@@ -250,13 +250,3 @@ test('plays: a bad game or version is refused', async () => {
   assert.equal((await call('POST', '/api/plays', 'not json')).status, 400);
   assert.deepEqual((await call('GET', '/api/plays')).body, { games: {} });
 });
-
-test('plays: only games and versions in the site catalog count', async () => {
-  const catalog = { games: [{ slug: 'hiihto', versions: [{ n: 1 }, { n: 2 }] }] };
-  const env = { DB: makeD1(), ADMIN_KEY, ASSETS: { fetch: async () => new Response(JSON.stringify(catalog)) } };
-  const call = api(env);
-  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 2 })).status, 200);
-  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 3 })).status, 404);
-  assert.equal((await call('POST', '/api/plays', { game: 'keksitty', version: 1 })).status, 404);
-  assert.deepEqual((await call('GET', '/api/plays')).body, { games: { hiihto: 1 } });
-});

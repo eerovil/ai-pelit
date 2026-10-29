@@ -3,7 +3,8 @@
 How a score gets from a game round onto the online list (#25), and how a nickname gets approved.
 The game never waits for the network: a score waits on the phone until it can be sent. A
 nickname shows on lists only after the admin approves it, and an approved name stays locked to
-its phone.
+its phone. The play counts (#26) share `server/api.js` and `public/app.js` but not this
+flow; they are drawn in `ai-pelit.md`.
 
 ```mermaid
 flowchart TD

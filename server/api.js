@@ -188,15 +188,20 @@ const CATALOG_TTL = 60e3;
 let catalog = null, catalogAt = 0;
 
 // The games and versions the site has, from its own catalog.json, so a made-up game gets no
-// row. Without env.ASSETS (the tests) any well-formed slug and version is taken.
+// row. Without env.ASSETS (the tests) any well-formed slug and version is taken. When the
+// catalog cannot be read, the last one read is used; with none yet, null and no count is taken.
 async function knownVersions(env, url) {
-  if (!env.ASSETS) return null;
+  if (!env.ASSETS) return 'any';
   if (!catalog || Date.now() - catalogAt > CATALOG_TTL) {
-    const res = await env.ASSETS.fetch(new URL('/catalog.json', url));
-    if (!res.ok) return catalog;
-    const data = await res.json();
-    catalog = new Map(data.games.map((g) => [g.slug, new Set(g.versions.map((v) => v.n))]));
-    catalogAt = Date.now();
+    try {
+      const res = await env.ASSETS.fetch(new URL('/catalog.json', url));
+      if (!res.ok) return catalog;
+      const data = await res.json();
+      catalog = new Map(data.games.map((g) => [g.slug, new Set(g.versions.map((v) => v.n))]));
+      catalogAt = Date.now();
+    } catch (e) {
+      return catalog;
+    }
   }
   return catalog;
 }
@@ -206,7 +211,8 @@ async function addPlay(env, url, body) {
   if (!SLUG.test(game)) return fail(400, 'bad game');
   if (!Number.isInteger(version) || version < 1 || version > 999) return fail(400, 'bad version');
   const known = await knownVersions(env, url);
-  if (known && !(known.get(game) && known.get(game).has(version))) return fail(404, 'no such version');
+  if (!known) return fail(503, 'no catalog');
+  if (known !== 'any' && !(known.get(game) && known.get(game).has(version))) return fail(404, 'no such version');
   await env.DB.prepare(
     `INSERT INTO plays (game, version, day, n) VALUES (?, ?, ?, 1)
      ON CONFLICT (game, version, day) DO UPDATE SET n = n + 1`
