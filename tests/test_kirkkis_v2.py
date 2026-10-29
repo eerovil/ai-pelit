@@ -332,6 +332,23 @@ def test_a_phone_away_when_the_round_ends_gets_its_result_once(phones):
     assert host.errors == guest.errors == []
 
 
+def test_a_phone_away_while_the_host_reloads_comes_back_to_the_room(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    start(host, [guest])
+    phones.relay.drop(guest)
+    host.wait_for_function("waiting.length === 1")
+    # The host's page reloads: its round is gone, and the guest was not there to hear so.
+    host.reload()
+    host.wait_for_function("net.joined && phase === 'room' && net.host")
+    phones.relay.back(guest)
+    guest.wait_for_function("net.connected && phase === 'room'", timeout=10000)
+    host.wait_for_function("net.members.filter(m => m.on).length === 2")
+    host.click("#startRound")
+    guest.wait_for_function("phase === 'count' && people.length === 5", timeout=8000)
+    assert host.errors == guest.errors == []
+
+
 def test_a_phone_reloaded_mid_round_gets_the_round_back(phones):
     host, code = make_room(phones)
     guest = join(phones, "Aino", code)

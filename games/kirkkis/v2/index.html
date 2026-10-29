@@ -951,7 +951,12 @@ function hostPeers() {
 // A phone connected (again): one in the round gets the round as it is; a new one waits for the next.
 function hostHello(id) {
   const p = people.find(q => q.id === id);
-  if (!racing()) { if (p && played && phase === 'room') net.send(snapshot(id)); return; }
+  if (!racing()) {
+    // The finished round to a phone in it; otherwise (this page was reloaded, its round lost) the
+    // room, so a phone that was away for the reset does not wait in a round nobody runs.
+    if (p && played && phase === 'room') net.send(snapshot(id)); else net.send({ t: 'lobby', to: id });
+    return;
+  }
   if (!p) { net.send({ t: 'wait', to: id }); return; }
   if (p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
   net.send(snapshot(id));
