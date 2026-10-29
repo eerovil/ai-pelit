@@ -23,6 +23,9 @@ def test_every_real_version_loads_without_errors(site, context):
     context.route("**/api/plays", lambda route: route.fulfill(
         status=200, content_type="application/json",
         body='{"ok": true}' if route.request.method == "POST" else '{"games": {}}'))
+    # ...and each game's no. 1 the shelf cards show (#25).
+    context.route("**/api/scores/top", lambda route: route.fulfill(
+        status=200, content_type="application/json", body='{"games": {}}'))
     page = context.new_page()
     found = errors_on(page)
     for game in catalog["games"]:
