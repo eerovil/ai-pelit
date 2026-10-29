@@ -14,10 +14,17 @@
 // A refused join is a WebSocket closed at once with a code and a Finnish reason the game shows:
 // 4004 no such room, 4001 room full, 4009 code in use, 4000 the same phone joined again.
 // Sockets use the hibernation API, so a quiet room costs nothing while it waits.
+//
+// The shared client (public/rooms.js, #34) also says which game and version the host is playing
+// (`game`, `v`) and how many phones the game takes (`max`, 2-8). The room keeps them from the
+// host's join and sends `game` and `v` in every `peers`, so a guest on another game or version can
+// move to the right one. A join without them (Kirkkis v2) works as before: 5 phones.
 
 const CODE = /^[A-Z]{4}$/;
 const KEY = /^[a-f0-9]{32}$/;
-export const MAX_PLAYERS = 5;
+const GAME = /^[a-z0-9-]{1,40}$/;
+export const MAX_PLAYERS = 5; // when the host does not say
+export const MOST_PLAYERS = 8; // the most a host may ask for
 export const IDLE = 6 * 3600e3; // an empty room is forgotten after this long
 const MSG_MAX = 16000;
 
@@ -33,11 +40,20 @@ export function cleanName(name) {
   return [...s].length <= 16 ? s : '';
 }
 
+// What the host says about its game: {game, v, max}, each only when it is valid.
+export function gameOf(params) {
+  const out = {}, game = params.get('game') || '', v = +params.get('v'), max = +params.get('max');
+  if (GAME.test(game)) out.game = game;
+  if (Number.isInteger(v) && v >= 1 && v <= 999) out.v = v;
+  if (Number.isInteger(max) && max >= 2) out.max = Math.min(MOST_PLAYERS, max);
+  return out;
+}
+
 export class Room {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.env = env;
-    this.room = undefined; // {host, members: {id: name}}, read from storage on first use
+    this.room = undefined; // {host, members: {id: name}, game?, v?, max?}, read from storage on first use
   }
 
   async load() {
@@ -70,13 +86,13 @@ export class Room {
     let room = await this.load();
     const open = this.open();
     if (wantsHost && (!room || (room.host !== id && !open.length))) {
-      room = { host: id, members: {} }; // a new room, or one everyone has left
+      room = { host: id, members: {}, ...gameOf(url.searchParams) }; // a new room, or one everyone has left
     } else if (wantsHost && room.host !== id) {
       return refuse(4009, 'Koodi on jo käytössä');
     } else if (!room) {
       return refuse(4004, 'Huonetta ei löydy');
     }
-    if (!Object.hasOwn(room.members, id) && Object.keys(room.members).length >= MAX_PLAYERS) {
+    if (!Object.hasOwn(room.members, id) && Object.keys(room.members).length >= (room.max || MAX_PLAYERS)) {
       return refuse(4001, 'Huone on täynnä');
     }
     room.members[id] = name;
@@ -149,6 +165,8 @@ export class Room {
     const text = JSON.stringify({
       t: 'peers',
       host: room.host,
+      ...(room.game ? { game: room.game } : {}),
+      ...(room.v ? { v: room.v } : {}),
       members: Object.entries(room.members).map(([id, name]) => ({ id, name, on: on.has(id) })),
     });
     for (const o of open) send(o.ws, text);
