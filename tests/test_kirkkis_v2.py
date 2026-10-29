@@ -332,6 +332,36 @@ def test_a_phone_away_when_the_round_ends_gets_its_result_once(phones):
     assert host.errors == guest.errors == []
 
 
+def test_a_phone_away_for_a_whole_round_still_gets_the_one_it_was_in(phones):
+    host, code = make_room(phones)
+    aino, onni = join(phones, "Aino", code), join(phones, "Onni", code)
+    tally = "JSON.parse(localStorage.getItem('ai-pelit:kirkkis:tilasto') || '{}').kierrokset || 0"
+    start(host, [aino, onni], host_seeks=True)
+    phones.relay.drop(aino)
+    host.wait_for_function("waiting.length === 1")
+    host.click("#goOn")
+    host.evaluate("timer = 0.1")
+    host.wait_for_function("phase === 'room'", timeout=8000)
+    onni.wait_for_function("phase === 'room'", timeout=8000)
+    # The host plays on with Onni before Aino is back.
+    host.click("#startRound")
+    onni.wait_for_function("phase === 'count'", timeout=8000)
+    assert host.evaluate("people.some(p => p.name === 'Aino' && p.id)") is False
+    phones.relay.back(aino)
+    # Aino gets the round she was in, saves it once, and waits for the next one.
+    aino.wait_for_function("phase === 'room' && played && net.wait", timeout=12000)
+    assert aino.evaluate(tally) == 1
+    assert aino.locator("#roomResult").inner_text() in ("Pelastuit! 🎉", "Sinut kirkattiin!")
+    assert aino.locator("#roomInfo").inner_text() == "Kierros on käynnissä – pääset mukaan seuraavaan."
+    # Hearing it again saves nothing twice; Onni's tally counts only his own round so far.
+    aino.reload()
+    aino.wait_for_function("net.joined && phase === 'room'", timeout=10000)
+    aino.wait_for_timeout(500)
+    assert aino.evaluate(tally) == 1
+    assert onni.evaluate(tally) == 1
+    assert host.errors == aino.errors == onni.errors == []
+
+
 def test_a_phone_away_while_the_host_reloads_comes_back_to_the_room(phones):
     host, code = make_room(phones)
     guest = join(phones, "Aino", code)

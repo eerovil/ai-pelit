@@ -432,7 +432,14 @@ function rules() {
 function end() {
   // As in the playground, the first one caught seeks next.
   roundOver(firstCaught || seeker);
-  if (net.on && net.host) { hostSend(); net.send({ t: 'end', round: net.round, next: people.indexOf(nextSeeker), p: stateOf() }); }
+  if (net.on && net.host) {
+    hostSend();
+    net.send({ t: 'end', round: net.round, next: people.indexOf(nextSeeker), p: stateOf() });
+    // A phone in the round but away at its end gets the finished round when it is back, even
+    // if more rounds have been played by then (hostHello()).
+    const done = snapshot();
+    for (const p of people) if (p.id && p.id !== myId && !net.online.has(p.id)) (net.owed[p.id] ||= []).push(done);
+  }
 }
 // Every phone keeps its own player's tally.
 function roundOver(next) {
@@ -828,7 +835,7 @@ const r2 = v => Math.round(v * 100) / 100;
 
 const net = {
   on: false, host: false, code: '', ws: null, connected: false, joined: false, tries: 0, timer: 0,
-  members: [], hostId: '', events: [], sendT: 0, meT: 0, pz: [], wait: false, round: 0, online: new Set(),
+  members: [], hostId: '', events: [], sendT: 0, meT: 0, pz: [], wait: false, round: '', owed: {}, online: new Set(),
   send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); },
 };
 const hostOn = () => net.members.some(m => m.id === net.hostId && m.on);
@@ -860,7 +867,7 @@ function connect() {
 function newCode() { let c = ''; for (let i = 0; i < 4; i++) c += LETTERS[Math.floor(Math.random() * LETTERS.length)]; return c; }
 function enterRoom(code, host) {
   net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0;
-  net.members = []; net.hostId = host ? myId : ''; net.round = ''; net.wait = false; net.pz = [];
+  net.members = []; net.hostId = host ? myId : ''; net.round = ''; net.owed = {}; net.wait = false; net.pz = [];
   played = false; nextSeeker = null;
   $('netErr').textContent = '';
   phase = 'room';
@@ -950,6 +957,8 @@ function hostPeers() {
 }
 // A phone connected (again): one in the round gets the round as it is; a new one waits for the next.
 function hostHello(id) {
+  for (const done of net.owed[id] || []) net.send({ ...done, to: id });
+  delete net.owed[id];
   const p = people.find(q => q.id === id);
   if (!racing()) {
     // The finished round to a phone in it; otherwise (this page was reloaded, its round lost) the
