@@ -16,12 +16,12 @@ flowchart TD
   B --> E[Pyyhkäisy ylös: irti tangosta]
   D --> E
   E --> F[Lento: painovoima, pyörimismäärä säilyy, kerä pyörii nopeammin, sivupyyhkäisy = puolikierre]
-  F --> G{Kädet tulevat alas tangolle vartalo auki?}
-  G -- Kyllä --> H[Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman]
+  F --> R[Kamera seuraa, ettei voimistelija katoa ruudulta]
+  R --> G{Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa}
+  G -- Sama tanko --> H[Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman]
   G -- Toinen tanko --> Q[Siirto tangolta toiselle: Pak-voltti, Shaposhnikova]
   H --> B
   Q --> B
-  F --> R[Kamera seuraa, ettei voimistelija katoa ruudulta]
   G -- Ei --> I[Alastulo: voltit ja kierteet lasketaan]
   I --> J{Jaloilleen ja kuinka pystyssä?}
   J -- Pystyssä --> K[Pysäytys]
@@ -56,9 +56,9 @@ flowchart TD
 - **Pyyhkäisy sivulle käsilläseisonnassa: Piruetti**: `twist()` on the bar, within 0.6 rad of the handstand: a half turn, 0,2; the chest then faces the other way.
 - **Pyyhkäisy ylös: irti tangosta**: `onUp()` sees a quick flick up and calls `release()`, which keeps the speed and the spin.
 - **Lento: painovoima, pyörimismäärä säilyy, kerä pyörii nopeammin, sivupyyhkäisy = puolikierre**: `airStep()`: a projectile spinning about its centre of mass with constant angular momentum `L`; a tuck has 3.75 times less inertia, so it spins 3.75 times faster.
-- **Kädet tulevat alas tangolle vartalo auki?**: `airStep()` catches a bar when the hands come within 25 cm of it with the body open and not mid-twist. The bar let go of only on the way down; in v2 the other bar (`BARS`: high at 0, low 1.75 m out and 0.9 m lower) also on the way up.
+- **Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa**: `airStep()` catches a bar when the hands come within 25 cm of it with the body open and not mid-twist. The bar let go of only on the way down; in v2 the other bar (`BARS`: high at 0, low 1.75 m out and 0.9 m lower) also on the way up.
 - **Siirto tangolta toiselle: Pak-voltti, Shaposhnikova**: v2 `grab(to)` names it by whole turns (`DOWN`, `UP`): down to the low bar "Siirto alatangolle" 0,1, a Pak salto 0,4 with one turn, "Kaksoisvoltti alatangolle" 0,6 with two or more; up to the high bar a Shaposhnikova 0,4, "Voltti ylätangolle" 0,5, "Kaksoisvoltti ylätangolle" 0,7. On the low bar the legs pike through the bottom so the feet clear the floor (`pk`); only the drawing, so the swing does not pump itself.
-- **Kamera seuraa, ettei voimistelija katoa ruudulta**: v2 `draw()` eases towards the body, then holds every point of it (`bodyPoints()`) at least 15 cm inside all four edges of the screen, however fast, far or high it flies.
+- **Kamera seuraa, ettei voimistelija katoa ruudulta**: every frame of the flight, v2 `draw()` eases towards the body, then holds every point of it (`bodyPoints()`) at least 15 cm inside all four edges of the screen, however fast, far or high it flies.
 - **Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman**: `grab()` names it by the whole turns in the flight, the half twists and whether the body crossed over the bar, and carries the angular momentum about the bar into the swing.
 - **Alastulo: voltit ja kierteet lasketaan**: `land()`: the saltos are the turns the body made between letting go and touching down (`turns()`, half a turn or more counts up, the same rule `grab()` uses); salto 0,1, double 0,3, triple 0,5, and 0,1 a full twist.
 - **Jaloilleen ja kuinka pystyssä?**: `land()` looks at the body's lean 0.05 s ahead (`LAND_LOOK`): under 0.3 rad is a stuck landing; up to 1.1 rad a step of 0,1, 0,3 or 0,5; past that, or not feet first, a fall. Still tucked, or mid-twist, costs 0,3 more.
