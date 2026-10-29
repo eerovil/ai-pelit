@@ -65,21 +65,27 @@ def test_the_low_bar_swing_does_not_grow_by_itself_and_the_feet_clear_the_floor(
     assert low > page.evaluate("FLOOR")
 
 
-def test_the_camera_keeps_the_whole_body_on_screen_in_fast_flights(site, context):
-    page = open_game(site, context)
-    page.wait_for_function("S > 0")
-    # Fast sideways with the body flat, fast up, and both, frame by frame through the game's own loop.
-    for launch in ("{ x: 1, y: 0.3, vx: 8, vy: 3, phi: Math.PI / 2 }", "{ x: 0, y: 0.5, vy: 11, phi: Math.PI }",
-                   "{ x: -1, y: 0.5, vx: -6, vy: 9, phi: -Math.PI / 2, w: 3 }"):
-        page.evaluate(f"newRoutine(); launchAir({launch})")
-        worst = page.evaluate("""() => new Promise(done => { let worst = -Infinity, n = 0;
-          (function check() {
-            const b = bodyPoints();
-            // From the first frame the game has drawn since the launch.
-            if (n > 0) for (const k in b) { const [px, py] = sc(b[k]); worst = Math.max(worst, -px, px - W, SAFE_T - py); }
-            if (mode === 'air' && n++ < 300) requestAnimationFrame(check); else done(worst);
-          })(); })""")
-        assert worst <= 0, launch
+def test_the_camera_keeps_the_whole_body_on_screen_in_fast_flights(site, browser):
+    site.build(ROOT / "games")
+    for size in ({"width": 360, "height": 740}, {"width": 360, "height": 640}):
+        ctx = browser.new_context(viewport=size, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        page.goto(f"{site.url}games/voimistelu/v2/")
+        page.wait_for_function("S > 0")
+        # Fast sideways with the body flat, fast up and all the way down again, and both, frame by frame
+        # through the game's own loop, until the body lands.
+        for launch in ("{ x: 1, y: 0.3, vx: 8, vy: 3, phi: Math.PI / 2 }", "{ x: 0, y: 0.5, vy: 11, phi: Math.PI }",
+                       "{ x: 0.5, y: 0.5, vy: 22 }", "{ x: -1, y: 0.5, vx: -6, vy: 9, phi: -Math.PI / 2, w: 3 }"):
+            page.evaluate(f"newRoutine(); launchAir({launch})")
+            worst = page.evaluate("""() => new Promise(done => { let worst = -Infinity, n = 0;
+              (function check() {
+                const b = bodyPoints();
+                // From the first frame the game has drawn since the launch.
+                if (n > 0) for (const k in b) { const [px, py] = sc(b[k]); worst = Math.max(worst, -px, px - W, SAFE_T - py, py - (H - SAFE_B)); }
+                if (mode === 'air' && n++ < 600) requestAnimationFrame(check); else done(worst);
+              })(); })""")
+            assert worst <= 0, (size, launch)
+        ctx.close()
 
 
 def test_flights_between_the_bars_are_named_by_their_turns(site, context):

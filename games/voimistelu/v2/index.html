@@ -358,11 +358,11 @@ function draw() {
     ty = Math.max(ty, pos[1] - up);
     camX = lerp(camX, tx, 0.08); camY = lerp(camY, ty, 0.08);
     // Then hold every point of the body, not just its middle, inside the screen edges.
-    const b = bodyPoints(), m = 0.15, half = W / 2 / S, top = (BAR_Y - SAFE_T - 20) / S;
-    let x0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const n in b) { x0 = Math.min(x0, b[n][0]); x1 = Math.max(x1, b[n][0]); y1 = Math.max(y1, b[n][1]); }
+    const b = bodyPoints(), m = 0.15, half = W / 2 / S, top = (BAR_Y - SAFE_T - 20) / S, bottom = (H - SAFE_B - 20 - BAR_Y) / S;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const n in b) { x0 = Math.min(x0, b[n][0]); x1 = Math.max(x1, b[n][0]); y0 = Math.min(y0, b[n][1]); y1 = Math.max(y1, b[n][1]); }
     camX = Math.max(x1 + m - half, Math.min(x0 - m + half, camX));
-    camY = Math.max(camY, y1 + m - top);
+    camY = Math.min(y0 - m + bottom, Math.max(camY, y1 + m - top));
   }
   // Hall and crowd
   const g = x.createLinearGradient(0, 0, 0, H);
