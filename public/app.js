@@ -122,9 +122,12 @@
       input.addEventListener('change', function () { go(Number(input.value)); });
       picker = el('div', { class: 'board-picker' }, [el('span', { text: 'Taso ' }), prev, input, next]);
     }
+    var asked = 0; // only the newest request may fill the box: an older one can answer last
     function fill() {
+      var mine = ++asked;
       box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
       scores.list(slug, picker ? 'taso-' + course : 'main').then(function (b) {
+        if (mine !== asked) return;
         var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
         if (b.mine && !b.rows.some(function (r) { return r.me; })) {
           if (rows.length) rows.push(el('div', { class: 'muted', text: '⋯' }));
@@ -133,6 +136,7 @@
         if (!rows.length) rows.push(el('p', { class: 'muted', text: 'Listalla ei ole vielä ketään.' }));
         box.replaceChildren.apply(box, rows);
       }).catch(function () {
+        if (mine !== asked) return;
         box.replaceChildren(el('p', { class: 'muted', text: 'Tuloksia ei saatu: ei verkkoyhteyttä.' }));
       });
     }

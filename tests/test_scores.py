@@ -27,6 +27,7 @@ class FakeApi:
         self.score_refusals = []  # HTTP statuses the next POST /api/scores answer, in turn
         self.hold = False  # True: POST /api/scores waits in self.held until the test lets it go
         self.held = []
+        self.hold_lists = False  # True: GET /api/scores waits in self.held too
 
     def handle(self, route):
         if not self.online:
@@ -75,6 +76,9 @@ class FakeApi:
                 if not cur or (sc["score"] < cur["score"] if low else sc["score"] > cur["score"]):
                     games[game] = {"board": board, "name": self.players[player]["name"], "level": sc.get("level"), **sc}
             return self.reply(route, {"games": games})
+        if path == "scores" and self.hold_lists:
+            self.held.append(route)
+            return None
         if path == "scores":
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
             rows, mine = [], None
@@ -416,3 +420,27 @@ def test_a_level_won_while_a_score_is_on_its_way_is_sent_too(site, context, fake
     [row] = fake.scores.values()
     assert row["level"] == 3  # ... and level 3 follows by itself
     assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt'))['sormiskeitti|main'].level") == 3
+
+
+def test_a_slow_answer_for_an_earlier_course_never_shows_under_a_later_one(site, context, fake):
+    site.build(ROOT / "games")
+    a, b = "a" * 32, "b" * 32
+    fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
+    fake.scores = {("hiihto", "taso-1", a): {"score": 71.5, "version": 2}, ("hiihto", "taso-2", b): {"score": 95, "version": 2}}
+    page = context.new_page()
+    page.goto(site.url + "#/hiihto")
+    page.wait_for_selector(".score-list .tulos:has-text('Aino')")
+    fake.hold_lists = True
+    page.click(".score-list .board-prev")  # course 1 again: its answer is held
+    page.click(".score-list .board-next")  # course 2: also held
+    page.wait_for_timeout(300)
+    assert len(fake.held) == 2
+    fake.hold_lists = False
+    second = fake.held.pop()
+    fake.handle(second)  # course 2 answers first ...
+    page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
+    fake.handle(fake.held.pop())  # ... then the slow course 1 answer
+    page.wait_for_timeout(300)
+    assert page.locator(".score-list .board").input_value() == "2"
+    assert "Bertta" in page.locator(".score-list").inner_text()
+    assert "Aino" not in page.locator(".score-list").inner_text()
