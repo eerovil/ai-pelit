@@ -152,7 +152,7 @@ function hit(p) {
   err += (Math.random() * 2 - 1) * hard * 1.6;
   if (hard > 0 && !(air && high) && Math.random() < hard * 0.5) {
     ball.vx = (Math.random() * 2 - 1) * 3 - fwd * 1.5; ball.vy = 2.5 + Math.random() * 2.5;
-    texts.push({ x: ball.x, y: ball.y + 0.6, s: 'Karkasi käsistä!', c: '#ffe08a', t: 0.9 });
+    texts.push({ x: ball.x, y: ball.y + 1.0, s: 'Karkasi käsistä!', c: '#ffe08a', t: 0.9 });
     tone(200, 0.1, 'triangle', 0.07); ai.react();
     return;
   }
@@ -185,7 +185,7 @@ function hit(p) {
     v = arcTo(ball.x, ball.y, tx, 4.3 + Math.random() * 0.3);
   }
   ball.vx = v.vx; ball.vy = v.vy; ball.spin = v.vx * 3;
-  if (kind) texts.push({ x: ball.x, y: ball.y + 0.6, s: kind, c: p.ai ? '#ffd0d8' : '#d6e6ff', t: 0.9 });
+  if (kind) texts.push({ x: ball.x, y: ball.y + 1.0, s: kind, c: p.ai ? '#ffd0d8' : '#d6e6ff', t: 0.9 });
   if (kind !== 'Smassi!') tone(p.ai ? 440 : 560, 0.07, 'triangle', 0.08);
   ai.react();
 }
