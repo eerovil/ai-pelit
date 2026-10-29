@@ -162,3 +162,37 @@ test('an approved name stays locked to its phone, even after it changes name', a
   await admin(A, 'rejected');
   assert.equal((await call('POST', '/api/players', { id: C, name: 'Aino' })).status, 200);
 });
+
+test('two phones asking for one name at once: only one gets it', async () => {
+  const { call } = setup();
+  const both = await Promise.all([
+    call('POST', '/api/players', { id: A, name: 'Aino' }),
+    call('POST', '/api/players', { id: B, name: 'aino' }),
+  ]);
+  assert.deepEqual(both.map((r) => r.status).sort(), [200, 409]);
+});
+
+test('names differing only by Finnish letter case are the same name', async () => {
+  const { call, admin } = setup();
+  assert.equal((await call('POST', '/api/players', { id: A, name: 'ÄITI' })).status, 200);
+  assert.equal((await call('POST', '/api/players', { id: B, name: 'äiti' })).status, 409);
+  assert.equal((await call('POST', '/api/players', { id: B, name: 'Öljy' })).status, 200);
+  await admin(B, 'approved');
+  assert.equal((await call('POST', '/api/players', { id: C, name: 'ÖLJY' })).status, 409);
+  // Composed and decomposed ä are one name too.
+  assert.equal((await call('POST', '/api/players', { id: C, name: 'Pa\u0308ivi' })).status, 200);
+  assert.equal((await call('POST', '/api/players', { id: A, name: 'P\u00e4ivi' })).status, 409);
+});
+
+test('a rejected player whose name another phone took cannot be approved back into it', async () => {
+  const { call, admin } = setup();
+  await call('POST', '/api/players', { id: A, name: 'Aino' });
+  await admin(A, 'rejected');
+  assert.equal((await call('POST', '/api/players', { id: B, name: 'Aino' })).status, 200);
+  await admin(B, 'approved');
+  assert.equal((await admin(A, 'approved')).status, 409);
+  assert.deepEqual((await call('GET', `/api/players/${A}`)).body, { name: 'Aino', status: 'rejected' });
+  // Once A picks a free name, it can be approved.
+  await call('POST', '/api/players', { id: A, name: 'Aino K' });
+  assert.equal((await admin(A, 'approved')).status, 200);
+});

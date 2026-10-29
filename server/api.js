@@ -11,7 +11,9 @@
 //   POST /api/admin/players    (X-Admin-Key) {id, status}    -> {name, status}
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
-// the admin approves it; from then on that name is locked to that phone (locked_names). Scores are taken as sent: there is no cheat check (Eero's choice).
+// the admin approves it; from then on that name is locked to that phone. Each name has one owner
+// in the `names` table, whose primary key settles two phones asking at once. Scores are taken
+// as sent: there is no cheat check (Eero's choice).
 // Against spam: each game has a fixed set of lists, one network makes at most NEW_PER_DAY names
 // a day, and while PENDING_MAX names wait for the admin no new one is taken.
 
@@ -60,6 +62,17 @@ export function cleanName(name) {
 
 const now = () => new Date().toISOString();
 
+// What makes two names the same: Unicode NFKC, lower case ('ÄITI' is 'äiti').
+export const nameKey = (name) => name.normalize('NFKC').toLowerCase();
+
+// Takes `key` for `player` unless another player owns it. True when the player owns it now.
+async function claim(env, key, player, locked) {
+  await env.DB.prepare('INSERT INTO names (name_key, player, locked, at) VALUES (?, ?, ?, ?) ON CONFLICT (name_key) DO NOTHING')
+    .bind(key, player, locked, now()).run();
+  const owner = await env.DB.prepare('SELECT player FROM names WHERE name_key = ?').bind(key).first();
+  return owner.player === player;
+}
+
 // The caller's network as a hash salted with the admin key: enough to count, nothing to read.
 async function sourceOf(request, env) {
   const ip = request.headers.get('cf-connecting-ip') || '';
@@ -72,11 +85,9 @@ async function setName(request, env, body) {
   const id = String(body.id || ''), name = cleanName(body.name);
   if (!ID.test(id)) return fail(400, 'bad id');
   if (!name) return fail(400, `a name is 1–${NAME_MAX} characters`);
-  const taken = await env.DB.prepare(
-    `SELECT 1 FROM players WHERE lower(name) = lower(?) AND id != ? AND status != 'rejected'
-     UNION ALL SELECT 1 FROM locked_names WHERE name_key = lower(?) AND player != ?`
-  ).bind(name, id, name, id).first();
-  if (taken) return fail(409, 'name taken');
+  const key = nameKey(name);
+  const owner = await env.DB.prepare('SELECT player FROM names WHERE name_key = ?').bind(key).first();
+  if (owner && owner.player !== id) return fail(409, 'name taken');
   const old = await env.DB.prepare('SELECT name, status FROM players WHERE id = ?').bind(id).first();
   if (old && old.name === name) return json({ name, status: old.status });
   const waiting = await env.DB.prepare("SELECT COUNT(*) AS n FROM players WHERE status = 'pending'").first();
@@ -88,6 +99,9 @@ async function setName(request, env, body) {
       .bind(source, day).first();
     if (made.n >= NEW_PER_DAY) return fail(429, 'too many new names from here today');
   }
+  if (!(await claim(env, key, id, 0))) return fail(409, 'name taken');
+  // The name it had before is free again, unless the admin approved it (locked).
+  await env.DB.prepare('DELETE FROM names WHERE player = ? AND locked = 0 AND name_key != ?').bind(id, key).run();
   // Every new nickname, and every change of one, waits for the admin again.
   await env.DB.prepare(
     `INSERT INTO players (id, name, status, created_at, updated_at, source) VALUES (?, ?, 'pending', ?, ?, ?)
@@ -183,15 +197,17 @@ async function adminDecide(env, body) {
   if (status !== 'approved' && status !== 'rejected') return fail(400, 'status is approved or rejected');
   const p = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(id).first();
   if (!p) return fail(404, 'unknown player');
-  const t = now();
-  await env.DB.prepare('UPDATE players SET status = ?, updated_at = ? WHERE id = ?').bind(status, t, id).run();
-  // An approved name is locked to this phone for good; rejecting the player frees its names.
   if (status === 'approved') {
-    await env.DB.prepare('INSERT OR IGNORE INTO locked_names (name_key, player, at) VALUES (lower(?), ?, ?)')
-      .bind(p.name, id, t).run();
+    // An approved name is locked to this phone for good. A rejected player's name was freed,
+    // and another phone may hold it now: then it cannot be approved.
+    const key = nameKey(p.name);
+    if (!(await claim(env, key, id, 1))) return fail(409, 'name taken by another player');
+    await env.DB.prepare('UPDATE names SET locked = 1 WHERE name_key = ?').bind(key).run();
   } else {
-    await env.DB.prepare('DELETE FROM locked_names WHERE player = ?').bind(id).run();
+    // Rejecting the player frees every name it held.
+    await env.DB.prepare('DELETE FROM names WHERE player = ?').bind(id).run();
   }
+  await env.DB.prepare('UPDATE players SET status = ?, updated_at = ? WHERE id = ?').bind(status, now(), id).run();
   return json({ name: p.name, status });
 }
 

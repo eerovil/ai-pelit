@@ -22,6 +22,7 @@ class FakeApi:
         self.players = {}  # id -> {name, status}
         self.scores = {}  # (game, board, player) -> {score, version}
         self.posts = []
+        self.taken = set()  # player ids whose name another phone holds now
 
     def handle(self, route):
         if not self.online:
@@ -63,6 +64,8 @@ class FakeApi:
         if path == "admin/players":
             if req.headers.get("x-admin-key") != ADMIN_KEY:
                 return self.reply(route, {"error": "admin key needed"}, 403)
+            if req.method == "POST" and body["id"] in self.taken:
+                return self.reply(route, {"error": "name taken by another player"}, 409)
             if req.method == "POST":
                 self.players[body["id"]]["status"] = body["status"]
                 return self.reply(route, self.players[body["id"]])
@@ -195,3 +198,14 @@ def test_the_shelf_shows_no_admin_link_without_the_key(site, context, fake):
     page.wait_for_selector(".card")
     page.wait_for_timeout(300)
     assert page.locator(".waiting-names").count() == 0
+
+
+def test_the_admin_is_told_when_a_name_is_already_someone_elses(site, context, fake):
+    site.build(ROOT / "games")
+    fake.players = {"a" * 32: {"name": "Aino", "status": "rejected"}}
+    fake.taken = {"a" * 32}
+    page = context.new_page()
+    page.goto(f"{site.url}yllapito/#avain={ADMIN_KEY}")
+    page.click(".player:has-text('Aino') button:has-text('Hyväksy')")
+    page.wait_for_selector("#msg:has-text('Nimi on jo toisella pelaajalla')")
+    assert fake.players["a" * 32]["status"] == "rejected"
