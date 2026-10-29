@@ -9,6 +9,8 @@
 //   GET  /api/scores?game=&board=&player=                    -> {rows, mine}
 //   GET  /api/admin/players    (X-Admin-Key)                 -> {players}
 //   POST /api/admin/players    (X-Admin-Key) {id, status}    -> {name, status}
+//   POST /api/plays            {game, version}               -> {ok}
+//   GET  /api/plays                                          -> {games: {<slug>: total}}
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -179,6 +181,46 @@ async function list(env, url) {
   return json({ rows, mine });
 }
 
+// Play counts (#26): back.js sends one count each time a game version opens. Anonymous by
+// Eero's choice: a row is game, version, UTC day and a number, nothing about the phone.
+const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const CATALOG_TTL = 60e3;
+let catalog = null, catalogAt = 0;
+
+// The games and versions the site has, from its own catalog.json, so a made-up game gets no
+// row. Without env.ASSETS (the tests) any well-formed slug and version is taken.
+async function knownVersions(env, url) {
+  if (!env.ASSETS) return null;
+  if (!catalog || Date.now() - catalogAt > CATALOG_TTL) {
+    const res = await env.ASSETS.fetch(new URL('/catalog.json', url));
+    if (!res.ok) return catalog;
+    const data = await res.json();
+    catalog = new Map(data.games.map((g) => [g.slug, new Set(g.versions.map((v) => v.n))]));
+    catalogAt = Date.now();
+  }
+  return catalog;
+}
+
+async function addPlay(env, url, body) {
+  const game = String(body.game || ''), version = Number(body.version);
+  if (!SLUG.test(game)) return fail(400, 'bad game');
+  if (!Number.isInteger(version) || version < 1 || version > 999) return fail(400, 'bad version');
+  const known = await knownVersions(env, url);
+  if (known && !(known.get(game) && known.get(game).has(version))) return fail(404, 'no such version');
+  await env.DB.prepare(
+    `INSERT INTO plays (game, version, day, n) VALUES (?, ?, ?, 1)
+     ON CONFLICT (game, version, day) DO UPDATE SET n = n + 1`
+  ).bind(game, version, now().slice(0, 10)).run();
+  return json({ ok: true });
+}
+
+async function playTotals(env) {
+  const { results } = await env.DB.prepare('SELECT game, SUM(n) AS n FROM plays GROUP BY game').all();
+  const games = {};
+  for (const r of results) games[r.game] = r.n;
+  return json({ games });
+}
+
 function isAdmin(request, env) {
   const key = request.headers.get('x-admin-key') || '';
   return !!env.ADMIN_KEY && key === env.ADMIN_KEY;
@@ -227,6 +269,11 @@ async function route(request, env) {
   if (path === '/api/scores' && method === 'POST') {
     const body = await readBody(request);
     return body ? addScore(env, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/plays' && method === 'GET') return playTotals(env);
+  if (path === '/api/plays' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? addPlay(env, url, body) : fail(400, 'bad body');
   }
   if (path === '/api/admin/players') {
     if (!isAdmin(request, env)) return fail(403, 'admin key needed');

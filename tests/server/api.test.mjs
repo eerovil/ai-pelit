@@ -212,3 +212,33 @@ test('on a tie the earlier score is ahead, and the own row says the same place a
   assert.equal(list.rows.some((r) => r.me), false);
   assert.equal(list.mine.rank, 11);
 });
+
+test('plays: each open counts one, totals are per game, and nothing is kept per phone', async () => {
+  const { env, call } = setup();
+  for (const version of [1, 2, 2]) assert.deepEqual((await call('POST', '/api/plays', { game: 'hiihto', version })).body, { ok: true });
+  await call('POST', '/api/plays', { game: 'kirkkis', version: 1 });
+  assert.deepEqual((await call('GET', '/api/plays')).body, { games: { hiihto: 3, kirkkis: 1 } });
+  // One row per game, version and day: no phone, no address.
+  const rows = env.DB.raw.prepare('SELECT * FROM plays ORDER BY game, version').all();
+  assert.deepEqual(rows.map((r) => Object.keys(r).sort()), Array(3).fill(['day', 'game', 'n', 'version']));
+  assert.deepEqual(rows.map((r) => r.n), [1, 2, 1]);
+});
+
+test('plays: a bad game or version is refused', async () => {
+  const { call } = setup();
+  assert.equal((await call('POST', '/api/plays', { game: 'Hiihto!', version: 1 })).status, 400);
+  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 0 })).status, 400);
+  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 1.5 })).status, 400);
+  assert.equal((await call('POST', '/api/plays', 'not json')).status, 400);
+  assert.deepEqual((await call('GET', '/api/plays')).body, { games: {} });
+});
+
+test('plays: only games and versions in the site catalog count', async () => {
+  const catalog = { games: [{ slug: 'hiihto', versions: [{ n: 1 }, { n: 2 }] }] };
+  const env = { DB: makeD1(), ADMIN_KEY, ASSETS: { fetch: async () => new Response(JSON.stringify(catalog)) } };
+  const call = api(env);
+  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 2 })).status, 200);
+  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 3 })).status, 404);
+  assert.equal((await call('POST', '/api/plays', { game: 'keksitty', version: 1 })).status, 404);
+  assert.deepEqual((await call('GET', '/api/plays')).body, { games: { hiihto: 1 } });
+});

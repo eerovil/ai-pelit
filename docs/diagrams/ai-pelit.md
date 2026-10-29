@@ -14,6 +14,9 @@ flowchart TD
     D --> E{Verkko poissa?}
     E -- Kyllä --> F[Service worker antaa välimuistista]
     E -- Ei --> G[Haetaan /games/slug/vN/]
+    D -. avaus .-> P[POST /api/plays: +1 pelille, versiolle ja päivälle]
+    P --> Q[Hyllyllä: pelattu N kertaa]
+    Q --> B
   end
   subgraph Uusi peli tai versio AgentDeckissä
     C -. kopioi teksti .-> H[AgentDeck: uusi Work ai-pelit-repoon]
@@ -23,9 +26,9 @@ flowchart TD
     N --> O[Cloudflare Pages julkaisee]
     O --> B
   end
-  class A,B,C,D blue
+  class A,B,C,D,Q blue
   class E amber
-  class F,G teal
+  class F,G,P teal
   class H violet
   class L,M,N rose
   class O green
@@ -45,6 +48,8 @@ flowchart TD
 - **Pelihylly: uusin versio jokaisesta pelistä**: `public/index.html` rendered from `catalog.json` (first game: Sormiskeitti v1), which `scripts/build.py` builds from every `games/*/game.json`.
 - **Pelin sivu: versiot v1, v2, v3...**: lists each version with its date and the change note; every version stays playable.
 - **Pelaa versiota koko ruudulla**: opens `/games/<slug>/v<N>/index.html` directly (not in an iframe) with the "‹ Pelit" chip from `public/back.js`. The installed app opens full screen (`"display": "fullscreen"` in the manifest, no phone status or navigation bar); in a browser tab, or an app installed before that, `back.js` asks for full screen on the first tap in a game.
+- **POST /api/plays: +1 pelille, versiolle ja päivälle**: `public/back.js` sends one anonymous count each time a version page opens (`sendBeacon`, lost when offline); `addPlay()` in `server/api.js` adds it to the `plays` table (`migrations/0004_plays.sql`: game, version, UTC day, count, nothing per phone), only for a game and version in `catalog.json` (#26).
+- **Hyllyllä: pelattu N kertaa**: `public/app.js` `loadPlays()` reads `GET /api/plays` (all-time total per game) and adds it to each game card, without changing the order; the last totals are kept in `localStorage` (`ai-pelit:_pelikerrat:yhteensa`), so they show offline too.
 - **Service worker antaa välimuistista**: `public/sw.js`: the shell and `catalog.json` network-first, version folders cache-first once played. The shelf is cached as `./` only, because Pages redirects `index.html` to `./`; `public/404.html` answers missing files so Pages never sends the shelf in their place. `/api/` (the high-score lists, see `tuloslistat.md`) always goes to the network.
 - **AgentDeck: uusi Work ai-pelit-repoon**: Eero writes "Uusi peli: …" or "<peli> v<N>: …"; each game page shows that text ready to copy.
 - **Agentti kirjoittaa games/slug/vN/ ja game.json**: a new version is always a new folder; old version folders are never edited.
