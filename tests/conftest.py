@@ -1,3 +1,4 @@
+import base64
 import functools
 import http.server
 import json
@@ -14,6 +15,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 BACK = build.BACK_SCRIPT
+# A plain 360 x 480 WebP, every test game's shelf picture.
+THUMB = base64.b64decode("UklGRi4AAABXRUJQVlA4TCEAAAAvZ8F3AAdQvKIUuf8BAkmb98+/7RH9z93/+3//7//9ZwwA")
 
 # A pull request runs a game's own tests only when it touches that game (#37): every version folder
 # is self-contained, so a change to one game cannot break another. A change anywhere outside
@@ -128,6 +131,7 @@ def make_game(games: Path, slug: str, pages: list[str], title: str | None = None
         versions.append({"n": i, "date": date, "note": f"Versio {i}", "request": "", "issue": None})
     meta = {"title": title or slug.capitalize(), "description": f"Peli {slug}", "versions": versions}
     (d / "game.json").write_text(json.dumps(meta))
+    (d / build.THUMB).write_bytes(THUMB)
 
 
 class Site:

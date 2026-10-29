@@ -5,12 +5,14 @@
 //
 //   POST /api/players          {id, name}                    -> {name, status}
 //   GET  /api/players/<id>                                   -> {name, status}
-//   POST /api/scores           {player, game, board, version, score} -> {best, rank}
+//   POST /api/scores           {player, game, board, version, score, level?} -> {best, rank}
 //   GET  /api/scores?game=&board=&player=                    -> {rows, mine}
+//   GET  /api/scores/top                                     -> {games: {<slug>: {board, name, score, level, version}}}
 //   GET  /api/admin/players    (X-Admin-Key)                 -> {players}
 //   POST /api/admin/players    (X-Admin-Key) {id, name, status} -> {name, status}
 //   POST /api/plays            {game, version}               -> {ok}
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
+//   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -25,7 +27,8 @@ export const GAMES = {
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
   puhelinkoppi: { order: 'high', boards: /^main$/ }, // highest level reached
-  hiihto: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/ }, // fastest time per course, seconds
+  hiihto: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest time per course, seconds
+  piano: { order: 'high', boards: /^main$/ }, // most points in one game
 };
 
 const ID = /^[a-f0-9]{32}$/;
@@ -138,19 +141,45 @@ async function addScore(env, body) {
   if (!GAMES[game].boards.test(String(board || ''))) return fail(400, 'bad board');
   if (!Number.isInteger(version) || version < 1) return fail(400, 'bad version');
   if (!Number.isFinite(score)) return fail(400, 'bad score');
+  // The level reached, shown beside the score; optional, as older versions do not send it.
+  const level = body.level === undefined || body.level === null ? null : Number(body.level);
+  if (level !== null && !(Number.isInteger(level) && level >= 1 && level <= 100000)) return fail(400, 'bad level');
   const known = await env.DB.prepare('SELECT 1 FROM players WHERE id = ?').bind(player).first();
   if (!known) return fail(404, 'unknown player');
   const better = GAMES[game].order === 'low' ? '<' : '>';
-  // Keep only the player's best on each list.
+  // Keep the player's best score on each list, and the highest level they have reached, which
+  // may rise in a round that does not beat the best score.
+  const beats = `excluded.score ${better} scores.score`;
   await env.DB.prepare(
-    `INSERT INTO scores (game, board, player, score, version, at) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (game, board, player) DO UPDATE
-       SET score = excluded.score, version = excluded.version, at = excluded.at
-       WHERE excluded.score ${better} scores.score`
-  ).bind(game, board, player, score, version, now()).run();
+    `INSERT INTO scores (game, board, player, score, version, at, level) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (game, board, player) DO UPDATE SET
+       score = CASE WHEN ${beats} THEN excluded.score ELSE scores.score END,
+       version = CASE WHEN ${beats} THEN excluded.version ELSE scores.version END,
+       at = CASE WHEN ${beats} THEN excluded.at ELSE scores.at END,
+       level = NULLIF(MAX(COALESCE(scores.level, 0), COALESCE(excluded.level, 0)), 0)`
+  ).bind(game, board, player, score, version, now(), level).run();
   const best = await env.DB.prepare('SELECT score, at FROM scores WHERE game = ? AND board = ? AND player = ?')
     .bind(game, board, player).first();
   return json({ best: best.score, rank: await rankOf(env, game, board, best.score, best.at) });
+}
+
+// A row's level is the player's highest in the whole game, from any of its lists: in Hiihto,
+// passing course 2 shows on the course 1 list too, with no replay.
+const GAME_LEVEL = '(SELECT MAX(l.level) FROM scores l WHERE l.game = s.game AND l.player = s.player)';
+
+// Each game's no. 1 for the shelf cards, in one request: its 'main' list, or its first course.
+async function tops(env) {
+  const games = {};
+  for (const [game, g] of Object.entries(GAMES)) {
+    const board = g.first || 'main';
+    const r = await env.DB.prepare(
+      `SELECT p.name, s.score, ${GAME_LEVEL} AS level, s.version FROM scores s JOIN players p ON p.id = s.player
+       WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
+       ORDER BY s.score ${g.order === 'low' ? 'ASC' : 'DESC'}, s.at ASC LIMIT 1`
+    ).bind(game, board).first();
+    if (r) games[game] = { board, name: r.name, score: r.score, level: r.level, version: r.version };
+  }
+  return json({ games });
 }
 
 async function list(env, url) {
@@ -161,20 +190,20 @@ async function list(env, url) {
   const order = GAMES[game].order === 'low' ? 'ASC' : 'DESC';
   // Player ids are each phone's secret: never sent back, only "is this row mine".
   const { results } = await env.DB.prepare(
-    `SELECT p.name, s.score, s.version, s.at, s.player = ? AS me
+    `SELECT p.name, s.score, s.version, s.at, ${GAME_LEVEL} AS level, s.player = ? AS me
      FROM scores s JOIN players p ON p.id = s.player
      WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
      ORDER BY s.score ${order}, s.at ASC LIMIT ${LIST}`
   ).bind(player, game, board).all();
-  const rows = results.map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, version: r.version, at: r.at, me: !!r.me }));
+  const rows = results.map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, level: r.level, version: r.version, at: r.at, me: !!r.me }));
   let mine = null;
   if (ID.test(player)) {
     const m = await env.DB.prepare(
-      `SELECT p.name, p.status, s.score, s.version, s.at FROM scores s JOIN players p ON p.id = s.player
+      `SELECT p.name, p.status, s.score, ${GAME_LEVEL} AS level, s.version, s.at FROM scores s JOIN players p ON p.id = s.player
        WHERE s.game = ? AND s.board = ? AND s.player = ?`
     ).bind(game, board, player).first();
     if (m) {
-      mine = { name: m.name, status: m.status, score: m.score, version: m.version, at: m.at };
+      mine = { name: m.name, status: m.status, score: m.score, level: m.level, version: m.version, at: m.at };
       if (m.status === 'approved') mine.rank = await rankOf(env, game, board, m.score, m.at);
     }
   }
@@ -288,6 +317,7 @@ async function route(request, env) {
   const m = path.match(/^\/api\/players\/([^/]+)$/);
   if (m && method === 'GET') return getPlayer(env, m[1]);
   if (path === '/api/scores' && method === 'GET') return list(env, url);
+  if (path === '/api/scores/top' && method === 'GET') return tops(env);
   if (path === '/api/scores' && method === 'POST') {
     const body = await readBody(request);
     return body ? addScore(env, body) : fail(400, 'bad body');
@@ -308,7 +338,18 @@ async function route(request, env) {
   return fail(404, 'no such route');
 }
 
+// A live game room: the WebSocket goes on to the room's Durable Object in the ai-pelit-rooms
+// Worker, bound to the Pages project as ROOMS. One object per code, so a room's phones meet.
+function room(request, env, code) {
+  if (!env.ROOMS) return fail(503, 'no rooms');
+  if (!/^[A-Z]{4}$/.test(code)) return fail(400, 'bad room code');
+  if (request.headers.get('upgrade') !== 'websocket') return fail(426, 'websocket only');
+  return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(request);
+}
+
 export async function handle(request, env) {
+  const rooms = new URL(request.url).pathname.match(/^\/api\/rooms\/([^/]*)$/);
+  if (rooms) return room(request, env, rooms[1].toUpperCase());
   if (!env.DB) return fail(503, 'no database');
   try {
     return await route(request, env);

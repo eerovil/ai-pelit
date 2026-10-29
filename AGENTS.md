@@ -11,16 +11,26 @@ player sees is Finnish unless the request says otherwise.
   `games/<slug>/v1/index.html` and `games/<slug>/game.json`.
 - "<Peli> v<N> (<slug>): …" — a new version. Copy `games/<slug>/v<N-1>/` to `games/<slug>/v<N>/`
   and change the copy. Append the version to `game.json`.
+- Either way, take the game's picture for the shelf (#33): during your mid-play check at
+  360 × 740, save a screenshot of a moment that shows the game well and run
+  `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
+  A new game needs one (the build refuses a game without it); retake it in a new version when the
+  game looks different.
 
 ## Rules
 
 1. **A published version never changes.** Never edit, move or delete a `games/<slug>/v<N>/` folder
    or its `game.json` entry once it is on `main`; a fix is a new version. CI runs
-   `scripts/check_immutable.py` and fails a pull request that does.
+   `scripts/check_immutable.py` and fails a pull request that does. `games/<slug>/thumb.webp`
+   is outside the version folders and may be retaken.
 2. **One folder per version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an
    extra: the game never waits for it, and plays the same without it.
+   Why no build step, and no TypeScript (#42): the file in the folder is the file the phone runs,
+   so a published version cannot change by accident and needs no tools to keep working. A library
+   a game needs is copied into its folder as one file. Think again only when a single game passes
+   about 2000 lines, or the same code is copied into a third game; then propose it as its own Work.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
@@ -44,15 +54,48 @@ high-score lists (#25), then play counts (#26).
 
 - **High scores.** A version opts in with
   `<script src="../../../scores.js" data-game="<slug>" data-order="high|low" data-corner="bottom-right"></script>`
-  and calls `AiPelitScores.submit(score)` when a round ends; `AiPelitScores.format(fn)` shows a
-  score, `AiPelitScores.board(id, label)` picks a per-course list. The game must also be in
-  `GAMES` in `server/api.js` (which way is better). Scores wait on the phone while offline.
-  Nicknames are one per phone, and show on lists only once approved at `/yllapito/`.
+  and calls `AiPelitScores.submit(score)` when a round ends; `AiPelitScores.board(id, label)`
+  picks a per-course list. Everything else about a game's list lives outside the game, so a
+  change to it needs no new version: `GAMES` in `public/scores.js` (how a score reads, and
+  where the game saves its level, which is sent with each score and shown beside it) and
+  `GAMES` in `server/api.js` (which way is better, which lists). Scores wait on the phone while
+  offline, and a round that beats neither the score nor the level is not sent. The shelf shows
+  each game's no. 1 on its card and its top 10 on its page (`data-shelf`). Nicknames are one
+  per phone, and show on lists only once approved at `/yllapito/`.
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
-- `public/scores.js` is shared by every version that uses it: change it only in ways every one of
-  them keeps working with.
+- **Live rooms (multiplayer).** A version opts in with
+  `<script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5"></script>` before
+  its own script (#34), and a "👥 Pelaa kavereiden kanssa" button that calls
+  `AiPelitRooms.open()`. Do not copy Kirkkis v2's own room code; it predates the library.
+  `rooms.js` draws the room screen (code, QR link, players, "Aloita kierros"), reconnects, rejoins
+  after a reload, sends a typed code from another game or version to the room's own, and pauses
+  the round while a phone in it is away (with "Jatka ilman heitä" on the host). The game keeps the
+  game: the phone that made the room (the host) runs the round and the others draw it.
+  - `on('start', s => …)` on every phone: `s.players` (`[{id, name}]`, the connected phones in
+    room order), `s.round`, `s.host`, `s.over` (a finished round sent to a phone that missed it).
+  - `send(msg, to)` (host: to all or one id; a guest: to the host) and `on('message', (msg, from) => …)`.
+    A message's `t` must not start with `_`; `you`, `peers`, `hello`, `bye` are taken too. A phone
+    that is not in the round (it joined late) hears none of its messages. A code typed for a room
+    made by Kirkkis v2 (which names no game) is refused with "Huone on toisessa pelissä.".
+  - Host: `on('hello', id => …)` sends a returning phone the round as it is; `deliver(msg)` sends the
+    round's end to every phone in it; each phone confirms it, and one that has not (away, or its
+    page reloading) gets it again when it is back; `endRound()`. `on('continue', ids)`
+    and `on('back', id)`: the computer takes over, and gives back, a phone's player.
+  - Every phone: `paused` (stop the clock while true), `once(round)` (save a result only when true),
+    `backToRoom(text, 'win'|'lose')` after the game's own end screen, `note(text)`,
+    `on('lobby')` (the host lost the round: stop it), `on('leave', why)` and `on('menu')` (show the
+    game's menu again), `me`, `isHost`, `inRoom`.
+  - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
+  - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
+    that plays the room in Playwright.
+  - The room is `/api/rooms/<CODE>`, a WebSocket to one Durable Object per 4-letter code in the
+    `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project as `ROOMS`. It only relays, and
+    keeps the host's `game`, `v` and `max` (2–8). CI deploys `rooms/` before the site; a change to
+    it must keep every published version's messages working.
+- `public/scores.js` and `public/rooms.js` are shared by every version that uses them: change them
+  only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`; on this host they are in `~/.local/share/ruokalista/cloudflare.env`)
@@ -73,6 +116,7 @@ high-score lists (#25), then play counts (#26).
   test that plays a game with `@pytest.mark.games("<slug>")`. Locally the same flag saves time.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
+- `games/<slug>/thumb.webp` shows the current version mid-play.
 - The use-case walkthrough is: open the shelf, open the game, play one round, go back.
 
 ## Running it locally

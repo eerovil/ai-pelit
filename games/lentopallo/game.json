@@ -1,0 +1,20 @@
+{
+  "title": "Lentopallo",
+  "description": "Rantalentopalloa sivusta katsottuna: 1 vs 1 tai 2 vs 2, tietokonetta tai kavereita vastaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: rantalentopalloa sivusta kuvattuna, 1v1 tietokonetta vastaan, syöttö, nosto, smassi ja kolme kosketusta, 11 pisteeseen.",
+      "request": "Lentopallo. Sivusta kuvattu 1v1",
+      "issue": "eerovil/ai-pelit#36"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-29",
+      "note": "Kavereiden kanssa 2–4 puhelimella ja 2 vs 2 -peli, yksin tietokoneen joukkuekaverin kanssa.",
+      "request": "Add multiplayer using shared lib. Also 2v2",
+      "issue": "eerovil/ai-pelit#36"
+    }
+  ]
+}
