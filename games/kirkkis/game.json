@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: piiloudu tai etsi neljää tietokonepelaajaa pihalla, jossa jokainen näkee vain oman näkökenttänsä, ja ehdi pesään huutamaan ”Kirkkis!”.",
       "request": "Kirkkis peli. Eli kirkonrotta. Yksi on etsijä, kaikilla on oma näkökenttä",
       "issue": "eerovil/ai-pelit#20"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-29",
+      "note": "Pelaa kavereiden kanssa: 2–5 puhelinta samassa pihassa huoneen koodilla tai QR-koodilla, ja jokainen näkee vain oman näkökenttänsä.",
+      "request": "Real-time multiplayer: kaksi tai useampi puhelin samassa pelissä. Kirkkis v2, 2–5 puhelinta, huoneen koodi ja QR-koodi, ja peli odottaa, jos puhelin putoaa pois.",
+      "issue": "eerovil/ai-pelit#27"
     }
   ]
 }
