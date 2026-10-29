@@ -53,6 +53,8 @@
       level: function () { return saved('hiihto', 'taso') - 1; },
       levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' läpi'; },
     },
+    // Most points in one game; level: the highest level reached (saved as 'taso').
+    piano: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('piano', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
