@@ -32,13 +32,9 @@ jobs:
         with:
           name: site
           path: _site
-      - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        with:
-          path: _site
 
-  # A merge to main is the release: Cloudflare Pages serves it at ai-pelit.pages.dev, and at
-  # pelit.vilpponen.fi once that name points there.
+  # A merge to main is the release: Cloudflare Pages serves it at pelit.vilpponen.fi (a CNAME
+  # to ai-pelit.pages.dev at hostingpalvelu.fi).
   deploy-cloudflare:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test
@@ -72,19 +68,3 @@ jobs:
       - name: Check what is live
         if: steps.ready.outputs.ready == 'true'
         run: curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://ai-pelit.pages.dev/catalog.json > /dev/null
-
-  # GitHub Pages keeps serving pelit.vilpponen.fi until its CNAME moves to ai-pelit.pages.dev;
-  # remove this job then.
-  deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
