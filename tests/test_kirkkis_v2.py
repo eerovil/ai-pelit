@@ -259,6 +259,7 @@ def test_each_phone_sees_its_own_view_and_the_host_runs_the_rules(phones):
     guest.wait_for_function("player.st === 'spotted' && msg === 'Sinut nähtiin! Juokse pesään!'")
     assert host.evaluate("msg") == "Näit Ainon! Pesään!"
     # Each phone draws only what its own player sees: the guest does not see the far bots.
+    guest.wait_for_function("Math.hypot(people[2].x - 2.5, people[2].y - 24) < 0.3")
     assert guest.evaluate("canSee(player, people[2])") is False
     # The host reaches the base first: the guest is caught on both phones.
     host.evaluate("player.x = 15; player.y = 23")
