@@ -14,8 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 BACK = build.BACK_SCRIPT
-# A 3 x 4 WebP, every test game's shelf picture.
-THUMB = base64.b64decode("UklGRjwAAABXRUJQVlA4IDAAAADwAQCdASoDAAQAAUAmJaACdLoB+AAETAAA/uxw3/0mzxNnibPkkf/OwbEu14AAAAA=")
+# A plain 360 x 480 WebP, every test game's shelf picture.
+THUMB = base64.b64decode("UklGRi4AAABXRUJQVlA4TCEAAAAvZ8F3AAdQvKIUuf8BAkmb98+/7RH9z93/+3//7//9ZwwA")
 
 
 def game_page(title: str, body: str = "", script: str = "") -> str:

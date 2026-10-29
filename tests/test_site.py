@@ -165,6 +165,32 @@ def test_a_played_version_and_the_shelf_work_offline(site, context):
         context.set_offline(False)
 
 
+def test_every_game_picture_shows_offline_also_after_an_update(site, context):
+    make_game(site.games, "eka", [game_page("eka")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    wait_for_worker(page)
+    make_game(site.games, "toka", [game_page("toka")])
+    site.build()
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_function(
+        "caches.keys().then(k => k.filter(n => n.startsWith('ai-pelit-shell-')).length === 1)", timeout=10000
+    )
+    # The new worker cached every picture on install, also one the shelf has not shown yet.
+    page.wait_for_function("caches.open('ai-pelit-thumbs').then(c => c.keys()).then(k => k.length === 2)", timeout=10000)
+    context.set_offline(True)
+    try:
+        page.goto(site.url)
+        page.wait_for_selector('.card[data-slug="toka"]')
+        page.wait_for_function(
+            "[...document.querySelectorAll('img.thumb')].every(i => i.complete && i.naturalWidth > 0)"
+        )
+        assert page.locator("img.thumb").count() == 2
+    finally:
+        context.set_offline(False)
+
+
 def test_a_new_version_keeps_the_save_and_an_update_does_not_touch_it(site, context):
     make_game(site.games, "tallennus", [game_page("v1", script=SAVE_V1), game_page("v2", script=SAVE_V2)])
     site.build()

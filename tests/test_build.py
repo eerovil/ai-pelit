@@ -5,7 +5,7 @@ import pytest
 
 import build
 from check_immutable import problems
-from conftest import ROOT, game_page, make_game
+from conftest import ROOT, THUMB, game_page, make_game
 
 
 def test_catalog_lists_every_game_newest_first(tmp_path):
@@ -16,6 +16,11 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
     assert [v["n"] for v in catalog["games"][0]["versions"]] == [1, 2]
 
 
+def small_webp():
+    # A real 3 x 4 WebP: the build reads the size from its header, without Pillow.
+    return bytes.fromhex("524946463c000000574542505650382030000000f001009d012a0300040001402625a00274ba01f800044c0000feec70dffd26cf136789b3e491ffcec1b12ed780000000")
+
+
 @pytest.mark.parametrize(
     "breakage, message",
     [
@@ -23,6 +28,8 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
         (lambda d: (d / "v3").mkdir(), "folders without a game.json version"),
         (lambda d: (d / "v2" / "index.html").unlink(), "v2/index.html is missing"),
         (lambda d: (d / "thumb.webp").unlink(), "thumb.webp is missing"),
+        (lambda d: (d / "thumb.webp").write_bytes(b"ei kuva"), "not a WebP image"),
+        (lambda d: (d / "thumb.webp").write_bytes(small_webp()), "found 3 x 4"),
     ],
 )
 def test_build_refuses_a_broken_game(tmp_path, breakage, message):
@@ -74,8 +81,13 @@ def test_each_game_has_its_picture_under_a_name_that_changes_with_it(tmp_path):
     assert (tmp_path / "a" / first).read_bytes() == (games / "peli" / "thumb.webp").read_bytes()
     # Served from thumbs/ only: under games/ the service worker would keep an old one forever.
     assert not (tmp_path / "a" / "games" / "peli" / "thumb.webp").exists()
-    (games / "peli" / "thumb.webp").write_bytes(b"toinen kuva")
-    assert build.build(games, ROOT / "public", tmp_path / "b")["games"][0]["thumb"] != first
+    # A version's own file of the same name is part of the game and is published.
+    (games / "peli" / "v1" / "thumb.webp").write_bytes(b"pelin oma kuva")
+    (games / "peli" / "thumb.webp").write_bytes(THUMB + b"\x00")
+    assert (tmp_path / "a" / "games" / "peli" / "v1").is_dir()
+    second = build.build(games, ROOT / "public", tmp_path / "b")
+    assert (tmp_path / "b" / "games" / "peli" / "v1" / "thumb.webp").read_bytes() == b"pelin oma kuva"
+    assert second["games"][0]["thumb"] != first
 
 
 def test_make_thumb_crops_a_screenshot_to_3_by_4(tmp_path):
@@ -88,9 +100,9 @@ def test_make_thumb_crops_a_screenshot_to_3_by_4(tmp_path):
         assert (img.format, img.size) == ("WEBP", (360, 480))
 
 
-def test_every_real_game_has_a_picture():
+def test_every_real_game_has_a_picture_of_the_right_size():
     for game_dir in (ROOT / "games").iterdir():
-        assert (game_dir / "thumb.webp").is_file(), game_dir.name
+        assert build.webp_size((game_dir / "thumb.webp").read_bytes()) == (360, 480), game_dir.name
 
 
 def git(cwd, *args):

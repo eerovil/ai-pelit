@@ -24,6 +24,22 @@ SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Each game's picture for the shelf (#33), beside game.json; scripts/make_thumb.py makes it.
 THUMB = "thumb.webp"
+THUMB_SIZE = (360, 480)
+
+
+def webp_size(data: bytes) -> tuple[int, int] | None:
+    """Width and height of a WebP image, read from its header; None when it is not one."""
+    if len(data) < 30 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        return None
+    kind = data[12:16]
+    if kind == b"VP8 " and data[23:26] == b"\x9d\x01\x2a":
+        return int.from_bytes(data[26:28], "little") & 0x3FFF, int.from_bytes(data[28:30], "little") & 0x3FFF
+    if kind == b"VP8L" and data[20] == 0x2F:
+        bits = int.from_bytes(data[21:25], "little")
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if kind == b"VP8X":
+        return int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1
+    return None
 
 
 class GameError(Exception):
@@ -57,6 +73,10 @@ def load_game(game_dir: Path) -> dict:
     thumb = game_dir / THUMB
     if not thumb.is_file():
         raise GameError(f"{slug}: {THUMB} is missing (python3 scripts/make_thumb.py {slug} <screenshot.png>)")
+    size = webp_size(thumb.read_bytes())
+    if size != THUMB_SIZE:
+        found = "not a WebP image" if size is None else f"{size[0]} x {size[1]}"
+        raise GameError(f"{slug}: {THUMB} must be a 360 x 480 WebP, found {found} (python3 scripts/make_thumb.py)")
     folders = {p.name for p in game_dir.iterdir() if p.is_dir() and re.match(r"^v\d+$", p.name)}
     extra = folders - {f"v{i}" for i in range(1, len(versions) + 1)}
     if extra:
@@ -86,7 +106,11 @@ def build(games_dir: Path, public_dir: Path, out_dir: Path) -> dict:
     if out_dir.exists():
         shutil.rmtree(out_dir)
     shutil.copytree(public_dir, out_dir)
-    shutil.copytree(games_dir, out_dir / "games", ignore=shutil.ignore_patterns("game.json", THUMB))
+    # The picture is skipped beside game.json only: a version may have a file of the same name.
+    def skip(folder, names):
+        return [n for n in names if n == "game.json" or (n == THUMB and Path(folder).parent == games_dir)]
+
+    shutil.copytree(games_dir, out_dir / "games", ignore=skip)
     (out_dir / "thumbs").mkdir()
     for game in catalog["games"]:
         shutil.copyfile(games_dir / game["slug"] / THUMB, out_dir / game["thumb"])

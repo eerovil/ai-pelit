@@ -34,7 +34,7 @@
   // The game's picture (#33), a mid-play screenshot the build names in the catalog.
   function thumb(game, cls, w, h) {
     if (!game.thumb) return null;
-    return el('img', { class: cls, src: game.thumb, alt: cls === 'thumb' ? '' : game.title, width: String(w), height: String(h), loading: 'lazy' });
+    return el('img', { class: cls, src: game.thumb, alt: cls === 'thumb' ? '' : game.title, width: String(w), height: String(h) });
   }
 
   function renderShelf() {

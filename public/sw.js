@@ -6,6 +6,8 @@ var BUILD = '__BUILD_ID__';
 var SHELL_CACHE = 'ai-pelit-shell-' + BUILD;
 // Version folders never change once published, so they keep one cache across builds.
 var GAMES_CACHE = 'ai-pelit-games';
+// Game pictures (#33) are named by their content, so they too keep one cache across builds.
+var THUMBS_CACHE = 'ai-pelit-thumbs';
 // The shelf is cached as './' only: Cloudflare Pages redirects index.html to './', and a
 // redirected response cannot answer a page load.
 var SHELL = [
@@ -24,7 +26,10 @@ self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(SHELL_CACHE)
       .then(function (cache) {
-        return cache.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'no-cache' }); }));
+        return cache.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'no-cache' }); }))
+          .then(function () { return cache.match('catalog.json'); })
+          .then(function (r) { return r.json(); })
+          .then(cacheThumbs);
       })
       .then(function () { return self.skipWaiting(); })
   );
@@ -42,13 +47,31 @@ self.addEventListener('activate', function (event) {
   );
 });
 
+// Every game's picture, so the whole shelf shows offline; pictures no game uses any more go.
+// A picture that fails to load now is fetched when the shelf shows it.
+function cacheThumbs(catalog) {
+  var wanted = catalog.games.map(function (g) { return new URL(g.thumb, self.registration.scope).href; });
+  return caches.open(THUMBS_CACHE).then(function (cache) {
+    return cache.keys().then(function (have) {
+      var had = have.map(function (r) { return r.url; });
+      return Promise.all(
+        have.filter(function (r) { return wanted.indexOf(r.url) < 0; }).map(function (r) { return cache.delete(r); })
+          .concat(wanted.filter(function (u) { return had.indexOf(u) < 0; }).map(function (u) {
+            return cache.add(u).catch(function () {});
+          }))
+      );
+    });
+  });
+}
+
 var GAMES_PREFIX = new URL('games/', self.registration.scope).pathname;
+var THUMBS_PREFIX = new URL('thumbs/', self.registration.scope).pathname;
 // The online parts (high scores, #25) are live data: straight to the network, never cached.
 var API_PREFIX = new URL('api/', self.registration.scope).pathname;
 
-// A version folder: cache first, filled the first time it is played.
-function gameFile(request) {
-  return caches.open(GAMES_CACHE).then(function (cache) {
+// A version folder or a picture: cache first, filled the first time it is used.
+function cachedFile(request, name) {
+  return caches.open(name).then(function (cache) {
     return cache.match(request, { ignoreSearch: true }).then(function (hit) {
       if (hit) return hit;
       return fetch(request).then(function (response) {
@@ -83,5 +106,7 @@ self.addEventListener('fetch', function (event) {
   var url = new URL(request.url);
   if (url.origin !== self.location.origin || url.href.indexOf(self.registration.scope) !== 0) return;
   if (url.pathname.indexOf(API_PREFIX) === 0) return;
-  event.respondWith(url.pathname.indexOf(GAMES_PREFIX) === 0 ? gameFile(request) : shellFile(request));
+  if (url.pathname.indexOf(GAMES_PREFIX) === 0) event.respondWith(cachedFile(request, GAMES_CACHE));
+  else if (url.pathname.indexOf(THUMBS_PREFIX) === 0) event.respondWith(cachedFile(request, THUMBS_CACHE));
+  else event.respondWith(shellFile(request));
 });
