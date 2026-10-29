@@ -18,6 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BACK_SCRIPT = '<script src="../../../back.js"></script>'
+# The chip may sit in another corner: <script src="../../../back.js" data-corner="bottom-left">.
+BACK_SCRIPT_RE = re.compile(r'<script src="\.\./\.\./\.\./back\.js"[^>]*></script>')
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -48,7 +50,7 @@ def load_game(game_dir: Path) -> dict:
         page = game_dir / f"v{i}" / "index.html"
         if not page.is_file():
             raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
-        if BACK_SCRIPT not in page.read_text():
+        if not BACK_SCRIPT_RE.search(page.read_text()):
             raise GameError(f"{slug} v{i}: index.html must include {BACK_SCRIPT}")
     folders = {p.name for p in game_dir.iterdir() if p.is_dir() and re.match(r"^v\d+$", p.name)}
     extra = folders - {f"v{i}" for i in range(1, len(versions) + 1)}

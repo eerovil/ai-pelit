@@ -22,7 +22,8 @@ player sees is Finnish unless the request says otherwise.
    forever.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
-   "‹ Pelit" in the top-left corner; keep that corner free of the game's own buttons.
+   "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
+   with `data-corner="top-right"`, `"bottom-left"` or `"bottom-right"` on that script tag.
 4. **Phone first.** Portrait, touch only, playable on a 360 × 640 screen, no hover, no keyboard
    needed. Use `100dvh`, safe-area insets, and `touch-action: none` on the play area. Short
    sounds through Web Audio only after the first tap.

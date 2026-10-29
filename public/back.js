@@ -3,7 +3,12 @@
 (function () {
   'use strict';
   // back.js sits in the shelf's own folder.
-  var shelf = new URL('./', document.currentScript.src).href;
+  var script = document.currentScript;
+  var shelf = new URL('./', script.src).href;
+  // A game whose own buttons are in the top-left asks for another corner with data-corner.
+  var corner = (script.getAttribute('data-corner') || 'top-left').split('-');
+  var vertical = corner[0] === 'bottom' ? 'bottom' : 'top';
+  var horizontal = corner[1] === 'right' ? 'right' : 'left';
   var parts = location.pathname.split('/').filter(Boolean);
   var slug = parts[parts.length - 2] || '';
   var a = document.createElement('a');
@@ -13,7 +18,8 @@
   a.id = 'ai-pelit-back';
   a.style.cssText = [
     'position:fixed', 'z-index:2147483647',
-    'top:calc(env(safe-area-inset-top, 0px) + 6px)', 'left:calc(env(safe-area-inset-left, 0px) + 6px)',
+    vertical + ':calc(env(safe-area-inset-' + vertical + ', 0px) + 6px)',
+    horizontal + ':calc(env(safe-area-inset-' + horizontal + ', 0px) + 6px)',
     'padding:6px 10px', 'border-radius:999px', 'background:rgba(0,0,0,.45)', 'color:#fff',
     'font:600 13px/1 system-ui,sans-serif', 'text-decoration:none', 'touch-action:manipulation',
   ].join(';');

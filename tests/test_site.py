@@ -47,6 +47,16 @@ def test_shelf_game_page_and_back_chip(site, context):
     assert page.locator("h1").inner_text() == "Pomppu"
 
 
+def test_a_game_can_move_the_back_chip(site, context):
+    page_html = game_page("x").replace('back.js"></script>', 'back.js" data-corner="bottom-left"></script>')
+    make_game(site.games, "kulma", [page_html])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/kulma/v1/")
+    box = page.locator("#ai-pelit-back").bounding_box()
+    assert box["x"] < 20 and box["y"] > 600
+
+
 def test_chrome_can_install_it(site, context):
     make_game(site.games, "pomppu", [game_page("v1")])
     site.build()
