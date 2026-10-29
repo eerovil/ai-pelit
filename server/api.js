@@ -11,6 +11,7 @@
 //   POST /api/admin/players    (X-Admin-Key) {id, name, status} -> {name, status}
 //   POST /api/plays            {game, version}               -> {ok}
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
+//   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -308,7 +309,18 @@ async function route(request, env) {
   return fail(404, 'no such route');
 }
 
+// A live game room: the WebSocket goes on to the room's Durable Object in the ai-pelit-rooms
+// Worker, bound to the Pages project as ROOMS. One object per code, so a room's phones meet.
+function room(request, env, code) {
+  if (!env.ROOMS) return fail(503, 'no rooms');
+  if (!/^[A-Z]{4}$/.test(code)) return fail(400, 'bad room code');
+  if (request.headers.get('upgrade') !== 'websocket') return fail(426, 'websocket only');
+  return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(request);
+}
+
 export async function handle(request, env) {
+  const rooms = new URL(request.url).pathname.match(/^\/api\/rooms\/([^/]*)$/);
+  if (rooms) return room(request, env, rooms[1].toUpperCase());
   if (!env.DB) return fail(503, 'no database');
   try {
     return await route(request, env);

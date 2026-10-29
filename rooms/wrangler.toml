@@ -1,0 +1,15 @@
+# The live game rooms (#27): a Worker that only holds the Room Durable Object. It has no address
+# of its own; the Pages project binds it as ROOMS, so phones reach it at
+# pelit.vilpponen.fi/api/rooms/<code> (server/api.js). CI deploys it before the site.
+name = "ai-pelit-rooms"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

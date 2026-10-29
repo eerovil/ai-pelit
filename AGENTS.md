@@ -51,6 +51,13 @@ high-score lists (#25), then play counts (#26).
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
+- **Live rooms (multiplayer).** `/api/rooms/<CODE>` is a WebSocket to a room: one Durable
+  Object per 4-letter code in the `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project
+  as `ROOMS`. The room only relays: the phone that made it (the host) runs the game and sends it to
+  the others; theirs go to the host. Up to 5 phones. A game copies the client from Kirkkis v2
+  (`net`, `connect()`, `qrMatrix()`), keeps its solo mode, and must keep working with no room.
+  CI deploys `rooms/` before the site; a change to it must keep every published version's
+  messages working.
 - `public/scores.js` is shared by every version that uses it: change it only in ways every one of
   them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
