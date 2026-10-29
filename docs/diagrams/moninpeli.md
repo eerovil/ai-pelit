@@ -19,6 +19,8 @@ flowchart TD
   end
   subgraph Lib[rooms.js: yhteinen kaikille peleille]
     L1[Huoneruutu: Luo huone tai Liity koodilla] --> L2[Koodi ja QR-koodi, pelaajalista]
+    L10[Avoimet huoneet: liity napautuksella] --> L1
+    L2 --> L11[🌍 Julkinen-kytkin isännällä]
     L2 --> L3[Aloita kierros]
     L4[Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen]
     L5{Onko joku kierroksen puhelin poissa?}
@@ -29,7 +31,11 @@ flowchart TD
   end
   subgraph Cloudflare
     C1[Huone: välittää viestit, muistaa pelin ja version]
+    C2[Julkisten huoneiden lista]
   end
+  L11 --> C1
+  C1 -- julkinen, odottaa, tilaa --> C2
+  C2 --> L10
   L1 --> C1
   C1 --> L8
   L8 -- Ei --> L2
@@ -47,8 +53,8 @@ flowchart TD
   G5 --> L7
   L7 --> L2
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9 blue
-  class C1 violet
+  class L1,L2,L3,L4,L7,L9,L10,L11 blue
+  class C1,C2 violet
   class L5,L8 amber
   class L6,G7 rose
 ```
@@ -65,6 +71,9 @@ flowchart TD
 
 - **👥 Pelaa kavereiden kanssa**: the game's own menu button; it calls `AiPelitRooms.open()`. The game loads `<script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5">` before its own script.
 - **Huoneruutu: Luo huone tai Liity koodilla**: `public/rooms.js` `build()` and `render()`, in Finnish, the same in every game. A new room gets a random 4-letter code (no I, O, Q, W, X, Z); a code in use gets another. The name is the phone's one nickname (`ai-pelit:_pelaaja:nimi`, shared with the high-score lists), or an animal name kept in `ai-pelit:_huone:nimi`. Kirkkis v2: `enterRoom()`, `renderNet()`.
+- **Avoimet huoneet: liity napautuksella**: `readList()` and `renderList()` on the first page of the room screen (#50): this game's public rooms from `GET /api/rooms?game=<slug>`, read on opening and every 5 seconds, as buttons "KOOD · 2/5 pelaajaa" (no names). A tap joins like a typed code, so a room of another version opens that version. Hidden until the first answer, so with no connection nothing shows.
+- **🌍 Julkinen-kytkin isännällä**: the host's checkbox in the room (`net.pub`, off for a new room, kept over a reload in `ai-pelit:_huone:nyt`). `tellList()` sends the room `{t: '_list', on}`: on while public and no round runs, and again every minute while on.
+- **Julkisten huoneiden lista**: one more object of the `Room` class, named `lobby` (`lobby()` in `rooms/worker.js`). Each room's `tell()` puts itself on it while the host's `_list` is on, the host is connected, a game is named and there is space, and takes itself off otherwise. Newest first, at most 10 per game; a listing not refreshed for 3 minutes is dropped. Only `GET /api/rooms?game=` reaches it from outside (`publicRooms()` in `server/api.js`).
 - **Koodi ja QR-koodi, pelaajalista**: the code, a QR code of `<version>/?huone=<KOODI>` drawn in the page (`qrMatrix()`), and who is in, the host with 👑, someone without a connection greyed out. A QR link joins at once.
 - **Aloita kierros**: host only, once `data-min` phones are connected. Sends `_start` with the round id and players, and fires the game's `on('start')` on every phone. Kirkkis v2: `startMulti()`.
 - **Kierros alkaa: isäntä pyörittää peliä**: the game's `on('start')`. The host runs the rules and the clock, and stops the clock while `AiPelitRooms.paused`.

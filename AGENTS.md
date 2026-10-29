@@ -87,6 +87,10 @@ high-score lists (#25), then play counts (#26).
     `backToRoom(text, 'win'|'lose')` after the game's own end screen, `note(text)`,
     `on('lobby')` (the host lost the round: stop it), `on('leave', why)` and `on('menu')` (show the
     game's menu again), `me`, `isHost`, `inRoom`.
+  - Public rooms (#50): the host's "🌍 Julkinen" switch in the room lists it on every phone's room
+    screen for the same game (any version), under "Avoimet huoneet"; one tap joins. A room is
+    listed only while it waits between rounds, has space and its host is connected. The list
+    shows only the code and the count, not names. A game needs nothing for it.
   - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
   - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
     that plays the room in Playwright.

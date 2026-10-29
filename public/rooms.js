@@ -4,7 +4,8 @@
 //   <script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5"></script>
 //
 // placed before the game's own script, and a button that calls AiPelitRooms.open(). This file
-// draws the room screen (make a room, join by code or QR link, who is in, "Aloita kierros"),
+// draws the room screen (make a room, join by code, QR link or the list of public rooms, who is in,
+// the host's "Julkinen huone" switch, "Aloita kierros"),
 // keeps the connection, comes back to the room after a reload, and pauses the round while a phone
 // in it is away. The game keeps the game: the phone that made the room (the host) runs the round
 // and sends it to the others with send(); the others' messages go to the host. See "Live rooms"
@@ -23,6 +24,7 @@
   var vm = location.pathname.match(/\/v(\d+)\//);
   var VERSION = vm ? +vm[1] : 1;
   var API = new URL('api/rooms/', script.src);
+  var LIST = new URL('../rooms?game=' + encodeURIComponent(GAME), API); // this game's public rooms (#50)
 
   var LETTERS = 'ABCDEFGHJKLMNPRSTUVY'; // easy to read aloud: no I, O, Q, W, X, Z
   var NICKS = ['Siili', 'Orava', 'Kettu', 'Jänis', 'Pöllö', 'Ilves', 'Hirvi', 'Majava'];
@@ -58,7 +60,7 @@
 
   var net = {
     on: false, host: false, code: '', ws: null, connected: false, joined: false, tries: 0, timer: 0,
-    me: '', hostId: '', members: [], online: {}, wait: false, listening: false, error: '', result: '', resultClass: '', note: '',
+    me: '', hostId: '', members: [], online: {}, pub: false, wait: false, listening: false, error: '', result: '', resultClass: '', note: '',
     // The round as this phone knows it: {id, players: [{id, name}], over}. Kept after it ends, so
     // a phone that was away gets it back.
     round: null, released: {}, owed: {}, pz: [], played: false, sent: 0, got: {},
@@ -80,7 +82,7 @@
     var ws;
     try { ws = new WebSocket(u); } catch (e) { return; }
     net.ws = ws;
-    ws.onopen = function () { if (net.ws === ws) { net.connected = true; render(); } };
+    ws.onopen = function () { if (net.ws === ws) { net.connected = true; listed = null; render(); } };
     ws.onmessage = function (e) {
       if (net.ws !== ws) return;
       var m;
@@ -102,9 +104,9 @@
   }
   function newCode() { var c = ''; for (var i = 0; i < 4; i++) c += LETTERS[Math.floor(Math.random() * LETTERS.length)]; return c; }
 
-  function enter(code, host) {
+  function enter(code, host, pub) {
     clearTimeout(net.timer);
-    net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0;
+    net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0; net.pub = !!(host && pub); listed = null;
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
     net.result = ''; net.resultClass = ''; net.note = ''; lastPz = '';
@@ -180,7 +182,7 @@
         return;
       }
       net.joined = true;
-      ssave(HERE, { game: GAME, v: VERSION, code: net.code, host: net.host });
+      keepHere();
       // A host that comes back without its round (a reload) sends everyone back to the room. Only
       // then: after an ordinary round each phone goes back on its own, keeping its result.
       if (net.host && !net.round) sendRaw({ t: '_lobby' });
@@ -235,6 +237,20 @@
     if (!net.owed[id].length) delete net.owed[id];
   }
 
+  function keepHere() { ssave(HERE, { game: GAME, v: VERSION, code: net.code, host: net.host, pub: net.pub }); }
+
+  // A public room is on the list while it waits between rounds (the room adds: with space, and
+  // the host connected). The host says so when that changes, and every minute while listed, which
+  // keeps it there.
+  var listed = null, listedAt = 0;
+  function tellList() {
+    if (!net.on || !net.host || !net.joined || !net.connected) return;
+    var want = net.pub && !racing();
+    if (want === listed && (!want || Date.now() - listedAt < 60e3)) return;
+    listed = want; listedAt = Date.now();
+    sendRaw({ t: '_list', on: want });
+  }
+
   function startRound() {
     if (!net.host || !net.connected) return;
     var players = net.members.filter(function (m) { return m.on; }).slice(0, MAX)
@@ -285,6 +301,7 @@
     if (net.host && net.on) {
       var pz = JSON.stringify(waitingFor());
       if (pz !== lastPz) { lastPz = pz; sendRaw({ t: '_pz', names: JSON.parse(pz) }); }
+      tellList();
     }
     render();
   }
@@ -325,6 +342,11 @@
     '#aipr-result.win{color:#3f8a3a}#aipr-result.lose{color:#c4432f}',
     '#aipr-info,#aipr-err{margin:0;font-size:14px;font-weight:600;color:#6a5638;max-width:300px}',
     '#aipr-err{color:#c4432f}',
+    '#aipr-open{gap:6px;margin-top:6px}',
+    '#aipr-rooms{display:flex;flex-direction:column;gap:6px}',
+    '#aipr-rooms button{font-size:16px;padding:8px 16px;background:#3f8ad8;box-shadow:0 4px 0 #2a5f99}',
+    '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
+    '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
     '#aipr-pause{position:fixed;left:16px;right:16px;top:40%;z-index:2147483641;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px;border-radius:16px;background:rgba(30,20,40,.88);color:#fff;text-align:center;font:700 17px/1.35 system-ui,sans-serif;touch-action:manipulation}',
     '#aipr-pause p{margin:0}',
     '#aipr-pause button{font:800 16px system-ui,sans-serif;padding:9px 16px;border:0;border-radius:12px;background:#f2c94c;color:#2b2416}',
@@ -336,6 +358,8 @@
       '<button id="aipr-create">Luo huone</button>' +
       '<p class="small">tai liity kaverin huoneeseen koodilla</p>' +
       '<div class="row"><input id="aipr-codeIn" maxlength="4" placeholder="KOOD" autocapitalize="characters" autocomplete="off" enterkeyhint="go"><button id="aipr-joinBtn">Liity</button></div>' +
+      '<div class="v" id="aipr-open" hidden><p class="small"><b>Avoimet huoneet</b></p><div id="aipr-rooms"></div>' +
+        '<p class="small" id="aipr-none">Ei avoimia huoneita juuri nyt.</p></div>' +
     '</div>' +
     '<div class="v" id="aipr-room" hidden>' +
       '<p id="aipr-result"></p>' +
@@ -344,6 +368,7 @@
         '<p class="small">Kaverit liittyvät koodilla tai skannaamalla kuvan.</p></div></div>' +
       '<ul id="aipr-members"></ul>' +
       '<p id="aipr-info"></p>' +
+      '<label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
       '<button id="aipr-start" hidden>Aloita kierros</button>' +
     '</div>' +
     '<p id="aipr-err"></p>' +
@@ -367,13 +392,14 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'create', 'codeIn', 'joinBtn', 'room', 'result', 'code', 'qr', 'members', 'info', 'start', 'err', 'back', 'pauseText', 'goOn']
+    ['join', 'name', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'room', 'result', 'code', 'qr', 'members', 'info', 'start', 'err', 'back', 'pauseText', 'goOn']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
     el.joinBtn.addEventListener('click', joinTyped);
     el.codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
     el.start.addEventListener('click', startRound);
+    el.pub.addEventListener('change', function () { net.pub = el.pub.checked; if (net.joined) keepHere(); tellList(); render(); });
     el.back.addEventListener('click', function () { if (net.on) leave(); else { show(false); fire('menu'); } });
     el.goOn.addEventListener('click', goOn);
   }
@@ -388,6 +414,30 @@
     enter(code, false);
   }
 
+  // The public rooms of this game, read while the first page of the room screen is open. Until
+  // the first answer (or with no connection) the list is not shown at all.
+  var openRooms = null, reading = false;
+  function readList() {
+    if (!shown || net.on || reading || !GAME || !window.fetch) return;
+    reading = true;
+    fetch(LIST, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { reading = false; if (d && Array.isArray(d.rooms)) { openRooms = d.rooms; render(); } })
+      .catch(function () { reading = false; });
+  }
+  function renderList() {
+    el.open.hidden = !openRooms;
+    if (!openRooms) return;
+    el.rooms.textContent = '';
+    openRooms.forEach(function (r) {
+      if (!r || !/^[A-Z]{4}$/.test(r.code)) return;
+      var b = document.createElement('button');
+      b.textContent = r.code + ' · ' + r.n + '/' + r.max + ' pelaajaa';
+      b.addEventListener('click', function () { takeName(); enter(r.code, false); });
+      el.rooms.appendChild(b);
+    });
+    el.none.hidden = el.rooms.childNodes.length > 0;
+  }
+
   var shown = false;
   function show(on) {
     build();
@@ -395,6 +445,7 @@
     root.hidden = !on;
     if (on) el.name.value = myName();
     render();
+    readList();
   }
   function joinLink() { return location.origin + location.pathname + '?huone=' + net.code; }
 
@@ -406,7 +457,7 @@
     el.room.hidden = !net.on;
     el.back.textContent = net.on ? 'Poistu huoneesta' : 'Takaisin';
     el.err.textContent = net.on ? '' : net.error;
-    if (!net.on) return;
+    if (!net.on) return renderList();
     if (el.code.textContent !== net.code) { el.code.textContent = net.code; drawQR(el.qr, joinLink()); }
     el.result.textContent = net.result;
     el.result.className = net.resultClass || '';
@@ -428,6 +479,8 @@
     } else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : 'Odotetaan, että ' + hostName() + ' aloittaa kierroksen…';
     if (net.note) info += ' ' + net.note;
     el.info.textContent = info;
+    el.pubRow.hidden = !net.host;
+    el.pub.checked = net.pub;
     el.start.hidden = !net.host;
     el.start.disabled = online < MIN || !net.connected;
     el.start.textContent = net.played ? 'Uusi kierros' : 'Aloita kierros';
@@ -590,6 +643,7 @@
       if (net.round) net.round.over = true;
       net.result = text || ''; net.resultClass = className || '';
       show(true);
+      tellList();
     },
     // A line of the game's own under the player list ("Seuraavaksi etsii Aino.").
     note: function (text) { net.note = text || ''; render(); },
@@ -628,9 +682,10 @@
     if (back && (back.game !== GAME || back.v !== VERSION)) back = null;
     if (q) history.replaceState(null, '', location.pathname);
     if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) enter(q.toUpperCase(), false);
-    else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host);
+    else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(autoJoin); });
   else setTimeout(autoJoin);
   setInterval(renderPause, 250);
+  setInterval(function () { readList(); tellList(); }, 5000);
 })();
