@@ -1,0 +1,13 @@
+{
+  "title": "Puhelinkoppi",
+  "description": "Heitä kännykkä pyörimään ilmaan ja ota koppi ruutu ylöspäin.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: kännykkä pyörii ilmassa oikean fysiikan mukaan, ja taso menee läpi, kun koppi osuu ruutu ylöspäin.",
+      "request": "Uusi peli. Heitetöän kännykkää ja otetaan Koppi. Se pyörii kaikilla 6 axelilla realistisesti. Pelin pääsee läpi jos se putoaa oikein päin käteen",
+      "issue": "eerovil/ai-pelit#9"
+    }
+  ]
+}
