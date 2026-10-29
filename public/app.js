@@ -37,6 +37,15 @@
     return el('img', { class: cls, src: game.thumb, alt: cls === 'thumb' ? '' : game.title, width: String(w), height: String(h) });
   }
 
+  // Version, how many versions and how many plays, under the game's name.
+  function metaLine(game) {
+    var v = latest(game);
+    return el('p', { class: 'muted meta' }, [
+      document.createTextNode('v' + v.n + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
+      el('span', { class: 'plays', text: playsText(game.slug) }),
+    ]);
+  }
+
   function renderShelf() {
     document.title = 'AI-pelit';
     var list = el('ul', { class: 'cards' });
@@ -47,15 +56,12 @@
           thumb(game, 'thumb', 72, 96),
           el('div', {}, [
             el('h2', { text: game.title }),
-            el('p', { text: game.description }),
-            el('p', { class: 'muted' }, [
-              document.createTextNode('v' + v.n + ' · ' + fiDate(v.date) + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
-              el('span', { class: 'plays', text: playsText(game.slug) }),
-            ]),
+            el('p', { class: 'desc', text: game.description }),
+            metaLine(game),
             el('p', { class: 'top-score', 'data-top': game.slug, text: topText(game.slug) }),
           ]),
         ]),
-        el('a', { class: 'button', href: playUrl(game.slug, v.n), text: 'Pelaa' }),
+        el('a', { class: 'button play', href: playUrl(game.slug, v.n), 'aria-label': 'Pelaa ' + game.title, text: '▶' }),
       ]));
     });
     view.replaceChildren(catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
@@ -194,9 +200,10 @@
     });
     view.replaceChildren.apply(view, [
       el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
-      el('h1', { text: game.title }),
-      thumb(game, 'thumb big', 150, 200),
-      el('p', { text: game.description }),
+      el('div', { class: 'game-head' }, [
+        thumb(game, 'thumb big', 120, 160),
+        el('div', {}, [el('h1', { text: game.title }), el('p', { text: game.description }), metaLine(game)]),
+      ]),
       el('a', { class: 'button big', href: playUrl(game.slug, v.n), text: 'Pelaa uusinta (v' + v.n + ')' }),
       scoreSection(game.slug),
       el('h2', { text: 'Versiot' }),
