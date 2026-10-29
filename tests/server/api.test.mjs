@@ -250,3 +250,43 @@ test('plays: a bad game or version is refused', async () => {
   assert.equal((await call('POST', '/api/plays', 'not json')).status, 400);
   assert.deepEqual((await call('GET', '/api/plays')).body, { games: {} });
 });
+
+test('each row carries the highest level reached, which can rise without a better score', async () => {
+  const { call, admin } = setup();
+  await call('POST', '/api/players', { id: A, name: 'Aino' });
+  await admin(A, 'approved');
+  const post = (score, level) => call('POST', '/api/scores', { player: A, game: 'sormiskeitti', board: 'main', version: 5, score, level });
+  assert.equal((await post(40, 3)).status, 200);
+  assert.equal((await post(30, 5)).status, 200); // a lower ollie, but a later level
+  assert.equal((await post(35, 2)).status, 200); // a level lower than before does not lower it
+  let { rows, mine } = (await call('GET', `/api/scores?game=sormiskeitti&player=${A}`)).body;
+  assert.deepEqual([rows[0].score, rows[0].level], [40, 5]);
+  assert.equal(mine.level, 5);
+  // An older version sends no level: the score counts, the level stays.
+  assert.equal((await call('POST', '/api/scores', { player: A, game: 'sormiskeitti', board: 'main', version: 5, score: 50 })).status, 200);
+  rows = (await call('GET', '/api/scores?game=sormiskeitti')).body.rows;
+  assert.deepEqual([rows[0].score, rows[0].level], [50, 5]);
+  for (const level of [0, 1.5, 'kolme', -2]) assert.equal((await post(10, level)).status, 400);
+  // No level ever sent: null.
+  await call('POST', '/api/scores', { player: A, game: 'voimistelu', board: 'main', version: 3, score: 12 });
+  assert.equal((await call('GET', '/api/scores?game=voimistelu')).body.rows[0].level, null);
+});
+
+test('the shelf gets every game\'s no. 1 in one request', async () => {
+  const { call, admin } = setup();
+  for (const [id, name] of [[A, 'Aino'], [B, 'Bertta'], [C, 'Cecilia']]) {
+    await call('POST', '/api/players', { id, name });
+    if (id !== C) await admin(id, 'approved');
+  }
+  const post = (player, game, board, score, level) => call('POST', '/api/scores', { player, game, board, version: 2, score, level });
+  await post(A, 'sormiskeitti', 'main', 40, 3);
+  await post(B, 'sormiskeitti', 'main', 55, 2);
+  await post(C, 'sormiskeitti', 'main', 90); // waiting for approval: not shown
+  await post(A, 'hiihto', 'taso-1', 80.5, 2);
+  await post(B, 'hiihto', 'taso-2', 60);
+  const { body } = await call('GET', '/api/scores/top');
+  assert.deepEqual(body.games, {
+    sormiskeitti: { board: 'main', name: 'Bertta', score: 55, level: 2, version: 2 },
+    hiihto: { board: 'taso-1', name: 'Aino', score: 80.5, level: 2, version: 2 },
+  });
+});

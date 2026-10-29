@@ -17,6 +17,7 @@ flowchart TD
     D -- Kyllä --> F{Verkko?}
     F -- Ei --> C
     T[🏆 Tulokset -nappi] --> L[Tuloslista pelin päällä]
+    P[Tallennettu taso pelin omasta tallennuksesta] --> F
   end
   subgraph Cloudflare Pages Functions
     F -- Kyllä --> G[POST /api/players]
@@ -25,6 +26,11 @@ flowchart TD
     H -- OK --> I[Nimi odottaa hyväksyntää]
     F -- Kyllä --> J[POST /api/scores: pidä paras]
     L --> K[GET /api/scores]
+    K2[GET /api/scores/top]
+  end
+  subgraph Pelihylly
+    S1[Hylly: ykkönen joka kortilla] --> K2
+    S2[Pelin sivu: top 10] --> K
   end
   subgraph Ylläpito
     I --> M[Hyllyllä: N nimimerkkiä odottaa]
@@ -32,9 +38,9 @@ flowchart TD
     N -- Hyväksy --> O[Nimi lukitaan puhelimelle]
     O --> K
   end
-  class A,B,E,T,L blue
+  class A,B,E,T,L,S1,S2 blue
   class D,F,H amber
-  class C,G,J,K teal
+  class C,G,J,K,K2,P teal
   class I,M,N violet
   class O green
 ```
@@ -49,7 +55,7 @@ flowchart TD
 
 ## Boxes
 
-- **AiPelitScores.submit**: `public/scores.js`; a game version loads it with `data-game`, `data-order` and `data-corner`, and calls `submit(score)` when a round ends (Sormiskeitti v5, Voimistelu v3, Puhelinkoppi v2, Hiihto v2).
+- **AiPelitScores.submit**: `public/scores.js`; a game version loads it with `data-game`, `data-order` and `data-corner`, and calls `submit(score)` when a round ends (Sormiskeitti v5, Voimistelu v3, Puhelinkoppi v2, Hiihto v2). How each list reads lives in `GAMES` in `scores.js`, not in the games, so a change to a list needs no new version.
 - **Jono puhelimessa: paras tulos per lista**: `localStorage` key `ai-pelit:_tulokset:jono`; only the best waiting score per list is kept, and `flush()` sends it on load, on `online`, and after each round. It leaves the queue only once the server took it (2xx), or answered 400 (a score it can never take).
 - **Kysy nimimerkki kerran**: the first score on a phone opens the list with a name field; the name is one per phone for every game (`ai-pelit:_pelaaja:nimi`, with a random id in `ai-pelit:_pelaaja:id`).
 - **POST /api/players**: `server/api.js` `setName()`, served by `functions/api/[[path]].js` on the D1 database (`migrations/`). A new or changed name is `pending`; it claims the name in `names` at once, so two phones asking together cannot both get it.
@@ -59,3 +65,7 @@ flowchart TD
 - **Hyllyllä: N nimimerkkiä odottaa**: `public/app.js` `showWaitingNames()`, only on a phone holding the admin key.
 - **/yllapito/: Hyväksy tai Hylkää**: `public/yllapito/index.html` calls `/api/admin/players` with the `ADMIN_KEY` secret (set by `scripts/cloudflare_setup.py`). Each decision carries the name the admin saw; if the phone changed name meanwhile it is refused (409) and the page shows the new name.
 - **Nimi lukitaan puhelimelle**: `adminDecide()` marks the name's row in `names` locked, so no other phone can take it, even after its owner changes name; rejecting the player frees it. Each name has one owner by the table's primary key (`claim()`), compared as `nameKey()`: Unicode NFKC, lower case, so 'ÄITI' is 'äiti'. A player whose freed name another phone took cannot be approved back into it.
+- **Tallennettu taso pelin omasta tallennuksesta**: `levelOf()` in `scores.js` reads the level the game itself saves (`ai-pelit:sormiskeitti:level`, `ai-pelit:voimistelu:taso`, Hiihto's `taso` − 1 = courses passed) when it sends a score; the server keeps each player's highest (`scores.level`, `migrations/0005`) and every row shows it beside the score. A round that beats neither the score nor the level is not sent (`ai-pelit:_tulokset:lahetetyt`).
+- **Hylly: ykkönen joka kortilla**: `loadTops()` in `public/app.js`: one request for every game's no. 1 (Hiihto: course 1), kept on the phone for offline.
+- **GET /api/scores/top**: `tops()` in `server/api.js`.
+- **Pelin sivu: top 10**: `scoreSection()` in `public/app.js`, with a course picker for Hiihto; rows drawn by `AiPelitScores.row()`.

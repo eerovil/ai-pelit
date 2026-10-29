@@ -63,6 +63,7 @@
             document.createTextNode('v' + v.n + ' · ' + fiDate(v.date) + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
             el('span', { class: 'plays', text: playsText(game.slug) }),
           ]),
+          el('p', { class: 'top-score', 'data-top': game.slug, text: topText(game.slug) }),
         ]),
         el('a', { class: 'button', href: playUrl(game.slug, v.n), text: 'Pelaa' }),
       ]));
@@ -72,6 +73,62 @@
     view.replaceChildren.apply(view, children);
     showWaitingNames();
     loadPlays();
+    loadTops();
+  }
+
+  // High scores outside the games (#25): each card shows its game's no. 1, all from one request,
+  // kept on the phone like the play counts. public/scores.js knows how each game's score reads.
+  var TOPS_KEY = 'ai-pelit:_tulokset:ykkoset';
+  var tops = {};
+  try { tops = JSON.parse(localStorage.getItem(TOPS_KEY)) || {}; } catch (e) {}
+  var scores = window.AiPelitScores;
+
+  function topText(slug) {
+    var t = tops[slug];
+    if (!t || !scores) return '';
+    var g = scores.games[slug];
+    return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(5) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
+  }
+
+  function loadTops() {
+    if (!scores) return;
+    scores.top().then(function (b) {
+      tops = b.games || {};
+      try { localStorage.setItem(TOPS_KEY, JSON.stringify(tops)); } catch (e) {}
+      Array.prototype.forEach.call(view.querySelectorAll('.top-score[data-top]'), function (p) {
+        p.textContent = topText(p.getAttribute('data-top'));
+      });
+    }).catch(function () {});
+  }
+
+  // A game's page: its top 10, and the player's own place under it. Hiihto has a list per course.
+  function scoreSection(slug) {
+    if (!scores || !scores.games[slug]) return null;
+    var box = el('div', { class: 'scores' });
+    var picker = null;
+    if (scores.games[slug].boards) {
+      var reached = 1;
+      try { reached = Number(JSON.parse(localStorage.getItem('ai-pelit:' + slug + ':taso'))) || 1; } catch (e) {}
+      picker = el('select', { class: 'board', 'aria-label': 'Rata' });
+      for (var n = 1; n <= Math.max(10, reached); n++) picker.appendChild(el('option', { value: 'taso-' + n, text: 'Taso ' + n }));
+      picker.addEventListener('change', function () { fill(); });
+    }
+    function fill() {
+      box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
+      scores.list(slug, picker ? picker.value : 'main').then(function (b) {
+        var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
+        if (b.mine && !b.rows.some(function (r) { return r.me; })) {
+          if (rows.length) rows.push(el('div', { class: 'muted', text: '⋯' }));
+          rows.push(scores.row(slug, b.mine, true));
+        }
+        if (!rows.length) rows.push(el('p', { class: 'muted', text: 'Listalla ei ole vielä ketään.' }));
+        box.replaceChildren.apply(box, rows);
+      }).catch(function () {
+        box.replaceChildren(el('p', { class: 'muted', text: 'Tuloksia ei saatu: ei verkkoyhteyttä.' }));
+      });
+    }
+    fill();
+    return el('section', { class: 'score-list' }, [el('h2', { text: '🏆 Tulokset' }), picker, box]);
   }
 
   // Play counts (#26): how many times each game has been opened, all versions together, on
@@ -134,15 +191,16 @@
         el('a', { class: 'button secondary', href: playUrl(game.slug, ver.n), text: 'Pelaa' }),
       ]));
     });
-    view.replaceChildren(
+    view.replaceChildren.apply(view, [
       el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('h1', { text: game.title }),
       el('p', { text: game.description }),
       el('a', { class: 'button big', href: playUrl(game.slug, v.n), text: 'Pelaa uusinta (v' + v.n + ')' }),
+      scoreSection(game.slug),
       el('h2', { text: 'Versiot' }),
       versions,
       copyBox('Tee uusi versio', game.title + ' v' + (v.n + 1) + ' (' + game.slug + '): ')
-    );
+    ].filter(Boolean));
   }
 
   function render() {
