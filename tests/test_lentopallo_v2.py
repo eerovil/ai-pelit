@@ -217,3 +217,15 @@ def test_a_phone_away_at_the_end_gets_its_result_once_after_a_reload(room):
     guest.wait_for_timeout(500)
     assert guest.evaluate("localStorage.getItem('ai-pelit:lentopallo:kaverit')") == '{"voitot":1,"haviot":0}'
     assert host.errors == guest.errors == third.errors == []
+
+
+def test_teammates_on_the_same_spot_touch_the_ball_once(site, context):
+    page = alone(site, context, "2v2")
+    page.evaluate(PLAYING)
+    page.evaluate("""() => {
+      const t = players[2]; t.kind = 'shown'; mine.x = -2; t.x = -2;
+      touchSide = -1; touches = 0; last = players[1];
+      Object.assign(ball, { x: -2, y: 2.3, vx: 0, vy: -1, cd: 0 });
+      for (let i = 0; i < 12; i++) stepBall(1 / 240, true);
+    }""")
+    assert page.evaluate("[touches, players[0].hits + players[2].hits]") == [1, 1]
