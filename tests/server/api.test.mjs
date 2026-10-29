@@ -19,7 +19,11 @@ function api(env) {
 function setup() {
   const env = { DB: makeD1(), ADMIN_KEY };
   const call = api(env);
-  const admin = (id, status) => call('POST', '/api/admin/players', { id, status }, { 'x-admin-key': ADMIN_KEY });
+  // Decides on the player's current name, as the admin page shows it.
+  const admin = async (id, status) => {
+    const name = env.DB.raw.prepare('SELECT name FROM players WHERE id = ?').get(id)?.name ?? '';
+    return call('POST', '/api/admin/players', { id, name, status }, { 'x-admin-key': ADMIN_KEY });
+  };
   return { env, call, admin };
 }
 
@@ -211,4 +215,18 @@ test('on a tie the earlier score is ahead, and the own row says the same place a
   assert.deepEqual(list.rows.map((r) => r.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.equal(list.rows.some((r) => r.me), false);
   assert.equal(list.mine.rank, 11);
+});
+
+test('a decision on a name the phone has since changed is refused', async () => {
+  const { call, env } = setup();
+  const decide = (id, name, status) => call('POST', '/api/admin/players', { id, name, status }, { 'x-admin-key': ADMIN_KEY });
+  await call('POST', '/api/players', { id: A, name: 'Aino' });
+  // The admin's page shows Aino; meanwhile the phone changes to a name the admin never saw.
+  await call('POST', '/api/players', { id: A, name: 'Rumanimi' });
+  assert.equal((await decide(A, 'Aino', 'approved')).status, 409);
+  assert.equal((await decide(A, 'Aino', 'rejected')).status, 409);
+  assert.deepEqual((await call('GET', `/api/players/${A}`)).body, { name: 'Rumanimi', status: 'pending' });
+  assert.deepEqual(env.DB.raw.prepare('SELECT name_key, locked FROM names WHERE player = ?').all(A).map((r) => [r.name_key, r.locked]), [['rumanimi', 0]]);
+  assert.equal((await decide(A, 'Rumanimi', 'approved')).status, 200);
+  assert.equal((await call('POST', '/api/admin/players', { id: A, status: 'approved' }, { 'x-admin-key': ADMIN_KEY })).status, 400);
 });

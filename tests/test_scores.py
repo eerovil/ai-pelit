@@ -24,6 +24,7 @@ class FakeApi:
         self.posts = []
         self.taken = set()  # player ids whose name another phone holds now
         self.refuse = {}  # name -> HTTP status that POST /api/players answers for it
+        self.score_refusals = []  # HTTP statuses the next POST /api/scores answer, in turn
 
     def handle(self, route):
         if not self.online:
@@ -44,6 +45,8 @@ class FakeApi:
         if m := re.fullmatch(r"players/(\w+)", path):
             p = self.players.get(m[1])
             return self.reply(route, p, 200 if p else 404)
+        if path == "scores" and req.method == "POST" and self.score_refusals:
+            return self.reply(route, {"error": "refused"}, self.score_refusals.pop(0))
         if path == "scores" and req.method == "POST":
             if body["player"] not in self.players:
                 return self.reply(route, {"error": "unknown player"}, 404)
@@ -67,6 +70,8 @@ class FakeApi:
         if path == "admin/players":
             if req.headers.get("x-admin-key") != ADMIN_KEY:
                 return self.reply(route, {"error": "admin key needed"}, 403)
+            if req.method == "POST" and body.get("name") != self.players[body["id"]]["name"]:
+                return self.reply(route, {"error": "name changed"}, 409)
             if req.method == "POST" and body["id"] in self.taken:
                 return self.reply(route, {"error": "name taken by another player"}, 409)
             if req.method == "POST":
@@ -229,3 +234,32 @@ def test_a_refused_name_says_why_instead_of_waiting(site, context, fake, status,
     page.click("#ai-pelit-tulokset button:has-text('Sulje')")
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector(f"#ai-pelit-tulokset :text('{says}')")
+
+
+def test_the_admin_never_approves_a_name_they_did_not_see(site, context, fake):
+    site.build(ROOT / "games")
+    fake.players = {"a" * 32: {"name": "Aino", "status": "pending"}}
+    page = context.new_page()
+    page.goto(f"{site.url}yllapito/#avain={ADMIN_KEY}")
+    page.wait_for_selector(".player:has-text('Aino')")
+    fake.players["a" * 32]["name"] = "Rumanimi"  # the phone changes name while the page is open
+    page.click(".player:has-text('Aino') button:has-text('Hyväksy')")
+    page.wait_for_selector("#msg:has-text('Pelaaja vaihtoi nimeään')")
+    page.wait_for_selector(".player:has-text('Rumanimi')")
+    assert fake.players["a" * 32]["status"] == "pending"
+
+
+@pytest.mark.parametrize("refusal", [429, 403, 503])
+def test_a_score_the_server_turns_away_for_now_is_sent_later(site, context, fake, refusal):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(f"{site.url}games/hiihto/v2/")
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
+    fake.score_refusals = [refusal]
+    page.evaluate("AiPelitScores.submit(71.5)")
+    page.wait_for_timeout(500)
+    assert fake.scores == {}
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['hiihto|taso-1'].score") == 71.5
+    page.reload()
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    assert [s["score"] for s in fake.scores.values()] == [71.5]
