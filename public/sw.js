@@ -6,9 +6,10 @@ var BUILD = '__BUILD_ID__';
 var SHELL_CACHE = 'ai-pelit-shell-' + BUILD;
 // Version folders never change once published, so they keep one cache across builds.
 var GAMES_CACHE = 'ai-pelit-games';
+// The shelf is cached as './' only: Cloudflare Pages redirects index.html to './', and a
+// redirected response cannot answer a page load.
 var SHELL = [
   './',
-  'index.html',
   'app.js',
   'app.css',
   'back.js',
@@ -66,7 +67,7 @@ function shellFile(request) {
       .catch(function () {
         return cache.match(request, { ignoreSearch: true }).then(function (hit) {
           if (hit) return hit;
-          if (request.mode === 'navigate') return cache.match('index.html');
+          if (request.mode === 'navigate') return cache.match('./');
           return Response.error();
         });
       });
