@@ -36,6 +36,7 @@ class Relay:
     def __init__(self):
         self.rooms = {}
         self.blocked = set()  # ids whose phone has no connection
+        self.slow = {}  # id -> its held hellos, for a phone whose hello is late
 
     def attach(self, page):
         page.route_web_socket(re.compile(r".*/api/rooms/.*"), self.connect)
@@ -73,6 +74,9 @@ class Relay:
 
     def message(self, room, me, text):
         msg = json.loads(text)
+        if msg.get("t") == "hello" and me in self.slow:
+            self.slow[me].append((room, text))
+            return
         if msg.get("t") == "bye":
             room["members"].pop(me, None)
             room["socks"].pop(me, None)
@@ -109,6 +113,14 @@ class Relay:
             ws = room["socks"].get(me)
             if ws:
                 close(ws, 1001, "")
+
+    def hold_hello(self, page):
+        """The phone's hellos wait until `let_hello()`: it is connected, but has not said hello."""
+        self.slow[page.evaluate("AiPelitRooms.me")] = []
+
+    def let_hello(self, page):
+        for room, text in self.slow.pop(page.evaluate("AiPelitRooms.me"), []):
+            self.message(room, page.evaluate("AiPelitRooms.me"), text)
 
     def back(self, page):
         self.blocked.discard(page.evaluate("AiPelitRooms.me"))
@@ -371,6 +383,31 @@ def test_a_phone_that_joins_mid_round_hears_none_of_it(phones):
     host.evaluate("end()")
     late.wait_for_function("demo.results.length === 1")
     assert host.errors == guest.errors == late.errors == []
+
+
+def test_a_page_reloading_as_the_round_ends_still_gets_its_result(phones):
+    # The host sees the phone connected again before its hello: the end it sends then reaches a
+    # page that does not know the round yet. Unconfirmed, it is sent again after the hello.
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    start(host, [guest])
+    first = host.evaluate("demo.round")
+    phones.relay.hold_hello(guest)
+    guest.reload()
+    guest.wait_for_function("AiPelitRooms.connected")
+    host.wait_for_function("AiPelitRooms.members.every(m => m.on)")
+    host.evaluate("end()")
+    guest.wait_for_timeout(300)
+    assert guest.evaluate("demo.results") == []
+    phones.relay.let_hello(guest)
+    guest.wait_for_function("demo.results.length === 1 && demo.phase === 'room'")
+    assert guest.evaluate("demo.results") == [first]
+    # Confirmed now: another hello (a second reload) does not send it again.
+    guest.reload()
+    guest.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.connected")
+    guest.wait_for_timeout(400)
+    assert guest.evaluate("demo.heard") == []
+    assert host.errors == guest.errors == []
 
 
 def test_a_result_heard_twice_counts_once(phones):

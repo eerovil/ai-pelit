@@ -61,7 +61,7 @@
     me: '', hostId: '', members: [], online: {}, wait: false, listening: false, error: '', result: '', resultClass: '', note: '',
     // The round as this phone knows it: {id, players: [{id, name}], over}. Kept after it ends, so
     // a phone that was away gets it back.
-    round: null, released: {}, owed: {}, pz: [], played: false,
+    round: null, released: {}, owed: {}, pz: [], played: false, sent: 0, got: {},
   };
   function sendRaw(m) { if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); }
   function hostOn() { return !!net.online[net.hostId]; }
@@ -106,7 +106,7 @@
     clearTimeout(net.timer);
     net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0;
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
-    net.round = null; net.released = {}; net.owed = {}; net.pz = []; net.played = false;
+    net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
     net.result = ''; net.resultClass = ''; net.note = ''; lastPz = '';
     show(true);
     connect();
@@ -137,6 +137,7 @@
     if (m.t === 'peers') return onPeers(m);
     if (net.host) {
       if (m.t === 'hello') return onHello(m.from);
+      if (m.t === '_got') return onGot(m.from, m.n);
       if (m.t && m.t.charAt(0) !== '_') fire('message', m, m.from);
       return;
     }
@@ -149,7 +150,17 @@
     if (m.t === '_wait') { net.wait = true; net.listening = false; return render(); }
     if (m.t === '_pz') { net.pz = Array.isArray(m.names) ? m.names : []; return update(); }
     if (m.t === '_close') return leave('Huone suljettiin.');
-    if (net.listening && m.t && m.t.charAt(0) !== '_') fire('message', m, net.hostId);
+    if (!net.listening || !m.t || m.t.charAt(0) === '_') return;
+    // A delivered message (deliver()): confirm it, and pass it on only the first time.
+    if (m._d) {
+      var key = m._r + ':' + m._d, first = !net.got[key];
+      net.got[key] = true;
+      sendRaw({ t: '_got', n: m._d });
+      if (!first) return;
+      m = Object.assign({}, m);
+      delete m._d; delete m._r; delete m.to;
+    }
+    fire('message', m, net.hostId);
   }
 
   function onPeers(m) {
@@ -190,31 +201,38 @@
   }
 
   // ---- On the host ----
-  // A phone connected (again): one in the round gets the round as it is, and anything it missed;
-  // one that is not waits for the next round. A round always reaches it before its messages, so
-  // a reloaded page knows the round before it hears how it ended.
+  // A phone connected (again): one in the round gets the round as it is, and anything delivered
+  // to it that it has not confirmed; one that is not waits for the next round. A round always
+  // reaches it before its messages, so a reloaded page knows the round before it hears how it
+  // ended. Earlier rounds first, so the phone ends up in the latest one.
   function onHello(id) {
-    var owed = net.owed[id] || [], started = {};
-    delete net.owed[id];
+    var owed = net.owed[id] || [], started = {}, cur = net.round && net.round.id;
     sendRaw({ t: '_pz', to: id, names: waitingFor() });
     if (!net.round) { sendRaw({ t: '_lobby', to: id }); return; }
-    var mine = inRound(id);
-    if (mine) {
-      if (net.released[id]) { delete net.released[id]; fire('back', id); }
-      sendRaw({ t: '_start', to: id, round: net.round.id, players: net.round.players, over: net.round.over });
-      started[net.round.id] = true;
-    }
-    // Earlier rounds it missed the end of: each one's start (as over), then what was kept for it.
-    owed.forEach(function (o) {
+    function resend(o) {
       if (!started[o.round]) {
         started[o.round] = true;
         sendRaw({ t: '_start', to: id, round: o.round, players: o.players, over: true });
       }
-      sendRaw(Object.assign({}, o.msg, { to: id }));
-    });
+      sendRaw(Object.assign({}, o.msg, { to: id, _d: o.n, _r: o.round }));
+    }
+    owed.filter(function (o) { return o.round !== cur; }).forEach(resend);
+    var mine = inRound(id);
+    if (mine) {
+      if (net.released[id]) { delete net.released[id]; fire('back', id); }
+      sendRaw({ t: '_start', to: id, round: cur, players: net.round.players, over: net.round.over });
+      started[cur] = true;
+    }
+    owed.filter(function (o) { return o.round === cur; }).forEach(resend);
     if (mine) fire('hello', id);
     else if (racing()) sendRaw({ t: '_wait', to: id });
     update();
+  }
+  // A phone confirmed a delivered message: it is not sent again.
+  function onGot(id, n) {
+    if (!net.owed[id]) return;
+    net.owed[id] = net.owed[id].filter(function (o) { return o.n !== n; });
+    if (!net.owed[id].length) delete net.owed[id];
   }
 
   function startRound() {
@@ -553,13 +571,15 @@
     leave: function () { if (net.on) leave(); else if (shown) { show(false); fire('menu'); } },
     // Host: to every other phone, or to one id. A guest: to the host.
     send: function (msg, to) { var m = Object.assign({}, msg); if (to && net.host) m.to = to; sendRaw(m); },
-    // Host: to every phone in the round, and only to them; a phone away now gets it when it is back.
+    // Host: to every phone in the round, and only to them. Each phone confirms it; one that has
+    // not (away, or a page reloading just now) gets it again when it says hello.
     deliver: function (msg) {
       if (!net.host || !net.round) return;
+      var o = { round: net.round.id, players: net.round.players, msg: msg, n: ++net.sent };
       net.round.players.forEach(function (p) {
         if (p.id === net.me) return;
-        if (net.online[p.id]) sendRaw(Object.assign({}, msg, { to: p.id }));
-        else (net.owed[p.id] = net.owed[p.id] || []).push({ round: net.round.id, players: net.round.players, msg: msg });
+        (net.owed[p.id] = net.owed[p.id] || []).push(o);
+        if (net.online[p.id]) sendRaw(Object.assign({}, msg, { to: p.id, _d: o.n, _r: o.round }));
       });
     },
     // Host: the round is over. Phones in it that come back later still get it (as over).
