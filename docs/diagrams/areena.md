@@ -1,6 +1,6 @@
 # Areena: one fight, and how the opponent thinks
 
-How one Areena fight plays (v1). The player names their fighter, then fights one AI opponent
+How one Areena fight plays (v1, and v2 which is easier). The player names their fighter, then fights one AI opponent
 with a sword, a bow and a dodge. The opponent switches between close and ranged fighting,
 dodges arrows and swings, and gets quicker, tougher and smarter with every level the player wins.
 
@@ -47,5 +47,5 @@ flowchart TD
 - **Nuoli kohti vastustajaa 8-10**: aims where the opponent will be when the arrow arrives; five arrows, one back every 1.4 s. Pillars stop arrows.
 - **Syöksy: hetken osumaton**: 0.2 s dash in the stick's direction (or away from the opponent) during which nothing hits.
 - **Tekoäly valitsee tavan: lähitaistelu tai kaukaa**: `aiInput()` picks a mode every 2-5 s, prefers range when it is losing, strafes and walks round pillars.
-- **Tekoäly väistää**: decided once per arrow or swing, with a chance that rises from 22 % at level 1 to 80 %.
-- **Voitto: taso nousee**: `endFight()` saves `taso`, `voitot` and `haviot`; each level's opponent has a new name, more health (90 + 15 per level), more speed and quicker reactions.
+- **Tekoäly väistää**: decided once per arrow or swing, with a chance that rises from 22 % at level 1 to 80 % in v1, and from 10 % to 50 % in v2.
+- **Voitto: taso nousee**: `endFight()` saves `taso`, `voitot` and `haviot`; each level's opponent has a new name, more health, more speed and quicker reactions: v1 90 + 15 health per level; v2 75 + 10, slower, slower to react, and its hits do 30 % less to the player.
