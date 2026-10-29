@@ -73,6 +73,12 @@ def test_a_pull_request_on_one_game_keeps_its_tests_and_the_shared_ones(tmp_path
     assert "games changed: alpha; other games' own tests were skipped" in out
 
 
+def test_file_names_with_spaces_or_letters_like_a_still_count_as_their_game(tmp_path):
+    for name in ("games/alpha/v1/iso ääni.mp3", "games/alpha/v1/ääni.mp3"):
+        kept, _ = selection(tmp_path / str(len(name)), name)
+        assert kept == ["test_alpha", "test_shared_alpha", "test_shared_any"], name
+
+
 def test_a_pull_request_on_a_game_s_tests_keeps_that_game(tmp_path):
     kept, _ = selection(tmp_path, "tests/test_beta_gamma_v2.py")
     assert kept == ["test_beta", "test_shared_any", "test_shared_beta"]

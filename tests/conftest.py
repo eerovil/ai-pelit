@@ -43,12 +43,13 @@ def pytest_configure(config):
 def changed_paths(ref: str) -> list[str] | None:
     """Every path changed on this branch since it left REF, committed or not; None if git can't say."""
     paths = []
-    for cmd in (["diff", "--name-only", f"{ref}...HEAD"], ["diff", "--name-only", "HEAD"],
-                ["ls-files", "--others", "--exclude-standard"]):
-        run = subprocess.run(["git", *cmd], cwd=ROOT, capture_output=True, text=True)
+    # -z: names as they are, never split at a space or quoted for a letter like ä.
+    for cmd in (["diff", "-z", "--name-only", f"{ref}...HEAD"], ["diff", "-z", "--name-only", "HEAD"],
+                ["ls-files", "-z", "--others", "--exclude-standard"]):
+        run = subprocess.run(["git", *cmd], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         if run.returncode != 0:
             return None
-        paths += run.stdout.split()
+        paths += [p for p in run.stdout.split("\0") if p]
     return paths
 
 
