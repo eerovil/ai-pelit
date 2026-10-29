@@ -44,11 +44,15 @@ def test_shelf_game_page_and_back_chip(site, context):
     site.build()
     page = context.new_page()
     page.goto(site.url)
+    page.wait_for_function("document.querySelector('.card[data-slug=\"pomppu\"] img.thumb')?.naturalWidth > 0")
+    assert page.locator("textarea").count() == 0
     page.click('.card[data-slug="pomppu"] .card-main')
     page.wait_for_selector(".version")
     assert page.locator(".version").count() == 2
     assert page.locator(".version").first.get_attribute("data-n") == "2"
-    assert "Pomppu v3 (pomppu): " in page.locator(".copy textarea").input_value()
+    # The game's picture shows at the top; the copy-text box is gone (#33).
+    page.wait_for_function("document.querySelector('img.thumb.big')?.naturalWidth > 0")
+    assert page.locator("textarea").count() == 0
     page.click('.version[data-n="1"] a')
     page.wait_for_url("**/games/pomppu/v1/")
     page.click("#ai-pelit-back")
@@ -160,6 +164,32 @@ def test_a_played_version_and_the_shelf_work_offline(site, context):
         assert page.title() == "Pomppu yksi"
         page.goto(site.url)
         page.wait_for_selector('.card[data-slug="pomppu"]')
+    finally:
+        context.set_offline(False)
+
+
+def test_every_game_picture_shows_offline_also_after_an_update(site, context):
+    make_game(site.games, "eka", [game_page("eka")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    wait_for_worker(page)
+    make_game(site.games, "toka", [game_page("toka")])
+    site.build()
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_function(
+        "caches.keys().then(k => k.filter(n => n.startsWith('ai-pelit-shell-')).length === 1)", timeout=10000
+    )
+    # The new worker cached every picture on install, also one the shelf has not shown yet.
+    page.wait_for_function("caches.open('ai-pelit-thumbs').then(c => c.keys()).then(k => k.length === 2)", timeout=10000)
+    context.set_offline(True)
+    try:
+        page.goto(site.url)
+        page.wait_for_selector('.card[data-slug="toka"]')
+        page.wait_for_function(
+            "[...document.querySelectorAll('img.thumb')].every(i => i.complete && i.naturalWidth > 0)"
+        )
+        assert page.locator("img.thumb").count() == 2
     finally:
         context.set_offline(False)
 

@@ -15,13 +15,14 @@ https://pelit.vilpponen.fi/
 - Kirkkistä (v2) voi pelata kavereiden kanssa: yksi puhelin luo huoneen, muut liittyvät
   neljän kirjaimen koodilla tai QR-koodilla. 2–5 puhelinta, tyhjät paikat täyttävät
   tietokonepelaajat.
-- Uusi peli tai versio tehdään AgentDeckissä: uusi Work tähän repoon. Pelin sivulla on valmis
-  teksti kopioitavaksi.
+- Uusi peli tai versio tehdään AgentDeckissä: uusi Work tähän repoon.
 
 ## How it works
 
 - `games/<slug>/v<N>/` — one self-contained version; never changed after merge.
 - `games/<slug>/game.json` — title, description, and the version list.
+- `games/<slug>/thumb.webp` — the game's picture on the shelf, a mid-play screenshot cut by
+  `scripts/make_thumb.py`.
 - `public/` — the shelf (`index.html`, `app.js`), the service worker (`sw.js`), the manifest,
   `back.js` (the "‹ Pelit" chip every game includes), `scores.js` (high-score lists) and
   `yllapito/` (approving nicknames).
