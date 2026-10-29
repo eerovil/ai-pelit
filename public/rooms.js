@@ -239,13 +239,14 @@
 
   function keepHere() { ssave(HERE, { game: GAME, v: VERSION, code: net.code, host: net.host, pub: net.pub }); }
 
-  // A public room is on the list while it waits between rounds (the room adds: with space, and
-  // the host connected). The host says so when that changes, and every minute while listed, which
+  // A public room is on the list while it waits in the room between rounds, its screen showing
+  // on the host, not while the game's own end screen is up (the room adds: with space, and the
+  // host connected). The host says so when that changes, and every minute while listed, which
   // keeps it there.
   var listed = null, listedAt = 0;
   function tellList() {
     if (!net.on || !net.host || !net.joined || !net.connected) return;
-    var want = net.pub && !racing();
+    var want = net.pub && !racing() && shown;
     if (want === listed && (!want || Date.now() - listedAt < 60e3)) return;
     listed = want; listedAt = Date.now();
     sendRaw({ t: '_list', on: want });
@@ -446,6 +447,7 @@
     if (on) el.name.value = myName();
     render();
     readList();
+    tellList();
   }
   function joinLink() { return location.origin + location.pathname + '?huone=' + net.code; }
 
@@ -643,7 +645,6 @@
       if (net.round) net.round.over = true;
       net.result = text || ''; net.resultClass = className || '';
       show(true);
-      tellList();
     },
     // A line of the game's own under the player list ("Seuraavaksi etsii Aino.").
     note: function (text) { net.note = text || ''; render(); },

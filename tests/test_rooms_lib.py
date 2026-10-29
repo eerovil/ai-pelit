@@ -548,6 +548,10 @@ def test_a_public_room_is_listed_for_the_game_and_joined_with_a_tap(phones):
     watcher.wait_for_selector("#aipr-rooms button", timeout=8000)
     start(host, [stranger])
     watcher.wait_for_function("!document.querySelector('#aipr-rooms button')", timeout=8000)
+    # A round over while the game's own end screen is up: still off until the room shows again.
+    host.evaluate("AiPelitRooms.endRound()")
+    host.wait_for_timeout(300)
+    assert phones.relay.rooms[code]["listed"] is False
     host.evaluate("end()")
     watcher.wait_for_selector("#aipr-rooms button", timeout=8000)
     # A host reload keeps the room public; switched off, it leaves the list.
