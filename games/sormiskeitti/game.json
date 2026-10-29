@@ -15,6 +15,13 @@
       "note": "Sormet irtoavat ilmassa ja antavat lisävauhtia, ja katto nousee loivemmin, joten jokainen taso on läpäistävissä.",
       "request": "Sormiskeitti v2 (sormiskeitti): Tasoa 8 ei voi läpäistä. Pitäisikö sormet \"irrota\" ilmalennossa.",
       "issue": "eerovil/ai-pelit#2"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-29",
+      "note": "Taso ja ennätys tallentuvat puhelimeen, joten peli jatkuu siitä mihin jäit.",
+      "request": "Ei tallennu progress",
+      "issue": "eerovil/ai-pelit#2"
     }
   ]
 }
