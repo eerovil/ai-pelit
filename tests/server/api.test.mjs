@@ -230,3 +230,23 @@ test('a decision on a name the phone has since changed is refused', async () => 
   assert.equal((await decide(A, 'Rumanimi', 'approved')).status, 200);
   assert.equal((await call('POST', '/api/admin/players', { id: A, status: 'approved' }, { 'x-admin-key': ADMIN_KEY })).status, 400);
 });
+
+test('plays: each open counts one, totals are per game, and nothing is kept per phone', async () => {
+  const { env, call } = setup();
+  for (const version of [1, 2, 2]) assert.deepEqual((await call('POST', '/api/plays', { game: 'hiihto', version })).body, { ok: true });
+  await call('POST', '/api/plays', { game: 'kirkkis', version: 1 });
+  assert.deepEqual((await call('GET', '/api/plays')).body, { games: { hiihto: 3, kirkkis: 1 } });
+  // One row per game, version and day: no phone, no address.
+  const rows = env.DB.raw.prepare('SELECT * FROM plays ORDER BY game, version').all();
+  assert.deepEqual(rows.map((r) => Object.keys(r).sort()), Array(3).fill(['day', 'game', 'n', 'version']));
+  assert.deepEqual(rows.map((r) => r.n), [1, 2, 1]);
+});
+
+test('plays: a bad game or version is refused', async () => {
+  const { call } = setup();
+  assert.equal((await call('POST', '/api/plays', { game: 'Hiihto!', version: 1 })).status, 400);
+  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 0 })).status, 400);
+  assert.equal((await call('POST', '/api/plays', { game: 'hiihto', version: 1.5 })).status, 400);
+  assert.equal((await call('POST', '/api/plays', 'not json')).status, 400);
+  assert.deepEqual((await call('GET', '/api/plays')).body, { games: {} });
+});

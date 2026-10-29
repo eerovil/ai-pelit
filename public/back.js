@@ -12,6 +12,16 @@
   // Both /games/<slug>/v<N>/ and /games/<slug>/v<N>/index.html.
   var match = location.pathname.match(/\/games\/([^/]+)\/v\d+\//);
   var slug = match ? match[1] : '';
+  // One play of this version for the shelf's play counts (#26): anonymous, sent once per page
+  // open, and lost when offline. The game never waits for it.
+  var version = location.pathname.match(/\/games\/[^/]+\/v(\d+)\//);
+  if (slug && version && /^https?:$/.test(location.protocol)) {
+    try {
+      var body = JSON.stringify({ game: slug, version: Number(version[1]) });
+      var sent = navigator.sendBeacon && navigator.sendBeacon(shelf + 'api/plays', new Blob([body], { type: 'application/json' }));
+      if (!sent) fetch(shelf + 'api/plays', { method: 'POST', body: body, headers: { 'content-type': 'application/json' }, keepalive: true }).catch(function () {});
+    } catch (e) {}
+  }
   var a = document.createElement('a');
   a.href = shelf + (slug ? '#/' + slug : '');
   a.textContent = '‹ Pelit';

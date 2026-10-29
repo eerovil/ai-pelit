@@ -40,7 +40,7 @@ player sees is Finnish unless the request says otherwise.
 
 The site runs on Cloudflare Pages, so `/api/` on the same address is Pages Functions
 (`functions/api/[[path]].js` → `server/api.js`) over a D1 database (`migrations/`). First use:
-high-score lists (#25).
+high-score lists (#25), then play counts (#26).
 
 - **High scores.** A version opts in with
   `<script src="../../../scores.js" data-game="<slug>" data-order="high|low" data-corner="bottom-right"></script>`
@@ -48,6 +48,9 @@ high-score lists (#25).
   score, `AiPelitScores.board(id, label)` picks a per-course list. The game must also be in
   `GAMES` in `server/api.js` (which way is better). Scores wait on the phone while offline.
   Nicknames are one per phone, and show on lists only once approved at `/yllapito/`.
+- **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
+  shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
+  version, day and a number are kept. A game needs nothing to be counted.
 - `public/scores.js` is shared by every version that uses it: change it only in ways every one of
   them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
