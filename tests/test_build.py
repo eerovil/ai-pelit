@@ -22,6 +22,7 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
         (lambda d: (d / "v1" / "index.html").write_text("<html></html>"), "must include"),
         (lambda d: (d / "v3").mkdir(), "folders without a game.json version"),
         (lambda d: (d / "v2" / "index.html").unlink(), "v2/index.html is missing"),
+        (lambda d: (d / "thumb.webp").unlink(), "thumb.webp is missing"),
     ],
 )
 def test_build_refuses_a_broken_game(tmp_path, breakage, message):
@@ -63,6 +64,33 @@ def test_build_id_changes_when_the_catalog_changes(tmp_path):
     make_game(games, "kaksi", [game_page("b")])
     build.build(games, ROOT / "public", tmp_path / "b")
     assert (tmp_path / "a" / "sw.js").read_text() != (tmp_path / "b" / "sw.js").read_text()
+
+
+def test_each_game_has_its_picture_under_a_name_that_changes_with_it(tmp_path):
+    games = tmp_path / "games"
+    make_game(games, "peli", [game_page("a")])
+    first = build.build(games, ROOT / "public", tmp_path / "a")["games"][0]["thumb"]
+    assert first.startswith("thumbs/peli-") and first.endswith(".webp")
+    assert (tmp_path / "a" / first).read_bytes() == (games / "peli" / "thumb.webp").read_bytes()
+    # Served from thumbs/ only: under games/ the service worker would keep an old one forever.
+    assert not (tmp_path / "a" / "games" / "peli" / "thumb.webp").exists()
+    (games / "peli" / "thumb.webp").write_bytes(b"toinen kuva")
+    assert build.build(games, ROOT / "public", tmp_path / "b")["games"][0]["thumb"] != first
+
+
+def test_make_thumb_crops_a_screenshot_to_3_by_4(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    import make_thumb
+
+    Image.new("RGB", (360, 740), (10, 20, 30)).save(tmp_path / "shot.png")
+    make_thumb.make_thumb(tmp_path / "shot.png", tmp_path / "thumb.webp")
+    with Image.open(tmp_path / "thumb.webp") as img:
+        assert (img.format, img.size) == ("WEBP", (360, 480))
+
+
+def test_every_real_game_has_a_picture():
+    for game_dir in (ROOT / "games").iterdir():
+        assert (game_dir / "thumb.webp").is_file(), game_dir.name
 
 
 def git(cwd, *args):

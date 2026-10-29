@@ -31,23 +31,10 @@
     statusEl.hidden = !text;
   }
 
-  // Text a person pastes into AgentDeck as a new Work on eerovil/ai-pelit.
-  function copyBox(label, text) {
-    var area = el('textarea', { readonly: '', rows: '3', 'aria-label': label });
-    area.value = text;
-    var button = el('button', { type: 'button', class: 'secondary', text: 'Kopioi' });
-    button.addEventListener('click', function () {
-      area.select();
-      var done = function () { button.textContent = 'Kopioitu'; };
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { document.execCommand('copy'); done(); });
-      else { document.execCommand('copy'); done(); }
-    });
-    return el('section', { class: 'copy' }, [
-      el('h2', { text: label }),
-      el('p', { class: 'muted', text: 'Uudet pelit ja versiot tehdään AgentDeckissä: tee uusi Work repoon eerovil/ai-pelit ja liitä tämä teksti sen alkuun.' }),
-      area,
-      button,
-    ]);
+  // The game's picture (#33), a mid-play screenshot the build names in the catalog.
+  function thumb(game, cls, w, h) {
+    if (!game.thumb) return null;
+    return el('img', { class: cls, src: game.thumb, alt: cls === 'thumb' ? '' : game.title, width: String(w), height: String(h), loading: 'lazy' });
   }
 
   function renderShelf() {
@@ -57,19 +44,20 @@
       var v = latest(game);
       list.appendChild(el('li', { class: 'card', 'data-slug': game.slug }, [
         el('a', { class: 'card-main', href: '#/' + game.slug }, [
-          el('h2', { text: game.title }),
-          el('p', { text: game.description }),
-          el('p', { class: 'muted' }, [
-            document.createTextNode('v' + v.n + ' · ' + fiDate(v.date) + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
-            el('span', { class: 'plays', text: playsText(game.slug) }),
+          thumb(game, 'thumb', 72, 96),
+          el('div', {}, [
+            el('h2', { text: game.title }),
+            el('p', { text: game.description }),
+            el('p', { class: 'muted' }, [
+              document.createTextNode('v' + v.n + ' · ' + fiDate(v.date) + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
+              el('span', { class: 'plays', text: playsText(game.slug) }),
+            ]),
           ]),
         ]),
         el('a', { class: 'button', href: playUrl(game.slug, v.n), text: 'Pelaa' }),
       ]));
     });
-    var children = [catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' })];
-    children.push(copyBox('Uusi peli', 'Uusi peli: '));
-    view.replaceChildren.apply(view, children);
+    view.replaceChildren(catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
     showWaitingNames();
     loadPlays();
   }
@@ -134,15 +122,15 @@
         el('a', { class: 'button secondary', href: playUrl(game.slug, ver.n), text: 'Pelaa' }),
       ]));
     });
-    view.replaceChildren(
+    view.replaceChildren.apply(view, [
       el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('h1', { text: game.title }),
+      thumb(game, 'thumb big', 150, 200),
       el('p', { text: game.description }),
       el('a', { class: 'button big', href: playUrl(game.slug, v.n), text: 'Pelaa uusinta (v' + v.n + ')' }),
       el('h2', { text: 'Versiot' }),
       versions,
-      copyBox('Tee uusi versio', game.title + ' v' + (v.n + 1) + ' (' + game.slug + '): ')
-    );
+    ].filter(Boolean));
   }
 
   function render() {

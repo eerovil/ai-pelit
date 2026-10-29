@@ -41,11 +41,15 @@ def test_shelf_game_page_and_back_chip(site, context):
     site.build()
     page = context.new_page()
     page.goto(site.url)
+    page.wait_for_function("document.querySelector('.card[data-slug=\"pomppu\"] img.thumb')?.naturalWidth > 0")
+    assert page.locator("textarea").count() == 0
     page.click('.card[data-slug="pomppu"] .card-main')
     page.wait_for_selector(".version")
     assert page.locator(".version").count() == 2
     assert page.locator(".version").first.get_attribute("data-n") == "2"
-    assert "Pomppu v3 (pomppu): " in page.locator(".copy textarea").input_value()
+    # The game's picture shows at the top; the copy-text box is gone (#33).
+    page.wait_for_function("document.querySelector('img.thumb.big')?.naturalWidth > 0")
+    assert page.locator("textarea").count() == 0
     page.click('.version[data-n="1"] a')
     page.wait_for_url("**/games/pomppu/v1/")
     page.click("#ai-pelit-back")

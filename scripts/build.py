@@ -22,6 +22,8 @@ BACK_SCRIPT = '<script src="../../../back.js"></script>'
 BACK_SCRIPT_RE = re.compile(r'<script src="\.\./\.\./\.\./back\.js"[^>]*></script>')
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Each game's picture for the shelf (#33), beside game.json; scripts/make_thumb.py makes it.
+THUMB = "thumb.webp"
 
 
 class GameError(Exception):
@@ -52,6 +54,9 @@ def load_game(game_dir: Path) -> dict:
             raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
         if not BACK_SCRIPT_RE.search(page.read_text()):
             raise GameError(f"{slug} v{i}: index.html must include {BACK_SCRIPT}")
+    thumb = game_dir / THUMB
+    if not thumb.is_file():
+        raise GameError(f"{slug}: {THUMB} is missing (python3 scripts/make_thumb.py {slug} <screenshot.png>)")
     folders = {p.name for p in game_dir.iterdir() if p.is_dir() and re.match(r"^v\d+$", p.name)}
     extra = folders - {f"v{i}" for i in range(1, len(versions) + 1)}
     if extra:
@@ -60,6 +65,8 @@ def load_game(game_dir: Path) -> dict:
         "slug": slug,
         "title": meta["title"],
         "description": meta["description"],
+        # A new picture gets a new name, so no phone keeps showing an old one from its cache.
+        "thumb": f"thumbs/{slug}-{hashlib.sha256(thumb.read_bytes()).hexdigest()[:8]}.webp",
         "versions": [
             {"n": v["n"], "date": v["date"], "note": v["note"], "issue": v.get("issue")}
             for v in versions
@@ -79,7 +86,10 @@ def build(games_dir: Path, public_dir: Path, out_dir: Path) -> dict:
     if out_dir.exists():
         shutil.rmtree(out_dir)
     shutil.copytree(public_dir, out_dir)
-    shutil.copytree(games_dir, out_dir / "games", ignore=shutil.ignore_patterns("game.json"))
+    shutil.copytree(games_dir, out_dir / "games", ignore=shutil.ignore_patterns("game.json", THUMB))
+    (out_dir / "thumbs").mkdir()
+    for game in catalog["games"]:
+        shutil.copyfile(games_dir / game["slug"] / THUMB, out_dir / game["thumb"])
     catalog_text = json.dumps(catalog, ensure_ascii=False, indent=1) + "\n"
     (out_dir / "catalog.json").write_text(catalog_text)
 
