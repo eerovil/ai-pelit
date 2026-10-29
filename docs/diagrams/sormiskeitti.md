@@ -4,14 +4,15 @@ How one round of Sormiskeitti plays from v2 on. Taps push the board along the ta
 the ramp is the ollie, and from v2 one tap in the air lets the fingers go, which flicks the board
 higher. Each level's ceiling now grows toward a top that good play can still reach, so no level
 is impossible as level 8 was in v1. From v3 the level and the record are saved on the phone, so
-closing the game no longer loses them.
+closing the game no longer loses them. From v4 a tap just after the lip still counts as a
+perfect ollie, because the green zone lasts only about 100 ms at full speed.
 
 ```mermaid
 flowchart TD
   S[Avaa peli: taso ja ennätys puhelimesta] --> A
   A[Napauta: aloita] --> B[Napauta nopeasti: potkaise vauhtia]
-  B --> C{Rampin yläpäässä napautus?}
-  C -- Myöhään --> D[Täydellinen ollie x1.3]
+  B --> C{Napautus rampin yläpäässä tai heti reunan jälkeen?}
+  C -- Myöhään tai heti reunan jälkeen --> D[Täydellinen ollie x1.3]
   C -- Aikaisin tai ei --> E[Heikompi ollie]
   D --> F[Ilmalento]
   E --> F
@@ -51,3 +52,4 @@ flowchart TD
 - **Taso läpi: seuraava katto vähän korkeammalla**: `ceilH()`: each level closes 15 % of the gap to `CEIL_TOP` (60 cm), so level 8 is 46 cm instead of v1's 57 cm, which no tapping could reach.
 - **Avaa peli: taso ja ennätys puhelimesta**: v3 reads `ai-pelit:sormiskeitti:level` and `ai-pelit:sormiskeitti:best` from `localStorage` (`load()`); with nothing saved it starts at level 1.
 - **Tallenna seuraava taso ja ennätys**: `finish()` saves the record every round and, on a win, the next level, so a reload starts there.
+- **Napautus rampin yläpäässä tai heti reunan jälkeen?**: `tap()`: on the ramp, past 1.3 rad (v3: 1.42) is perfect and past 1.1 good; from v4 a tap up to `OLLIE_GRACE` (8) frames after the lip is a perfect ollie too, and the flight so far is redone as if it had been at the lip. Only after that does a tap mean the let-go.

@@ -1,4 +1,6 @@
-"""Sormiskeitti in a phone-sized Chromium: the level and record survive closing the game (v3)."""
+"""Sormiskeitti in a phone-sized Chromium: saved progress (v3 on) and the late-ollie grace (v4)."""
+
+import pytest
 
 from conftest import ROOT
 
@@ -20,10 +22,11 @@ def saved(page):
     return page.evaluate("({ level, best })")
 
 
-def test_sormiskeitti_keeps_the_level_and_record_after_a_reload(site, context):
+@pytest.mark.parametrize("version", ["v3", "v4"])
+def test_sormiskeitti_keeps_the_level_and_record_after_a_reload(site, context, version):
     site.build(ROOT / "games")
     page = context.new_page()
-    url = f"{site.url}games/sormiskeitti/v3/"
+    url = f"{site.url}games/sormiskeitti/{version}/"
     page.goto(url)
     assert saved(page) == {"level": 1, "best": 0}
 
@@ -38,3 +41,33 @@ def test_sormiskeitti_keeps_the_level_and_record_after_a_reload(site, context):
     assert won["won"] and won["best"] > lost["best"]
     page.reload()
     assert saved(page) == {"level": 2, "best": won["best"]}
+
+
+# Pushes to the lip with no ollie on the ramp, then taps `late` frames after the lip
+# (or never, with null) and flies without a let-go, under a ceiling too high to reach.
+LATE = """(late) => {
+  won = false; level = 30; reset(); tap();
+  for (let f = 1; f < 5000 && st !== 'end'; f++) {
+    if (st === 'roll' && s < L && f % 6 === 0) tap();
+    if (late !== null && st === 'air' && airF === late && !ollie) tap();
+    step();
+  }
+  return { ollie, maxH, letGo: !!letGo };
+}"""
+
+
+def test_sormiskeitti_v4_counts_a_tap_just_after_the_lip_as_a_perfect_ollie(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(f"{site.url}games/sormiskeitti/v4/")
+    at_lip = page.evaluate(LATE, 0)
+    assert at_lip["ollie"] == 1.3 and not at_lip["letGo"]
+    for late in (1, 4, 7):
+        r = page.evaluate(LATE, late)
+        # The same flight as an ollie right at the lip, not a let-go.
+        assert r["ollie"] == 1.3 and not r["letGo"]
+        assert r["maxH"] == pytest.approx(at_lip["maxH"], abs=0.01)
+    # Past the grace the tap is the mid-air let-go, as before.
+    too_late = page.evaluate(LATE, 8)
+    assert too_late["ollie"] == 0 and too_late["letGo"]
+    assert page.evaluate(LATE, None)["maxH"] < at_lip["maxH"]
