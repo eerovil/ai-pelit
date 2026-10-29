@@ -1,0 +1,13 @@
+{
+  "title": "Piano",
+  "description": "Nuotit putoavat neljää kaistaa pitkin: osu niihin ja kappale soi.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: neljä nappia, nuotit putoavat neljällä kaistalla tuttujen kappaleiden tahdissa, kolme sydäntä ja nopeutuvat tasot.",
+      "request": "Piano peli jossa neljä nappia ja ylhäältä putoilee neljjällä \"lanella\" nuotteja. Niihin pitää osua",
+      "issue": "eerovil/ai-pelit#44"
+    }
+  ]
+}
