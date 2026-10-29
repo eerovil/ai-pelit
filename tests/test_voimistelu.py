@@ -115,3 +115,39 @@ def test_a_flick_up_lets_go_and_a_flick_sideways_in_the_handstand_is_a_pirouette
     page.mouse.move(180, 420)
     page.mouse.up()
     assert page.evaluate("mode") in ("air", "land")
+
+
+def finish_with(page, level, names):
+    """Ends a routine with a stuck landing after the given elements, on the given level."""
+    page.evaluate(f"""() => {{ newRoutine(); level = {level};
+      for (const n of {names!r}) addElement(n, 0.1);
+      touch = {{ fall: false, stuck: true, saltos: 0, halves: 0 }}; finish(); }}""")
+    return page.evaluate("result.passed")
+
+
+def test_a_release_task_asks_for_that_release_move_and_no_other(site, context):
+    page = open_game(site, context)
+    assert finish_with(page, 8, ["Jäger"]) and finish_with(page, 8, ["Gienger"])
+    assert not finish_with(page, 8, ["Kovacs"]) and not finish_with(page, 8, ["Kolman"])
+    assert finish_with(page, 10, ["Kovacs"])
+    assert not finish_with(page, 10, ["Kolman"]) and not finish_with(page, 10, ["Kolmoisvoltti tangolle"])
+
+
+def test_the_score_board_fits_a_small_screen_however_many_elements(site, browser):
+    from conftest import ROOT as _root
+    site.build(_root / "games")
+    ctx = browser.new_context(viewport={"width": 360, "height": 640}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.goto(f"{site.url}games/voimistelu/v1/")
+    page.evaluate("""() => { newRoutine();
+      for (let i = 0; i < 26; i++) addElement('Jättikierto taakse', 0.1);
+      for (const n of ['Piruetti', 'Tkatchev', 'Jäger', 'Kovacs', 'Kolman', 'Lentoliike', 'Gienger', 'Jättikierto eteen',
+                       'Lentoliike kierteellä', 'Kolmoisvoltti tangolle', 'Voltti alas']) addElement(n, 0.2);
+      deductions = [['Iso askel', 0.5], ['Kerä auki liian myöhään', 0.3], ['Kierre kesken', 0.3]];
+      touch = { fall: false, stuck: false, saltos: 1, halves: 0 }; finish(); resultT = 1; best = 0; result.record = true; }""")
+    page.wait_for_timeout(200)
+    lay = page.evaluate("resultLayout")
+    assert lay["bottom"] <= 640 and lay["tapY"] < lay["bottom"]
+    assert lay["recordY"] < lay["tapY"] - 15
+    assert page.evaluate("result.names.length") == 37
+    ctx.close()

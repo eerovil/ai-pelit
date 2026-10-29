@@ -43,9 +43,9 @@ const TASKS = [
   ['Piruetti käsilläseisonnassa tangon päällä', r => r.names.includes('Piruetti')],
   ['Tkatchev: lennä tangon yli ja ota kiinni', r => r.names.includes('Tkatchev')],
   ['Kaksoisvoltti alas', r => r.saltos >= 2],
-  ['Jäger tai Gienger: voltti ilmassa ja kiinni tangosta', r => r.releaseSaltos >= 1],
+  ['Jäger tai Gienger: voltti ilmassa ja kiinni tangosta', r => r.names.includes('Jäger') || r.names.includes('Gienger')],
   ['Kierre alastulossa', r => r.halves >= 2],
-  ['Kovacs: kaksoisvoltti tangon yli ja kiinni', r => r.releaseSaltos >= 2],
+  ['Kovacs: kaksoisvoltti tangon yli ja kiinni', r => r.names.includes('Kovacs')],
 ];
 function target(n) { return Math.min(14.5, 10.8 + 0.3 * (n - TASKS.length - 1)); }
 function taskText(n) { return n <= TASKS.length ? TASKS[n - 1][0] : `Saa vähintään ${fmt(target(n), 1)} pistettä`; }
@@ -248,14 +248,8 @@ function finish() {
   for (const e of elements) if (!seen.has(e.name)) { seen.add(e.name); d += e.value; }
   const ded = deductions.reduce((a, b) => a + b[1], 0);
   const eScore = Math.max(0, 10 - ded), total = d + eScore;
-  let releaseSaltos = 0;
-  for (const e of elements) {
-    if (e.name === 'Jäger' || e.name === 'Gienger') releaseSaltos = Math.max(releaseSaltos, 1);
-    if (e.name === 'Kovacs' || e.name === 'Kolman') releaseSaltos = Math.max(releaseSaltos, 2);
-    if (e.name === 'Kolmoisvoltti tangolle') releaseSaltos = 3;
-  }
   const r = { names: elements.map(e => e.name), d, e: eScore, total, fall: touch.fall, stuck: touch.stuck,
-    saltos: touch.saltos, halves: touch.halves, releaseSaltos, level, passed: false, record: false };
+    saltos: touch.saltos, halves: touch.halves, level, passed: false, record: false };
   r.passed = !r.fall && taskDone(level, r);
   routines++;
   if (r.passed) level++;
@@ -411,27 +405,36 @@ function drawHud() {
   hl.forEach((l, i) => text(l, W / 2, by + i * 18, 14, hold ? '#ffd45c' : '#cfd6ee'));
 }
 
+// The score board: each different element once (a repeat shows its count), as many rows as fit,
+// so the scores and the tap for a new routine always stay on the screen.
+let resultLayout = null;
 function drawResult() {
-  const r = result, pw = Math.min(W - 24, 360), ph = Math.min(H - SAFE_T - SAFE_B - 40, 300 + r.names.length * 20);
+  const r = result, avail = H - SAFE_T - SAFE_B - 40, pw = Math.min(W - 24, 360);
+  const rows = [];
+  for (const e of elements) {
+    const row = rows.find(q => q.name === e.name);
+    if (row) row.count++; else rows.push({ name: e.name, value: e.value, count: 1 });
+  }
+  const lines = rows.map(q => [q.count > 1 ? `${q.name} ×${q.count}` : q.name, fmt(q.value, 1), '#e8edf6', '#9fe3b8'])
+    .concat(deductions.map(([t, v]) => [t, '−' + fmt(v, 1), '#ffb0b0', '#ffb0b0']));
+  const FIXED = 64 + 114 + 40, fit = Math.max(1, Math.floor((avail - FIXED) / 20));
+  const shown = lines.length > fit ? lines.slice(0, fit - 1).concat([[`+${lines.length - fit + 1} muuta`, '', '#7d879c', '']]) : lines;
+  const ph = Math.min(avail, FIXED + shown.length * 20);
   const px = (W - pw) / 2, py = SAFE_T + (H - SAFE_T - SAFE_B - ph) / 2;
   x.fillStyle = 'rgba(8,12,28,0.93)'; x.strokeStyle = '#ffd45c'; x.lineWidth = 2;
   x.beginPath(); x.roundRect(px, py, pw, ph, 14); x.fill(); x.stroke();
   let y = py + 30;
   text(r.passed ? 'Taso läpäisty!' : r.fall ? 'Kaatuminen' : 'Tehtävä jäi tekemättä', W / 2, y, 22, r.passed ? '#7ef0a0' : '#ff8a8a', 'center', 800);
   y += 34;
-  const seen = new Set();
-  for (const e of elements) {
-    const dup = seen.has(e.name); seen.add(e.name);
-    text(e.name, px + 16, y, 14, dup ? '#7d879c' : '#e8edf6', 'left');
-    text(dup ? 'toisto' : fmt(e.value, 1), px + pw - 16, y, 14, dup ? '#7d879c' : '#9fe3b8', 'right'); y += 20;
-  }
-  for (const [t, v] of deductions) { text(t, px + 16, y, 14, '#ffb0b0', 'left'); text('−' + fmt(v, 1), px + pw - 16, y, 14, '#ffb0b0', 'right'); y += 20; }
+  for (const [t, v, c1, c2] of shown) { text(t, px + 16, y, 14, c1, 'left'); text(v, px + pw - 16, y, 14, c2, 'right'); y += 20; }
   y += 10;
   text('D (vaikeus)', px + 16, y, 15, '#cfd6ee', 'left'); text(fmt(r.d, 3), px + pw - 16, y, 15, '#ffffff', 'right'); y += 22;
   text('E (suoritus)', px + 16, y, 15, '#cfd6ee', 'left'); text(fmt(r.e, 3), px + pw - 16, y, 15, '#ffffff', 'right'); y += 30;
+  const totalY = y;
   text(fmt(r.total, 3), W / 2, y, 34, '#ffd45c', 'center', 800); y += 30;
   if (r.record) { text('Uusi ennätys!', W / 2, y, 15, '#7ef0a0'); y += 22; }
   if (resultT > 0.8) text('Napauta: uusi suoritus', W / 2, py + ph - 20, 14, '#b8c2e0');
+  resultLayout = { rows: shown.length, totalY, recordY: y - 22, tapY: py + ph - 20, bottom: py + ph };
 }
 
 // ---- Loop ----
