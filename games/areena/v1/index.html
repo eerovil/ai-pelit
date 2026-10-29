@@ -36,7 +36,7 @@
   <p id="foe"></p>
   <button id="go">Taisteluun!</button>
   <p id="stats"></p>
-  <p class="help">Vasen peukalo liikuttaa. 🗡️ Miekka lyö lähelle, 🪨 jouskari ampuu kiven kauas. 💨 Väistön aikana mikään ei osu.</p>
+  <p class="help">Vasen peukalo liikuttaa. 🗡️ Miekka lyö lähelle, 🏹 jousi ampuu nuolen kauas. 💨 Väistön aikana mikään ei osu.</p>
 </div>
 <script>
 'use strict';
@@ -54,7 +54,7 @@ const FOES = ['Rautakoura', 'Kivisilmä', 'Varjokettu', 'Myrskyhammas', 'Raudanp
 function foeName(l) { return l <= FOES.length ? FOES[l - 1] : FOES[FOES.length - 1] + ' ' + (l - FOES.length + 1); }
 
 // Arena in world units; drawn scaled to fit between the HUD and the controls.
-const AW = 340, AH = 440, PR = 14, STONE_V = 320;
+const AW = 340, AH = 440, PR = 14, ARROW_V = 320;
 const PILLARS = [{ x: 82, y: 220, r: 22 }, { x: 258, y: 220, r: 22 }];
 const SWING = 0.26, HP = 100;
 
@@ -87,10 +87,10 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 // ---------- Fighters ----------
 function fighter(px, py, name, color, dark, ai) {
   return { x: px, y: py, r: PR, vx: 0, vy: 0, kx: 0, ky: 0, fx: 0, fy: ai ? 1 : -1, name, color, dark, ai,
-    hp: HP, max: HP, speed: 125, swing: 0, swingHit: false, swordCd: 0, slingCd: 0, ammo: 5, ammoT: 0,
+    hp: HP, max: HP, speed: 125, swing: 0, swingHit: false, swordCd: 0, bowCd: 0, ammo: 5, ammoT: 0,
     dash: 0, dashCd: 0, dx: 0, dy: 0, flash: 0, shot: 0, side: 1 };
 }
-let me, foe, stones, puffs, texts, state = 'menu', stateT = 0, shake = 0, slow = 1;
+let me, foe, arrows, puffs, texts, state = 'menu', stateT = 0, shake = 0, slow = 1;
 
 function newFight() {
   me = fighter(AW / 2, AH - 60, playerName || 'Sankari', '#3d8bfd', '#1f4fa8', false);
@@ -98,7 +98,7 @@ function newFight() {
   foe.speed = Math.min(138, 100 + 7 * (level - 1));
   // Later opponents are tougher, as well as quicker and smarter.
   foe.hp = foe.max = Math.min(180, 90 + 15 * (level - 1));
-  stones = []; puffs = []; texts = []; shake = 0; slow = 1;
+  arrows = []; puffs = []; texts = []; shake = 0; slow = 1;
   ai.mode = 'melee'; ai.modeT = 1.5; ai.think = 0; ai.retreat = 0; ai.wait = -1;
   // One second each for 3, 2 and 1, then TAISTELE! for the last 0.7 s.
   state = 'count'; stateT = 3.7;
@@ -136,7 +136,7 @@ function damage(t, n, fromX, fromY, push) {
 function act(f, o, inp, dt) {
   const ax = o.x - f.x, ay = o.y - f.y, d = Math.hypot(ax, ay) || 1;
   f.fx = ax / d; f.fy = ay / d;
-  f.swordCd -= dt; f.slingCd -= dt; f.dashCd -= dt; f.flash -= dt; f.shot -= dt;
+  f.swordCd -= dt; f.bowCd -= dt; f.dashCd -= dt; f.flash -= dt; f.shot -= dt;
   if (f.ammo < 5 && (f.ammoT += dt) > 1.4) { f.ammo++; f.ammoT = 0; }
   const live = state === 'fight';
   if (live && inp.dash && f.dashCd <= 0) {
@@ -149,13 +149,13 @@ function act(f, o, inp, dt) {
     f.swing = SWING; f.swingHit = false; f.swordCd = 0.6; f.side = -f.side;
     tone(700, 0.09, 'triangle', 0.05, 250);
   }
-  if (live && inp.sling && f.slingCd <= 0 && f.ammo > 0 && f.swing <= 0 && f.dash <= 0) {
-    // Aim where the opponent will be when the stone gets there.
-    const t = d / STONE_V, lead = inp.lead;
+  if (live && inp.bow && f.bowCd <= 0 && f.ammo > 0 && f.swing <= 0 && f.dash <= 0) {
+    // Aim where the opponent will be when the arrow gets there.
+    const t = d / ARROW_V, lead = inp.lead;
     const tx = o.x + o.vx * t * lead, ty = o.y + o.vy * t * lead;
     const sx = tx - f.x, sy = ty - f.y, sd = Math.hypot(sx, sy) || 1;
-    stones.push({ x: f.x + sx / sd * 18, y: f.y + sy / sd * 18, vx: sx / sd * STONE_V, vy: sy / sd * STONE_V, from: f, life: 2 });
-    f.ammo--; f.ammoT = 0; f.slingCd = 0.7; f.shot = 0.25;
+    arrows.push({ x: f.x + sx / sd * 18, y: f.y + sy / sd * 18, vx: sx / sd * ARROW_V, vy: sy / sd * ARROW_V, from: f, life: 2 });
+    f.ammo--; f.ammoT = 0; f.bowCd = 0.7; f.shot = 0.25;
     tone(900, 0.07, 'square', 0.04, 400);
   }
   const px = f.x, py = f.y;
@@ -184,7 +184,7 @@ function act(f, o, inp, dt) {
 // ---------- The opponent's head ----------
 const ai = { mode: 'melee', modeT: 0, think: 0, mx: 0, my: 0, strafe: 1, retreat: 0, wait: -1, seenSwing: false };
 function aiInput(f, p, dt) {
-  const L = level, inp = { mx: ai.mx, my: ai.my, sword: false, sling: false, dash: false, lead: Math.min(1, (L - 1) * 0.3) };
+  const L = level, inp = { mx: ai.mx, my: ai.my, sword: false, bow: false, dash: false, lead: Math.min(1, (L - 1) * 0.3) };
   const react = Math.max(0.1, 0.32 - 0.04 * (L - 1)), dodge = Math.min(0.8, 0.22 + 0.1 * (L - 1));
   const dx = p.x - f.x, dy = p.y - f.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
   const los = clear(f.x, f.y, p.x, p.y);
@@ -209,16 +209,16 @@ function aiInput(f, p, dt) {
     const m = Math.hypot(mx, my) || 1; ai.mx = mx / m; ai.my = my / m;
     inp.mx = ai.mx; inp.my = ai.my;
   }
-  // Dodge a stone flying at it, decided once per stone.
-  for (const s of stones) {
+  // Dodge an arrow flying at it, decided once per arrow.
+  for (const s of arrows) {
     if (s.from !== p || s.judged) continue;
-    const rx = f.x - s.x, ry = f.y - s.y, t = (rx * s.vx + ry * s.vy) / (STONE_V * STONE_V);
+    const rx = f.x - s.x, ry = f.y - s.y, t = (rx * s.vx + ry * s.vy) / (ARROW_V * ARROW_V);
     if (t < 0 || t > 0.45) continue;
     s.judged = true;
     const cx = s.x + s.vx * t - f.x, cy = s.y + s.vy * t - f.y;
     if (Math.hypot(cx, cy) < f.r + 8 && Math.random() < dodge) {
-      if (f.dashCd <= 0 && Math.random() < 0.6) { inp.dash = true; inp.mx = -s.vy / STONE_V; inp.my = s.vx / STONE_V; if (Math.random() < 0.5) { inp.mx *= -1; inp.my *= -1; } }
-      else { ai.mx = -s.vy / STONE_V * ai.strafe; ai.my = s.vx / STONE_V * ai.strafe; inp.mx = ai.mx; inp.my = ai.my; ai.think = 0.35; }
+      if (f.dashCd <= 0 && Math.random() < 0.6) { inp.dash = true; inp.mx = -s.vy / ARROW_V; inp.my = s.vx / ARROW_V; if (Math.random() < 0.5) { inp.mx *= -1; inp.my *= -1; } }
+      else { ai.mx = -s.vy / ARROW_V * ai.strafe; ai.my = s.vx / ARROW_V * ai.strafe; inp.mx = ai.mx; inp.my = ai.my; ai.think = 0.35; }
     }
   }
   // Dodge a sword swing, decided once per swing.
@@ -233,8 +233,8 @@ function aiInput(f, p, dt) {
     ai.wait -= dt;
     if (ai.wait <= 0) { inp.sword = true; ai.wait = -1; if (Math.random() < 0.5) ai.retreat = 0.3 + Math.random() * 0.3; }
   } else ai.wait = -1;
-  // Slingshot from range when the line is clear.
-  if (los && d > 90 && f.ammo > 0 && f.slingCd <= 0 && Math.random() < dt * (ai.mode === 'ranged' ? 3 : 0.7) * (1 + 0.15 * (L - 1))) inp.sling = true;
+  // Bow from range when the line is clear.
+  if (los && d > 90 && f.ammo > 0 && f.bowCd <= 0 && Math.random() < dt * (ai.mode === 'ranged' ? 3 : 0.7) * (1 + 0.15 * (L - 1))) inp.bow = true;
   return inp;
 }
 
@@ -246,7 +246,7 @@ function buttons() {
   const s = Math.min(1.15, W / 360);
   return [
     { k: 'sword', x: W - 64 * s, y: cy + 8, r: 42 * s, icon: '🗡️', label: 'Miekka' },
-    { k: 'sling', x: W - 156 * s, y: cy + 40, r: 32 * s, icon: '🪨', label: 'Jouskari' },
+    { k: 'bow', x: W - 156 * s, y: cy + 40, r: 32 * s, icon: '🏹', label: 'Jousi' },
     { k: 'dash', x: W - 150 * s, y: cy - 54, r: 27 * s, icon: '💨', label: 'Väistö' },
   ];
 }
@@ -277,7 +277,7 @@ function playerInput() {
     if (d > R * 1.4) { pad.ox = pad.x - dx / d * R * 1.4; pad.oy = pad.y - dy / d * R * 1.4; }
   }
   const dash = !!held.dashTap; held.dashTap = false;
-  return { mx, my, sword: held.sword !== undefined, sling: held.sling !== undefined, dash, lead: 1 };
+  return { mx, my, sword: held.sword !== undefined, bow: held.bow !== undefined, dash, lead: 1 };
 }
 
 // ---------- Game step ----------
@@ -294,14 +294,14 @@ function step(dt) {
   // Fighters push each other apart.
   const dx = foe.x - me.x, dy = foe.y - me.y, d = Math.hypot(dx, dy) || 1, m = me.r + foe.r;
   if (d < m) { const p = (m - d) / 2; me.x -= dx / d * p; me.y -= dy / d * p; foe.x += dx / d * p; foe.y += dy / d * p; hitWall(me); hitWall(foe); }
-  for (const s of stones) {
+  for (const s of arrows) {
     s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
     const t = s.from === me ? foe : me;
     let hit = s.x < 0 || s.x > AW || s.y < 0 || s.y > AH || s.life <= 0 || PILLARS.some(p => Math.hypot(s.x - p.x, s.y - p.y) < p.r + 3);
     if (!hit && Math.hypot(s.x - t.x, s.y - t.y) < t.r + 4 && t.dash <= 0) { hit = true; if (state === 'fight') damage(t, 8 + Math.floor(Math.random() * 3), s.x - s.vx, s.y - s.vy, 120); }
     if (hit) { s.dead = true; puffs.push({ x: s.x, y: s.y, t: 0.3 }); }
   }
-  stones = stones.filter(s => !s.dead);
+  arrows = arrows.filter(s => !s.dead);
 }
 
 function endFight() {
@@ -362,10 +362,13 @@ function drawFighter(f) {
   x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(2, 5, f.r + 2, f.r * 0.8, 0, 0, 7); x.fill();
   if (f.dash > 0) { x.globalAlpha = 0.55; }
   x.rotate(a);
-  // Slingshot in the left hand.
-  x.save(); x.translate(4, -f.r + 1); x.strokeStyle = '#7a4a1e'; x.lineWidth = 3; x.lineCap = 'round';
-  x.beginPath(); x.moveTo(0, 0); x.lineTo(9, 0); x.moveTo(9, 0); x.lineTo(14, -4); x.moveTo(9, 0); x.lineTo(14, 4); x.stroke();
-  if (f.shot > 0) { x.strokeStyle = '#ddd'; x.lineWidth = 1; x.beginPath(); x.moveTo(14, -4); x.lineTo(14 + 10 * f.shot, 0); x.lineTo(14, 4); x.stroke(); }
+  // Bow in the left hand, its string pulled back for a moment after a shot.
+  x.save(); x.translate(6, -f.r + 2); x.lineCap = 'round';
+  x.strokeStyle = '#7a4a1e'; x.lineWidth = 3;
+  x.beginPath(); x.arc(0, 0, 11, -1.15, 1.15); x.stroke();
+  const pull = f.shot > 0 ? 7 * f.shot / 0.25 : 0;
+  x.strokeStyle = '#eee'; x.lineWidth = 1;
+  x.beginPath(); x.moveTo(11 * Math.cos(1.15), -11 * Math.sin(1.15)); x.lineTo(4.5 - pull, 0); x.lineTo(11 * Math.cos(1.15), 11 * Math.sin(1.15)); x.stroke();
   x.restore();
   // Sword in the right hand: resting forward, or sweeping across.
   let sa = 0.35;
@@ -420,7 +423,7 @@ function drawControls() {
   x.fillStyle = on ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.3)'; x.beginPath(); x.arc(kx, ky, 22, 0, 7); x.fill();
   if (!on) { x.font = '600 11px system-ui'; x.fillStyle = 'rgba(255,255,255,.5)'; x.textAlign = 'center'; x.fillText('Liiku', bx, by + 68); }
   for (const b of buttons()) {
-    const cd = b.k === 'sword' ? me.swordCd / 0.6 : b.k === 'sling' ? (me.ammo ? me.slingCd / 0.7 : 1) : me.dashCd / 1.1;
+    const cd = b.k === 'sword' ? me.swordCd / 0.6 : b.k === 'bow' ? (me.ammo ? me.bowCd / 0.7 : 1) : me.dashCd / 1.1;
     const pressed = held[b.k] !== undefined;
     x.fillStyle = pressed ? 'rgba(255,209,102,.55)' : 'rgba(255,255,255,.14)';
     x.strokeStyle = 'rgba(255,255,255,.4)'; x.lineWidth = 2;
@@ -429,7 +432,7 @@ function drawControls() {
     x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `${Math.round(b.r * 0.8)}px system-ui`; x.fillStyle = '#fff';
     x.fillText(b.icon, b.x, b.y - 2); x.textBaseline = 'alphabetic';
     x.font = '600 11px system-ui'; x.fillStyle = 'rgba(255,255,255,.75)'; x.fillText(b.label, b.x, b.y + b.r + 13);
-    if (b.k === 'sling') for (let i = 0; i < 5; i++) {
+    if (b.k === 'bow') for (let i = 0; i < 5; i++) {
       x.fillStyle = i < me.ammo ? '#d9d2c3' : 'rgba(255,255,255,.15)';
       x.beginPath(); x.arc(b.x - 16 + i * 8, b.y - b.r - 7, 3, 0, 7); x.fill();
     }
@@ -446,10 +449,13 @@ function draw() {
   if (shake > 0.3) x.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
   drawArena();
   for (const f of [foe, me].sort((a, b) => a.y - b.y)) drawFighter(f);
-  for (const s of stones) {
+  for (const s of arrows) {
     const [sx, sy] = W2(s.x, s.y);
-    x.fillStyle = '#6b655b'; x.strokeStyle = '#2f2b26'; x.lineWidth = 1.5;
-    x.beginPath(); x.arc(sx, sy, 4 * scale, 0, 7); x.fill(); x.stroke();
+    x.save(); x.translate(sx, sy); x.rotate(Math.atan2(s.vy, s.vx)); x.scale(scale, scale);
+    x.strokeStyle = '#6b4423'; x.lineWidth = 2; x.beginPath(); x.moveTo(-14, 0); x.lineTo(4, 0); x.stroke();
+    x.fillStyle = '#cfd6dd'; x.beginPath(); x.moveTo(8, 0); x.lineTo(2, -3.5); x.lineTo(2, 3.5); x.fill();
+    x.fillStyle = '#e5484d'; x.beginPath(); x.moveTo(-14, 0); x.lineTo(-18, -3.5); x.lineTo(-11, 0); x.lineTo(-18, 3.5); x.fill();
+    x.restore();
   }
   for (const p of puffs) {
     const [px, py] = W2(p.x, p.y);
