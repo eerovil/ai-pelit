@@ -204,8 +204,11 @@ R.on('start', s => {
   race.adopt = !R.isHost; // a guest reloaded mid-race takes its runner back from the host
   if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
 });
-const pack = r => [Math.round(r.x * 100) / 100, Math.round(r.y * 100) / 100, Math.round(r.v * 100) / 100, r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0];
-function unpack(r, a) { r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; }
+// A runner as sent: where, how fast, and the jump, last foot and stumble, so a phone that
+// reloads mid-jump carries on with the same jump. [6] says the computer runs it now.
+const r2 = n => Math.round(n * 100) / 100;
+const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum)];
+function unpack(r, a) { r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; r.vy = a[7]; r.foot = a[8]; r.stum = a[9]; }
 function hostState() { return { t: 's', round: race.round, ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack) }; }
 R.on('message', (m, from) => {
   if (!race || race.mode !== 'net' || m.round !== race.round) return;

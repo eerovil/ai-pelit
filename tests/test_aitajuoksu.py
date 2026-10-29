@@ -137,3 +137,17 @@ def test_a_guest_in_first_ends_the_race_for_a_host_that_stopped(site, browser):
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()
+
+
+def test_a_guest_reloaded_mid_jump_carries_on_with_the_same_jump(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    # In the air, rising fast, stumbling, last step on the right foot.
+    guest.evaluate("Object.assign(me, { x: 30, v: 6, y: 0.5, vy: 40, stum: 30, foot: 2 })")
+    host.wait_for_function("race.runners[1].stum > 25 && race.runners[1].vy > 30", timeout=3000)
+    guest.reload()
+    guest.wait_for_function("race && race.phase === 'run' && me.x >= 30", timeout=8000)
+    assert guest.evaluate("[me.foot, me.stum > 20, me.y > 0, me.vy > 0, me.hits]") == [2, True, True, True, 0]
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
