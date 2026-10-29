@@ -432,7 +432,7 @@ function rules() {
 function end() {
   // As in the playground, the first one caught seeks next.
   roundOver(firstCaught || seeker);
-  if (net.on && net.host) { hostSend(); net.send({ t: 'end', next: people.indexOf(nextSeeker), p: stateOf() }); }
+  if (net.on && net.host) { hostSend(); net.send({ t: 'end', round: net.round, next: people.indexOf(nextSeeker), p: stateOf() }); }
 }
 // Every phone keeps its own player's tally.
 function roundOver(next) {
@@ -820,7 +820,9 @@ const myKey = load('id', null) || (() => {
   save('id', key); return key;
 })();
 let myId = '';
-let myName = load('nimi', '') || NICKS[Math.floor(Math.random() * NICKS.length)];
+// A name picked for this phone is kept, so it stays the same after a reload or a QR join.
+let myName = load('nimi', '') || (() => { const n = NICKS[Math.floor(Math.random() * NICKS.length)]; save('nimi', n); return n; })();
+const COUNTED = KEY + 'kierros'; // sessionStorage: the last round whose result this phone saved
 let waiting = []; // the people the round is waiting for
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -858,7 +860,7 @@ function connect() {
 function newCode() { let c = ''; for (let i = 0; i < 4; i++) c += LETTERS[Math.floor(Math.random() * LETTERS.length)]; return c; }
 function enterRoom(code, host) {
   net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0;
-  net.members = []; net.hostId = host ? myId : ''; net.round = 0; net.wait = false; net.pz = [];
+  net.members = []; net.hostId = host ? myId : ''; net.round = ''; net.wait = false; net.pz = [];
   played = false; nextSeeker = null;
   $('netErr').textContent = '';
   phase = 'room';
@@ -907,7 +909,7 @@ function onNet(m) {
   }
   if (m.t === 'start') guestStart(m);
   else if (m.t === 's') guestState(m);
-  else if (m.t === 'end') { guestState(m); roundOver(people[m.next] || seeker); }
+  else if (m.t === 'end') { guestState(m); guestFinish(m.next); }
   else if (m.t === 'wait') { net.wait = true; renderNet(); }
   else if (m.t === 'lobby') { if (phase !== 'room') { played = false; showRoom(); } }
   else if (m.t === 'close') leaveRoom('Huone suljettiin.');
@@ -917,9 +919,11 @@ const racing = () => phase === 'count' || phase === 'seek' || phase === 'end';
 // ----- On the host -----
 // The round as the others need it: where everyone is, which way they look, and their state.
 const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0)]);
+// After the round (the host back in the room) it is the finished round, so a phone that missed
+// its end still gets its result.
 function snapshot(to) {
-  return { t: 'start', to, round: net.round, seeker: people.indexOf(seeker), ph: phase, tm: r2(timer), p: stateOf(),
-           people: people.map(p => ({ n: p.name, c: p.color, id: p.id })) };
+  return { t: 'start', to, round: net.round, seeker: people.indexOf(seeker), ph: racing() ? phase : 'end', tm: r2(timer),
+           p: stateOf(), next: people.indexOf(nextSeeker), people: people.map(p => ({ n: p.name, c: p.color, id: p.id })) };
 }
 function startMulti() {
   const humans = net.members.filter(m => m.on).slice(0, 5);
@@ -935,7 +939,7 @@ function startMulti() {
   people = cast; player = cast.find(p => p.isPlayer); bots = cast.filter(p => p.ctrl === 'bot');
   // The first one caught last round seeks; the first round, a phone picked at random.
   const next = nextSeeker && cast.find(p => (nextSeeker.id ? p.id === nextSeeker.id : !p.id && p.name === nextSeeker.name));
-  net.round++; net.events = []; net.sendT = 0;
+  net.round = Math.random().toString(36).slice(2, 10); net.events = []; net.sendT = 0;
   setupRound(next || cast[Math.floor(Math.random() * humans.length)]);
   net.send(snapshot());
 }
@@ -946,8 +950,8 @@ function hostPeers() {
 }
 // A phone connected (again): one in the round gets the round as it is; a new one waits for the next.
 function hostHello(id) {
-  if (!racing()) return;
   const p = people.find(q => q.id === id);
+  if (!racing()) { if (p && played && phase === 'room') net.send(snapshot(id)); return; }
   if (!p) { net.send({ t: 'wait', to: id }); return; }
   if (p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
   net.send(snapshot(id));
@@ -982,9 +986,19 @@ function guestStart(m) {
   people.forEach(p => { p.role = p === seeker ? 'seeker' : 'hider'; });
   firstCaught = null; joy = null; net.wait = false; net.round = m.round;
   guestState(m, true);
+  if (m.ph === 'end') { menu.classList.add('hidden'); phase = 'end'; guestFinish(m.next); return; }
   phase = m.ph; timer = m.tm;
   if (m.ph === 'count' && m.tm > COUNT - 1) show(['count', 0]);
   menu.classList.add('hidden'); netEl.classList.add('hidden');
+}
+// The round is over: save this phone's result once per round, however many times it hears so.
+function guestFinish(next) {
+  const round = net.code + ':' + net.round, nextP = people[next] || seeker;
+  let done = false;
+  try { done = sessionStorage.getItem(COUNTED) === round; sessionStorage.setItem(COUNTED, round); } catch (e) { /* private mode */ }
+  if (!done) { roundOver(nextP); return; }
+  played = true; nextSeeker = nextP;
+  if (phase !== 'room') showRoom();
 }
 function guestState(m, snap) {
   if (!m.p || m.p.length !== people.length) return;

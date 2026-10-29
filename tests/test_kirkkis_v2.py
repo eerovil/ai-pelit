@@ -116,7 +116,8 @@ def phones(site, browser):
     def phone(name, query=""):
         ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
-        ctx.add_init_script(f"localStorage.setItem('ai-pelit:kirkkis:nimi', {json.dumps(json.dumps(name))})")
+        if name:
+            ctx.add_init_script(f"localStorage.setItem('ai-pelit:kirkkis:nimi', {json.dumps(json.dumps(name))})")
         page = ctx.new_page()
         page.errors = []
         page.on("pageerror", lambda e: page.errors.append(str(e)))
@@ -281,6 +282,53 @@ def test_each_phone_sees_its_own_view_and_the_host_runs_the_rules(phones):
     assert host.locator("#startRound").inner_text() == "Uusi kierros"
     host.click("#startRound")
     guest.wait_for_function("phase === 'count' && seeker === player")
+    assert host.errors == guest.errors == []
+
+
+def test_a_first_time_phone_keeps_its_picked_name_through_a_qr_join_and_reload(phones):
+    host, code = make_room(phones)
+    guest = phones(None, f"?huone={code}")
+    guest.wait_for_function("net.joined && net.members.length === 2")
+    name = guest.evaluate("myName")
+    assert guest.evaluate("JSON.parse(localStorage.getItem('ai-pelit:kirkkis:nimi'))") == name
+    guest.reload()
+    guest.wait_for_function("net.joined")
+    assert guest.evaluate("myName") == name
+    host.wait_for_function(f"net.members.map(m => m.name).join() === 'Eero,{name}'")
+
+
+def test_a_phone_away_when_the_round_ends_gets_its_result_once(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    start(host, [guest], host_seeks=True)
+    tally = "JSON.parse(localStorage.getItem('ai-pelit:kirkkis:tilasto') || '{}').kierrokset || 0"
+    phones.relay.drop(guest)
+    host.wait_for_function("waiting.length === 1")
+    host.click("#goOn")
+    host.evaluate("timer = 0.1")
+    host.wait_for_function("phase === 'room'", timeout=8000)
+    # Back after the round ended: the guest gets the finished round, and saves its result.
+    phones.relay.back(guest)
+    guest.wait_for_function("phase === 'room' && played", timeout=10000)
+    assert guest.evaluate(tally) == 1
+    assert guest.locator("#roomResult").inner_text() == "Pelastuit! 🎉"
+    # Hearing it again (a reload, another connection) saves nothing twice.
+    guest.reload()
+    guest.wait_for_function("phase === 'room' && played", timeout=10000)
+    assert guest.evaluate(tally) == 1
+    assert guest.locator("#roomResult").inner_text() == "Pelastuit! 🎉"
+    # Dropped just before the end, back while the host still shows the end: also once.
+    host.click("#startRound")
+    guest.wait_for_function("phase === 'count'", timeout=8000)
+    phones.relay.drop(guest)
+    host.wait_for_function("waiting.length === 1")
+    host.click("#goOn")
+    host.evaluate("phase = 'seek'; timer = 0.05")
+    host.wait_for_function("phase === 'end'")
+    host.evaluate("endT = 5")
+    phones.relay.back(guest)
+    guest.wait_for_function("phase === 'room' && played", timeout=12000)
+    assert guest.evaluate(tally) == 2
     assert host.errors == guest.errors == []
 
 
