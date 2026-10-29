@@ -68,7 +68,7 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = "taso-1" if game == "hiihto" else "main"
+                first = {"hiihto": "taso-1", "puhelinkoppi": "putki"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
                 low = game == "hiihto"
@@ -351,6 +351,9 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
         ("sormiskeitti", "main", b): {"score": 58, "version": 5},
         ("hiihto", "taso-1", a): {"score": 71.5, "version": 2, "level": 3},
         ("hiihto", "taso-2", b): {"score": 95, "version": 2, "level": 2},
+        # Puhelinkoppi's shelf list is the streak list (v3); v2's level list does not show.
+        ("puhelinkoppi", "main", a): {"score": 40, "version": 2},
+        ("puhelinkoppi", "putki", b): {"score": 7, "version": 3},
     }
     page = context.new_page()
     page.goto(site.url)
@@ -358,12 +361,18 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     assert page.locator('.top-score[data-top="sormiskeitti"]').inner_text() == "🏆 Aino · 64 cm"
     assert page.locator('.top-score[data-top="hiihto"]').inner_text() == "🏆 Taso 1: Aino · 1.11,5"
     assert page.locator('.top-score[data-top="voimistelu"]').is_hidden()
+    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == "🏆 Bertta · putki 7"
     assert page.locator("#ai-pelit-tulokset-nappi").count() == 0  # no chip on the shelf
 
     page.click('.card[data-slug="sormiskeitti"] .card-main')
     page.wait_for_selector(".score-list .tulos")
     rows = page.locator(".score-list .tulos").all_inner_texts()
     assert [" ".join(r.split()) for r in rows] == ["1. Aino 64 cm taso 7 v5", "2. Bertta 58 cm v5"]
+
+    page.goto(site.url + "#/puhelinkoppi")
+    page.wait_for_selector(".score-list .tulos")
+    rows = page.locator(".score-list .tulos").all_inner_texts()
+    assert [" ".join(r.split()) for r in rows] == ["1. Bertta putki 7 v3"]
 
     page.goto(site.url + "#/hiihto")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")

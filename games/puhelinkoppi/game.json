@@ -15,6 +15,13 @@
       "note": "Netin tuloslista: korkein saavutettu taso kaikilta pelaajilta, nimimerkki kerran puhelimelle.",
       "request": "Online high-score lists for each game (#25): a nickname once per phone, approved by the admin; one list per game across versions; no cheat checks.",
       "issue": "eerovil/ai-pelit#25"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-29",
+      "note": "Päämääränä pisin putki: jokaisella heitolla tehdään pyydetty temppu, ja pyöritys (suora, voltti tai kierre) valitaan napeista.",
+      "request": "Pelissä ei ole oikein määränpäätä. (Valinnat: putkiennätys, lisäksi joku control tehdä tietynlainen spin; tuloslistaksi uusi putkilista.)",
+      "issue": "eerovil/ai-pelit#9"
     }
   ]
 }

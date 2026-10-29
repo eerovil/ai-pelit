@@ -26,7 +26,8 @@
 export const GAMES = {
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
-  puhelinkoppi: { order: 'high', boards: /^main$/ }, // highest level reached
+  // v2: highest level reached ('main'); v3 on: longest streak ('putki'), the one the shelf shows.
+  puhelinkoppi: { order: 'high', boards: /^(main|putki)$/, first: 'putki' },
   hiihto: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest time per course, seconds
   piano: { order: 'high', boards: /^main$/ }, // most points in one game
 };
