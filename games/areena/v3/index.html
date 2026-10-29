@@ -358,7 +358,7 @@ document.getElementById('multi').addEventListener('click', () => {
 
 function onlineFight(s) {
   const other = s.players.find(p => p.id !== R.me) || { id: '', name: 'Kaveri' };
-  net = { host: s.host, round: s.round, other: other.id, sendT: 0, inT: 0, bot: false,
+  net = { host: s.host, round: s.round, other: other.id, sendT: 0, inT: 0, bot: false, done: false,
     gin: { mx: 0, my: 0, sword: false, bow: false, dash: false, lead: 1 }, dashN: 0, seenDash: 0, fresh: true };
   me = fighter(AW / 2, AH - 60, myFightName(), '#3d8bfd', '#1f4fa8', false);
   foe = fighter(AW / 2, 60, other.name, '#e5484d', '#8f1d22', true);
@@ -368,7 +368,12 @@ function onlineFight(s) {
   menu.classList.add('hidden');
   state = 'count'; stateT = 3.7;
 }
-R.on('start', s => { if (!s.over) { unlock(); onlineFight(s); } });
+// A round that ended while this phone was away (or reloading) comes back as over, followed by its
+// end message: set the fight up only to show that result.
+R.on('start', s => {
+  unlock(); onlineFight(s);
+  if (s.over) state = 'room';
+});
 
 // Host: the friend's latest stick and buttons. A dash is a count, so a quick tap is not lost.
 function friendInput() {
@@ -452,7 +457,9 @@ function endOnline() {
   finishOnline(m);
 }
 function finishOnline(m) {
-  if (!net || state === 'room') return;
+  if (!net || net.done) return;
+  net.done = true;
+  if (!net.host && Array.isArray(m.n)) foe.name = String(m.n[0]).slice(0, 14);
   const won = m.w === R.me;
   state = 'room';
   pad.id = null; for (const k in held) delete held[k];

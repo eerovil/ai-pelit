@@ -59,6 +59,7 @@ def two_phones(site, browser):
         page.click("#multi")
         return page
 
+    phone.relay = relay
     yield phone
     for ctx in contexts:
         ctx.close()
@@ -96,4 +97,29 @@ def test_v3_two_phones_fight_each_other_online(two_phones):
     guest.wait_for_function("state === 'room'", timeout=8000)
     assert host.locator("#aipr-result").inner_text() == "💀 Aino voitti"
     assert guest.locator("#aipr-result").inner_text() == "🏆 Aino voitti!"
+    assert host.errors == [] and guest.errors == []
+
+
+def test_v3_a_friend_away_at_the_end_gets_the_result_after_a_reload(two_phones):
+    host = two_phones("Eero")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    guest = two_phones("Aino")
+    guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-start")
+    for p in (host, guest):
+        p.wait_for_function("net && state === 'fight'", timeout=8000)
+    # The friend's phone drops off; the host lets the computer fight on, and wins.
+    two_phones.relay.drop(guest)
+    host.locator("#aipr-goOn").click(timeout=8000)
+    host.evaluate("foe.hp = 1; damage(foe, 20, me.x, me.y, 0)")
+    host.wait_for_function("state === 'room'", timeout=8000)
+    assert host.locator("#aipr-result").inner_text() == "🏆 Eero voitti!"
+    # The friend comes back by reloading the page, and still hears how the fight ended.
+    two_phones.relay.back(guest)
+    guest.reload()
+    guest.wait_for_function("document.getElementById('aipr-result')?.innerText === '💀 Eero voitti'", timeout=8000)
+    assert guest.evaluate("state") == "room"
     assert host.errors == [] and guest.errors == []
