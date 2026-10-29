@@ -51,8 +51,11 @@ class FakeApi:
             if body["player"] not in self.players:
                 return self.reply(route, {"error": "unknown player"}, 404)
             k = (body["game"], body["board"], body["player"])
-            old_level = self.scores.get(k, {}).get("level")
-            self.scores[k] = {"score": body["score"], "version": body["version"]}
+            old = self.scores.get(k)
+            old_level = (old or {}).get("level")
+            # Like the server: the best score stays (lower is better in Hiihto).
+            beats = not old or (body["score"] < old["score"] if body["game"] == "hiihto" else body["score"] > old["score"])
+            self.scores[k] = {"score": body["score"], "version": body["version"]} if beats else {"score": old["score"], "version": old["version"]}
             if body.get("level") or old_level:
                 self.scores[k]["level"] = max(body.get("level") or 0, old_level or 0)
             return self.reply(route, {"best": body["score"], "rank": 1})
@@ -355,11 +358,33 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
 
     page.goto(site.url + "#/hiihto")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
-    page.select_option(".score-list .board", "taso-2")
+    page.click(".score-list .board-next")
     page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
     assert "2 rataa läpi" in page.locator(".score-list").inner_text()
+    # A phone that has never played Hiihto can still look at any course.
+    fake.scores[("hiihto", "taso-11", a)] = {"score": 300, "version": 2, "level": 11}
+    page.fill(".score-list .board", "11")
+    page.dispatch_event(".score-list .board", "change")
+    page.wait_for_selector(".score-list .tulos:has-text('11 rataa läpi')")
 
     # Offline the cards keep the last no. 1 they saw.
     fake.online = False
     page.goto(site.url)
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
+
+
+def test_a_won_level_is_sent_even_when_the_ollie_is_no_record(site, context, fake):
+    """Sormiskeitti v5 hands over its score before it saves the next level: the level is read when sending."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.evaluate("""localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'));
+        localStorage.setItem('ai-pelit:_tulokset:lahetetyt', JSON.stringify({'sormiskeitti|main': {score: 999, level: 1}}))""")
+    page.reload()
+    won = page.evaluate(PLAY, [6, True])
+    assert won["won"] and round(won["best"] / 10) < 999
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    [row] = fake.scores.values()
+    assert row["level"] == 2
+    page.goto(site.url)  # the player leaves the game: nothing more to send
+    assert page.evaluate("localStorage.getItem('ai-pelit:_tulokset:jono')") == "{}"

@@ -77,6 +77,7 @@
   var sending = false;
   function post(path, body) {
     return fetch(API + path, {
+      keepalive: true, // still sent when the player leaves the game right after the round
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
     }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { b.httpStatus = r.status; return b; }); });
   }
@@ -104,7 +105,14 @@
       return keys.reduce(function (p, key) {
         return p.then(function (go) {
           if (!go) return false;
-          var q = queue[key];
+          var q = queue[key], lvl = levelOf(q.game) || 0, had = load(SENT, {})[key];
+          var qBetter = GAMES[q.game] && GAMES[q.game].order === 'low' ? function (a, b) { return a < b; } : function (a, b) { return a > b; };
+          if (had && !qBetter(q.score, had.score) && lvl <= (had.level || 0)) {
+            // Nothing new for the server: neither a better score nor a higher level than it has.
+            var left = load(QUEUE, {});
+            if (left[key] && left[key].score === q.score) { delete left[key]; save(QUEUE, left); }
+            return true;
+          }
           // The level as the game's save has it now: it only ever rises.
           return post('scores', { player: playerId(), game: q.game, board: q.board, version: q.version, score: q.score, level: levelOf(q.game) })
             .then(function (b) {
@@ -131,12 +139,10 @@
   function submit(score) {
     if (!GAME || typeof score !== 'number' || !isFinite(score)) return;
     var queue = load(QUEUE, {}), key = GAME + '|' + board, old = queue[key];
-    var sent = load(SENT, {})[key], lvl = levelOf(GAME) || 0;
-    // Nothing new for the server: neither a better score nor a higher level than it has.
-    var nothingNew = !old && sent && !better(score, sent.score) && lvl <= (sent.level || 0);
-    if (!nothingNew && (!old || better(score, old.score))) {
-      // A round that only raised the level is still sent: with the best score, as the server keeps that anyway.
-      queue[key] = { game: GAME, board: board, version: VERSION, score: sent && !better(score, sent.score) ? sent.score : score };
+    // Whether the round brings anything new (a better score, or a higher level) is decided when it
+    // is sent, not here: a game may save its new level only after this call (Sormiskeitti v5 does).
+    if (!old || better(score, old.score)) {
+      queue[key] = { game: GAME, board: board, version: VERSION, score: score };
       save(QUEUE, queue);
     }
     if (!load(K + 'nimi', '') && !load(K + 'kysytty', false)) {

@@ -106,16 +106,25 @@
     if (!scores || !scores.games[slug]) return null;
     var box = el('div', { class: 'scores' });
     var picker = null;
+    var course = 1;
     if (scores.games[slug].boards) {
-      var reached = 1;
-      try { reached = Number(JSON.parse(localStorage.getItem('ai-pelit:' + slug + ':taso'))) || 1; } catch (e) {}
-      picker = el('select', { class: 'board', 'aria-label': 'Rata' });
-      for (var n = 1; n <= Math.max(10, reached); n++) picker.appendChild(el('option', { value: 'taso-' + n, text: 'Taso ' + n }));
-      picker.addEventListener('change', function () { fill(); });
+      // Any course, not just the ones this phone has reached: ‹ Taso N ›, or type the number.
+      var input = el('input', { class: 'board', type: 'number', min: '1', max: '999', inputmode: 'numeric', value: '1', 'aria-label': 'Rata' });
+      var go = function (n) {
+        course = Math.min(999, Math.max(1, Math.floor(n) || 1));
+        input.value = String(course);
+        fill();
+      };
+      var prev = el('button', { type: 'button', class: 'secondary board-prev', 'aria-label': 'Edellinen rata', text: '‹' });
+      var next = el('button', { type: 'button', class: 'secondary board-next', 'aria-label': 'Seuraava rata', text: '›' });
+      prev.addEventListener('click', function () { go(course - 1); });
+      next.addEventListener('click', function () { go(course + 1); });
+      input.addEventListener('change', function () { go(Number(input.value)); });
+      picker = el('div', { class: 'board-picker' }, [el('span', { text: 'Taso ' }), prev, input, next]);
     }
     function fill() {
       box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
-      scores.list(slug, picker ? picker.value : 'main').then(function (b) {
+      scores.list(slug, picker ? 'taso-' + course : 'main').then(function (b) {
         var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
         if (b.mine && !b.rows.some(function (r) { return r.me; })) {
           if (rows.length) rows.push(el('div', { class: 'muted', text: '⋯' }));

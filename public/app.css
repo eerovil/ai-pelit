@@ -32,4 +32,5 @@ p { margin: 0 0 6px; }
 .top-score { margin: 4px 0 0; color: var(--accent); font-size: 14px; }
 .top-score:empty { display: none; }
 .score-list { margin: 0 0 16px; }
-.score-list .board { background: var(--card); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 8px; font: inherit; margin-bottom: 6px; }
+.board-picker { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.score-list .board { width: 4.5em; background: var(--card); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 8px; font: inherit; text-align: center; }

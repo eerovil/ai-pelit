@@ -290,3 +290,16 @@ test('the shelf gets every game\'s no. 1 in one request', async () => {
     hiihto: { board: 'taso-1', name: 'Aino', score: 80.5, level: 2, version: 2 },
   });
 });
+
+test('a row shows the player\'s highest level in the whole game, from any list', async () => {
+  const { call, admin } = setup();
+  await call('POST', '/api/players', { id: A, name: 'Aino' });
+  await admin(A, 'approved');
+  const post = (board, score, level) => call('POST', '/api/scores', { player: A, game: 'hiihto', board, version: 2, score, level });
+  await post('taso-1', 80, 1);
+  await post('taso-2', 95, 2); // passing course 2 must show on course 1's list without replaying it
+  const one = (await call('GET', `/api/scores?game=hiihto&board=taso-1&player=${A}`)).body;
+  assert.equal(one.rows[0].level, 2);
+  assert.equal(one.mine.level, 2);
+  assert.equal((await call('GET', '/api/scores/top')).body.games.hiihto.level, 2);
+});

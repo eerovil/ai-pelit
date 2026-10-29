@@ -161,13 +161,17 @@ async function addScore(env, body) {
   return json({ best: best.score, rank: await rankOf(env, game, board, best.score, best.at) });
 }
 
+// A row's level is the player's highest in the whole game, from any of its lists: in Hiihto,
+// passing course 2 shows on the course 1 list too, with no replay.
+const GAME_LEVEL = '(SELECT MAX(l.level) FROM scores l WHERE l.game = s.game AND l.player = s.player)';
+
 // Each game's no. 1 for the shelf cards, in one request: its 'main' list, or its first course.
 async function tops(env) {
   const games = {};
   for (const [game, g] of Object.entries(GAMES)) {
     const board = g.first || 'main';
     const r = await env.DB.prepare(
-      `SELECT p.name, s.score, s.level, s.version FROM scores s JOIN players p ON p.id = s.player
+      `SELECT p.name, s.score, ${GAME_LEVEL} AS level, s.version FROM scores s JOIN players p ON p.id = s.player
        WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
        ORDER BY s.score ${g.order === 'low' ? 'ASC' : 'DESC'}, s.at ASC LIMIT 1`
     ).bind(game, board).first();
@@ -184,7 +188,7 @@ async function list(env, url) {
   const order = GAMES[game].order === 'low' ? 'ASC' : 'DESC';
   // Player ids are each phone's secret: never sent back, only "is this row mine".
   const { results } = await env.DB.prepare(
-    `SELECT p.name, s.score, s.version, s.at, s.level, s.player = ? AS me
+    `SELECT p.name, s.score, s.version, s.at, ${GAME_LEVEL} AS level, s.player = ? AS me
      FROM scores s JOIN players p ON p.id = s.player
      WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
      ORDER BY s.score ${order}, s.at ASC LIMIT ${LIST}`
@@ -193,7 +197,7 @@ async function list(env, url) {
   let mine = null;
   if (ID.test(player)) {
     const m = await env.DB.prepare(
-      `SELECT p.name, p.status, s.score, s.level, s.version, s.at FROM scores s JOIN players p ON p.id = s.player
+      `SELECT p.name, p.status, s.score, ${GAME_LEVEL} AS level, s.version, s.at FROM scores s JOIN players p ON p.id = s.player
        WHERE s.game = ? AND s.board = ? AND s.player = ?`
     ).bind(game, board, player).first();
     if (m) {
