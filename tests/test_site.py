@@ -46,6 +46,8 @@ def test_shelf_game_page_and_back_chip(site, context):
     page.goto(site.url)
     page.wait_for_function("document.querySelector('.card[data-slug=\"pomppu\"] img.thumb')?.naturalWidth > 0")
     assert page.locator("textarea").count() == 0
+    # The round play button opens the latest version (#33, layout D).
+    assert page.get_attribute('.card[data-slug="pomppu"] a.play', "href") == "games/pomppu/v2/"
     page.click('.card[data-slug="pomppu"] .card-main')
     page.wait_for_selector(".version")
     assert page.locator(".version").count() == 2
