@@ -19,8 +19,9 @@ def test_every_real_version_loads_without_errors(site, context):
     catalog = site.build(ROOT / "games")
     page = context.new_page()
     found = errors_on(page)
-    page.goto(site.url)
     for game in catalog["games"]:
+        # Back to the shelf for each game: the loop below leaves the page on a game.
+        page.goto(site.url)
         assert page.locator(f'.card[data-slug="{game["slug"]}"]').is_visible()
         for v in game["versions"]:
             page.goto(f'{site.url}games/{game["slug"]}/v{v["n"]}/')
