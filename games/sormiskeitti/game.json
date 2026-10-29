@@ -1,0 +1,13 @@
+{
+  "title": "Sormiskeitti",
+  "description": "Vauhtia rampissa ja ollie oikeaan aikaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-27",
+      "note": "Ensimmäinen versio, tuotu sivulta eero.vilpponen.fi/sormiskeitti/.",
+      "request": "",
+      "issue": null
+    }
+  ]
+}
