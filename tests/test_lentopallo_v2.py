@@ -254,3 +254,18 @@ def test_only_the_host_says_which_game_the_room_plays(room):
         assert "Kaksi pelaa" not in info and "Pelataan" not in info
     assert "Pelataan 2 vs 2." in host.locator("#aipr-info").inner_text()
     assert host.errors == aino.errors == iida.errors == []
+
+
+def test_a_defender_at_the_net_can_play_a_spike_at_once(site, context):
+    page = alone(site, context)
+    page.evaluate(PLAYING)
+    page.evaluate("""() => {
+      const foe = players[1]; foe.kind = 'shown'; foe.x = 0.6; foe.cd = 0;
+      touchSide = -1; touches = 2; last = mine; mine.x = -0.3; mine.y = 1.0;
+      Object.assign(ball, { x: -0.25, y: 3.2, vx: 0, vy: 0, cd: 0 });
+      mine.intent = 'set'; hit(mine);
+      // A fast ball straight at the defender, just over the net, well within 0.2 s of the spike.
+      Object.assign(ball, { x: 0.3, y: 2.0, vx: 6, vy: -4 });
+      for (let i = 0; i < 8; i++) stepBall(1 / 240, true);
+    }""")
+    assert page.evaluate("[players[1].hits, last === players[1]]") == [1, True]

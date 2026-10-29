@@ -203,7 +203,7 @@ const clears = (x0, y0, v) => { const h = heightAtNet(x0, y0, v); return h === n
 function hit(p) {
   const fwd = -p.side;
   if (touchSide !== p.side) { touchSide = p.side; touches = 0; }
-  touches++; last = p; p.cd = 0.28; p.arms = 0.3; p.hits++; ball.cd = 0.2;
+  touches++; last = p; p.cd = 0.28; p.arms = 0.3; p.hits++; ball.cd = 0.2; ball.cdSide = p.side;
   if (touches > 3) { pointTo(1 - team(p), 'Neljä kosketusta!'); return; }
   const air = p.y > 0.05, high = ball.y > p.y + REACH - 0.3;
   // A ball off the middle of the hands goes a little wrong.
@@ -413,10 +413,13 @@ function stepBall(dt, rules) {
   }
   if (state === 'play') {
     // A tossed serve can only be hit on its way down.
-    // One touch at a time: after a touch nobody, a teammate on the same spot included, can play
-    // the ball until it is on its way (ball.cd).
+    // One touch at a time: after a touch the same team, a teammate on the same spot included, can
+    // not play the ball again until it is on its way (ball.cd). The other team can at once.
     ball.cd = Math.max(0, (ball.cd || 0) - dt);
-    if (!ball.cd) for (const p of players) if (touching(p) && !(last === null && ball.vy > 0)) { hit(p); break; }
+    for (const p of players) {
+      if (ball.cd && p.side === ball.cdSide) continue;
+      if (touching(p) && !(last === null && ball.vy > 0)) { hit(p); break; }
+    }
     if (state !== 'play') return;
   }
   if (ball.y <= BR) {
