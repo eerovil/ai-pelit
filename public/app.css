@@ -1,0 +1,31 @@
+:root {
+  color-scheme: dark;
+  --bg: #1b1e2b;
+  --card: #262a3b;
+  --text: #f2f3f7;
+  --muted: #a5a9bd;
+  --accent: #ffb703;
+  --accent-text: #1b1e2b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, sans-serif; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+a { color: inherit; }
+.top { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; }
+.brand { font-weight: 800; font-size: 22px; text-decoration: none; }
+.status { font-size: 13px; color: var(--muted); }
+main { padding: 8px 16px 32px; max-width: 640px; margin: 0 auto; }
+h1 { margin: 8px 0 4px; font-size: 26px; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+p { margin: 0 0 6px; }
+.muted { color: var(--muted); font-size: 14px; }
+.cards, .versions { list-style: none; padding: 0; margin: 0 0 24px; }
+.card, .version { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+.card-main { flex: 1; text-decoration: none; min-width: 0; }
+.version > div { flex: 1; min-width: 0; }
+.button { display: inline-block; background: var(--accent); color: var(--accent-text); font-weight: 700; text-decoration: none; padding: 10px 16px; border-radius: 10px; border: 0; font-size: 16px; }
+.button.secondary, button.secondary { background: transparent; color: var(--text); border: 1px solid var(--muted); padding: 8px 14px; border-radius: 10px; font-size: 15px; }
+.button.big { display: block; text-align: center; margin: 12px 0 20px; padding: 14px; font-size: 18px; }
+.back { display: inline-block; color: var(--muted); text-decoration: none; margin: 4px 0; }
+.copy { border-top: 1px solid #3a3f55; padding-top: 16px; margin-top: 8px; }
+.copy textarea { width: 100%; background: var(--card); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 10px; font: inherit; margin: 6px 0; resize: none; }
