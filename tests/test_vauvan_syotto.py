@@ -10,10 +10,12 @@ DRAG = """([px, py]) => {
   down(G.bowl.x, G.bowl.y); move(px, py + TIP); up(px, py + TIP);
 }"""
 
-# Feeds one spoonful as soon as the mouth opens, with a happy baby that never spits.
+# Feeds one spoonful as soon as the mouth opens, with a happy baby that never spits. It waits for
+# the spoon to be back in the bowl too: the live game loop runs between two calls, and a mouth
+# still open from the last spoonful would otherwise get a spoon that is not in the hand.
 FEED = """() => {
   mood = 100;
-  for (let i = 0; i < 2000 && !(baby.act === 'open' && baby.mouth > 0.8); i++) step(0.02);
+  for (let i = 0; i < 2000 && !(spoon.where === 'bowl' && baby.act === 'open' && baby.mouth > 0.8); i++) step(0.02);
   const m = mouthPos();
   down(G.bowl.x, G.bowl.y); move(m.x, m.y + TIP); up(m.x, m.y + TIP);
 }"""
