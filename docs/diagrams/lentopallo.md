@@ -10,7 +10,7 @@ is doing at that moment.
 flowchart TD
   S{Miten pelataan?}
   S -- 1 vs 1 tai 2 vs 2 yksin --> S1[Tietokone pelaa muut, 2 vs 2:ssa myös joukkuekaverin]
-  S -- Kavereiden kanssa --> S2[Huone: 2 puhelinta 1 vs 1, 3–4 puhelinta 2 vs 2, tyhjät paikat tietokoneelle]
+  S -- Kavereiden kanssa --> S2[Huone: 2 puhelinta pelaa tekijän valinnan, 1 vs 1 tai 2 vs 2; 3–4 puhelinta 2 vs 2; tyhjät paikat tietokoneelle]
   S2 --> S3[Huoneen tekijä pyörittää ottelua, muut lähettävät oman pelaajansa paikan]
   S3 --> S4[Jokainen näkee oman joukkueensa vasemmalla]
   S1 --> A
@@ -69,7 +69,7 @@ flowchart TD
 
 - **Miten pelataan?**: v2's menu in `games/lentopallo/v2/index.html`: pick **1 vs 1** or **2 vs 2** first (`pickMode()`, kept in `ai-pelit:lentopallo:muoto`), then **Pelaa yksin** (`newMatch()`) or **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`; the room screen says which it will be, `roomNote()`). v1 has only the 1 vs 1 match.
 - **Tietokone pelaa muut, 2 vs 2:ssa myös joukkuekaverin**: the computer's players run `cpuThink()`; the teammate Tiina plays at least as well as level 3.
-- **Huone: 2 puhelinta 1 vs 1, 3–4 puhelinta 2 vs 2, tyhjät paikat tietokoneelle**: `setupFor()` on the host: phones take turns left and right in room order; two phones play what the host picked in the menu, three or four always 2 vs 2. The host sends it as `setup`, and again to a phone that comes back (`on('hello')`).
+- **Huone: 2 puhelinta pelaa tekijän valinnan, 1 vs 1 tai 2 vs 2; 3–4 puhelinta 2 vs 2; tyhjät paikat tietokoneelle**: `setupFor()` on the host: phones take turns left and right in room order; two phones play what the host picked in the menu, three or four always 2 vs 2. The room screen says so on the host's phone, and on the others that the host decides (`roomNote()`). The host sends it as `setup`, and again to a phone that comes back (`on('hello')`).
 - **Huoneen tekijä pyörittää ottelua, muut lähettävät oman pelaajansa paikan**: the host runs the rules, the ball and the computer's players, and sends `s` 20 times a second (`snapshot()`); a guest moves its own player at once and sends `p` (where it is, and whether it runs toward the net) and `toss` (`guestUpdate()`), and draws the rest from `applySnapshot()`. A phone let go with "Jatka ilman heitä" is played by the computer (`on('continue')`).
 - **Jokainen näkee oman joukkueensa vasemmalla**: `view` mirrors the drawing on a phone of the right-hand team; ◀ ▶ stay as seen on the screen (`steer()`).
 - **Lähempi ottaa ensimmäisen, toinen seuraavan, toinen kosketus nostaa kaverille**: `myBall()`: in 2 vs 2 the computer player nearer the ball takes the first touch and leaves the next to its teammate, stepping out from under it; a person teammate is trusted with a ball clearly theirs. The second touch sets toward where the teammate stands (`hit()`). After any touch the ball cannot be played for 0.2 s (`ball.cd` in `stepBall()`), so teammates on the same spot touch it once, not twice.

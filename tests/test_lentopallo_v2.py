@@ -94,7 +94,7 @@ def room(site, browser):
     relay = Relay()
     contexts = []
 
-    def phone(name):
+    def phone(name, query=""):
         ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
         ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
@@ -102,7 +102,7 @@ def room(site, browser):
         page.errors = []
         page.on("pageerror", lambda e: page.errors.append(str(e)))
         relay.attach(page)
-        page.goto(site.url + URL)
+        page.goto(site.url + URL + query)
         return page
 
     def play(*names, mode="1v1"):
@@ -127,6 +127,7 @@ def room(site, browser):
         return host, guests
 
     play.relay = relay
+    play.phone = phone
     yield play
     for ctx in contexts:
         ctx.close()
@@ -229,3 +230,27 @@ def test_teammates_on_the_same_spot_touch_the_ball_once(site, context):
       for (let i = 0; i < 12; i++) stepBall(1 / 240, true);
     }""")
     assert page.evaluate("[touches, players[0].hits + players[2].hits]") == [1, 1]
+
+
+def test_only_the_host_says_which_game_the_room_plays(room):
+    host = room.phone("Eero")
+    host.click("#m2")
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    # Aino last played 1 vs 1 alone; Iida joins by the QR link.
+    aino = room.phone("Aino")
+    aino.click("#m1")
+    aino.click("#multi")
+    aino.fill("#aipr-codeIn", code)
+    aino.click("#aipr-joinBtn")
+    iida = room.phone("Iida", f"?huone={code}")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 3")
+    for g in (aino, iida):
+        g.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 3")
+        info = g.locator("#aipr-info").inner_text()
+        assert "Huoneen tekijä valitsee, pelataanko 1 vs 1 vai 2 vs 2." in info
+        assert "Kaksi pelaa" not in info and "Pelataan" not in info
+    assert "Pelataan 2 vs 2." in host.locator("#aipr-info").inner_text()
+    assert host.errors == aino.errors == iida.errors == []

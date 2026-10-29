@@ -800,14 +800,17 @@ function pickMode(m) {
   document.getElementById('m1').classList.toggle('on', m === '1v1');
   document.getElementById('m2').classList.toggle('on', m === '2v2');
 }
+// The room's maker decides 1 vs 1 or 2 vs 2; the other phones only hear that it is theirs to say.
 function roomNote() {
-  R.note(mode === '2v2' ? 'Pelataan 2 vs 2. Tyhjät paikat pelaa tietokone.' : 'Kaksi pelaa 1 vs 1, kolme tai neljä 2 vs 2.');
+  if (!R.inRoom) return;
+  if (!R.isHost) R.note('Huoneen tekijä valitsee, pelataanko 1 vs 1 vai 2 vs 2.');
+  else R.note(mode === '2v2' ? 'Pelataan 2 vs 2. Tyhjät paikat pelaa tietokone.' : 'Kaksi pelaa 1 vs 1, kolme tai neljä 2 vs 2.');
 }
 document.getElementById('m1').addEventListener('click', () => pickMode('1v1'));
 document.getElementById('m2').addEventListener('click', () => pickMode('2v2'));
 document.getElementById('go').addEventListener('click', () => { unlock(); newMatch(mode); });
 document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); roomNote(); });
-R.on('peers', () => { if (R.isHost) roomNote(); });
+R.on('peers', roomNote);
 showMenu();
 requestAnimationFrame(loop);
 </script>
