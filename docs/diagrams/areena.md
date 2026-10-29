@@ -42,7 +42,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: anna hahmolle nimi**: the `#menu` overlay in `games/areena/v1/index.html`; the name is saved as `ai-pelit:areena:nimi` and drawn over the fighter and on its health bar.
+- **Valikko: anna hahmolle nimi**: the `#menu` overlay in `games/areena/v1/index.html` and `games/areena/v2/index.html` (v2 is the same game with an easier opponent); the name is saved as `ai-pelit:areena:nimi` and drawn over the fighter and on its health bar.
 - **Lyönti lähelle 16-20**: `act()` starts a swing; it connects halfway through if the opponent is within reach. Holding the button keeps swinging.
 - **Nuoli kohti vastustajaa 8-10**: aims where the opponent will be when the arrow arrives; five arrows, one back every 1.4 s. Pillars stop arrows.
 - **Syöksy: hetken osumaton**: 0.2 s dash in the stick's direction (or away from the opponent) during which nothing hits.
