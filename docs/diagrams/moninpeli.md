@@ -1,75 +1,82 @@
 # Moninpeli: playing with friends in one room
 
-How 2–5 phones play one game together (#27, first in Kirkkis v2). One phone makes a room and runs
-the game: the computer players, the rules and the clock. Every phone moves its own player and
-draws the game through its own player's eyes. The room on Cloudflare only passes messages between
-the phones. When a phone drops off, the round waits for it.
+How 2–8 phones play one game together. One phone makes a room and runs the game; every phone
+moves its own player and draws the game from its own side. The room on Cloudflare only passes
+messages between the phones. Everything a game needs for a room is one shared script,
+`public/rooms.js` (#34): the room screen, reconnecting, the pause for a phone that dropped off, and
+saving a round's result once. A game writes only its own part. Kirkkis v2 (#27), the first such
+game, has its own copy of the same flow, from before the library; each box says where.
 
 ```mermaid
 flowchart TD
-  subgraph Huoneen tekijän puhelin
-    A[Luo huone] --> B[Koodi ja QR-koodi näkyvät]
-    G[Aloita kierros] --> H[Kierros pyörii tässä puhelimessa: tietokonepelaajat, säännöt, kello]
-    H --> I[Tilanne kaikille 12 kertaa sekunnissa]
-    P{Onko joku kierroksen puhelin poissa?}
-    P -- Kyllä --> Q[Kierros odottaa]
-    Q --> R{Jatka ilman heitä?}
-    R -- Kyllä --> S[Tietokone ohjaa poissaolevaa]
-    R -- Ei --> P
-    P -- Ei --> H
-    S --> H
+  subgraph Peli[Pelin oma koodi]
+    G1[👥 Pelaa kavereiden kanssa] --> L1
+    G2[Kierros alkaa: isäntä pyörittää peliä] --> G3[Isäntä lähettää tilanteen monta kertaa sekunnissa]
+    G6[Oma sormi liikuttaa omaa pelaajaa, sijainti isännälle]
+    G4[Piirtää pelin oman pelaajan silmin]
+    G5[Kierros päättyy: tulos kaikille, myös poissa olleille]
+    G7[Tietokone ohjaa poissaolevaa]
+  end
+  subgraph Lib[rooms.js: yhteinen kaikille peleille]
+    L1[Huoneruutu: Luo huone tai Liity koodilla] --> L2[Koodi ja QR-koodi, pelaajalista]
+    L2 --> L3[Aloita kierros]
+    L4[Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen]
+    L5{Onko joku kierroksen puhelin poissa?}
+    L5 -- Kyllä --> L6[⏸ Odotetaan, isännällä Jatka ilman heitä]
+    L7[Tallenna tulos kerran per kierros]
+    L8{Väärä peli tai versio?}
+    L8 -- Kyllä --> L9[Avaa oikean pelin version]
   end
   subgraph Cloudflare
-    C[Huone: Durable Object koodia kohti]
+    C1[Huone: välittää viestit, muistaa pelin ja version]
   end
-  subgraph Kaverin puhelin
-    D[Liity koodilla tai QR-linkillä] --> E[Huoneen pelaajalista]
-    J[Oma sormi liikuttaa omaa pelaajaa] --> K[Oma sijainti 10 kertaa sekunnissa]
-    L[Piirtää pihan oman pelaajan silmin]
-  end
-  B --> C
-  D --> C
-  C --> E
-  E --> G
-  I --> C
-  C --> L
-  K --> C
-  C --> H
-  H --> P
-  H --> T[Kierros päättyy: jokainen puhelin tallentaa oman tilastonsa]
-  T --> G
-  class A,D,B,E blue
-  class C violet
-  class G,H,I,T teal
-  class J,K,L green
-  class P,R amber
-  class Q,S rose
+  L1 --> C1
+  C1 --> L8
+  L8 -- Ei --> L2
+  L3 --> G2
+  G3 --> C1
+  G6 --> C1
+  C1 --> G4
+  C1 --> L4
+  L4 --> G2
+  C1 --> L5
+  L5 -- Ei --> G2
+  L6 --> G7
+  G7 --> G2
+  G2 --> G5
+  G5 --> L7
+  L7 --> L2
+  class G1,G2,G3,G4,G5,G6 teal
+  class L1,L2,L3,L4,L7,L9 blue
+  class C1 violet
+  class L5,L8 amber
+  class L6,G7 rose
 ```
 
 ## Colours
 
-- **blue**: making and joining a room
-- **violet**: the room on Cloudflare, which only passes messages on
-- **teal**: the round, run on the phone that made the room
-- **green**: a friend's phone playing its own player
+- **teal**: the game's own code, the only part a new multiplayer game writes
+- **blue**: the shared `public/rooms.js`, the same for every game
+- **violet**: the room on Cloudflare (`rooms/worker.js`), which only passes messages on
 - **amber**: a check that decides the path
 - **rose**: a phone that dropped off
 
 ## Boxes
 
-- **Luo huone**: `games/kirkkis/v2/index.html` `enterRoom(newCode(), true)`: a random 4-letter code (no I, O, Q, W, X, Z); a code already in use gets a new one.
-- **Koodi ja QR-koodi näkyvät**: `renderNet()` and `drawQR()`; `qrMatrix()` draws the join link `…/games/kirkkis/v2/?huone=<KOODI>` as a QR code in the page itself, with no library.
-- **Huone: Durable Object koodia kohti**: `rooms/worker.js` `Room`, in the `ai-pelit-rooms` Worker, reached at `/api/rooms/<KOODI>` through `server/api.js` (`ROOMS` binding). Each phone connects with its own secret key; the room tells it alone its public id (a hash of the key, `{t: 'you'}`), so nobody can take another phone's place, the host's included, by copying an id. Up to 5 phones; the host's messages go to all (or to `to`), the others' to the host with `from`. It tells everyone who is in and who is connected (`peers`). An empty room is forgotten after 6 hours.
-- **Liity koodilla tai QR-linkillä**: typing the code, or opening the QR link, which joins at once. A reload goes back to the same room (`sessionStorage`).
-- **Huoneen pelaajalista**: who is in, the host with 👑; someone without a connection is greyed out.
-- **Aloita kierros**: needs 2 connected phones. The cast is the phones in the room plus computer players up to 5; the first seeker is a random phone, then the first one caught (`startMulti()`).
-- **Kierros pyörii tässä puhelimessa: tietokonepelaajat, säännöt, kello**: the same `step()`, `rules()` and bots as alone. The other phones' players stand where those phones last said.
-- **Tilanne kaikille 12 kertaa sekunnissa**: `hostSend()`: everyone's place, facing and state, the clock, and what happened (`happen()`: seen, saved, caught), which each phone tells from its own side.
-- **Oma sijainti 10 kertaa sekunnissa**: `guestStep()` moves this phone's player at once, and sends where it is; the others glide to where the host last saw them.
-- **Piirtää pihan oman pelaajan silmin**: `draw()` with this phone's `player`: the fog is cut by that player's own field of view.
-- **Onko joku kierroksen puhelin poissa?**: `paused()`: a phone in the round whose connection is gone, or the host's own connection.
-- **Kierros odottaa**: the clock and everyone stop; each phone shows who is being waited for.
-- **Jatka ilman heitä?**: only the host's phone shows this button.
-- **Tietokone ohjaa poissaolevaa**: `toBot()`. When that phone comes back, it takes its player back and gets the round as it is (`snapshot()`).
-- **Liity koodilla tai QR-linkillä** (again): on every connection a guest says `hello` to the host (`hostHello()`), so a phone in the round gets it back even when its new socket replaced the old one without it ever showing as gone (a reload, a second tab).
-- **Kierros päättyy: jokainen puhelin tallentaa oman tilastonsa**: `roundOver()` on every phone, into `ai-pelit:kirkkis:tilasto` as in v1, once per round (`guestFinish()` keeps the last saved round id in `sessionStorage`). A phone away at the end gets the finished round when it says hello, even after the host is back in the room or has started more rounds (`net.owed`, kept on the host's page); everyone goes back to the room on its own, keeping its result. The host sends `lobby` only when it comes back without its round (a reload), which sends everyone back to the room; a phone that was away then gets `lobby` in answer to its hello.
+- **👥 Pelaa kavereiden kanssa**: the game's own menu button; it calls `AiPelitRooms.open()`. The game loads `<script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5">` before its own script.
+- **Huoneruutu: Luo huone tai Liity koodilla**: `public/rooms.js` `build()` and `render()`, in Finnish, the same in every game. A new room gets a random 4-letter code (no I, O, Q, W, X, Z); a code in use gets another. The name is the phone's one nickname (`ai-pelit:_pelaaja:nimi`, shared with the high-score lists), or an animal name kept in `ai-pelit:_huone:nimi`. Kirkkis v2: `enterRoom()`, `renderNet()`.
+- **Koodi ja QR-koodi, pelaajalista**: the code, a QR code of `<version>/?huone=<KOODI>` drawn in the page (`qrMatrix()`), and who is in, the host with 👑, someone without a connection greyed out. A QR link joins at once.
+- **Aloita kierros**: host only, once `data-min` phones are connected. Sends `_start` with the round id and players, and fires the game's `on('start')` on every phone. Kirkkis v2: `startMulti()`.
+- **Kierros alkaa: isäntä pyörittää peliä**: the game's `on('start')`. The host runs the rules and the clock, and stops the clock while `AiPelitRooms.paused`.
+- **Isäntä lähettää tilanteen monta kertaa sekunnissa**: the game's `AiPelitRooms.send()`. A phone that joined after the round began hears none of it (`net.listening` in `onMessage()`), and waits for the next round. Kirkkis v2: `hostSend()`, 12 times a second.
+- **Oma sormi liikuttaa omaa pelaajaa, sijainti isännälle**: a guest moves its own player at once and sends where it is (`send()`); the host hears it in `on('message', (msg, from))`. Kirkkis v2: `guestStep()`.
+- **Piirtää pelin oman pelaajan silmin**: the game's drawing, from this phone's player. Kirkkis v2: `draw()` with the fog cut by that player's field of view.
+- **Huone: välittää viestit, muistaa pelin ja version**: `rooms/worker.js` `Room`, in the `ai-pelit-rooms` Worker, at `/api/rooms/<KOODI>` through `server/api.js` (`ROOMS` binding). Each phone connects with a secret key and is known by a hash of it, so nobody can take another phone's place. The host's messages go to all (or `to`), the others' to the host with `from`; `peers` says who is in and connected. It keeps the host's `game`, `v` and `max` (2–8, default 5) and sends `game` and `v` in `peers`. An empty room is forgotten after 6 hours.
+- **Väärä peli tai versio?**: `onPeers()` on a guest's first `peers`: the room's `game` and `v` against the page's own. A room that names no game (made by Kirkkis v2, from before the library) is left at once with "Huone on toisessa pelissä."
+- **Avaa oikean pelin version**: the guest moves to `../../<game>/v<v>/?huone=<KOODI>`, which joins the room there.
+- **Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen**: `connect()` retries with a growing wait; the room this tab is in is kept in `sessionStorage` (`ai-pelit:_huone:nyt`). On every connection a guest says `hello`; the host sends a phone in the round `_start` again and fires `on('hello')`, so the game sends the round as it is. A host that comes back without its round (a reload) sends `_lobby`, and everyone goes back to the room. Kirkkis v2: `hostHello()`.
+- **Onko joku kierroksen puhelin poissa?**: `waitingFor()`: a phone in the round with no connection, unless the computer took it; on a guest also the host, or its own connection. The host sends the names (`_pz`).
+- **⏸ Odotetaan, isännällä Jatka ilman heitä**: `renderPause()`: every phone shows who is being waited for; only the host has the button (`goOn()`).
+- **Tietokone ohjaa poissaolevaa**: the game's `on('continue', ids)`; `on('back', id)` when that phone returns. Someone who leaves the room for good is handed over the same way. Kirkkis v2: `toBot()`.
+- **Kierros päättyy: tulos kaikille, myös poissa olleille**: the host's `deliver(msg)` sends the end to every phone in the round and to no other. Each phone confirms it (`_got`); until then the host keeps it, and sends it again on that phone's `hello`, after that round's `_start` (so a reloaded page knows the round). A page that reloads just as the round ends, seen as connected before its hello, gets it that way. Then `endRound()`. Kirkkis v2: `end()` and `net.owed`.
+- **Tallenna tulos kerran per kierros**: the game saves only when `AiPelitRooms.once(round)` is true (kept per tab in `ai-pelit:_huone:kierros`), then `backToRoom(text)` shows the room with the result. Kirkkis v2: `guestFinish()`, into `ai-pelit:kirkkis:tilasto`.

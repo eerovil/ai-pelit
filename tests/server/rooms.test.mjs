@@ -18,7 +18,7 @@ globalThis.WebSocketPair = class {
 // Node's Response refuses status 101; Cloudflare's takes it with the client end of the socket.
 globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket; } };
 
-const { Room, MAX_PLAYERS, IDLE, publicId } = await import('../../rooms/worker.js');
+const { Room, MAX_PLAYERS, MOST_PLAYERS, IDLE, publicId } = await import('../../rooms/worker.js');
 const { handle } = await import('../../server/api.js');
 
 function fakeCtx() {
@@ -50,8 +50,8 @@ const id = async (c) => { const k = key(c), i = await publicId(k); keyOf[i] = k;
 function setup() {
   const ctx = fakeCtx(), room = new Room(ctx, {});
   // Joins and returns the server end of the socket (what the room sees); `.client` is the phone's.
-  const join = async (who, name, host = false, code = 'KISA') => {
-    const q = new URLSearchParams({ key: keyOf[who], name });
+  const join = async (who, name, host = false, code = 'KISA', extra = {}) => {
+    const q = new URLSearchParams({ key: keyOf[who], name, ...extra });
     if (host) q.set('host', '1');
     const res = await room.fetch(new Request(`https://pelit.test/api/rooms/${code}?${q}`, { headers: { upgrade: 'websocket' } }));
     assert.equal(res.status, 101);
@@ -167,6 +167,29 @@ test('leaving with bye frees the place; a code in use is refused to another host
   await room.webSocketClose(fresh.server);
   await room.alarm();
   assert.equal(ctx.store.size, 0);
+});
+
+test('the host says its game, version and size: kept, and told in peers', async () => {
+  const { join } = setup();
+  const h = await join(H, 'Eero', true, 'KISA', { game: 'pallo', v: '3', max: '20' });
+  // A guest's own game is not the room's: it hears the room's and moves there (public/rooms.js).
+  const a = await join(A, 'Aino', false, 'KISA', { game: 'muu', v: '1', max: '2' });
+  assert.deepEqual(a.server.last('peers'), {
+    t: 'peers', host: H, game: 'pallo', v: 3,
+    members: [{ id: H, name: 'Eero', on: true }, { id: A, name: 'Aino', on: true }],
+  });
+  // `max` is capped at MOST_PLAYERS.
+  for (let i = 0; i < MOST_PLAYERS - 2; i++) assert.equal((await join(await id(String(i)), `P${i}`)).refused, null);
+  assert.equal((await join(await id('9'), 'Liikaa')).client.closed.code, 4001);
+  assert.equal(h.server.last('peers').members.length, MOST_PLAYERS);
+});
+
+test('a room whose host says nothing of its game works as before', async () => {
+  const { join } = setup();
+  const h = await join(H, 'Eero', true, 'KISA', { game: 'Ei Kelpaa!', v: '0', max: '1' });
+  assert.deepEqual(h.server.last('peers'), { t: 'peers', host: H, members: [{ id: H, name: 'Eero', on: true }] });
+  for (const c of 'bcde') await join(await id(c), c);
+  assert.equal((await join(await id('f'), 'f')).client.closed.code, 4001); // the default 5
 });
 
 test('bad codes, ids and names are refused before the room', async () => {
