@@ -11,12 +11,18 @@ player sees is Finnish unless the request says otherwise.
   `games/<slug>/v1/index.html` and `games/<slug>/game.json`.
 - "<Peli> v<N> (<slug>): …" — a new version. Copy `games/<slug>/v<N-1>/` to `games/<slug>/v<N>/`
   and change the copy. Append the version to `game.json`.
+- Either way, take the game's picture for the shelf (#33): during your mid-play check at
+  360 × 740, save a screenshot of a moment that shows the game well and run
+  `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
+  A new game needs one (the build refuses a game without it); retake it in a new version when the
+  game looks different.
 
 ## Rules
 
 1. **A published version never changes.** Never edit, move or delete a `games/<slug>/v<N>/` folder
    or its `game.json` entry once it is on `main`; a fix is a new version. CI runs
-   `scripts/check_immutable.py` and fails a pull request that does.
+   `scripts/check_immutable.py` and fails a pull request that does. `games/<slug>/thumb.webp`
+   is outside the version folders and may be retaken.
 2. **One folder per version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an
@@ -44,10 +50,14 @@ high-score lists (#25), then play counts (#26).
 
 - **High scores.** A version opts in with
   `<script src="../../../scores.js" data-game="<slug>" data-order="high|low" data-corner="bottom-right"></script>`
-  and calls `AiPelitScores.submit(score)` when a round ends; `AiPelitScores.format(fn)` shows a
-  score, `AiPelitScores.board(id, label)` picks a per-course list. The game must also be in
-  `GAMES` in `server/api.js` (which way is better). Scores wait on the phone while offline.
-  Nicknames are one per phone, and show on lists only once approved at `/yllapito/`.
+  and calls `AiPelitScores.submit(score)` when a round ends; `AiPelitScores.board(id, label)`
+  picks a per-course list. Everything else about a game's list lives outside the game, so a
+  change to it needs no new version: `GAMES` in `public/scores.js` (how a score reads, and
+  where the game saves its level, which is sent with each score and shown beside it) and
+  `GAMES` in `server/api.js` (which way is better, which lists). Scores wait on the phone while
+  offline, and a round that beats neither the score nor the level is not sent. The shelf shows
+  each game's no. 1 on its card and its top 10 on its page (`data-shelf`). Nicknames are one
+  per phone, and show on lists only once approved at `/yllapito/`.
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
@@ -95,6 +105,7 @@ high-score lists (#25), then play counts (#26).
   `python3 scripts/check_immutable.py origin/main`.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
+- `games/<slug>/thumb.webp` shows the current version mid-play.
 - The use-case walkthrough is: open the shelf, open the game, play one round, go back.
 
 ## Running it locally
