@@ -353,6 +353,26 @@ def test_a_phone_reloaded_while_away_hears_the_round_before_its_end(phones):
     assert host.errors == guest.errors == third.errors == []
 
 
+def test_a_phone_that_joins_mid_round_hears_none_of_it(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    start(host, [guest])
+    late = join(phones, "Onni", code)
+    late.wait_for_function("document.getElementById('aipr-info').textContent === 'Kierros on käynnissä – pääset mukaan seuraavaan.'")
+    host.wait_for_timeout(400)  # the host keeps sending the round to everyone
+    host.evaluate("end()")
+    guest.wait_for_function("demo.results.length === 1")
+    late.wait_for_timeout(400)
+    assert late.evaluate("demo.heard") == []
+    assert late.evaluate("[demo.results.length, demo.phase]") == [0, "menu"]
+    # The next round is everyone's.
+    start(host, [guest, late])
+    late.wait_for_function("demo.heard.includes('s')")
+    host.evaluate("end()")
+    late.wait_for_function("demo.results.length === 1")
+    assert host.errors == guest.errors == late.errors == []
+
+
 def test_a_result_heard_twice_counts_once(phones):
     host, code = make_room(phones)
     guest = join(phones, "Aino", code)

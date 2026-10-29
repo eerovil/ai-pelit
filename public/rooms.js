@@ -58,7 +58,7 @@
 
   var net = {
     on: false, host: false, code: '', ws: null, connected: false, joined: false, tries: 0, timer: 0,
-    me: '', hostId: '', members: [], online: {}, wait: false, error: '', result: '', resultClass: '', note: '',
+    me: '', hostId: '', members: [], online: {}, wait: false, listening: false, error: '', result: '', resultClass: '', note: '',
     // The round as this phone knows it: {id, players: [{id, name}], over}. Kept after it ends, so
     // a phone that was away gets it back.
     round: null, released: {}, owed: {}, pz: [], played: false,
@@ -131,7 +131,9 @@
   function onMessage(m) {
     // Every new connection: the room says who this phone is, and a guest says hello to the host,
     // which sends the round back if this phone is in it (after a reload or a dropped connection).
-    if (m.t === 'you') { net.me = m.id; if (net.host) net.hostId = m.id; else sendRaw({ t: 'hello' }); return; }
+    // Until the host answers, a guest does not know whether it is in the round, so it hears none
+    // of the game's messages: a phone that is not in the round never sees the round's messages.
+    if (m.t === 'you') { net.me = m.id; if (net.host) net.hostId = m.id; else { net.listening = false; sendRaw({ t: 'hello' }); } return; }
     if (m.t === 'peers') return onPeers(m);
     if (net.host) {
       if (m.t === 'hello') return onHello(m.from);
@@ -140,14 +142,14 @@
     }
     if (m.t === '_start') return onStart(m);
     if (m.t === '_lobby') {
-      net.wait = false;
+      net.wait = false; net.listening = false;
       if (net.round) { net.round = null; net.pz = []; net.result = ''; fire('lobby'); show(true); }
       return render();
     }
-    if (m.t === '_wait') { net.wait = true; return render(); }
+    if (m.t === '_wait') { net.wait = true; net.listening = false; return render(); }
     if (m.t === '_pz') { net.pz = Array.isArray(m.names) ? m.names : []; return update(); }
     if (m.t === '_close') return leave('Huone suljettiin.');
-    if (m.t && m.t.charAt(0) !== '_') fire('message', m, net.hostId);
+    if (net.listening && m.t && m.t.charAt(0) !== '_') fire('message', m, net.hostId);
   }
 
   function onPeers(m) {
@@ -227,7 +229,13 @@
 
   // ---- On a guest ----
   function onStart(m) {
-    if (!Array.isArray(m.players) || !m.players.some(function (p) { return p.id === net.me; })) return;
+    if (!Array.isArray(m.players)) return;
+    if (!m.players.some(function (p) { return p.id === net.me; })) {
+      // A round without this phone (it joined too late): it waits for the next one.
+      if (!m.over) { net.wait = true; net.listening = false; render(); }
+      return;
+    }
+    net.listening = true;
     var same = net.round && net.round.id === m.round;
     net.round = { id: String(m.round), players: m.players, over: !!m.over };
     net.wait = false;
@@ -542,13 +550,13 @@
     leave: function () { if (net.on) leave(); else if (shown) { show(false); fire('menu'); } },
     // Host: to every other phone, or to one id. A guest: to the host.
     send: function (msg, to) { var m = Object.assign({}, msg); if (to && net.host) m.to = to; sendRaw(m); },
-    // Host: to every phone in the round; a phone away now gets it when it is back.
+    // Host: to every phone in the round, and only to them; a phone away now gets it when it is back.
     deliver: function (msg) {
       if (!net.host || !net.round) return;
-      sendRaw(msg);
       net.round.players.forEach(function (p) {
-        if (p.id === net.me || net.online[p.id]) return;
-        (net.owed[p.id] = net.owed[p.id] || []).push({ round: net.round.id, players: net.round.players, msg: msg });
+        if (p.id === net.me) return;
+        if (net.online[p.id]) sendRaw(Object.assign({}, msg, { to: p.id }));
+        else (net.owed[p.id] = net.owed[p.id] || []).push({ round: net.round.id, players: net.round.players, msg: msg });
       });
     },
     // Host: the round is over. Phones in it that come back later still get it (as over).

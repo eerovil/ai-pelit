@@ -14,7 +14,7 @@
 <script>
 'use strict';
 const R = window.AiPelitRooms;
-const demo = window.demo = { phase: 'menu', round: '', players: [], dots: {}, clock: 0, results: [], log: [], bots: [] };
+const demo = window.demo = { phase: 'menu', round: '', players: [], dots: {}, clock: 0, results: [], log: [], bots: [], heard: [] };
 const menu = document.getElementById('menu');
 document.getElementById('multi').addEventListener('click', () => R.open());
 
@@ -28,6 +28,7 @@ R.on('start', s => {
   menu.classList.add('hidden');
 });
 R.on('message', (m, from) => {
+  demo.heard.push(m.t);
   if (R.isHost) {
     if (m.t === 'me' && demo.phase === 'play' && demo.dots[from]) demo.dots[from] = [m.x, m.y];
     return;
