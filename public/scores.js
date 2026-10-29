@@ -149,7 +149,7 @@
           if (!v) return;
           save(K + 'nimi', v); save(K + 'tila', 'pending');
           showName(false);
-          flush().then(refresh);
+          flush().then(afterSend);
         };
         row.appendChild(input); row.appendChild(ok);
         nameRow.appendChild(row);
@@ -198,6 +198,12 @@
       });
     }
 
+    // Sending may have changed the name's state (taken, busy): show it, unless it is being edited.
+    function afterSend() {
+      if (panel && !nameRow.querySelector('input')) showName(false);
+      refresh();
+    }
+
     // The admin may have approved or rejected the name since last time.
     function checkName() {
       var name = load(K + 'nimi', '');
@@ -210,7 +216,7 @@
     }
 
     showName(false);
-    flush().then(function () { checkName(); refresh(); });
+    flush().then(function () { afterSend(); checkName(); });
   }
 
   // ---- The chip ----

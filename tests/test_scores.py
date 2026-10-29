@@ -23,6 +23,7 @@ class FakeApi:
         self.scores = {}  # (game, board, player) -> {score, version}
         self.posts = []
         self.taken = set()  # player ids whose name another phone holds now
+        self.refuse = {}  # name -> HTTP status that POST /api/players answers for it
 
     def handle(self, route):
         if not self.online:
@@ -33,6 +34,8 @@ class FakeApi:
         body = json.loads(req.post_data) if req.post_data else {}
         if req.method == "POST":
             self.posts.append((path, body))
+        if path == "players" and req.method == "POST" and body["name"] in self.refuse:
+            return self.reply(route, {"error": "refused"}, self.refuse[body["name"]])
         if path == "players" and req.method == "POST":
             old = self.players.get(body["id"])
             if not old or old["name"] != body["name"]:
@@ -209,3 +212,20 @@ def test_the_admin_is_told_when_a_name_is_already_someone_elses(site, context, f
     page.click(".player:has-text('Aino') button:has-text('Hyväksy')")
     page.wait_for_selector("#msg:has-text('Nimi on jo toisella pelaajalla')")
     assert fake.players["a" * 32]["status"] == "rejected"
+
+
+@pytest.mark.parametrize("status, says", [(409, "nimi on jo käytössä"), (429, "ei voitu vielä tallentaa")])
+def test_a_refused_name_says_why_instead_of_waiting(site, context, fake, status, says):
+    site.build(ROOT / "games")
+    fake.refuse = {"Aino": status}
+    page = context.new_page()
+    page.goto(f"{site.url}games/puhelinkoppi/v2/")
+    page.click("#ai-pelit-tulokset-nappi")
+    page.fill("#ai-pelit-nimi", "Aino")
+    page.click("#ai-pelit-tulokset button:has-text('Tallenna')")
+    page.wait_for_selector(f"#ai-pelit-tulokset :text('{says}')")
+    assert "odottaa hyväksyntää" not in page.locator("#ai-pelit-tulokset").inner_text()
+    # The same on the next opening.
+    page.click("#ai-pelit-tulokset button:has-text('Sulje')")
+    page.click("#ai-pelit-tulokset-nappi")
+    page.wait_for_selector(f"#ai-pelit-tulokset :text('{says}')")

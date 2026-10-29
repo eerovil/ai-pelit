@@ -116,13 +116,15 @@ async function getPlayer(env, id) {
   return p ? json({ name: p.name, status: p.status }) : fail(404, 'unknown player');
 }
 
-// 1 + how many approved players beat this score on the list.
-async function rankOf(env, game, board, score) {
+// The place of a score made at `at` on the list: 1 + how many approved players are ahead of it,
+// in the list's own order (better score first, then the earlier one on a tie).
+async function rankOf(env, game, board, score, at) {
   const better = GAMES[game].order === 'low' ? '<' : '>';
   const r = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM scores s JOIN players p ON p.id = s.player
-     WHERE s.game = ? AND s.board = ? AND p.status = 'approved' AND s.score ${better} ?`
-  ).bind(game, board, score).first();
+     WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
+       AND (s.score ${better} ? OR (s.score = ? AND s.at < ?))`
+  ).bind(game, board, score, score, at).first();
   return r.n + 1;
 }
 
@@ -144,9 +146,9 @@ async function addScore(env, body) {
        SET score = excluded.score, version = excluded.version, at = excluded.at
        WHERE excluded.score ${better} scores.score`
   ).bind(game, board, player, score, version, now()).run();
-  const best = await env.DB.prepare('SELECT score FROM scores WHERE game = ? AND board = ? AND player = ?')
+  const best = await env.DB.prepare('SELECT score, at FROM scores WHERE game = ? AND board = ? AND player = ?')
     .bind(game, board, player).first();
-  return json({ best: best.score, rank: await rankOf(env, game, board, best.score) });
+  return json({ best: best.score, rank: await rankOf(env, game, board, best.score, best.at) });
 }
 
 async function list(env, url) {
@@ -171,7 +173,7 @@ async function list(env, url) {
     ).bind(game, board, player).first();
     if (m) {
       mine = { name: m.name, status: m.status, score: m.score, version: m.version, at: m.at };
-      if (m.status === 'approved') mine.rank = await rankOf(env, game, board, m.score);
+      if (m.status === 'approved') mine.rank = await rankOf(env, game, board, m.score, m.at);
     }
   }
   return json({ rows, mine });

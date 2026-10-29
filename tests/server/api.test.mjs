@@ -196,3 +196,19 @@ test('a rejected player whose name another phone took cannot be approved back in
   await call('POST', '/api/players', { id: A, name: 'Aino K' });
   assert.equal((await admin(A, 'approved')).status, 200);
 });
+
+test('on a tie the earlier score is ahead, and the own row says the same place as the list', async () => {
+  const { call, admin } = setup();
+  const ids = Array.from({ length: 11 }, (_, i) => hex(1000 + i));
+  for (const [i, id] of ids.entries()) {
+    await call('POST', '/api/players', { id, name: `Pelaaja ${i}` }, { 'cf-connecting-ip': `10.1.0.${i}` });
+    await admin(id, 'approved');
+    const { body } = await call('POST', '/api/scores', { player: id, game: 'puhelinkoppi', board: 'main', version: 2, score: 5 });
+    assert.equal(body.rank, i + 1);
+    await new Promise((r) => setTimeout(r, 2)); // a later time for the next score
+  }
+  const list = (await call('GET', `/api/scores?game=puhelinkoppi&player=${ids[10]}`)).body;
+  assert.deepEqual(list.rows.map((r) => r.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.equal(list.rows.some((r) => r.me), false);
+  assert.equal(list.mine.rank, 11);
+});
