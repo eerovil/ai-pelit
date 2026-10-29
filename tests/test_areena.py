@@ -167,3 +167,35 @@ def test_v3_the_friend_can_dodge_before_and_after_reloading(two_phones):
     guest.evaluate(DODGE)
     host.wait_for_function("foe.dashCd > 0.5", timeout=3000)
     assert host.errors == [] and guest.errors == []
+
+
+def test_v3_the_friends_bow_and_sword_hurt_the_host_and_win(two_phones):
+    host, guest = open_fight(two_phones)
+    # Real touches on the friend's phone: first the bow from where they stand, then walk up and
+    # hold the sword. The host's player does nothing.
+    guest.evaluate("""(() => {
+      const c = document.getElementById('c');
+      const ev = (t, id, x, y) => c.dispatchEvent(new PointerEvent(t, {pointerId: id, clientX: x, clientY: y, bubbles: true, cancelable: true}));
+      const at = k => buttons().find(b => b.k === k);
+      window.useBow = () => { const b = at('bow'); ev('pointerdown', 2, b.x, b.y); };
+      window.useSword = () => {
+        ev('pointerup', 2, 0, 0);
+        const h = padHome(); ev('pointerdown', 1, h.x, h.y);
+        setInterval(() => {
+          const dx = foe.x - me.x, dy = foe.y - me.y, d = Math.hypot(dx, dy) || 1;
+          ev('pointermove', 1, h.x + dx / d * 45, h.y + dy / d * 45);
+        }, 50);
+        const s = at('sword'); ev('pointerdown', 3, s.x, s.y);
+      };
+    })()""")
+    guest.evaluate("useBow()")
+    host.wait_for_function("me.hp < 100", timeout=8000)
+    assert guest.evaluate("me.hp") == 100
+    after_bow = host.evaluate("me.hp")
+    guest.evaluate("useSword()")
+    host.wait_for_function(f"me.hp <= {after_bow} - 16", timeout=10000)
+    host.wait_for_function("state === 'room'", timeout=30000)
+    guest.wait_for_function("state === 'room'", timeout=8000)
+    assert host.locator("#aipr-result").inner_text() == "💀 Aino voitti"
+    assert guest.locator("#aipr-result").inner_text() == "🏆 Aino voitti!"
+    assert host.errors == [] and guest.errors == []
