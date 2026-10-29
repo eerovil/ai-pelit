@@ -1,5 +1,7 @@
 """The app in a phone-sized Chromium: the shelf, playing, installing, updating, offline, saves."""
 
+import json
+
 import pytest
 
 from conftest import ROOT, game_page, make_game, wait_for_worker
@@ -71,6 +73,25 @@ def test_a_tap_on_the_back_chip_never_reaches_the_game(site, context):
     page.tap("#ai-pelit-back")
     page.click("#ai-pelit-back")
     assert page.evaluate("window.seen") == []
+
+
+def test_a_tap_in_a_game_makes_it_full_screen_but_a_tap_on_the_chip_does_not(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/pomppu/v1/")
+    page.evaluate("document.getElementById('ai-pelit-back').addEventListener('click', e => e.preventDefault())")
+    page.tap("#ai-pelit-back")
+    assert page.evaluate("document.fullscreenElement") is None
+    page.touchscreen.tap(180, 400)
+    page.wait_for_function("document.fullscreenElement === document.documentElement")
+
+
+def test_the_installed_app_opens_full_screen(site):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    manifest = json.loads((site.root / "manifest.webmanifest").read_text())
+    assert manifest["display"] == "fullscreen"
 
 
 def test_a_game_can_move_the_back_chip(site, context):
