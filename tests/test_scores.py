@@ -25,6 +25,8 @@ class FakeApi:
         self.taken = set()  # player ids whose name another phone holds now
         self.refuse = {}  # name -> HTTP status that POST /api/players answers for it
         self.score_refusals = []  # HTTP statuses the next POST /api/scores answer, in turn
+        self.hold = False  # True: POST /api/scores waits in self.held until the test lets it go
+        self.held = []
 
     def handle(self, route):
         if not self.online:
@@ -45,6 +47,9 @@ class FakeApi:
         if m := re.fullmatch(r"players/(\w+)", path):
             p = self.players.get(m[1])
             return self.reply(route, p, 200 if p else 404)
+        if path == "scores" and req.method == "POST" and self.hold:
+            self.held.append(route)
+            return None
         if path == "scores" and req.method == "POST" and self.score_refusals:
             return self.reply(route, {"error": "refused"}, self.score_refusals.pop(0))
         if path == "scores" and req.method == "POST":
@@ -388,3 +393,26 @@ def test_a_won_level_is_sent_even_when_the_ollie_is_no_record(site, context, fak
     assert row["level"] == 2
     page.goto(site.url)  # the player leaves the game: nothing more to send
     assert page.evaluate("localStorage.getItem('ai-pelit:_tulokset:jono')") == "{}"
+
+
+def test_a_level_won_while_a_score_is_on_its_way_is_sent_too(site, context, fake):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.evaluate("""localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'));
+        localStorage.setItem('ai-pelit:_tulokset:lahetetyt', JSON.stringify({'sormiskeitti|main': {score: 999, level: 1}}))""")
+    page.reload()
+    win = "lv => { level = lv; maxH = 300; st = 'air'; finish(true); }"  # a won level, no record ollie
+    fake.hold = True
+    page.evaluate(win, 1)  # level 2 reached: its send is held on the way
+    page.wait_for_timeout(300)
+    assert len(fake.held) == 1 and json.loads(fake.held[0].request.post_data)["level"] == 2
+    page.evaluate(win, 2)  # level 3 reached while level 2 is still on its way
+    page.wait_for_timeout(300)
+    fake.hold = False
+    fake.handle(fake.held.pop())  # the server takes level 2 ...
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    page.wait_for_timeout(300)
+    [row] = fake.scores.values()
+    assert row["level"] == 3  # ... and level 3 follows by itself
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt'))['sormiskeitti|main'].level") == 3

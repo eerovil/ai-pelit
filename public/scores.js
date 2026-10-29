@@ -95,9 +95,11 @@
     });
   }
 
+  var again = false; // a flush was asked for while one was running: run once more after it
   function flush() {
-    if (sending || !load(K + 'nimi', '')) return Promise.resolve();
-    sending = true;
+    if (sending) { again = true; return Promise.resolve(); }
+    if (!load(K + 'nimi', '')) return Promise.resolve();
+    sending = true; again = false;
     return register().then(function (ok) {
       if (!ok) return;
       var queue = load(QUEUE, {});
@@ -113,27 +115,35 @@
             if (left[key] && left[key].score === q.score) { delete left[key]; save(QUEUE, left); }
             return true;
           }
-          // The level as the game's save has it now: it only ever rises.
-          return post('scores', { player: playerId(), game: q.game, board: q.board, version: q.version, score: q.score, level: levelOf(q.game) })
+          // The level as the game's save has it now (it only ever rises); exactly this one is
+          // recorded as the server's once it answers, whatever the game saves meanwhile.
+          var sentLevel = lvl || null;
+          return post('scores', { player: playerId(), game: q.game, board: q.board, version: q.version, score: q.score, level: sentLevel })
             .then(function (b) {
               if (b.httpStatus === 404) { save(K + 'lahetetty', ''); return false; } // server forgot us: register again
               // Kept for later unless the server took it. Only a 400 (a score it can never take)
               // is dropped, so one bad item cannot block the queue for good.
               if (b.httpStatus !== 400 && (b.httpStatus < 200 || b.httpStatus > 299)) return false;
+              // Done with the item, unless a better score or a higher level came in while it was
+              // on its way: then it stays, and goes again.
               var now = load(QUEUE, {});
-              if (now[key] && now[key].score === q.score) { delete now[key]; save(QUEUE, now); }
+              if (now[key] && now[key].score === q.score && (b.httpStatus === 400 || (levelOf(q.game) || 0) <= (sentLevel || 0))) {
+                delete now[key]; save(QUEUE, now);
+              }
               if (b.httpStatus !== 400) {
-                var sent = load(SENT, {}), had = sent[key], lvl = levelOf(q.game) || 0;
-                var o = GAMES[q.game] ? GAMES[q.game].order : ORDER;
-                var keep = had && (o === 'low' ? had.score <= q.score : had.score >= q.score);
-                sent[key] = { score: keep ? had.score : q.score, level: Math.max(lvl, (had && had.level) || 0) };
+                var sent = load(SENT, {}), was = sent[key];
+                var keep = was && !qBetter(q.score, was.score);
+                sent[key] = { score: keep ? was.score : q.score, level: Math.max(sentLevel || 0, (was && was.level) || 0) };
                 save(SENT, sent);
               }
               return true;
             });
         });
       }, Promise.resolve(true));
-    }).catch(function () {}).then(function () { sending = false; });
+    }).catch(function () {}).then(function () {
+      sending = false;
+      if (again) return flush();
+    });
   }
 
   function submit(score) {
