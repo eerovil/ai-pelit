@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: neljä nappia, nuotit putoavat neljällä kaistalla tuttujen kappaleiden tahdissa, kolme sydäntä ja nopeutuvat tasot.",
       "request": "Piano peli jossa neljä nappia ja ylhäältä putoilee neljjällä \"lanella\" nuotteja. Niihin pitää osua",
       "issue": "eerovil/ai-pelit#44"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-29",
+      "note": "Tulos tallentuu jokaisen soitetun kappaleen jälkeen, ja kappaleita on nyt yhdeksän: uutena Maija pikkuinen, Piippolan vaari, Lontoon silta, Paljon onnea vaan ja Kulkuset.",
+      "request": "Save score after each song is finished, even when no fail. Add more songs",
+      "issue": "eerovil/ai-pelit#44"
     }
   ]
 }
