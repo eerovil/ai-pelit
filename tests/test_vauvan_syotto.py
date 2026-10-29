@@ -92,3 +92,18 @@ def test_an_aeroplane_spoonful_at_the_mouth_is_never_spat_out(site, context):
     page.evaluate("usePower('plane'); mood = 10; Math.random = () => 0")
     page.evaluate(DRAG, page.evaluate("[mouthPos().x, mouthPos().y]"))
     assert page.evaluate("[tummy, plane, splats.length]") == [1, False, 0]
+
+
+def test_a_spoon_given_to_the_left_hand_stays_there_until_it_drops(site, context):
+    page = start(site, context)
+    page.evaluate("baby.act = 'idle'; baby.t = 0; baby.dur = 99")
+    left = page.evaluate("[hands()[0].x, hands()[0].y]")
+    page.evaluate(DRAG, left)
+    for _ in range(20):
+        page.evaluate(RUN, 0.1)
+        if page.evaluate("spoon.where") != "baby":
+            break
+        assert abs(page.evaluate("spoon.x") - left[0]) < 10
+    page.evaluate(RUN, 3)
+    assert page.evaluate("spoon.where") == "floor"
+    assert 0 < page.evaluate("spoon.x") < page.evaluate("G.hx")

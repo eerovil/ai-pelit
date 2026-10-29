@@ -102,7 +102,7 @@ const sfx = {
 let state = 'menu', time = 0;
 let tummy = 0, goal = 1, mood = 80, misses = 0, streak = 0, power = {}, plane = false, videoT = 0, songT = 0, endT = 0, pops = [], splats = [];
 const baby = { act: 'idle', t: 0, dur: 1, mouth: 0, turn: 0, turnTo: 0, blink: 0, blinkT: 2, face: [], fed: 0 };
-const spoon = { where: 'bowl', x: 0, y: 0, a: 0, loaded: false, vy: 0, vx: 0, t: 0, fx: 0, fy: 0 };
+const spoon = { where: 'bowl', x: 0, y: 0, a: 0, loaded: false, vy: 0, vx: 0, t: 0, fx: 0, fy: 0, hand: 1 };
 
 // Each level wants more bites from a fussier baby with a shorter open mouth.
 function goalFor(l) { return Math.min(30, 6 + 2 * l); }
@@ -194,8 +194,8 @@ function miss() {
   setAct('idle', 0.6);
 }
 
-function give(reaching) {
-  spoon.where = 'baby'; spoon.loaded = false; spoon.t = 1.6 + Math.random() * 1.2;
+function give(reaching, hand) {
+  spoon.where = 'baby'; spoon.hand = hand; spoon.loaded = false; spoon.t = 1.6 + Math.random() * 1.2;
   addMood(reaching ? 25 : 10); sfx.laugh();
   say(reaching ? 'Kiitos! Hihi!' : 'Hihi!', '#2d7fc1');
   setAct('hold', spoon.t);
@@ -266,8 +266,9 @@ function step(dt) {
     const r = spoonRest(), k = Math.min(1, dt * 14);
     spoon.x += (r.x - spoon.x) * k; spoon.y += (r.y - spoon.y) * k; spoon.a += (-0.75 - spoon.a) * k;
   } else if (spoon.where === 'baby') {
-    const h = hands()[1];
-    spoon.x = h.x + 4; spoon.y = h.y + 10; spoon.a = 0.25 + Math.sin(time * 14) * 0.45;
+    // In whichever hand it was given to; the left hand waves it the other way.
+    const h = hands()[spoon.hand], side = spoon.hand ? 1 : -1;
+    spoon.x = h.x + 4 * side; spoon.y = h.y + 10; spoon.a = side * (0.25 + Math.sin(time * 14) * 0.45);
   } else if (spoon.where === 'fall') {
     spoon.vy += 1400 * dt; spoon.x += spoon.vx * dt; spoon.y += spoon.vy * dt; spoon.a += 9 * dt;
     if (spoon.y >= G.floorY) {
@@ -315,7 +316,7 @@ function step(dt) {
       if (baby.act === 'idle') nextAct();
       else if (baby.act === 'hold') {
         // Bang, bang… and over the edge it goes.
-        spoon.where = 'fall'; spoon.vy = -260; spoon.vx = -(30 + Math.random() * 40);
+        spoon.where = 'fall'; spoon.vy = -260; spoon.vx = (spoon.hand ? -1 : 1) * (30 + Math.random() * 40); // towards the chair, so it stays on screen
         setAct('idle', 0.8); say('Hups!', '#2d7fc1');
       } else {
         if (baby.act === 'reach') { addMood(-8); say('Hmph!', '#d2483b'); }
@@ -372,10 +373,10 @@ function up(px, py) {
     if (baby.mouth > 0.55 || plane) { const byPlane = plane; plane = false; bite(byPlane); } else miss();
     return;
   }
-  for (const h of hands()) {
+  for (const [i, h] of hands().entries()) {
     if (Math.hypot(t.x - h.x, t.y - h.y) < R * 0.55 || Math.hypot(px - h.x, py - h.y) < R * 0.5) {
       if (spoon.loaded) pop('Plops pöydälle', h.x, h.y - 30);
-      give(baby.act === 'reach'); return;
+      give(baby.act === 'reach', i); return;
     }
   }
   if (plane && spoon.loaded && t.y < G.bowl.y - G.bowl.r) {

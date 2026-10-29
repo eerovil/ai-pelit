@@ -50,7 +50,7 @@ flowchart TD
 - **Mihin lusikka viedään?**: `up()` checks where the spoon's bowl end is when the finger lifts: at the mouth, at either hand, or elsewhere (back to the bowl).
 - **Onko vauva kiukkuinen?**: with mood under 35, no video and no aeroplane, a bite is spat out 45 % of the time (`bite()`).
 - **Pfrrrt! Sose ruudulle, pyyhi sormella**: four food splats cover the screen; a finger rubbing them (`wipe()`) clears them, and they fade by themselves in about 14 s.
-- **Vauva ilahtuu ja heiluttaa lusikkaa**: `give()`: +25 mood when the baby was reaching for it ("Anna! Anna!"), else +10; the baby bangs it for 1.6-2.8 s.
+- **Vauva ilahtuu ja heiluttaa lusikkaa**: `give()`: +25 mood when the baby was reaching for it ("Anna! Anna!"), else +10; the baby bangs it for 1.6-2.8 s in the hand it was given to.
 - **Kolin! Lusikka lattialle**: the spoon falls to the floor beside the chair, and there is no feeding until it is washed.
 - **Vauva: Aaa, Ei!, pään kääntö, Anna! Anna!**: `nextAct()`: the mouth opens for a shorter time each level, the head turns away more often, and from level 2 the open mouth sways side to side. Not giving the spoon when asked costs 8 mood.
 - **📱 Video: suu auki, mieli ei laske**: 6 s of a cartoon on a phone; the baby stares with its mouth wide open and its head still. A spoon the baby is holding still gets dropped, and a bite is still chewed, before it stares again.
