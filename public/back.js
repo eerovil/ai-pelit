@@ -27,6 +27,19 @@
   ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(function (type) {
     a.addEventListener(type, function (e) { e.stopPropagation(); }, { passive: true });
   });
+  // Play full screen: the installed app already is (manifest "display": "fullscreen"); in a browser
+  // tab, or an app installed before that, the first tap asks for it. Only a pointerup, touchend or
+  // click lets a page go full screen, and a tap after the player left full screen asks again.
+  var root = document.documentElement;
+  function fullScreen(e) {
+    if (e.target === a || document.fullscreenElement || !root.requestFullscreen) return;
+    if (window.matchMedia && matchMedia('(display-mode: fullscreen)').matches) return;
+    var asked = root.requestFullscreen({ navigationUI: 'hide' });
+    if (asked && asked.catch) asked.catch(function () {});
+  }
+  ['pointerup', 'touchend', 'click'].forEach(function (type) {
+    window.addEventListener(type, fullScreen, { capture: true, passive: true });
+  });
   function add() { document.body.appendChild(a); }
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
 })();
