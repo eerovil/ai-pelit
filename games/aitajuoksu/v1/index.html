@@ -115,7 +115,7 @@ function soloRace() {
   newRace('solo', '', rs);
 }
 function newRace(mode, round, runners) {
-  race = { mode, round, runners, phase: 'cd', cdT: 0, gunAt: 2.1 + Math.random() * 1.1, clock: 0, doneT: 0, firstFin: null, adopt: false, sendT: 0, results: null };
+  race = { mode, round, runners, phase: 'cd', cdT: 0, gunAt: 2.1 + Math.random() * 1.1, clock: 0, doneT: 0, firstFin: null, late: 20, adopt: false, sendT: 0, results: null };
   me = runners.find(r => r.kind === 'me') || null;
   texts = []; warn = 0;
   layout();
@@ -211,7 +211,11 @@ R.on('message', (m, from) => {
   if (!race || race.mode !== 'net' || m.round !== race.round) return;
   if (R.isHost) {
     const r = race.runners.find(o => o.id === from);
-    if (m.t === 'p' && r && r.kind === 'net') unpack(r, m.r);
+    if (m.t === 'p' && r && r.kind === 'net') {
+      unpack(r, m.r);
+      // A guest in first starts the wait for the rest, as a runner finishing here does.
+      if (r.fin !== null && race.firstFin === null) race.firstFin = race.clock;
+    }
     return;
   }
   if (m.t === 's') {
@@ -239,7 +243,7 @@ function hostTick(dt) {
   race.sendT -= dt;
   if (race.sendT <= 0) { race.sendT = 1 / 12; R.send(hostState()); }
   const all = race.runners.every(r => r.fin !== null);
-  if (race.phase === 'run' && (all || (race.firstFin !== null && race.clock > race.firstFin + 20))) {
+  if (race.phase === 'run' && (all || (race.firstFin !== null && race.clock > race.firstFin + race.late))) {
     const m = { t: 'end', round: race.round, res: standings() };
     R.deliver(m);
     R.endRound();

@@ -68,8 +68,8 @@ def test_the_computer_runs_the_whole_race(site, context):
     assert page.evaluate("race.runners.filter(r => r !== me).map(r => r.hits).every(h => h <= 2)")
 
 
-def test_two_phones_race_and_both_get_the_results(site, browser):
-    site.build(ROOT / "games")
+def room_of_two(site, browser):
+    """Eero's phone makes a room, Aino's joins it, and the race is on."""
     relay = Relay()
     pages = []
     for name in ["Eero", "Aino"]:
@@ -93,6 +93,13 @@ def test_two_phones_race_and_both_get_the_results(site, browser):
     host.click("#aipr-start")
     for p in pages:
         p.wait_for_function("race && race.mode === 'net' && race.phase === 'run'", timeout=6000)
+    return host, guest
+
+
+def test_two_phones_race_and_both_get_the_results(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    pages = [host, guest]
     assert guest.evaluate("race.runners.map(r => r.name)") == ["Eero", "Aino"]
     # The guest's own steps reach the host.
     guest.evaluate("step(me, 1); step(me, 2); Object.assign(me, { x: 40 })")
@@ -114,4 +121,19 @@ def test_two_phones_race_and_both_get_the_results(site, browser):
     assert "1. Aino" in host.inner_text("#aipr")
     assert host.errors == guest.errors == []
     for p in pages:
+        p.context.close()
+
+
+def test_a_guest_in_first_ends_the_race_for_a_host_that_stopped(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    host.evaluate("race.late = 1")
+    guest.evaluate("Object.assign(me, { x: 99.8, v: 9, down: 1023 })")
+    # The host never runs; the race ends a second after the guest's finish.
+    for p in (host, guest):
+        p.wait_for_function("AiPelitRooms.inRoom && !race && document.getElementById('aipr-result').textContent !== ''", timeout=10000)
+    assert guest.inner_text("#aipr-result").startswith("1. sija")
+    assert host.inner_text("#aipr-result") == "Et ehtinyt maaliin"
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
         p.context.close()
