@@ -67,6 +67,22 @@
     var children = [catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' })];
     children.push(copyBox('Uusi peli', 'Uusi peli: '));
     view.replaceChildren.apply(view, children);
+    showWaitingNames();
+  }
+
+  // On the admin's phone only (it holds the key yllapito/ saved): how many nicknames wait.
+  function showWaitingNames() {
+    var key = null;
+    try { key = localStorage.getItem('ai-pelit:_yllapito:avain'); } catch (e) {}
+    if (!key) return;
+    fetch('api/admin/players', { headers: { 'x-admin-key': key } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) {
+        var n = b ? b.players.filter(function (p) { return p.status === 'pending'; }).length : 0;
+        if (!n || /^#\/[a-z0-9-]/.test(location.hash) || view.querySelector('.waiting-names')) return;
+        view.insertBefore(el('a', { class: 'button big waiting-names', href: 'yllapito/', text: n + (n === 1 ? ' nimimerkki odottaa' : ' nimimerkkiä odottaa') + ' hyväksyntää' }), view.firstChild);
+      })
+      .catch(function () {});
   }
 
   function renderGame(slug) {

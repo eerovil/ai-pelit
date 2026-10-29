@@ -13,6 +13,7 @@ var SHELL = [
   'app.js',
   'app.css',
   'back.js',
+  'scores.js',
   'catalog.json',
   'manifest.webmanifest',
   'icons/icon-192.png',
@@ -42,6 +43,8 @@ self.addEventListener('activate', function (event) {
 });
 
 var GAMES_PREFIX = new URL('games/', self.registration.scope).pathname;
+// The online parts (high scores, #25) are live data: straight to the network, never cached.
+var API_PREFIX = new URL('api/', self.registration.scope).pathname;
 
 // A version folder: cache first, filled the first time it is played.
 function gameFile(request) {
@@ -79,5 +82,6 @@ self.addEventListener('fetch', function (event) {
   if (request.method !== 'GET') return;
   var url = new URL(request.url);
   if (url.origin !== self.location.origin || url.href.indexOf(self.registration.scope) !== 0) return;
+  if (url.pathname.indexOf(API_PREFIX) === 0) return;
   event.respondWith(url.pathname.indexOf(GAMES_PREFIX) === 0 ? gameFile(request) : shellFile(request));
 });

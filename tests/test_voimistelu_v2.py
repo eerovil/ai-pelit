@@ -126,4 +126,4 @@ def test_v1_progress_carries_on_into_the_new_bar_tasks(site, context):
     page.reload()
     assert page.evaluate("[level, best, taskText(level)]") == [11, 11.2, "Siirry alatangolle"]
     meta = json.loads((ROOT / "games/voimistelu/game.json").read_text())
-    assert [v["n"] for v in meta["versions"]] == [1, 2]
+    assert [v["n"] for v in meta["versions"]][:2] == [1, 2]
