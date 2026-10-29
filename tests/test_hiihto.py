@@ -1,3 +1,4 @@
+# Live check for #37: this pull request changes only hiihto's tests.
 """Hiihto in a phone-sized Chromium, driven through the game's own touch handlers and step()."""
 
 from conftest import ROOT
