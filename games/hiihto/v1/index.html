@@ -479,7 +479,7 @@ function skier(sx, sy, k, o) {
   const spread = o.vee ? 0.32 : o.skate ? 0.22 : 0.02;
   for (const [f, sd] of [[fl, -1], [fr, 1]]) {
     const lift = o.skate && (sd > 0) === (ph > 0) ? 0.08 : 0;
-    L([[f[0] - sd * spread * 0.15, f[1] - 0.15 * dir + lift], [f[0] + sd * spread * 1.3, f[1] + 0.55 * dir + lift]], 0.07, skiCol);
+    L([[f[0], f[1] - 0.15 * dir + lift], [f[0] + sd * spread * 1.3, f[1] + 0.55 * dir + lift]], 0.07, skiCol);
   }
   const hipL = [-0.11, hip], hipR = [0.11, hip];
   L([fl, [fl[0] + 0.02, (fl[1] + hip) / 2 + (o.tuck ? 0.05 : 0)], hipL], 0.13, o.pants);
