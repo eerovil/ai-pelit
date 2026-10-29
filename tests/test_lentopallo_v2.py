@@ -1,0 +1,171 @@
+"""Lentopallo v2: 1 vs 1 and 2 vs 2 against the computer, and 2-4 phones in one room.
+
+Each phone is its own Chromium context; the room relay is `Relay` from test_rooms_lib.
+"""
+
+import json
+
+import pytest
+
+from conftest import ROOT
+from test_rooms_lib import Relay
+
+URL = "games/lentopallo/v2/"
+
+
+def alone(site, context, mode="1v1"):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + URL)
+    page.click("#go1" if mode == "1v1" else "#go2")
+    return page
+
+
+PLAYING = """() => {
+  tossed = true; ball.held = false; ball.served = true; state = 'play';
+  for (const p of players) if (p !== mine) { p.x = p.side * 0.5; p.kind = 'shown'; }
+}"""
+
+
+def test_v1_saves_carry_over(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + "games/lentopallo/v1/")
+    page.evaluate("localStorage.setItem('ai-pelit:lentopallo:taso', '3'); localStorage.setItem('ai-pelit:lentopallo:voitot', '2')")
+    page.goto(site.url + URL)
+    assert "Taso 3" in page.inner_text("#foe")
+    assert "Voitot 2" in page.inner_text("#stats")
+
+
+def test_one_against_one_keeps_v1s_rules(site, context):
+    page = alone(site, context)
+    assert page.evaluate("players.length") == 2
+    assert page.evaluate("[matchWinner(11, 9), matchWinner(11, 10), matchWinner(12, 10)]") == [0, -1, 0]
+    page.evaluate(PLAYING)
+    page.evaluate("last = mine; touchSide = 1; Object.assign(ball, { x: 4.8, y: 0.6, vx: 0.5, vy: -2 })")
+    page.wait_for_function("state === 'point'", timeout=2000)
+    assert page.evaluate("[score.join('-'), msg.s, team(server)]") == ["0-1", "Ulos!", 1]
+
+
+def test_the_serve_goes_over_the_net(site, context):
+    page = alone(site, context, "2v2")
+    assert page.evaluate("state === 'serve' && server === mine && ball.held")
+    page.evaluate("press(mine)")
+    page.wait_for_function("crossings >= 1", timeout=4000)
+
+
+def test_two_against_two_with_a_computer_teammate(site, context):
+    page = alone(site, context, "2v2")
+    assert page.evaluate("players.map(p => [p.side, p.kind])") == [[-1, "me"], [1, "cpu"], [-1, "cpu"], [1, "cpu"]]
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentopallo:muoto')") == '"2v2"'
+    # A team that wins the serve back serves with its other player.
+    page.evaluate("state = 'play'; pointTo(1, 'x')")
+    assert page.evaluate("players.indexOf(server)") == 1
+    page.evaluate("state = 'play'; pointTo(0, 'x')")
+    assert page.evaluate("players.indexOf(server)") == 2
+    page.evaluate("state = 'play'; pointTo(0, 'x')")
+    assert page.evaluate("players.indexOf(server)") == 2
+    page.evaluate("state = 'play'; pointTo(1, 'x')")
+    assert page.evaluate("players.indexOf(server)") == 3
+    # Three touches on one side, then the fourth is a fault, whoever makes it.
+    page.evaluate(PLAYING)
+    page.evaluate("touchSide = -1; touches = 3; last = players[2]; hit(mine)")
+    assert page.evaluate("msg.s") == "Neljä kosketusta!"
+
+
+def test_the_computer_teammate_sets_the_ball_for_you(site, context):
+    page = alone(site, context, "2v2")
+    page.evaluate(PLAYING)
+    page.evaluate("""() => {
+      const t = players[2]; t.kind = 'cpu'; mine.x = -3; t.x = -1.2;
+      touchSide = -1; touches = 1; last = mine;
+      Object.assign(ball, { x: -1.2, y: 2.4, vx: 0, vy: -0.5 });
+      hit(t);
+    }""")
+    # The second touch comes down near where the player stands.
+    land = page.evaluate("predict(0.2).x")
+    assert -3.7 < land < -2.0
+
+
+@pytest.fixture
+def room(site, browser):
+    site.build(ROOT / "games")
+    relay = Relay()
+    contexts = []
+
+    def phone(name):
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        contexts.append(ctx)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        return page
+
+    def play(*names):
+        host = phone(names[0])
+        host.click("#multi")
+        host.click("#aipr-create")
+        host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+        code = host.evaluate("AiPelitRooms.code")
+        guests = []
+        for n in names[1:]:
+            g = phone(n)
+            g.click("#multi")
+            g.fill("#aipr-codeIn", code)
+            g.click("#aipr-joinBtn")
+            g.wait_for_function("AiPelitRooms.inRoom")
+            guests.append(g)
+        host.wait_for_function(f"AiPelitRooms.members.filter(m => m.on).length === {len(names)}")
+        host.click("#aipr-start")
+        for p in [host, *guests]:
+            p.wait_for_function("mine && players.length && (state === 'serve' || state === 'play')")
+        return host, guests
+
+    yield play
+    for ctx in contexts:
+        ctx.close()
+
+
+def test_two_phones_play_one_against_one(room):
+    host, [guest] = room("Eero", "Aino")
+    assert host.evaluate("players.map(p => [p.name, p.side, p.kind])") == [["Sinä", -1, "me"], ["Aino", 1, "remote"]]
+    assert guest.evaluate("players.map(p => [p.name, p.side, p.kind])") == [["Eero", -1, "shown"], ["Sinä", 1, "me"]]
+    # Each phone sees its own side on the left: the guest's court is drawn mirrored.
+    assert host.evaluate("view") == 1 and guest.evaluate("view") == -1
+    assert guest.evaluate("sx(mine.x) < sx(0)")
+    # The guest's ▶ runs toward the net, which for its side is toward smaller x; the host sees it.
+    start = guest.evaluate("mine.x")
+    guest.evaluate("state = 'play'; input.right = true")
+    guest.wait_for_timeout(300)
+    guest.evaluate("input.right = false")
+    assert guest.evaluate("mine.x") < start
+    host.wait_for_function(f"players[1].x < {start} - 0.3")
+    # The host's serve reaches the guest's phone.
+    host.evaluate("press(mine)")
+    guest.wait_for_function("crossings >= 0 && ball.x > 0 && !ball.held", timeout=4000)
+    # The match ends on the host; both phones hear it once and go back to the room.
+    host.evaluate("score = [11, 4]; state = 'point'; pauseT = 0")
+    for p, res, saved in [(host, "Voitto 11–4! 🏆", '{"voitot":1,"haviot":0}'), (guest, "Häviö 4–11", '{"voitot":0,"haviot":1}')]:
+        p.wait_for_function("state === 'done'")
+        p.wait_for_function("document.querySelector('#aipr-result') && document.querySelector('#aipr-result').innerText.length > 0")
+        assert p.locator("#aipr-result").inner_text() == res
+        assert p.evaluate("localStorage.getItem('ai-pelit:lentopallo:kaverit')") == saved
+    assert host.errors == guest.errors == []
+
+
+def test_three_phones_play_two_against_two_with_the_computer(room):
+    host, [a, b] = room("Eero", "Aino", "Iida")
+    teams = host.evaluate("players.map(p => [p.side, p.slot, p.kind])")
+    assert teams == [[-1, 0, "me"], [1, 0, "remote"], [-1, 1, "remote"], [1, 1, "cpu"]]
+    assert b.evaluate("[mine.side, view]") == [-1, 1]
+    assert a.evaluate("[mine.side, view]") == [1, -1]
+    # Iida (the host's teammate) serves when the host's team wins the serve back.
+    host.evaluate("state = 'play'; pointTo(1, 'x'); state = 'play'; pointTo(0, 'x')")
+    b.wait_for_function("server === mine")
+    b.wait_for_function("state === 'serve'")
+    b.evaluate("press(mine)")
+    host.wait_for_function("tossed && server === players[2]")
+    assert host.errors == a.errors == b.errors == []
