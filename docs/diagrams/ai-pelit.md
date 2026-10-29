@@ -45,7 +45,7 @@ flowchart TD
 
 ## Boxes
 
-- **Pelihylly: uusin versio jokaisesta pelistä**: `public/index.html` rendered from `catalog.json` (first game: Sormiskeitti v1), which `scripts/build.py` builds from every `games/*/game.json`.
+- **Pelihylly: uusin versio jokaisesta pelistä**: `public/index.html` rendered from `catalog.json` (first game: Sormiskeitti v1), which `scripts/build.py` builds from every `games/*/game.json`. Each card also shows its game's high-score no. 1, and a game's page its top 10 (`loadTops()` and `scoreSection()` in `public/app.js`, through `public/scores.js` loaded with `data-shelf`; see `tuloslistat.md`).
 - **Pelin sivu: versiot v1, v2, v3...**: lists each version with its date and the change note; every version stays playable.
 - **Pelaa versiota koko ruudulla**: opens `/games/<slug>/v<N>/index.html` directly (not in an iframe) with the "‹ Pelit" chip from `public/back.js`. The installed app opens full screen (`"display": "fullscreen"` in the manifest, no phone status or navigation bar); in a browser tab, or an app installed before that, `back.js` asks for full screen on the first tap in a game.
 - **POST /api/plays: +1 pelille, versiolle ja päivälle**: `public/back.js` sends one anonymous count each time a version page opens (`sendBeacon`, lost when offline); `addPlay()` in `server/api.js` adds it to the `plays` table (`migrations/0004_plays.sql`: game, version, UTC day, count, nothing per phone), only for a game and version in `catalog.json`, and none while no catalog has been read (#26).
