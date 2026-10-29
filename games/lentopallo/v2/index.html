@@ -16,6 +16,8 @@
   #result.win{color:#7ee081}#result.lose{color:#ff7a6b}
   #foe{margin:4px 0 0;font-size:17px;color:#ffb4a8}
   .row{display:flex;gap:10px}
+  .mode{font:800 18px system-ui,sans-serif;padding:9px 18px;border:2px solid #ffb703;border-radius:14px;background:transparent;color:#ffd166}
+  .mode.on{background:#ffd166;color:#2a1a05}
   .go{font:800 20px system-ui,sans-serif;padding:13px 20px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
   .go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
   #multi{font:700 17px system-ui,sans-serif;padding:11px 18px;border:2px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166}
@@ -30,13 +32,14 @@
   <h1>🏐 Lentopallo</h1>
   <p id="result"></p>
   <p id="foe"></p>
-  <div class="row"><button class="go" id="go1">1 vs 1</button><button class="go" id="go2">2 vs 2</button></div>
+  <div class="row"><button class="mode" id="m1">1 vs 1</button><button class="mode" id="m2">2 vs 2</button></div>
+  <button class="go" id="go">Pelaa yksin</button>
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <p id="stats"></p>
   <p class="help">Rantalentopalloa 11 pisteeseen (kahden pisteen ero). Pallo lähtee käsistä, kun se osuu sinuun.<br>
     Seisot paikallaan: nostat pallon ylös. Juokset verkkoa kohti: pallo menee yli.
     Hyppää ja lyö pallo ylhäältä verkon lähellä: smassi! Joukkue saa koskea palloon kolme kertaa.<br>
-    Kavereiden kanssa 2–4 puhelinta: kaksi pelaa 1 vs 1 (tai 2 vs 2, jos valitsit viimeksi sen), kolme tai neljä 2 vs 2. Tyhjät paikat pelaa tietokone.</p>
+    Kavereiden kanssa 2–4 puhelinta: huoneen tekijän valinta ratkaisee, pelaako kaksi puhelinta 1 vs 1 vai 2 vs 2; kolme tai neljä pelaa aina 2 vs 2. Tyhjät paikat pelaa tietokone.</p>
 </div>
 <script src="../../../rooms.js" data-game="lentopallo" data-min="2" data-max="4"></script>
 <script>
@@ -524,14 +527,17 @@ function guestUpdate(dt) {
   }
 }
 function hostEnd(w) {
-  const m = { t: 'end', round: net.round, sc: score.slice(), w };
+  // The end says who played on which side, so a phone that missed the match (reloaded while away)
+  // still knows whether it won.
+  const m = { t: 'end', round: net.round, sc: score.slice(), w, pl: net.setup.pl.map(q => [q.id, q.side]) };
   R.deliver(m);
   R.endRound();
   finish(m);
 }
 function finish(m) {
   state = 'done';
-  const t = team(mine), won = m.w === t, a = m.sc[t], b = m.sc[1 - t];
+  const own = (m.pl || []).find(q => q[0] === R.me);
+  const t = own ? (own[1] < 0 ? 0 : 1) : mine ? team(mine) : 0, won = m.w === t, a = m.sc[t], b = m.sc[1 - t];
   if (R.once(m.round)) {
     if (won) friends.voitot++; else friends.haviot++;
     save('kaverit', friends);
@@ -540,8 +546,9 @@ function finish(m) {
 }
 
 R.on('start', s => {
-  if (s.over) return;
   menu.classList.add('hidden');
+  // A finished match sent to a phone that missed its end: the end itself comes next.
+  if (s.over) { net.round = s.round; state = 'room'; return; }
   // A guest waits for the host's setup; the same round again (a reconnect) carries on as it is.
   if (!R.isHost) { if (s.round !== net.round) { state = 'room'; players = []; mine = null; } return; }
   const setup = setupFor(s.round, s.players);
@@ -558,6 +565,8 @@ R.on('message', (m, from) => {
     if (m.t === 'toss') toss(p);
     return;
   }
+  // Only the phones in the match hear its end (rooms.js deliver()), so it needs no players here.
+  if (m.t === 'end') { finish(m); return; }
   if (m.t === 'setup') {
     if (net.round === m.round && players.length) return;
     applySetup(m);
@@ -567,7 +576,6 @@ R.on('message', (m, from) => {
     menu.classList.add('hidden');
   } else if (m.round === net.round && players.length) {
     if (m.t === 's') applySnapshot(m);
-    if (m.t === 'end') finish(m);
   }
 });
 // A phone that comes back gets the match as it is: who plays where, then the running stream.
@@ -779,12 +787,23 @@ function showMenu(result, cls) {
   document.getElementById('foe').textContent = 'Taso ' + level + ': vastassa ' + foeName(level);
   document.getElementById('stats').textContent = 'Voitot ' + wins + ' · Häviöt ' + losses +
     (friends.voitot + friends.haviot ? ' · Kavereita vastaan ' + friends.voitot + '–' + friends.haviot : '');
-  for (const [id, m] of [['go1', '1v1'], ['go2', '2v2']]) document.getElementById(id).style.outline = mode === m ? '3px solid #fff' : '';
+  pickMode(mode);
   menu.classList.remove('hidden');
 }
-document.getElementById('go1').addEventListener('click', () => { unlock(); newMatch('1v1'); });
-document.getElementById('go2').addEventListener('click', () => { unlock(); newMatch('2v2'); });
-document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+// 1 vs 1 or 2 vs 2 is picked first; it holds for a match alone and for a room this phone makes.
+function pickMode(m) {
+  mode = m; save('muoto', m);
+  document.getElementById('m1').classList.toggle('on', m === '1v1');
+  document.getElementById('m2').classList.toggle('on', m === '2v2');
+}
+function roomNote() {
+  R.note(mode === '2v2' ? 'Pelataan 2 vs 2. Tyhjät paikat pelaa tietokone.' : 'Kaksi pelaa 1 vs 1, kolme tai neljä 2 vs 2.');
+}
+document.getElementById('m1').addEventListener('click', () => pickMode('1v1'));
+document.getElementById('m2').addEventListener('click', () => pickMode('2v2'));
+document.getElementById('go').addEventListener('click', () => { unlock(); newMatch(mode); });
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); roomNote(); });
+R.on('peers', () => { if (R.isHost) roomNote(); });
 showMenu();
 requestAnimationFrame(loop);
 </script>

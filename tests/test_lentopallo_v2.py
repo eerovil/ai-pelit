@@ -17,7 +17,8 @@ def alone(site, context, mode="1v1"):
     site.build(ROOT / "games")
     page = context.new_page()
     page.goto(site.url + URL)
-    page.click("#go1" if mode == "1v1" else "#go2")
+    page.click("#m1" if mode == "1v1" else "#m2")
+    page.click("#go")
     return page
 
 
@@ -104,8 +105,9 @@ def room(site, browser):
         page.goto(site.url + URL)
         return page
 
-    def play(*names):
+    def play(*names, mode="1v1"):
         host = phone(names[0])
+        host.click("#m1" if mode == "1v1" else "#m2")
         host.click("#multi")
         host.click("#aipr-create")
         host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
@@ -124,6 +126,7 @@ def room(site, browser):
             p.wait_for_function("mine && players.length && (state === 'serve' || state === 'play')")
         return host, guests
 
+    play.relay = relay
     yield play
     for ctx in contexts:
         ctx.close()
@@ -169,3 +172,48 @@ def test_three_phones_play_two_against_two_with_the_computer(room):
     b.evaluate("press(mine)")
     host.wait_for_function("tossed && server === players[2]")
     assert host.errors == a.errors == b.errors == []
+
+
+def test_two_phones_play_two_against_two_when_the_host_picks_it(room):
+    host, [guest] = room("Eero", "Aino", mode="2v2")
+    assert host.evaluate("players.map(p => [p.side, p.slot, p.kind])") == [[-1, 0, "me"], [1, 0, "remote"], [-1, 1, "cpu"], [1, 1, "cpu"]]
+    assert guest.evaluate("players.length") == 4
+    assert host.errors == guest.errors == []
+
+
+def test_four_phones_play_two_against_two(room):
+    host, guests = room("Eero", "Aino", "Iida", "Onni")
+    assert host.evaluate("players.map(p => [p.side, p.slot, p.kind])") == [[-1, 0, "me"], [1, 0, "remote"], [-1, 1, "remote"], [1, 1, "remote"]]
+    assert [g.evaluate("[mine.side, mine.slot, view]") for g in guests] == [[1, 0, -1], [-1, 1, 1], [1, 1, -1]]
+    # Each guest's own player moves on the host's phone.
+    for i, g in enumerate(guests, start=1):
+        before = host.evaluate(f"players[{i}].x")
+        g.evaluate("mine.x = mine.side * 3.3")
+        host.wait_for_function(f"Math.abs(players[{i}].x - players[{i}].side * 3.3) < 0.1 && players[{i}].x !== {before}")
+    host.evaluate("score = [9, 11]; state = 'point'; pauseT = 0")
+    for p, res in [(host, "Häviö 9–11"), (guests[0], "Voitto 11–9! 🏆"), (guests[1], "Häviö 9–11"), (guests[2], "Voitto 11–9! 🏆")]:
+        p.wait_for_function("state === 'done' && document.querySelector('#aipr-result').innerText.length > 0")
+        assert p.locator("#aipr-result").inner_text() == res
+    assert host.errors == [] and all(g.errors == [] for g in guests)
+
+
+def test_a_phone_away_at_the_end_gets_its_result_once_after_a_reload(room):
+    host, [guest, third] = room("Eero", "Aino", "Iida")
+    room.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1")
+    host.click("#aipr-goOn")
+    host.wait_for_function("players[1].kind === 'cpu'")
+    host.evaluate("score = [4, 11]; state = 'point'; pauseT = 0")
+    third.wait_for_function("state === 'done'")
+    # Aino's page reloads as her phone comes back: a fresh page that knows no match.
+    room.relay.back(guest)
+    guest.reload()
+    guest.wait_for_function("document.querySelector('#aipr-result') && document.querySelector('#aipr-result').innerText.length > 0", timeout=8000)
+    assert guest.locator("#aipr-result").inner_text() == "Voitto 11–4! 🏆"
+    assert guest.evaluate("localStorage.getItem('ai-pelit:lentopallo:kaverit')") == '{"voitot":1,"haviot":0}'
+    # Back in the room after another reload, the match is not counted again.
+    guest.reload()
+    guest.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.connected", timeout=8000)
+    guest.wait_for_timeout(500)
+    assert guest.evaluate("localStorage.getItem('ai-pelit:lentopallo:kaverit')") == '{"voitot":1,"haviot":0}'
+    assert host.errors == guest.errors == third.errors == []
