@@ -59,6 +59,8 @@ def changed_games(paths: list[str] | None) -> set[str] | None:
     games = set()
     for path in paths:
         parts = path.split("/")
+        if "__pycache__" in parts:
+            continue
         if parts[0] == "games" and len(parts) > 2:
             games.add(parts[1])
         elif parts[0] == "tests" and len(parts) == 2 and (game := game_of_test_file(parts[1])):
@@ -98,13 +100,16 @@ def pytest_collection_modifyitems(config, items):
         items[:] = keep
 
 
-def pytest_report_header(config):
+def pytest_terminal_summary(terminalreporter, config):
+    # A summary line, not a report header: `pytest -q`, as CI runs it, leaves the header out.
     if not config.getoption("--changed-since"):
-        return None
+        return
     changed = config.stash[CHANGED_GAMES]
     if changed is None:
-        return "changed outside games/ (or git could not say): testing every game"
-    return f"games changed: {', '.join(sorted(changed)) or 'none'}; other games' own tests are skipped"
+        terminalreporter.write_line("changed outside games/ (or git could not say): tested every game")
+    else:
+        terminalreporter.write_line(
+            f"games changed: {', '.join(sorted(changed)) or 'none'}; other games' own tests were skipped")
 
 
 @pytest.fixture
