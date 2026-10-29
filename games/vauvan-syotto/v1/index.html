@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Vauvan syöttäminen</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#fdf1e0;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#3a2a1c}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(253,241,224,.93);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:34px;line-height:1.15;color:#e2702b;text-shadow:0 3px 0 #f6c99a}
+  #result{margin:0;font-size:24px;font-weight:800}
+  #result.win{color:#3f9b4a}#result.lose{color:#d2483b}
+  #stars{margin:0;font-size:34px;letter-spacing:4px;min-height:0}
+  #lvl{margin:0;font-size:18px;font-weight:700;color:#7a5536}
+  #go{font:800 22px system-ui,sans-serif;padding:14px 34px;border:0;border-radius:16px;background:#f08a3c;color:#fff;box-shadow:0 4px 0 #b65a1a}
+  #go:active{transform:translateY(3px);box-shadow:0 1px 0 #b65a1a}
+  #total{margin:0;font-size:14px;color:#9a7b5e}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#8a6c50;max-width:310px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🥣 Vauvan<br>syöttäminen</h1>
+  <p id="result"></p>
+  <p id="stars"></p>
+  <p id="lvl"></p>
+  <button id="go">Aloita</button>
+  <p id="total"></p>
+  <p class="help">Vedä lusikka kulhosta vauvan suuhun, kun suu on auki. Anna lusikka vauvan käteen, niin vauva ilahtuu – mutta pudottaa sen. Napauta pudonnut lusikka pestäväksi. 📱 Video pitää suun auki, ✈️ lentokone menee aina perille, 🎵 laulu piristää. Pyyhi roiskeet ruudulta sormella.</p>
+</div>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:vauvan-syotto:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), stars = load('tahdet', {});
+
+const FOOD = '#f39a3c', FOOD_D = '#d9741c', SKIN = '#ffd9b8', SKIN_D = '#f0b993';
+const TIP = 46; // from the finger to the spoon's bowl, so the finger never hides the food
+
+let W, H, DPR, safeT = 0, safeB = 0, G;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  // Everything is laid out from the screen size: HUD, baby in the high chair, bowl, power buttons.
+  const top = safeT + 96, btnY = H - safeB - 46, bowlR = Math.min(58, W * 0.16);
+  const bowlY = btnY - 56 - bowlR * 0.9;
+  const R = Math.max(54, Math.min(W * 0.24, (bowlY - top) * 0.27));
+  const hy = top + R * 1.1, trayY = hy + R * 1.45;
+  G = {
+    R, hx: W / 2, hy, trayY, floorY: trayY + Math.min(R * 1.05, (bowlY - bowlR - trayY) * 0.8),
+    bowl: { x: W / 2, y: bowlY, r: bowlR },
+    btns: [
+      { id: 'video', x: W * 0.2, y: btnY, r: 28, icon: '📱', label: 'Video' },
+      { id: 'plane', x: W * 0.5, y: btnY, r: 28, icon: '✈️', label: 'Lentokone' },
+      { id: 'song', x: W * 0.8, y: btnY, r: 28, icon: '🎵', label: 'Laulu' },
+    ],
+  };
+}
+addEventListener('resize', resize); resize();
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'sine', vol = 0.08, to = 0, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+const sfx = {
+  nam() { tone(520, 0.1, 'triangle', 0.09); tone(660, 0.14, 'triangle', 0.09, 0, 0.11); },
+  splat() { tone(180, 0.18, 'sawtooth', 0.06, 60); },
+  clang() { tone(1800, 0.25, 'square', 0.04, 1500); tone(2400, 0.2, 'square', 0.03, 2100, 0.06); tone(1500, 0.3, 'square', 0.03, 1300, 0.16); },
+  plop() { tone(300, 0.08, 'sine', 0.08, 600); },
+  laugh() { [0, 0.12, 0.24].forEach((d, i) => tone(700 + i * 90, 0.09, 'triangle', 0.06, 0, d)); },
+  cry() { tone(600, 0.5, 'sawtooth', 0.05, 380); tone(600, 0.6, 'sawtooth', 0.05, 350, 0.55); },
+  brr() { tone(90, 0.7, 'sawtooth', 0.05, 140); },
+  song() { [523, 587, 659, 523, 659, 698, 784].forEach((f, i) => tone(f, 0.22, 'sine', 0.07, 0, i * 0.24)); },
+  video() { [784, 659, 784, 880].forEach((f, i) => tone(f, 0.12, 'square', 0.035, 0, i * 0.14)); },
+  burp() { tone(110, 0.35, 'sawtooth', 0.1, 70); },
+  pfrt() { tone(140, 0.3, 'sawtooth', 0.08, 90); },
+  star() { tone(880, 0.1, 'triangle', 0.07); tone(1320, 0.18, 'triangle', 0.07, 0, 0.1); },
+};
+
+// ---------- State ----------
+let state = 'menu', time = 0;
+let tummy = 0, goal = 1, mood = 80, misses = 0, streak = 0, power = {}, plane = false, videoT = 0, songT = 0, endT = 0, pops = [], splats = [];
+const baby = { act: 'idle', t: 0, dur: 1, mouth: 0, turn: 0, turnTo: 0, blink: 0, blinkT: 2, face: [], fed: 0 };
+const spoon = { where: 'bowl', x: 0, y: 0, a: 0, loaded: false, vy: 0, vx: 0, t: 0, fx: 0, fy: 0, hand: 1 };
+
+// Each level wants more bites from a fussier baby with a shorter open mouth.
+function goalFor(l) { return Math.min(30, 6 + 2 * l); }
+function openDur() { return Math.max(0.9, 2.1 - 0.12 * (level - 1)); }
+function turnChance() { return Math.min(0.42, 0.12 + 0.05 * level); }
+function swayAmp() { return Math.min(0.55, 0.06 * (level - 1)); }
+function drain() { return 2 + 0.55 * level; }
+
+function newLevel() {
+  tummy = 0; goal = goalFor(level); mood = 80; misses = 0; streak = 0;
+  power = { video: 1, plane: 1, song: 1 }; plane = false; videoT = 0; songT = 0; endT = 0;
+  pops = []; splats = [];
+  Object.assign(baby, { act: 'idle', t: 0, dur: 1.2, mouth: 0, turn: 0, turnTo: 0, face: [], fed: 0 });
+  restSpoon(); spoon.x = spoonRest().x; spoon.y = spoonRest().y; spoon.loaded = false;
+  state = 'play';
+  menu.classList.add('hidden');
+}
+
+function mouthPos() { return { x: G.hx + baby.turn * G.R * 0.5, y: G.hy + G.R * 0.42 }; }
+function hands() {
+  const up = baby.act === 'reach' ? G.R * 0.55 : 0;
+  return [{ x: G.hx - G.R * 1.12, y: G.trayY - up - 6 }, { x: G.hx + G.R * 1.12, y: G.trayY - up - 6 }];
+}
+function spoonRest() { return { x: G.bowl.x + G.bowl.r * 0.95, y: G.bowl.y + 4 }; }
+function restSpoon() { spoon.where = 'bowl'; spoon.a = -0.75; }
+function tip() { return { x: spoon.x + Math.sin(spoon.a) * TIP, y: spoon.y - Math.cos(spoon.a) * TIP }; }
+
+// A new text in the same spot replaces the old one there.
+function pop(s, px, py, col = '#5a3a20', big = false) { pops = pops.filter(p => p.ox !== px || p.oy !== py); pops.push({ s, x: px, y: py, ox: px, oy: py, c: col, t: 1.1, big }); }
+// Where texts go: the baby's words right of the head, food left of it, game news under the tray.
+function say(s, col = '#5a3a20') { pop(s, G.hx + G.R * 1.0, G.hy - G.R * 0.75, col, true); }
+function yum(s, col) { pop(s, G.hx - G.R * 1.0, G.hy - G.R * 0.75, col, true); }
+function news(s, col) { pop(s, G.hx, G.trayY + 52, col, true); }
+
+function setAct(a, dur) { baby.act = a; baby.t = 0; baby.dur = dur; }
+
+// What the baby does next, after a calm moment.
+function nextAct() {
+  const r = Math.random();
+  if (r < turnChance()) {
+    baby.turnTo = Math.random() < 0.5 ? -1 : 1;
+    setAct('turn', 0.9 + Math.random() * 0.9);
+    say(Math.random() < 0.5 ? 'Ei!' : 'Hmm-mm!');
+  } else if (r < turnChance() + 0.17 && (spoon.where === 'bowl' || spoon.where === 'hand')) {
+    setAct('reach', 2.6);
+    say('Anna! Anna!', '#2d7fc1');
+  } else {
+    setAct('open', openDur());
+    if (Math.random() < 0.4) say('Aaa!', '#e2702b');
+  }
+}
+
+function addMood(n) { mood = Math.max(0, Math.min(100, mood + n)); }
+
+function gainPower() {
+  const free = Object.keys(power).filter(k => power[k] < 3);
+  if (!free.length) return;
+  const k = free[Math.floor(Math.random() * free.length)];
+  power[k]++;
+  const b = G.btns.find(b => b.id === k);
+  pop('+1 ' + b.icon, b.x, b.y - 44, '#3f9b4a', true); sfx.star();
+}
+
+function bite(byPlane) {
+  spoon.loaded = false; restSpoon();
+  // A grumpy baby may blow the food back out, all over the screen.
+  if (mood < 35 && videoT <= 0 && !byPlane && Math.random() < 0.45) {
+    setAct('spit', 0.6); streak = 0; sfx.pfrt();
+    yum('Pfrrrt!', '#d2483b');
+    for (let i = 0; i < 4; i++) splats.push({ x: 30 + Math.random() * (W - 60), y: safeT + 120 + Math.random() * (H - safeT - 260), r: 26 + Math.random() * 34, a: 1, seed: Math.random() * 6 });
+    return;
+  }
+  tummy++; streak++; baby.fed++;
+  addMood(byPlane ? 15 : 8);
+  setAct('chew', 0.75);
+  sfx.nam();
+  yum(byPlane ? 'Nam nam!' : ['Nam!', 'Mmm!', 'Nami!'][baby.fed % 3], '#3f9b4a');
+  if (streak % 4 === 0) gainPower();
+  if (tummy >= goal) win();
+}
+
+function miss() {
+  const m = mouthPos();
+  spoon.loaded = false; restSpoon();
+  misses++; streak = 0; addMood(-10); sfx.splat();
+  baby.face.push({ dx: (m.x - G.hx) / G.R + (Math.random() - 0.5) * 0.5, dy: 0.1 + (Math.random() - 0.5) * 0.5, r: 0.12 + Math.random() * 0.08 });
+  if (baby.face.length > 8) baby.face.shift();
+  yum('Plätsis!', '#d2483b');
+  setAct('idle', 0.6);
+}
+
+function give(reaching, hand) {
+  spoon.where = 'baby'; spoon.hand = hand; spoon.loaded = false; spoon.t = 1.6 + Math.random() * 1.2;
+  addMood(reaching ? 25 : 10); sfx.laugh();
+  say(reaching ? 'Kiitos! Hihi!' : 'Hihi!', '#2d7fc1');
+  setAct('hold', spoon.t);
+}
+
+function usePower(id) {
+  if (state !== 'play' || power[id] <= 0) return;
+  if (id === 'video' && videoT > 0) return;
+  if (id === 'plane' && plane) return;
+  if (id === 'song' && songT > 0) return;
+  power[id]--;
+  if (id === 'video') { videoT = 6; sfx.video(); news('Katsotaan videota!', '#7a4cc2'); }
+  if (id === 'plane') { plane = true; sfx.brr(); news('Tässä tulee lentokone!', '#2d7fc1'); }
+  if (id === 'song') { songT = 3.2; addMood(40); sfx.song(); news('Tuu tuu tupakkarulla…', '#c2447a'); }
+}
+
+function win() {
+  state = 'win'; endT = 2.2; setAct('sleep', 99); sfx.burp();
+  say('Röyh!', '#7a5536');
+  const s = misses === 0 ? 3 : misses <= 2 ? 2 : 1;
+  stars[level] = Math.max(stars[level] || 0, s); save('tahdet', stars);
+  lastStars = s; level++; save('taso', level);
+}
+function lose() { state = 'lose'; endT = 2.2; setAct('cry', 99); sfx.cry(); say('Buaaa!', '#d2483b'); }
+let lastStars = 0;
+
+function showMenu() {
+  state = 'menu';
+  const res = document.getElementById('result'), st = document.getElementById('stars');
+  res.className = ''; res.textContent = ''; st.textContent = '';
+  if (lastResult === 'win') {
+    res.className = 'win'; res.textContent = 'Vauva on kylläinen!';
+    st.textContent = '⭐'.repeat(lastStars) + '☆'.repeat(3 - lastStars);
+  } else if (lastResult === 'lose') {
+    res.className = 'lose'; res.textContent = 'Vauva itkee… yritä uudestaan';
+  }
+  document.getElementById('lvl').textContent = 'Taso ' + level + ' · ' + goalFor(level) + ' lusikallista';
+  document.getElementById('go').textContent = lastResult === 'win' ? 'Seuraava taso' : lastResult === 'lose' ? 'Uudestaan' : 'Aloita';
+  const total = Object.values(stars).reduce((a, b) => a + b, 0);
+  document.getElementById('total').textContent = total ? 'Tähtiä yhteensä ' + total + ' ⭐' : '';
+  menu.classList.remove('hidden');
+}
+let lastResult = '';
+document.getElementById('go').addEventListener('click', () => { unlock(); newLevel(); });
+
+// ---------- Step ----------
+function step(dt) {
+  time += dt;
+  if (state === 'menu') return;
+  for (const p of pops) { p.t -= dt; p.y -= 14 * dt; }
+  pops = pops.filter(p => p.t > 0);
+  for (const s of splats) s.a -= dt / 14;
+  splats = splats.filter(s => s.a > 0.05);
+  if (state === 'win' || state === 'lose') {
+    baby.mouth += ((baby.act === 'cry' ? 0.7 : 0) - baby.mouth) * Math.min(1, dt * 8);
+    baby.turn += (0 - baby.turn) * Math.min(1, dt * 6);
+    endT -= dt;
+    if (endT <= 0) { lastResult = state; showMenu(); }
+    return;
+  }
+
+  videoT = Math.max(0, videoT - dt); songT = Math.max(0, songT - dt);
+  addMood(-drain() * dt * (videoT > 0 ? 0 : songT > 0 ? 0.3 : 1));
+  if (mood <= 0) { lose(); return; }
+
+  // The spoon on its own: back to the bowl, in the baby's fist, falling, washed, or flying.
+  if (spoon.where === 'bowl') {
+    const r = spoonRest(), k = Math.min(1, dt * 14);
+    spoon.x += (r.x - spoon.x) * k; spoon.y += (r.y - spoon.y) * k; spoon.a += (-0.75 - spoon.a) * k;
+  } else if (spoon.where === 'baby') {
+    // In whichever hand it was given to; the left hand waves it the other way.
+    const h = hands()[spoon.hand], side = spoon.hand ? 1 : -1;
+    spoon.x = h.x + 4 * side; spoon.y = h.y + 10; spoon.a = side * (0.25 + Math.sin(time * 14) * 0.45);
+  } else if (spoon.where === 'fall') {
+    spoon.vy += 1400 * dt; spoon.x += spoon.vx * dt; spoon.y += spoon.vy * dt; spoon.a += 9 * dt;
+    if (spoon.y >= G.floorY) {
+      spoon.y = G.floorY; spoon.where = 'floor'; spoon.a = 1.35 + Math.random() * 0.3; sfx.clang();
+      pop('Kolin!', spoon.x, spoon.y - 24, '#7a5536', true);
+    }
+  } else if (spoon.where === 'wash') {
+    spoon.t -= dt;
+    if (spoon.t <= 0) restSpoon();
+  } else if (spoon.where === 'fly') {
+    spoon.t += dt / 0.75;
+    const m = mouthPos(), u = Math.min(1, spoon.t), e = u * u * (3 - 2 * u);
+    // A loop-the-loop on the way in.
+    const lx = Math.sin(u * Math.PI * 2) * 50 * (1 - u), ly = -Math.sin(u * Math.PI) * 70;
+    const tx = spoon.fx + (m.x - spoon.fx) * e + lx, ty = spoon.fy + (m.y - spoon.fy) * e + ly;
+    spoon.a = Math.sin(u * Math.PI * 2) * 0.6;
+    spoon.x = tx - Math.sin(spoon.a) * TIP; spoon.y = ty + Math.cos(spoon.a) * TIP;
+    if (u >= 1) { plane = false; bite(true); if (state !== 'play') return; }
+  }
+
+  // The baby.
+  baby.blinkT -= dt;
+  if (baby.blinkT <= 0) { baby.blink = 0.14; baby.blinkT = 2 + Math.random() * 3; }
+  baby.blink -= dt;
+  baby.t += dt;
+  const held = spoon.where === 'hand' && spoon.loaded;
+  const planeComing = spoon.where === 'fly' || (plane && held);
+  let open = 0, turnTo = 0;
+  // Holding the spoon, chewing and spitting run to their end even then, so the spoon still drops.
+  const busy = baby.act === 'hold' || baby.act === 'chew' || baby.act === 'spit';
+  if ((videoT > 0 || planeComing) && !busy) {
+    // Staring at the phone, or at the aeroplane: mouth wide open, head still.
+    open = 1; if (baby.act !== 'open') setAct('open', 0.4); baby.t = 0;
+  } else {
+    // A loaded spoon close to the mouth hurries the next "aaa".
+    if (baby.act === 'idle' && held) {
+      const t = tip(), m = mouthPos();
+      if (Math.hypot(t.x - m.x, t.y - m.y) < G.R * 2.2) baby.t += dt * 1.5;
+    }
+    if (baby.act === 'open') { open = 1; turnTo = Math.sin(time * 2.3) * swayAmp(); }
+    if (baby.act === 'turn') turnTo = baby.turnTo;
+    if (baby.act === 'spit') open = 0.5;
+    if (baby.act === 'chew') open = 0.15 + 0.15 * Math.sin(baby.t * 30);
+    if (baby.t >= baby.dur) {
+      if (baby.act === 'idle') nextAct();
+      else if (baby.act === 'hold') {
+        // Bang, bang… and over the edge it goes.
+        spoon.where = 'fall'; spoon.vy = -260; spoon.vx = (spoon.hand ? -1 : 1) * (30 + Math.random() * 40); // towards the chair, so it stays on screen
+        setAct('idle', 0.8); say('Hups!', '#2d7fc1');
+      } else {
+        if (baby.act === 'reach') { addMood(-8); say('Hmph!', '#d2483b'); }
+        setAct('idle', Math.max(0.5, 1.6 - 0.1 * level) * (0.6 + Math.random() * 0.8));
+      }
+    }
+  }
+  baby.mouth += (open - baby.mouth) * Math.min(1, dt * 10);
+  baby.turn += (turnTo - baby.turn) * Math.min(1, dt * (videoT > 0 ? 8 : 4.5));
+}
+
+// ---------- Touch ----------
+let finger = null; // 'spoon', 'wipe' or null
+function canvasPoint(e) { return { px: e.clientX, py: e.clientY }; }
+
+function down(px, py) {
+  unlock();
+  if (state !== 'play') return;
+  for (const b of G.btns) if (Math.hypot(px - b.x, py - b.y) < b.r + 10) { usePower(b.id); finger = null; return; }
+  if (spoon.where === 'bowl' && (Math.hypot(px - G.bowl.x, py - G.bowl.y) < G.bowl.r * 1.4 || Math.hypot(px - spoon.x, py - spoon.y) < 50)) {
+    // Picking the spoon up out of the bowl scoops a spoonful.
+    spoon.where = 'hand'; spoon.a = 0; spoon.x = px; spoon.y = py;
+    if (!spoon.loaded) { spoon.loaded = true; sfx.plop(); }
+    finger = 'spoon'; return;
+  }
+  if (spoon.where === 'floor') {
+    const t = tip();
+    if (Math.hypot(px - spoon.x, py - spoon.y) < 55 || Math.hypot(px - t.x, py - t.y) < 55) {
+      spoon.where = 'wash'; spoon.t = 0.8; spoon.loaded = false;
+      pop('Pestään… 🧽', spoon.x, spoon.y - 30, '#2d7fc1');
+      finger = null; return;
+    }
+  }
+  finger = 'wipe'; wipe(px, py);
+}
+
+function move(px, py) {
+  if (finger === 'spoon' && spoon.where === 'hand') {
+    spoon.x = px; spoon.y = py;
+    // Dipping the spoon back into the bowl fills it again.
+    const t = tip();
+    if (!spoon.loaded && Math.hypot(t.x - G.bowl.x, t.y - G.bowl.y) < G.bowl.r * 0.8) { spoon.loaded = true; sfx.plop(); }
+  } else if (finger === 'wipe') wipe(px, py);
+}
+
+function up(px, py) {
+  const f = finger; finger = null;
+  if (f !== 'spoon' || spoon.where !== 'hand' || state !== 'play') return;
+  spoon.x = px; spoon.y = py;
+  const t = tip(), m = mouthPos(), R = G.R;
+  if (Math.hypot(t.x - m.x, t.y - m.y) < R * 0.45) {
+    if (!spoon.loaded) { restSpoon(); yum('?'); return; }
+    // An aeroplane spoonful always goes in, wherever it is let go.
+    if (baby.mouth > 0.55 || plane) { const byPlane = plane; plane = false; bite(byPlane); } else miss();
+    return;
+  }
+  for (const [i, h] of hands().entries()) {
+    if (Math.hypot(t.x - h.x, t.y - h.y) < R * 0.55 || Math.hypot(px - h.x, py - h.y) < R * 0.5) {
+      if (spoon.loaded) pop('Plops pöydälle', h.x, h.y - 30);
+      give(baby.act === 'reach', i); return;
+    }
+  }
+  if (plane && spoon.loaded && t.y < G.bowl.y - G.bowl.r) {
+    spoon.where = 'fly'; spoon.t = 0; spoon.fx = t.x; spoon.fy = t.y; sfx.brr(); return;
+  }
+  restSpoon();
+}
+
+function wipe(px, py) {
+  for (const s of splats) if (Math.hypot(px - s.x, py - s.y) < s.r + 24) s.a -= 0.12;
+  splats = splats.filter(s => s.a > 0.05);
+}
+
+c.addEventListener('pointerdown', e => {
+  if (!e.isPrimary) return;
+  c.setPointerCapture(e.pointerId);
+  const p = canvasPoint(e); down(p.px, p.py);
+});
+c.addEventListener('pointermove', e => { if (e.isPrimary) { const p = canvasPoint(e); move(p.px, p.py); } });
+c.addEventListener('pointerup', e => { if (e.isPrimary) { const p = canvasPoint(e); up(p.px, p.py); } });
+c.addEventListener('pointercancel', e => { if (e.isPrimary && finger === 'spoon') { finger = null; restSpoon(); } });
+
+// ---------- Drawing ----------
+function rr(px, py, w, h, r) { x.beginPath(); x.roundRect ? x.roundRect(px, py, w, h, r) : x.rect(px, py, w, h); }
+function blob(px, py, r, seed, col) {
+  x.fillStyle = col; x.beginPath();
+  for (let i = 0; i <= 10; i++) {
+    const a = i / 10 * Math.PI * 2, k = r * (0.75 + 0.25 * Math.sin(a * 3 + seed) + 0.1 * Math.cos(a * 5 + seed));
+    i ? x.lineTo(px + Math.cos(a) * k, py + Math.sin(a) * k) : x.moveTo(px + Math.cos(a) * k, py + Math.sin(a) * k);
+  }
+  x.closePath(); x.fill();
+}
+
+function drawRoom() {
+  x.fillStyle = '#fdf1e0'; x.fillRect(0, 0, W, H);
+  // Wallpaper dots and the kitchen floor.
+  x.fillStyle = '#f7e2c6';
+  for (let yy = safeT + 20; yy < G.floorY; yy += 34) for (let xx = (yy / 34 % 2) * 17; xx < W; xx += 34) { x.beginPath(); x.arc(xx, yy, 3, 0, 7); x.fill(); }
+  x.fillStyle = '#e9c9a0'; x.fillRect(0, G.floorY + 6, W, H - G.floorY);
+  x.strokeStyle = '#dcb88a'; x.lineWidth = 2;
+  for (let xx = -40; xx < W + 40; xx += 46) { x.beginPath(); x.moveTo(xx, G.floorY + 6); x.lineTo(xx - 30, H); x.stroke(); }
+}
+
+function drawChair() {
+  const { hx, hy, R, trayY } = G;
+  // Chair back, legs and tray.
+  x.fillStyle = '#9fd3c7'; rr(hx - R * 1.35, hy - R * 0.7, R * 2.7, trayY - hy + R * 0.7, R * 0.5); x.fill();
+  x.strokeStyle = '#c98b4b'; x.lineWidth = 8; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(hx - R * 0.9, trayY + 10); x.lineTo(hx - R * 1.25, G.floorY + 4);
+  x.moveTo(hx + R * 0.9, trayY + 10); x.lineTo(hx + R * 1.25, G.floorY + 4); x.stroke();
+}
+
+function drawBaby() {
+  const { hx, hy, R, trayY } = G, t = baby.turn, fx = hx + t * R * 0.32, bob = baby.act === 'open' ? 0 : Math.sin(time * 2) * 1.5;
+  const happy = baby.act === 'chew' || baby.act === 'hold' || songT > 0 || baby.act === 'sleep';
+  // Body, bib.
+  x.fillStyle = '#7ec4e8'; x.beginPath(); x.ellipse(hx, trayY - R * 0.15, R * 0.88, R * 0.7, 0, Math.PI, 0); x.fill();
+  x.fillStyle = '#fff'; x.beginPath(); x.ellipse(hx, hy + R * 1.0, R * 0.55, R * 0.42, 0, 0, Math.PI * 2); x.fill();
+  for (let i = 0; i < Math.min(misses, 6); i++) blob(hx - R * 0.3 + (i % 3) * R * 0.3, hy + R * (0.95 + Math.floor(i / 3) * 0.2), R * 0.07, i, FOOD);
+  // Head.
+  const hyb = hy + bob;
+  x.fillStyle = SKIN;
+  x.beginPath(); x.arc(hx - R * 0.98 + t * R * 0.1, hyb, R * 0.2, 0, 7); x.arc(hx + R * 0.98 + t * R * 0.1, hyb, R * 0.2, 0, 7); x.fill();
+  x.beginPath(); x.arc(hx, hyb, R, 0, Math.PI * 2); x.fill();
+  // A curl of hair.
+  x.strokeStyle = '#a0682f'; x.lineWidth = 4; x.beginPath(); x.arc(fx + 4, hyb - R * 0.92, R * 0.14, Math.PI * 0.9, Math.PI * 2.6); x.stroke();
+  // Eyes.
+  const ey = hyb - R * 0.1, ex = R * 0.34;
+  x.fillStyle = '#3a2a1c'; x.strokeStyle = '#3a2a1c'; x.lineWidth = 3.5;
+  for (const s of [-1, 1]) {
+    const px = fx + s * ex;
+    if (baby.act === 'sleep' || baby.act === 'cry') {
+      x.beginPath(); x.arc(px, ey, R * 0.1, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke();
+    } else if (happy) {
+      x.beginPath(); x.arc(px, ey + R * 0.04, R * 0.1, 1.15 * Math.PI, 1.85 * Math.PI); x.stroke();
+    } else if (baby.blink > 0) {
+      x.beginPath(); x.moveTo(px - R * 0.09, ey); x.lineTo(px + R * 0.09, ey); x.stroke();
+    } else {
+      const big = videoT > 0 ? 1.35 : 1;
+      x.beginPath(); x.ellipse(px, ey, R * 0.09 * big, R * 0.12 * big, 0, 0, 7); x.fill();
+      x.fillStyle = videoT > 0 ? '#9fe0ff' : '#fff';
+      x.beginPath(); x.arc(px + R * 0.03, ey - R * 0.04, R * 0.035 * big, 0, 7); x.fill(); x.fillStyle = '#3a2a1c';
+    }
+    if (baby.act === 'turn' || (baby.act === 'idle' && mood < 30)) {
+      // Cross eyebrows.
+      x.beginPath(); x.moveTo(px - s * R * 0.12, ey - R * 0.24); x.lineTo(px + s * R * 0.1, ey - R * 0.18); x.stroke();
+    }
+  }
+  // Cheeks.
+  x.fillStyle = 'rgba(255,120,120,.35)';
+  x.beginPath(); x.arc(fx - R * 0.55, hyb + R * 0.2, R * 0.15, 0, 7); x.arc(fx + R * 0.55, hyb + R * 0.2, R * 0.15, 0, 7); x.fill();
+  // Tears.
+  if (baby.act === 'cry' || mood < 15) {
+    x.fillStyle = '#7cc7ff';
+    const d = (time * 1.5) % 1;
+    for (const s of [-1, 1]) { x.beginPath(); x.ellipse(fx + s * ex, ey + R * (0.15 + d * 0.5), 4, 6, 0, 0, 7); x.fill(); }
+  }
+  // Mouth.
+  const m = mouthPos(), mo = baby.mouth;
+  if (mo > 0.08) {
+    x.fillStyle = '#9b2c2c'; x.beginPath(); x.ellipse(m.x, m.y, R * (0.16 + 0.08 * mo), R * (0.04 + 0.2 * mo), 0, 0, 7); x.fill();
+    x.fillStyle = '#f08080'; x.beginPath(); x.ellipse(m.x, m.y + R * 0.12 * mo, R * 0.12 * mo, R * 0.07 * mo, 0, 0, 7); x.fill();
+  } else {
+    x.strokeStyle = '#9b2c2c'; x.lineWidth = 3.5; x.beginPath();
+    if (mood < 35 || baby.act === 'turn') x.arc(m.x, m.y + R * 0.14, R * 0.14, 1.2 * Math.PI, 1.8 * Math.PI);
+    else x.arc(m.x, m.y - R * 0.06, R * 0.14, 0.2 * Math.PI, 0.8 * Math.PI);
+    x.stroke();
+  }
+  if (baby.act === 'chew' || baby.act === 'spit') blob(m.x, m.y + R * 0.02, R * 0.06, 2, FOOD);
+  // Food on the face from every miss.
+  for (const f of baby.face) blob(hx + f.dx * R, hyb + f.dy * R + R * 0.42, f.r * R, f.dx * 9, FOOD);
+  if (baby.act === 'sleep') { x.fillStyle = '#7a5536'; x.font = '700 22px system-ui'; x.textAlign = 'left'; x.fillText('z Z z', hx + R * 0.8, hyb - R * 0.9 - Math.sin(time * 2) * 4); }
+  // Tray in front, with the hands on it.
+  x.fillStyle = '#fbf8f2'; rr(hx - R * 1.55, trayY - 8, R * 3.1, 22, 11); x.fill();
+  x.strokeStyle = '#d9cfbf'; x.lineWidth = 2; x.stroke();
+  const hs = hands();
+  for (const h of hs) {
+    if (baby.act === 'reach') {
+      x.strokeStyle = '#7ec4e8'; x.lineWidth = R * 0.22; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(h.x * 0.6 + hx * 0.4, trayY - 10); x.lineTo(h.x, h.y + 8); x.stroke();
+    }
+    x.fillStyle = SKIN; x.beginPath(); x.arc(h.x, h.y + Math.sin(time * 12) * (baby.act === 'reach' ? 3 : 0), R * 0.17, 0, 7); x.fill();
+    x.strokeStyle = SKIN_D; x.lineWidth = 2; x.stroke();
+  }
+}
+
+function drawPhone() {
+  if (videoT <= 0) return;
+  const { hx, hy, R } = G, pw = R * 0.9, ph = R * 1.5, px = hx + R * 1.15, py = hy - R * 1.15;
+  x.save(); x.translate(px, py); x.rotate(-0.12);
+  x.fillStyle = '#222'; rr(0, 0, pw, ph, 10); x.fill();
+  x.fillStyle = '#5ac8fa'; rr(5, 8, pw - 10, ph - 16, 5); x.fill();
+  // A tiny cartoon: a bouncing ball and a sun.
+  x.fillStyle = '#ffd34d'; x.beginPath(); x.arc(pw * 0.72, ph * 0.25, 7, 0, 7); x.fill();
+  x.fillStyle = '#6cc04a'; x.fillRect(5, ph * 0.72, pw - 10, ph * 0.28 - 8);
+  x.fillStyle = '#ff5c8a'; x.beginPath(); x.arc(pw * 0.4 + Math.sin(time * 3) * pw * 0.2, ph * 0.68 - Math.abs(Math.sin(time * 6)) * ph * 0.3, 8, 0, 7); x.fill();
+  x.restore();
+}
+
+function drawBowl() {
+  const b = G.bowl;
+  x.fillStyle = 'rgba(0,0,0,.08)'; x.beginPath(); x.ellipse(b.x, b.y + b.r * 0.62, b.r * 1.05, b.r * 0.22, 0, 0, 7); x.fill();
+  x.fillStyle = '#ff8fa3'; x.beginPath(); x.moveTo(b.x - b.r, b.y); x.quadraticCurveTo(b.x - b.r * 0.9, b.y + b.r * 0.7, b.x, b.y + b.r * 0.66); x.quadraticCurveTo(b.x + b.r * 0.9, b.y + b.r * 0.7, b.x + b.r, b.y); x.fill();
+  x.fillStyle = '#ffc2cd'; x.beginPath(); x.ellipse(b.x, b.y, b.r, b.r * 0.32, 0, 0, 7); x.fill();
+  x.fillStyle = FOOD; x.beginPath(); x.ellipse(b.x, b.y + 2, b.r * 0.84, b.r * 0.24, 0, 0, 7); x.fill();
+  x.fillStyle = FOOD_D; x.beginPath(); x.ellipse(b.x - b.r * 0.2, b.y, b.r * 0.2, b.r * 0.06, 0, 0, 7); x.fill();
+}
+
+function drawSpoon() {
+  if (spoon.where === 'wash') {
+    x.font = '30px system-ui'; x.textAlign = 'center'; x.fillText('🫧', spoon.x, spoon.y - 10 - (0.8 - spoon.t) * 40);
+    return;
+  }
+  x.save(); x.translate(spoon.x, spoon.y); x.rotate(spoon.a);
+  const flying = spoon.where === 'fly' || (plane && spoon.where === 'hand' && spoon.loaded);
+  if (flying) {
+    x.fillStyle = '#e5484d';
+    x.beginPath(); x.moveTo(0, -TIP * 0.45); x.lineTo(-26, -TIP * 0.2); x.lineTo(-26, -TIP * 0.08); x.lineTo(0, -TIP * 0.2); x.lineTo(26, -TIP * 0.08); x.lineTo(26, -TIP * 0.2); x.closePath(); x.fill();
+  }
+  x.strokeStyle = '#a9b4bf'; x.lineWidth = 7; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(0, 8); x.lineTo(0, -TIP + 10); x.stroke();
+  x.strokeStyle = '#dfe6ec'; x.lineWidth = 3; x.beginPath(); x.moveTo(-1, 6); x.lineTo(-1, -TIP + 12); x.stroke();
+  x.fillStyle = '#c9d3dd'; x.beginPath(); x.ellipse(0, -TIP, 13, 10, 0, 0, 7); x.fill();
+  if (spoon.loaded) blob(0, -TIP - 1, 10, 1, FOOD);
+  x.restore();
+}
+
+function bar(px, py, w, val, col, icon, label) {
+  x.fillStyle = 'rgba(90,58,32,.15)'; rr(px, py, w, 16, 8); x.fill();
+  x.fillStyle = col; rr(px, py, Math.max(16, w * val), 16, 8); x.fill();
+  x.font = '18px system-ui'; x.textAlign = 'right'; x.textBaseline = 'middle'; x.fillStyle = '#3a2a1c';
+  x.fillText(icon, px - 6, py + 9);
+  x.font = '700 11px system-ui'; x.textAlign = 'left'; x.fillStyle = '#fff'; x.fillText(label, px + 8, py + 8.5);
+  x.textBaseline = 'alphabetic';
+}
+
+function drawHud() {
+  x.textAlign = 'right'; x.fillStyle = '#7a5536'; x.font = '800 18px system-ui';
+  x.fillText('Taso ' + level, W - 14, safeT + 26);
+  const bx = 44, bw = W - bx - 14;
+  bar(bx, safeT + 44, bw, tummy / goal, '#3f9b4a', '🍼', 'Maha ' + tummy + '/' + goal);
+  const face = mood > 60 ? '😊' : mood > 30 ? '😐' : '😣';
+  bar(bx, safeT + 68, bw, mood / 100, mood > 30 ? '#f0a23c' : '#d2483b', face, 'Mieli');
+}
+
+function drawButtons() {
+  for (const b of G.btns) {
+    const n = power[b.id], on = (b.id === 'video' && videoT > 0) || (b.id === 'plane' && plane) || (b.id === 'song' && songT > 0);
+    x.globalAlpha = n > 0 || on ? 1 : 0.4;
+    x.fillStyle = on ? '#ffe08a' : '#fff'; x.beginPath(); x.arc(b.x, b.y, b.r, 0, 7); x.fill();
+    x.strokeStyle = on ? '#e0a82e' : '#e2c9a8'; x.lineWidth = 3; x.stroke();
+    x.font = '26px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(b.icon, b.x, b.y + 1);
+    x.textBaseline = 'alphabetic';
+    x.fillStyle = '#e2702b'; x.beginPath(); x.arc(b.x + b.r * 0.75, b.y - b.r * 0.75, 10, 0, 7); x.fill();
+    x.fillStyle = '#fff'; x.font = '800 12px system-ui'; x.fillText(n, b.x + b.r * 0.75, b.y - b.r * 0.75 + 4);
+    x.fillStyle = '#7a5536'; x.font = '600 11px system-ui'; x.fillText(b.label, b.x, b.y + b.r + 14);
+    x.globalAlpha = 1;
+  }
+}
+
+function drawNotes() {
+  if (songT <= 0) return;
+  x.font = '22px system-ui'; x.textAlign = 'center'; x.fillStyle = '#c2447a';
+  for (let i = 0; i < 4; i++) {
+    const u = (time * 0.6 + i / 4) % 1;
+    x.globalAlpha = 1 - u;
+    x.fillText(i % 2 ? '♪' : '♫', G.hx + Math.sin(u * 6 + i) * G.R * 1.4, G.hy - G.R * 0.3 - u * G.R * 1.2);
+  }
+  x.globalAlpha = 1;
+}
+
+function drawPops() {
+  x.textAlign = 'center';
+  for (const p of pops) {
+    x.globalAlpha = Math.min(1, p.t * 2);
+    x.font = (p.big ? '800 22px' : '700 17px') + ' system-ui';
+    x.lineWidth = 4; x.strokeStyle = '#fff'; x.strokeText(p.s, p.x, p.y);
+    x.fillStyle = p.c; x.fillText(p.s, p.x, p.y);
+  }
+  x.globalAlpha = 1;
+}
+
+function drawSplats() {
+  for (const s of splats) { x.globalAlpha = Math.min(0.9, s.a); blob(s.x, s.y, s.r, s.seed, FOOD); blob(s.x - s.r * 0.2, s.y - s.r * 0.2, s.r * 0.35, s.seed + 1, '#f7b26b'); }
+  x.globalAlpha = 1;
+}
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawRoom(); drawChair(); drawBaby(); drawPhone(); drawNotes(); drawBowl();
+  const onTop = spoon.where === 'hand' || spoon.where === 'fly';
+  if (!onTop) drawSpoon();
+  if (state !== 'menu') { drawHud(); drawButtons(); }
+  if (onTop) drawSpoon();
+  drawPops(); drawSplats();
+  // A hint until the first bite.
+  if (state === 'play' && tummy === 0 && spoon.where === 'bowl' && misses === 0) {
+    x.globalAlpha = 0.5 + 0.5 * Math.sin(time * 5);
+    x.font = '700 15px system-ui'; x.textAlign = 'center'; x.fillStyle = '#7a5536';
+    x.fillText('👆 Ota lusikka kulhosta', G.bowl.x, G.bowl.y - G.bowl.r * 0.6 - 10);
+    x.globalAlpha = 1;
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  step(dt); draw();
+  requestAnimationFrame(frame);
+}
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
