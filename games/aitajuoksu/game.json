@@ -1,0 +1,13 @@
+{
+  "title": "Aitajuoksu",
+  "description": "100 metrin aitajuoksu: paina jalkoja vuorotellen ja hyppää aidat, yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: 100 metrin aitajuoksu sivusta, kolmea tietokonejuoksijaa vastaan tai 2–6 kaverin kanssa samassa huoneessa.",
+      "request": "Aitajuoksu peli. Multiplayer mahdollisuus",
+      "issue": "eerovil/ai-pelit#46"
+    }
+  ]
+}

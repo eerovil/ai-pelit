@@ -434,6 +434,7 @@
   }
   var pauseShown = '';
   function renderPause() {
+    if (!root) return; // the room screen is built on first use; the timer starts before that
     var text = '', canGoOn = false;
     if (net.on && racing() && !shown) {
       var names = waitingFor();
