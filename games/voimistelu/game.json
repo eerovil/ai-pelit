@@ -15,6 +15,13 @@
       "note": "Toinen tanko kuten naisten eritasonojapuissa: lennä tangolta toiselle, ja kamera seuraa, vaikka lentäisit ruudun reunan yli.",
       "request": "Lisää toinen tanko kuten olympialaisissa. Myös jos lentää ruudun ulkopuolelle niin kamera seuraa",
       "issue": "eerovil/ai-pelit#14"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-29",
+      "note": "Netin tuloslista: paras sarjan pistemäärä kaikilta pelaajilta, nimimerkki kerran puhelimelle.",
+      "request": "Online high-score lists for each game (#25): a nickname once per phone, approved by the admin; one list per game across versions; no cheat checks.",
+      "issue": "eerovil/ai-pelit#25"
     }
   ]
 }

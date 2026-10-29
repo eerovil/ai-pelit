@@ -22,6 +22,11 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
       - run: python -m playwright install --with-deps chromium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Server tests (server/api.js on SQLite)
+        run: npm test
       - name: No published version changed
         if: github.event_name == 'pull_request'
         run: python scripts/check_immutable.py origin/${{ github.base_ref }}
@@ -53,6 +58,9 @@ jobs:
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
+      # The checkout brings functions/ and server/: wrangler bundles them as the site's /api/.
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.ready == 'true'
       - uses: actions/download-artifact@v4
         if: steps.ready.outputs.ready == 'true'
         with:
@@ -67,4 +75,6 @@ jobs:
         run: npx -y wrangler@4 pages deploy _site --project-name ai-pelit --branch main --commit-hash "$GITHUB_SHA"
       - name: Check what is live
         if: steps.ready.outputs.ready == 'true'
-        run: curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://ai-pelit.pages.dev/catalog.json > /dev/null
+        run: |
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://ai-pelit.pages.dev/catalog.json > /dev/null
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors 'https://ai-pelit.pages.dev/api/scores?game=hiihto&board=taso-1' > /dev/null

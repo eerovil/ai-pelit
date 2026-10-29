@@ -29,6 +29,13 @@
       "note": "Ollie osuu nyt varmemmin: myöhäinen napautus heti rampin reunan jälkeen lasketaan vielä täydelliseksi ollieksi.",
       "request": "Pelaajat valittelee ettö joskus se ei  osu ollieen vaikka olisi vihreällä.",
       "issue": "eerovil/ai-pelit#2"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-29",
+      "note": "Netin tuloslista: korkein ollie kaikilta pelaajilta, nimimerkki kerran puhelimelle.",
+      "request": "Online high-score lists for each game (#25): a nickname once per phone, approved by the admin; one list per game across versions; no cheat checks.",
+      "issue": "eerovil/ai-pelit#25"
     }
   ]
 }

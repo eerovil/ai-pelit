@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ylläpito · AI-pelit</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="../app.css">
+<style>
+  .player { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .player .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .player button { padding: 8px 12px; }
+  .tag { font-size: 12px; padding: 2px 6px; border-radius: 6px; background: #3a4570; }
+  .tag.pending { background: #8a6d12; }
+  .tag.rejected { background: #7a2b2b; }
+  form { display: flex; gap: 8px; }
+  form[hidden] { display: none; }
+  button { font-family: inherit; }
+  form input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 0; font: 16px system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<header class="top"><a class="brand" href="../">AI-pelit</a></header>
+<main>
+  <h1>Nimimerkit</h1>
+  <p class="muted">Uusi tai vaihdettu nimimerkki näkyy tuloslistoilla vasta, kun hyväksyt sen.</p>
+  <form id="login" hidden>
+    <input id="key" type="password" autocomplete="current-password" placeholder="Ylläpidon avain" aria-label="Ylläpidon avain">
+    <button class="button" type="submit">Avaa</button>
+  </form>
+  <p id="msg" class="muted"></p>
+  <div id="list"></div>
+</main>
+<script>
+// The admin's page for nicknames (#25). The key is the ADMIN_KEY secret on Cloudflare; it is
+// kept on this phone only, so the shelf can show how many names wait.
+(function () {
+  'use strict';
+  var KEY = 'ai-pelit:_yllapito:avain';
+  // A link with #avain=<key> saves the key on this phone and drops it from the address.
+  function keyFromLink() {
+    var m = location.hash.match(/avain=([^&]+)/);
+    if (!m) return false;
+    localStorage.setItem(KEY, decodeURIComponent(m[1]));
+    history.replaceState(null, '', location.pathname);
+    return true;
+  }
+  keyFromLink();
+  var login = document.getElementById('login'), msg = document.getElementById('msg'), list = document.getElementById('list');
+  var LABEL = { pending: 'odottaa', approved: 'hyväksytty', rejected: 'hylätty' };
+
+  function call(method, body) {
+    return fetch('../api/admin/players', {
+      method: method,
+      headers: { 'content-type': 'application/json', 'x-admin-key': localStorage.getItem(KEY) || '' },
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (r) {
+      if (r.status === 403) { localStorage.removeItem(KEY); throw new Error('avain'); }
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+  }
+
+  function button(text, status, id) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = text; b.className = status === 'approved' ? 'button' : 'secondary';
+    b.dataset.status = status;
+    b.onclick = function () { call('POST', { id: id, status: status }).then(show, fail); };
+    return b;
+  }
+
+  function show() {
+    login.hidden = true;
+    msg.textContent = 'Haetaan…';
+    call('GET').then(function (b) {
+      list.textContent = '';
+      var waiting = b.players.filter(function (p) { return p.status === 'pending'; }).length;
+      msg.textContent = waiting ? waiting + ' odottaa hyväksyntää.' : 'Kaikki nimet on käsitelty.';
+      b.players.forEach(function (p) {
+        var row = document.createElement('div');
+        row.className = 'player'; row.dataset.status = p.status;
+        var who = document.createElement('div'); who.className = 'who';
+        var name = document.createElement('strong'); name.textContent = p.name;
+        var tag = document.createElement('span'); tag.className = 'tag ' + p.status; tag.textContent = LABEL[p.status];
+        who.appendChild(name); who.appendChild(document.createTextNode(' ')); who.appendChild(tag);
+        row.appendChild(who);
+        if (p.status !== 'approved') row.appendChild(button('Hyväksy', 'approved', p.id));
+        if (p.status !== 'rejected') row.appendChild(button('Hylkää', 'rejected', p.id));
+        list.appendChild(row);
+      });
+    }, fail);
+  }
+
+  function fail(e) {
+    list.textContent = '';
+    if (e && e.message === 'avain') { login.hidden = false; msg.textContent = localStorage.getItem(KEY) === null ? 'Väärä avain.' : ''; }
+    else msg.textContent = 'Ei yhteyttä palvelimeen.';
+  }
+
+  login.addEventListener('submit', function (e) {
+    e.preventDefault();
+    localStorage.setItem(KEY, document.getElementById('key').value.trim());
+    show();
+  });
+
+  window.addEventListener('hashchange', function () { if (keyFromLink()) show(); });
+  if (localStorage.getItem(KEY)) show(); else { login.hidden = false; }
+})();
+</script>
+</body>
+</html>
