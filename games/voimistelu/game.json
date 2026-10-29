@@ -1,12 +1,19 @@
 {
   "title": "Voimistelu",
-  "description": "Rekkitanko kuin olympialaisissa: jättikierrot, lentoliikkeet ja voltti alas.",
+  "description": "Rekkitanko ja eritasonojapuut kuin olympialaisissa: jättikierrot, lentoliikkeet ja voltti alas.",
   "versions": [
     {
       "n": 1,
       "date": "2026-10-29",
       "note": "Ensimmäinen versio: heilu rekillä, tee jättikiertoja, piruetteja ja lentoliikkeitä, ja tule alas voltilla pysäytykseen.",
       "request": "Uusi peli: voimistelu. Samoja temppuja kuin olympialaisten rekkitanko",
+      "issue": "eerovil/ai-pelit#14"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-29",
+      "note": "Toinen tanko kuten naisten eritasonojapuissa: lennä tangolta toiselle, ja kamera seuraa, vaikka lentäisit ruudun reunan yli.",
+      "request": "Lisää toinen tanko kuten olympialaisissa. Myös jos lentää ruudun ulkopuolelle niin kamera seuraa",
       "issue": "eerovil/ai-pelit#14"
     }
   ]
