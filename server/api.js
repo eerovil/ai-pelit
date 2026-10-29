@@ -8,7 +8,7 @@
 //   POST /api/scores           {player, game, board, version, score} -> {best, rank}
 //   GET  /api/scores?game=&board=&player=                    -> {rows, mine}
 //   GET  /api/admin/players    (X-Admin-Key)                 -> {players}
-//   POST /api/admin/players    (X-Admin-Key) {id, status}    -> {name, status}
+//   POST /api/admin/players    (X-Admin-Key) {id, name, status} -> {name, status}
 //   POST /api/plays            {game, version}               -> {ok}
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
 //
@@ -236,23 +236,39 @@ async function adminPlayers(env) {
 }
 
 async function adminDecide(env, body) {
-  const id = String(body.id || ''), status = body.status;
+  const id = String(body.id || ''), status = body.status, expected = body.name;
   if (!ID.test(id)) return fail(400, 'bad id');
   if (status !== 'approved' && status !== 'rejected') return fail(400, 'status is approved or rejected');
+  // The name the admin saw: a decision on a name the phone has since changed is refused, so no
+  // name is ever approved unseen.
+  if (typeof expected !== 'string') return fail(400, 'name needed');
   const p = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(id).first();
   if (!p) return fail(404, 'unknown player');
-  if (status === 'approved') {
-    // An approved name is locked to this phone for good. A rejected player's name was freed,
-    // and another phone may hold it now: then it cannot be approved.
-    const key = nameKey(p.name);
-    if (!(await claim(env, key, id, 1))) return fail(409, 'name taken by another player');
-    await env.DB.prepare('UPDATE names SET locked = 1 WHERE name_key = ?').bind(key).run();
-  } else {
+  if (p.name !== expected) return fail(409, 'name changed');
+  const t = now();
+  if (status === 'rejected') {
+    const res = await env.DB.prepare("UPDATE players SET status = 'rejected', updated_at = ? WHERE id = ? AND name = ?")
+      .bind(t, id, expected).run();
+    if (!res.meta.changes) return fail(409, 'name changed');
     // Rejecting the player frees every name it held.
     await env.DB.prepare('DELETE FROM names WHERE player = ?').bind(id).run();
+    return json({ name: expected, status });
   }
-  await env.DB.prepare('UPDATE players SET status = ?, updated_at = ? WHERE id = ?').bind(status, now(), id).run();
-  return json({ name: p.name, status });
+  // An approved name is locked to this phone for good. A rejected player's name was freed, and
+  // another phone may hold it now: then it cannot be approved. The lock is taken before the
+  // status changes, and undone if the phone changed name in between.
+  const key = nameKey(expected);
+  const before = await env.DB.prepare('SELECT player, locked FROM names WHERE name_key = ?').bind(key).first();
+  if (!(await claim(env, key, id, 1))) return fail(409, 'name taken by another player');
+  await env.DB.prepare('UPDATE names SET locked = 1 WHERE name_key = ? AND player = ?').bind(key, id).run();
+  const res = await env.DB.prepare("UPDATE players SET status = 'approved', updated_at = ? WHERE id = ? AND name = ?")
+    .bind(t, id, expected).run();
+  if (!res.meta.changes) {
+    if (!before) await env.DB.prepare('DELETE FROM names WHERE name_key = ? AND player = ?').bind(key, id).run();
+    else if (!before.locked) await env.DB.prepare('UPDATE names SET locked = 0 WHERE name_key = ? AND player = ?').bind(key, id).run();
+    return fail(409, 'name changed');
+  }
+  return json({ name: expected, status });
 }
 
 async function route(request, env) {

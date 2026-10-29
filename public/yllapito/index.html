@@ -57,16 +57,16 @@
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) {
       if (r.status === 403) { localStorage.removeItem(KEY); throw new Error('avain'); }
-      if (!r.ok) throw new Error(r.status);
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (b) { throw new Error(r.status + ' ' + (b.error || '')); });
       return r.json();
     });
   }
 
-  function button(text, status, id) {
+  function button(text, status, id, name) {
     var b = document.createElement('button');
     b.type = 'button'; b.textContent = text; b.className = status === 'approved' ? 'button' : 'secondary';
     b.dataset.status = status;
-    b.onclick = function () { call('POST', { id: id, status: status }).then(show, fail); };
+    b.onclick = function () { call('POST', { id: id, name: name, status: status }).then(show, fail); };
     return b;
   }
 
@@ -86,8 +86,8 @@
         var tag = document.createElement('span'); tag.className = 'tag ' + p.status; tag.textContent = LABEL[p.status];
         who.appendChild(name); who.appendChild(document.createTextNode(' ')); who.appendChild(tag);
         row.appendChild(who);
-        if (p.status !== 'approved') row.appendChild(button('Hyväksy', 'approved', p.id));
-        if (p.status !== 'rejected') row.appendChild(button('Hylkää', 'rejected', p.id));
+        if (p.status !== 'approved') row.appendChild(button('Hyväksy', 'approved', p.id, p.name));
+        if (p.status !== 'rejected') row.appendChild(button('Hylkää', 'rejected', p.id, p.name));
         list.appendChild(row);
       });
     }, fail);
@@ -96,7 +96,8 @@
   function fail(e) {
     list.textContent = '';
     if (e && e.message === 'avain') { login.hidden = false; msg.textContent = localStorage.getItem(KEY) === null ? 'Väärä avain.' : ''; }
-    else if (e && e.message === '409') { note = 'Nimi on jo toisella pelaajalla: hyväksy vasta, kun pelaaja on valinnut uuden.'; show(); }
+    else if (e && e.message === '409 name changed') { note = 'Pelaaja vaihtoi nimeään: katso uusi nimi.'; show(); }
+    else if (e && e.message.indexOf('409') === 0) { note = 'Nimi on jo toisella pelaajalla: hyväksy vasta, kun pelaaja on valinnut uuden.'; show(); }
     else msg.textContent = 'Ei yhteyttä palvelimeen.';
   }
 
