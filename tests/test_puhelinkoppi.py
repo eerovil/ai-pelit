@@ -12,6 +12,9 @@ INVARIANTS = """() => {
 }"""
 
 
+REST_Y = 0.008 * 0.825  # the phone's centre above the palm: REST * cos(TILT)
+
+
 def open_game(site, context):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -66,8 +69,21 @@ def test_a_catch_screen_up_passes_the_level_and_is_kept_after_a_reload(site, con
     assert page.evaluate("level") == 2
 
 
-def test_a_swipe_up_throws_the_phone_and_a_drag_moves_the_hand(site, context):
+def test_the_hand_carries_the_phone_and_a_flick_up_throws_it(site, context):
     page = open_game(site, context)
+    px, py = page.evaluate("phoneOnScreen().slice(0, 2)")
+    # A slow drag only moves the hand, with the phone in it.
+    page.mouse.move(px, py)
+    page.mouse.down()
+    for i in range(1, 6):
+        page.mouse.move(px + 10 * i, py + 10 * i)
+        page.wait_for_timeout(120)
+    page.mouse.up()
+    assert page.evaluate("state") == "ready"
+    hand = page.evaluate("[handX, handY]")
+    assert hand[0] > 0.02 and hand[1] < -0.02
+    assert page.evaluate("Math.abs(pos[0] - handX) + Math.abs(dot(sub(pos, hand()), N) - REST)") < 1e-9
+    # A quick flick up throws it from where the hand is.
     px, py = page.evaluate("phoneOnScreen().slice(0, 2)")
     page.mouse.move(px, py)
     page.mouse.down()
@@ -77,8 +93,23 @@ def test_a_swipe_up_throws_the_phone_and_a_drag_moves_the_hand(site, context):
     assert page.evaluate("state") == "air"
     assert page.evaluate("vel[1]") >= 2
     page.evaluate("vel[1] = 6")  # keep it in the air while the hand moves
+    # During the flight a drag moves the hand sideways and up.
     page.mouse.move(180, 600)
     page.mouse.down()
-    page.mouse.move(260, 600)
+    page.mouse.move(260, 520)
     page.mouse.up()
-    assert page.evaluate("handX") > 0.05
+    assert page.evaluate("handX") > hand[0] + 0.05
+    assert page.evaluate("handY") > hand[1] + 0.05
+
+
+def test_a_raised_hand_catches_the_phone_higher_up(site, context):
+    page = open_game(site, context)
+    page.evaluate("launch({ v0: 3 }); handY = 0.3")
+    assert page.evaluate(FLY, 3) == "result"
+    assert page.evaluate("result.kind") == "win"
+    assert abs(page.evaluate("pos[1]") - 0.3 - REST_Y) < 0.01
+    # A hand raised past a phone that is already below it does not catch it.
+    page.evaluate("newRound(); launch({ v0: 3 })")
+    page.evaluate("for (let i = 0; i < 120 && !(vel[1] < 0 && pos[1] < 0.1); i++) step(1 / 60); handY = 0.4")
+    page.evaluate(FLY, 3)
+    assert page.evaluate("result.kind") == "drop"
