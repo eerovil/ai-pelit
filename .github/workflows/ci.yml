@@ -27,12 +27,54 @@ jobs:
         run: python scripts/check_immutable.py origin/${{ github.base_ref }}
       - run: python -m pytest -q
       - run: python scripts/build.py
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: site
+          path: _site
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           path: _site
 
-  # A merge to main is the release: GitHub Pages serves it at pelit.vilpponen.fi.
+  # A merge to main is the release: Cloudflare Pages serves it at ai-pelit.pages.dev, and at
+  # pelit.vilpponen.fi once that name points there.
+  deploy-cloudflare:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      # Until the CLOUDFLARE_* secrets are added there is nowhere to deploy to: say so and stop green.
+      - name: Is Cloudflare set up?
+        id: ready
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Not deploying to Cloudflare: add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          name: site
+          path: _site
+      - uses: actions/setup-node@v4
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          node-version: 22
+      - name: Deploy
+        if: steps.ready.outputs.ready == 'true'
+        run: npx -y wrangler@4 pages deploy _site --project-name ai-pelit --branch main --commit-hash "$GITHUB_SHA"
+      - name: Check what is live
+        if: steps.ready.outputs.ready == 'true'
+        run: curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://ai-pelit.pages.dev/catalog.json > /dev/null
+
+  # GitHub Pages keeps serving pelit.vilpponen.fi until its CNAME moves to ai-pelit.pages.dev;
+  # remove this job then.
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test

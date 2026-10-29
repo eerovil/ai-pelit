@@ -47,6 +47,15 @@ def test_the_real_games_build(tmp_path):
     assert "__BUILD_ID__" not in sw
 
 
+def test_the_site_is_ready_for_cloudflare_pages(tmp_path):
+    build.build(ROOT / "games", ROOT / "public", tmp_path / "out")
+    # Pages answers a missing file with 404.html; without one it sends the shelf with a 200.
+    assert (tmp_path / "out" / "404.html").is_file()
+    # Pages redirects index.html to './', and the service worker cannot answer a page load
+    # with a redirected response, so it caches the shelf as './' only.
+    assert "'index.html'" not in (tmp_path / "out" / "sw.js").read_text()
+
+
 def test_build_id_changes_when_the_catalog_changes(tmp_path):
     games = tmp_path / "games"
     make_game(games, "yksi", [game_page("a")])

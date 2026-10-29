@@ -19,7 +19,7 @@ https://pelit.vilpponen.fi/
 - `public/` — the shelf (`index.html`, `app.js`), the service worker (`sw.js`), the manifest and
   `back.js`, the "‹ Pelit" chip every game includes.
 - `scripts/build.py` builds `_site/` with `catalog.json`; `scripts/check_immutable.py` guards
-  published versions. A merge to `main` deploys to GitHub Pages (`.github/workflows/ci.yml`).
+  published versions. A merge to `main` deploys to Cloudflare Pages, project `ai-pelit` (`.github/workflows/ci.yml`).
 - [docs/diagrams/ai-pelit.md](docs/diagrams/ai-pelit.md) draws the whole flow.
 
 Rules for agents making games: [AGENTS.md](AGENTS.md).
