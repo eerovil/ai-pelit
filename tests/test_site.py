@@ -47,6 +47,31 @@ def test_shelf_game_page_and_back_chip(site, context):
     assert page.locator("h1").inner_text() == "Pomppu"
 
 
+@pytest.mark.parametrize("path", ["games/pomppu/v1/", "games/pomppu/v1/index.html"])
+def test_back_chip_finds_the_game_from_either_address(site, context, path):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url + path)
+    assert page.get_attribute("#ai-pelit-back", "href") == f"{site.url}#/pomppu"
+
+
+def test_a_tap_on_the_back_chip_never_reaches_the_game(site, context):
+    events = ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup", "click"]
+    listen = "window.seen = []; " + "".join(
+        f"window.addEventListener('{e}', () => window.seen.push('{e}'));" for e in events
+    )
+    make_game(site.games, "pomppu", [game_page("v1", script=listen)])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/pomppu/v1/")
+    # Stop the navigation so the game page can still be asked what it saw.
+    page.evaluate("document.getElementById('ai-pelit-back').addEventListener('click', e => e.preventDefault())")
+    page.tap("#ai-pelit-back")
+    page.click("#ai-pelit-back")
+    assert page.evaluate("window.seen") == []
+
+
 def test_a_game_can_move_the_back_chip(site, context):
     page_html = game_page("x").replace('back.js"></script>', 'back.js" data-corner="bottom-left"></script>')
     make_game(site.games, "kulma", [page_html])

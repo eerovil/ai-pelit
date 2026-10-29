@@ -9,10 +9,11 @@
   var corner = (script.getAttribute('data-corner') || 'top-left').split('-');
   var vertical = corner[0] === 'bottom' ? 'bottom' : 'top';
   var horizontal = corner[1] === 'right' ? 'right' : 'left';
-  var parts = location.pathname.split('/').filter(Boolean);
-  var slug = parts[parts.length - 2] || '';
+  // Both /games/<slug>/v<N>/ and /games/<slug>/v<N>/index.html.
+  var match = location.pathname.match(/\/games\/([^/]+)\/v\d+\//);
+  var slug = match ? match[1] : '';
   var a = document.createElement('a');
-  a.href = shelf + '#/' + slug;
+  a.href = shelf + (slug ? '#/' + slug : '');
   a.textContent = '‹ Pelit';
   a.setAttribute('aria-label', 'Takaisin pelilistaan');
   a.id = 'ai-pelit-back';
@@ -23,10 +24,9 @@
     'padding:6px 10px', 'border-radius:999px', 'background:rgba(0,0,0,.45)', 'color:#fff',
     'font:600 13px/1 system-ui,sans-serif', 'text-decoration:none', 'touch-action:manipulation',
   ].join(';');
-  ['pointerdown', 'touchstart', 'mousedown'].forEach(function (type) {
+  ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(function (type) {
     a.addEventListener(type, function (e) { e.stopPropagation(); }, { passive: true });
   });
-  a.addEventListener('click', function (e) { e.stopPropagation(); });
   function add() { document.body.appendChild(a); }
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
 })();
