@@ -100,7 +100,8 @@ function newFight() {
   foe.hp = foe.max = Math.min(180, 90 + 15 * (level - 1));
   stones = []; puffs = []; texts = []; shake = 0; slow = 1;
   ai.mode = 'melee'; ai.modeT = 1.5; ai.think = 0; ai.retreat = 0; ai.wait = -1;
-  state = 'count'; stateT = 2.2;
+  // One second each for 3, 2 and 1, then TAISTELE! for the last 0.7 s.
+  state = 'count'; stateT = 3.7;
 }
 
 function hitWall(f) {
@@ -435,6 +436,8 @@ function drawControls() {
   }
 }
 
+function countText() { const n = Math.ceil(stateT - 0.7); return n > 0 ? String(n) : 'TAISTELE!'; }
+
 function draw() {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   x.fillStyle = '#1b1712'; x.fillRect(0, 0, W, H);
@@ -464,7 +467,7 @@ function draw() {
   const cx = W / 2, cy = oy + AH * scale / 2;
   x.textAlign = 'center'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.6)';
   if (state === 'count') {
-    const n = Math.ceil(stateT - 0.7), s = n > 0 ? String(n) : 'TAISTELE!';
+    const s = countText(), n = s.length === 1 ? 1 : 0;
     x.font = `900 ${n > 0 ? 64 : 40}px system-ui`; x.strokeText(s, cx, cy); x.fillStyle = '#ffd166'; x.fillText(s, cx, cy);
   } else if (state === 'ko') {
     x.font = '900 52px system-ui'; x.strokeText('K.O.!', cx, cy); x.fillStyle = '#ff7a6b'; x.fillText('K.O.!', cx, cy);
