@@ -1,0 +1,13 @@
+{
+  "title": "Voimistelu",
+  "description": "Rekkitanko kuin olympialaisissa: jättikierrot, lentoliikkeet ja voltti alas.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: heilu rekillä, tee jättikiertoja, piruetteja ja lentoliikkeitä, ja tule alas voltilla pysäytykseen.",
+      "request": "Uusi peli: voimistelu. Samoja temppuja kuin olympialaisten rekkitanko",
+      "issue": "eerovil/ai-pelit#14"
+    }
+  ]
+}
