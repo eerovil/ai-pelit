@@ -53,6 +53,6 @@ flowchart TD
 - **Vauva ilahtuu ja heiluttaa lusikkaa**: `give()`: +25 mood when the baby was reaching for it ("Anna! Anna!"), else +10; the baby bangs it for 1.6-2.8 s.
 - **Kolin! Lusikka lattialle**: the spoon falls to the floor beside the chair, and there is no feeding until it is washed.
 - **Vauva: Aaa, Ei!, pään kääntö, Anna! Anna!**: `nextAct()`: the mouth opens for a shorter time each level, the head turns away more often, and from level 2 the open mouth sways side to side. Not giving the spoon when asked costs 8 mood.
-- **📱 Video: suu auki, mieli ei laske**: 6 s of a cartoon on a phone; the baby stares with its mouth wide open and its head still.
-- **✈️ Lentokone: lusikka menee aina perille**: the next spoonful, let go anywhere above the bowl, loops into the mouth by itself and is never spat out.
+- **📱 Video: suu auki, mieli ei laske**: 6 s of a cartoon on a phone; the baby stares with its mouth wide open and its head still. A spoon the baby is holding still gets dropped, and a bite is still chewed, before it stares again.
+- **✈️ Lentokone: lusikka menee aina perille**: the next spoonful, let go anywhere above the bowl, loops into the mouth by itself; let go right at the mouth, it goes straight in. Either way it is never spat out.
 - **Röyh! Taso läpi, tähdet ja seuraava taso tallennetaan**: `win()`: 3 stars with no misses, 2 with up to two, else 1. Every four bites in a row without a miss earn one more power-up (at most 3 of each).

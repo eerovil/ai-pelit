@@ -69,3 +69,26 @@ def test_a_full_tummy_wins_and_the_next_level_survives_a_reload(site, context):
     assert page.locator("#result").inner_text() == "Vauva on kylläinen!"
     page.reload()
     assert page.evaluate("[level, stars[1]]") == [2, 3]
+
+
+def test_a_spoon_given_during_the_video_is_still_dropped(site, context):
+    page = start(site, context)
+    page.evaluate("baby.act = 'idle'; baby.t = 0; baby.dur = 99")
+    page.evaluate(DRAG, page.evaluate("[hands()[1].x, hands()[1].y]"))
+    page.evaluate("usePower('video')")
+    page.evaluate(RUN, 3.5)
+    assert page.evaluate("[spoon.where, videoT > 0]") == ["floor", True]
+    # Back by the bowl, the video still opens the mouth, and a chewed bite does not end it.
+    page.evaluate("down(spoon.x, spoon.y); up(spoon.x, spoon.y)")
+    page.evaluate(RUN, 1)
+    assert page.evaluate("[spoon.where, baby.mouth > 0.9]") == ["bowl", True]
+    page.evaluate(DRAG, page.evaluate("[mouthPos().x, mouthPos().y]"))
+    page.evaluate(RUN, 1)
+    assert page.evaluate("[tummy, baby.act, baby.mouth > 0.9]") == [1, "open", True]
+
+
+def test_an_aeroplane_spoonful_at_the_mouth_is_never_spat_out(site, context):
+    page = start(site, context)
+    page.evaluate("usePower('plane'); mood = 10; Math.random = () => 0")
+    page.evaluate(DRAG, page.evaluate("[mouthPos().x, mouthPos().y]"))
+    assert page.evaluate("[tummy, plane, splats.length]") == [1, False, 0]

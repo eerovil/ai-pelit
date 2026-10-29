@@ -296,9 +296,11 @@ function step(dt) {
   const held = spoon.where === 'hand' && spoon.loaded;
   const planeComing = spoon.where === 'fly' || (plane && held);
   let open = 0, turnTo = 0;
-  if (videoT > 0 || planeComing) {
+  // Holding the spoon, chewing and spitting run to their end even then, so the spoon still drops.
+  const busy = baby.act === 'hold' || baby.act === 'chew' || baby.act === 'spit';
+  if ((videoT > 0 || planeComing) && !busy) {
     // Staring at the phone, or at the aeroplane: mouth wide open, head still.
-    if (baby.act !== 'chew') { open = 1; if (baby.act !== 'open') setAct('open', 0.4); baby.t = 0; }
+    open = 1; if (baby.act !== 'open') setAct('open', 0.4); baby.t = 0;
   } else {
     // A loaded spoon close to the mouth hurries the next "aaa".
     if (baby.act === 'idle' && held) {
@@ -366,7 +368,8 @@ function up(px, py) {
   const t = tip(), m = mouthPos(), R = G.R;
   if (Math.hypot(t.x - m.x, t.y - m.y) < R * 0.45) {
     if (!spoon.loaded) { restSpoon(); yum('?'); return; }
-    if (baby.mouth > 0.55 || plane) { if (plane) plane = false; bite(false); } else miss();
+    // An aeroplane spoonful always goes in, wherever it is let go.
+    if (baby.mouth > 0.55 || plane) { const byPlane = plane; plane = false; bite(byPlane); } else miss();
     return;
   }
   for (const h of hands()) {
