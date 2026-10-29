@@ -22,6 +22,13 @@
       "note": "Taso ja ennätys tallentuvat puhelimeen, joten peli jatkuu siitä mihin jäit.",
       "request": "Ei tallennu progress",
       "issue": "eerovil/ai-pelit#2"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-29",
+      "note": "Ollie osuu nyt varmemmin: myöhäinen napautus heti rampin reunan jälkeen lasketaan vielä täydelliseksi ollieksi.",
+      "request": "Pelaajat valittelee ettö joskus se ei  osu ollieen vaikka olisi vihreällä.",
+      "issue": "eerovil/ai-pelit#2"
     }
   ]
 }
