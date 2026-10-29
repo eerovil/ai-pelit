@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: 1v1-taistelu tekoälyä vastaan, miekka, jousi ja nuolet, väistö ja oman hahmon nimi.",
       "request": "Uusi peli, areena taistelu. Tekoälyä vastaan 1v1. Aseina miekka ja jouskari. omalle hahmolle voi antaa nimen",
       "issue": "eerovil/ai-pelit#3"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-29",
+      "note": "Helpompi: vastustaja on hitaampi, kestää vähemmän, väistää harvemmin ja lyö heikommin.",
+      "request": "Tee pelistä helpompi",
+      "issue": "eerovil/ai-pelit#3"
     }
   ]
 }
