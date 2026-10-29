@@ -1,0 +1,13 @@
+{
+  "title": "Lentopallo",
+  "description": "Rantalentopalloa sivusta katsottuna, yksi vastaan yksi tietokonetta vastaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: rantalentopalloa sivusta kuvattuna, 1v1 tietokonetta vastaan, syöttö, nosto, smassi ja kolme kosketusta, 11 pisteeseen.",
+      "request": "Lentopallo. Sivusta kuvattu 1v1",
+      "issue": "eerovil/ai-pelit#36"
+    }
+  ]
+}
