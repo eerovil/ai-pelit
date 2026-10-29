@@ -27,6 +27,10 @@ player sees is Finnish unless the request says otherwise.
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an
    extra: the game never waits for it, and plays the same without it.
+   Why no build step, and no TypeScript (#42): the file in the folder is the file the phone runs,
+   so a published version cannot change by accident and needs no tools to keep working. A library
+   a game needs is copied into its folder as one file. Think again only when a single game passes
+   about 2000 lines, or the same code is copied into a third game; then propose it as its own Work.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
