@@ -1,7 +1,7 @@
 # AI-pelit
 
 Tekoälyn tekemiä kännykkäpelejä yhdessä asennettavassa sovelluksessa:
-https://eero.vilpponen.fi/ai-pelit/
+https://pelit.vilpponen.fi/
 
 - Pelihylly näyttää jokaisen pelin uusimman version; pelin sivulla ovat kaikki sen versiot, ja
   jokainen vanha versio on yhä pelattavissa.

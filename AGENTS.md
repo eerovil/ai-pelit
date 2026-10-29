@@ -1,6 +1,6 @@
 # Agent guide — ai-pelit
 
-AI-made phone games, played from one PWA at https://eero.vilpponen.fi/ai-pelit/. Every version
+AI-made phone games, played from one PWA at https://pelit.vilpponen.fi/. Every version
 of every game stays playable. Eero asks for games as AgentDeck Works on this repository; the
 issue is the request, in Finnish. Write code comments and pull requests in English; everything a
 player sees is Finnish unless the request says otherwise.
@@ -46,5 +46,5 @@ player sees is Finnish unless the request says otherwise.
 
     python3 scripts/build.py && python3 -m http.server -d _site 8000
 
-The site is built for `/ai-pelit/` but uses relative links, so it also runs at a root.
+The site is served from the root of its own name, and uses only relative links.
 `scripts/make_icons.py` redraws the app icons (needs Pillow); the PNGs are committed.

@@ -36,17 +36,17 @@ def make_game(games: Path, slug: str, pages: list[str], title: str | None = None
 
 
 class Site:
-    """A built site served at http://127.0.0.1:<port>/ai-pelit/, like GitHub Pages serves it."""
+    """A built site served at the root of http://127.0.0.1:<port>/, as pelit.vilpponen.fi serves it."""
 
     def __init__(self, tmp: Path):
         self.games = tmp / "games"
         self.games.mkdir()
-        self.root = tmp / "www"
-        self.out = self.root / "ai-pelit"
+        self.out = tmp / "www"
+        self.root = self.out
         handler = functools.partial(QuietHandler, directory=str(self.root))
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.url = f"http://127.0.0.1:{self.server.server_address[1]}/ai-pelit/"
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}/"
 
     def build(self, games: Path | None = None) -> dict:
         return build.build(games or self.games, ROOT / "public", self.out)

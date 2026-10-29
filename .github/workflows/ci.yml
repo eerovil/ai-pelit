@@ -32,7 +32,7 @@ jobs:
         with:
           path: _site
 
-  # A merge to main is the release: GitHub Pages serves it at eero.vilpponen.fi/ai-pelit/.
+  # A merge to main is the release: GitHub Pages serves it at pelit.vilpponen.fi.
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test

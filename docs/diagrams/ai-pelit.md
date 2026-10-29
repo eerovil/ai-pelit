@@ -8,7 +8,7 @@ and the merge deploys it. The app has no form.
 ```mermaid
 flowchart TD
   subgraph Pelaaminen
-    A[Puhelin avaa eero.vilpponen.fi/ai-pelit] --> B[Pelihylly: uusin versio jokaisesta pelistä]
+    A[Puhelin avaa pelit.vilpponen.fi] --> B[Pelihylly: uusin versio jokaisesta pelistä]
     B --> C[Pelin sivu: versiot v1, v2, v3...]
     C --> D[Pelaa versiota koko ruudulla]
     D --> E{Verkko poissa?}
