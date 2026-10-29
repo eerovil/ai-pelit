@@ -1,0 +1,13 @@
+{
+  "title": "Hiihto",
+  "description": "Perinteistä hiihtoa ladulla: ohita mummot, väistä vastaantulijat ja voitele kelin mukaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-29",
+      "note": "Ensimmäinen versio: voitelu kelin mukaan, mummojen ohitus vastaantulijoiden ladun kautta, luistelijat vierellä, V-käynti ylämäkeen ja laskuasento alamäkeen.",
+      "request": "Suomalainen hiihtopeli. Mennään ladulla, pitöä ohitella mummoja jotka hiihtäö hitaammin. Vierellä menee luisteluhiihtäjiä ohi ja toisella ladulla vastaan tulee muita perinteisen hiihtäjiä. Ylämäissä pitää tehdä v kävelyä ja alamäessä luistaa. Kelin mukaan voitelu",
+      "issue": "eerovil/ai-pelit#18"
+    }
+  ]
+}
