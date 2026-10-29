@@ -434,7 +434,7 @@
   }
   var pauseShown = '';
   function renderPause() {
-    if (!root) return; // the room screen is built on first use; the timer starts before that
+    if (!root) return; // nothing drawn yet: the room screen has not been opened on this page
     var text = '', canGoOn = false;
     if (net.on && racing() && !shown) {
       var names = waitingFor();
