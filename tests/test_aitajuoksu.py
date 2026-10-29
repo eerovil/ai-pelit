@@ -93,7 +93,7 @@ def test_two_phones_race_and_both_get_the_results(site, browser):
     host.click("#aipr-start")
     for p in pages:
         p.wait_for_function("race && race.mode === 'net' && race.phase === 'run'", timeout=6000)
-    assert guest.evaluate("race.runners.map(r => r.name)") == ["Eero", "Sinä"]
+    assert guest.evaluate("race.runners.map(r => r.name)") == ["Eero", "Aino"]
     # The guest's own steps reach the host.
     guest.evaluate("step(me, 1); step(me, 2); Object.assign(me, { x: 40 })")
     host.wait_for_function("race.runners[1].x >= 40", timeout=3000)
@@ -104,6 +104,9 @@ def test_two_phones_race_and_both_get_the_results(site, browser):
     guest.evaluate("Object.assign(me, { x: 99.8, v: 9, down: 1023 })")
     host.wait_for_function("race.runners[1].fin !== null", timeout=3000)
     host.evaluate("Object.assign(me, { x: 99.8, v: 9, down: 1023 })")
+    # The results name everyone, each phone itself as "Sinä".
+    guest.wait_for_function("race && race.phase === 'done'", timeout=5000)
+    assert guest.evaluate("race.results.map(r => r.name)") == ["Aino", "Eero"]
     for p in pages:
         p.wait_for_function("AiPelitRooms.inRoom && !race && document.getElementById('aipr-result').textContent !== ''", timeout=10000)
     assert guest.inner_text("#aipr-result").startswith("1. sija")

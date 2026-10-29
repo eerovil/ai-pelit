@@ -199,7 +199,7 @@ function soloOver() {
 // The host runs the starter's gun and the computer's runners, and sends everyone the race; each
 // phone runs its own runner and sends it to the host.
 R.on('start', s => {
-  const rs = s.players.map((p, i) => runner(p.id, p.id === R.me ? 'Sinä' : p.name, COLORS[i % COLORS.length], p.id === R.me ? 'me' : 'net', 7.6));
+  const rs = s.players.map((p, i) => runner(p.id, p.name, COLORS[i % COLORS.length], p.id === R.me ? 'me' : 'net', 7.6));
   newRace('net', s.round, rs);
   race.adopt = !R.isHost; // a guest reloaded mid-race takes its runner back from the host
   if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
