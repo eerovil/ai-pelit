@@ -35,6 +35,9 @@ let best = Math.max(0, Number(load('paras', 0)) || 0);
 let routines = Math.max(0, Math.floor(load('suoritukset', 0)) || 0);
 
 // ---- Levels: one task each; a routine passes when it does the task and ends on the feet ----
+// Flights between the bars by whole turns: none, one, two or more.
+const DOWN = ['Siirto alatangolle', 'Pak-voltti', 'Kaksoisvoltti alatangolle'];
+const UP = ['Shaposhnikova', 'Voltti ylätangolle', 'Kaksoisvoltti ylätangolle'];
 const TASKS = [
   ['Hyppää alas ja laskeudu jaloillesi', r => true],
   ['Tee jättikierto ja alastulo', r => r.names.some(n => n.startsWith('Jättikierto'))],
@@ -46,8 +49,9 @@ const TASKS = [
   ['Jäger tai Gienger: voltti ilmassa ja kiinni tangosta', r => r.names.includes('Jäger') || r.names.includes('Gienger')],
   ['Kierre alastulossa', r => r.halves >= 2],
   ['Kovacs: kaksoisvoltti tangon yli ja kiinni', r => r.names.includes('Kovacs')],
-  ['Siirry alatangolle', r => r.names.includes('Siirto alatangolle') || r.names.includes('Pak-voltti')],
-  ['Shaposhnikova: alatangolta lentäen ylätangolle', r => r.names.includes('Shaposhnikova') || r.names.includes('Voltti ylätangolle')],
+  // Any way down to the low bar goes: the task is only to get there.
+  ['Siirry alatangolle', r => r.names.some(n => DOWN.includes(n))],
+  ['Shaposhnikova: alatangolta lentäen ylätangolle', r => r.names.includes('Shaposhnikova')],
   ['Pak-voltti: voltti ylätangolta alatangolle', r => r.names.includes('Pak-voltti')],
 ];
 function target(n) { return Math.min(14.5, 10.8 + 0.3 * (n - TASKS.length - 1)); }
@@ -220,8 +224,9 @@ function grab(to) {
   syncBar();
   if (to !== flight.from) {
     // Between the bars, as on the women's uneven bars.
-    if (to === LOW) addElement(n ? 'Pak-voltti' : 'Siirto alatangolle', n ? 0.4 : 0.1);
-    else addElement(n ? 'Voltti ylätangolle' : 'Shaposhnikova', n ? 0.5 : 0.4);
+    const k = Math.min(2, n);
+    if (to === LOW) addElement(DOWN[k], [0.1, 0.4, 0.6][k]);
+    else addElement(UP[k], [0.4, 0.5, 0.7][k]);
   } else if (n === 0) {
     if (flight.crossed) addElement('Tkatchev', 0.3);
     else addElement(halves ? 'Lentoliike kierteellä' : 'Lentoliike', halves ? 0.2 : 0.1);
@@ -352,8 +357,12 @@ function draw() {
     tx = Math.max(pos[0] - halfW, Math.min(pos[0] + halfW, tx));
     ty = Math.max(ty, pos[1] - up);
     camX = lerp(camX, tx, 0.08); camY = lerp(camY, ty, 0.08);
-    camX = Math.max(pos[0] - halfW - 0.5, Math.min(pos[0] + halfW + 0.5, camX));
-    camY = Math.max(camY, pos[1] - up - 0.5);
+    // Then hold every point of the body, not just its middle, inside the screen edges.
+    const b = bodyPoints(), m = 0.15, half = W / 2 / S, top = (BAR_Y - SAFE_T - 20) / S;
+    let x0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n in b) { x0 = Math.min(x0, b[n][0]); x1 = Math.max(x1, b[n][0]); y1 = Math.max(y1, b[n][1]); }
+    camX = Math.max(x1 + m - half, Math.min(x0 - m + half, camX));
+    camY = Math.max(camY, y1 + m - top);
   }
   // Hall and crowd
   const g = x.createLinearGradient(0, 0, 0, H);

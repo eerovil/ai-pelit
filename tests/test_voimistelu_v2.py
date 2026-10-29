@@ -65,17 +65,53 @@ def test_the_low_bar_swing_does_not_grow_by_itself_and_the_feet_clear_the_floor(
     assert low > page.evaluate("FLOOR")
 
 
-def test_the_camera_keeps_a_far_flight_on_screen(site, context):
+def test_the_camera_keeps_the_whole_body_on_screen_in_fast_flights(site, context):
     page = open_game(site, context)
     page.wait_for_function("S > 0")
-    page.evaluate("launchAir({ x: 1, y: 0.5, vx: 5, vy: 7 })")
-    worst = page.evaluate("""() => new Promise(done => { let worst = 0, n = 0;
-      (function check() {
-        const [px, py] = sc(pos);
-        worst = Math.max(worst, -px, px - W, -py, py - H);
-        if (mode === 'air' && n++ < 200) requestAnimationFrame(check); else done(worst);
-      })(); })""")
-    assert worst <= 0
+    # Fast sideways with the body flat, fast up, and both, frame by frame through the game's own loop.
+    for launch in ("{ x: 1, y: 0.3, vx: 8, vy: 3, phi: Math.PI / 2 }", "{ x: 0, y: 0.5, vy: 11, phi: Math.PI }",
+                   "{ x: -1, y: 0.5, vx: -6, vy: 9, phi: -Math.PI / 2, w: 3 }"):
+        page.evaluate(f"newRoutine(); launchAir({launch})")
+        worst = page.evaluate("""() => new Promise(done => { let worst = -Infinity, n = 0;
+          (function check() {
+            const b = bodyPoints();
+            // From the first frame the game has drawn since the launch.
+            if (n > 0) for (const k in b) { const [px, py] = sc(b[k]); worst = Math.max(worst, -px, px - W, SAFE_T - py); }
+            if (mode === 'air' && n++ < 300) requestAnimationFrame(check); else done(worst);
+          })(); })""")
+        assert worst <= 0, launch
+
+
+def test_flights_between_the_bars_are_named_by_their_turns(site, context):
+    page = open_game(site, context)
+    for turns, T, name in ((0, 0.8, "Siirto alatangolle"), (-1, 0.8, "Pak-voltti"), (-2, 1.2, "Kaksoisvoltti alatangolle")):
+        page.evaluate(BETWEEN, [0, 1.2, 1, 0.3, T, turns])
+        assert page.evaluate(FLY, 2) == "bar"
+        assert page.evaluate("[bar, elements.map(e => e.name)]") == [1, [name]], turns
+    for a1, turns, name in ((-1.6, 0, "Shaposhnikova"), (-1.9, 1, "Voltti ylätangolle"), (-1.9, 2, "Kaksoisvoltti ylätangolle")):
+        page.evaluate(BETWEEN, [1, a1, 0, 0.3, 0.8, turns])
+        assert page.evaluate(FLY, 2) == "bar"
+        assert page.evaluate("[bar, elements.map(e => e.name)]") == [0, [name]], turns
+
+
+def finish_with(page, level, names):
+    page.evaluate(f"""() => {{ newRoutine(); level = {level};
+      for (const n of {names!r}) addElement(n, 0.1);
+      touch = {{ fall: false, stuck: true, saltos: 0, halves: 0 }}; finish(); }}""")
+    return page.evaluate("result.passed")
+
+
+def test_each_bar_task_asks_for_its_own_move(site, context):
+    page = open_game(site, context)
+    for name in ("Siirto alatangolle", "Pak-voltti", "Kaksoisvoltti alatangolle"):
+        assert finish_with(page, 11, [name])
+    assert not finish_with(page, 11, ["Shaposhnikova"])
+    assert finish_with(page, 12, ["Shaposhnikova"])
+    for name in ("Voltti ylätangolle", "Kaksoisvoltti ylätangolle", "Pak-voltti"):
+        assert not finish_with(page, 12, [name])
+    assert finish_with(page, 13, ["Pak-voltti"])
+    for name in ("Siirto alatangolle", "Kaksoisvoltti alatangolle", "Shaposhnikova"):
+        assert not finish_with(page, 13, [name])
 
 
 def test_v1_progress_carries_on_into_the_new_bar_tasks(site, context):
