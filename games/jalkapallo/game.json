@@ -1,0 +1,13 @@
+{
+  "title": "Jalkapallo",
+  "description": "Jalkapalloa ylhäältä katsottuna, 3 vs 3: tietokonetta tai kavereita vastaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: 3 vs 3 ylhäältä kuvattuna, juoksutatikku, syöttö, laukaus ja taklaus; yksin tietokonetta vastaan tai 2–6 puhelinta kahdessa joukkueessa.",
+      "request": "Jalkapallopeli. Multiplayer tai tekoäly",
+      "issue": "eerovil/ai-pelit#108"
+    }
+  ]
+}
