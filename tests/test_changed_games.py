@@ -42,6 +42,7 @@ def selection(tmp_path, change: str) -> tuple[list[str], str]:
     (repo / "scripts").mkdir()
     shutil.copy(ROOT / "tests" / "conftest.py", repo / "tests")
     shutil.copy(ROOT / "scripts" / "build.py", repo / "scripts")
+    shutil.copy(ROOT / "scripts" / "check_immutable.py", repo / "scripts")  # build.py reads WITHDRAWN from it
     for slug in ("alpha", "beta-gamma"):
         (repo / "games" / slug / "v1").mkdir(parents=True)
         (repo / "games" / slug / "v1" / "index.html").write_text("<p>v1</p>")

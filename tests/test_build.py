@@ -138,6 +138,81 @@ def test_editing_a_published_version_fails(repo):
     assert "make a new version" in problems("main", cwd=str(repo))[0]
 
 
+def withdraw_v2(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v2")
+    make_game(repo / "games", "peli", [game_page("a")])
+
+
+def test_a_withdrawn_version_may_be_deleted_whole(repo):
+    withdraw_v2(repo)
+    assert problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}) == []
+    # Without the owner's word it is still refused.
+    assert any("make a new version" in p for p in problems("main", cwd=str(repo), withdrawn=set()))
+
+
+def test_a_withdrawn_version_may_not_be_edited_and_others_stay_put(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("muutettu"))
+    assert "make a new version" in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"})[0]
+    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("b"))
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v1")
+    assert any("v1 is published" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+
+
+def test_a_withdrawn_version_may_not_be_deleted_in_part(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    (repo / "games" / "peli" / "v2" / "muu.js").write_text("// toinen tiedosto")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    (repo / "games" / "peli" / "v2" / "muu.js").unlink()  # one file gone, the folder stays
+    assert "delete it whole" in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"})[0]
+
+
+def test_a_withdrawn_folder_and_its_entry_go_together(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v2")  # the folder goes, its game.json entry stays
+    assert any("remove its entry too" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+
+
+def test_a_withdrawn_number_is_never_published_again(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v2")
+    make_game(repo / "games", "peli", [game_page("a")])
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "v2 withdrawn")
+    # A later change tries a new game at the old v2 address.
+    make_game(repo / "games", "peli", [game_page("a"), game_page("uusi")])
+    assert any("never used again" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+
+
+def test_the_build_skips_a_withdrawn_number(tmp_path):
+    import build
+    make_game(tmp_path, "peli", [game_page("a"), game_page("b"), game_page("c")])
+    import shutil
+    meta = json.loads((tmp_path / "peli" / "game.json").read_text())
+    shutil.move(tmp_path / "peli" / "v2", tmp_path / "peli" / "v-old")
+    shutil.rmtree(tmp_path / "peli" / "v-old")
+    meta["versions"] = [meta["versions"][0], meta["versions"][2]]
+    (tmp_path / "peli" / "game.json").write_text(json.dumps(meta))
+    # v1 then v3: fine only when v2 was withdrawn.
+    assert [v["n"] for v in build.load_game(tmp_path / "peli", withdrawn={"games/peli/v2/"})["versions"]] == [1, 3]
+    with pytest.raises(build.GameError):
+        build.load_game(tmp_path / "peli", withdrawn=set())
+
+
 def test_rewriting_a_published_entry_fails(repo):
     meta = json.loads((repo / "games" / "peli" / "game.json").read_text())
     meta["versions"][0]["note"] = "toinen"

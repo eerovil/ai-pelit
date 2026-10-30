@@ -9,8 +9,9 @@ player sees is Finnish unless the request says otherwise.
 
 - "Uusi peli: …" — a new game. Pick a short slug (lowercase, digits, dashes), make
   `games/<slug>/v1/index.html` and `games/<slug>/game.json`.
-- "<Peli> v<N> (<slug>): …" — a new version. Copy `games/<slug>/v<N-1>/` to `games/<slug>/v<N>/`
-  and change the copy. Append the version to `game.json`.
+- "<Peli> v<N> (<slug>): …" — a new version. Copy the newest version still in `games/<slug>/`
+  (usually `v<N-1>/`) to the next free number and change the copy; a withdrawn number (rule 1) is
+  skipped for good, so Puhelinkoppi goes from `v2/` to `v5/`. Append the version to `game.json`.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
@@ -22,7 +23,10 @@ player sees is Finnish unless the request says otherwise.
 1. **A published version never changes.** Never edit, move or delete a `games/<slug>/v<N>/` folder
    or its `game.json` entry once it is on `main`; a fix is a new version. CI runs
    `scripts/check_immutable.py` and fails a pull request that does. `games/<slug>/thumb.webp`
-   is outside the version folders and may be retaken.
+   is outside the version folders and may be retaken. The only exception: a version Eero
+   explicitly asks to take out of production is added to `WITHDRAWN` in that script (with where
+   he said so) in its own pull request, and then deleted whole, folder and entry, in the next.
+   Its number is never used again (phones keep the old one cached): the next version skips it.
 2. **One folder per version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an
