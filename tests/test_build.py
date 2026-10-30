@@ -218,3 +218,27 @@ def test_rewriting_a_published_entry_fails(repo):
     meta["versions"][0]["note"] = "toinen"
     (repo / "games" / "peli" / "game.json").write_text(json.dumps(meta))
     assert "only append" in problems("main", cwd=str(repo))[0]
+
+
+def add_lib(repo, folder, text):
+    d = repo / "public" / "lib" / folder
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "kirjasto.js").write_text(text)
+
+
+def test_a_published_library_file_never_changes(repo):
+    add_lib(repo, "kirjasto-r1", "export const a = 1;\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "lib")
+    add_lib(repo, "kirjasto-r1", "export const a = 2;\n")
+    assert "library file never changes" in problems("main", cwd=str(repo))[0]
+    (repo / "public" / "lib" / "kirjasto-r1" / "kirjasto.js").unlink()
+    assert "library file never changes" in problems("main", cwd=str(repo))[0]
+
+
+def test_a_new_library_release_is_a_new_folder(repo):
+    add_lib(repo, "kirjasto-r1", "export const a = 1;\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "lib")
+    add_lib(repo, "kirjasto-r2", "export const a = 2;\n")
+    assert problems("main", cwd=str(repo)) == []
