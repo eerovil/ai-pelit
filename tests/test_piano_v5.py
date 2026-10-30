@@ -148,3 +148,25 @@ def test_a_press_makes_no_sound_and_a_late_press_does_not_move_the_note(site, co
     }""")
     hit, sounds_from_press, off_beat = played
     assert hit is True and sounds_from_press == 0 and abs(off_beat) < 0.001
+
+
+def test_the_next_song_plays_from_its_start_and_the_list_holds_the_tune(site, context):
+    page = open_game(site, context)
+    page.evaluate(SPY)
+    played = page.evaluate("""() => {
+      level = 1; startLevel(); state = 'play'; lives = 99;
+      for (const n of cur.notes) n.hit = true;
+      while (level === 1) update(1 / 30);  // song 1 to its end, then song 2 starts
+      const first = cur.notes[0];
+      _played.length = 0;
+      // The high-score list over the game: the clock and the tune wait.
+      const panel = document.createElement('div'); panel.id = 'ai-pelit-tulokset'; document.body.append(panel);
+      const held = now;
+      for (let i = 0; i < 300; i++) update(1 / 30);
+      const whileOpen = [_played.length, now === held];
+      panel.remove();
+      while (now < first.t + 0.01) update(1 / 60);
+      state = 'menu';
+      return [whileOpen, _played[0][0] === first.pitch, Math.abs(_played[0][1] + _played[0][2] - first.t) < 0.001];
+    }""")
+    assert played == [[0, True], True, True]
