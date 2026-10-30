@@ -146,3 +146,55 @@ def test_doing_every_trick_clears_the_level_saves_the_next_and_sends_the_points(
     assert page.inner_text("#stats").startswith(f"Ennätys {pts} p")
     queue = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))")
     assert queue["trampoliini|main"]["score"] == pts
+
+
+def test_a_tap_just_before_landing_still_counts_and_a_second_tap_changes_nothing(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    # Early: 0.05 s before the mat, in the air.
+    page.evaluate("stand(0); J.vin = 5; while (phase === 'mat') step(1 / 60);"
+                  "while (timeToMat() > 0.05) step(1 / 60); tap()")
+    assert page.evaluate("J.pumpT") < 0
+    page.evaluate("while (phase === 'air') step(1 / 60); J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60)")
+    early = page.evaluate("J.vy")
+    # The first tap is the one that counts: a perfect second tap does not replace it.
+    page.evaluate("stand(0); J.vin = 5; J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60)")
+    assert early < page.evaluate("J.vy")
+
+
+def test_a_twist_still_turning_at_the_landing_is_a_fall(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.evaluate("stand(0); J.vin = 5; while (phase === 'mat') step(1 / 60);"
+                  "while (timeToMat() > 0.2) step(1 / 60); twistTap(); while (phase === 'air') step(1 / 60)")
+    assert page.evaluate("[lastLand.crash, hearts]") == ["kierre", 2]
+
+
+def test_closing_the_game_mid_go_starts_the_level_again_with_the_record_kept(site, context):
+    page = open_game(site, context, level=2)
+    page.evaluate("localStorage.setItem('ai-pelit:trampoliini:ennatys', '140')")
+    page.click("#go")
+    page.evaluate(TRICK, [1, 0, 1.2])
+    assert page.evaluate("points") > 0
+    page.reload()
+    assert page.inner_text("#level") == "Taso 2: Pieni pihatrampoliini"
+    assert page.inner_text("#stats").startswith("Ennätys 140 p")
+    page.click("#go")
+    assert page.evaluate("[points, hearts, tasks.some(k => k.done)]") == [0, 3, False]
+
+
+def test_the_top_bar_and_buttons_fit_a_360_and_a_390_px_phone(site, context):
+    site.build(ROOT / "games")
+    for width in (360, 390):
+        page = context.new_page()
+        page.set_viewport_size({"width": width, "height": 740})
+        page.goto(site.url + URL)
+        for lv in (5, 8):  # the longest trick names, and four tricks
+            page.evaluate(f"level = {lv}; startGo()")
+            widths = page.evaluate("""() => { x.font = '600 12px system-ui,sans-serif';
+              return tasks.map(k => x.measureText('⭐ ' + trickName(k.t)).width); }""")
+            assert max(widths) < width - 28
+            boxes = [page.locator("#pad button").nth(i).bounding_box() for i in range(3)]
+            assert boxes[0]["x"] >= 0 and boxes[2]["x"] + boxes[2]["width"] <= width
+            assert all(b["width"] >= 80 for b in boxes)
+        page.close()
