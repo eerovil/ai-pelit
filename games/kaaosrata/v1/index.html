@@ -436,27 +436,29 @@ function finish(res) {
   race.phase = 'done'; race.doneT = 0; race.results = res;
   const mine = res.findIndex(r => race.mode === 'solo' ? r.id === 'me' : r.id === R.me);
   const t = mine >= 0 ? res[mine].fin : null;
+  // Only a finish wins: at the time limit the one who got furthest is first, but has not won.
+  const won = mine === 0 && t !== null;
   const counted = race.mode === 'solo' || R.once(race.round);
   if (counted && mine >= 0) {
     races++;
     if (t !== null && (best === null || t < best)) best = t;
-    if (race.mode === 'solo' && mine === 0) { wins++; level++; }
+    if (race.mode === 'solo' && won) { wins++; level++; }
     save('kisat', races); save('ennatys', best); save('voitot', wins); save('taso', level);
     if (t !== null && window.AiPelitScores) AiPelitScores.submit(t);
   }
-  race.mine = mine; race.time = t;
+  race.mine = mine; race.time = t; race.won = won;
 }
 function afterResults() {
-  const res = race.results, mine = race.mine, t = race.time;
-  const text = t === null ? 'Et ehtinyt maaliin' : mine === 0 ? 'Voitit! ' + fmt(t) + ' 🏆' : (mine + 1) + '. sija · ' + fmt(t);
+  const res = race.results, mine = race.mine, t = race.time, won = race.won;
+  const text = t === null ? 'Et ehtinyt maaliin' : won ? 'Voitit! ' + fmt(t) + ' 🏆' : (mine + 1) + '. sija · ' + fmt(t);
   if (race.mode === 'solo') {
     race = null;
-    showMenu(text, mine === 0 ? 'win' : 'lose');
+    showMenu(text, won ? 'win' : 'lose');
     return;
   }
   race = null;
   R.note(res.map((r, i) => (i + 1) + '. ' + (r.id === R.me ? 'Sinä' : r.name) + ' ' + (r.fin === null ? '–' : fmt(r.fin))).join(' · '));
-  R.backToRoom(mine < 0 ? 'Kisa päättyi' : t === null ? 'Et ehtinyt maaliin' : (mine + 1) + '. sija · ' + fmt(t), mine === 0 ? 'win' : 'lose');
+  R.backToRoom(mine < 0 ? 'Kisa päättyi' : t === null ? 'Et ehtinyt maaliin' : (mine + 1) + '. sija · ' + fmt(t), won ? 'win' : 'lose');
 }
 
 // ---------- The loop ----------

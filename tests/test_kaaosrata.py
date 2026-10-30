@@ -123,6 +123,17 @@ def test_the_finish_ends_the_race_and_a_win_raises_the_level(site, context):
     assert "Ennätys" in page.inner_text("#stats")
 
 
+def test_furthest_at_the_time_limit_is_not_a_win(site, context):
+    page = start(site, context)
+    put(page, x=1.7, y=44, cp=1)
+    page.evaluate("race.clock = LIMIT + 1")
+    page.wait_for_function("!race && !document.getElementById('menu').classList.contains('hidden')", timeout=12000)
+    assert page.inner_text("#result") == "Et ehtinyt maaliin"
+    assert page.evaluate("document.getElementById('result').className") == "lose"
+    assert page.evaluate("[localStorage.getItem('ai-pelit:kaaosrata:taso'), localStorage.getItem('ai-pelit:kaaosrata:voitot')]") == ["1", "0"]
+    assert page.evaluate("localStorage.getItem('ai-pelit:kaaosrata:kisat')") == "1"
+
+
 def test_the_computer_gets_through_the_whole_course(site, context):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -230,6 +241,22 @@ def test_in_a_room_a_finished_player_stands_still_on_every_phone(site, browser):
     guest.wait_for_function(f"race.runners[2].fin !== null && Math.abs(race.runners[2].x - {bot[0]}) < 0.01 && Math.abs(race.runners[2].y - {bot[1]}) < 0.01", timeout=3000)
     host.wait_for_timeout(500)
     assert host.evaluate("[race.runners[2].x, race.runners[2].y]") == bot
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
+
+
+def test_in_a_room_furthest_at_the_time_limit_is_not_a_win(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    guest.evaluate("Object.assign(me, { x: 1.7, y: 44, cp: 1, vx: 0, vy: 0 })")
+    host.wait_for_function("race.runners[1].best >= 44", timeout=3000)
+    host.evaluate("race.clock = LIMIT + 1")
+    for p in (host, guest):
+        p.wait_for_function("AiPelitRooms.inRoom && !race && document.getElementById('aipr-result').textContent !== ''", timeout=10000)
+    assert guest.evaluate("race === null && AiPelitRooms.inRoom")
+    assert guest.inner_text("#aipr-result") == "Et ehtinyt maaliin"
+    assert "win" not in guest.evaluate("document.getElementById('aipr-result').className")
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()
