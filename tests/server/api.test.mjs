@@ -95,6 +95,16 @@ test('each player keeps their best, and the list sorts the game\'s way', async (
   rows = (await call('GET', '/api/scores?game=puhelinkoppi&board=putki')).body.rows;
   assert.deepEqual(rows.map((r) => [r.name, r.score]), [['Aino', 12]]);
   assert.equal((await post(A, 'puhelinkoppi', 'taso-1', 3)).status, 400);
+  // Aitajuoksu: 100 m hurdles is 'main', each other race its own list, lower time first.
+  await post(A, 'aitajuoksu', '400-tasainen', 58.2);
+  await post(B, 'aitajuoksu', '400-tasainen', 55.1);
+  await post(A, 'aitajuoksu', 'main', 15.3);
+  rows = (await call('GET', '/api/scores?game=aitajuoksu&board=400-tasainen')).body.rows;
+  assert.deepEqual(rows.map((r) => [r.name, r.score]), [['Bertta', 55.1], ['Aino', 58.2]]);
+  rows = (await call('GET', '/api/scores?game=aitajuoksu&board=main')).body.rows;
+  assert.deepEqual(rows.map((r) => [r.name, r.score]), [['Aino', 15.3]]);
+  for (const b of ['200-aidat', '100-tasainen']) assert.equal((await post(C, 'aitajuoksu', b, 30)).status, 200);
+  for (const b of ['100-aidat', '800-tasainen', '400-aidat-x']) assert.equal((await post(C, 'aitajuoksu', b, 30)).status, 400);
 });
 
 test('bad scores and unknown players are refused', async () => {
