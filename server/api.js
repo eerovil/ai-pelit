@@ -38,6 +38,7 @@ export const GAMES = {
   kaaosrata: { order: 'low', boards: /^main$/ }, // fastest obstacle course, seconds
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
+  skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
   tikka: { order: 'high', boards: /^main$/ }, // most points in a 10-round Pistekisa
 };
 
