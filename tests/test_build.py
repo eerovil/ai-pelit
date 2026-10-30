@@ -166,6 +166,24 @@ def test_a_withdrawn_version_may_not_be_edited_and_others_stay_put(repo):
     assert any("v1 is published" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
 
 
+def test_a_withdrawn_version_may_not_be_deleted_in_part(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    (repo / "games" / "peli" / "v2" / "muu.js").write_text("// toinen tiedosto")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    (repo / "games" / "peli" / "v2" / "muu.js").unlink()  # one file gone, the folder stays
+    assert "delete it whole" in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"})[0]
+
+
+def test_a_withdrawn_folder_and_its_entry_go_together(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v2")  # the folder goes, its game.json entry stays
+    assert any("remove its entry too" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+
+
 def test_rewriting_a_published_entry_fails(repo):
     meta = json.loads((repo / "games" / "peli" / "game.json").read_text())
     meta["versions"][0]["note"] = "toinen"

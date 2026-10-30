@@ -41,6 +41,10 @@ def problems(base: str, cwd: str | None = None, withdrawn: set[str] = WITHDRAWN)
         m = VERSION_FILE.match(path)
         if m and m.group(0) in published_dirs:
             if status == "D" and m.group(0) in withdrawn:
+                # Only the whole version may go: a file deleted from a folder that stays is an edit.
+                if not os.path.isdir(f"{cwd or '.'}/{m.group(0)}"):
+                    continue
+                found.append(f"{path}: {m.group(1)} {m.group(2)} is withdrawn; delete it whole, not file by file")
                 continue
             found.append(f"{path}: {m.group(1)} {m.group(2)} is published; make a new version instead")
         if path.endswith("/game.json") and status != "A" and path in published:
@@ -52,9 +56,22 @@ def problems(base: str, cwd: str | None = None, withdrawn: set[str] = WITHDRAWN)
                 found.append(f"{path}: a published game cannot be removed")
                 continue
             slug = path.split("/")[1]
-            old = [v for v in old if f"games/{slug}/v{v.get('n')}/" not in withdrawn or os.path.isdir(f"{cwd or '.'}/games/{slug}/v{v.get('n')}")]
+            gone = {v.get("n") for v in old if f"games/{slug}/v{v.get('n')}/" in withdrawn
+                    and not os.path.isdir(f"{cwd or '.'}/games/{slug}/v{v.get('n')}")}
+            old = [v for v in old if v.get("n") not in gone]
             if new[: len(old)] != old:
                 found.append(f"{path}: published versions' entries changed; only append new ones")
+    # A withdrawn version's folder and its game.json entry go together, even when game.json
+    # itself was left as it was.
+    for d in sorted(withdrawn & published_dirs):
+        if os.path.isdir(f"{cwd or '.'}/{d}"):
+            continue
+        slug, n = d.split("/")[1], int(d.split("/")[2][1:])
+        meta = f"{cwd or '.'}/games/{slug}/game.json"
+        if os.path.isfile(meta):
+            with open(meta) as f:
+                if any(v.get("n") == n for v in json.load(f)["versions"]):
+                    found.append(f"games/{slug}/game.json: v{n} is withdrawn and its folder is gone; remove its entry too")
     return found
 
 
