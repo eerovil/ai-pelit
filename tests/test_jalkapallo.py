@@ -313,3 +313,47 @@ def test_sideways_the_pitch_runs_across_and_survives_turning_the_phone(phone):
     page.wait_for_function("W === 740 && wide")
     assert page.evaluate("[score.join('-'), state]") == ["2-1", "play"]
     assert page.errors == []
+
+
+def test_controls_fit_a_390_px_phone(phone):
+    page = phone(390, 844)
+    page.click("#go")
+    assert page.evaluate("""!wide && buttons.every(b => b.x - b.r >= 0 && b.x + b.r <= W && b.y - b.r >= ctrlTop && b.y + b.r <= H)
+      && stickHome.x + STICK_R < buttons[0].x - buttons[0].r && stickHome.y + STICK_R <= H""")
+    # The two buttons do not overlap each other.
+    assert page.evaluate("Math.hypot(buttons[0].x - buttons[1].x, buttons[0].y - buttons[1].y) > buttons[0].r + buttons[1].r")
+    assert page.errors == []
+
+
+def test_two_tackles_at_once_give_the_ball_to_one(site, context):
+    page = start(site, context)
+    page.evaluate(STILL)
+    page.evaluate("""() => { players[3].x = 0; players[3].y = 0; players[3].fx = 0; players[3].fy = -1; take(players[3]);
+      for (let i = 0; i < 20; i++) stepBall(1 / 60, true);
+      for (const i of [0, 1]) { const p = players[i]; p.x = i ? 0.9 : -0.9; p.y = -1.6; p.fx = i ? -0.5 : 0.5; p.fy = 0.86; }
+      press(ctrls[0], 'pass'); press(ctrls[1], 'shootDown'); }""")
+    page.evaluate("run(() => owner === players[3], 0.4)")
+    assert page.evaluate("players.indexOf(owner)") in (0, 1)
+    assert page.errors == []
+
+
+def test_buttons_without_the_ball_at_the_kickoff_do_nothing(site, context):
+    page = start(site, context)
+    page.evaluate("kickoff(1)")
+    page.evaluate("press(ctrls[0], 'pass'); press(ctrls[0], 'shootDown'); shootUp(ctrls[0], 1)")
+    assert page.evaluate("[state, owner.t, ctrls[0].p.lunge]") == ["kickoff", 1, 0]
+    assert page.errors == []
+
+
+def test_a_guest_that_reloads_mid_match_gets_its_player_back(room):
+    host, [guest] = room("Eero", "Aino")
+    host.evaluate("state = 'play'; score = [1, 0]")
+    guest.reload()
+    guest.wait_for_function("players.length === 6 && myTeam === 1 && score[0] === 1", timeout=8000)
+    guest.wait_for_function("myPlayer() && myPlayer().t === 1", timeout=4000)
+    # Its joystick moves its player on the host again.
+    host.evaluate("ctrls[1].switchT = 99")
+    start = host.evaluate("ctrls[1].p.y")
+    guest.evaluate("input.jx = 0; input.jy = -1")
+    host.wait_for_function(f"ctrls[1].p.y < {start} - 1", timeout=3000)
+    assert host.errors == guest.errors == []
