@@ -1,0 +1,13 @@
+{
+  "title": "Kaahari",
+  "description": "Kaahaa karting-kisaa viittä kuskia vastaan: liu'u mutkissa turboon, kerää hedelmiä ja heitä pommeja.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: kolme rataa, liukuturbot, turbonuolet, ?-laatikoiden esineet (turbo, pommi, TNT, kupla) ja hedelmät viittä tietokonekuskia vastaan.",
+      "request": "crash team racing tyylinen ajopeli",
+      "issue": "eerovil/ai-pelit#89"
+    }
+  ]
+}
