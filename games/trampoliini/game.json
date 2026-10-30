@@ -26,8 +26,8 @@
     {
       "n": 4,
       "date": "2026-10-30",
-      "note": "Kierrenappi pohjassa pitää kierteen käynnissä, ja kun päästät irti, meneillään oleva kierre tehdään loppuun.",
-      "request": "Anna pitää kierrenappia pohjassa joten kierre jatkuu kunnes päästää irti",
+      "note": "Puolikierteet ja pidettävä kierrenappi: napautus tekee puolikierteen, pohjassa pidetty kierre jatkuu kunnes päästät irti, eikä kesken jäänyt kierre enää kaada.",
+      "request": "Anna pitää kierrenappia pohjassa joten kierre jatkuu kunnes päästää irti. Voisi muuten olla puolikierre nyt myös. Ja älä kaadu jos kierre on kesken.",
       "issue": "eerovil/ai-pelit#62"
     }
   ]

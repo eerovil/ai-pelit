@@ -43,7 +43,7 @@
   <p class="help">Paina ruutua, niin jalat menevät koukkuun. Päästä irti juuri kun osut
     trampoliiniin: se on ponnistus, ja pompit korkeammalle.
     Pidä voltin nappia pohjassa, niin pyörit kippurassa, ja päästä irti ajoissa, niin oikaiset
-    jaloillesi. 🌀 tekee kierteen: pidä pohjassa, niin kierre jatkuu, kunnes päästät irti. Tee tason kaikki temput, ennen kuin kolme sydäntä loppuu.</p>
+    jaloillesi. 🌀 tekee puolikierteen: pidä pohjassa, niin kierre jatkuu, kunnes päästät irti. Tee tason kaikki temput, ennen kuin kolme sydäntä loppuu.</p>
 </div>
 <script>
 'use strict';
@@ -113,11 +113,14 @@ function levelOf(n) {
 function trickName([n, tw]) {
   const a = Math.abs(n), dir = n > 0 ? 'taakse' : 'eteen';
   const many = k => k < 4 ? ['', '', 'Tupla', 'Tripla'][k] : `${k}x `;
+  // Twists come in halves from v4: ½ is "Puoli", 1½ "1½-", and whole ones as before.
+  const twWord = (w, cap) => w === 0.5 ? (cap ? 'Puolikierre' : 'puolikierre')
+    : w % 1 ? `${Math.floor(w)}½-kierre` : `${many(w)}${w > 1 || !cap ? 'kierre' : 'Kierre'}`;
   if (!a && !tw) return 'Suora hyppy';
-  if (!a) return `${many(tw)}${tw > 1 ? 'kierrehyppy' : 'Kierrehyppy'}`;
+  if (!a) return `${twWord(tw, true)}hyppy`;
   const flip = `${many(a)}${a > 1 ? 'voltti' : 'Voltti'}`;
   if (!tw) return `${flip} ${dir}`;
-  return `${many(tw)}${tw > 1 ? 'kierre' : 'Kierre'}${flip.toLowerCase()} ${dir}`;
+  return `${twWord(tw, true)}${flip.toLowerCase()} ${dir}`;
 }
 function trickPoints([n, tw], clean) {
   let p = 10 * Math.abs(n) + 6 * tw;
@@ -157,7 +160,7 @@ function setup() {
 }
 // Standing on the mat, starting with a small bounce.
 function stand(px) {
-  J = { x: px, y: COMH, vx: 0, vy: 0, a: 0, w: 0, dir: 0, twist: 0, twists: 0, rot: 0,
+  J = { x: px, y: COMH, vx: 0, vy: 0, a: 0, w: 0, dir: 0, twist: 0, twists: 0, rot: 0, face: 1,
         vin: 2.6, matT: 0, pumpT: null, queued: 0, queuedTwist: false, downT: 0, off: false };
   phase = 'mat';
 }
@@ -191,12 +194,12 @@ function press(dir) {
   held = J && J.dir ? J.dir : dir;
 }
 function release() { held = 0; }
-// Pressing 🌀 asks for one more twist at once (a quick tap is one twist, as before v4); while it
-// is held the twist keeps going, one more whole twist ahead at a time, until it is let go.
+// Pressing 🌀 asks for half a twist more at once (a quick tap is a half twist); while it is held
+// the twist keeps going, half a twist ahead at a time, until it is let go.
 function twistDown() {
   unlock();
   if (phase === 'mat' || (phase === 'air' && timeToMat() < 0.12)) { J.queuedTwist = true; tap(); }
-  else if (phase === 'air' && J.twists < MAX_TWISTS) J.twists++;
+  else if (phase === 'air' && J.twists < MAX_TWISTS) J.twists += 0.5;
   twistHeld = true;
 }
 function twistUp() { twistHeld = false; }
@@ -235,7 +238,7 @@ function air(dt) {
     J.w += (want - J.w) * Math.min(1, dt * 8);
   }
   J.a += J.w * dt; J.rot += J.w * dt;
-  if (twistHeld && J.twists > 0) J.twists = Math.min(MAX_TWISTS, Math.max(J.twists, Math.floor(J.twist) + 1));
+  if (twistHeld && J.twists > 0) J.twists = Math.min(MAX_TWISTS, Math.max(J.twists, Math.floor(J.twist * 2) / 2 + 0.5));
   if (J.twist < J.twists) J.twist = Math.min(J.twists, J.twist + TWIST * dt);
   if (T.net && Math.abs(J.x) > T.half - 0.25) { J.x = Math.sign(J.x) * (T.half - 0.25); J.vx = -J.vx * 0.4; }
   if (!J.off && Math.abs(J.x) > T.half + 0.15) J.off = true;
@@ -244,20 +247,24 @@ function air(dt) {
 }
 // Feet first and upright is a landing; a little off, a wobble; more, a fall.
 function land() {
-  const an = Math.abs(wrap(J.a)), left = J.twists - J.twist;
-  const trick = [Math.round(J.rot / (2 * Math.PI)), Math.round(J.twist)];
+  // v4: a twist still under way at the landing is a wobble, not a fall; it counts the halves
+  // it nearly made. Only the lean decides a fall.
+  const an = Math.abs(wrap(J.a)), left = J.twists - J.twist, halves = Math.round(J.twist * 2);
+  const trick = [Math.round(J.rot / (2 * Math.PI)), halves / 2];
   let clean;
-  if (an < 0.5 && left < 0.12 && !held) clean = true;
-  else if (an < 1 && left < 0.3) clean = false;
-  else { lastLand = { crash: left >= 0.3 ? 'kierre' : 'kaatui' }; crash(left >= 0.3 ? 'Kierre jäi kesken!' : 'Kaaduit!'); return; }
+  if (an < 0.5 && left < 0.12 && !held && !twistHeld) clean = true;   // still twisting: a wobble
+  else if (an < 1) clean = false;
+  else { lastLand = { crash: 'kaatui' }; crash('Kaaduit!'); return; }
+  if (halves % 2) J.face = -J.face;   // half a twist more: you land facing the other way
   lastLand = { trick, clean };
   J.vin = -J.vy; J.vy = 0; J.y = COMH; J.matT = 0;
   // Leaning back (head behind, a > 0) sends you back (-x), leaning forward sends you forward.
-  const slide = -Math.sin(wrap(J.a)) * slideOf(T);
+  const slide = -Math.sin(wrap(J.a)) * slideOf(T) * J.face;
   J.vx = J.vx * 0.5 - J.x * 0.3 + slide;  // the mat pulls you in a little
   // Say it only when you really go that way: off the middle the mat's pull can win.
   if (Math.abs(wrap(J.a)) >= SLIDE_SHOWN && Math.sign(J.vx) === Math.sign(slide)) {
-    pop(slide < 0 ? '← Liukuu taaksepäin' : 'Liukuu eteenpäin →', '#e0fbfc', true);
+    const word = slide * J.face < 0 ? 'taaksepäin' : 'eteenpäin';
+    pop(slide < 0 ? `← Liukuu ${word}` : `Liukuu ${word} →`, '#e0fbfc', true);
   }
   J.twist = J.twists = 0; J.w = 0; J.dir = 0;
   J.landA = wrap(J.a); J.a = J.landA;
@@ -303,7 +310,7 @@ function takeoff() {
   if (q >= 0.5) sound('spring');
   Object.assign(J, { vy: v, y: COMH, a: 0, w: 0, rot: 0, landA: 0, pumpT: null, twist: 0, twists: 0, dir: 0 });
   if (J.queued) {
-    J.dir = J.queued; J.w = J.dir * OPEN; J.vx -= J.dir * DRIFT;
+    J.dir = J.queued; J.w = J.dir * OPEN; J.vx -= J.dir * DRIFT * J.face;
     if (held) held = J.dir;
   }
   // Without a net, everything that moves you sideways together carries you at most MAX_BOUNCE
@@ -312,7 +319,7 @@ function takeoff() {
     const cap = MAX_BOUNCE * (T.half + 0.15) / (airtime(v) + CONTACT * 0.3);
     J.vx = Math.max(-cap, Math.min(cap, J.vx));
   }
-  if (J.queuedTwist) J.twists = 1;
+  if (J.queuedTwist) J.twists = 0.5;
   J.queued = 0; J.queuedTwist = false;
   phase = 'air';
 }
@@ -454,8 +461,8 @@ function drawJumper(v) {
   const s = Math.max(60, Math.min(S, 100));
   x.save();
   x.translate(px, py - (s - S) * COMH);
-  x.rotate(-J.a);
-  x.scale(Math.abs(tw) < 0.35 ? 0.35 * Math.sign(tw || 1) : tw, 1);
+  x.rotate(-J.a * J.face);
+  x.scale((Math.abs(tw) < 0.35 ? 0.35 * Math.sign(tw || 1) : tw) * J.face, 1);
   x.lineCap = 'round'; x.lineJoin = 'round';
   const limb = (pts, w, col) => { x.strokeStyle = col; x.lineWidth = w * s; x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a * s, -b * s) : x.moveTo(a * s, -b * s)); x.stroke(); };
   if (tuck) {
