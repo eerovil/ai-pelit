@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#5aa9e6">
+<title>Pallorata</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #5aa9e6; font-family: system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  #hud { position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 12px; display: flex; gap: 8px;
+    pointer-events: none; }
+  .chip { background: rgba(255,255,255,.85); color: #123; border-radius: 999px; padding: 6px 12px;
+    font-weight: 700; font-size: 17px; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+  #hud.hidden, .chip.hidden { display: none; }
+  #vauhti { background: #19c3e6; color: #fff; }
+  #toast { position: fixed; left: 0; right: 0; top: 22dvh; text-align: center; color: #fff; font-size: 32px;
+    font-weight: 800; text-shadow: 0 3px 8px rgba(0,0,0,.45); pointer-events: none; }
+  #toast.hidden { display: none; }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 24px; text-align: center; color: #fff; background: rgba(20,50,90,.45); }
+  .screen.hidden { display: none; }
+  .screen h1 { margin: 0; font-size: 44px; text-shadow: 0 3px 0 rgba(0,0,0,.25); }
+  .screen p { margin: 0; font-size: 18px; line-height: 1.4; max-width: 300px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+  .screen .big { font-size: 26px; font-weight: 800; }
+  button.go { font: inherit; font-size: 24px; font-weight: 800; color: #123; background: #ffd23f; border: 0;
+    border-radius: 18px; padding: 16px 44px; box-shadow: 0 5px 0 #c99a00; touch-action: manipulation; }
+  button.go:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a00; }
+  #menu { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 15dvh); }
+  #ei { display: none; }
+  /* Sideways (#95): the menu in two columns, title and help on the left, record and button on the right. */
+  @media (orientation: landscape) and (max-height: 540px) {
+    #menu:not(.hidden) { display: grid; grid-template-columns: minmax(0, 360px) auto; column-gap: 44px;
+      align-content: center; justify-content: center; align-items: center; padding-top: 24px; }
+    #menu h1 { grid-column: 1; grid-row: 1; }
+    #menu p:not(#paras) { grid-column: 1; grid-row: 2; max-width: 360px; font-size: 16px; }
+    #paras { grid-column: 2; grid-row: 1; align-self: end; }
+    #aloita { grid-column: 2; grid-row: 2; }
+    .screen { padding-left: calc(env(safe-area-inset-left) + 24px); padding-right: calc(env(safe-area-inset-right) + 24px); }
+    .screen p { max-width: 460px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden"><span class="chip hidden" id="vauhti">Vauhti!</span><span class="chip" id="tahdet">⭐ 0</span><span class="chip" id="matka">0 m</span></div>
+<div id="toast" class="hidden"></div>
+<div class="screen" id="menu">
+  <h1>Pallorata</h1>
+  <p>Vedä sormella vasemmalle ja oikealle, pysy radalla ja kerää tähtiä. Hyppyristä pallo lentää aukon yli, turbosta se kiitää. Varo liukuvia palikoita!</p>
+  <p id="paras"></p>
+  <button class="go" id="aloita">Aloita</button>
+</div>
+<div class="screen hidden" id="loppu">
+  <h1>Putosit!</h1>
+  <p class="big" id="tulos"></p>
+  <p id="ennatys"></p>
+  <button class="go" id="uudestaan">Uudestaan</button>
+</div>
+<div class="screen" id="ei"><p>Tämä puhelin ei osaa piirtää 3D-kuvaa.</p></div>
+<!-- Pallorata v2 (#95): v1 (#102), a ball rolling along a narrow track above the sky on the shared three.js, also sideways. -->
+<script type="module">
+import * as THREE from '../../../lib/three-r187/three.module.js';
+
+const KEY = 'ai-pelit:pallorata:';
+const ROW = 2;            // track row length along the run
+const R = 0.45;           // ball radius
+const AHEAD = 45;         // rows kept in front of the ball
+const BEHIND = 6;         // rows kept behind it
+const H = 0.7;            // how high a ramp's end is
+const G = 22;             // gravity
+const $ = id => document.getElementById(id);
+
+const c = $('c');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true });
+} catch (e) {
+  c.style.display = 'none';
+  $('menu').classList.add('hidden');
+  $('ei').style.display = 'flex';
+  window.noWebgl = true;
+}
+
+if (renderer) {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const SKY = 0x8cc8f0;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 35, 85);
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x6688aa, 1.3);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff4dd, 2.2);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 12, bottom: -12, near: 1, far: 40 });
+  sun.shadow.bias = -0.0005;
+  scene.add(sun, sun.target);
+
+  // The ball: a striped sphere, so its rolling shows.
+  const stripes = document.createElement('canvas');
+  stripes.width = 64; stripes.height = 32;
+  const sg = stripes.getContext('2d');
+  sg.fillStyle = '#e8364f'; sg.fillRect(0, 0, 64, 32);
+  sg.fillStyle = '#fff'; sg.fillRect(0, 13, 64, 6); sg.fillRect(28, 0, 8, 32);
+  const ballTex = new THREE.CanvasTexture(stripes);
+  ballTex.colorSpace = THREE.SRGBColorSpace;
+  const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 20),
+    new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.35, metalness: 0.1 }));
+  ballMesh.castShadow = true;
+  scene.add(ballMesh);
+
+  // Track rows: one box each, recycled as the ball rolls on.
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  const rowMats = [0xf4efe6, 0xd9cfbf].map(color => new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x3f8f6b, roughness: 0.7 });
+  // The ramp: orange with white arrows pointing up it, so it reads as a jump from afar.
+  const arrows = document.createElement('canvas');
+  arrows.width = 64; arrows.height = 64;
+  const ag = arrows.getContext('2d');
+  ag.fillStyle = '#ff7a2f'; ag.fillRect(0, 0, 64, 64);
+  ag.strokeStyle = '#fff'; ag.lineWidth = 7; ag.lineJoin = 'round';
+  for (const y of [16, 40]) { ag.beginPath(); ag.moveTo(14, y + 14); ag.lineTo(32, y); ag.lineTo(50, y + 14); ag.stroke(); }
+  const arrowTex = new THREE.CanvasTexture(arrows);
+  arrowTex.colorSpace = THREE.SRGBColorSpace;
+  const rampMat = new THREE.MeshStandardMaterial({ map: arrowTex, roughness: 0.6 });
+  // A turbo strip: glowing cyan with the same arrows.
+  const turbo = document.createElement('canvas');
+  turbo.width = 64; turbo.height = 64;
+  const tg = turbo.getContext('2d');
+  tg.fillStyle = '#19c3e6'; tg.fillRect(0, 0, 64, 64);
+  tg.strokeStyle = '#fff36b'; tg.lineWidth = 7; tg.lineJoin = 'round';
+  for (const y of [16, 40]) { tg.beginPath(); tg.moveTo(14, y + 14); tg.lineTo(32, y); tg.lineTo(50, y + 14); tg.stroke(); }
+  const turboTex = new THREE.CanvasTexture(turbo);
+  turboTex.colorSpace = THREE.SRGBColorSpace;
+  const boostMat = new THREE.MeshStandardMaterial({ map: turboTex, emissive: 0x0a6f88, emissiveIntensity: 0.6, roughness: 0.5 });
+  const rowPool = [];
+  for (let i = 0; i < AHEAD + BEHIND + 2; i++) {
+    const top = new THREE.Mesh(boxGeo, rowMats[0]);
+    top.receiveShadow = true; top.castShadow = true;
+    const base = new THREE.Mesh(boxGeo, edgeMat);
+    base.receiveShadow = true;
+    scene.add(top, base);
+    rowPool.push({ top, base, used: null });
+  }
+
+  // Stars: a five-point star, extruded and spinning.
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 0.16 : 0.38;
+    i ? shape.lineTo(Math.cos(a) * r, Math.sin(a) * r) : shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const starGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.12, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 1 });
+  starGeo.center();
+  const starMat = new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xaa7a00, emissiveIntensity: 0.45, metalness: 0.3, roughness: 0.35 });
+
+  // The sky turns from day to sunset to a starry night the further the ball gets.
+  const ZONES = [
+    { at: 0, name: '', sky: 0x8cc8f0, sun: 0xfff4dd, hemi: 1.3 },
+    { at: 300, name: 'Auringonlasku', sky: 0xf2a07b, sun: 0xffb36b, hemi: 1.1 },
+    { at: 700, name: 'Tähtiyö', sky: 0x1d2552, sun: 0xaabbff, hemi: 0.7 },
+  ];
+  const skyA = new THREE.Color(), skyB = new THREE.Color();
+  // Night-sky stars on a dome that moves with the camera, seen only as it gets dark.
+  const dots = [];
+  for (let n = 0; n < 300; n++) {
+    const a = Math.random() * Math.PI * 2, e = Math.random() * 1.2 + 0.05;
+    dots.push(Math.cos(a) * Math.cos(e) * 150, Math.sin(e) * 150, Math.sin(a) * Math.cos(e) * 150);
+  }
+  const dotGeo = new THREE.BufferGeometry();
+  dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(dots, 3));
+  const dotMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0 });
+  const skyDots = new THREE.Points(dotGeo, dotMat);
+  scene.add(skyDots);
+
+  // Sliding blocks that bump the ball sideways, from 240 m on.
+  const blockGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+  const blockMat = new THREE.MeshStandardMaterial({ color: 0x9b5de5, roughness: 0.5 });
+
+  // Clouds far below the track, drifting past.
+  const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.92 });
+  const cloudGeo = new THREE.SphereGeometry(1, 12, 8);
+  const clouds = [];
+  for (let i = 0; i < 14; i++) {
+    const g = new THREE.Group();
+    for (let k = 0; k < 4; k++) {
+      const p = new THREE.Mesh(cloudGeo, cloudMat);
+      p.scale.set(2.4 + Math.random() * 2, 1.1 + Math.random() * 0.6, 2 + Math.random() * 1.5);
+      p.position.set(k * 2.4 - 3.6, Math.random() * 0.5, Math.random() * 1.5);
+      g.add(p);
+    }
+    scene.add(g);
+    clouds.push(g);
+  }
+
+  // --- Track ---------------------------------------------------------------------------------
+  // rows[i] covers the run from i*ROW to (i+1)*ROW: its middle is at x = cx, it is w wide.
+  // A ramp row is followed by a gap of one or two rows, then a straight, wide landing.
+  // Two turbo rows speed the ball up for a few seconds; no ramp comes soon after them.
+  let rows, stars, blocks, seed, plan, lastRamp, lastBoost;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+  function makeRow(i) {
+    if (i < 10) return { cx: 0, w: 3.2 };
+    const p = rows[i - 1];
+    if (!plan.length && i > 20 && i - lastBoost > 40 && i - lastRamp > 12 && rnd() < 0.05) {
+      lastBoost = i;
+      plan = ['boost', 'boost'];
+    }
+    if (!plan.length && i - lastRamp > 18 && i - lastBoost > 35 && rnd() < 0.08) {
+      lastRamp = i;
+      plan = ['ramp', 'gap', ...(i > 150 ? ['gap'] : []), 'land', 'land', 'land', 'land', 'land', 'land'];
+    }
+    if (plan.length) {
+      const kind = plan.shift();
+      if (kind === 'gap') addStar(p.cx, 1.5, i);
+      return { kind, cx: p.cx, w: Math.max(p.w, 2.6), drift: 0 };
+    }
+    // Narrower and twistier the further the ball has come.
+    const hard = Math.min(1, i / 400);
+    const w = Math.max(1.3, 3 - hard * 1.5 + (rnd() < 0.15 ? -0.5 : 0));
+    let drift = p.drift ?? 0;
+    if (rnd() < 0.12) drift = (rnd() - 0.5) * (0.5 + hard * 0.7);
+    let cx = p.cx + drift;
+    if (Math.abs(cx) > 6) { drift = -drift; cx = p.cx + drift; }
+    const row = { cx, w, drift };
+    if (i > 120 && w >= 1.8 && rnd() < 0.07) {
+      const mesh = new THREE.Mesh(blockGeo, blockMat);
+      mesh.castShadow = true;
+      mesh.position.set(cx, 0.4, -(i + 0.5) * ROW);
+      scene.add(mesh);
+      blocks.push({ mesh, i, ph: rnd() * 6.28, sp: 1.2 + rnd() * 1.3, hit: false });
+    } else if (rnd() < 0.28) addStar(cx + (rnd() - 0.5) * (w - 0.6), 0.75, i);
+    return row;
+  }
+  function addStar(x, y, i) {
+    const star = new THREE.Mesh(starGeo, starMat);
+    star.castShadow = true;
+    star.rotation.y = rnd() * Math.PI;
+    star.position.set(x, y, -(i + 0.5) * ROW);
+    scene.add(star);
+    stars.push(star);
+  }
+  function row(i) {
+    if (i < 0) return { cx: 0, w: 3.2 };
+    while (rows.length <= i) rows.push(makeRow(rows.length));
+    return rows[i];
+  }
+  function free(r) {
+    r.used = null;
+    r.top.visible = r.base.visible = false;
+  }
+  function placeRows(first, last) {
+    for (const r of rowPool) if (r.used !== null && (r.used < first || r.used > last)) free(r);
+    for (let i = first; i <= last; i++) {
+      if (rowPool.some(r => r.used === i)) continue;
+      const r = rowPool.find(r => r.used === null);
+      const { cx, w, kind } = row(i);
+      r.used = i;
+      r.top.visible = r.base.visible = kind !== 'gap';
+      r.top.material = kind === 'ramp' ? rampMat : kind === 'boost' ? boostMat : rowMats[Math.abs(i) % 2];
+      if (kind === 'ramp') {
+        // A board tilted up towards the run's direction, its top rising from 0 to H.
+        const a = Math.atan2(H, ROW);
+        r.top.rotation.x = a;
+        r.top.scale.set(w, 0.3, Math.hypot(ROW, H) + 0.02);
+        r.top.position.set(cx, H / 2 - 0.15 * Math.cos(a), -(i + 0.5) * ROW - 0.15 * Math.sin(a));
+      } else {
+        r.top.rotation.x = 0;
+        r.top.scale.set(w, 0.3, ROW + 0.02);
+        r.top.position.set(cx, -0.15, -(i + 0.5) * ROW);
+      }
+      r.base.scale.set(w * 0.8, 0.5, ROW + 0.02);
+      r.base.position.set(cx, -0.55, -(i + 0.5) * ROW);
+    }
+  }
+
+  // --- Round ---------------------------------------------------------------------------------
+  const ball = { x: 0, y: R, z: 0, vy: 0, v: 0, aimX: 0, air: false, ramp: false, boost: 0, rush: 0 };
+  const round = { phase: 'menu', stars: 0, fallT: 0, t: 0, zone: 0, endZ: null };
+
+  function best() { return +(localStorage.getItem(KEY + 'ennatys') || 0); }
+  // The distance stops counting where the ball left the track, though it keeps flying while it falls.
+  function metres() { return Math.floor(-(round.endZ ?? ball.z)); }
+  function points() { return metres() + round.stars * 10; }
+
+  function reset() {
+    for (const s of stars || []) scene.remove(s);
+    for (const b of blocks || []) scene.remove(b.mesh);
+    rowPool.forEach(free);
+    rows = []; stars = []; blocks = []; plan = []; lastRamp = 10; lastBoost = 0; seed = (Date.now() % 2147483646) + 1;
+    Object.assign(ball, { x: 0, y: R, z: 0, vy: 0, v: 6, aimX: 0, air: false, ramp: false, boost: 0, rush: 0 });
+    Object.assign(round, { stars: 0, fallT: 0, t: 0, zone: 0, endZ: null });
+    ballMesh.quaternion.identity();
+    placeRows(-BEHIND, AHEAD);
+    hud();
+  }
+
+  function start() {
+    unlockAudio();
+    reset();
+    round.phase = 'run';
+    $('menu').classList.add('hidden');
+    $('loppu').classList.add('hidden');
+    $('hud').classList.remove('hidden');
+  }
+
+  function hud() {
+    $('tahdet').textContent = '⭐ ' + round.stars;
+    $('matka').textContent = metres() + ' m';
+    $('vauhti').classList.toggle('hidden', !(ball.boost > 0));
+  }
+
+  function over() {
+    round.phase = 'over';
+    const p = points(), old = best();
+    let pelit = +(localStorage.getItem(KEY + 'pelit') || 0) + 1;
+    localStorage.setItem(KEY + 'pelit', pelit);
+    if (p > old) localStorage.setItem(KEY + 'ennatys', p);
+    $('tulos').textContent = `${metres()} m ja ⭐ ${round.stars} = ${p} pistettä`;
+    $('ennatys').textContent = p > old ? (old ? 'Uusi ennätys!' : 'Ensimmäinen ennätyksesi!') : `Ennätys: ${old} pistettä`;
+    $('loppu').classList.remove('hidden');
+    $('hud').classList.add('hidden');
+  }
+
+  function showMenu() {
+    const b = best();
+    $('paras').textContent = b ? `Ennätys: ${b} pistettä` : '';
+  }
+
+  // Rolling on the track, jumping off a ramp, landing, or dropping off the edge.
+  function bounce(dt) {
+    const i = Math.floor(-ball.z / ROW), r = row(i);
+    const solid = r.kind !== 'gap' && Math.abs(ball.x - r.cx) <= r.w / 2;
+    const ground = r.kind === 'ramp' ? H * (-ball.z / ROW - i) : 0;
+    if (!ball.air) {
+      if (ball.ramp && r.kind !== 'ramp') {
+        ball.air = true;
+        ball.vy = ball.v * H / ROW + 3;
+        sound('jump');
+      } else if (!solid) {
+        ball.air = true;
+        ball.vy = 0;
+      } else {
+        ball.y = R + ground;
+        if (r.kind === 'boost') {
+          if (ball.boost < 2.8) sound('boost');
+          ball.boost = 3;
+        }
+      }
+      ball.ramp = !ball.air && r.kind === 'ramp';
+    }
+    if (ball.air) {
+      const was = ball.y;
+      ball.vy -= G * dt;
+      ball.y += ball.vy * dt;
+      if (solid && ball.vy <= 0 && ball.y <= R + ground && was >= R + ground - 0.05) {
+        Object.assign(ball, { y: R + ground, vy: 0, air: false, ramp: r.kind === 'ramp' });
+      } else if (ball.y < R - 0.3) {
+        round.phase = 'fall'; round.fallT = 0; round.endZ = ball.z; sound('fall');
+      }
+    }
+  }
+
+  const spinAxis = new THREE.Vector3(), spinQ = new THREE.Quaternion();
+  function step(dt) {
+    round.t += dt;
+    if (round.phase === 'run' || round.phase === 'fall') {
+      // A turbo strip adds up to 8 on top of the speed, easing in and out.
+      ball.boost = Math.max(0, ball.boost - dt);
+      ball.rush += ((ball.boost > 0 ? 8 : 0) - ball.rush) * Math.min(1, dt * 3);
+      ball.v = Math.min(15, 6 + round.t * 0.12) + ball.rush;
+      const vx = (ball.aimX - ball.x) * Math.min(1, dt * 14) / Math.max(dt, 1e-6);
+      ball.x += vx * dt;
+      ball.z -= ball.v * dt;
+      // Roll: around the axis across the way it moves.
+      const dist = Math.hypot(vx * dt, ball.v * dt);
+      if (dist > 0) {
+        spinAxis.set(-ball.v * dt, 0, -vx * dt).normalize();
+        spinQ.setFromAxisAngle(spinAxis, dist / R);
+        ballMesh.quaternion.premultiply(spinQ);
+      }
+    }
+    if (round.phase === 'run') {
+      bounce(dt);
+      for (const s of stars) {
+        if (s.visible && Math.abs(s.position.z - ball.z) < 0.7 && Math.abs(s.position.x - ball.x) < 0.75
+          && Math.abs(s.position.y - ball.y) < 0.8) {
+          s.visible = false;
+          round.stars++;
+          sound('star');
+        }
+      }
+      for (const b of blocks) {
+        const p = b.mesh.position;
+        if (!b.hit && ball.y < 1.2 && Math.abs(p.z - ball.z) < 0.4 + R && Math.abs(p.x - ball.x) < 0.4 + R) {
+          // Bumped: knocked away from the block, and slowed for a moment.
+          b.hit = true;
+          ball.aimX = ball.x + Math.sign(ball.x - p.x || 1) * 1.4;
+          ball.rush = -4;
+          ball.boost = 0;
+          sound('bump');
+        }
+      }
+      // Stars and blocks far behind are done with.
+      stars = stars.filter(s => (s.position.z < ball.z + 10) || (scene.remove(s), false));
+      blocks = blocks.filter(b => (b.mesh.position.z < ball.z + 10) || (scene.remove(b.mesh), false));
+      const z = ZONES.findLastIndex(q => metres() >= q.at);
+      if (z > round.zone) { round.zone = z; toast(ZONES[z].name); }
+      hud();
+    } else if (round.phase === 'fall') {
+      ball.vy -= G * dt;
+      ball.y += ball.vy * dt;
+      round.fallT += dt;
+      if (round.fallT > 1.3) over();
+    }
+    const i = Math.floor(-ball.z / ROW);
+    placeRows(i - BEHIND, i + AHEAD);
+    for (const s of stars) s.rotation.y += dt * 2.5;
+    for (const b of blocks) {
+      const r = row(b.i);
+      b.mesh.position.x = r.cx + Math.sin(round.t * b.sp + b.ph) * (r.w / 2 - 0.4);
+    }
+  }
+
+  // Blend the sky and light between zones over 60 m.
+  function paintSky() {
+    const m = -ball.z;
+    let k = 0;
+    while (k + 1 < ZONES.length && m >= ZONES[k + 1].at - 60) k++;
+    const a = ZONES[Math.max(0, k - 1)], b = ZONES[k];
+    const f = k === 0 ? 1 : Math.min(1, (m - (b.at - 60)) / 60);
+    skyA.set(a.sky).lerp(skyB.set(b.sky), f);
+    scene.background.copy(skyA);
+    scene.fog.color.copy(skyA);
+    sun.color.set(a.sun).lerp(skyB.set(b.sun), f);
+    hemi.intensity = a.hemi + (b.hemi - a.hemi) * f;
+    dotMat.opacity = Math.max(0, Math.min(1, (1 - hemi.intensity) / 0.3));
+    skyDots.visible = dotMat.opacity > 0;
+    skyDots.position.copy(camera.position);
+    starMat.emissiveIntensity = 0.45 + 0.6 * (hemi.intensity < 1 ? 1 - hemi.intensity / 1.3 : 0);
+  }
+
+  let toastT = null;
+  function toast(text) {
+    const t = $('toast');
+    t.textContent = text;
+    t.classList.remove('hidden');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.add('hidden'), 1800);
+  }
+
+  const look = new THREE.Vector3();
+  let camX = 0;
+  function draw(dt) {
+    paintSky();
+    for (const [n, g] of clouds.entries()) {
+      if (g.position.z > ball.z + 30 || g.position.z < ball.z - 100 || g.position.y === 0) {
+        g.position.set((n % 2 ? 1 : -1) * (5 + Math.random() * 18), -12 - Math.random() * 10, ball.z - 20 - Math.random() * 80);
+      }
+    }
+    ballMesh.position.set(ball.x, ball.y, ball.z);
+    camX += (ball.x - camX) * Math.min(1, dt * 4);
+    // In a jump the camera rises only part of the way, so the jump shows.
+    const cy = ball.y > R ? R + (ball.y - R) * 0.6 : Math.max(ball.y, -3);
+    // At turbo speed the view widens and the camera drops back a little.
+    const fov = baseFov + ball.rush * 1.3;
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    camera.position.set(camX, cy + 2.7, ball.z + 5.2 + ball.rush * 0.08);
+    look.set(camX + (ball.x - camX) * 0.5, Math.max(cy - R, -6), ball.z - 4);
+    camera.lookAt(look);
+    sun.position.set(ball.x + 4, 10, ball.z + 3);
+    sun.target.position.set(ball.x, 0, ball.z - 4);
+    renderer.render(scene, camera);
+    window.drawn = true;
+  }
+
+  let baseFov = 60;
+  // Turning the phone (#95) only resizes the view: the round goes on as it was. Some phones
+  // report the new size a moment after the resize event, so each frame checks it too.
+  let sizedW = 0, sizedH = 0;
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    sizedW = w; sizedH = h;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // A narrow portrait screen sees a bit wider.
+    baseFov = camera.fov = w / h < 0.7 ? 68 : 58;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  // --- Touch: dragging moves the ball sideways --------------------------------------------------
+  let dragX = null;
+  c.addEventListener('pointerdown', e => { dragX = e.clientX; c.setPointerCapture?.(e.pointerId); });
+  c.addEventListener('pointermove', e => {
+    if (dragX === null) return;
+    steer(e.clientX - dragX);
+    dragX = e.clientX;
+  });
+  const lift = () => { dragX = null; };
+  c.addEventListener('pointerup', lift);
+  c.addEventListener('pointercancel', lift);
+  // A drag across the whole screen moves the ball about two track widths.
+  function steer(px) {
+    if (round.phase === 'run') ball.aimX += px / Math.min(innerWidth, 500) * 6;
+  }
+
+  // --- Sound ---------------------------------------------------------------------------------
+  let ac = null;
+  function unlockAudio() {
+    if (!ac) { try { ac = new AudioContext(); } catch (e) { ac = null; } }
+    ac?.resume?.();
+  }
+  function sound(kind) {
+    if (!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.connect(g); g.connect(ac.destination);
+    if (kind === 'star') {
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(880, t); o.frequency.setValueAtTime(1320, t + 0.07);
+      g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.start(t); o.stop(t + 0.24);
+    } else if (kind === 'bump') {
+      o.type = 'square';
+      o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.15);
+      g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.start(t); o.stop(t + 0.2);
+    } else if (kind === 'boost') {
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(900, t + 0.45);
+      g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      o.start(t); o.stop(t + 0.52);
+    } else if (kind === 'jump') {
+      o.type = 'square';
+      o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(660, t + 0.25);
+      g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      o.start(t); o.stop(t + 0.32);
+    } else {
+      o.type = 'sine';
+      o.frequency.setValueAtTime(500, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.9);
+      g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1);
+      o.start(t); o.stop(t + 1.05);
+    }
+  }
+
+  $('aloita').addEventListener('click', start);
+  $('uudestaan').addEventListener('click', start);
+
+  let last = performance.now();
+  reset();
+  round.phase = 'menu';
+  showMenu();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (innerWidth !== sizedW || innerHeight !== sizedH) resize();
+    if (round.phase === 'menu') {
+      // The menu shows the ball rolling gently on the start straight.
+      round.t = 0;
+      ball.z -= dt * 2;
+      if (ball.z < -16) ball.z = 0;
+      spinAxis.set(-1, 0, 0);
+      ballMesh.quaternion.premultiply(spinQ.setFromAxisAngle(spinAxis, dt * 2 / R));
+      placeRows(Math.floor(-ball.z / ROW) - BEHIND, Math.floor(-ball.z / ROW) + AHEAD);
+    } else if (round.phase !== 'over') {
+      step(dt);
+    }
+    draw(dt);
+  });
+
+  // For tests and the curious: the round as it is.
+  Object.assign(window, { ball, round, start, steer, row, camera, renderer });
+  Object.defineProperty(window, 'stars', { get: () => stars });
+  Object.defineProperty(window, 'blocks', { get: () => blocks });
+}
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

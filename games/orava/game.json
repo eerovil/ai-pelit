@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: kiipeä runkoja, juokse oksia pitkin, loikkaa puusta toiseen ja syö metsän kävyt ennen kuin aika loppuu; myöhemmillä tasoilla näätä ja haukka.",
       "request": "Uusi peli. Orava kiipeilee männyissä ja syö käpyjä. Voi hyppiä oksasts toiseen jne.",
       "issue": "eerovil/ai-pelit#97"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: ohjain ja hyppynappi ovat alakulmissa, metsä näkyy leveämpänä ja valikko jakautuu kahteen sarakkeeseen.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

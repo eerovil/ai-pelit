@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: 3D-pallo vierii taivaalla kapenevalla radalla, ohjaus vetämällä, hyppyrit aukkojen yli, turbokaistat, liukuvat palikat, tähdet ja taivas, joka muuttuu päivästä auringonlaskuun ja tähtiyöhön.",
       "request": "Pieni 3D-peli: pallo vierii kapealla radalla taivaan yllä, sitä ohjataan vetämällä sormella vasemmalle ja oikealle, ja radalla kerätään tähtiä. Radalta putoaminen lopettaa kierroksen. Kamera seuraa palloa takaa ja vähän yläviistosta, ja pelissä on valot ja varjot, jotta 3D näkyy kunnolla.",
       "issue": "eerovil/ai-pelit#102"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: alkuvalikko asettuu kahteen palstaan, rata näkyy leveänä keskellä ja kääntäminen kesken kierroksen ei keskeytä peliä.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }
