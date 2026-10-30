@@ -118,3 +118,19 @@ def test_the_slide_labels_fit_a_390_and_a_360_px_phone(site, context):
           return ['← Liukuu taaksepäin', 'Liukuu eteenpäin →'].map(t => x.measureText(t).width); }""")
         assert max(widths) < width - 24
         page.close()
+
+
+def test_every_trampoline_says_when_a_lean_slides_you_and_which_way(site, context):
+    page = open_game(site, context)
+    for tramp in ("piha", "pieni", "mini", "kilpa", "jatti"):
+        said = page.evaluate("""(name) => { const s = window.__step, out = [];
+          for (const tilt of [0.4, -0.4, 0.1]) {
+            T = TRAMPS[name]; stand(0); J.vin = 6; while (phase === 'mat') s(1 / 60);
+            while (!(J.vy < 0 && J.y + J.vy / 60 <= COMH)) s(1 / 60);
+            pops = []; J.a = tilt; J.rot = tilt; s(1 / 60);
+            out.push([pops.map(p => p.text).filter(t => t.includes('Liukuu')), Math.sign(J.vx)]);
+          }
+          return out; }""", tramp)
+        assert said[0] == [["← Liukuu taaksepäin"], -1], (tramp, said)
+        assert said[1] == [["Liukuu eteenpäin →"], 1], (tramp, said)
+        assert said[2][0] == [], (tramp, said)   # a slight lean slides a little, unannounced

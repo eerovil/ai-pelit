@@ -140,6 +140,8 @@ let squat = false, squatId = null, bend = 0, kick = 0;
 // the slide is capped so that the steepest clean lean (0.5 rad) at full height carries you at
 // most 45 % of the way to the edge in one bounce: only several leaning landings take you off.
 const SLIDE = 3, CLEAN_LEAN = 0.5, ONE_BOUNCE = 0.45;
+// A lean this steep (rad) or more says it slides, on every trampoline whatever its slide speed.
+const SLIDE_SHOWN = 0.25;
 const slideOf = t => t.net ? SLIDE
   : Math.min(SLIDE, ONE_BOUNCE * (t.half + 0.15) / airtime(t.vMax) / Math.sin(CLEAN_LEAN));
 function setup() {
@@ -242,7 +244,7 @@ function land() {
   // Leaning back (head behind, a > 0) sends you back (-x), leaning forward sends you forward.
   const slide = -Math.sin(wrap(J.a)) * slideOf(T);
   J.vx = J.vx * 0.5 - J.x * 0.3 + slide;  // the mat pulls you in a little
-  if (Math.abs(slide) > 0.8) pop(slide < 0 ? '← Liukuu taaksepäin' : 'Liukuu eteenpäin →', '#e0fbfc', true);
+  if (Math.abs(wrap(J.a)) >= SLIDE_SHOWN) pop(slide < 0 ? '← Liukuu taaksepäin' : 'Liukuu eteenpäin →', '#e0fbfc', true);
   J.twist = J.twists = 0; J.w = 0; J.dir = 0;
   J.landA = wrap(J.a); J.a = J.landA;
   phase = 'mat';
