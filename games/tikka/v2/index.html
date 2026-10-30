@@ -584,16 +584,18 @@ function drawSight() {
 function roundRect(rx, ry, rw, rh, rr) { x.beginPath(); if (x.roundRect) x.roundRect(rx, ry, rw, rh, rr); else x.rect(rx, ry, rw, rh); }
 // Draws one line of the panel and keeps its box in panelTexts, so the tests can see nothing overlaps.
 let panelTexts = [];
-function label(str, tx, ty, size, weight, col, align) {
+// With max, a text wider than max pixels is cut short with "…" (phones' fonts differ in width).
+function label(str, tx, ty, size, weight, col, align, max) {
   str = String(str);
   x.font = weight + ' ' + size + 'px system-ui,sans-serif'; x.fillStyle = col; x.textAlign = align;
+  if (max) while (str.length > 1 && x.measureText(str).width > max) str = str.slice(0, -2) + '…';
   x.fillText(str, tx, ty);
   if (!str) return;
   const w = x.measureText(str).width, x0 = align === 'right' ? tx - w : tx;
   panelTexts.push({ text: str, x0, x1: x0 + w, y0: ty - size / 2, y1: ty + size / 2 });
 }
-// A nickname may be 16 letters: the panel shows at most 11, so the scores and darts stay clear.
-function nameOf(p) { const n = net && p.id === R.me ? 'Sinä' : p.name; return n.length > 11 ? n.slice(0, 10) + '…' : n; }
+function nameOf(p) { return net && p.id === R.me ? 'Sinä' : p.name; }
+function textW(str, size, weight) { x.font = weight + ' ' + size + 'px system-ui,sans-serif'; return str ? x.measureText(String(str)).width : 0; }
 function drawPanel() {
   const P = PANEL;
   panelTexts = [];
@@ -620,7 +622,10 @@ function drawPanel() {
     players.forEach((p, i) => {
       const ry = P.y + 30 + i * 24;
       if (i === cur) { x.fillStyle = 'rgba(255,255,255,.14)'; roundRect(P.x + 6, ry, P.w - 12, 22, 7); x.fill(); }
-      label((i === cur ? '▶ ' : '') + nameOf(p) + (p.ai ? ' 🤖' : ''), P.x + 12, ry + 11, 14, 700, PCOL[i % PCOL.length], 'left');
+      // The name gets what the score (and upright the turn's darts) leave of the row.
+      const dartsW = i === cur && !LAND && last ? textW(last, 12, 700) + 50 : 0;
+      const room = P.w - 24 - Math.max(textW(p.score, 16, 800) + 10, dartsW);
+      label((i === cur ? '▶ ' : '') + nameOf(p) + (p.ai ? ' 🤖' : ''), P.x + 12, ry + 11, 14, 700, PCOL[i % PCOL.length], 'left', room);
       label(p.score, P.x + P.w - 14, ry + 11, 16, 800, '#fff', 'right');
       // This turn's darts: upright in the thrower's own row before the score.
       if (i === cur && !LAND) label(last, P.x + P.w - 56, ry + 11, 12, 700, '#c4d2df', 'right');
@@ -638,7 +643,7 @@ function drawPanel() {
     x.fillStyle = i === cur ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.04)';
     roundRect(bx, by, bw, bh, 10); x.fill();
     if (i === cur) { x.strokeStyle = PCOL[i]; x.lineWidth = 2; roundRect(bx, by, bw, bh, 10); x.stroke(); }
-    label(nameOf(players[i]) + (players[i].ai && net ? ' 🤖' : ''), bx + 10, by + 16, 14, 700, PCOL[i], 'left');
+    label(nameOf(players[i]) + (players[i].ai && net ? ' 🤖' : ''), bx + 10, by + 16, 14, 700, PCOL[i], 'left', bw - (i === cur ? 64 : 20));
     label(players[i].score, bx + 10, by + 46, 30, 800, '#fff', 'left');
     if (i === cur) {
       dots(bx + bw - 40, by + 16);
