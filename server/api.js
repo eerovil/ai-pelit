@@ -39,6 +39,7 @@ export const GAMES = {
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
+  tikka: { order: 'high', boards: /^main$/ }, // most points in a 10-round Pistekisa
 };
 
 const ID = /^[a-f0-9]{32}$/;

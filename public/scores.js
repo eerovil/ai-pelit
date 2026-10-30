@@ -65,6 +65,8 @@
     orava: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('orava', 'taso'); } },
     // Most points in one minute's run; no levels.
     skuutti: { order: 'high', score: function (s) { return s + ' p'; } },
+    // Most points in a 10-round Pistekisa; no level.
+    tikka: { order: 'high', score: function (s) { return s + ' p'; } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
