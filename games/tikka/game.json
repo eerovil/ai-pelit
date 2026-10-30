@@ -1,12 +1,19 @@
 {
   "title": "Tikanheitto",
-  "description": "Heitä tikkaa oikeaan tauluun: pistekisa ennätyksestä tai 501 tietokonetta tai kaveria vastaan.",
+  "description": "Heitä tikkaa: mökkitikkaa kymppiä kohti tai dartsia, yksin, tietokonetta vastaan tai kavereiden kanssa.",
   "versions": [
     {
       "n": 1,
       "date": "2026-10-30",
       "note": "Ensimmäinen versio: tähtää sormella, ajoita heitto käden heilunnan mukaan ja heitä pistekisa tai 501 tietokonetta tai kaveria vastaan.",
       "request": "Tikan heitto peli.",
+      "issue": "eerovil/ai-pelit#118"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Mökkitikka on nyt pääpeli: perinteinen suomalainen taulu, jonka keskusta on 10 pistettä, 10 kierrosta ja 3 tikkaa kerrallaan; lisäksi pelit kavereiden kanssa omilla puhelimilla.",
+      "request": "Default mode tulee olla mökkitikka. Ja moninpeli tähän",
       "issue": "eerovil/ai-pelit#118"
     }
   ]

@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Tikanheitto</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d2733;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:calc(env(safe-area-inset-top,0px) + 46px) 22px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:rgba(16,24,34,.86);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:38px;color:#ffd166;text-shadow:0 3px 0 #8a2d1c}
+  #result{margin:0;font-size:20px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#9be38f}#result.lose{color:#ffb4a2}
+  .btn{font:800 20px system-ui,sans-serif;padding:13px 26px;border:0;border-radius:16px;background:#ffd166;color:#3a2600;box-shadow:0 4px 0 #b8860b;min-width:240px}
+  .btn:active{transform:translateY(3px);box-shadow:0 1px 0 #b8860b}
+  #multi{font-size:17px;padding:11px 20px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #darts{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px;padding-top:8px;border-top:1px solid rgba(255,255,255,.15)}
+  .sub{margin:0;font-size:14px;color:#dbe6f0}
+  .row{display:flex;gap:8px;justify-content:center}
+  .small{font:800 16px system-ui,sans-serif;padding:9px 16px;border:0;border-radius:12px;background:#e8eef4;color:#13202c;box-shadow:0 3px 0 #8a99a8}
+  .small:active{transform:translateY(2px);box-shadow:0 1px 0 #8a99a8}
+  .chips{display:flex;gap:5px;justify-content:center}
+  .chips button{font:700 14px system-ui,sans-serif;padding:7px 8px;border-radius:12px;border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#fff}
+  .chips button.on{border-color:#7fd1ff;background:#7fd1ff;color:#08283a}
+  #stats{margin:0;font-size:13px;color:#c4d2df}
+  #stats:empty{display:none}
+  .help{margin:0;font-size:13px;line-height:1.4;color:#c4d2df;max-width:320px}
+  #tk-room .help{margin:4px 0}
+  /* The room's own buttons are big and green; the host's game choice shows which one is picked. */
+  #aipr #tk-room .chips{gap:8px}
+  #aipr #tk-room .chips button{font:800 16px system-ui,sans-serif;padding:8px 14px;border-radius:12px;border:0;background:#e9dfc6;color:#5a4a30;box-shadow:0 3px 0 #b8ad95}
+  #aipr #tk-room .chips button.on{background:#4f9a3a;color:#fff;box-shadow:0 3px 0 #2f6a22}
+  /* Sideways (#95): two columns, so the menu fits a 360 px high screen. */
+  @media (orientation:landscape) and (max-height:520px) {
+    #menu{display:grid;grid-template-columns:minmax(0,320px) minmax(0,320px);grid-template-areas:"t d" "r d" "g d" "m h" "s h";
+      align-content:center;justify-content:center;justify-items:center;align-items:center;gap:8px 30px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu h1{grid-area:t;font-size:32px}
+    #result{grid-area:r;font-size:17px}
+    #go{grid-area:g}
+    #multi{grid-area:m}
+    #darts{grid-area:d;border-top:0;margin:0;padding:0}
+    #stats{grid-area:s}
+    #menu .help{grid-area:h}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🎯 Tikanheitto</h1>
+  <p id="result"></p>
+  <button id="go" class="btn">Mökkitikka</button>
+  <button id="multi" class="btn">👥 Pelaa kavereiden kanssa</button>
+  <div id="darts">
+    <p class="sub">Darts-taulu:</p>
+    <div class="row"><button id="kisa" class="small">Pistekisa</button><button id="go501" class="small">501</button></div>
+    <p class="sub">501:n vastus:</p>
+    <div id="opps" class="chips">
+      <button data-o="helppo">Helppo</button><button data-o="keski">Keskitaso</button><button data-o="kova">Kova</button><button data-o="kaveri">Kaveri</button>
+    </div>
+  </div>
+  <p id="stats"></p>
+  <p class="help">Paina sormi ruutuun ja liikuta tähtäintä. Käsi heiluu: päästä irti oikealla
+    hetkellä, niin tikka lentää. Mökkitikassa heität 10 kierrosta, 3 tikkaa kerrallaan:
+    keskusta on 10 pistettä.</p>
+</div>
+<script src="../../../rooms.js" data-game="tikka" data-min="2" data-max="5"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+const KEY = 'ai-pelit:tikka:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : v; } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, String(v)); } catch (e) {} }
+
+// ---- The boards, in millimetres from the middle, y down (real sizes) ----
+// The darts board.
+const ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const R_BULL = 6.35, R_OUTER_BULL = 15.9, R_TRI_IN = 99, R_TRI_OUT = 107, R_DBL_IN = 162, R_DBL_OUT = 170;
+const R_ALL = 228;   // the board with its surround
+function dartsAt(px, py) {
+  const r = Math.hypot(px, py);
+  if (r <= R_BULL) return { pts: 50, label: 'Bull' };
+  if (r <= R_OUTER_BULL) return { pts: 25, label: '25' };
+  if (r > R_DBL_OUT) return { pts: 0, label: 'Ohi' };
+  const a = (Math.atan2(px, -py) * 180 / Math.PI + 360) % 360;
+  const n = ORDER[Math.floor(((a + 9) % 360) / 18)];
+  if (r > R_DBL_IN) return { pts: 2 * n, label: 'D' + n };
+  if (r > R_TRI_IN && r <= R_TRI_OUT) return { pts: 3 * n, label: 'T' + n };
+  return { pts: n, label: String(n) };
+}
+// The Finnish cottage board (mökkitikka): the 10 is 35 mm across, then rings 9 to 1, each 17 mm
+// wide, 341 mm across in all. A dart on a line counts for the better ring.
+const M_TEN = 17.5, M_RING = 17, M_OUT = M_TEN + 9 * M_RING;
+function mokkiAt(px, py) {
+  const r = Math.hypot(px, py);
+  if (r <= M_TEN) return { pts: 10, label: '10' };
+  if (r > M_OUT) return { pts: 0, label: 'Ohi' };
+  const n = 10 - Math.ceil((r - M_TEN) / M_RING);
+  return { pts: n, label: String(n) };
+}
+function scoreAt(px, py) { return mode === 'mokki' ? mokkiAt(px, py) : dartsAt(px, py); }
+// Where to aim for a single, a double or a triple of n, or the bull (n 25 or 50).
+function spotOf(n, mult) {
+  if (n === 50) return { x: 0, y: 0 };
+  if (n === 25) return { x: 0, y: -11 };
+  const r = mult === 3 ? 103 : mult === 2 ? 166 : 135;
+  const a = ORDER.indexOf(n) * 18 * Math.PI / 180;
+  return { x: Math.sin(a) * r, y: -Math.cos(a) * r };
+}
+
+// ---- Layout ----
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, LAND = false;
+let BX = 0, BY = 0, K = 1, PANEL = null;
+// How tall the upright panel is: a list for 3 to 5 players, else room for one or two cards.
+function panelH() { return players.length > 2 ? 34 + players.length * 24 : 108; }
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+  SAFE_L = parseFloat(cs.paddingLeft) || 0; SAFE_R = parseFloat(cs.paddingRight) || 0;
+  LAND = W > H;
+  if (LAND) {
+    // The board on the left, the score panel on the right under the corner chips.
+    const pw = Math.min(260, W * 0.36), bw = W - SAFE_L - SAFE_R - pw - 16;
+    const r = Math.min(bw / 2 - 6, (H - SAFE_T - SAFE_B) / 2 - 8);
+    K = r / R_ALL; BX = SAFE_L + 8 + bw / 2; BY = SAFE_T + (H - SAFE_T - SAFE_B) / 2;
+    PANEL = { x: W - SAFE_R - pw - 8, y: SAFE_T + 52, w: pw, h: H - SAFE_T - SAFE_B - 62 };
+  } else {
+    // The panel under the corner chips, the board below it, room for the thumb at the bottom.
+    PANEL = { x: SAFE_L + 10, y: SAFE_T + 50, w: W - SAFE_L - SAFE_R - 20, h: panelH() };
+    const top = PANEL.y + PANEL.h + 8, avail = H - top - SAFE_B - 50;
+    const r = Math.min((W - 16) / 2, avail / 2);
+    K = r / R_ALL; BX = W / 2; BY = top + r;
+  }
+}
+addEventListener('resize', resize);
+const sx = mx => BX + mx * K, sy = my => BY + my * K;
+
+// ---- State ----
+let phase = 'menu';      // menu, play, wait (in a room, before the host's first word)
+let mode = 'mokki';      // mokki (cottage board, 10 rounds), kisa (darts board, 10 rounds) or 501
+let opp = load('vastus', 'keski');
+let roomMode = load('huonepeli', 'mokki') === '501' ? '501' : 'mokki';
+const ROUNDS = 10;
+const AIM_SIGMA = { helppo: 30, keski: 17, kova: 9 };
+let players = [], cur = 0, round = 1, dartsLeft = 3, turnStart = 0, turnDarts = [];
+let stuck = [];          // darts in the board this turn: {x, y, p}
+let flying = null;       // {x, y, t, p}
+let aim = { x: 0, y: 0 };
+let seen = null;         // in a room: where another phone's player aims {x, y}
+let hold = null;         // the finger: {id, lx, ly, t}
+let wob = 0;             // time for the hand's sway
+let pause = 0, banner = null, after = null;
+let bot = null;          // the computer's turn: {t, from, to}
+let thrown = 0;          // darts the human players threw this game
+let net = null;          // in a room: {round, host}
+let aimSend = 0;
+let ownFlying = 0;       // a guest's darts thrown here that the host has not sent back yet
+resize();
+
+const runs = () => !net || net.host;                 // this phone keeps the score
+const points = () => mode !== '501';                 // Mökkitikka and Pistekisa add up points
+function mine() {                                     // this phone throws now
+  const p = players[cur];
+  if (!p || p.ai) return false;
+  return !net || p.id === R.me;
+}
+function player(name, id) { return { id, name, score: mode === '501' ? 501 : 0, tens: 0, ai: null }; }
+
+function newGame(m) {
+  mode = m; phase = 'play'; cur = 0; round = 1; thrown = 0; net = null; seen = null;
+  if (m !== '501') players = [player('Sinä')];
+  else if (opp === 'kaveri') players = [player('Pelaaja 1'), player('Pelaaja 2')];
+  else { players = [player('Sinä'), player('Tietokone')]; players[1].ai = opp; }
+  pickBoard();
+  resize();
+  startTurn();
+  menu.classList.add('hidden');
+}
+function startTurn() {
+  dartsLeft = 3; turnDarts = []; stuck = []; turnStart = players[cur].score; hold = null; bot = null; seen = null;
+  // Each player's sight starts where they last let go.
+  aim = Object.assign({}, players[cur].aim || { x: 0, y: 0 });
+  if (players[cur].ai && runs()) botNext();
+  sync();
+}
+
+// ---- Throwing ----
+// The sway of the hand, in mm: small at first, growing after 1.4 s of holding.
+function sway(heldFor) {
+  const a = 5 + Math.min(20, Math.max(0, heldFor - 1.4) * 10);
+  return { x: a * (Math.sin(wob * 2.3) + 0.5 * Math.sin(wob * 5.3 + 1)) / 1.5,
+           y: a * (Math.cos(wob * 1.9) + 0.5 * Math.sin(wob * 4.1 + 2)) / 1.5 };
+}
+function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
+function throwAt(tx, ty) {
+  flying = { x: tx, y: ty, t: 0, p: cur };
+  dartsLeft--;
+  if (!players[cur].ai) { thrown++; players[cur].aim = { x: aim.x, y: aim.y }; }
+  sound('whoosh');
+  if (net && net.host) R.send({ t: 'f', round: net.round, x: r1(tx), y: r1(ty), p: cur });
+}
+function land() {
+  const f = flying; flying = null;
+  const s = scoreAt(f.x, f.y);
+  stuck.push({ x: f.x, y: f.y, p: f.p });
+  turnDarts.push(s);
+  sound(s.pts ? 'thunk' : 'miss');
+  const p = players[cur];
+  if (points()) {
+    p.score += s.pts;
+    if (s.pts === 10 && mode === 'mokki') p.tens++;
+    if (!dartsLeft) endTurn(turnText());
+  } else {
+    const left = p.score - s.pts;
+    if (left < 0) { p.score = turnStart; sound('bust'); endTurn('Yli! ' + turnStart + ' jää'); }
+    else if (left === 0) { p.score = 0; endGame(); }
+    else { p.score = left; if (!dartsLeft) endTurn(turnText()); }
+  }
+  // The computer aims again for what is left.
+  if (pause <= 0 && dartsLeft && p.ai) botNext();
+  sync();
+}
+function turnSum() { return turnDarts.reduce((a, d) => a + d.pts, 0); }
+const PERFECT = { mokki: 30, kisa: 180, 501: 180 };
+function turnText() { return turnSum() === PERFECT[mode] ? turnSum() + '!' : turnSum() + ' p'; }
+function endTurn(text) {
+  banner = { text, t: 0 };
+  if (text.endsWith('!') && !text.startsWith('Yli')) sound('cheer');
+  pause = 1.3;
+  after = () => {
+    banner = null;
+    const next = (cur + 1) % players.length;
+    if (next === 0 && points() && round >= ROUNDS) return endGame();
+    if (next === 0) round++;
+    cur = next;
+    startTurn();
+  };
+}
+function endGame() {
+  pause = 1.4;
+  banner = { text: points() && players.length === 1 ? players[0].score + ' p' : points() ? 'Peli ohi!' : 'Tasan nolla!', t: 0 };
+  sound('win');
+  const winner = cur;
+  after = () => { banner = null; if (net) hostEnd(); else finish(winner); };
+  sync();
+}
+// Best first: the most points (then the most tens) in Mökkitikka, the least left in 501.
+function standings() {
+  const list = players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, tens: p.tens, i }));
+  if (points()) list.sort((a, b) => b.score - a.score || b.tens - a.tens || a.i - b.i);
+  else list.sort((a, b) => a.score - b.score || (a.i === cur ? -1 : b.i === cur ? 1 : a.i - b.i));
+  return list;
+}
+function record(sc) {
+  // The best of the mode on this phone, and the high-score list.
+  const k = mode === 'mokki' ? 'mokki' : 'ennatys', best = +load(k, 0);
+  if (sc > best) save(k, sc);
+  if (window.AiPelitScores) { pickBoard(); AiPelitScores.submit(sc); }
+  return sc > best;
+}
+function finish(winner) {
+  phase = 'menu';
+  const res = document.getElementById('result');
+  if (points()) {
+    const sc = players[0].score, rec = record(sc);
+    res.textContent = (mode === 'mokki' ? 'Mökkitikka: ' : 'Pistekisa: ') + sc + ' p' + (rec ? ', uusi ennätys!' : '');
+    res.className = rec ? 'win' : '';
+  } else if (players[winner].ai) {
+    res.textContent = 'Tietokone voitti. Sinulle jäi ' + players[0].score + '.';
+    res.className = 'lose';
+  } else if (opp === 'kaveri') {
+    res.textContent = players[winner].name + ' voitti!';
+    res.className = 'win';
+  } else {
+    save('voitot', +load('voitot', 0) + 1);
+    res.textContent = 'Voitit! Heitit ' + thrown + (thrown === 1 ? ' tikan.' : ' tikkaa.');
+    res.className = 'win';
+  }
+  showMenu();
+}
+
+// ---- The computer (and a player away from a room) ----
+function botTarget(left) {
+  if (mode === 'mokki') return { x: 0, y: 0 };
+  if (mode === 'kisa') return spotOf(20, 3);
+  if (left === 50) return spotOf(50);
+  if (left === 25) return spotOf(25);
+  if (left <= 20) return spotOf(left, 1);
+  if (left <= 40 && left % 2 === 0) return spotOf(left / 2, 2);
+  if (left <= 60 && left % 3 === 0) return spotOf(left / 3, 3);
+  if (left > 40 && left - 40 <= 20) return spotOf(left - 40, 1);
+  return left >= 62 ? spotOf(20, 3) : spotOf(20, 1);
+}
+function botNext() {
+  const to = botTarget(players[cur].score);
+  bot = { t: 0, from: { x: aim.x, y: aim.y }, to };
+}
+
+// ---- Touch: the finger moves the sight like a touchpad, letting go throws ----
+c.addEventListener('pointerdown', e => {
+  if (phase !== 'play' || hold || pause > 0 || banner || flying || dartsLeft <= 0 || !mine() || (net && R.paused)) return;
+  audio();
+  hold = { id: e.pointerId, lx: e.clientX, ly: e.clientY, t: 0 };
+  try { c.setPointerCapture(e.pointerId); } catch (err) {}
+});
+c.addEventListener('pointermove', e => {
+  if (!hold || e.pointerId !== hold.id) return;
+  aim.x = Math.max(-R_ALL, Math.min(R_ALL, aim.x + (e.clientX - hold.lx) / K * 0.8));
+  aim.y = Math.max(-R_ALL, Math.min(R_ALL, aim.y + (e.clientY - hold.ly) / K * 0.8));
+  hold.lx = e.clientX; hold.ly = e.clientY;
+});
+function letGo(e) {
+  if (!hold || e.pointerId !== hold.id) return;
+  const h = hold; hold = null;
+  if (h.t < 0.12 || e.type === 'pointercancel') return;   // a brush of the screen does not throw
+  const w = sway(h.t);
+  release(aim.x + w.x + gauss() * 2.5, aim.y + w.y + gauss() * 2.5);
+}
+c.addEventListener('pointerup', letGo);
+c.addEventListener('pointercancel', letGo);
+// The dart leaves the hand: alone or on the host it is thrown here; a guest shows it flying and
+// tells the host, whose word then counts.
+function release(tx, ty) {
+  if (runs()) return throwAt(tx, ty);
+  players[cur].aim = { x: aim.x, y: aim.y };
+  flying = { x: tx, y: ty, t: 0, p: cur };
+  dartsLeft--; thrown++; ownFlying++;
+  sound('whoosh');
+  R.send({ t: 'th', round: net.round, x: r1(tx), y: r1(ty), n: 3 - dartsLeft });
+}
+
+// ---- Playing with friends ----
+// Players take turns, one phone each. The host keeps the score: a guest sends its throws, the
+// host sends every dart's flight ('f') and the whole game after each change ('g'). Whoever is
+// throwing sends where they aim ('a'), so every phone sees the sight move.
+const r1 = n => Math.round(n * 10) / 10;
+function state() {
+  return { t: 'g', round: net.round, mode, cur, rnd: round, left: dartsLeft, ts: turnStart,
+    ps: players.map(p => [p.score, p.tens, p.ai ? 1 : 0]),
+    td: turnDarts.map(d => [d.pts, d.label]), st: stuck.map(d => [r1(d.x), r1(d.y), d.p]),
+    ban: banner ? banner.text : '' };
+}
+function sync() { if (net && net.host && phase === 'play') R.send(state()); }
+function adopt(m) {
+  mode = m.mode; pickBoard();
+  if (phase === 'wait') { phase = 'play'; menu.classList.add('hidden'); }
+  const turnChanged = m.cur !== cur;
+  cur = m.cur; round = m.rnd; dartsLeft = m.left; turnStart = m.ts;
+  m.ps.forEach((a, i) => { const p = players[i]; if (p) { p.score = a[0]; p.tens = a[1]; p.ai = a[2] ? 'keski' : null; } });
+  turnDarts = m.td.map(a => ({ pts: a[0], label: a[1] }));
+  if (!flying) stuck = m.st.map(a => ({ x: a[0], y: a[1], p: a[2] }));
+  if (m.ban && (!banner || banner.text !== m.ban)) { banner = { text: m.ban, t: 0 }; if (m.ban.startsWith('Yli')) sound('bust'); }
+  if (!m.ban) banner = null;
+  if (turnChanged) { seen = null; hold = null; if (mine()) aim = Object.assign({}, players[cur].aim || { x: 0, y: 0 }); }
+}
+R.on('start', s => {
+  net = { round: s.round, host: R.isHost }; ownFlying = 0;
+  mode = R.isHost ? roomMode : 'mokki';
+  players = s.players.map(p => player(p.name, p.id));
+  cur = 0; round = 1; thrown = 0; stuck = []; turnDarts = []; flying = null; banner = null; after = null; pause = 0;
+  resize();
+  menu.classList.add('hidden');
+  if (R.isHost && !s.over) { phase = 'play'; pickBoard(); startTurn(); }
+  else phase = 'wait';   // the host's first word tells the game; a finished one is on its way
+});
+R.on('message', (m, from) => {
+  if (!net || m.round !== net.round) return;
+  if (net.host) {
+    const p = players[cur];
+    if (m.t === 'th' && p && p.id === from && !p.ai && phase === 'play' && dartsLeft === 4 - m.n) {
+      // The guest's last dart may still be flying here: it lands first.
+      if (flying) land();
+      if (pause > 0 || players[cur] !== p) return;
+      throwAt(+m.x || 0, +m.y || 0);
+    }
+    if (m.t === 'a' && p && p.id === from) { seen = { x: m.x, y: m.y }; R.send(m); }
+    return;
+  }
+  if (m.t === 'g') adopt(m);
+  if (m.t === 'f') {
+    // My own darts already flew here when I let go.
+    if (players[m.p] && players[m.p].id === R.me && ownFlying > 0) ownFlying--;
+    else { if (flying) stuck.push({ x: flying.x, y: flying.y, p: flying.p }); flying = { x: m.x, y: m.y, t: 0, p: m.p }; seen = null; sound('whoosh'); }
+  }
+  if (m.t === 'a' && !mine()) seen = { x: m.x, y: m.y };
+  if (m.t === 'end') netFinish(m);
+});
+R.on('hello', id => { if (net && net.host && phase === 'play') R.send(state(), id); });
+// A phone away: the computer throws for its player until it is back.
+R.on('continue', ids => {
+  if (!net || !net.host) return;
+  players.forEach((p, i) => { if (ids.includes(p.id)) { p.ai = 'keski'; if (i === cur && !flying && pause <= 0 && dartsLeft) botNext(); } });
+  sync();
+});
+R.on('back', id => {
+  if (!net || !net.host) return;
+  players.forEach((p, i) => { if (p.id === id && p.ai) { p.ai = null; if (i === cur) bot = null; } });
+  sync();
+});
+R.on('lobby', () => { net = null; phase = 'menu'; });
+R.on('leave', () => { net = null; showMenu(); });
+R.on('menu', () => { net = null; showMenu(); });
+function hostEnd() {
+  const m = { t: 'end', round: net.round, mode, res: standings().map(r => ({ id: r.id, name: r.name, score: r.score, tens: r.tens })) };
+  R.deliver(m);
+  R.endRound();
+  netFinish(m);
+}
+function netFinish(m) {
+  if (!net || phase === 'menu') return;
+  const round = net.round, res = m.res;
+  phase = 'menu'; mode = m.mode;
+  const at = res.findIndex(r => r.id === R.me), me = res[at];
+  if (me && R.once(round) && mode === 'mokki') record(me.score);
+  const fmt = r => mode === '501' ? (r.score ? r.score + ' jäi' : 'nolla') : r.score + ' p';
+  R.note(res.map((r, i) => (i + 1) + '. ' + (r.id === R.me ? 'Sinä' : r.name) + ' ' + fmt(r)).join(' · '));
+  net = null;
+  if (!me) return R.backToRoom('Peli päättyi', 'lose');
+  R.backToRoom(at === 0 ? 'Voitit! ' + fmt(me) + ' 🏆' : (at + 1) + '. sija · ' + fmt(me), at === 0 ? 'win' : 'lose');
+}
+// In a room the host picks the game under the players; the others see who picks.
+let roomEl = null;
+function roomControls() {
+  if (!R || !R.extra) return;
+  if (!roomEl) {
+    roomEl = document.createElement('div'); roomEl.id = 'tk-room';
+    roomEl.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b || !R.isHost) return;
+      roomMode = b.dataset.m; save('huonepeli', roomMode); roomControls();
+    });
+    R.extra(roomEl);
+  }
+  if (R.isHost) {
+    roomEl.innerHTML = '<div class="chips">' + [['mokki', 'Mökkitikka'], ['501', '501 (darts)']].map(([m, t]) =>
+      '<button data-m="' + m + '"' + (m === roomMode ? ' class="on"' : '') + '>' + t + '</button>').join('') + '</div>';
+  } else {
+    const h = R.members && R.members.find(m => m.id === R.hostId);
+    roomEl.innerHTML = '<p class="help">Pelin valitsee ' + (h ? '👑 ' + h.name.replace(/[<>&]/g, '') : 'huoneen tekijä') + '.</p>';
+  }
+}
+R.on('peers', roomControls);
+
+// ---- Step ----
+function step(dt) {
+  wob += dt;
+  if (banner) banner.t += dt;
+  if (phase !== 'play') return;
+  if (net && R.paused) return;
+  if (hold) hold.t += dt;
+  // Whoever throws here shows the others where they aim, ten times a second.
+  if (net && (hold || (bot && net.host))) {
+    aimSend -= dt;
+    if (aimSend <= 0) {
+      aimSend = 0.1;
+      const w = hold ? sway(hold.t) : sway(0);
+      R.send({ t: 'a', round: net.round, x: r1(aim.x + w.x), y: r1(aim.y + w.y) });
+    }
+  }
+  if (flying) {
+    flying.t += dt / 0.28;
+    if (flying.t >= 1) {
+      if (runs()) land();
+      else { stuck.push({ x: flying.x, y: flying.y, p: flying.p }); flying = null; sound('thunk'); }
+    }
+    return;
+  }
+  if (!runs()) return;
+  if (pause > 0) { pause -= dt; if (pause <= 0 && after) { const f = after; after = null; f(); } return; }
+  if (bot) {
+    bot.t += dt;
+    const k = Math.min(1, bot.t / 0.7), e = k * k * (3 - 2 * k);
+    aim.x = bot.from.x + (bot.to.x - bot.from.x) * e; aim.y = bot.from.y + (bot.to.y - bot.from.y) * e;
+    if (bot.t >= 1.0) {
+      const sg = AIM_SIGMA[players[cur].ai] || AIM_SIGMA.keski;
+      bot = null;
+      throwAt(aim.x + gauss() * sg, aim.y + gauss() * sg);
+    }
+  }
+}
+
+// ---- Draw ----
+const RED = '#d23a2f', GREEN = '#1f8a4c', DARK = '#1b1b1b', CREAM = '#f1e2bd';
+const PCOL = ['#ffd166', '#7fd1ff', '#9be38f', '#ff9fb2', '#c7a6ff'];
+function drawDartsBoard() {
+  x.fillStyle = '#121212'; x.beginPath(); x.arc(0, 0, R_ALL * K, 0, 7); x.fill();
+  const ring = (r0, r1, a0, a1, col) => {
+    x.fillStyle = col; x.beginPath(); x.arc(0, 0, r1 * K, a0, a1); x.arc(0, 0, r0 * K, a1, a0, true); x.closePath(); x.fill();
+  };
+  for (let i = 0; i < 20; i++) {
+    const a0 = (i * 18 - 9 - 90) * Math.PI / 180, a1 = a0 + 18 * Math.PI / 180;
+    const even = i % 2 === 0;
+    ring(R_OUTER_BULL, R_DBL_OUT, a0, a1, even ? DARK : CREAM);
+    ring(R_TRI_IN, R_TRI_OUT, a0, a1, even ? RED : GREEN);
+    ring(R_DBL_IN, R_DBL_OUT, a0, a1, even ? RED : GREEN);
+  }
+  x.fillStyle = GREEN; x.beginPath(); x.arc(0, 0, R_OUTER_BULL * K, 0, 7); x.fill();
+  x.fillStyle = RED; x.beginPath(); x.arc(0, 0, R_BULL * K, 0, 7); x.fill();
+  // The wires.
+  x.strokeStyle = 'rgba(200,200,200,.55)'; x.lineWidth = Math.max(0.5, K * 1.2);
+  for (const r of [R_OUTER_BULL, R_TRI_IN, R_TRI_OUT, R_DBL_IN, R_DBL_OUT]) { x.beginPath(); x.arc(0, 0, r * K, 0, 7); x.stroke(); }
+  x.beginPath();
+  for (let i = 0; i < 20; i++) {
+    const a = (i * 18 - 9 - 90) * Math.PI / 180;
+    x.moveTo(Math.cos(a) * R_OUTER_BULL * K, Math.sin(a) * R_OUTER_BULL * K);
+    x.lineTo(Math.cos(a) * R_DBL_OUT * K, Math.sin(a) * R_DBL_OUT * K);
+  }
+  x.stroke();
+  x.fillStyle = '#f4f4f4'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '700 ' + Math.round(26 * K) + 'px system-ui,sans-serif';
+  for (let i = 0; i < 20; i++) {
+    const a = (i * 18 - 90) * Math.PI / 180;
+    x.fillText(ORDER[i], Math.cos(a) * 198 * K, Math.sin(a) * 198 * K);
+  }
+}
+// The cottage board: a pine plank backing, light odd rings, dark even rings and a red ten,
+// with each ring's number printed in it above, below and to the sides.
+function drawMokkiBoard() {
+  const S = R_ALL * K;
+  x.fillStyle = '#b98a52'; x.beginPath(); x.arc(0, 0, S, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(90,55,20,.35)'; x.lineWidth = 1.2;
+  for (let i = -6; i <= 6; i++) {
+    const yy = i * S / 6.5, half = Math.sqrt(Math.max(0, S * S - yy * yy));
+    x.beginPath(); x.moveTo(-half, yy); x.bezierCurveTo(-half / 3, yy + 4, half / 3, yy - 4, half, yy); x.stroke();
+  }
+  for (let n = 1; n <= 9; n++) {
+    const r = (M_TEN + (10 - n) * M_RING) * K;
+    x.fillStyle = n % 2 ? '#f4ecd6' : '#26221d';
+    x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill();
+  }
+  x.fillStyle = '#c4382c'; x.beginPath(); x.arc(0, 0, M_TEN * K, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.45)'; x.lineWidth = Math.max(0.6, K * 1.2);
+  for (let n = 0; n <= 9; n++) { x.beginPath(); x.arc(0, 0, (M_TEN + n * M_RING) * K, 0, 7); x.stroke(); }
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '800 ' + Math.max(8, Math.round(11 * K)) + 'px system-ui,sans-serif';
+  for (let n = 1; n <= 9; n++) {
+    const r = (M_TEN + (9.5 - n) * M_RING) * K;
+    x.fillStyle = n % 2 ? '#26221d' : '#f4ecd6';
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) x.fillText(n, dx * r, dy * r);
+  }
+  x.fillStyle = '#fff'; x.fillText('10', 0, 0);
+}
+function drawBoard() {
+  x.save();
+  x.translate(BX, BY);
+  x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.arc(4, 7, R_ALL * K, 0, 7); x.fill();
+  if (mode === 'mokki') drawMokkiBoard(); else drawDartsBoard();
+  x.restore();
+}
+function drawDart(px, py, p, scale) {
+  // Seen from the thrower: the barrel and flights point back towards them, down and right.
+  const s = Math.max(0.6, K * 2.6) * scale, dx = 5 * s, dy = 13 * s;
+  x.strokeStyle = '#d9dde3'; x.lineWidth = 2.6 * s; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(px, py); x.lineTo(px + dx, py + dy); x.stroke();
+  x.fillStyle = PCOL[p % PCOL.length];
+  x.beginPath(); x.moveTo(px + dx, py + dy); x.lineTo(px + dx - 5 * s, py + dy + 9 * s); x.lineTo(px + dx + 7 * s, py + dy + 7 * s); x.closePath(); x.fill();
+  x.fillStyle = '#222'; x.beginPath(); x.arc(px, py, 1.4 * s, 0, 7); x.fill();
+}
+function drawSight() {
+  let at;
+  if (hold) { const w = sway(hold.t); at = { x: aim.x + w.x, y: aim.y + w.y }; }
+  else if (seen && !mine()) at = seen;
+  else if (bot) { const w = sway(0); at = { x: aim.x + w.x, y: aim.y + w.y }; }
+  else if (mine()) at = aim;
+  else return;
+  const px = sx(at.x), py = sy(at.y), r = 13;
+  x.strokeStyle = hold && hold.t > 1.4 ? '#ff8a6b' : mine() || bot ? '#fff' : PCOL[cur % PCOL.length]; x.lineWidth = 2;
+  x.beginPath(); x.arc(px, py, r, 0, 7); x.stroke();
+  x.beginPath(); x.moveTo(px - r - 6, py); x.lineTo(px - 4, py); x.moveTo(px + 4, py); x.lineTo(px + r + 6, py);
+  x.moveTo(px, py - r - 6); x.lineTo(px, py - 4); x.moveTo(px, py + 4); x.lineTo(px, py + r + 6); x.stroke();
+}
+function roundRect(rx, ry, rw, rh, rr) { x.beginPath(); if (x.roundRect) x.roundRect(rx, ry, rw, rh, rr); else x.rect(rx, ry, rw, rh); }
+// Draws one line of the panel and keeps its box in panelTexts, so the tests can see nothing overlaps.
+let panelTexts = [];
+// With max, a text wider than max pixels is cut short with "…" (phones' fonts differ in width).
+function label(str, tx, ty, size, weight, col, align, max) {
+  str = String(str);
+  x.font = weight + ' ' + size + 'px system-ui,sans-serif'; x.fillStyle = col; x.textAlign = align;
+  if (max) while (str.length > 1 && x.measureText(str).width > max) str = str.slice(0, -2) + '…';
+  x.fillText(str, tx, ty);
+  if (!str) return;
+  const w = x.measureText(str).width, x0 = align === 'right' ? tx - w : tx;
+  panelTexts.push({ text: str, x0, x1: x0 + w, y0: ty - size / 2, y1: ty + size / 2 });
+}
+function nameOf(p) { return net && p.id === R.me ? 'Sinä' : p.name; }
+function textW(str, size, weight) { x.font = weight + ' ' + size + 'px system-ui,sans-serif'; return str ? x.measureText(String(str)).width : 0; }
+function drawPanel() {
+  const P = PANEL;
+  panelTexts = [];
+  x.fillStyle = 'rgba(0,0,0,.35)'; roundRect(P.x, P.y, P.w, P.h, 12); x.fill();
+  x.textBaseline = 'middle';
+  const dots = (dx, dy) => { for (let i = 0; i < 3; i++) { x.fillStyle = i < dartsLeft ? '#fff' : 'rgba(255,255,255,.2)'; x.beginPath(); x.arc(dx + i * 14, dy, 4.5, 0, 7); x.fill(); } };
+  const last = turnDarts.map(d => d.label).join(' · ');
+  const n = players.length;
+  if (n === 1) {
+    // Round and darts on top, the points below, and this turn's darts on a row of their own.
+    label('Kierros ' + round + '/' + ROUNDS, P.x + 14, P.y + 20, 15, 600, '#c4d2df', 'left');
+    dots(P.x + P.w - 46, P.y + 20);
+    label(players[0].score + ' p', P.x + 14, P.y + 54, 32, 800, '#ffd166', 'left');
+    label(last, P.x + 14, P.y + 88, 15, 700, '#fff', 'left');
+    const best = +load(mode === 'mokki' ? 'mokki' : 'ennatys', 0);
+    if (LAND && best) label('Ennätys ' + best + ' p', P.x + 14, P.y + 116, 14, 600, '#c4d2df', 'left');
+    return;
+  }
+  const rnd = points() ? 'Kierros ' + round + '/' + ROUNDS : 'Kierros ' + round;
+  if (n > 2) {
+    // Three to five players: one row each, the one throwing marked, then this turn's darts.
+    label(rnd, P.x + 12, P.y + 15, 13, 600, '#c4d2df', 'left');
+    dots(P.x + P.w - 44, P.y + 15);
+    players.forEach((p, i) => {
+      const ry = P.y + 30 + i * 24;
+      if (i === cur) { x.fillStyle = 'rgba(255,255,255,.14)'; roundRect(P.x + 6, ry, P.w - 12, 22, 7); x.fill(); }
+      // The name gets what the score (and upright the turn's darts) leave of the row.
+      const dartsW = i === cur && !LAND && last ? textW(last, 12, 700) + 50 : 0;
+      const room = P.w - 24 - Math.max(textW(p.score, 16, 800) + 10, dartsW);
+      label((i === cur ? '▶ ' : '') + nameOf(p) + (p.ai ? ' 🤖' : ''), P.x + 12, ry + 11, 14, 700, PCOL[i % PCOL.length], 'left', room);
+      label(p.score, P.x + P.w - 14, ry + 11, 16, 800, '#fff', 'right');
+      // This turn's darts: upright in the thrower's own row before the score.
+      if (i === cur && !LAND) label(last, P.x + P.w - 56, ry + 11, 12, 700, '#c4d2df', 'right');
+    });
+    // Sideways the panel is narrower, so they go under the list.
+    if (LAND) label(last, P.x + 12, P.y + 30 + n * 24 + 16, 14, 700, '#e8eef4', 'left');
+    return;
+  }
+  // Two players: one card a player, side by side upright and one above the other sideways. In each
+  // card the name, then the score, then this turn's darts, each on its own row.
+  const bh = LAND ? 88 : P.h - 16;
+  for (let i = 0; i < n; i++) {
+    const bw = LAND ? P.w - 16 : (P.w - 24) / 2;
+    const bx = LAND ? P.x + 8 : P.x + 8 + i * (bw + 8), by = LAND ? P.y + 8 + i * (bh + 8) : P.y + 8;
+    x.fillStyle = i === cur ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.04)';
+    roundRect(bx, by, bw, bh, 10); x.fill();
+    if (i === cur) { x.strokeStyle = PCOL[i]; x.lineWidth = 2; roundRect(bx, by, bw, bh, 10); x.stroke(); }
+    label(nameOf(players[i]) + (players[i].ai && net ? ' 🤖' : ''), bx + 10, by + 16, 14, 700, PCOL[i], 'left', bw - (i === cur ? 64 : 20));
+    label(players[i].score, bx + 10, by + 46, 30, 800, '#fff', 'left');
+    if (i === cur) {
+      dots(bx + bw - 40, by + 16);
+      label(last, bx + 10, by + bh - 13, 13, 700, '#e8eef4', 'left');
+    }
+  }
+  if (LAND) label(rnd, P.x + 14, P.y + 8 + n * (bh + 8) + 14, 14, 600, '#c4d2df', 'left');
+}
+function drawHint() {
+  if (phase === 'wait') return hint('Odotetaan…', 0.75);
+  if (phase !== 'play' || hold || flying || pause > 0 || banner) return;
+  if (net && !mine()) return hint('Vuorossa: ' + players[cur].name, 0.75);
+  if (!mine()) return;
+  hint(net ? 'Sinun vuorosi: paina, tähtää, päästä irti' : 'Paina ja liikuta tähtäintä, päästä irti = heitto',
+    turnDarts.length || round > 1 ? 0.4 : 0.75);
+}
+function hint(text, a) {
+  x.fillStyle = 'rgba(255,255,255,' + a + ')'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '600 15px system-ui,sans-serif';
+  x.fillText(text, LAND ? BX : W / 2, LAND ? H - SAFE_B - 18 : H - SAFE_B - 26);
+}
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#2b3a4a'); g.addColorStop(1, '#141c25');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // A spotlight on the board.
+  const sp = x.createRadialGradient(BX, BY, R_ALL * K * 0.6, BX, BY, R_ALL * K * 1.7);
+  sp.addColorStop(0, 'rgba(255,240,200,.18)'); sp.addColorStop(1, 'rgba(255,240,200,0)');
+  x.fillStyle = sp; x.fillRect(0, 0, W, H);
+  drawBoard();
+  for (const d of stuck) drawDart(sx(d.x), sy(d.y), d.p, 1);
+  if (phase === 'play') {
+    if (flying) {
+      const k = flying.t, tx = sx(flying.x), ty = sy(flying.y), fy = H + 40;
+      const py = fy + (ty - fy) * k - Math.sin(k * Math.PI) * 60;
+      drawDart(tx, py, flying.p, 1 + (1 - k) * 2.2);
+    } else if (pause <= 0 && !banner) drawSight();
+    drawPanel();
+  }
+  drawHint();
+  if (banner) {
+    const a = Math.min(1, banner.t * 5), big = banner.text.endsWith('!') && /^\d/.test(banner.text);
+    x.globalAlpha = a; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = '900 ' + (big ? 64 : 42) + 'px system-ui,sans-serif';
+    x.lineWidth = 7; x.strokeStyle = 'rgba(0,0,0,.6)'; x.strokeText(banner.text, BX, BY);
+    x.fillStyle = big ? '#ffd166' : '#fff'; x.fillText(banner.text, BX, BY);
+    x.globalAlpha = 1;
+  }
+}
+
+// ---- Menu ----
+// The high-score list the 🏆 chip shows: Mökkitikka has its own, Pistekisa keeps v1's 'main'.
+function pickBoard() {
+  if (!window.AiPelitScores) return;
+  if (mode === 'kisa') AiPelitScores.board('main', 'Pistekisa'); else AiPelitScores.board('mokki', 'Mökkitikka');
+}
+function pickOpp(o) {
+  opp = o; save('vastus', o);
+  for (const b of document.querySelectorAll('#opps button')) b.classList.toggle('on', b.dataset.o === o);
+}
+function showMenu() {
+  phase = 'menu';
+  if (!net) { mode = 'mokki'; players = []; resize(); }
+  pickOpp(['helppo', 'keski', 'kova', 'kaveri'].includes(opp) ? opp : 'keski');
+  pickBoard();
+  const mk = +load('mokki', 0), best = +load('ennatys', 0), wins = +load('voitot', 0);
+  const parts = [];
+  if (mk) parts.push('Mökkitikka ' + mk + ' p');
+  if (best) parts.push('Pistekisa ' + best + ' p');
+  if (wins) parts.push('Voittoja tietokoneesta ' + wins);
+  document.getElementById('stats').textContent = parts.length ? 'Ennätykset: ' + parts.join(' · ') : '';
+  menu.classList.remove('hidden');
+}
+document.getElementById('go').onclick = () => { audio(); newGame('mokki'); };
+document.getElementById('kisa').onclick = () => { audio(); newGame('kisa'); };
+document.getElementById('go501').onclick = () => { audio(); newGame('501'); };
+document.getElementById('multi').onclick = () => { audio(); R.open(); roomControls(); };
+for (const b of document.querySelectorAll('#opps button')) b.onclick = () => pickOpp(b.dataset.o);
+
+// ---- Sound: short Web Audio tones, only after the first tap ----
+let ac = null;
+function audio() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function tone(f0, f1, dur, type, vol, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function sound(k) {
+  if (k === 'whoosh') tone(700, 300, 0.18, 'sine', 0.05);
+  else if (k === 'thunk') { tone(180, 70, 0.07, 'square', 0.12); tone(1200, 600, 0.03, 'triangle', 0.05); }
+  else if (k === 'miss') tone(140, 90, 0.12, 'sine', 0.1);
+  else if (k === 'bust') tone(300, 110, 0.4, 'sawtooth', 0.1, 0.1);
+  else if (k === 'cheer') [659, 784, 988, 1319].forEach((f, i) => tone(f, f, 0.16, 'square', 0.07, i * 0.08));
+  else if (k === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.18, 0.1 + i * 0.1));
+}
+
+// ---- Loop: fixed 1/60 s steps ----
+let lastT = performance.now(), acc = 0;
+function frame(t) {
+  acc += Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
+  draw();
+  requestAnimationFrame(frame);
+}
+showMenu();
+addEventListener('load', pickBoard);   // scores.js loads after this script
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="tikka" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>

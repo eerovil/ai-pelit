@@ -324,3 +324,18 @@ test('a row shows the player\'s highest level in the whole game, from any list',
   assert.equal(one.mine.level, 2);
   assert.equal((await call('GET', '/api/scores/top')).body.games.hiihto.level, 2);
 });
+
+test('Tikanheitto keeps Mökkitikka and Pistekisa apart, and its shelf no. 1 is Mökkitikka\'s', async () => {
+  const { call, admin } = setup();
+  for (const [id, name] of [[A, 'Aino'], [B, 'Bertta']]) {
+    await call('POST', '/api/players', { id, name });
+    await admin(id, 'approved');
+  }
+  const post = (player, board, score, version) => call('POST', '/api/scores', { player, game: 'tikka', board, version, score });
+  assert.equal((await post(A, 'mokki', 254, 2)).status, 200);
+  assert.equal((await post(B, 'main', 412, 1)).status, 200);
+  assert.equal((await post(A, 'darts', 10, 2)).status, 400);
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki')).body.rows.map(r => r.name), ['Aino']);
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=main')).body.rows.map(r => r.name), ['Bertta']);
+  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.tikka, { board: 'mokki', name: 'Aino', score: 254, level: null, version: 2 });
+});
