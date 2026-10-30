@@ -165,7 +165,10 @@
     fire('message', m, net.hostId);
   }
 
+  var moving = false; // this page is on its way to the room's own game or version
   function onPeers(m) {
+    // A second peers message before the page has gone must not step back twice (#68).
+    if (moving) return;
     net.members = Array.isArray(m.members) ? m.members : [];
     net.hostId = m.host;
     net.online = {};
@@ -178,6 +181,7 @@
       if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
         var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
         net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
+        moving = true;
         // Back always goes up (#68): opened from the shelf, this game has its page below it.
         var up = history.state && history.state.aiPelitUp;
         try {

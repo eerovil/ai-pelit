@@ -283,7 +283,9 @@
     location.assign(url.href);
   }
   window.addEventListener('pageshow', function (e) { if (e.persisted) { openFromRoom(); render(); } });
-  openFromRoom();
+  // Only once the page has loaded: a page still loading would open the game in place of B's page.
+  if (document.readyState === 'complete') openFromRoom();
+  else window.addEventListener('load', function () { setTimeout(openFromRoom); });
 
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
