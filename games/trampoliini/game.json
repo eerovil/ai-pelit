@@ -22,6 +22,13 @@
       "note": "Alastulo ratkaisee sivuttaisliikkeen: kallellaan alas tullut voltti heittää siihen suuntaan, johon kallistuit.",
       "request": "v3 prototyyppi: Kokeillaan voisiko olla enemmän sivuttaissuuntaista liikettä. (Tarkennus: voltin jälkeen voisi tulla sivuttaisliikettä sen mukaan miten alastulo meni; valittu pieni liuku.)",
       "issue": "eerovil/ai-pelit#62"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Puolikierteet ja pidettävä kierrenappi: napautus tekee puolikierteen, pohjassa pidetty kierre jatkuu kunnes päästät irti, eikä kesken jäänyt kierre enää kaada.",
+      "request": "Anna pitää kierrenappia pohjassa joten kierre jatkuu kunnes päästää irti. Voisi muuten olla puolikierre nyt myös. Ja älä kaadu jos kierre on kesken.",
+      "issue": "eerovil/ai-pelit#62"
     }
   ]
 }
