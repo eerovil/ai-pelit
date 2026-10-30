@@ -68,6 +68,13 @@
   #menu .help { font-size: 13px; color: #a8cfe6; margin-top: 10px; }
   #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s; }
   #fade.on { opacity: 1; transition: none; }
+  /* A short upright phone (360 × 640): the home card's seven actions tighten up so they fit without scrolling. */
+  @media (orientation: portrait) and (max-height: 700px) {
+    #panel.home .card { padding: 10px 12px; }
+    #panel.home .card h2 { font-size: 17px; margin-bottom: 2px; }
+    #panel.home .card p.small { margin-bottom: 2px; }
+    #panel.home .card button { padding: 5px 12px; margin-top: 4px; }
+  }
   /* Sideways (#95): the HUD in one row along the top, cards in two columns, the home card at the right. */
   @media (orientation: landscape) and (max-height: 520px) {
     #hud { display: flex; align-items: flex-start; gap: 8px; padding-top: calc(env(safe-area-inset-top) + 6px);
@@ -786,10 +793,11 @@ function sleep() {
 function newFinds() {
   const s = G.s, max = [0, 820, 1640, 2700, 3100, 3640, 4440][s.up.hull];
   for (let tries = 0; s.finds.length < 3 && tries < 40; tries++) {
-    const x = 260 + Math.random() * (max - 260), y = floorY(x) - 0.9;
+    // Rounded before the checks: on the steep slope a find moved half a metre after them could end up in the rock.
+    const x = Math.round(260 + Math.random() * (max - 260)), y = Math.floor((floorY(x) - 0.9) * 10) / 10;
     if (y > RATING[s.up.hull] - 4 || siteAt(x, y) || siteAt(x, y - 6) || diverHits(x, y)) continue;
     const r = Math.random(), deep = x > 2450 ? 0.15 : 0;  // the slope's finds are more often spare parts
-    s.finds.push({ id: 'f' + (s.findN++), k: r < 0.65 - deep ? 'ruoka' : r < 0.85 ? 'osa' : 'laake', x: Math.round(x), y: Math.round(y * 10) / 10 });
+    s.finds.push({ id: 'f' + (s.findN++), k: r < 0.65 - deep ? 'ruoka' : r < 0.85 ? 'osa' : 'laake', x, y });
   }
 }
 

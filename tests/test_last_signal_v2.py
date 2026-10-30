@@ -281,7 +281,7 @@ def test_continue_returns_to_where_sisu_was(site, browser):
     assert page.inner_text("#goal").startswith("Tutki hylkykenttä")
 
 
-@pytest.mark.parametrize("w,h", [(360, 740), (390, 844), (740, 360)])
+@pytest.mark.parametrize("w,h", [(360, 640), (360, 740), (390, 844), (740, 360)])
 def test_menus_cards_and_controls_fit_upright_and_sideways(site, browser, w, h):
     page = open_game(site, browser, w, h)
     assert page.evaluate(OVERFLOW) == []
@@ -449,9 +449,10 @@ def test_the_slope_takes_sisu_down_faster_and_nightly_finds_follow_the_hull(site
     page.click("#card button:has-text('Kohti syvyyttä')")
     page.evaluate("G.hold = true; sub.y = 900")
     assert page.evaluate("subBoost()") == 2.2
-    page.evaluate("G.s.up.hull = 6; G.s.finds = []; for (let n = 0; n < 30; n++) { G.s.finds = []; newFinds(); if (G.s.finds.some(f => f.x > 3700)) break; }")
-    assert page.evaluate("G.s.finds.every(f => f.y < RATING[6] && !diverHits(f.x, f.y))")
-    assert page.evaluate("G.s.finds.some(f => f.x > 2600)")
+    # Many nights, so a find on the steepest part of the slope is drawn too: each must lie in open water.
+    page.evaluate("G.s.up.hull = 6; window.all = []; for (let n = 0; n < 400; n++) { G.s.finds = []; newFinds(); all.push(...G.s.finds); }")
+    assert page.evaluate("all.filter(f => f.y >= RATING[6] || diverHits(f.x, f.y)).map(f => [f.x, f.y])") == []
+    assert page.evaluate("all.some(f => f.x > 3700)")
 
 
 def test_inside_nordlys_the_rooms_are_named_and_the_iceberg_hall_widens_the_view(site, browser):
@@ -508,7 +509,7 @@ def test_a_reload_mid_dive_in_nordlys_comes_back_at_sisu_with_the_story_kept(sit
     assert page.inner_text("#goal").startswith("Nordlys on tyhjä")
 
 
-@pytest.mark.parametrize("w,h", [(390, 844), (360, 740), (740, 360)])
+@pytest.mark.parametrize("w,h", [(360, 640), (390, 844), (360, 740), (740, 360)])
 def test_chapter_2_cards_fit_upright_and_sideways(site, browser, w, h):
     page = open_game(site, browser, w, h, save=CH1_DONE)
     page.click("#jatka")

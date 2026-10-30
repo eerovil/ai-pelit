@@ -27,7 +27,7 @@ flowchart TD
   K --> I
   L --> I
   M --> I
-  I --> CO{Alle 600 metrin?}
+  I --> CO{Yli 600 metrin syvyydessä?}
   CO -- Kyllä --> CP[Kylmä vesi: happi kuluu nopeammin, paitsi lähteiden luona]
   CP --> I
   I --> FI[Valokala tönäisee: −8 s happea, SISUlle −5 % runkoa]
