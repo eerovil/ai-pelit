@@ -16,6 +16,9 @@ import shutil
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_immutable import WITHDRAWN  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 BACK_SCRIPT = '<script src="../../../back.js"></script>'
 # The chip may sit in another corner: <script src="../../../back.js" data-corner="bottom-left">.
@@ -51,7 +54,7 @@ class GameError(Exception):
     pass
 
 
-def load_game(game_dir: Path) -> dict:
+def load_game(game_dir: Path, withdrawn: set[str] | None = None) -> dict:
     slug = game_dir.name
     if not SLUG.match(slug):
         raise GameError(f"{slug}: a game folder name is lowercase letters, digits and dashes")
@@ -63,9 +66,16 @@ def load_game(game_dir: Path) -> dict:
         if not meta.get(key):
             raise GameError(f"{slug}: game.json needs {key}")
     versions = meta["versions"]
-    for i, v in enumerate(versions, start=1):
-        if v.get("n") != i:
-            raise GameError(f"{slug}: versions must be numbered 1, 2, 3… in order (found {v.get('n')} at {i})")
+    # Numbered 1, 2, 3… in order; a number withdrawn (check_immutable.WITHDRAWN) is skipped for good.
+    skip = {int(d.split("/")[2][1:]) for d in (WITHDRAWN if withdrawn is None else withdrawn) if d.split("/")[1] == slug}
+    expected = 1
+    for v in versions:
+        while v.get("n") != expected and expected in skip:
+            expected += 1
+        if v.get("n") != expected:
+            raise GameError(f"{slug}: versions must be numbered 1, 2, 3… in order (found {v.get('n')} where {expected} was due)")
+        i = expected
+        expected += 1
         if not DATE.match(str(v.get("date", ""))):
             raise GameError(f"{slug} v{i}: date must be YYYY-MM-DD")
         if not v.get("note"):
@@ -83,7 +93,7 @@ def load_game(game_dir: Path) -> dict:
         found = "not a WebP image" if size is None else f"{size[0]} x {size[1]}"
         raise GameError(f"{slug}: {THUMB} must be a 360 x 480 WebP, found {found} (python3 scripts/make_thumb.py)")
     folders = {p.name for p in game_dir.iterdir() if p.is_dir() and re.match(r"^v\d+$", p.name)}
-    extra = folders - {f"v{i}" for i in range(1, len(versions) + 1)}
+    extra = folders - {f"v{v['n']}" for v in versions}
     if extra:
         raise GameError(f"{slug}: folders without a game.json version: {', '.join(sorted(extra))}")
     return {

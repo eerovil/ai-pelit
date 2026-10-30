@@ -61,6 +61,11 @@ def problems(base: str, cwd: str | None = None, withdrawn: set[str] = WITHDRAWN)
             old = [v for v in old if v.get("n") not in gone]
             if new[: len(old)] != old:
                 found.append(f"{path}: published versions' entries changed; only append new ones")
+    # A withdrawn number is never used again: phones keep the old version in their offline cache
+    # for good, so a new game at the same address would never reach them.
+    for d in sorted(withdrawn - published_dirs):
+        if os.path.isdir(f"{cwd or '.'}/{d}"):
+            found.append(f"{d}: this version was withdrawn; its number is never used again, take the next unused one")
     # A withdrawn version's folder and its game.json entry go together, even when game.json
     # itself was left as it was.
     for d in sorted(withdrawn & published_dirs):

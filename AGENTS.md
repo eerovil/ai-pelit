@@ -25,6 +25,7 @@ player sees is Finnish unless the request says otherwise.
    is outside the version folders and may be retaken. The only exception: a version Eero
    explicitly asks to take out of production is added to `WITHDRAWN` in that script (with where
    he said so) in its own pull request, and then deleted whole, folder and entry, in the next.
+   Its number is never used again (phones keep the old one cached): the next version skips it.
 2. **One folder per version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an
