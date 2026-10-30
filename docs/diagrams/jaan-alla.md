@@ -58,7 +58,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: Jatka tai Uusi peli**: `games/jaan-alla/v1/index.html`, `showMenu()`. "Jatka" shows only when `ai-pelit:jaan-alla:peli` holds a save; "Uusi peli" over a save asks for a second tap first.
+- **Valikko: Jatka tai Uusi peli**: `games/jaan-alla/v1/index.html`, `showMenu()`. "Jatka" shows only when `ai-pelit:jaan-alla:peli` holds a save; "Uusi peli" over a save asks for a second tap first. v2 (#95) plays sideways too: the menu, and every story and station card, in two columns (text left, buttons right); the meters, goal and bag in one thin row at the top; the stick lower left, dive, rise and the action button lower right.
 - **Tarina: SISU lähetetään Aurora-asemalle**: `newGame()` starts a fresh save (`fresh()`) and shows the intro panel.
 - **Ohjaa SISUa: ohjain, nouse, sukella**: `stepSub()`: the stick turns and drives (12 m/s at most), the ▲ ▼ buttons rise and sink; `collideSub()` keeps SISU under the ice, above `floorY()` and out of the spheres and columns in `SPHERES` and `COLUMNS`. Driving uses power; the reactor gives a little back. With no power SISU crawls at 35 %, hungry at 70 %.
 - **Missä SISU on?**: `currentAction()` shows the yellow action button when SISU is under the station's moon pool or within 15 m of a place's door (the blinking yellow light). `goal()` picks the current goal, shown at the top with an arrow and distance, and as a light column in the sea.

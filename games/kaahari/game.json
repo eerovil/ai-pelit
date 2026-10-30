@@ -15,6 +15,13 @@
       "note": "Pelaa kavereiden kanssa: 2–6 puhelinta samassa kisassa, tyhjät paikat täyttävät tietokonekuskit ja huoneen tekijä valitsee radan.",
       "request": "multiplayer pitää olla",
       "issue": "eerovil/ai-pelit#89"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: rata näkyy leveämpänä, ohjausnapit ovat peukaloiden alla kulmissa ja valikko on kahdessa sarakkeessa.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

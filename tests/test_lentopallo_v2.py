@@ -77,14 +77,19 @@ def test_two_against_two_with_a_computer_teammate(site, context):
 def test_the_computer_teammate_sets_the_ball_for_you(site, context):
     page = alone(site, context, "2v2")
     page.evaluate(PLAYING)
-    page.evaluate("""() => {
-      const t = players[2]; t.kind = 'cpu'; mine.x = -3; t.x = -1.2;
+    # The computer teammate, thinking about the second touch, plans a set, and that set comes down
+    # near where the player stands. All in one call, so no animation frame runs in between.
+    intent, land = page.evaluate("""() => {
+      const t = players[2]; t.kind = 'cpu'; t.intent = 'over'; mine.x = -3; t.x = -1.2;
       touchSide = -1; touches = 1; last = mine;
       Object.assign(ball, { x: -1.2, y: 2.4, vx: 0, vy: -0.5 });
+      t.brain.wait = 0; t.brain.decided = false;
+      cpuThink(t, 1 / 60);
+      const intent = t.intent;
       hit(t);
+      return [intent, predict(0.2).x];
     }""")
-    # The second touch comes down near where the player stands.
-    land = page.evaluate("predict(0.2).x")
+    assert intent == "set"
     assert -3.7 < land < -2.0
 
 

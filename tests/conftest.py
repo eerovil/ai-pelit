@@ -181,13 +181,21 @@ def site(tmp_path):
 
 
 @pytest.fixture(scope="session")
-def browser():
+def _playwright():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        b = p.chromium.launch()
-        yield b
-        b.close()
+        yield p
+
+
+# A fresh Chromium for each test file (#95). With one browser for the whole run, the 3D games'
+# WebGL pages (Hiihto from v7, Pallorata) slowed it down for every file after them on CI, until
+# their rounds timed out.
+@pytest.fixture(scope="module")
+def browser(_playwright):
+    b = _playwright.chromium.launch()
+    yield b
+    b.close()
 
 
 @pytest.fixture
@@ -195,6 +203,24 @@ def context(browser):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
     yield ctx
     ctx.close()
+
+
+def turn(page, size: dict) -> None:
+    """Turns the phone: resizes the page's window to size, {"width": ..., "height": ...} (#95).
+
+    back.js puts the page in full screen on the first tap, and Chromium refuses to resize a
+    full-screen window. Leaving it from the page (document.exitFullscreen()) finishes some time
+    later, too late on a busy machine; so the window is set back to normal through the browser
+    itself first, which takes effect before the resize.
+    """
+    cdp = page.context.new_cdp_session(page)
+    try:
+        win = cdp.send("Browser.getWindowForTarget")["windowId"]
+        if cdp.send("Browser.getWindowBounds", {"windowId": win})["bounds"].get("windowState") != "normal":
+            cdp.send("Browser.setWindowBounds", {"windowId": win, "bounds": {"windowState": "normal"}})
+    finally:
+        cdp.detach()
+    page.set_viewport_size(size)
 
 
 def wait_for_worker(page) -> None:

@@ -1,6 +1,6 @@
 # Kaahari: one kart race
 
-How one race of Kaahari plays (v2). The player drives a kart seen from behind it, three laps
+How one race of Kaahari plays (v2, and v3 the same race played sideways too, #95: the track view widens, steering lower left, LIUKU and ESINE lower right, menus in two columns). The player drives a kart seen from behind it, three laps
 round one of three tracks: alone against five computer drivers, or in a room with 2–6 phones
 whose empty places computer drivers fill. The gas is always on: the player
 steers, slides through bends for a turbo, and picks up items and fruit on the way.
@@ -57,7 +57,7 @@ flowchart TD
 ## Boxes
 
 - **Valitse rata, Aja!**: the menu's three track buttons (`showMenu()` in `games/kaahari/v2/index.html`) pick Hiekkaranta, Viidakko or Laavaluola (saved as `rata`); `soloRace()` paints the track's ground picture (`paintTrack()`), plants its trees (`plantScenery()`) and puts the player at the back of a grid of six.
-- **Huone: tekijä valitsee radan, Aloita kierros**: the "Pelaa kavereiden kanssa" button opens the room (`rooms.js`). Under the player list the phone that made the room (the host) picks the track (`roomControls()`); the others see "Huoneen tekijä valitsee radan.". On `R.on('start')` every phone builds the same grid: the people in the room at the back, computer drivers in front up to six (`setupRace()`).
+- **Huone: tekijä valitsee radan, Aloita kierros**: the "Pelaa kavereiden kanssa" button opens the room (`rooms.js`). Under the player list the phone that made the room (the host) picks the track (`roomControls()`); the others see "Huoneen tekijä valitsee radan.". Sideways (#95) the room screen is two columns, the code and QR left and the players, the track choice and "Aloita kierros" right, so a full room fits without scrolling. On `R.on('start')` every phone builds the same grid: the people in the room at the back, computer drivers in front up to six (`setupRace()`).
 - **3, 2, 1, AJA!**: `tick()` counts `race.cdT` to 3 s; nobody moves before it. In a room only the host counts, and the others follow its `s` messages (`hostState()`), which also carry the track.
 - **Nuolet ohjaavat, kaasu aina pohjassa**: the ◀ ▶ buttons (`which()`, `syncInput()`) steer, eased in over about a tenth of a second; `drive()` speeds the kart up to its top speed by itself. Off the road, on the verge, the top speed is about half. The ground is drawn from behind the kart, row by row, by `ground()`, and everything standing on it by `draw()`.
 - **Odotetaan muita, enintään 40 s ensimmäisen jälkeen**: each phone drives its own kart and sends it to the host 12 times a second (`guestTick()`, `pack()`); the host drives the computer's karts and sends every kart back (`hostTick()`); between messages a kart goes on the way it was going (`carry()`). A bomb or TNT box is sent to every phone (`shareNet()`, `addThrown()`), and each phone checks only its own kart against it (`local()`). `over()`: every person in plus 2.5 s, 40 s after the first, or ten minutes.

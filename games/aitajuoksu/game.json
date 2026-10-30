@@ -22,6 +22,13 @@
       "note": "Matkat 100, 200 ja 400 m, aitojen kanssa tai ilman; jokaisella juoksulla oma ennätys ja tuloslista.",
       "request": "Moodi ilman aitoja, ja pidempiä matkoja",
       "issue": "eerovil/ai-pelit#87"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: jalkanapit ovat reunoilla peukaloiden alla, ja valikko matkavalintoineen mahtuu ruutuun kahtena palstana.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

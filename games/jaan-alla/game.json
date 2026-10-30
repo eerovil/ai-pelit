@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: luku 1 – SISU-sukellusvene, Aurora-asema, RV Nordlysin hylky, jäävuoren luola, kristalliluola ja jättikalmari; ilma, virta, ruoka ja runko.",
       "request": "Tee three js tarinallinen survival peli kuvien pohjalta",
       "issue": "eerovil/ai-pelit#106"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: mittarit ja tavoite mahtuvat yhdelle riville, ohjaimet ovat alakulmissa ja tarinakortit jakautuvat kahteen palstaan.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }
