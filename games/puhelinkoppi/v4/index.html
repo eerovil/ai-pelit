@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Puhelinkoppi</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d2230;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<script>
+const c = document.getElementById('c'), x = c.getContext('2d');
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+}
+addEventListener('resize', resize); resize();
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:puhelinkoppi:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+// v1 and v2 kept levels (taso, paras, haasteet); v3 reads none of them and leaves them as they
+// are. Catches (kopit) carry on. The goal is now the longest streak of tricks caught screen up.
+let catches = Math.max(0, Math.floor(load('kopit', 0)) || 0);
+let streak = Math.max(0, Math.floor(load('putki-nyt', 0)) || 0);
+let record = Math.max(streak, Math.floor(load('putki', 0)) || 0);
+
+// How fast each spin turns (turns per second). The throwing motion picks the spin (v3 had
+// buttons); the height of the throw decides how many turns it makes before it comes down.
+const SPINS = { suora: 0, voltti: 1.7, kierre: 2 };
+// Each throw asks for one trick. The first three teach the spins; then they come at random,
+// harder as the streak grows. Every one of them can be thrown within the hand's reach.
+let trick = null;
+function nextTrick() {
+  if (streak === 0) return { kind: 'suora', n: 0 };
+  if (streak === 1) return { kind: 'kierre', n: 1 };
+  if (streak === 2) return { kind: 'voltti', n: 1 };
+  const pool = [{ kind: 'suora', n: 0 }, { kind: 'kierre', n: 1 }, { kind: 'voltti', n: 1 }];
+  if (streak >= 4) pool.push({ kind: 'kierre', n: 2 });
+  if (streak >= 6) pool.push({ kind: 'voltti', n: 2 });
+  const fresh = pool.filter(t => !trick || t.kind !== trick.kind || t.n !== trick.n);
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+function trickText(t) {
+  if (t.kind === 'suora') return 'suora heitto';
+  return `${t.n} ${t.kind === 'voltti' ? (t.n === 1 ? 'voltti' : 'volttia') : (t.n === 1 ? 'kierre' : 'kierrettä')}`;
+}
+trick = nextTrick();
+
+// ---- Vectors and quaternions ----
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const qmul = (a, b) => [
+  a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+  a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+  a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+  a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]];
+const qnorm = q => { const l = Math.hypot(q[0], q[1], q[2], q[3]); return [q[0] / l, q[1] / l, q[2] / l, q[3] / l]; };
+function rot(q, v) { // rotate body vector v into the world
+  const t = qmul(qmul(q, [0, v[0], v[1], v[2]]), [q[0], -q[1], -q[2], -q[3]]);
+  return [t[1], t[2], t[3]];
+}
+function qFromAxes(xa, ya, za) { // columns of the rotation matrix
+  const m00 = xa[0], m01 = ya[0], m02 = za[0], m10 = xa[1], m11 = ya[1], m12 = za[1], m20 = xa[2], m21 = ya[2], m22 = za[2];
+  const tr = m00 + m11 + m22;
+  let q;
+  if (tr > 0) { const s = Math.sqrt(tr + 1) * 2; q = [s / 4, (m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s]; }
+  else if (m00 > m11 && m00 > m22) { const s = Math.sqrt(1 + m00 - m11 - m22) * 2; q = [(m21 - m12) / s, s / 4, (m01 + m10) / s, (m02 + m20) / s]; }
+  else if (m11 > m22) { const s = Math.sqrt(1 + m11 - m00 - m22) * 2; q = [(m02 - m20) / s, (m01 + m10) / s, s / 4, (m12 + m21) / s]; }
+  else { const s = Math.sqrt(1 + m22 - m00 - m11) * 2; q = [(m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, s / 4]; }
+  return qnorm(q);
+}
+function slerp(a, b, t) {
+  let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  if (d < 0) { b = b.map(v => -v); d = -d; }
+  if (d > 0.9995) return qnorm(a.map((v, i) => v + (b[i] - v) * t));
+  const th = Math.acos(d), s = Math.sin(th);
+  return a.map((v, i) => (v * Math.sin((1 - t) * th) + b[i] * Math.sin(t * th)) / s);
+}
+
+// ---- The phone: a rigid box, 7.5 × 15.5 × 0.8 cm ----
+// Body axes: x = across the screen, y = towards the top end, z = out of the screen.
+const PW = 0.075, PH = 0.155, PD = 0.008, G = 9.81;
+// Moments of inertia per unit mass. y is the smallest, z the largest, x in between: a spin about
+// x (an end-over-end flip) is unstable and turns into a twist on its own, as a real phone does.
+const I = [(PH * PH + PD * PD) / 12, (PW * PW + PD * PD) / 12, (PW * PW + PH * PH) / 12];
+function euler(w) { // dω/dt for a torque-free rigid body, in body axes
+  return [(I[1] - I[2]) * w[1] * w[2] / I[0], (I[2] - I[0]) * w[2] * w[0] / I[1], (I[0] - I[1]) * w[0] * w[1] / I[2]];
+}
+
+// The palm is tilted towards you, as you hold a phone to read it.
+const TILT = 0.6;
+const N = [0, Math.cos(TILT), Math.sin(TILT)];   // palm normal
+const F = [0, Math.sin(TILT), -Math.cos(TILT)];  // towards the fingertips, away from you
+const REST = PD / 2 + 0.004;                      // phone centre above the palm when held
+const REACH_X = 0.085, REACH_F = 0.11;
+const HAND_MIN_Y = -0.3, HAND_MAX_Y = 0.6;  // how far the hand reaches down and up (m)
+const HAND_Z = 0.45, HAND_Z_SPEED = 1.5;     // the arm reaches this far forward or back (m), this fast (m/s)
+const THROW_Z = 0.06;
+function hand() { return [handX, handY, handZ]; }
+
+let spinThrown = 'suora';
+let state, pos, vel, q, w, handX, handY, handZ, halfFlips, flipSign, settle, result, resultT, camY, swipe, shake, dip, noise = 0.03;
+
+function newRound() {
+  state = 'ready';
+  handX = 0; handY = 0; handZ = 0;
+  pos = mul(N, REST); vel = [0, 0, 0]; w = [0, 0, 0];
+  q = qFromAxes(cross(F, N), F, N);
+  halfFlips = 0; flipSign = 1; settle = null; result = null; camY = 0; swipe = null; shake = 0; dip = 0;
+}
+newRound();
+
+// Throw from the palm. v0 is the upward speed (m/s), wx the flip, wy the twist about the long
+// axis (rad/s), vx the sideways drift (m/s), vz towards you (m/s). By default the tilted palm
+// pushes the phone a little towards you, as a real one does.
+function launch({ v0, wx = 0, wy = 0, vx = 0, vz = v0 * THROW_Z }) {
+  const r = () => (Math.random() * 2 - 1) * noise; // no hand throws perfectly
+  w = [wx + r(), wy + r(), r()];
+  vel = [vx, v0, vz + r() * 3];
+  halfFlips = 0; flipSign = 1;
+  state = 'air';
+  sound('whoosh');
+}
+
+function screenUp() { return dot(rot(q, [0, 0, 1]), N); }
+
+function physics(h) {
+  // RK4 on Euler's equations, then turn the orientation by the mean body rate.
+  const k1 = euler(w), k2 = euler(add(w, mul(k1, h / 2))), k3 = euler(add(w, mul(k2, h / 2))), k4 = euler(add(w, mul(k3, h)));
+  const wn = add(w, mul(add(add(k1, mul(k2, 2)), add(mul(k3, 2), k4)), h / 6));
+  const wm = mul(add(w, wn), 0.5), a = Math.hypot(wm[0], wm[1], wm[2]) * h;
+  if (a > 1e-12) { const s = Math.sin(a / 2) / (a / h); q = qnorm(qmul(q, [Math.cos(a / 2), wm[0] * s, wm[1] * s, wm[2] * s])); }
+  w = wn;
+  pos = add(pos, mul(vel, h)); vel[1] -= G * h;
+  const u = screenUp();
+  if (u * flipSign < -0.2) { flipSign = -flipSign; halfFlips++; }
+}
+
+function step(dt) {
+  if (shake > 0) shake = Math.max(0, shake - dt * 3);
+  if (dip > 0) dip = Math.max(0, dip - dt * 4);
+  if (state === 'air' || state === 'drop') {
+    const n = Math.ceil(dt / 0.001), h = dt / n;
+    for (let i = 0; i < n; i++) {
+      physics(h);
+      // The arm reaches forward or back under the phone by itself; the finger steers the rest.
+      if (state === 'air') handZ = Math.max(-HAND_Z, Math.min(HAND_Z, handZ + Math.max(-HAND_Z_SPEED * h, Math.min(HAND_Z_SPEED * h, pos[2] - handZ))));
+      if (state === 'air' && vel[1] < 0) {
+        const rel = sub(pos, hand()), h = dot(rel, N);
+        // Only a phone coming down onto the palm is caught; one the hand was raised past falls on.
+        if (h <= REST && h > -0.04) {
+          if (Math.abs(rel[0]) < REACH_X && Math.abs(dot(rel, F)) < REACH_F) { caught(); break; }
+          state = 'drop'; sound('miss');
+        }
+      }
+      if (pos[1] < HAND_MIN_Y - 0.2) { finish('drop'); break; }
+    }
+  } else if (state === 'settle') {
+    settle.t = Math.min(1, settle.t + dt / 0.22);
+    const e = 1 - Math.pow(1 - settle.t, 3);
+    q = slerp(settle.q0, settle.q1, e);
+    pos = add(settle.p0, mul(sub(settle.p1, settle.p0), e));
+    if (settle.t >= 1) judge();
+  }
+  // The camera rises with a high throw so the phone stays in view.
+  const target = Math.max(0, pos[1] - 0.35);
+  camY += (target - camY) * Math.min(1, dt * 7);
+}
+
+// The phone lands on whichever face is lower and lies flat in the palm.
+function caught() {
+  const zNow = rot(q, [0, 0, 1]), yNow = rot(q, [0, 1, 0]);
+  const up = dot(zNow, N) >= 0;
+  const z1 = up ? N : mul(N, -1);
+  let y1 = sub(yNow, mul(z1, dot(yNow, z1)));
+  if (Math.hypot(...y1) < 0.05) y1 = F;
+  y1 = norm(y1);
+  const lateral = Math.max(-0.03, Math.min(0.03, pos[0] - handX));
+  settle = { kind: spinThrown, t: 0, q0: q, q1: qFromAxes(cross(y1, z1), y1, z1), p0: pos, p1: add([handX + lateral, handY, handZ], mul(N, REST)), up, readable: dot(y1, F) > 0.5 };
+  vel = [0, 0, 0]; w = [0, 0, 0];
+  state = 'settle'; dip = 1;
+  sound('catch');
+  if (navigator.vibrate) try { navigator.vibrate(25); } catch (e) {}
+}
+
+// Screen up keeps the streak going only with the trick asked: the right spin picked, and at
+// least as many turns (a straight throw: none).
+function judge() {
+  const turns = Math.floor(halfFlips / 2);
+  if (!settle.up) return finish('down');
+  const ok = settle.kind === trick.kind && (trick.kind === 'suora' ? turns === 0 : turns >= trick.n);
+  finish(ok ? 'win' : 'trick');
+}
+
+function finish(kind) {
+  state = 'result'; resultT = performance.now();
+  const turns = Math.floor(halfFlips / 2);
+  result = { kind, turns, trick, thrown: settle ? settle.kind : spinThrown, streak: 0, record: false };
+  if (kind === 'drop') { shake = 1; sound('crash'); if (navigator.vibrate) try { navigator.vibrate([60, 40, 60]); } catch (e) {} }
+  if (kind !== 'drop') { catches++; save('kopit', catches); }
+  if (kind === 'win') {
+    sound('win');
+    streak++;
+    if (streak > record) {
+      record = streak; result.record = true; save('putki', record);
+      // The online list keeps each player's longest streak.
+      if (window.AiPelitScores) AiPelitScores.submit(record);
+    }
+  } else {
+    if (kind !== 'drop') sound('fail');
+    streak = 0;
+  }
+  result.streak = streak;
+  save('putki-nyt', streak);
+}
+
+function resultText(r) {
+  const k = `${r.turns} ${r.turns === 1 ? 'kierros' : 'kierrosta'}`;
+  switch (r.kind) {
+    case 'win': return ['KOPPI! 🎉', `${trickText(r.trick)} onnistui · putki ${r.streak}`, r.record ? 'Uusi ennätys! 🏅' : ''];
+    case 'trick': return ['Väärä temppu!', `Piti tehdä: ${trickText(r.trick)}`, r.thrown === r.trick.kind ? `Teit ${k}` : `Heitit: ${SPIN_NAMES[r.thrown]}`];
+    case 'down': return ['Väärin päin!', `Ruutu jäi alaspäin · ${k}`];
+    default: return ['Kolaus!', 'Puhelin putosi lattialle'];
+  }
+}
+const SPIN_NAMES = { suora: 'suora', voltti: 'voltti', kierre: 'kierre' };
+const SPIN_ICONS = { suora: '⬆ suora', voltti: '🔄 voltti', kierre: '🌀 kierre' };
+
+// ---- Camera ----
+const PITCH = -0.45;
+const CF = [0, Math.sin(PITCH), -Math.cos(PITCH)], CU = [0, Math.cos(PITCH), Math.sin(PITCH)];
+function camPos() { return [0, 0.75 + camY, 1.4]; }
+function focal() { return Math.min(W * 3, H * 1.45); }
+function project(p) {
+  const d = sub(p, camPos()), z = dot(d, CF);
+  const f = focal() / Math.max(0.05, z);
+  return [W / 2 + d[0] * f, H * 0.6 - dot(d, CU) * f, z];
+}
+function poly(pts, fill, stroke) {
+  x.beginPath();
+  pts.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1]));
+  x.closePath();
+  if (fill) { x.fillStyle = fill; x.fill(); }
+  if (stroke) { x.strokeStyle = stroke; x.lineWidth = 1; x.stroke(); }
+}
+function shade(rgb, s) { return `rgb(${rgb.map(v => Math.round(Math.min(255, v * s))).join(',')})`; }
+const LIGHT = norm([0.35, 1, 0.7]);
+function lit(n) { return 0.5 + 0.6 * Math.max(0, dot(n, LIGHT)); }
+
+// ---- Drawing ----
+function drawRoom() {
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#2d3a52'); g.addColorStop(1, '#17202e');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // Height marks on the far wall, so a high throw shows how high it went.
+  x.font = '12px system-ui,sans-serif'; x.fillStyle = 'rgba(255,255,255,.35)'; x.textAlign = 'left';
+  for (let m = 1; m <= 8; m++) {
+    const yy = m * 0.25, a = project([-1.2, yy, -1.0]), b = project([1.2, yy, -1.0]);
+    if (b[1] < -10 || b[1] > H + 10) continue;
+    if (b[1] < SAFE_T + 100) continue;          // keep the HUD readable
+    x.strokeStyle = m % 4 === 0 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.08)';
+    x.lineWidth = 1; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke();
+    if (m % 2 === 0) x.fillText(`${(yy).toFixed(1).replace('.', ',')} m`, W - 44, b[1] - 4);
+  }
+}
+
+const SKIN = [236, 186, 150];
+function handPt(a, b, lift = 0) { return add([handX, handY - 0.006 - dip * 0.02, handZ], add(add(mul([1, 0, 0], a), mul(F, b)), mul(N, lift))); }
+function drawHand() {
+  const P = (a, b, l) => project(handPt(a, b, l));
+  const s = lit(N);
+  // Forearm, towards you and down.
+  poly([P(-0.034, -0.03, 0), P(0.034, -0.03, 0), P(0.045, -0.5, -0.05), P(-0.045, -0.5, -0.05)], shade(SKIN, s * 0.82));
+  // Palm.
+  const palm = [];
+  for (let i = 0; i < 24; i++) { const t = i / 24 * Math.PI * 2; palm.push(P(Math.cos(t) * 0.048, -0.01 + Math.sin(t) * 0.058, 0)); }
+  poly(palm, shade(SKIN, s), shade(SKIN, s * 0.75));
+  // Fingers, slightly curled up at the tips.
+  [-0.032, -0.011, 0.011, 0.031].forEach((fx, i) => {
+    const len = [0.07, 0.085, 0.08, 0.065][i], w2 = 0.009;
+    poly([P(fx - w2, 0.035, 0), P(fx + w2, 0.035, 0), P(fx + w2 * 0.85, 0.035 + len, 0.012), P(fx - w2 * 0.85, 0.035 + len, 0.012)], shade(SKIN, s * 0.97), shade(SKIN, s * 0.72));
+  });
+  // Thumb, off to the left.
+  poly([P(-0.04, -0.03, 0), P(-0.05, 0.0, 0), P(-0.085, 0.045, 0.012), P(-0.075, 0.055, 0.012), P(-0.035, 0.015, 0)], shade(SKIN, s * 0.95), shade(SKIN, s * 0.72));
+}
+
+const BACK = [214, 88, 52], EDGE = [150, 156, 166];
+function drawPhone() {
+  const cam = camPos();
+  const P = v => project(add(pos, rot(q, v)));
+  // A face: centre c, in-plane axes u and v (half sizes), outward normal n, in body axes.
+  const face = (c, u, v, n, draw) => {
+    const nw = rot(q, n), cw = add(pos, rot(q, c));
+    if (dot(nw, sub(cam, cw)) <= 0) return;
+    const at = (a, b) => P(add(c, add(mul(u, a), mul(v, b))));
+    draw(at, lit(nw), nw);
+  };
+  const hx = PW / 2, hy = PH / 2, hz = PD / 2;
+  const rect = (at, a0, b0, a1, b1, col) => poly([at(a0, b0), at(a1, b0), at(a1, b1), at(a0, b1)], col);
+  const ellipse = (at, ca, cb, ra, rb, col) => { const p = []; for (let i = 0; i < 14; i++) { const t = i / 14 * Math.PI * 2; p.push(at(ca + Math.cos(t) * ra, cb + Math.sin(t) * rb)); } poly(p, col); };
+  // Sides and ends.
+  face([hx, 0, 0], [0, hy, 0], [0, 0, hz], [1, 0, 0], (at, s) => rect(at, -1, -1, 1, 1, shade(EDGE, s)));
+  face([-hx, 0, 0], [0, hy, 0], [0, 0, hz], [-1, 0, 0], (at, s) => rect(at, -1, -1, 1, 1, shade(EDGE, s)));
+  face([0, hy, 0], [hx, 0, 0], [0, 0, hz], [0, 1, 0], (at, s) => rect(at, -1, -1, 1, 1, shade(EDGE, s)));
+  face([0, -hy, 0], [hx, 0, 0], [0, 0, hz], [0, -1, 0], (at, s) => { rect(at, -1, -1, 1, 1, shade(EDGE, s)); rect(at, -0.25, -0.4, 0.25, 0.4, shade([60, 60, 66], s)); });
+  // Back: orange, with the camera block near the top.
+  face([0, 0, -hz], [-hx, 0, 0], [0, hy, 0], [0, 0, -1], (at, s) => {
+    rect(at, -1, -1, 1, 1, shade(BACK, s));
+    rect(at, -0.9, 0.58, -0.05, 0.95, shade([40, 40, 46], s));
+    ellipse(at, -0.68, 0.84, 0.17, 0.07, shade([20, 20, 30], s));
+    ellipse(at, -0.68, 0.68, 0.17, 0.07, shade([20, 20, 30], s));
+    ellipse(at, -0.25, 0.84, 0.08, 0.035, shade([240, 230, 200], s));
+    ellipse(at, 0, -0.1, 0.22, 0.1, shade([240, 140, 100], s));
+  });
+  // Screen: black glass, a lit display with a clock bar and app icons.
+  face([0, 0, hz], [hx, 0, 0], [0, hy, 0], [0, 0, 1], (at, s, nw) => {
+    rect(at, -1, -1, 1, 1, shade([18, 18, 22], s));
+    rect(at, -0.9, -0.94, 0.9, 0.94, shade([46, 110, 196], 0.75 + 0.35 * s));
+    rect(at, -0.36, 0.72, 0.36, 0.82, shade([235, 240, 255], 0.8 + 0.25 * s)); // clock
+    const cols = ['#ffcf4a', '#5ee08a', '#ff6b8b', '#ffffff'];
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) {
+      const a = -0.62 + k * 0.415, b = 0.42 - r * 0.24;
+      rect(at, a - 0.13, b - 0.065, a + 0.13, b + 0.065, cols[(r + k) % 4]);
+    }
+    for (let k = 0; k < 4; k++) { const a = -0.62 + k * 0.415; rect(at, a - 0.13, -0.86, a + 0.13, -0.73, cols[(k + 1) % 4]); }
+    ellipse(at, 0, 0.9, 0.05, 0.022, '#000');
+    // A glint when the glass faces the light.
+    const gl = Math.pow(Math.max(0, dot(nw, LIGHT)), 6);
+    if (gl > 0.05) { x.globalAlpha = gl * 0.35; poly([at(-1, 0.2), at(-0.2, 1), at(0.3, 1), at(-1, -0.3)], '#fff'); x.globalAlpha = 1; }
+  });
+}
+
+function drawHud() {
+  const top = SAFE_T + 12;
+  x.textAlign = 'right'; x.fillStyle = '#fff';
+  x.font = 'bold 20px system-ui,sans-serif'; x.fillText(`Putki ${streak}`, W - 14, top + 18);
+  x.font = '13px system-ui,sans-serif'; x.fillStyle = 'rgba(255,255,255,.7)';
+  x.fillText(`Ennätys ${record} · Kopit ${catches}`, W - 14, top + 38);
+  x.textAlign = 'center';
+  x.font = 'bold 17px system-ui,sans-serif'; x.fillStyle = '#ffe9a8';
+  wrap(`Tee: ${trickText(trick)}, koppi ruutu ylöspäin`, W / 2, top + 72, W - 40, 21);
+  if (state === 'air' || state === 'drop' || state === 'settle') {
+    x.font = 'bold 34px system-ui,sans-serif'; x.fillStyle = '#fff';
+    x.fillText(`${Math.floor(halfFlips / 2)}${halfFlips % 2 ? '½' : ''}`, W / 2, top + 130);
+    x.font = '12px system-ui,sans-serif'; x.fillStyle = 'rgba(255,255,255,.6)'; x.fillText(`kierrosta · ${SPIN_ICONS[spinThrown]}`, W / 2, top + 148);
+  }
+  const bot = H - SAFE_B - 56; // room under the hints for the 🏆 Tulokset chip
+  x.shadowColor = 'rgba(0,0,0,.9)'; x.shadowBlur = 4;
+  x.font = '14px system-ui,sans-serif'; x.fillStyle = 'rgba(255,255,255,.85)';
+  if (state === 'ready') {
+    wrap('Nykäise ylös: suoraan = suora, vinosti = kierre, loppuun koukku alas = voltti.', W / 2, bot - 36, W - 48, 18);
+    x.fillStyle = 'rgba(255,255,255,.6)'; x.font = '13px system-ui,sans-serif';
+    wrap('Korkeampi heitto = enemmän kierroksia.', W / 2, bot, W - 48, 17);
+  } else if (state === 'air') {
+    x.fillText('Liikuta kättä sormella: sivulle, ylös ja alas', W / 2, bot);
+  }
+  x.shadowBlur = 0;
+  if (state === 'result') {
+    const [big, small, extra] = resultText(result);
+    x.fillStyle = 'rgba(10,12,20,.72)'; x.fillRect(0, H * 0.34, W, 142);
+    x.fillStyle = result.kind === 'win' ? '#7dffa8' : '#ffb3a8';
+    x.font = 'bold 34px system-ui,sans-serif'; x.fillText(big, W / 2, H * 0.34 + 48);
+    x.fillStyle = '#fff'; x.font = '15px system-ui,sans-serif'; x.fillText(small, W / 2, H * 0.34 + 76);
+    if (extra) { x.fillStyle = result.record ? '#ffe9a8' : 'rgba(255,255,255,.75)'; x.fillText(extra, W / 2, H * 0.34 + 99); }
+    x.fillStyle = 'rgba(255,255,255,.6)'; x.font = '13px system-ui,sans-serif';
+    x.fillText(result.kind === 'win' ? 'Napauta: seuraava temppu' : 'Napauta: uusi putki alkaa', W / 2, H * 0.34 + 126);
+  }
+}
+function wrap(text, cx, y, maxW, lh) {
+  const words = text.split(' '), lines = [];
+  let line = '';
+  for (const wd of words) { const t = line ? line + ' ' + wd : wd; if (x.measureText(t).width > maxW && line) { lines.push(line); line = wd; } else line = t; }
+  lines.push(line);
+  lines.forEach((l, i) => x.fillText(l, cx, y + i * lh));
+}
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (shake > 0) x.translate((Math.random() - 0.5) * 10 * shake, (Math.random() - 0.5) * 10 * shake);
+  drawRoom();
+  const below = dot(sub(pos, hand()), N) < -0.01;
+  if (below) { drawPhone(); drawHand(); } else { drawHand(); drawPhone(); }
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawHud();
+}
+
+// ---- Input ----
+// The finger moves the hand: sideways and up or down. Before the throw the phone rides in the
+// palm, and a quick flick upwards lets it go with the hand's speed.
+function phoneOnScreen() { return project(pos); }
+function moveHand(dxPx, dyPx) {
+  const k = project(hand())[2] / focal();
+  handX = Math.max(-0.45, Math.min(0.45, handX + dxPx * k));
+  handY = Math.max(HAND_MIN_Y, Math.min(HAND_MAX_Y, handY - dyPx * k / Math.cos(PITCH)));
+}
+function onDown(e) {
+  e.preventDefault(); unlock();
+  if (state === 'result') { if (performance.now() - resultT > 500) { trick = nextTrick(); newRound(); } return; }
+  if (state === 'ready') {
+    const p = phoneOnScreen();
+    swipe = { x0: e.clientX, y0: e.clientY, px: p[0], py: p[1], lx: e.clientX, ly: e.clientY, pts: [[e.clientX, e.clientY, performance.now()]] };
+  } else if (state === 'air' || state === 'drop') {
+    swipe = { hand: true, lx: e.clientX, ly: e.clientY };
+  }
+}
+function onMove(e) {
+  if (!swipe) return;
+  e.preventDefault();
+  // Once the phone is in the hand (settling or the result), the hand holds still.
+  if (state !== 'ready' && state !== 'air' && state !== 'drop') { swipe = null; return; }
+  moveHand(e.clientX - swipe.lx, e.clientY - swipe.ly);
+  swipe.lx = e.clientX; swipe.ly = e.clientY;
+  if (!swipe.hand && state === 'ready') {
+    pos = add(hand(), mul(N, REST));
+    swipe.pts.push([e.clientX, e.clientY, performance.now()]);
+    if (swipe.pts.length > 40) swipe.pts.shift();
+  }
+}
+function onUp(e) {
+  if (!swipe) return;
+  const s = swipe; swipe = null;
+  if (s.hand || state !== 'ready') return;
+  const t = classifyThrow(s.pts);
+  if (t) throwFromSwipe(t);
+}
+
+// The throwing motion picks the spin, as a real hand does:
+// - straight up: a straight throw;
+// - diagonally up, left or right: a kierre (about the long axis) that way;
+// - up and then a quick hook back down towards you at the end, a wrist flick: a voltti.
+const HOOK_PX = 20, HOOK_MS = 220, SLANT = 0.6;
+function classifyThrow(pts) {
+  if (!pts.length) return null;
+  // The highest point the finger reached; the upward stroke ends there.
+  let peak = 0;
+  pts.forEach((p, i) => { if (p[1] <= pts[peak][1]) peak = i; });
+  const last = pts[pts.length - 1], top = pts[peak];
+  const hook = last[1] - top[1] > HOOK_PX && last[2] - top[2] < HOOK_MS;
+  // The stroke's speed over its last 90 ms up to the highest point.
+  let first = pts[0];
+  for (const p of pts) if (top[2] - p[2] <= 90) { first = p; break; }
+  const dt = Math.max(0.016, (top[2] - first[2]) / 1000);
+  const dy = first[1] - top[1], dx = top[0] - first[0];
+  const kind = hook ? 'voltti' : Math.abs(dx) > SLANT * dy ? 'kierre' : 'suora';
+  return { kind, dir: dx < 0 ? -1 : 1, speedUp: dy / dt, speedSide: dx / dt };
+}
+
+// The phone leaves with the hand's upward speed, spinning as thrown: a voltti end over end
+// (the unstable middle axis, so it may twist on its own), a kierre about the long axis (steady).
+function throwFromSwipe({ kind, dir = 1, speedUp, speedSide }) {
+  const k = project(pos)[2] / focal();
+  const up = speedUp * k / Math.cos(PITCH);
+  if (up < 1) return;                       // just moving the hand, no throw
+  const v0 = Math.max(2, Math.min(6.5, up)), rate = SPINS[kind] * 2 * Math.PI;
+  spinThrown = kind;
+  launch({ v0, wx: kind === 'voltti' ? -rate : 0, wy: kind === 'kierre' ? rate * dir : 0, vx: Math.max(-0.35, Math.min(0.35, speedSide * k * 0.15)) });
+}
+c.addEventListener('pointerdown', onDown, { passive: false });
+addEventListener('pointermove', onMove, { passive: false });
+addEventListener('pointerup', onUp);
+addEventListener('pointercancel', () => { swipe = null; });
+
+// ---- Sound (Web Audio, after the first tap) ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function tone(f0, f1, dur, type = 'sine', vol = 0.2, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, freq, vol) {
+  if (!ac) return;
+  const n = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = b; fl.type = 'bandpass'; fl.frequency.value = freq; g.gain.value = vol;
+  s.connect(fl).connect(g).connect(ac.destination); s.start();
+}
+function sound(k) {
+  if (k === 'whoosh') noiseBurst(0.25, 900, 0.5);
+  else if (k === 'catch') { tone(160, 90, 0.12, 'sine', 0.4); noiseBurst(0.05, 2500, 0.3); }
+  else if (k === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.18, 0.12 + i * 0.09));
+  else if (k === 'fail') tone(300, 150, 0.35, 'sawtooth', 0.1, 0.1);
+  else if (k === 'miss') noiseBurst(0.15, 500, 0.3);
+  else if (k === 'crash') { noiseBurst(0.4, 3000, 0.7); tone(120, 50, 0.3, 'square', 0.15); }
+}
+
+// ---- Loop ----
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="puhelinkoppi" data-order="high" data-corner="bottom-right"></script>
+<script>if (window.AiPelitScores) { AiPelitScores.board('putki', 'Putkiennätys'); AiPelitScores.format(s => `putki ${s}`); }</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
