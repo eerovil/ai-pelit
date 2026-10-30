@@ -36,6 +36,13 @@
       "note": "Peliä voi pelata myös vaakatasossa: piha näkyy leveämpänä, tilanne on oikeassa yläkulmassa ja valikko mahtuu ruudulle kahteen palstaan.",
       "request": "Add landscape to all games where it's possible",
       "issue": "eerovil/ai-pelit#95"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-30",
+      "note": "Kolme uutta kenttää (koulun piha, metsä ja kirkonmäki) valikosta tai huoneesta, ja juoksu kuuluu: lähellä juoksevan askeleet 👣 näkyvät seinienkin läpi, ja tietokone-etsijä menee katsomaan.",
+      "request": "Keksi kirkkikseen parannuksia. Ja uusia kenttiä",
+      "issue": "eerovil/ai-pelit#109"
     }
   ]
 }
