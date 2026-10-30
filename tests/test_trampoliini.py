@@ -67,13 +67,13 @@ def test_every_level_has_its_own_size_of_trampoline(site, context):
 def test_a_tap_at_the_bottom_of_the_bounce_goes_higher_and_no_tap_goes_lower(site, context):
     page = open_game(site, context)
     page.click("#go")
-    page.evaluate("stand(0); J.vin = 5; J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60)")
-    assert page.evaluate("J.vy") > 5.5
-    page.evaluate("stand(0); J.vin = 5; while (phase === 'mat') step(1 / 60)")
-    assert page.evaluate("J.vy") < 5
+    # Read the take-off speed in the same call: the page's own loop keeps stepping between calls.
+    off = "([vin, t]) => { stand(0); J.vin = vin; if (t !== null) { J.matT = t; tap(); } while (phase === 'mat') step(1 / 60); return [J.vy, T.vMax]; }"
+    assert page.evaluate(off, [5, 0.15])[0] > 5.5
+    assert page.evaluate(off, [5, None])[0] < 5
     # Never higher than the trampoline throws.
-    page.evaluate("stand(0); J.vin = 30; J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60)")
-    assert page.evaluate("J.vy") == page.evaluate("T.vMax")
+    vy, top = page.evaluate(off, [30, 0.15])
+    assert vy == top
 
 
 def test_every_trick_of_the_first_fifteen_levels_can_be_landed(site, context):
@@ -152,14 +152,16 @@ def test_a_tap_just_before_landing_still_counts_and_a_second_tap_changes_nothing
     page = open_game(site, context)
     page.click("#go")
     # Early: 0.05 s before the mat, in the air.
-    page.evaluate("stand(0); J.vin = 5; while (phase === 'mat') step(1 / 60);"
-                  "while (timeToMat() > 0.05) step(1 / 60); tap()")
-    assert page.evaluate("J.pumpT") < 0
-    page.evaluate("while (phase === 'air') step(1 / 60); J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60)")
-    early = page.evaluate("J.vy")
+    # Each step runs in one call: the page's own loop keeps stepping between calls.
+    pump_t, early = page.evaluate("""() => {
+      stand(0); J.vin = 5; while (phase === 'mat') step(1 / 60);
+      while (timeToMat() > 0.05) step(1 / 60); tap(); const t = J.pumpT;
+      while (phase === 'air') step(1 / 60); J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60);
+      return [t, J.vy]; }""")
+    assert pump_t < 0
     # The first tap is the one that counts: a perfect second tap does not replace it.
-    page.evaluate("stand(0); J.vin = 5; J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60)")
-    assert early < page.evaluate("J.vy")
+    perfect = page.evaluate("() => { stand(0); J.vin = 5; J.matT = CONTACT / 2; tap(); while (phase === 'mat') step(1 / 60); return J.vy; }")
+    assert early < perfect
 
 
 def test_a_twist_still_turning_at_the_landing_is_a_fall(site, context):
