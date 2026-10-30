@@ -16,9 +16,12 @@ globalThis.WebSocketPair = class {
   constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket(); this[0].peer = this[1]; this[1].peer = this[0]; }
 };
 // Node's Response refuses status 101; Cloudflare's takes it with the client end of the socket.
-globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket; } };
+globalThis.Response = class {
+  constructor(body, init = {}) { this.body = body; this.status = init.status ?? 200; this.webSocket = init.webSocket; }
+  async json() { return JSON.parse(this.body); }
+};
 
-const { Room, MAX_PLAYERS, MOST_PLAYERS, IDLE, publicId } = await import('../../rooms/worker.js');
+const { Room, MAX_PLAYERS, MOST_PLAYERS, IDLE, LISTED_FOR, publicId } = await import('../../rooms/worker.js');
 const { handle } = await import('../../server/api.js');
 
 function fakeCtx() {
@@ -47,8 +50,8 @@ const H = await publicId(K.H), A = await publicId(K.A), B = await publicId(K.B);
 const keyOf = { [H]: K.H, [A]: K.A, [B]: K.B };
 const id = async (c) => { const k = key(c), i = await publicId(k); keyOf[i] = k; return i; };
 
-function setup() {
-  const ctx = fakeCtx(), room = new Room(ctx, {});
+function setup(env = {}) {
+  const ctx = fakeCtx(), room = new Room(ctx, env);
   // Joins and returns the server end of the socket (what the room sees); `.client` is the phone's.
   const join = async (who, name, host = false, code = 'KISA', extra = {}) => {
     const q = new URLSearchParams({ key: keyOf[who], name, ...extra });
@@ -211,4 +214,93 @@ test('/api/rooms/<code> goes on to the room named by its code', async () => {
   assert.equal((await handle(new Request('https://pelit.test/api/rooms/KIS4', ws), { ROOMS })).status, 400);
   assert.equal((await handle(new Request('https://pelit.test/api/rooms/KISA'), { ROOMS })).status, 426);
   assert.equal((await handle(new Request('https://pelit.test/api/rooms/KISA', ws), {})).status, 503);
+});
+
+// Public rooms (#50): the rooms and the list (the LOBBY object) as Cloudflare would wire them.
+function world() {
+  const objects = new Map();
+  const ROOMS = {
+    idFromName: (name) => name,
+    get: (name) => {
+      if (!objects.has(name)) objects.set(name, setup({ ROOMS }));
+      return { fetch: (req) => objects.get(name).room.fetch(req) };
+    },
+  };
+  const make = (code) => { ROOMS.get(code); return objects.get(code); };
+  const list = async (game) => {
+    const r = await handle(new Request(`https://pelit.test/api/rooms?game=${game}`), { ROOMS });
+    return (await r.json()).rooms;
+  };
+  return { ROOMS, make, list, objects };
+}
+
+test('a public room is listed for its game while it waits, has space and its host is here', async () => {
+  const { make, list } = world();
+  const kisa = make('KISA');
+  const h = await kisa.join(H, 'Eero', true, 'KISA', { game: 'pallo', v: '2', max: '3' });
+  assert.deepEqual(await list('pallo'), []); // private until the host says
+  await kisa.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: true }));
+  assert.deepEqual(await list('pallo'), [{ code: 'KISA', v: 2, n: 1, max: 3 }]);
+  assert.deepEqual(await list('muu'), []);
+  assert.equal(h.server.last('_list'), undefined); // the room keeps it; nobody hears it
+  // A guest cannot list or unlist the room.
+  const a = await kisa.join(A, 'Aino');
+  await kisa.room.webSocketMessage(a.server, JSON.stringify({ t: '_list', on: false }));
+  assert.deepEqual(await list('pallo'), [{ code: 'KISA', v: 2, n: 2, max: 3 }]);
+  // Full: off the list; a place frees up: back on.
+  const b = await kisa.join(B, 'Iida');
+  assert.deepEqual(await list('pallo'), []);
+  await kisa.room.webSocketMessage(b.server, JSON.stringify({ t: 'bye' }));
+  assert.deepEqual((await list('pallo')).map((r) => r.n), [2]);
+  // A round starts (the host takes it off), and ends (back on).
+  await kisa.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: false }));
+  assert.deepEqual(await list('pallo'), []);
+  await kisa.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: true }));
+  assert.equal((await list('pallo')).length, 1);
+  // The host drops off: off the list until it is back.
+  h.server.close(1006, '');
+  await kisa.room.webSocketClose(h.server);
+  assert.deepEqual(await list('pallo'), []);
+  await kisa.join(H, 'Eero', true, 'KISA', { game: 'pallo', v: '2', max: '3' });
+  assert.equal((await list('pallo')).length, 1);
+});
+
+test('the list is newest room first, and forgets a room that stops saying it is there', async () => {
+  const { make, list, objects } = world();
+  for (const code of ['AAAA', 'BBBB']) {
+    const r = make(code), h = await r.join(H, 'Eero', true, code, { game: 'pallo', v: '1' });
+    await r.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: true }));
+  }
+  assert.deepEqual((await list('pallo')).map((r) => r.code), ['BBBB', 'AAAA']);
+  const h = objects.get('AAAA').ctx.getWebSockets()[0];
+  await objects.get('AAAA').room.webSocketMessage(h, JSON.stringify({ t: '_list', on: true })); // a refresh keeps its place
+  assert.deepEqual((await list('pallo')).map((r) => r.code), ['BBBB', 'AAAA']);
+  // A room that vanished without a word (no refresh) drops off after LISTED_FOR.
+  const lobby = objects.get('lobby').ctx.store;
+  lobby.set('lobby', lobby.get('lobby').map((r) => (r.code === 'BBBB' ? { ...r, at: Date.now() - LISTED_FOR - 1 } : r)));
+  assert.deepEqual((await list('pallo')).map((r) => r.code), ['AAAA']);
+});
+
+test('a room made again over an old one is not listed; a room with no game never is', async () => {
+  const { make, list, objects } = world();
+  const kisa = make('KISA');
+  const h = await kisa.join(H, 'Eero', true, 'KISA', { game: 'pallo', v: '1' });
+  await kisa.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: true }));
+  // The host's socket is lost without a close event (a restart); another phone makes a new room.
+  h.server.closed = { code: 1006 };
+  const fresh = await kisa.join(B, 'Iida', true, 'KISA', { game: 'pallo', v: '1' });
+  assert.equal(fresh.refused, null);
+  assert.deepEqual(await list('pallo'), []);
+  const old = make('VANH'), k = await old.join(A, 'Aino', true, 'VANH'); // Kirkkis v2 says no game
+  await old.room.webSocketMessage(k.server, JSON.stringify({ t: '_list', on: true }));
+  assert.ok(!objects.get('lobby').ctx.store.get('lobby').some((r) => r.code === 'VANH'));
+});
+
+test('GET /api/rooms?game= reads the list; anything else about it is refused', async () => {
+  const { ROOMS } = world();
+  assert.equal((await handle(new Request('https://pelit.test/api/rooms?game=pallo'), { ROOMS })).status, 200);
+  assert.equal((await handle(new Request('https://pelit.test/api/rooms/?game=pallo'), { ROOMS })).status, 200);
+  assert.equal((await handle(new Request('https://pelit.test/api/rooms?game=Ei!'), { ROOMS })).status, 400);
+  assert.equal((await handle(new Request('https://pelit.test/api/rooms?game=pallo', { method: 'POST', body: '{}' }), { ROOMS })).status, 405);
+  assert.equal((await handle(new Request('https://pelit.test/api/rooms?game=pallo'), {})).status, 503);
 });

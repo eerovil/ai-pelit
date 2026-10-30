@@ -3,7 +3,7 @@
 Each phone is its own Chromium context. The room (rooms/worker.js on Cloudflare) is played by
 `Relay`, which answers the pages' WebSockets the same way: the host's messages to everyone (or to
 `to`), the others' to the host with `from`, and `peers` (with the host's game and version) whenever
-someone comes or goes.
+someone comes or goes. It keeps the list of public rooms (#50) too, read with GET /api/rooms?game=.
 """
 
 import asyncio
@@ -40,6 +40,14 @@ class Relay:
 
     def attach(self, page):
         page.route_web_socket(re.compile(r".*/api/rooms/.*"), self.connect)
+        page.route(re.compile(r".*/api/rooms\?.*"), self.listing)
+
+    def listing(self, route):
+        game = parse_qs(urlparse(route.request.url).query).get("game", [""])[0]
+        rooms = [{"code": code, "v": r["v"], "n": len(r["members"]), "max": r["max"]}
+                 for code, r in reversed(self.rooms.items())
+                 if r.get("listed") and r["game"] == game and r["host"] in r["socks"] and len(r["members"]) < r["max"]]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"rooms": rooms}))
 
     def connect(self, ws):
         url = urlparse(ws.url)
@@ -76,6 +84,10 @@ class Relay:
         msg = json.loads(text)
         if msg.get("t") == "hello" and me in self.slow:
             self.slow[me].append((room, text))
+            return
+        if msg.get("t") == "_list":
+            if me == room["host"]:
+                room["listed"] = msg.get("on") is True
             return
         if msg.get("t") == "bye":
             room["members"].pop(me, None)
@@ -513,6 +525,46 @@ def test_the_room_screen_fits_a_small_phone(phones):
         join(phones, n, code)
     host.wait_for_function("AiPelitRooms.members.length === 5")
     # Everything is on the screen without scrolling, the way out included.
-    for part in ["#aipr-qr", "#aipr-start", "#aipr-back"]:
+    for part in ["#aipr-qr", "#aipr-pub", "#aipr-start", "#aipr-back"]:
         box = host.locator(part).bounding_box()
         assert box["y"] >= 0 and box["y"] + box["height"] <= 640, part
+
+
+def test_a_public_room_is_listed_for_the_game_and_joined_with_a_tap(phones):
+    host, code = make_room(phones)
+    stranger = phones("Aino", "huonetesti/v1/")
+    stranger.click("#multi")
+    stranger.wait_for_function("!document.getElementById('aipr-none').hidden")
+    assert text(stranger, "none") == "Ei avoimia huoneita juuri nyt."
+    # The host makes the room public; a phone on another version of the game sees it.
+    host.check("#aipr-pub")
+    stranger.wait_for_selector("#aipr-rooms button", timeout=8000)
+    assert stranger.locator("#aipr-rooms button").all_inner_texts() == [f"{code} · 1/5 pelaajaa"]
+    # A phone on another game does not.
+    other = phones("Iida", "pieni/v1/")
+    other.click("#multi")
+    other.wait_for_function("!document.getElementById('aipr-none').hidden")
+    # One tap joins, in the room's own version; a guest has no switch.
+    stranger.click("#aipr-rooms button")
+    stranger.wait_for_url(re.compile(r".*/huonetesti/v2/$"))
+    stranger.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 2")
+    assert stranger.locator("#aipr-pubRow").is_hidden()
+    # While a round runs the room is off the list, and back on once it ends.
+    watcher = phones("Onni")
+    watcher.click("#multi")
+    watcher.wait_for_selector("#aipr-rooms button", timeout=8000)
+    start(host, [stranger])
+    watcher.wait_for_function("!document.querySelector('#aipr-rooms button')", timeout=8000)
+    # A round over while the game's own end screen is up: still off until the room shows again.
+    host.evaluate("AiPelitRooms.endRound()")
+    host.wait_for_timeout(300)
+    assert phones.relay.rooms[code]["listed"] is False
+    host.evaluate("end()")
+    watcher.wait_for_selector("#aipr-rooms button", timeout=8000)
+    # A host reload keeps the room public; switched off, it leaves the list.
+    host.reload()
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 2")
+    assert host.locator("#aipr-pub").is_checked()
+    host.uncheck("#aipr-pub")
+    watcher.wait_for_function("!document.querySelector('#aipr-rooms button')", timeout=8000)
+    assert host.errors == stranger.errors == watcher.errors == other.errors == []
