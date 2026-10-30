@@ -36,6 +36,13 @@
       "note": "Voiteen valinta ei enää avaa vahingossa kaveripeliä: kaverinappi on kauempana ja aukeaa vasta kun sormi nousee siitä.",
       "request": "jostain syystä kun valitsee voiteen alussa niin se menee aina välillä multiplayer tilaan ja välillä yksin peliin",
       "issue": "eerovil/ai-pelit#61"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-30",
+      "note": "Napautus osuu valikossa nappiin, johon sormi osuu, eikä sen alapuolelle, ja kisa toimii myös kolmen tai useamman kaverin kanssa.",
+      "request": "Hiihtopelin main menu, täppäykset ottaa ns. Liian ylhäältä. Pitää painaa napin yläpuolelle. Lisäksi varmista että moninpeli toimii useammalla kuin 2",
+      "issue": "eerovil/ai-pelit#93"
     }
   ]
 }
