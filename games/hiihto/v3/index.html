@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Hiihto</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#cfdcea;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<script src="../../../rooms.js" data-game="hiihto" data-min="2" data-max="6"></script>
+<script>
+const c = document.getElementById('c'), x = c.getContext('2d');
+let W, H, DPR, F, H0, SAFE_T = 0, SAFE_B = 0;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+  F = 0.72 * H; H0 = 0.3 * H;
+}
+addEventListener('resize', resize); resize();
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:hiihto:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let maxLevel = Math.max(1, Math.floor(load('taso', 1)) || 1);   // the highest level open
+let stars = load('tahdet', {}) || {};                            // level -> best stars
+let bests = load('ajat', {}) || {};                              // level -> best time, seconds
+// Skating (v3) keeps its own stars and times: a skate is faster, so the lists stay apart. The
+// levels opened ('taso') are shared by both styles.
+let sStars = load('luistelu-tahdet', {}) || {}, sBests = load('luistelu-ajat', {}) || {};
+const savedStyle = () => load('tyyli', 'perinteinen') === 'luistelu' ? 'luistelu' : 'perinteinen';
+let style = savedStyle();                                        // 'perinteinen' (classic) or 'luistelu'
+let level = maxLevel;
+const skating = () => style === 'luistelu';
+const starsOf = () => skating() ? sStars : stars;
+const bestsOf = () => skating() ? sBests : bests;
+const STYLE_NAME = { perinteinen: 'Perinteinen', luistelu: 'Luistelu' };
+// One online list per course and style: classic keeps v1-v2's 'taso-N'.
+function setBoard() {
+  if (window.AiPelitScores) AiPelitScores.board(skating() ? `luistelu-${level}` : `taso-${level}`, skating() ? `Luistelu · taso ${level}` : `Taso ${level}`);
+}
+
+const TAU = 2 * Math.PI, G = 9.81;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+function rng(seed) {
+  return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const fmt = (v, d) => v.toFixed(d).replace('.', ',').replace('-', '−');
+function fmtTime(t) { const m = Math.floor(t / 60), s = t - 60 * m; return `${m}.${s < 10 ? '0' : ''}${fmt(Math.floor(s * 10) / 10, 1)}`; }
+
+// ---- Weather and grip wax ----
+// A wax grips in its own temperature range. Too hard a wax for the weather (colder wax, warmer day)
+// slips; too soft a wax (warmer wax, colder day) grips, but snow sticks to it and it glides badly.
+const WAXES = [
+  { name: 'Vihreä', col: '#2e9e4f', lo: -20, hi: -10, range: '−10…−20 °C' },
+  { name: 'Sininen', col: '#2f6fd0', lo: -10, hi: -2, range: '−2…−10 °C' },
+  { name: 'Violetti', col: '#8a4fc4', lo: -3, hi: 0, range: '0…−3 °C' },
+  { name: 'Klisteri', col: '#d6403a', lo: 0, hi: 5, range: '0…+5 °C, nuoska' },
+];
+const TEMPS = [-6, -14, -1.5, 1.5, -8, -2.5, -17, 0.5, -4, -11];
+function weatherFor(n) {
+  const T = n <= TEMPS.length ? TEMPS[n - 1] : Math.round((rng(n * 31)() * 21 - 18) * 2) / 2;
+  const desc = T <= -10 ? 'Kireä pakkanen, kuiva ja kova lumi' : T < -3 ? 'Pakkaskeli, kuiva lumi'
+    : T <= 0 ? 'Nollakeli, kosteaa uutta lunta' : 'Suojakeli, märkää nuoskaa';
+  return { T, desc, snowing: T > -4.5, grey: T > -3 };
+}
+function waxFit(w, T) {
+  if (T > w.hi) return { grip: clamp(1 - 0.14 * (T - w.hi), 0.35, 1), drag: 0 };
+  if (T < w.lo) return { grip: 1, drag: Math.min(0.06, 0.02 * (w.lo - T)) };
+  return { grip: 1, drag: 0 };
+}
+function bestWax(T) { let b = 0, s = -1e9; WAXES.forEach((w, i) => { const f = waxFit(w, T), v = f.grip - 4 * f.drag; if (v > s) { s = v; b = i; } }); return b; }
+// A skate pushes off the edge, so skating wants no grip wax, only a glide wax for the snow: one
+// made for other weather drags a little more for each degree it is off.
+const GLIDES = [
+  { name: 'Pakkanen', col: '#2e9e4f', lo: -20, hi: -8, range: '−8…−20 °C' },
+  { name: 'Keskikeli', col: '#2f6fd0', lo: -10, hi: -3, range: '−3…−10 °C' },
+  { name: 'Nollakeli', col: '#8a4fc4', lo: -4, hi: 0.5, range: '0…−4 °C' },
+  { name: 'Suojakeli', col: '#d6403a', lo: 0, hi: 6, range: '0…+6 °C, märkä' },
+];
+function glideFit(w, T) { const d = T > w.hi ? T - w.hi : T < w.lo ? w.lo - T : 0; return { grip: 1, drag: Math.min(0.05, 0.012 * d) }; }
+function bestGlide(T) { let b = 0, s = 1e9; GLIDES.forEach((w, i) => { const d = glideFit(w, T).drag; if (d < s) { s = d; b = i; } }); return b; }
+const waxList = st => (st || style) === 'luistelu' ? GLIDES : WAXES;
+const fitOf = (st, i, T) => st === 'luistelu' ? glideFit(GLIDES[i], T) : waxFit(WAXES[i], T);
+const bestFor = (st, T) => st === 'luistelu' ? bestGlide(T) : bestWax(T);
+
+// ---- The course: 2 m segments, each with its own grade and curve ----
+const SEG = 2, DRAW = 130;
+const LX = [-1.25, 0, 1.7];                     // oncoming classic track, own classic track, skating lane
+const LS = [0, 1.15, 2.25];                     // a skater's lanes: the classic track, the skating lane's two halves
+const laneX = (st, lane) => (st === 'luistelu' ? LS : LX)[lane];
+const TRAIL_L = -2.05, TRAIL_R = 2.85, SKATE_L = 0.62;
+const CAM_BACK = 6, CAM_H = 4.2;
+let course;
+
+function buildCourse(n) {
+  const r = rng(n * 7919 + 101);
+  const len = Math.min(1500, 500 + 100 * (n - 1));
+  const total = Math.ceil((len + 320) / SEG);
+  const raw = new Float32Array(total), curve = new Float32Array(total);
+  let i = 0, hills = 0;
+  const put = (m, g, cv) => { const k = Math.max(1, Math.round(m / SEG));
+    for (let j = 0; j < k && i < total; j++, i++) { raw[i] = g; curve[i] = cv * Math.sin(Math.PI * (j + 0.5) / k); } };
+  put(50, 0, 0);
+  while (i * SEG < len - 150) {
+    put(30 + r() * 50, (r() - 0.5) * 0.02, (r() - 0.5) * 0.014);
+    // The second hill is always steep, so every course needs the V step at least once.
+    const steep = hills === 1 || (hills > 1 && r() < Math.min(0.75, 0.4 + 0.04 * n));
+    const up = steep ? 0.1 + r() * 0.03 : 0.035 + r() * 0.025;
+    put(steep ? 28 + r() * 20 : 40 + r() * 40, up, (r() - 0.5) * 0.006);
+    put(10, up * 0.25, 0);
+    put(50 + r() * 60, -(0.05 + r() * 0.06), (r() - 0.5) * 0.016);
+    hills++;
+  }
+  put(total * SEG, 0, 0);
+  const grade = new Float32Array(total), y = new Float32Array(total + 1), xs = new Float32Array(total + 1), dir = new Float32Array(total + 1);
+  for (let s = 0; s < total; s++) { let a = 0, k = 0; for (let j = -4; j <= 4; j++) { const q = s + j; if (q >= 0 && q < total) { a += raw[q]; k++; } } grade[s] = a / k; }
+  for (let s = 0; s < total; s++) { y[s + 1] = y[s] + grade[s] * SEG; dir[s + 1] = dir[s] + curve[s]; xs[s + 1] = xs[s] + dir[s] * SEG; }
+  // Spruces beside the trail, a start and a finish banner, and distance posts.
+  const spr = Array.from({ length: total }, () => []);
+  for (let s = 0; s < total; s++) for (const side of [-1, 1]) {
+    if (r() < 0.42) spr[s].push({ kind: 'tree', l: side < 0 ? TRAIL_L - 1.4 - r() * 12 : TRAIL_R + 1.4 + r() * 12, h: 3.5 + r() * 5, z: s * SEG + r() * SEG });
+  }
+  const at = (z, o) => spr[Math.floor(z / SEG)].push({ z, ...o });
+  at(4, { kind: 'banner', text: 'LÄHTÖ' });
+  at(len, { kind: 'banner', text: 'MAALI' });
+  for (let d = 250; d < len - 50; d += 250) at(len - d, { kind: 'post', text: `${d} m`, l: TRAIL_R + 0.5 });
+  course = { n, len, total, grade, y, xs, dir, spr, weather: weatherFor(n) };
+  course.ideal = idealTime();
+  course.par = Math.round(course.ideal * 1.5);
+  return course;
+}
+function segAt(z) { return clamp(Math.floor(z / SEG), 0, course.total - 1); }
+function gradeAt(z) { return course.grade[segAt(z)]; }
+function heightAt(z) { const i = segAt(z), t = clamp(z / SEG - i, 0, 1); return lerp(course.y[i], course.y[i + 1], t); }
+function centreAt(z) { const i = segAt(z), t = clamp(z / SEG - i, 0, 1); return [lerp(course.xs[i], course.xs[i + 1], t), lerp(course.dir[i], course.dir[i + 1], t)]; }
+
+// ---- The skier ----
+// Diagonal stride: each tap is one kick. It grips only when the wax grips well enough for the
+// slope, so a steep hill wants the V step (haarakäynti), which always grips but is slow on the flat
+// and brakes downhill. Holding a finger down is the tuck, which glides fastest down a hill.
+const MU = 0.035, K_STRIDE = 0.75, VMAX_STRIDE = 7.2, K_V = 1.0, VMAX_V = 4.6, K_DOWN = 0.35;
+function newSkier(st) {
+  st = st || style;
+  return { style: st, z: 0, v: 0, lane: 1, x: laneX(st, 1), vMode: false, hold: false, lastKick: -9, t: 0, fallT: 0, invT: 0, slipT: 0, sameT: 0, kickAnim: 1, side: 1, grip: 1, drag: 0 };
+}
+let P = newSkier();
+
+function kickNeed(g, vMode) { return vMode ? 0.25 : 0.3 + 10 * Math.max(0, g); }
+function kick(p) {
+  if (p.fallT > 0) return 0;
+  const g = gradeAt(p.z), since = p.t - p.lastKick;
+  p.lastKick = p.t; p.kickAnim = 0; p.side = -p.side;
+  const rate = clamp((since - 0.12) / 0.25, 0.3, 1);       // mashing the screen kicks weakly
+  const eff = clamp(1 - (kickNeed(g, p.vMode) - p.grip) * 2.5, 0, 1);
+  let K = p.vMode ? K_V : K_STRIDE, vmax = p.vMode ? VMAX_V : VMAX_STRIDE;
+  if (g < -0.03) K = p.vMode ? 0 : K_DOWN;
+  const dv = K * rate * eff * Math.max(0, 1 - p.v / vmax);
+  p.v += dv;
+  if (eff < 0.5 && K > 0) p.slipT = 0.9;
+  return dv;
+}
+// Skating (v3): a tap on the left half of the screen pushes off the left ski, on the right half
+// the right one. Pushes on alternate skis drive the skier on, uphill too, as the edge always
+// grips; the same ski twice is a weak push. Faster than the stride, and no V step is needed.
+const K_SKATE = 0.8, VMAX_SKATE = 9.2;
+function push(p, side) {
+  if (p.fallT > 0) return 0;
+  const g = gradeAt(p.z), since = p.t - p.lastKick, alt = side !== p.side;
+  p.lastKick = p.t; p.kickAnim = 0; p.side = side;
+  const rate = clamp((since - 0.1) / 0.22, 0.3, 1) * (alt ? 1 : 0.35);
+  const K = g < -0.03 ? K_SKATE * 0.4 : K_SKATE;
+  const dv = K * rate * Math.max(0, 1 - p.v / VMAX_SKATE);
+  p.v += dv;
+  if (!alt) p.sameT = 0.9;
+  return dv;
+}
+function physics(p, dt) {
+  p.t += dt;
+  const g = gradeAt(p.z);
+  p.kickAnim = Math.min(1, p.kickAnim + dt * 2.6);
+  p.slipT = Math.max(0, p.slipT - dt); p.invT = Math.max(0, p.invT - dt); p.sameT = Math.max(0, p.sameT - dt);
+  if (p.fallT > 0) { p.fallT = Math.max(0, p.fallT - dt); p.v *= Math.exp(-8 * dt); }
+  let mu = MU + p.drag;
+  if (p.vMode) mu += g < -0.01 ? 0.22 : 0.03;              // a V downhill is a snowplough
+  const k = p.hold && !p.vMode ? 0.0018 : 0.0055;
+  p.v += (-G * g - (mu * G + k * p.v * p.v)) * dt;
+  if (p.v < 0) p.v = 0;
+  p.z += p.v * dt;
+  const tx = laneX(p.style, p.lane);
+  p.x += clamp(tx - p.x, -9 * dt, 9 * dt);
+}
+// A good skier: V on the steep climbs (classic), the tuck down the hills, a kick every `gap`
+// seconds, a push on alternate skis when skating. Sets the par, and skis for a friend who left.
+function botStep(p, dt, gap) {
+  const g = gradeAt(p.z + 2);
+  p.vMode = p.style !== 'luistelu' && g > 0.075; p.hold = g < -0.02;
+  if (!p.hold && p.t >= (p.next || 0)) {
+    if (p.style === 'luistelu') push(p, -p.side); else kick(p);
+    p.next = p.t + gap;
+  }
+  physics(p, dt);
+}
+// The time a good skier needs with the right wax and nobody on the trail; it sets the par.
+function idealTime() {
+  const p = newSkier(), gap = skating() ? 0.34 : 0.4;
+  for (let i = 0; i < 60 * 1200 && p.z < course.len; i++) botStep(p, 1 / 60, gap);
+  return p.t;
+}
+
+// ---- Others on the trail ----
+const GRANNY_COATS = ['#8e3b6b', '#b5533c', '#5b6b3a', '#6a4b8c', '#3b6b8e'], GRANNY_HATS = ['#d13b3b', '#f0f0f0', '#e2b53b', '#3bb0d1'];
+const GRANNY_LINES = ['Kylläpä on kiire!', 'Hyvää päivänjatkoa!', 'Nuoret ne menee…', 'Hyvä keli tänään!', 'Muista voidella!', 'No hei vaan!'];
+const OTHER_COATS = ['#2d7d46', '#c0392b', '#2c3e50', '#d35400', '#16a085', '#7f8c8d'];
+const SKATE_SUITS = ['#e0302f', '#f2b705', '#18a0a0', '#1d1d1d', '#e05aa0'];
+let npcs, nextVasta, nextSkate, bubbles, popups, passes, falls, mode, countT, resultT, result, clock = 0, snow, R;
+
+function slopeFactor(g) { return g > 0 ? Math.max(0.35, 1 - 6 * g) : Math.min(2.5, 1 - 9 * g); }
+function pick(a) { return a[Math.floor(R() * a.length)]; }
+function addGranny(z) { npcs.push({ kind: 'mummo', z, lane: 1, x: LX[1], base: 1.7 + R() * 0.6, v: 0, coat: pick(GRANNY_COATS), hat: pick(GRANNY_HATS), ph: R(), passed: false }); }
+function addVasta(z) { npcs.push({ kind: 'vasta', z, lane: 0, x: LX[0], base: 3 + R() * 1.6, v: 0, coat: pick(OTHER_COATS), hat: pick(GRANNY_HATS), ph: R(), passed: false }); }
+function addSkater(z) { npcs.push({ kind: 'luistelija', z, lane: 2, x: LX[2], base: 6.6 + R() * 1.6, v: 0, coat: pick(SKATE_SUITS), hat: pick(SKATE_SUITS), ph: R(), passed: false, shout: false }); }
+// Skating (v3): slower fitness skaters in the skating lane, on either half, to overtake.
+function addSlow(z) { const lane = 1 + Math.floor(R() * 2); npcs.push({ kind: 'luistelija', slow: true, z, lane, x: LS[lane], base: 3.6 + R() * 1.4, v: 0, coat: pick(SKATE_SUITS), hat: pick(GRANNY_HATS), ph: R(), passed: false }); }
+const SLOW_LINES = ['Hyvin menee!', 'Vauhtia riittää!', 'Hei hei!', 'Mennään, mennään!'];
+
+// `seed` (a race with friends) gives every phone the same grannies and skaters to start with.
+function newRace(seed) {
+  buildCourse(level);
+  setBoard();
+  R = rng(seed ?? level * 104729 + Math.floor(clock * 1000));
+  P = newSkier(); npcs = []; bubbles = []; popups = []; passes = 0; falls = 0; result = null;
+  // Slower skiers start in the first half, so a skier at a good pace catches every one before the
+  // finish: grannies on the classic track, or fitness skaters in the skating lane when skating.
+  const n = Math.min(12, 3 + level), len = course.len;
+  if (skating()) {
+    for (let i = 0; i < n; i++) addSlow(25 + len * 0.6 * (i + 0.2 + R() * 0.6) / n);
+    for (let i = 0; i < 3; i++) addGranny(30 + len * 0.3 * (i + R()) / 3);
+  } else for (let i = 0; i < n; i++) addGranny(25 + len * 0.5 * (i + 0.2 + R() * 0.6) / n);
+  for (let z = 40; z < 160; z += 30 + R() * 50) addVasta(z);
+  if (!skating()) addSkater(-20 - R() * 30);
+  nextVasta = 3 + R() * 4; nextSkate = skating() ? 1e9 : 6 + R() * 6;
+  snow = Array.from({ length: 70 }, () => [R(), R(), 0.5 + R()]);
+  mode = 'wax';
+}
+
+function npcStep(o, dt) {
+  if (o.kind === 'vasta') { o.v = o.base * slopeFactor(-gradeAt(o.z)); o.z -= o.v * dt; }
+  else { o.v = o.base * slopeFactor(gradeAt(o.z)); o.z += o.v * dt; }
+  o.ph += dt * (o.kind === 'luistelija' ? 1.4 : o.kind === 'mummo' ? 0.9 : 1.3);
+}
+// The slower ones going your way: grannies, and the fitness skaters when skating.
+const isSlow = o => o.kind === 'mummo' || !!o.slow;
+
+function world(dt) {
+  // The slower ones queue behind each other on their track instead of skiing through.
+  const queue = npcs.filter(isSlow).sort((a, b) => b.z - a.z);
+  for (const o of npcs) npcStep(o, dt);
+  for (let i = 1; i < queue.length; i++) {
+    const o = queue[i], ahead = queue.slice(0, i).reverse().find(a => a.x === o.x);
+    if (ahead && o.z > ahead.z - 3) o.z = ahead.z - 3;
+  }
+  nextVasta -= dt; nextSkate -= dt;
+  if (nextVasta <= 0) { if (P.z + 160 < course.len + 40) addVasta(P.z + 160); nextVasta = Math.max(2.5, (5 + R() * 6) / (1 + 0.08 * (level - 1))); }
+  if (nextSkate <= 0) { addSkater(P.z - 50); nextSkate = Math.max(3, (7 + R() * 7) / (1 + 0.06 * (level - 1))); }
+  npcs = npcs.filter(o => o.z > P.z - 70 && (isSlow(o) || o.z < P.z + 260));
+  if (P.fallT > 0 || P.invT > 0) return;
+  for (const o of npcs) {
+    const dz = o.z - P.z;
+    if (Math.abs(o.x - P.x) < 0.75 && Math.abs(dz) < 0.9) { crash(o); return; }
+    if (isSlow(o) && !o.passed && dz < -1) {
+      o.passed = true; passes++;
+      say(o, pick(o.slow ? SLOW_LINES : GRANNY_LINES)); popup('Ohitus!', '#7ef0a0');
+    }
+    if (o.kind === 'vasta' && !o.passed && dz < 0) { o.passed = true; if (R() < 0.4) say(o, pick(['Moi!', 'Hei!', 'Päivää!'])); }
+    if (o.kind === 'luistelija' && !o.slow && !o.shout && dz < -3 && dz > -16 && P.lane === 2 && o.v > P.v) { o.shout = true; say(o, 'Latua!'); }
+  }
+}
+
+function crash(o) {
+  P.fallT = 1.6; P.invT = 2.8; P.v = 0; falls++;
+  if (o.kind === 'mummo' && skating()) { P.z = Math.min(P.z, o.z - 1.3); say(o, pick(['Ei saa luistella perinteisen ladulla!', 'Pysy omalla puolellasi!'])); }
+  else if (o.slow) { P.z = Math.min(P.z, o.z - 1.3); say(o, pick(['Hups!', 'Varovasti!', 'Tilaa on!'])); }
+  else if (o.kind === 'mummo') { P.z = Math.min(P.z, o.z - 1.3); say(o, pick(['Voi hyvänen aika!', 'Varovasti!', 'Ohhoh!'])); }
+  else if (o.kind === 'vasta') say(o, pick(['Katso eteesi!', 'Oikealle!', 'Hupsis!']));
+  else say(o, pick(['Latua, sanoin!', 'Hups!', 'Pois tieltä!']));
+  popup('Kaatuminen!', '#ff8a8a');
+  thud();
+}
+
+function say(o, text) { bubbles = bubbles.filter(b => b.o !== o); bubbles.push({ o, text, t: 0 }); }
+function popup(text, col) { popups.push({ text, col, t: 0 }); }
+
+function steer(d) { if (mode === 'race' || mode === 'count') P.lane = clamp(P.lane + d, 0, 2); }
+
+// ---- Step: everything that moves ----
+function step(dt) {
+  clock += dt;
+  if (net && RM.paused) return;   // a phone in the race is away: everyone waits for it
+  const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+  // With friends the host fires the start; the others start when it says so.
+  if (mode === 'count') { countT -= dt; if (countT <= 0 && (!net || RM.isHost)) go(); }
+  if (mode === 'race') {
+    P.hold = held();
+    for (let i = 0; i < n && mode === 'race'; i++) {
+      physics(P, h); world(h);
+      if (P.z >= course.len) finish();
+    }
+  }
+  if (mode === 'done') { resultT += dt; for (const o of npcs) npcStep(o, dt); }
+  if (net) netTick(dt, n);
+  for (const b of bubbles) b.t += dt;
+  bubbles = bubbles.filter(b => b.t < 2);
+  for (const p of popups) p.t += dt;
+  popups = popups.filter(p => p.t < 1.3);
+}
+function go() {
+  mode = 'race'; beep(880, 0.25, 'triangle', 0.1);
+  if (net) { net.phase = 'run'; net.clock = 0; }
+}
+
+function finish() {
+  mode = 'done'; resultT = 0;
+  const t = P.t, I = course.ideal, B = bestsOf(), S = starsOf(), pre = skating() ? 'luistelu-' : '';
+  const s = t <= I * 1.15 ? 3 : t <= I * 1.3 ? 2 : t <= course.par ? 1 : 0;
+  const prev = B[level], record = s > 0 && (prev === undefined || t < prev);
+  // A race with friends is saved once, however often its end is heard (a reload).
+  if (!net || RM.once(net.round)) {
+    if (record) { B[level] = t; save(pre + 'ajat', B); }
+    if (s > 0 && window.AiPelitScores) AiPelitScores.submit(Math.round(t * 10) / 10);
+    if (s > (S[level] || 0)) { S[level] = s; save(pre + 'tahdet', S); }
+    if (s > 0 && level === maxLevel) { maxLevel++; save('taso', maxLevel); }
+  }
+  const note = skating() ? (P.drag > 0.02 ? 'Luistovoide ei sopinut keliin: luisto oli huono.' : 'Luistovoide osui nappiin!')
+    : P.grip < 0.8 ? 'Voide oli liian kova: pito ei riittänyt.' : P.drag > 0.04 ? 'Voide oli liian pehmeä: lunta tarttui pohjaan.' : 'Voitelu osui nappiin!';
+  result = { t, stars: s, passed: s > 0, record, note };
+  if (net) { const k = meK(); k.fin = Math.round(t * 100) / 100; k.z = P.z; if (RM.isHost) arrive(k); net.sendT = 0; }
+  beep(s > 0 ? 784 : 330, 0.18, 'triangle', 0.1); if (s > 0) setTimeout(() => beep(1047, 0.3, 'triangle', 0.1), 160);
+}
+
+function applyWax(i) {
+  const f = fitOf(style, i, course.weather.T);
+  P.wax = i; P.grip = f.grip; P.drag = f.drag;
+}
+function chooseWax(i) {
+  applyWax(i);
+  beep(520, 0.1, 'sine', 0.08);
+  // With friends, the start waits until everyone has waxed.
+  if (net) { meK().wax = i; mode = 'ready'; net.readyT = 0; return; }
+  mode = 'count'; countT = 3;
+}
+function setStyle(st) {
+  if (st === style) return;
+  style = st; save('tyyli', st);
+  newRace();
+}
+
+// ---- Racing friends (v3) ----
+// Everyone in the room skis the host's course in the host's style at once. The others show on the
+// trail as skiers in their own colours (skiers ski through each other) and the first to the finish
+// wins. Each phone skis its own skier among its own grannies and skaters (the same ones at the
+// start), and sends it to the host; the host runs the start, the end (everyone in, or a minute
+// after the first), and the computer's skier for a friend who left, and sends everyone the race.
+const RM = window.AiPelitRooms;
+const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
+const LATE = 60;
+let net = null, lastEnd = null;   // lastEnd: the host's last result, for a phone that reloads after it
+const meK = () => net.skiers.find(k => k.kind === 'me');
+
+function netStart(s) {
+  net = { round: s.round, cfg: null, phase: 'wax', sendT: 0, readyT: 0, clock: 0, firstFin: null, res: null,
+    soloLevel: net ? net.soloLevel : level, adopt: false,
+    skiers: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
+      z: 0, x: 0, lane: 1, v: 0, fin: null, wax: -1, fall: 0, ph: 0 })) };
+  touches.clear();
+  if (s.host) { net.cfg = { level, style, seed: Math.floor(Math.random() * 1e9) }; netCourse(); }
+  else mode = 'netwait';   // until the host says which course
+  if (s.over) mode = 'netwait';   // a phone that missed the end: the results are on their way
+}
+function netCourse() {
+  level = net.cfg.level; style = net.cfg.style;
+  newRace(net.cfg.seed);
+  for (const k of net.skiers) k.x = laneX(style, 1);
+}
+// A skier as sent: where, which lane, how fast, the finish time, the wax, a fall, whether the
+// computer skis it now, whether the computer took it to the finish, and when the host saw it
+// arrive. `fin` is the skier's own time, kept for records; the places go by `at`, the host's race
+// clock when it first heard of the finish, so a phone whose clock ran slow cannot win a race it
+// lost.
+const r2 = n => Math.round(n * 100) / 100;
+const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null];
+function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; }
+// The host: a skier's finish, on the race clock, the first time it is seen.
+function arrive(k) {
+  if (k.fin === null || k.at != null) return;
+  k.at = r2(net.clock);
+  if (net.firstFin === null) net.firstFin = net.clock;
+}
+const finOrder = k => k.at ?? k.fin;
+function synced(k) {
+  if (k.kind === 'me' && (mode === 'race' || mode === 'done')) { k.z = P.z; k.lane = P.lane; k.v = mode === 'race' ? P.v : 0; k.fall = P.fallT > 0 ? 1 : 0; }
+  return k;
+}
+function hostState() {
+  return { t: 's', round: net.round, cfg: net.cfg, ph: net.phase, cd: r2(countT || 0), clock: r2(net.clock), sk: net.skiers.map(k => pack(synced(k))) };
+}
+
+// The host: the start once everyone has waxed, the computer's skiers, the end.
+function netTick(dt, n) {
+  for (const k of net.skiers) {
+    if (k.kind === 'me') continue;
+    if (k.kind === 'cpu' && RM.isHost) {
+      if (net.phase === 'run' && k.fin === null) {
+        for (let i = 0; i < n; i++) botStep(k.p, dt / n, skating() ? 0.38 : 0.44);
+        k.z = k.p.z; k.lane = k.p.lane; k.v = k.p.v;
+        if (k.z >= course.len) { k.fin = r2(k.p.t); k.cpuFin = true; arrive(k); }
+      }
+    } else if (net.phase === 'run' && k.fin === null && !k.fall) k.z += k.v * dt;
+    k.x += clamp(laneX(style, k.lane) - k.x, -9 * dt, 9 * dt);
+    k.ph += dt * (k.fin === null ? 0.25 + k.v / 5 : 0);
+  }
+  net.sendT -= dt;
+  if (RM.isHost) {
+    if (net.phase === 'wax' && mode === 'ready' && net.skiers.every(k => k.wax >= 0)) { net.phase = 'cd'; mode = 'count'; countT = 3; net.sendT = 0; }
+    if (net.phase === 'run') {
+      net.clock += dt;
+      if (net.skiers.every(k => k.fin !== null) || (net.firstFin !== null && net.clock > net.firstFin + LATE)) {
+        const m = { t: 'end', round: net.round, res: standings() };
+        RM.send(hostState());
+        RM.deliver(m);
+        RM.endRound();
+        netEnd(m.res);
+        return;
+      }
+    }
+    if (net.sendT <= 0) { net.sendT = net.phase === 'wax' ? 0.5 : 0.1; RM.send(hostState()); }
+    return;
+  }
+  if (net.phase === 'run') net.clock += dt;
+  // A guest: its wax until the host has it, then its skier ten times a second.
+  if (mode === 'ready' && net.phase === 'wax') {
+    net.readyT -= dt;
+    if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: P.wax }); }
+  }
+  if ((mode === 'race' || mode === 'done') && net.sendT <= 0 && !net.res) {
+    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, s: pack(synced(meK())) });
+  }
+}
+function guestState(m) {
+  if (!net.cfg) { net.cfg = m.cfg; netCourse(); net.adopt = true; }
+  net.phase = m.ph; net.clock = m.clock;
+  m.sk.forEach((a, i) => {
+    const k = net.skiers[i];
+    if (!k) return;
+    if (k.kind !== 'me') { unpack(k, a); return; }
+    k.at = a[8] ?? k.at;   // when the host saw me finish, for my place
+    // Back after a reload: the host knows my wax, and where I was.
+    if (mode === 'wax' && a[4] >= 0) adopt(a, m);
+    // The computer skied for me while I was away: carry on from where it got to.
+    else if (a[6] && mode === 'race') {
+      P.z = a[0]; P.lane = a[1]; P.v = a[2]; P.t = m.clock;
+      if (a[3] !== null) arrived(a);
+    }
+  });
+  net.adopt = false;
+  if (m.ph === 'cd' && mode === 'ready') mode = 'count';
+  if (mode === 'count') countT = m.cd;
+  if (m.ph === 'run' && (mode === 'count' || mode === 'ready')) { mode = 'race'; P.t = m.clock; if (m.clock < 0.5) beep(880, 0.25, 'triangle', 0.1); }
+}
+function adopt(a, m) {
+  applyWax(a[4]); meK().wax = a[4];
+  P.z = a[0]; P.lane = a[1]; P.x = laneX(style, a[1]); P.v = a[2]; P.t = m.clock;
+  if (a[3] !== null) arrived(a);
+  else mode = m.ph === 'run' ? 'race' : m.ph === 'cd' ? 'count' : 'ready';
+}
+// The host says I am at the finish. My own finish (heard again after a reload) is saved as usual,
+// once; one the computer skied for me while I was away keeps its place in the race, but is not
+// my time: no stars, record, level or online score.
+function arrived(a) {
+  P.t = a[3]; P.z = Math.max(P.z, course.len);
+  if (!a[7]) return finish();
+  mode = 'done'; resultT = 0;
+  result = { t: a[3], stars: 0, passed: false, record: false, cpu: true, note: 'Tietokone hiihti puolestasi maaliin.' };
+  const k = meK(); k.fin = a[3]; k.z = P.z; net.sendT = 0;
+}
+function cpuTakes(k) {
+  k.kind = 'cpu';
+  if (k.wax < 0) k.wax = bestFor(style, course.weather.T);
+  const p = newSkier(style), f = fitOf(style, k.wax, course.weather.T);
+  Object.assign(p, { z: k.z, v: k.v, lane: k.lane, x: laneX(style, k.lane), t: net.clock, grip: f.grip, drag: f.drag });
+  k.p = p;
+}
+// Finished skiers by time, ahead of everyone still on the trail, who go by how far they got.
+function standings() {
+  return net.skiers.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? finOrder(a) - finOrder(b) : b.z - a.z))
+    .map(k => ({ id: k.id, name: k.name, fin: k.fin, z: Math.round(Math.min(k.z, course.len)), color: k.color }));
+}
+const placeOf = (list, id) => list.findIndex(o => o.id === id) + 1;
+function netEnd(res) {
+  if (!net || net.res) return;
+  net.res = res; net.phase = 'done';
+  if (RM.isHost) lastEnd = { t: 'end', round: net.round, res };
+  // Not at the finish here (or reloaded after it): my place and time come from the results.
+  if (mode !== 'done') {
+    const me = res.find(o => o.id === RM.me);
+    mode = 'done'; resultT = 0; result = { t: me ? me.fin : null, stars: 0, passed: false, record: false, note: '' };
+  }
+}
+// After the results: back to the room, with my place there and everyone's times under the list.
+function backRoom() {
+  const res = net.res, i = res.findIndex(o => o.id === RM.me), r = res[i];
+  RM.note(res.map((o, j) => `${j + 1}. ${o.id === RM.me ? 'Sinä' : o.name} ${o.fin === null ? '–' : fmtTime(o.fin)}`).join(' · '));
+  const text = i < 0 ? 'Kisa päättyi' : r.fin === null ? 'Et ehtinyt maaliin' : `${i + 1}. sija · ${fmtTime(r.fin)}`;
+  toSolo();
+  RM.backToRoom(text, i === 0 ? 'win' : 'lose');
+}
+function toSolo() {
+  if (!net) return;
+  level = clamp(net.soloLevel, 1, maxLevel); style = savedStyle();
+  net = null;
+  newRace();
+  roomControls();
+}
+
+// The host's course and style, in the room under the players; the others see what was picked.
+let roomEl = null;
+function roomControls() {
+  if (!RM || !RM.extra) return;
+  if (!roomEl) {
+    const css = document.createElement('style');
+    css.textContent = '#hiihto-room{display:flex;flex-direction:column;align-items:center;gap:6px;margin:2px 0 4px}' +
+      '#hiihto-room div{display:flex;gap:8px;align-items:center}' +
+      '#aipr #hiihto-room button{font-size:15px;padding:7px 12px;background:#b8ad95;box-shadow:0 3px 0 #8f846c}' +
+      '#aipr #hiihto-room button.on{background:#3f8ad8;box-shadow:0 3px 0 #2a5f99}' +
+      '#aipr #hiihto-room button:disabled{opacity:.35}' +
+      '#hiihto-room b{min-width:74px;font-size:17px}';
+    document.head.appendChild(css);
+    roomEl = document.createElement('div'); roomEl.id = 'hiihto-room';
+    roomEl.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b || !RM.isHost || net) return;
+      if (b.dataset.d) { const to = clamp(level + +b.dataset.d, 1, maxLevel); if (to !== level) { level = to; newRace(); } }
+      if (b.dataset.s) setStyle(b.dataset.s);
+      roomControls();
+    });
+    RM.extra(roomEl);
+  }
+  if (RM.isHost) {
+    roomEl.innerHTML = `<div><button data-d="-1"${level > 1 ? '' : ' disabled'}>‹</button><b>Taso ${level}</b><button data-d="1"${level < maxLevel ? '' : ' disabled'}>›</button></div>` +
+      `<div>${['perinteinen', 'luistelu'].map(s => `<button data-s="${s}"${s === style ? ' class="on"' : ''}>${STYLE_NAME[s]}</button>`).join('')}</div>`;
+  } else {
+    const h = RM.members.find(m => m.id === RM.hostId);
+    roomEl.innerHTML = `<p class="small">Radan ja tyylin valitsee ${h ? '👑 ' + h.name.replace(/[<>&]/g, '') : 'huoneen tekijä'}.</p>`;
+  }
+}
+if (RM) {
+  RM.on('start', netStart);
+  RM.on('message', (m, from) => {
+    if (!net || m.round !== net.round) return;
+    if (RM.isHost) {
+      const k = net.skiers.find(o => o.id === from);
+      if (!k || k.kind !== 'net') return;
+      if (m.t === 'ready' && k.wax < 0 && m.wax >= 0) k.wax = m.wax;
+      if (m.t === 'p') {
+        // Given back by the computer: the phone's own skier counts again once it has caught up.
+        if (k.handback && m.s[0] < k.z - 1) return;
+        k.handback = false;
+        unpack(k, m.s); arrive(k);
+      }
+      return;
+    }
+    if (m.t === 's') guestState(m);
+    if (m.t === 'end') netEnd(m.res);
+  });
+  RM.on('hello', id => {
+    if (net && !net.res) RM.send(hostState(), id);
+    // A phone back after the end it already confirmed (a reload): the library does not send it
+    // again, so the host does, and the phone shows the results instead of waiting.
+    else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
+  });
+  RM.on('continue', ids => { if (net) net.skiers.forEach(k => { if (ids.includes(k.id) && k.kind === 'net') cpuTakes(k); }); });
+  RM.on('back', id => { if (net) net.skiers.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; } }); });
+  RM.on('lobby', toSolo);
+  RM.on('leave', toSolo);
+  RM.on('menu', toSolo);
+  RM.on('peers', roomControls);
+}
+
+// ---- Input ----
+const touches = new Map();
+let ui = { wax: [], prev: null, next: null, styles: [], friends: null };
+function vButton() { return { x: 56, y: H - SAFE_B - 62, r: 38 }; }
+// Skating: the left and right push pads, one in the middle of each half of the screen.
+function skatePads() { const w = 76, h = 34, y = H - SAFE_B - 128; return [-1, 1].map(side => ({ side, x: (side < 0 ? W * 0.25 : W * 0.75) - w / 2, y, w, h })); }
+function inRect(r, px, py) { return r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; }
+function held() { for (const t of touches.values()) if (!t.swiped && !t.v && clock - t.t0 > 0.2) return true; return false; }
+function down(id, px, py) {
+  if (mode === 'wax') {
+    const i = ui.wax.findIndex(r => inRect(r, px, py)), st = ui.styles.find(r => inRect(r, px, py));
+    if (i >= 0) chooseWax(i);
+    else if (net) return;
+    else if (st) setStyle(st.style);
+    else if (inRect(ui.friends, px, py) && RM) { RM.open(); roomControls(); }
+    else if (inRect(ui.prev, px, py) && level > 1) { level--; newRace(); }
+    else if (inRect(ui.next, px, py) && level < maxLevel) { level++; newRace(); }
+    return;
+  }
+  if (mode === 'ready' || mode === 'netwait') return;
+  if (mode === 'done') {
+    if (net) { if (net.res && resultT > 0.8) backRoom(); return; }
+    if (resultT > 0.8) { if (result.passed) level = Math.min(maxLevel, level + 1); newRace(); }
+    return;
+  }
+  const b = vButton();
+  if (!skating() && Math.hypot(px - b.x, py - b.y) < b.r + 8) { P.vMode = !P.vMode; touches.set(id, { x0: px, y0: py, t0: clock, v: true }); beep(P.vMode ? 660 : 440, 0.06, 'square', 0.04); return; }
+  touches.set(id, { x0: px, y0: py, t0: clock, swiped: false });
+  if (mode === 'race') { if (skating()) push(P, px < W / 2 ? -1 : 1); else kick(P); swish(); }
+}
+function move(id, px, py) {
+  const t = touches.get(id);
+  if (!t || t.swiped || t.v) return;
+  const dx = px - t.x0, dy = py - t.y0;
+  if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy)) { t.swiped = true; steer(dx > 0 ? 1 : -1); }
+}
+function up(id) { touches.delete(id); }
+c.addEventListener('pointerdown', e => { e.preventDefault(); unlock(); down(e.pointerId, e.clientX, e.clientY); });
+c.addEventListener('pointermove', e => move(e.pointerId, e.clientX, e.clientY));
+c.addEventListener('pointerup', e => up(e.pointerId));
+c.addEventListener('pointercancel', e => up(e.pointerId));
+
+// ---- Sound ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function beep(f, d, type, vol) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = type || 'sine'; o.frequency.value = f; g.gain.setValueAtTime(vol || 0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function noise(d, f, vol) {
+  if (!ac) return;
+  const n = Math.floor(ac.sampleRate * d), buf = ac.createBuffer(1, n, ac.sampleRate), a = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) a[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  fl.type = 'bandpass'; fl.frequency.value = f; g.gain.value = vol;
+  s.buffer = buf; s.connect(fl); fl.connect(g); g.connect(ac.destination); s.start();
+}
+function swish() { noise(0.14, P.slipT > 0 ? 900 : 2400, 0.25); }
+function thud() { noise(0.3, 180, 0.6); beep(90, 0.25, 'sine', 0.2); }
+
+// ---- Drawing ----
+const HAZE = [222, 231, 241];
+function mix(rgb, f) { return `rgb(${Math.round(lerp(rgb[0], HAZE[0], f))},${Math.round(lerp(rgb[1], HAZE[1], f))},${Math.round(lerp(rgb[2], HAZE[2], f))})`; }
+const fogOf = dz => Math.pow(clamp(dz / (DRAW * SEG), 0, 1), 1.4) * 0.9;
+let cam = { z: 0, y: 0, cx: 0, cd: 0, lat: 0 };
+function relX(z) { const [cx] = centreAt(z); return cx - (cam.cx + cam.cd * (z - cam.z)); }
+function project(z, l, yOff) {
+  const dz = Math.max(0.3, z - cam.z), k = F / dz;
+  return { x: W / 2 + (relX(z) + l - cam.lat) * k, y: H0 - (heightAt(z) + (yOff || 0) - cam.y) * k, k, dz };
+}
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const wx = course.weather;
+  cam.z = P.z - CAM_BACK; cam.y = heightAt(P.z) + CAM_H;
+  [cam.cx, cam.cd] = centreAt(cam.z);
+  cam.lat = lerp(cam.lat, P.x * 0.55 + 0.25, 0.2);
+  // Sky, sun and the far forest
+  const sky = x.createLinearGradient(0, 0, 0, H0);
+  sky.addColorStop(0, wx.grey ? '#8f9cab' : '#5e9ad8'); sky.addColorStop(1, wx.grey ? '#d5dce4' : '#d8e7f6');
+  x.fillStyle = sky; x.fillRect(0, 0, W, H0 + 2);
+  if (!wx.grey) { x.fillStyle = 'rgba(255,240,200,0.9)'; x.beginPath(); x.arc(W * 0.8, H0 * 0.8, 20, 0, TAU); x.fill(); }
+  const off = -cam.cd * 600;
+  for (let layer = 0; layer < 2; layer++) {
+    x.fillStyle = layer ? '#45605a' : '#7f948f';
+    const base = H0 + 2, hh = layer ? 20 : 34, step = layer ? 11 : 17, sh = ((off * (layer ? 1 : 0.5)) % step + step) % step;
+    x.beginPath(); x.moveTo(0, base);
+    for (let px = -step + sh, i = 0; px < W + step; px += step, i++) {
+      const t = Math.abs(Math.sin((px - sh + off * (layer ? 1 : 0.5)) * 0.031 + layer)) * 0.6 + 0.4;
+      x.lineTo(px, base - hh * t * 0.6); x.lineTo(px + step / 2, base - hh * t); x.lineTo(px + step, base - hh * t * 0.6);
+    }
+    x.lineTo(W, base); x.closePath(); x.fill();
+  }
+  x.fillStyle = mix([235, 241, 248], 0.8); x.fillRect(0, H0 + 1, W, H - H0);
+  // The trail, near to far, each segment clipped below the crests already drawn.
+  const first = Math.max(0, Math.floor(cam.z / SEG)), last = Math.min(course.total - 1, first + DRAW);
+  const pts = [];
+  for (let i = first; i <= last + 1; i++) pts[i] = project(i * SEG, 0);
+  const clipY = [];
+  let maxY = H;
+  for (let i = first; i <= last; i++) {
+    const a = pts[i], b = pts[i + 1];
+    clipY[i] = maxY;
+    if (b.y >= maxY || i * SEG + SEG <= cam.z + 0.3) continue;
+    const f = fogOf(a.dz);
+    x.save(); x.beginPath(); x.rect(0, 0, W, maxY); x.clip();
+    const band = (i >> 2) & 1;
+    x.fillStyle = mix(band ? [236, 242, 249] : [228, 236, 245], f); x.fillRect(0, b.y, W, a.y - b.y + 1);
+    const q = (l0, l1, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(a.x + l0 * a.k, a.y + 0.5); x.lineTo(a.x + l1 * a.k, a.y + 0.5); x.lineTo(b.x + l1 * b.k, b.y); x.lineTo(b.x + l0 * b.k, b.y); x.fill(); };
+    q(TRAIL_L - 0.4, TRAIL_L, mix([214, 225, 238], f)); q(TRAIL_R, TRAIL_R + 0.4, mix([214, 225, 238], f));
+    q(TRAIL_L, TRAIL_R, mix([246, 249, 253], f));
+    q(SKATE_L, TRAIL_R - 0.1, mix(i & 1 ? [240, 245, 251] : [229, 237, 247], f));
+    for (const l of [LX[0], LX[1]]) { q(l - 0.25, l - 0.15, mix([170, 188, 210], f)); q(l + 0.15, l + 0.25, mix([170, 188, 210], f)); }
+    x.restore();
+    maxY = Math.min(maxY, b.y);
+  }
+  // Things on the trail, far to near.
+  const items = [];
+  for (let i = last; i >= first; i--) for (const s of course.spr[i]) items.push(s);
+  for (const o of npcs) items.push(o);
+  if (net) for (const k of net.skiers) if (k.kind !== 'me') items.push({ kind: 'pelaaja', z: Math.min(k.z, course.len + 30), x: k.x, k });
+  items.push(P);
+  items.sort((a, b) => b.z - a.z);
+  for (const s of items) {
+    if (s.z < cam.z + 0.8 || s.z > (last + 1) * SEG) continue;
+    const i = segAt(s.z), cy = s === P ? H : (clipY[i] ?? H);
+    x.save(); x.beginPath(); x.rect(0, 0, W, cy); x.clip();
+    drawItem(s);
+    x.restore();
+  }
+  for (const b of bubbles) {
+    const o = b.o; if (o.z < cam.z + 1) continue;
+    const p = project(o.z, o.x, 1.95);
+    bubble(b.text, p.x, p.y - 6, Math.min(1, (2 - b.t) * 3));
+  }
+  if (wx.snowing) {
+    x.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const s of snow) {
+      const sy = ((s[1] * H + clock * 40 * s[2] + P.z * 6 * s[2]) % H), sx = ((s[0] * W + Math.sin(clock + s[1] * 9) * 12) % W + W) % W;
+      x.beginPath(); x.arc(sx, sy, 1.2 * s[2] + 0.5, 0, TAU); x.fill();
+    }
+  }
+  drawHud();
+  if (mode === 'wax') drawWax();
+  if (mode === 'ready' || mode === 'netwait') drawWait();
+  if (mode === 'done') drawResult();
+}
+
+function drawItem(s) {
+  if (s.kind === 'tree') {
+    const p = project(s.z, s.l), k = p.k, f = fogOf(p.dz);
+    if (k * s.h < 3 || p.x < -k * 2 || p.x > W + k * 2) return;
+    x.fillStyle = mix([92, 62, 40], f); x.fillRect(p.x - 0.12 * k, p.y - 0.8 * k, 0.24 * k, 0.8 * k);
+    for (let j = 0; j < 4; j++) {
+      const y0 = p.y - (0.5 + j * 0.24 * s.h * 0.9) * k, w = (1.5 - j * 0.32) * k * s.h / 6, hh = 0.42 * s.h * k;
+      x.fillStyle = mix([30, 74, 52], f); x.beginPath(); x.moveTo(p.x - w, y0); x.lineTo(p.x + w, y0); x.lineTo(p.x, y0 - hh); x.fill();
+      x.fillStyle = mix([245, 249, 255], f); x.beginPath(); x.moveTo(p.x - w * 0.55, y0 - hh * 0.45); x.lineTo(p.x + w * 0.4, y0 - hh * 0.45); x.lineTo(p.x, y0 - hh); x.fill();
+    }
+    return;
+  }
+  if (s.kind === 'banner') {
+    const a = project(s.z, TRAIL_L - 0.3), b = project(s.z, TRAIL_R + 0.3), k = a.k, top = 3.1 * k;
+    x.strokeStyle = '#3a3a3a'; x.lineWidth = Math.max(1, 0.1 * k);
+    x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(a.x, a.y - top); x.moveTo(b.x, b.y); x.lineTo(b.x, b.y - top); x.stroke();
+    x.fillStyle = s.text === 'MAALI' ? '#d62845' : '#1f4fa8';
+    x.fillRect(a.x, a.y - top, b.x - a.x, 0.7 * k);
+    if (k > 6) text(s.text, (a.x + b.x) / 2, a.y - top + 0.35 * k, 0.5 * k, '#fff', 'center', 800);
+    return;
+  }
+  if (s.kind === 'post') {
+    const p = project(s.z, s.l), k = p.k;
+    if (k < 4) return;
+    x.fillStyle = '#6b4a2e'; x.fillRect(p.x - 0.04 * k, p.y - 1.2 * k, 0.08 * k, 1.2 * k);
+    x.fillStyle = '#f4d03f'; x.fillRect(p.x - 0.45 * k, p.y - 1.5 * k, 0.9 * k, 0.4 * k);
+    if (k > 12) text(s.text, p.x, p.y - 1.3 * k, 0.24 * k, '#222', 'center', 800);
+    return;
+  }
+  const p = project(s.z, s.x);
+  if (s === P) {
+    const ph = P.kickAnim < 1 ? Math.sin(P.kickAnim * Math.PI) * P.side : 0;
+    const col = net ? meK().color : '#1f4fa8';
+    skier(p.x, p.y, p.k, { coat: col, pants: '#16233f', hat: '#ffffff', pom: col, ph, tuck: P.hold && !P.vMode && P.fallT <= 0, vee: P.vMode, skate: skating() && !(P.hold && P.fallT <= 0), fall: P.fallT > 0, blink: P.invT > 0 && P.fallT <= 0 });
+  } else if (s.kind === 'pelaaja') {
+    // A friend: in their colour, with their name above while near enough to read.
+    const k = s.k, f = fogOf(p.dz), ph = Math.sin(k.ph * TAU), sk = skating() && k.fin === null;
+    skier(p.x + (sk ? ph * 0.2 * p.k : 0), p.y, p.k, { coat: k.color, pants: '#1d2333', hat: k.color, pom: '#fff', ph, skate: sk, vee: !skating() && gradeAt(k.z) > 0.075, fall: !!k.fall, f });
+    if (p.k > 7 && f < 0.6) shadowText(k.name, p.x, p.y - 2.05 * 0.85 * p.k - 8, clamp(p.k * 0.32, 10, 14), '#ffffff', 'center', 800);
+  } else if (s.kind === 'mummo') {
+    skier(p.x, p.y, p.k, { coat: s.coat, pants: '#3a3a4a', hat: s.hat, pom: '#fff', ph: Math.sin(s.ph * TAU), granny: true, f: fogOf(p.dz) });
+  } else if (s.kind === 'vasta') {
+    skier(p.x, p.y, p.k, { coat: s.coat, pants: '#2a2a35', hat: s.hat, pom: '#fff', ph: Math.sin(s.ph * TAU), toward: true, vee: gradeAt(s.z) < -0.075, f: fogOf(p.dz) });
+  } else {
+    skier(p.x + Math.sin(s.ph * TAU) * 0.25 * p.k, p.y, p.k, { coat: s.coat, pants: s.coat, hat: s.hat, pom: s.hat, ph: Math.sin(s.ph * TAU), skate: true, f: fogOf(p.dz) });
+  }
+}
+
+// One skier, from behind (or from the front, `toward`). Metres up the body times k pixels.
+function skier(sx, sy, k, o) {
+  if (k * 1.7 < 4) return;
+  if (o.blink && Math.floor(clock * 10) % 2) x.globalAlpha = 0.5;
+  const s = k * 0.85, lw = w => Math.max(1, w * s);
+  const L = (pts, w, col) => { x.strokeStyle = col; x.lineWidth = lw(w); x.beginPath(); x.moveTo(sx + pts[0][0] * s, sy - pts[0][1] * s); for (const q of pts.slice(1)) x.lineTo(sx + q[0] * s, sy - q[1] * s); x.stroke(); };
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const skiCol = '#c23b22', poleCol = '#333';
+  if (o.fall) {
+    L([[-0.9, 0.05], [0.7, 0.35]], 0.07, skiCol); L([[-0.7, 0.35], [0.9, 0.05]], 0.07, skiCol);
+    L([[-0.7, 0.18], [0.5, 0.25]], 0.3, o.coat);
+    x.fillStyle = '#f2c9a5'; x.beginPath(); x.arc(sx + 0.7 * s, sy - 0.28 * s, 0.13 * s, 0, TAU); x.fill();
+    x.fillStyle = o.hat; x.beginPath(); x.arc(sx + 0.75 * s, sy - 0.33 * s, 0.13 * s, Math.PI, TAU * 0.95); x.fill();
+    x.globalAlpha = 1; return;
+  }
+  const ph = o.ph || 0, dir = o.toward ? -1 : 1;
+  const crouch = o.tuck ? 0.45 : o.granny ? 0.18 : 0.12;
+  const hip = 0.92 - crouch * 0.6, sh = hip + (o.tuck ? 0.32 : 0.55), head = sh + 0.2;
+  const lean = o.tuck ? 0.0 : 0;
+  // Feet slide forward and back (forward is up the screen, foreshortened), skis point ahead.
+  const fl = [-0.16, Math.max(0, ph) * 0.18 * dir], fr = [0.16, Math.max(0, -ph) * 0.18 * dir];
+  const spread = o.vee ? 0.32 : o.skate ? 0.22 : 0.02;
+  for (const [f, sd] of [[fl, -1], [fr, 1]]) {
+    const lift = o.skate && (sd > 0) === (ph > 0) ? 0.08 : 0;
+    L([[f[0], f[1] - 0.15 * dir + lift], [f[0] + sd * spread * 1.3, f[1] + 0.55 * dir + lift]], 0.07, skiCol);
+  }
+  const hipL = [-0.11, hip], hipR = [0.11, hip];
+  L([fl, [fl[0] + 0.02, (fl[1] + hip) / 2 + (o.tuck ? 0.05 : 0)], hipL], 0.13, o.pants);
+  L([fr, [fr[0] - 0.02, (fr[1] + hip) / 2 + (o.tuck ? 0.05 : 0)], hipR], 0.13, o.pants);
+  if (o.granny) { x.fillStyle = o.coat; x.beginPath(); x.moveTo(sx - 0.24 * s, sy - (hip - 0.25) * s); x.lineTo(sx + 0.24 * s, sy - (hip - 0.25) * s); x.lineTo(sx + 0.18 * s, sy - sh * s); x.lineTo(sx - 0.18 * s, sy - sh * s); x.fill(); }
+  L([[lean, hip], [lean, sh]], o.granny ? 0.36 : 0.3, o.coat);
+  // Arms and poles, swinging opposite to the legs.
+  for (const sd of [-1, 1]) {
+    const sw = (o.skate ? 0.5 : -ph * sd) * (o.tuck ? 0 : 1);
+    const hand = o.tuck ? [sd * 0.18, hip + 0.05] : [sd * 0.3, sh - 0.3 + 0.12 * sw];
+    L([[sd * 0.15, sh - 0.02], hand], 0.09, o.coat);
+    const tip = o.tuck ? [sd * 0.45, hip - 0.1] : [sd * (0.36 + 0.06 * Math.abs(sw)), 0.05 + Math.max(0, -sw) * 0.25 * dir];
+    L([hand, tip], 0.03, poleCol);
+  }
+  x.fillStyle = '#f2c9a5'; x.beginPath(); x.arc(sx + lean * s, sy - head * s, 0.13 * s, 0, TAU); x.fill();
+  if (o.granny) { x.fillStyle = '#d8d8d8'; x.beginPath(); x.arc(sx, sy - (head - 0.03) * s, 0.14 * s, 0.15 * Math.PI, 0.85 * Math.PI); x.fill(); }
+  if (o.toward) { x.fillStyle = '#222'; x.fillRect(sx - 0.06 * s, sy - (head + 0.01) * s, 0.03 * s, 0.03 * s); x.fillRect(sx + 0.03 * s, sy - (head + 0.01) * s, 0.03 * s, 0.03 * s); }
+  else { x.fillStyle = o.granny ? '#cfcfcf' : '#6b4a2e'; x.beginPath(); x.arc(sx, sy - head * s, 0.13 * s, -0.1, Math.PI + 0.1); x.fill(); }
+  x.fillStyle = o.hat; x.beginPath(); x.arc(sx + lean * s, sy - (head + 0.03) * s, 0.14 * s, Math.PI, TAU); x.fill();
+  x.fillStyle = o.pom; x.beginPath(); x.arc(sx + lean * s, sy - (head + 0.19) * s, 0.06 * s, 0, TAU); x.fill();
+  if (o.f) { x.globalAlpha = o.f * 0.8; x.fillStyle = 'rgb(222,231,241)'; x.fillRect(sx - 0.6 * s, sy - (head + 0.3) * s, 1.2 * s, (head + 0.6) * s); }
+  x.globalAlpha = 1;
+}
+
+function text(t, px, py, size, col, align, weight) {
+  x.font = `${weight || 600} ${size}px system-ui,sans-serif`;
+  x.fillStyle = col; x.textAlign = align || 'center'; x.textBaseline = 'middle';
+  x.fillText(t, px, py);
+}
+function bubble(t, px, py, a) {
+  x.globalAlpha = clamp(a, 0, 1);
+  x.font = '700 13px system-ui,sans-serif';
+  const w = x.measureText(t).width + 14, bx = clamp(px - w / 2, 4, W - w - 4), by = Math.max(SAFE_T + 4, py - 26);
+  x.fillStyle = '#fff'; x.strokeStyle = '#33415c'; x.lineWidth = 1.5;
+  x.beginPath(); x.roundRect(bx, by, w, 22, 9); x.fill(); x.stroke();
+  text(t, bx + w / 2, by + 11, 13, '#1b2240', 'center', 700);
+  x.globalAlpha = 1;
+}
+function shadowText(t, px, py, size, col, align, weight) {
+  x.save(); x.shadowColor = 'rgba(0,0,0,0.55)'; x.shadowBlur = 4; text(t, px, py, size, col, align, weight); x.restore();
+}
+
+// The hint for what the trail asks of the skier right now.
+function hint() {
+  if (mode !== 'race') return null;
+  const g = gradeAt(P.z), ahead = gradeAt(P.z + 6);
+  if (P.fallT > 0) return ['Kaatuminen! Noustaan ylös…', '#ffb0b0'];
+  if (skating()) {
+    if (P.sameT > 0) return ['Vuorotellen: vasen, oikea, vasen…', '#ffd45c'];
+    if (P.lane === 0) return ['Perinteisen latu: pyyhkäise oikealle', '#ffd45c'];
+    if (g < -0.025) return [P.hold ? 'Laskuasento, luistaa!' : 'Alamäki: pidä sormea ruudulla', '#ffffff'];
+    return ['Napauta vuorotellen vasen ja oikea puoli', '#ffffff'];
+  }
+  const behind = npcs.find(o => o.kind === 'luistelija' && !o.slow && P.lane === 2 && o.z < P.z && o.z > P.z - 25 && o.v > P.v);
+  if (behind) return ['Takaa tulee luistelija!', '#ffb0b0'];
+  if (P.slipT > 0 && !P.vMode) return ['Lipsuu! Paina V ja tee V-käyntiä', '#ffd45c'];
+  if (!P.vMode && Math.max(g, ahead) > 0.075) return ['Jyrkkä ylämäki: paina V', '#ffd45c'];
+  if (P.vMode && g < -0.02) return ['Alamäki: V pois, niin luistaa', '#ffd45c'];
+  if (P.vMode && Math.max(g, ahead) < 0.03) return ['Mäki loppui: V pois', '#ffd45c'];
+  if (g < -0.025) return [P.hold ? 'Laskuasento, luistaa!' : 'Alamäki: pidä sormea ruudulla', '#ffffff'];
+  return ['Napauta tahdissa · pyyhkäise: kaista', '#ffffff'];
+}
+
+// My place among friends right now: finished ones by time, the rest by how far they are.
+function livePlace() {
+  const me = synced(meK());
+  return 1 + net.skiers.filter(k => k !== me && (k.fin !== null ? me.fin === null || finOrder(k) < finOrder(me) : me.fin === null && k.z > me.z)).length;
+}
+
+function drawHud() {
+  const top = SAFE_T + 18;
+  if (mode === 'race' || mode === 'done' || mode === 'count') {
+    shadowText(fmtTime(P.t), W - 12, top, 20, '#ffffff', 'right', 800);
+    shadowText(`Maaliin ${Math.max(0, Math.ceil(course.len - P.z))} m`, W - 12, top + 20, 12, '#ffffff', 'right');
+    const head = net ? `${STYLE_NAME[style]} · sija ${livePlace()}/${net.skiers.length}` : `${skating() ? 'Luistelu · ' : ''}Taso ${level} · raja ${fmtTime(course.par)}`;
+    shadowText(head, W / 2 - 10, top, 12, '#ffffff', 'center');
+  }
+  // The trail ahead: the next 300 m from the side, steep climbs in red.
+  const px0 = 12, pw = W - 24, py0 = top + 34, ph = 34, z0 = P.z - 20, z1 = P.z + 280;
+  let lo = 1e9, hi = -1e9;
+  for (let z = z0; z <= z1; z += 4) { const h = heightAt(z); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+  const span = Math.max(8, hi - lo), mid = (hi + lo) / 2;
+  const sxz = z => px0 + (z - z0) / (z1 - z0) * pw, syh = h => py0 + ph / 2 - (h - mid) / span * (ph - 6);
+  x.fillStyle = 'rgba(20,30,55,0.35)'; x.beginPath(); x.roundRect(px0 - 4, py0 - 4, pw + 8, ph + 8, 8); x.fill();
+  x.lineWidth = 2.5; x.lineCap = 'round';
+  for (let z = z0; z < z1; z += 4) {
+    if (z > course.len + 4) break;
+    const g = gradeAt(z);
+    x.strokeStyle = g > 0.075 ? '#ff6b6b' : g > 0.03 ? '#ffd45c' : g < -0.03 ? '#7fd4ff' : '#ffffff';
+    x.beginPath(); x.moveTo(sxz(z), syh(heightAt(z))); x.lineTo(sxz(z + 4), syh(heightAt(z + 4))); x.stroke();
+  }
+  if (course.len < z1) { x.fillStyle = '#d62845'; x.fillRect(sxz(course.len) - 1, py0 - 2, 3, ph + 4); }
+  // Friends on the profile, in their colours.
+  if (net) for (const k of net.skiers) {
+    if (k.kind === 'me' || k.z < z0 || k.z > z1) continue;
+    x.fillStyle = k.color; x.strokeStyle = '#fff'; x.lineWidth = 1.5;
+    x.beginPath(); x.arc(sxz(Math.min(k.z, course.len)), syh(heightAt(k.z)), 4, 0, TAU); x.fill(); x.stroke();
+  }
+  x.fillStyle = net ? meK().color : '#1f4fa8'; x.strokeStyle = '#fff'; x.lineWidth = 2;
+  x.beginPath(); x.arc(sxz(P.z), syh(heightAt(P.z)), 5, 0, TAU); x.fill(); x.stroke();
+  const hn = hint();
+  if (hn) shadowText(hn[0], W / 2, py0 + ph + 20, 15, hn[1], 'center', 700);
+  for (const p of popups) { x.globalAlpha = 1 - p.t / 1.3; shadowText(p.text, W / 2, H * 0.42 - p.t * 30, 24, p.col, 'center', 800); x.globalAlpha = 1; }
+  if (mode === 'count') shadowText(countT > 0.2 ? String(Math.ceil(countT)) : 'Hiihdä!', W / 2, H * 0.4, 64, '#ffd45c', 'center', 900);
+  if (mode === 'count' && skating()) shadowText('Napauta vuorotellen vasen ja oikea puoli', W / 2, H * 0.4 + 52, 14, '#ffffff', 'center', 700);
+  if (mode === 'race' || mode === 'count') {
+    if (skating()) {
+      // Which ski pushed last: the next push is on the other one. Each pad sits in the half of the
+      // screen that pushes that ski, so a tap on it pushes the ski it names.
+      for (const r of skatePads()) {
+        const next = P.side !== r.side;
+        x.fillStyle = next ? '#ffd45c' : 'rgba(20,30,55,0.55)'; x.strokeStyle = '#fff'; x.lineWidth = 2;
+        x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill(); x.stroke();
+        text(r.side < 0 ? '‹ vasen' : 'oikea ›', r.x + r.w / 2, r.y + r.h / 2, 13, next ? '#1b2240' : '#fff', 'center', 800);
+      }
+    } else {
+      const b = vButton();
+      x.fillStyle = P.vMode ? '#ffd45c' : 'rgba(20,30,55,0.55)'; x.strokeStyle = '#fff'; x.lineWidth = 3;
+      x.beginPath(); x.arc(b.x, b.y, b.r, 0, TAU); x.fill(); x.stroke();
+      text('V', b.x, b.y - 5, 30, P.vMode ? '#1b2240' : '#fff', 'center', 900);
+      text(P.vMode ? 'päällä' : 'V-käynti', b.x, b.y + 20, 10, P.vMode ? '#1b2240' : '#fff', 'center', 700);
+    }
+    const w = waxList()[P.wax ?? 0];
+    shadowText(`${Math.round(P.v * 3.6)} km/h`, W - 14, H - SAFE_B - 72, 18, '#ffffff', 'right', 800);
+    x.fillStyle = w.col; x.beginPath(); x.roundRect(W - 92, H - SAFE_B - 50, 78, 22, 11); x.fill();
+    text(w.name, W - 53, H - SAFE_B - 39, 12, '#fff', 'center', 700);
+  }
+}
+
+function panel(px, py, pw, ph) {
+  x.fillStyle = 'rgba(14,22,44,0.92)'; x.strokeStyle = '#ffd45c'; x.lineWidth = 2;
+  x.beginPath(); x.roundRect(px, py, pw, ph, 14); x.fill(); x.stroke();
+}
+function pill(r, label, on, col) {
+  x.fillStyle = on ? (col || '#ffd45c') : 'rgba(255,255,255,0.1)'; x.strokeStyle = on ? (col || '#ffd45c') : 'rgba(255,255,255,0.35)'; x.lineWidth = 1.5;
+  x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill(); x.stroke();
+  text(label, r.x + r.w / 2, r.y + r.h / 2 + 1, 15, on ? '#1b2240' : '#ffffff', 'center', 800);
+}
+
+// Before the start: the style (alone), the course and its weather, and the wax for it.
+function drawWax() {
+  const wx = course.weather, solo = !net, S = starsOf(), B = bestsOf(), st = S[level] || 0;
+  const ph = Math.min(H - SAFE_T - SAFE_B - 70, 372 + (st ? 18 : 0) + (solo ? 100 : 0)), pw = Math.min(W - 24, 360);
+  const px = (W - pw) / 2, py = SAFE_T + 50 + Math.max(0, (H - SAFE_T - SAFE_B - 70 - ph) / 2);
+  panel(px, py, pw, ph);
+  let y = py + 14;
+  ui.styles = [];
+  if (solo) {
+    const gap = 10, bw = (pw - 32 - gap) / 2;
+    ui.styles = ['perinteinen', 'luistelu'].map((s, i) => ({ x: px + 16 + i * (bw + gap), y, w: bw, h: 36, style: s }));
+    ui.styles.forEach(r => pill(r, STYLE_NAME[r.style], r.style === style));
+    y += 36 + 28;
+  } else y += 14;
+  ui.prev = solo && level > 1 ? { x: px + 6, y: y - 20, w: 44, h: 40 } : null;
+  ui.next = solo && level < maxLevel ? { x: px + pw - 50, y: y - 20, w: 44, h: 40 } : null;
+  if (ui.prev) text('‹', px + 28, y, 28, '#ffd45c', 'center', 800);
+  if (ui.next) text('›', px + pw - 28, y, 28, '#ffd45c', 'center', 800);
+  text(solo ? `Taso ${level}` : `👥 Taso ${level} · ${STYLE_NAME[style]}`, W / 2, y, solo ? 22 : 19, '#ffd45c', 'center', 800);
+  y += 24;
+  text(`${course.len} m · aikaraja ${fmtTime(course.par)}${B[level] !== undefined ? ' · paras ' + fmtTime(B[level]) : ''}`, W / 2, y, 12, '#b8c2e0');
+  if (st) { y += 18; text('★'.repeat(st) + '☆'.repeat(3 - st), W / 2, y, 16, '#ffd45c'); }
+  y += 40;
+  text(`${wx.T > 0 ? '+' : ''}${fmt(wx.T, Number.isInteger(wx.T) ? 0 : 1)} °C`, W / 2, y, 34, wx.T > 0 ? '#ffb0b0' : '#9fd8ff', 'center', 800);
+  y += 30;
+  text(wx.desc, W / 2, y, 14, '#ffffff');
+  y += 32;
+  text(skating() ? 'Valitse luistovoide' : 'Valitse pitovoide', W / 2, y, 16, '#ffd45c', 'center', 700);
+  y += 16;
+  const foot = solo ? 44 + 58 : 44;
+  const gap = 10, bw = (pw - 32 - gap) / 2, bh = Math.max(52, Math.min(70, (py + ph - foot - y - gap) / 2));
+  ui.wax = waxList().map((w, i) => {
+    const r = { x: px + 16 + (i % 2) * (bw + gap), y: y + Math.floor(i / 2) * (bh + gap), w: bw, h: bh };
+    x.fillStyle = w.col; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, 10); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.85)'; x.beginPath(); x.roundRect(r.x + 8, r.y + 8, 14, r.h - 16, 4); x.fill();
+    text(w.name, r.x + r.w / 2 + 8, r.y + r.h / 2 - 9, 16, '#fff', 'center', 800);
+    text(w.range, r.x + r.w / 2 + 8, r.y + r.h / 2 + 11, 11, '#fff', 'center', 600);
+    return r;
+  });
+  ui.friends = null;
+  if (solo && RM) {
+    ui.friends = { x: px + 16, y: py + ph - 44 - 50, w: pw - 32, h: 44 };
+    pill(ui.friends, '👥 Pelaa kavereiden kanssa', true, '#8ecae6');
+  }
+  text(skating() ? 'Vuorotellen vasen ja oikea, alamäkeen sormi ruudulle' : 'Ylämäkeen V, alamäkeen sormi ruudulle', W / 2, py + ph - 18, 12, '#b8c2e0');
+}
+
+// Waxed, and waiting for the others (or for the host to say which course).
+function drawWait() {
+  const pw = Math.min(W - 24, 320), ph = 150, px = (W - pw) / 2, py = SAFE_T + Math.max(60, (H - SAFE_T - SAFE_B - ph) / 2);
+  panel(px, py, pw, ph);
+  if (mode === 'netwait' || !net) { text('Odotetaan kisan alkua…', W / 2, py + ph / 2, 18, '#ffd45c', 'center', 800); return; }
+  text('Voideltu!', W / 2, py + 34, 22, '#7ef0a0', 'center', 800);
+  const left = net.skiers.filter(k => k.wax < 0).map(k => k.name);
+  text('Odotetaan, että kaikki voitelevat:', W / 2, py + 72, 14, '#ffffff');
+  text(left.length ? left.join(', ') : 'lähtö tulee!', W / 2, py + 98, 15, '#ffd45c', 'center', 700);
+  text(`${STYLE_NAME[style]} · taso ${level}`, W / 2, py + ph - 20, 12, '#b8c2e0');
+}
+
+function drawResult() {
+  if (net) return drawNetResult();
+  const r = result, pw = Math.min(W - 24, 340), ph = 300;
+  const px = (W - pw) / 2, py = SAFE_T + Math.max(60, (H - SAFE_T - SAFE_B - ph) / 2);
+  panel(px, py, pw, ph);
+  let y = py + 32;
+  text(r.passed ? 'Maalissa!' : 'Aikaraja ylittyi', W / 2, y, 24, r.passed ? '#7ef0a0' : '#ff8a8a', 'center', 800);
+  y += 44;
+  text(fmtTime(r.t), W / 2, y, 36, '#ffd45c', 'center', 800);
+  y += 30;
+  text(r.stars ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : `aikaraja ${fmtTime(course.par)}`, W / 2, y, r.stars ? 24 : 14, '#ffd45c');
+  y += 32;
+  text(`Ohitukset: ${passes}`, W / 2, y, 15, '#ffffff'); y += 22;
+  text(`Kaatumiset: ${falls}`, W / 2, y, 15, falls ? '#ffb0b0' : '#ffffff'); y += 22;
+  text(r.note, W / 2, y, 13, '#b8c2e0'); y += 22;
+  if (r.record) text('Uusi ennätys!', W / 2, y, 15, '#7ef0a0');
+  if (resultT > 0.8) text(r.passed ? 'Napauta: seuraava taso' : 'Napauta: yritä uudestaan', W / 2, py + ph - 20, 14, '#ffd45c');
+}
+// With friends: everyone's place, live until the race ends.
+function drawNetResult() {
+  const list = net.res || standings(), n = list.length, r = result;
+  const pw = Math.min(W - 24, 340), ph = 168 + 26 * n, px = (W - pw) / 2, py = SAFE_T + Math.max(60, (H - SAFE_T - SAFE_B - ph) / 2);
+  panel(px, py, pw, ph);
+  const i = placeOf(list, RM.me);
+  let y = py + 32;
+  const title = r.t === null ? 'Et ehtinyt maaliin' : r.cpu ? (net.res ? `${i}. sija` : 'Maalissa') : net.res ? (i === 1 ? 'Voitit! 🏆' : `${i}. sija`) : 'Maalissa!';
+  text(title, W / 2, y, 24, r.t !== null && i === 1 ? '#7ef0a0' : r.t === null ? '#ff8a8a' : '#ffffff', 'center', 800);
+  y += 38;
+  if (r.t !== null) text(fmtTime(r.t) + (r.stars ? '  ' + '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : ''), W / 2, y, 22, '#ffd45c', 'center', 800);
+  y += 34;
+  list.forEach((o, j) => {
+    const me = o.id === RM.me, col = net.skiers.find(k => k.id === o.id)?.color || o.color;
+    x.fillStyle = col; x.beginPath(); x.arc(px + 28, y, 6, 0, TAU); x.fill();
+    text(`${j + 1}. ${me ? 'Sinä' : o.name}`, px + 42, y, 15, me ? '#ffd45c' : '#ffffff', 'left', me ? 800 : 600);
+    text(o.fin !== null ? fmtTime(o.fin) : `${o.z} m`, px + pw - 18, y, 15, o.fin !== null ? '#ffffff' : '#b8c2e0', 'right', 700);
+    y += 26;
+  });
+  if (r.note) text(r.note, W / 2, y + 8, 12, '#b8c2e0');
+  const foot = net.res ? (resultT > 0.8 ? 'Napauta: takaisin huoneeseen' : '') : 'Odotetaan muita maaliin…';
+  if (foot) text(foot, W / 2, py + ph - 20, 14, '#ffd45c');
+}
+
+// ---- Loop ----
+newRace();
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="hiihto" data-order="low" data-corner="bottom-right"></script>
+<script>if (window.AiPelitScores) { AiPelitScores.format(fmtTime); setBoard(); }</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

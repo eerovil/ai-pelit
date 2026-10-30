@@ -1,6 +1,6 @@
 {
   "title": "Hiihto",
-  "description": "Perinteistä hiihtoa ladulla: ohita mummot, väistä vastaantulijat ja voitele kelin mukaan.",
+  "description": "Hiihtoa ladulla, perinteisellä tai luistellen: ohita hitaammat, väistä vastaantulijat ja voitele kelin mukaan, yksin tai kavereiden kanssa.",
   "versions": [
     {
       "n": 1,
@@ -15,6 +15,13 @@
       "note": "Netin tuloslista joka radalle: nopeimmat ajat kaikilta pelaajilta, nimimerkki kerran puhelimelle.",
       "request": "Online high-score lists for each game (#25): a nickname once per phone, approved by the admin; one list per game across versions; no cheat checks.",
       "issue": "eerovil/ai-pelit#25"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-30",
+      "note": "Kaksi tyyliä, perinteinen tai luistelu omine aikoineen, ja kisa kavereiden kanssa samalla radalla: ensimmäinen maalissa voittaa.",
+      "request": "Lisätään multiplayer. Ja eri moodit: luisteluhiihto vs perinteinen.",
+      "issue": "eerovil/ai-pelit#61"
     }
   ]
 }

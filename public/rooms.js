@@ -386,6 +386,7 @@
         '<p class="small">Kaverit liittyvät koodilla tai skannaamalla kuvan.</p></div></div>' +
       '<ul id="aipr-members"></ul>' +
       '<p id="aipr-info"></p>' +
+      '<div id="aipr-extra"></div>' +
       '<label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
       '<button id="aipr-start" hidden>Aloita kierros</button>' +
     '</div>' +
@@ -410,7 +411,7 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'room', 'result', 'code', 'qr', 'members', 'info', 'start', 'err', 'back', 'pauseText', 'goOn']
+    ['join', 'name', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'room', 'result', 'code', 'qr', 'members', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
@@ -666,6 +667,9 @@
     },
     // A line of the game's own under the player list ("Seuraavaksi etsii Aino.").
     note: function (text) { net.note = text || ''; render(); },
+    // The game's own element under the player list, shown while this phone is in a room (Hiihto
+    // v3's course and style); null takes it away. The game keeps it up to date.
+    extra: function (node) { build(); el.extra.textContent = ''; if (node) el.extra.appendChild(node); },
     // True the first time it is asked for this round on this tab, so a result heard twice (or
     // again after a reload) is saved once.
     once: function (round) {

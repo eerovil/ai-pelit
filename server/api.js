@@ -29,7 +29,7 @@ export const GAMES = {
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
   // v2: highest level reached ('main'); v3 on: longest streak ('putki'), the one the shelf shows.
   puhelinkoppi: { order: 'high', boards: /^(main|putki)$/, first: 'putki' },
-  hiihto: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest time per course, seconds
+  hiihto: { order: 'low', boards: /^(taso|luistelu)-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest time per course and style (classic 'taso-N', skating 'luistelu-N'), seconds
   piano: { order: 'high', boards: /^main$/ }, // most points in one game
   aitajuoksu: { order: 'low', boards: /^main$/ }, // fastest 100 m, seconds
   kaaosrata: { order: 'low', boards: /^main$/ }, // fastest obstacle course, seconds

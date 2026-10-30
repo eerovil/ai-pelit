@@ -85,6 +85,7 @@ high-score lists (#25), then play counts (#26).
     and `on('back', id)`: the computer takes over, and gives back, a phone's player.
   - Every phone: `paused` (stop the clock while true), `once(round)` (save a result only when true),
     `backToRoom(text, 'win'|'lose')` after the game's own end screen, `note(text)`,
+    `extra(node)` (the game's own controls under the player list, such as the host's choice of course),
     `on('lobby')` (the host lost the round: stop it), `on('leave', why)` and `on('menu')` (show the
     game's menu again), `me`, `isHost`, `inRoom`.
   - Public rooms (#50): the host's "🌍 Julkinen" switch in the room lists it on every phone's room
