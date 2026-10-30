@@ -102,6 +102,9 @@ def test_the_motion_is_read_from_its_shape(site, context):
     assert read(slant_then_straight) == ["kierre", 1]
     # Moving the hand 200 px sideways at the same height, then a straight flick: a straight throw.
     assert read([[100 + 40 * i, 500, 30 * i] for i in range(6)] + [[300, 500 - 40 * i, 150 + 15 * i] for i in range(1, 6)]) == ["suora", 1]
+    # A small sideways wobble at the top, or in the middle, of a straight flick is still a straight throw.
+    assert read([[100, 500, 0], [100, 460, 20], [100, 420, 40], [108, 419, 50], [108, 419, 51]]) == ["suora", 1]
+    assert read([[100, 500, 0], [100, 460, 20], [106, 461, 25], [106, 400, 45], [106, 340, 65]]) == ["suora", 1]
     # Dragging the hand around before the flick does not count towards its shape.
     assert read([[100 - 20 * i, 500 + 10 * i, 20 * i] for i in range(6)] + [[0, 550 - 40 * i, 120 + 10 * i] for i in range(1, 7)]) == ["suora", 1]
 
@@ -144,3 +147,11 @@ def test_it_plays_on_a_390_px_phone(site, browser):
     assert page.evaluate("document.documentElement.scrollWidth") <= 390
     assert flick(page, 40, False) == ["air", "kierre"]
     ctx.close()
+
+
+def test_a_flick_ending_in_a_small_sideways_wobble_still_throws(site, context):
+    page = open_game(site, context)
+    t = page.evaluate("classifyThrow([[100, 500, 0], [100, 460, 20], [100, 420, 40], [108, 419, 50], [108, 419, 51]])")
+    assert t["kind"] == "suora" and t["speedUp"] > 1500
+    page.evaluate("throwFromSwipe(classifyThrow([[100, 500, 0], [100, 460, 20], [100, 420, 40], [108, 419, 50], [108, 419, 51]]))")
+    assert page.evaluate("state") == "air"

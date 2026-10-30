@@ -446,23 +446,24 @@ function onUp(e) {
 // - straight up: a straight throw;
 // - diagonally up, left or right: a kierre (about the long axis) that way;
 // - up and then a quick hook back down towards you at the end, a wrist flick: a voltti.
-const HOOK_PX = 20, HOOK_MS = 220, SLANT = 0.6;
+const HOOK_PX = 20, HOOK_MS = 220, SLANT = 0.6, FLAT_PX = 25;
 function classifyThrow(pts) {
   if (!pts.length) return null;
   // The highest point the finger reached; the upward stroke ends there.
   let peak = 0;
-  pts.forEach((p, i) => { if (p[1] <= pts[peak][1]) peak = i; });
+  pts.forEach((p, i) => { if (p[1] < pts[peak][1]) peak = i; });
   const last = pts[pts.length - 1], top = pts[peak];
   const hook = last[1] - top[1] > HOOK_PX && last[2] - top[2] < HOOK_MS;
   // The shape and the way it slants come from the whole upward stroke: back from the highest
-  // point for as long as each step still rises (a few px of jitter allowed). A step that goes
-  // mostly sideways, such as moving the hand into place before the flick, is not part of it.
-  const rising = (a, c) => {
-    const up = a[1] - c[1], side = Math.abs(c[0] - a[0]);
-    return (up > 0 && up >= 0.25 * side) || (Math.abs(up) <= 3 && side <= 3);
-  };
-  let start = peak;
-  while (start > 0 && rising(pts[start - 1], pts[start])) start--;
+  // point through every rising step. Small wobbles within it (sideways or down, under
+  // FLAT_PX together) belong to it; a longer stretch that does not rise, such as moving the
+  // hand into place before the flick, ends it.
+  let start = peak, flat = 0;
+  for (let i = peak; i > 0; i--) {
+    const up = pts[i - 1][1] - pts[i][1], side = Math.abs(pts[i][0] - pts[i - 1][0]);
+    if (up > 0 && up >= 0.25 * side) { start = i - 1; flat = 0; }
+    else if ((flat += side + Math.max(0, -up)) > FLAT_PX) break;
+  }
   const sx = top[0] - pts[start][0], sy = pts[start][1] - top[1];
   const kind = hook ? 'voltti' : Math.abs(sx) > SLANT * sy ? 'kierre' : 'suora';
   // The speed comes from the stroke's last 90 ms up to the highest point.
