@@ -102,3 +102,39 @@ def test_the_saved_level_and_track_are_read_back(site, context):
     page.reload()
     assert page.inner_text("#stats").startswith("Taso 4")
     assert "Laavaluola" in page.inner_text(".track.on")
+
+
+def test_racing_again_after_a_finish_starts_a_fresh_race(site, context):
+    page = start(site, context)
+    page.evaluate("""() => {
+        const p = at(T, T.L - 25, 0);
+        Object.assign(me, { x: p.x, y: p.y, a: p.a, idx: p.i, s: T.L - 25, prog: 3 * T.L - 25, lap: 2, v: 150, item: 'tnt', fruit: 7 });
+    }""")
+    page.wait_for_function("race.phase === 'over'", timeout=6000)
+    page.click("#go")
+    assert page.evaluate("[race.phase, me.lap, me.fin, me.item, me.fruit, me.prog < 0]") == ["cd", 0, None, None, 0, True]
+    assert page.inner_text("#result") == ""
+    page.wait_for_function("race.phase === 'run'", timeout=5000)
+
+
+def test_both_arrows_at_once_on_a_390_px_phone_drive_straight(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    try:
+        page = ctx.new_page()
+        page.goto(site.url + URL)
+        page.evaluate("soloRace(0)")
+        page.wait_for_function("race.phase === 'run'", timeout=6000)
+        # Every button inside the screen, the arrows clear of the item and slide buttons.
+        boxes = page.evaluate("layout(), BTN")
+        assert boxes["right"]["x"] + boxes["right"]["w"] < boxes["item"]["cx"] - boxes["item"]["r"]
+        assert boxes["drift"]["cx"] + boxes["drift"]["r"] <= 390 and boxes["left"]["y"] + boxes["left"]["h"] <= 844
+        # Two fingers, one on each arrow: no turn.
+        for sel in ("left", "right"):
+            b = boxes[sel]
+            page.evaluate(f"c.dispatchEvent(new PointerEvent('pointerdown', {{ pointerId: {1 if sel == 'left' else 2}, clientX: {b['x'] + b['w'] / 2}, clientY: {b['y'] + b['h'] / 2}, bubbles: true }}))")
+        assert page.evaluate("[input.left, input.right]") == [True, True]
+        page.wait_for_timeout(300)
+        assert page.evaluate("Math.abs(input.steer)") < 0.01
+    finally:
+        ctx.close()
