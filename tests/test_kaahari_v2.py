@@ -24,7 +24,7 @@ def test_alone_the_race_still_runs_and_saves_the_win(site, context):
     assert page.evaluate("localStorage.getItem('ai-pelit:kaahari:taso')") == "2"
 
 
-def room_of_two(site, browser, track=None):
+def room_of_two(site, browser, track=None, countdown=False):
     """Eero's phone makes a room, Aino's joins it, and the race is on."""
     relay = Relay()
     pages = []
@@ -50,6 +50,10 @@ def room_of_two(site, browser, track=None):
     host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
     assert guest.inner_text("#aipr-extra") == "Huoneen tekijä valitsee radan."
     host.click("#aipr-start")
+    if countdown:
+        # The guest counts down on the host's track before anyone drives.
+        guest.wait_for_function("race && race.phase === 'cd' && race.cdT > 0.5 && T.name === 'Laavaluola'", timeout=3000)
+        assert guest.evaluate("race.karts.every(k => k.v === 0)")
     for p in pages:
         p.wait_for_function("race && race.mode === 'net' && race.phase === 'run'", timeout=8000)
     return host, guest
@@ -150,3 +154,25 @@ def test_the_host_first_then_a_second_round_on_another_track(site, browser):
         assert p.evaluate("[me.fin, me.lap, race.karts.every(k => k.fin === null)]") == [None, 0, True]
     assert guest.evaluate("localStorage.getItem('ai-pelit:kaahari:kisat')") == "1"
     assert host.errors == [] and guest.errors == []
+
+
+def test_the_guest_counts_down_on_the_hosts_track(site, browser):
+    site.build(ROOT / "games")
+    room_of_two(site, browser, track=2, countdown=True)
+
+
+def test_the_race_ends_40_s_after_the_host_finishes_without_the_guest(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    finish(host)
+    host.wait_for_function("me.fin !== null && race.firstFin !== null", timeout=3000)
+    host.evaluate("race.t = race.firstFin + 39")
+    host.wait_for_timeout(500)
+    assert host.evaluate("race.phase") == "run"
+    host.evaluate("race.t = race.firstFin + 41")
+    guest.wait_for_function("(!race || race.phase === 'over') && document.getElementById('aipr-result').textContent !== ''", timeout=10000)
+    # The guest, not in, is placed by an estimated time behind the host.
+    assert " sija · " in guest.inner_text("#aipr-result")
+    assert host.inner_text("#aipr-result").startswith("🏆 Voitit kisan!")
+    assert "(* ei vielä maalissa: arvioitu aika)" in guest.inner_text("#aipr-room")
+    assert "Sinä" in guest.inner_text("#aipr-room") and "*" in guest.inner_text("#aipr-room").split("Sinä")[1].split("·")[0]

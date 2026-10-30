@@ -502,6 +502,8 @@ function tick(dt) {
     if (host) race.cdT += dt;
     if (Math.floor(race.cdT) > race.beeped) { race.beeped = Math.floor(race.cdT); beep(race.cdT >= 3 ? 880 : 440, 0.18, 'square', 0.08); }
     if (host && race.cdT >= 3) goRun(0);
+    // The guests wait for the track and count down with the host.
+    if (race.mode === 'net' && host) hostTick(dt);
   } else if (race.phase === 'run' || race.phase === 'done') {
     for (const k of race.karts) {
       if (k.kind === 'net') { carry(k, dt); continue; }
@@ -679,6 +681,7 @@ function guestTick(dt) {
 }
 // This phone's kart is in: its time is kept, and it waits for the others.
 function netFinishMe() {
+  if (R.isHost && race.firstFin === null) race.firstFin = race.t;
   say('MAALISSA!');
   beep(660, 0.5, 'square', 0.08, 990);
   const t = Math.round(me.fin * 100) / 100;
