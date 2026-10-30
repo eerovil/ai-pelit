@@ -40,7 +40,8 @@
   <ul id="tasks"></ul>
   <button id="go">Hyppää!</button>
   <p id="stats"></p>
-  <p class="help">Napauta ruutua juuri kun osut trampoliiniin, niin pompit korkeammalle.
+  <p class="help">Paina ruutua, niin jalat menevät koukkuun. Päästä irti juuri kun osut
+    trampoliiniin: se on ponnistus, ja pompit korkeammalle.
     Pidä voltin nappia pohjassa, niin pyörit kippurassa, ja päästä irti ajoissa, niin oikaiset
     jaloillesi. 🌀 tekee kierteen. Tee tason kaikki temput, ennen kuin kolme sydäntä loppuu.</p>
 </div>
@@ -128,9 +129,11 @@ function trickPoints([n, tw], clean) {
 // ---- One go at a level ----
 let L, T, tasks, hearts, points, combo, phase = 'menu', J, held = 0, pops = [], endT = 0, lastResult = null;
 let paid = {};        // the most points each trick has given in this go
-let lastLand = null;
-// Every tap kicks the legs: a quick knee bend (1 just tapped, back to 0 in a fifth of a second).
-let kick = 0;  // how the last landing went: { trick, clean } or { crash }
+let lastLand = null;  // how the last landing went: { trick, clean } or { crash }
+// v2: a finger on the screen bends the knees and keeps them bent (squat); letting go is the
+// push. bend eases towards the squat; kick (1 just pushed, 0 a fifth of a second later) swings
+// the arms down with the push.
+let squat = false, squatId = null, bend = 0, kick = 0;
 function setup() {
   L = levelOf(level); T = TRAMPS[L.tramp];
   tasks = L.tasks.map(t => ({ t, done: false }));
@@ -151,11 +154,18 @@ function startGo() {
 }
 
 // ---- Input ----
-// A tap on the mat's bottom gives a bounce up; up to 0.12 s early still counts, just less.
+// The push (letting go of the screen, or a flip button on the mat) at the mat's bottom gives a
+// bounce up; up to 0.12 s early still counts, just less.
 function timeToMat() { return J.vy < 0 ? (J.y - COMH) / -J.vy : Infinity; }
-function kickLegs() { kick = 1; sound('thump'); }
+function squatDown(id = null) { unlock(); if (phase === 'air' || phase === 'mat') { squat = true; squatId = id; } }
+// Only the finger that bent the legs pushes: letting go of a flip button with another is not a push.
+function squatUp(id = null) {
+  if (!squat || (squatId !== null && id !== squatId)) return;
+  squat = false; squatId = null;
+  if (phase === 'air' || phase === 'mat') tap();
+}
 function tap() {
-  kickLegs();
+  kick = 1; sound('thump');
   if (phase === 'mat' && J.pumpT === null) J.pumpT = J.matT;
   else if (phase === 'air' && J.pumpT === null && !J.off && timeToMat() < 0.12) J.pumpT = -timeToMat();
 }
@@ -177,6 +187,8 @@ const wrap = a => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.
 function step(dt) {
   pops.forEach(p => { p.t += dt; }); pops = pops.filter(p => p.t < 1.6);
   kick = Math.max(0, kick - dt * 5);
+  if (phase !== 'air' && phase !== 'mat') squat = false;
+  bend += ((squat ? 1 : 0) - bend) * Math.min(1, dt * (squat ? 14 : 20));
   if (phase === 'air') air(dt);
   else if (phase === 'mat') mat(dt);
   else if (phase === 'down') {
@@ -245,7 +257,7 @@ function score(trick, clean) {
 function mat(dt) {
   J.matT += dt;
   J.x += J.vx * dt * 0.3;
-  J.y = COMH - dip() * Math.sin(Math.PI * Math.min(1, J.matT / CONTACT)) * (1 + 0.3 * kick);
+  J.y = COMH - dip() * Math.sin(Math.PI * Math.min(1, J.matT / CONTACT)) * (1 + 0.3 * bend);
   J.a = J.landA ? J.landA * Math.max(0, 1 - J.matT / CONTACT) : 0;
   if (J.matT >= CONTACT) takeoff();
 }
@@ -329,7 +341,9 @@ pad.querySelectorAll('button').forEach(b => {
   const up = () => { b.classList.remove('on'); if (b.dataset.act !== 'kierre') release(); };
   b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
 });
-c.addEventListener('pointerdown', e => { e.preventDefault(); unlock(); if (phase === 'air' || phase === 'mat') tap(); }, { passive: false });
+c.addEventListener('pointerdown', e => { e.preventDefault(); squatDown(e.pointerId); }, { passive: false });
+addEventListener('pointerup', e => squatUp(e.pointerId));
+addEventListener('pointercancel', e => squatUp(e.pointerId));
 
 // ---- Drawing ----
 function view() {
@@ -392,10 +406,10 @@ function drawTramp(v) {
   const rim = Math.min(0.35, T.half * 0.25) * S;
   [-1, 1].forEach(k => { x.fillRect(cx + k * half - (k > 0 ? 0 : rim), matY - S * 0.06, rim, S * 0.14); });
 }
-// How bent the knees are, 0 to 1: pressed into the mat, and a quick bend at every tap.
+// How bent the knees are, 0 to 1: pressed into the mat, and held bent while the finger is down.
 function legBend() {
   const mat = phase === 'mat' ? Math.min(1, (COMH - J.y) / 0.6) : 0;
-  return Math.min(1, Math.max(mat, 0.85 * kick));
+  return Math.min(1, Math.max(mat, 0.9 * bend));
 }
 function drawJumper(v) {
   const { S, matY, cx } = v;
@@ -476,7 +490,7 @@ function drawHud() {
   });
   if (phase === 'mat' && points === 0 && combo === 0 && hearts === 3) {
     x.fillStyle = 'rgba(20,40,70,.8)'; x.font = '600 14px system-ui,sans-serif';
-    x.fillText('Napauta ruutua, kun osut trampoliiniin', W / 2, H - SAFE_B - 110);
+    x.fillText('Pidä ruutua pohjassa, päästä irti matolla', W / 2, H - SAFE_B - 110);
   }
 }
 function roundRect(a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }

@@ -12,8 +12,8 @@
     {
       "n": 2,
       "date": "2026-10-30",
-      "note": "Ponnistus tuntuu: jokainen napautus koukistaa jalat ja painaa mattoa, ja onnistunut ponnistus kuuluu jousen äänenä.",
-      "request": "Muuten hyvä mutta hyppynappi ei ole kovin satisfying. olisi parempi jos esim. aina kun painan ruutua niin jalat menee vähän koukkuun",
+      "note": "Ponnistus tuntuu: ruudun painaminen koukistaa jalat ja pitää ne koukussa, ja irti päästäminen on hyppy.",
+      "request": "Muuten hyvä mutta hyppynappi ei ole kovin satisfying. olisi parempi jos esim. aina kun painan ruutua niin jalat menee vähän koukkuun. (Tarkennus: jalat pysyvät koukussa kun pitää pohjassa; hyppy on se kun päästää irti.)",
       "issue": "eerovil/ai-pelit#62"
     }
   ]
