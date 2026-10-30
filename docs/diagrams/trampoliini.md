@@ -1,8 +1,8 @@
 # Trampoliini: one bounce, from the mat to the landing
 
-How one Trampoliini bounce plays (v1, v2 and v3). The player pushes at the bottom of each bounce
+How one Trampoliini bounce plays (v1 to v4). The player pushes at the bottom of each bounce
 to go higher (v1: a tap; v2 and v3: hold the screen to bend the knees and let go), holds a flip
-button to spin tucked, lets go to stretch out and spot the landing, and taps 🌀 for a twist. From
+button to spin tucked, lets go to stretch out and spot the landing, and taps 🌀 for a twist (from v4, held down it keeps twisting until let go). From
 v3 a tilted landing slides the jumper sideways on the next bounce. Each level has its own size of trampoline and a list of tricks; the level is cleared when
 every trick is done before three hearts run out.
 
@@ -17,7 +17,7 @@ flowchart TD
   B -- Voltin nappi tai 🌀 matolla --> F
   F --> G[Pidä nappia: kippura, nopea voltti]
   G --> H[Päästä irti: oikaisu, katse alastuloon]
-  F --> I[🌀: kierre]
+  F --> I[🌀: kierre, v4: pidä pohjassa]
   H --> J{Mihin osuu?}
   I --> J
   J -- Trampoliinin ohi --> K[Putoat nurmelle]
@@ -66,7 +66,7 @@ flowchart TD
 - **Voltin nappi tai 🌀 matolla**: `press()` and `twistTap()` on the mat also count as the tap, and start the flip or twist from the take-off; a flip started from the mat carries you 0.25 m/s back or forward (`DRIFT`), which matters on the small trampolines.
 - **Pidä nappia: kippura, nopea voltti**: `air()`: held, the jumper tucks and turns 1.4 times a second (`TUCK`).
 - **Päästä irti: oikaisu, katse alastuloon**: `air()`: let go, the turn slows to at most 1.2 rad/s (`OPEN`) and eases onto the nearest upright ahead, or back onto one just passed.
-- **🌀: kierre**: `twistTap()`: one full twist about the long axis, 1.6 a second (`TWIST`), up to three a jump.
+- **🌀: kierre, v4: pidä pohjassa**: `twistTap()`: one full twist about the long axis, 1.6 a second (`TWIST`), up to three a jump. From v4 (`games/trampoliini/v4/index.html`) `twistDown()` asks for one more twist at once and, while 🌀 is held (`twistHeld`), `air()` keeps the target one whole twist ahead, up to four; `twistUp()` lets the twist under way finish. Held into the landing, the twist is unfinished and you fall.
 - **Trampoliinin ohi**: past the mat's end you fall to the grass; the big garden trampoline's net bounces you back instead.
 - **v3: kallellaan?**: `land()` in `games/trampoliini/v3/index.html`: the tilt the jumper lands with (`wrap(J.a)`); leaning back is behind, forward is ahead. v1 and v2 have no such check.
 - **Liukuu sivulle: seuraava alastulo kauempana**: v3 adds `-sin(tilt) × slideOf(T)` m/s sideways (see the landing box); a lean of 0.25 rad or more shows "← Liukuu taaksepäin" or "Liukuu eteenpäin →" (`SLIDE_SHOWN`), but only when you really go that way: off the middle the mat's pull can win, and then nothing shows. The next bounce carries you that far, so several leaning landings in a row can take you past the mat.
