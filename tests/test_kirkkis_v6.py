@@ -75,6 +75,19 @@ def test_the_map_is_kept_on_the_phone_and_old_saves_still_read(site, browser):
     ctx.close()
 
 
+def test_a_map_this_version_does_not_know_falls_back_to_the_yard(site, browser):
+    # A broken save, or a map name from a later version heard in a room.
+    ctx, page = open_game(site, browser, init="localStorage.setItem('ai-pelit:kirkkis:kentta', '\"kuu\"')")
+    assert page.evaluate("[mapId, soloMap]") == ["piha", "piha"]
+    page.evaluate("loadMap('kirkko'); loadMap(undefined)")
+    assert page.evaluate("[mapId, WW, SPOTS.length > 40]") == ["piha", 30, True]
+    page.click("#hide")
+    page.evaluate(RUN, 12)
+    assert page.evaluate("phase") == "seek"
+    assert page.errors == []
+    ctx.close()
+
+
 # The player seeks on the old yard, and a hider is behind the shed's corner, out of sight, 5 m away.
 BEHIND_SHED = """() => { newRound('seek'); for (let i = 0; i < 10.2 * 30; i++) step(1 / 30);
   const h = bots[0]; for (const b of bots) { b.x = 28; b.y = 42; b.goal = b.spot = { x: 28, y: 42 }; b.path = []; b.brave = 999; }
@@ -117,7 +130,7 @@ def test_the_computer_seeker_goes_to_look_where_it_heard_running(site, browser):
     ctx.close()
 
 
-@pytest.mark.parametrize("width,height", [(360, 640), (740, 360), (640, 360)])
+@pytest.mark.parametrize("width,height", [(360, 640), (390, 844), (740, 360), (844, 390), (640, 360)])
 def test_the_menu_with_the_maps_fits_upright_and_sideways(site, browser, width, height):
     ctx, page = open_game(site, browser, width, height)
     page.evaluate("stats.kierrokset = 12; newRound('hide'); played = true; nextSeeker = bots[1]; showMenu()")
