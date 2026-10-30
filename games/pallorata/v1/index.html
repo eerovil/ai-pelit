@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#5aa9e6">
+<title>Pallorata</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #5aa9e6; font-family: system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  #hud { position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 12px; display: flex; gap: 8px;
+    pointer-events: none; }
+  .chip { background: rgba(255,255,255,.85); color: #123; border-radius: 999px; padding: 6px 12px;
+    font-weight: 700; font-size: 17px; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+  #hud.hidden { display: none; }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 24px; text-align: center; color: #fff; background: rgba(20,50,90,.45); }
+  .screen.hidden { display: none; }
+  .screen h1 { margin: 0; font-size: 44px; text-shadow: 0 3px 0 rgba(0,0,0,.25); }
+  .screen p { margin: 0; font-size: 18px; line-height: 1.4; max-width: 300px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+  .screen .big { font-size: 26px; font-weight: 800; }
+  button.go { font: inherit; font-size: 24px; font-weight: 800; color: #123; background: #ffd23f; border: 0;
+    border-radius: 18px; padding: 16px 44px; box-shadow: 0 5px 0 #c99a00; touch-action: manipulation; }
+  button.go:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a00; }
+  #menu { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 15dvh); }
+  #ei { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden"><span class="chip" id="tahdet">⭐ 0</span><span class="chip" id="matka">0 m</span></div>
+<div class="screen" id="menu">
+  <h1>Pallorata</h1>
+  <p>Vedä sormella vasemmalle ja oikealle, pysy radalla ja kerää tähtiä.</p>
+  <p id="paras"></p>
+  <button class="go" id="aloita">Aloita</button>
+</div>
+<div class="screen hidden" id="loppu">
+  <h1>Putosit!</h1>
+  <p class="big" id="tulos"></p>
+  <p id="ennatys"></p>
+  <button class="go" id="uudestaan">Uudestaan</button>
+</div>
+<div class="screen" id="ei"><p>Tämä puhelin ei osaa piirtää 3D-kuvaa.</p></div>
+<!-- Pallorata v1 (#102): a ball rolls along a narrow track above the sky, on the shared three.js. -->
+<script type="module">
+import * as THREE from '../../../lib/three-r187/three.module.js';
+
+const KEY = 'ai-pelit:pallorata:';
+const ROW = 2;            // track row length along the run
+const R = 0.45;           // ball radius
+const AHEAD = 45;         // rows kept in front of the ball
+const BEHIND = 6;         // rows kept behind it
+const $ = id => document.getElementById(id);
+
+const c = $('c');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true });
+} catch (e) {
+  c.style.display = 'none';
+  $('menu').classList.add('hidden');
+  $('ei').style.display = 'flex';
+  window.noWebgl = true;
+}
+
+if (renderer) {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const SKY = 0x8cc8f0;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 35, 85);
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6688aa, 1.3));
+  const sun = new THREE.DirectionalLight(0xfff4dd, 2.2);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 12, bottom: -12, near: 1, far: 40 });
+  sun.shadow.bias = -0.0005;
+  scene.add(sun, sun.target);
+
+  // The ball: a striped sphere, so its rolling shows.
+  const stripes = document.createElement('canvas');
+  stripes.width = 64; stripes.height = 32;
+  const sg = stripes.getContext('2d');
+  sg.fillStyle = '#e8364f'; sg.fillRect(0, 0, 64, 32);
+  sg.fillStyle = '#fff'; sg.fillRect(0, 13, 64, 6); sg.fillRect(28, 0, 8, 32);
+  const ballTex = new THREE.CanvasTexture(stripes);
+  ballTex.colorSpace = THREE.SRGBColorSpace;
+  const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 20),
+    new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.35, metalness: 0.1 }));
+  ballMesh.castShadow = true;
+  scene.add(ballMesh);
+
+  // Track rows: one box each, recycled as the ball rolls on.
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  const rowMats = [0xf4efe6, 0xd9cfbf].map(color => new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x3f8f6b, roughness: 0.7 });
+  const rowPool = [];
+  for (let i = 0; i < AHEAD + BEHIND + 2; i++) {
+    const top = new THREE.Mesh(boxGeo, rowMats[0]);
+    top.receiveShadow = true; top.castShadow = true;
+    const base = new THREE.Mesh(boxGeo, edgeMat);
+    base.receiveShadow = true;
+    scene.add(top, base);
+    rowPool.push({ top, base, used: null });
+  }
+
+  // Stars: a five-point star, extruded and spinning.
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 0.16 : 0.38;
+    i ? shape.lineTo(Math.cos(a) * r, Math.sin(a) * r) : shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const starGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.12, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 1 });
+  starGeo.center();
+  const starMat = new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xaa7a00, emissiveIntensity: 0.45, metalness: 0.3, roughness: 0.35 });
+
+  // Clouds far below the track, drifting past.
+  const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.92 });
+  const cloudGeo = new THREE.SphereGeometry(1, 12, 8);
+  const clouds = [];
+  for (let i = 0; i < 14; i++) {
+    const g = new THREE.Group();
+    for (let k = 0; k < 4; k++) {
+      const p = new THREE.Mesh(cloudGeo, cloudMat);
+      p.scale.set(2.4 + Math.random() * 2, 1.1 + Math.random() * 0.6, 2 + Math.random() * 1.5);
+      p.position.set(k * 2.4 - 3.6, Math.random() * 0.5, Math.random() * 1.5);
+      g.add(p);
+    }
+    scene.add(g);
+    clouds.push(g);
+  }
+
+  // --- Track ---------------------------------------------------------------------------------
+  // rows[i] covers the run from i*ROW to (i+1)*ROW: its middle is at x = cx, it is w wide.
+  let rows, stars, seed;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+  function makeRow(i) {
+    if (i < 10) return { cx: 0, w: 3.2 };
+    const p = rows[i - 1];
+    // Narrower and twistier the further the ball has come.
+    const hard = Math.min(1, i / 400);
+    const w = Math.max(1.3, 3 - hard * 1.5 + (rnd() < 0.15 ? -0.5 : 0));
+    let drift = p.drift ?? 0;
+    if (rnd() < 0.12) drift = (rnd() - 0.5) * (0.5 + hard * 0.7);
+    let cx = p.cx + drift;
+    if (Math.abs(cx) > 6) { drift = -drift; cx = p.cx + drift; }
+    const row = { cx, w, drift };
+    if (rnd() < 0.28) {
+      const star = new THREE.Mesh(starGeo, starMat);
+      star.castShadow = true;
+      star.rotation.y = rnd() * Math.PI;
+      star.position.set(cx + (rnd() - 0.5) * (w - 0.6), 0.75, -(i + 0.5) * ROW);
+      scene.add(star);
+      stars.push(star);
+    }
+    return row;
+  }
+  function row(i) {
+    if (i < 0) return { cx: 0, w: 3.2 };
+    while (rows.length <= i) rows.push(makeRow(rows.length));
+    return rows[i];
+  }
+  function free(r) {
+    r.used = null;
+    r.top.visible = r.base.visible = false;
+  }
+  function placeRows(first, last) {
+    for (const r of rowPool) if (r.used !== null && (r.used < first || r.used > last)) free(r);
+    for (let i = first; i <= last; i++) {
+      if (rowPool.some(r => r.used === i)) continue;
+      const r = rowPool.find(r => r.used === null);
+      const { cx, w } = row(i);
+      r.used = i;
+      r.top.visible = r.base.visible = true;
+      r.top.material = rowMats[Math.abs(i) % 2];
+      r.top.scale.set(w, 0.3, ROW + 0.02);
+      r.top.position.set(cx, -0.15, -(i + 0.5) * ROW);
+      r.base.scale.set(w * 0.8, 0.5, ROW + 0.02);
+      r.base.position.set(cx, -0.55, -(i + 0.5) * ROW);
+    }
+  }
+
+  // --- Round ---------------------------------------------------------------------------------
+  const ball = { x: 0, y: R, z: 0, vy: 0, v: 0, aimX: 0 };
+  const round = { phase: 'menu', stars: 0, fallT: 0, t: 0 };
+
+  function best() { return +(localStorage.getItem(KEY + 'ennatys') || 0); }
+  function metres() { return Math.floor(-ball.z); }
+  function points() { return metres() + round.stars * 10; }
+
+  function reset() {
+    for (const s of stars || []) scene.remove(s);
+    rowPool.forEach(free);
+    rows = []; stars = []; seed = (Date.now() % 2147483646) + 1;
+    Object.assign(ball, { x: 0, y: R, z: 0, vy: 0, v: 6, aimX: 0 });
+    Object.assign(round, { stars: 0, fallT: 0, t: 0 });
+    ballMesh.quaternion.identity();
+    placeRows(-BEHIND, AHEAD);
+    hud();
+  }
+
+  function start() {
+    unlockAudio();
+    reset();
+    round.phase = 'run';
+    $('menu').classList.add('hidden');
+    $('loppu').classList.add('hidden');
+    $('hud').classList.remove('hidden');
+  }
+
+  function hud() {
+    $('tahdet').textContent = '⭐ ' + round.stars;
+    $('matka').textContent = metres() + ' m';
+  }
+
+  function over() {
+    round.phase = 'over';
+    const p = points(), old = best();
+    let pelit = +(localStorage.getItem(KEY + 'pelit') || 0) + 1;
+    localStorage.setItem(KEY + 'pelit', pelit);
+    if (p > old) localStorage.setItem(KEY + 'ennatys', p);
+    $('tulos').textContent = `${metres()} m ja ⭐ ${round.stars} = ${p} pistettä`;
+    $('ennatys').textContent = p > old ? (old ? 'Uusi ennätys!' : 'Ensimmäinen ennätyksesi!') : `Ennätys: ${old} pistettä`;
+    $('loppu').classList.remove('hidden');
+    $('hud').classList.add('hidden');
+  }
+
+  function showMenu() {
+    const b = best();
+    $('paras').textContent = b ? `Ennätys: ${b} pistettä` : '';
+  }
+
+  function onTrack() {
+    const r = row(Math.floor(-ball.z / ROW));
+    return Math.abs(ball.x - r.cx) <= r.w / 2;
+  }
+
+  const spinAxis = new THREE.Vector3(), spinQ = new THREE.Quaternion();
+  function step(dt) {
+    round.t += dt;
+    if (round.phase === 'run' || round.phase === 'fall') {
+      ball.v = Math.min(15, 6 + round.t * 0.12);
+      const vx = (ball.aimX - ball.x) * Math.min(1, dt * 14) / Math.max(dt, 1e-6);
+      ball.x += vx * dt;
+      ball.z -= ball.v * dt;
+      // Roll: around the axis across the way it moves.
+      const dist = Math.hypot(vx * dt, ball.v * dt);
+      if (dist > 0) {
+        spinAxis.set(-ball.v * dt, 0, -vx * dt).normalize();
+        spinQ.setFromAxisAngle(spinAxis, dist / R);
+        ballMesh.quaternion.premultiply(spinQ);
+      }
+    }
+    if (round.phase === 'run') {
+      if (!onTrack()) { round.phase = 'fall'; round.fallT = 0; sound('fall'); }
+      for (const s of stars) {
+        if (s.visible && Math.abs(s.position.z - ball.z) < 0.7 && Math.abs(s.position.x - ball.x) < 0.75) {
+          s.visible = false;
+          round.stars++;
+          sound('star');
+        }
+      }
+      // Stars far behind are done with.
+      stars = stars.filter(s => (s.position.z < ball.z + 10) || (scene.remove(s), false));
+      hud();
+    } else if (round.phase === 'fall') {
+      ball.vy -= 22 * dt;
+      ball.y += ball.vy * dt;
+      round.fallT += dt;
+      if (round.fallT > 1.3) over();
+    }
+    const i = Math.floor(-ball.z / ROW);
+    placeRows(i - BEHIND, i + AHEAD);
+    for (const s of stars) s.rotation.y += dt * 2.5;
+  }
+
+  const look = new THREE.Vector3();
+  let camX = 0;
+  function draw(dt) {
+    for (const [n, g] of clouds.entries()) {
+      if (g.position.z > ball.z + 30 || g.position.z < ball.z - 100 || g.position.y === 0) {
+        g.position.set((n % 2 ? 1 : -1) * (5 + Math.random() * 18), -12 - Math.random() * 10, ball.z - 20 - Math.random() * 80);
+      }
+    }
+    ballMesh.position.set(ball.x, ball.y, ball.z);
+    camX += (ball.x - camX) * Math.min(1, dt * 4);
+    const cy = Math.max(ball.y, -3);
+    camera.position.set(camX, cy + 2.7, ball.z + 5.2);
+    look.set(camX + (ball.x - camX) * 0.5, Math.max(ball.y, -6), ball.z - 4);
+    camera.lookAt(look);
+    sun.position.set(ball.x + 4, 10, ball.z + 3);
+    sun.target.position.set(ball.x, 0, ball.z - 4);
+    renderer.render(scene, camera);
+    window.drawn = true;
+  }
+
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // A narrow portrait screen sees a bit wider.
+    camera.fov = w / h < 0.7 ? 68 : 58;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  // --- Touch: dragging moves the ball sideways --------------------------------------------------
+  let dragX = null;
+  c.addEventListener('pointerdown', e => { dragX = e.clientX; c.setPointerCapture?.(e.pointerId); });
+  c.addEventListener('pointermove', e => {
+    if (dragX === null) return;
+    steer(e.clientX - dragX);
+    dragX = e.clientX;
+  });
+  const lift = () => { dragX = null; };
+  c.addEventListener('pointerup', lift);
+  c.addEventListener('pointercancel', lift);
+  // A drag across the whole screen moves the ball about two track widths.
+  function steer(px) {
+    if (round.phase === 'run') ball.aimX += px / Math.min(innerWidth, 500) * 6;
+  }
+
+  // --- Sound ---------------------------------------------------------------------------------
+  let ac = null;
+  function unlockAudio() {
+    if (!ac) { try { ac = new AudioContext(); } catch (e) { ac = null; } }
+    ac?.resume?.();
+  }
+  function sound(kind) {
+    if (!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.connect(g); g.connect(ac.destination);
+    if (kind === 'star') {
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(880, t); o.frequency.setValueAtTime(1320, t + 0.07);
+      g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.start(t); o.stop(t + 0.24);
+    } else {
+      o.type = 'sine';
+      o.frequency.setValueAtTime(500, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.9);
+      g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1);
+      o.start(t); o.stop(t + 1.05);
+    }
+  }
+
+  $('aloita').addEventListener('click', start);
+  $('uudestaan').addEventListener('click', start);
+
+  let last = performance.now();
+  reset();
+  round.phase = 'menu';
+  showMenu();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (round.phase === 'menu') {
+      // The menu shows the ball rolling gently on the start straight.
+      round.t = 0;
+      ball.z -= dt * 2;
+      if (ball.z < -16) ball.z = 0;
+      spinAxis.set(-1, 0, 0);
+      ballMesh.quaternion.premultiply(spinQ.setFromAxisAngle(spinAxis, dt * 2 / R));
+      placeRows(Math.floor(-ball.z / ROW) - BEHIND, Math.floor(-ball.z / ROW) + AHEAD);
+    } else if (round.phase !== 'over') {
+      step(dt);
+    }
+    draw(dt);
+  });
+
+  // For tests and the curious: the round as it is.
+  Object.assign(window, { ball, round, start, steer, row });
+  Object.defineProperty(window, 'stars', { get: () => stars });
+}
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

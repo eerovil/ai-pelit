@@ -1,0 +1,13 @@
+{
+  "title": "Pallorata",
+  "description": "Ohjaa vierivää palloa kapealla radalla taivaan yllä ja kerää tähtiä putoamatta.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: 3D-pallo vierii taivaalla kapenevalla radalla, ohjaus vetämällä ja tähtiä kerättävänä.",
+      "request": "Pieni 3D-peli: pallo vierii kapealla radalla taivaan yllä, sitä ohjataan vetämällä sormella vasemmalle ja oikealle, ja radalla kerätään tähtiä. Radalta putoaminen lopettaa kierroksen. Kamera seuraa palloa takaa ja vähän yläviistosta, ja pelissä on valot ja varjot, jotta 3D näkyy kunnolla.",
+      "issue": "eerovil/ai-pelit#102"
+    }
+  ]
+}
