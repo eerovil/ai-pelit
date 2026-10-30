@@ -273,8 +273,9 @@ def inside(box, width, height):
 def test_the_menu_fits_sideways(phone, size):
     w, h = size
     page = phone(w, h)
-    page.evaluate("showMenu('Voitit 3–2! 🏆', 'win')")
-    for sel in ("#menu h1", "#result", "#foe", "#go", "#multi", "#stats", "#menu .help.short", "#ai-pelit-back"):
+    # The longest menu: a result, and an unfinished match to carry on.
+    page.evaluate("save('ottelu', { sc: [1, 0], cl: 95, lv: level }); showMenu('Voitit 3–2! 🏆', 'win')")
+    for sel in ("#menu h1", "#result", "#foe", "#resume", "#go", "#multi", "#stats", "#menu .help.short", "#ai-pelit-back"):
         box = page.locator(sel).bounding_box()
         assert box and inside(box, w, h), (sel, box)
     assert not page.locator("#menu .help.long").is_visible()
@@ -373,3 +374,32 @@ def test_a_phone_alone_on_its_team_gives_its_name_to_the_player_it_steers(room):
     assert host.evaluate("[msg.who, msg.by === AiPelitRooms.me]") == ["Eero", True]
     guest.wait_for_function("state === 'goal' && msg && msg.who === 'Eero'")
     assert host.errors == guest.errors == []
+
+
+def test_a_reload_mid_match_can_carry_the_match_on(site, context):
+    page = start(site, context)
+    assert not page.is_visible("#resume")
+    page.evaluate("state = 'play'; score = [2, 1]; clock = 75.4; saveT = 0; update(1 / 60)")
+    page.reload()
+    page.evaluate(RUN)
+    assert page.inner_text("#resume") == "Jatka ottelua 2–1 (1:15)"
+    page.click("#resume")
+    assert page.evaluate("[score.join('-'), Math.round(clock), players.length]") == ["2-1", 75, 6]
+    # A finished match is not offered again, and Pelaa yksin starts afresh.
+    page.evaluate("state = 'play'; clock = 0.01")
+    page.evaluate("run(() => state !== 'done', 4)")
+    assert not page.is_visible("#resume")
+    page.evaluate("localStorage.setItem('ai-pelit:jalkapallo:ottelu', JSON.stringify({ sc: [3, 0], cl: 60, lv: level }))")
+    page.reload()
+    page.click("#go")
+    assert page.evaluate("[score.join('-'), clock]") == ["0-0", 180]
+
+
+def test_drawing_and_touches_use_the_canvas_own_box(site, context):
+    page = start(site, context)
+    assert page.evaluate("const b = c.getBoundingClientRect(); W === b.width && H === b.height")
+    # A tap on the Syötä button, read against that box, lands on it.
+    page.evaluate(STILL)
+    page.evaluate("take(players[0])")
+    page.touchscreen.tap(*page.evaluate("const b = buttons.find(q => q.k === 'pass'); [b.x + box.left, b.y + box.top]"))
+    page.wait_for_function("owner !== players[0]")

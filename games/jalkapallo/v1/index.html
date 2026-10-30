@@ -16,6 +16,8 @@
   #result.win{color:#7ee081}#result.lose{color:#ff7a6b}#result.draw{color:#ffd166}
   #foe{margin:4px 0 0;font-size:17px;color:#ffd0a8}
   .go{font:800 20px system-ui,sans-serif;padding:13px 22px;border:0;border-radius:16px;background:#ffd166;color:#2a1a05;box-shadow:0 4px 0 #9a6b12}
+  #resume{background:#7ee081;box-shadow:0 4px 0 #2f7a3a}
+  .go[hidden]{display:none}
   .go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a6b12}
   #multi{font:700 17px system-ui,sans-serif;padding:11px 18px;border:2px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166}
   #stats{margin:0;font-size:14px;color:#bfe0c8}
@@ -32,8 +34,9 @@
     #stats{grid-column:1;grid-row:4}
     .help.short{display:block;grid-column:1;grid-row:5;margin:0;max-width:330px}
     .help.long{display:none}
-    #go{grid-column:2;grid-row:1/3;align-self:end}
-    #multi{grid-column:2;grid-row:3/5;align-self:start;margin-top:8px}
+    #resume{grid-column:2;grid-row:1;align-self:end}
+    #go{grid-column:2;grid-row:2/4;align-self:center}
+    #multi{grid-column:2;grid-row:4/6;align-self:start}
   }
 </style>
 </head>
@@ -44,6 +47,7 @@
   <h1>⚽ Jalkapallo</h1>
   <p id="result"></p>
   <p id="foe"></p>
+  <button class="go" id="resume" hidden>Jatka ottelua</button>
   <button class="go" id="go">Pelaa yksin</button>
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <p id="stats"></p>
@@ -80,10 +84,13 @@ const COLORS = [['#2f7de1', '#123f80', '#ffd166'], ['#e5383b', '#7a1416', '#7ee0
 
 // viewTop..viewBot is the part of the screen the pitch is seen in; ctrlTop is where the portrait
 // control strip starts (the bottom of the screen sideways, where the controls float on the pitch).
-let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, sc, ctrlTop, midX, midY, viewTop, viewBot, stickHome, buttons = [];
+let box = { left: 0, top: 0 }, W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, sc, ctrlTop, midX, midY, viewTop, viewBot, stickHome, buttons = [];
 function resize() {
   DPR = window.devicePixelRatio || 1;
-  W = innerWidth; H = innerHeight;
+  // Sized from the canvas's own box, which every touch is read against too (Hiihto v5 drew for
+  // innerHeight while 100dvh differed, and taps missed the buttons).
+  box = c.getBoundingClientRect();
+  W = box.width || innerWidth; H = box.height || innerHeight;
   c.width = W * DPR; c.height = H * DPR;
   const cs = getComputedStyle(document.getElementById('safe'));
   safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
@@ -171,7 +178,8 @@ let net = { on: false, round: '', sendT: 0 };
 const input = { jx: 0, jy: 0, shootT: -1 };
 
 function newInput() { return { x: 0, y: 0, shootDown: false, shootT: 0 }; }
-function newMatch() {
+// A match alone: a fresh one, or the one saved before the page was closed or reloaded.
+function newMatch(resume) {
   net = { on: false, round: '', sendT: 0 };
   players = [
     player(0, 0, MATES[0], ROOM_LEVEL), player(0, 1, MATES[1], ROOM_LEVEL), player(0, 2, MATES[2], ROOM_LEVEL),
@@ -180,6 +188,15 @@ function newMatch() {
   ctrls = [{ id: 'me', t: 0, fixed: -1, p: players[0], input: newInput() }];
   myTeam = 0;
   begin();
+  if (resume) { score = resume.sc.slice(); clock = resume.cl; }
+  saveT = 0;
+}
+// The match alone is saved every second, so a reload or a trip to the shelf does not lose it.
+let saveT = 0;
+function keepMatch(dt) {
+  if (net.on || (saveT -= dt) > 0) return;
+  saveT = 1;
+  save('ottelu', { sc: score, cl: Math.round(clock), lv: level });
 }
 function begin() {
   view = myTeam === 0 ? 1 : -1;
@@ -541,6 +558,7 @@ function update(dt) {
     if (state === 'kickoff' && owner && Math.hypot(owner.x, owner.y) > 1.5) state = 'play';
     if (state === 'kickoff') for (const p of players) if (owner !== p) p.vx = p.vy = 0;
   } else for (const p of players) { p.vx *= 0.9; p.vy *= 0.9; }
+  if (state === 'play' || state === 'goal' || state === 'kickoff') keepMatch(dt);
   if (state === 'play') {
     clock -= dt;
     if (clock <= 0) { clock = 0; whistle(true); state = 'full'; pauseT = 2.2; msg = { s: 'Loppuvihellys', t: -1 }; }
@@ -561,6 +579,7 @@ function tick(dt) {
 function endMatch() {
   const a = score[myTeam], b = score[1 - myTeam];
   state = 'done';
+  save('ottelu', null);
   if (a > b) { wins++; level++; } else if (a < b) losses++; else draws++;
   save('taso', level); save('voitot', wins); save('haviot', losses); save('tasapelit', draws);
   showMenu(a > b ? 'Voitit ' + a + '–' + b + '! 🏆' : a < b ? 'Hävisit ' + a + '–' + b : 'Tasapeli ' + a + '–' + b, a > b ? 'win' : a < b ? 'lose' : 'draw');
@@ -725,22 +744,25 @@ function act(what, pw) {
   k.input.x = input.jx; k.input.y = input.jy;
   if (what === 'shootUp') shootUp(k, pw); else press(k, what);
 }
+// A touch's place on the canvas.
+const at = e => [e.clientX - box.left, e.clientY - box.top];
 c.addEventListener('pointerdown', e => {
   unlock();
   e.preventDefault();
   if (state !== 'play' && state !== 'kickoff' && state !== 'goal') return;
-  const k = buttonAt(e.clientX, e.clientY);
+  const [ex, ey] = at(e), k = buttonAt(ex, ey);
   if (k) {
     held[e.pointerId] = k;
     if (k === 'pass') act('pass');
     else { const p = myPlayer(); if (p && owner === p) input.shootT = performance.now(); act('shootDown'); }
     return;
   }
-  if (stick.id === null && e.clientX < W * (wide ? 0.45 : 0.6)) { stick.id = e.pointerId; stick.ox = e.clientX; stick.oy = e.clientY; stick.dx = stick.dy = 0; setStick(); }
+  if (stick.id === null && ex < W * (wide ? 0.45 : 0.6)) { stick.id = e.pointerId; stick.ox = ex; stick.oy = ey; stick.dx = stick.dy = 0; setStick(); }
 });
 c.addEventListener('pointermove', e => {
   if (e.pointerId !== stick.id) return;
-  stick.dx = e.clientX - stick.ox; stick.dy = e.clientY - stick.oy;
+  const [ex, ey] = at(e);
+  stick.dx = ex - stick.ox; stick.dy = ey - stick.oy;
   // The base follows a thumb that slides far, so it never runs out of stick.
   const d = Math.hypot(stick.dx, stick.dy);
   if (d > STICK_R * 1.4) { const k = (d - STICK_R * 1.4) / d; stick.ox += stick.dx * k; stick.oy += stick.dy * k; stick.dx -= stick.dx * k; stick.dy -= stick.dy * k; }
@@ -955,12 +977,17 @@ function showMenu(result, cls) {
   const f = friends.voitot + friends.haviot + (friends.tasapelit || 0);
   document.getElementById('stats').textContent = 'Voitot ' + wins + ' · Tasapelit ' + draws + ' · Häviöt ' + losses +
     (f ? ' · Kavereita vastaan ' + friends.voitot + '–' + (friends.tasapelit || 0) + '–' + friends.haviot : '');
+  // A match left unfinished can be carried on.
+  const m = load('ottelu', null), res = document.getElementById('resume');
+  res.hidden = !(m && m.lv === level && m.cl > 0);
+  if (!res.hidden) res.textContent = 'Jatka ottelua ' + m.sc[0] + '–' + m.sc[1] + ' (' + Math.floor(m.cl / 60) + ':' + String(m.cl % 60).padStart(2, '0') + ')';
   menu.classList.remove('hidden');
 }
 function roomNote() {
   if (R.inRoom) R.note('Puhelimet jaetaan vuorotellen siniseen ja punaiseen joukkueeseen. Tyhjät paikat pelaa tietokone.');
 }
-document.getElementById('go').addEventListener('click', () => { unlock(); newMatch(); });
+document.getElementById('go').addEventListener('click', () => { unlock(); save('ottelu', null); newMatch(); });
+document.getElementById('resume').addEventListener('click', () => { unlock(); newMatch(load('ottelu', null)); });
 document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); roomNote(); });
 R.on('peers', roomNote);
 showMenu();
