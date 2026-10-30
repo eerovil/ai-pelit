@@ -3,7 +3,7 @@
 import shutil
 
 import pytest
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/orava/v2/"
 LAND = {"width": 740, "height": 360}
@@ -97,14 +97,14 @@ def test_turning_the_phone_mid_round_keeps_the_round(site, browser):
         assert before == ["play", 1, 10, 2, 10, "trunk", 1]
         page.evaluate("document.fullscreenElement && document.exitFullscreen()")
         page.wait_for_timeout(200)
-        page.set_viewport_size(LAND)
+        turn(page, LAND)
         page.wait_for_timeout(500)
         assert page.evaluate("[W, H, LAND]") == [740, 360, True]
         assert page.evaluate("[phase, eaten, points, hearts, cones.length, S.mode, S.tree]") == before
         # The camera has caught up: the squirrel is on the screen, above the floor line.
         sx, sy = page.evaluate("[sx(S.x), sy(S.y)]")
         assert 0 < sx < 740 and 40 < sy < 340
-        page.set_viewport_size({"width": 360, "height": 740})
+        turn(page, {"width": 360, "height": 740})
         page.wait_for_timeout(500)
         assert page.evaluate("[W, LAND, floorY()]") == [360, False, 740 - 150]
         assert page.evaluate("[phase, eaten, points, hearts, cones.length, S.mode, S.tree]") == before

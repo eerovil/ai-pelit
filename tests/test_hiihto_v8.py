@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/hiihto/v8/"
 LAYOUT = "[vButton().x, vButton().y, vButton().r, skatePads().map(p => [p.x, p.y, p.w, p.h]), ui.friends && [ui.friends.x, ui.friends.y], ui.wax.map(b => [b.x, b.y, b.w, b.h])]"
@@ -53,14 +53,6 @@ def chip(page, sel):
 
 def overlaps(a, b):
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
-
-
-def turn(page, w, h):
-    """Turns the phone. back.js goes fullscreen on the first tap, and Chromium resizes no
-    fullscreen window, so leave fullscreen first."""
-    page.evaluate("document.fullscreenElement && document.exitFullscreen()")
-    page.wait_for_timeout(200)
-    page.set_viewport_size({"width": w, "height": h})
 
 
 def tap(page, name):
@@ -137,14 +129,14 @@ def test_a_race_sideways_survives_turning_the_phone(site, browser):
     z, t = page.evaluate("[P.z, P.t]")
     assert z > 3 and page.evaluate("mode") == "race"
     # Turned upright mid-race: the same race goes on where it was, the 3D view upright too.
-    turn(page, 360, 740)
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_function("W === 360 && H === 740 && !LAND")
     page.wait_for_timeout(300)
     z2, t2 = page.evaluate("[P.z, P.t]")
     assert page.evaluate("mode") == "race" and z2 >= z and t2 > t
     assert camera(page) == [360, 740, 360 / 740, 0]
     # And back sideways: still the same race, and a tap still kicks.
-    turn(page, 740, 360)
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_function("W === 740 && H === 360 && LAND")
     v0 = page.evaluate("P.v")
     page.wait_for_timeout(400)

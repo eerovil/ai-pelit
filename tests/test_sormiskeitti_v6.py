@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/sormiskeitti/v6/"
 SIDEWAYS = [(740, 360), (844, 390), (640, 360)]
@@ -63,12 +63,12 @@ def test_sideways_a_round_runs_and_survives_turning_the_phone(site, browser):
     assert before["st"] == "roll"
     # Turn the phone upright mid-round: the round goes on where it was.
     page.evaluate("document.fullscreenElement && document.exitFullscreen()")
-    page.set_viewport_size({"width": 360, "height": 740})
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_function("W === 360 && H === 740")
     after = page.evaluate("({ st, s, level })")
     assert after["st"] in ("roll", "air") and after["s"] >= before["s"] and after["level"] == before["level"]
     # And back sideways; the round still finishes normally.
-    page.set_viewport_size({"width": 740, "height": 360})
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_function("W === 740 && H === 360")
     assert page.evaluate("st") != "ready"
     page.wait_for_function("st === 'end'", timeout=15000)

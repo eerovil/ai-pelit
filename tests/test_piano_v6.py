@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/piano/v6/"
 SIZES = [(740, 360), (844, 390), (640, 360)]
@@ -80,7 +80,7 @@ def test_turning_the_phone_mid_song_keeps_the_round(piano_site, browser):
                   "document.fullscreenElement && document.exitFullscreen()")
     before = page.evaluate("[level, now, cur.notes.length]")
     for w, h in [(740, 360), (360, 740), (844, 390)]:
-        page.set_viewport_size({"width": w, "height": h})
+        turn(page, {"width": w, "height": h})
         page.wait_for_timeout(300)
         lv, t, count, score, lives, state, wide, btn = page.evaluate(
             "[level, now, cur.notes.length, score, lives, state, wide, btnTop]")

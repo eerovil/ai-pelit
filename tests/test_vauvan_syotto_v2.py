@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/vauvan-syotto/v2/"
 SIDEWAYS = [(740, 360), (844, 390), (640, 360)]
@@ -103,7 +103,7 @@ def test_turning_the_phone_mid_round_keeps_the_round(site, browser):
     start(page)
     page.evaluate("tummy = 3; misses = 1; mood = 70; power.video = 2; spoon.where = 'floor'; spoon.x = 700; spoon.y = G.floorY")
     before = page.evaluate("[level, goal, tummy, misses, power.video, state]")
-    page.set_viewport_size({"width": 360, "height": 740})
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_function("W === 360 && H === 740")
     assert page.evaluate("wide") is False
     assert page.evaluate("[level, goal, tummy, misses, power.video, state]") == before
@@ -111,7 +111,7 @@ def test_turning_the_phone_mid_round_keeps_the_round(site, browser):
     assert page.evaluate("spoon.where === 'floor' && spoon.x <= W - 30 && spoon.y === G.floorY")
     page.evaluate("down(spoon.x, spoon.y); up(spoon.x, spoon.y)")
     assert page.evaluate("spoon.where") == "wash"
-    page.set_viewport_size({"width": 740, "height": 360})
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_function("W === 740 && H === 360")
     assert page.evaluate("[wide, state, tummy]") == [True, "play", 3]
     assert page.errors == []

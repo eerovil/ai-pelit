@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/aitajuoksu/v4/"
 LANDSCAPES = [(740, 360), (844, 390), (640, 360)]
@@ -117,7 +117,7 @@ def test_turning_the_phone_mid_round_keeps_the_round(site, landscape):
     page.evaluate("document.fullscreenElement ? document.exitFullscreen() : null")
     page.wait_for_function("!document.fullscreenElement")
     for w, h in [(360, 740), (740, 360), (360, 640), (844, 390)]:
-        page.set_viewport_size({"width": w, "height": h})
+        turn(page, {"width": w, "height": h})
         page.wait_for_function(f"innerWidth === {w} && land === {'true' if w > h else 'false'}", timeout=3000)
         page.wait_for_timeout(150)
         assert page.evaluate("race === theRace && race.phase === 'run' && me.x > 30 && TRACK === 200 && H_N === 10")

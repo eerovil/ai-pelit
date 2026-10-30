@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 LANDSCAPE = [{"width": 740, "height": 360}, {"width": 844, "height": 390}, {"width": 640, "height": 360}]
 
@@ -90,7 +90,7 @@ def test_a_round_plays_sideways_and_turning_the_phone_keeps_it(site, browser):
       launchAir({ x: r * Math.sin(a), y: -r * Math.cos(a), vx: -2 * r * Math.sin(a) / T, vy: G * T / 2, phi: a, w: 1.2 / T }); }""")
     before = page.evaluate("({ names: elements.map(e => e.name), routines, mode })")
     for turned in ({"width": 360, "height": 740}, size):
-        page.set_viewport_size(turned)
+        turn(page, turned)
         page.wait_for_function(f"W === {turned['width']} && H === {turned['height']}")
         page.wait_for_timeout(100)
         now = page.evaluate("({ names: elements.map(e => e.name), routines, mode, side: sideL() })")

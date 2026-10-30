@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/kaaosrata/v2/"
 
@@ -80,13 +80,13 @@ def test_a_round_sideways_runs_and_survives_turning_the_phone(site, browser):
     page.evaluate("input.y = 0")
     at = page.evaluate("[race.round, race.clock, me.y, me.cp]")
     unfull(page)
-    page.set_viewport_size({"width": 360, "height": 740})
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_timeout(300)
     assert page.evaluate("[!wide, race && race.phase]") == [True, "run"]
     now = page.evaluate("[race.round, race.clock, me.y, me.cp]")
     assert now[0] == at[0] and now[1] > at[1] and abs(now[2] - at[2]) < 1 and now[3] == at[3]
     unfull(page)
-    page.set_viewport_size({"width": 740, "height": 360})
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_timeout(300)
     assert page.evaluate("wide && race.phase === 'run' && race.clock") > now[1]
     # The round ends sideways as it does upright.

@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 LANDSCAPE = [(740, 360), (844, 390), (640, 360)]
 
@@ -77,7 +77,7 @@ def test_v4_a_fight_runs_sideways_and_survives_turning_the_phone(phone):
     page.evaluate("document.fullscreenElement ? document.exitFullscreen() : null")
     page.wait_for_function("!document.fullscreenElement")
     for w, h in ((360, 740), (740, 360)):
-        page.set_viewport_size({"width": w, "height": h})
+        turn(page, {"width": w, "height": h})
         page.wait_for_timeout(300)
         state = page.evaluate("({state, land, x: me.x, y: me.y, hp: foe.hp + me.hp, foe: foe.name, W})")
         assert state["state"] == "fight" and state["W"] == w and state["land"] == (w > h)

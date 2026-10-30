@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/puhelinkoppi/v5/"
 SIDEWAYS = [(740, 360), (844, 390), (640, 360)]
@@ -91,12 +91,12 @@ def test_turning_the_phone_mid_throw_keeps_the_round(site, browser):
     page.evaluate("launch({ v0: 5, wx: 6 }); for (let i = 0; i < 20; i++) step(1 / 60)")
     before = page.evaluate("[state, level, halfFlips, pos[1], vel[1]]")
     page.evaluate("document.fullscreenElement && document.exitFullscreen()")
-    page.set_viewport_size({"width": 360, "height": 740})
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_function("!LAND")
     now = page.evaluate("[state, level, halfFlips]")
     assert now[0] == "air" and now[1] == before[1] and now[2] >= before[2]
     # It flies on and lands in the hand, in portrait now, and back to sideways.
-    page.set_viewport_size({"width": 740, "height": 360})
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_function("LAND")
     assert page.evaluate("state") in ("air", "drop", "settle", "result")
     assert page.evaluate(FLY, 4) == "result"

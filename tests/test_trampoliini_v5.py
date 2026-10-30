@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/trampoliini/v5/"
 SIZES = [(740, 360), (844, 390), (640, 360)]
@@ -104,7 +104,7 @@ def test_turning_the_phone_mid_round_keeps_the_round(tramp_site, browser):
     page.evaluate("document.fullscreenElement && document.exitFullscreen()")
     page.wait_for_timeout(200)
     for w, h, wide in ((740, 360, True), (360, 740, False), (844, 390, True)):
-        page.set_viewport_size({"width": w, "height": h})
+        turn(page, {"width": w, "height": h})
         page.wait_for_timeout(300)
         assert page.evaluate("[innerWidth, wide]") == [w, wide]
         assert page.evaluate("[phase !== 'menu', level, points, hearts, tasks[0].done, tasks[1].done]") == [True, 2, 47, 2, True, False]

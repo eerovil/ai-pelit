@@ -197,5 +197,23 @@ def context(browser):
     ctx.close()
 
 
+def turn(page, size: dict) -> None:
+    """Turns the phone: resizes the page's window to size, {"width": ..., "height": ...} (#95).
+
+    back.js puts the page in full screen on the first tap, and Chromium refuses to resize a
+    full-screen window. Leaving it from the page (document.exitFullscreen()) finishes some time
+    later, too late on a busy machine; so the window is set back to normal through the browser
+    itself first, which takes effect before the resize.
+    """
+    cdp = page.context.new_cdp_session(page)
+    try:
+        win = cdp.send("Browser.getWindowForTarget")["windowId"]
+        if cdp.send("Browser.getWindowBounds", {"windowId": win})["bounds"].get("windowState") != "normal":
+            cdp.send("Browser.setWindowBounds", {"windowId": win, "bounds": {"windowState": "normal"}})
+    finally:
+        cdp.detach()
+    page.set_viewport_size(size)
+
+
 def wait_for_worker(page) -> None:
     page.wait_for_function("navigator.serviceWorker && navigator.serviceWorker.controller !== null", timeout=10000)

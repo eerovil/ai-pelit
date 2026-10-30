@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/kirkkis/v5/"
 SIDEWAYS = [(740, 360), (844, 390), (640, 360)]
@@ -94,12 +94,12 @@ def test_turning_the_phone_mid_round_keeps_the_round(site, browser):
     page.evaluate(RUN, 12)
     before = page.evaluate("[phase, timer, player.x, player.y, people.indexOf(seeker)]")
     assert before[0] == "seek"
-    page.set_viewport_size({"width": 360, "height": 740})
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_function("!wide && S === 30 && W === 360", timeout=3000)
     after = page.evaluate("[phase, timer, player.x, player.y, people.indexOf(seeker)]")
     assert after[0] == "seek" and before[1] - 2 < after[1] <= before[1]
     assert after[2:] == pytest.approx(before[2:], abs=0.5)
-    page.set_viewport_size({"width": 740, "height": 360})
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_function("wide", timeout=3000)
     assert page.evaluate("phase") == "seek"
     assert page.errors == []

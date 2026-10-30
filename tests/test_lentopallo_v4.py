@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/lentopallo/v4/"
 LANDSCAPE = [(740, 360), (844, 390), (640, 360)]
@@ -84,11 +84,11 @@ def test_a_match_runs_sideways_and_survives_turning_the_phone(phone):
     players = page.evaluate("players.length")
     # Turn the phone mid-match (back.js went fullscreen on the tap; Chromium cannot resize that).
     page.evaluate("document.fullscreenElement && document.exitFullscreen()")
-    page.set_viewport_size({"width": 360, "height": 740})
+    turn(page, {"width": 360, "height": 740})
     page.wait_for_function("W === 360 && !wide")
     page.wait_for_timeout(300)
     assert page.evaluate("[score[0] + score[1] >= 5, players.length, state !== 'menu' && state !== 'done']") == [True, players, True]
-    page.set_viewport_size({"width": 740, "height": 360})
+    turn(page, {"width": 740, "height": 360})
     page.wait_for_function("W === 740 && wide")
     page.wait_for_timeout(300)
     assert page.evaluate("[score[0] + score[1] >= 5, state !== 'menu' && state !== 'done']") == [True, True]

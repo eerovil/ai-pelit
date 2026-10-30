@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/pallorata/v2/"
 LANDSCAPE = {"width": 740, "height": 360}
@@ -111,7 +111,7 @@ def test_turning_the_phone_mid_round_keeps_the_round(landscape):
     leave_fullscreen(page)
     for w, h in [(360, 740), (740, 360)]:
         before = page.evaluate("[-ball.z, round.t]")
-        page.set_viewport_size({"width": w, "height": h})
+        turn(page, {"width": w, "height": h})
         page.wait_for_function(f"innerWidth === {w} && Math.abs(camera.aspect - {w / h}) < 0.01", timeout=3000)
         page.wait_for_function(f"-ball.z > {before[0] + 3}", timeout=5000)
         assert page.evaluate("round.phase") == "run"
