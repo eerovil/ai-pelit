@@ -144,3 +144,12 @@ def test_a_whole_race_with_a_road(site, context):
     assert r["mode"] == "done" and r["t"] < r["par"], r
     assert page.evaluate("P.road") == "done"
     assert page.errors == []
+
+
+def test_a_skier_put_back_past_the_road_skis_on(site, context):
+    # As after a reload in a room: the host puts the skier back where it was, past the road.
+    page = open_game(site, context)
+    page.evaluate(CROSS, "luistelu")
+    page.evaluate("P.road = undefined; P.z = course.road.z1 + 5; P.v = 4")
+    page.evaluate(RUN, 1)
+    assert page.evaluate("[P.road, P.z > course.road.z1 + 5]") == ["done", True]

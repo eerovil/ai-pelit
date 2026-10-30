@@ -234,6 +234,8 @@ function roadStep(p, dt) {
   if (!r || p.road === 'done') return false;
   if (!p.road) {
     if (p.z + p.v * dt < r.z0 - 1.2) return false;
+    // Already across (put back there after a reload in a room, or by the computer): ski on.
+    if (p.z > r.z1) { p.road = 'done'; return false; }
     if (p.v > 4.5 && p.fallT <= 0) { p.fallT = 1.6; p.hitRoad = true; }
     p.z = r.z0 - 1.2; p.road = 'edge'; p.roadT = 0;
   }
