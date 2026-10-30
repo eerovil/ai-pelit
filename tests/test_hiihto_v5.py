@@ -66,3 +66,18 @@ def test_a_real_tap_on_each_wax_starts_the_race(site, browser):
         page.wait_for_function("mode === 'count'", timeout=2000)
         assert page.evaluate(ROOM_OPEN) is False
         page.context.close()
+
+
+def test_two_fingers_a_wax_wins(site, browser):
+    # One finger rests on the friends button while another taps a wax: the race starts, and
+    # lifting the first finger afterwards does not open the friends screen.
+    page = open_game(site, browser, 390, 844)
+    page.evaluate("draw()")
+    b = page.evaluate("ui.friends")
+    cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
+    page.evaluate("([x, y]) => down(4, x, y)", [cx, cy])
+    page.evaluate("const r = ui.wax[1]; down(5, r.x + 5, r.y + 5); up(5, r.x + 5, r.y + 5)")
+    page.evaluate("([x, y]) => up(4, x, y)", [cx, cy])
+    assert page.evaluate("[mode, net === null]") == ["count", True]
+    assert page.evaluate(ROOM_OPEN) is False
+    page.context.close()
