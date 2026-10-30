@@ -1,6 +1,6 @@
 # Trampoliini: one bounce, from the mat to the landing
 
-How one Trampoliini bounce plays (v1, and v2 with the same rules). The player taps at the bottom of each bounce to go higher,
+How one Trampoliini bounce plays (v1, and v2 and v3 with the same rules). The player taps at the bottom of each bounce to go higher,
 holds a flip button to spin tucked, lets go to stretch out and spot the landing, and taps 🌀 for a
 twist. Each level has its own size of trampoline and a list of tricks; the level is cleared when
 every trick is done before three hearts run out.
@@ -63,7 +63,7 @@ flowchart TD
 - **Päästä irti: oikaisu, katse alastuloon**: `air()`: let go, the turn slows to at most 1.2 rad/s (`OPEN`) and eases onto the nearest upright ahead, or back onto one just passed.
 - **🌀: kierre**: `twistTap()`: one full twist about the long axis, 1.6 a second (`TWIST`), up to three a jump.
 - **Trampoliinin ohi**: past the mat's end you fall to the grass; the big garden trampoline's net bounces you back instead.
-- **Jaloillaan pystyssä?**: `land()`: within 0.5 rad of upright, twist done and button let go is clean; within 1 rad is a wobble; otherwise a fall.
+- **Jaloillaan pystyssä?**: `land()`: within 0.5 rad of upright, twist done and button let go is clean; within 1 rad is a wobble; otherwise a fall. From v3 (`games/trampoliini/v3/index.html`) the landing's tilt also moves you sideways: `land()` adds `-sin(tilt) × slideOf(T)` m/s (3 m/s per radian on the big garden trampoline, less on smaller mats, never under 40 %), leaning back sends you back and forward sends you forward, and the mat pulls you back to the middle less than in v2 (30 % of the distance instead of 60 %).
 - **Puhdas temppu: pisteet ja putki**: `score()` names the trick from whole turns and twists (`trickName()`), gives `trickPoints()` with a 10 % bonus per trick in a row (at most double); a trick done again in the same go pays only what it beats its earlier best by (`paid`), so one go's points have a ceiling, and ticks off a matching trick on the list (+25).
 - **Taso läpi: seuraava trampoliini**: `clearLevel()` and `finish()`: a bonus of 50 × level + 20 a heart left; the next level is saved as `ai-pelit:trampoliini:taso`.
 - **Ennätys ja tuloslista**: `finish()` saves the best go (`ennatys`) and sends its points with `AiPelitScores.submit()`; the list is the most points first (`trampoliini` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
