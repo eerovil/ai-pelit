@@ -109,6 +109,9 @@ test('bad scores and unknown players are refused', async () => {
   assert.equal((await call('POST', '/api/scores', { ...ok, board: 'taso-1' })).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'taso-12' })).status, 200);
   assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'taso-0' })).status, 400);
+  // Hiihto v3's skating times have lists of their own (#61).
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'luistelu-3' })).status, 200);
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'luistelu-0' })).status, 400);
   assert.equal((await call('GET', '/api/scores?game=hiihto&board=main')).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, score: 'paljon' })).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, version: 0 })).status, 400);
