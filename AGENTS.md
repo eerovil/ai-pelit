@@ -18,6 +18,10 @@ player sees is Finnish unless the request says otherwise.
   A new game needs one (the build refuses a game without it); retake it in a new version when the
   game looks different.
 
+How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
+asked to change in past versions: [docs/making-games.md](docs/making-games.md). Read it before you
+start a new game or version.
+
 ## Rules
 
 1. **A published version never changes.** Never edit, move or delete a `games/<slug>/v<N>/` folder
