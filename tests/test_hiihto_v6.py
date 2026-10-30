@@ -40,9 +40,10 @@ def test_the_game_is_drawn_for_the_canvas_as_it_shows(site, browser):
 # v5 drew for innerHeight but stretched the canvas to 100dvh; where a phone's two differ, the
 # buttons showed lower than where a tap went. A canvas box taller than the window, and one that is
 # shorter and lower, stand in for those phones.
+@pytest.mark.parametrize("w,h", [(360, 740), (390, 844)])
 @pytest.mark.parametrize("box", ["top:0;height:110%", "top:60px;height:calc(100% - 60px)"])
-def test_a_tap_on_a_button_as_it_shows_presses_it(site, browser, box):
-    page = open_game(site, browser, 360, 740)
+def test_a_tap_on_a_button_as_it_shows_presses_it(site, browser, box, w, h):
+    page = open_game(site, browser, w, h)
     page.evaluate(f"c.style.cssText = '{box}'; resize()")
     page.wait_for_function("H === c.getBoundingClientRect().height")
     # The style button, then a wax: each where it is drawn on the screen.
@@ -125,6 +126,11 @@ def test_four_phones_race_and_all_get_the_same_places(site, browser):
     for p in pages:
         p.wait_for_function("net.skiers.every((k, i) => k.kind === 'me' || Math.abs(k.z - (40 + 30 * i)) < 15)", timeout=4000)
     assert [p.evaluate("livePlace()") for p in pages] == [4, 3, 2, 1]
+    # Ville's phone reloads mid-race: it skis on from where it was, and the others still see it.
+    pages[2].reload()
+    pages[2].wait_for_function("net && mode === 'race' && P.z >= 95 && net.skiers.length === 4", timeout=8000)
+    pages[2].evaluate(CLEAR)
+    host.wait_for_function("net.skiers[2].z >= 95", timeout=4000)
     # They finish in the order Ville, Eero, Saara, Aino.
     for i in [2, 0, 3, 1]:
         pages[i].evaluate("P.z = course.len - 0.5; P.v = 8")
