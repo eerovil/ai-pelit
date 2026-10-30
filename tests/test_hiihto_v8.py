@@ -16,8 +16,24 @@ def build(site):
     site.build()
 
 
+_opened = []
+
+
+@pytest.fixture(autouse=True)
+def _close_pages():
+    # Close every page a test opened even when it fails, so its 3D loop does not slow the next.
+    yield
+    while _opened:
+        ctx = _opened.pop()
+        try:
+            ctx.close()
+        except Exception:
+            pass
+
+
 def open_game(site, browser, w=740, h=360, url=URL):
     ctx = browser.new_context(viewport={"width": w, "height": h}, is_mobile=True, has_touch=True)
+    _opened.append(ctx)
     ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi'))")
     page = ctx.new_page()
     page.errors = []
@@ -58,6 +74,14 @@ def overlaps(a, b):
 def tap(page, name):
     _, l, t, r, b = next(x for x in rects(page) if x[0] == name)
     page.touchscreen.tap((l + r) / 2, (t + b) / 2)
+
+
+def start_race(page):
+    """After a wax tap: skip the countdown, as tests/test_hiihto_v7.py does. Software WebGL on CI
+    draws slowly, and a frame moves the clock at most 0.05 s, so 3 s of countdown can take far longer."""
+    page.wait_for_function("mode === 'count' || mode === 'race'", timeout=20000)
+    page.evaluate("if (mode === 'count') countT = 0")
+    page.wait_for_function("mode === 'race'", timeout=20000)
 
 
 def camera(page):
@@ -112,7 +136,7 @@ def test_a_race_sideways_survives_turning_the_phone(site, browser):
     wait_3d(page)
     page.evaluate("level = 1; newRace(); npcs = []; nextVasta = nextSkate = 1e9")
     tap(page, "wax0")
-    page.wait_for_function("mode === 'race'", timeout=5000)
+    start_race(page)
     page.evaluate("npcs = []; nextVasta = nextSkate = 1e9")
     # The 3D view fills the wide screen, shifted down so the HUD stays in the sky.
     assert camera(page) == [740, 360, 740 / 360, round(0.06 * 360)]
@@ -156,7 +180,7 @@ def test_skating_pads_and_the_road_button_sit_in_the_lower_corners(site, browser
     assert all(0 <= p[0] and p[2] <= 740 and p[3] <= 360 and p[1] > 360 / 2 for p in pads)
     # On level 3 the road: its one button low on the right.
     page.evaluate("level = 3; newRace(); chooseWax(bestFor(style, course.weather.T)); countT = 0.01")
-    page.wait_for_function("mode === 'race'", timeout=3000)
+    start_race(page)
     page.evaluate("npcs = []; nextVasta = nextSkate = 1e9; P.z = course.road.z0 - 1; P.v = 1")
     page.wait_for_function("P.road === 'edge'", timeout=5000)
     page.touchscreen.tap(740 - 30 - 115, 360 - 46 - 27)
@@ -169,7 +193,7 @@ def test_the_finish_sideways_fits_and_a_tap_goes_on(site, browser):
     build(site)
     page = open_game(site, browser)
     page.evaluate("level = 1; maxLevel = 1; newRace(); chooseWax(bestFor(style, course.weather.T)); countT = 0.01")
-    page.wait_for_function("mode === 'race'", timeout=3000)
+    start_race(page)
     page.evaluate("P.z = course.len - 0.5; P.v = 6; P.t = course.ideal")
     page.wait_for_function("mode === 'done' && resultT > 0.9", timeout=15000)
     box = page.evaluate("(() => { const b = landBox(Math.min(W - SAFE_L - SAFE_R - 24, 560), 206); return [b.px, b.py, b.px + b.pw, b.py + b.ph]; })()")
