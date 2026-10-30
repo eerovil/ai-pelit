@@ -1,0 +1,1699 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Hiihto</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#cfdcea;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+  #g{pointer-events:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<script src="../../../rooms.js" data-game="hiihto" data-min="2" data-max="6"></script>
+<script>
+const c = document.getElementById('c'), x = c.getContext('2d');
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, LAND = false;
+// v6 (#93): the game is drawn for the canvas's own box on the screen, and a finger is read
+// against that box. v5 drew for innerWidth × innerHeight but stretched the canvas to 100dvh; on a
+// phone where those differ, everything showed lower than where a tap landed.
+function resize() {
+  // v7: at most twice the screen's pixels, as for the 3D under it: a phone at three times spent
+  // most of its frame on this canvas.
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const r = c.getBoundingClientRect();
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+  SAFE_L = parseFloat(cs.paddingLeft) || 0; SAFE_R = parseFloat(cs.paddingRight) || 0;
+  // v8 (#95): a phone turned sideways. The menus and end screens go into two columns, the buttons
+  // to the lower corners, and the 3D view simply shows wider. Only the drawing changes: a rotation
+  // mid-race keeps the race as it is.
+  LAND = W > H;
+}
+addEventListener('resize', resize); resize();
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe(c);
+// A finger on the screen, in the game's own coordinates.
+function at(e) { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * W / (r.width || W), (e.clientY - r.top) * H / (r.height || H)]; }
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:hiihto:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let maxLevel = Math.max(1, Math.floor(load('taso', 1)) || 1);   // the highest level open
+let stars = load('tahdet', {}) || {};                            // level -> best stars
+let bests = load('ajat', {}) || {};                              // level -> best time, seconds
+// Skating (v3) keeps its own stars and times: a skate is faster, so the lists stay apart. The
+// levels opened ('taso') are shared by both styles.
+let sStars = load('luistelu-tahdet', {}) || {}, sBests = load('luistelu-ajat', {}) || {};
+const savedStyle = () => load('tyyli', 'perinteinen') === 'luistelu' ? 'luistelu' : 'perinteinen';
+let style = savedStyle();                                        // 'perinteinen' (classic) or 'luistelu'
+let level = maxLevel;
+const skating = () => style === 'luistelu';
+const starsOf = () => skating() ? sStars : stars;
+const bestsOf = () => skating() ? sBests : bests;
+const STYLE_NAME = { perinteinen: 'Perinteinen', luistelu: 'Luistelu' };
+// One online list per course and style: classic keeps v1-v2's 'taso-N'.
+function setBoard() {
+  if (window.AiPelitScores) AiPelitScores.board(skating() ? `luistelu-${level}` : `taso-${level}`, skating() ? `Luistelu · taso ${level}` : `Taso ${level}`);
+}
+
+const TAU = 2 * Math.PI, G = 9.81;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+function rng(seed) {
+  return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const fmt = (v, d) => v.toFixed(d).replace('.', ',').replace('-', '−');
+function fmtTime(t) { const m = Math.floor(t / 60), s = t - 60 * m; return `${m}.${s < 10 ? '0' : ''}${fmt(Math.floor(s * 10) / 10, 1)}`; }
+
+// ---- Weather and grip wax ----
+// A wax grips in its own temperature range. Too hard a wax for the weather (colder wax, warmer day)
+// slips; too soft a wax (warmer wax, colder day) grips, but snow sticks to it and it glides badly.
+const WAXES = [
+  { name: 'Vihreä', col: '#2e9e4f', lo: -20, hi: -10, range: '−10…−20 °C' },
+  { name: 'Sininen', col: '#2f6fd0', lo: -10, hi: -2, range: '−2…−10 °C' },
+  { name: 'Violetti', col: '#8a4fc4', lo: -3, hi: 0, range: '0…−3 °C' },
+  { name: 'Klisteri', col: '#d6403a', lo: 0, hi: 5, range: '0…+5 °C, nuoska' },
+];
+const TEMPS = [-6, -14, -1.5, 1.5, -8, -2.5, -17, 0.5, -4, -11];
+function weatherFor(n) {
+  const T = n <= TEMPS.length ? TEMPS[n - 1] : Math.round((rng(n * 31)() * 21 - 18) * 2) / 2;
+  const desc = T <= -10 ? 'Kireä pakkanen, kuiva ja kova lumi' : T < -3 ? 'Pakkaskeli, kuiva lumi'
+    : T <= 0 ? 'Nollakeli, kosteaa uutta lunta' : 'Suojakeli, märkää nuoskaa';
+  return { T, desc, snowing: T > -4.5, grey: T > -3 };
+}
+function waxFit(w, T) {
+  if (T > w.hi) return { grip: clamp(1 - 0.14 * (T - w.hi), 0.35, 1), drag: 0 };
+  if (T < w.lo) return { grip: 1, drag: Math.min(0.06, 0.02 * (w.lo - T)) };
+  return { grip: 1, drag: 0 };
+}
+function bestWax(T) { let b = 0, s = -1e9; WAXES.forEach((w, i) => { const f = waxFit(w, T), v = f.grip - 4 * f.drag; if (v > s) { s = v; b = i; } }); return b; }
+// A skate pushes off the edge, so skating wants no grip wax, only a glide wax for the snow: one
+// made for other weather drags a little more for each degree it is off.
+const GLIDES = [
+  { name: 'Pakkanen', col: '#2e9e4f', lo: -20, hi: -8, range: '−8…−20 °C' },
+  { name: 'Keskikeli', col: '#2f6fd0', lo: -10, hi: -3, range: '−3…−10 °C' },
+  { name: 'Nollakeli', col: '#8a4fc4', lo: -4, hi: 0.5, range: '0…−4 °C' },
+  { name: 'Suojakeli', col: '#d6403a', lo: 0, hi: 6, range: '0…+6 °C, märkä' },
+];
+function glideFit(w, T) { const d = T > w.hi ? T - w.hi : T < w.lo ? w.lo - T : 0; return { grip: 1, drag: Math.min(0.05, 0.012 * d) }; }
+function bestGlide(T) { let b = 0, s = 1e9; GLIDES.forEach((w, i) => { const d = glideFit(w, T).drag; if (d < s) { s = d; b = i; } }); return b; }
+const waxList = st => (st || style) === 'luistelu' ? GLIDES : WAXES;
+const fitOf = (st, i, T) => st === 'luistelu' ? glideFit(GLIDES[i], T) : waxFit(WAXES[i], T);
+const bestFor = (st, T) => st === 'luistelu' ? bestGlide(T) : bestWax(T);
+
+// ---- The course: 2 m segments, each with its own grade and curve ----
+const SEG = 2, ROAD_W = 8;
+const LX = [-1.25, 0, 1.7];                     // oncoming classic track, own classic track, skating lane
+const LS = [0, 1.15, 2.25];                     // a skater's lanes: the classic track, the skating lane's two halves
+const laneX = (st, lane) => (st === 'luistelu' ? LS : LX)[lane];
+const TRAIL_L = -2.05, TRAIL_R = 2.85, SKATE_L = 0.62;
+let course;
+
+function buildCourse(n) {
+  const r = rng(n * 7919 + 101);
+  const len = Math.min(1500, 500 + 100 * (n - 1));
+  const total = Math.ceil((len + 320) / SEG);
+  const raw = new Float32Array(total), curve = new Float32Array(total);
+  let i = 0, hills = 0;
+  const put = (m, g, cv) => { const k = Math.max(1, Math.round(m / SEG));
+    for (let j = 0; j < k && i < total; j++, i++) { raw[i] = g; curve[i] = cv * Math.sin(Math.PI * (j + 0.5) / k); } };
+  put(50, 0, 0);
+  while (i * SEG < len - 150) {
+    put(30 + r() * 50, (r() - 0.5) * 0.02, (r() - 0.5) * 0.014);
+    // The second hill is always steep, so every course needs the V step at least once.
+    const steep = hills === 1 || (hills > 1 && r() < Math.min(0.75, 0.4 + 0.04 * n));
+    const up = steep ? 0.1 + r() * 0.03 : 0.035 + r() * 0.025;
+    put(steep ? 28 + r() * 20 : 40 + r() * 40, up, (r() - 0.5) * 0.006);
+    put(10, up * 0.25, 0);
+    put(50 + r() * 60, -(0.05 + r() * 0.06), (r() - 0.5) * 0.016);
+    hills++;
+  }
+  put(total * SEG, 0, 0);
+  // A road across the trail (v4) on levels 3, 5, 7…, a little before half way, on the flat.
+  const road = n >= 3 && n % 2 === 1 ? { z0: Math.round(len * 0.45 / SEG) * SEG } : null;
+  if (road) {
+    road.z1 = road.z0 + ROAD_W;
+    for (let j = Math.floor((road.z0 - 30) / SEG); j < Math.ceil((road.z1 + 30) / SEG); j++) { raw[j] = 0; curve[j] = 0; }
+  }
+  const grade = new Float32Array(total), y = new Float32Array(total + 1), xs = new Float32Array(total + 1), dir = new Float32Array(total + 1);
+  for (let s = 0; s < total; s++) { let a = 0, k = 0; for (let j = -4; j <= 4; j++) { const q = s + j; if (q >= 0 && q < total) { a += raw[q]; k++; } } grade[s] = a / k; }
+  for (let s = 0; s < total; s++) { y[s + 1] = y[s] + grade[s] * SEG; dir[s + 1] = dir[s] + curve[s]; xs[s + 1] = xs[s] + dir[s] * SEG; }
+  // Spruces beside the trail, a start and a finish banner, and distance posts.
+  const spr = Array.from({ length: total }, () => []);
+  for (let s = 0; s < total; s++) for (const side of [-1, 1]) {
+    if (r() < 0.42) spr[s].push({ kind: 'tree', l: side < 0 ? TRAIL_L - 1.4 - r() * 12 : TRAIL_R + 1.4 + r() * 12, h: 3.5 + r() * 5, z: s * SEG + r() * SEG });
+  }
+  const at = (z, o) => spr[Math.floor(z / SEG)].push({ z, ...o });
+  at(4, { kind: 'banner', text: 'LÄHTÖ' });
+  at(len, { kind: 'banner', text: 'MAALI' });
+  if (road) at(road.z0 - 16, { kind: 'post', text: '⚠ TIE', l: TRAIL_R + 0.5 });
+  for (let d = 250; d < len - 50; d += 250) at(len - d, { kind: 'post', text: `${d} m`, l: TRAIL_R + 0.5 });
+  course = { n, len, total, grade, y, xs, dir, spr, road, weather: weatherFor(n) };
+  course.ideal = idealTime();
+  course.par = Math.round(course.ideal * 1.5);
+  return course;
+}
+function segAt(z) { return clamp(Math.floor(z / SEG), 0, course.total - 1); }
+function gradeAt(z) { return course.grade[segAt(z)]; }
+function heightAt(z) { const i = segAt(z), t = clamp(z / SEG - i, 0, 1); return lerp(course.y[i], course.y[i + 1], t); }
+function centreAt(z) { const i = segAt(z), t = clamp(z / SEG - i, 0, 1); return [lerp(course.xs[i], course.xs[i + 1], t), lerp(course.dir[i], course.dir[i + 1], t)]; }
+
+// ---- The skier ----
+// Diagonal stride: each tap is one kick. It grips only when the wax grips well enough for the
+// slope, so a steep hill wants the V step (haarakäynti), which always grips but is slow on the flat
+// and brakes downhill. Holding a finger down is the tuck, which glides fastest down a hill.
+const MU = 0.035, K_STRIDE = 0.75, VMAX_STRIDE = 7.2, K_V = 1.0, VMAX_V = 4.6, K_DOWN = 0.35;
+function newSkier(st) {
+  st = st || style;
+  return { style: st, z: 0, v: 0, lane: 1, x: laneX(st, 1), vMode: false, hold: false, lastKick: -9, t: 0, fallT: 0, invT: 0, slipT: 0, sameT: 0, kickAnim: 1, side: 1, grip: 1, drag: 0 };
+}
+let P = newSkier();
+
+function kickNeed(g, vMode) { return vMode ? 0.25 : 0.3 + 10 * Math.max(0, g); }
+function kick(p) {
+  if (p.fallT > 0) return 0;
+  const g = gradeAt(p.z), since = p.t - p.lastKick;
+  p.lastKick = p.t; p.kickAnim = 0; p.side = -p.side;
+  // A kick too soon after the last is weaker, down to nothing: mashing the screen never beats the
+  // rhythm (v4; earlier versions kept 30 % of every kick, so very fast taps were the fastest).
+  const rate = clamp((since - 0.12) / 0.25, 0, 1);
+  p.earlyT = rate < 0.85 ? 0.6 : 0;
+  const eff = clamp(1 - (kickNeed(g, p.vMode) - p.grip) * 2.5, 0, 1);
+  let K = p.vMode ? K_V : K_STRIDE, vmax = p.vMode ? VMAX_V : VMAX_STRIDE;
+  if (g < -0.03) K = p.vMode ? 0 : K_DOWN;
+  const dv = K * rate * eff * Math.max(0, 1 - p.v / vmax);
+  p.v += dv;
+  if (eff < 0.5 && K > 0) p.slipT = 0.9;
+  return dv;
+}
+// Skating (v3): a tap on the left half of the screen pushes off the left ski, on the right half
+// the right one. Pushes on alternate skis drive the skier on, uphill too, as the edge always
+// grips; the same ski twice is a weak push. Faster than the stride, and no V step is needed.
+const K_SKATE = 0.8, VMAX_SKATE = 9.2;
+function push(p, side) {
+  if (p.fallT > 0) return 0;
+  const g = gradeAt(p.z), since = p.t - p.lastKick, alt = side !== p.side;
+  p.lastKick = p.t; p.kickAnim = 0; p.side = side;
+  const timing = clamp((since - 0.1) / 0.22, 0, 1), rate = timing * (alt ? 1 : 0.35);
+  p.earlyT = timing < 0.85 ? 0.6 : 0;
+  const K = g < -0.03 ? K_SKATE * 0.4 : K_SKATE;
+  const dv = K * rate * Math.max(0, 1 - p.v / VMAX_SKATE);
+  p.v += dv;
+  if (!alt) p.sameT = 0.9;
+  return dv;
+}
+// The rhythm (v4): how far the skier is from the next full-strength kick or push. A tap before it
+// is weaker (above), a tap long after it wastes time, so tapping as the meter turns green is the
+// fastest rhythm: 0.37 s a kick in classic, 0.32 s a push when skating.
+const BEAT = { perinteinen: 0.37, luistelu: 0.32 };
+const beatLen = p => p.road === 'walk' ? WALK_BEAT : BEAT[p.style];
+function beat(p) { return clamp((p.t - p.lastKick) / beatLen(p), 0, 1); }
+// What the meter shows: red after a tap that came too soon, until the next full-strength moment;
+// then green; yellow while it fills.
+function meter(p) { const f = beat(p); return f >= 1 ? 'ready' : p.earlyT > 0 ? 'early' : 'filling'; }
+function physics(p, dt) {
+  p.t += dt;
+  const g = gradeAt(p.z);
+  p.kickAnim = Math.min(1, p.kickAnim + dt * 2.6);
+  p.slipT = Math.max(0, p.slipT - dt); p.invT = Math.max(0, p.invT - dt); p.sameT = Math.max(0, p.sameT - dt); p.earlyT = Math.max(0, (p.earlyT || 0) - dt);
+  if (p.fallT > 0) { p.fallT = Math.max(0, p.fallT - dt); p.v *= Math.exp(-8 * dt); }
+  if (roadStep(p, dt)) return;
+  let mu = MU + p.drag;
+  if (p.vMode) mu += g < -0.01 ? 0.22 : 0.03;              // a V downhill is a snowplough
+  const k = p.hold && !p.vMode ? 0.0018 : 0.0055;
+  p.v += (-G * g - (mu * G + k * p.v * p.v)) * dt;
+  if (p.v < 0) p.v = 0;
+  p.z += p.v * dt;
+  const tx = laneX(p.style, p.lane);
+  p.x += clamp(tx - p.x, -9 * dt, 9 * dt);
+}
+// ---- The road crossing (v4) ----
+// At the road's edge the skier stops (one who comes in fast falls over), takes the skis off,
+// steps across the icy road (a step before the meter is green slips), and puts the skis back on;
+// when snow has got into the bindings, it has to be knocked out first, a tap for each knock.
+const STEP = 0.9, WALK_BEAT = 0.45;
+const onRoad = p => !!(p.road && p.road !== 'done');
+function roadStep(p, dt) {
+  const r = course.road;
+  if (!r || p.road === 'done') return false;
+  if (!p.road) {
+    if (p.z + p.v * dt < r.z0 - 1.2) return false;
+    // Already across (put back there after a reload in a room, or by the computer): ski on.
+    if (p.z > r.z1) { p.road = 'done'; return false; }
+    if (p.v > 4.5 && p.fallT <= 0) { p.fallT = 1.6; p.hitRoad = true; }
+    p.z = r.z0 - 1.2; p.road = 'edge'; p.roadT = 0;
+  }
+  p.v = 0; p.roadT += dt;
+  if (p.road === 'off' && p.roadT >= 0.8) { p.road = 'walk'; p.roadT = 0; p.lastKick = p.t - 1; }
+  if (p.road === 'on' && p.roadT >= 0.8) { p.road = 'done'; p.lastKick = p.t - 1; }
+  if (p.road === 'walk' && p.z >= r.z1 + 0.6) { p.road = 'skison'; p.roadT = 0; }
+  p.x += clamp(laneX(p.style, p.lane) - p.x, -9 * dt, 9 * dt);
+  return true;
+}
+// A tap at the road: skis off, a step, skis on, or a knock at the snow in the bindings.
+function roadTap(p) {
+  if (p.fallT > 0) return null;
+  if (p.road === 'edge') { p.road = 'off'; p.roadT = 0; return 'off'; }
+  if (p.road === 'walk') {
+    const since = p.t - p.lastKick;
+    p.lastKick = p.t; p.side = -p.side; p.kickAnim = 0;
+    // Ice: a step before the meter is green slips. The same moment the meter turns green.
+    if (since < WALK_BEAT) { p.fallT = 1.0; p.earlyT = 0.6; return 'slip'; }
+    p.z += STEP;
+    return 'step';
+  }
+  if (p.road === 'skison') {
+    if (p.clog > 0) { p.road = 'clog'; return 'clog'; }
+    p.road = 'on'; p.roadT = 0; return 'on';
+  }
+  if (p.road === 'clog') {
+    p.clog--;
+    if (p.clog <= 0) { p.road = 'on'; p.roadT = 0; }
+    return 'knock';
+  }
+  return null;
+}
+// A good skier: V on the steep climbs (classic), the tuck down the hills, a kick every `gap`
+// seconds, a push on alternate skis when skating. Sets the par, and skis for a friend who left.
+function botStep(p, dt, gap) {
+  if (onRoad(p) || (course.road && !p.road && p.z > course.road.z0 - 25)) {
+    // The road: slow down to it, then the same taps as a person, in the meter's rhythm.
+    p.vMode = false; p.hold = false;
+    if (onRoad(p) && p.t >= (p.next || 0)) { roadTap(p); p.next = p.t + (p.road === 'walk' ? WALK_BEAT + 0.02 : 0.3); }
+    else if (!onRoad(p) && p.v < 2.5 && p.t >= (p.next || 0)) { if (p.style === 'luistelu') push(p, -p.side); else kick(p); p.next = p.t + gap; }
+    physics(p, dt);
+    return;
+  }
+  const g = gradeAt(p.z + 2);
+  p.vMode = p.style !== 'luistelu' && g > 0.075; p.hold = g < -0.02;
+  if (!p.hold && p.t >= (p.next || 0)) {
+    if (p.style === 'luistelu') push(p, -p.side); else kick(p);
+    p.next = p.t + gap;
+  }
+  physics(p, dt);
+}
+// The time a good skier needs with the right wax and nobody on the trail; it sets the par.
+function idealTime() {
+  const p = newSkier(), gap = skating() ? 0.34 : 0.4;
+  for (let i = 0; i < 60 * 1200 && p.z < course.len; i++) botStep(p, 1 / 60, gap);
+  return p.t;
+}
+
+// ---- Others on the trail ----
+const GRANNY_COATS = ['#8e3b6b', '#b5533c', '#5b6b3a', '#6a4b8c', '#3b6b8e'], GRANNY_HATS = ['#d13b3b', '#f0f0f0', '#e2b53b', '#3bb0d1'];
+const GRANNY_LINES = ['Kylläpä on kiire!', 'Hyvää päivänjatkoa!', 'Nuoret ne menee…', 'Hyvä keli tänään!', 'Muista voidella!', 'No hei vaan!'];
+const OTHER_COATS = ['#2d7d46', '#c0392b', '#2c3e50', '#d35400', '#16a085', '#7f8c8d'];
+const SKATE_SUITS = ['#e0302f', '#f2b705', '#18a0a0', '#1d1d1d', '#e05aa0'];
+let npcs, nextVasta, nextSkate, bubbles, popups, passes, falls, mode, countT, resultT, result, clock = 0, snow, R;
+
+function slopeFactor(g) { return g > 0 ? Math.max(0.35, 1 - 6 * g) : Math.min(2.5, 1 - 9 * g); }
+function pick(a) { return a[Math.floor(R() * a.length)]; }
+function addGranny(z) { npcs.push({ kind: 'mummo', z, lane: 1, x: LX[1], base: 1.7 + R() * 0.6, v: 0, coat: pick(GRANNY_COATS), hat: pick(GRANNY_HATS), ph: R(), passed: false }); }
+function addVasta(z) { npcs.push({ kind: 'vasta', z, lane: 0, x: LX[0], base: 3 + R() * 1.6, v: 0, coat: pick(OTHER_COATS), hat: pick(GRANNY_HATS), ph: R(), passed: false }); }
+function addSkater(z) { npcs.push({ kind: 'luistelija', z, lane: 2, x: LX[2], base: 6.6 + R() * 1.6, v: 0, coat: pick(SKATE_SUITS), hat: pick(SKATE_SUITS), ph: R(), passed: false, shout: false }); }
+// Skating (v3): slower fitness skaters in the skating lane, on either half, to overtake.
+function addSlow(z) { const lane = 1 + Math.floor(R() * 2); npcs.push({ kind: 'luistelija', slow: true, z, lane, x: LS[lane], base: 3.6 + R() * 1.4, v: 0, coat: pick(SKATE_SUITS), hat: pick(GRANNY_HATS), ph: R(), passed: false }); }
+const SLOW_LINES = ['Hyvin menee!', 'Vauhtia riittää!', 'Hei hei!', 'Mennään, mennään!'];
+
+// `seed` (a race with friends) gives every phone the same grannies and skaters to start with.
+function newRace(seed) {
+  buildCourse(level);
+  setBoard();
+  R = rng(seed ?? level * 104729 + Math.floor(clock * 1000));
+  P = newSkier(); npcs = []; bubbles = []; popups = []; passes = 0; falls = 0; result = null;
+  // Slower skiers start in the first half, so a skier at a good pace catches every one before the
+  // finish: grannies on the classic track, or fitness skaters in the skating lane when skating.
+  const n = Math.min(12, 3 + level), len = course.len;
+  if (skating()) {
+    for (let i = 0; i < n; i++) addSlow(25 + len * 0.6 * (i + 0.2 + R() * 0.6) / n);
+    for (let i = 0; i < 3; i++) addGranny(30 + len * 0.3 * (i + R()) / 3);
+  } else for (let i = 0; i < n; i++) addGranny(25 + len * 0.5 * (i + 0.2 + R() * 0.6) / n);
+  for (let z = 40; z < 160; z += 30 + R() * 50) addVasta(z);
+  if (!skating()) addSkater(-20 - R() * 30);
+  nextVasta = 3 + R() * 4; nextSkate = skating() ? 1e9 : 6 + R() * 6;
+  snow = Array.from({ length: 70 }, () => [R(), R(), 0.5 + R()]);
+  // Snow in the bindings at the road: likelier in wet, new snow. The same for everyone in a room.
+  const T = course.weather.T;
+  P.clog = course.road && R() < (T > -3 ? 0.75 : T > -10 ? 0.45 : 0.25) ? 4 + Math.floor(R() * 3) : 0;
+  mode = 'wax';
+}
+
+function npcStep(o, dt) {
+  if (o.kind === 'vasta') { o.v = o.base * slopeFactor(-gradeAt(o.z)); o.z -= o.v * dt; }
+  else { o.v = o.base * slopeFactor(gradeAt(o.z)); o.z += o.v * dt; }
+  o.ph += dt * (o.kind === 'luistelija' ? 1.4 : o.kind === 'mummo' ? 0.9 : 1.3);
+}
+// The slower ones going your way: grannies, and the fitness skaters when skating.
+const isSlow = o => o.kind === 'mummo' || !!o.slow;
+
+function world(dt) {
+  // The slower ones queue behind each other on their track instead of skiing through.
+  const queue = npcs.filter(isSlow).sort((a, b) => b.z - a.z);
+  for (const o of npcs) npcStep(o, dt);
+  for (let i = 1; i < queue.length; i++) {
+    const o = queue[i], ahead = queue.slice(0, i).reverse().find(a => a.x === o.x);
+    if (ahead && o.z > ahead.z - 3) o.z = ahead.z - 3;
+  }
+  nextVasta -= dt; nextSkate -= dt;
+  if (nextVasta <= 0) { if (P.z + 160 < course.len + 40) addVasta(P.z + 160); nextVasta = Math.max(2.5, (5 + R() * 6) / (1 + 0.08 * (level - 1))); }
+  if (nextSkate <= 0) { addSkater(P.z - 50); nextSkate = Math.max(3, (7 + R() * 7) / (1 + 0.06 * (level - 1))); }
+  npcs = npcs.filter(o => o.z > P.z - 70 && (isSlow(o) || o.z < P.z + 260));
+  if (P.fallT > 0 || P.invT > 0 || onRoad(P)) return;
+  for (const o of npcs) {
+    const dz = o.z - P.z;
+    if (Math.abs(o.x - P.x) < 0.75 && Math.abs(dz) < 0.9) { crash(o); return; }
+    if (isSlow(o) && !o.passed && dz < -1) {
+      o.passed = true; passes++;
+      say(o, pick(o.slow ? SLOW_LINES : GRANNY_LINES)); popup('Ohitus!', '#7ef0a0');
+    }
+    if (o.kind === 'vasta' && !o.passed && dz < 0) { o.passed = true; if (R() < 0.4) say(o, pick(['Moi!', 'Hei!', 'Päivää!'])); }
+    if (o.kind === 'luistelija' && !o.slow && !o.shout && dz < -3 && dz > -16 && P.lane === 2 && o.v > P.v) { o.shout = true; say(o, 'Latua!'); }
+  }
+}
+
+function crash(o) {
+  P.fallT = 1.6; P.invT = 2.8; P.v = 0; falls++;
+  if (o.kind === 'mummo' && skating()) { P.z = Math.min(P.z, o.z - 1.3); say(o, pick(['Ei saa luistella perinteisen ladulla!', 'Pysy omalla puolellasi!'])); }
+  else if (o.slow) { P.z = Math.min(P.z, o.z - 1.3); say(o, pick(['Hups!', 'Varovasti!', 'Tilaa on!'])); }
+  else if (o.kind === 'mummo') { P.z = Math.min(P.z, o.z - 1.3); say(o, pick(['Voi hyvänen aika!', 'Varovasti!', 'Ohhoh!'])); }
+  else if (o.kind === 'vasta') say(o, pick(['Katso eteesi!', 'Oikealle!', 'Hupsis!']));
+  else say(o, pick(['Latua, sanoin!', 'Hups!', 'Pois tieltä!']));
+  popup('Kaatuminen!', '#ff8a8a');
+  thud();
+}
+
+function say(o, text) { bubbles = bubbles.filter(b => b.o !== o); bubbles.push({ o, text, t: 0 }); }
+function popup(text, col) { popups.push({ text, col, t: 0 }); }
+
+function steer(d) { if ((mode === 'race' || mode === 'count') && !onRoad(P)) P.lane = clamp(P.lane + d, 0, 2); }
+
+// ---- Step: everything that moves ----
+function step(dt) {
+  clock += dt;
+  if (net && RM.paused) return;   // a phone in the race is away: everyone waits for it
+  const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+  // With friends the host fires the start; the others start when it says so.
+  if (mode === 'count') { countT -= dt; if (countT <= 0 && (!net || RM.isHost)) go(); }
+  if (mode === 'race') {
+    P.hold = held();
+    for (let i = 0; i < n && mode === 'race'; i++) {
+      physics(P, h); world(h);
+      if (P.hitRoad) { P.hitRoad = false; falls++; popup('Liian kovaa tielle!', '#ff8a8a'); thud(); }
+      if (P.z >= course.len) finish();
+    }
+  }
+  if (mode === 'done') { resultT += dt; for (const o of npcs) npcStep(o, dt); }
+  if (net) netTick(dt, n);
+  for (const b of bubbles) b.t += dt;
+  bubbles = bubbles.filter(b => b.t < 2);
+  for (const p of popups) p.t += dt;
+  popups = popups.filter(p => p.t < 1.3);
+}
+function go() {
+  mode = 'race'; beep(880, 0.25, 'triangle', 0.1);
+  if (net) { net.phase = 'run'; net.clock = 0; }
+}
+
+function finish() {
+  mode = 'done'; resultT = 0;
+  const t = P.t, I = course.ideal, B = bestsOf(), S = starsOf(), pre = skating() ? 'luistelu-' : '';
+  const s = t <= I * 1.15 ? 3 : t <= I * 1.3 ? 2 : t <= course.par ? 1 : 0;
+  const prev = B[level], record = s > 0 && (prev === undefined || t < prev);
+  // A race with friends is saved once, however often its end is heard (a reload).
+  if (!net || RM.once(net.round)) {
+    if (record) { B[level] = t; save(pre + 'ajat', B); }
+    if (s > 0 && window.AiPelitScores) AiPelitScores.submit(Math.round(t * 10) / 10);
+    if (s > (S[level] || 0)) { S[level] = s; save(pre + 'tahdet', S); }
+    if (s > 0 && level === maxLevel) { maxLevel++; save('taso', maxLevel); }
+  }
+  const note = skating() ? (P.drag > 0.02 ? 'Luistovoide ei sopinut keliin: luisto oli huono.' : 'Luistovoide osui nappiin!')
+    : P.grip < 0.8 ? 'Voide oli liian kova: pito ei riittänyt.' : P.drag > 0.04 ? 'Voide oli liian pehmeä: lunta tarttui pohjaan.' : 'Voitelu osui nappiin!';
+  result = { t, stars: s, passed: s > 0, record, note };
+  if (net) { const k = meK(); k.fin = Math.round(t * 100) / 100; k.z = P.z; if (RM.isHost) arrive(k); net.sendT = 0; }
+  beep(s > 0 ? 784 : 330, 0.18, 'triangle', 0.1); if (s > 0) setTimeout(() => beep(1047, 0.3, 'triangle', 0.1), 160);
+}
+
+function applyWax(i) {
+  const f = fitOf(style, i, course.weather.T);
+  P.wax = i; P.grip = f.grip; P.drag = f.drag;
+}
+function chooseWax(i) {
+  applyWax(i);
+  beep(520, 0.1, 'sine', 0.08);
+  // With friends, the start waits until everyone has waxed.
+  if (net) { meK().wax = i; mode = 'ready'; net.readyT = 0; return; }
+  mode = 'count'; countT = 3;
+}
+function setStyle(st) {
+  if (st === style) return;
+  style = st; save('tyyli', st);
+  newRace();
+}
+
+// ---- Racing friends (v3) ----
+// Everyone in the room skis the host's course in the host's style at once. The others show on the
+// trail as skiers in their own colours (skiers ski through each other) and the first to the finish
+// wins. Each phone skis its own skier among its own grannies and skaters (the same ones at the
+// start), and sends it to the host; the host runs the start, the end (everyone in, or a minute
+// after the first), and the computer's skier for a friend who left, and sends everyone the race.
+const RM = window.AiPelitRooms;
+const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
+const LATE = 60;
+let net = null, lastEnd = null;   // lastEnd: the host's last result, for a phone that reloads after it
+const meK = () => net.skiers.find(k => k.kind === 'me');
+
+function netStart(s) {
+  net = { round: s.round, cfg: null, phase: 'wax', sendT: 0, readyT: 0, clock: 0, firstFin: null, res: null,
+    soloLevel: net ? net.soloLevel : level, adopt: false,
+    skiers: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
+      z: 0, x: 0, lane: 1, v: 0, fin: null, wax: -1, fall: 0, ph: 0 })) };
+  touches.clear();
+  if (s.host) { net.cfg = { level, style, seed: Math.floor(Math.random() * 1e9) }; netCourse(); }
+  else mode = 'netwait';   // until the host says which course
+  if (s.over) mode = 'netwait';   // a phone that missed the end: the results are on their way
+}
+function netCourse() {
+  level = net.cfg.level; style = net.cfg.style;
+  newRace(net.cfg.seed);
+  for (const k of net.skiers) k.x = laneX(style, 1);
+}
+// A skier as sent: where, which lane, how fast, the finish time, the wax, a fall, whether the
+// computer skis it now, whether the computer took it to the finish, and when the host saw it
+// arrive. `fin` is the skier's own time, kept for records; the places go by `at`, the host's race
+// clock when it first heard of the finish, so a phone whose clock ran slow cannot win a race it
+// lost.
+const r2 = n => Math.round(n * 100) / 100;
+// v4 adds the road: how far across it the skier is ([9]) and the snow left in its bindings ([10]),
+// so the computer, or the player back after a reload, carries on from the same step.
+const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null, k.road || null, k.clog || 0];
+function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; k.road = a[9] ?? null; k.clog = a[10] || 0; }
+// Puts a skier at a road step it was sent: the timers start again, the step rhythm is free.
+function roadFrom(p, road, clog, t) { p.road = road || undefined; p.clog = clog || 0; p.roadT = 0; if (road) p.lastKick = t - 1; }
+// The host: a skier's finish, on the race clock, the first time it is seen.
+function arrive(k) {
+  if (k.fin === null || k.at != null) return;
+  k.at = r2(net.clock);
+  if (net.firstFin === null) net.firstFin = net.clock;
+}
+const finOrder = k => k.at ?? k.fin;
+function synced(k) {
+  if (k.kind === 'me' && (mode === 'race' || mode === 'done')) { k.z = P.z; k.lane = P.lane; k.v = mode === 'race' ? P.v : 0; k.fall = P.fallT > 0 ? 1 : 0; k.road = P.road || null; k.clog = P.clog || 0; }
+  else if (k.kind === 'me') k.clog = P.clog || 0;
+  return k;
+}
+function hostState() {
+  return { t: 's', round: net.round, cfg: net.cfg, ph: net.phase, cd: r2(countT || 0), clock: r2(net.clock), sk: net.skiers.map(k => pack(synced(k))) };
+}
+
+// The host: the start once everyone has waxed, the computer's skiers, the end.
+function netTick(dt, n) {
+  for (const k of net.skiers) {
+    if (k.kind === 'me') continue;
+    if (k.kind === 'cpu' && RM.isHost) {
+      if (net.phase === 'run' && k.fin === null) {
+        for (let i = 0; i < n; i++) botStep(k.p, dt / n, skating() ? 0.38 : 0.44);
+        k.z = k.p.z; k.lane = k.p.lane; k.v = k.p.v; k.road = k.p.road || null; k.clog = k.p.clog || 0;
+        if (k.z >= course.len) { k.fin = r2(k.p.t); k.cpuFin = true; arrive(k); }
+      }
+    } else if (net.phase === 'run' && k.fin === null && !k.fall) k.z += k.v * dt;
+    k.x += clamp(laneX(style, k.lane) - k.x, -9 * dt, 9 * dt);
+    k.ph += dt * (k.fin === null ? 0.25 + k.v / 5 : 0);
+  }
+  net.sendT -= dt;
+  if (RM.isHost) {
+    if (net.phase === 'wax' && mode === 'ready' && net.skiers.every(k => k.wax >= 0)) { net.phase = 'cd'; mode = 'count'; countT = 3; net.sendT = 0; }
+    if (net.phase === 'run') {
+      net.clock += dt;
+      if (net.skiers.every(k => k.fin !== null) || (net.firstFin !== null && net.clock > net.firstFin + LATE)) {
+        const m = { t: 'end', round: net.round, res: standings() };
+        RM.send(hostState());
+        RM.deliver(m);
+        RM.endRound();
+        netEnd(m.res);
+        return;
+      }
+    }
+    if (net.sendT <= 0) { net.sendT = net.phase === 'wax' ? 0.5 : 0.1; RM.send(hostState()); }
+    return;
+  }
+  if (net.phase === 'run') net.clock += dt;
+  // A guest: its wax until the host has it, then its skier ten times a second.
+  if (mode === 'ready' && net.phase === 'wax') {
+    net.readyT -= dt;
+    if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: P.wax }); }
+  }
+  if ((mode === 'race' || mode === 'done') && net.sendT <= 0 && !net.res) {
+    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, s: pack(synced(meK())) });
+  }
+}
+function guestState(m) {
+  if (!net.cfg) { net.cfg = m.cfg; netCourse(); net.adopt = true; }
+  net.phase = m.ph; net.clock = m.clock;
+  m.sk.forEach((a, i) => {
+    const k = net.skiers[i];
+    if (!k) return;
+    if (k.kind !== 'me') { unpack(k, a); return; }
+    k.at = a[8] ?? k.at;   // when the host saw me finish, for my place
+    // Back after a reload: the host knows my wax, and where I was.
+    if (mode === 'wax' && a[4] >= 0) adopt(a, m);
+    // The computer skied for me while I was away: carry on from where it got to.
+    else if (a[6] && mode === 'race') {
+      P.z = a[0]; P.lane = a[1]; P.v = a[2]; P.t = m.clock; roadFrom(P, a[9], a[10], P.t);
+      if (a[3] !== null) arrived(a);
+    }
+  });
+  net.adopt = false;
+  if (m.ph === 'cd' && mode === 'ready') mode = 'count';
+  if (mode === 'count') countT = m.cd;
+  if (m.ph === 'run' && (mode === 'count' || mode === 'ready')) { mode = 'race'; P.t = m.clock; if (m.clock < 0.5) beep(880, 0.25, 'triangle', 0.1); }
+}
+function adopt(a, m) {
+  applyWax(a[4]); meK().wax = a[4];
+  P.z = a[0]; P.lane = a[1]; P.x = laneX(style, a[1]); P.v = a[2]; P.t = m.clock; roadFrom(P, a[9], a[10], P.t);
+  if (a[3] !== null) arrived(a);
+  else mode = m.ph === 'run' ? 'race' : m.ph === 'cd' ? 'count' : 'ready';
+}
+// The host says I am at the finish. My own finish (heard again after a reload) is saved as usual,
+// once; one the computer skied for me while I was away keeps its place in the race, but is not
+// my time: no stars, record, level or online score.
+function arrived(a) {
+  P.t = a[3]; P.z = Math.max(P.z, course.len);
+  if (!a[7]) return finish();
+  mode = 'done'; resultT = 0;
+  result = { t: a[3], stars: 0, passed: false, record: false, cpu: true, note: 'Tietokone hiihti puolestasi maaliin.' };
+  const k = meK(); k.fin = a[3]; k.z = P.z; net.sendT = 0;
+}
+function cpuTakes(k) {
+  k.kind = 'cpu';
+  if (k.wax < 0) k.wax = bestFor(style, course.weather.T);
+  const p = newSkier(style), f = fitOf(style, k.wax, course.weather.T);
+  Object.assign(p, { z: k.z, v: k.v, lane: k.lane, x: laneX(style, k.lane), t: net.clock, grip: f.grip, drag: f.drag });
+  roadFrom(p, k.road, k.clog, p.t);
+  k.p = p;
+}
+// Finished skiers by time, ahead of everyone still on the trail, who go by how far they got.
+function standings() {
+  return net.skiers.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? finOrder(a) - finOrder(b) : b.z - a.z))
+    .map(k => ({ id: k.id, name: k.name, fin: k.fin, z: Math.round(Math.min(k.z, course.len)), color: k.color }));
+}
+const placeOf = (list, id) => list.findIndex(o => o.id === id) + 1;
+function netEnd(res) {
+  if (!net || net.res) return;
+  net.res = res; net.phase = 'done';
+  if (RM.isHost) lastEnd = { t: 'end', round: net.round, res };
+  // Not at the finish here (or reloaded after it): my place and time come from the results.
+  if (mode !== 'done') {
+    const me = res.find(o => o.id === RM.me);
+    mode = 'done'; resultT = 0; result = { t: me ? me.fin : null, stars: 0, passed: false, record: false, note: '' };
+  }
+}
+// After the results: back to the room, with my place there and everyone's times under the list.
+function backRoom() {
+  const res = net.res, i = res.findIndex(o => o.id === RM.me), r = res[i];
+  RM.note(res.map((o, j) => `${j + 1}. ${o.id === RM.me ? 'Sinä' : o.name} ${o.fin === null ? '–' : fmtTime(o.fin)}`).join(' · '));
+  const text = i < 0 ? 'Kisa päättyi' : r.fin === null ? 'Et ehtinyt maaliin' : `${i + 1}. sija · ${fmtTime(r.fin)}`;
+  toSolo();
+  RM.backToRoom(text, i === 0 ? 'win' : 'lose');
+}
+function toSolo() {
+  if (!net) return;
+  level = clamp(net.soloLevel, 1, maxLevel); style = savedStyle();
+  net = null;
+  newRace();
+  roomControls();
+}
+
+// The host's course and style, in the room under the players; the others see what was picked.
+let roomEl = null;
+function roomControls() {
+  if (!RM || !RM.extra) return;
+  if (!roomEl) {
+    const css = document.createElement('style');
+    css.textContent = '#hiihto-room{display:flex;flex-direction:column;align-items:center;gap:6px;margin:2px 0 4px}' +
+      '#hiihto-room div{display:flex;gap:8px;align-items:center}' +
+      '#aipr #hiihto-room button{font-size:15px;padding:7px 12px;background:#b8ad95;box-shadow:0 3px 0 #8f846c}' +
+      '#aipr #hiihto-room button.on{background:#3f8ad8;box-shadow:0 3px 0 #2a5f99}' +
+      '#aipr #hiihto-room button:disabled{opacity:.35}' +
+      '#hiihto-room b{min-width:74px;font-size:17px}' +
+      '@media (orientation:landscape){#hiihto-room{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:12px}}';
+    document.head.appendChild(css);
+    roomEl = document.createElement('div'); roomEl.id = 'hiihto-room';
+    roomEl.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b || !RM.isHost || net) return;
+      if (b.dataset.d) { const to = clamp(level + +b.dataset.d, 1, maxLevel); if (to !== level) { level = to; newRace(); } }
+      if (b.dataset.s) setStyle(b.dataset.s);
+      roomControls();
+    });
+    RM.extra(roomEl);
+  }
+  if (RM.isHost) {
+    roomEl.innerHTML = `<div><button data-d="-1"${level > 1 ? '' : ' disabled'}>‹</button><b>Taso ${level}</b><button data-d="1"${level < maxLevel ? '' : ' disabled'}>›</button></div>` +
+      `<div>${['perinteinen', 'luistelu'].map(s => `<button data-s="${s}"${s === style ? ' class="on"' : ''}>${STYLE_NAME[s]}</button>`).join('')}</div>`;
+  } else {
+    const h = RM.members.find(m => m.id === RM.hostId);
+    roomEl.innerHTML = `<p class="small">Radan ja tyylin valitsee ${h ? '👑 ' + h.name.replace(/[<>&]/g, '') : 'huoneen tekijä'}.</p>`;
+  }
+}
+if (RM) {
+  RM.on('start', netStart);
+  RM.on('message', (m, from) => {
+    if (!net || m.round !== net.round) return;
+    if (RM.isHost) {
+      const k = net.skiers.find(o => o.id === from);
+      if (!k || k.kind !== 'net') return;
+      if (m.t === 'ready' && k.wax < 0 && m.wax >= 0) k.wax = m.wax;
+      if (m.t === 'p') {
+        // Given back by the computer: the phone's own skier counts again once it has caught up.
+        if (k.handback && m.s[0] < k.z - 1) return;
+        k.handback = false;
+        unpack(k, m.s); arrive(k);
+      }
+      return;
+    }
+    if (m.t === 's') guestState(m);
+    if (m.t === 'end') netEnd(m.res);
+  });
+  RM.on('hello', id => {
+    if (net && !net.res) RM.send(hostState(), id);
+    // A phone back after the end it already confirmed (a reload): the library does not send it
+    // again, so the host does, and the phone shows the results instead of waiting.
+    else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
+  });
+  RM.on('continue', ids => { if (net) net.skiers.forEach(k => { if (ids.includes(k.id) && k.kind === 'net') cpuTakes(k); }); });
+  RM.on('back', id => { if (net) net.skiers.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; } }); });
+  RM.on('lobby', toSolo);
+  RM.on('leave', toSolo);
+  RM.on('menu', toSolo);
+  RM.on('peers', roomControls);
+}
+
+// ---- Input ----
+const touches = new Map();
+let ui = { wax: [], prev: null, next: null, styles: [], friends: null };
+function vButton() { return LAND ? { x: SAFE_L + 64, y: H - SAFE_B - 64, r: 38 } : { x: 56, y: H - SAFE_B - 62, r: 38 }; }
+// Skating: the left and right push pads, one in the middle of each half of the screen.
+// The rhythm meter, under the hint line.
+function rhythmBar() { const w = 150, top = SAFE_T + 18; return { x: (W - w) / 2 - 16, y: top + 34 + 34 + 36, w, h: 12 }; }
+function skatePads() {
+  // Landscape (v8): each pad low in its own corner, under the thumb that pushes that ski.
+  if (LAND) { const w = 76, h = 34, y = H - SAFE_B - 104; return [-1, 1].map(side => ({ side, x: side < 0 ? SAFE_L + 20 : W - SAFE_R - 20 - w, y, w, h })); }
+  const w = 76, h = 34, y = H - SAFE_B - 128; return [-1, 1].map(side => ({ side, x: (side < 0 ? W * 0.25 : W * 0.75) - w / 2, y, w, h })); }
+function inRect(r, px, py) { return r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; }
+function held() { for (const t of touches.values()) if (!t.swiped && !t.v && clock - t.t0 > 0.2) return true; return false; }
+function down(id, px, py) {
+  if (mode === 'wax') {
+    const i = ui.wax.findIndex(r => inRect(r, px, py)), st = ui.styles.find(r => inRect(r, px, py));
+    if (i >= 0) chooseWax(i);
+    else if (net) return;
+    else if (st) setStyle(st.style);
+    // The friends button (v5) opens on a finished tap: down and up both on it. On finger-down it
+    // caught taps aimed at the wax buttons just above it (v4, #61).
+    else if (inRect(ui.friends, px, py) && RM) friendsTap = id;
+    else if (inRect(ui.prev, px, py) && level > 1) { level--; newRace(); }
+    else if (inRect(ui.next, px, py) && level < maxLevel) { level++; newRace(); }
+    return;
+  }
+  if (mode === 'ready' || mode === 'netwait') return;
+  if (mode === 'done') {
+    if (net) { if (net.res && resultT > 0.8) backRoom(); return; }
+    if (resultT > 0.8) { if (result.passed) level = Math.min(maxLevel, level + 1); newRace(); }
+    return;
+  }
+  if (mode === 'race' && onRoad(P)) { roadFx(roadTap(P)); return; }
+  const b = vButton();
+  if (!skating() && Math.hypot(px - b.x, py - b.y) < b.r + 8) { P.vMode = !P.vMode; touches.set(id, { x0: px, y0: py, t0: clock, v: true }); beep(P.vMode ? 660 : 440, 0.06, 'square', 0.04); return; }
+  touches.set(id, { x0: px, y0: py, t0: clock, swiped: false });
+  if (mode === 'race') { if (skating()) push(P, px < W / 2 ? -1 : 1); else kick(P); swish(); }
+}
+function roadFx(what) {
+  if (what === 'off') { popup('Sukset pois', '#ffffff'); beep(440, 0.08, 'triangle', 0.08); }
+  if (what === 'step') noise(0.06, 3200, 0.15);
+  if (what === 'slip') { falls++; popup('Liukastui!', '#ff8a8a'); thud(); }
+  if (what === 'clog') popup('Lunta siteissä!', '#9fd8ff');
+  if (what === 'knock') noise(0.07, 260, 0.6);
+  if (what === 'on') { popup('Sukset jalkaan!', '#7ef0a0'); beep(660, 0.1, 'triangle', 0.08); }
+}
+function move(id, px, py) {
+  const t = touches.get(id);
+  if (!t || t.swiped || t.v) return;
+  const dx = px - t.x0, dy = py - t.y0;
+  if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy)) { t.swiped = true; steer(dx > 0 ? 1 : -1); }
+}
+let friendsTap = null;
+function up(id, px, py) {
+  touches.delete(id);
+  if (friendsTap === id && mode === 'wax' && !net && inRect(ui.friends, px, py) && RM) { RM.open(); roomControls(); }
+  if (friendsTap === id) friendsTap = null;
+}
+c.addEventListener('pointerdown', e => { e.preventDefault(); unlock(); down(e.pointerId, ...at(e)); });
+c.addEventListener('pointermove', e => move(e.pointerId, ...at(e)));
+c.addEventListener('pointerup', e => up(e.pointerId, ...at(e)));
+c.addEventListener('pointercancel', e => up(e.pointerId));
+
+// ---- Sound ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function beep(f, d, type, vol) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = type || 'sine'; o.frequency.value = f; g.gain.setValueAtTime(vol || 0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function noise(d, f, vol) {
+  if (!ac) return;
+  const n = Math.floor(ac.sampleRate * d), buf = ac.createBuffer(1, n, ac.sampleRate), a = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) a[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  fl.type = 'bandpass'; fl.frequency.value = f; g.gain.value = vol;
+  s.buffer = buf; s.connect(fl); fl.connect(g); g.connect(ac.destination); s.start();
+}
+function swish() { noise(0.14, P.slipT > 0 ? 900 : 2400, 0.25); }
+function thud() { noise(0.3, 180, 0.6); beep(90, 0.25, 'sine', 0.2); }
+
+// ---- Drawing: the world in 3D (v7, #103) ----
+// three.js draws the trail, the skiers and the landscape on the canvas under the game's own one,
+// which still draws the menus and the HUD over it. The course is v6's: a course metre z is world
+// −Z, the course's sideways bend (`centreAt`) plus a skier's place across the trail is world X,
+// and the height is world Y. three.js comes from the site's shared copy (#99), which the phone
+// keeps for offline play.
+const gl = document.getElementById('g');
+let THREE = null, V3 = null, no3d = false;
+import('../../../lib/three-r187/three.module.js').then(m => {
+  THREE = m;
+  try { init3d(); } catch (e) { no3d = true; }
+}, () => { no3d = true; });
+const CAM_BACK3 = 5.2, CAM_UP = 2.5, LOOK = 12;
+let cam = { lat: 0 };
+
+function init3d() {
+  const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(66, 1, 0.1, 900);
+  // v9: brighter, whiter light, so the snow is as white as v6's (v7's came out grey).
+  const hemi = new THREE.HemisphereLight(0xeef4ff, 0xc8d4e6, 1.8);
+  const sun = new THREE.DirectionalLight(0xfffaf0, 2.0);
+  // Shadows only near the skier: the sun's box moves with them.
+  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.intensity = 0.5; sun.shadow.radius = 2;
+  Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 100 });
+  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
+  scene.add(hemi, sun, sun.target);
+  scene.fog = new THREE.Fog(0xdee7f1, 40, 300);
+  const shared = {
+    limb: new THREE.CylinderGeometry(1, 1, 1, 7),
+    ski: new THREE.BoxGeometry(0.075, 0.03, 1.85),
+    ball: new THREE.SphereGeometry(1, 12, 8),
+    cap: new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+    skirt: new THREE.CylinderGeometry(0.17, 0.3, 0.5, 9, 1, true),
+    limb12: new THREE.CylinderGeometry(1, 1, 1, 12),
+    torso: new THREE.CylinderGeometry(1.2, 0.85, 1, 14),
+    ball16: new THREE.SphereGeometry(1, 16, 12),
+    boot: new THREE.BoxGeometry(0.1, 0.1, 0.26),
+    basket: new THREE.CylinderGeometry(0.045, 0.045, 0.012, 10),
+    brim: new THREE.TorusGeometry(1, 0.22, 8, 18),
+    skiTip: new THREE.BoxGeometry(0.075, 0.025, 0.16),
+  };
+  const sky = skyDome(), hills = farHills();
+  scene.add(sky, hills);
+  V3 = { renderer, scene, camera, hemi, sun, sky, hills, shared, world: null, course: null, rigs: new Map(), pool: [], w: 0, h: 0, v: new THREE.Vector3() };
+}
+
+// Colours given as vertex colours are linear in three.js: THREE.Color converts the sRGB hex.
+function colorArray(n, pick) {
+  const a = new Float32Array(n * 3), c = new THREE.Color();
+  for (let i = 0; i < n; i++) { c.set(pick(i)); a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  return a;
+}
+// Several shapes in one geometry with a colour each, so a spruce is one draw for all of them.
+function merge(parts) {
+  const geos = parts.map(([g, hex]) => { g = g.index ? g.toNonIndexed() : g; g.setAttribute('color', new THREE.BufferAttribute(colorArray(g.attributes.position.count, () => hex), 3)); return g; });
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'color']) {
+    const n = geos.reduce((s, g) => s + g.attributes[name].array.length, 0), a = new Float32Array(n);
+    let o = 0; for (const g of geos) { a.set(g.attributes[name].array, o); o += g.attributes[name].array.length; }
+    out.setAttribute(name, new THREE.BufferAttribute(a, 3));
+  }
+  return out;
+}
+
+// The sky, from blue (or grey) overhead to the haze at the horizon, and hills far away: both
+// move with the camera, so they stay at the horizon.
+function skyDome() {
+  const g = new THREE.SphereGeometry(700, 24, 12), p = g.attributes.position;
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(p.count * 3), 3));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  m.renderOrder = -2;
+  const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(18, 24), new THREE.MeshBasicMaterial({ color: 0xfff3c8, fog: false, depthWrite: false }));
+  sunDisc.position.set(260, 120, -600); sunDisc.lookAt(0, 0, 0); sunDisc.renderOrder = -1;
+  m.add(sunDisc); m.userData.sun = sunDisc;
+  return m;
+}
+function paintSky(grey) {
+  const g = V3.sky.geometry, p = g.attributes.position, c = g.attributes.color;
+  const top = new THREE.Color(grey ? '#8f9cab' : '#5e9ad8'), low = new THREE.Color(grey ? '#d5dce4' : '#d8e7f6'), t = new THREE.Color();
+  for (let i = 0; i < p.count; i++) { t.copy(low).lerp(top, clamp(p.getY(i) / 350, 0, 1)); c.setXYZ(i, t.r, t.g, t.b); }
+  c.needsUpdate = true;
+  V3.sky.userData.sun.visible = !grey;
+}
+function farHills() {
+  const r = rng(77), parts = [];
+  for (let i = 0; i < 22; i++) {
+    const a = i / 22 * TAU + r() * 0.2, d = 430 + r() * 120, h = 50 + r() * 70, w = 110 + r() * 90;
+    const g = new THREE.ConeGeometry(w, h, 9, 1, true); g.translate(Math.sin(a) * d, h / 2 - 25, -Math.cos(a) * d);
+    parts.push([g, i % 3 ? '#7f948f' : '#93a7b4']);
+  }
+  return new THREE.Mesh(merge(parts), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+}
+
+// The land beside the trail: a low snow bank at each edge, then hills rising away from it.
+// The classic tracks (v9): a groove for each ski, cut into the snow where the skis run (±0.12 m from
+// the track's middle), floor GROOVE_W wide, sides sloping out to GROOVE_EDGE; none on the road.
+const GROOVE_D = 0.04, GROOVE_W = 0.045, GROOVE_EDGE = 0.075;
+const GROOVES = [LX[0] - 0.12, LX[0] + 0.12, LX[1] - 0.12, LX[1] + 0.12];
+const inGroove = l => GROOVES.some(g => Math.abs(l - g) <= GROOVE_W + 1e-6);
+function lifted(z, l) {
+  const out = l < TRAIL_L ? TRAIL_L - l : l > TRAIL_R ? l - TRAIL_R : 0;
+  if (out <= 0) return inGroove(l) && !(course.road && z > course.road.z0 - 0.5 && z < course.road.z1 + 0.5) ? -GROOVE_D : 0;
+  const berm = 0.2 * Math.exp(-Math.pow((out - 0.55) / 0.45, 2));
+  const wave = 0.08 + 0.045 * Math.sin(z * 0.011 + (l < 0 ? 0 : 2.1)) + 0.025 * Math.sin(z * 0.037 + l * 0.05);
+  return berm + Math.pow(Math.max(0, out - 3), 1.35) * wave;
+}
+const COLS = [-110, -70, -42, -24, -13, -7, TRAIL_L - 1.6, TRAIL_L - 0.9, TRAIL_L - 0.4, TRAIL_L, SKATE_L, TRAIL_R, TRAIL_R + 0.4, TRAIL_R + 0.9, TRAIL_R + 1.6, 8, 14, 25, 43, 71, 111,
+  ...GROOVES.flatMap(g => [g - GROOVE_EDGE, g - GROOVE_W, g + GROOVE_W, g + GROOVE_EDGE])].sort((a, b) => a - b);
+// A sheet laid on the land from z0 to z1 across the given columns, `yo` metres above it.
+function sheet(z0, z1, cols, yo, paint) {
+  const rows = Math.max(1, Math.round((z1 - z0) / SEG)), n = cols.length, pos = new Float32Array((rows + 1) * n * 3), idx = [], pick = [];
+  for (let r = 0; r <= rows; r++) {
+    const z = z0 + (z1 - z0) * r / rows, cx = centreAt(z)[0], h = heightAt(z);
+    for (let j = 0; j < n; j++) {
+      const k = (r * n + j) * 3, l = cols[j];
+      pos[k] = cx + l; pos[k + 1] = h + lifted(z, l) + yo; pos[k + 2] = -z;
+      pick.push(paint(r, l));
+      if (r < rows && j < n - 1) { const a = r * n + j; idx.push(a, a + 1, a + n, a + 1, a + n + 1, a + n); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(colorArray(pick.length, i => pick[i]), 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+// A sign with words on it, as a texture.
+function label(textStr, w, h, bg, fg) {
+  const cv = document.createElement('canvas'), q = cv.getContext('2d');
+  cv.width = 512; cv.height = Math.round(512 * h / w);
+  q.fillStyle = bg; q.fillRect(0, 0, cv.width, cv.height);
+  q.fillStyle = fg; q.font = `900 ${Math.round(cv.height * 0.62)}px system-ui,sans-serif`; q.textAlign = 'center'; q.textBaseline = 'middle';
+  q.fillText(textStr, cv.width / 2, cv.height * 0.54);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
+}
+// Where a course point is in the world.
+function spot(z, l, up) { const [cx] = centreAt(z); return [cx + l, heightAt(z) + lifted(z, l) + (up || 0), -z]; }
+
+function setTree(im, i, at, sc, yaw) {
+  const m = V3.m4 || (V3.m4 = new THREE.Matrix4());
+  m.makeRotationY(yaw).scale(V3.v.set(sc, sc, sc)); m.setPosition(at[0], at[1], at[2]);
+  im.setMatrixAt(i, m);
+}
+// A spruce (v9, chosen from four in a prototype): 3D, in v6's flat colours and unlit, so it reads as
+// drawn; each of its five tiers is darker at its foot, with snow on top. 6 m tall, scaled per tree.
+function spruce() {
+  const S = V3.shared;
+  if (!S.spruce) S.spruce = (() => {
+    const parts = [], col = new THREE.Color(), dark = new THREE.Color('#163a28'), light = new THREE.Color('#2f6b4a');
+    const add = (g, paint) => { g = g.toNonIndexed(); const p = g.attributes.position, c = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) { paint(p.getY(i), col); c.set([col.r, col.g, col.b], i * 3); }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.deleteAttribute('uv'); parts.push(g); };
+    add(new THREE.CylinderGeometry(0.12, 0.16, 0.9, 6).translate(0, 0.45, 0), (y, c) => c.set('#5c3e28'));
+    for (let j = 0; j < 5; j++) {
+      const r = 1.55 - j * 0.27, y0 = 0.5 + j * 1.05, hh = 2.1;
+      add(new THREE.ConeGeometry(r, hh, 9).translate(0, y0 + hh / 2, 0), (y, c) => c.copy(dark).lerp(light, clamp((y - y0) / hh, 0, 1)));
+      add(new THREE.ConeGeometry(r * 0.6, hh * 0.52, 9).translate(0, y0 + hh * 0.74 + 0.02, 0), (y, c) => c.set('#f5f9ff'));
+    }
+    const g = new THREE.BufferGeometry();
+    for (const n of ['position', 'normal', 'color']) {
+      const a = new Float32Array(parts.reduce((t, q) => t + q.attributes[n].array.length, 0)); let o = 0;
+      for (const q of parts) { a.set(q.attributes[n].array, o); o += q.attributes[n].array.length; }
+      g.setAttribute(n, new THREE.BufferAttribute(a, 3));
+    }
+    return g;
+  })();
+  return S.spruce;
+}
+
+// Everything that stays put on this course: the land, the trail and its tracks, the road, the
+// spruces, the banners and the posts. Built again for each new course.
+function build3d() {
+  if (V3.world) {
+    V3.scene.remove(V3.world);
+    V3.world.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+  }
+  V3.course = course;
+  const wx = course.weather, world = new THREE.Group(), end = course.total * SEG, rd = course.road;
+  const vc = o => new THREE.MeshLambertMaterial({ vertexColors: true, ...o });
+  const lay = o => vc({ polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2, ...o });
+  // The land: groomed trail, untouched snow beside it.
+  const snowC = wx.grey ? '#e4e9ef' : '#eef2f8', trailC = '#f7f9fc';
+  // The grooves' floors a shade bluer than the packed snow, so they read from afar too.
+  const land = new THREE.Mesh(sheet(-40, end, COLS, 0, (r, l) => inGroove(l) ? '#c3d3e6' : l >= TRAIL_L && l <= TRAIL_R ? trailC : snowC), vc());
+  land.receiveShadow = true; world.add(land);
+  // The trail's lanes, kept off the road: the skating lane's ridged snow, and the two classic tracks.
+  const parts = rd ? [[-40, rd.z0], [rd.z1, end]] : [[-40, end]];
+  for (const [a, b] of parts) {
+    const skate = new THREE.Mesh(sheet(a, b, [SKATE_L, TRAIL_R - 0.1], 0.01, r => (r >> 1) & 1 ? '#edf2f9' : '#e2e9f3'), lay());
+    skate.receiveShadow = true; world.add(skate);
+
+  }
+  if (rd) {
+    // The icy road across the land, with its centre line and a sheen of ice.
+    const road = new THREE.Mesh(sheet(rd.z0, rd.z1, COLS, 0.03, r => r & 1 ? '#5c6572' : '#636d7b'), lay({ polygonOffsetFactor: -3 }));
+    road.receiveShadow = true; world.add(road);
+    const zc = rd.z0 + ROAD_W / 2, dash = new THREE.MeshLambertMaterial({ color: 0xf0d65a });
+    for (let l = -40; l < 40; l += 3) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), dash);
+      m.position.set(...spot(zc, l, 0.05)); m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan(centreAt(zc)[1]);
+      world.add(m);
+    }
+  }
+  // Spruces (`spruce()`): those beside the trail (from the course, as in v6) cast shadows; a forest
+  // further out casts none, to keep the phone's work down.
+  const near = [], far = [], tr = rng(course.n * 13 + 5);
+  for (let i = 0; i < course.total; i++) for (const s of course.spr[i]) if (s.kind === 'tree') near.push([s.z, s.l, s.h]);
+  for (let z = -40; z < end; z += 5) for (const side of [-1, 1]) {
+    const out = 15 + Math.pow(tr(), 1.6) * 90, l = side < 0 ? TRAIL_L - out : TRAIL_R + out;
+    if (tr() < 0.85) far.push([z + tr() * 5, l, 5 + tr() * 6]);
+  }
+  near.sort((a, b) => a[0] - b[0]);
+  const tmat = new THREE.MeshBasicMaterial({ vertexColors: true }), tyaw = rng(course.n * 17 + 3);
+  for (const [list, shadow] of [[near, true], [far, false]]) {
+    const im = new THREE.InstancedMesh(spruce(), tmat, list.length);
+    list.forEach(([z, l, h], i) => setTree(im, i, spot(z, l, -0.1), h / 6, tyaw() * TAU));
+    im.castShadow = shadow;
+    world.add(im);
+  }
+  // The start and finish banners, the road sign and the distance posts.
+  const wood = new THREE.MeshLambertMaterial({ color: 0x6b4a2e }), steel = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+  const face = z => -Math.atan(centreAt(z)[1]);
+  for (let i = 0; i < course.total; i++) for (const s of course.spr[i]) {
+    if (s.kind === 'banner') {
+      for (const l of [TRAIL_L - 0.3, TRAIL_R + 0.3]) {
+        const pole = new THREE.Mesh(V3.shared.limb, steel); pole.scale.set(0.05, 3.4, 0.05); pole.position.set(...spot(s.z, l, 1.7)); pole.castShadow = true; world.add(pole);
+      }
+      const b = label(s.text, TRAIL_R - TRAIL_L + 0.6, 0.75, s.text === 'MAALI' ? '#d62845' : '#1f4fa8', '#ffffff');
+      b.position.set(...spot(s.z, (TRAIL_L + TRAIL_R) / 2, 3.0)); b.rotation.y = face(s.z); b.castShadow = true; world.add(b);
+    }
+    if (s.kind === 'post') {
+      const pole = new THREE.Mesh(V3.shared.limb, wood); pole.scale.set(0.05, 1.4, 0.05); pole.position.set(...spot(s.z, s.l, 0.7)); pole.castShadow = true; world.add(pole);
+      const b = label(s.text, 0.95, 0.42, '#f4d03f', '#222222');
+      b.position.set(...spot(s.z, s.l, 1.45)); b.rotation.y = face(s.z); b.castShadow = true; world.add(b);
+    }
+  }
+  V3.scene.add(world); V3.world = world;
+  // The day's weather: a blue sky and a low sun, or grey and flat.
+  paintSky(wx.grey);
+  V3.scene.fog.color.set(wx.grey ? '#d5dce4' : '#dee7f1');
+  V3.scene.fog.near = wx.snowing ? 25 : 40; V3.scene.fog.far = wx.snowing ? 210 : 300;
+  V3.sun.intensity = wx.grey ? 1.0 : 2.0; V3.hemi.intensity = wx.grey ? 2.2 : 1.8;
+}
+
+// ---- Skiers in 3D ----
+// v9 (#103): v7's skier, made finer (`makeExtra`, `dress`) and animated more smoothly (`pose`). In a
+// prototype the owner chose it over v6's flat skier on a card standing in the 3D world.
+// One skier is a set of simple parts (skis, legs, body, arms, poles, head, hat) posed each frame
+// from the same few numbers v6 drew its flat skier from. A rig faces +Z, with +X on its left.
+function makeRig() {
+  const S = V3.shared, M = rigShared(), root = new THREE.Group(), m = () => rigMat({});
+  const mats = { coat: m(), pants: m(), hat: m(), pom: m() };
+  const part = (geo, mat) => { const p = new THREE.Mesh(geo, mat); p.castShadow = true; root.add(p); return p; };
+  const r = { root, mats, key: '' };
+  r.skis = [part(S.ski, M.skiMat), part(S.ski, M.skiMat)];
+  r.legs = [0, 1, 2, 3].map(() => part(S.limb, mats.pants));
+  r.body = part(S.limb, mats.coat);
+  r.skirt = part(S.skirt, mats.coat);
+  r.arms = [part(S.limb, mats.coat), part(S.limb, mats.coat)];
+  r.poles = [part(S.limb, M.pole), part(S.limb, M.pole)];
+  r.head = part(S.ball, M.skin);
+  r.hair = part(S.ball, M.hair);
+  r.hat = part(S.cap, mats.hat);
+  r.pom = part(S.ball, mats.pom);
+  r.carry = [part(S.limb, M.skiMat), part(S.limb, M.skiMat)];
+  r.lumps = [part(S.ball, M.snow), part(S.ball, M.snow)];
+  V3.scene.add(root);
+  makeExtra(r);
+  return r;
+}
+const UP3 = [0, 1, 0];
+// A part stretched between two points (a limb, a pole), `w` thick.
+function limb(mesh, a, b, w) {
+  const v = V3.v.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = v.length();
+  mesh.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  mesh.scale.set(w, len, w);
+  mesh.quaternion.setFromUnitVectors(V3.up || (V3.up = new THREE.Vector3(...UP3)), v.normalize());
+  mesh.visible = true;
+}
+const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+
+// Poses a rig. `o` is v6's skier: coat, pants, hat, pom, ph (the stride, −1…1), tuck, vee,
+// skate, fall, noSkis, snowy, granny, and `g`, the slope under the skis the way it faces.
+function pose(r, o) {
+  const key = o.coat + o.pants + o.hat + o.pom;
+  if (r.key !== key) { r.key = key; for (const k of ['coat', 'pants', 'hat', 'pom']) r.mats[k].color.set(o[k]); }
+  const ph = o.ph || 0, g = o.g || 0;
+  r.skirt.visible = !!o.granny && !o.fall; r.hair.visible = !o.toward;
+  for (const p of r.carry) p.visible = false;
+  for (const p of r.lumps) p.visible = false;
+  // v9 (#103): the poses blend into each other instead of jumping (`r.sm`), the
+  // stride swings on from one kick to the next, the knees give at each kick (`o.bob`), and a
+  // skater's weight moves over the gliding ski.
+  const dt = V3.dt || 1 / 60, sm = r.sm || (r.sm = { tuck: 0, fall: 0, vee: 0, skate: o.skate ? 1 : 0, ph });
+  const ease = (k, to, rate) => (sm[k] += (to - sm[k]) * Math.min(1, dt * rate));
+  const tu = ease('tuck', o.tuck ? 1 : 0, 7), fa = ease('fall', o.fall ? 1 : 0, 9), ve = ease('vee', o.vee ? 1 : 0, 8), sk8 = ease('skate', o.skate ? 1 : 0, 8);
+  const p = ease('ph', ph, 16), bob = (o.bob || 0) * (1 - tu);
+  const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const skiPitch = Math.atan(g) * (1 - fa);
+  // Upright: the diagonal stride or the skate.
+  const sway = sk8 * p * 0.12, hipY = (o.granny ? 0.88 : 0.92 - 0.06 * sk8) - 0.07 * bob;
+  let hip = [sway, hipY, 0];
+  let sh = [sway * 1.6, hipY + 0.5, (o.granny ? 0.07 : 0.13 + 0.07 * sk8) + 0.08 * bob];
+  const st = o.noSkis ? 0.22 : 0.34;
+  const fC = [[0.12 + 0.13 * ve, 0.06, p * st], [-0.12 - 0.13 * ve, 0.06, -p * st]];
+  const fS = [[0.25 + 0.1 * Math.max(0, -p), 0.06, 0.05 - 0.15 * Math.max(0, -p)], [-0.25 - 0.1 * Math.max(0, p), 0.06, 0.05 - 0.15 * Math.max(0, p)]];
+  let feet = [0, 1].map(i => mix3(fC[i], fS[i], sk8));
+  const lift = [0.12 * Math.max(0, -p) * sk8, 0.12 * Math.max(0, p) * sk8];
+  let splay = lerp(0.3 * ve, 0.28, sk8);
+  let hands = [1, -1].map((sd, i) => {
+    const sw = lerp(i ? p : -p, 0.4 - 0.8 * Math.abs(p), sk8);
+    return [sd * 0.27 + sway * 1.4, sh[1] - 0.42 + 0.08 * Math.max(0, sw), sh[2] + 0.12 + 0.32 * sw];
+  });
+  let tips = hands.map(h => [h[0] * 1.25, 0.03, h[2] - 0.5 - 0.25 * lerp(Math.abs(p), 1, sk8)]);
+  // The tuck: low, the hands forward, the poles under the arms, the feet together.
+  if (tu > 0.001) {
+    const hipT = [0, 0.62, -0.15], shT = [0, 0.93, 0.3];
+    const handsT = [1, -1].map(sd => [sd * 0.18, 0.82, 0.5]), tipsT = handsT.map(h => [h[0] * 1.6, 0.72, -0.85]);
+    hip = mix3(hip, hipT, tu); sh = mix3(sh, shT, tu);
+    hands = hands.map((h, i) => mix3(h, handsT[i], tu)); tips = tips.map((t, i) => mix3(t, tipsT[i], tu));
+    feet = feet.map(f => [f[0], f[1], f[2] * (1 - 0.8 * tu)]);
+  }
+  let head = add3(sh, mix3([0, 0.22, 0.05], [0, 0.15, 0.18], tu));
+  for (const f of feet) f[1] += Math.tan(skiPitch) * f[2];
+  // A fall: on the ground on one side, skis crossed; the skier tips over and gets up again.
+  if (fa > 0.001) {
+    hip = mix3(hip, [0.25, 0.2, 0], fa); sh = mix3(sh, [0.75, 0.28, 0.15], fa); head = mix3(head, [0.98, 0.3, 0.2], fa);
+    feet = feet.map((f, i) => mix3(f, [[-0.35, 0.1, 0.25], [-0.4, 0.1, -0.2]][i], fa));
+    hands = hands.map((h, i) => mix3(h, [[0.55, 0.1, 0.55], [0.9, 0.08, -0.25]][i], fa));
+    tips = tips.map((t, i) => mix3(t, [[0.2, 0.05, 1.2], [1.4, 0.05, -0.9]][i], fa));
+    splay = lerp(splay, 0.7, fa);
+  }
+  // Legs, with the knees bent forward (more in the tuck); the body, the arms and the poles.
+  feet.forEach((f, i) => {
+    const ft = [f[0], f[1] + lift[i] + 0.06, f[2]], hp = [hip[0] + (1 - fa) * (i ? -0.1 : 0.1), hip[1], hip[2]];
+    const knee = [(ft[0] + hp[0]) / 2, (ft[1] + hp[1]) / 2, (ft[2] + hp[2]) / 2 + (1 - fa) * (lerp(0.1, 0.28, tu) + 0.1 * bob)];
+    limb(r.legs[i * 2], ft, knee, 0.075); limb(r.legs[i * 2 + 1], knee, hp, 0.085);
+    if (r.extra) { r.extra.at.knees[i] = knee; r.extra.at.feet[i] = [f[0], f[1] + lift[i], f[2]]; }
+    // The binding is a little behind the ski's middle; a V turns the tips out and the tails in.
+    const sk = r.skis[i], yaw = (i ? -1 : 1) * splay;
+    sk.visible = !o.noSkis;
+    sk.position.set(f[0] + Math.sin(yaw) * 0.2, f[1] + lift[i] + 0.015 + Math.tan(skiPitch) * 0.2, f[2] + Math.cos(yaw) * 0.2);
+    sk.rotation.set(-skiPitch, yaw, 0, 'YXZ');
+  });
+  limb(r.body, hip, sh, o.granny ? 0.19 : 0.17);
+  if (r.skirt.visible) { r.skirt.position.set(hip[0], hip[1] - 0.12, hip[2] + 0.02); r.skirt.rotation.set(0, 0, 0); }
+  hands.forEach((h, i) => {
+    const sd = i ? -1 : 1, s0 = add3(sh, [lerp(sd * 0.19, 0, fa), lerp(-0.03, 0, fa), lerp(0, sd * 0.18, fa)]);
+    limb(r.arms[i], s0, h, 0.06); limb(r.poles[i], h, tips[i], 0.016);
+    if (r.extra) r.extra.at.shoulders[i] = s0;
+  });
+  r.head.position.set(...head); r.head.scale.setScalar(0.125);
+  r.hair.position.set(head[0], head[1] + 0.01, head[2] - 0.03); r.hair.scale.setScalar(0.12);
+  if (o.granny) r.hair.material = rigShared().grey; else r.hair.material = rigShared().hair;
+  r.hat.position.set(head[0], head[1] + 0.03, head[2]); r.hat.scale.setScalar(0.135);
+  r.hat.rotation.set(0, 0, o.fall ? -1.4 : 0);
+  r.pom.position.set(head[0] + (o.fall ? 0.17 : 0), head[1] + (o.fall ? 0.05 : 0.18), head[2]); r.pom.scale.setScalar(0.055);
+  if (o.noSkis && !o.fall) {
+    // On foot (the road): the skis on the shoulder.
+    limb(r.carry[0], [0.32, sh[1] - 0.75, sh[2] - 0.75], [-0.15, sh[1] + 0.5, sh[2] + 0.75], 0.035);
+    limb(r.carry[1], [0.4, sh[1] - 0.72, sh[2] - 0.72], [-0.07, sh[1] + 0.53, sh[2] + 0.78], 0.035);
+    if (o.snowy) feet.forEach((f, i) => { const l = r.lumps[i]; l.visible = true; l.position.set(f[0], f[1] + 0.06, f[2] + 0.05); l.scale.setScalar(0.1); });
+  }
+  if (r.extra) dress(r, o, hip, sh, head, hands, tips);
+}
+
+// v9 (#103): the same skier as v7, finer. Bent elbows and knees with round joints, a
+// body wider at the chest, a neck, mittens, boots, ski tips that turn up, baskets on the poles and
+// a folded hat brim, all smoother.
+function makeExtra(r) {
+  // The small parts cast no shadow, and a skier far away has none of them (`skiers3d()`): an old
+  // phone runs out of time for them.
+  const S = V3.shared, M = rigShared(), add = (geo, mat) => { const p = new THREE.Mesh(geo, mat); p.userData.small = true; r.root.add(p); return p; };
+  const two = (geo, mat) => [add(geo, mat), add(geo, mat)];
+  const boot = rigMat({ color: 0x23262e });
+  for (const p of [...r.legs, ...r.arms, ...r.poles, r.body]) p.geometry = S.limb12;
+  r.body.geometry = S.torso; r.head.geometry = S.ball16;
+  r.extra = { at: { knees: [], feet: [], shoulders: [] },
+    upper: two(S.limb12, r.mats.coat), fore: two(S.limb12, r.mats.coat), elbows: two(S.ball16, r.mats.coat), shoulders: two(S.ball16, r.mats.coat),
+    knees: two(S.ball16, r.mats.pants), hips: add(S.ball16, r.mats.pants), mitts: two(S.ball16, r.mats.hat), boots: two(S.boot, boot),
+    baskets: two(S.basket, M.pole), neck: add(S.limb12, M.skin), brim: add(S.brim, r.mats.pom) };
+  for (const sk of r.skis) { const t = new THREE.Mesh(S.skiTip, M.skiMat); t.position.set(0, 0.04, 0.98); t.rotation.x = -0.45; t.userData.small = true; sk.add(t); }
+  r.small = []; r.root.traverse(p => { if (p.userData.small) r.small.push(p); });
+}
+function dress(r, o, hip, sh, head, hands, tips) {
+  if (r.fine === false) return;   // far away: v7's plain arms, no small parts
+  const e = r.extra, at = e.at;
+  for (const a of r.arms) a.visible = false;
+  hands.forEach((h, i) => {
+    const s0 = at.shoulders[i], sd = i ? -1 : 1;
+    const el = o.fall ? [(s0[0] + h[0]) / 2, (s0[1] + h[1]) / 2 + 0.05, (s0[2] + h[2]) / 2]
+      : [(s0[0] + h[0]) / 2 + sd * 0.07, (s0[1] + h[1]) / 2 - 0.02, (s0[2] + h[2]) / 2 - 0.07];
+    limb(e.upper[i], s0, el, 0.062); limb(e.fore[i], el, h, 0.052);
+    e.elbows[i].position.set(...el); e.elbows[i].scale.setScalar(0.055);
+    e.shoulders[i].position.set(...s0); e.shoulders[i].scale.setScalar(0.075);
+    e.mitts[i].position.set(...h); e.mitts[i].scale.set(0.05, 0.06, 0.05);
+    const t = tips[i], d = [h[0] - t[0], h[1] - t[1], h[2] - t[2]], n = Math.hypot(...d) || 1;
+    e.baskets[i].position.set(t[0] + d[0] / n * 0.1, t[1] + d[1] / n * 0.1, t[2] + d[2] / n * 0.1);
+    e.baskets[i].quaternion.copy(r.poles[i].quaternion);
+  });
+  at.knees.forEach((k, i) => { e.knees[i].position.set(...k); e.knees[i].scale.setScalar(0.08); });
+  at.feet.forEach((f, i) => { e.boots[i].position.set(f[0], f[1] + 0.07, f[2] + 0.03); e.boots[i].rotation.set(0, r.skis[i].rotation.y, 0); });
+  e.hips.position.set(...hip); e.hips.scale.set(0.16, 0.1, 0.12);
+  limb(e.neck, sh, head, 0.045);
+  e.brim.position.set(head[0], head[1] + 0.05, head[2]); e.brim.scale.setScalar(0.128);
+  e.brim.rotation.set(Math.PI / 2, 0, 0); if (o.fall) e.brim.rotation.set(Math.PI / 2, 1.4, 0);
+}
+
+// Puts a rig on the trail at course metre z, `x` across it, facing the way it skis.
+function placeRig(r, z, xl, toward) {
+  const [cx, d] = centreAt(z), sgn = toward ? -1 : 1;
+  r.root.position.set(cx + xl, heightAt(z), -z);
+  r.root.rotation.set(0, Math.atan2(sgn * d, -sgn), 0);
+  r.root.visible = true;
+}
+
+function rigMat(o) { return new THREE.MeshLambertMaterial(o); }
+function rigShared() {
+  return V3.rm || (V3.rm = { skin: rigMat({ color: 0xf2c9a5 }), skiMat: rigMat({ color: 0xc23b22 }), pole: rigMat({ color: 0x333333 }),
+    snow: rigMat({ color: 0xffffff }), hair: rigMat({ color: 0x6b4a2e }), grey: rigMat({ color: 0xd2d2d2 }) });
+}
+
+// Each frame: a rig for everyone near enough to see, taken from a pool and given back after.
+function skiers3d() {
+  const used = new Set(), z0 = P.z - CAM_BACK3 - 1, z1 = P.z + 170;
+  const want = (obj, z, xl, o, toward) => {
+    if (z < z0 || z > z1) return;
+    let r = V3.rigs.get(obj);
+    // The player's own card is sharper: it is the nearest.
+    if (!r) { r = V3.pool.pop() || makeRig(); r.sm = null; V3.rigs.set(obj, r); }
+    used.add(obj);
+    o.toward = !!toward;
+    o.g = gradeAt(z) * (toward ? -1 : 1);
+    pose(r, o); placeRig(r, z, xl, toward);
+    // Blinking while nobody can knock the skier down again; shadows only near the camera.
+    r.root.visible = !(o.blink && Math.floor(clock * 10) % 2);
+    const cast = z - P.z < 30;
+    if (r.cast !== cast) { r.cast = cast; r.root.traverse(p => { p.castShadow = cast && !p.userData.small; }); }
+    const fine = z - P.z < 40;
+    if (r.fine !== fine) { r.fine = fine; for (const p of r.small) p.visible = fine; }
+  };
+  // The stride swings from one side to the other over 0.32 s after each kick and stays there while
+  // gliding, coming back to the middle only when the skier stops kicking (v9, #103).
+  const since = P.t - P.lastKick, phP = P.side * -Math.cos(Math.PI * clamp(since / 0.32, 0, 1)) * clamp(1 - (since - 0.8) * 1.5, 0, 1);
+  const bobP = since < 0.35 ? Math.sin(Math.PI * since / 0.35) : 0, colP = net ? meK().color : '#1f4fa8';
+  const walk = P.road === 'walk' || P.road === 'skison' || P.road === 'clog';
+  want(P, P.z, P.x, { coat: colP, pants: '#16233f', hat: '#ffffff', pom: colP, ph: phP, bob: bobP, tuck: P.hold && !P.vMode && P.fallT <= 0 && !onRoad(P), vee: P.vMode, skate: skating() && !onRoad(P) && !(P.hold && P.fallT <= 0), fall: P.fallT > 0, blink: P.invT > 0 && P.fallT <= 0, noSkis: walk, snowy: P.road === 'clog' });
+  for (const s of npcs) {
+    const ph = Math.sin(s.ph * TAU);
+    if (s.kind === 'mummo') want(s, s.z, s.x, { coat: s.coat, pants: '#3a3a4a', hat: s.hat, pom: '#ffffff', ph, granny: true });
+    else if (s.kind === 'vasta') want(s, s.z, s.x, { coat: s.coat, pants: '#2a2a35', hat: s.hat, pom: '#ffffff', ph, vee: gradeAt(s.z) < -0.075 }, true);
+    else want(s, s.z, s.x + Math.sin(s.ph * TAU) * 0.25, { coat: s.coat, pants: s.coat, hat: s.hat, pom: s.hat, ph, skate: true });
+  }
+  if (net) for (const k of net.skiers) {
+    if (k.kind === 'me') continue;
+    const ph = Math.sin(k.ph * TAU), sk = skating() && k.fin === null, foot = k.road === 'walk' || k.road === 'skison' || k.road === 'clog';
+    want(k, Math.min(k.z, course.len + 30), k.x + (sk && !foot ? ph * 0.2 : 0), { coat: k.color, pants: '#1d2333', hat: k.color, pom: '#ffffff', ph, skate: sk && !k.road, vee: !skating() && gradeAt(k.z) > 0.075, fall: !!k.fall, noSkis: foot, snowy: k.road === 'clog' });
+  }
+  for (const [obj, r] of V3.rigs) if (!used.has(obj)) { r.root.visible = false; V3.rigs.delete(obj); V3.pool.push(r); }
+}
+
+// Draws the 3D world; false while three.js is not there (still loading, or no WebGL).
+function render3d() {
+  if (!V3) return false;
+  if (V3.course !== course) build3d();
+  const w = gl.clientWidth || W, h = gl.clientHeight || H, cm = V3.camera;
+  // The renderer and the camera follow the canvas, also when the phone turns (v8). Sideways the
+  // picture shows wider at the same height, and slides down 6 % of the height (a lens shift), so
+  // the HUD at the top stays in the sky.
+  const shift = w > h ? Math.round(0.06 * h) : 0;
+  if (w !== V3.w || h !== V3.h || shift !== V3.shift) {
+    V3.w = w; V3.h = h; V3.shift = shift; V3.renderer.setSize(w, h, false); cm.aspect = w / h;
+    if (shift) cm.setViewOffset(w, h, 0, -shift, w, h); else cm.clearViewOffset();
+    cm.updateProjectionMatrix();
+  }
+  // The camera behind the skier, a little to the side the skier is on, looking down the trail.
+  cam.lat = lerp(cam.lat, P.x * 0.55 + 0.25, 0.2);
+  const cz = P.z - CAM_BACK3, lz = P.z + LOOK;
+  cm.position.set(centreAt(cz)[0] + cam.lat, Math.max(heightAt(P.z), heightAt(cz)) + CAM_UP, -cz);
+  cm.lookAt(centreAt(lz)[0] + cam.lat * 0.7, heightAt(lz) + 0.2, -lz);
+  V3.sky.position.copy(cm.position); V3.hills.position.set(cm.position.x, heightAt(P.z), cm.position.z);
+  // v9: the sun behind the camera and to the right, so the snow facing the camera is lit, and the
+  // shadows fall ahead, softer than v7's.
+  const [sx, sy, sz] = spot(P.z + 10, P.x, 0);
+  V3.sun.position.set(sx + 22, sy + 28, sz + 16); V3.sun.target.position.set(sx, sy, sz);
+  const now = performance.now(); V3.dt = Math.min(0.1, (now - (V3.last || now)) / 1000); V3.last = now;
+  skiers3d();
+  V3.renderer.render(V3.scene, cm);
+  return true;
+}
+// A slow phone: measured over the first seconds of racing, below 27 frames a second it
+// draws fewer pixels, half a step at a time down to one per screen pixel, and if still below 22
+// it turns the shadows off. v9: v7 and v8 stepped down below 40, which also blurred a fast phone whose
+// screen is held at 30 a second (battery saving); 27 is below such a cap. Never back up, so the
+// picture does not flicker between the two.
+function tune(ms) {
+  if (!V3 || V3.tuned || mode !== 'race' || ms > 500) return;
+  V3.tt = (V3.tt || 0) + ms; V3.tn = (V3.tn || 0) + 1;
+  if (V3.tt < 2500) return;
+  const fps = 1000 * V3.tn / V3.tt, R = V3.renderer, pr = R.getPixelRatio();
+  V3.tt = V3.tn = 0;
+  if (V3.warm !== true) { V3.warm = true; return; }   // the first stretch builds the shaders
+  if (fps >= 27) V3.tuned = true;
+  else if (pr > 1.01) { R.setPixelRatio(Math.max(1, pr - 0.5)); V3.w = 0; }
+  else {
+    if (fps < 22) { R.shadowMap.enabled = false; V3.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
+    V3.tuned = true;
+  }
+}
+// Where a point on the course shows on the screen, in the game's own coordinates (for speech
+// bubbles and friends' names); null behind the camera or with no 3D.
+function screenOf(z, l, up) {
+  if (!V3 || !V3.w) return null;
+  const v = V3.v.set(...spot(z, l, 0)); v.y = heightAt(z) + up;
+  const d = V3.camera.position.distanceTo(v);
+  v.project(V3.camera);
+  return v.z > 1 ? null : { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, d };
+}
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.clearRect(0, 0, W, H);
+  const wx = course.weather;
+  if (!render3d()) {
+    // Before three.js is ready, or on a phone that cannot draw 3D: a plain winter day.
+    const sky = x.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, wx.grey ? '#8f9cab' : '#5e9ad8'); sky.addColorStop(0.3, '#dee7f1'); sky.addColorStop(1, '#f2f6fb');
+    x.fillStyle = sky; x.fillRect(0, 0, W, H);
+    if (no3d && mode !== 'wax') shadowText('Tämä puhelin ei osaa piirtää 3D-kuvaa.', W / 2, H * 0.52, 15, '#ffffff', 'center', 700);
+  }
+  // Friends' names over their heads, while near enough to read.
+  if (net) for (const k of net.skiers) {
+    if (k.kind === 'me' || k.z < P.z - 2 || k.z > P.z + 60) continue;
+    const p = screenOf(Math.min(k.z, course.len + 30), k.x, 2.15);
+    if (p) shadowText(k.name, p.x, p.y, clamp(150 / p.d, 10, 14), '#ffffff', 'center', 800);
+  }
+  for (const b of bubbles) {
+    const o = b.o; if (o.z < P.z - CAM_BACK3 + 1) continue;
+    const p = screenOf(o.z, o.x, 2.0);
+    if (p) bubble(b.text, p.x, p.y - 6, Math.min(1, (2 - b.t) * 3));
+  }
+  if (wx.snowing) {
+    x.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const s of snow) {
+      const sy = ((s[1] * H + clock * 40 * s[2] + P.z * 6 * s[2]) % H), sx = ((s[0] * W + Math.sin(clock + s[1] * 9) * 12) % W + W) % W;
+      x.beginPath(); x.arc(sx, sy, 1.2 * s[2] + 0.5, 0, TAU); x.fill();
+    }
+  }
+  drawHud();
+  if (mode === 'wax') drawWax();
+  if (mode === 'ready' || mode === 'netwait') drawWait();
+  if (mode === 'done') drawResult();
+}
+
+function text(t, px, py, size, col, align, weight) {
+  x.font = `${weight || 600} ${size}px system-ui,sans-serif`;
+  x.fillStyle = col; x.textAlign = align || 'center'; x.textBaseline = 'middle';
+  x.fillText(t, px, py);
+}
+function bubble(t, px, py, a) {
+  x.globalAlpha = clamp(a, 0, 1);
+  x.font = '700 13px system-ui,sans-serif';
+  const w = x.measureText(t).width + 14, bx = clamp(px - w / 2, 4, W - w - 4), by = Math.max(SAFE_T + 4, py - 26);
+  x.fillStyle = '#fff'; x.strokeStyle = '#33415c'; x.lineWidth = 1.5;
+  x.beginPath(); x.roundRect(bx, by, w, 22, 9); x.fill(); x.stroke();
+  text(t, bx + w / 2, by + 11, 13, '#1b2240', 'center', 700);
+  x.globalAlpha = 1;
+}
+function shadowText(t, px, py, size, col, align, weight) {
+  x.save(); x.shadowColor = 'rgba(0,0,0,0.55)'; x.shadowBlur = 4; text(t, px, py, size, col, align, weight); x.restore();
+}
+
+// The hint for what the trail asks of the skier right now.
+function hint() {
+  if (mode !== 'race') return null;
+  const g = gradeAt(P.z), ahead = gradeAt(P.z + 6);
+  if (P.fallT > 0) return ['Kaatuminen! Noustaan ylös…', '#ffb0b0'];
+  if (onRoad(P)) return ({
+    edge: ['Tie! Napauta: sukset pois', '#ffd45c'], off: ['Sukset pois…', '#ffffff'],
+    walk: meter(P) === 'early' ? ['Liukas tie! Odota vihreää', '#ffb0b0'] : ['Jäinen tie: askel, kun palkki on vihreä', '#ffd45c'],
+    skison: ['Napauta: sukset jalkaan', '#ffd45c'], clog: [`Lunta siteissä! Kopistele: ${P.clog} ×`, '#9fd8ff'], on: ['Sukset jalkaan…', '#ffffff'],
+  })[P.road];
+  if (course.road && !P.road && course.road.z0 - P.z < 45) return ['Tie edessä: hidasta!', '#ffd45c'];
+  if (skating()) {
+    if (P.sameT > 0) return ['Vuorotellen: vasen, oikea, vasen…', '#ffd45c'];
+    if (meter(P) === 'early') return ['Liian tiheään: odota vihreää', '#ffb0b0'];
+    if (P.lane === 0) return ['Perinteisen latu: pyyhkäise oikealle', '#ffd45c'];
+    if (g < -0.025) return [P.hold ? 'Laskuasento, luistaa!' : 'Alamäki: pidä sormea ruudulla', '#ffffff'];
+    return ['Napauta vuorotellen vasen ja oikea puoli', '#ffffff'];
+  }
+  const behind = npcs.find(o => o.kind === 'luistelija' && !o.slow && P.lane === 2 && o.z < P.z && o.z > P.z - 25 && o.v > P.v);
+  if (behind) return ['Takaa tulee luistelija!', '#ffb0b0'];
+  if (P.slipT > 0 && !P.vMode) return ['Lipsuu! Paina V ja tee V-käyntiä', '#ffd45c'];
+  if (meter(P) === 'early') return ['Liian tiheään: odota vihreää', '#ffb0b0'];
+  if (!P.vMode && Math.max(g, ahead) > 0.075) return ['Jyrkkä ylämäki: paina V', '#ffd45c'];
+  if (P.vMode && g < -0.02) return ['Alamäki: V pois, niin luistaa', '#ffd45c'];
+  if (P.vMode && Math.max(g, ahead) < 0.03) return ['Mäki loppui: V pois', '#ffd45c'];
+  if (g < -0.025) return [P.hold ? 'Laskuasento, luistaa!' : 'Alamäki: pidä sormea ruudulla', '#ffffff'];
+  return ['Napauta tahdissa · pyyhkäise: kaista', '#ffffff'];
+}
+
+// My place among friends right now: finished ones by time, the rest by how far they are.
+function livePlace() {
+  const me = synced(meK());
+  return 1 + net.skiers.filter(k => k !== me && (k.fin !== null ? me.fin === null || finOrder(k) < finOrder(me) : me.fin === null && k.z > me.z)).length;
+}
+
+function drawHud() {
+  const top = SAFE_T + 18;
+  if (mode === 'race' || mode === 'done' || mode === 'count') {
+    shadowText(fmtTime(P.t), W - 12, top, 20, '#ffffff', 'right', 800);
+    shadowText(`Maaliin ${Math.max(0, Math.ceil(course.len - P.z))} m`, W - 12, top + 20, 12, '#ffffff', 'right');
+    // The speed (v4) at the top in the middle, where the eye is, with the level or place under it.
+    shadowText(`${Math.round((mode === 'race' ? P.v : 0) * 3.6)} km/h`, W / 2 - 6, top, 22, '#ffffff', 'center', 900);
+    const head = net ? `sija ${livePlace()}/${net.skiers.length}` : `Taso ${level} · raja ${fmtTime(course.par)}`;
+    shadowText(head, W / 2 - 6, top + 21, 12, '#ffffff', 'center');
+  }
+  // The trail ahead: the next 300 m from the side, steep climbs in red.
+  const pw = LAND ? Math.min(W - 24, 460) : W - 24, px0 = (W - pw) / 2, py0 = top + 34, ph = 34, z0 = P.z - 20, z1 = P.z + 280;
+  let lo = 1e9, hi = -1e9;
+  for (let z = z0; z <= z1; z += 4) { const h = heightAt(z); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+  const span = Math.max(8, hi - lo), mid = (hi + lo) / 2;
+  const sxz = z => px0 + (z - z0) / (z1 - z0) * pw, syh = h => py0 + ph / 2 - (h - mid) / span * (ph - 6);
+  x.fillStyle = 'rgba(20,30,55,0.35)'; x.beginPath(); x.roundRect(px0 - 4, py0 - 4, pw + 8, ph + 8, 8); x.fill();
+  x.lineWidth = 2.5; x.lineCap = 'round';
+  for (let z = z0; z < z1; z += 4) {
+    if (z > course.len + 4) break;
+    const g = gradeAt(z);
+    x.strokeStyle = g > 0.075 ? '#ff6b6b' : g > 0.03 ? '#ffd45c' : g < -0.03 ? '#7fd4ff' : '#ffffff';
+    x.beginPath(); x.moveTo(sxz(z), syh(heightAt(z))); x.lineTo(sxz(z + 4), syh(heightAt(z + 4))); x.stroke();
+  }
+  if (course.road && course.road.z1 > z0 && course.road.z0 < z1) { x.fillStyle = '#5c6572'; x.fillRect(sxz(course.road.z0), py0 - 2, Math.max(4, sxz(course.road.z1) - sxz(course.road.z0)), ph + 4); }
+  if (course.len < z1) { x.fillStyle = '#d62845'; x.fillRect(sxz(course.len) - 1, py0 - 2, 3, ph + 4); }
+  // Friends on the profile, in their colours.
+  if (net) for (const k of net.skiers) {
+    if (k.kind === 'me' || k.z < z0 || k.z > z1) continue;
+    x.fillStyle = k.color; x.strokeStyle = '#fff'; x.lineWidth = 1.5;
+    x.beginPath(); x.arc(sxz(Math.min(k.z, course.len)), syh(heightAt(k.z)), 4, 0, TAU); x.fill(); x.stroke();
+  }
+  x.fillStyle = net ? meK().color : '#1f4fa8'; x.strokeStyle = '#fff'; x.lineWidth = 2;
+  x.beginPath(); x.arc(sxz(P.z), syh(heightAt(P.z)), 5, 0, TAU); x.fill(); x.stroke();
+  const hn = hint();
+  if (hn) shadowText(hn[0], W / 2, py0 + ph + 20, 15, hn[1], 'center', 700);
+  // The rhythm meter (v4): fills after each tap and turns green when the next one is at full strength.
+  if (mode === 'race' && !(P.hold && P.fallT <= 0 && !onRoad(P)) && (!onRoad(P) || P.road === 'walk')) {
+    const r = rhythmBar(), f = beat(P), m = meter(P), ready = m === 'ready', early = m === 'early';
+    x.fillStyle = 'rgba(20,30,55,0.45)'; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill();
+    x.fillStyle = early ? '#ff8a8a' : ready ? '#7ef0a0' : '#ffd45c';
+    x.beginPath(); x.roundRect(r.x, r.y, Math.max(r.h, r.w * f), r.h, r.h / 2); x.fill();
+    x.strokeStyle = '#fff'; x.lineWidth = 1.5; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.stroke();
+    shadowText(ready ? 'Nyt!' : 'Tahti', r.x + r.w + 8, r.y + r.h / 2, 13, ready ? '#7ef0a0' : '#ffffff', 'left', 800);
+  }
+  for (const p of popups) { x.globalAlpha = 1 - p.t / 1.3; shadowText(p.text, W / 2, H * 0.42 - p.t * 30, 24, p.col, 'center', 800); x.globalAlpha = 1; }
+  if (mode === 'count') shadowText(countT > 0.2 ? String(Math.ceil(countT)) : 'Hiihdä!', W / 2, H * 0.4, 64, '#ffd45c', 'center', 900);
+  if (mode === 'count') shadowText(skating() ? 'Vuorotellen vasen ja oikea puoli,' : 'Napauta tahdissa,', W / 2, H * 0.4 + 52, 14, '#ffffff', 'center', 700);
+  if (mode === 'count') shadowText('aina kun tahtipalkki on vihreä', W / 2, H * 0.4 + 72, 14, '#ffffff', 'center', 700);
+  const ask = mode === 'race' && P.fallT <= 0 && { edge: '👟 Sukset pois', skison: '⛷ Sukset jalkaan', clog: `❄ Kopistele (${P.clog})` }[P.road];
+  if (ask) {
+    // The road's one action, big in the middle: a tap anywhere does it.
+    // Landscape (v8): low on the right, under the thumb, clear of the skier in the middle.
+    const w = 230, h = 54, bx = LAND ? W - SAFE_R - w - 16 : (W - w) / 2, by = LAND ? H - SAFE_B - h - 46 : H * 0.6;
+    x.fillStyle = '#ffd45c'; x.strokeStyle = '#fff'; x.lineWidth = 3;
+    x.beginPath(); x.roundRect(bx, by, w, h, h / 2); x.fill(); x.stroke();
+    text(ask, bx + w / 2, by + h / 2 + 1, 20, '#1b2240', 'center', 900);
+  }
+  if ((mode === 'race' || mode === 'count') && !onRoad(P)) {
+    if (skating()) {
+      // Which ski pushed last: the next push is on the other one. Each pad sits in the half of the
+      // screen that pushes that ski, so a tap on it pushes the ski it names.
+      for (const r of skatePads()) {
+        const next = P.side !== r.side;
+        x.fillStyle = next ? '#ffd45c' : 'rgba(20,30,55,0.55)'; x.strokeStyle = '#fff'; x.lineWidth = 2;
+        x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill(); x.stroke();
+        text(r.side < 0 ? '‹ vasen' : 'oikea ›', r.x + r.w / 2, r.y + r.h / 2, 13, next ? '#1b2240' : '#fff', 'center', 800);
+      }
+    } else {
+      const b = vButton();
+      x.fillStyle = P.vMode ? '#ffd45c' : 'rgba(20,30,55,0.55)'; x.strokeStyle = '#fff'; x.lineWidth = 3;
+      x.beginPath(); x.arc(b.x, b.y, b.r, 0, TAU); x.fill(); x.stroke();
+      text('V', b.x, b.y - 5, 30, P.vMode ? '#1b2240' : '#fff', 'center', 900);
+      text(P.vMode ? 'päällä' : 'V-käynti', b.x, b.y + 20, 10, P.vMode ? '#1b2240' : '#fff', 'center', 700);
+    }
+    const w = waxList()[P.wax ?? 0];
+    const wy = H - SAFE_B - (LAND ? 58 : 50);
+    x.fillStyle = w.col; x.beginPath(); x.roundRect(W - SAFE_R - 92, wy, 78, 22, 11); x.fill();
+    text(w.name, W - SAFE_R - 53, wy + 11, 12, '#fff', 'center', 700);
+  }
+}
+
+function panel(px, py, pw, ph) {
+  x.fillStyle = 'rgba(14,22,44,0.92)'; x.strokeStyle = '#ffd45c'; x.lineWidth = 2;
+  x.beginPath(); x.roundRect(px, py, pw, ph, 14); x.fill(); x.stroke();
+}
+function pill(r, label, on, col) {
+  x.fillStyle = on ? (col || '#ffd45c') : 'rgba(255,255,255,0.1)'; x.strokeStyle = on ? (col || '#ffd45c') : 'rgba(255,255,255,0.35)'; x.lineWidth = 1.5;
+  x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill(); x.stroke();
+  text(label, r.x + r.w / 2, r.y + r.h / 2 + 1, 15, on ? '#1b2240' : '#ffffff', 'center', 800);
+}
+
+// Before the start: the style (alone), the course and its weather, and the wax for it.
+function drawWax() {
+  if (LAND) return drawWaxLand();
+  const wx = course.weather, solo = !net, S = starsOf(), B = bestsOf(), st = S[level] || 0;
+  const ph = Math.min(H - SAFE_T - SAFE_B - 70, 372 + (st ? 18 : 0) + (solo ? 100 : 0)), pw = Math.min(W - 24, 360);
+  const px = (W - pw) / 2, py = SAFE_T + 50 + Math.max(0, (H - SAFE_T - SAFE_B - 70 - ph) / 2);
+  panel(px, py, pw, ph);
+  let y = py + 14;
+  ui.styles = [];
+  if (solo) {
+    const gap = 10, bw = (pw - 32 - gap) / 2;
+    ui.styles = ['perinteinen', 'luistelu'].map((s, i) => ({ x: px + 16 + i * (bw + gap), y, w: bw, h: 36, style: s }));
+    ui.styles.forEach(r => pill(r, STYLE_NAME[r.style], r.style === style));
+    y += 36 + 28;
+  } else y += 14;
+  ui.prev = solo && level > 1 ? { x: px + 6, y: y - 20, w: 44, h: 40 } : null;
+  ui.next = solo && level < maxLevel ? { x: px + pw - 50, y: y - 20, w: 44, h: 40 } : null;
+  if (ui.prev) text('‹', px + 28, y, 28, '#ffd45c', 'center', 800);
+  if (ui.next) text('›', px + pw - 28, y, 28, '#ffd45c', 'center', 800);
+  text(solo ? `Taso ${level}` : `👥 Taso ${level} · ${STYLE_NAME[style]}`, W / 2, y, solo ? 22 : 19, '#ffd45c', 'center', 800);
+  y += 24;
+  text(`${course.len} m · aikaraja ${fmtTime(course.par)}${B[level] !== undefined ? ' · paras ' + fmtTime(B[level]) : ''}`, W / 2, y, 12, '#b8c2e0');
+  if (st) { y += 18; text('★'.repeat(st) + '☆'.repeat(3 - st), W / 2, y, 16, '#ffd45c'); }
+  y += 40;
+  text(`${wx.T > 0 ? '+' : ''}${fmt(wx.T, Number.isInteger(wx.T) ? 0 : 1)} °C`, W / 2, y, 34, wx.T > 0 ? '#ffb0b0' : '#9fd8ff', 'center', 800);
+  y += 30;
+  text(wx.desc, W / 2, y, 14, '#ffffff');
+  if (course.road) { text('Radalla tie: sukset pois ja varovasti yli', W / 2, y + 19, 12, '#ffd45c', 'center', 700); y += 14; }
+  y += 32;
+  text(skating() ? 'Valitse luistovoide' : 'Valitse pitovoide', W / 2, y, 16, '#ffd45c', 'center', 700);
+  y += 16;
+  // Alone, the friends button sits well clear of the wax buttons (v5: 30 px, was 8 px).
+  const foot = solo ? 44 + 58 + 22 : 44;
+  const gap = 10, bw = (pw - 32 - gap) / 2, bh = Math.max(52, Math.min(70, (py + ph - foot - y - gap) / 2));
+  ui.wax = waxList().map((w, i) => {
+    const r = { x: px + 16 + (i % 2) * (bw + gap), y: y + Math.floor(i / 2) * (bh + gap), w: bw, h: bh };
+    x.fillStyle = w.col; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, 10); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.85)'; x.beginPath(); x.roundRect(r.x + 8, r.y + 8, 14, r.h - 16, 4); x.fill();
+    text(w.name, r.x + r.w / 2 + 8, r.y + r.h / 2 - 9, 16, '#fff', 'center', 800);
+    text(w.range, r.x + r.w / 2 + 8, r.y + r.h / 2 + 11, 11, '#fff', 'center', 600);
+    return r;
+  });
+  ui.friends = null;
+  if (solo && RM) {
+    ui.friends = { x: px + 16, y: py + ph - 44 - 50, w: pw - 32, h: 44 };
+    pill(ui.friends, '👥 Pelaa kavereiden kanssa', true, '#8ecae6');
+  }
+  text(skating() ? 'Vuorotellen vasen ja oikea, alamäkeen sormi ruudulle' : 'Ylämäkeen V, alamäkeen sormi ruudulle', W / 2, py + ph - 18, 12, '#b8c2e0');
+}
+
+// Waxed, and waiting for the others (or for the host to say which course).
+function drawWait() {
+  const pw = Math.min(W - 24, 320), ph = 150, px = (W - pw) / 2, py = SAFE_T + Math.max(60, (H - SAFE_T - SAFE_B - ph) / 2);
+  panel(px, py, pw, ph);
+  if (mode === 'netwait' || !net) { text('Odotetaan kisan alkua…', W / 2, py + ph / 2, 18, '#ffd45c', 'center', 800); return; }
+  text('Voideltu!', W / 2, py + 34, 22, '#7ef0a0', 'center', 800);
+  const left = net.skiers.filter(k => k.wax < 0).map(k => k.name);
+  text('Odotetaan, että kaikki voitelevat:', W / 2, py + 72, 14, '#ffffff');
+  // v6: with many friends still waxing, as many names as fit and how many more.
+  let line = left.length ? left.join(', ') : 'lähtö tulee!';
+  x.font = '700 15px system-ui,sans-serif';
+  for (let n = left.length - 1; n > 0 && x.measureText(line).width > pw - 24; n--) line = `${left.slice(0, n).join(', ')} +${left.length - n}`;
+  text(line, W / 2, py + 98, 15, '#ffd45c', 'center', 700);
+  text(`${STYLE_NAME[style]} · taso ${level}`, W / 2, py + ph - 20, 12, '#b8c2e0');
+}
+
+function drawResult() {
+  if (net) return LAND ? drawNetResultLand() : drawNetResult();
+  if (LAND) return drawResultLand();
+  const r = result, pw = Math.min(W - 24, 340), ph = 300;
+  const px = (W - pw) / 2, py = SAFE_T + Math.max(60, (H - SAFE_T - SAFE_B - ph) / 2);
+  panel(px, py, pw, ph);
+  let y = py + 32;
+  text(r.passed ? 'Maalissa!' : 'Aikaraja ylittyi', W / 2, y, 24, r.passed ? '#7ef0a0' : '#ff8a8a', 'center', 800);
+  y += 44;
+  text(fmtTime(r.t), W / 2, y, 36, '#ffd45c', 'center', 800);
+  y += 30;
+  text(r.stars ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : `aikaraja ${fmtTime(course.par)}`, W / 2, y, r.stars ? 24 : 14, '#ffd45c');
+  y += 32;
+  text(`Ohitukset: ${passes}`, W / 2, y, 15, '#ffffff'); y += 22;
+  text(`Kaatumiset: ${falls}`, W / 2, y, 15, falls ? '#ffb0b0' : '#ffffff'); y += 22;
+  text(r.note, W / 2, y, 13, '#b8c2e0'); y += 22;
+  if (r.record) text('Uusi ennätys!', W / 2, y, 15, '#7ef0a0');
+  if (resultT > 0.8) text(r.passed ? 'Napauta: seuraava taso' : 'Napauta: yritä uudestaan', W / 2, py + ph - 20, 14, '#ffd45c');
+}
+// With friends: everyone's place, live until the race ends.
+function drawNetResult() {
+  const list = net.res || standings(), n = list.length, r = result;
+  const pw = Math.min(W - 24, 340), ph = 168 + 26 * n, px = (W - pw) / 2, py = SAFE_T + Math.max(60, (H - SAFE_T - SAFE_B - ph) / 2);
+  panel(px, py, pw, ph);
+  const i = placeOf(list, RM.me);
+  let y = py + 32;
+  const title = r.t === null ? 'Et ehtinyt maaliin' : r.cpu ? (net.res ? `${i}. sija` : 'Maalissa') : net.res ? (i === 1 ? 'Voitit! 🏆' : `${i}. sija`) : 'Maalissa!';
+  text(title, W / 2, y, 24, r.t !== null && i === 1 ? '#7ef0a0' : r.t === null ? '#ff8a8a' : '#ffffff', 'center', 800);
+  y += 38;
+  if (r.t !== null) text(fmtTime(r.t) + (r.stars ? '  ' + '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : ''), W / 2, y, 22, '#ffd45c', 'center', 800);
+  y += 34;
+  list.forEach((o, j) => {
+    const me = o.id === RM.me, col = net.skiers.find(k => k.id === o.id)?.color || o.color;
+    x.fillStyle = col; x.beginPath(); x.arc(px + 28, y, 6, 0, TAU); x.fill();
+    text(`${j + 1}. ${me ? 'Sinä' : o.name}`, px + 42, y, 15, me ? '#ffd45c' : '#ffffff', 'left', me ? 800 : 600);
+    text(o.fin !== null ? fmtTime(o.fin) : `${o.z} m`, px + pw - 18, y, 15, o.fin !== null ? '#ffffff' : '#b8c2e0', 'right', 700);
+    y += 26;
+  });
+  if (r.note) text(r.note, W / 2, y + 8, 12, '#b8c2e0');
+  const foot = net.res ? (resultT > 0.8 ? 'Napauta: takaisin huoneeseen' : '') : 'Odotetaan muita maaliin…';
+  if (foot) text(foot, W / 2, py + ph - 20, 14, '#ffd45c');
+}
+
+// ---- Landscape (v8): the same screens, side by side in two columns ----
+// The box a landscape panel may use: under the back chip, above the Tulokset chip.
+function landBox(pw, ph) {
+  const top = SAFE_T + 38, bot = H - SAFE_B - 36, room = bot - top;
+  ph = Math.min(ph, room);
+  return { px: SAFE_L + (W - SAFE_L - SAFE_R - pw) / 2, py: top + Math.max(0, (room - ph) / 2), pw, ph };
+}
+function drawWaxLand() {
+  const wx = course.weather, solo = !net, S = starsOf(), B = bestsOf(), st = S[level] || 0;
+  const { px, py, pw, ph } = landBox(Math.min(W - SAFE_L - SAFE_R - 24, 640), 266);
+  panel(px, py, pw, ph);
+  const cw = (pw - 48) / 2, lx = px + 16, rx = lx + cw + 16, lc = lx + cw / 2, rc = rx + cw / 2;
+  // Left: the style, the course and its weather.
+  let y = py + 14;
+  ui.styles = [];
+  if (solo) {
+    const gap = 10, bw = (cw - gap) / 2;
+    ui.styles = ['perinteinen', 'luistelu'].map((s, i) => ({ x: lx + i * (bw + gap), y, w: bw, h: 36, style: s }));
+    ui.styles.forEach(r => pill(r, STYLE_NAME[r.style], r.style === style));
+    y += 36 + 26;
+  } else y += 18;
+  ui.prev = solo && level > 1 ? { x: lx - 10, y: y - 20, w: 44, h: 40 } : null;
+  ui.next = solo && level < maxLevel ? { x: lx + cw - 34, y: y - 20, w: 44, h: 40 } : null;
+  if (ui.prev) text('‹', lx + 12, y, 28, '#ffd45c', 'center', 800);
+  if (ui.next) text('›', lx + cw - 12, y, 28, '#ffd45c', 'center', 800);
+  text(solo ? `Taso ${level}` : `👥 Taso ${level} · ${STYLE_NAME[style]}`, lc, y, solo ? 22 : 19, '#ffd45c', 'center', 800);
+  y += 24;
+  text(`${course.len} m · aikaraja ${fmtTime(course.par)}${B[level] !== undefined ? ' · paras ' + fmtTime(B[level]) : ''}`, lc, y, 12, '#b8c2e0');
+  if (st) { y += 18; text('★'.repeat(st) + '☆'.repeat(3 - st), lc, y, 16, '#ffd45c'); }
+  y += 38;
+  text(`${wx.T > 0 ? '+' : ''}${fmt(wx.T, Number.isInteger(wx.T) ? 0 : 1)} °C`, lc, y, 34, wx.T > 0 ? '#ffb0b0' : '#9fd8ff', 'center', 800);
+  y += 30;
+  text(wx.desc, lc, y, 14, '#ffffff');
+  if (course.road) text('Radalla tie: sukset pois ja varovasti yli', lc, y + 20, 12, '#ffd45c', 'center', 700);
+  // Right: the wax, and friends under it.
+  text(skating() ? 'Valitse luistovoide' : 'Valitse pitovoide', rc, py + 26, 16, '#ffd45c', 'center', 700);
+  const gap = 10, bw = (cw - gap) / 2, top = py + 44, foot = solo && RM ? 12 + 44 : 0;
+  const bh = clamp((py + ph - 34 - foot - top - gap) / 2, 44, 60);
+  ui.wax = waxList().map((w, i) => {
+    const r = { x: rx + (i % 2) * (bw + gap), y: top + Math.floor(i / 2) * (bh + gap), w: bw, h: bh };
+    x.fillStyle = w.col; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, 10); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.85)'; x.beginPath(); x.roundRect(r.x + 8, r.y + 8, 14, r.h - 16, 4); x.fill();
+    text(w.name, r.x + r.w / 2 + 8, r.y + r.h / 2 - 9, 16, '#fff', 'center', 800);
+    text(w.range, r.x + r.w / 2 + 8, r.y + r.h / 2 + 11, 11, '#fff', 'center', 600);
+    return r;
+  });
+  ui.friends = null;
+  if (solo && RM) {
+    ui.friends = { x: rx, y: top + 2 * bh + gap + 12, w: cw, h: 44 };
+    pill(ui.friends, '👥 Pelaa kavereiden kanssa', true, '#8ecae6');
+  }
+  text(skating() ? 'Vuorotellen vasen ja oikea, alamäkeen sormi ruudulle' : 'Ylämäkeen V, alamäkeen sormi ruudulle', px + pw / 2, py + ph - 16, 12, '#b8c2e0');
+}
+function drawResultLand() {
+  const r = result, { px, py, pw, ph } = landBox(Math.min(W - SAFE_L - SAFE_R - 24, 560), 206);
+  panel(px, py, pw, ph);
+  const lc = px + pw * 0.3, rc = px + pw * 0.72;
+  text(r.passed ? 'Maalissa!' : 'Aikaraja ylittyi', lc, py + 34, 24, r.passed ? '#7ef0a0' : '#ff8a8a', 'center', 800);
+  text(fmtTime(r.t), lc, py + 78, 36, '#ffd45c', 'center', 800);
+  text(r.stars ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : `aikaraja ${fmtTime(course.par)}`, lc, py + 112, r.stars ? 24 : 14, '#ffd45c');
+  text(`Ohitukset: ${passes}`, rc, py + 46, 15, '#ffffff');
+  text(`Kaatumiset: ${falls}`, rc, py + 72, 15, falls ? '#ffb0b0' : '#ffffff');
+  if (r.record) text('Uusi ennätys!', rc, py + 98, 15, '#7ef0a0');
+  text(r.note, px + pw / 2, py + 146, 13, '#b8c2e0');
+  if (resultT > 0.8) text(r.passed ? 'Napauta: seuraava taso' : 'Napauta: yritä uudestaan', px + pw / 2, py + ph - 20, 14, '#ffd45c');
+}
+function drawNetResultLand() {
+  const list = net.res || standings(), n = list.length, r = result;
+  const { px, py, pw, ph } = landBox(Math.min(W - SAFE_L - SAFE_R - 24, 600), Math.max(170, 44 + 26 * n));
+  panel(px, py, pw, ph);
+  const i = placeOf(list, RM.me), lw = pw * 0.44, lc = px + lw / 2 + 8;
+  const title = r.t === null ? 'Et ehtinyt maaliin' : r.cpu ? (net.res ? `${i}. sija` : 'Maalissa') : net.res ? (i === 1 ? 'Voitit! 🏆' : `${i}. sija`) : 'Maalissa!';
+  text(title, lc, py + 34, 24, r.t !== null && i === 1 ? '#7ef0a0' : r.t === null ? '#ff8a8a' : '#ffffff', 'center', 800);
+  if (r.t !== null) text(fmtTime(r.t) + (r.stars ? '  ' + '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : ''), lc, py + 72, 22, '#ffd45c', 'center', 800);
+  if (r.note) text(r.note, lc, py + 104, 12, '#b8c2e0');
+  const foot = net.res ? (resultT > 0.8 ? 'Napauta: takaisin huoneeseen' : '') : 'Odotetaan muita maaliin…';
+  if (foot) text(foot, lc, py + ph - 22, 14, '#ffd45c');
+  // Right: everyone's place.
+  const l0 = px + lw + 16, top = py + (ph - 26 * (n - 1)) / 2;
+  list.forEach((o, j) => {
+    const me = o.id === RM.me, col = net.skiers.find(k => k.id === o.id)?.color || o.color, y = top + 26 * j;
+    x.fillStyle = col; x.beginPath(); x.arc(l0 + 8, y, 6, 0, TAU); x.fill();
+    text(`${j + 1}. ${me ? 'Sinä' : o.name}`, l0 + 22, y, 15, me ? '#ffd45c' : '#ffffff', 'left', me ? 800 : 600);
+    text(o.fin !== null ? fmtTime(o.fin) : `${o.z} m`, px + pw - 18, y, 15, o.fin !== null ? '#ffffff' : '#b8c2e0', 'right', 700);
+  });
+}
+
+// ---- Loop ----
+newRace();
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000); tune(t - lastT); lastT = t;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="hiihto" data-order="low" data-corner="bottom-right"></script>
+<script>if (window.AiPelitScores) { AiPelitScores.format(fmtTime); setBoard(); }</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

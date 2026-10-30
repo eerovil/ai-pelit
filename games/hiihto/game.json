@@ -57,6 +57,13 @@
       "note": "Peliä voi pelata myös vaakatasossa: valikko ja tulokset kahdessa sarakkeessa, V-käynti ja luistelun painikkeet alakulmissa peukaloiden alla, tien nappi oikealla alhaalla ja 3D-maisema näkyy leveämpänä.",
       "request": "Add landscape to all games where it's possible",
       "issue": "eerovil/ai-pelit#95"
+    },
+    {
+      "n": 9,
+      "date": "2026-10-30",
+      "note": "Hienommat 3D-hiihtäjät ja sulavampi liike, piirretyn näköiset kuuset, latuun ura kummallekin suksella, kirkkaampi lumi ja pehmeämmät varjot; pystyssä ja vaakatasossa.",
+      "request": "The 3d looks worse than the old version. I wonder why? / Yeah and the models did look better flat. 3d makes them stand out that they are spheres and cones. / 3d piirretty. Ja oli ne 3d hahmot sittenkin paremmat. / Pitää tuo latu saada paremman näköiseksi, siinä ei ole kahdelle sukselle uraa. / Tee vielä prototyyppi jossa latua ja hahmoa korjataan paremmaksi. / Ja paremmat animaatiot. / Joo 3d parempi on hyvä.",
+      "issue": "eerovil/ai-pelit#103"
     }
   ]
 }
