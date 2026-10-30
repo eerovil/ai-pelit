@@ -477,3 +477,17 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
     assert row == {"score": 300, "version": 1, "level": 1}
+
+
+def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
+    """Puhelinkoppi's v3/v4 streak list was withdrawn (#9): its no. 1 kept on the phone must not read as a level."""
+    site.build(ROOT / "games")
+    fake.online = False
+    page = context.new_page()
+    page.goto(site.url)
+    page.evaluate("""localStorage.setItem('ai-pelit:_tulokset:ykkoset', JSON.stringify({
+        puhelinkoppi: { board: 'putki', name: 'Bertta', score: 7, version: 3 },
+        sormiskeitti: { board: 'main', name: 'Aino', score: 64, version: 5 } }))""")
+    page.reload()
+    page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
+    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == ""

@@ -81,6 +81,9 @@
     var t = tops[slug];
     if (!t || !scores) return '';
     var g = scores.games[slug];
+    // A no. 1 kept from a list the shelf no longer shows (Puhelinkoppi's withdrawn streak list,
+    // #9) is not shown as this one's.
+    if (!(g && g.boards) && t.board && t.board !== 'main') return '';
     return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(5) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
   }
 
