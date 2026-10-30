@@ -235,6 +235,58 @@
   }
 
   window.addEventListener('hashchange', function () { render(); window.scrollTo(0, 0); });
+
+  // The phone's back always goes up (#68): game → its page → the shelf → out of the app. Going
+  // down adds one entry marked { up: true } over its parent; going up steps back to that parent,
+  // or, with no parent below (opened from a link), takes this entry's place instead of adding one.
+  function goDown(hash) {
+    history.pushState({ up: true }, '', hash);
+    render();
+    window.scrollTo(0, 0);
+  }
+  view.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    var href = a.getAttribute('href');
+    var game = href.match(/^games\/([a-z0-9-]+)\/v\d+\/$/);
+    if (href === '#/') {
+      e.preventDefault();
+      if (history.state && history.state.up) history.back();
+      else location.replace('#/');
+    } else if (/^#\/[a-z0-9-]+$/.test(href)) {
+      e.preventDefault();
+      goDown(href);
+    } else if (game) {
+      e.preventDefault();
+      var url = new URL(href, location.href);
+      // A game opened from the shelf gets its page between them, so back from it goes there.
+      if (!/^#\/[a-z0-9-]/.test(location.hash)) goDown('#/' + game[1]);
+      // back.js reads this and steps back here from the chip instead of opening the page anew.
+      try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
+      location.assign(url.href);
+    }
+  });
+  // A room code typed in game A that belongs to game B (rooms.js) steps back here to A's page and
+  // leaves this note: A's page becomes B's, and B opens over it, so back from B goes to B's page.
+  function openFromRoom() {
+    var to = null;
+    try {
+      to = JSON.parse(sessionStorage.getItem('ai-pelit:_avaa'));
+      sessionStorage.removeItem('ai-pelit:_avaa');
+    } catch (err) {}
+    if (!to || to.from !== location.hash || !/^#\/[a-z0-9-]+$/.test(to.page)) return;
+    var url = new URL(to.game, location.href);
+    if (url.origin !== location.origin) return;
+    history.replaceState({ up: true }, '', to.page);
+    render();
+    try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
+    location.assign(url.href);
+  }
+  window.addEventListener('pageshow', function (e) { if (e.persisted) { openFromRoom(); render(); } });
+  // Only once the page has loaded: a page still loading would open the game in place of B's page.
+  if (document.readyState === 'complete') openFromRoom();
+  else window.addEventListener('load', function () { setTimeout(openFromRoom); });
+
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     loadCatalog();
