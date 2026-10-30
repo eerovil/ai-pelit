@@ -504,9 +504,10 @@ function draw() {
   // Floor and mat
   const fy = sc([0, FLOOR])[1];
   x.fillStyle = '#1b2240'; x.fillRect(0, fy, W, H - fy);
-  const m0 = sc([-4, FLOOR]), m1 = sc([6, FLOOR]);
-  x.fillStyle = '#2f6fd0'; x.fillRect(m0[0], fy - 0.18 * S, m1[0] - m0[0], 0.18 * S);
-  x.fillStyle = '#5a92e8'; x.fillRect(m0[0], fy - 0.18 * S, m1[0] - m0[0], 0.04 * S);
+  // Sideways the mat stops at the side columns, so it never runs under their text.
+  const m0 = Math.max(sc([-4, FLOOR])[0], wd ? sideL() : -Infinity), m1 = Math.min(sc([6, FLOOR])[0], wd ? W - sideR() : Infinity);
+  x.fillStyle = '#2f6fd0'; x.fillRect(m0, fy - 0.18 * S, m1 - m0, 0.18 * S);
+  x.fillStyle = '#5a92e8'; x.fillRect(m0, fy - 0.18 * S, m1 - m0, 0.04 * S);
   // Uprights, cables and the two bars seen end on
   const ends = BARS.map(sc), base = sc([0, FLOOR]);
   x.strokeStyle = 'rgba(200,210,230,0.35)'; x.lineWidth = 1.5;
