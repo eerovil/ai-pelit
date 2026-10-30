@@ -55,7 +55,7 @@ flowchart TD
 - **Mihin osuu?**: `hits()` for the bars (`SWEEPERS`, low enough to jump), the sliding walls (`PUSHERS`, too tall to jump), the bumpers and the hammers (`HAMMERS`); `bumps()` for the players.
 - **Lennät kauas, hetken pyörryksissä**: `knock()`: thrown the way the bar or ball moves, 0.6–0.7 s with little control.
 - **Seinä työntää mukanaan**: a wall moving into the player pushes it along, off the edge if it does not get out of the way.
-- **Tönäisy: molemmat kimpoavat**: `bumps()` pushes apart every player moved on this phone, harder the faster they met; a player moved on another phone gets its own push there.
+- **Tönäisy: molemmat kimpoavat**: `bumps()` pushes apart every player moved on this phone, harder the faster they met; a player moved on another phone gets its own push there. A player who has finished passes through everyone, so it cannot change a result still being raced.
 - **Lattiaa jalkojen alla?**: `groundAt()`: the floors, the stepping stones, the sliding platform and the three spinning discs; over nothing for 0.1 s means falling.
 - **Putoat, takaisin viime välietapille**: `respawn()` after 1.1 s at the last of the checkpoints (`CPS`, the green dashed lines) the player has stood past.
 - **Aika maalissa**: `move()` sets `fin` when the player crosses 140 m, to 1/100 s.

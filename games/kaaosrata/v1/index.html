@@ -260,12 +260,13 @@ function hits(r, t) {
   }
 }
 
-// Runners bump into each other: each one moved here is pushed off the other.
+// Runners bump into each other: each one moved here is pushed off the other. A finished runner
+// is out of the race and passes through everyone, so it cannot change anyone else's result.
 function bumps() {
   const rs = race.runners;
   for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
     const a = rs[i], b = rs[j], la = local(a), lb = local(b);
-    if ((!la && !lb) || a.fall > 0 || b.fall > 0 || Math.abs(a.z - b.z) > 0.8) continue;
+    if ((!la && !lb) || a.fin !== null || b.fin !== null || a.fall > 0 || b.fall > 0 || Math.abs(a.z - b.z) > 0.8) continue;
     let nx = b.x - a.x, ny = b.y - a.y;
     const d = Math.hypot(nx, ny);
     if (d >= 2 * RAD) continue;

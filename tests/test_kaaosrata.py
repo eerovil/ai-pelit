@@ -77,6 +77,25 @@ def test_players_bump_each_other_apart(site, context):
     assert page.evaluate("Math.hypot(me.x - race.runners[1].x, me.y - race.runners[1].y)") >= 0.75
 
 
+# Two runners overlapping, the first having finished or not, then one round of bumping: how far
+# the second one was pushed, and how fast.
+OVERLAP = """fin => {
+  const a = race.runners[0], b = race.runners[1];
+  Object.assign(a, { x: 0, y: 135, z: 0, vx: 4, vy: 0, fall: 0, fin });
+  Object.assign(b, { x: 0.3, y: 135, z: 0, vx: 0, vy: 0, fall: 0, fin: null });
+  bumps();
+  return [Math.abs(b.x - 0.3) + Math.abs(b.y - 135), Math.hypot(b.vx, b.vy)];
+}"""
+
+
+def test_a_finished_player_cannot_push_one_still_racing(site, context):
+    page = start(site, context)
+    page.evaluate("race.runners[1].kind = 'cpu'")  # the second one moved here too, so it can be pushed
+    assert page.evaluate(OVERLAP, 12.5) == [0, 0]
+    pushed, speed = page.evaluate(OVERLAP, None)
+    assert pushed > 0.1 and speed > 1
+
+
 def test_the_finish_ends_the_race_and_a_win_raises_the_level(site, context):
     page = start(site, context)
     put(page, x=0, y=139.5, vy=5, cp=4)
@@ -160,4 +179,17 @@ def test_two_phones_race_with_bots_and_both_get_the_results(site, browser):
     assert host.inner_text("#aipr-result").startswith("2. sija")
     assert host.errors == guest.errors == []
     for p in pages:
+        p.context.close()
+
+
+def test_in_a_room_a_finished_guest_cannot_push_the_host(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    # On the host, its own player is runners[1] here and the guest's player runners[0]: swap them in.
+    flip = OVERLAP.replace("race.runners[0], b = race.runners[1]", "race.runners[1], b = race.runners[0]")
+    assert host.evaluate(flip, 12.5) == [0, 0]
+    pushed, _ = host.evaluate(flip, None)
+    assert pushed > 0.1
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
         p.context.close()
