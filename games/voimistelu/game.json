@@ -22,6 +22,13 @@
       "note": "Netin tuloslista: paras sarjan pistemäärä kaikilta pelaajilta, nimimerkki kerran puhelimelle.",
       "request": "Online high-score lists for each game (#25): a nickname once per phone, approved by the admin; one list per game across versions; no cheat checks.",
       "issue": "eerovil/ai-pelit#25"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Ilmassa kädet kääntyvät lähellä olevaa tankoa kohti mihin suuntaan tahansa, joten kiinni saa myös, kun suorat kädet menisivät ohi.",
+      "request": "voimistelu: prototyyppi: kun ukko on ilmassa, sen kädet voisi osoittaa automaattisesti tankoa kohti jos se on lähellä. Näin voisi ottaa kiinni myös tilanteessa kun juuri \"sormet ei osu tankoon kun kädet suorana\"",
+      "issue": "eerovil/ai-pelit#84"
     }
   ]
 }
