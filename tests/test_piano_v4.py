@@ -1,5 +1,7 @@
 """Piano v4: the hit zone is drawn, and it is the same time window for every note."""
 
+import pytest
+
 from conftest import ROOT
 
 URL = "games/piano/v4/"
@@ -89,12 +91,19 @@ def test_the_zone_follows_a_new_level_after_a_reload(site, context):
     assert page.evaluate("[level, zonePx(GOOD) < " + str(fast) + "]") == [9, True]
 
 
-def test_the_zone_fits_a_390_px_phone(site, browser):
+@pytest.mark.parametrize("w,h", [(390, 844), (360, 640)])
+def test_the_zone_fits_a_390_px_phone(site, browser, w, h):
     site.build(ROOT / "games")
-    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    ctx = browser.new_context(viewport={"width": w, "height": h}, is_mobile=True, has_touch=True)
     page = ctx.new_page()
     page.goto(site.url + URL)
+    page.evaluate("localStorage.setItem('ai-pelit:piano:taso', '40')")
+    page.reload()
+    # Both edges of the zone stay between the hearts and the keys, from the slowest song to a
+    # fast one on a later, faster lap; the lane is a quarter of the width.
     page.click("#go")
-    # The zone's upper half and the line sit above the keys; the lane is a quarter of the width.
-    assert page.evaluate("[hitY - zonePx(GOOD) > topY + 20, hitY < btnTop, Math.round(laneW)]") == [True, True, 98]
+    for lv in (1, 9, 13, 26, 40):
+        edges = page.evaluate(f"level = {lv}; startLevel(); [hitY - zonePx(GOOD) > topY + 20, hitY + zonePx(GOOD) <= btnTop]")
+        assert edges == [True, True], lv
+    assert round(page.evaluate("laneW")) == round(w / 4)
     ctx.close()

@@ -152,7 +152,7 @@ const LEAD0 = 1.9;                    // seconds a note takes from the top to th
 const LIVES = 3;
 const lead = level => LEAD0 * (songOf(level).lead || 1) / Math.sqrt(speedOf(level));
 
-let W, H, DPR, safeT = 0, safeB = 0, laneW, hitY, btnTop, topY;
+let W, H, DPR, safeT = 0, safeB = 0, laneW, hitY, btnTop, topY, lineLevel = 1;
 function resize() {
   DPR = window.devicePixelRatio || 1;
   W = innerWidth; H = innerHeight;
@@ -161,8 +161,16 @@ function resize() {
   safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
   laneW = W / 4;
   btnTop = H - safeB - Math.max(96, Math.min(140, H * 0.17));
-  hitY = btnTop - 56;  // v4: room under the line for the lower half of the hit zone
   topY = safeT + 64;
+  placeLine(lineLevel);
+}
+// v4: the line sits just high enough that the whole hit zone, its late half too, shows above the
+// keys at this level's fall speed. The zone's half height is GOOD / lead * (hitY - topY), so
+// solve hitY + that = btnTop - 6. It moves only between levels, while the level's name shows.
+function placeLine(lv) {
+  lineLevel = lv;
+  const k = GOOD / lead(lv);
+  hitY = (btnTop - 6 + k * topY) / (1 + k);
 }
 addEventListener('resize', resize); resize();
 
@@ -203,6 +211,7 @@ function newGame(from) {
 }
 function startLevel() {
   cur = levelNotes(level);
+  placeLine(level);
   lives = LIVES;  // v3: every level starts with three fresh hearts
   // A note at t = 0 starts at the top of the screen, so the first one has time to fall.
   now = -lead(level) - 0.6;
