@@ -112,6 +112,34 @@ def test_the_time_running_out_during_the_recount_saves_everyone_out(site, contex
     assert page.errors == []
 
 
+def test_a_rescue_and_a_call_at_the_same_moment_the_hider_wins(site, context):
+    page = open_game(site, context)
+    page.evaluate("newRound('seek')")
+    page.evaluate(RUN, 10.1)
+    # One hider named already, one seen and racing, one reaching the base the same step as the seeker.
+    page.evaluate("""() => { const h = hiders(); h[0].st = 'caught'; h[1].st = 'spotted';
+      h[2].left = true; h[2].x = 15; h[2].y = 20.9; h[2].path = []; player.x = 15; player.y = 23; step(1 / 30); }""")
+    assert page.evaluate("[phase, hiders().map(h => h.st)]") == ["count", ["hiding"] * 4]
+    assert page.errors == []
+
+
+def test_on_a_390_px_phone_the_messages_fit(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.evaluate("newRound('hide')")
+    for text in ["Kaikki pelastettu! Piiloudu!", "Kaikki pelastettu! 😮", "Sinut nimettiin! 😱", "Sinun nimet, Eetun nimet, Iidan nimet, Onnin nimet!"]:
+        page.evaluate(f"toast({json.dumps(text)}, 2); draw()")
+        # The toast's font, as draw() left it, fits the text inside the screen.
+        assert page.evaluate("x.measureText(msg).width + 28") <= 390
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
+    ctx.close()
+    assert errors == []
+
+
 def test_rounds_against_the_computer_end_and_the_first_caught_seeks_next(site, context):
     page = open_game(site, context)
     results = page.evaluate("""() => { const out = [];
@@ -174,4 +202,21 @@ def test_with_friends_kaikki_pelastettu_reaches_every_phone(phones):
     in_room_with_result(guest)
     # Whoever the seeker called after the recount counts; the named one before it was freed.
     assert guest.locator("#aipr-result").inner_text() in ("Kaikki pelastuivat!", "Nimesit 1/4!", "Nimesit 2/4!")
+    assert host.errors == guest.errors == []
+
+
+def test_a_phone_reloaded_during_the_recount_gets_the_clock_back(phones):
+    host = phones("Eero")
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    guest = join(phones, "Aino", host.evaluate("AiPelitRooms.code"))
+    host.evaluate("nextSeeker = { id: AiPelitRooms.me }")
+    start(host, [guest])
+    host.evaluate("""() => { const [a, b] = bots; a.st = 'caught'; b.left = true; b.x = 15; b.y = 20.9; b.path = []; b.goal = BASE; }""")
+    host.wait_for_function("phase === 'count' && seekLeft !== null")
+    host.evaluate("timer = 8")  # keep the recount going while the guest reloads
+    guest.reload()
+    guest.wait_for_function("phase === 'count' && player.name === 'Aino' && seekLeft > 150", timeout=8000)
+    assert guest.evaluate("hiders().every(h => h.st === 'hiding')")
     assert host.errors == guest.errors == []
