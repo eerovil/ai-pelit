@@ -181,13 +181,21 @@ def site(tmp_path):
 
 
 @pytest.fixture(scope="session")
-def browser():
+def _playwright():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        b = p.chromium.launch()
-        yield b
-        b.close()
+        yield p
+
+
+# A fresh Chromium for each test file (#95). With one browser for the whole run, the 3D games'
+# WebGL pages (Hiihto from v7, Pallorata) slowed it down for every file after them on CI, until
+# their rounds timed out.
+@pytest.fixture(scope="module")
+def browser(_playwright):
+    b = _playwright.chromium.launch()
+    yield b
+    b.close()
 
 
 @pytest.fixture
