@@ -29,6 +29,13 @@
       "note": "Osuma-alue näkyy jokaisella kaistalla valaistuna: nuotin keskikohta osuu, kun se on alueella, ja alue on yhtä pitkä aika jokaiselle nuotille, nopeillekin.",
       "request": "Näytä pelissä paremmin se kohta missä nuotin pitää olla että se osuu. Lisäksi: Ei kai nopeissa nuoteissa ole pienempi osumis alue? Ei saa olla",
       "issue": "eerovil/ai-pelit#44"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-30",
+      "note": "Korjattu nopeiden kappaleiden ohi menneet painallukset: painallus osuu aina vanhimpaan osuma-alueella olevaan nuottiin, eikä myöhäinen painallus enää vie seuraavaa nuottia.",
+      "request": "Tässä on joku bugi, yleensä punaisessa nuotissa, se vaan ei ota. Esim kimalaisessa osuu hyvin eka keltainen, mutta eka punainen menee ohi",
+      "issue": "eerovil/ai-pelit#44"
     }
   ]
 }
