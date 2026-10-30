@@ -175,10 +175,11 @@ def test_a_new_go_after_a_lost_one_starts_afresh(site, context):
     page.evaluate("const k = cones[0]; Object.assign(S, { mode: 'air', x: k.x, y: k.y - 9 }); eat(); hearts = 1; timeLeft = 0.02; run(() => phase !== 'menu', 4)")
     assert page.inner_text("#go") == "Uudestaan"
     # The first score opens the high-score list over the menu (it asks a nickname); start past it.
-    page.evaluate("startGo()")
+    # The clock is read in the same call as startGo(): on a busy machine it ticks between two calls.
+    full, left = page.evaluate("startGo(); [40 + 6 * cones.length, timeLeft]")
     assert page.evaluate("[phase, hearts, eaten, points, cones.every(k => !k.eaten), S.mode, martens.length, level]") == \
         ["play", 3, 0, 0, True, "ground", 1, 2]
-    assert page.evaluate("timeLeft") == page.evaluate("40 + 6 * cones.length")
+    assert left == full
 
 
 def test_the_controls_fit_a_390_px_phone_side_by_side(site, browser):
