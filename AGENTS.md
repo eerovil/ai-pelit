@@ -22,7 +22,9 @@ player sees is Finnish unless the request says otherwise.
 1. **A published version never changes.** Never edit, move or delete a `games/<slug>/v<N>/` folder
    or its `game.json` entry once it is on `main`; a fix is a new version. CI runs
    `scripts/check_immutable.py` and fails a pull request that does. `games/<slug>/thumb.webp`
-   is outside the version folders and may be retaken.
+   is outside the version folders and may be retaken. The only exception: a version Eero
+   explicitly asks to take out of production is added to `WITHDRAWN` in that script (with where
+   he said so) in its own pull request, and then deleted whole, folder and entry, in the next.
 2. **One folder per version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an

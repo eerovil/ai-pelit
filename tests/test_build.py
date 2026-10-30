@@ -138,6 +138,34 @@ def test_editing_a_published_version_fails(repo):
     assert "make a new version" in problems("main", cwd=str(repo))[0]
 
 
+def withdraw_v2(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v2")
+    make_game(repo / "games", "peli", [game_page("a")])
+
+
+def test_a_withdrawn_version_may_be_deleted_whole(repo):
+    withdraw_v2(repo)
+    assert problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}) == []
+    # Without the owner's word it is still refused.
+    assert any("make a new version" in p for p in problems("main", cwd=str(repo), withdrawn=set()))
+
+
+def test_a_withdrawn_version_may_not_be_edited_and_others_stay_put(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "v2")
+    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("muutettu"))
+    assert "make a new version" in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"})[0]
+    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("b"))
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v1")
+    assert any("v1 is published" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+
+
 def test_rewriting_a_published_entry_fails(repo):
     meta = json.loads((repo / "games" / "peli" / "game.json").read_text())
     meta["versions"][0]["note"] = "toinen"
