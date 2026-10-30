@@ -33,7 +33,9 @@ def test_every_real_version_loads_without_errors(site, context, changed_games_on
             continue
         # Back to the shelf for each game: the loop below leaves the page on a game.
         page.goto(site.url)
-        assert page.locator(f'.card[data-slug="{game["slug"]}"]').is_visible()
+        # The shelf draws its cards after fetching catalog.json: wait for the card, a busy runner
+        # can take longer than the page's load event (#123).
+        page.wait_for_selector(f'.card[data-slug="{game["slug"]}"]', state="visible")
         for v in game["versions"]:
             page.goto(f'{site.url}games/{game["slug"]}/v{v["n"]}/')
             page.wait_for_selector("#ai-pelit-back")
