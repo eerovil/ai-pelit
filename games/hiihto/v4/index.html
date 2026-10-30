@@ -97,7 +97,7 @@ const fitOf = (st, i, T) => st === 'luistelu' ? glideFit(GLIDES[i], T) : waxFit(
 const bestFor = (st, T) => st === 'luistelu' ? bestGlide(T) : bestWax(T);
 
 // ---- The course: 2 m segments, each with its own grade and curve ----
-const SEG = 2, DRAW = 130;
+const SEG = 2, DRAW = 130, ROAD_W = 8;
 const LX = [-1.25, 0, 1.7];                     // oncoming classic track, own classic track, skating lane
 const LS = [0, 1.15, 2.25];                     // a skater's lanes: the classic track, the skating lane's two halves
 const laneX = (st, lane) => (st === 'luistelu' ? LS : LX)[lane];
@@ -125,6 +125,12 @@ function buildCourse(n) {
     hills++;
   }
   put(total * SEG, 0, 0);
+  // A road across the trail (v4) on levels 3, 5, 7…, a little before half way, on the flat.
+  const road = n >= 3 && n % 2 === 1 ? { z0: Math.round(len * 0.45 / SEG) * SEG } : null;
+  if (road) {
+    road.z1 = road.z0 + ROAD_W;
+    for (let j = Math.floor((road.z0 - 30) / SEG); j < Math.ceil((road.z1 + 30) / SEG); j++) { raw[j] = 0; curve[j] = 0; }
+  }
   const grade = new Float32Array(total), y = new Float32Array(total + 1), xs = new Float32Array(total + 1), dir = new Float32Array(total + 1);
   for (let s = 0; s < total; s++) { let a = 0, k = 0; for (let j = -4; j <= 4; j++) { const q = s + j; if (q >= 0 && q < total) { a += raw[q]; k++; } } grade[s] = a / k; }
   for (let s = 0; s < total; s++) { y[s + 1] = y[s] + grade[s] * SEG; dir[s + 1] = dir[s] + curve[s]; xs[s + 1] = xs[s] + dir[s] * SEG; }
@@ -136,8 +142,9 @@ function buildCourse(n) {
   const at = (z, o) => spr[Math.floor(z / SEG)].push({ z, ...o });
   at(4, { kind: 'banner', text: 'LÄHTÖ' });
   at(len, { kind: 'banner', text: 'MAALI' });
+  if (road) at(road.z0 - 16, { kind: 'post', text: '⚠ TIE', l: TRAIL_R + 0.5 });
   for (let d = 250; d < len - 50; d += 250) at(len - d, { kind: 'post', text: `${d} m`, l: TRAIL_R + 0.5 });
-  course = { n, len, total, grade, y, xs, dir, spr, weather: weatherFor(n) };
+  course = { n, len, total, grade, y, xs, dir, spr, road, weather: weatherFor(n) };
   course.ideal = idealTime();
   course.par = Math.round(course.ideal * 1.5);
   return course;
@@ -195,7 +202,8 @@ function push(p, side) {
 // is weaker (above), a tap long after it wastes time, so tapping as the meter turns green is the
 // fastest rhythm: 0.37 s a kick in classic, 0.32 s a push when skating.
 const BEAT = { perinteinen: 0.37, luistelu: 0.32 };
-function beat(p) { return clamp((p.t - p.lastKick) / BEAT[p.style], 0, 1); }
+const beatLen = p => p.road === 'walk' ? WALK_BEAT : BEAT[p.style];
+function beat(p) { return clamp((p.t - p.lastKick) / beatLen(p), 0, 1); }
 // What the meter shows: red after a tap that came too soon, until the next full-strength moment;
 // then green; yellow while it fills.
 function meter(p) { const f = beat(p); return f >= 1 ? 'ready' : p.earlyT > 0 ? 'early' : 'filling'; }
@@ -205,6 +213,7 @@ function physics(p, dt) {
   p.kickAnim = Math.min(1, p.kickAnim + dt * 2.6);
   p.slipT = Math.max(0, p.slipT - dt); p.invT = Math.max(0, p.invT - dt); p.sameT = Math.max(0, p.sameT - dt); p.earlyT = Math.max(0, (p.earlyT || 0) - dt);
   if (p.fallT > 0) { p.fallT = Math.max(0, p.fallT - dt); p.v *= Math.exp(-8 * dt); }
+  if (roadStep(p, dt)) return;
   let mu = MU + p.drag;
   if (p.vMode) mu += g < -0.01 ? 0.22 : 0.03;              // a V downhill is a snowplough
   const k = p.hold && !p.vMode ? 0.0018 : 0.0055;
@@ -214,9 +223,60 @@ function physics(p, dt) {
   const tx = laneX(p.style, p.lane);
   p.x += clamp(tx - p.x, -9 * dt, 9 * dt);
 }
+// ---- The road crossing (v4) ----
+// At the road's edge the skier stops (one who comes in fast falls over), takes the skis off,
+// steps across the icy road (a step before the meter is green slips), and puts the skis back on;
+// when snow has got into the bindings, it has to be knocked out first, a tap for each knock.
+const STEP = 0.9, WALK_BEAT = 0.45;
+const onRoad = p => !!(p.road && p.road !== 'done');
+function roadStep(p, dt) {
+  const r = course.road;
+  if (!r || p.road === 'done') return false;
+  if (!p.road) {
+    if (p.z + p.v * dt < r.z0 - 1.2) return false;
+    if (p.v > 4.5 && p.fallT <= 0) { p.fallT = 1.6; p.hitRoad = true; }
+    p.z = r.z0 - 1.2; p.road = 'edge'; p.roadT = 0;
+  }
+  p.v = 0; p.roadT += dt;
+  if (p.road === 'off' && p.roadT >= 0.8) { p.road = 'walk'; p.roadT = 0; p.lastKick = p.t - 1; }
+  if (p.road === 'on' && p.roadT >= 0.8) { p.road = 'done'; p.lastKick = p.t - 1; }
+  if (p.road === 'walk' && p.z >= r.z1 + 0.6) { p.road = 'skison'; p.roadT = 0; }
+  p.x += clamp(laneX(p.style, p.lane) - p.x, -9 * dt, 9 * dt);
+  return true;
+}
+// A tap at the road: skis off, a step, skis on, or a knock at the snow in the bindings.
+function roadTap(p) {
+  if (p.fallT > 0) return null;
+  if (p.road === 'edge') { p.road = 'off'; p.roadT = 0; return 'off'; }
+  if (p.road === 'walk') {
+    const since = p.t - p.lastKick;
+    p.lastKick = p.t; p.side = -p.side; p.kickAnim = 0;
+    if (since < WALK_BEAT * 0.85) { p.fallT = 1.0; p.earlyT = 0.6; return 'slip'; }
+    p.z += STEP;
+    return 'step';
+  }
+  if (p.road === 'skison') {
+    if (p.clog > 0) { p.road = 'clog'; return 'clog'; }
+    p.road = 'on'; p.roadT = 0; return 'on';
+  }
+  if (p.road === 'clog') {
+    p.clog--;
+    if (p.clog <= 0) { p.road = 'on'; p.roadT = 0; }
+    return 'knock';
+  }
+  return null;
+}
 // A good skier: V on the steep climbs (classic), the tuck down the hills, a kick every `gap`
 // seconds, a push on alternate skis when skating. Sets the par, and skis for a friend who left.
 function botStep(p, dt, gap) {
+  if (onRoad(p) || (course.road && !p.road && p.z > course.road.z0 - 25)) {
+    // The road: slow down to it, then the same taps as a person, in the meter's rhythm.
+    p.vMode = false; p.hold = false;
+    if (onRoad(p) && p.t >= (p.next || 0)) { roadTap(p); p.next = p.t + (p.road === 'walk' ? WALK_BEAT + 0.02 : 0.3); }
+    else if (!onRoad(p) && p.v < 2.5 && p.t >= (p.next || 0)) { if (p.style === 'luistelu') push(p, -p.side); else kick(p); p.next = p.t + gap; }
+    physics(p, dt);
+    return;
+  }
   const g = gradeAt(p.z + 2);
   p.vMode = p.style !== 'luistelu' && g > 0.075; p.hold = g < -0.02;
   if (!p.hold && p.t >= (p.next || 0)) {
@@ -265,6 +325,9 @@ function newRace(seed) {
   if (!skating()) addSkater(-20 - R() * 30);
   nextVasta = 3 + R() * 4; nextSkate = skating() ? 1e9 : 6 + R() * 6;
   snow = Array.from({ length: 70 }, () => [R(), R(), 0.5 + R()]);
+  // Snow in the bindings at the road: likelier in wet, new snow. The same for everyone in a room.
+  const T = course.weather.T;
+  P.clog = course.road && R() < (T > -3 ? 0.75 : T > -10 ? 0.45 : 0.25) ? 4 + Math.floor(R() * 3) : 0;
   mode = 'wax';
 }
 
@@ -288,7 +351,7 @@ function world(dt) {
   if (nextVasta <= 0) { if (P.z + 160 < course.len + 40) addVasta(P.z + 160); nextVasta = Math.max(2.5, (5 + R() * 6) / (1 + 0.08 * (level - 1))); }
   if (nextSkate <= 0) { addSkater(P.z - 50); nextSkate = Math.max(3, (7 + R() * 7) / (1 + 0.06 * (level - 1))); }
   npcs = npcs.filter(o => o.z > P.z - 70 && (isSlow(o) || o.z < P.z + 260));
-  if (P.fallT > 0 || P.invT > 0) return;
+  if (P.fallT > 0 || P.invT > 0 || onRoad(P)) return;
   for (const o of npcs) {
     const dz = o.z - P.z;
     if (Math.abs(o.x - P.x) < 0.75 && Math.abs(dz) < 0.9) { crash(o); return; }
@@ -315,7 +378,7 @@ function crash(o) {
 function say(o, text) { bubbles = bubbles.filter(b => b.o !== o); bubbles.push({ o, text, t: 0 }); }
 function popup(text, col) { popups.push({ text, col, t: 0 }); }
 
-function steer(d) { if (mode === 'race' || mode === 'count') P.lane = clamp(P.lane + d, 0, 2); }
+function steer(d) { if ((mode === 'race' || mode === 'count') && !onRoad(P)) P.lane = clamp(P.lane + d, 0, 2); }
 
 // ---- Step: everything that moves ----
 function step(dt) {
@@ -328,6 +391,7 @@ function step(dt) {
     P.hold = held();
     for (let i = 0; i < n && mode === 'race'; i++) {
       physics(P, h); world(h);
+      if (P.hitRoad) { P.hitRoad = false; falls++; popup('Liian kovaa tielle!', '#ff8a8a'); thud(); }
       if (P.z >= course.len) finish();
     }
   }
@@ -637,10 +701,19 @@ function down(id, px, py) {
     if (resultT > 0.8) { if (result.passed) level = Math.min(maxLevel, level + 1); newRace(); }
     return;
   }
+  if (mode === 'race' && onRoad(P)) { roadFx(roadTap(P)); return; }
   const b = vButton();
   if (!skating() && Math.hypot(px - b.x, py - b.y) < b.r + 8) { P.vMode = !P.vMode; touches.set(id, { x0: px, y0: py, t0: clock, v: true }); beep(P.vMode ? 660 : 440, 0.06, 'square', 0.04); return; }
   touches.set(id, { x0: px, y0: py, t0: clock, swiped: false });
   if (mode === 'race') { if (skating()) push(P, px < W / 2 ? -1 : 1); else kick(P); swish(); }
+}
+function roadFx(what) {
+  if (what === 'off') { popup('Sukset pois', '#ffffff'); beep(440, 0.08, 'triangle', 0.08); }
+  if (what === 'step') noise(0.06, 3200, 0.15);
+  if (what === 'slip') { falls++; popup('Liukastui!', '#ff8a8a'); thud(); }
+  if (what === 'clog') popup('Lunta siteissä!', '#9fd8ff');
+  if (what === 'knock') noise(0.07, 260, 0.6);
+  if (what === 'on') { popup('Sukset jalkaan!', '#7ef0a0'); beep(660, 0.1, 'triangle', 0.08); }
 }
 function move(id, px, py) {
   const t = touches.get(id);
@@ -720,7 +793,14 @@ function draw() {
     if (b.y >= maxY || i * SEG + SEG <= cam.z + 0.3) continue;
     const f = fogOf(a.dz);
     x.save(); x.beginPath(); x.rect(0, 0, W, maxY); x.clip();
-    const band = (i >> 2) & 1;
+    const band = (i >> 2) & 1, rd = course.road;
+    if (rd && i * SEG >= rd.z0 && i * SEG < rd.z1) {
+      // The icy road, across the whole view, with its centre line.
+      x.fillStyle = mix(i & 1 ? [92, 101, 114] : [99, 109, 123], f); x.fillRect(0, b.y, W, a.y - b.y + 1);
+      if (i * SEG === rd.z0 + ROAD_W / 2 - SEG) { x.fillStyle = mix([240, 214, 90], f); for (let xx = -((cam.cx * 40) % 48); xx < W; xx += 48) x.fillRect(xx, b.y - 1, 26, Math.max(1.5, (a.y - b.y) * 0.15)); }
+      x.fillStyle = 'rgba(220,235,255,0.18)'; x.fillRect(0, b.y, W, (a.y - b.y) * 0.4);
+      x.restore(); maxY = Math.min(maxY, b.y); continue;
+    }
     x.fillStyle = mix(band ? [236, 242, 249] : [228, 236, 245], f); x.fillRect(0, b.y, W, a.y - b.y + 1);
     const q = (l0, l1, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(a.x + l0 * a.k, a.y + 0.5); x.lineTo(a.x + l1 * a.k, a.y + 0.5); x.lineTo(b.x + l1 * b.k, b.y); x.lineTo(b.x + l0 * b.k, b.y); x.fill(); };
     q(TRAIL_L - 0.4, TRAIL_L, mix([214, 225, 238], f)); q(TRAIL_R, TRAIL_R + 0.4, mix([214, 225, 238], f));
@@ -795,7 +875,8 @@ function drawItem(s) {
   if (s === P) {
     const ph = P.kickAnim < 1 ? Math.sin(P.kickAnim * Math.PI) * P.side : 0;
     const col = net ? meK().color : '#1f4fa8';
-    skier(p.x, p.y, p.k, { coat: col, pants: '#16233f', hat: '#ffffff', pom: col, ph, tuck: P.hold && !P.vMode && P.fallT <= 0, vee: P.vMode, skate: skating() && !(P.hold && P.fallT <= 0), fall: P.fallT > 0, blink: P.invT > 0 && P.fallT <= 0 });
+    const walk = P.road === 'walk' || P.road === 'skison' || P.road === 'clog';
+    skier(p.x, p.y, p.k, { coat: col, pants: '#16233f', hat: '#ffffff', pom: col, ph, tuck: P.hold && !P.vMode && P.fallT <= 0 && !onRoad(P), vee: P.vMode, skate: skating() && !onRoad(P) && !(P.hold && P.fallT <= 0), fall: P.fallT > 0, blink: P.invT > 0 && P.fallT <= 0, noSkis: walk, snowy: P.road === 'clog' });
   } else if (s.kind === 'pelaaja') {
     // A friend: in their colour, with their name above while near enough to read.
     const k = s.k, f = fogOf(p.dz), ph = Math.sin(k.ph * TAU), sk = skating() && k.fin === null;
@@ -832,7 +913,11 @@ function skier(sx, sy, k, o) {
   // Feet slide forward and back (forward is up the screen, foreshortened), skis point ahead.
   const fl = [-0.16, Math.max(0, ph) * 0.18 * dir], fr = [0.16, Math.max(0, -ph) * 0.18 * dir];
   const spread = o.vee ? 0.32 : o.skate ? 0.22 : 0.02;
-  for (const [f, sd] of [[fl, -1], [fr, 1]]) {
+  if (o.noSkis) {
+    // On foot (v4, the road): boots, and the skis carried on the shoulder.
+    for (const f of [fl, fr]) L([[f[0], f[1]], [f[0], f[1] + 0.08]], 0.12, '#2a2a2a');
+    if (o.snowy) { x.fillStyle = '#ffffff'; for (const f of [fl, fr]) { x.beginPath(); x.arc(sx + f[0] * s, sy - (f[1] + 0.05) * s, 0.09 * s, 0, TAU); x.fill(); } }
+  } else for (const [f, sd] of [[fl, -1], [fr, 1]]) {
     const lift = o.skate && (sd > 0) === (ph > 0) ? 0.08 : 0;
     L([[f[0], f[1] - 0.15 * dir + lift], [f[0] + sd * spread * 1.3, f[1] + 0.55 * dir + lift]], 0.07, skiCol);
   }
@@ -849,6 +934,7 @@ function skier(sx, sy, k, o) {
     const tip = o.tuck ? [sd * 0.45, hip - 0.1] : [sd * (0.36 + 0.06 * Math.abs(sw)), 0.05 + Math.max(0, -sw) * 0.25 * dir];
     L([hand, tip], 0.03, poleCol);
   }
+  if (o.noSkis) { L([[-0.5, hip + 0.85], [0.45, hip - 0.15]], 0.07, skiCol); L([[-0.42, hip + 0.9], [0.53, hip - 0.1]], 0.07, skiCol); }
   x.fillStyle = '#f2c9a5'; x.beginPath(); x.arc(sx + lean * s, sy - head * s, 0.13 * s, 0, TAU); x.fill();
   if (o.granny) { x.fillStyle = '#d8d8d8'; x.beginPath(); x.arc(sx, sy - (head - 0.03) * s, 0.14 * s, 0.15 * Math.PI, 0.85 * Math.PI); x.fill(); }
   if (o.toward) { x.fillStyle = '#222'; x.fillRect(sx - 0.06 * s, sy - (head + 0.01) * s, 0.03 * s, 0.03 * s); x.fillRect(sx + 0.03 * s, sy - (head + 0.01) * s, 0.03 * s, 0.03 * s); }
@@ -882,6 +968,12 @@ function hint() {
   if (mode !== 'race') return null;
   const g = gradeAt(P.z), ahead = gradeAt(P.z + 6);
   if (P.fallT > 0) return ['Kaatuminen! Noustaan ylös…', '#ffb0b0'];
+  if (onRoad(P)) return ({
+    edge: ['Tie! Napauta: sukset pois', '#ffd45c'], off: ['Sukset pois…', '#ffffff'],
+    walk: meter(P) === 'early' ? ['Liukas tie! Odota vihreää', '#ffb0b0'] : ['Jäinen tie: askel, kun palkki on vihreä', '#ffd45c'],
+    skison: ['Napauta: sukset jalkaan', '#ffd45c'], clog: [`Lunta siteissä! Kopistele: ${P.clog} ×`, '#9fd8ff'], on: ['Sukset jalkaan…', '#ffffff'],
+  })[P.road];
+  if (course.road && !P.road && course.road.z0 - P.z < 45) return ['Tie edessä: hidasta!', '#ffd45c'];
   if (skating()) {
     if (P.sameT > 0) return ['Vuorotellen: vasen, oikea, vasen…', '#ffd45c'];
     if (meter(P) === 'early') return ['Liian tiheään: odota vihreää', '#ffb0b0'];
@@ -930,6 +1022,7 @@ function drawHud() {
     x.strokeStyle = g > 0.075 ? '#ff6b6b' : g > 0.03 ? '#ffd45c' : g < -0.03 ? '#7fd4ff' : '#ffffff';
     x.beginPath(); x.moveTo(sxz(z), syh(heightAt(z))); x.lineTo(sxz(z + 4), syh(heightAt(z + 4))); x.stroke();
   }
+  if (course.road && course.road.z1 > z0 && course.road.z0 < z1) { x.fillStyle = '#5c6572'; x.fillRect(sxz(course.road.z0), py0 - 2, Math.max(4, sxz(course.road.z1) - sxz(course.road.z0)), ph + 4); }
   if (course.len < z1) { x.fillStyle = '#d62845'; x.fillRect(sxz(course.len) - 1, py0 - 2, 3, ph + 4); }
   // Friends on the profile, in their colours.
   if (net) for (const k of net.skiers) {
@@ -942,7 +1035,7 @@ function drawHud() {
   const hn = hint();
   if (hn) shadowText(hn[0], W / 2, py0 + ph + 20, 15, hn[1], 'center', 700);
   // The rhythm meter (v4): fills after each tap and turns green when the next one is at full strength.
-  if (mode === 'race' && !(P.hold && P.fallT <= 0)) {
+  if (mode === 'race' && !(P.hold && P.fallT <= 0 && !onRoad(P)) && (!onRoad(P) || P.road === 'walk')) {
     const r = rhythmBar(), f = beat(P), m = meter(P), ready = m === 'ready', early = m === 'early';
     x.fillStyle = 'rgba(20,30,55,0.45)'; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill();
     x.fillStyle = early ? '#ff8a8a' : ready ? '#7ef0a0' : '#ffd45c';
@@ -954,7 +1047,15 @@ function drawHud() {
   if (mode === 'count') shadowText(countT > 0.2 ? String(Math.ceil(countT)) : 'Hiihdä!', W / 2, H * 0.4, 64, '#ffd45c', 'center', 900);
   if (mode === 'count') shadowText(skating() ? 'Vuorotellen vasen ja oikea puoli,' : 'Napauta tahdissa,', W / 2, H * 0.4 + 52, 14, '#ffffff', 'center', 700);
   if (mode === 'count') shadowText('aina kun tahtipalkki on vihreä', W / 2, H * 0.4 + 72, 14, '#ffffff', 'center', 700);
-  if (mode === 'race' || mode === 'count') {
+  const ask = mode === 'race' && P.fallT <= 0 && { edge: '👟 Sukset pois', skison: '⛷ Sukset jalkaan', clog: `❄ Kopistele (${P.clog})` }[P.road];
+  if (ask) {
+    // The road's one action, big in the middle: a tap anywhere does it.
+    const w = 230, h = 54, bx = (W - w) / 2, by = H * 0.6;
+    x.fillStyle = '#ffd45c'; x.strokeStyle = '#fff'; x.lineWidth = 3;
+    x.beginPath(); x.roundRect(bx, by, w, h, h / 2); x.fill(); x.stroke();
+    text(ask, W / 2, by + h / 2 + 1, 20, '#1b2240', 'center', 900);
+  }
+  if ((mode === 'race' || mode === 'count') && !onRoad(P)) {
     if (skating()) {
       // Which ski pushed last: the next push is on the other one. Each pad sits in the half of the
       // screen that pushes that ski, so a tap on it pushes the ski it names.
@@ -1013,6 +1114,7 @@ function drawWax() {
   text(`${wx.T > 0 ? '+' : ''}${fmt(wx.T, Number.isInteger(wx.T) ? 0 : 1)} °C`, W / 2, y, 34, wx.T > 0 ? '#ffb0b0' : '#9fd8ff', 'center', 800);
   y += 30;
   text(wx.desc, W / 2, y, 14, '#ffffff');
+  if (course.road) { text('Radalla tie: sukset pois ja varovasti yli', W / 2, y + 19, 12, '#ffd45c', 'center', 700); y += 14; }
   y += 32;
   text(skating() ? 'Valitse luistovoide' : 'Valitse pitovoide', W / 2, y, 16, '#ffd45c', 'center', 700);
   y += 16;

@@ -1,6 +1,6 @@
 # Hiihto: one race, from the style and wax to the finish
 
-How one race of Hiihto plays (v1–v4). Since v3 the player first picks a style: classic
+How one race of Hiihto plays (v1–v4). From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
 (perinteinen) or skating (luistelu); a race with friends skis the host's course and style. The
 player picks a wax for the day's weather (a grip wax for classic, a glide wax for skating), then
 skis to the finish. Slower skiers are overtaken from another lane, running into anyone is a fall,
@@ -31,6 +31,9 @@ flowchart TD
   I --> K
   J --> K
   H2 --> K
+  H --> TIE{Tie edessä?}
+  TIE -- Kyllä --> TIE2[Sukset pois, varovasti jäisen tien yli, sukset jalkaan]
+  TIE2 --> K
   K -- Kyllä --> L[Pyyhkäise toiselle kaistalle]
   L --> O{Tuleeko joku vastaan tai takaa?}
   O -- Ei --> P[Ohitus! Ohitettu sanoo jotain]
@@ -45,10 +48,10 @@ flowchart TD
   T --> K4[Kavereiden kanssa: sijat, ensimmäinen maalissa voittaa]
   U --> K4
   class A,F blue
-  class Y,S,B,G,K,K2,O,R,S2 amber
+  class Y,S,B,G,K,K2,O,R,S2,TIE amber
   class C,P,T green
   class D,E,Q,U rose
-  class H,I,J,H2 teal
+  class H,I,J,H2,TIE2 teal
   class L violet
   class K1,K3,K4 violet
 ```
@@ -76,6 +79,8 @@ flowchart TD
 - **V-nappi päälle: V-käynti**: the V button (bottom left) toggles the V step: it grips on any climb but is slow on the flat and brakes downhill like a snowplough. Classic only.
 - **Sormi ruudulle: laskuasento**: a finger held still for 0.2 s is the tuck (`held()`), which cuts air drag to a third. Both styles.
 - **Napauta vuorotellen vasen ja oikea puoli**: `push()`: a tap on the left half pushes off the left ski, on the right half the right one; the same ski twice is a weak push. In v4 the rhythm meter turns green at 0.32 s, the fastest rhythm for pushes. The yellow pad, "‹ vasen" or "oikea ›" in the middle of its half (`skatePads()`), shows which ski is next. Faster than the stride and needs no V step, since a skate's edge always grips.
+- **Tie edessä?**: `buildCourse()` in `games/hiihto/v4/index.html`: levels 3, 5, 7… have an 8 m road at 45 % of the course, flat for 30 m each side, with a "⚠ TIE" post before it; the hint says "Tie edessä: hidasta!".
+- **Sukset pois, varovasti jäisen tien yli, sukset jalkaan**: `roadStep()` and `roadTap()`: the skier stops at the edge (coming in faster than 4.5 m/s is a fall), a tap takes the skis off, each tap is a 0.9 m step and one before the meter is green (0.45 s) slips; on the far side a tap puts the skis on, but first snow in the bindings (likelier in wet snow, decided at the start, the same for a whole room) needs 4–6 knocks. The computer skier does the same in rhythm (`botStep()`), so the time limit counts the crossing.
 - **Hitaampi edessä?**: classic: grannies on the own track at about 2 m/s. Skating: fitness skaters at 3.6–5 m/s on either half of the skating lane. Both go slower uphill and faster downhill (`slopeFactor()`) and queue behind each other on their track.
 - **Pyyhkäise toiselle kaistalle**: classic: the oncoming track on the left, or the skating lane on the right, where fast skaters shout "Latua!" first. Skating: the other half of the skating lane, or the classic track, where the grannies scold.
 - **Kaatuminen: hetki ylös noustessa**: `crash()`: 1.6 s on the ground and the speed lost, then a moment when nobody can knock you down again. Friends ski through each other.

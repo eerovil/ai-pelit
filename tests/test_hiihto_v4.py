@@ -66,3 +66,81 @@ def test_a_race_draws_the_speed_and_the_meter(site, browser, w, h):
     assert r["mode"] == "done" and r["stars"] >= 1, r
     assert page.errors == []
     ctx.close()
+
+
+def test_the_road_is_on_odd_levels_from_three(site, context):
+    page = open_game(site, context)
+    roads = page.evaluate("[1, 2, 3, 4, 5, 6].map(n => { level = n; newRace(); return !!course.road; })")
+    assert roads == [False, False, True, False, True, False]
+    page.evaluate("level = 3; newRace()")
+    # Flat on and around the road, so nobody slides on to it down a hill.
+    assert page.evaluate("[-20, 0, 4, 8, 20].every(d => Math.abs(gradeAt(course.road.z0 + d)) < 0.005)")
+
+
+CROSS = """(st) => { level = 3; style = st; newRace(); chooseWax(bestFor(style, course.weather.T)); mode = 'race';
+  npcs = []; nextVasta = nextSkate = 1e9; P.clog = 3; P.z = course.road.z0 - 6; P.v = 3; }"""
+RUN = "s => { for (let i = 0; i < s * 60; i++) step(1 / 60); }"
+TAP = "() => { down(5, W / 2, H / 2); up(5); }"
+
+
+@pytest.mark.parametrize("st", ["perinteinen", "luistelu"])
+def test_crossing_the_road(site, context, st):
+    page = open_game(site, context)
+    page.evaluate(CROSS, st)
+    page.evaluate(RUN, 3)
+    # Stopped at the edge, skis still on, nobody knocked down.
+    assert page.evaluate("[P.road, P.v, falls, hint()[0]]") == ["edge", 0, 0, "Tie! Napauta: sukset pois"]
+    assert page.evaluate("P.z < course.road.z0")
+    page.evaluate(TAP)
+    page.evaluate(RUN, 1)
+    assert page.evaluate("P.road") == "walk"
+    # A step in the rhythm moves on; one straight after it slips on the ice.
+    page.evaluate(TAP)
+    z = page.evaluate("P.z")
+    page.evaluate(RUN, 0.1)
+    page.evaluate(TAP)
+    assert page.evaluate("[falls, P.fallT > 0, P.z]") == [1, True, z]
+    page.evaluate(RUN, 1.2)
+    # Steps on green get across.
+    for _ in range(12):
+        if page.evaluate("P.road") != "walk":
+            break
+        page.evaluate(TAP)
+        page.evaluate(RUN, 0.5)
+    assert page.evaluate("[P.road, P.z > course.road.z1]") == ["skison", True]
+    # Snow in the bindings: three knocks, then the skis go on and the race goes on.
+    page.evaluate(TAP)
+    assert page.evaluate("[P.road, hint()[0]]") == ["clog", "Lunta siteissä! Kopistele: 3 ×"]
+    for _ in range(3):
+        page.evaluate(TAP)
+    page.evaluate(RUN, 1)
+    assert page.evaluate("P.road") == "done"
+    z = page.evaluate("P.z")
+    for _ in range(6):
+        page.evaluate("st => st === 'luistelu' ? push(P, -P.side) : kick(P)", st)
+        page.evaluate(RUN, 0.4)
+    assert page.evaluate("P.z") > z + 2
+    assert page.errors == []
+
+
+def test_coming_in_fast_is_a_fall(site, context):
+    page = open_game(site, context)
+    page.evaluate(CROSS, "perinteinen")
+    page.evaluate("P.v = 7")
+    page.evaluate(RUN, 1.5)
+    assert page.evaluate("[falls, P.road, P.z < course.road.z0]") == [1, "edge", True]
+
+
+def test_a_whole_race_with_a_road(site, context):
+    page = open_game(site, context)
+    page.evaluate("localStorage.setItem('ai-pelit:hiihto:taso', '3'); maxLevel = 3; level = 3; newRace()")
+    assert page.evaluate("!!course.road")
+    # The time limit counts the crossing, but only as long as it takes: a few seconds more than
+    # the same course with no road.
+    with_road = page.evaluate("course.ideal")
+    no_road = page.evaluate("(() => { const r = course.road; course.road = null; const t = idealTime(); course.road = r; return t; })()")
+    assert no_road + 4 < with_road < no_road + 15
+    r = page.evaluate(BOT)
+    assert r["mode"] == "done" and r["t"] < r["par"], r
+    assert page.evaluate("P.road") == "done"
+    assert page.errors == []
