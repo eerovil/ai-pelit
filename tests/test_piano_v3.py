@@ -60,3 +60,38 @@ def test_a_first_game_has_no_picker(site, context):
     page = open_game(site, context)
     assert not page.is_visible("#pickrow")
     assert page.inner_text("#go") == "Soita!"
+
+
+def test_progress_survives_a_reload_mid_game(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.evaluate("for (let i = 0; i < 2; i++) { for (const n of cur.notes) n.hit = true; now = cur.end + 1; update(0.01); }")
+    assert page.evaluate("level") == 3
+    page.reload()
+    assert page.inner_text("#go") == "Jatka tasolta 3"
+    page.click("#go")
+    assert page.evaluate("[level, lives]") == [3, 3]
+
+
+def test_two_lanes_at_once_on_a_fast_song(site, context):
+    page = open_game(site, context, {"taso": 13})
+    page.click("#go")
+    # Two thumbs: the two notes nearest the line in different lanes, pressed in the same frame.
+    page.evaluate("""() => {
+      const [a] = cur.notes; const b = cur.notes.find(n => n.lane !== a.lane);
+      now = (a.t + b.t) / 2; tap(a.lane); tap(b.lane);
+    }""")
+    assert page.evaluate("[cur.notes.filter(n => n.hit).length, lives]") == [2, 3]
+
+
+def test_the_menu_fits_a_390_px_phone(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.goto(site.url + URL)
+    page.evaluate("localStorage.setItem('ai-pelit:piano:taso', '12')")
+    page.reload()
+    row = page.locator("#pickrow").bounding_box()
+    assert row["x"] >= 0 and row["x"] + row["width"] <= 390
+    assert "Kimalaisen lento" in page.inner_text("#pick")
+    ctx.close()
