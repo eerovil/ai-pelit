@@ -104,6 +104,19 @@ def test_a_ctrl_click_opens_the_link_in_a_new_tab_as_before(site, context):
         tab.value.close()
 
 
+def test_the_header_link_goes_up_too(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    page.click('.card[data-slug="pomppu"] .card-main')
+    page.wait_for_selector(".version")
+    page.click("a.brand")
+    page.wait_for_selector('.card[data-slug="pomppu"]')
+    page.go_back()
+    assert page.url == "about:blank"
+
+
 def test_back_from_a_game_opened_with_the_play_button_goes_to_its_page(site, context):
     make_game(site.games, "pomppu", [game_page("v1")])
     site.build()
