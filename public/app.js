@@ -81,6 +81,11 @@
     var t = tops[slug];
     if (!t || !scores) return '';
     var g = scores.games[slug];
+    // A game with named lists (Tikanheitto) shows its first list's no. 1 with the list's name.
+    if (g && g.lists) {
+      var named = g.lists.filter(function (l) { return l[0] === t.board; })[0];
+      return named ? '🏆 ' + named[1] + ': ' + t.name + ' · ' + scores.scoreText(slug, t.score) : '';
+    }
     // A no. 1 kept from a list the shelf no longer shows (Puhelinkoppi's withdrawn streak list,
     // #9) is not shown as this one's.
     if (!(g && g.boards) && t.board && t.board !== 'main') return '';
@@ -98,13 +103,27 @@
     }).catch(function () {});
   }
 
-  // A game's page: its top 10, and the player's own place under it. Hiihto has a list per course.
+  // A game's page: its top 10, and the player's own place under it. Hiihto has a list per course,
+  // Tikanheitto named lists (Mökkitikka first, then Pistekisa) picked with a button each.
   function scoreSection(slug) {
     if (!scores || !scores.games[slug]) return null;
     var box = el('div', { class: 'scores' });
     var picker = null;
     var course = 1;
-    if (scores.games[slug].boards) {
+    var lists = scores.games[slug].lists, listId = lists ? lists[0][0] : 'main';
+    if (lists) {
+      var buttons = lists.map(function (l) {
+        var b = el('button', { type: 'button', class: 'secondary board-list', 'data-board': l[0], text: l[1] });
+        b.addEventListener('click', function () {
+          listId = l[0];
+          buttons.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+          fill();
+        });
+        b.setAttribute('aria-pressed', String(l[0] === listId));
+        return b;
+      });
+      picker = el('div', { class: 'board-picker' }, buttons);
+    } else if (scores.games[slug].boards) {
       // Any course, not just the ones this phone has reached: ‹ Taso N ›, or type the number.
       var input = el('input', { class: 'board', type: 'number', min: '1', max: '999', inputmode: 'numeric', value: '1', 'aria-label': 'Rata' });
       var go = function (n) {
@@ -123,7 +142,7 @@
     function fill() {
       var mine = ++asked;
       box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
-      scores.list(slug, picker ? 'taso-' + course : 'main').then(function (b) {
+      scores.list(slug, lists ? listId : picker ? 'taso-' + course : 'main').then(function (b) {
         if (mine !== asked) return;
         var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
         if (b.mine && !b.rows.some(function (r) { return r.me; })) {

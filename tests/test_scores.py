@@ -68,7 +68,7 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = "taso-1" if game == "hiihto" else "main"
+                first = {"hiihto": "taso-1", "tikka": "mokki"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
                 low = game == "hiihto"
@@ -491,3 +491,27 @@ def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, co
     page.reload()
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
     assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == ""
+
+
+@pytest.mark.games("tikka")
+def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, context, fake):
+    site.build(ROOT / "games")
+    a, b = "a" * 32, "b" * 32
+    fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
+    fake.scores = {("tikka", "mokki", a): {"score": 254, "version": 2}, ("tikka", "main", b): {"score": 412, "version": 1}}
+    page = context.new_page()
+    page.goto(site.url)
+    # The shelf card: Mökkitikka's no. 1, named.
+    page.wait_for_selector('.top-score[data-top="tikka"]:has-text("Aino")')
+    assert page.locator('.top-score[data-top="tikka"]').inner_text() == "🏆 Mökkitikka: Aino · 254 p"
+    # The game's page: the Mökkitikka list first, Pistekisa a tap away, and back.
+    page.goto(site.url + "#/tikka")
+    page.wait_for_selector(".score-list .tulos:has-text('Aino')")
+    assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Mökkitikka"
+    assert "Bertta" not in page.locator(".score-list").inner_text()
+    page.click(".score-list .board-list[data-board='main']")
+    page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
+    assert "Aino" not in page.locator(".score-list").inner_text()
+    assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Pistekisa"
+    page.click(".score-list .board-list[data-board='mokki']")
+    page.wait_for_selector(".score-list .tulos:has-text('Aino')")
