@@ -33,6 +33,7 @@ export const GAMES = {
   piano: { order: 'high', boards: /^main$/ }, // most points in one game
   aitajuoksu: { order: 'low', boards: /^main$/ }, // fastest 100 m, seconds
   kaaosrata: { order: 'low', boards: /^main$/ }, // fastest obstacle course, seconds
+  trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
 };
 
 const ID = /^[a-f0-9]{32}$/;
