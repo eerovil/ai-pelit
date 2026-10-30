@@ -111,6 +111,12 @@ def test_skating_wants_alternate_skis(site, context):
     assert page.evaluate("P.side") == -1
     page.evaluate("P.t = 21; down(3, W * 0.8, H / 2); up(3)")
     assert page.evaluate("P.side") == 1
+    # A tap in the middle of each visible pad pushes the ski it names.
+    pads = page.evaluate("skatePads()")
+    assert pads[0]["x"] + pads[0]["w"] < page.evaluate("W / 2") < pads[1]["x"]
+    for i, (pad, side) in enumerate(zip(pads, [-1, 1])):
+        page.evaluate("([px, py, t]) => { P.t = t; down(4, px, py); up(4); }", [pad["x"] + pad["w"] / 2, pad["y"] + pad["h"] / 2, 30 + i])
+        assert page.evaluate("P.side") == side
     # Uphill the edge grips: the skater gets up a steep hill with no V step.
     z = page.evaluate("(() => { for (let z = 0; z < course.len; z++) if (gradeAt(z) > 0.1) return z; })()")
     top = page.evaluate("z => { while (gradeAt(z) > 0.03) z += 1; return z; }", z)
@@ -296,6 +302,26 @@ def test_a_finish_the_computer_skied_is_not_the_players_own(site, browser):
         p.wait_for_function("net && net.res", timeout=6000)
     assert guest.evaluate("net.res.map(r => r.name)") == ["Aino", "Eero"]
     assert guest.evaluate("['ajat', 'taso'].map(k => localStorage.getItem('ai-pelit:hiihto:' + k))") == [None, None]
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
+
+
+def test_a_phone_reloaded_after_the_end_still_gets_the_results(site, browser):
+    host, guest = room_of_two(site, browser)
+    wax_and_go([host, guest])
+    guest.evaluate("P.z = course.len - 0.5; P.v = 8")
+    host.wait_for_function("net.skiers[1].fin !== null", timeout=4000)
+    host.evaluate("P.z = course.len - 0.5; P.v = 8")
+    guest.wait_for_function("net && net.res", timeout=6000)
+    # The guest has confirmed the results; it reloads before going back to the room.
+    guest.wait_for_timeout(500)
+    guest.reload()
+    guest.wait_for_function("net && net.res && mode === 'done'", timeout=8000)
+    assert guest.evaluate("[net.res.map(r => r.name), result.t !== null]") == [["Aino", "Eero"], True]
+    guest.evaluate("resultT = 2; down(1, W / 2, H / 2); up(1)")
+    guest.wait_for_function("AiPelitRooms.inRoom && !net && document.getElementById('aipr-result').textContent !== ''", timeout=6000)
+    assert guest.inner_text("#aipr-result").startswith("1. sija")
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()

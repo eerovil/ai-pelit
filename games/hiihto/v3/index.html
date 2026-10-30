@@ -376,7 +376,7 @@ function setStyle(st) {
 const RM = window.AiPelitRooms;
 const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
 const LATE = 60;
-let net = null;
+let net = null, lastEnd = null;   // lastEnd: the host's last result, for a phone that reloads after it
 const meK = () => net.skiers.find(k => k.kind === 'me');
 
 function netStart(s) {
@@ -500,7 +500,12 @@ const placeOf = (list, id) => list.findIndex(o => o.id === id) + 1;
 function netEnd(res) {
   if (!net || net.res) return;
   net.res = res; net.phase = 'done';
-  if (mode !== 'done') { mode = 'done'; resultT = 0; result = { t: null, stars: 0, passed: false, record: false, note: '' }; }
+  if (RM.isHost) lastEnd = { t: 'end', round: net.round, res };
+  // Not at the finish here (or reloaded after it): my place and time come from the results.
+  if (mode !== 'done') {
+    const me = res.find(o => o.id === RM.me);
+    mode = 'done'; resultT = 0; result = { t: me ? me.fin : null, stars: 0, passed: false, record: false, note: '' };
+  }
 }
 // After the results: back to the room, with my place there and everyone's times under the list.
 function backRoom() {
@@ -568,7 +573,12 @@ if (RM) {
     if (m.t === 's') guestState(m);
     if (m.t === 'end') netEnd(m.res);
   });
-  RM.on('hello', id => { if (net && !net.res) RM.send(hostState(), id); });
+  RM.on('hello', id => {
+    if (net && !net.res) RM.send(hostState(), id);
+    // A phone back after the end it already confirmed (a reload): the library does not send it
+    // again, so the host does, and the phone shows the results instead of waiting.
+    else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
+  });
   RM.on('continue', ids => { if (net) net.skiers.forEach(k => { if (ids.includes(k.id) && k.kind === 'net') cpuTakes(k); }); });
   RM.on('back', id => { if (net) net.skiers.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; } }); });
   RM.on('lobby', toSolo);
@@ -581,6 +591,8 @@ if (RM) {
 const touches = new Map();
 let ui = { wax: [], prev: null, next: null, styles: [], friends: null };
 function vButton() { return { x: 56, y: H - SAFE_B - 62, r: 38 }; }
+// Skating: the left and right push pads, one in the middle of each half of the screen.
+function skatePads() { const w = 76, h = 34, y = H - SAFE_B - 128; return [-1, 1].map(side => ({ side, x: (side < 0 ? W * 0.25 : W * 0.75) - w / 2, y, w, h })); }
 function inRect(r, px, py) { return r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; }
 function held() { for (const t of touches.values()) if (!t.swiped && !t.v && clock - t.t0 > 0.2) return true; return false; }
 function down(id, px, py) {
@@ -905,13 +917,13 @@ function drawHud() {
   if (mode === 'count' && skating()) shadowText('Napauta vuorotellen vasen ja oikea puoli', W / 2, H * 0.4 + 52, 14, '#ffffff', 'center', 700);
   if (mode === 'race' || mode === 'count') {
     if (skating()) {
-      // Which ski pushed last: the next push is on the other one.
-      const y = H - SAFE_B - 44;
-      for (const sd of [-1, 1]) {
-        const cx = sd < 0 ? 38 : 96, next = P.side !== sd;
+      // Which ski pushed last: the next push is on the other one. Each pad sits in the half of the
+      // screen that pushes that ski, so a tap on it pushes the ski it names.
+      for (const r of skatePads()) {
+        const next = P.side !== r.side;
         x.fillStyle = next ? '#ffd45c' : 'rgba(20,30,55,0.55)'; x.strokeStyle = '#fff'; x.lineWidth = 2;
-        x.beginPath(); x.roundRect(cx - 26, y - 16, 52, 32, 16); x.fill(); x.stroke();
-        text(sd < 0 ? '‹ vasen' : 'oikea ›', cx, y, 11, next ? '#1b2240' : '#fff', 'center', 800);
+        x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill(); x.stroke();
+        text(r.side < 0 ? '‹ vasen' : 'oikea ›', r.x + r.w / 2, r.y + r.h / 2, 13, next ? '#1b2240' : '#fff', 'center', 800);
       }
     } else {
       const b = vButton();
