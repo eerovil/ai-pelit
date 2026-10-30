@@ -22,6 +22,13 @@
       "note": "Kaksi tyyliä, perinteinen tai luistelu omine aikoineen, ja kisa kavereiden kanssa samalla radalla: ensimmäinen maalissa voittaa.",
       "request": "Lisätään multiplayer. Ja eri moodit: luisteluhiihto vs perinteinen.",
       "issue": "eerovil/ai-pelit#61"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Nopeus näkyy ylhäällä, tahtipalkki näyttää oikean rytmin, ja tasoilla 3, 5, 7… ylitetään jäinen autotie sukset kädessä.",
+      "request": "Nopeusmittari voisi olla ylhäällä näkyvillä. Vähän hankala tietää mikä rytmi on oikea. / Lisätään johonkin kenttään tien ylitys. Sukset pois ja liukastelua jäisellä autotiellä, sitten sukset jalkaan. Lunta voi mennä siteisiin ja joutuu kopistelemaan",
+      "issue": "eerovil/ai-pelit#61"
     }
   ]
 }
