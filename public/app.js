@@ -244,7 +244,8 @@
     render();
     window.scrollTo(0, 0);
   }
-  view.addEventListener('click', function (e) {
+  // The whole page, so the header's "AI-pelit" link goes up the same way.
+  document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     var href = a.getAttribute('href');
