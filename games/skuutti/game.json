@@ -1,0 +1,13 @@
+{
+  "title": "Skuutti",
+  "description": "Aja potkulaudalla rampissa, pumppaa vauhtia ja tee temppuja ilmassa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: pumppaa vauhtia U-rampissa, lennä reunan yli ja pyyhkäise barspinit, tailwhipit ja voltit; ennätys avaa uusia temppuja ja värejä.",
+      "request": "Scooty-temppuilupeli. Rampilla mennään. Tehdään temppuja.",
+      "issue": "eerovil/ai-pelit#119"
+    }
+  ]
+}
