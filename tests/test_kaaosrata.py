@@ -96,6 +96,19 @@ def test_a_finished_player_cannot_push_one_still_racing(site, context):
     assert pushed > 0.1 and speed > 1
 
 
+def test_a_finished_player_stands_still_with_the_stick_held(site, context):
+    page = start(site, context)
+    put(page, x=0, y=139.5, vy=5, cp=4)
+    page.evaluate("race.late = 999; input.x = 0; input.y = 1")
+    page.wait_for_function("me.fin !== null", timeout=2000)
+    at = page.evaluate("[me.x, me.y, me.fin]")
+    # Back down the course with a jump: nothing moves.
+    page.evaluate("input.y = -1; press()")
+    page.wait_for_timeout(500)
+    assert page.evaluate("[me.x, me.y, me.fin]") == at
+    assert page.evaluate("me.z") == 0
+
+
 def test_the_finish_ends_the_race_and_a_win_raises_the_level(site, context):
     page = start(site, context)
     put(page, x=0, y=139.5, vy=5, cp=4)
@@ -190,6 +203,33 @@ def test_in_a_room_a_finished_guest_cannot_push_the_host(site, browser):
     assert host.evaluate(flip, 12.5) == [0, 0]
     pushed, _ = host.evaluate(flip, None)
     assert pushed > 0.1
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
+
+
+def test_in_a_room_a_finished_player_stands_still_on_every_phone(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    host.evaluate("race.late = 999")
+    guest.evaluate("Object.assign(me, { x: 0, y: 139.5, vy: 5, cp: 4 }); input.y = 1")
+    host.wait_for_function("race.runners[1].fin !== null", timeout=3000)
+    guest.evaluate("input.y = -1; input.x = 1")
+    host.wait_for_timeout(300)
+    seen = host.evaluate("[race.runners[1].x, race.runners[1].y]")
+    own = guest.evaluate("[me.x, me.y]")
+    host.wait_for_timeout(600)
+    assert host.evaluate("[race.runners[1].x, race.runners[1].y]") == seen
+    assert guest.evaluate("[me.x, me.y]") == own
+    assert seen == [round(v, 2) for v in own]  # sent to 1/100 m
+    # The guest's computer players stop at the line too, on the host and on the guest.
+    host.evaluate("const b = race.runners[2]; Object.assign(b, { x: 0, y: 139.8, vy: 5, z: 0, fall: 0, fin: null })")
+    host.wait_for_function("race.runners[2].fin !== null", timeout=3000)
+    host.wait_for_timeout(300)
+    bot = host.evaluate("[race.runners[2].x, race.runners[2].y]")
+    guest.wait_for_function(f"race.runners[2].fin !== null && Math.abs(race.runners[2].x - {bot[0]}) < 0.01 && Math.abs(race.runners[2].y - {bot[1]}) < 0.01", timeout=3000)
+    host.wait_for_timeout(500)
+    assert host.evaluate("[race.runners[2].x, race.runners[2].y]") == bot
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()

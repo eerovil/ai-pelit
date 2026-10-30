@@ -58,7 +58,7 @@ flowchart TD
 - **Tönäisy: molemmat kimpoavat**: `bumps()` pushes apart every player moved on this phone, harder the faster they met; a player moved on another phone gets its own push there. A player who has finished passes through everyone, so it cannot change a result still being raced.
 - **Lattiaa jalkojen alla?**: `groundAt()`: the floors, the stepping stones, the sliding platform and the three spinning discs; over nothing for 0.1 s means falling.
 - **Putoat, takaisin viime välietapille**: `respawn()` after 1.1 s at the last of the checkpoints (`CPS`, the green dashed lines) the player has stood past.
-- **Aika maalissa**: `move()` sets `fin` when the player crosses 140 m, to 1/100 s.
+- **Aika maalissa**: `move()` sets `fin` when the player crosses 140 m, to 1/100 s. From then on the player stands still where it crossed (`tick()` skips it on every phone, and it bumps nobody) until the race ends.
 - **Taso nousee, taitavammat vastustajat**: `finish()` saves `ai-pelit:kaaosrata:taso`, `voitot`, `kisat` and `ennatys`; higher levels make the computer players faster and surer in their jumps (`think()`).
 - **Isäntä odottaa kaikki ihmiset maaliin, enintään 30 s ensimmäisen jälkeen**: `over()` and `hostTick()`: each guest runs its own player and sends it to the host 12 times a second (`p`); the host sends everyone back (`s`), with the race clock that moves every obstacle, and runs the computer for a phone that is away (`on('continue')`). The race also ends at 150 s.
 - **Tulokset kaikille, takaisin huoneeseen**: the host's `R.deliver()` of `end` with the standings (finishers by time, the rest by how far they got); each phone shows them, saves once (`R.once`) and goes back to the room.

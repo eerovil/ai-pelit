@@ -208,6 +208,8 @@ function move(r, dt, t) {
   if (r.fin === null && r.y >= FIN) {
     r.fin = Math.round((t - (r.y - FIN) / Math.max(r.vy, 1)) * 100) / 100;
     r.cp = CPS.length - 1;
+    // Out of the race: it stands where it crossed the line until the race ends.
+    Object.assign(r, { vx: 0, vy: 0, vz: 0, z: 0, ix: 0, iy: 0, jq: 0, stun: 0 });
     if (race.firstFin === null) race.firstFin = t;
     if (r === me) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.25, 'sine', 0.07), 120); }
   }
@@ -486,6 +488,7 @@ function tick(dt) {
   const t = race.clock;
   for (const r of race.runners) {
     if (race.phase !== 'run') continue;
+    if (r.fin !== null) { r.vx = r.vy = r.vz = 0; r.z = Math.max(0, r.z); continue; } // finished: stands still
     if (r.kind === 'cpu' && host) { think(r, dt, t); move(r, dt, t); }
     else if (r.kind === 'me') move(r, dt, t);
     else if (r.kind === 'net') {
