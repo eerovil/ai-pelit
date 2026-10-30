@@ -8,7 +8,8 @@ after every finished song, not only when the last heart goes, and there are nine
 a game starts from the furthest level reached (or an earlier one picked in the menu), every
 level starts with three fresh hearts, and four fast, hard songs end the list. From v4 the hit
 zone is drawn in every lane, and a note counts when its middle is in it. From v5 a press always
-takes the oldest note still in the zone, so a late press no longer steals the next note.
+takes the oldest note still in the zone, so a late press no longer steals the next note, and the
+tune plays by itself, each note on its beat; a press makes no sound.
 
 ```mermaid
 flowchart TD
@@ -19,11 +20,12 @@ flowchart TD
   D -- Aivan kohdalla --> E[Nappiin!: 100 p x putki-kerroin]
   D -- Melkein --> F[Hyvä: 50 p x putki-kerroin]
   D -- Ei --> G[Ohi!: putki katkeaa, sydän menee]
-  E --> H[Nuotti soi]
-  F --> H
+  B --> H[Nuotti soi tahdillaan]
+  E --> K
+  F --> K
   B --> I[Nuotti putoaa viivan ohi]
   I --> J[Ohi meni!: putki katkeaa, sydän menee]
-  H --> K{Kappale lopussa?}
+  K{Kappale lopussa?}
   K -- Ei --> B
   K -- Kyllä --> V[Tulos talteen ja tuloslistalle]
   V --> L[Seuraava taso: uusi kappale vähän nopeammin]
@@ -47,7 +49,7 @@ flowchart TD
 
 - **blue**: what the player sees and does
 - **amber**: a check that decides the path
-- **teal**: a hit: points and the note's sound
+- **teal**: a hit and its points, and the tune's notes
 - **green**: a finished song: the score is kept (v2) and a faster song starts
 - **rose**: a miss that costs a heart
 - **violet**: the end of the game and what is saved
@@ -60,7 +62,7 @@ flowchart TD
 - **Painat kaistan nappia**: the `pointerdown` handler: anywhere in a lane below the top bar counts as that lane's key, so several fingers can play at once.
 - **Onko tämän kaistan nuotti viivalla?**: `tap()` takes an unplayed note of that lane within `GOOD` (0.16 s): in v1–v4 the nearest, from v5 the oldest (v4 gave a slightly late press on fast songs to the next note in the lane, losing the one at the line); within `PERFECT` (0.07 s) is "Nappiin!". The window is the same time for every note and song, however fast it falls. From v4 `drawZone()` shows it in every lane: the band is ±`GOOD`, its bright middle ±`PERFECT`, the line the beat; `zonePx()` turns the window into pixels at the current fall speed, so a faster note's zone is taller; `placeLine()` sets the line per level just high enough that the whole zone, its late half too, shows above the keys. A note's middle is its beat (v1–v3 used its bottom edge), it gets a white outline while `inZone()`, and its lane lights up.
 - **Nappiin!: 100 p x putki-kerroin**: `mult()`: every 10 hits in a row add one to the multiplier, up to x4.
-- **Nuotti soi**: `piano()`: a triangle wave with a quiet octave above it and a long fade, at the note's pitch.
+- **Nuotti soi tahdillaan**: `piano()`: a triangle wave with a quiet octave above it and a long fade, at the note's pitch. In v1–v4 a hit played its note at the moment of the press. From v5 `update()` hands every note to the audio clock `SOUND_AHEAD` (0.05 s) before its beat so it sounds exactly on the beat, pressed or not, and a press makes no sound.
 - **Nuotti putoaa viivan ohi**: `update()` marks a note missed once it is more than `GOOD` past the line.
 - **Seuraava taso: uusi kappale vähän nopeammin**: `speedOf()`: in v1 and v2 each level plays 10 % faster; from v3 a song plays at its own tempo the first time round and 15 % faster on each later lap, and `lead()` makes the notes fall a little faster too. The highest level reached is saved as `ai-pelit:piano:taso`.
 - **Tulos talteen ja tuloslistalle**: v2 `songDone()` → `keepScore()`: saves the record and calls `AiPelitScores.submit(score)` after every finished song, so a run counts even if the phone is closed mid-song; the banner of the next level says "Tulos tallennettu". While the high-score list (or its first nickname question) is open, `update()` holds the song still.

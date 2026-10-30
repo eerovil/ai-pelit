@@ -111,3 +111,40 @@ def test_after_a_reload_mid_song_presses_still_land(site, context):
     page.click("#go")
     played = page.evaluate(PLAY, [12, 0.13, 24])
     assert played == played.upper(), played
+
+
+# Records every note handed to the audio: [pitch, the game clock, how far ahead it was put].
+# (It ends with `true`: Playwright would call a function the string evaluates to.)
+SPY = "window._played = []; piano = (p, d, delay = 0) => _played.push([p, now, delay]); true"
+
+
+def test_the_tune_plays_each_note_on_its_beat_without_presses(site, context):
+    page = open_game(site, context)
+    page.evaluate(SPY)
+    played = page.evaluate("""() => {
+      level = 1; startLevel(); state = 'play'; lives = 99;
+      const notes = cur.notes.slice(0, 8);
+      while (now < notes[7].t + 0.01) update(1 / 60);
+      state = 'menu';
+      return [notes.map(n => n.pitch), _played.slice(0, 8).map(([p, at, d]) => [p, at + d]), notes.map(n => n.t)];
+    }""")
+    pitches, sounded, beats = played
+    assert [p for p, _ in sounded] == pitches
+    # Each lands on its beat, give or take a millisecond.
+    assert all(abs(at - t) < 0.001 for (_, at), t in zip(sounded, beats))
+
+
+def test_a_press_makes_no_sound_and_a_late_press_does_not_move_the_note(site, context):
+    page = open_game(site, context)
+    page.evaluate(SPY)
+    played = page.evaluate("""() => {
+      level = 12; startLevel(); state = 'play'; lives = 99;
+      const [n] = cur.notes;
+      while (now < n.t + 0.1) update(1 / 60);
+      const before = _played.length;
+      tap(n.lane);  // 0.1 s late
+      state = 'menu';
+      return [n.hit, _played.length - before, _played[0][1] + _played[0][2] - n.t];
+    }""")
+    hit, sounds_from_press, off_beat = played
+    assert hit is True and sounds_from_press == 0 and abs(off_beat) < 0.001

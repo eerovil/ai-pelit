@@ -33,8 +33,8 @@
     {
       "n": 5,
       "date": "2026-10-30",
-      "note": "Korjattu nopeiden kappaleiden ohi menneet painallukset: painallus osuu aina vanhimpaan osuma-alueella olevaan nuottiin, eikä myöhäinen painallus enää vie seuraavaa nuottia.",
-      "request": "Tässä on joku bugi, yleensä punaisessa nuotissa, se vaan ei ota. Esim kimalaisessa osuu hyvin eka keltainen, mutta eka punainen menee ohi",
+      "note": "Painallus osuu aina vanhimpaan osuma-alueella olevaan nuottiin, eikä myöhäinen painallus enää vie seuraavaa, ja kappale soi itsestään nuotti kerrallaan omalla tahdillaan; painallus ei soita.",
+      "request": "Tässä on joku bugi, yleensä punaisessa nuotissa, se vaan ei ota. Esim kimalaisessa osuu hyvin eka keltainen, mutta eka punainen menee ohi / Also, let's not play the sound when you tap. Instead play when it's supposed to in the song",
       "issue": "eerovil/ai-pelit#44"
     }
   ]

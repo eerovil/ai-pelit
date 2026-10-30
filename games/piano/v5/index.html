@@ -33,7 +33,7 @@
   <div id="pickrow"><button id="prev" aria-label="Edellinen taso">‹</button><span id="pick"></span><button id="next" aria-label="Seuraava taso">›</button></div>
   <button id="go">Soita!</button>
   <p id="stats"></p>
-  <p class="help">Nuotit putoavat neljää kaistaa pitkin. Paina kaistan nappia, kun nuotin keskikohta on valaistulla alueella viivan kohdalla, niin kappale soi.
+  <p class="help">Nuotit putoavat neljää kaistaa pitkin. Kappale soi itsestään. Paina kaistan nappia, kun nuotin keskikohta on valaistulla alueella viivan kohdalla.
     Ohi mennyt nuotti tai turha painallus vie sydämen; jokaisella tasolla on kolme uutta. Peli jatkuu aina pisimmältä tasolta, jolle pääsit, ja nuolilla voit valita aiemman. Loppupään kappaleet ovat todella nopeita.</p>
 </div>
 <script>
@@ -176,11 +176,13 @@ addEventListener('resize', resize); resize();
 
 // ---------- Sound (only after the first tap) ----------
 let ac = null;
+const SOUND_AHEAD = 0.05;  // seconds
 function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
 // A soft piano-like note: a quick attack and a long fade, with a quiet octave above.
-function piano(semi, dur) {
+// v5: `delay` seconds from now, so a note can be put exactly on its beat.
+function piano(semi, dur, delay = 0) {
   if (!ac) return;
-  const t = ac.currentTime, f = 261.63 * Math.pow(2, semi / 12), g = ac.createGain();
+  const t = ac.currentTime + delay, f = 261.63 * Math.pow(2, semi / 12), g = ac.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.5, dur * 1.6));
@@ -244,7 +246,6 @@ function tap(lane) {
   combo++; bestCombo = Math.max(bestCombo, combo);
   score += (perfect ? 100 : 50) * mult();
   flashes[lane] = 1;
-  piano(n.pitch, n.beats * 60 / (cur.song.bpm * speedOf(level)));
   popText(lane, perfect ? 'Nappiin!' : 'Hyvä', perfect ? '#ffd166' : '#9be7ff');
 }
 function miss(lane, why) {
@@ -282,6 +283,14 @@ function update(dt) {
   if (banner && (banner.t -= dt) <= 0) banner = null;
   if (state !== 'play') return;
   now += dt;
+  // v5: the tune plays by itself, each note on its beat whether it is pressed or not (v1–v4
+  // played a note when it was pressed, so the tune came out as early or late as the presses).
+  // A note is handed to the audio clock just before its beat, to land on it exactly.
+  for (const n of cur.notes) {
+    if (n.sounded || n.t - now > SOUND_AHEAD) continue;
+    n.sounded = true;
+    if (now - n.t < GOOD) piano(n.pitch, n.beats * 60 / (cur.song.bpm * speedOf(level)), Math.max(0, n.t - now));
+  }
   for (const n of cur.notes) {
     if (!n.hit && !n.missed && now - n.t > GOOD) { n.missed = true; miss(n.lane, 'Ohi meni!'); if (state !== 'play') return; }
   }
