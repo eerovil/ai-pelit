@@ -131,3 +131,16 @@ def test_a_catch_screen_down_or_a_drop_ends_the_streak_but_keeps_the_record(site
         assert page.evaluate("localStorage.getItem('ai-pelit:puhelinkoppi:putki-nyt')") == "0"
         page.reload()
         assert page.evaluate("[streak, record]") == [0, 5]
+
+
+def test_it_plays_on_a_390_px_phone(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.goto(f"{site.url}games/puhelinkoppi/v4/")
+    page.evaluate("noise = 0")
+    x, y = page.evaluate("phoneOnScreen().slice(0, 2)")
+    assert 0 < x < 390 and 0 < y < 844  # the phone and the hand are on screen
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
+    assert flick(page, 40, False) == ["air", "kierre"]
+    ctx.close()
