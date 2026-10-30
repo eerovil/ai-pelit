@@ -74,9 +74,16 @@ def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, cont
     page.click('.card[data-slug="pomppu"] .card-main')
     page.click('.version[data-n="1"] a')
     page.wait_for_url("**/games/pomppu/v1/")
+    # A reload in the game (the phone woke it, or the app restarted) still knows its page is below.
+    page.reload()
+    page.wait_for_selector("#ai-pelit-back")
     page.click("#ai-pelit-back")
     page.wait_for_url(f"{site.url}#/pomppu")
     assert page.locator("h1").inner_text() == "Pomppu"
+    page.go_forward()
+    page.wait_for_url("**/games/pomppu/v1/")
+    page.go_back()
+    page.wait_for_url(f"{site.url}#/pomppu")
     page.go_back()
     page.wait_for_selector('.card[data-slug="pomppu"]')
     assert "#/pomppu" not in page.url
