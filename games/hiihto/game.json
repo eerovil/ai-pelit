@@ -29,6 +29,13 @@
       "note": "Nopeus näkyy ylhäällä, tahtipalkki näyttää oikean rytmin, ja tasoilla 3, 5, 7… ylitetään jäinen autotie sukset kädessä.",
       "request": "Nopeusmittari voisi olla ylhäällä näkyvillä. Vähän hankala tietää mikä rytmi on oikea. / Lisätään johonkin kenttään tien ylitys. Sukset pois ja liukastelua jäisellä autotiellä, sitten sukset jalkaan. Lunta voi mennä siteisiin ja joutuu kopistelemaan",
       "issue": "eerovil/ai-pelit#61"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-30",
+      "note": "Voiteen valinta ei enää avaa vahingossa kaveripeliä: kaverinappi on kauempana ja aukeaa vasta kun sormi nousee siitä.",
+      "request": "jostain syystä kun valitsee voiteen alussa niin se menee aina välillä multiplayer tilaan ja välillä yksin peliin",
+      "issue": "eerovil/ai-pelit#61"
     }
   ]
 }
