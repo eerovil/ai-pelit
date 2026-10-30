@@ -5,7 +5,8 @@ moves its own player and draws the game from its own side. The room on Cloudflar
 messages between the phones. Everything a game needs for a room is one shared script,
 `public/rooms.js` (#34): the room screen, reconnecting, the pause for a phone that dropped off, and
 saving a round's result once. A game writes only its own part; where a box is a game's, it names
-Kirkkis v3 (`games/kirkkis/v3/index.html`, #57), whose messages are `kr`, `ks`, `kme` and `kfin`.
+Kirkkis v3 (`games/kirkkis/v3/index.html`, #57), whose messages are `kr`, `ks`, `kme` and `kfin`;
+v4 (#67) sends the same, with the seek clock during a recount (`sl`) and a "Kaikki pelastettu!" event.
 Kirkkis v2 (#27) keeps its own copy of the whole flow, from before the library.
 
 ```mermaid

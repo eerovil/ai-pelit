@@ -11,7 +11,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Pull requests only: a merge to main is not tested again (#65), every test already ran on the
+  # pull request's head.
   test:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,24 +31,21 @@ jobs:
       - name: Server tests (server/api.js on SQLite)
         run: npm test
       - name: No published version changed
-        if: github.event_name == 'pull_request'
         run: python scripts/check_immutable.py origin/${{ github.base_ref }}
-      # On a pull request, a game's own browser tests run only when it touches that game (#37);
-      # anything outside games/ still runs them all, and so does every push to main.
+      # A game's own browser tests run only when the pull request touches that game (#37); a change
+      # outside games/ runs only the shared tests. The full suite never runs (#65).
       - name: Browser tests
-        run: python -m pytest -q ${{ github.event_name == 'pull_request' && format('--changed-since origin/{0}', github.base_ref) || '' }}
+        run: python -m pytest -q --changed-since origin/${{ github.base_ref }}
       - run: python scripts/build.py
-      - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        with:
-          name: site
-          path: _site
 
   # A merge to main is the release: Cloudflare Pages serves it at pelit.vilpponen.fi (a CNAME
   # to ai-pelit.pages.dev at hostingpalvelu.fi).
+  # Main runs no browser tests (#65): every test already passed on the pull request's own head,
+  # and the deck re-tests that head after bringing it up to main, so running them again only
+  # delayed each release by about 6 minutes. Before deploying it runs only what takes seconds:
+  # the server tests and the build (which checks every game).
   deploy-cloudflare:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: test
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -64,15 +64,20 @@ jobs:
       # The checkout brings functions/ and server/: wrangler bundles them as the site's /api/.
       - uses: actions/checkout@v4
         if: steps.ready.outputs.ready == 'true'
-      - uses: actions/download-artifact@v4
+      - uses: actions/setup-python@v5
         if: steps.ready.outputs.ready == 'true'
         with:
-          name: site
-          path: _site
+          python-version: "3.12"
+      - name: Build the site
+        if: steps.ready.outputs.ready == 'true'
+        run: python scripts/build.py
       - uses: actions/setup-node@v4
         if: steps.ready.outputs.ready == 'true'
         with:
           node-version: 22
+      - name: Server tests (server/api.js on SQLite)
+        if: steps.ready.outputs.ready == 'true'
+        run: npm test
       # The live game rooms' Worker (#27) first, so the site never calls a room that is not there.
       - name: Deploy the rooms Worker
         if: steps.ready.outputs.ready == 'true'

@@ -19,11 +19,12 @@ BACK = build.BACK_SCRIPT
 THUMB = base64.b64decode("UklGRi4AAABXRUJQVlA4TCEAAAAvZ8F3AAdQvKIUuf8BAkmb98+/7RH9z93/+3//7//9ZwwA")
 
 # A pull request runs a game's own tests only when it touches that game (#37): every version folder
-# is self-contained, so a change to one game cannot break another. A change anywhere outside
-# games/ (public/, scripts/, server/, the tests' own helpers...) can, and runs everything.
+# is self-contained, so a change to one game cannot break another. A change outside games/
+# (public/, scripts/, server/, the tests' own helpers...) runs only the shared tests, the ones tied
+# to no game: the full suite never runs in CI (#65, Eero's choice), it took about 6 minutes.
 # A game's tests are tests/test_<slug>.py or tests/test_<slug>_<more>.py (dashes as underscores),
 # or any test module that says `pytestmark = pytest.mark.games("<slug>", ...)`.
-CHANGED_GAMES = pytest.StashKey[set | None]()
+CHANGED_GAMES = pytest.StashKey[set]()
 REAL_GAMES = sorted((p.name for p in (ROOT / "games").iterdir() if p.is_dir()), key=len, reverse=True)
 
 
@@ -37,26 +38,25 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     config.addinivalue_line("markers", "games(*slugs): the games whose folders these tests play")
     ref = config.getoption("--changed-since")
-    config.stash[CHANGED_GAMES] = changed_games(changed_paths(ref)) if ref else None
+    if ref:
+        config.stash[CHANGED_GAMES] = changed_games(changed_paths(ref))
 
 
-def changed_paths(ref: str) -> list[str] | None:
-    """Every path changed on this branch since it left REF, committed or not; None if git can't say."""
+def changed_paths(ref: str) -> list[str]:
+    """Every path changed on this branch since it left REF, committed or not; none if git can't say."""
     paths = []
     # -z: names as they are, never split at a space or quoted for a letter like ä.
     for cmd in (["diff", "-z", "--name-only", f"{ref}...HEAD"], ["diff", "-z", "--name-only", "HEAD"],
                 ["ls-files", "-z", "--others", "--exclude-standard"]):
         run = subprocess.run(["git", *cmd], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         if run.returncode != 0:
-            return None
+            return []
         paths += [p for p in run.stdout.split("\0") if p]
     return paths
 
 
-def changed_games(paths: list[str] | None) -> set[str] | None:
-    """The games these paths touch, or None when a path outside any one game means test everything."""
-    if paths is None:
-        return None
+def changed_games(paths: list[str]) -> set[str]:
+    """The games these paths touch; a path outside any one game adds none."""
     games = set()
     for path in paths:
         parts = path.split("/")
@@ -66,8 +66,6 @@ def changed_games(paths: list[str] | None) -> set[str] | None:
             games.add(parts[1])
         elif parts[0] == "tests" and len(parts) == 2 and (game := game_of_test_file(parts[1])):
             games.add(game)
-        elif not (parts[0] == "docs" or path.endswith(".md")):
-            return None
     return games
 
 
@@ -89,9 +87,9 @@ def games_of(item) -> set[str]:
 
 
 def pytest_collection_modifyitems(config, items):
-    changed = config.stash[CHANGED_GAMES]
-    if changed is None:
+    if CHANGED_GAMES not in config.stash:
         return
+    changed = config.stash[CHANGED_GAMES]
     keep, drop = [], []
     for item in items:
         games = games_of(item)
@@ -106,17 +104,14 @@ def pytest_terminal_summary(terminalreporter, config):
     if not config.getoption("--changed-since"):
         return
     changed = config.stash[CHANGED_GAMES]
-    if changed is None:
-        terminalreporter.write_line("changed outside games/ (or git could not say): tested every game")
-    else:
-        terminalreporter.write_line(
-            f"games changed: {', '.join(sorted(changed)) or 'none'}; other games' own tests were skipped")
+    terminalreporter.write_line(
+        f"games changed: {', '.join(sorted(changed)) or 'none'}; other games' own tests were skipped")
 
 
 @pytest.fixture
 def changed_games_only(request):
     """The games a --changed-since run tests, or None for all of them."""
-    return request.config.stash[CHANGED_GAMES]
+    return request.config.stash.get(CHANGED_GAMES, None)
 
 
 def game_page(title: str, body: str = "", script: str = "") -> str:

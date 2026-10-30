@@ -22,6 +22,13 @@
       "note": "Päämääränä pisin putki: jokaisella heitolla tehdään pyydetty temppu, ja pyöritys (suora, voltti tai kierre) valitaan napeista.",
       "request": "Pelissä ei ole oikein määränpäätä. (Valinnat: putkiennätys, lisäksi joku control tehdä tietynlainen spin; tuloslistaksi uusi putkilista.)",
       "issue": "eerovil/ai-pelit#9"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Napit pois: pyöritys valitaan heittoliikkeellä – suoraan ylös on suora, vinosti kierre ja loppukoukku alas voltti.",
+      "request": "Ajattelin lähinnä, että se kierre olisi jotenkin valittu siinä, millä tavalla sinä liikutat sitä kättä. Minun mielestä nappulat ei oikein kuulu tähän peliin. (Valinta: heiton suunta.)",
+      "issue": "eerovil/ai-pelit#9"
     }
   ]
 }

@@ -17,14 +17,16 @@ def test_docs_and_python_caches_alone_test_no_game():
     assert changed_games(["docs/diagrams/hiihto.md", "README.md", "tests/__pycache__/conftest.cpython-312.pyc"]) == set()
 
 
-def test_anything_shared_tests_every_game():
+def test_anything_shared_adds_no_game():
+    # Never the full suite (#65): a shared change runs the shared tests only.
     for shared in ["public/scores.js", "scripts/build.py", "server/api.js", "tests/conftest.py",
                    "tests/test_site.py", ".github/workflows/ci.yml", "games/README"]:
-        assert changed_games(["games/hiihto/v3/index.html", shared]) is None, shared
+        assert changed_games(["games/hiihto/v3/index.html", shared]) == {"hiihto"}, shared
+        assert changed_games([shared]) == set(), shared
 
 
-def test_when_git_cannot_say_every_game_is_tested():
-    assert changed_games(None) is None
+def test_when_git_cannot_say_no_game_is_tested():
+    assert changed_games([]) == set()
 
 
 def selection(tmp_path, change: str) -> tuple[list[str], str]:
@@ -84,7 +86,7 @@ def test_a_pull_request_on_a_game_s_tests_keeps_that_game(tmp_path):
     assert kept == ["test_beta", "test_shared_any", "test_shared_beta"]
 
 
-def test_a_pull_request_on_a_shared_file_keeps_every_test(tmp_path):
+def test_a_pull_request_on_a_shared_file_keeps_only_the_shared_tests(tmp_path):
     kept, out = selection(tmp_path, "public/scores.js")
-    assert kept == ["test_alpha", "test_beta", "test_shared_alpha", "test_shared_any", "test_shared_beta"]
-    assert "tested every game" in out
+    assert kept == ["test_shared_any"]
+    assert "games changed: none; other games' own tests were skipped" in out
