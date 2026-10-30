@@ -48,7 +48,8 @@ const TASKS = [
   ['Tee jättikierto ja alastulo', r => r.names.some(n => n.startsWith('Jättikierto'))],
   ['Voltti alas', r => r.saltos >= 1],
   ['Pysäytys: alastulo ilman askelta', r => r.stuck],
-  ['Piruetti käsilläseisonnassa tangon päällä', r => r.names.includes('Piruetti')],
+  // v7: a Kokopiruetti takes the place of its two halves, so it does this task too.
+  ['Piruetti käsilläseisonnassa tangon päällä', r => r.names.includes('Piruetti') || r.names.includes('Kokopiruetti')],
   ['Tkatchev: lennä tangon yli ja ota kiinni', r => r.names.includes('Tkatchev')],
   ['Kaksoisvoltti alas', r => r.saltos >= 2],
   ['Jäger tai Gienger: voltti ilmassa ja kiinni tangosta', r => r.names.includes('Jäger') || r.names.includes('Gienger')],

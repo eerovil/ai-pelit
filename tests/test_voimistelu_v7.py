@@ -144,6 +144,12 @@ def test_each_new_task_asks_for_its_own_thing(site, context):
     assert page.evaluate("[result.passed, level]") == [False, 23]
 
 
+def test_a_kokopiruetti_also_passes_the_pirouette_level(site, context):
+    page = open_game(site, context)
+    assert finish_with(page, 5, [("Kokopiruetti", 0.4)]) and finish_with(page, 5, [("Piruetti", 0.2)])
+    assert not finish_with(page, 5, [("Tkatchev", 0.3)])
+
+
 def test_level_20_saved_by_v6_goes_on_to_the_first_new_task(site, context):
     page = open_game(site, context)
     page.evaluate("localStorage.setItem('ai-pelit:voimistelu:taso', '20'); localStorage.setItem('ai-pelit:voimistelu:paras', '12.7')")

@@ -22,7 +22,7 @@ flowchart TD
   T --> G{Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa}
   G -- Sama tanko --> H[Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman]
   G -- Toinen tanko --> Q[Siirto tangolta toiselle: Pak-voltti, Shaposhnikova]
-  H --> Y{Seuraava lento ennen kuin heilahdus käy kahdesti alhaalla?}
+  H --> Y{Edellinen lento lähti ennen kuin heilahdus kävi kahdesti alhaalla?}
   Q --> Y
   Y -- Kyllä --> Z[Yhdistelmä +0,1]
   Z --> B
@@ -74,8 +74,8 @@ flowchart TD
 - **Jaloilleen ja kuinka pystyssä?**: `land()` looks at the body's lean 0.05 s ahead (`LAND_LOOK`): under 0.3 rad is a stuck landing; up to 1.1 rad a step of 0,1, 0,3 or 0,5; past that, or not feet first, a fall. Still tucked, or mid-twist, costs 0,3 more.
 - **Pisteet D + E, tason tehtävä tarkistetaan**: `finish()`: D counts each different element once. Levels 1–10 each ask one element by name (`TASKS`; a harder release move does not stand in for the one asked); v2 adds levels 11–13 for the low bar (any way down to it, then only a Shaposhnikova, then only a Pak salto); after the tasks, a score to reach. Both versions share the saved level. A fall never passes. `drawResult()` lists each element once with its count, and as many rows as fit, so the scores stay on screen.
 - **Toinen pyyhkäisy samassa käsilläseisonnassa: Kokopiruetti**: v7 `twist()` in `games/voimistelu/v7/index.html`: a second sideways flick the same way, still within 0.6 rad of the handstand on the same pass (`pir`, cleared by `barStep()` when the body leaves it), makes the pair one "Kokopiruetti" 0,4 instead of two Piruetti; it may come while the first half turn still turns.
-- **Seuraava lento ennen kuin heilahdus käy kahdesti alhaalla?**: v7 `release()` checks the last catch (`link`, set by `grab()`, its bottom passes counted by `barStep()`): let go after at most one pass of the bottom, when this flight is then caught too, the two count as connected.
-- **Yhdistelmä +0,1**: v7 `grab()` adds the element "Yhdistelmä: <first> + <second>" worth 0,1; D counts each different pair once, as with every element.
+- **Edellinen lento lähti ennen kuin heilahdus kävi kahdesti alhaalla?**: asked only once this flight is caught (it hangs off the catch boxes). v7 `release()` noted the last catch (`link`, set by `grab()`, its bottom passes counted by `barStep()`): let go after at most one pass of the bottom, when this flight is then caught too, the two count as connected.
+- **Yhdistelmä +0,1**: on the catch of the second flight, never on letting go or on a landing, v7 `grab()` adds the element "Yhdistelmä: <first> + <second>" worth 0,1; D counts each different pair once, as with every element.
 - **Mikä taso?**: v7 `TASKS` holds levels 1–13 as before, then `TASKS2` levels 21–32; levels 14–20 keep their score targets, so the saved level means the same in v6 and v7.
 - **Tehtävä: liike, yhdistelmä tai alastulo**: `TASKS2`: one task each: giant swings both ways, two different release moves, Kokopiruetti, a connection, a double salto with a twist, down to the low bar and back up, a Kolman, a stuck double salto, three different flights, two connections, D at least 2,5, a stuck triple salto.
 - **Pisteraja**: `target(n)`: 10.8 + 0.3 per level from 14 (12.6 at 20); from 33 on it carries on from 12.9 by 0.2 a level, up to 15.5.
