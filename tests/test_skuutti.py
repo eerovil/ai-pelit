@@ -1,6 +1,6 @@
 """Skuutti in a phone-sized Chromium: pumping, airs, tricks, falls, the clock and unlocks."""
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/skuutti/v1/"
 
@@ -127,6 +127,32 @@ def test_a_real_swipe_on_the_screen_is_a_trick(site, context):
     assert page.evaluate("[P.barTo, P.asked]") == [1, ["bar"]]
 
 
+def test_two_fingers_crouch_until_both_lift_and_a_second_finger_can_swipe(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate(RIDE, [3, True])
+    page.evaluate("for (let i = 0; i < 6; i++) step(1 / 60)")
+    ev = "([type, id, x, y]) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true }))"
+    page.evaluate(ev, ["pointerdown", 1, 100, 500])
+    page.evaluate(ev, ["pointerdown", 2, 250, 500])
+    page.evaluate(ev, ["pointermove", 2, 250, 560])
+    page.evaluate(ev, ["pointerup", 1, 100, 500])
+    assert page.evaluate("[crouch, P.whipTo]") == [True, 1]
+    page.evaluate(ev, ["pointerup", 2, 250, 560])
+    assert page.evaluate("crouch") is False
+
+
+def test_turning_the_phone_mid_run_keeps_the_run(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate(RIDE, [2, True])
+    before = page.evaluate("[phase, P.s, P.h, points, timeLeft]")
+    turn(page, {"width": 740, "height": 360})
+    assert page.evaluate("[phase, P.s, P.h, points, timeLeft]") == before
+    page.wait_for_function("wide && W === 740")
+    page.evaluate("draw()")
+
+
 def test_time_up_ends_the_run_saves_the_record_and_opens_what_it_reached(site, context):
     page = open_game(site, context)
     start(page)
@@ -159,7 +185,7 @@ def test_a_picked_colour_is_kept(site, context):
 
 def test_the_menu_fits_upright_and_sideways(site, context, browser):
     site.build(ROOT / "games")
-    for w, h in [(360, 640), (740, 360)]:
+    for w, h in [(360, 640), (390, 844), (740, 360)]:
         ctx = browser.new_context(viewport={"width": w, "height": h})
         page = ctx.new_page()
         page.goto(site.url + URL)
