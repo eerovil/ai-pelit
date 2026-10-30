@@ -163,7 +163,9 @@ function kick(p) {
   if (p.fallT > 0) return 0;
   const g = gradeAt(p.z), since = p.t - p.lastKick;
   p.lastKick = p.t; p.kickAnim = 0; p.side = -p.side;
-  const rate = clamp((since - 0.12) / 0.25, 0.3, 1);       // mashing the screen kicks weakly
+  // A kick too soon after the last is weaker, down to nothing: mashing the screen never beats the
+  // rhythm (v4; earlier versions kept 30 % of every kick, so very fast taps were the fastest).
+  const rate = clamp((since - 0.12) / 0.25, 0, 1);
   p.earlyT = rate < 0.85 ? 0.6 : 0;
   const eff = clamp(1 - (kickNeed(g, p.vMode) - p.grip) * 2.5, 0, 1);
   let K = p.vMode ? K_V : K_STRIDE, vmax = p.vMode ? VMAX_V : VMAX_STRIDE;
@@ -181,7 +183,7 @@ function push(p, side) {
   if (p.fallT > 0) return 0;
   const g = gradeAt(p.z), since = p.t - p.lastKick, alt = side !== p.side;
   p.lastKick = p.t; p.kickAnim = 0; p.side = side;
-  const timing = clamp((since - 0.1) / 0.22, 0.3, 1), rate = timing * (alt ? 1 : 0.35);
+  const timing = clamp((since - 0.1) / 0.22, 0, 1), rate = timing * (alt ? 1 : 0.35);
   p.earlyT = timing < 0.85 ? 0.6 : 0;
   const K = g < -0.03 ? K_SKATE * 0.4 : K_SKATE;
   const dv = K * rate * Math.max(0, 1 - p.v / VMAX_SKATE);

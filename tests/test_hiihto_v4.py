@@ -35,8 +35,9 @@ def test_the_meter_turns_green_at_the_fastest_rhythm(site, context, st, full):
       return P.z; }"""
     page.evaluate("course.grade.fill(0); course.y.fill(0); mode = 'wax'")
     at_beat = page.evaluate(run, full + 1 / 60)
-    assert at_beat > page.evaluate(run, full * 0.5)
-    assert at_beat > page.evaluate(run, full * 1.8)
+    # Faster taps, down to mashing the screen, and slower ones all lose to the meter's rhythm.
+    for gap in [0.05, 0.08, 0.1, full * 0.5, full * 0.8, full * 1.3, full * 1.8]:
+        assert at_beat > page.evaluate(run, gap), gap
     # A tap long before the meter is full says so.
     early = "P.t = 50; P.lastKick = 49.95; P.sameT = 0; P.fallT = 0; P.slipT = 0; P.style === 'luistelu' ? push(P, -P.side) : kick(P); P.slipT = 0; mode = 'race'; hint()[0]"
     assert page.evaluate(early) == "Liian tiheään: odota vihreää"
