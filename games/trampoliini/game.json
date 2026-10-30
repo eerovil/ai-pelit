@@ -15,6 +15,13 @@
       "note": "Ponnistus tuntuu: ruudun painaminen koukistaa jalat ja pitää ne koukussa, ja irti päästäminen on hyppy.",
       "request": "Muuten hyvä mutta hyppynappi ei ole kovin satisfying. olisi parempi jos esim. aina kun painan ruutua niin jalat menee vähän koukkuun. (Tarkennus: jalat pysyvät koukussa kun pitää pohjassa; hyppy on se kun päästää irti.)",
       "issue": "eerovil/ai-pelit#62"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-30",
+      "note": "Alastulo ratkaisee sivuttaisliikkeen: kallellaan alas tullut voltti heittää siihen suuntaan, johon kallistuit.",
+      "request": "v3 prototyyppi: Kokeillaan voisiko olla enemmän sivuttaissuuntaista liikettä. (Tarkennus: voltin jälkeen voisi tulla sivuttaisliikettä sen mukaan miten alastulo meni; valittu pieni liuku.)",
+      "issue": "eerovil/ai-pelit#62"
     }
   ]
 }
