@@ -43,6 +43,13 @@
       "note": "Peliä voi pelata myös vaakatasossa: sali täyttää ruudun korkeuden, tehtävä ja liikkeet ovat sivuilla ja tulostaulu jakautuu kahteen sarakkeeseen.",
       "request": "Add landscape to all games where it's possible",
       "issue": "eerovil/ai-pelit#95"
+    },
+    {
+      "n": 7,
+      "date": "2026-10-30",
+      "note": "Uudet tasot 21–32: yhdistelmät, kokopiruetti ja vaikeammat alastulot, ja pisteraja nousee 15,5:een.",
+      "request": "Voimistelu on lemppari pelini. Mitä voitaisi keksiä lisää tähän? Olen jo taso 20",
+      "issue": "eerovil/ai-pelit#133"
     }
   ]
 }

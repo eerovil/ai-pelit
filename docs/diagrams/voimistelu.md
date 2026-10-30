@@ -1,6 +1,6 @@
 # Voimistelu: one high-bar routine, from the first swing to the score
 
-How one Voimistelu routine plays (v2–v5; v1 is the same with the high bar alone). The gymnast hangs from the high bar, seen from the side with the bar end on. Holding a
+How one Voimistelu routine plays (v2–v7; v1 is the same with the high bar alone). The gymnast hangs from the high bar, seen from the side with the bar end on. Holding a
 finger pulls the body in; done through the bottom of the swing and let go at its ends, it pumps the swing up until the
 body goes over the top: a giant swing. A quick flick up lets go of the bar. In the air the body keeps its spin, a held
 finger tucks it to spin faster, and a sideways flick adds a half twist. Hands that come down to the bar with the body
@@ -13,6 +13,7 @@ flowchart TD
   B --> C{Yli tangon kahdesti samaan suuntaan?}
   C -- Kyllä --> D[Jättikierto]
   B --> P[Pyyhkäisy sivulle käsilläseisonnassa: Piruetti]
+  P --> P2[Toinen pyyhkäisy samassa käsilläseisonnassa: Kokopiruetti]
   B --> E[Pyyhkäisy ylös: irti tangosta]
   D --> E
   E --> F[Lento: painovoima, pyörimismäärä säilyy, kerä pyörii nopeammin, sivupyyhkäisy = puolikierre]
@@ -21,8 +22,11 @@ flowchart TD
   T --> G{Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa}
   G -- Sama tanko --> H[Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman]
   G -- Toinen tanko --> Q[Siirto tangolta toiselle: Pak-voltti, Shaposhnikova]
-  H --> B
-  Q --> B
+  H --> Y{Seuraava lento ennen kuin heilahdus käy kahdesti alhaalla?}
+  Q --> Y
+  Y -- Kyllä --> Z[Yhdistelmä +0,1]
+  Z --> B
+  Y -- Ei --> B
   G -- Ei --> I[Alastulo: voltit ja kierteet lasketaan]
   I --> J{Jaloilleen ja kuinka pystyssä?}
   J -- Pystyssä --> K[Pysäytys]
@@ -31,12 +35,16 @@ flowchart TD
   K --> N[Pisteet D + E, tason tehtävä tarkistetaan]
   L --> N
   M --> N
-  N --> O[Taso, paras ja suoritukset tallessa puhelimessa]
+  N --> V{Mikä taso?}
+  V -- 1–13 ja 21–32 --> W[Tehtävä: liike, yhdistelmä tai alastulo]
+  V -- 14–20 ja 33– --> X[Pisteraja]
+  W --> O[Taso, paras ja suoritukset tallessa puhelimessa]
+  X --> O
   O --> A
   class A,B,E,P blue
-  class C,G,J amber
+  class C,G,J,Y,V amber
   class F,R,T teal
-  class D,H,I,K,N,O,Q green
+  class D,H,I,K,N,O,Q,P2,Z,W,X green
   class L,M rose
 ```
 
@@ -65,4 +73,10 @@ flowchart TD
 - **Alastulo: voltit ja kierteet lasketaan**: `land()`: the saltos are the turns the body made between letting go and touching down (`turns()`, half a turn or more counts up, the same rule `grab()` uses); salto 0,1, double 0,3, triple 0,5, and 0,1 a full twist.
 - **Jaloilleen ja kuinka pystyssä?**: `land()` looks at the body's lean 0.05 s ahead (`LAND_LOOK`): under 0.3 rad is a stuck landing; up to 1.1 rad a step of 0,1, 0,3 or 0,5; past that, or not feet first, a fall. Still tucked, or mid-twist, costs 0,3 more.
 - **Pisteet D + E, tason tehtävä tarkistetaan**: `finish()`: D counts each different element once. Levels 1–10 each ask one element by name (`TASKS`; a harder release move does not stand in for the one asked); v2 adds levels 11–13 for the low bar (any way down to it, then only a Shaposhnikova, then only a Pak salto); after the tasks, a score to reach. Both versions share the saved level. A fall never passes. `drawResult()` lists each element once with its count, and as many rows as fit, so the scores stay on screen.
+- **Toinen pyyhkäisy samassa käsilläseisonnassa: Kokopiruetti**: v7 `twist()` in `games/voimistelu/v7/index.html`: a second sideways flick the same way, still within 0.6 rad of the handstand on the same pass (`pir`, cleared by `barStep()` when the body leaves it), makes the pair one "Kokopiruetti" 0,4 instead of two Piruetti; it may come while the first half turn still turns.
+- **Seuraava lento ennen kuin heilahdus käy kahdesti alhaalla?**: v7 `release()` checks the last catch (`link`, set by `grab()`, its bottom passes counted by `barStep()`): let go after at most one pass of the bottom, when this flight is then caught too, the two count as connected.
+- **Yhdistelmä +0,1**: v7 `grab()` adds the element "Yhdistelmä: <first> + <second>" worth 0,1; D counts each different pair once, as with every element.
+- **Mikä taso?**: v7 `TASKS` holds levels 1–13 as before, then `TASKS2` levels 21–32; levels 14–20 keep their score targets, so the saved level means the same in v6 and v7.
+- **Tehtävä: liike, yhdistelmä tai alastulo**: `TASKS2`: one task each: giant swings both ways, two different release moves, Kokopiruetti, a connection, a double salto with a twist, down to the low bar and back up, a Kolman, a stuck double salto, three different flights, two connections, D at least 2,5, a stuck triple salto.
+- **Pisteraja**: `target(n)`: 10.8 + 0.3 per level from 14 (12.6 at 20); from 33 on it carries on from 12.9 by 0.2 a level, up to 15.5.
 - **Taso, paras ja suoritukset tallessa puhelimessa**: `taso`, `paras` and `suoritukset` under `ai-pelit:voimistelu:`.
