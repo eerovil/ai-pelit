@@ -27,8 +27,9 @@
 export const GAMES = {
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
-  // v2: highest level reached ('main'); v3 on: longest streak ('putki'), the one the shelf shows.
-  puhelinkoppi: { order: 'high', boards: /^(main|putki)$/, first: 'putki' },
+  // Highest level reached ('main'). 'putki' (the streak list of the withdrawn v3 and v4, #9) is
+  // still taken from phones that kept those versions, but no longer shown.
+  puhelinkoppi: { order: 'high', boards: /^(main|putki)$/ },
   hiihto: { order: 'low', boards: /^(taso|luistelu)-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest time per course and style (classic 'taso-N', skating 'luistelu-N'), seconds
   piano: { order: 'high', boards: /^main$/ }, // most points in one game
   aitajuoksu: { order: 'low', boards: /^main$/ }, // fastest 100 m, seconds

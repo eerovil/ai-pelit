@@ -120,7 +120,7 @@
     function fill() {
       var mine = ++asked;
       box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
-      scores.list(slug, picker ? 'taso-' + course : scores.games[slug].list || 'main').then(function (b) {
+      scores.list(slug, picker ? 'taso-' + course : 'main').then(function (b) {
         if (mine !== asked) return;
         var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
         if (b.mine && !b.rows.some(function (r) { return r.me; })) {
