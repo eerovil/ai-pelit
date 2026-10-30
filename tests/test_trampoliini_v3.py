@@ -75,3 +75,35 @@ def test_v3_plays_on_with_the_saved_level_and_record(site, context):
     page.reload()
     assert page.inner_text("#level") == "Taso 4: Kilpatrampoliini"
     assert page.inner_text("#stats").startswith("Ennätys 300 p")
+
+
+def test_two_leaning_landings_in_a_row_add_up_and_one_the_other_way_brings_you_back(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { const s = window.__step, land = tilt => {
+        while (phase === 'mat') s(1 / 60);
+        while (!(J.vy < 0 && J.y < COMH + 0.05)) s(1 / 60);
+        J.a = tilt; J.rot = tilt; s(1 / 60); return J.vx; };
+      stand(0); J.vin = 6;
+      const one = land(0.4), two = land(0.4), back = land(-0.4);
+      return [one, two, back, J.x, phase]; }""")
+    one, two, back, x, phase = r
+    assert two < one < 0 and back > two and phase == "mat"
+    assert x < 0     # walked backwards
+
+
+def test_a_wobbly_landing_slides_by_its_lean_not_by_where_you_stand(site, context):
+    page = open_game(site, context)
+    vx, phase = page.evaluate(LAND, [-0.8, 6, -1])   # wobble, leaning forward, standing back of the middle
+    assert phase == "mat" and vx > 1.5
+
+
+def test_the_slide_labels_fit_a_390_and_a_360_px_phone(site, context):
+    site.build(ROOT / "games")
+    for width in (360, 390):
+        page = context.new_page()
+        page.set_viewport_size({"width": width, "height": 740})
+        page.goto(site.url + URL)
+        widths = page.evaluate("""() => { x.font = '800 16px system-ui,sans-serif';
+          return ['← Liukuu taaksepäin', 'Liukuu eteenpäin →'].map(t => x.measureText(t).width); }""")
+        assert max(widths) < width - 24
+        page.close()
