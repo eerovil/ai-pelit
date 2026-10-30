@@ -5,6 +5,8 @@
 
 A published version is a `games/<slug>/v<N>/` folder that exists at the base ref. Its files
 may not change, and its entry in game.json may not change either; new versions are appended.
+A shared library's file under `public/lib/` (three.js, #99) that exists at the base ref may not
+change either: games load it from there for good, so a new release goes in a new folder.
 
 The one way out is WITHDRAWN: a version Eero asked, in so many words, to take out of production.
 Such a version may only be deleted whole (its folder and its game.json entry), never edited.
@@ -61,6 +63,11 @@ def problems(base: str, cwd: str | None = None, withdrawn: set[str] = WITHDRAWN)
             old = [v for v in old if v.get("n") not in gone]
             if new[: len(old)] != old:
                 found.append(f"{path}: published versions' entries changed; only append new ones")
+    lib = git("diff", "--name-status", "--no-renames", base, "--", "public/lib", cwd=cwd).splitlines()
+    for line in lib:
+        status, path = line.split("\t", 1)
+        if status != "A":
+            found.append(f"{path}: a published library file never changes; add a new folder for a new release")
     # A withdrawn number is never used again: phones keep the old version in their offline cache
     # for good, so a new game at the same address would never reach them.
     for d in sorted(withdrawn - published_dirs):

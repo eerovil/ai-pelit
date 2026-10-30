@@ -33,7 +33,9 @@ player sees is Finnish unless the request says otherwise.
    extra: the game never waits for it, and plays the same without it.
    Why no build step, and no TypeScript (#42): the file in the folder is the file the phone runs,
    so a published version cannot change by accident and needs no tools to keep working. A library
-   a game needs is copied into its folder as one file. Think again only when a single game passes
+   a game needs is copied into its folder as one file, except a shared library under
+   `public/lib/` (three.js, #99, Eero's choice), which games load from there and never copy; see
+   "3D games". Think again only when a single game passes
    about 2000 lines, or the same code is copied into a third game; then propose it as its own Work.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
@@ -114,6 +116,39 @@ high-score lists (#25), then play counts (#26).
   deploy a preview: `npx wrangler pages deploy _site --project-name ai-pelit --branch <branch>`
   serves `https://<branch>.ai-pelit.pages.dev` on the `ai-pelit-preview` database. There is no
   Node on this host; run it in `podman run … docker.io/library/node:22`.
+
+## 3D games (three.js)
+
+A game that wants real 3D (a camera, lights, solid shapes) uses three.js from the site's shared
+folder (#99), not hand-made projection maths:
+
+```html
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from '../../../lib/three-r187/three.module.js';
+const c = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// scene, PerspectiveCamera, lights, meshes; on resize: renderer.setSize(innerWidth, innerHeight, false),
+// camera.aspect = innerWidth / innerHeight, camera.updateProjectionMatrix().
+renderer.setAnimationLoop(() => renderer.render(scene, camera));
+</script>
+```
+
+- Use the newest `public/lib/three-r*/` folder. A published library folder never changes
+  (`scripts/check_immutable.py` fails a pull request that edits one): a newer three.js goes in a
+  new `three-r<N>/` folder, copied unchanged from the npm package's `build/` with its `LICENSE`
+  and a `SOURCE` line, in its own pull request. Old games keep the release they were made with.
+- Core three.js only. An add-on (a model loader, camera controls) is copied into the game's own
+  folder as one file, with its import of `three` changed to the relative path above.
+- The canvas fills `100dvh` with `touch-action: none`; size the renderer from `innerWidth` and
+  `innerHeight`. Wrap `new THREE.WebGLRenderer` in `try` and show a Finnish message when the phone
+  cannot draw 3D.
+- The phone downloads the library (about 420 KB compressed) the first time it opens a 3D game,
+  and `sw.js` keeps it for offline play. `scripts/build.py` refuses a version that loads a
+  `lib/` file that is not there.
+- `tests/fixtures/three-demo.html` is a complete small example (a lit, spinning cube), and
+  `tests/test_lib_three.py` shows how to check a 3D game draws (headless Chromium has WebGL).
 
 ## Before you mark the pull request ready
 

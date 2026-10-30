@@ -8,6 +8,10 @@ var SHELL_CACHE = 'ai-pelit-shell-' + BUILD;
 var GAMES_CACHE = 'ai-pelit-games';
 // Game pictures (#33) are named by their content, so they too keep one cache across builds.
 var THUMBS_CACHE = 'ai-pelit-thumbs';
+// Shared libraries (three.js, #99) live in folders named after their release and never change,
+// so they keep one cache across builds too. Filled on first use: a phone that never opens a game
+// using one never downloads it.
+var LIB_CACHE = 'ai-pelit-lib';
 // The shelf is cached as './' only: Cloudflare Pages redirects index.html to './', and a
 // redirected response cannot answer a page load.
 var SHELL = [
@@ -67,10 +71,11 @@ function cacheThumbs(catalog) {
 
 var GAMES_PREFIX = new URL('games/', self.registration.scope).pathname;
 var THUMBS_PREFIX = new URL('thumbs/', self.registration.scope).pathname;
+var LIB_PREFIX = new URL('lib/', self.registration.scope).pathname;
 // The online parts (high scores, #25) are live data: straight to the network, never cached.
 var API_PREFIX = new URL('api/', self.registration.scope).pathname;
 
-// A version folder or a picture: cache first, filled the first time it is used.
+// A version folder, a picture or a library: cache first, filled the first time it is used.
 function cachedFile(request, name) {
   return caches.open(name).then(function (cache) {
     return cache.match(request, { ignoreSearch: true }).then(function (hit) {
@@ -109,5 +114,6 @@ self.addEventListener('fetch', function (event) {
   if (url.pathname.indexOf(API_PREFIX) === 0) return;
   if (url.pathname.indexOf(GAMES_PREFIX) === 0) event.respondWith(cachedFile(request, GAMES_CACHE));
   else if (url.pathname.indexOf(THUMBS_PREFIX) === 0) event.respondWith(cachedFile(request, THUMBS_CACHE));
+  else if (url.pathname.indexOf(LIB_PREFIX) === 0) event.respondWith(cachedFile(request, LIB_CACHE));
   else event.respondWith(shellFile(request));
 });

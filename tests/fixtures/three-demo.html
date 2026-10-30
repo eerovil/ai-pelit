@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kuutio</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #123; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  #ei { display: none; color: #fff; font: 18px system-ui; padding: 60px 20px; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p id="ei">Tämä puhelin ei osaa piirtää 3D-kuvaa.</p>
+<!-- A test-only game (#99): the starter scene AGENTS.md describes, on the shared three.js. -->
+<script type="module">
+import * as THREE from '../../../lib/three-r187/three.module.js';
+
+const c = document.getElementById('c');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true });
+} catch (e) {
+  c.style.display = 'none';
+  document.getElementById('ei').style.display = 'block';
+  window.noWebgl = true;
+}
+if (renderer) {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x112233);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+  camera.position.set(0, 1.5, 5);
+  camera.lookAt(0, 0, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.2));
+  const sun = new THREE.DirectionalLight(0xffffff, 2);
+  sun.position.set(3, 5, 4);
+  scene.add(sun);
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshStandardMaterial({ color: 0xff8800 }));
+  scene.add(cube);
+
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  let spin = 0.01;
+  c.addEventListener('pointerdown', () => { spin = -spin; });
+  renderer.setAnimationLoop(() => {
+    cube.rotation.x += spin * 0.7;
+    cube.rotation.y += spin;
+    renderer.render(scene, camera);
+    window.drawn = true;
+  });
+}
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

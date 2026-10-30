@@ -28,6 +28,9 @@ DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Each game's picture for the shelf (#33), beside game.json; scripts/make_thumb.py makes it.
 THUMB = "thumb.webp"
 THUMB_SIZE = (360, 480)
+# A shared library a version loads from public/lib/ (#99), e.g. '../../../lib/three-r187/three.module.js'.
+LIB_REF = re.compile(r"""['"]\.\./\.\./\.\./lib/([^'"?#]+)""")
+LIB_DIR = ROOT / "public" / "lib"
 
 
 def webp_size(data: bytes) -> tuple[int, int] | None:
@@ -54,7 +57,7 @@ class GameError(Exception):
     pass
 
 
-def load_game(game_dir: Path, withdrawn: set[str] | None = None) -> dict:
+def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path = LIB_DIR) -> dict:
     slug = game_dir.name
     if not SLUG.match(slug):
         raise GameError(f"{slug}: a game folder name is lowercase letters, digits and dashes")
@@ -83,8 +86,12 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None) -> dict:
         page = game_dir / f"v{i}" / "index.html"
         if not page.is_file():
             raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
-        if not BACK_SCRIPT_RE.search(page.read_text()):
+        html = page.read_text()
+        if not BACK_SCRIPT_RE.search(html):
             raise GameError(f"{slug} v{i}: index.html must include {BACK_SCRIPT}")
+        for ref in LIB_REF.findall(html):
+            if not (lib_dir / ref).is_file():
+                raise GameError(f"{slug} v{i}: index.html loads lib/{ref}, which is not in public/lib/")
     thumb = game_dir / THUMB
     if not thumb.is_file():
         raise GameError(f"{slug}: {THUMB} is missing (python3 scripts/make_thumb.py {slug} <screenshot.png>)")
@@ -109,15 +116,15 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None) -> dict:
     }
 
 
-def build_catalog(games_dir: Path) -> dict:
-    games = [load_game(d) for d in sorted(games_dir.iterdir()) if d.is_dir()]
+def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
+    games = [load_game(d, lib_dir=lib_dir) for d in sorted(games_dir.iterdir()) if d.is_dir()]
     # Newest version first, so a fresh game or version is at the top of the shelf.
     games.sort(key=lambda g: (g["versions"][-1]["date"], g["slug"]), reverse=True)
     return {"games": games}
 
 
 def build(games_dir: Path, public_dir: Path, out_dir: Path) -> dict:
-    catalog = build_catalog(games_dir)
+    catalog = build_catalog(games_dir, public_dir / "lib")
     if out_dir.exists():
         shutil.rmtree(out_dir)
     shutil.copytree(public_dir, out_dir)
