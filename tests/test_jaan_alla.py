@@ -195,3 +195,49 @@ def test_continue_picks_up_the_saved_game(site, context):
     page.click("#uusi")
     assert "Paina uudelleen" in page.inner_text("#uusi")
     assert errors == []
+
+
+def test_things_found_out_of_order_still_count_and_a_reload_mid_dive_resumes_in_sisu(site, context):
+    page, _ = new_game(site, context)
+    # The crystal first, before any log: kept, and the goal still starts from the station.
+    page.evaluate("enterSite('kristalli'); diver.pos.set(1 * 4 + 2, 1.3, 5 * 4 + 2); step(1 / 60)")
+    assert page.evaluate("G.s.inv.kristalli") == 1
+    page.click("#card button:has-text('Jatka')")
+    page.evaluate("drawHud()")
+    assert "Aurora-asemalle ja lue" in page.inner_text("#goal")
+    # Fish and kelp at once both count.
+    page.evaluate("leaveSite(); SCHOOLS[1].x = KELP.x; SCHOOLS[1].z = KELP.z; SCHOOLS[1].y = floorY(KELP.x, KELP.z) + 6;"
+                  "sub.pos.set(KELP.x, SCHOOLS[1].y, KELP.z); const n = G.s.inv.ruoka; step(1 / 60); window.got = G.s.inv.ruoka - n")
+    assert page.evaluate("got") == 2
+    # With every log read, the crystal step is skipped straight to the radio.
+    page.evaluate("Object.assign(G.s.flags, { stationLog: true, nordlysLog: true, jaavuoriLog: true }); G.s.inv.antenni = 1; drawHud()")
+    assert "korjaa radiomasto" in page.inner_text("#goal")
+    # A reload while diving continues in SISU with what was found.
+    page.evaluate("enterSite('nordlys'); saveGame()")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    assert page.evaluate("[G.mode, G.s.inv.kristalli, G.s.inv.antenni]") == ["sub", 1, 1]
+
+
+@pytest.mark.parametrize("width,height", [(360, 640), (390, 844)])
+def test_the_controls_and_meters_fit_a_small_phone(site, browser, width, height):
+    phone = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
+    page, _ = new_game(site, phone)
+    page.evaluate("G.s.flags.stationLog = true; sub.pos.set(SITES.nordlys.door.x, SITES.nordlys.door.y, SITES.nordlys.door.z + 5); drawHud()")
+    # In SISU the bag button shows; in a dive the air meter makes four meters.
+    bag = page.evaluate("document.getElementById('bag').getBoundingClientRect().left")
+    page.evaluate("enterSite('nordlys'); diver.pos.set(1 * 4 + 2, 1.8, 3 * 4 + 2); drawHud()")  # at the airlock
+    box = page.evaluate("""() => {
+        const r = id => document.getElementById(id).getBoundingClientRect();
+        const tops = [...document.querySelectorAll('#meters .m')].map(m => Math.round(m.getBoundingClientRect().top));
+        return { rows: new Set(tops).size, meters: r('meters').right, goal: r('goalbar').bottom,
+                 stick: r('stick'), up: r('up'), act: r('act'), w: innerWidth, h: innerHeight };
+    }""")
+    assert box["rows"] == 1
+    assert 0 < box["meters"] <= bag
+    for k in ("stick", "up", "act"):
+        assert 0 <= box[k]["left"] and box[k]["right"] <= box["w"] and box[k]["bottom"] <= box["h"], k
+        assert box[k]["top"] > box["goal"], k
+    assert box["stick"]["right"] < box["act"]["left"]
+    phone.close()
