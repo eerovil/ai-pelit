@@ -1,6 +1,6 @@
 {
   "title": "Aitajuoksu",
-  "description": "100 metrin aitajuoksu: paina jalkoja vuorotellen ja hyppää aidat, yksin tai kavereiden kanssa.",
+  "description": "Aitajuoksu ja pikajuoksu 100–400 m: paina jalkoja vuorotellen ja hyppää aidat, yksin tai kavereiden kanssa.",
   "versions": [
     {
       "n": 1,
@@ -14,6 +14,13 @@
       "date": "2026-10-30",
       "note": "Varaslähtö: askel ennen laukausta tuo keltaisen kortin, toinen punaisen ja juoksija on ulkona; lähtö otetaan uudestaan.",
       "request": "Aitajuoksuun varaslähtö: keltainen ja punainen kortti",
+      "issue": "eerovil/ai-pelit#87"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-30",
+      "note": "Matkat 100, 200 ja 400 m, aitojen kanssa tai ilman; jokaisella juoksulla oma ennätys ja tuloslista.",
+      "request": "Moodi ilman aitoja, ja pidempiä matkoja",
       "issue": "eerovil/ai-pelit#87"
     }
   ]
