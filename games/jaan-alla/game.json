@@ -1,0 +1,13 @@
+{
+  "title": "Jään alla",
+  "description": "Tarinallinen selviytymisseikkailu jään alla: ohjaa SISU-sukellusvenettä, sukella hylkyihin ja luoliin ja selvitä, minne Aurora-aseman väki katosi.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: luku 1 – SISU-sukellusvene, Aurora-asema, RV Nordlysin hylky, jäävuoren luola, kristalliluola ja jättikalmari; ilma, virta, ruoka ja runko.",
+      "request": "Tee three js tarinallinen survival peli kuvien pohjalta",
+      "issue": "eerovil/ai-pelit#106"
+    }
+  ]
+}
