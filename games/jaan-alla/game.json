@@ -22,6 +22,13 @@
       "note": "Luku 2: pelasta Aurora-aseman väki pohjoiselta rannalta – nouse avannosta jäälle, pidä lämpö yllä, johdata kaksitoista ihmistä SISUun neljä kerrallaan ja vie heidät asemalle myrskyn yltyessä. Jäällä liikkuu jääkarhu.",
       "request": "Tähän tarinalle jatkoa.",
       "issue": "eerovil/ai-pelit#106"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Luku 3: muinaiset rauniot kanjonin pohjalla – kanna hehkuvia kristalleja kivijalustoille, avaa ovet, lue seinäkuvien tarina Valon vartijoista ja herätä Sydän.",
+      "request": "Nyt jatkoa",
+      "issue": "eerovil/ai-pelit#106"
     }
   ]
 }
