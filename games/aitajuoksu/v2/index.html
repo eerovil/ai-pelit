@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Aitajuoksu</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(18,32,58,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:40px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:24px;font-weight:800}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:310px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🏃 Aitajuoksu</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Juokse!</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help">100 metriä, 10 aitaa. Paina vasenta ja oikeaa jalkaa vuorotellen niin nopeasti kuin pystyt.
+    Hyppää aidan yli keskinapista juuri ennen aitaa. Kaatunut aita hidastaa!
+    Varaslähdöstä keltainen kortti, toisesta punainen ja ulos.</p>
+</div>
+<script src="../../../rooms.js" data-game="aitajuoksu" data-min="2" data-max="6"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:aitajuoksu:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), races = load('juoksut', 0), best = load('ennatys', null);
+
+const FOES = ['Aita-Aili', 'Pikajalka Pekka', 'Loikka-Leena', 'Salama-Sami', 'Harppaus-Hanna', 'Turbo-Tuomas', 'Ukkonen Ulla', 'Mestari Matti'];
+const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
+
+// The track in metres: 100 m, ten hurdles 84 cm high (13 m to the first, 8.5 m apart).
+const TRACK = 100, H_N = 10, H_H = 0.84;
+const HURDLES = Array.from({ length: H_N }, (_, i) => 13 + 8.5 * i);
+// Running: each step on the other foot adds speed, more the slower you go; the track slows you.
+// Tapping 8 times a second holds about 8.3 m/s.
+const VMAX = 12, STEP = 1.0, GRAV = 20, JUMP_V = 4.8;
+const CLEAR = 0.3;              // feet this high over a hurdle's line clear it (about 0.33 s of a jump)
+const HIT_KEEP = 0.45, STUMBLE = 0.35;
+// False starts: a step after "Valmiit…" and before the gun. The first gets a yellow card, the
+// second a red one, and that runner is out. The start is called back and starts again.
+const SET_AT = 0.9, FS_SHOW = 2.4, CPU_JUMPY = 0.05;
+
+let W, H, DPR, safeT = 0, safeB = 0, ctrlTop, ctrlH, trackTop, laneH, sc, sv;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  ctrlH = Math.max(140, Math.min(200, H * 0.25));
+  ctrlTop = H - safeB - ctrlH;
+  layout();
+}
+function layout() {
+  const n = race ? race.runners.length : 4;
+  trackTop = safeT + 196;
+  laneH = (ctrlTop - 14 - trackTop) / n;
+  // Along the track 13 m fit the screen, so the others show; people and hurdles are drawn taller.
+  sc = W / 13; sv = Math.min(laneH * 0.5, 46);
+}
+addEventListener('resize', resize);
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function whistle() { tone(2400, 0.18, 'sine', 0.07, 2000); setTimeout(() => tone(2400, 0.4, 'sine', 0.07, 2100), 200); }
+function bang() { tone(140, 0.25, 'sawtooth', 0.14, 40); tone(900, 0.06, 'square', 0.08, 200); }
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The race ----------
+// kind: 'me' (this phone's taps), 'cpu' (moved here by the computer), 'net' (another phone's).
+function runner(id, name, color, kind, rate) {
+  return { id, name, color, kind, rate: rate || 7, x: 0, y: 0, vy: 0, v: 0, foot: 0, stum: 0, hits: 0, down: 0,
+    fin: null, ph: 0, card: 0, ai: { t: 0.2 + Math.random() * 0.15, err: 0, hurdle: -1, jumpy: null } };
+}
+let race = null, me = null, texts = [], warn = 0, flash = { 1: 0, 2: 0, 3: 0 };
+
+// Solo: you in lane 2 against three runners of your level.
+function soloRace() {
+  const base = Math.min(10.2, 6.5 + 0.4 * (level - 1));
+  const foes = [0, 1, 2].map(i => FOES[(level - 1 + i) % FOES.length]);
+  const rs = [
+    runner('a', foes[0], COLORS[0], 'cpu', base + 0.3),
+    runner('me', 'Sinä', COLORS[1], 'me'),
+    runner('b', foes[1], COLORS[2], 'cpu', base),
+    runner('c', foes[2], COLORS[3], 'cpu', base - 0.5),
+  ];
+  newRace('solo', '', rs);
+}
+function newRace(mode, round, runners) {
+  race = { mode, round, runners, phase: 'cd', cdT: 0, gunAt: 0, clock: 0, doneT: 0, firstFin: null, late: 20, adopt: false, sendT: 0, results: null, fs: null, fsT: 0 };
+  me = runners.find(r => r.kind === 'me') || null;
+  texts = []; warn = 0;
+  countdown();
+  layout();
+  menu.classList.add('hidden');
+}
+
+// "Paikoillenne… Valmiit…" again, with a new moment for the gun. Now and then a computer runner
+// in a race alone is too eager and goes before it.
+function countdown() {
+  race.phase = 'cd'; race.cdT = 0; race.gunAt = 2.1 + Math.random() * 1.1; race.fs = null;
+  race.runners.forEach(r => {
+    r.ai.jumpy = race.mode === 'solo' && r.kind === 'cpu' && r.card < 2 && Math.random() < CPU_JUMPY
+      ? SET_AT + 0.2 + Math.random() * (race.gunAt - SET_AT - 0.3) : null;
+  });
+}
+function falseStart(r) {
+  if (race.mode === 'net' && !R.isHost) { R.send({ t: 'f', round: race.round }); return; } // the host decides
+  if (race.phase !== 'cd' || r.card >= 2) return;
+  r.card++;
+  race.phase = 'false'; race.fsT = 0; race.fs = { id: r.id, card: r.card };
+  whistle();
+}
+function afterFalse() {
+  if (race.mode === 'solo' && me.card >= 2) {
+    race = null;
+    showMenu('🟥 Varaslähtö – hylätty', 'lose');
+    return;
+  }
+  countdown();
+}
+
+function step(r, foot) {
+  if (r.card >= 2) return;
+  if (!race || race.phase !== 'run' || r.fin !== null || r.y > 0 || r.stum > 0) {
+    if (r === me && race && race.phase === 'cd') { if (race.cdT > SET_AT) falseStart(me); else warn = 1; }
+    return;
+  }
+  if (foot !== r.foot) r.v = Math.min(VMAX, r.v + STEP * (1 - r.v / VMAX));
+  else r.v = Math.max(0, r.v - 0.3); // the same foot twice is a stumble, not a stride
+  r.foot = foot;
+  if (r === me) tone(foot === 1 ? 190 : 230, 0.03, 'triangle', 0.05);
+}
+function jump(r) {
+  if (!race || race.phase !== 'run' || r.fin !== null || r.y > 0 || r.vy > 0 || r.stum > 0) return;
+  r.vy = JUMP_V;
+  if (r === me) tone(330, 0.07, 'triangle', 0.05, 520);
+}
+
+// One runner's physics for dt seconds of the race clock.
+function move(r, dt, clock) {
+  if (r.fin !== null) { r.v = Math.max(0, r.v - 3 * dt); r.x += r.v * dt; r.ph += r.v * dt * 1.5; return; }
+  r.stum = Math.max(0, r.stum - dt);
+  const loss = r.y > 0 ? 0.3 : 1.2 + 0.15 * r.v;
+  r.v = Math.max(0, r.v - loss * dt);
+  const x0 = r.x;
+  r.x += r.v * dt;
+  if (r.y > 0 || r.vy > 0) {
+    r.vy -= GRAV * dt; r.y += r.vy * dt;
+    if (r.y <= 0) { r.y = 0; r.vy = 0; }
+  }
+  for (let i = 0; i < H_N; i++) {
+    const hx = HURDLES[i];
+    if (!(r.down >> i & 1) && x0 < hx && r.x >= hx && r.y < CLEAR) {
+      r.down |= 1 << i; r.v *= HIT_KEEP; r.stum = STUMBLE; r.hits++;
+      if (r === me) { tone(160, 0.18, 'sawtooth', 0.09, 70); texts.push({ s: 'Kolaus!', t: 0 }); }
+    }
+  }
+  r.ph += r.v * dt * 1.5;
+  if (r.x >= TRACK) {
+    r.fin = Math.round((clock - (r.x - TRACK) / Math.max(r.v, 0.5)) * 100) / 100;
+    if (race.firstFin === null) race.firstFin = clock;
+    if (r === me) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+  }
+}
+
+// The computer taps at its own rate and jumps at a distance that misses now and then.
+function think(r, dt) {
+  if (race.phase === 'cd' && r.ai.jumpy !== null && race.cdT >= r.ai.jumpy) { r.ai.jumpy = null; falseStart(r); }
+  if (r.fin !== null || r.card >= 2 || race.phase !== 'run') return;
+  const a = r.ai;
+  a.t -= dt;
+  while (a.t <= 0) { step(r, r.foot === 1 ? 2 : 1); a.t += (0.85 + Math.random() * 0.3) / r.rate; }
+  const i = HURDLES.findIndex(hx => hx > r.x);
+  if (i < 0) return;
+  if (a.hurdle !== i) { a.hurdle = i; a.err = (Math.random() + Math.random() - 1) * Math.max(0.4, 1.9 - 0.13 * r.rate); }
+  if (HURDLES[i] - r.x <= Math.max(0.2, r.v * 0.24 + a.err)) jump(r);
+}
+
+// Finished runners by time, ahead of everyone still running, who go by how far they are.
+const ahead = (o, r) => o.fin !== null ? r.fin === null || o.fin < r.fin : r.fin === null && (o.card < 2 && r.card >= 2 || o.x > r.x);
+const out = r => r.fin !== null || r.card >= 2; // finished, or shown the red card
+const place = r => 1 + race.runners.filter(o => o !== r && ahead(o, r)).length;
+const fmt = t => t.toFixed(2).replace('.', ',') + ' s';
+
+// The standings: finished runners by time, the rest by how far they got, red cards last.
+function standings() {
+  return race.runners.slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.card >= 2) - (b.card >= 2) || (a.fin !== null ? a.fin - b.fin : b.x - a.x))
+    .map(r => ({ id: r.id, name: r.name, fin: r.fin, color: r.color, dq: r.card >= 2 }));
+}
+
+// ---------- Solo ----------
+function soloOver() {
+  // You are in; the others get their time from where they are and how fast they go.
+  race.runners.forEach(r => { if (r.fin === null && r.card < 2) r.fin = Math.round((race.clock + (TRACK - r.x) / Math.max(r.v, 4)) * 100) / 100; });
+  finish(standings());
+}
+
+// ---------- Playing with friends ----------
+// The host runs the starter's gun and the computer's runners, and sends everyone the race; each
+// phone runs its own runner and sends it to the host.
+R.on('start', s => {
+  const rs = s.players.map((p, i) => runner(p.id, p.name, COLORS[i % COLORS.length], p.id === R.me ? 'me' : 'net', 7.6));
+  newRace('net', s.round, rs);
+  race.adopt = !R.isHost; // a guest reloaded mid-race takes its runner back from the host
+  if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
+});
+// A runner as sent: where, how fast, and the jump, last foot and stumble, so a phone that
+// reloads mid-jump carries on with the same jump. [6] says the computer runs it now; [10] is its
+// card, which only the host gives.
+const r2 = n => Math.round(n * 100) / 100;
+const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum), r.card];
+function unpack(r, a) { r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; r.vy = a[7]; r.foot = a[8]; r.stum = a[9]; }
+function hostState() { return { t: 's', round: race.round, ph: race.phase, cd: race.cdT, clock: race.clock, fs: race.fs, r: race.runners.map(pack) }; }
+R.on('message', (m, from) => {
+  if (!race || race.mode !== 'net' || m.round !== race.round) return;
+  if (R.isHost) {
+    const r = race.runners.find(o => o.id === from);
+    if (m.t === 'p' && r && r.kind === 'net') {
+      unpack(r, m.r);
+      // A guest in first starts the wait for the rest, as a runner finishing here does.
+      if (r.fin !== null && race.firstFin === null) race.firstFin = race.clock;
+    }
+    // A guest's step before the gun; one sent just after it, or twice, does nothing.
+    if (m.t === 'f' && r && race.phase === 'cd' && race.cdT > SET_AT) falseStart(r);
+    return;
+  }
+  if (m.t === 's') {
+    if (race.phase === 'cd' || race.phase === 'false') {
+      race.cdT = m.cd; race.fs = m.fs || null;
+      if (m.ph === 'false' && race.phase === 'cd') whistle();
+      if (m.ph === 'run') { race.phase = 'run'; race.clock = m.clock; if (m.clock < 0.5) bang(); }
+      else if (m.ph === 'cd' || m.ph === 'false') race.phase = m.ph;
+    }
+    m.r.forEach((a, i) => {
+      const r = race.runners[i];
+      if (!r) return;
+      r.card = a[10] || 0;
+      // My own runner is mine, unless the computer ran it while I was away.
+      if (r === me && !a[6] && !(race.adopt && a[0] > me.x)) return;
+      unpack(r, a);
+    });
+    if (m.ph === 'run') race.adopt = false;
+  }
+  if (m.t === 'end') finish(m.res);
+});
+R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
+R.on('continue', ids => { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) r.kind = 'cpu'; }); });
+R.on('back', id => { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') r.kind = 'net'; }); });
+R.on('lobby', () => { race = null; });
+R.on('leave', () => { race = null; showMenu(); });
+R.on('menu', () => { race = null; showMenu(); });
+
+function hostTick(dt) {
+  race.sendT -= dt;
+  if (race.sendT <= 0) { race.sendT = 1 / 12; R.send(hostState()); }
+  const all = race.runners.every(out);
+  if (race.phase === 'run' && (all || (race.firstFin !== null && race.clock > race.firstFin + race.late))) {
+    const m = { t: 'end', round: race.round, res: standings() };
+    R.deliver(m);
+    R.endRound();
+    finish(m.res);
+  }
+}
+function guestTick(dt) {
+  race.sendT -= dt;
+  const was = me.sentFin;
+  if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !was))) {
+    race.sendT = 1 / 12; me.sentFin = me.fin !== null;
+    R.send({ t: 'p', round: race.round, r: pack(me) });
+  }
+}
+
+// ---------- The end ----------
+function finish(res) {
+  if (!race || race.phase === 'done') return;
+  race.phase = 'done'; race.doneT = 0; race.results = res;
+  const mine = res.findIndex(r => race.mode === 'solo' ? r.id === 'me' : r.id === R.me);
+  const t = mine >= 0 ? res[mine].fin : null;
+  const counted = race.mode === 'solo' || R.once(race.round);
+  if (counted && t !== null) {
+    races++;
+    if (best === null || t < best) best = t;
+    if (race.mode === 'solo' && mine === 0) { wins++; level++; }
+    save('juoksut', races); save('ennatys', best); save('voitot', wins); save('taso', level);
+    if (window.AiPelitScores) AiPelitScores.submit(t);
+  }
+  race.mine = mine; race.time = t;
+}
+function afterResults() {
+  const res = race.results, mine = race.mine, t = race.time;
+  if (race.mode === 'solo') {
+    race = null;
+    showMenu(mine === 0 ? 'Voitit! ' + fmt(t) + ' 🏆' : (mine + 1) + '. sija · ' + fmt(t), mine === 0 ? 'win' : 'lose');
+    return;
+  }
+  race = null;
+  R.note(res.map((r, i) => (i + 1) + '. ' + (r.id === R.me ? 'Sinä' : r.name) + ' ' + (r.dq ? 'hylätty' : r.fin === null ? '–' : fmt(r.fin))).join(' · '));
+  R.backToRoom(mine < 0 ? 'Juoksu päättyi' : res[mine].dq ? '🟥 Varaslähtö – hylätty' : t === null ? 'Et ehtinyt maaliin' : (mine + 1) + '. sija · ' + fmt(t), mine === 0 ? 'win' : 'lose');
+}
+
+// ---------- The loop ----------
+let lastT = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  if (race) tick(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+function tick(dt) {
+  for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
+  warn = Math.max(0, warn - dt);
+  texts.forEach(t => { t.t += dt; }); texts = texts.filter(t => t.t < 1);
+  if (race.phase === 'done') { race.doneT += dt; if (race.doneT > 3.2) afterResults(); return; }
+  if (race.mode === 'net' && R.paused) return;
+  const host = race.mode === 'solo' || R.isHost;
+  if (race.phase === 'cd') {
+    if (host) {
+      race.cdT += dt;
+      if (race.cdT >= race.gunAt) { race.phase = 'run'; race.clock = race.cdT - race.gunAt; bang(); }
+    }
+  } else if (race.phase === 'false') {
+    race.fsT += dt;
+    if (host && race.fsT >= FS_SHOW) { afterFalse(); if (!race) return; }
+  } else if (race.phase === 'run') {
+    race.clock += dt;
+  }
+  for (const r of race.runners) {
+    if (r.kind === 'cpu' && host) { think(r, dt); move(r, dt, race.clock); }
+    else if (r.kind === 'me' && race.phase === 'run') move(r, dt, race.clock);
+    else if (r.kind === 'net' && race.phase === 'run' && r.fin === null) { r.x += r.v * dt; r.ph += r.v * dt * 1.5; }
+    else if (r.kind === 'net') r.ph += r.v * dt * 1.5;
+  }
+  if (race.mode === 'solo') {
+    if (me.fin !== null && (race.runners.every(out) || race.clock > me.fin + 4)) soloOver();
+  } else if (R.isHost) hostTick(dt);
+  else guestTick(dt);
+}
+
+// ---------- Drawing ----------
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function laneBase(i) { return trackTop + laneH * (i + 1) - laneH * 0.18; }
+function camX() { const r = me || (race && race.runners[0]); return (r ? r.x : 0) - (W * 0.4) / sc; }
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const cam = race ? camX() : -2;
+  // Sky and stands.
+  const sky = x.createLinearGradient(0, 0, 0, trackTop);
+  sky.addColorStop(0, '#5fa8e8'); sky.addColorStop(1, '#bfe3ff');
+  x.fillStyle = sky; x.fillRect(0, 0, W, trackTop);
+  const standTop = trackTop - 78;
+  x.fillStyle = '#3b4a63'; x.fillRect(0, standTop, W, 78);
+  const crowd = ['#e63946', '#f1faee', '#ffb703', '#8ecae6', '#2a9d8f', '#f4a261'];
+  const pc = cam * sc * 0.4, gap = 11;
+  for (let row = 0; row < 6; row++) {
+    const off = (row % 2) * gap / 2;
+    for (let k = Math.floor((pc - off) / gap) - 1; k * gap + off - pc < W + gap; k++) {
+      const n = (k * 7919 + row * 104729) >>> 0;
+      x.fillStyle = crowd[n % crowd.length];
+      x.beginPath(); x.arc(k * gap + off - pc, standTop + 8 + row * 12, 3.6, 0, 7); x.fill();
+    }
+  }
+  // The track.
+  x.fillStyle = '#c8553d'; x.fillRect(0, trackTop, W, ctrlTop - trackTop);
+  x.fillStyle = '#3f8f3a'; x.fillRect(0, trackTop - 6, W, 6);
+  const n = race ? race.runners.length : 4;
+  x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineWidth = 2;
+  for (let i = 0; i <= n; i++) { const y = trackTop + laneH * i; x.beginPath(); x.moveTo(0, y); x.lineTo(W, y); x.stroke(); }
+  const sxw = m => (m - cam) * sc;
+  // Start, every 10 m, and the finish.
+  for (let m = 0; m <= TRACK; m += 10) {
+    const px = sxw(m);
+    if (px < -40 || px > W + 40) continue;
+    if (m === TRACK) {
+      for (let yy = trackTop, k = 0; yy < trackTop + laneH * n; yy += 8, k++) {
+        x.fillStyle = k % 2 ? '#111' : '#fff'; x.fillRect(px - 4, yy, 4, 8);
+        x.fillStyle = k % 2 ? '#fff' : '#111'; x.fillRect(px, yy, 4, 8);
+      }
+    } else {
+      x.fillStyle = 'rgba(255,255,255,.8)'; x.fillRect(px - 1.5, trackTop, 3, laneH * n);
+    }
+    x.font = '800 13px system-ui'; x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.strokeText(m === TRACK ? 'MAALI' : m + ' m', px, trackTop - 10);
+    x.fillStyle = '#fff'; x.fillText(m === TRACK ? 'MAALI' : m + ' m', px, trackTop - 10);
+  }
+  // Lanes back to front: hurdles, then the runner.
+  for (let i = 0; i < n; i++) {
+    const base = laneBase(i), r = race && race.runners[i];
+    if (r === me) { x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(0, trackTop + laneH * i, W, laneH); }
+    x.fillStyle = 'rgba(255,255,255,.7)'; x.font = '700 11px system-ui'; x.textAlign = 'left';
+    x.fillText(String(i + 1), 4, trackTop + laneH * i + 13);
+    HURDLES.forEach((hx, k) => {
+      const px = sxw(hx);
+      if (px < -30 || px > W + 30) return;
+      drawHurdle(px, base, r ? (r.down >> k & 1) : 0);
+    });
+    if (r) drawRunner(r, sxw(r.x), base);
+  }
+  drawHud();
+  drawControls();
+  if (race && race.phase === 'done') drawResults();
+}
+
+function drawHurdle(px, base, down) {
+  const h = H_H * sv, lw = Math.max(3, 0.06 * sv), bw = 0.16 * sv, bh = 0.13 * sv;
+  x.lineCap = 'round';
+  x.strokeStyle = '#e8e8e8'; x.lineWidth = lw;
+  if (!down) {
+    x.beginPath(); x.moveTo(px - 0.22 * sv, base); x.lineTo(px + 0.12 * sv, base); x.stroke();
+    x.beginPath(); x.moveTo(px, base); x.lineTo(px, base - h); x.stroke();
+    // The top board, end on: black and white.
+    x.fillStyle = '#fff'; x.fillRect(px - bw / 2, base - h - bh, bw, bh);
+    x.fillStyle = '#111'; x.fillRect(px - bw / 2, base - h - bh * 0.66, bw, bh * 0.33);
+  } else {
+    x.beginPath(); x.moveTo(px - 0.1 * sv, base); x.lineTo(px + h, base - 0.05 * sv); x.stroke();
+    x.fillStyle = '#fff'; x.fillRect(px + h - 0.02 * sv, base - bw, bh, bw);
+    x.fillStyle = '#111'; x.fillRect(px + h - 0.02 * sv + bh * 0.33, base - bw, bh * 0.33, bw);
+  }
+}
+
+// A runner seen from the side, running to the right; heights in metres from the feet.
+function drawRunner(r, px, base) {
+  if (px < -60 || px > W + 60) return;
+  x.save();
+  if (r.card >= 2) x.globalAlpha = 0.4;
+  drawBody(r, px, base);
+  x.restore();
+}
+function drawBody(r, px, base) {
+  const s = sv, lw = Math.max(3, 0.11 * s);
+  const air = r.y > 0.02, stum = r.stum > 0;
+  const lean = 0.08 + Math.min(r.v, 10) * 0.018 + (stum ? 0.45 : 0);
+  const fy = base - r.y * s;
+  const hipX = px, hipY = fy - 0.92 * s;
+  const neckX = hipX + Math.sin(lean) * 0.55 * s, neckY = hipY - Math.cos(lean) * 0.55 * s;
+  const L = 0.46 * s;
+  const pt = (x0, y0, a, l) => [x0 + Math.sin(a) * l, y0 + Math.cos(a) * l];
+  let legs, arms;
+  const p = r.ph * 2.2;
+  if (air) {
+    legs = [[1.45, 1.55], [-0.35, -1.9]];
+    arms = [[1.6, 1.5], [-0.6, -0.2]];
+  } else if (r.v < 0.3 && (!race || race.phase !== 'run')) {
+    legs = [[0.12, 0.05], [-0.1, -0.1]];
+    arms = [[0.15, 0.6], [-0.1, 0.4]];
+  } else {
+    const amp = 0.25 + Math.min(r.v, 10) * 0.07;
+    legs = [0, Math.PI].map(o => { const a = Math.sin(p + o) * amp; return [a, a - 0.25 - (0.6 + amp) * Math.max(0, -Math.cos(p + o))]; });
+    arms = [0, Math.PI].map(o => { const a = -Math.sin(p + o) * amp * 1.1; return [a, a + 1.3]; });
+  }
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const limb = (ox, oy, [a1, a2], len, col) => {
+    const k = pt(ox, oy, a1, len), e = pt(k[0], k[1], a2, len);
+    x.strokeStyle = col; x.lineWidth = lw;
+    x.beginPath(); x.moveTo(ox, oy); x.lineTo(k[0], k[1]); x.lineTo(e[0], e[1]); x.stroke();
+    return e;
+  };
+  const dark = 'rgba(0,0,0,.25)';
+  // Shadow.
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(px, base, 0.35 * s / (1 + r.y), 0.06 * s, 0, 0, 7); x.fill();
+  // Far limbs darker, then the body, then near limbs.
+  limb(neckX, neckY + 0.05 * s, arms[1], 0.3 * s, '#a86f4c');
+  const far = limb(hipX, hipY, legs[1], L, '#a86f4c');
+  x.fillStyle = '#222'; x.beginPath(); x.ellipse(far[0] + 0.06 * s, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = r.color; x.lineWidth = lw * 2.1;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(neckX, neckY); x.stroke();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.4;
+  const near = limb(hipX, hipY, legs[0], L, '#c98a62');
+  x.fillStyle = '#fff'; x.beginPath(); x.ellipse(near[0] + 0.06 * s, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); x.stroke();
+  limb(neckX, neckY + 0.05 * s, arms[0], 0.3 * s, '#c98a62');
+  // Head.
+  const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
+  x.fillStyle = dark; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
+  // Name.
+  x.font = (r === me ? '800 ' : '600 ') + Math.round(Math.max(10, Math.min(14, 0.3 * s))) + 'px system-ui'; x.textAlign = 'center';
+  x.fillStyle = r === me ? '#ffd166' : 'rgba(255,255,255,.9)';
+  const label = r === me ? '▼ Sinä' : r.name;
+  x.fillText(label, hx, hy - 0.22 * s);
+  if (r.card) {
+    const lx = hx + x.measureText(label).width / 2 + 4, ly = hy - 0.22 * s - 11;
+    x.fillStyle = r.card >= 2 ? '#e5383b' : '#ffd60a'; rr(lx, ly, 8, 11, 2); x.fill();
+  }
+}
+
+function drawHud() {
+  const top = safeT + 44;
+  x.fillStyle = 'rgba(10,20,40,.55)'; rr(8, top, W - 16, 66, 12); x.fill();
+  // Everyone along the 100 m, with the hurdles.
+  const bx = 22, bw = W - 44, by = top + 50;
+  x.fillStyle = 'rgba(255,255,255,.25)'; x.fillRect(bx, by - 1, bw, 3);
+  x.fillStyle = 'rgba(255,255,255,.6)';
+  HURDLES.forEach(h => x.fillRect(bx + bw * h / TRACK - 1, by - 5, 2, 7));
+  if (race) race.runners.forEach(r => {
+    x.fillStyle = r.color; x.beginPath(); x.arc(bx + bw * Math.min(1, r.x / TRACK), by, r === me ? 6 : 4.5, 0, 7); x.fill();
+    if (r === me) { x.strokeStyle = '#fff'; x.lineWidth = 2; x.stroke(); }
+  });
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 24px system-ui';
+  const t = !race ? 0 : race.phase === 'cd' || race.phase === 'false' ? 0 : me && me.fin !== null ? me.fin : race.clock;
+  x.fillText(t.toFixed(2).replace('.', ','), 20, top + 30);
+  x.textAlign = 'right'; x.font = '700 15px system-ui';
+  if (race && me) {
+    x.fillText(place(me) + '. / ' + race.runners.length + (me.hits ? '  · ' + me.hits + ' 🚧' : '') + (me.card ? '  ' + (me.card >= 2 ? '🟥' : '🟨') : ''), W - 20, top + 28);
+  }
+  // The starter, and the messages.
+  if (race && race.phase === 'false') drawCard();
+  else if (race && race.phase === 'cd') {
+    const s = race.cdT < SET_AT ? 'Paikoillenne…' : 'Valmiit…';
+    big(s, '#fff');
+    if (warn > 0) small('Odota laukausta!', '#ffd166');
+  } else if (race && race.phase === 'run' && race.clock < 0.8) big('PAM!', '#ffd166');
+  else if (race && me && me.fin !== null && race.phase === 'run') big(place(me) + '. maaliin!', '#7ee081');
+  texts.forEach(tt => { x.globalAlpha = 1 - tt.t; small(tt.s, '#ff9a8b', -tt.t * 30); x.globalAlpha = 1; });
+}
+// The starter calls the start back and shows the card to whoever went early.
+function drawCard() {
+  const fs = race.fs, r = fs && race.runners.find(o => o.id === fs.id);
+  const y0 = trackTop + 10, h = 212;
+  x.fillStyle = 'rgba(10,20,40,.88)'; rr(20, y0, W - 40, h, 16); x.fill();
+  x.textAlign = 'center'; x.font = '900 28px system-ui'; x.fillStyle = '#ff9a8b';
+  x.fillText('Varaslähtö!', W / 2, y0 + 40);
+  if (!r) return;
+  const red = fs.card >= 2, cw = 44, ch = 62, cy = y0 + 58;
+  x.save(); x.translate(W / 2, cy + ch / 2); x.rotate(0.12);
+  x.fillStyle = red ? '#e5383b' : '#ffd60a'; rr(-cw / 2, -ch / 2, cw, ch, 6); x.fill();
+  x.restore();
+  const who = r === me ? (red ? 'Punainen kortti: olet ulkona' : 'Sinulle keltainen kortti')
+    : r.name + ': ' + (red ? 'punainen kortti' : 'keltainen kortti');
+  const sub = r === me ? (red ? 'Kaksi varaslähtöä' : 'Toisesta tulee punainen') : red ? 'Ulos radalta, muut lähtevät uudestaan' : 'Lähtö uudestaan';
+  x.font = '800 18px system-ui'; x.fillStyle = red ? '#ff9a8b' : '#ffd166';
+  x.fillText(who, W / 2, cy + ch + 34);
+  x.font = '600 15px system-ui'; x.fillStyle = '#fff';
+  x.fillText(sub, W / 2, cy + ch + 58);
+}
+function big(s, col) {
+  x.textAlign = 'center'; x.font = '900 34px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = trackTop + 40; x.strokeText(s, W / 2, y); x.fillStyle = col; x.fillText(s, W / 2, y);
+}
+function small(s, col, dy = 0) {
+  x.textAlign = 'center'; x.font = '800 20px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = trackTop + 72 + dy; x.strokeText(s, W / 2, y); x.fillStyle = col; x.fillText(s, W / 2, y);
+}
+
+// Three pads: left foot, jump, right foot. The foot to press next glows.
+function pads() {
+  const w3 = W / 3, y = ctrlTop + 6, h = ctrlH - 12;
+  return [{ k: 1, x: 6, y, w: w3 - 9, h }, { k: 3, x: w3 + 3, y, w: w3 - 6, h }, { k: 2, x: 2 * w3 + 3, y, w: w3 - 9, h }];
+}
+function drawControls() {
+  x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop);
+  const next = me && me.foot === 1 ? 2 : 1;
+  for (const b of pads()) {
+    const glow = b.k !== 3 && race && race.phase === 'run' && me && me.fin === null && b.k === next;
+    x.fillStyle = flash[b.k] > 0 ? '#ffe08a' : b.k === 3 ? '#ffb703' : glow ? '#4f7fc4' : '#2c4a75';
+    rr(b.x, b.y, b.w, b.h, 18); x.fill();
+    x.fillStyle = b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    x.font = '900 34px system-ui';
+    x.fillText(b.k === 3 ? '⤒' : '👟', b.x + b.w / 2, b.y + b.h / 2 + 4);
+    x.font = '800 14px system-ui';
+    x.fillText(b.k === 1 ? 'Vasen' : b.k === 2 ? 'Oikea' : 'Hyppää', b.x + b.w / 2, b.y + b.h / 2 + 30);
+  }
+}
+
+function drawResults() {
+  const res = race.results, rowH = 30, h = 60 + rowH * res.length, y0 = trackTop + 10;
+  x.fillStyle = 'rgba(10,20,40,.88)'; rr(20, y0, W - 40, h, 16); x.fill();
+  x.fillStyle = '#ffd166'; x.textAlign = 'center'; x.font = '900 22px system-ui';
+  x.fillText('Tulokset', W / 2, y0 + 34);
+  res.forEach((r, i) => {
+    const y = y0 + 64 + i * rowH, mine = i === race.mine;
+    x.fillStyle = r.color; x.beginPath(); x.arc(44, y - 6, 7, 0, 7); x.fill();
+    x.textAlign = 'left'; x.font = (mine ? '900 ' : '600 ') + '17px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+    const name = race.mode === 'net' && r.id === R.me ? 'Sinä' : r.name;
+    x.fillText((i + 1) + '. ' + name, 58, y);
+    x.textAlign = 'right'; x.fillText(r.dq ? 'Hylätty' : r.fin === null ? '–' : fmt(r.fin), W - 36, y);
+  });
+}
+
+// ---------- Input ----------
+function press(k) {
+  unlock();
+  if (!race || !me || race.phase === 'done') return;
+  flash[k] = 0.09;
+  if (k === 3) jump(me); else step(me, k);
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (e.clientY < ctrlTop) { press(3); return; } // a tap on the track jumps too
+  const b = pads().find(p => e.clientX >= p.x - 4 && e.clientX <= p.x + p.w + 4);
+  if (b) press(b.k);
+});
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
+  else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
+  else if (e.key === ' ' || e.key === 'ArrowUp') press(3);
+});
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja muut';
+  document.getElementById('stats').textContent = 'Juoksut ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
+  menu.classList.remove('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); soloRace(); });
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="aitajuoksu" data-order="low" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
