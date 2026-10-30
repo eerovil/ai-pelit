@@ -150,6 +150,14 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 - The phone downloads the library (about 420 KB compressed) the first time it opens a 3D game,
   and `sw.js` keeps it for offline play. `scripts/build.py` refuses a version that loads a
   `lib/` file that is not there.
+- Turning an existing 2D game into 3D (Hiihto v7, #103): keep its classic `<script>`, so its
+  functions stay global for its tests and for the inline scripts after it, and load three.js with
+  `import('../../../lib/three-r187/three.module.js').then(m => …)`. Put the WebGL canvas under the
+  game's own canvas (`pointer-events:none` on it) and keep drawing the menus and HUD on the 2D one,
+  cleared each frame. Vertex colours are linear: fill them from `new THREE.Color('#hex')`.
+- A cheap phone is short of pixels, not of shapes: on a 2017 Huawei P8 lite, shadows and the pixel
+  ratio decided the frame rate, a thousand instanced spruces hardly did. Measure the first seconds of
+  play and step the pixel ratio down, then the shadows off (`tune()` in Hiihto v7).
 - `tests/fixtures/three-demo.html` is a complete small example (a lit, spinning cube), and
   `tests/test_lib_three.py` shows how to check a 3D game draws (headless Chromium has WebGL).
 

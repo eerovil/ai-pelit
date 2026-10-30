@@ -43,6 +43,13 @@
       "note": "Napautus osuu valikossa nappiin, johon sormi osuu, eikä sen alapuolelle, ja kisa toimii myös kolmen tai useamman kaverin kanssa.",
       "request": "Hiihtopelin main menu, täppäykset ottaa ns. Liian ylhäältä. Pitää painaa napin yläpuolelle. Lisäksi varmista että moninpeli toimii useammalla kuin 2",
       "issue": "eerovil/ai-pelit#93"
+    },
+    {
+      "n": 7,
+      "date": "2026-10-30",
+      "note": "Oikea 3D: latu, hiihtäjät, kuuset ja mäet piirretään kolmiulotteisina, kamera hiihtäjän takana, valot ja varjot; pelaaminen pysyy samana.",
+      "request": "Jatkoa #99:lle: kokeillaan uutta jaettua 3D-moottoria (three.js, `lib/three-r187/`) muuttamalla olemassa oleva peli oikeaksi 3D:ksi.\n\nTehdään Hiihdosta uusi versio, joka piirtää ladun, hiihtäjät ja maiseman (lumi, kuuset, mäet) three.js:llä: oikea kamera hiihtäjän takana, valot ja varjot. Pelattavuus, ohjaus, perinteinen ja luistelu, ohitukset, vastaantulijat, voitelu ja kaverien kanssa hiihto pysyvät samoina, ja vanhat tallennukset toimivat.\n\nTarkoitus on testata, että three.js toimii puhelimella sujuvasti (myös ilman verkkoa) ja että AGENTS.md:n 3D-ohjeilla muutos onnistuu helposti. Kerro PR:ssä, miten peli pyöri puhelinkokoisella näytöllä ja jäikö ohjeisiin aukkoja.",
+      "issue": "eerovil/ai-pelit#103"
     }
   ]
 }

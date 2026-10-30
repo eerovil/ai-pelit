@@ -37,6 +37,7 @@ export const GAMES = {
   aitajuoksu: { order: 'low', boards: /^(main|(200|400)-aidat|(100|200|400)-tasainen)$/ },
   kaaosrata: { order: 'low', boards: /^main$/ }, // fastest obstacle course, seconds
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
+  orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
 };
 
 const ID = /^[a-f0-9]{32}$/;

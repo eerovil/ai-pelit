@@ -61,6 +61,8 @@
     kaaosrata: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('kaaosrata', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
     trampoliini: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('trampoliini', 'taso'); } },
+    // Most points in one go at a level; level: 'taso', the level the player is on.
+    orava: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('orava', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }

@@ -1,6 +1,6 @@
 # Hiihto: one race, from the style and wax to the finish
 
-How one race of Hiihto plays (v1–v7). v7 (#95) plays the same race with the phone on its side: the menu and end screens in two columns, the V-step button and the skating pads in the lower corners, the road button lower right (see `docs/diagrams/landscape.md`). From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
+How one race of Hiihto plays (v1–v7). From v7 the world is drawn in real 3D with three.js; the play is v6's. From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
 (perinteinen) or skating (luistelu); a race with friends skis the host's course and style. The
 player picks a wax for the day's weather (a grip wax for classic, a glide wax for skating), then
 skis to the finish. Slower skiers are overtaken from another lane, running into anyone is a fall,
@@ -22,7 +22,8 @@ flowchart TD
   K2 -- Kyllä --> K3[Odotetaan, että kaikki voitelevat]
   K2 -- Ei --> F[Lähtö: 3, 2, 1, Hiihdä!]
   K3 --> F
-  F --> G{Millainen mäki?}
+  F --> D3[3D: kamera hiihtäjän takana, valot ja varjot]
+  D3 --> G{Millainen mäki?}
   G -- Tasainen tai loiva --> H[Napauta tahdissa: potku]
   G -- Jyrkkä ylämäki --> I[V-nappi päälle: V-käynti]
   G -- Alamäki --> J[Sormi ruudulle: laskuasento]
@@ -47,7 +48,7 @@ flowchart TD
   S2 -- Ei --> U[Sama taso uudestaan]
   T --> K4[Kavereiden kanssa: sijat, ensimmäinen maalissa voittaa]
   U --> K4
-  class A,F blue
+  class A,F,D3 blue
   class Y,S,B,G,K,K2,O,R,S2,TIE amber
   class C,P,T green
   class D,E,Q,U rose
@@ -58,7 +59,7 @@ flowchart TD
 
 ## Colours
 
-- **blue**: the start of a level
+- **blue**: the start of a level, and how it is drawn
 - **amber**: a choice or check that decides the path
 - **teal**: the ways of moving, by the style and the shape of the trail
 - **violet**: overtaking, and the race with friends
@@ -67,9 +68,10 @@ flowchart TD
 
 ## Boxes
 
-- **Yksin vai kavereiden kanssa?**: `games/hiihto/v3/index.html` and `v4` `drawWax()`: alone, the panel before the race has the style switch, the level arrows and "👥 Pelaa kavereiden kanssa", which opens the shared room screen (`public/rooms.js`). From v5 that button sits 30 px below the waxes (8 px in v3–v4) and opens only on a finished tap (down and up on it), so a tap aimed at a wax never opens the friends game. From v6 the menu is drawn for the canvas's own box on the screen and a finger is read against that box (`resize()`, `at()`); v5 drew for the window's height but stretched the canvas to `100dvh`, so on some phones the buttons showed lower than where a tap landed. From v7, sideways, this panel is two columns (style, level and weather left; waxes and the friends button right), and the shared room screen is two columns too.
+- **Yksin vai kavereiden kanssa?**: `games/hiihto/v3/index.html` and `v4` `drawWax()`: alone, the panel before the race has the style switch, the level arrows and "👥 Pelaa kavereiden kanssa", which opens the shared room screen (`public/rooms.js`). From v5 that button sits 30 px below the waxes (8 px in v3–v4) and opens only on a finished tap (down and up on it), so a tap aimed at a wax never opens the friends game. From v6 the menu is drawn for the canvas's own box on the screen and a finger is read against that box (`resize()`, `at()`); v5 drew for the window's height but stretched the canvas to `100dvh`, so on some phones the buttons showed lower than where a tap landed.
 - **Tyyli: perinteinen vai luistelu?**: `setStyle()` saves the pick in `ai-pelit:hiihto:tyyli`; v1 and v2 saves stay as they were and are classic. The opened levels (`taso`) are shared by both styles.
 - **Isäntä valitsee huoneessa radan ja tyylin**: `roomControls()` puts the level arrows and the two styles under the player list through `AiPelitRooms.extra()`; the others see who picks. At "Aloita kierros" `netStart()` sends everyone the host's level, style and a seed, so every phone has the same course and the same grannies and skaters to start with. A friend's own saved style is not changed.
+- **3D: kamera hiihtäjän takana, valot ja varjot**: `games/hiihto/v7/index.html` loads three.js from the shared `lib/three-r187/` (`import()` in the game's own script, so the rest of the game and its tests stay as v6's). `build3d()` lays the land, the trail's lanes and tracks, the road, the spruces (two instanced meshes: those beside the trail cast shadows, a forest further out does not), the banners and posts, once per course; `skiers3d()` poses a simple jointed skier (`makeRig()`, `pose()`) for everyone in sight from the same numbers v6 drew from; `render3d()` puts the camera 5 m behind and 2.5 m above the skier and moves the sun's shadow box with them. The menus, HUD, speech bubbles (`screenOf()`) and snowfall are still drawn on the 2D canvas over it. `tune()`: on a phone below 40 frames a second it draws fewer pixels, then drops shadows below 28. With no WebGL the game still plays and says the phone cannot draw 3D.
 - **Taso ja keli: lämpötila ja lumi**: `weatherFor()`: levels 1-10 have set temperatures (`TEMPS`), later ones a random one from −18 to +3 °C. `buildCourse()` makes the course: 500 m at level 1, 100 m more each level, at most 1500 m; the second hill is always steep. The time limit is set for the style (`idealTime()` skis it with `botStep()`).
 - **Valitse voide**: classic shows four grip waxes (`WAXES`), skating four glide waxes (`GLIDES`), each with its temperature range.
 - **Lipsuu mäissä**: `waxFit()`: a grip wax made for colder weather loses 14 % of its grip per degree above its range (at least 35 % left), so kicks slip on climbs that a right wax holds.
