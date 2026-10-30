@@ -109,3 +109,35 @@ def test_two_phones_still_play_in_a_room(site, browser):
     guest.wait_for_function("state === 'done' && document.querySelector('#aipr-result').innerText.length > 0")
     assert guest.locator("#aipr-result").inner_text() == "Häviö 3–11"
     assert host.errors == guest.errors == []
+
+
+def test_a_new_match_after_a_win_is_against_a_stronger_opponent(site, context):
+    page = alone(site, context)
+    before = page.evaluate("[players[1].speed, players[1].err, players[1].aim]")
+    page.evaluate("score = [11, 5]; state = 'point'; pauseT = 0; update(1 / 60)")
+    assert page.evaluate("state") == "done"
+    assert "Voitit 11–5" in page.inner_text("#result")
+    page.click("#go")
+    after = page.evaluate("[players[1].speed, players[1].err, players[1].aim, level, score.join('-'), state]")
+    assert after[3:] == [2, "0-0", "serve"]
+    assert after[0] > before[0] and after[1] < before[1] and after[2] > before[2]
+    # The still player still loses against the new opponent.
+    won, lost = page.evaluate(STILL.replace("level = 1;", "level = 2;"), [-2.0, "1v1", 20])
+    assert won <= 6
+
+
+def test_plays_on_a_390_px_phone(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.click("#m2")
+    page.click("#go")
+    page.evaluate("press(mine)")
+    page.wait_for_function("crossings >= 1", timeout=4000)
+    # The whole court and the buttons fit: both end lines and the jump button are on the screen.
+    assert page.evaluate("sx(-COURT) > 0 && sx(COURT) < W && buttons[2].x + buttons[2].r <= W")
+    assert errors == []
+    ctx.close()
