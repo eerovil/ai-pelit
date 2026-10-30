@@ -40,10 +40,13 @@ GAME_FILES_BUILD_CHECKS = {"game.json", build.THUMB}
 class Changes:
     """What a pull request changes, as far as choosing its tests goes."""
 
-    def __init__(self, paths: list[str]):
+    def __init__(self, paths: list[str], new: list[str] = ()):
         self.games = changed_games(paths)
         self.versions = changed_versions(paths)
-        self.whole_games = whole_games_changed(paths)
+        # A test file new on this branch runs itself only: no other test imports it yet, and a new
+        # version always brings one (#116). An edited test file may be imported, so it runs its game.
+        self.whole_games = whole_games_changed([p for p in paths if p not in set(new)])
+        self.test_files = {p.split("/")[1] for p in paths if p.startswith("tests/") and p.count("/") == 1}
 
 
 def pytest_addoption(parser):
@@ -58,14 +61,16 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "alone: a heavy 3D test that runs one at a time, never beside others")
     ref = config.getoption("--changed-since")
     if ref:
-        config.stash[CHANGES] = Changes(changed_paths(ref))
+        config.stash[CHANGES] = Changes(changed_paths(ref), changed_paths(ref, only_new=True))
 
 
-def changed_paths(ref: str) -> list[str]:
-    """Every path changed on this branch since it left REF, committed or not; none if git can't say."""
+def changed_paths(ref: str, only_new: bool = False) -> list[str]:
+    """Every path changed on this branch since it left REF, committed or not; none if git can't say.
+    With only_new, just the paths that did not exist at REF (added, or not yet known to git)."""
     paths = []
+    added = ["--diff-filter=A"] if only_new else []
     # -z: names as they are, never split at a space or quoted for a letter like ä.
-    for cmd in (["diff", "-z", "--name-only", f"{ref}...HEAD"], ["diff", "-z", "--name-only", "HEAD"],
+    for cmd in (["diff", "-z", "--name-only", *added, f"{ref}...HEAD"], ["diff", "-z", "--name-only", *added, "HEAD"],
                 ["ls-files", "-z", "--others", "--exclude-standard"]):
         run = subprocess.run(["git", *cmd], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         if run.returncode != 0:
@@ -154,7 +159,7 @@ def runs(item, changes: Changes) -> bool:
     if item.get_closest_marker("games"):
         return bool(games & changes.games)
     (slug,) = games
-    if slug in changes.whole_games:
+    if slug in changes.whole_games or item.path.name in changes.test_files:
         return True
     changed = changes.versions.get(slug, set())
     if not changed:

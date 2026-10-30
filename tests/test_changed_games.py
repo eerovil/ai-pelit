@@ -61,7 +61,7 @@ def test_when_git_cannot_say_no_game_is_tested():
     assert changed_games([]) == set()
 
 
-def selection(tmp_path, *changes: str) -> tuple[list[str], str]:
+def selection(tmp_path, *changes: str | tuple[str, str]) -> tuple[list[str], str]:
     """Collect a small repository's tests after `changes`, as CI does on a pull request."""
     import shutil
     import subprocess
@@ -99,9 +99,11 @@ def selection(tmp_path, *changes: str) -> tuple[list[str], str]:
     subprocess.run([*git, "add", "-A"], cwd=repo, check=True)
     subprocess.run([*git, "commit", "-qm", "base"], cwd=repo, check=True)
     for change in changes:
+        # A change is a path to touch, or (path, text) for a new file.
+        change, text = change if isinstance(change, tuple) else (change, "\n")
         (repo / change).parent.mkdir(parents=True, exist_ok=True)
         with open(repo / change, "a") as f:
-            f.write("\n")
+            f.write(text)
     run = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--co", "--changed-since", "HEAD"],
                          cwd=repo, capture_output=True, text=True)
     assert run.returncode == 0, run.stdout + run.stderr
@@ -151,6 +153,13 @@ def test_a_version_no_test_file_names_runs_all_of_its_game(tmp_path):
 def test_a_change_to_one_of_a_game_s_test_files_runs_all_of_them(tmp_path):
     kept, _ = selection(tmp_path, "tests/test_delta_v2.py")
     assert kept == ["test_delta_any", "test_delta_v1", "test_delta_v2", "test_shared_any"]
+
+
+def test_a_new_version_with_its_own_new_test_file_runs_only_that_file(tmp_path):
+    # As every new version comes: its folder and a new test file. The new file is imported by no
+    # other test yet, so it does not run the game's older tests.
+    kept, _ = selection(tmp_path, "games/delta/v4/index.html", ("tests/test_delta_v4.py", "def test_delta_v4(): pass\n"))
+    assert kept == ["test_delta_any", "test_delta_v4", "test_shared_any"]
 
 
 def test_only_game_json_or_the_thumbnail_runs_none_of_the_game_s_own_tests(tmp_path):

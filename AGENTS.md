@@ -172,7 +172,8 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
   that plays a game with `@pytest.mark.games("<slug>")`. Within a game only the test files of the
   changed versions run (#116): a file tests the `_v<N>` in its name and every `games/<slug>/v<N>`
   written in it. So a new version's tests go in `tests/test_<slug>_v<N>.py`, or name its folder.
-  A change to any of the game's test files runs all of them; a version no file names does too.
+  Editing an existing test file of the game runs all of them (they import each other); a new test
+  file runs only itself; a version no file names runs all of them.
   CI runs them on four workers (`-n 4 --dist loadfile -m "not alone"`, pytest-xdist), then the
   tests of 3D games (versions that load `lib/three`, marked `alone` by `tests/conftest.py`) one at
   a time with `-m alone`: beside other Chromiums their timed races fail. Run both locally to match. When you change a shared file

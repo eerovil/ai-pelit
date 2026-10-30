@@ -11,7 +11,7 @@ flowchart TD
   A[Pull request opened or pushed] --> B[Changed paths since origin/main]
   B --> C{Test file tied to a game?}
   C -- No --> S[Shared test: always runs]
-  C -- Yes --> D{Did a test file of that game change?}
+  C -- Yes --> D{Was an older test file of that game edited?}
   D -- Yes --> R[Runs]
   D -- No --> E{Does the change touch a version this file tests?}
   E -- Yes --> R
@@ -51,7 +51,7 @@ flowchart TD
 
 - **Changed paths since origin/main**: `changed_paths()` in `tests/conftest.py`: `git diff` against the base, plus uncommitted and new files.
 - **Test file tied to a game?**: `games_of()` in `tests/conftest.py`: the file is `tests/test_<slug>*.py`, or its tests carry `@pytest.mark.games("<slug>")`.
-- **Did a test file of that game change?**: any `tests/test_<slug>*.py` in the change. Then every test file of that game runs, because they import helpers from each other (`test_kirkkis_v4.py` imports from `test_kirkkis_v3.py`).
+- **Was an older test file of that game edited?**: a `tests/test_<slug>*.py` that already existed on `main` and changed (`whole_games_changed()`). Then every test file of that game runs, because they import helpers from each other (`test_kirkkis_v4.py` imports from `test_kirkkis_v3.py`). A test file new on the branch, as each new version brings, runs only itself: no other test imports it yet.
 - **Does the change touch a version this file tests?**: a file's versions are the `_v<N>` in its name plus every `games/<slug>/v<N>` written in it (`versions_of_test_file()`, new). `test_areena.py` names `games/areena/v3`, so it runs for v3; `test_voimistelu_v4.py` builds its address from a parameter but its name gives v4. A changed version that no test file names (a new version with no tests of its own) runs every test file of its game, as before.
 - **File names no version at all?**: the safe fallback: a game test file that names no version runs whenever its game changes.
 - **Does the change touch the game's folder?**: only `game.json` and `thumb.webp` changing (a new version always adds a `v<N>/` folder too) runs none of the game's tests; `scripts/build.py` already checks both.
