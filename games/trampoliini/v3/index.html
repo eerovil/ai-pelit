@@ -138,8 +138,10 @@ let squat = false, squatId = null, bend = 0, kick = 0;
 // throws you the way you lean, SLIDE m/s per radian of lean; the mat pulls you back to the
 // middle less than in v2, so a few sloppy landings in a row walk you to the edge. Without a net
 // the slide is capped so that the steepest clean lean (0.5 rad) at full height carries you at
-// most 45 % of the way to the edge in one bounce: only several leaning landings take you off.
-const SLIDE = 3, CLEAN_LEAN = 0.5, ONE_BOUNCE = 0.45;
+// most 45 % of the way to the edge in one bounce; takeoff() then caps every sideways push
+// together (the slide, a flip's drift, speed left from the last bounce) to 30 % of the way per
+// bounce, so only several leaning landings in a row take you off.
+const SLIDE = 3, CLEAN_LEAN = 0.5, ONE_BOUNCE = 0.45, MAX_BOUNCE = 0.3;
 // A lean this steep (rad) or more says it slides, on every trampoline whatever its slide speed.
 const SLIDE_SHOWN = 0.25;
 const slideOf = t => t.net ? SLIDE
@@ -244,7 +246,10 @@ function land() {
   // Leaning back (head behind, a > 0) sends you back (-x), leaning forward sends you forward.
   const slide = -Math.sin(wrap(J.a)) * slideOf(T);
   J.vx = J.vx * 0.5 - J.x * 0.3 + slide;  // the mat pulls you in a little
-  if (Math.abs(wrap(J.a)) >= SLIDE_SHOWN) pop(slide < 0 ? '← Liukuu taaksepäin' : 'Liukuu eteenpäin →', '#e0fbfc', true);
+  // Say it only when you really go that way: off the middle the mat's pull can win.
+  if (Math.abs(wrap(J.a)) >= SLIDE_SHOWN && Math.sign(J.vx) === Math.sign(slide)) {
+    pop(slide < 0 ? '← Liukuu taaksepäin' : 'Liukuu eteenpäin →', '#e0fbfc', true);
+  }
   J.twist = J.twists = 0; J.w = 0; J.dir = 0;
   J.landA = wrap(J.a); J.a = J.landA;
   phase = 'mat';
@@ -291,6 +296,12 @@ function takeoff() {
   if (J.queued) {
     J.dir = J.queued; J.w = J.dir * OPEN; J.vx -= J.dir * DRIFT;
     if (held) held = J.dir;
+  }
+  // Without a net, everything that moves you sideways together carries you at most MAX_BOUNCE
+  // of the way to the edge in one bounce, the flight and the next time on the mat.
+  if (!T.net) {
+    const cap = MAX_BOUNCE * (T.half + 0.15) / (airtime(v) + CONTACT * 0.3);
+    J.vx = Math.max(-cap, Math.min(cap, J.vx));
   }
   if (J.queuedTwist) J.twists = 1;
   J.queued = 0; J.queuedTwist = false;

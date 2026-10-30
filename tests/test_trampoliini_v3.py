@@ -134,3 +134,55 @@ def test_every_trampoline_says_when_a_lean_slides_you_and_which_way(site, contex
         assert said[0] == [["← Liukuu taaksepäin"], -1], (tramp, said)
         assert said[1] == [["Liukuu eteenpäin →"], 1], (tramp, said)
         assert said[2][0] == [], (tramp, said)   # a slight lean slides a little, unannounced
+
+
+def test_back_flips_started_from_the_mat_and_landed_leaning_take_several_landings_to_go_off(site, context):
+    page = open_game(site, context)
+    for tramp in ("pieni", "mini", "kilpa", "jatti"):
+        # As a player would: push at the bottom, press ↺ Taakse on the mat (it starts the flip
+        # with its drift), let go late in the turn, and land every time 0.49 rad past upright.
+        r = page.evaluate("""(name) => { const s = window.__step;
+          T = TRAMPS[name]; hearts = 9; stand(0); J.vin = T.vMax;
+          const xs = [];
+          for (let k = 0; k < 6; k++) {
+            while (phase === 'mat' && J.matT < CONTACT / 2) s(1 / 60);
+            if (phase !== 'mat') break;
+            press(1);                                   // the real button path: pump and flip
+            while (phase === 'mat') s(1 / 60);
+            while (phase === 'air' && Math.abs(J.rot) < 2 * Math.PI - 1.2) s(1 / 60);
+            release();
+            while (phase === 'air' && !J.off && !(J.vy < 0 && J.y + J.vy / 60 <= COMH)) s(1 / 60);
+            if (J.off || phase !== 'air') break;
+            J.a = 2 * Math.PI + 0.49; J.rot = J.a; s(1 / 60);
+            if (phase !== 'mat' || !lastLand.clean) break;
+            xs.push(J.x);
+          }
+          return { name, xs, off: J.off, half: T.half }; }""", tramp)
+        assert len(r["xs"]) >= 3, r
+        assert abs(r["xs"][0]) > 0.1 * r["half"], r
+
+
+def test_off_the_middle_the_slide_label_only_says_the_way_you_really_go(site, context):
+    page = open_game(site, context, level=4)
+    assert page.evaluate("T.name") == "Kilpatrampoliini"
+    seen = page.evaluate("""() => { const s = window.__step, out = [];
+      for (const x0 of [-2.25, -1, 0, 1, 2.25]) for (const tilt of [0.26, -0.26, 0.45, -0.45]) {
+        stand(x0); J.vin = 6; while (phase === 'mat') s(1 / 60);
+        J.vx = 0; J.x = x0;
+        while (!(J.vy < 0 && J.y + J.vy / 60 <= COMH)) s(1 / 60);
+        J.x = x0; pops = []; J.a = tilt; J.rot = tilt; s(1 / 60);
+        const said = pops.map(p => p.text).filter(t => t.includes('Liukuu'));
+        out.push([x0, tilt, said, J.vx]);
+      }
+      return out; }""")
+    for x0, tilt, said, vx in seen:
+        if said == ["← Liukuu taaksepäin"]:
+            assert vx < 0, (x0, tilt, vx)
+        elif said == ["Liukuu eteenpäin →"]:
+            assert vx > 0, (x0, tilt, vx)
+        else:
+            assert said == [], (x0, tilt, said)
+    # In the middle the lean always shows.
+    assert all(said for x0, tilt, said, vx in seen if x0 == 0)
+    # At the back edge leaning back, the mat's pull wins: no "taaksepäin".
+    assert ["← Liukuu taaksepäin"] not in [said for x0, tilt, said, vx in seen if x0 == -2.25 and tilt == 0.26]
