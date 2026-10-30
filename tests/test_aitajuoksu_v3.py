@@ -118,6 +118,9 @@ def test_in_a_room_the_hosts_race_is_everyones(site, browser):
         p.wait_for_function("race && race.mode === 'net' && race.dist === 200 && !race.hurdles && TRACK === 200 && H_N === 0", timeout=6000)
     # The guest's own menu choice stays its own.
     assert guest.evaluate("[dist, hurdles]") == [100, True]
+    # A guest that reloads before the gun gets the host's race again.
+    guest.reload()
+    guest.wait_for_function("race && race.mode === 'net' && race.dist === 200 && !race.hurdles && TRACK === 200", timeout=8000)
     host.evaluate("race.gunAt = 0.05")
     for p in pages:
         p.wait_for_function("race.phase === 'run'", timeout=4000)
