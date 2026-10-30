@@ -8,18 +8,12 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#141a2e;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif}
   canvas{display:block;width:100vw;height:100dvh;touch-action:none}
-  #dropbar{position:fixed;left:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 62px);display:flex;gap:8px}
-  #dropoff{display:none}
-  #dropbar.on #dropoff{display:block}
-  #drop,#dropoff{padding:7px 12px;border-radius:16px;border:1px solid #4a5680;background:rgba(20,26,46,0.85);color:#cfd6ee;font:600 13px system-ui,sans-serif;touch-action:manipulation}
-  #dropbar.on button{border-color:#ffd45c;color:#ffd45c}
   #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="safe"></div>
-<div id="dropbar"><button id="drop" type="button"></button><button id="dropoff" type="button">✕</button></div>
 <script>
 const c = document.getElementById('c'), x = c.getContext('2d');
 let W, H, DPR, SAFE_T = 0, SAFE_B = 0;
@@ -104,7 +98,6 @@ let pk = 0;         // the legs' own pike under the low bar
 let hold = false;   // a finger is down
 let tau, tauT, facing; // twist angle, where the twist is going, which way the chest faced at the start
 let arm = 0, armT = 0, armK = 1; // the arms' turn at the shoulders, where it is going, how far they reach (bent elbows under 1)
-let dropTest = sessionStorage.getItem('voimistelu-drop') === '1'; // PROTOTYPE ONLY
 // v5: just after a catch the body hangs on a real joint at the shoulders for a moment (see jointStep()).
 // The body is two masses on a rod, at the shoulders and near the feet, chosen to keep its centre of mass
 // and its own inertia (IC_EXT); the arms are a massless rod from the bar to the shoulders.
@@ -121,11 +114,6 @@ function newRoutine() {
   arm = armT = 0; armK = 1; jt = null;
   flight = null; lastCross = 0; elements = []; deductions = []; touch = null; result = null; popups = [];
   syncBar(); camX = 0.6; camY = 0;
-  if (dropTest) {
-    // PROTOTYPE ONLY (#84): fall from above the bars at a random spot, the body open at a random angle.
-    launchAir({ from: 0, x: -0.5 + Math.random() * 2.8, y: 1.6, vx: Math.random() - 0.5, phi: Math.random() * TAU });
-    flight.t = 1; camX = pos[0]; camY = 0.5;
-  }
 }
 
 function syncBar() {
@@ -613,16 +601,6 @@ function drawResult() {
   if (resultT > 0.8) text('Napauta: uusi suoritus', W / 2, py + ph - 20, 14, '#b8c2e0');
   resultLayout = { rows: shown.length, totalY, recordY: y - 22, tapY: py + ph - 20, bottom: py + ph };
 }
-
-// PROTOTYPE ONLY: the drop test switch; on, each routine starts with a fall from above the bars.
-const dropBtn = document.getElementById('drop');
-const dropOff = document.getElementById('dropoff'), dropBar = document.getElementById('dropbar');
-function showDrop() { dropBtn.textContent = dropTest ? '⬇ Pudota uudestaan' : 'Testi: pudotus ylhäältä'; dropBar.classList.toggle('on', dropTest); }
-function setDrop(on) { dropTest = on; sessionStorage.setItem('voimistelu-drop', on ? '1' : '0'); showDrop(); newRoutine(); }
-dropBar.addEventListener('pointerdown', e => e.stopPropagation());
-dropBtn.addEventListener('click', () => setDrop(true));
-dropOff.addEventListener('click', () => setDrop(false));
-showDrop();
 
 // ---- Loop ----
 newRoutine();
