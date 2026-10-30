@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from conftest import ROOT
 from test_hiihto import BOT, EMPTY, RUN
 from test_rooms_lib import Relay
@@ -129,13 +131,14 @@ def test_the_wrong_glide_wax_is_slow(site, context):
     assert page.evaluate("result.note").startswith("Luistovoide ei sopinut")
 
 
-def test_it_fits_a_small_phone(site, browser):
-    ctx = browser.new_context(viewport={"width": 360, "height": 640}, is_mobile=True, has_touch=True)
+@pytest.mark.parametrize("w,h", [(360, 640), (390, 844)])
+def test_it_fits_a_small_phone(site, browser, w, h):
+    ctx = browser.new_context(viewport={"width": w, "height": h}, is_mobile=True, has_touch=True)
     page = open_game(site, ctx)
     page.evaluate("draw()")
     boxes = page.evaluate("[...ui.wax, ...ui.styles, ui.friends].map(r => [r.x, r.y, r.x + r.w, r.y + r.h])")
     for x0, y0, x1, y1 in boxes:
-        assert 0 <= x0 and x1 <= 360 and 40 <= y0 and y1 <= 640
+        assert 0 <= x0 and x1 <= w and 40 <= y0 and y1 <= h
     # Nothing overlaps: the wax buttons sit between the style switch and the friends button.
     assert max(b[3] for b in boxes[:4]) < boxes[6][1]
     assert min(b[1] for b in boxes[:4]) > boxes[4][3]
