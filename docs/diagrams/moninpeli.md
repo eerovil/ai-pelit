@@ -22,6 +22,7 @@ flowchart TD
     L1[Huoneruutu: Luo huone tai Liity koodilla] --> L2[Koodi ja QR-koodi, pelaajalista]
     L10[Avoimet huoneet: liity napautuksella] --> L1
     L2 --> L11[🌍 Julkinen-kytkin isännällä]
+    L2 --> L12[Pelin omat valinnat pelaajalistan alla]
     L2 --> L3[Aloita kierros]
     L4[Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen]
     L5{Onko joku kierroksen puhelin poissa?}
@@ -54,7 +55,7 @@ flowchart TD
   G5 --> L7
   L7 --> L2
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12 blue
   class C1,C2 violet
   class L5,L8 amber
   class L6,G7 rose
@@ -76,6 +77,7 @@ flowchart TD
 - **🌍 Julkinen-kytkin isännällä**: the host's checkbox in the room (`net.pub`, off for a new room, kept over a reload in `ai-pelit:_huone:nyt`). `tellList()` sends the room `{t: '_list', on}`: on while public, no round runs and the room screen shows on the host (not during the game's own end screen), and again every minute while on.
 - **Julkisten huoneiden lista**: one more object of the `Room` class, named `lobby` (`lobby()` in `rooms/worker.js`). Each room's `tell()` puts itself on it while the host's `_list` is on, the host is connected, a game is named and there is space, and takes itself off otherwise. Newest first, at most 10 per game; a listing not refreshed for 3 minutes is dropped. Only `GET /api/rooms?game=` reaches it from outside (`publicRooms()` in `server/api.js`).
 - **Koodi ja QR-koodi, pelaajalista**: the code, a QR code of `<version>/?huone=<KOODI>` drawn in the page (`qrMatrix()`), and who is in, the host with 👑, someone without a connection greyed out. A QR link joins at once.
+- **Pelin omat valinnat pelaajalistan alla**: `extra(node)` in `public/rooms.js`: a game's own element shown in the room under the player list, kept up to date by the game. Hiihto v3 puts the host's level and style there (`roomControls()`).
 - **Aloita kierros**: host only, once `data-min` phones are connected. Sends `_start` with the round id and players, and fires the game's `on('start')` on every phone.
 - **Kierros alkaa: isäntä pyörittää peliä**: the game's `on('start')`. The host runs the rules and the clock, and stops the clock while `AiPelitRooms.paused`. Kirkkis: `hostStart()` makes the cast (the phones in the round, then computer players up to five), picks the seeker and sends the round (`kr`); a guest waits for it (`phase = 'wait'`), and builds its cast from it (`castFrom()`).
 - **Isäntä lähettää tilanteen monta kertaa sekunnissa**: the game's `AiPelitRooms.send()`. A phone that joined after the round began hears none of it (`net.listening` in `onMessage()`), and waits for the next round. Kirkkis: `hostSend()` (`ks`), 12 times a second, with what happened since (`happen()`).
