@@ -1,0 +1,13 @@
+{
+  "title": "Trampoliini",
+  "description": "Pompi korkealle ja tee voltteja ja kierteitä: joka tasolla on erikokoinen trampoliini.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: ponnista oikeaan aikaan, tee voltteja taakse ja eteen ja kierteitä, ja tee tason temput pihatrampoliinilla, minitrampoliinilla, kilpatrampoliinilla ja jättitrampoliinilla.",
+      "request": "Trampoliinipeli. Pitää tehdä tramppatemppuja. Eri tasoilla on eri kokoisia trampoliineja",
+      "issue": "eerovil/ai-pelit#62"
+    }
+  ]
+}
