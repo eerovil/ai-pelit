@@ -22,7 +22,8 @@ flowchart TD
     H[AgentDeck: uusi Work ai-pelit-repoon] --> L[Agentti aloittaa Workin]
     L --> M[Agentti kirjoittaa games/slug/vN/ ja game.json]
     M --> T[Agentti pelaa ja ottaa pikkukuvan games/slug/thumb.webp]
-    T --> N[PR, katselmointi, automaattinen merge]
+    T --> U[PR:n testit: vain muuttuneet pelit]
+    U --> N[PR, katselmointi, automaattinen merge]
     N --> O[Cloudflare Pages julkaisee]
     O --> B
   end
@@ -31,6 +32,7 @@ flowchart TD
   class F,G,P teal
   class H violet
   class L,M,T,N rose
+  class U amber
   class O green
 ```
 
@@ -54,4 +56,5 @@ flowchart TD
 - **AgentDeck: uusi Work ai-pelit-repoon**: Eero writes "Uusi peli: …" or "<peli> v<N>: …" straight in AgentDeck; the app no longer shows that text to copy (#33).
 - **Agentti kirjoittaa games/slug/vN/ ja game.json**: a new version is always a new folder; old version folders are never edited.
 - **Agentti pelaa ja ottaa pikkukuvan games/slug/thumb.webp**: during its own mid-play check at 360 × 740 the agent saves a screenshot and runs `scripts/make_thumb.py <slug> <screenshot>`, which crops it to 3:4 and writes a 360 × 480 WebP beside `game.json`. One per game, outside the version folders, so it may be retaken when a new version looks different. `scripts/build.py` refuses a game without one, or one that is not a 360 × 480 WebP, and copies it to `thumbs/<slug>-<hash>.webp`, a new name whenever the picture changes, so no phone keeps an old one.
+- **PR:n testit: vain muuttuneet pelit**: `.github/workflows/ci.yml` runs pytest with `--changed-since origin/main` on a pull request; `tests/conftest.py` keeps a game's own tests (`tests/test_<slug>*.py`, or marked `@pytest.mark.games("<slug>")`) only when the change touches `games/<slug>/` or those tests, and keeps every test when anything outside `games/` (other than docs) changes. A push to `main` runs everything (#37).
 - **Cloudflare Pages julkaisee**: `.github/workflows/ci.yml`: tests, then `wrangler pages deploy` to the `ai-pelit` Pages project (ai-pelit.pages.dev, custom domain pelit.vilpponen.fi) with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets; without them the job stops green. `pelit` is a CNAME to `ai-pelit.pages.dev` at hostingpalvelu.fi. Before the site, the job deploys the live rooms' Worker `ai-pelit-rooms` (`rooms/`, see `moninpeli.md`).

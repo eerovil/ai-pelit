@@ -17,7 +17,7 @@ def errors_on(page):
     return found
 
 
-def test_every_real_version_loads_without_errors(site, context):
+def test_every_real_version_loads_without_errors(site, context, changed_games_only):
     catalog = site.build(ROOT / "games")
     # The test server has no /api/: answer the play counts (#26) every page sends as the real one does.
     context.route("**/api/plays", lambda route: route.fulfill(
@@ -29,6 +29,8 @@ def test_every_real_version_loads_without_errors(site, context):
     page = context.new_page()
     found = errors_on(page)
     for game in catalog["games"]:
+        if changed_games_only is not None and game["slug"] not in changed_games_only:
+            continue
         # Back to the shelf for each game: the loop below leaves the page on a game.
         page.goto(site.url)
         assert page.locator(f'.card[data-slug="{game["slug"]}"]').is_visible()

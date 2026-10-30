@@ -125,6 +125,7 @@ def win_puhelinkoppi(page):
     assert page.evaluate("result.kind") == "win"
 
 
+@pytest.mark.games("puhelinkoppi")
 def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -156,6 +157,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v2" in text
 
 
+@pytest.mark.games("sormiskeitti")
 def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -177,6 +179,7 @@ def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     assert [s["score"] for s in fake.scores.values()] == [best_cm]
 
 
+@pytest.mark.games("sormiskeitti")
 def test_a_tap_on_the_list_never_reaches_the_game(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -189,6 +192,7 @@ def test_a_tap_on_the_list_never_reaches_the_game(site, context, fake):
     assert page.evaluate("st") == st
 
 
+@pytest.mark.games("hiihto")
 def test_hiihto_keeps_one_list_per_course(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -246,6 +250,7 @@ def test_the_admin_is_told_when_a_name_is_already_someone_elses(site, context, f
     assert fake.players["a" * 32]["status"] == "rejected"
 
 
+@pytest.mark.games("puhelinkoppi")
 @pytest.mark.parametrize("status, says", [(409, "nimi on jo käytössä"), (429, "ei voitu vielä tallentaa")])
 def test_a_refused_name_says_why_instead_of_waiting(site, context, fake, status, says):
     site.build(ROOT / "games")
@@ -276,6 +281,7 @@ def test_the_admin_never_approves_a_name_they_did_not_see(site, context, fake):
     assert fake.players["a" * 32]["status"] == "pending"
 
 
+@pytest.mark.games("hiihto")
 @pytest.mark.parametrize("refusal", [429, 403, 503])
 def test_a_score_the_server_turns_away_for_now_is_sent_later(site, context, fake, refusal):
     site.build(ROOT / "games")
@@ -293,6 +299,7 @@ def test_a_score_the_server_turns_away_for_now_is_sent_later(site, context, fake
 
 
 
+@pytest.mark.games("sormiskeitti")
 def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -325,6 +332,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 5, "level": 4}
 
 
+@pytest.mark.games("hiihto")
 def test_hiihto_sends_courses_passed(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -391,6 +399,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
 
 
+@pytest.mark.games("sormiskeitti")
 def test_a_won_level_is_sent_even_when_the_ollie_is_no_record(site, context, fake):
     """Sormiskeitti v5 hands over its score before it saves the next level: the level is read when sending."""
     site.build(ROOT / "games")
@@ -408,6 +417,7 @@ def test_a_won_level_is_sent_even_when_the_ollie_is_no_record(site, context, fak
     assert page.evaluate("localStorage.getItem('ai-pelit:_tulokset:jono')") == "{}"
 
 
+@pytest.mark.games("sormiskeitti")
 def test_a_level_won_while_a_score_is_on_its_way_is_sent_too(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
@@ -455,6 +465,7 @@ def test_a_slow_answer_for_an_earlier_course_never_shows_under_a_later_one(site,
     assert "Aino" not in page.locator(".score-list").inner_text()
 
 
+@pytest.mark.games("piano")
 def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()

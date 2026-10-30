@@ -56,6 +56,8 @@
     },
     // Most points in one game; level: the highest level reached (saved as 'taso').
     piano: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('piano', 'taso'); } },
+    // Fastest 100 m in seconds; level: 'taso', the level the player is on.
+    aitajuoksu: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('aitajuoksu', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
