@@ -116,3 +116,45 @@ def test_rolling_into_a_gap_without_a_jump_drops_the_ball(site, context):
     ramp = page.evaluate(FIRST_RAMP)
     page.evaluate(f"ball.z = -({ramp} + 1.1) * 2; ball.x = ball.aimX = row({ramp}).cx; ball.ramp = false")
     page.wait_for_function("round.phase === 'fall'", timeout=2000)
+
+
+def keep_on_the_track(page):
+    page.evaluate("setInterval(() => { ball.aimX = row(Math.floor(-ball.z / 2)).cx; }, 16)")
+
+
+FIRST_TURBO = "(() => { for (let i = 10; i < 3000; i++) if (row(i).kind === 'boost') return i; })()"
+
+
+def test_a_turbo_strip_speeds_the_ball_up_for_a_while(site, context):
+    page, _ = start(site, context)
+    turbo = page.evaluate(FIRST_TURBO)
+    # No ramp right after a turbo, so the faster jump cannot overshoot its landing.
+    assert page.evaluate(f"[...Array(35).keys()].every(n => row({turbo} + n).kind !== 'ramp')")
+    page.evaluate(f"ball.z = -{turbo} * 2 + 1; ball.x = ball.aimX = row({turbo}).cx")
+    page.wait_for_function("ball.boost > 0", timeout=3000)
+    keep_on_the_track(page)
+    assert page.is_visible("#vauhti")
+    page.wait_for_function("ball.v > 12", timeout=3000)
+    page.wait_for_function("ball.boost === 0 && ball.rush < 1", timeout=6000)
+    assert not page.is_visible("#vauhti")
+
+
+def test_a_sliding_block_bumps_the_ball_aside_and_slows_it(site, context):
+    page, _ = start(site, context)
+    i = page.evaluate("(() => { for (let i = 121; i < 3000; i++) { row(i); if (blocks.length) return blocks[0].i; } })()")
+    page.evaluate(f"""() => {{
+        const b = blocks[0]; b.sp = 0; b.ph = 0;  // parked in the middle of its row
+        ball.z = -{i} * 2 + 0.5; ball.x = ball.aimX = row({i}).cx;
+    }}""")
+    page.wait_for_function("blocks[0].hit", timeout=3000)
+    assert page.evaluate("ball.rush < 0 && Math.abs(ball.aimX - blocks[0].mesh.position.x) > 1")
+
+
+def test_the_sky_turns_to_sunset_further_on(site, context):
+    page, _ = start(site, context)
+    day = page.evaluate("document.querySelector('canvas') && window.round.zone")
+    assert day == 0
+    keep_on_the_track(page)
+    page.evaluate("ball.z = -301")
+    page.wait_for_function("round.zone === 1", timeout=3000)
+    assert page.text_content("#toast") == "Auringonlasku"
