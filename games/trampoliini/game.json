@@ -29,6 +29,13 @@
       "note": "Puolikierteet ja pidettävä kierrenappi: napautus tekee puolikierteen, pohjassa pidetty kierre jatkuu kunnes päästät irti, eikä kesken jäänyt kierre enää kaada.",
       "request": "Anna pitää kierrenappia pohjassa joten kierre jatkuu kunnes päästää irti. Voisi muuten olla puolikierre nyt myös. Ja älä kaadu jos kierre on kesken.",
       "issue": "eerovil/ai-pelit#62"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: trampoliini mahtuu ruudun korkeuteen, voltinapit ovat alakulmissa ja kierrenappi kummankin peukalon yllä.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

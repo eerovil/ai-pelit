@@ -22,6 +22,13 @@
       "note": "Vaikeampi: tietokone lyö pallon sinne, missä ei ole ketään, matalammin ja nopeammin, ja smassaa useammin.",
       "request": "liian helppo. jos seisoo vähän verkosta irti niin hahmo torjuu kaiken",
       "issue": "eerovil/ai-pelit#36"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: kenttä täyttää ruudun korkeuden, napit ovat alakulmissa peukaloiden alla ja valikko on kahdessa sarakkeessa.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

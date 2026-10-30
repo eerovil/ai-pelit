@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: estejuoksu pyörivien puomien, hyppykivien, liukuseinien, pyörivien levyjen ja heilureiden läpi seitsemää tietokonepelaajaa vastaan tai 2–8 kaverin kanssa samassa huoneessa.",
       "request": "Fall guys tyylinen peli jossa pelaajien täytyyy päästä tasohyppely läpi maaliin ja he törmäilevät toisiinsa. Esteitä ja pyöriviä esteitä jne",
       "issue": "eerovil/ai-pelit#56"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: rata näkyy keskellä isompana, aika, sija ja eteneminen ovat vasemmalla ja hyppynappi oikeassa alakulmassa.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

@@ -41,9 +41,12 @@ player sees is Finnish unless the request says otherwise.
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
    with `data-corner="top-right"`, `"bottom-left"` or `"bottom-right"` on that script tag.
-4. **Phone first.** Portrait, touch only, playable on a 360 × 640 screen, no hover, no keyboard
+4. **Phone first.** Touch only, playable on a 360 × 640 screen, no hover, no keyboard
    needed. Use `100dvh`, safe-area insets, and `touch-action: none` on the play area. Short
-   sounds through Web Audio only after the first tap.
+   sounds through Web Audio only after the first tap. Portrait first, and sideways too (#95): the
+   installed app may turn, so a new version also plays at 740 × 360 — menus and end screens fit
+   without scrolling, buttons sit where thumbs rest, and turning the phone mid-round keeps the
+   round.
 5. **Saves stay on the phone, and survive new versions.** Save only to `localStorage`, under keys
    `ai-pelit:<slug>:<name>` (keys starting `ai-pelit:_` belong to the shared scripts). All versions of a game share those keys: a new version must read
    the previous version's saved data (or migrate it in place) and never rename, reset or clear

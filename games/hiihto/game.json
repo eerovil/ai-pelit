@@ -43,6 +43,13 @@
       "note": "Napautus osuu valikossa nappiin, johon sormi osuu, eikä sen alapuolelle, ja kisa toimii myös kolmen tai useamman kaverin kanssa.",
       "request": "Hiihtopelin main menu, täppäykset ottaa ns. Liian ylhäältä. Pitää painaa napin yläpuolelle. Lisäksi varmista että moninpeli toimii useammalla kuin 2",
       "issue": "eerovil/ai-pelit#93"
+    },
+    {
+      "n": 7,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: valikko ja tulokset kahdessa sarakkeessa, V-nappi ja luistelun polkimet alakulmissa peukaloiden alla.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

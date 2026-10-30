@@ -365,6 +365,21 @@
     '#aipr-rooms button{font-size:16px;padding:8px 16px;background:#3f8ad8;box-shadow:0 4px 0 #2a5f99}',
     '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
     '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
+    // A phone on its side (#95): the room in two columns, the code and QR left and everything to
+    // tap right, so "Aloita kierros" shows without scrolling even with a full room.
+    '@media (orientation:landscape) and (max-height:500px){' +
+      '#aipr{gap:4px;padding:calc(env(safe-area-inset-top,0px) + 8px) calc(env(safe-area-inset-right,0px) + 16px) calc(env(safe-area-inset-bottom,0px) + 6px) calc(env(safe-area-inset-left,0px) + 16px)}' +
+      '#aipr h2{font-size:20px}' +
+      '#aipr-room:not([hidden]){display:grid;grid-template-columns:auto auto;column-gap:28px;row-gap:0;align-items:center;justify-items:center}' +
+      '#aipr-room>*{grid-column:2;margin-top:6px}' +
+      '#aipr-room>.row{grid-column:1;grid-row:1/span 7;flex-direction:column;gap:2px;margin:0}' +
+      '#aipr-room>.row .small{max-width:180px}' +
+      '#aipr canvas{width:96px;height:96px}' +
+      '#aipr-code{font-size:32px;margin:0}' +
+      '#aipr ul{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:3px 6px}' +
+      '#aipr li{font-size:15px;padding:2px 8px}' +
+      '#aipr button.plain{padding:2px 6px}' +
+    '}',
     '#aipr-pause{position:fixed;left:16px;right:16px;top:40%;z-index:2147483641;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px;border-radius:16px;background:rgba(30,20,40,.88);color:#fff;text-align:center;font:700 17px/1.35 system-ui,sans-serif;touch-action:manipulation}',
     '#aipr-pause p{margin:0}',
     '#aipr-pause button{font:800 16px system-ui,sans-serif;padding:9px 16px;border:0;border-radius:12px;background:#f2c94c;color:#2b2416}',

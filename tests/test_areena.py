@@ -5,7 +5,7 @@ import pytest
 from conftest import ROOT
 
 
-@pytest.mark.parametrize("version", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4"])
 def test_the_countdown_shows_3_2_1_then_fight(site, context, version):
     site.build(ROOT / "games")
     page = context.new_page()

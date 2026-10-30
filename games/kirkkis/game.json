@@ -29,6 +29,13 @@
       "note": "Oikeat huudot (”Ainon nimet!”, ”Omat nimet!”), uusi sääntö ”Kaikki pelastettu!” ja etsintäaika 200 sekuntia.",
       "request": "Kirkkiksen termistö oikeaksi ja uusi sääntö \"Kaikki pelastettu\". Pohjaksi Kirkkis v3 (`games/kirkkis/v3/`, yhteinen huonekirjasto).\n\nOmistajan päätökset (kysytty #57:ssä):\n\n**Sanat** (lähteet: [Wikipedia: Kirkonrotta](https://fi.wikipedia.org/wiki/Kirkonrotta), [Yle](https://yle.fi/a/20-57244)): vaihdetaan kaikki.\n- Etsijä pesällä nähdyistä: \"Ainon nimet!\" (nyt \"Kirkkis Aino!\"). Useampi: \"Ainon nimet, Eetun nimet!\".\n- Piiloutuja ehtii pesään ensin: \"Omat nimet!\" (nyt \"Kirkkis minä!\").\n- Tila \"Nimetty\" (nyt \"Kirkattu\"), tulos \"Sinut nimettiin!\", tilasto \"nimesit\" (nyt \"kirkkasit\").\n- Pelin nimi Kirkkis ja \"Näin Ainon!\" pysyvät. Tallennukset (`ai-pelit:kirkkis:*`, myös avaimet kuten `kirkkasit`) luetaan ennallaan.\n\n**Uusi sääntö: Kaikki pelastettu**\n- Jos joku on jo nimetty, ja sen jälkeen piiloutuja ehtii pesään ja huutaa \"Omat nimet!\", siitä tulee \"Kaikki pelastettu!\".\n- Silloin kaikki muut piiloutuvat uudestaan, myös jo pelastuneet, ja sama etsijä laskee pesällä uudestaan.\n- Etsintäkello ei nollaudu, vaan jatkuu. Kun aika loppuu, kaikki ulkona olevat pelastuvat kuten nyt.\n\n**Etsintäaika** 200 s (nyt 100 s).\n\nSama koskee kavereiden kanssa pelaamista. Kaaviot `docs/diagrams/kirkkis.md` ja tarvittaessa `moninpeli.md` päivitetään.\n",
       "issue": "eerovil/ai-pelit#67"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: piha näkyy leveämpänä, tilanne on oikeassa yläkulmassa ja valikko mahtuu ruudulle kahteen palstaan.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

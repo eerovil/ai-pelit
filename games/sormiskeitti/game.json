@@ -36,6 +36,13 @@
       "note": "Netin tuloslista: korkein ollie kaikilta pelaajilta, nimimerkki kerran puhelimelle.",
       "request": "Online high-score lists for each game (#25): a nickname once per phone, approved by the admin; one list per game across versions; no cheat checks.",
       "issue": "eerovil/ai-pelit#25"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: ramppi ja katto mahtuvat leveään ruutuun ja ohjeet lyhenevät.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

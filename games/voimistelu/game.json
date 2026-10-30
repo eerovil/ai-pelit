@@ -36,6 +36,13 @@
       "note": "Kädet kääntyvät tankoa kohti lähes heti, ja kiinnioton jälkeen vartalo heilahtaa olkanivelen varassa linjaan käsien kanssa hyppimättä.",
       "request": "Allow the arms to rotate much faster, almost instantly. / When the gymnast approaches the bar legs first, the attachment is a bit janky. / Could we temporarily have physics on, so there is a joint?",
       "issue": "eerovil/ai-pelit#84"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: sali täyttää ruudun korkeuden, tehtävä ja liikkeet ovat sivuilla ja tulostaulu jakautuu kahteen sarakkeeseen.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }

@@ -22,7 +22,7 @@ def saved(page):
     return page.evaluate("({ level, best })")
 
 
-@pytest.mark.parametrize("version", ["v3", "v4", "v5"])
+@pytest.mark.parametrize("version", ["v3", "v4", "v5", "v6"])
 def test_sormiskeitti_keeps_the_level_and_record_after_a_reload(site, context, version):
     site.build(ROOT / "games")
     page = context.new_page()

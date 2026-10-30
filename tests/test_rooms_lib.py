@@ -146,8 +146,8 @@ def phones(site, browser):
     relay = Relay()
     contexts = []
 
-    def phone(name, path="huonetesti/v2/", height=740, nickname=None):
-        ctx = browser.new_context(viewport={"width": 360, "height": height}, is_mobile=True, has_touch=True)
+    def phone(name, path="huonetesti/v2/", height=740, nickname=None, width=360):
+        ctx = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
         if name:
             ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
@@ -556,6 +556,28 @@ def test_the_room_screen_fits_a_small_phone(phones):
     for part in ["#aipr-qr", "#aipr-pub", "#aipr-start", "#aipr-back"]:
         box = host.locator(part).bounding_box()
         assert box["y"] >= 0 and box["y"] + box["height"] <= 640, part
+
+
+@pytest.mark.parametrize("width,height", [(740, 360), (640, 360)])
+def test_the_room_screen_fits_a_phone_on_its_side(phones, width, height):
+    # Sideways (#95) the room is two columns: the code and QR left, the players and buttons right.
+    host = phones("Eero", width=width, height=height)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    for n in ["Aino", "Eetu", "Iida", "Onni"]:
+        join(phones, n, code)
+    host.wait_for_function("AiPelitRooms.members.length === 5")
+    assert host.evaluate("document.getElementById('aipr').scrollHeight") <= height
+    for part in ["#aipr-qr", "#aipr-code", "#aipr-pub", "#aipr-start", "#aipr-back"]:
+        box = host.locator(part).bounding_box()
+        assert box["y"] >= 0 and box["y"] + box["height"] <= height, part
+        assert box["x"] >= 0 and box["x"] + box["width"] <= width, part
+    qr, start_ = host.locator("#aipr-qr").bounding_box(), host.locator("#aipr-start").bounding_box()
+    assert qr["x"] + qr["width"] < start_["x"]
+    host.click("#aipr-start")
+    host.wait_for_function("demo.phase === 'play'")
 
 
 def test_a_public_room_is_listed_for_the_game_and_joined_with_a_tap(phones):

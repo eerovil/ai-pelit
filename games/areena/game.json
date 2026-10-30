@@ -22,6 +22,13 @@
       "note": "Kaksintaistelu kaverin kanssa verkossa: toinen luo huoneen, toinen liittyy koodilla omalla puhelimellaan.",
       "request": "Add multiplayer",
       "issue": "eerovil/ai-pelit#3"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Peliä voi pelata myös vaakatasossa: areena on keskellä, oma palkki ja tatti vasemmalla, vastustajan palkki ja napit oikealla.",
+      "request": "Add landscape to all games where it's possible",
+      "issue": "eerovil/ai-pelit#95"
     }
   ]
 }
