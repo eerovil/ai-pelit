@@ -176,9 +176,10 @@ def room(site, browser):
 
 def test_two_phones_play_against_each_other_with_computer_teammates(room):
     host, [guest] = room("Eero", "Aino")
+    # A phone alone on its team owns no player: it steers whichever one is nearest the ball.
     assert host.evaluate("players.map(p => [p.t, p.name, p.id ? 'phone' : 'cpu'])") == [
-        [0, "Eero", "phone"], [0, "Aino", "cpu"], [0, "Onni", "cpu"],
-        [1, "Aino", "phone"], [1, "Sammal", "cpu"], [1, "Kettu", "cpu"]]
+        [0, "Ville", "cpu"], [0, "Aino", "cpu"], [0, "Onni", "cpu"],
+        [1, "Kurki", "cpu"], [1, "Sammal", "cpu"], [1, "Kettu", "cpu"]]
     assert host.evaluate("ctrls.map(k => [k.t, k.fixed])") == [[0, -1], [1, -1]]
     # Each phone sees its own team attacking up the screen: the guest's pitch is turned round.
     assert host.evaluate("view") == 1 and guest.evaluate("[view, myTeam]") == [-1, 1]
@@ -356,4 +357,19 @@ def test_a_guest_that_reloads_mid_match_gets_its_player_back(room):
     start = host.evaluate("ctrls[1].p.y")
     guest.evaluate("input.jx = 0; input.jy = -1")
     host.wait_for_function(f"ctrls[1].p.y < {start} - 1", timeout=3000)
+    assert host.errors == guest.errors == []
+
+
+def test_a_phone_alone_on_its_team_gives_its_name_to_the_player_it_steers(room):
+    host, [guest] = room("Eero", "Iida")
+    # Eero's phone steers its team's slot 1 player, not the one it started on.
+    host.evaluate("""() => { state = 'play'; const k = ctrls[0]; k.switchT = 99; k.p = players[1];
+      for (const p of players) { p.x = (p.slot - 1) * 6; p.y = p.t ? 8 : -8; }
+      players[5].x = 12; players[1].x = 1; players[1].y = 14; players[1].fx = 0; players[1].fy = 1; take(players[1]); }""")
+    guest.wait_for_function("players[1].ctl && players[1].ctl === AiPelitRooms.hostId")
+    assert guest.evaluate("[ctrlName(players[1].ctl), ctrlName(players[0].ctl)]") == ["Eero", ""]
+    host.evaluate("shoot(players[1], 0, 1, 0.5)")
+    host.wait_for_function("state === 'goal'", timeout=3000)
+    assert host.evaluate("[msg.who, msg.by === AiPelitRooms.me]") == ["Eero", True]
+    guest.wait_for_function("state === 'goal' && msg && msg.who === 'Eero'")
     assert host.errors == guest.errors == []

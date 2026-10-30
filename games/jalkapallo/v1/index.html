@@ -512,7 +512,8 @@ function goal(t) {
   score[t]++; goals++;
   // Who scored: the name, and the phone that steered the scorer (an own goal names nobody).
   const own = ball.from && ball.from.t !== t;
-  msg = { s: 'MAALI!', t, who: ball.from && !own ? ball.from.name : '', by: own ? '' : ball.by || '', own };
+  const by = own ? '' : ball.by || '';
+  msg = { s: 'MAALI!', t, who: ball.from && !own ? ctrlName(by) || ball.from.name : '', by, own };
   state = 'goal'; pauseT = 2.4; owner = null;
   whistle(false); cheer(); shake = 8;
 }
@@ -575,14 +576,15 @@ function setupFor(round, list) {
   for (const t of [0, 1]) {
     const phones = per[t];
     for (let slot = 0; slot < 3; slot++) {
-      // One phone on a team follows the ball (its slot is only where it starts); with two the
-      // keeper is the computer's; three phones play every spot.
-      const ph = phones.length === 3 ? phones[slot] : slot < phones.length ? phones[slot] : null;
+      // One phone on a team follows the ball, so no player is its own: its name goes on whichever
+      // player it steers now (ctrlName()). With two the keeper is the computer's; three phones play
+      // every spot.
+      const ph = phones.length === 1 ? null : phones.length === 3 ? phones[slot] : slot < phones.length ? phones[slot] : null;
       pl.push({ t, slot, name: ph ? ph.name : (t === 0 ? MATES : FOE_NAMES)[slot], id: ph ? ph.id : '' });
     }
   }
   const ct = [];
-  for (const t of [0, 1]) per[t].forEach((ph, i) => ct.push({ id: ph.id, t, fixed: per[t].length === 1 ? -1 : t * 3 + i }));
+  for (const t of [0, 1]) per[t].forEach((ph, i) => ct.push({ id: ph.id, name: ph.name, t, fixed: per[t].length === 1 ? -1 : t * 3 + i }));
   return { t: 'setup', round, pl, ct };
 }
 function applySetup(s) {
@@ -711,6 +713,8 @@ function setStick() {
   input.jy = (wide ? ux : -uy) * view;
 }
 const myId = () => net.on ? R.me : 'me';
+// The name of the phone that steers a player in a room ('' alone, or for the computer).
+function ctrlName(id) { const k = net.on && id && net.setup ? net.setup.ct.find(q => q.id === id) : null; return k ? k.name : ''; }
 function myCtrl() { return ctrls.find(k => k.id === myId()); }
 // The player this phone steers now (on a guest, as the host last said).
 function myPlayer() { return players.find(p => p.ctl && p.ctl === myId()) || null; }
@@ -827,7 +831,7 @@ function drawPlayer(p) {
   if (p.lunge > 0) { x.strokeStyle = 'rgba(255,255,255,.7)'; x.lineWidth = 2; x.beginPath(); x.moveTo(px - fx * r * 2, py - fy * r * 2); x.lineTo(px - fx * r * 1.2, py - fy * r * 1.2); x.stroke(); }
   // Name tag under the player.
   x.font = '700 11px system-ui'; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.55)';
-  const name = me ? 'Sinä' : p.name;
+  const name = me ? 'Sinä' : ctrlName(p.ctl) || p.name;
   x.strokeText(name, px, py + r + 13); x.fillStyle = me ? '#ffd166' : '#fff'; x.fillText(name, px, py + r + 13);
 }
 function drawBall() {
