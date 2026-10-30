@@ -36,3 +36,4 @@ https://pelit.vilpponen.fi/
   [docs/diagrams/moninpeli.md](docs/diagrams/moninpeli.md) playing with friends.
 
 Rules for agents making games: [AGENTS.md](AGENTS.md).
+Best practices for making a game that plays well: [docs/making-games.md](docs/making-games.md).
