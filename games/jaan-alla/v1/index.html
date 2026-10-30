@@ -200,7 +200,7 @@ const STATION_LOG = 'Päivä 41. Myrsky katkaisi radiomaston antennin, emmekä s
 function fresh() {
   return { v: 1, t: 0, flags: {}, inv: { ruoka: 2, romu: 0, antenni: 0, kristalli: 0 },
     m: { power: 100, food: 80, hull: 100, air: 100 }, taken: {}, cool: {},
-    sub: { ...START }, farmAt: -999, varasto: false, hungry: false };
+    sub: { ...START }, farmAt: -999, storeAt: -999, varasto: false, hungry: false };
 }
 function loadSave() {
   try { const s = JSON.parse(localStorage.getItem(KEY + 'peli')); return s && s.v ? Object.assign(fresh(), s) : null; } catch (e) { return null; }
@@ -738,17 +738,25 @@ function undock() {
   saveGame();
 }
 function stationPanel(msg) {
-  const s = G.s, f = s.flags, farmWait = s.t - s.farmAt < 120;
+  const s = G.s, f = s.flags, farmWait = s.t - s.farmAt < 120, storeWait = s.varasto && s.t - s.storeAt < 120;
   const b = [
     { t: f.stationLog ? '📖 Ohjauskeskus: lue päiväkirja uudelleen' : '📖 Ohjauskeskus: lue päiväkirja', fn: stationLog, keep: true },
     { t: farmWait ? '🐟 Vesiviljely: kalat kasvavat vielä' : '🐟 Vesiviljely: ota kalaa (+2 ruokaa)', off: farmWait, keep: true,
       fn: () => { s.inv.ruoka += 2; s.farmAt = s.t; sfx('pick'); saveGame(); stationPanel('Otit kaksi kalaa altaasta.'); } },
-    { t: s.varasto ? '📦 Varasto on tyhjä' : '📦 Varasto: ota tarvikkeet', off: s.varasto, keep: true,
-      fn: () => { s.varasto = true; s.inv.ruoka += 2; s.inv.romu += 1; sfx('pick'); saveGame(); stationPanel('Löysit kaksi säilykettä ja vähän romua.'); } },
+    // The store always turns up more scrap in time, so the radio can never become impossible to fix.
+    { t: !s.varasto ? '📦 Varasto: ota tarvikkeet' : storeWait ? '📦 Varasto: etsit jo romua, katso myöhemmin' : '📦 Varasto: etsi romua (+1 romu)',
+      off: storeWait, keep: true,
+      fn: () => {
+        const first = !s.varasto;
+        s.varasto = true; s.storeAt = s.t; s.inv.romu += 1;
+        if (first) s.inv.ruoka += 2;
+        sfx('pick'); saveGame();
+        stationPanel(first ? 'Löysit kaksi säilykettä ja vähän romua.' : 'Löysit hyllyjen takaa romua.');
+      } },
     { t: '🔧 Työpaja: korjaa runko täyteen (1 romu)', off: s.m.hull >= 100 || s.inv.romu < 1, keep: true,
       fn: () => { s.inv.romu -= 1; s.m.hull = 100; sfx('pick'); saveGame(); stationPanel('SISUn runko on taas ehjä.'); } },
   ];
-  if (f.stationLog) b.push({ t: '📡 Radiomasto: korjaa', keep: true, fn: mast });
+  if (f.stationLog) b.push({ t: f.radio ? '📡 Radiomasto toimii: kuuntele viesti' : '📡 Radiomasto: korjaa', keep: true, fn: mast });
   b.push({ t: 'Lähde telakasta', cls: 'go', fn: undock });
   panel('Aurora-asema A-3', [
     msg && { t: msg, cls: 'msg' },
@@ -767,14 +775,20 @@ function stationLog() {
 }
 function mast() {
   const inv = G.s.inv;
+  if (G.s.flags.radio) return radioMessage();
   if (!inv.antenni) return stationPanel('Maston antenni puuttuu. Ehkä Nordlysin miehistö tietää, missä se on.');
   if (!inv.kristalli) return stationPanel('Antenni on paikallaan, mutta radio tarvitsee virtaa.');
-  if (inv.romu < 2) return stationPanel(`Maston korjaukseen tarvitaan 2 romua (sinulla ${inv.romu}). Romua löytyy hylyistä.`);
+  if (inv.romu < 2) return stationPanel(`Maston korjaukseen tarvitaan 2 romua (sinulla ${inv.romu}). Romua löytyy hylyistä ja aseman varastosta.`);
   inv.romu -= 2; G.s.flags.radio = true;
   try { if (!localStorage.getItem(KEY + 'luku1')) localStorage.setItem(KEY + 'luku1', String(Math.round(G.s.t))); } catch (e) {}
   saveGame();
+  radioMessage();
+}
+function radioMessage() {
   sfx('story');
-  const min = Math.max(1, Math.round(G.s.t / 60));
+  let t = G.s.t;
+  try { t = Number(localStorage.getItem(KEY + 'luku1')) || t; } catch (e) {}
+  const min = Math.max(1, Math.round(t / 60));
   panel('Radio toimii!', [
     'Kiinnität antennin ja kristallin. Radio rätisee – ja sitten kuuluu ääni:',
     { t: '”Tässä Aino! Kuuluuko? Olemme kaikki kaksitoista pohjoisen vuorten rannalla, kylmissämme mutta elossa. Tulkaa hakemaan meidät!”', cls: 'log' },
@@ -799,6 +813,7 @@ function bagPanel(msg) {
 // ---- Moving between SISU and a place ------------------------------------------------------------
 function enterSite(id) {
   const site = SITES[id];
+  if (G.mode === 'sub') saveGame();   // keep SISU where it is now, outside this place
   G.site = site; G.mode = 'dive';
   G.s.m.air = 100;
   buildRoom(site);

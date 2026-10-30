@@ -179,6 +179,28 @@ def test_bringing_the_antenna_crystal_and_scrap_home_fixes_the_radio_and_ends_ch
     assert page.inner_text("#card h2") == "Radio toimii!"
     assert "Luku 1 päättyi" in page.inner_text("#card")
     assert page.evaluate("[G.s.flags.radio, G.s.inv.romu, localStorage.getItem('ai-pelit:jaan-alla:luku1') !== null]") == [True, 0, True]
+    # A fixed mast stays fixed: listening again costs nothing.
+    page.click("#card button:has-text('Jatka tutkimista')")
+    page.evaluate("G.s.inv.romu = 3")
+    page.click("#card button:has-text('Radiomasto toimii')")
+    assert page.inner_text("#card h2") == "Radio toimii!"
+    assert page.evaluate("G.s.inv.romu") == 3
+
+
+def test_scrap_spent_on_repairs_comes_back_from_the_station_store(site, context):
+    page, _ = new_game(site, context)
+    # Every wreck's scrap is taken and spent on the hull: the store still finds more, in time.
+    page.evaluate("Object.assign(G.s.flags, { stationLog: true, nordlysLog: true, jaavuoriLog: true });"
+                  "Object.assign(G.s.inv, { antenni: 1, kristalli: 1, romu: 1 }); G.s.m.hull = 50; dock()")
+    page.click("#card button:has-text('Työpaja')")
+    page.click("#card button:has-text('Varasto: ota tarvikkeet')")
+    assert page.evaluate("G.s.inv.romu") == 1
+    assert page.is_disabled("#card button:has-text('katso myöhemmin')")
+    page.evaluate("G.s.t += 121; dock()")
+    page.click("#card button:has-text('Varasto: etsi romua')")
+    assert page.evaluate("G.s.inv.romu") == 2
+    page.click("#card button:has-text('Radiomasto: korjaa')")
+    assert page.inner_text("#card h2") == "Radio toimii!"
 
 
 def test_continue_picks_up_the_saved_game(site, context):
@@ -213,11 +235,12 @@ def test_things_found_out_of_order_still_count_and_a_reload_mid_dive_resumes_in_
     page.evaluate("Object.assign(G.s.flags, { stationLog: true, nordlysLog: true, jaavuoriLog: true }); G.s.inv.antenni = 1; drawHud()")
     assert "korjaa radiomasto" in page.inner_text("#goal")
     # A reload while diving continues in SISU with what was found.
-    page.evaluate("enterSite('nordlys'); saveGame()")
+    page.evaluate("sub.pos.set(SITES.nordlys.door.x, SITES.nordlys.door.y, SITES.nordlys.door.z + 5); enterSite('nordlys'); saveGame()")
     page.reload()
     page.wait_for_function("window.drawn === true")
     page.click("#jatka")
     assert page.evaluate("[G.mode, G.s.inv.kristalli, G.s.inv.antenni]") == ["sub", 1, 1]
+    assert page.evaluate("sub.pos.distanceTo(SITES.nordlys.door)") < 6
 
 
 @pytest.mark.parametrize("width,height", [(360, 640), (390, 844)])
