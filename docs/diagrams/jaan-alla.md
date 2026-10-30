@@ -1,10 +1,12 @@
-# Jään alla: luku 1, sukellusvene ja sukeltaja
+# Jään alla: luvut 1–2, sukellusvene, sukeltaja ja jäällä kulkija
 
 How chapter 1 of Jään alla plays (v1, #106). The player drives the one-person submarine SISU
 under the arctic ice from Aurora station to the RV Nordlys wreck, the iceberg cave and the
 crystal cave, swims inside them as a diver, and brings the radio antenna, a glowing crystal and
 scrap home to fix the radio mast. Air, power, food and hull are the four needs; running out of
-air or hull sends the player back to safety, never ends the story.
+air or hull sends the player back to safety, never ends the story. Chapter 2 (v3) follows on: SISU
+surfaces through an opening in the ice at the northern shore, the player walks the ice in a storm,
+finds Aino's camp and the five who left it, and ferries all twelve to the station, four a trip.
 
 ```mermaid
 flowchart TD
@@ -39,11 +41,29 @@ flowchart TD
   R --> C
   F --> T{Antenni, kristalli ja 2 romua?}
   T -- Kyllä --> U[Radio toimii: Aino vastaa, luku 1 päättyy]
+  U --> V[Luku 2: aja pohjoiseen avantoon]
+  V --> W[Nouse jäälle: lämpö vähenee, myrsky yltyy]
+  W --> X{Kenet kohtaat?}
+  X -- Aino leirissä --> Y[Aino kertoo: viisi on soihtujen luona]
+  X -- Joku odottaja --> Z[Hän seuraa, enintään 4 kyydissä]
+  X -- Jääkarhu --> AA[Karhu tönäisee: lämpö -30]
+  X -- Nuotio --> AB[Lämpö täyttyy]
+  W --> AC{Lämpö loppu?}
+  AC -- Kyllä --> AD[Takaisin SISUun, seuraajat jäävät odottamaan]
+  Z --> AE[Avannolla: kaikki SISUun]
+  AE --> AF[Telakoidu: kyydissä olevat turvaan asemalle]
+  AF --> AG{Kaikki 12 turvassa?}
+  AG -- Ei --> V
+  AG -- Kyllä --> AH[Kaikki turvassa: luku 2 päättyy]
   class A,B,C blue
   class D,K,N,S,T amber
   class E,F,G,M,R teal
   class H,O,Q green
-  class P,U violet
+  class P,U,Y,AH violet
+  class V,W,AE,AF teal
+  class X,AC,AG amber
+  class Z,AB green
+  class AA,AD rose
   class I,J,L rose
 ```
 
@@ -76,3 +96,14 @@ flowchart TD
 - **Ilma loppu?**: `airOut()` puts the player back in SISU at the door, keeping what was found.
 - **Antenni, kristalli ja 2 romua?**: `mast()` says what is missing, or fixes the radio.
 - **Radio toimii: Aino vastaa, luku 1 päättyy**: sets `flags.radio`, writes `ai-pelit:jaan-alla:luku1` (play time), and the player may keep exploring.
+- **Luku 2: aja pohjoiseen avantoon**: `games/jaan-alla/v3/index.html`. Fixing the radio (`mast()`) fills `G.s.crew` with the twelve (`CREW`); an older version's save that finished chapter 1 gets them in `loadSave()`. `goal()` points at `HOLE`, the opening in the ice by the northern shore, where the floor rises (`floorY()`).
+- **Nouse jäälle: lämpö vähenee, myrsky yltyy**: `surface()` switches to the ice scene (`ice`), its own coordinates with the hole at 0, 0. `stepIce()` walks with the stick, blocked by ridges and tents (`ICE_ROCKS`) and the storm's edge (`ICE_R`). Warmth falls 0.8–1.7 % a second; `storm()` grows with everyone saved, thickening the fog and the snow in `drawIce()`.
+- **Kenet kohtaat?**: people within 2.6 m of the walker; seven wait at the camp, five far out by red flares.
+- **Aino kertoo: viisi on soihtujen luona**: `meetAino()`, once.
+- **Hän seuraa, enintään 4 kyydissä**: followers plus those already aboard never pass `SEATS` (4); followers walk in a line behind the walker.
+- **Karhu tönäisee: lämpö -30**: `stepBear()`: the bear wanders near its home, chases within 14 m slower than the walker, shoves once and walks home for 8 s.
+- **Lämpö täyttyy**: within 7 m of the fire (`FIRE`), +25 % a second.
+- **Takaisin SISUun, seuraajat jäävät odottamaan**: `coldOut()`; followers stay where they stood.
+- **Avannolla: kaikki SISUun**: `boardSisu()` at the hole puts followers aboard (`at: 'sub'`); a reload never leaves anyone following.
+- **Telakoidu: kyydissä olevat turvaan asemalle**: `dock()` → `unload()`; the station card counts the saved.
+- **Kaikki turvassa: luku 2 päättyy**: `rescuedPanel()` sets `flags.rescued` and writes `ai-pelit:jaan-alla:luku2`.
