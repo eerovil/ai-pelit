@@ -1,0 +1,13 @@
+{
+  "title": "Kaaosrata",
+  "description": "Tönäise muita ja hyppää pyörivien puomien, kuilujen ja heilureiden ohi maaliin, yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: estejuoksu pyörivien puomien, hyppykivien, liukuseinien, pyörivien levyjen ja heilureiden läpi seitsemää tietokonepelaajaa vastaan tai 2–8 kaverin kanssa samassa huoneessa.",
+      "request": "Fall guys tyylinen peli jossa pelaajien täytyyy päästä tasohyppely läpi maaliin ja he törmäilevät toisiinsa. Esteitä ja pyöriviä esteitä jne",
+      "issue": "eerovil/ai-pelit#56"
+    }
+  ]
+}
