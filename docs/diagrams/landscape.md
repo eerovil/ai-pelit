@@ -11,7 +11,7 @@ flowchart TD
   A[Open the app from the home screen] --> B[Manifest allows any orientation]
   B --> C[Open a game's newest version]
   C --> D[resize: read the screen's width and height]
-  D --> E{Wider than tall?}
+  D --> E{Sideways by the game's own test?}
   E -- No --> F[Portrait layout, as in the previous version]
   E -- Yes --> G[Landscape layout]
   G --> H[Menu and end screen in two columns, no scrolling]
@@ -45,6 +45,7 @@ flowchart TD
 
 - **Manifest allows any orientation**: `public/manifest.webmanifest` has `"orientation": "any"` (was `"portrait"`), so the installed app turns with the phone.
 - **Open a game's newest version**: the new versions made for #95: aitajuoksu v4, areena v4, hiihto v7, kaahari v3, kaaosrata v2, kirkkis v5, lentopallo v4, piano v6, puhelinkoppi v5, sormiskeitti v6, trampoliini v5, vauvan-syotto v2, voimistelu v6 (`games/<slug>/v<N>/index.html`). Older versions keep their portrait layout.
+- **Sideways by the game's own test?**: in `resize()` (Voimistelu: `wide()`), from `W` and `H`. Eleven games take wider than tall (`W > H`). Aitajuoksu v4 waits until it is 15 % wider (`W > H * 1.15`), so a nearly square screen keeps the upright layout with its taller track. Lentopallo v4 also needs a short screen (`W > H && H < 500`), so a tablet keeps the upright court.
 - **resize: read the screen's width and height**: each version's own `resize()`, run on the window's resize event, as before; it now also decides the layout.
 - **Menu and end screen in two columns, no scrolling**: title and results left, buttons right; the long help text is shortened or hidden sideways. Checked at 740 × 360, 844 × 390 and 640 × 360 by each game's `tests/test_<slug>_v<N>.py`.
 - **Play view fitted to the height, wider scene**: the scene keeps its size from the screen's height and shows more to the sides, or is centred; nothing about the rules or speeds changes.

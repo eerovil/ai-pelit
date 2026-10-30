@@ -1,6 +1,6 @@
 # Hiihto: one race, from the style and wax to the finish
 
-How one race of Hiihto plays (v1–v6). From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
+How one race of Hiihto plays (v1–v7). v7 (#95) plays the same race with the phone on its side: the menu and end screens in two columns, the V-step button and the skating pads in the lower corners, the road button lower right (see `docs/diagrams/landscape.md`). From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
 (perinteinen) or skating (luistelu); a race with friends skis the host's course and style. The
 player picks a wax for the day's weather (a grip wax for classic, a glide wax for skating), then
 skis to the finish. Slower skiers are overtaken from another lane, running into anyone is a fall,
@@ -67,7 +67,7 @@ flowchart TD
 
 ## Boxes
 
-- **Yksin vai kavereiden kanssa?**: `games/hiihto/v3/index.html` and `v4` `drawWax()`: alone, the panel before the race has the style switch, the level arrows and "👥 Pelaa kavereiden kanssa", which opens the shared room screen (`public/rooms.js`). From v5 that button sits 30 px below the waxes (8 px in v3–v4) and opens only on a finished tap (down and up on it), so a tap aimed at a wax never opens the friends game. From v6 the menu is drawn for the canvas's own box on the screen and a finger is read against that box (`resize()`, `at()`); v5 drew for the window's height but stretched the canvas to `100dvh`, so on some phones the buttons showed lower than where a tap landed.
+- **Yksin vai kavereiden kanssa?**: `games/hiihto/v3/index.html` and `v4` `drawWax()`: alone, the panel before the race has the style switch, the level arrows and "👥 Pelaa kavereiden kanssa", which opens the shared room screen (`public/rooms.js`). From v5 that button sits 30 px below the waxes (8 px in v3–v4) and opens only on a finished tap (down and up on it), so a tap aimed at a wax never opens the friends game. From v6 the menu is drawn for the canvas's own box on the screen and a finger is read against that box (`resize()`, `at()`); v5 drew for the window's height but stretched the canvas to `100dvh`, so on some phones the buttons showed lower than where a tap landed. From v7, sideways, this panel is two columns (style, level and weather left; waxes and the friends button right), and the shared room screen is two columns too.
 - **Tyyli: perinteinen vai luistelu?**: `setStyle()` saves the pick in `ai-pelit:hiihto:tyyli`; v1 and v2 saves stay as they were and are classic. The opened levels (`taso`) are shared by both styles.
 - **Isäntä valitsee huoneessa radan ja tyylin**: `roomControls()` puts the level arrows and the two styles under the player list through `AiPelitRooms.extra()`; the others see who picks. At "Aloita kierros" `netStart()` sends everyone the host's level, style and a seed, so every phone has the same course and the same grannies and skaters to start with. A friend's own saved style is not changed.
 - **Taso ja keli: lämpötila ja lumi**: `weatherFor()`: levels 1-10 have set temperatures (`TEMPS`), later ones a random one from −18 to +3 °C. `buildCourse()` makes the course: 500 m at level 1, 100 m more each level, at most 1500 m; the second hill is always steep. The time limit is set for the style (`idealTime()` skis it with `botStep()`).

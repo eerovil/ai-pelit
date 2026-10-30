@@ -142,6 +142,7 @@ class Relay:
 def phones(site, browser):
     make_game(site.games, "huonetesti", [demo_page(), demo_page()])
     make_game(site.games, "pieni", [demo_page("pieni", 3)])
+    make_game(site.games, "iso", [demo_page("iso", 8)])
     site.build()
     relay = Relay()
     contexts = []
@@ -558,26 +559,57 @@ def test_the_room_screen_fits_a_small_phone(phones):
         assert box["y"] >= 0 and box["y"] + box["height"] <= 640, part
 
 
+# A host control like Kaahari's track choice, put under the player list with AiPelitRooms.extra().
+EXTRA = """() => {
+  const row = document.createElement('div');
+  row.id = 'tracks';
+  row.style.cssText = 'display:flex;gap:8px';
+  window.picked = null;
+  for (const t of ['Hiekkaranta', 'Viidakko', 'Laavaluola']) {
+    const b = document.createElement('button');
+    b.textContent = t;
+    b.onclick = () => { window.picked = t; };
+    row.appendChild(b);
+  }
+  AiPelitRooms.extra(row);
+}"""
+
+
 @pytest.mark.parametrize("width,height", [(740, 360), (640, 360), (844, 390)])
 def test_the_room_screen_fits_a_phone_on_its_side(phones, width, height):
     # Sideways (#95) the room is two columns: the code and QR left, the players and buttons right.
-    host = phones("Eero", width=width, height=height)
+    # A full room of eight, with the game's own host controls, still fits without scrolling.
+    host = phones("Eero", "iso/v1/", width=width, height=height)
     host.click("#multi")
     host.click("#aipr-create")
     host.wait_for_function("AiPelitRooms.members.length === 1")
+    host.evaluate(EXTRA)
     code = host.evaluate("AiPelitRooms.code")
-    for n in ["Aino", "Eetu", "Iida", "Onni"]:
-        join(phones, n, code)
-    host.wait_for_function("AiPelitRooms.members.length === 5")
-    assert host.evaluate("document.getElementById('aipr').scrollHeight") <= height
-    for part in ["#aipr-qr", "#aipr-code", "#aipr-pub", "#aipr-start", "#aipr-back"]:
-        box = host.locator(part).bounding_box()
-        assert box["y"] >= 0 and box["y"] + box["height"] <= height, part
-        assert box["x"] >= 0 and box["x"] + box["width"] <= width, part
+    for n in ["Aino", "Eetu", "Iida", "Onni", "Lumi", "Väinö"]:
+        join(phones, n, code, "iso/v1/")
+    guest = phones("Kaisa", "iso/v1/", width=width, height=height)
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", code.lower())
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 8")
+    guest.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 8")
+    assert text(host, "info") == "8 pelaajaa – huone on täynnä."
+    for page, parts in [(host, ["#aipr-qr", "#aipr-code", "#tracks", "#aipr-pub", "#aipr-start", "#aipr-back"]),
+                        (guest, ["#aipr-qr", "#aipr-code", "#aipr-info", "#aipr-back"])]:
+        assert page.evaluate("document.getElementById('aipr').scrollHeight") <= height
+        assert page.locator("#aipr-members li").count() == 8
+        for part in parts + ["#aipr-members li >> nth=7"]:
+            box = page.locator(part).bounding_box()
+            assert box["y"] >= 0 and box["y"] + box["height"] <= height, part
+            assert box["x"] >= 0 and box["x"] + box["width"] <= width, part
     qr, start_ = host.locator("#aipr-qr").bounding_box(), host.locator("#aipr-start").bounding_box()
     assert qr["x"] + qr["width"] < start_["x"]
+    # The game's own control and the start button both take a tap where they show.
+    host.locator("#tracks button >> nth=1").click()
+    assert host.evaluate("window.picked") == "Viidakko"
     host.click("#aipr-start")
     host.wait_for_function("demo.phase === 'play'")
+    guest.wait_for_function("demo.phase === 'play'")
 
 
 def test_a_public_room_is_listed_for_the_game_and_joined_with_a_tap(phones):
