@@ -56,3 +56,26 @@ def test_v2_plays_on_with_v1_s_saved_level_and_record(site, context):
     page.reload()
     assert page.inner_text("#level") == "Taso 3: Minitrampoliini"
     assert page.inner_text("#stats").startswith("Ennätys 210 p")
+
+
+def test_a_flip_button_on_the_mat_and_a_second_tap_kick_too_but_only_the_first_push_counts(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const s = window.__step; stand(0); J.vin = 6; J.matT = CONTACT / 2;
+      press(1); const first = [legBend() > 0.8, J.pumpT];
+      for (let i = 0; i < 6; i++) s(1 / 60);
+      const faded = legBend(); tap();
+      return [first, faded < legBend(), J.pumpT, J.queued]; }""")
+    assert r[0] == [True, 0.15] and r[1] is True
+    assert r[2] == 0.15 and r[3] == 1   # the second tap kicks the legs again but is not a second push
+
+
+def test_the_buttons_fit_a_390_px_phone(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.set_viewport_size({"width": 390, "height": 740})
+    page.goto(site.url + URL)
+    page.click("#go")
+    boxes = [page.locator("#pad button").nth(i).bounding_box() for i in range(3)]
+    assert boxes[0]["x"] >= 0 and boxes[2]["x"] + boxes[2]["width"] <= 390
+    assert all(b["height"] >= 60 for b in boxes)
