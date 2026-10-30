@@ -65,8 +65,9 @@
     orava: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('orava', 'taso'); } },
     // Most points in one minute's run; no levels.
     skuutti: { order: 'high', score: function (s) { return s + ' p'; } },
-    // Most points in 10 rounds: Pistekisa on 'main', Mökkitikka (v2) on 'mokki'; no level.
-    tikka: { order: 'high', score: function (s) { return s + ' p'; } },
+    // Most points in 10 rounds; no level. Named lists, the shelf's first: Mökkitikka (v2) on
+    // 'mokki', Pistekisa on 'main'.
+    tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki', 'Mökkitikka'], ['main', 'Pistekisa']] },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }

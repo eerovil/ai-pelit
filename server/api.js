@@ -39,7 +39,8 @@ export const GAMES = {
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
-  tikka: { order: 'high', boards: /^(main|mokki)$/ }, // most points in 10 rounds: Pistekisa 'main', Mökkitikka 'mokki'
+  // Most points in 10 rounds: Mökkitikka 'mokki' (v2's main mode, the shelf's), Pistekisa 'main' (v1 on).
+  tikka: { order: 'high', boards: /^(main|mokki)$/, first: 'mokki' },
 };
 
 const ID = /^[a-f0-9]{32}$/;
@@ -178,7 +179,7 @@ async function addScore(env, body) {
 // passing course 2 shows on the course 1 list too, with no replay.
 const GAME_LEVEL = '(SELECT MAX(l.level) FROM scores l WHERE l.game = s.game AND l.player = s.player)';
 
-// Each game's no. 1 for the shelf cards, in one request: its 'main' list, or its first course.
+// Each game's no. 1 for the shelf cards, in one request: its 'main' list, or its `first` one.
 async function tops(env) {
   const games = {};
   for (const [game, g] of Object.entries(GAMES)) {
