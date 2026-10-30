@@ -62,9 +62,42 @@ def test_the_library_is_in_its_own_cache_that_outlives_builds(site, context):
     assert "/lib/three-r187/three.core.js" in cached
 
 
-def test_the_build_refuses_a_version_loading_a_library_that_is_not_there(tmp_path):
-    page = game_page("a", script="")
-    make_game(tmp_path, "peli", [page.replace("<script></script>", "<script type=\"module\">import * as THREE from '../../../lib/three-r999/three.module.js';</script>")])
+def test_a_3d_game_still_plays_offline_after_a_site_update(site, context):
+    make_game(site.games, "kuutio", [DEMO])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    wait_for_worker(page)
+    page.goto(f"{site.url}games/kuutio/v1/")
+    page.wait_for_function("window.drawn === true || window.noWebgl === true", timeout=15000)
+    first = page.evaluate("caches.keys().then(k => k.find(n => n.startsWith('ai-pelit-shell-')))")
+
+    make_game(site.games, "toka", [game_page("toka")])
+    site.build()
+    page.goto(site.url)
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    # The new worker has taken over once the old shell cache is gone; the library's cache stays.
+    page.wait_for_function(
+        f"caches.keys().then(k => !k.includes({first!r}) && k.some(n => n.startsWith('ai-pelit-shell-')))",
+        timeout=15000,
+    )
+    context.set_offline(True)
+    try:
+        page.goto(f"{site.url}games/kuutio/v1/")
+        assert_draws_the_cube(page)
+    finally:
+        context.set_offline(False)
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "<script type=\"module\">import * as THREE from '../../../lib/three-r999/three.module.js';</script>",
+        '<script src="../../../lib/three-r999/three.module.js"></script>',
+    ],
+)
+def test_the_build_refuses_a_version_loading_a_library_that_is_not_there(tmp_path, tag):
+    make_game(tmp_path, "peli", [game_page("a").replace("<script></script>", tag)])
     with pytest.raises(build.GameError, match="lib/three-r999/three.module.js"):
         build.build_catalog(tmp_path)
 
