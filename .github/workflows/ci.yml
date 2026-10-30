@@ -36,13 +36,11 @@ jobs:
       # the test files of the versions it touches (#116); a change outside games/ runs only the
       # shared tests. The full suite never runs (#65). Four workers side by side, one per core of
       # GitHub's runner; --dist loadfile keeps a file's tests (and its one Chromium) on one worker.
-      # The 3D games' tests (marked alone in tests/conftest.py) then run one at a time: beside
-      # other Chromiums their software WebGL drops too many frames for the timed races (#116).
-      # Exit code 5 is "no test was selected", as when the change has no 3D game.
+      # The 3D games' tests (marked alone in tests/conftest.py) never run here (#123): they run on
+      # the AgentDeck host, scripts/host-tests.sh, as the deck's verification job for the head.
+      # Exit code 5 is "no test was selected".
       - name: Browser tests, side by side
         run: python -m pytest -q -n 4 --dist loadfile -m "not alone" --changed-since origin/${{ github.base_ref }} || [ $? -eq 5 ]
-      - name: 3D browser tests, one at a time
-        run: python -m pytest -q -m alone --changed-since origin/${{ github.base_ref }} || [ $? -eq 5 ]
       - run: python scripts/build.py
 
   # A merge to main is the release: Cloudflare Pages serves it at pelit.vilpponen.fi (a CNAME
