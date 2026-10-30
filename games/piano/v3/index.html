@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Piano</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1033;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(20,10,44,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:42px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #7a3fb0}
+  #result{margin:0;font-size:24px;font-weight:800;color:#c8b6ff}
+  #go{font:800 22px system-ui,sans-serif;padding:14px 34px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  #go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #pickrow{display:flex;align-items:center;gap:10px}
+  #pickrow.hidden{display:none}
+  #pickrow button{font:800 26px system-ui,sans-serif;width:48px;height:48px;border:0;border-radius:14px;background:#3b2a78;color:#fff}
+  #pickrow button:disabled{opacity:.3}
+  #pick{min-width:190px;font-size:16px;font-weight:700;color:#fff}
+  #stats{margin:0;font-size:15px;color:#d8ccff}
+  .help{margin:6px 0 0;font-size:13px;line-height:1.45;color:#b9aee0;max-width:310px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🎹 Piano</h1>
+  <p id="result"></p>
+  <div id="pickrow"><button id="prev" aria-label="Edellinen taso">‹</button><span id="pick"></span><button id="next" aria-label="Seuraava taso">›</button></div>
+  <button id="go">Soita!</button>
+  <p id="stats"></p>
+  <p class="help">Nuotit putoavat neljää kaistaa pitkin. Paina kaistan nappia, kun nuotti osuu viivaan, niin kappale soi.
+    Ohi mennyt nuotti tai turha painallus vie sydämen; jokaisella tasolla on kolme uutta. Peli jatkuu aina pisimmältä tasolta, jolle pääsit, ja nuolilla voit valita aiemman. Loppupään kappaleet ovat todella nopeita.</p>
+</div>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:piano:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let best = load('ennatys', 0), topLevel = load('taso', 1);
+
+// ---------- Songs ----------
+// Each note is [semitones above middle C, beats]. The lanes follow the tune's ups and downs
+// (see nextLane), so a rising tune walks to the right and a falling one to the left.
+const SONGS = [
+  { name: 'Tuiki tuiki tähtönen', bpm: 100, notes: [
+    [0,1],[0,1],[7,1],[7,1],[9,1],[9,1],[7,2],[5,1],[5,1],[4,1],[4,1],[2,1],[2,1],[0,2],
+    [7,1],[7,1],[5,1],[5,1],[4,1],[4,1],[2,2],[7,1],[7,1],[5,1],[5,1],[4,1],[4,1],[2,2],
+    [0,1],[0,1],[7,1],[7,1],[9,1],[9,1],[7,2],[5,1],[5,1],[4,1],[4,1],[2,1],[2,1],[0,2]] },
+  { name: 'Maija pikkuinen', bpm: 108, notes: [
+    [4,1],[2,1],[0,1],[2,1],[4,1],[4,1],[4,2],[2,1],[2,1],[2,2],[4,1],[7,1],[7,2],
+    [4,1],[2,1],[0,1],[2,1],[4,1],[4,1],[4,1],[4,1],[2,1],[2,1],[4,1],[2,1],[0,3]] },
+  { name: 'Ukko Nooa', bpm: 112, notes: [
+    [0,1],[0,1],[0,1],[4,1],[2,1],[2,1],[2,1],[5,1],[4,1],[4,1],[2,1],[2,1],[0,2],
+    [4,1],[4,1],[4,1],[4,1],[7,2],[5,1],[5,1],[2,1],[2,1],[2,1],[2,1],[5,2],[4,2],
+    [0,1],[0,1],[0,1],[4,1],[2,1],[2,1],[2,1],[5,1],[4,1],[4,1],[2,1],[2,1],[0,2]] },
+  { name: 'Piippolan vaari', bpm: 116, notes: [
+    [0,1],[0,1],[0,1],[-5,1],[-3,1],[-3,1],[-5,2],[4,1],[4,1],[2,1],[2,1],[0,3],
+    [-5,1],[0,1],[0,1],[0,1],[-5,1],[-3,1],[-3,1],[-5,2],[4,1],[4,1],[2,1],[2,1],[0,3]] },
+  { name: 'Jaakko kulta', bpm: 116, notes: [
+    [0,1],[2,1],[4,1],[0,1],[0,1],[2,1],[4,1],[0,1],[4,1],[5,1],[7,2],[4,1],[5,1],[7,2],
+    [7,0.5],[9,0.5],[7,0.5],[5,0.5],[4,1],[0,1],[7,0.5],[9,0.5],[7,0.5],[5,0.5],[4,1],[0,1],
+    [0,1],[-5,1],[0,2],[0,1],[-5,1],[0,2]] },
+  { name: 'Lontoon silta', bpm: 116, notes: [
+    [7,1.5],[9,0.5],[7,1],[5,1],[4,1],[5,1],[7,2],[2,1],[4,1],[5,2],[4,1],[5,1],[7,2],
+    [7,1.5],[9,0.5],[7,1],[5,1],[4,1],[5,1],[7,2],[2,2],[7,2],[4,1],[0,3]] },
+  { name: 'Oodi ilolle', bpm: 120, notes: [
+    [4,1],[4,1],[5,1],[7,1],[7,1],[5,1],[4,1],[2,1],[0,1],[0,1],[2,1],[4,1],[4,1.5],[2,0.5],[2,2],
+    [4,1],[4,1],[5,1],[7,1],[7,1],[5,1],[4,1],[2,1],[0,1],[0,1],[2,1],[4,1],[2,1.5],[0,0.5],[0,2]] },
+  { name: 'Paljon onnea vaan', bpm: 96, notes: [
+    [-5,0.75],[-5,0.25],[-3,1],[-5,1],[0,1],[-1,2],[-5,0.75],[-5,0.25],[-3,1],[-5,1],[2,1],[0,2],
+    [-5,0.75],[-5,0.25],[7,1],[4,1],[0,1],[-1,1],[-3,2],[5,0.75],[5,0.25],[4,1],[0,1],[2,1],[0,3]] },
+  { name: 'Kulkuset', bpm: 132, notes: [
+    [4,1],[4,1],[4,2],[4,1],[4,1],[4,2],[4,1],[7,1],[0,1.5],[2,0.5],[4,4],
+    [5,1],[5,1],[5,1.5],[5,0.5],[5,1],[4,1],[4,1],[4,0.5],[4,0.5],[4,1],[2,1],[2,1],[4,1],[2,2],[7,2],
+    [4,1],[4,1],[4,2],[4,1],[4,1],[4,2],[4,1],[7,1],[0,1.5],[2,0.5],[4,4],
+    [5,1],[5,1],[5,1.5],[5,0.5],[5,1],[4,1],[4,1],[4,0.5],[4,0.5],[7,1],[7,1],[5,1],[2,1],[0,4]] },
+  // The hard end (v3): fast runs and sixteenth notes. A note-dense song falls faster ('lead'),
+  // so its notes do not pile on top of each other.
+  { name: 'Vuorenpeikkojen luolassa', bpm: 132, lead: 0.8, notes: [
+    [-3,.5],[-1,.5],[0,.5],[2,.5],[4,.5],[0,.5],[4,1],[3,.5],[-1,.5],[3,1],[2,.5],[-2,.5],[2,1],
+    [-3,.5],[-1,.5],[0,.5],[2,.5],[4,.5],[0,.5],[4,.5],[9,.5],[7,.5],[4,.5],[0,.5],[4,.5],[7,2],
+    [-3,.25],[-1,.25],[0,.25],[2,.25],[4,.25],[0,.25],[4,.5],[3,.25],[-1,.25],[3,.5],[2,.25],[-2,.25],[2,.5],
+    [-3,.25],[-1,.25],[0,.25],[2,.25],[4,.25],[0,.25],[4,.25],[9,.25],[7,.25],[4,.25],[0,.25],[4,.25],[7,1]] },
+  { name: 'Turkkilainen marssi', bpm: 112, lead: 0.75, notes: [
+    [-1,.25],[-3,.25],[-4,.25],[-3,.25],[0,1],[2,.25],[0,.25],[-1,.25],[0,.25],[4,1],
+    [5,.25],[4,.25],[3,.25],[4,.25],[11,.25],[9,.25],[8,.25],[9,.25],[11,.25],[9,.25],[8,.25],[9,.25],[12,1],
+    [9,.5],[12,.5],[11,.5],[9,.5],[7,.5],[9,.5],[11,.5],[9,.5],[7,.5],[9,.5],[11,.5],[9,.5],[7,.5],[6,.5],[4,1],
+    [-1,.25],[-3,.25],[-4,.25],[-3,.25],[0,1],[2,.25],[0,.25],[-1,.25],[0,.25],[4,1],
+    [5,.25],[4,.25],[3,.25],[4,.25],[11,.25],[9,.25],[8,.25],[9,.25],[11,.25],[9,.25],[8,.25],[9,.25],[12,1],
+    [9,.5],[11,.5],[12,.5],[11,.5],[9,.5],[8,.5],[9,.5],[4,.5],[5,.5],[2,.5],[0,1],[-1,1],[-3,2]] },
+  { name: 'Kimalaisen lento', bpm: 120, lead: 0.7, notes: [
+    [16,.25],[15,.25],[14,.25],[13,.25],[14,.25],[13,.25],[12,.25],[11,.25],[12,.25],[11,.25],[10,.25],[9,.25],[10,.25],[11,.25],[12,.25],[13,.25],
+    [16,.25],[15,.25],[14,.25],[13,.25],[14,.25],[13,.25],[12,.25],[11,.25],[12,.25],[11,.25],[10,.25],[9,.25],[10,.25],[11,.25],[12,.25],[13,.25],
+    [4,.25],[3,.25],[2,.25],[1,.25],[2,.25],[1,.25],[0,.25],[-1,.25],[0,.25],[-1,.25],[-2,.25],[-3,.25],[-2,.25],[-1,.25],[0,.25],[1,.25],
+    [4,.25],[3,.25],[2,.25],[1,.25],[2,.25],[1,.25],[0,.25],[-1,.25],[0,.25],[-1,.25],[-2,.25],[-3,.25],[-2,.25],[-1,.25],[0,.25],[1,.25],
+    [4,.25],[3,.25],[2,.25],[1,.25],[0,.25],[-1,.25],[0,.25],[1,.25],[2,.25],[3,.25],[4,.25],[5,.25],[6,.25],[7,.25],[8,.25],[9,.25],
+    [4,2]] },
+  // Tulimyrsky is written for this game: galloping arpeggios and a two-octave run, in the spirit
+  // of power-metal shredding (a real band's song cannot be copied here).
+  { name: 'Tulimyrsky', bpm: 150, lead: 0.65, notes: [
+    [-3,.25],[0,.25],[4,.25],[9,.25],[4,.25],[0,.25],[-3,.25],[0,.25],[-7,.25],[-3,.25],[0,.25],[5,.25],[0,.25],[-3,.25],[-7,.25],[-3,.25],
+    [-5,.25],[-1,.25],[2,.25],[7,.25],[2,.25],[-1,.25],[-5,.25],[-1,.25],[-8,.25],[-4,.25],[-1,.25],[4,.25],[-1,.25],[-4,.25],[-8,.25],[-4,.25],
+    [-3,.25],[0,.25],[4,.25],[9,.25],[4,.25],[0,.25],[-3,.25],[0,.25],[-7,.25],[-3,.25],[0,.25],[5,.25],[0,.25],[-3,.25],[-7,.25],[-3,.25],
+    [-5,.25],[-1,.25],[2,.25],[7,.25],[2,.25],[-1,.25],[-5,.25],[-1,.25],[-8,.25],[-4,.25],[-1,.25],[4,.25],[-1,.25],[-4,.25],[-8,.25],[-4,.25],
+    [-3,.25],[-1,.25],[0,.25],[2,.25],[4,.25],[5,.25],[7,.25],[9,.25],[11,.25],[12,.25],[14,.25],[16,.25],[17,.25],[19,.25],[21,.25],[19,.25],
+    [17,.25],[16,.25],[14,.25],[12,.25],[11,.25],[9,.25],[7,.25],[5,.25],[4,.25],[2,.25],[0,.25],[-1,.25],[-3,.25],[9,2]] },
+];
+
+// The notes of one level as {t (seconds from the level's start), lane, pitch, hit, missed}.
+// Level 1 is the first song; after the last song they come round again, a little faster.
+function levelNotes(level) {
+  const song = songOf(level);
+  const beat = 60 / (song.bpm * speedOf(level));
+  const out = [];
+  let t = 0, lane = 1, prev = song.notes[0][0];
+  for (const [p, b] of song.notes) {
+    lane = nextLane(lane, p - prev); prev = p;
+    out.push({ t, lane, pitch: p, beats: b, hit: false, missed: false });
+    t += b * beat;
+  }
+  return { song, notes: out, end: t };
+}
+// A repeated note stays in its lane, a step up or down moves one lane, a leap two. At the edge
+// a step turns back, so the notes spread over all four lanes instead of piling on one side.
+function nextLane(lane, step) {
+  if (!step) return lane;
+  const d = Math.sign(step) * (Math.abs(step) >= 5 ? 2 : 1);
+  // A leap that would go past the edge takes one step instead (v2: v1 turned it right round,
+  // so a leap down from the second lane jumped to the far right).
+  for (const l of [lane + d, lane + Math.sign(d), lane - Math.sign(d)]) if (l >= 0 && l <= 3) return l;
+  return lane;
+}
+// v3: a song plays at its own tempo the first time round, and 15 % faster on each later lap
+// (v1 and v2 sped up every level, which would make the hard songs at the end unplayable).
+const speedOf = level => 1 + 0.15 * Math.floor((level - 1) / SONGS.length);
+const songOf = level => SONGS[(level - 1) % SONGS.length];
+
+// ---------- Timing ----------
+const PERFECT = 0.07, GOOD = 0.16;   // seconds either side of the line
+const LEAD0 = 1.9;                    // seconds a note takes from the top to the line at level 1
+const LIVES = 3;
+const lead = level => LEAD0 * (songOf(level).lead || 1) / Math.sqrt(speedOf(level));
+
+let W, H, DPR, safeT = 0, safeB = 0, laneW, hitY, btnTop, topY;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  laneW = W / 4;
+  btnTop = H - safeB - Math.max(96, Math.min(140, H * 0.17));
+  hitY = btnTop - 26;
+  topY = safeT + 64;
+}
+addEventListener('resize', resize); resize();
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+// A soft piano-like note: a quick attack and a long fade, with a quiet octave above.
+function piano(semi, dur) {
+  if (!ac) return;
+  const t = ac.currentTime, f = 261.63 * Math.pow(2, semi / 12), g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.5, dur * 1.6));
+  g.connect(ac.destination);
+  for (const [m, type, v] of [[1, 'triangle', 1], [2, 'sine', 0.35]]) {
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = type; o.frequency.value = f * m; og.gain.value = v;
+    o.connect(og).connect(g); o.start(t); o.stop(t + Math.max(0.6, dur * 1.7));
+  }
+}
+function thud() {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'square'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.2);
+  g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.24);
+}
+
+// ---------- Game state ----------
+let state = 'menu', level = 1, cur = null, now = 0, score = 0, combo = 0, bestCombo = 0, lives = LIVES;
+let flashes = [0, 0, 0, 0], pressed = [false, false, false, false], pops = [], banner = null;
+
+// v3: a game starts from the picked level (by default the furthest one reached).
+function newGame(from) {
+  level = from || 1; score = 0; combo = 0; bestCombo = 0; pops = [];
+  startLevel();
+  state = 'play';
+}
+function startLevel() {
+  cur = levelNotes(level);
+  lives = LIVES;  // v3: every level starts with three fresh hearts
+  // A note at t = 0 starts at the top of the screen, so the first one has time to fall.
+  now = -lead(level) - 0.6;
+  banner = { s: 'Taso ' + level, sub: cur.song.name, t: 1.8 };
+  // Saved from level 1 on, so even a first game's score carries its level to the list.
+  topLevel = Math.max(topLevel, level); save('taso', topLevel);
+}
+
+const mult = () => 1 + Math.min(3, Math.floor(combo / 10));
+// v3: a new word in a lane replaces the one before, so fast songs do not stack them.
+function popText(lane, s, col) { pops = pops.filter(p => p.lane !== lane); pops.push({ lane, x: (lane + 0.5) * laneW, y: hitY - 40, s, c: col, t: 0.7 }); }
+
+// A press of a lane's button: hits the nearest note in that lane, or costs a heart.
+function tap(lane) {
+  if (state !== 'play') return;
+  pressed[lane] = true;
+  let n = null;
+  for (const m of cur.notes) {
+    if (m.hit || m.missed || m.lane !== lane) continue;
+    if (Math.abs(m.t - now) <= GOOD && (!n || Math.abs(m.t - now) < Math.abs(n.t - now))) n = m;
+  }
+  if (!n) { miss(lane, 'Ohi!'); return; }
+  n.hit = true;
+  const perfect = Math.abs(n.t - now) <= PERFECT;
+  combo++; bestCombo = Math.max(bestCombo, combo);
+  score += (perfect ? 100 : 50) * mult();
+  flashes[lane] = 1;
+  piano(n.pitch, n.beats * 60 / (cur.song.bpm * speedOf(level)));
+  popText(lane, perfect ? 'Nappiin!' : 'Hyvä', perfect ? '#ffd166' : '#9be7ff');
+}
+function miss(lane, why) {
+  combo = 0; lives--;
+  thud();
+  popText(lane, why, '#ff7a8a');
+  if (lives <= 0) gameOver();
+}
+
+// The score so far is kept after every finished song as well as at the end, so a good run
+// counts even if the phone is closed before the last heart goes.
+function keepScore() {
+  const record = score > best;
+  if (record) { best = score; save('ennatys', best); }
+  if (window.AiPelitScores && score > 0) AiPelitScores.submit(score);
+  return record;
+}
+function songDone() {
+  keepScore();
+  level++; startLevel();
+  banner.note = 'Tulos tallennettu: ' + score + ' p'; banner.t = 2.4;
+}
+function gameOver() {
+  state = 'over';
+  const record = keepScore();
+  showMenu('Peli päättyi: ' + score + ' pistettä' + (record ? ' – uusi ennätys! 🏆' : ''));
+}
+
+function update(dt) {
+  for (let i = 0; i < 4; i++) flashes[i] = Math.max(0, flashes[i] - dt * 4);
+  for (const p of pops) { p.t -= dt; p.y -= dt * 50; }
+  pops = pops.filter(p => p.t > 0);
+  // The high-score list (or its first nickname question) over the game holds the song still.
+  if (document.getElementById('ai-pelit-tulokset')) return;
+  if (banner && (banner.t -= dt) <= 0) banner = null;
+  if (state !== 'play') return;
+  now += dt;
+  for (const n of cur.notes) {
+    if (!n.hit && !n.missed && now - n.t > GOOD) { n.missed = true; miss(n.lane, 'Ohi meni!'); if (state !== 'play') return; }
+  }
+  // The song is over once its last note has passed: on to the next level.
+  if (now > cur.end + 0.8) songDone();
+}
+
+// ---------- Input ----------
+const laneOf = px => Math.max(0, Math.min(3, Math.floor(px / laneW)));
+const down = {};
+c.addEventListener('pointerdown', e => {
+  unlock();
+  e.preventDefault();
+  // The whole lane is its button, so a thumb slightly above the key still counts.
+  if (e.clientY < topY) return;
+  const l = laneOf(e.clientX);
+  down[e.pointerId] = l;
+  tap(l);
+});
+function up(e) {
+  const l = down[e.pointerId];
+  delete down[e.pointerId];
+  if (l !== undefined && !Object.values(down).includes(l)) pressed[l] = false;
+}
+c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+
+// ---------- Drawing ----------
+const LANE_COL = ['#ff5d8f', '#ffb703', '#3ddc97', '#4cc9f0'];
+function yOf(t) { return hitY - (t - now) / lead(level) * (hitY - topY); }
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const bg = x.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#2b1660'); bg.addColorStop(1, '#120a26');
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  // Lanes.
+  for (let i = 0; i < 4; i++) {
+    if (flashes[i] > 0) {
+      const g = x.createLinearGradient(0, hitY, 0, topY);
+      g.addColorStop(0, LANE_COL[i] + '66'); g.addColorStop(1, LANE_COL[i] + '00');
+      x.globalAlpha = flashes[i]; x.fillStyle = g; x.fillRect(i * laneW, topY, laneW, hitY - topY); x.globalAlpha = 1;
+    }
+    if (i) { x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(i * laneW - 1, topY, 2, btnTop - topY); }
+  }
+  // Falling notes.
+  if (cur && state !== 'menu') {
+    const span = hitY - topY, beat = 60 / (cur.song.bpm * speedOf(level));
+    // Notes come out from under the hearts, never over the score.
+    x.save(); x.beginPath(); x.rect(0, topY + 20, W, btnTop - topY - 20); x.clip();
+    for (const n of cur.notes) {
+      if (n.hit) continue;
+      const y = yOf(n.t);
+      if (y < topY - 80 || y > H) continue;
+      const h = Math.max(26, Math.min(70, n.beats * beat / lead(level) * span * 0.55));
+      const px = n.lane * laneW + 6, w = laneW - 12;
+      x.globalAlpha = n.missed ? 0.3 : 1;
+      x.fillStyle = LANE_COL[n.lane];
+      x.beginPath(); x.roundRect(px, y - h, w, h, 10); x.fill();
+      x.fillStyle = 'rgba(255,255,255,.35)'; x.beginPath(); x.roundRect(px + 5, y - h + 4, w - 10, 8, 4); x.fill();
+      x.fillStyle = 'rgba(0,0,0,.35)'; x.font = `900 ${Math.round(Math.min(26, h * 0.6))}px system-ui`;
+      x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('♪', px + w / 2, y - h / 2 + 2);
+      x.globalAlpha = 1;
+    }
+    x.restore();
+  }
+  // The line to hit on.
+  x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(0, hitY - 2, W, 4);
+  // The four keys.
+  for (let i = 0; i < 4; i++) {
+    const on = pressed[i] || flashes[i] > 0.6, kx = i * laneW + 4, kw = laneW - 8, ky = btnTop + (on ? 4 : 0), kh = H - safeB - btnTop - 10;
+    x.fillStyle = 'rgba(0,0,0,.4)'; x.beginPath(); x.roundRect(kx, btnTop + 6, kw, kh, 14); x.fill();
+    x.fillStyle = on ? LANE_COL[i] : '#f4f0ff';
+    x.beginPath(); x.roundRect(kx, ky, kw, kh - (on ? 4 : 6), 14); x.fill();
+    x.fillStyle = on ? '#fff' : LANE_COL[i];
+    x.beginPath(); x.arc(kx + kw / 2, ky + kh / 2 - 3, Math.min(14, kw * 0.18), 0, 7); x.fill();
+  }
+  x.textBaseline = 'alphabetic';
+  // Popping words.
+  x.textAlign = 'center';
+  for (const p of pops) {
+    x.globalAlpha = Math.min(1, p.t * 2.5);
+    x.font = '800 16px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.strokeText(p.s, p.x, p.y); x.fillStyle = p.c; x.fillText(p.s, p.x, p.y);
+    x.globalAlpha = 1;
+  }
+  if (state !== 'menu') drawHud();
+}
+function drawHud() {
+  // Top bar: hearts, score and combo; the back chip is top-left and the scores chip top-right.
+  const y = safeT + 10;
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '900 24px system-ui'; x.fillStyle = '#fff'; x.fillText(score, W / 2, y + 16);
+  x.font = '600 12px system-ui'; x.fillStyle = '#d8ccff';
+  x.fillText('Taso ' + level + (combo >= 10 ? ' · putki ' + combo + ' · x' + mult() : combo > 1 ? ' · putki ' + combo : ''), W / 2, y + 40);
+  x.font = '18px system-ui';
+  let hs = ''; for (let i = 0; i < LIVES; i++) hs += i < lives ? '❤️' : '🤍';
+  x.fillText(hs, W / 2, topY + 6);
+  if (banner) {
+    x.globalAlpha = Math.min(1, banner.t * 2);
+    x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+    const cy = topY + (hitY - topY) * 0.3;
+    x.font = '900 34px system-ui'; x.strokeText(banner.s, W / 2, cy); x.fillStyle = '#ffd166'; x.fillText(banner.s, W / 2, cy);
+    x.font = '700 18px system-ui'; x.strokeText(banner.sub, W / 2, cy + 34); x.fillStyle = '#fff'; x.fillText(banner.sub, W / 2, cy + 34);
+    if (banner.note) { x.font = '700 15px system-ui'; x.strokeText(banner.note, W / 2, cy + 62); x.fillStyle = '#7ee081'; x.fillText(banner.note, W / 2, cy + 62); }
+    x.globalAlpha = 1;
+  }
+  x.textBaseline = 'alphabetic';
+}
+
+let prev = 0;
+function loop(t) {
+  const dt = Math.min(0.05, (t - prev) / 1000 || 0); prev = t;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Menu ----------
+// The level to start from: the furthest one reached, or an earlier one picked with the arrows.
+let pick = topLevel;
+function showPick() {
+  document.getElementById('pickrow').classList.toggle('hidden', topLevel <= 1);
+  document.getElementById('pick').textContent = 'Taso ' + pick + ' · ' + songOf(pick).name;
+  document.getElementById('prev').disabled = pick <= 1;
+  document.getElementById('next').disabled = pick >= topLevel;
+  document.getElementById('go').textContent = pick === 1 ? 'Soita!' : pick === topLevel ? 'Jatka tasolta ' + pick : 'Soita tasolta ' + pick;
+}
+function showMenu(result) {
+  document.getElementById('result').textContent = result || '';
+  document.getElementById('stats').textContent = 'Ennätys ' + best + ' pistettä · paras taso ' + topLevel;
+  pick = topLevel;
+  showPick();
+  menu.classList.remove('hidden');
+}
+document.getElementById('prev').addEventListener('click', () => { pick = Math.max(1, pick - 1); showPick(); });
+document.getElementById('next').addEventListener('click', () => { pick = Math.min(topLevel, pick + 1); showPick(); });
+document.getElementById('go').addEventListener('click', () => {
+  unlock(); menu.classList.add('hidden'); newGame(pick);
+});
+showMenu();
+requestAnimationFrame(loop);
+</script>
+<script src="../../../scores.js" data-game="piano" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
