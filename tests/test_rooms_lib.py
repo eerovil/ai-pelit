@@ -558,7 +558,7 @@ def test_the_room_screen_fits_a_small_phone(phones):
         assert box["y"] >= 0 and box["y"] + box["height"] <= 640, part
 
 
-@pytest.mark.parametrize("width,height", [(740, 360), (640, 360)])
+@pytest.mark.parametrize("width,height", [(740, 360), (640, 360), (844, 390)])
 def test_the_room_screen_fits_a_phone_on_its_side(phones, width, height):
     # Sideways (#95) the room is two columns: the code and QR left, the players and buttons right.
     host = phones("Eero", width=width, height=height)
