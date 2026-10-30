@@ -100,6 +100,8 @@ def test_the_motion_is_read_from_its_shape(site, context):
     # A stroke that starts slanted and ends straight up is still a slanted one: its whole rise counts.
     slant_then_straight = [[100 + 46 * i, 500 - 44 * i, 30 * i] for i in range(6)] + [[330, 280 - 30 * i, 150 + 20 * i] for i in range(1, 4)]
     assert read(slant_then_straight) == ["kierre", 1]
+    # Moving the hand 200 px sideways at the same height, then a straight flick: a straight throw.
+    assert read([[100 + 40 * i, 500, 30 * i] for i in range(6)] + [[300, 500 - 40 * i, 150 + 15 * i] for i in range(1, 6)]) == ["suora", 1]
     # Dragging the hand around before the flick does not count towards its shape.
     assert read([[100 - 20 * i, 500 + 10 * i, 20 * i] for i in range(6)] + [[0, 550 - 40 * i, 120 + 10 * i] for i in range(1, 7)]) == ["suora", 1]
 
