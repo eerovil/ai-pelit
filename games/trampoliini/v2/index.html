@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Trampoliini</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#7cc6f2;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #pad{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:8px 10px calc(env(safe-area-inset-bottom,0px) + 10px);box-sizing:border-box;touch-action:none}
+  #pad button{flex:1;height:64px;border:0;border-radius:16px;font:800 17px system-ui,sans-serif;color:#fff;background:#3d5a80;box-shadow:0 4px 0 #24364f;touch-action:none;padding:0}
+  #pad button.on{transform:translateY(3px);box-shadow:0 1px 0 #24364f;background:#ee6c4d}
+  #pad button[data-act=kierre]{flex:.8;background:#7b5ea7;box-shadow:0 4px 0 #4b3570}
+  #pad button[data-act=kierre].on{box-shadow:0 1px 0 #4b3570;background:#b388eb}
+  #pad.off{visibility:hidden}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);box-sizing:border-box;background:rgba(20,40,70,.84);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:40px;color:#ffd166;text-shadow:0 3px 0 #ee6c4d}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ffb4a2}
+  #level{margin:0;font-size:18px;font-weight:700;color:#e0fbfc}
+  #tasks{margin:0;padding:0;list-style:none;font-size:16px;line-height:1.6;color:#fff}
+  #go{font:800 22px system-ui,sans-serif;padding:14px 34px;border:0;border-radius:16px;background:#ffd166;color:#3a2600;box-shadow:0 4px 0 #b8860b}
+  #go:active{transform:translateY(3px);box-shadow:0 1px 0 #b8860b}
+  #stats{margin:0;font-size:14px;color:#c8dcef}
+  .help{margin:2px 0 0;font-size:13px;line-height:1.45;color:#c8dcef;max-width:320px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="pad" class="off"><button data-act="taakse">↺ Taakse</button><button data-act="kierre">🌀 Kierre</button><button data-act="eteen">Eteen ↻</button></div>
+<div id="menu">
+  <h1>🤸 Trampoliini</h1>
+  <p id="result"></p>
+  <p id="level"></p>
+  <ul id="tasks"></ul>
+  <button id="go">Hyppää!</button>
+  <p id="stats"></p>
+  <p class="help">Paina ruutua, niin jalat menevät koukkuun. Päästä irti juuri kun osut
+    trampoliiniin: se on ponnistus, ja pompit korkeammalle.
+    Pidä voltin nappia pohjassa, niin pyörit kippurassa, ja päästä irti ajoissa, niin oikaiset
+    jaloillesi. 🌀 tekee kierteen. Tee tason kaikki temput, ennen kuin kolme sydäntä loppuu.</p>
+</div>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu'), pad = document.getElementById('pad');
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+}
+addEventListener('resize', resize); resize();
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:trampoliini:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = Math.max(1, Math.floor(load('taso', 1)) || 1);   // the level being played
+let best = Math.max(0, Math.floor(load('ennatys', 0)) || 0); // most points in one go at a level
+let tricksDone = Math.max(0, Math.floor(load('temput', 0)) || 0);
+
+// ---- The trampolines, in metres ----
+// half: half the mat's length, seen from the side; vMax: the fastest it throws you up (m/s), and
+// so how high you can get; frame: the mat's height above the grass. A net keeps you on.
+const TRAMPS = {
+  piha: { name: 'Iso pihatrampoliini', half: 2.1, vMax: 7.6, frame: 0.9, net: true, mat: '#222b38', rim: '#2f80c3' },
+  pieni: { name: 'Pieni pihatrampoliini', half: 1.2, vMax: 7, frame: 0.7, net: false, mat: '#26303d', rim: '#46a35a' },
+  mini: { name: 'Minitrampoliini', half: 0.55, vMax: 6.2, frame: 0.28, net: false, mat: '#1d1d24', rim: '#e05d5d' },
+  kilpa: { name: 'Kilpatrampoliini', half: 2.5, vMax: 10, frame: 1.15, net: false, mat: '#e9eef3', rim: '#d63a3a' },
+  jatti: { name: 'Jättitrampoliini', half: 4, vMax: 13.2, frame: 1.4, net: false, mat: '#262335', rim: '#f2a541' },
+};
+// A trick is [turns, twists]: turns > 0 backwards, < 0 forwards.
+const LEVELS = [
+  { tramp: 'piha', tasks: [[0, 1], [1, 0], [-1, 0]] },
+  { tramp: 'pieni', tasks: [[1, 0], [-1, 0], [1, 1]] },
+  { tramp: 'mini', tasks: [[1, 0], [0, 1], [-1, 1]] },
+  { tramp: 'kilpa', tasks: [[2, 0], [-1, 1], [1, 2]] },
+  { tramp: 'jatti', tasks: [[3, 0], [-2, 0], [2, 1]] },
+];
+const G = 9.81, COMH = 0.95;           // gravity; the hips above the mat when standing
+const TUCK = 1.4 * 2 * Math.PI;        // a tucked flip turns this fast (rad/s)
+const OPEN = 1.2;                      // stretched out, at most this fast
+const TWIST = 1.6;                     // twists a second
+const CONTACT = 0.3;                   // seconds on the mat each bounce
+const DRIFT = 0.25;                    // a flip started from the mat carries you this fast (m/s)
+const airtime = v => 2 * v / G;
+// The time a trick needs in the air, with time to stretch out before landing.
+const needs = ([n, tw]) => Math.max(Math.abs(n) * 2 * Math.PI / TUCK + 0.4, tw / TWIST + 0.25);
+function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+// Past the fifth level the trampolines come round again with four tricks each, never more than
+// the trampoline has air for.
+function levelOf(n) {
+  if (n <= LEVELS.length) return LEVELS[n - 1];
+  const order = ['pieni', 'mini', 'kilpa', 'jatti', 'piha'];
+  const tramp = order[(n - LEVELS.length - 1) % order.length], t = TRAMPS[tramp];
+  const pool = [];
+  for (let k = -3; k <= 3; k++) for (let tw = 0; tw <= 2; tw++) {
+    if ((k || tw) && needs([k, tw]) <= airtime(t.vMax)) pool.push([k, tw]);  // needs() has the margin
+  }
+  const r = rng(n * 7919), tasks = [];
+  while (tasks.length < 4 && pool.length) tasks.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
+  tasks.sort((a, b) => needs(a) - needs(b));
+  return { tramp, tasks };
+}
+function trickName([n, tw]) {
+  const a = Math.abs(n), dir = n > 0 ? 'taakse' : 'eteen';
+  const many = k => k < 4 ? ['', '', 'Tupla', 'Tripla'][k] : `${k}x `;
+  if (!a && !tw) return 'Suora hyppy';
+  if (!a) return `${many(tw)}${tw > 1 ? 'kierrehyppy' : 'Kierrehyppy'}`;
+  const flip = `${many(a)}${a > 1 ? 'voltti' : 'Voltti'}`;
+  if (!tw) return `${flip} ${dir}`;
+  return `${many(tw)}${tw > 1 ? 'kierre' : 'Kierre'}${flip.toLowerCase()} ${dir}`;
+}
+function trickPoints([n, tw], clean) {
+  let p = 10 * Math.abs(n) + 6 * tw;
+  if (Math.abs(n) >= 2) p *= 1.5;
+  if (n && tw) p += 5;
+  return Math.round(clean ? p : p / 2);
+}
+
+// ---- One go at a level ----
+let L, T, tasks, hearts, points, combo, phase = 'menu', J, held = 0, pops = [], endT = 0, lastResult = null;
+let paid = {};        // the most points each trick has given in this go
+let lastLand = null;  // how the last landing went: { trick, clean } or { crash }
+// v2: a finger on the screen bends the knees and keeps them bent (squat); letting go is the
+// push. bend eases towards the squat; kick (1 just pushed, 0 a fifth of a second later) swings
+// the arms down with the push.
+let squat = false, squatId = null, bend = 0, kick = 0;
+function setup() {
+  L = levelOf(level); T = TRAMPS[L.tramp];
+  tasks = L.tasks.map(t => ({ t, done: false }));
+  hearts = 3; points = 0; combo = 0; pops = []; paid = {};
+  stand(0);
+}
+// Standing on the mat, starting with a small bounce.
+function stand(px) {
+  J = { x: px, y: COMH, vx: 0, vy: 0, a: 0, w: 0, dir: 0, twist: 0, twists: 0, rot: 0,
+        vin: 2.6, matT: 0, pumpT: null, queued: 0, queuedTwist: false, downT: 0, off: false };
+  phase = 'mat';
+}
+function startGo() {
+  unlock();
+  setup();
+  menu.classList.add('hidden');
+  pad.classList.remove('off');
+}
+
+// ---- Input ----
+// The push (letting go of the screen, or a flip button on the mat) at the mat's bottom gives a
+// bounce up; up to 0.12 s early still counts, just less.
+function timeToMat() { return J.vy < 0 ? (J.y - COMH) / -J.vy : Infinity; }
+function squatDown(id = null) { unlock(); if (phase === 'air' || phase === 'mat') { squat = true; squatId = id; } }
+// Only the finger that bent the legs pushes: letting go of a flip button with another is not a push.
+function squatUp(id = null) {
+  if (!squat || (squatId !== null && id !== squatId)) return;
+  squat = false; squatId = null;
+  if (phase === 'air' || phase === 'mat') tap();
+}
+function tap() {
+  kick = 1; sound('thump');
+  if (phase === 'mat' && J.pumpT === null) J.pumpT = J.matT;
+  else if (phase === 'air' && J.pumpT === null && !J.off && timeToMat() < 0.12) J.pumpT = -timeToMat();
+}
+function press(dir) {
+  unlock();
+  if (phase === 'mat' || (phase === 'air' && timeToMat() < 0.12)) { J.queued = dir; tap(); }
+  else if (phase === 'air' && !J.dir) J.dir = dir;    // started in the air: no push from the mat
+  held = J && J.dir ? J.dir : dir;
+}
+function release() { held = 0; }
+function twistTap() {
+  unlock();
+  if (phase === 'mat' || (phase === 'air' && timeToMat() < 0.12)) { J.queuedTwist = true; tap(); }
+  else if (phase === 'air' && J.twists < 3) J.twists++;
+}
+
+// ---- Physics: one fixed step ----
+const wrap = a => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+function step(dt) {
+  pops.forEach(p => { p.t += dt; }); pops = pops.filter(p => p.t < 1.6);
+  kick = Math.max(0, kick - dt * 5);
+  if (phase !== 'air' && phase !== 'mat') squat = false;
+  bend += ((squat ? 1 : 0) - bend) * Math.min(1, dt * (squat ? 14 : 20));
+  if (phase === 'air') air(dt);
+  else if (phase === 'mat') mat(dt);
+  else if (phase === 'down') {
+    J.downT -= dt;
+    if (J.downT <= 0) {
+      if (hearts <= 0) finish(false);
+      else stand(J.off ? 0 : Math.max(-T.half * 0.6, Math.min(T.half * 0.6, J.x)));
+    }
+  } else if (phase === 'clear' || phase === 'over') {
+    endT -= dt;
+    if (endT <= 0) showMenu();
+  }
+}
+function air(dt) {
+  J.vy -= G * dt; J.x += J.vx * dt; J.y += J.vy * dt;
+  // Tucked, the flip spins fast; stretched out it slows, and the jumper spots the landing:
+  // near an upright the turn eases onto it.
+  if (held && J.dir) J.w += (J.dir * TUCK - J.w) * Math.min(1, dt * 10);
+  else if (J.dir) {
+    const up = 2 * Math.PI, ahead = J.dir > 0 ? up - ((J.a % up) + up) % up : -(((J.a % up) + up) % up);
+    let gap = ahead;
+    if (Math.abs(wrap(J.a)) < 0.6) gap = -wrap(J.a);   // just past an upright: settle back onto it
+    const want = Math.sign(gap) * Math.min(OPEN, Math.abs(gap) * 2.5);
+    J.w += (want - J.w) * Math.min(1, dt * 8);
+  }
+  J.a += J.w * dt; J.rot += J.w * dt;
+  if (J.twist < J.twists) J.twist = Math.min(J.twists, J.twist + TWIST * dt);
+  if (T.net && Math.abs(J.x) > T.half - 0.25) { J.x = Math.sign(J.x) * (T.half - 0.25); J.vx = -J.vx * 0.4; }
+  if (!J.off && Math.abs(J.x) > T.half + 0.15) J.off = true;
+  if (J.vy < 0 && !J.off && J.y <= COMH) land();
+  else if (J.off && J.y <= COMH - T.frame) { lastLand = { crash: 'ohi' }; crash('Putosit trampoliinilta!'); }
+}
+// Feet first and upright is a landing; a little off, a wobble; more, a fall.
+function land() {
+  const an = Math.abs(wrap(J.a)), left = J.twists - J.twist;
+  const trick = [Math.round(J.rot / (2 * Math.PI)), Math.round(J.twist)];
+  let clean;
+  if (an < 0.5 && left < 0.12 && !held) clean = true;
+  else if (an < 1 && left < 0.3) clean = false;
+  else { lastLand = { crash: left >= 0.3 ? 'kierre' : 'kaatui' }; crash(left >= 0.3 ? 'Kierre jäi kesken!' : 'Kaaduit!'); return; }
+  lastLand = { trick, clean };
+  if (!clean) J.vx += (J.x >= 0 ? 0.3 : -0.3);
+  J.vin = -J.vy; J.vy = 0; J.y = COMH; J.matT = 0;
+  J.vx = J.vx * 0.4 - J.x * 0.6;  // the mat sags towards the middle and pulls you in
+  J.twist = J.twists = 0; J.w = 0; J.dir = 0;
+  J.landA = wrap(J.a); J.a = J.landA;
+  phase = 'mat';
+  sound('boing', J.vin);
+  if (trick[0] || trick[1]) score(trick, clean);
+}
+function score(trick, clean) {
+  combo++;
+  const full = Math.round(trickPoints(trick, clean) * (1 + 0.1 * Math.min(combo - 1, 10)));
+  // A trick done again pays only what it beats its best in this go by, so the points of one go
+  // have a ceiling and an easy trick repeated cannot fill the high-score list.
+  const id = trick.join(','), before = paid[id] || 0;
+  let p = Math.max(0, full - before);
+  paid[id] = Math.max(before, full);
+  const task = tasks.find(k => !k.done && k.t[0] === trick[0] && k.t[1] === trick[1]);
+  if (task) { task.done = true; p += 25; }
+  points += p; tricksDone++; save('temput', tricksDone);
+  pop(`${trickName(trick)}${clean ? '' : ' (horjahdus)'} +${p}`, task ? '#7ee081' : p ? '#fff' : '#c8dcef');
+  sound(task ? 'task' : 'trick');
+  if (tasks.every(k => k.done)) clearLevel();
+}
+function mat(dt) {
+  J.matT += dt;
+  J.x += J.vx * dt * 0.3;
+  J.y = COMH - dip() * Math.sin(Math.PI * Math.min(1, J.matT / CONTACT)) * (1 + 0.3 * bend);
+  J.a = J.landA ? J.landA * Math.max(0, 1 - J.matT / CONTACT) : 0;
+  if (J.matT >= CONTACT) takeoff();
+}
+const dip = () => Math.min(0.75, 0.12 + J.vin * 0.055);
+function pumpQuality() {
+  if (J.pumpT === null) return 0;
+  const err = Math.abs(J.pumpT - CONTACT / 2);
+  return err < 0.05 ? 1 : Math.max(0, 1 - (err - 0.05) / 0.2);
+}
+function takeoff() {
+  const q = pumpQuality();
+  let v = J.pumpT === null ? J.vin * 0.82 : J.vin * 0.9 + 2 * q;
+  v = Math.max(2.4, Math.min(T.vMax, v));
+  if (J.pumpT !== null && v >= T.vMax - 0.01 && J.vin < T.vMax - 0.3) pop('Huippukorkeus!', '#ffd166', true);
+  else if (q >= 1) pop('Täydellinen ponnistus!', '#ffd166', true);
+  else if (J.pumpT !== null && q < 0.25) pop(J.pumpT < CONTACT / 2 ? 'Liian aikaisin' : 'Liian myöhään', '#ffb4a2', true);
+  if (q >= 0.5) sound('spring');
+  Object.assign(J, { vy: v, y: COMH, a: 0, w: 0, rot: 0, landA: 0, pumpT: null, twist: 0, twists: 0, dir: 0 });
+  if (J.queued) {
+    J.dir = J.queued; J.w = J.dir * OPEN; J.vx -= J.dir * DRIFT;
+    if (held) held = J.dir;
+  }
+  if (J.queuedTwist) J.twists = 1;
+  J.queued = 0; J.queuedTwist = false;
+  phase = 'air';
+}
+function crash(why) {
+  hearts--; combo = 0;
+  J.vx = 0; J.vy = 0; J.w = 0; J.downT = 1.4;
+  J.y = (J.off ? -T.frame : 0) + 0.15;  // lying on the mat, or on the grass beside it
+  J.a = J.a % (2 * Math.PI) > 0 ? Math.PI / 2 : -Math.PI / 2;
+  phase = 'down';
+  pop(why, '#ffb4a2');
+  sound('crash');
+}
+function clearLevel() {
+  const bonus = 50 * level + 20 * hearts;
+  points += bonus;
+  pop(`Taso läpi! +${bonus}`, '#ffd166');
+  sound('win');
+  finish(true);
+}
+function finish(won) {
+  lastResult = { won, points, level };
+  if (points > best) { best = points; save('ennatys', best); }
+  if (won) { level++; save('taso', level); }
+  if (points > 0 && window.AiPelitScores) AiPelitScores.submit(points);
+  phase = won ? 'clear' : 'over'; endT = 1.8; held = 0;
+  if (!won) sound('fail');
+}
+function pop(text, color, small) { pops.push({ text, color, small: !!small, t: 0 }); }
+
+// ---- The menu ----
+function showMenu() {
+  phase = 'menu'; held = 0;
+  pad.classList.add('off');
+  const r = document.getElementById('result');
+  if (lastResult) {
+    r.textContent = lastResult.won ? `Taso ${lastResult.level} läpi! ${lastResult.points} p` : `Sydämet loppuivat. ${lastResult.points} p`;
+    r.className = lastResult.won ? 'win' : 'lose';
+  } else { r.textContent = ''; r.className = ''; }
+  const l = levelOf(level);
+  document.getElementById('level').textContent = `Taso ${level}: ${TRAMPS[l.tramp].name}`;
+  const ul = document.getElementById('tasks'); ul.innerHTML = '';
+  l.tasks.forEach(t => { const li = document.createElement('li'); li.textContent = '⭐ ' + trickName(t); ul.appendChild(li); });
+  document.getElementById('go').textContent = lastResult && !lastResult.won ? 'Uudestaan' : 'Hyppää!';
+  document.getElementById('stats').textContent = `Ennätys ${best} p · Temppuja ${tricksDone}`;
+  menu.classList.remove('hidden');
+  setup(); phase = 'menu';
+}
+document.getElementById('go').addEventListener('click', startGo);
+
+pad.querySelectorAll('button').forEach(b => {
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    try { b.setPointerCapture(e.pointerId); } catch (er) {}
+    b.classList.add('on');
+    const act = b.dataset.act;
+    if (act === 'kierre') twistTap(); else press(act === 'taakse' ? 1 : -1);
+  });
+  const up = () => { b.classList.remove('on'); if (b.dataset.act !== 'kierre') release(); };
+  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+});
+c.addEventListener('pointerdown', e => { e.preventDefault(); squatDown(e.pointerId); }, { passive: false });
+addEventListener('pointerup', e => squatUp(e.pointerId));
+addEventListener('pointercancel', e => squatUp(e.pointerId));
+
+// ---- Drawing ----
+function view() {
+  const ground = H - SAFE_B - 96;
+  const top = SAFE_T + 100;
+  const apex = COMH + T.vMax * T.vMax / (2 * G) + 0.9;
+  const S = Math.min(W * 0.94 / (2 * T.half + 1.4), (ground - top) / (T.frame + apex + 0.3), 120);
+  return { S, ground, matY: ground - T.frame * S, cx: W / 2 };
+}
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const v = view(), { S, ground, matY, cx } = v;
+  const sky = x.createLinearGradient(0, 0, 0, ground);
+  sky.addColorStop(0, '#4ea8de'); sky.addColorStop(1, '#bde0fe');
+  x.fillStyle = sky; x.fillRect(0, 0, W, H);
+  // Clouds and a hedge.
+  x.fillStyle = 'rgba(255,255,255,.8)';
+  [[0.2, 0.25, 1], [0.75, 0.18, 1.3], [0.55, 0.4, 0.8]].forEach(([u, w, s]) => {
+    const px = u * W, py = SAFE_T + 60 + w * (ground - SAFE_T);
+    x.beginPath(); x.arc(px, py, 18 * s, 0, 7); x.arc(px + 20 * s, py - 8 * s, 22 * s, 0, 7); x.arc(px + 42 * s, py, 16 * s, 0, 7); x.fill();
+  });
+  x.fillStyle = '#5a9a4f'; x.fillRect(0, ground - 26, W, 26);
+  x.fillStyle = '#6fbf5f'; x.fillRect(0, ground, W, H - ground);
+  drawTramp(v);
+  drawJumper(v);
+  drawHud();
+}
+function matSag(v, px) {
+  // How far the mat is pressed down at px: under the feet while on it, otherwise flat.
+  if (phase !== 'mat' && !(phase === 'down' && !J.off)) return 0;
+  const d = phase === 'mat' ? COMH - J.y : 0.08;
+  const half = T.half, jx = J.x, u = px < jx ? (px + half) / (jx + half) : (half - px) / (half - jx);
+  return Math.max(0, d * Math.min(1, u)) * v.S;
+}
+function drawTramp(v) {
+  const { S, ground, matY, cx } = v, half = T.half * S;
+  // Legs and frame.
+  x.strokeStyle = '#9aa5b1'; x.lineWidth = Math.max(3, S * 0.06);
+  [-1, -0.45, 0.45, 1].forEach(k => {
+    x.beginPath(); x.moveTo(cx + k * half, matY); x.lineTo(cx + k * half * 0.92, ground); x.stroke();
+  });
+  if (T.net) {
+    x.strokeStyle = 'rgba(40,40,40,.25)'; x.lineWidth = 1;
+    const netTop = matY - 1.9 * S;
+    for (let i = 0; i <= 8; i++) { const yy = netTop + i * (matY - netTop) / 8; x.beginPath(); x.moveTo(cx - half, yy); x.lineTo(cx + half, yy); x.stroke(); }
+    x.strokeStyle = '#555'; x.lineWidth = 3;
+    [-1, 1].forEach(k => { x.beginPath(); x.moveTo(cx + k * half, matY); x.lineTo(cx + k * half, netTop); x.stroke(); });
+  }
+  // The mat, sagging under the feet.
+  x.strokeStyle = T.mat; x.lineWidth = Math.max(4, S * 0.08); x.lineCap = 'round';
+  x.beginPath();
+  for (let i = 0; i <= 40; i++) {
+    const m = -T.half + 2 * T.half * i / 40;
+    const py = matY + matSag(v, m);
+    if (i) x.lineTo(cx + m * S, py); else x.moveTo(cx + m * S, py);
+  }
+  x.stroke();
+  // The padded rim.
+  x.fillStyle = T.rim;
+  const rim = Math.min(0.35, T.half * 0.25) * S;
+  [-1, 1].forEach(k => { x.fillRect(cx + k * half - (k > 0 ? 0 : rim), matY - S * 0.06, rim, S * 0.14); });
+}
+// How bent the knees are, 0 to 1: pressed into the mat, and held bent while the finger is down.
+function legBend() {
+  const mat = phase === 'mat' ? Math.min(1, (COMH - J.y) / 0.6) : 0;
+  return Math.min(1, Math.max(mat, 0.9 * bend));
+}
+function drawJumper(v) {
+  const { S, matY, cx } = v;
+  let px = cx + J.x * S, py = matY - J.y * S;
+  if (phase === 'menu') py = matY - COMH * S;
+  const tuck = phase === 'air' && held && J.dir;
+  const tw = Math.cos(J.twist * 2 * Math.PI);
+  // On a big trampoline the jumper would be tiny: draw it at least 60 px a metre, raised so
+  // the feet still meet the mat.
+  const s = Math.max(60, Math.min(S, 100));
+  x.save();
+  x.translate(px, py - (s - S) * COMH);
+  x.rotate(-J.a);
+  x.scale(Math.abs(tw) < 0.35 ? 0.35 * Math.sign(tw || 1) : tw, 1);
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const limb = (pts, w, col) => { x.strokeStyle = col; x.lineWidth = w * s; x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a * s, -b * s) : x.moveTo(a * s, -b * s)); x.stroke(); };
+  if (tuck) {
+    // Knees to the chest, hands on the shins.
+    limb([[-0.04, 0], [-0.08, 0.45]], 0.22, '#ee6c4d');
+    limb([[0, 0], [0.3, 0.32], [0.26, -0.08]], 0.14, '#264653');
+    limb([[-0.06, 0.4], [0.14, 0.32], [0.3, 0.12]], 0.08, '#f4c7a1');
+    head(0.02, 0.62, s);
+  } else {
+    const crouch = legBend();
+    const k = 0.24 * crouch;
+    limb([[0.03, 0], [0.08 + k, -0.45 + k * 0.5], [0.04, -0.93 + 0.3 * crouch]], 0.14, '#264653');
+    limb([[-0.03, 0], [-0.04 + k, -0.45 + k * 0.5], [-0.02, -0.93 + 0.3 * crouch]], 0.14, '#1f3a44');
+    limb([[0, 0], [0, 0.5]], 0.22, '#ee6c4d');
+    // The arms swing down with each push, as a jumper drives the bounce.
+    const swing = phase === 'air' ? kick : 0;
+    const arms = phase === 'air'
+      ? [[0.02, 0.46], [0.12, 0.8 - 0.5 * swing], [0.16 + 0.1 * swing, 1.05 - 0.9 * swing]]
+      : [[0.02, 0.46], [0.12, 0.2], [0.16, 0]];
+    limb(arms, 0.08, '#f4c7a1');
+    head(0, 0.68, s);
+  }
+  x.restore();
+  function head(hx, hy, s) {
+    x.fillStyle = '#f4c7a1'; x.beginPath(); x.arc(hx * s, -hy * s, 0.13 * s, 0, 7); x.fill();
+    x.fillStyle = '#6b3e26'; x.beginPath(); x.arc(hx * s - 0.02 * s, -hy * s - 0.04 * s, 0.13 * s, Math.PI * 1.05, Math.PI * 2.1); x.fill();
+    x.fillStyle = '#222'; x.beginPath(); x.arc(hx * s + 0.07 * s, -hy * s, 0.018 * s + 0.5, 0, 7); x.fill();
+  }
+}
+function drawHud() {
+  if (phase === 'menu') return;
+  const top = SAFE_T + 50;
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '600 12px system-ui,sans-serif';
+  const lines = [''];
+  tasks.forEach(k => {
+    const part = (k.done ? '✅ ' : '⭐ ') + trickName(k.t), cur = lines[lines.length - 1];
+    if (cur && x.measureText(cur + '  ' + part).width > W - 28) lines.push(part);
+    else lines[lines.length - 1] = cur ? cur + '  ' + part : part;
+  });
+  x.fillStyle = 'rgba(20,40,70,.55)';
+  roundRect(8, top - 4, W - 16, 40 + 16 * lines.length, 12); x.fill();
+  x.fillStyle = '#fff'; x.font = '700 15px system-ui,sans-serif';
+  x.fillText(`Taso ${level} · ${T.name}`, W / 2, top + 10);
+  x.textAlign = 'left';
+  x.fillText('❤️'.repeat(Math.max(0, hearts)) + '🤍'.repeat(Math.max(0, 3 - hearts)), 16, top + 10);
+  x.textAlign = 'right'; x.fillText(`${points} p`, W - 16, top + 10);
+  // The tricks still to do.
+  x.textAlign = 'center'; x.font = '600 12px system-ui,sans-serif';
+  lines.forEach((l, i) => x.fillText(l, W / 2, top + 34 + 16 * i));
+  // Popups: trick names and pump timing.
+  let yy = H * 0.3;
+  pops.forEach(p => {
+    const a = Math.min(1, (1.6 - p.t) * 2);
+    x.globalAlpha = a; x.fillStyle = p.color;
+    let size = p.small ? 16 : 22;
+    x.font = `800 ${size}px system-ui,sans-serif`;
+    const wide = x.measureText(p.text).width;
+    if (wide > W - 24) { size = Math.floor(size * (W - 24) / wide); x.font = `800 ${size}px system-ui,sans-serif`; }
+    x.strokeStyle = 'rgba(20,40,70,.7)'; x.lineWidth = 4;
+    const ty = yy - p.t * 20;
+    x.strokeText(p.text, W / 2, ty); x.fillText(p.text, W / 2, ty);
+    x.globalAlpha = 1; yy += p.small ? 24 : 30;
+  });
+  if (phase === 'mat' && points === 0 && combo === 0 && hearts === 3) {
+    x.fillStyle = 'rgba(20,40,70,.8)'; x.font = '600 14px system-ui,sans-serif';
+    x.fillText('Pidä ruutua pohjassa, päästä irti matolla', W / 2, H - SAFE_B - 110);
+  }
+}
+function roundRect(a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
+
+// ---- Sound (Web Audio, after the first tap) ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function tone(f0, f1, dur, type = 'sine', vol = 0.2, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function sound(k, v) {
+  if (k === 'boing') tone(90 + (v || 3) * 12, 260 + (v || 3) * 25, 0.22, 'sine', 0.25);
+  else if (k === 'thump') tone(150, 70, 0.08, 'sine', 0.3);
+  else if (k === 'spring') tone(220, 700, 0.18, 'triangle', 0.18);
+  else if (k === 'trick') tone(660, 880, 0.12, 'triangle', 0.15);
+  else if (k === 'task') [660, 880, 1175].forEach((f, i) => tone(f, f, 0.12, 'triangle', 0.16, i * 0.08));
+  else if (k === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.18, 0.1 + i * 0.1));
+  else if (k === 'crash') tone(180, 60, 0.35, 'square', 0.12);
+  else if (k === 'fail') tone(300, 150, 0.4, 'sawtooth', 0.1, 0.2);
+}
+
+// ---- Loop: fixed 1/60 s steps ----
+let lastT = performance.now(), acc = 0;
+function frame(t) {
+  acc += Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
+  draw();
+  requestAnimationFrame(frame);
+}
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="trampoliini" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
