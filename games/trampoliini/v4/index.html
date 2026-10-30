@@ -252,7 +252,8 @@ function land() {
   const an = Math.abs(wrap(J.a)), left = J.twists - J.twist, halves = Math.round(J.twist * 2);
   const trick = [Math.round(J.rot / (2 * Math.PI)), halves / 2];
   let clean;
-  if (an < 0.5 && left < 0.12 && !held && !twistHeld) clean = true;   // still twisting: a wobble
+  // Still twisting in this jump is a wobble; 🌀 pressed just now for the next jump is not.
+  if (an < 0.5 && left < 0.12 && !held && !(twistHeld && J.twists > 0)) clean = true;
   else if (an < 1) clean = false;
   else { lastLand = { crash: 'kaatui' }; crash('Kaaduit!'); return; }
   if (halves % 2) J.face = -J.face;   // half a twist more: you land facing the other way
@@ -319,7 +320,7 @@ function takeoff() {
     const cap = MAX_BOUNCE * (T.half + 0.15) / (airtime(v) + CONTACT * 0.3);
     J.vx = Math.max(-cap, Math.min(cap, J.vx));
   }
-  if (J.queuedTwist) J.twists = 0.5;
+  if (J.queuedTwist || twistHeld) J.twists = 0.5;   // 🌀 still held from the last jump twists on
   J.queued = 0; J.queuedTwist = false;
   phase = 'air';
 }

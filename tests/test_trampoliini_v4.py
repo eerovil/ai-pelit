@@ -169,3 +169,42 @@ def test_v4_plays_on_with_the_saved_level_and_record(site, context):
     page.reload()
     assert page.inner_text("#level") == "Taso 5: Jättitrampoliini"
     assert page.inner_text("#stats").startswith("Ennätys 400 p")
+
+
+def test_twist_pressed_in_the_last_moment_before_a_clean_landing_is_for_the_next_jump(site, context):
+    page = open_game(site, context, level=1)
+    r = page.evaluate("""() => { const s = window.__step;
+      stand(0); J.vin = T.vMax; lastLand = null;
+      while (phase === 'mat' && J.matT < CONTACT / 2) s(1 / 60);
+      press(1); while (phase === 'mat') s(1 / 60);
+      while (phase === 'air' && Math.abs(J.rot) < 2 * Math.PI - 1.2) s(1 / 60);
+      release();
+      while (phase === 'air' && timeToMat() > 0.08) s(1 / 60);
+      twistDown();                                   // within 0.12 s of the mat
+      const queued = [J.queuedTwist, J.twists];
+      while (phase === 'air') s(1 / 60);
+      const landed = lastLand;
+      twistUp(); while (phase === 'mat') s(1 / 60);
+      return [queued, landed, J.twists]; }""")
+    assert r[0] == [True, 0]
+    assert r[1] == {"trick": [1, 0], "clean": True}   # the back flip keeps its full points
+    assert r[2] == 0.5                                 # and the next jump twists
+
+
+def test_twist_held_through_a_landing_keeps_twisting_on_the_next_jump(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { const s = window.__step;
+      stand(0); J.vin = T.vMax; lastLand = null;
+      while (phase === 'mat' && J.matT < CONTACT / 2) s(1 / 60);
+      twistDown();                                   // one press, never let go
+      while (phase === 'mat') s(1 / 60);
+      while (phase === 'air') s(1 / 60);
+      const first = lastLand;
+      while (phase === 'mat') s(1 / 60);
+      for (let i = 0; i < 30; i++) s(1 / 60);
+      const second = [J.twist > 0.5, J.twists > J.twist];
+      twistUp(); while (phase === 'air') s(1 / 60);
+      return [first, second, lastLand]; }""")
+    assert r[0]["clean"] is False and r[0]["trick"][1] >= 1
+    assert r[1] == [True, True]
+    assert r[2]["clean"] and r[2]["trick"][1] >= 1
