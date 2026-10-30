@@ -184,11 +184,16 @@ def room_of_two(site, browser, style="perinteinen", relay=None):
     return host, guest
 
 
+# Nobody else on the trail, so a skier moved by a test does not land on a granny and fall.
+CLEAR = "npcs = []; nextVasta = nextSkate = 1e9"
+
+
 def wax_and_go(pages):
     for p in pages:
         p.evaluate("draw(); const r = ui.wax[bestFor(style, course.weather.T)]; down(1, r.x + 5, r.y + 5); up(1)")
     for p in pages:
         p.wait_for_function("mode === 'race'", timeout=8000)
+        p.evaluate(CLEAR)
 
 
 def test_two_phones_ski_the_same_course_and_the_first_in_wins(site, browser):
@@ -204,6 +209,7 @@ def test_two_phones_ski_the_same_course_and_the_first_in_wins(site, browser):
     host.wait_for_timeout(600)
     assert host.evaluate("[mode, net.phase]") == ["ready", "wax"]
     wax_and_go([guest])
+    host.evaluate(CLEAR)
     # Each sees the other on the trail.
     guest.evaluate("P.z = 120")
     host.wait_for_function("net.skiers[1].z >= 120", timeout=3000)
@@ -212,7 +218,9 @@ def test_two_phones_ski_the_same_course_and_the_first_in_wins(site, browser):
     assert guest.evaluate("livePlace()") == 1
     # A reload mid-race gives the guest its skier back where it was.
     guest.reload()
-    guest.wait_for_function("net && mode === 'race' && P.z >= 120", timeout=8000)
+    # (A reload brings the course's grannies and skaters back: a fall on one may set it back a step.)
+    guest.wait_for_function("net && mode === 'race' && P.z >= 115", timeout=8000)
+    guest.evaluate(CLEAR)
     # The guest finishes first, then the host; both get the same results.
     guest.evaluate("P.z = course.len - 0.5; P.v = 8")
     host.wait_for_function("net.skiers[1].fin !== null", timeout=4000)
