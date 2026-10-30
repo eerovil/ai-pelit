@@ -102,7 +102,7 @@ function levelOf(n) {
   const tramp = order[(n - LEVELS.length - 1) % order.length], t = TRAMPS[tramp];
   const pool = [];
   for (let k = -3; k <= 3; k++) for (let tw = 0; tw <= 2; tw++) {
-    if ((k || tw) && needs([k, tw]) <= airtime(t.vMax) * 0.8) pool.push([k, tw]);
+    if ((k || tw) && needs([k, tw]) <= airtime(t.vMax)) pool.push([k, tw]);  // needs() has the margin
   }
   const r = rng(n * 7919), tasks = [];
   while (tasks.length < 4 && pool.length) tasks.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);

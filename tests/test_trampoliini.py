@@ -76,9 +76,9 @@ def test_a_tap_at_the_bottom_of_the_bounce_goes_higher_and_no_tap_goes_lower(sit
     assert page.evaluate("J.vy") == page.evaluate("T.vMax")
 
 
-def test_every_trick_of_the_first_ten_levels_can_be_landed(site, context):
+def test_every_trick_of_the_first_fifteen_levels_can_be_landed(site, context):
     page = open_game(site, context)
-    for lv in range(1, 11):
+    for lv in range(1, 16):
         page.evaluate(f"level = {lv}; setup()")
         for n, tw in page.evaluate("L.tasks"):
             assert play(page, n, tw) is not None, f"level {lv}: {n} turns, {tw} twists"
@@ -210,3 +210,10 @@ def test_the_same_trick_again_pays_only_what_it_beats_its_best_by(site, context)
     # The streak bonus tops out at double: never more than one trick's points on top.
     assert page.evaluate("points") - first <= page.evaluate("trickPoints([1, 0], true)")
     assert page.evaluate("hearts") == 3
+
+
+def test_every_level_past_the_fifth_asks_four_different_tricks(site, context):
+    page = open_game(site, context)
+    for lv in range(6, 31):
+        tasks = page.evaluate(f"levelOf({lv}).tasks")
+        assert len(tasks) == 4 and len({tuple(t) for t in tasks}) == 4, f"level {lv}: {tasks}"
