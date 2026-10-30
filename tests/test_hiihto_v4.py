@@ -43,14 +43,17 @@ def test_the_meter_turns_green_at_the_fastest_rhythm(site, context, st, full):
     assert page.errors == []
 
 
-def test_a_race_draws_the_speed_and_the_meter(site, browser):
-    ctx = browser.new_context(viewport={"width": 360, "height": 640}, is_mobile=True, has_touch=True)
+@pytest.mark.parametrize("w,h", [(360, 640), (390, 844)])
+def test_a_race_draws_the_speed_and_the_meter(site, browser, w, h):
+    ctx = browser.new_context(viewport={"width": w, "height": h}, is_mobile=True, has_touch=True)
     page = open_game(site, ctx)
     r = page.evaluate(BOT.replace("mode === 'race'; i++)", "mode === 'race' && P.z < 150; i++)", 1))
     assert r["mode"] == "race"
     page.evaluate("draw()")
     bar = page.evaluate("rhythmBar()")
-    assert 0 <= bar["x"] and bar["x"] + bar["w"] + 40 <= 360
+    assert 0 <= bar["x"] and bar["x"] + bar["w"] + 40 <= w
+    # Under the hint line, above the trail, clear of the corner chips.
+    assert page.evaluate("SAFE_T + 18 + 34 + 34 + 20") < bar["y"] < h / 3
     # Classic still plays to the end and saves as before.
     r = page.evaluate(BOT)
     assert r["mode"] == "done" and r["stars"] >= 1, r
