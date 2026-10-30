@@ -53,3 +53,48 @@ def test_a_note_lights_up_while_it_is_in_the_zone(site, context):
     # Its middle is on the line at its beat.
     page.evaluate("now = cur.notes[0].t")
     assert page.evaluate("yOf(cur.notes[0].t) === hitY") is True
+
+
+def test_two_lanes_in_the_zone_at_once_both_hit(site, context):
+    page = start_at(site, context, 13)
+    page.evaluate("""() => {
+      const [a] = cur.notes; const b = cur.notes.find(n => n.lane !== a.lane);
+      now = (a.t + b.t) / 2; window._pair = [a, b];
+      state = 'play'; tap(b.lane); tap(a.lane); state = 'menu';
+    }""")
+    assert page.evaluate("[_pair.every(n => n.hit), lives]") == [True, 3]
+
+
+def test_a_press_between_two_close_notes_in_a_lane_takes_the_nearer(site, context):
+    page = start_at(site, context, 13)
+    pair = page.evaluate("""() => {
+      for (let i = 0; i < cur.notes.length; i++) for (let k = i + 1; k < cur.notes.length; k++) {
+        const a = cur.notes[i], b = cur.notes[k];
+        if (a.lane === b.lane && b.t - a.t < 0.32) {
+          now = b.t - 0.03; state = 'play'; tap(b.lane); state = 'menu';
+          return [a.hit, b.hit, lives];
+        }
+      }
+    }""")
+    assert pair == [False, True, 3]
+
+
+def test_the_zone_follows_a_new_level_after_a_reload(site, context):
+    page = start_at(site, context, 13)
+    fast = page.evaluate("zonePx(GOOD)")
+    page.evaluate("localStorage.setItem('ai-pelit:piano:taso', '13')")
+    page.reload()
+    page.click("#prev"); page.click("#prev"); page.click("#prev"); page.click("#prev")
+    page.click("#go")
+    assert page.evaluate("[level, zonePx(GOOD) < " + str(fast) + "]") == [9, True]
+
+
+def test_the_zone_fits_a_390_px_phone(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.goto(site.url + URL)
+    page.click("#go")
+    # The zone's upper half and the line sit above the keys; the lane is a quarter of the width.
+    assert page.evaluate("[hitY - zonePx(GOOD) > topY + 20, hitY < btnTop, Math.round(laneW)]") == [True, True, 98]
+    ctx.close()
