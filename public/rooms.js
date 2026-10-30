@@ -682,7 +682,7 @@
     var q = new URLSearchParams(location.search).get('huone');
     var back = sload(HERE, null);
     if (back && (back.game !== GAME || back.v !== VERSION)) back = null;
-    if (q) history.replaceState(null, '', location.pathname);
+    if (q) history.replaceState(history.state, '', location.pathname);
     if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) enter(q.toUpperCase(), false);
     else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
   }

@@ -235,6 +235,37 @@
   }
 
   window.addEventListener('hashchange', function () { render(); window.scrollTo(0, 0); });
+
+  // The phone's back always goes up (#68): game → its page → the shelf → out of the app. Going
+  // down adds one entry marked { up: true } over its parent; going up steps back to that parent,
+  // or, with no parent below (opened from a link), takes this entry's place instead of adding one.
+  function goDown(hash) {
+    history.pushState({ up: true }, '', hash);
+    render();
+    window.scrollTo(0, 0);
+  }
+  view.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || e.defaultPrevented) return;
+    var href = a.getAttribute('href');
+    var game = href.match(/^games\/([a-z0-9-]+)\/v\d+\/$/);
+    if (href === '#/') {
+      e.preventDefault();
+      if (history.state && history.state.up) history.back();
+      else location.replace('#/');
+    } else if (/^#\/[a-z0-9-]+$/.test(href)) {
+      e.preventDefault();
+      goDown(href);
+    } else if (game) {
+      e.preventDefault();
+      var url = new URL(href, location.href);
+      // A game opened from the shelf gets its page between them, so back from it goes there.
+      if (!/^#\/[a-z0-9-]/.test(location.hash)) goDown('#/' + game[1]);
+      // back.js reads this and steps back here from the chip instead of opening the page anew.
+      try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
+      location.assign(url.href);
+    }
+  });
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     loadCatalog();
