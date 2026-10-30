@@ -9,8 +9,9 @@ player sees is Finnish unless the request says otherwise.
 
 - "Uusi peli: …" — a new game. Pick a short slug (lowercase, digits, dashes), make
   `games/<slug>/v1/index.html` and `games/<slug>/game.json`.
-- "<Peli> v<N> (<slug>): …" — a new version. Copy `games/<slug>/v<N-1>/` to `games/<slug>/v<N>/`
-  and change the copy. Append the version to `game.json`.
+- "<Peli> v<N> (<slug>): …" — a new version. Copy the newest version still in `games/<slug>/`
+  (usually `v<N-1>/`) to the next free number and change the copy; a withdrawn number (rule 1) is
+  skipped for good, so Puhelinkoppi goes from `v2/` to `v5/`. Append the version to `game.json`.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
