@@ -272,10 +272,11 @@ if (renderer) {
 
   // --- Round ---------------------------------------------------------------------------------
   const ball = { x: 0, y: R, z: 0, vy: 0, v: 0, aimX: 0, air: false, ramp: false, boost: 0, rush: 0 };
-  const round = { phase: 'menu', stars: 0, fallT: 0, t: 0, zone: 0 };
+  const round = { phase: 'menu', stars: 0, fallT: 0, t: 0, zone: 0, endZ: null };
 
   function best() { return +(localStorage.getItem(KEY + 'ennatys') || 0); }
-  function metres() { return Math.floor(-ball.z); }
+  // The distance stops counting where the ball left the track, though it keeps flying while it falls.
+  function metres() { return Math.floor(-(round.endZ ?? ball.z)); }
   function points() { return metres() + round.stars * 10; }
 
   function reset() {
@@ -284,7 +285,7 @@ if (renderer) {
     rowPool.forEach(free);
     rows = []; stars = []; blocks = []; plan = []; lastRamp = 10; lastBoost = 0; seed = (Date.now() % 2147483646) + 1;
     Object.assign(ball, { x: 0, y: R, z: 0, vy: 0, v: 6, aimX: 0, air: false, ramp: false, boost: 0, rush: 0 });
-    Object.assign(round, { stars: 0, fallT: 0, t: 0, zone: 0 });
+    Object.assign(round, { stars: 0, fallT: 0, t: 0, zone: 0, endZ: null });
     ballMesh.quaternion.identity();
     placeRows(-BEHIND, AHEAD);
     hud();
@@ -351,7 +352,7 @@ if (renderer) {
       if (solid && ball.vy <= 0 && ball.y <= R + ground && was >= R + ground - 0.05) {
         Object.assign(ball, { y: R + ground, vy: 0, air: false, ramp: r.kind === 'ramp' });
       } else if (ball.y < R - 0.3) {
-        round.phase = 'fall'; round.fallT = 0; sound('fall');
+        round.phase = 'fall'; round.fallT = 0; round.endZ = ball.z; sound('fall');
       }
     }
   }

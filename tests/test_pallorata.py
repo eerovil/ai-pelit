@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, wait_for_worker
 
 URL = "games/pallorata/v1/"
 
@@ -158,3 +158,38 @@ def test_the_sky_turns_to_sunset_further_on(site, context):
     page.evaluate("ball.z = -301")
     page.wait_for_function("round.zone === 1", timeout=3000)
     assert page.text_content("#toast") == "Auringonlasku"
+
+
+def test_the_distance_stops_counting_when_the_ball_leaves_the_track(site, context):
+    page, _ = start(site, context)
+    page.wait_for_function("-ball.z > 4", timeout=5000)
+    page.evaluate("ball.aimX = 5")
+    page.wait_for_function("round.phase === 'fall'", timeout=2000)
+    left = page.evaluate("Math.floor(-round.endZ)")
+    page.wait_for_function("round.phase === 'over'", timeout=4000)
+    # The ball flew on while falling, but the score counts only where it left the track.
+    assert page.evaluate("-ball.z") > left + 3
+    assert page.text_content("#tulos").startswith(f"{left} m ")
+    assert page.evaluate("+localStorage.getItem('ai-pelit:pallorata:ennatys')") == left + 10 * page.evaluate("round.stars")
+
+
+def test_it_plays_offline_from_the_phones_cache(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site.url)
+    wait_for_worker(page)
+    page.goto(site.url + URL)
+    page.wait_for_function("window.drawn === true || window.noWebgl === true", timeout=15000)
+    if page.evaluate("window.noWebgl === true"):
+        pytest.skip("this Chromium has no WebGL")
+    context.set_offline(True)
+    try:
+        page.reload()
+        page.wait_for_function("window.drawn === true", timeout=15000)
+        page.click("#aloita")
+        page.wait_for_function("round.phase === 'run' && -ball.z > 4", timeout=5000)
+    finally:
+        context.set_offline(False)
+    assert errors == []

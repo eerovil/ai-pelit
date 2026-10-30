@@ -68,6 +68,6 @@ flowchart TD
 - **Vauhti! 3 s kovempaa**: rolling on a turbo row (`kind: 'boost'`, cyan with yellow arrows) sets `ball.boost` to 3 s; `ball.rush` eases up to +8 speed and back down after. The view widens with it (`draw()`), and a "Vauhti!" chip shows. No ramp comes within 35 rows after a turbo, so a faster jump cannot overshoot its landing.
 - **Pallo tönäistään sivuun ja hidastuu**: a purple block (from row 120, on rows at least 1.8 wide) slides from edge to edge of its row; touching it moves the ball's aim 1.4 away from it and sets `ball.rush` to −4, so it slows for a moment. The push can drop it off a narrow track.
 - **300 m: Auringonlasku, 700 m: Tähtiyö**: `ZONES` and `paintSky()` blend the sky, fog and light over 60 m into each new zone and show its name (`toast()`); at night white sky stars (`skyDots`) appear and the stars glow brighter.
-- **Pallo putoaa pilviin**: off the track the ball keeps rolling forward and falls under gravity; after 1.3 s `over()` ends the round.
+- **Pallo putoaa pilviin**: off the track the ball keeps flying forward and falls under gravity; the distance stops counting where it left the track (`round.endZ`); after 1.3 s `over()` ends the round.
 - **Putosit!: metrit + 10 × tähdet = pisteet**: `over()` shows the distance, the stars and the points, and counts the round in `ai-pelit:pallorata:pelit`.
 - **Uusi ennätys talteen**: a better score is saved in `ai-pelit:pallorata:ennatys` on the phone.
