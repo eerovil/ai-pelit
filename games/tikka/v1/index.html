@@ -109,7 +109,7 @@ function resize() {
     PANEL = { x: W - SAFE_R - pw - 8, y: SAFE_T + 52, w: pw, h: H - SAFE_T - SAFE_B - 62 };
   } else {
     // The panel under the corner chips, the board below it, room for the thumb at the bottom.
-    PANEL = { x: SAFE_L + 10, y: SAFE_T + 50, w: W - SAFE_L - SAFE_R - 20, h: 92 };
+    PANEL = { x: SAFE_L + 10, y: SAFE_T + 50, w: W - SAFE_L - SAFE_R - 20, h: 108 };
     const top = PANEL.y + PANEL.h + 8, avail = H - top - SAFE_B - 70;
     const r = Math.min((W - 16) / 2, avail / 2);
     K = r / R_ALL; BX = W / 2; BY = top + r;
@@ -345,46 +345,50 @@ function drawSight() {
   x.moveTo(px, py - r - 6); x.lineTo(px, py - 4); x.moveTo(px, py + 4); x.lineTo(px, py + r + 6); x.stroke();
 }
 function roundRect(rx, ry, rw, rh, rr) { x.beginPath(); if (x.roundRect) x.roundRect(rx, ry, rw, rh, rr); else x.rect(rx, ry, rw, rh); }
+// Draws one line of the panel and keeps its box in panelTexts, so the tests can see nothing overlaps.
+let panelTexts = [];
+function label(str, tx, ty, size, weight, col, align) {
+  str = String(str);
+  x.font = weight + ' ' + size + 'px system-ui,sans-serif'; x.fillStyle = col; x.textAlign = align;
+  x.fillText(str, tx, ty);
+  if (!str) return;
+  const w = x.measureText(str).width, x0 = align === 'right' ? tx - w : tx;
+  panelTexts.push({ text: str, x0, x1: x0 + w, y0: ty - size / 2, y1: ty + size / 2 });
+}
 function drawPanel() {
   const P = PANEL;
+  panelTexts = [];
   x.fillStyle = 'rgba(0,0,0,.35)'; roundRect(P.x, P.y, P.w, P.h, 12); x.fill();
   x.textBaseline = 'middle';
   const dots = (dx, dy) => { for (let i = 0; i < 3; i++) { x.fillStyle = i < dartsLeft ? '#fff' : 'rgba(255,255,255,.2)'; x.beginPath(); x.arc(dx + i * 14, dy, 4.5, 0, 7); x.fill(); } };
   const last = turnDarts.map(d => d.label).join(' · ');
   if (mode === 'kisa') {
-    x.textAlign = 'left'; x.fillStyle = '#c4d2df'; x.font = '600 15px system-ui,sans-serif';
-    x.fillText('Kierros ' + round + '/' + ROUNDS, P.x + 14, P.y + 22);
-    x.fillStyle = '#ffd166'; x.font = '800 32px system-ui,sans-serif';
-    x.fillText(players[0].score + ' p', P.x + 14, P.y + 56);
-    dots(P.x + P.w - 46, P.y + 22);
-    x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '700 16px system-ui,sans-serif';
-    x.fillText(last, P.x + P.w - 14, P.y + 58);
+    // Round and darts on top, the points below, and this turn's darts on a row of their own.
+    label('Kierros ' + round + '/' + ROUNDS, P.x + 14, P.y + 20, 15, 600, '#c4d2df', 'left');
+    dots(P.x + P.w - 46, P.y + 20);
+    label(players[0].score + ' p', P.x + 14, P.y + 54, 32, 800, '#ffd166', 'left');
+    label(last, P.x + 14, P.y + 88, 15, 700, '#fff', 'left');
     const best = +load('ennatys', 0);
-    if (LAND && best) { x.textAlign = 'left'; x.fillStyle = '#c4d2df'; x.font = '600 14px system-ui,sans-serif'; x.fillText('Ennätys ' + best + ' p', P.x + 14, P.y + 92); }
+    if (LAND && best) label('Ennätys ' + best + ' p', P.x + 14, P.y + 116, 14, 600, '#c4d2df', 'left');
     return;
   }
-  // 501: one row (sideways) or one column (upright) a player.
-  const n = players.length;
+  // 501: one card a player, side by side upright and one above the other sideways. In each card
+  // the name, then the score, then this turn's darts, each on its own row.
+  const n = players.length, bh = LAND ? 88 : P.h - 16;
   for (let i = 0; i < n; i++) {
-    const bw = LAND ? P.w - 16 : (P.w - 24) / 2, bh = LAND ? 74 : P.h - 16;
+    const bw = LAND ? P.w - 16 : (P.w - 24) / 2;
     const bx = LAND ? P.x + 8 : P.x + 8 + i * (bw + 8), by = LAND ? P.y + 8 + i * (bh + 8) : P.y + 8;
     x.fillStyle = i === cur ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.04)';
     roundRect(bx, by, bw, bh, 10); x.fill();
     if (i === cur) { x.strokeStyle = PCOL[i]; x.lineWidth = 2; roundRect(bx, by, bw, bh, 10); x.stroke(); }
-    x.textAlign = 'left'; x.fillStyle = PCOL[i]; x.font = '700 14px system-ui,sans-serif';
-    x.fillText(players[i].name, bx + 10, by + 16);
-    x.fillStyle = '#fff'; x.font = '800 30px system-ui,sans-serif';
-    x.fillText(players[i].score, bx + 10, by + bh - 24);
+    label(players[i].name, bx + 10, by + 16, 14, 700, PCOL[i], 'left');
+    label(players[i].score, bx + 10, by + 46, 30, 800, '#fff', 'left');
     if (i === cur) {
       dots(bx + bw - 40, by + 16);
-      x.textAlign = 'right'; x.font = '700 13px system-ui,sans-serif'; x.fillStyle = '#e8eef4';
-      x.fillText(last, bx + bw - 8, by + bh - 22);
+      label(last, bx + 10, by + bh - 13, 13, 700, '#e8eef4', 'left');
     }
   }
-  if (LAND) {
-    x.textAlign = 'left'; x.fillStyle = '#c4d2df'; x.font = '600 14px system-ui,sans-serif';
-    x.fillText('Kierros ' + round, P.x + 14, P.y + 8 + n * 82 + 14);
-  }
+  if (LAND) label('Kierros ' + round, P.x + 14, P.y + 8 + n * (bh + 8) + 14, 14, 600, '#c4d2df', 'left');
 }
 function drawHint() {
   if (phase !== 'play' || hold || flying || pause > 0 || players[cur].ai) return;

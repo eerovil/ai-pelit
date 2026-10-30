@@ -203,3 +203,31 @@ def test_on_a_390_px_phone_the_board_and_panel_fit_under_the_chips(site, context
     chip = page.locator("#ai-pelit-tulokset-nappi").bounding_box()
     assert page.evaluate("PANEL.y") >= chip["y"] + chip["height"]
     assert page.errors == []
+
+
+def overlaps(a, b):
+    return a["x0"] < b["x1"] and b["x0"] < a["x1"] and a["y0"] < b["y1"] and b["y0"] < a["y1"]
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+@pytest.mark.parametrize("game", ["501", "kisa"])
+def test_a_full_panel_has_no_text_on_top_of_other_text(site, context, size, game):
+    w, h = size
+    page = open_game(site, context, {"vastus": "kaveri", "ennatys": 1800})
+    turn(page, {"width": w, "height": h})
+    page.click("#go501" if game == "501" else "#kisa")
+    # Three triple 20s and big scores: the widest a turn's darts and the scores get.
+    page.evaluate("""() => {
+        for (const p of players) p.score = mode === 'kisa' ? 1800 : 501;
+        turnDarts = [scoreAt(0, -103), scoreAt(0, -103), scoreAt(0, -103)];
+        draw();
+    }""")
+    texts = page.evaluate("panelTexts")
+    assert "T20 · T20 · T20" in [t["text"] for t in texts]
+    panel = page.evaluate("PANEL")
+    for i, a in enumerate(texts):
+        assert panel["x"] <= a["x0"] and a["x1"] <= panel["x"] + panel["w"], a
+        assert panel["y"] <= a["y0"] and a["y1"] <= panel["y"] + panel["h"], a
+        for b in texts[i + 1:]:
+            assert not overlaps(a, b), (a, b)
+    assert page.errors == []

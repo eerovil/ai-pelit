@@ -16,25 +16,31 @@ flowchart TD
   F --> G[Osuma: piste, tupla, tripla, bull tai ohi]
   G --> H{Pistekisa vai 501?}
   H -- Pistekisa --> I[Pisteet kasvavat]
-  H -- 501 --> J{Mitä jää?}
-  J -- Alle nollan --> K[Yli! Vuoron pisteet palaavat]
-  J -- Tasan nolla --> L[Voitto]
-  J -- Enemmän --> M{Tikkoja jäljellä?}
-  I --> M
+  I --> M{Tikkoja jäljellä?}
   M -- Kyllä --> C
   M -- Ei --> N{Kymmenen kierrosta heitetty?}
-  K --> N
   N -- Ei --> B
-  N -- Pistekisa ohi --> O[Ennätys ja tuloslista]
-  L --> P[Voitot tietokoneesta talteen]
+  N -- Kyllä --> O[Ennätys ja tuloslista]
+  H -- 501 --> J{Mitä jää?}
+  J -- Alle nollan --> K[Yli! Vuoron pisteet palaavat]
+  J -- Enemmän --> Q{Tikkoja jäljellä?}
+  Q -- Kyllä --> C
+  Q -- Ei --> V[Seuraavan pelaajan vuoro]
+  K --> V
+  V --> B
+  J -- Tasan nolla --> L[Tasan nolla: heittäjä voittaa]
+  L --> W{Kuka voitti?}
+  W -- Sinä tietokonetta vastaan --> P[Voitot tietokoneesta talteen]
+  W -- Tietokone tai kaveripeli --> X[Voittaja valikossa]
   O --> A
   P --> A
-  class A,B,D,F blue
+  X --> A
+  class A,B,D,F,V blue
   class E violet
-  class C,H,J,M,N amber
+  class C,H,J,M,N,Q,W amber
   class G,I teal
   class K rose
-  class L,O,P green
+  class L,O,P,X green
 ```
 
 ## Colours
@@ -56,4 +62,7 @@ flowchart TD
 - **Osuma: piste, tupla, tripla, bull tai ohi**: `scoreAt()` scores a point on a real board's sizes: bull 50, outer bull 25, triple ring 99–107 mm, double ring 162–170 mm, numbers in the standard order from 20 at the top.
 - **Yli! Vuoron pisteet palaavat**: in 501 a dart that would go under nought ends the turn and puts the score back where the turn started. No double is needed to finish.
 - **Ennätys ja tuloslista**: `finish()` saves the best Pistekisa as `ennatys` and sends it with `AiPelitScores.submit()` (`public/scores.js` and `server/api.js`, `GAMES.tikka`, the `main` list).
-- **Voitot tietokoneesta talteen**: a win against the computer adds one to `voitot`; a game with a friend counts for neither.
+- **Seuraavan pelaajan vuoro**: `endTurn()` in 501 passes the turn to the other player after three darts or a bust, and a new round starts when it comes back to the first.
+- **Kuka voitti?**: `finish()` looks at who reached nought first.
+- **Voitot tietokoneesta talteen**: only the player beating the computer adds one to `voitot`.
+- **Voittaja valikossa**: the computer winning shows what the player had left; in a game with a friend the menu names the winner, and neither counts as a win.
