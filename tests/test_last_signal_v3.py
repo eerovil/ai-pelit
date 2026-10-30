@@ -733,3 +733,30 @@ def test_a_v3_save_still_opens_in_v2(site, browser):
     page.click("#jatka")
     assert page.evaluate("[G.mode, G.s.flags.koti]") == ["sub", True]
     assert page.errors == []
+
+
+def test_a_new_tap_or_the_stick_midway_changes_the_way_and_a_reload_inside_starts_at_the_helm(site, browser):
+    page = open_game(site, browser)
+    new_game(page)
+    inside(page)
+    page.evaluate("G.hold = true")
+    # Tapped downstairs, then the galley halfway down the ladder: the person climbs back up and goes there.
+    page.evaluate("walkTo(7, 1.2); run(() => crew.y < 0.8, 5)")
+    assert page.evaluate("crew.climbing") is True
+    page.evaluate("walkTo(-5, -1.2); run(() => crew.to, 10); step(1 / 60)")
+    assert page.evaluate("[crew.room, crew.y]") == ["keittio", 0]
+    # The stick takes over from a tap at once.
+    page.evaluate("walkTo(8, -1.2); step(1 / 60); input.x = -1; step(1 / 60)")
+    assert page.evaluate("crew.to") is None
+    page.evaluate("input.x = 0; G.s.inv.ruoka = 3; save()")
+    # A reload inside: Continue starts at the helm, driving, with nothing lost.
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    page.evaluate("G.hold = true; drawHud()")
+    assert page.evaluate("[G.mode, G.s.inv.ruoka, G.s.flags.koti]") == ["sub", 3, True]
+    assert page.inner_text("#act") == "🚶 Sisälle"
+    page.click("#act")
+    assert page.is_hidden("#panel")
+    assert page.evaluate("[G.mode, crew.room]") == ["home", "ohjaamo"]
+    assert page.errors == []
