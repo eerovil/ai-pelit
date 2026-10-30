@@ -1,0 +1,13 @@
+{
+  "title": "Orava",
+  "description": "Kiipeile männyissä oravana, hypi oksalta toiselle ja syö kaikki kävyt.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-30",
+      "note": "Ensimmäinen versio: kiipeä runkoja, juokse oksia pitkin, loikkaa puusta toiseen ja syö metsän kävyt ennen kuin aika loppuu; myöhemmillä tasoilla näätä ja haukka.",
+      "request": "Uusi peli. Orava kiipeilee männyissä ja syö käpyjä. Voi hyppiä oksasts toiseen jne.",
+      "issue": "eerovil/ai-pelit#97"
+    }
+  ]
+}
