@@ -1,10 +1,12 @@
 # Pull request tests: which run, and how fast
 
-What GitHub CI runs on a pull request. The shared tests always run. A game's own test file runs
+Which tests a pull request runs, and where. The shared tests always run. A game's own test file runs
 only when the change touches one of the game versions that file tests, or the game's tests
 themselves. Old, published versions never change, so their tests stay quiet. The chosen test
 files then run on four Chromium workers side by side, one whole file per worker at a time, except
-the 3D games' tests, which run after them one at a time.
+the 3D games' tests. Those never run in GitHub CI: they run on the AgentDeck host (bazzite) as
+the deck's verification job for the pull request's head, and the deck merges only when that job
+and GitHub CI are both green on the same head (#123).
 
 ```mermaid
 flowchart TD
@@ -31,19 +33,20 @@ flowchart TD
   S --> T{Plays a 3D version?}
   R --> T
   T -- No --> P[pytest -n 4 --dist loadfile -m 'not alone']
-  T -- Yes --> L[pytest -m alone: one at a time]
+  T -- Yes --> L[On bazzite: scripts/host-tests.sh, two side by side]
   P --> W1[Worker 1: own Chromium]
   P --> W2[Worker 2: own Chromium]
   P --> W3[Worker 3: own Chromium]
   P --> W4[Worker 4: own Chromium]
-  W1 & W2 & W3 & W4 --> L
-  L --> Z[One result for the pull request]
+  W1 & W2 & W3 & W4 --> G[GitHub CI result]
+  L --> J[Verification job result]
+  G & J --> Z[Deck merges only on both]
   class A,B blue
   class C,M,H,D,N,V,F,E,U,T amber
   class S,R green
   class K rose
   class P,W1,W2,W3,W4,L teal
-  class Z violet
+  class G,J,Z violet
 ```
 
 ## Colours
@@ -53,7 +56,7 @@ flowchart TD
 - **green**: a test file that runs
 - **rose**: a test file left out
 - **teal**: the tests running side by side
-- **violet**: what the pull request shows
+- **violet**: the results the deck merges on
 
 ## Boxes
 
@@ -67,6 +70,9 @@ flowchart TD
 - **Does the change touch a version this file tests?**: a file's versions are the `_v<N>` in its name plus every `games/<slug>/v<N>` written in it (`versions_of_test_file()`). `test_areena.py` names `games/areena/v3`, so it runs for v3; `test_voimistelu_v4.py` builds its address from a parameter but its name gives v4.
 - **Is a changed version named by no test file?**: `versions_with_tests()`: a new version with no tests of its own runs every test file of its game, as before.
 - **Plays a 3D version?**: `is_3d()` in `tests/conftest.py`: a version the test file tests loads `lib/three` (Hiihto v7 on, Pallorata, Jään alla), or the file says `pytestmark = pytest.mark.alone` (`test_lib_three.py`). Such tests get the `alone` mark.
-- **pytest -m alone: one at a time**: the second browser step in `.github/workflows/ci.yml`. Beside other Chromiums, software WebGL drops too many frames for the 3D games' timed races; even two at once failed one Hiihto test (#116). Exit code 5 (nothing selected) counts as a pass.
+- **On bazzite: scripts/host-tests.sh, two side by side**: `scripts/host-tests.sh`, run by each Work agent with `agentdeck job submit --verification` on the AgentDeck host, never in `.github/workflows/ci.yml` (#123). On GitHub's 4-core runner software WebGL beside other Chromiums dropped too many frames for the 3D games' timed races, so they ran one at a time and took 9 of 14 minutes. On bazzite two run side by side (`-n 2`, under `nice`): four failed a Hiihto v8 race on a busy host. Exit code 5 (nothing selected) counts as a pass.
 - **pytest -n 4 --dist loadfile -m 'not alone'**: `pytest-xdist` in `requirements-dev.txt`; the step in `.github/workflows/ci.yml`. `loadfile` keeps a file's tests on one worker, so the per-file Chromium (`browser` fixture, scope `module`) still starts once per file.
 - **Worker 1: own Chromium**: each worker is its own Python process with its own Playwright and Chromium; each test's `site` fixture already serves on its own free port.
+- **GitHub CI result**: the `test` job in `.github/workflows/ci.yml`: server tests, the published-version check, the non-3D browser tests and the build.
+- **Verification job result**: the deck's record of a green `agentdeck job submit --verification` run for the exact head.
+- **Deck merges only on both**: AgentDeck's ai-pelit setting `verification = "agentdeck_job"` (eerovil/agentdeck#3919): a green verification job and finished, green GitHub checks on the same head.
