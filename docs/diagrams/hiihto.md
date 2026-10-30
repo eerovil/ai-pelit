@@ -27,12 +27,12 @@ flowchart TD
   G -- Jyrkkä ylämäki --> I[V-nappi päälle: V-käynti]
   G -- Alamäki --> J[Sormi ruudulle: laskuasento]
   G -- Luistelu --> H2[Napauta vuorotellen vasen ja oikea puoli]
-  H --> K{Hitaampi edessä?}
-  I --> K
-  J --> K
-  H2 --> K
   H --> TIE{Tie edessä?}
+  I --> TIE
+  J --> TIE
+  H2 --> TIE
   TIE -- Kyllä --> TIE2[Sukset pois, varovasti jäisen tien yli, sukset jalkaan]
+  TIE -- Ei --> K{Hitaampi edessä?}
   TIE2 --> K
   K -- Kyllä --> L[Pyyhkäise toiselle kaistalle]
   L --> O{Tuleeko joku vastaan tai takaa?}
