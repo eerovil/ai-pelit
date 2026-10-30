@@ -60,3 +60,19 @@ def test_a_far_flight_still_lands_and_the_arms_go_back_in_line(site, context):
     page.evaluate(NEAR_MISS, [-0.6, 0])
     assert page.evaluate(FLY, 2) == "land"
     assert page.evaluate("[arm, armK]") == [0, 1]
+
+
+def test_the_arms_do_not_reach_while_tucked_or_for_the_bar_just_let_go_of_on_the_way_up(site, context):
+    page = open_game(site, context)
+    # Tucked through a near miss: no reach and no catch.
+    page.evaluate(NEAR_MISS, [0, -0.3])
+    page.evaluate("s = 1; hold = true")
+    assert page.evaluate("""() => { let most = 0;
+      for (let t = 0; t < 2 && mode === 'air'; t += 1 / 240) { step(1 / 240); most = Math.max(most, Math.abs(arm)); }
+      return [mode, most]; }""") == ["land", 0]
+    # Let go of the high bar going up: the arms leave it alone until the body falls.
+    page.evaluate("newRoutine(); th = 2.6; Lb = 6 * (icBar(0) + R_EXT * R_EXT); syncBar(); release()")
+    early = page.evaluate("""() => { let most = 0;
+      for (let t = 0; t < 2 && mode === 'air' && vel[1] > 0; t += 1 / 240) { step(1 / 240); most = Math.max(most, Math.abs(arm)); }
+      return most; }""")
+    assert early == 0
