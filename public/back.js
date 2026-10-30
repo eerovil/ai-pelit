@@ -37,6 +37,27 @@
   ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(function (type) {
     a.addEventListener(type, function (e) { e.stopPropagation(); }, { passive: true });
   });
+  // The chip and the phone's own back both go up, to the game's page, never back into a game
+  // (#68). When the shelf opened this game it left the game's page just below it in the history
+  // (app.js marks that in sessionStorage), so the chip steps back to it. Otherwise (a link, a
+  // home-screen shortcut, a reload into a room) the chip takes this page's place, so back from
+  // the game's page never comes here again.
+  var UP = 'ai-pelit:_ylos';
+  try {
+    if (sessionStorage.getItem(UP) === location.pathname.replace(/index\.html$/, '')) {
+      sessionStorage.removeItem(UP);
+      var state = history.state && typeof history.state === 'object' ? history.state : {};
+      state.aiPelitUp = true;
+      history.replaceState(state, '');
+    }
+  } catch (e) {}
+  a.addEventListener('click', function (e) {
+    // A new tab (Ctrl, Cmd, Shift, middle button) opens the link as it is.
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (history.state && history.state.aiPelitUp) history.back();
+    else location.replace(a.href);
+  });
   // Play full screen: the installed app already is (manifest "display": "fullscreen"); in a browser
   // tab, or an app installed before that, the first tap asks for it. Only a pointerup, touchend or
   // click lets a page go full screen, and a tap after the player left full screen asks again.

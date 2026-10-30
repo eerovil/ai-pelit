@@ -65,6 +65,76 @@ def test_shelf_game_page_and_back_chip(site, context):
     assert page.locator("h1").inner_text() == "Pomppu"
 
 
+def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, context):
+    # The chip and the phone's back both go up, never back into the game (#68).
+    make_game(site.games, "pomppu", [game_page("v1"), game_page("v2")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    page.click('.card[data-slug="pomppu"] .card-main')
+    page.click('.version[data-n="1"] a')
+    page.wait_for_url("**/games/pomppu/v1/")
+    # A reload in the game (the phone woke it, or the app restarted) still knows its page is below.
+    page.reload()
+    page.wait_for_selector("#ai-pelit-back")
+    page.click("#ai-pelit-back")
+    page.wait_for_url(f"{site.url}#/pomppu")
+    assert page.locator("h1").inner_text() == "Pomppu"
+    page.go_forward()
+    page.wait_for_url("**/games/pomppu/v1/")
+    page.go_back()
+    page.wait_for_url(f"{site.url}#/pomppu")
+    page.go_back()
+    page.wait_for_selector('.card[data-slug="pomppu"]')
+    assert "#/pomppu" not in page.url
+    page.go_back()
+    assert page.url == "about:blank"
+
+
+def test_a_ctrl_click_opens_the_link_in_a_new_tab_as_before(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    for link, url in [(".card-main", f"{site.url}#/pomppu"), ("a.play", f"{site.url}games/pomppu/v1/")]:
+        with context.expect_page() as tab:
+            page.click(f'.card[data-slug="pomppu"] {link}', modifiers=["Control"])
+        tab.value.wait_for_url(url)
+        assert page.url == site.url
+        tab.value.close()
+
+
+def test_back_from_a_game_opened_with_the_play_button_goes_to_its_page(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    page.click('.card[data-slug="pomppu"] a.play')
+    page.wait_for_url("**/games/pomppu/v1/")
+    page.go_back()
+    page.wait_for_selector("h1")
+    assert page.url == f"{site.url}#/pomppu"
+    assert page.locator("h1").inner_text() == "Pomppu"
+    page.click("a.back")
+    page.wait_for_selector('.card[data-slug="pomppu"]')
+    page.go_back()
+    assert page.url == "about:blank"
+
+
+def test_the_chip_on_a_game_opened_from_a_link_never_leads_back_into_it(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/pomppu/v1/")
+    page.click("#ai-pelit-back")
+    page.wait_for_url(f"{site.url}#/pomppu")
+    page.wait_for_selector("h1")
+    page.click("a.back")
+    page.wait_for_selector('.card[data-slug="pomppu"]')
+    page.go_back()
+    assert page.url == "about:blank"
+
+
 @pytest.mark.parametrize("path", ["games/pomppu/v1/", "games/pomppu/v1/index.html"])
 def test_back_chip_finds_the_game_from_either_address(site, context, path):
     make_game(site.games, "pomppu", [game_page("v1")])
@@ -84,7 +154,7 @@ def test_a_tap_on_the_back_chip_never_reaches_the_game(site, context):
     page = context.new_page()
     page.goto(f"{site.url}games/pomppu/v1/")
     # Stop the navigation so the game page can still be asked what it saw.
-    page.evaluate("document.getElementById('ai-pelit-back').addEventListener('click', e => e.preventDefault())")
+    page.evaluate("window.addEventListener('click', e => e.preventDefault(), true)")
     page.tap("#ai-pelit-back")
     page.click("#ai-pelit-back")
     assert page.evaluate("window.seen") == []
@@ -95,7 +165,7 @@ def test_a_tap_in_a_game_makes_it_full_screen_but_a_tap_on_the_chip_does_not(sit
     site.build()
     page = context.new_page()
     page.goto(f"{site.url}games/pomppu/v1/")
-    page.evaluate("document.getElementById('ai-pelit-back').addEventListener('click', e => e.preventDefault())")
+    page.evaluate("window.addEventListener('click', e => e.preventDefault(), true)")
     page.tap("#ai-pelit-back")
     assert page.evaluate("document.fullscreenElement") is None
     page.touchscreen.tap(180, 400)
