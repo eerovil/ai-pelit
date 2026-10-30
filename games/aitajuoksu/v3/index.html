@@ -677,8 +677,8 @@ function pick(e) {
   if (b.dataset.d) { dist = +b.dataset.d; save('matka', dist); }
   if (b.dataset.h) { hurdles = b.dataset.h === '1'; save('aidat', hurdles); }
   setTrack(dist, hurdles);
-  const res = document.getElementById('result');
-  if (!menu.classList.contains('hidden')) showMenu(res.textContent, res.className);
+  // A new race picked: the last race's result belongs to that race, so it goes.
+  if (!menu.classList.contains('hidden')) showMenu();
   roomControls();
 }
 document.getElementById('dists').addEventListener('click', pick);

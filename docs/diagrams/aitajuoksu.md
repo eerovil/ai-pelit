@@ -1,7 +1,7 @@
-# Aitajuoksu: one 100 m hurdle race, alone or with friends
+# Aitajuoksu: one race of 100, 200 or 400 m, with or without hurdles, alone or with friends
 
 How one race of Aitajuoksu plays (v1; v2 adds false starts; v3 adds 200 and 400 m and races without hurdles). The runner speeds up with taps on the left and right foot
-in turn, and jumps the ten hurdles with the middle button; a hurdle run into falls and slows the
+in turn, and, in a race with hurdles, jumps the ten hurdles with the middle button; a hurdle run into falls and slows the
 runner down. Alone it is a race against three computer runners of the player's level; in a room
 each phone runs its own runner and the phone that made the room (the host) fires the gun and
 ends the race. From v2 a step after "Valmiit…" and before the gun is a false start: a yellow
@@ -22,12 +22,14 @@ flowchart TD
   D -- Eri jalka kuin viimeksi --> E[Vauhti kasvaa]
   D -- Sama jalka --> F[Vauhti hidastuu hieman]
   D -- Hyppää --> G[Hyppy]
-  E --> H{Aidan kohdalla jalat tarpeeksi ylhäällä?}
-  F --> H
-  G --> H
+  E --> HA{Aidat ja aidan kohdalla?}
+  F --> HA
+  G --> HA
+  HA -- Ei --> K{Valittu matka juostu?}
+  HA -- Kyllä --> H{Jalat tarpeeksi ylhäällä?}
   H -- Kyllä --> I[Yli puhtaasti]
   H -- Ei --> J[Kolaus: aita kaatuu, vauhti puolittuu]
-  I --> K{100 metriä?}
+  I --> K
   J --> K
   K -- Ei --> D
   K -- Kyllä --> L[Aika maalissa]
@@ -35,11 +37,11 @@ flowchart TD
   M -- Yksin --> N{Voititko?}
   N -- Kyllä --> O[Taso nousee, nopeammat vastustajat]
   N -- Ei --> P[Sama taso uudestaan]
-  M -- Huoneessa --> Q[Isäntä odottaa kaikki maaliin, enintään 20 s ensimmäisen jälkeen]
+  M -- Huoneessa --> Q[Isäntä odottaa kaikki maaliin, enintään 20 s per 100 m ensimmäisen jälkeen]
   Q --> R[Tulokset kaikille, takaisin huoneeseen]
   L --> S[Ennätys ja tuloslista]
   class V,A,B,C,D blue
-  class H,K,M,N,FS,YC amber
+  class HA,H,K,M,N,FS,YC amber
   class E,F,G,I teal
   class Q,R violet
   class L,O,S green
@@ -67,10 +69,12 @@ flowchart TD
 - **Vauhti kasvaa**: `step()`: each tap on the other foot adds speed, less the faster the runner goes (up to 12 m/s); `move()` takes some away all the time, so about 8 taps a second holds about 8.3 m/s.
 - **Vauhti hidastuu hieman**: `step()`: the same foot twice takes 0.3 m/s off.
 - **Hyppy**: `jump()`: a jump of about half a second, 0.58 m high; no steps in the air.
-- **Aidan kohdalla jalat tarpeeksi ylhäällä?**: `move()`: passing a hurdle's line (13 m, then every 8.5 m) with the feet under 0.3 m knocks it down (`down` bitmask per runner).
+- **Aidat ja aidan kohdalla?**: `move()` checks each of `HURDLES` the runner passes this frame: 13 m, then every 8.5 m in v1-v2; from v3 the selected race's ten (`setTrack()`), or none in a race without hurdles, so a flat race never knocks anything.
+- **Jalat tarpeeksi ylhäällä?**: `move()`: passing a hurdle's line with the feet under 0.3 m knocks it down (`down` bitmask per runner).
+- **Valittu matka juostu?**: `move()`: `r.x >= TRACK`, the selected distance.
 - **Kolaus: aita kaatuu, vauhti puolittuu**: speed × 0.45 and 0.35 s of stumbling with no steps.
-- **Aika maalissa**: `move()` sets `fin` to the moment the runner crossed 100 m, to 1/100 s.
+- **Aika maalissa**: `move()` sets `fin` to the moment the runner crossed `TRACK` (100 m in v1-v2; 100, 200 or 400 m in v3), to 1/100 s.
 - **Taso nousee, nopeammat vastustajat**: `finish()` saves `ai-pelit:aitajuoksu:taso`, `voitot`, `juoksut` and `ennatys`; the menu shows the next opponents.
-- **Isäntä odottaa kaikki maaliin, enintään 20 s ensimmäisen jälkeen**: `hostTick()`, with `race.firstFin` set by whichever runner is in first, the host's own, the computer's or a guest's `p` message: each guest runs its own runner and sends it to the host 12 times a second (`p`); the host sends everyone's runners back (`s`) and runs the computer for a phone that is away (`on('continue')`). A guest that reloads takes its runner back from the host's `s`, mid-jump or mid-stumble included (`pack()` sends the jump speed, last foot and stumble too).
+- **Isäntä odottaa kaikki maaliin, enintään 20 s per 100 m ensimmäisen jälkeen**: `hostTick()` waits `race.late` after the first finish: 20 s in v1-v2, and from v3 20 s per 100 m (`20 * d / 100`: 20, 40 or 80 s), with `race.firstFin` set by whichever runner is in first, the host's own, the computer's or a guest's `p` message: each guest runs its own runner and sends it to the host 12 times a second (`p`); the host sends everyone's runners back (`s`) and runs the computer for a phone that is away (`on('continue')`). A guest that reloads takes its runner back from the host's `s`, mid-jump or mid-stumble included (`pack()` sends the jump speed, last foot and stumble too).
 - **Tulokset kaikille, takaisin huoneeseen**: the host's `R.deliver()` of `end` with the standings; each phone shows them for three seconds, saves its time once (`R.once`), and goes back to the room with its place and the standings as the room's note.
 - **Ennätys ja tuloslista**: `AiPelitScores.submit()` with the time; the list is the fastest first (`aitajuoksu` in `public/scores.js` and `server/api.js`). v3: each race has its own record (`bestKey()`: 100 m hurdles keeps `ennatys`, the rest `ennatys-<matka>-<aidat|tasainen>`) and list (`boardId()`: 100 m hurdles keeps `main`, the rest e.g. `400-tasainen`); the shelf still shows the `main` list. The level is shared by every race.

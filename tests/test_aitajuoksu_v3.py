@@ -135,3 +135,16 @@ def test_in_a_room_the_hosts_race_is_everyones(site, browser):
     assert host.errors == guest.errors == []
     for p in pages:
         p.context.close()
+
+
+def test_picking_another_race_clears_the_last_result(site, context):
+    page = open_game(site, context)
+    run(page)
+    page.evaluate("race.runners.forEach(r => { if (r !== me) r.rate = 1; }); Object.assign(me, { x: 99.5, v: 9, down: 1023 })")
+    page.wait_for_function("!race && !document.getElementById('menu').classList.contains('hidden')", timeout=12000)
+    assert page.inner_text("#result").startswith("Voitit!")
+    # (The first score asks for a nickname over the menu; the pick is under it.)
+    page.evaluate("document.querySelector(\"#dists [data-d='400']\").click()")
+    assert page.evaluate("dist") == 400
+    assert page.inner_text("#result") == ""
+    assert page.evaluate("document.getElementById('result').className") == ""
