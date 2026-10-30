@@ -77,13 +77,14 @@ def test_the_panel_fits_every_player_count_with_no_text_on_text(site, context, s
     turn(page, {"width": w, "height": h})
     page.click("#go")
     page.evaluate(f"""() => {{
-        players = Array.from({{ length: {n} }}, (_, i) => Object.assign(player('Pelaaja ' + (i + 1)), {{ score: 288 }}));
+        players = Array.from({{ length: {n} }}, (_, i) => Object.assign(player('WWWWWWWWWWWWWWW' + i), {{ score: 501 }}));
         cur = {n} - 1; resize();
-        turnDarts = [mokkiAt(0, 0), mokkiAt(0, 0), mokkiAt(0, 0)];
+        mode = '501'; turnDarts = [dartsAt(0, -103), dartsAt(0, -103), dartsAt(0, -103)];
         draw();
     }}""")
     texts, panel = page.evaluate("panelTexts"), page.evaluate("PANEL")
-    assert "10 · 10 · 10" in [t["text"] for t in texts]
+    # The longest a nickname (16 letters), a score and a turn's darts get.
+    assert "T20 · T20 · T20" in [t["text"] for t in texts]
     for i, a in enumerate(texts):
         assert panel["x"] <= a["x0"] and a["x1"] <= panel["x"] + panel["w"], a
         assert panel["y"] <= a["y0"] and a["y1"] <= panel["y"] + panel["h"], a

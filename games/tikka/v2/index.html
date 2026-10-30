@@ -31,6 +31,10 @@
   #stats:empty{display:none}
   .help{margin:0;font-size:13px;line-height:1.4;color:#c4d2df;max-width:320px}
   #tk-room .help{margin:4px 0}
+  /* The room's own buttons are big and green; the host's game choice shows which one is picked. */
+  #aipr #tk-room .chips{gap:8px}
+  #aipr #tk-room .chips button{font:800 16px system-ui,sans-serif;padding:8px 14px;border-radius:12px;border:0;background:#e9dfc6;color:#5a4a30;box-shadow:0 3px 0 #b8ad95}
+  #aipr #tk-room .chips button.on{background:#4f9a3a;color:#fff;box-shadow:0 3px 0 #2f6a22}
   /* Sideways (#95): two columns, so the menu fits a 360 px high screen. */
   @media (orientation:landscape) and (max-height:520px) {
     #menu{display:grid;grid-template-columns:minmax(0,320px) minmax(0,320px);grid-template-areas:"t d" "r d" "g d" "m h" "s h";
@@ -588,7 +592,8 @@ function label(str, tx, ty, size, weight, col, align) {
   const w = x.measureText(str).width, x0 = align === 'right' ? tx - w : tx;
   panelTexts.push({ text: str, x0, x1: x0 + w, y0: ty - size / 2, y1: ty + size / 2 });
 }
-function nameOf(p) { return net && p.id === R.me ? 'Sinä' : p.name; }
+// A nickname may be 16 letters: the panel shows at most 11, so the scores and darts stay clear.
+function nameOf(p) { const n = net && p.id === R.me ? 'Sinä' : p.name; return n.length > 11 ? n.slice(0, 10) + '…' : n; }
 function drawPanel() {
   const P = PANEL;
   panelTexts = [];
@@ -617,10 +622,11 @@ function drawPanel() {
       if (i === cur) { x.fillStyle = 'rgba(255,255,255,.14)'; roundRect(P.x + 6, ry, P.w - 12, 22, 7); x.fill(); }
       label((i === cur ? '▶ ' : '') + nameOf(p) + (p.ai ? ' 🤖' : ''), P.x + 12, ry + 11, 14, 700, PCOL[i % PCOL.length], 'left');
       label(p.score, P.x + P.w - 14, ry + 11, 16, 800, '#fff', 'right');
+      // This turn's darts: upright in the thrower's own row before the score.
+      if (i === cur && !LAND) label(last, P.x + P.w - 56, ry + 11, 12, 700, '#c4d2df', 'right');
     });
-    // This turn's darts: under the list sideways, on the top row between the round and the dots upright.
+    // Sideways the panel is narrower, so they go under the list.
     if (LAND) label(last, P.x + 12, P.y + 30 + n * 24 + 16, 14, 700, '#e8eef4', 'left');
-    else label(last, P.x + P.w / 2 - 20, P.y + 15, 13, 700, '#e8eef4', 'left');
     return;
   }
   // Two players: one card a player, side by side upright and one above the other sideways. In each
