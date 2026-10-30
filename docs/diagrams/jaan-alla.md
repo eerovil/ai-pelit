@@ -1,4 +1,4 @@
-# Jään alla: luvut 1–2, sukellusvene, sukeltaja ja jäällä kulkija
+# Jään alla: luvut 1–3, sukellusvene, sukeltaja, jäällä kulkija ja rauniot
 
 How chapter 1 of Jään alla plays (v1, #106). The player drives the one-person submarine SISU
 under the arctic ice from Aurora station to the RV Nordlys wreck, the iceberg cave and the
@@ -7,6 +7,8 @@ scrap home to fix the radio mast. Air, power, food and hull are the four needs; 
 air or hull sends the player back to safety, never ends the story. Chapter 2 (v3) follows on: SISU
 surfaces through an opening in the ice at the northern shore, the player walks the ice in a storm,
 finds Aino's camp and the five who left it, and ferries all twelve to the station, four a trip.
+Chapter 3 (v4) opens the ancient ruins in the deep canyon: the diver carries crystals to stone
+sockets that open the doors, reads the murals, and wakes the Heart.
 
 ```mermaid
 flowchart TD
@@ -55,11 +57,22 @@ flowchart TD
   AF --> AG{Kaikki 12 turvassa?}
   AG -- Ei --> V
   AG -- Kyllä --> AH[Kaikki turvassa: luku 2 päättyy]
+  AH --> AI[Luku 3: sukella raunioihin kanjonissa]
+  AI --> AJ{Kannatko kristallia?}
+  AJ -- Ei --> AK[Ota kristalli, yksi kerrallaan]
+  AJ -- Kyllä --> AL[Jalusta syttyy, sen ovi aukeaa]
+  AK --> AJ
+  AL --> AM{Kolme valoa palaa?}
+  AM -- Ei --> AJ
+  AM -- Kyllä --> AN[Sydän herää: luku 3 päättyy]
   class A,B,C blue
   class D,K,N,S,T amber
   class E,F,G,M,R teal
   class H,O,Q green
-  class P,U,Y,AH violet
+  class P,U,Y,AH,AN violet
+  class AI,AL teal
+  class AJ,AM amber
+  class AK green
   class V,W,AE,AF teal
   class X,AC,AG amber
   class Z,AB green
@@ -107,3 +120,9 @@ flowchart TD
 - **Avannolla: kaikki SISUun**: `boardSisu()` at the hole puts followers aboard (`at: 'sub'`); a reload never leaves anyone following.
 - **Telakoidu: kyydissä olevat turvaan asemalle**: `dock()` → `unload()`; the station card counts the saved.
 - **Kaikki turvassa: luku 2 päättyy**: `rescuedPanel()` sets `flags.rescued` and writes `ai-pelit:jaan-alla:luku2`.
+- **Luku 3: sukella raunioihin kanjonissa**: `games/jaan-alla/v4/index.html`. The ruins (`SITES.rauniot`, temple and columns at `RX`, `RZ`) open only once `flags.rescued` is set; `goal()` points there. Inside, three murals (`MURALS`) tell the story of the Light Keepers once each (`G.s.read`).
+- **Kannatko kristallia?**: `G.s.carry`, saved, so a reload keeps the crystal in hand; a carried crystal shows in the diver's hands (`carryMesh`).
+- **Ota kristalli, yksi kerrallaan**: `ruinsTouch()` on a `C` cell; a second crystal stays put while one is carried.
+- **Jalusta syttyy, sen ovi aukeaa**: a crystal on socket 1, 2 or 3 sets `G.s.lit`, and its door (`SOCKET_DOOR`: a, b, c) stops being a wall in `isWall()`. Any crystal fits any socket.
+- **Kolme valoa palaa?**: `litCount()`.
+- **Sydän herää: luku 3 päättyy**: touching the Heart (`H`) with three lights lit sets `flags.heart`, writes `ai-pelit:jaan-alla:luku3` and shows `heartPanel()` with the chapter 4 teaser.
