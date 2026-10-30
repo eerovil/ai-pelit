@@ -90,7 +90,7 @@ test('each player keeps their best, and the list sorts the game\'s way', async (
   await post(B, 'puhelinkoppi', 'main', 7);
   rows = (await call('GET', '/api/scores?game=puhelinkoppi')).body.rows;
   assert.deepEqual(rows.map((r) => [r.name, r.score]), [['Bertta', 9], ['Aino', 4]]);
-  // From v3 on Puhelinkoppi keeps the longest streak on its own list.
+  // Phones that kept the withdrawn v3/v4 may still send their streak list; it is taken, not shown.
   await post(A, 'puhelinkoppi', 'putki', 12);
   rows = (await call('GET', '/api/scores?game=puhelinkoppi&board=putki')).body.rows;
   assert.deepEqual(rows.map((r) => [r.name, r.score]), [['Aino', 12]]);
@@ -292,12 +292,12 @@ test('the shelf gets every game\'s no. 1 in one request', async () => {
   await post(C, 'sormiskeitti', 'main', 90); // waiting for approval: not shown
   await post(A, 'hiihto', 'taso-1', 80.5, 2);
   await post(B, 'hiihto', 'taso-2', 60);
-  await post(A, 'puhelinkoppi', 'main', 30); // v2's level list: not on the shelf
-  await post(B, 'puhelinkoppi', 'putki', 6);
+  await post(A, 'puhelinkoppi', 'main', 30); // the level list is the shelf's again
+  await post(B, 'puhelinkoppi', 'putki', 60); // the withdrawn streak list: not on the shelf
   const { body } = await call('GET', '/api/scores/top');
   assert.deepEqual(body.games, {
     sormiskeitti: { board: 'main', name: 'Bertta', score: 55, level: 2, version: 2 },
-    puhelinkoppi: { board: 'putki', name: 'Bertta', score: 6, level: null, version: 2 },
+    puhelinkoppi: { board: 'main', name: 'Aino', score: 30, level: null, version: 2 },
     hiihto: { board: 'taso-1', name: 'Aino', score: 80.5, level: 2, version: 2 },
   });
 });

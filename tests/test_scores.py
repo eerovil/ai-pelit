@@ -68,7 +68,7 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = {"hiihto": "taso-1", "puhelinkoppi": "putki"}.get(game, "main")
+                first = "taso-1" if game == "hiihto" else "main"
                 if board != first or self.players[player]["status"] != "approved":
                     continue
                 low = game == "hiihto"
@@ -359,9 +359,9 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
         ("sormiskeitti", "main", b): {"score": 58, "version": 5},
         ("hiihto", "taso-1", a): {"score": 71.5, "version": 2, "level": 3},
         ("hiihto", "taso-2", b): {"score": 95, "version": 2, "level": 2},
-        # Puhelinkoppi's shelf list is the streak list (v3); v2's level list does not show.
+        # Puhelinkoppi's shelf list is its level list again; the withdrawn v3/v4 streak list does not show.
         ("puhelinkoppi", "main", a): {"score": 40, "version": 2},
-        ("puhelinkoppi", "putki", b): {"score": 7, "version": 3},
+        ("puhelinkoppi", "putki", b): {"score": 70, "version": 3},
     }
     page = context.new_page()
     page.goto(site.url)
@@ -369,7 +369,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     assert page.locator('.top-score[data-top="sormiskeitti"]').inner_text() == "🏆 Aino · 64 cm"
     assert page.locator('.top-score[data-top="hiihto"]').inner_text() == "🏆 Taso 1: Aino · 1.11,5"
     assert page.locator('.top-score[data-top="voimistelu"]').is_hidden()
-    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == "🏆 Bertta · putki 7"
+    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == "🏆 Aino · taso 40"
     assert page.locator("#ai-pelit-tulokset-nappi").count() == 0  # no chip on the shelf
 
     page.click('.card[data-slug="sormiskeitti"] .card-main')
@@ -380,7 +380,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     page.goto(site.url + "#/puhelinkoppi")
     page.wait_for_selector(".score-list .tulos")
     rows = page.locator(".score-list .tulos").all_inner_texts()
-    assert [" ".join(r.split()) for r in rows] == ["1. Bertta putki 7 v3"]
+    assert [" ".join(r.split()) for r in rows] == ["1. Aino taso 40 v2"]
 
     page.goto(site.url + "#/hiihto")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
@@ -477,3 +477,17 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
     assert row == {"score": 300, "version": 1, "level": 1}
+
+
+def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
+    """Puhelinkoppi's v3/v4 streak list was withdrawn (#9): its no. 1 kept on the phone must not read as a level."""
+    site.build(ROOT / "games")
+    fake.online = False
+    page = context.new_page()
+    page.goto(site.url)
+    page.evaluate("""localStorage.setItem('ai-pelit:_tulokset:ykkoset', JSON.stringify({
+        puhelinkoppi: { board: 'putki', name: 'Bertta', score: 7, version: 3 },
+        sormiskeitti: { board: 'main', name: 'Aino', score: 64, version: 5 } }))""")
+    page.reload()
+    page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
+    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == ""

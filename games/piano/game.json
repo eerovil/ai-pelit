@@ -15,6 +15,13 @@
       "note": "Tulos tallentuu jokaisen soitetun kappaleen jälkeen, ja kappaleita on nyt yhdeksän: uutena Maija pikkuinen, Piippolan vaari, Lontoon silta, Paljon onnea vaan ja Kulkuset.",
       "request": "Save score after each song is finished, even when no fail. Add more songs",
       "issue": "eerovil/ai-pelit#44"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-30",
+      "note": "Peli jatkuu pisimmältä saavutetulta tasolta (aiemmankin voi valita), joka tasolla on kolme uutta sydäntä, ja loppuun tuli neljä vaikeaa nopeaa kappaletta.",
+      "request": "Muuta niin että jatkuu aina siltä tasolta mihin pääsit. Alussa voi valita vanhan tason jos haluaa. Joka tasolla on uudet 3 elämää. Tee uusia vaikeampia biisejä (vrt. Through the fire and the flames)",
+      "issue": "eerovil/ai-pelit#44"
     }
   ]
 }

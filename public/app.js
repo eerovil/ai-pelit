@@ -81,6 +81,9 @@
     var t = tops[slug];
     if (!t || !scores) return '';
     var g = scores.games[slug];
+    // A no. 1 kept from a list the shelf no longer shows (Puhelinkoppi's withdrawn streak list,
+    // #9) is not shown as this one's.
+    if (!(g && g.boards) && t.board && t.board !== 'main') return '';
     return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(5) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
   }
 
@@ -120,7 +123,7 @@
     function fill() {
       var mine = ++asked;
       box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
-      scores.list(slug, picker ? 'taso-' + course : scores.games[slug].list || 'main').then(function (b) {
+      scores.list(slug, picker ? 'taso-' + course : 'main').then(function (b) {
         if (mine !== asked) return;
         var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
         if (b.mine && !b.rows.some(function (r) { return r.me; })) {
