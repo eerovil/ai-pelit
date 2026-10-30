@@ -124,3 +124,23 @@ def room_of_two_at_set(site, browser):
     host.evaluate("race.gunAt = 99; race.cdT = 1.5")
     guest.wait_for_function("race && race.mode === 'net' && race.phase === 'cd' && race.cdT > 1", timeout=6000)
     return host, guest
+
+
+def test_a_guest_reloaded_during_the_card_keeps_it_and_a_tap_after_the_gun_is_no_false_start(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two_at_set(site, browser)
+    host.evaluate("race.runners[1].card = 1; falseStart(race.runners[1])")  # Aino's second: red
+    host.wait_for_function("race.phase === 'false'", timeout=3000)
+    guest.reload()
+    guest.wait_for_function("race && race.mode === 'net' && me.card === 2", timeout=8000)
+    # A tap the host hears only after its gun does nothing.
+    host.wait_for_function("race.phase === 'cd'", timeout=5000)
+    host.evaluate("race.gunAt = 0.1")
+    host.wait_for_function("race.phase === 'run'", timeout=3000)
+    host.evaluate("race.runners[0].card = 1")
+    guest.evaluate("AiPelitRooms.send({ t: 'f', round: race.round })")
+    host.wait_for_timeout(500)
+    assert host.evaluate("[race.phase, race.runners[1].card, race.runners[0].card]") == ["run", 2, 1]
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
