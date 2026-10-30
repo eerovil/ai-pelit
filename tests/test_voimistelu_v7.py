@@ -85,6 +85,26 @@ def test_two_half_turns_the_same_way_in_one_handstand_are_a_kokopiruetti(site, c
     assert names == ["Piruetti", "Piruetti"]
 
 
+def test_a_giant_swing_between_the_two_swipes_still_makes_a_kokopiruetti(site, context):
+    page = open_game(site, context)
+    names = page.evaluate("""() => { newRoutine(); th = Math.PI - 0.02; Lb = 0.3; syncBar(); lastCross = 1;
+      twist(1); for (let i = 0; i < 400 && th < Math.PI + 0.05; i++) step(1 / 240); twist(1); return elements.map(e => e.name); }""")
+    assert names[-1] == "Kokopiruetti" and "Piruetti" not in names
+    assert any(n.startswith("Jättikierto") for n in names)
+
+
+def test_a_new_routine_carries_no_catch_or_handstand_over(site, context):
+    page = open_game(site, context)
+    caught_tkatchev(page)
+    page.evaluate("th = Math.PI - 0.2; Lb = 0.3; syncBar(); twist(1)")
+    assert page.evaluate("[!!link, !!pir]") == [True, True]
+    page.evaluate("touch = { fall: false, stuck: true, saltos: 0, halves: 0 }; finish(); newRoutine()")
+    assert page.evaluate("[link, pir, elements.length]") == [None, None, 0]
+    # Let go at once in the new routine: nothing to connect to.
+    page.evaluate("th = 2; Lb = 3; syncBar(); release()")
+    assert page.evaluate("flight.prev") is None
+
+
 def test_levels_14_to_20_keep_their_scores_and_21_to_32_are_the_new_tasks(site, context):
     page = open_game(site, context)
     texts = page.evaluate("[13, 14, 20, 21, 32, 33, 34, 60].map(taskText)")
@@ -136,7 +156,7 @@ def test_level_20_saved_by_v6_goes_on_to_the_first_new_task(site, context):
 
 
 def test_a_long_connection_name_fits_the_score_board(site, browser):
-    for size in ({"width": 360, "height": 740}, {"width": 740, "height": 360}):
+    for size in ({"width": 360, "height": 740}, {"width": 390, "height": 844}, {"width": 740, "height": 360}):
         ctx = browser.new_context(viewport=size, is_mobile=True, has_touch=True)
         ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi'))")
         page = ctx.new_page()
