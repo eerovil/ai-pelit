@@ -13,6 +13,7 @@
 //   POST /api/plays            {game, version}               -> {ok}
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
+//   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -349,7 +350,19 @@ function room(request, env, code) {
   return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(request);
 }
 
+// The public rooms of one game (#50), from the one object that keeps the list (rooms/worker.js).
+// Only this GET reaches it from outside; the rooms themselves tell it what is listed.
+function publicRooms(request, env) {
+  if (!env.ROOMS) return fail(503, 'no rooms');
+  if (request.method !== 'GET') return fail(405, 'GET only');
+  const game = new URL(request.url).searchParams.get('game') || '';
+  if (!/^[a-z0-9-]{1,40}$/.test(game)) return fail(400, 'bad game');
+  const q = new URLSearchParams({ game });
+  return env.ROOMS.get(env.ROOMS.idFromName('lobby')).fetch(new Request(`https://rooms/lobby?${q}`));
+}
+
 export async function handle(request, env) {
+  if (/^\/api\/rooms\/?$/.test(new URL(request.url).pathname)) return publicRooms(request, env);
   const rooms = new URL(request.url).pathname.match(/^\/api\/rooms\/([^/]*)$/);
   if (rooms) return room(request, env, rooms[1].toUpperCase());
   if (!env.DB) return fail(503, 'no database');
