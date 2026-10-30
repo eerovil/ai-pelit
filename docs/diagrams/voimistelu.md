@@ -1,10 +1,10 @@
 # Voimistelu: one high-bar routine, from the first swing to the score
 
-How one Voimistelu routine plays (v2; v1 is the same with the high bar alone). The gymnast hangs from the high bar, seen from the side with the bar end on. Holding a
+How one Voimistelu routine plays (v2–v4; v1 is the same with the high bar alone). The gymnast hangs from the high bar, seen from the side with the bar end on. Holding a
 finger pulls the body in; done through the bottom of the swing and let go at its ends, it pumps the swing up until the
 body goes over the top: a giant swing. A quick flick up lets go of the bar. In the air the body keeps its spin, a held
 finger tucks it to spin faster, and a sideways flick adds a half twist. Hands that come down to the bar with the body
-open catch it again (a release move), and v2 adds a low bar in front, as on the women's uneven bars, to fly to and from; otherwise the routine ends on the mat, where the landing is judged. The score is
+open catch it again (a release move; from v4 the arms turn towards a bar within reach first), and v2 adds a low bar in front, as on the women's uneven bars, to fly to and from; otherwise the routine ends on the mat, where the landing is judged. The score is
 the Olympic one: D (the difficulty of each different element) plus E (10 less the deductions).
 
 ```mermaid
@@ -17,7 +17,8 @@ flowchart TD
   D --> E
   E --> F[Lento: painovoima, pyörimismäärä säilyy, kerä pyörii nopeammin, sivupyyhkäisy = puolikierre]
   F --> R[Kamera seuraa, ettei voimistelija katoa ruudulta]
-  R --> G{Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa}
+  R --> T[Kädet kääntyvät lähellä olevaa tankoa kohti]
+  T --> G{Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa}
   G -- Sama tanko --> H[Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman]
   G -- Toinen tanko --> Q[Siirto tangolta toiselle: Pak-voltti, Shaposhnikova]
   H --> B
@@ -34,7 +35,7 @@ flowchart TD
   O --> A
   class A,B,E,P blue
   class C,G,J amber
-  class F,R teal
+  class F,R,T teal
   class D,H,I,K,N,O,Q green
   class L,M rose
 ```
@@ -58,6 +59,7 @@ flowchart TD
 - **Lento: painovoima, pyörimismäärä säilyy, kerä pyörii nopeammin, sivupyyhkäisy = puolikierre**: `airStep()`: a projectile spinning about its centre of mass with constant angular momentum `L`; a tuck has 3.75 times less inertia, so it spins 3.75 times faster.
 - **Kädet tangolle vartalo auki? Irrotettu tanko laskussa, toinen myös nousussa**: `airStep()` catches a bar when the hands come within 25 cm of it with the body open and not mid-twist. The bar let go of only on the way down; in v2 the other bar (`BARS`: high at 0, low 1.75 m out and 0.9 m lower) also on the way up.
 - **Siirto tangolta toiselle: Pak-voltti, Shaposhnikova**: v2 `grab(to)` names it by whole turns (`DOWN`, `UP`): down to the low bar "Siirto alatangolle" 0,1, a Pak salto 0,4 with one turn, "Kaksoisvoltti alatangolle" 0,6 with two or more; up to the high bar a Shaposhnikova 0,4, "Voltti ylätangolle" 0,5, "Kaksoisvoltti ylätangolle" 0,7. On the low bar the legs pike through the bottom so the feet clear the floor (`pk`); only the drawing, so the swing does not pump itself.
+- **Kädet kääntyvät lähellä olevaa tankoa kohti**: v4 `aim()` in `games/voimistelu/v4/index.html`: with the body open, the arms turn at the shoulders, the short way and any way round, towards the nearest bar that may be caught and is within the arm (0.58 m) and 35 cm more of the shoulder, bending at the elbows when it is nearer than the arm (`arm`, `armK`). After such a catch the body eases into line with the arms in about a tenth of a second while the hands stay on the bar (`snap`).
 - **Kamera seuraa, ettei voimistelija katoa ruudulta**: every frame of the flight, v2 `draw()` eases towards the body, then holds every point of it (`bodyPoints()`) at least 15 cm inside all four edges of the screen, however fast, far or high it flies.
 - **Lentoliike: Tkatchev, Jäger, Gienger, Kovacs, Kolman**: `grab()` names it by the whole turns in the flight, the half twists and whether the body crossed over the bar, and carries the angular momentum about the bar into the swing.
 - **Alastulo: voltit ja kierteet lasketaan**: `land()`: the saltos are the turns the body made between letting go and touching down (`turns()`, half a turn or more counts up, the same rule `grab()` uses); salto 0,1, double 0,3, triple 0,5, and 0,1 a full twist.
