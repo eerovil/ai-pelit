@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Orava</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#20331f;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #pad{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;padding:6px 16px calc(env(safe-area-inset-bottom,0px) + 12px);box-sizing:border-box;touch-action:none;pointer-events:none}
+  #pad.off{visibility:hidden}
+  #stick{position:relative;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.35);touch-action:none;pointer-events:auto}
+  #stick span{position:absolute;font:800 22px system-ui,sans-serif;color:rgba(255,255,255,.85);width:40px;height:40px;line-height:40px;text-align:center;pointer-events:none}
+  #stick .u{left:55px;top:4px}#stick .d{left:55px;bottom:4px}#stick .l{left:4px;top:55px}#stick .r{right:4px;top:55px}
+  #stick span.on{color:#ffd166}
+  #knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(255,255,255,.55);pointer-events:none}
+  #jump{width:108px;height:108px;border-radius:50%;border:0;font:800 19px system-ui,sans-serif;color:#3a2600;background:#ffd166;box-shadow:0 5px 0 #b8860b;touch-action:none;pointer-events:auto;padding:0}
+  #jump.on{transform:translateY(4px);box-shadow:0 1px 0 #b8860b;background:#ffe39a}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);box-sizing:border-box;background:rgba(18,38,24,.84);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:42px;color:#ffb35c;text-shadow:0 3px 0 #7a2e0e}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#9be38f}#result.lose{color:#ffb4a2}
+  #level{margin:0;font-size:18px;font-weight:700;color:#e8f5d0}
+  #danger{margin:0;font-size:15px;color:#ffd9a8}
+  #danger:empty{display:none}
+  #go{font:800 22px system-ui,sans-serif;padding:14px 34px;border:0;border-radius:16px;background:#ffd166;color:#3a2600;box-shadow:0 4px 0 #b8860b}
+  #go:active{transform:translateY(3px);box-shadow:0 1px 0 #b8860b}
+  #stats{margin:0;font-size:14px;color:#c9dcc0}
+  .help{margin:2px 0 0;font-size:13px;line-height:1.45;color:#c9dcc0;max-width:320px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="pad" class="off">
+  <div id="stick"><span class="u">▲</span><span class="l">◀</span><span class="r">▶</span><span class="d">▼</span><div id="knob"></div></div>
+  <button id="jump">Hyppää</button>
+</div>
+<div id="menu">
+  <h1>🐿️ Orava</h1>
+  <p id="result"></p>
+  <p id="level"></p>
+  <p id="danger"></p>
+  <button id="go">Kiipeä!</button>
+  <p id="stats"></p>
+  <p class="help">Syö metsän kaikki kävyt ennen kuin aika loppuu. Ohjaimella kiipeät runkoa
+    ylös ja alas ja juokset oksia pitkin. Hyppää-napilla loikkaat oksalta toiselle ja puusta
+    toiseen: osu oksaan tai runkoon, niin tartut siihen.</p>
+</div>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu'), pad = document.getElementById('pad');
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+}
+addEventListener('resize', resize); resize();
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:orava:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = Math.max(1, Math.floor(load('taso', 1)) || 1);   // the level being played
+let best = Math.max(0, Math.floor(load('ennatys', 0)) || 0); // most points in one go at a level
+let conesEver = Math.max(0, Math.floor(load('kavyt', 0)) || 0); // every cone ever eaten
+
+// ---- The squirrel's moves, in screen pixels and seconds; the world's y grows upwards ----
+const G = 1150;          // gravity
+const JUMP_VX = 230;     // a leap carries the squirrel this fast sideways...
+const JUMP_VY = 470;     // ...and this fast up: about 190 px across, 95 px up
+const CLIMB = 150;       // up and down a trunk
+const RUN = 170;         // along a branch or the ground
+const REACH = 22;        // a cone this near the squirrel's middle is eaten
+
+function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---- One level's forest: pines in a row, branches on both sides, cones on them ----
+// The same level always grows the same forest. Every cone sits on a branch or a treetop, so
+// it can always be reached by climbing; leaping only makes it quicker.
+let trees = [], branches = [], cones = [], worldW = 600;
+function conesFor(n) { return 8 + 2 * n; }
+function treesFor(n) { return Math.min(8, 3 + n); }
+function makeForest(n) {
+  const r = rng(n * 7919 + 101);
+  const count = treesFor(n);
+  trees = []; branches = []; cones = [];
+  let tx = 70;
+  for (let i = 0; i < count; i++) {
+    trees.push({ x: tx, h: Math.round(430 + r() * 200 + Math.min(n, 8) * 30), i });
+    tx += 150 + Math.round(r() * 50);
+  }
+  worldW = trees[count - 1].x + 70;
+  trees.forEach((t, i) => {
+    // A branch reaches at most halfway to the next trunk, so two never meet.
+    const room = { '-1': i ? (t.x - trees[i - 1].x) / 2 - 6 : t.x - 14, '1': i < count - 1 ? (trees[i + 1].x - t.x) / 2 - 6 : worldW - 14 - t.x };
+    let y = 110 + r() * 30, side = r() < 0.5 ? -1 : 1;
+    while (y < t.h - 30) {
+      const top = 1 - 0.45 * (y / t.h);  // a pine's crown narrows to the top
+      const most = Math.min(room[side], 110) * top, len = Math.round(Math.max(36, 42 + r() * (most - 42)));
+      branches.push({ t: i, x0: t.x, side, y: Math.round(y), len: Math.min(len, Math.round(room[side])) });
+      if (r() < 0.75) side = -side;
+      y += 55 + r() * 45;
+    }
+  });
+  const spots = branches.map(b => ({ x: Math.round(b.x0 + b.side * b.len * (0.55 + 0.4 * r())), y: b.y + 7 }));
+  trees.forEach(t => spots.push({ x: t.x, y: t.h + 4 }));
+  for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [spots[i], spots[j]] = [spots[j], spots[i]]; }
+  cones = spots.slice(0, Math.min(spots.length, conesFor(n))).map(s => ({ x: s.x, y: s.y, eaten: false }));
+  return r;
+}
+function trunkHalf(t, y) { return 10 - 6.5 * clamp(y / t.h, 0, 1); }
+
+// ---- One go at a level ----
+let phase = 'menu', S, timeLeft = 0, hearts = 3, eaten = 0, points = 0, endT = 0, lastResult = null;
+let martens = [], hawk = null, pops = [], crumbs = [], playT = 0;
+let camX = 0, camY = 0, jumpBuf = 0;
+const input = { left: false, right: false, up: false, down: false };
+function setup() {
+  const r = makeForest(level);
+  S = { x: trees[0].x - 40, y: 0, vx: 0, vy: 0, mode: 'ground', tree: -1, br: null, u: 0, face: 1, inv: 0,
+        leftTree: -1, leaveT: 0, ignoreBr: null, ignoreT: 0, eatT: 0, run: 0, downward: false };
+  timeLeft = 40 + 6 * cones.length; hearts = 3; eaten = 0; points = 0; pops = []; crumbs = []; playT = 0;
+  // Pine martens from the second level: each climbs one trunk up and down.
+  martens = [];
+  const nm = level < 2 ? 0 : level < 5 ? 1 : 2;
+  for (let k = 0; k < nm; k++) {
+    const i = 1 + Math.floor(r() * (trees.length - 1));
+    if (martens.some(m => m.tree === i)) continue;
+    martens.push({ tree: i, y: trees[i].h * (0.35 + 0.3 * r()), dir: r() < 0.5 ? -1 : 1, v: Math.min(110, 45 + 10 * level), pause: 0 });
+  }
+  // A goshawk from the third level: it swoops at the squirrel every few seconds.
+  hawk = level >= 3 ? { state: 'wait', t: 6 } : null;
+  camX = clamp(S.x - W / 2, 0, Math.max(0, worldW - W)); camY = 0;
+}
+function startGo() {
+  unlock();
+  setup();
+  phase = 'play';
+  menu.classList.add('hidden');
+  pad.classList.remove('off');
+}
+
+// ---- Moving ----
+function branchAt(tree, side, y) {
+  let found = null;
+  branches.forEach(b => { if (b.t === tree && b.side === side && Math.abs(b.y - y) < 16 && (!found || Math.abs(b.y - y) < Math.abs(found.y - y))) found = b; });
+  return found;
+}
+function toTrunk(i, y) {
+  Object.assign(S, { mode: 'trunk', tree: i, x: trees[i].x, y: clamp(y, 1, trees[i].h), vx: 0, vy: 0, br: null });
+}
+function toBranch(b, u) {
+  Object.assign(S, { mode: 'branch', br: b, u: clamp(u, 2, b.len), y: b.y, vx: 0, vy: 0, tree: -1 });
+  S.x = b.x0 + b.side * S.u;
+}
+function leap(dir) {
+  if (S.mode === 'trunk') { S.leftTree = S.tree; S.leaveT = 0.3; }
+  if (S.mode === 'branch') { S.ignoreBr = S.br; S.ignoreT = 0.12; }
+  if (dir) S.face = dir;
+  Object.assign(S, { mode: 'air', vx: dir * JUMP_VX, vy: S.mode === 'trunk' ? JUMP_VY * 0.85 : JUMP_VY, br: null, tree: -1 });
+  sound('hop');
+}
+function move(dt) {
+  const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0), vdir = (input.up ? 1 : 0) - (input.down ? 1 : 0);
+  if (dir) S.face = dir;
+  S.leaveT = Math.max(0, S.leaveT - dt); S.ignoreT = Math.max(0, S.ignoreT - dt);
+  jumpBuf = Math.max(0, jumpBuf - dt);
+  const wantJump = jumpBuf > 0;
+  if (wantJump && S.mode !== 'air') jumpBuf = 0;
+  if (S.mode === 'trunk') {
+    const t = trees[S.tree];
+    if (vdir) S.downward = vdir < 0;
+    S.y = clamp(S.y + vdir * CLIMB * dt, 0, t.h);
+    S.run += Math.abs(vdir) * dt;
+    if (wantJump) return leap(dir || S.face);
+    if (dir) { const b = branchAt(S.tree, dir, S.y); if (b) return toBranch(b, 3); }
+    if (S.y <= 0) { S.mode = 'ground'; S.y = 0; S.tree = -1; }
+  } else if (S.mode === 'branch') {
+    const b = S.br;
+    if (wantJump) return leap(dir);
+    if (vdir > 0 && S.u < 18) return toTrunk(b.t, b.y);
+    if (vdir < 0 && !dir) { S.ignoreBr = b; S.ignoreT = 0.3; Object.assign(S, { mode: 'air', vx: 0, vy: 0, br: null }); return; }
+    S.u += dir * b.side * RUN * dt; S.run += Math.abs(dir) * dt;
+    if (S.u <= 0) return toTrunk(b.t, b.y);
+    S.x = b.x0 + b.side * Math.min(S.u, b.len);
+    if (S.u > b.len + 4) { S.ignoreBr = b; S.ignoreT = 0.2; Object.assign(S, { mode: 'air', vx: dir * RUN * 0.8, vy: 40, br: null }); }
+  } else if (S.mode === 'ground') {
+    if (wantJump) return leap(dir);
+    S.x += dir * RUN * dt; S.run += Math.abs(dir) * dt;
+    if (vdir > 0) { const t = trees.find(t => Math.abs(t.x - S.x) < 16); if (t) return toTrunk(t.i, 2); }
+  } else {
+    // In the air: a little steering, then catch whatever is in the way.
+    if (dir) S.vx += (dir * JUMP_VX - S.vx) * Math.min(1, dt * 2.5);
+    const px = S.x, py = S.y;
+    S.vy -= G * dt; S.x += S.vx * dt; S.y += S.vy * dt;
+    if (S.vy < 0) {
+      for (const b of branches) {
+        if (b === S.ignoreBr && S.ignoreT > 0) continue;
+        const u = (S.x - b.x0) * b.side;
+        if (py >= b.y && S.y < b.y && u >= -2 && u <= b.len + 6) { sound('land'); return toBranch(b, u); }
+      }
+    }
+    for (const t of trees) {
+      if (t.i === S.leftTree && S.leaveT > 0) continue;
+      if ((px - t.x) * (S.x - t.x) <= 0 && S.y > 4 && S.y < t.h) { S.downward = false; sound('land'); return toTrunk(t.i, S.y); }
+    }
+    if (S.y <= 0) { Object.assign(S, { mode: 'ground', y: 0, vx: 0, vy: 0 }); sound('land'); }
+  }
+  if (S.x < 12 || S.x > worldW - 12) { S.x = clamp(S.x, 12, worldW - 12); S.vx = 0; }
+}
+// The squirrel's middle, where it eats and gets caught.
+function middle() { return S.mode === 'trunk' ? { x: S.x, y: S.y + 10 } : { x: S.x, y: S.y + 9 }; }
+function eat() {
+  const m = middle();
+  cones.forEach(k => {
+    if (k.eaten || Math.hypot(k.x - m.x, k.y - m.y) > REACH) return;
+    k.eaten = true; eaten++; conesEver++; save('kavyt', conesEver);
+    points += 10; S.eatT = 0.35;
+    for (let i = 0; i < 8; i++) crumbs.push({ x: k.x, y: k.y, vx: (Math.random() - 0.5) * 120, vy: 60 + Math.random() * 120, t: 0 });
+    pop('+10', '#ffd166', k.x, k.y);
+    sound('crunch');
+  });
+  if (eaten === cones.length) win();
+}
+
+// ---- Dangers ----
+function hazards(dt) {
+  const m = middle();
+  martens.forEach(mt => {
+    const t = trees[mt.tree];
+    if (mt.pause > 0) mt.pause -= dt;
+    else {
+      mt.y += mt.dir * mt.v * dt;
+      if (mt.y > t.h - 40) { mt.y = t.h - 40; mt.dir = -1; }
+      if (mt.y < 20) { mt.y = 20; mt.dir = 1; }
+      if (Math.random() < dt * 0.25) mt.pause = 0.6 + Math.random() * 0.8;
+    }
+    if (Math.abs(m.x - t.x) < 20 && Math.abs(m.y - (mt.y + 14)) < 28) hurt('Näätä nappasi!', m.x < t.x ? -1 : 1);
+  });
+  if (!hawk) return;
+  if (hawk.state === 'wait') {
+    hawk.t -= dt;
+    if (hawk.t <= 0) { Object.assign(hawk, { state: 'warn', t: 1.2, tx: m.x, ty: m.y }); sound('screech'); }
+  } else if (hawk.state === 'warn') {
+    hawk.t -= dt;
+    hawk.tx += (m.x - hawk.tx) * Math.min(1, dt * 3); hawk.ty += (m.y - hawk.ty) * Math.min(1, dt * 3);
+    if (hawk.t <= 0) {
+      const side = hawk.tx - camX < W / 2 ? 1 : -1, sp = 380 + 15 * Math.min(level, 10);
+      const sx = hawk.tx + side * W * 0.75, sy = hawk.ty + 320, d = Math.hypot(hawk.tx - sx, hawk.ty - sy);
+      Object.assign(hawk, { state: 'fly', x: sx, y: sy, vx: (hawk.tx - sx) / d * sp, vy: (hawk.ty - sy) / d * sp, left: 2 * d / sp });
+    }
+  } else {
+    hawk.x += hawk.vx * dt; hawk.y += hawk.vy * dt; hawk.left -= dt;
+    // Pressed against a trunk the squirrel is out of the hawk's reach.
+    if (S.mode !== 'trunk' && Math.hypot(hawk.x - m.x, hawk.y - m.y) < 26) hurt('Haukka nappasi!', hawk.vx > 0 ? 1 : -1);
+    if (hawk.left <= 0) Object.assign(hawk, { state: 'wait', t: Math.max(3.5, 7 - 0.4 * (level - 3)) });
+  }
+}
+function hurt(why, dir) {
+  if (S.inv > 0 || phase !== 'play') return;
+  hearts--; S.inv = 1.8;
+  if (S.mode === 'trunk') { S.leftTree = S.tree; S.leaveT = 0.5; }
+  Object.assign(S, { mode: 'air', vx: dir * 160, vy: 260, br: null, tree: -1 });
+  pop(why, '#ffb4a2');
+  sound('hurt');
+  if (hearts <= 0) finish(false, 'Sydämet loppuivat.');
+}
+function win() {
+  const bonus = 2 * Math.ceil(timeLeft) + 25 * hearts;
+  points += bonus;
+  pop(`Kaikki kävyt! +${bonus}`, '#9be38f');
+  sound('win');
+  finish(true);
+}
+function finish(won, why) {
+  lastResult = { won, points, level, eaten, total: cones.length, why };
+  if (points > best) { best = points; save('ennatys', best); }
+  if (won) { level++; save('taso', level); }
+  if (points > 0 && window.AiPelitScores) AiPelitScores.submit(points);
+  phase = won ? 'clear' : 'over'; endT = 2;
+  if (!won) { sound('fail'); pop(why, '#ffb4a2'); }
+}
+function pop(text, color, wx, wy) { pops.push({ text, color, wx, wy, t: 0 }); }
+
+function step(dt) {
+  pops.forEach(p => { p.t += dt; }); pops = pops.filter(p => p.t < 1.4);
+  crumbs.forEach(k => { k.t += dt; k.vy -= G * 0.6 * dt; k.x += k.vx * dt; k.y += k.vy * dt; }); crumbs = crumbs.filter(k => k.t < 0.8);
+  if (phase === 'play') {
+    playT += dt;
+    S.inv = Math.max(0, S.inv - dt); S.eatT = Math.max(0, S.eatT - dt);
+    move(dt);
+    eat();
+    if (phase === 'play') hazards(dt);
+    if (phase === 'play') {
+      timeLeft -= dt;
+      if (timeLeft <= 0) { timeLeft = 0; finish(false, 'Aika loppui!'); }
+    }
+  } else if (phase === 'clear' || phase === 'over') {
+    endT -= dt;
+    if (S.mode === 'air') move(dt);   // a squirrel knocked off still falls
+    if (endT <= 0) showMenu();
+  }
+  if (S) follow(dt);
+}
+
+// ---- The menu ----
+function showMenu() {
+  phase = 'menu';
+  pad.classList.add('off'); clearStick();
+  const r = document.getElementById('result');
+  if (lastResult) {
+    r.textContent = lastResult.won ? `Taso ${lastResult.level} läpi! ${lastResult.points} p`
+      : `${lastResult.why} ${lastResult.eaten}/${lastResult.total} käpyä, ${lastResult.points} p`;
+    r.className = lastResult.won ? 'win' : 'lose';
+  } else { r.textContent = ''; r.className = ''; }
+  document.getElementById('level').textContent = `Taso ${level}: ${treesFor(level)} mäntyä, ${conesFor(level)} käpyä`;
+  const d = [];
+  if (level >= 2) d.push('🦡 Näätä kiipeilee rungoilla: väistä se.');
+  if (level >= 3) d.push('🦅 Kun haukka kirkuu, piiloudu runkoon!');
+  document.getElementById('danger').innerHTML = d.join('<br>');
+  document.getElementById('go').textContent = lastResult && !lastResult.won ? 'Uudestaan' : 'Kiipeä!';
+  document.getElementById('stats').textContent = `Ennätys ${best} p · Käpyjä syöty ${conesEver}`;
+  menu.classList.remove('hidden');
+  setup();
+}
+document.getElementById('go').addEventListener('click', startGo);
+
+// ---- Controls: a stick on the left, the jump button on the right ----
+const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+let stickId = null;
+function readStick(e) {
+  const r = stick.getBoundingClientRect();
+  let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  const d = Math.hypot(dx, dy), max = r.width / 2 - 20;
+  if (d > max) { dx *= max / d; dy *= max / d; }
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+  const dead = 14, a = Math.atan2(-dy, dx), on = d > dead;
+  // Eight ways: each direction owns 135° of the circle, so the diagonals press two at once.
+  input.right = on && Math.cos(a) > 0.38; input.left = on && Math.cos(a) < -0.38;
+  input.up = on && Math.sin(a) > 0.38; input.down = on && Math.sin(a) < -0.38;
+  showStick();
+}
+function showStick() { ['u', 'd', 'l', 'r'].forEach((k, i) => stick.querySelector('.' + k).classList.toggle('on', [input.up, input.down, input.left, input.right][i])); }
+function clearStick() { stickId = null; input.left = input.right = input.up = input.down = false; knob.style.transform = ''; showStick(); }
+stick.addEventListener('pointerdown', e => {
+  e.preventDefault(); unlock(); stickId = e.pointerId;
+  try { stick.setPointerCapture(e.pointerId); } catch (er) {}
+  readStick(e);
+});
+stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) readStick(e); });
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(n => stick.addEventListener(n, e => { if (e.pointerId === stickId) clearStick(); }));
+const jumpBtn = document.getElementById('jump');
+function pressJump() { unlock(); jumpBuf = 0.15; }
+jumpBtn.addEventListener('pointerdown', e => { e.preventDefault(); jumpBtn.classList.add('on'); pressJump(); });
+['pointerup', 'pointercancel', 'pointerleave'].forEach(n => jumpBtn.addEventListener(n, () => jumpBtn.classList.remove('on')));
+c.addEventListener('pointerdown', e => e.preventDefault(), { passive: false });
+
+// ---- Camera ----
+// The forest floor sits just above the controls; the view climbs with the squirrel.
+function floorY() { return H - SAFE_B - 150; }
+function viewH() { return floorY() - SAFE_T - 96; }
+function follow(dt) {
+  const tallest = Math.max(...trees.map(t => t.h)) + 70;
+  const tx = clamp(S.x - W / 2, Math.min(0, (worldW - W) / 2), Math.max((worldW - W) / 2, worldW - W));
+  const ty = clamp(S.y - viewH() * 0.4, 0, Math.max(0, tallest - viewH()));
+  const k = Math.min(1, dt * 5);
+  camX += (tx - camX) * k; camY += (ty - camY) * k;
+}
+const sx = wx => wx - camX, sy = wy => floorY() - (wy - camY);
+
+// ---- Drawing ----
+const HILLS = (() => { const r = rng(5), out = []; for (let i = 0; i < 60; i++) out.push({ x: i * 34 + r() * 20, h: 70 + r() * 90 }); return out; })();
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const fy = floorY();
+  const sky = x.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#7fc3ea'); sky.addColorStop(0.7, '#d9eef5'); sky.addColorStop(1, '#f4e7c4');
+  x.fillStyle = sky; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#fff6c8'; x.beginPath(); x.arc(W * 0.78, SAFE_T + 120 + camY * 0.05, 30, 0, 7); x.fill();
+  // A far forest, moving slower than the near one.
+  x.fillStyle = '#8fb39a';
+  const hy = fy + camY * 0.35 - 30;
+  HILLS.forEach(h => {
+    const px = ((h.x - camX * 0.3) % 2040 + 2040) % 2040 - 60;
+    if (px < -40 || px > W + 40) return;
+    x.beginPath(); x.moveTo(px - 18, hy); x.lineTo(px, hy - h.h); x.lineTo(px + 18, hy); x.fill();
+  });
+  x.fillRect(0, hy - 1, W, H);
+  if (!S) return;
+  // The forest floor: moss and heather.
+  const gy = sy(0);
+  if (gy < H) {
+    x.fillStyle = '#4f7a35'; x.fillRect(0, gy, W, H - gy);
+    x.fillStyle = '#3d5f2a'; x.fillRect(0, gy + 6, W, H - gy);
+    x.fillStyle = '#6d8f3f';
+    for (let i = Math.floor(camX / 26) - 1; i < (camX + W) / 26 + 1; i++) { x.beginPath(); x.ellipse(i * 26 - camX + 8, gy + 3, 12, 5, 0, 0, 7); x.fill(); }
+  }
+  trees.forEach(drawTree);
+  cones.forEach(k => { if (!k.eaten) drawCone(sx(k.x), sy(k.y), 1); });
+  martens.forEach(drawMarten);
+  drawSquirrel();
+  x.fillStyle = '#8a5a2b';
+  crumbs.forEach(k => { x.fillRect(sx(k.x) - 1.5, sy(k.y) - 1.5, 3, 3); });
+  drawHawk();
+  drawHud();
+}
+function drawTree(t) {
+  const x0 = sx(t.x);
+  if (x0 < -140 || x0 > W + 140) return;
+  // The trunk: grey and furrowed low down, orange near the top as on a real pine.
+  const yb = sy(0), yt = sy(t.h);
+  const bark = x.createLinearGradient(0, yb, 0, yt);
+  bark.addColorStop(0, '#6b5a4c'); bark.addColorStop(0.35, '#8a5a3c'); bark.addColorStop(1, '#d9813f');
+  x.fillStyle = bark;
+  x.beginPath(); x.moveTo(x0 - 10, yb + 2); x.lineTo(x0 - 3.5, yt); x.lineTo(x0 + 3.5, yt); x.lineTo(x0 + 10, yb + 2); x.fill();
+  x.strokeStyle = 'rgba(40,25,15,.3)'; x.lineWidth = 1.5;
+  for (let y = 20; y < t.h * 0.4; y += 26) { const w = trunkHalf(t, y); x.beginPath(); x.moveTo(x0 - w + 2, sy(y)); x.lineTo(x0 - w + 5, sy(y + 14)); x.moveTo(x0 + w - 3, sy(y + 8)); x.lineTo(x0 + w - 6, sy(y + 20)); x.stroke(); }
+  // Branches with tufts of needles.
+  branches.forEach(b => {
+    if (b.t !== t.i) return;
+    const y = sy(b.y), x1 = x0 + b.side * b.len;
+    x.strokeStyle = '#7a4a2a'; x.lineWidth = 5; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(x0, y + 1); x.lineTo(x1, y + 1); x.stroke();
+    x.fillStyle = '#2f5d2e';
+    for (let u = 0.45; u <= 1.001; u += 0.18) {
+      const px = x0 + b.side * b.len * u;
+      x.beginPath(); x.ellipse(px, y - 3, 13, 7, 0, 0, 7); x.fill();
+    }
+    x.fillStyle = '#3f7a3a';
+    x.beginPath(); x.ellipse(x1 + b.side * 4, y - 4, 12, 7, 0, 0, 7); x.fill();
+  });
+  // The crown.
+  x.fillStyle = '#2f5d2e';
+  [[0, 10, 20, 12], [-12, 2, 14, 9], [12, 2, 14, 9]].forEach(([dx, dy, rx, ry]) => { x.beginPath(); x.ellipse(x0 + dx, yt - dy, rx, ry, 0, 0, 7); x.fill(); });
+}
+function drawCone(px, py, s) {
+  x.save(); x.translate(px, py); x.scale(s, s);
+  x.fillStyle = '#8a5a2b'; x.beginPath(); x.ellipse(0, 0, 5.5, 8, 0, 0, 7); x.fill();
+  x.strokeStyle = '#5a3515'; x.lineWidth = 1;
+  for (let i = -1; i <= 1; i++) { x.beginPath(); x.moveTo(-5, i * 3.5 - 1); x.lineTo(0, i * 3.5 + 1.5); x.lineTo(5, i * 3.5 - 1); x.stroke(); }
+  x.restore();
+}
+function drawSquirrel() {
+  if (phase === 'menu') return;
+  if (S.inv > 0 && Math.floor(S.inv * 10) % 2) return;
+  const run = Math.sin(S.run * 18);
+  x.save();
+  if (S.mode === 'trunk') {
+    const t = trees[S.tree], hw = trunkHalf(t, S.y);
+    x.translate(sx(S.x + S.face * hw), sy(S.y + 10));
+    // Head up while climbing up or still, head first going down.
+    if (S.downward) { x.scale(S.face, 1); x.rotate(Math.PI / 2); } else { x.scale(-S.face, 1); x.rotate(-Math.PI / 2); }
+    x.translate(0, 0);
+  } else {
+    x.translate(sx(S.x), sy(S.y) - 2);
+    x.scale(S.face, 1);
+    if (S.mode === 'air') x.rotate(-Math.atan2(S.vy, Math.abs(S.vx) + 80) * 0.6);
+  }
+  const air = S.mode === 'air';
+  // The bushy tail.
+  x.fillStyle = '#b4441a';
+  const tail = air ? [[-11, -8, 7], [-19, -9, 8], [-27, -11, 8], [-33, -15, 7]] : [[-10, -10, 7], [-17, -17, 8], [-19, -27, 8], [-14, -34, 7], [-7, -34, 5]];
+  tail.forEach(([a, b, r]) => { x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); });
+  // Body, legs, head.
+  x.fillStyle = '#c4501f'; x.beginPath(); x.ellipse(0, -9, 11, 7, 0, 0, 7); x.fill();
+  x.fillStyle = '#f3e1c0'; x.beginPath(); x.ellipse(2, -5, 7, 3.5, 0, 0, 7); x.fill();
+  x.fillStyle = '#a33e15';
+  const lg = air ? 3 : 2.5 * run;
+  x.beginPath(); x.ellipse(-6 - lg, -2, 4, 2.5, 0, 0, 7); x.ellipse(6 + lg, -2, 3.5, 2.2, 0, 0, 7); x.fill();
+  x.fillStyle = '#c4501f'; x.beginPath(); x.arc(11, -15, 6.5, 0, 7); x.fill();
+  x.beginPath(); x.moveTo(8, -19); x.lineTo(10, -28); x.lineTo(13, -19); x.fill();
+  x.fillStyle = '#f3e1c0'; x.beginPath(); x.arc(14, -12, 3, 0, 7); x.fill();
+  x.fillStyle = '#1a1a1a'; x.beginPath(); x.arc(13, -16, 1.6, 0, 7); x.fill();
+  x.beginPath(); x.arc(17.5, -14, 1.2, 0, 7); x.fill();
+  if (S.eatT > 0) drawCone(17, -8, 0.7);
+  x.restore();
+}
+function drawMarten(m) {
+  const t = trees[m.tree], px = sx(t.x), py = sy(m.y);
+  if (px < -40 || px > W + 40) return;
+  x.save(); x.translate(px, py);
+  if (m.dir < 0) x.scale(1, -1);
+  // A long dark body on the trunk, head the way it climbs, with a yellow bib.
+  x.fillStyle = '#3b2615';
+  x.beginPath(); x.ellipse(0, -14, 7, 18, 0, 0, 7); x.fill();
+  x.beginPath(); x.ellipse(0, 14, 4, 12, 0, 0, 7); x.fill();
+  x.beginPath(); x.arc(0, -33, 7, 0, 7); x.fill();
+  x.beginPath(); x.moveTo(-6, -36); x.lineTo(-7, -43); x.lineTo(-2, -38); x.moveTo(6, -36); x.lineTo(7, -43); x.lineTo(2, -38); x.fill();
+  x.fillStyle = '#f0c040'; x.beginPath(); x.ellipse(0, -25, 4.5, 6, 0, 0, 7); x.fill();
+  x.fillStyle = '#fff'; x.beginPath(); x.arc(-2.5, -35, 1.6, 0, 7); x.arc(2.5, -35, 1.6, 0, 7); x.fill();
+  x.restore();
+}
+function drawHawk() {
+  if (!hawk || phase === 'menu') return;
+  if (hawk.state === 'warn') {
+    const px = clamp(sx(hawk.tx), 24, W - 24), py = clamp(sy(hawk.ty) - 44, SAFE_T + 110, floorY() - 20);
+    x.globalAlpha = 0.6 + 0.4 * Math.sin(hawk.t * 20);
+    x.fillStyle = '#e63946'; x.beginPath(); x.arc(px, py, 15, 0, 7); x.fill();
+    x.fillStyle = '#fff'; x.font = '900 20px system-ui,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('!', px, py + 1);
+    x.globalAlpha = 1;
+    return;
+  }
+  if (hawk.state !== 'fly') return;
+  const flap = Math.sin(performance.now() / 60) * 10;
+  x.save(); x.translate(sx(hawk.x), sy(hawk.y));
+  x.rotate(Math.atan2(-hawk.vy, hawk.vx));
+  x.fillStyle = '#5b5f66';
+  x.beginPath(); x.moveTo(-6, 0); x.lineTo(-14, -22 - flap); x.lineTo(6, -2); x.moveTo(-6, 0); x.lineTo(-14, 22 + flap); x.lineTo(6, 2); x.fill();
+  x.fillStyle = '#7d828a'; x.beginPath(); x.ellipse(0, 0, 16, 6, 0, 0, 7); x.fill();
+  x.beginPath(); x.moveTo(-14, 0); x.lineTo(-24, -6); x.lineTo(-24, 6); x.fill();
+  x.fillStyle = '#f2c94c'; x.beginPath(); x.moveTo(15, -2); x.lineTo(21, 1); x.lineTo(15, 3); x.fill();
+  x.restore();
+}
+function drawHud() {
+  if (phase === 'menu') return;
+  const top = SAFE_T + 50;
+  x.fillStyle = 'rgba(18,38,24,.6)';
+  roundRect(8, top - 4, W - 16, 30, 12); x.fill();
+  x.textBaseline = 'middle'; x.font = '700 15px system-ui,sans-serif'; x.fillStyle = '#fff';
+  x.textAlign = 'left';
+  x.fillText('❤️'.repeat(Math.max(0, hearts)) + '🤍'.repeat(Math.max(0, 3 - hearts)), 16, top + 11);
+  x.textAlign = 'center';
+  x.fillStyle = timeLeft < 10 ? '#ffb4a2' : '#fff';
+  x.fillText(`Taso ${level} · ⏱ ${Math.ceil(timeLeft)}`, W / 2, top + 11);
+  x.fillStyle = '#fff'; x.textAlign = 'right';
+  x.fillText(`${eaten}/${cones.length}`, W - 16, top + 11);
+  drawCone(W - 22 - x.measureText(`${eaten}/${cones.length}`).width, top + 11, 0.8);
+  // Arrows at the edge to the nearest cones out of sight.
+  const off = cones.filter(k => !k.eaten).map(k => ({ k, px: sx(k.x), py: sy(k.y) }))
+    .filter(o => o.px < 0 || o.px > W || o.py < top + 30 || o.py > floorY() + 20)
+    .sort((a, b) => Math.hypot(a.k.x - S.x, a.k.y - S.y) - Math.hypot(b.k.x - S.x, b.k.y - S.y));
+  const shown = [];
+  off.forEach(o => {
+    const cx = W / 2, cy = (top + 30 + floorY()) / 2, a = Math.atan2(o.py - cy, o.px - cx);
+    const ex = clamp(o.px, 22, W - 22), ey = clamp(o.py, top + 50, floorY() - 10);
+    // At most three, and never one on top of another.
+    if (shown.length >= 3 || shown.some(s => Math.hypot(s[0] - ex, s[1] - ey) < 34)) return;
+    shown.push([ex, ey]);
+    x.save(); x.translate(ex, ey);
+    x.fillStyle = 'rgba(255,255,255,.75)'; x.beginPath(); x.arc(0, 0, 13, 0, 7); x.fill();
+    drawCone(0, 0, 0.8);
+    x.rotate(a); x.fillStyle = 'rgba(255,255,255,.9)';
+    x.beginPath(); x.moveTo(20, 0); x.lineTo(13, -6); x.lineTo(13, 6); x.fill();
+    x.restore();
+  });
+  // Popups: points where a cone was, messages in the middle.
+  x.textAlign = 'center';
+  let my = H * 0.32;
+  pops.forEach(p => {
+    x.globalAlpha = Math.min(1, (1.4 - p.t) * 2.5);
+    x.fillStyle = p.color; x.strokeStyle = 'rgba(18,38,24,.75)'; x.lineWidth = 4;
+    let px, py;
+    if (p.wx !== undefined) { x.font = '800 16px system-ui,sans-serif'; px = sx(p.wx); py = sy(p.wy) - 18 - p.t * 30; }
+    else { x.font = '800 22px system-ui,sans-serif'; px = W / 2; py = my - p.t * 16; my += 30; }
+    x.strokeText(p.text, px, py); x.fillText(p.text, px, py);
+    x.globalAlpha = 1;
+  });
+  if (playT < 6 && eaten === 0 && phase === 'play') {
+    x.font = '600 14px system-ui,sans-serif'; x.fillStyle = 'rgba(18,38,24,.85)';
+    x.fillText('▲ rungon luona kiipeää ylös', W / 2, floorY() - 14);
+  }
+}
+function roundRect(a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
+
+// ---- Sound (Web Audio, after the first tap) ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function tone(f0, f1, dur, type = 'sine', vol = 0.2, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function sound(k) {
+  if (k === 'hop') tone(420, 760, 0.1, 'triangle', 0.12);
+  else if (k === 'land') tone(220, 140, 0.06, 'sine', 0.1);
+  else if (k === 'crunch') { tone(900, 300, 0.05, 'square', 0.06); tone(700, 250, 0.05, 'square', 0.06, 0.06); }
+  else if (k === 'hurt') tone(300, 90, 0.3, 'sawtooth', 0.12);
+  else if (k === 'screech') tone(1400, 2200, 0.35, 'sawtooth', 0.06);
+  else if (k === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.18, 0.1 + i * 0.1));
+  else if (k === 'fail') tone(300, 150, 0.4, 'sawtooth', 0.1, 0.2);
+}
+
+// ---- Loop: fixed 1/60 s steps ----
+let lastT = performance.now(), acc = 0;
+function frame(t) {
+  acc += Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
+  draw();
+  requestAnimationFrame(frame);
+}
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="orava" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
