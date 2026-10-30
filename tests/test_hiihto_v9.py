@@ -224,3 +224,22 @@ def test_a_phone_held_at_30_frames_keeps_its_full_picture(site, context):
     r = page.evaluate("""() => { V3.tuned = false; V3.warm = true; V3.tt = V3.tn = 0; V3.renderer.setPixelRatio(2);
       for (let i = 0; i < 60; i++) tune(1000 / 15); return V3.renderer.getPixelRatio(); }""")
     assert r == 1.5
+
+
+def test_sideways_the_finer_skier_races_and_turning_keeps_the_race(site, browser):
+    # v9 is built on v8's sideways layout (#95): the 3D, the skier and the race work on its side too.
+    ctx = browser.new_context(viewport={"width": 740, "height": 360}, is_mobile=True, has_touch=True)
+    page = open_game(site, ctx)
+    wait_3d(page)
+    r = page.evaluate("""() => { chooseWax(bestWax(course.weather.T)); countT = 0; step(1 / 60);
+      for (let i = 0; i < 60 * 5; i++) { if (i % 24 === 0) kick(P); step(1 / 60); }
+      V3.last = performance.now() - 33; draw();
+      const me = V3.rigs.get(P);
+      return [mode, P.z > 5, !!me && me.root.visible, me.extra.mitts[0].visible, V3.w > V3.h]; }""")
+    assert r == ["race", True, True, True, True], r
+    # Turned upright mid-race: the same race goes on, drawn for the new shape.
+    page.set_viewport_size({"width": 360, "height": 740})
+    page.wait_for_function("V3.w === 0 || V3.h > V3.w || (draw(), V3.h > V3.w)", timeout=5000)
+    assert page.evaluate("draw(); [mode, V3.h > V3.w]") == ["race", True]
+    assert page.errors == []
+    ctx.close()
