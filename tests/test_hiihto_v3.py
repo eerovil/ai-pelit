@@ -216,7 +216,10 @@ def test_two_phones_ski_the_same_course_and_the_first_in_wins(site, browser):
     assert guest.evaluate("net.res.map(r => r.name)") == ["Aino", "Eero"]
     assert host.evaluate("net.res.map(r => r.name)") == ["Aino", "Eero"]
     # The skating time is saved as a skating time on each phone.
-    assert guest.evaluate("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:hiihto:luistelu-ajat') || '{}'))") in ([], ["1"])
+    guest_t = guest.evaluate("net.res[0].fin")
+    saved = guest.evaluate("JSON.parse(localStorage.getItem('ai-pelit:hiihto:luistelu-ajat'))")
+    assert list(saved) == ["1"] and abs(saved["1"] - guest_t) < 0.01, saved
+    assert guest.evaluate("localStorage.getItem('ai-pelit:hiihto:ajat')") is None
     for p in pages:
         p.evaluate("resultT = 2; down(1, W / 2, H / 2); up(1)")
         p.wait_for_function("AiPelitRooms.inRoom && !net && document.getElementById('aipr-result').textContent !== ''", timeout=6000)
@@ -265,6 +268,34 @@ def test_the_computer_skis_for_a_friend_who_left(site, browser):
     relay.back(guest)
     guest.wait_for_function("!AiPelitRooms.paused && P.z > 20", timeout=8000)
     host.wait_for_function("net.skiers[1].kind === 'net'", timeout=4000)
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
+
+
+def test_a_finish_the_computer_skied_is_not_the_players_own(site, browser):
+    relay = Relay()
+    host, guest = room_of_two(site, browser, relay=relay)
+    wax_and_go([host, guest])
+    relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.paused", timeout=8000)
+    host.click("#aipr-goOn")
+    host.wait_for_function("net.skiers[1].kind === 'cpu' && !AiPelitRooms.paused", timeout=4000)
+    # The computer takes Aino's skier over the line while her phone is away.
+    host.evaluate("net.skiers[1].p.z = course.len - 0.5; net.skiers[1].p.v = 8")
+    host.wait_for_function("net.skiers[1].fin !== null", timeout=4000)
+    relay.back(guest)
+    guest.wait_for_function("mode === 'done' && result && result.cpu", timeout=8000)
+    # She keeps her place in the race, but it is not her time: nothing is saved or sent.
+    assert guest.evaluate("[meK().fin !== null, result.stars, result.record]") == [True, 0, False]
+    assert guest.evaluate("['luistelu-ajat', 'ajat', 'tahdet', 'taso'].map(k => localStorage.getItem('ai-pelit:hiihto:' + k))") == [None] * 4
+    assert guest.evaluate("localStorage.getItem('ai-pelit:_tulokset:jono')") in (None, "{}")
+    # The host finishes; both get the same places, Aino first.
+    host.evaluate("P.z = course.len - 0.5; P.v = 8")
+    for p in (host, guest):
+        p.wait_for_function("net && net.res", timeout=6000)
+    assert guest.evaluate("net.res.map(r => r.name)") == ["Aino", "Eero"]
+    assert guest.evaluate("['ajat', 'taso'].map(k => localStorage.getItem('ai-pelit:hiihto:' + k))") == [None, None]
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()

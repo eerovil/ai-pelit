@@ -394,10 +394,10 @@ function netCourse() {
   newRace(net.cfg.seed);
   for (const k of net.skiers) k.x = laneX(style, 1);
 }
-// A skier as sent: where, which lane, how fast, the finish time, the wax, a fall, and whether the
-// computer skis it now.
+// A skier as sent: where, which lane, how fast, the finish time, the wax, a fall, whether the
+// computer skis it now, and whether the computer took it to the finish.
 const r2 = n => Math.round(n * 100) / 100;
-const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0];
+const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0];
 function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; }
 function synced(k) {
   if (k.kind === 'me' && (mode === 'race' || mode === 'done')) { k.z = P.z; k.lane = P.lane; k.v = mode === 'race' ? P.v : 0; k.fall = P.fallT > 0 ? 1 : 0; }
@@ -415,7 +415,7 @@ function netTick(dt, n) {
       if (net.phase === 'run' && k.fin === null) {
         for (let i = 0; i < n; i++) botStep(k.p, dt / n, skating() ? 0.38 : 0.44);
         k.z = k.p.z; k.lane = k.p.lane; k.v = k.p.v;
-        if (k.z >= course.len) { k.fin = r2(k.p.t); if (net.firstFin === null) net.firstFin = net.clock; }
+        if (k.z >= course.len) { k.fin = r2(k.p.t); k.cpuFin = true; if (net.firstFin === null) net.firstFin = net.clock; }
       }
     } else if (net.phase === 'run' && k.fin === null && !k.fall) k.z += k.v * dt;
     k.x += clamp(laneX(style, k.lane) - k.x, -9 * dt, 9 * dt);
@@ -460,7 +460,7 @@ function guestState(m) {
     // The computer skied for me while I was away: carry on from where it got to.
     else if (a[6] && mode === 'race') {
       P.z = a[0]; P.lane = a[1]; P.v = a[2]; P.t = m.clock;
-      if (a[3] !== null) { P.t = a[3]; finish(); }
+      if (a[3] !== null) arrived(a);
     }
   });
   net.adopt = false;
@@ -471,8 +471,18 @@ function guestState(m) {
 function adopt(a, m) {
   applyWax(a[4]); meK().wax = a[4];
   P.z = a[0]; P.lane = a[1]; P.x = laneX(style, a[1]); P.v = a[2]; P.t = m.clock;
-  if (a[3] !== null) { P.t = a[3]; finish(); }
+  if (a[3] !== null) arrived(a);
   else mode = m.ph === 'run' ? 'race' : m.ph === 'cd' ? 'count' : 'ready';
+}
+// The host says I am at the finish. My own finish (heard again after a reload) is saved as usual,
+// once; one the computer skied for me while I was away keeps its place in the race, but is not
+// my time: no stars, record, level or online score.
+function arrived(a) {
+  P.t = a[3]; P.z = Math.max(P.z, course.len);
+  if (!a[7]) return finish();
+  mode = 'done'; resultT = 0;
+  result = { t: a[3], stars: 0, passed: false, record: false, cpu: true, note: 'Tietokone hiihti puolestasi maaliin.' };
+  const k = meK(); k.fin = a[3]; k.z = P.z; net.sendT = 0;
 }
 function cpuTakes(k) {
   k.kind = 'cpu';
@@ -1011,7 +1021,7 @@ function drawNetResult() {
   panel(px, py, pw, ph);
   const i = placeOf(list, RM.me);
   let y = py + 32;
-  const title = r.t === null ? 'Et ehtinyt maaliin' : net.res ? (i === 1 ? 'Voitit! 🏆' : `${i}. sija`) : 'Maalissa!';
+  const title = r.t === null ? 'Et ehtinyt maaliin' : r.cpu ? (net.res ? `${i}. sija` : 'Maalissa') : net.res ? (i === 1 ? 'Voitit! 🏆' : `${i}. sija`) : 'Maalissa!';
   text(title, W / 2, y, 24, r.t !== null && i === 1 ? '#7ef0a0' : r.t === null ? '#ff8a8a' : '#ffffff', 'center', 800);
   y += 38;
   if (r.t !== null) text(fmtTime(r.t) + (r.stars ? '  ' + '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : ''), W / 2, y, 22, '#ffd45c', 'center', 800);
