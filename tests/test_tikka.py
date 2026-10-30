@@ -158,3 +158,48 @@ def test_turning_the_phone_keeps_the_round_and_the_board_clear_of_the_panel(site
     chip = page.locator("#ai-pelit-tulokset-nappi").bounding_box()
     assert page.evaluate("PANEL.y") >= chip["y"] + chip["height"]
     assert page.errors == []
+
+
+def test_a_second_finger_does_not_steer_or_throw(site, context):
+    page = open_game(site, context)
+    page.click("#kisa")
+    page.evaluate("run(() => true, 0.1)")
+    page.evaluate("""() => {
+        const c = document.getElementById('c');
+        const ev = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+        aim = { x: 0, y: 0 };
+        ev('pointerdown', 1, 180, 650);
+        ev('pointerdown', 2, 100, 650);
+        ev('pointermove', 2, 100, 500);   // the second finger moves: the sight stays
+        window.afterSecond = aim.y;
+        run(() => hold.t < 0.3, 1);
+        ev('pointerup', 2, 100, 500);     // the second finger lifts: no throw
+        window.thrownAfterSecond = dartsLeft;
+        ev('pointerup', 1, 180, 650);     // the first finger lifts: the dart flies
+    }""")
+    assert page.evaluate("[afterSecond, thrownAfterSecond, dartsLeft, flying !== null]") == [0, 3, 2, True]
+    assert page.errors == []
+
+
+def test_a_reload_keeps_the_record_wins_and_opponent(site, context):
+    page = open_game(site, context, {"ennatys": 512, "voitot": 3, "vastus": "kova"})
+    assert page.inner_text("#stats") == "Ennätys 512 p · Voittoja tietokoneesta 3"
+    assert page.evaluate("document.querySelector('#opps .on').dataset.o") == "kova"
+    page.click("#opps [data-o=helppo]")
+    page.reload()
+    assert page.evaluate("document.querySelector('#opps .on').dataset.o") == "helppo"
+    assert page.errors == []
+
+
+def test_on_a_390_px_phone_the_board_and_panel_fit_under_the_chips(site, context):
+    page = open_game(site, context)
+    turn(page, {"width": 390, "height": 844})
+    page.click("#kisa")
+    w, h = 390, 844
+    left, right = page.evaluate("BX - R_ALL * K"), page.evaluate("BX + R_ALL * K")
+    top, bottom = page.evaluate("BY - R_ALL * K"), page.evaluate("BY + R_ALL * K")
+    assert left >= 0 and right <= w and bottom <= h - 60
+    assert top >= page.evaluate("PANEL.y + PANEL.h")
+    chip = page.locator("#ai-pelit-tulokset-nappi").bounding_box()
+    assert page.evaluate("PANEL.y") >= chip["y"] + chip["height"]
+    assert page.errors == []
