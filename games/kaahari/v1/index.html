@@ -528,6 +528,8 @@ function fmt(t) { const m = Math.floor(t / 60), s = t - m * 60; return m + '.' +
 function showResult() {
   engineOn(false);
   race.phase = 'over';
+  // Drivers still on the track get the time they would finish in at their average speed so far.
+  for (const k of race.karts) if (k.fin === null) k.fin = race.t + (LAPS * T.L - k.prog) / Math.max(40, k.prog / race.t);
   const place = race.place, res = document.getElementById('result');
   res.textContent = place === 1 ? '🏆 Voitit kisan!' : place + '. sija';
   res.className = place === 1 ? 'win' : 'lose';
@@ -607,7 +609,10 @@ function drawKart(k) {
   x.fillStyle = 'rgba(0,0,0,.3)'; poly(sh);
   const wheel = (fw, rt) => { const p = P(fw, rt, 2.5); if (p) { x.fillStyle = '#1a1a1a'; x.beginPath(); x.ellipse(p.x, p.y, 3 * p.s, 2.6 * p.s, 0, 0, 7); x.fill(); } };
   // Wheels further away first.
-  const ws = [[8, -7], [8, 7], [-7, -7], [-7, 7]].map(w => ({ w, p: P(w[0], w[1], 0) })).sort((a, b) => b.p.z - a.p.z);
+  const ws = [[8, -7], [8, 7], [-7, -7], [-7, 7]].map(w => ({ w, p: P(w[0], w[1], 0) }));
+  // A kart passing the camera can have a wheel behind it: then draw none of it.
+  if (ws.some(o => !o.p)) return;
+  ws.sort((a, b) => b.p.z - a.p.z);
   ws.slice(0, 2).forEach(o => wheel(o.w[0], o.w[1]));
   // Body: a low tub, then the nose.
   const lo = [P(9, -5.5, 2), P(9, 5.5, 2), P(-8, 6, 2), P(-8, -6, 2)], hi = [P(9, -5, 5), P(9, 5, 5), P(-8, 5.5, 6), P(-8, -5.5, 6)];

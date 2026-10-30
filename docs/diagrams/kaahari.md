@@ -61,5 +61,5 @@ flowchart TD
 - **Päästit irti, kipinöitä?**: letting go gives a turbo of 0.55, 0.9 or 1.35 s by the spark colour (`TIER_BOOST`); a shorter slide gives nothing.
 - **Kolme kierrosta ajettu?**: `k.prog` counts the distance along the track past the line; each full lap behind adds one, and the third finishes the kart (`fin`).
 - **Voitto: taso nousee, nopeammat kuskit**: `finishMe()` saves `taso`, `voitot` and `kisat`; a higher level makes the computer drivers faster (`cpuSkill()`) and gives them more turbos out of bends (`think()`).
-- **Sija ja ajat, sama taso**: `showResult()` lists the finishing order, the times and the player's best lap.
+- **Sija ja ajat, sama taso**: `showResult()` lists the finishing order, every driver's time and the player's best lap; a driver still on the track gets the time it would finish in at its average speed so far.
 - **Ratakohtainen ennätys**: the fastest race on each track is saved in `ennatykset` and shown on its track button.

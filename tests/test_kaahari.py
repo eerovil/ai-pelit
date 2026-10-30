@@ -138,3 +138,34 @@ def test_both_arrows_at_once_on_a_390_px_phone_drive_straight(site, browser):
         assert page.evaluate("Math.abs(input.steer)") < 0.01
     finally:
         ctx.close()
+
+
+def test_a_kart_passing_the_camera_from_behind_is_drawn_without_an_error(site, context):
+    page = start(site, context)
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    # Another kart moved, frame by frame, from behind the camera to in front of the player.
+    for back in range(-110, 40, 4):
+        page.evaluate(f"""() => {{
+            const o = race.karts[1], d = {back};
+            Object.assign(o, {{ x: me.x + Math.cos(me.a) * d + Math.cos(me.a + 1.57) * 5, y: me.y + Math.sin(me.a) * d + Math.sin(me.a + 1.57) * 5, a: me.a + 0.8, v: 0 }});
+            draw();
+        }}""")
+    page.wait_for_timeout(100)
+    assert errors == []
+    assert page.evaluate("race.phase") == "run"
+
+
+def test_a_clear_win_lists_every_drivers_time(site, context):
+    page = start(site, context)
+    page.evaluate("""() => {
+        race.karts.forEach(k => { if (k !== me) k.prog = 2 * T.L; });
+        const p = at(T, T.L - 25, 0);
+        Object.assign(me, { x: p.x, y: p.y, a: p.a, idx: p.i, s: T.L - 25, prog: 3 * T.L - 25, lap: 2, v: 150 });
+    }""")
+    page.wait_for_function("race.phase === 'over'", timeout=6000)
+    rows = page.locator("#table div").all_inner_texts()[:6]
+    assert rows[0].startswith("1. Sinä")
+    assert all("–" not in r and r.split("\n")[-1].count(",") == 1 for r in rows), rows
+    times = page.evaluate("standings().map(k => k.fin)")
+    assert times == sorted(times)
