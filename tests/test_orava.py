@@ -168,3 +168,28 @@ def test_the_stick_and_the_jump_button_drive_the_squirrel(site, context):
     page.evaluate("Object.assign(S, { mode: 'ground', x: 20, y: 0 })")
     page.locator("#jump").tap()
     page.wait_for_function("S.mode === 'air'", timeout=1000)
+
+
+def test_a_new_go_after_a_lost_one_starts_afresh(site, context):
+    page = start(site, context, level=2)
+    page.evaluate("const k = cones[0]; Object.assign(S, { mode: 'air', x: k.x, y: k.y - 9 }); eat(); hearts = 1; timeLeft = 0.02; run(() => phase !== 'menu', 4)")
+    assert page.inner_text("#go") == "Uudestaan"
+    # The first score opens the high-score list over the menu (it asks a nickname); start past it.
+    page.evaluate("startGo()")
+    assert page.evaluate("[phase, hearts, eaten, points, cones.every(k => !k.eaten), S.mode, martens.length, level]") == \
+        ["play", 3, 0, 0, True, "ground", 1, 2]
+    assert page.evaluate("timeLeft") == page.evaluate("40 + 6 * cones.length")
+
+
+def test_the_controls_fit_a_390_px_phone_side_by_side(site, browser):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    try:
+        page = start(site, ctx)
+        stick, jump = page.locator("#stick").bounding_box(), page.locator("#jump").bounding_box()
+        assert stick["x"] >= 0 and jump["x"] + jump["width"] <= 390
+        assert stick["x"] + stick["width"] < jump["x"]
+        assert jump["y"] + jump["height"] <= 844 and stick["y"] + stick["height"] <= 844
+        # The squirrel on the ground stands above the controls, not behind them.
+        assert page.evaluate("sy(0)") < stick["y"] + 30
+    finally:
+        ctx.close()
