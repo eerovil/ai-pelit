@@ -153,3 +153,103 @@ def test_a_skier_put_back_past_the_road_skis_on(site, context):
     page.evaluate("P.road = undefined; P.z = course.road.z1 + 5; P.v = 4")
     page.evaluate(RUN, 1)
     assert page.evaluate("[P.road, P.z > course.road.z1 + 5]") == ["done", True]
+
+
+@pytest.mark.parametrize("gap", [0.39, 0.42, 0.44])
+def test_a_step_before_green_slips(site, context, gap):
+    page = open_game(site, context)
+    page.evaluate(CROSS, "perinteinen")
+    page.evaluate(RUN, 3)
+    page.evaluate(TAP)
+    page.evaluate(RUN, 1)
+    page.evaluate(TAP)
+    # Not yet green, so the next step slips; on green it is a step.
+    res = page.evaluate("gap => { P.t = P.lastKick + gap; const before = meter(P); return [before, roadTap(P)]; }", gap)
+    assert res == ["filling", "slip"]
+    page.evaluate(RUN, 1.2)
+    assert page.evaluate("P.t = P.lastKick + 0.451; [meter(P), roadTap(P)]") == ["ready", "step"]
+
+
+def room_on_level(site, browser, level, relay):
+    """Two phones in a room on the host's `level`, both on skis: Eero hosts, Aino joins."""
+    import json
+    site.build(ROOT / "games")
+    pages = []
+    for name in ["Eero", "Aino"]:
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))});"
+                            f"localStorage.setItem('ai-pelit:hiihto:taso', '{level}')")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        page.wait_for_function("typeof course === 'object'")
+        pages.append(page)
+    host, guest = pages
+    host.evaluate("draw(); down(1, ui.friends.x + 5, ui.friends.y + 5); up(1)")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    guest.evaluate("AiPelitRooms.open()")
+    guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-start")
+    for p in pages:
+        p.wait_for_function("net && net.cfg && mode === 'wax'", timeout=6000)
+        p.evaluate("draw(); const r = ui.wax[bestFor(style, course.weather.T)]; down(1, r.x + 5, r.y + 5); up(1)")
+    for p in pages:
+        p.wait_for_function("mode === 'race'", timeout=8000)
+        p.evaluate("npcs = []; nextVasta = nextSkate = 1e9")
+    return host, guest
+
+
+# The computer's road steps for Aino's skier, as the host runs it, until it is past the road.
+CPU_ROAD = """() => { const seen = []; for (let i = 0; i < 60 * 40 && net.skiers[1].road !== 'done'; i++) {
+  step(1 / 60); const r = net.skiers[1].road; if (r && seen[seen.length - 1] !== r) seen.push(r); }
+  return [seen, net.skiers[1].z > course.road.z1]; }"""
+
+
+@pytest.mark.parametrize("where", ["before", "middle"])
+def test_the_computer_takes_over_at_the_road(site, browser, where):
+    from test_rooms_lib import Relay
+    relay = Relay()
+    host, guest = room_on_level(site, browser, 3, relay)
+    assert host.evaluate("!!course.road") and guest.evaluate("P.clog") == host.evaluate("P.clog")
+    if where == "before":
+        guest.evaluate("P.clog = 3; P.z = course.road.z0 - 8; P.v = 2")
+        host.wait_for_function("net.skiers[1].z > course.road.z0 - 9 && net.skiers[1].clog === 3", timeout=3000)
+    else:
+        guest.evaluate("P.clog = 2; P.z = course.road.z0 + 3; P.v = 0; P.road = 'walk'; P.lastKick = P.t - 1")
+        host.wait_for_function("net.skiers[1].road === 'walk' && net.skiers[1].z >= course.road.z0 + 3", timeout=3000)
+    relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.paused", timeout=8000)
+    host.click("#aipr-goOn")
+    host.wait_for_function("net.skiers[1].kind === 'cpu' && !AiPelitRooms.paused", timeout=4000)
+    z0 = host.evaluate("net.skiers[1].z")
+    seen, past = host.evaluate(CPU_ROAD)
+    # The computer goes on from the same step (never back to the road's start) and knocks the snow
+    # out of the bindings before the skis go on.
+    assert past, seen
+    assert "clog" in seen and seen.index("clog") > seen.index("skison"), seen
+    if where == "middle":
+        assert seen[0] == "walk" and z0 >= host.evaluate("course.road.z0 + 3"), seen
+    else:
+        assert seen[0] == "edge", seen
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
+
+
+def test_a_player_back_mid_road_carries_on_from_the_same_step(site, browser):
+    from test_rooms_lib import Relay
+    relay = Relay()
+    host, guest = room_on_level(site, browser, 3, relay)
+    guest.evaluate("P.clog = 2; P.z = course.road.z0 + 3; P.v = 0; P.road = 'walk'; P.lastKick = P.t - 1")
+    host.wait_for_function("net.skiers[1].road === 'walk'", timeout=3000)
+    guest.reload()
+    guest.wait_for_function("net && mode === 'race' && P.road === 'walk'", timeout=8000)
+    assert guest.evaluate("[P.z >= course.road.z0 + 3, P.clog]") == [True, 2]
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()

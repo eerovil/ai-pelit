@@ -253,7 +253,8 @@ function roadTap(p) {
   if (p.road === 'walk') {
     const since = p.t - p.lastKick;
     p.lastKick = p.t; p.side = -p.side; p.kickAnim = 0;
-    if (since < WALK_BEAT * 0.85) { p.fallT = 1.0; p.earlyT = 0.6; return 'slip'; }
+    // Ice: a step before the meter is green slips. The same moment the meter turns green.
+    if (since < WALK_BEAT) { p.fallT = 1.0; p.earlyT = 0.6; return 'slip'; }
     p.z += STEP;
     return 'step';
   }
@@ -478,8 +479,12 @@ function netCourse() {
 // clock when it first heard of the finish, so a phone whose clock ran slow cannot win a race it
 // lost.
 const r2 = n => Math.round(n * 100) / 100;
-const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null];
-function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; }
+// v4 adds the road: how far across it the skier is ([9]) and the snow left in its bindings ([10]),
+// so the computer, or the player back after a reload, carries on from the same step.
+const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null, k.road || null, k.clog || 0];
+function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; k.road = a[9] ?? null; k.clog = a[10] || 0; }
+// Puts a skier at a road step it was sent: the timers start again, the step rhythm is free.
+function roadFrom(p, road, clog, t) { p.road = road || undefined; p.clog = clog || 0; p.roadT = 0; if (road) p.lastKick = t - 1; }
 // The host: a skier's finish, on the race clock, the first time it is seen.
 function arrive(k) {
   if (k.fin === null || k.at != null) return;
@@ -488,7 +493,8 @@ function arrive(k) {
 }
 const finOrder = k => k.at ?? k.fin;
 function synced(k) {
-  if (k.kind === 'me' && (mode === 'race' || mode === 'done')) { k.z = P.z; k.lane = P.lane; k.v = mode === 'race' ? P.v : 0; k.fall = P.fallT > 0 ? 1 : 0; }
+  if (k.kind === 'me' && (mode === 'race' || mode === 'done')) { k.z = P.z; k.lane = P.lane; k.v = mode === 'race' ? P.v : 0; k.fall = P.fallT > 0 ? 1 : 0; k.road = P.road || null; k.clog = P.clog || 0; }
+  else if (k.kind === 'me') k.clog = P.clog || 0;
   return k;
 }
 function hostState() {
@@ -502,7 +508,7 @@ function netTick(dt, n) {
     if (k.kind === 'cpu' && RM.isHost) {
       if (net.phase === 'run' && k.fin === null) {
         for (let i = 0; i < n; i++) botStep(k.p, dt / n, skating() ? 0.38 : 0.44);
-        k.z = k.p.z; k.lane = k.p.lane; k.v = k.p.v;
+        k.z = k.p.z; k.lane = k.p.lane; k.v = k.p.v; k.road = k.p.road || null; k.clog = k.p.clog || 0;
         if (k.z >= course.len) { k.fin = r2(k.p.t); k.cpuFin = true; arrive(k); }
       }
     } else if (net.phase === 'run' && k.fin === null && !k.fall) k.z += k.v * dt;
@@ -548,7 +554,7 @@ function guestState(m) {
     if (mode === 'wax' && a[4] >= 0) adopt(a, m);
     // The computer skied for me while I was away: carry on from where it got to.
     else if (a[6] && mode === 'race') {
-      P.z = a[0]; P.lane = a[1]; P.v = a[2]; P.t = m.clock;
+      P.z = a[0]; P.lane = a[1]; P.v = a[2]; P.t = m.clock; roadFrom(P, a[9], a[10], P.t);
       if (a[3] !== null) arrived(a);
     }
   });
@@ -559,7 +565,7 @@ function guestState(m) {
 }
 function adopt(a, m) {
   applyWax(a[4]); meK().wax = a[4];
-  P.z = a[0]; P.lane = a[1]; P.x = laneX(style, a[1]); P.v = a[2]; P.t = m.clock;
+  P.z = a[0]; P.lane = a[1]; P.x = laneX(style, a[1]); P.v = a[2]; P.t = m.clock; roadFrom(P, a[9], a[10], P.t);
   if (a[3] !== null) arrived(a);
   else mode = m.ph === 'run' ? 'race' : m.ph === 'cd' ? 'count' : 'ready';
 }
@@ -578,6 +584,7 @@ function cpuTakes(k) {
   if (k.wax < 0) k.wax = bestFor(style, course.weather.T);
   const p = newSkier(style), f = fitOf(style, k.wax, course.weather.T);
   Object.assign(p, { z: k.z, v: k.v, lane: k.lane, x: laneX(style, k.lane), t: net.clock, grip: f.grip, drag: f.drag });
+  roadFrom(p, k.road, k.clog, p.t);
   k.p = p;
 }
 // Finished skiers by time, ahead of everyone still on the trail, who go by how far they got.
@@ -882,7 +889,8 @@ function drawItem(s) {
   } else if (s.kind === 'pelaaja') {
     // A friend: in their colour, with their name above while near enough to read.
     const k = s.k, f = fogOf(p.dz), ph = Math.sin(k.ph * TAU), sk = skating() && k.fin === null;
-    skier(p.x + (sk ? ph * 0.2 * p.k : 0), p.y, p.k, { coat: k.color, pants: '#1d2333', hat: k.color, pom: '#fff', ph, skate: sk, vee: !skating() && gradeAt(k.z) > 0.075, fall: !!k.fall, f });
+    const foot = k.road === 'walk' || k.road === 'skison' || k.road === 'clog';
+    skier(p.x + (sk && !foot ? ph * 0.2 * p.k : 0), p.y, p.k, { coat: k.color, pants: '#1d2333', hat: k.color, pom: '#fff', ph, skate: sk && !k.road, vee: !skating() && gradeAt(k.z) > 0.075, fall: !!k.fall, f, noSkis: foot, snowy: k.road === 'clog' });
     if (p.k > 7 && f < 0.6) shadowText(k.name, p.x, p.y - 2.05 * 0.85 * p.k - 8, clamp(p.k * 0.32, 10, 14), '#ffffff', 'center', 800);
   } else if (s.kind === 'mummo') {
     skier(p.x, p.y, p.k, { coat: s.coat, pants: '#3a3a4a', hat: s.hat, pom: '#fff', ph: Math.sin(s.ph * TAU), granny: true, f: fogOf(p.dz) });
