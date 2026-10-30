@@ -165,7 +165,10 @@
     fire('message', m, net.hostId);
   }
 
+  var moving = false; // this page is on its way to the room's own game or version
   function onPeers(m) {
+    // A second peers message before the page has gone must not step back twice (#68).
+    if (moving) return;
     net.members = Array.isArray(m.members) ? m.members : [];
     net.hostId = m.host;
     net.online = {};
@@ -178,6 +181,20 @@
       if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
         var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
         net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
+        moving = true;
+        // Back always goes up (#68): opened from the shelf, this game has its page below it.
+        var up = history.state && history.state.aiPelitUp;
+        try {
+          // Another version: the same page stays below the new one, and back.js marks it.
+          if (up && m.game === GAME) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
+          // Another game: back to this game's page, which app.js turns into that game's page
+          // before it opens the game over it.
+          if (up && m.game !== GAME) {
+            sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + GAME, page: '#/' + m.game, game: to.href }));
+            history.back();
+            return;
+          }
+        } catch (e) {}
         location.replace(to.href);
         return;
       }
@@ -686,7 +703,7 @@
     var q = new URLSearchParams(location.search).get('huone');
     var back = sload(HERE, null);
     if (back && (back.game !== GAME || back.v !== VERSION)) back = null;
-    if (q) history.replaceState(null, '', location.pathname);
+    if (q) history.replaceState(history.state, '', location.pathname);
     if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) enter(q.toUpperCase(), false);
     else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
   }

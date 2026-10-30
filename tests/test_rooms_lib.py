@@ -159,6 +159,7 @@ def phones(site, browser):
         return page
 
     phone.relay = relay
+    phone.site = site
     yield phone
     for ctx in contexts:
         ctx.close()
@@ -460,6 +461,33 @@ def test_a_typed_code_from_another_version_opens_the_rooms_version(phones):
     away.wait_for_url(re.compile(r".*/games/pieni/v1/$"))
     away.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 2")
     assert guest.errors == away.errors == []
+
+
+def test_back_from_a_room_in_another_game_goes_to_that_games_page_then_the_shelf(phones):
+    # Back always goes up (#68), even after a typed code moved the phone to another game or version.
+    site = phones.site
+    small, small_code = make_room(phones, "pieni/v1/")
+    other, other_code = make_room(phones, "huonetesti/v2/")
+    for name, code, url, page in [("Onni", other_code, r".*/games/huonetesti/v2/$", "huonetesti"),
+                                  ("Iida", small_code, r".*/games/pieni/v1/$", "pieni")]:
+        away = phones(name, "huonetesti/v1/")
+        away.goto(site.url)
+        away.click('.card[data-slug="huonetesti"] .card-main')
+        away.click('.version[data-n="1"] a')
+        away.wait_for_url(re.compile(r".*/games/huonetesti/v1/$"))
+        away.click("#multi")
+        away.fill("#aipr-codeIn", code)
+        away.click("#aipr-joinBtn")
+        away.wait_for_url(re.compile(url))
+        away.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 2")
+        # The phone's own back goes to the room's game's page, and from there to the shelf.
+        away.go_back()
+        away.wait_for_url(f"{site.url}#/{page}")
+        away.wait_for_selector(".version")
+        away.go_back()
+        away.wait_for_selector('.card[data-slug="huonetesti"]')
+        assert away.url == site.url
+        assert away.errors == []
 
 
 def test_a_room_that_does_not_say_its_game_is_refused(phones):

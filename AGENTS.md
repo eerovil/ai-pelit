@@ -113,12 +113,17 @@ high-score lists (#25), then play counts (#26).
 
 ## Before you mark the pull request ready
 
-- `python3 -m pytest -q`, `npm test` and `python3 scripts/build.py` pass. On a PR also
-  `python3 scripts/check_immutable.py origin/main`. CI runs pytest with `--changed-since origin/main`
-  on a pull request: a game's own tests run only when the change touches `games/<slug>/` or that
-  game's test file, and everything runs when anything outside `games/` changes (#37). So name a
-  game's tests `tests/test_<slug>.py` (or `test_<slug>_<more>.py`, dashes as underscores), or mark a
-  test that plays a game with `@pytest.mark.games("<slug>")`. Locally the same flag saves time.
+- `python3 -m pytest -q --changed-since origin/main`, `npm test` and `python3 scripts/build.py`
+  pass. On a PR also `python3 scripts/check_immutable.py origin/main`. The full browser suite
+  never runs, not in CI and not by you (#65, Eero's choice): with `--changed-since` a game's own
+  tests run only when the change touches `games/<slug>/` or that game's test file (#37), and a
+  change outside `games/` runs only the shared tests, the ones tied to no game. So name a game's
+  tests `tests/test_<slug>.py` (or `test_<slug>_<more>.py`, dashes as underscores), or mark a test
+  that plays a game with `@pytest.mark.games("<slug>")`. When you change a shared file
+  (`public/back.js`, `rooms.js`, `scores.js`...), play a game that uses it yourself.
+- So the pull request's CI is the last check before release. A merge to `main` deploys at once
+  (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
+  the site. `main` runs no browser tests; they already passed on the pull request's head.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
 - `games/<slug>/thumb.webp` shows the current version mid-play.
