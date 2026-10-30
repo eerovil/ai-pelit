@@ -123,6 +123,27 @@ def test_a_rescue_and_a_call_at_the_same_moment_the_hider_wins(site, context):
     assert page.errors == []
 
 
+@pytest.mark.parametrize("width", [360, 390])
+def test_four_names_called_at_once_stay_on_the_screen(site, browser, width):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": width, "height": 740}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site.url + URL)
+    call = "Sinun nimet, Eetun nimet, Iidan nimet, Onnin nimet!"
+    # Every line of the bubble and of the far seeker's words, as drawn, fits inside the screen.
+    r = page.evaluate("""call => { newRound('hide'); x.font = '700 14px system-ui';
+      const a = wrapText(call, W - 24), b = wrapText('Aino: ' + call, W - 24);
+      const widest = Math.max(...[...a, ...b].map(l => x.measureText(l).width)) + 16;
+      say(seeker, call, 2); draw();
+      return { widest, W, a, same: a.join(' ') === call }; }""", call)
+    assert r["widest"] <= r["W"] - 8 and r["same"]
+    assert len(r["a"]) >= 2 if width == 360 else True  # on a narrow phone it wraps
+    ctx.close()
+    assert errors == []
+
+
 def test_on_a_390_px_phone_the_messages_fit(site, browser):
     site.build(ROOT / "games")
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)

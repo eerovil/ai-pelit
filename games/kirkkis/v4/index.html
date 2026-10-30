@@ -662,13 +662,30 @@ function label(p, text, y, font, color) {
   x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,0.5)'; x.strokeText(text, sx(p.x), y); x.fillStyle = color; x.fillText(text, sx(p.x), y);
 }
+// Splits text into lines no wider than max in the current font: after a comma when it can
+// ("Ainon nimet, / Eetun nimet!"), else at spaces.
+function wrapText(text, max) {
+  const greedy = (parts, sep) => {
+    const out = [];
+    for (const w of parts) {
+      const line = out.length ? out[out.length - 1] + sep + w : w;
+      if (out.length && x.measureText(line).width <= max) out[out.length - 1] = line; else out.push(w);
+    }
+    return out;
+  };
+  return greedy(text.split(', ').map((t, i, a) => i < a.length - 1 ? t + ',' : t), ' ')
+    .flatMap(l => x.measureText(l).width <= max ? [l] : greedy(l.split(' '), ' '));
+}
+const LINE = 17;
 function drawBubble(p) {
   x.font = '700 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  const w = x.measureText(p.bubble).width + 16, bx = Math.max(4, Math.min(W - w - 4, sx(p.x) - w / 2)), by = sy(p.y) - BODY * S - 34;
+  // A long call ("Ainon nimet, Eetun nimet, …") goes on more lines, so it stays on the screen.
+  const lines = wrapText(p.bubble, W - 24), extra = (lines.length - 1) * LINE;
+  const w = Math.max(...lines.map(l => x.measureText(l).width)) + 16, bx = Math.max(4, Math.min(W - w - 4, sx(p.x) - w / 2)), by = sy(p.y) - BODY * S - 34 - extra;
   x.globalAlpha = Math.min(1, p.bt * 3);
-  x.fillStyle = '#fff'; rrect(x, bx, by, w, 24, 10); x.fill();
-  x.beginPath(); x.moveTo(sx(p.x) - 5, by + 23); x.lineTo(sx(p.x) + 5, by + 23); x.lineTo(sx(p.x), by + 30); x.fill();
-  x.fillStyle = '#2b2416'; x.fillText(p.bubble, bx + w / 2, by + 12);
+  x.fillStyle = '#fff'; rrect(x, bx, by, w, 24 + extra, 10); x.fill();
+  x.beginPath(); x.moveTo(sx(p.x) - 5, by + extra + 23); x.lineTo(sx(p.x) + 5, by + extra + 23); x.lineTo(sx(p.x), by + extra + 30); x.fill();
+  x.fillStyle = '#2b2416'; lines.forEach((l, i) => x.fillText(l, bx + w / 2, by + 12 + i * LINE));
   x.globalAlpha = 1;
 }
 
@@ -709,7 +726,8 @@ function draw() {
   // Words from the seeker are heard even when the seeker is out of sight.
   if (playing && seeker !== player && seeker.bt > 0 && !shown.includes(seeker)) {
     x.font = '700 14px system-ui'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,0.9)';
-    x.fillText(`${seeker.name}: ${seeker.bubble}`, W / 2, H - safeB - 64);
+    const lines = wrapText(`${seeker.name}: ${seeker.bubble}`, W - 24);
+    lines.forEach((l, i) => x.fillText(l, W / 2, H - safeB - 64 - (lines.length - 1 - i) * LINE));
   }
   if (playing) { drawBaseArrow(); drawHud(); }
   if (joy && playing) {
