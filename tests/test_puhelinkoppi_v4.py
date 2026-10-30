@@ -111,6 +111,10 @@ def test_the_motion_is_read_from_its_shape(site, context):
     assert t["kind"] == "suora" and t["speedUp"] > 1500
     assert read([[100, 500, 0], [100, 300, 1200], [100, 390, 1800], [140, 350, 1820], [180, 310, 1840]]) == ["kierre", 1]
     assert read([[100, 500, 0], [100, 300, 1200], [100, 390, 1800], [100, 330, 1830], [100, 365, 1860]]) == ["voltti", 1]
+    # A slow lift straight up, then at once a fast slanted flick: only the fast part counts.
+    assert read([[100, 500, 0], [100, 460, 400], [100, 420, 800], [100, 380, 1200], [100, 340, 1600], [120, 320, 1620], [140, 300, 1640], [160, 280, 1660]]) == ["kierre", 1]
+    # ... and a slow slanted lift, then a fast straight flick, is a straight throw.
+    assert read([[100, 500, 0], [140, 460, 400], [180, 420, 800], [220, 380, 1200], [220, 340, 1220], [220, 300, 1240], [220, 260, 1260]]) == ["suora", 1]
     # Dragging the hand around before the flick does not count towards its shape.
     assert read([[100 - 20 * i, 500 + 10 * i, 20 * i] for i in range(6)] + [[0, 550 - 40 * i, 120 + 10 * i] for i in range(1, 7)]) == ["suora", 1]
 

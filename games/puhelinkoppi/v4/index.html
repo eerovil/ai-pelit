@@ -446,7 +446,7 @@ function onUp(e) {
 // - straight up: a straight throw;
 // - diagonally up, left or right: a kierre (about the long axis) that way;
 // - up and then a quick hook back down towards you at the end, a wrist flick: a voltti.
-const HOOK_PX = 20, HOOK_MS = 220, SLANT = 0.6, FLAT_PX = 25;
+const HOOK_PX = 20, HOOK_MS = 220, SLANT = 0.6, FLAT_PX = 25, FAST = 0.35;
 function classifyThrow(pts) {
   if (!pts.length) return null;
   // The throw is the last flick, not the touch's highest point: the hand may be moved up and
@@ -469,6 +469,14 @@ function classifyThrow(pts) {
     if (up > 0 && up >= 0.25 * side) { start = i - 1; flat = 0; }
     else if ((flat += side + Math.max(0, -up)) > FLAT_PX) break;
   }
+  // Of that rise, only the fast end is the flick: back from the top while each step moves at
+  // least FAST of the rise's fastest step. A slow lift into place before it does not count.
+  const stepSpeed = i => Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) / Math.max(1, pts[i][2] - pts[i - 1][2]);
+  let vmax = 0;
+  for (let i = start + 1; i <= peak; i++) vmax = Math.max(vmax, stepSpeed(i));
+  let fast = peak;
+  while (fast > start && stepSpeed(fast) >= FAST * vmax) fast--;
+  start = fast;
   const sx = top[0] - pts[start][0], sy = pts[start][1] - top[1];
   const kind = hook ? 'voltti' : Math.abs(sx) > SLANT * sy ? 'kierre' : 'suora';
   // The speed comes from the stroke's last 90 ms up to the highest point.
