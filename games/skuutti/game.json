@@ -5,7 +5,7 @@
     {
       "n": 1,
       "date": "2026-10-30",
-      "note": "Ensimmäinen versio: pumppaa vauhtia U-rampissa, lennä reunan yli ja pyyhkäise barspinit, tailwhipit ja voltit; ennätys avaa uusia temppuja ja värejä.",
+      "note": "Ensimmäinen versio: pumppaa vauhtia U-rampissa, lennä reunan yli ja pyyhkäise barspinit, tailwhipit, 360:t ja takavoltit; ennätys avaa uusia temppuja ja värejä.",
       "request": "Scooty-temppuilupeli. Rampilla mennään. Tehdään temppuja.",
       "issue": "eerovil/ai-pelit#119"
     }

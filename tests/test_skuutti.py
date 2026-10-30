@@ -52,7 +52,7 @@ def test_the_menu_lists_the_open_and_locked_tricks_and_starts_a_run(site, contex
     page = open_game(site, context)
     assert page.inner_text("#tricks").split("\n") == [
         "↑ Barspin: pyyhkäise ylös", "↓ Tailwhip: pyyhkäise alas",
-        "🔒 Takavoltti: ennätys 600 p", "🔒 Etuvoltti: ennätys 1500 p",
+        "🔒 360: ennätys 600 p", "🔒 Takavoltti: ennätys 1500 p",
     ]
     assert page.locator("#colors button:not([disabled])").count() == 2
     start(page)
@@ -101,18 +101,36 @@ def test_the_same_air_twice_in_a_row_pays_half(site, context):
     assert two < one * 0.7
 
 
-def test_flips_open_with_the_record_and_go_the_way_of_the_swipe(site, context):
+def test_the_360_and_the_back_flip_open_with_the_record_and_go_the_way_of_the_swipe(site, context):
     page = open_game(site, context)
     start(page)
     page.evaluate(RIDE, [3, True])
     assert page.evaluate(AIR, [["left", "right"], 0.2])["took"] == [False, False]
     page = open_game(site, context, best=2000)
     start(page)
+    # On both walls: towards the middle of the ramp is a back flip, away from it a 360.
+    sides = set()
+    for air in range(2):
+        page.evaluate(RIDE, [3 if air == 0 else 1, True])
+        side = page.evaluate("P.side")
+        sides.add(side)
+        inward, outward = ("left", "right") if side > 0 else ("right", "left")
+        r = page.evaluate(AIR, [[inward] if air == 0 else [outward], 0.1])
+        assert r["lastLand"]["name"] == ("Takavoltti" if air == 0 else "360") and r["lastLand"]["clean"], side
+    assert sides == {-1, 1}
+
+
+def test_a_360_and_a_back_flip_in_one_air_both_have_to_turn_all_the_way(site, context):
+    page = open_game(site, context, best=2000)
+    start(page)
     page.evaluate(RIDE, [3, True])
-    # Towards the middle of the ramp is a back flip, away from it a front flip.
-    inward = "left" if page.evaluate("P.side") > 0 else "right"
-    r = page.evaluate(AIR, [[inward], 0.1])
-    assert r["lastLand"]["name"] == "Takavoltti" and r["lastLand"]["clean"]
+    # Asked together early, both finish: one air with two tricks.
+    r = page.evaluate(AIR, [["left", "right"], 0.05])
+    assert r["lastLand"]["name"] == "360 + Takavoltti" and r["lastLand"]["clean"]
+    # Asked together late, neither undoes the other: the back flip is not done, so a fall.
+    page.evaluate(RIDE, [1, True])
+    r = page.evaluate(AIR, [["left", "right"], 0.7])
+    assert r["phase"] == "down" and r["lastLand"] == {"crash": "kesken"}
 
 
 def test_a_real_swipe_on_the_screen_is_a_trick(site, context):
@@ -159,9 +177,9 @@ def test_time_up_ends_the_run_saves_the_record_and_opens_what_it_reached(site, c
     page.evaluate("points = 700; timeLeft = 0.01; step(1 / 60)")
     assert page.evaluate("phase") == "menu"
     assert page.inner_text("#result") == "Uusi ennätys! 700 p"
-    assert page.inner_text("#unlocked") == "🔓 Avattu: Takavoltti, Vihreä skuutti"
+    assert page.inner_text("#unlocked") == "🔓 Avattu: 360, Vihreä skuutti"
     assert page.evaluate("localStorage.getItem('ai-pelit:skuutti:ennatys')") == "700"
-    assert "⇥ Takavoltti" in page.inner_text("#tricks")
+    assert "↔ 360: pyyhkäise sivulle rampista ulospäin" in page.inner_text("#tricks")
     assert page.inner_text("#go") == "Uudestaan"
 
 
@@ -191,7 +209,7 @@ def test_the_menu_fits_upright_and_sideways(site, context, browser):
         page.goto(site.url + URL)
         page.evaluate("localStorage.setItem('ai-pelit:skuutti:ennatys', '700')")
         page.goto(site.url + URL)
-        page.evaluate("lastResult = { points: 700, record: true, opened: ['Takavoltti', 'Vihreä skuutti'] }; showMenu()")
+        page.evaluate("lastResult = { points: 700, record: true, opened: ['360', 'Vihreä skuutti'] }; showMenu()")
         box = page.locator("#go").bounding_box()
         assert box["y"] >= 0 and box["y"] + box["height"] <= h, (w, h)
         assert page.evaluate("document.getElementById('menu').scrollHeight <= innerHeight + 1"), (w, h)

@@ -83,14 +83,16 @@ let colorIx = Math.max(0, Math.floor(load('vari', 0)) || 0);
 
 // ---- Tricks and colours; a higher record opens more ----
 // swipe: the way to swipe in the air. 'in' is towards the middle of the ramp, 'out' away from it.
-// spin: how long one takes (s); the flips turn the whole rider and scooter round once.
+// spin: how long one takes (s). The 360 turns the whole rider and scooter round about the
+// up-down axis, the back flip head over heels; the four are the ones Eero picked (#119).
 const TRICKS = [
   { id: 'bar', name: 'Barspin', swipe: 'up', arrow: '↑', p: 100, spin: 0.35, need: 0 },
   { id: 'whip', name: 'Tailwhip', swipe: 'down', arrow: '↓', p: 150, spin: 0.5, need: 0 },
-  { id: 'back', name: 'Takavoltti', swipe: 'in', arrow: '⇥', p: 300, spin: 0.8, need: 600 },
-  { id: 'front', name: 'Etuvoltti', swipe: 'out', arrow: '⇤', p: 350, spin: 0.8, need: 1500 },
+  { id: 'spin', name: '360', swipe: 'out', arrow: '↔', p: 250, spin: 0.6, need: 600 },
+  { id: 'back', name: 'Takavoltti', swipe: 'in', arrow: '↔', p: 350, spin: 0.8, need: 1500 },
 ];
-const SWIPE_TEXT = { up: 'ylös', down: 'alas', in: 'keskelle päin', out: 'ulospäin' };
+// Sideways depends on the wall the rider is over, so it is said in words, never as one arrow.
+const SWIPE_TEXT = { up: 'ylös', down: 'alas', in: 'sivulle rampin keskelle päin', out: 'sivulle rampista ulospäin' };
 const COLORS = [
   { name: 'Punainen', c: '#e63946', need: 0 },
   { name: 'Sininen', c: '#3a86ff', need: 0 },
@@ -127,7 +129,7 @@ function at(s) {
 // P: the rider. phase 'ride' on the ramp, 'air' over the coping, 'down' after a fall,
 // 'menu' between runs. In the air: side (-1 left wall, 1 right), h (height over the coping),
 // vy, airT and airMax (time up and back), and the tricks under way: bar and whip count spins
-// done, barTo and whipTo the spins asked; flip and flipTo turns (+ back, − front).
+// done, barTo and whipTo the spins asked; spin and spinTo 360s, flip and flipTo back flips.
 let P, phase = 'menu', points = 0, timeLeft = RUN, streak = 0, lastAir = '', pops = [], lastResult = null;
 let lastLand = null;    // how the last landing went: { name, clean, points } or { crash }
 let fingers = new Map(), crouch = false, crouchT = 0;
@@ -138,7 +140,7 @@ function setup() {
 // Standing on the coping, then rolling in: the start, and the way back in after a fall.
 function dropIn(side) {
   P = { s: side * LEN, v: 0, side, h: 0, vy: 0, airT: 0, airMax: 0, maxH: 0, face: -side,
-        bar: 0, barTo: 0, whip: 0, whipTo: 0, flip: 0, flipTo: 0, asked: [], pumped: false,
+        bar: 0, barTo: 0, whip: 0, whipTo: 0, spin: 0, spinTo: 0, flip: 0, flipTo: 0, asked: [], pumped: false,
         downT: 0, downX: 0, downA: 0 };
   phase = 'ride';
 }
@@ -190,7 +192,7 @@ function pump() {
 // ---- In the air ----
 function launch() {
   Object.assign(P, { side: Math.sign(P.s), h: 0, vy: Math.abs(P.v), airT: 0, maxH: 0, bar: 0, barTo: 0,
-                     whip: 0, whipTo: 0, flip: 0, flipTo: 0, asked: [] });
+                     whip: 0, whipTo: 0, spin: 0, spinTo: 0, flip: 0, flipTo: 0, asked: [] });
   P.airMax = 2 * P.vy / G; P.face = P.side;
   phase = 'air';
 }
@@ -199,6 +201,7 @@ function air(dt) {
   const move = (now, to, spin) => now < to ? Math.min(to, now + dt / spin) : now > to ? Math.max(to, now - dt / spin) : now;
   P.bar = move(P.bar, P.barTo, trickOf('bar').spin);
   P.whip = move(P.whip, P.whipTo, trickOf('whip').spin);
+  P.spin = move(P.spin, P.spinTo, trickOf('spin').spin);
   P.flip = move(P.flip, P.flipTo, trickOf('back').spin);
   if (P.h <= 0 && P.vy < 0) land();
 }
@@ -211,7 +214,8 @@ function trick(dir) {
   if (!isOpen(t)) { pop(`🔒 ${t.name}: ennätys ${t.need} p`, '#c8cde6', true); return false; }
   if (t.id === 'bar') P.barTo++;
   else if (t.id === 'whip') P.whipTo++;
-  else P.flipTo += t.id === 'back' ? 1 : -1;
+  else if (t.id === 'spin') P.spinTo++;
+  else P.flipTo++;
   P.asked.push(t.id);
   sound('swish');
   return true;
@@ -227,7 +231,7 @@ function airName(ids) {
 }
 function land() {
   // Turns still to go on each part: a little is clean, more is a wobble, more still a fall.
-  const left = Math.max(P.barTo - P.bar, P.whipTo - P.whip, Math.abs(P.flipTo - P.flip));
+  const left = Math.max(P.barTo - P.bar, P.whipTo - P.whip, P.spinTo - P.spin, P.flipTo - P.flip);
   const ids = P.asked;
   if (left > SLOPPY) {
     lastLand = { crash: 'kesken' };
@@ -427,7 +431,9 @@ function drawRider(v) {
     rot = -P.side * Math.PI / 2 * (1 - 0.8 * Math.sin(Math.PI * Math.min(1, t * 1.1)));
     // The turn is quick, round the top, so the tricks before and after it show side on.
     const u = Math.min(1, Math.max(0, (t - 0.32) / 0.36)), turn = Math.cos(Math.PI * u * u * (3 - 2 * u));
-    scaleX = P.side * (Math.abs(turn) < 0.3 ? 0.3 * Math.sign(turn || 1) : turn);
+    // A 360 turns the rider round once more on top of the turn back.
+    const sc = turn * Math.cos(2 * Math.PI * (P.spin % 1 || 0));
+    scaleX = P.side * (Math.abs(sc) < 0.3 ? 0.3 * Math.sign(sc || 1) : sc);
     flip = P.flip * 2 * Math.PI * -P.side;
     crouchK = 0.5;
   } else if (phase === 'down') {
