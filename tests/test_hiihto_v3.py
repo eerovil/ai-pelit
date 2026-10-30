@@ -325,3 +325,23 @@ def test_a_phone_reloaded_after_the_end_still_gets_the_results(site, browser):
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()
+
+
+def test_the_first_to_the_finish_wins_whatever_the_phones_clocks_say(site, browser):
+    host, guest = room_of_two(site, browser)
+    wax_and_go([host, guest])
+    # Aino's phone ran slow and counts 200 s, Eero's 100 s, but Aino crosses the line first.
+    guest.evaluate("P.z = course.len - 0.5; P.v = 8; P.t = 200")
+    host.wait_for_function("net.skiers[1].at != null", timeout=4000)
+    host.evaluate("net.clock += 5; P.z = course.len - 0.5; P.v = 8; P.t = 100")
+    for p in (host, guest):
+        p.wait_for_function("net && net.res", timeout=6000)
+    for p in (host, guest):
+        res = p.evaluate("net.res.map(r => [r.name, Math.round(r.fin)])")
+        assert res == [["Aino", 200], ["Eero", 100]], res
+    # Each keeps its own time for its records, and sees its own place.
+    assert round(host.evaluate("result.t")) == 100 and round(guest.evaluate("result.t")) == 200
+    assert host.evaluate("placeOf(net.res, AiPelitRooms.me)") == 2
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
