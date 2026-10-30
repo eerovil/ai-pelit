@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: ponnista oikeaan aikaan, tee voltteja taakse ja eteen ja kierteitä, ja tee tason temput pihatrampoliinilla, minitrampoliinilla, kilpatrampoliinilla ja jättitrampoliinilla.",
       "request": "Trampoliinipeli. Pitää tehdä tramppatemppuja. Eri tasoilla on eri kokoisia trampoliineja",
       "issue": "eerovil/ai-pelit#62"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Ponnistus tuntuu: ruudun painaminen koukistaa jalat ja pitää ne koukussa, ja irti päästäminen on hyppy.",
+      "request": "Muuten hyvä mutta hyppynappi ei ole kovin satisfying. olisi parempi jos esim. aina kun painan ruutua niin jalat menee vähän koukkuun. (Tarkennus: jalat pysyvät koukussa kun pitää pohjassa; hyppy on se kun päästää irti.)",
+      "issue": "eerovil/ai-pelit#62"
     }
   ]
 }
