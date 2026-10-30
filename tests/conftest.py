@@ -2,6 +2,7 @@ import base64
 import functools
 import http.server
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -24,8 +25,25 @@ THUMB = base64.b64decode("UklGRi4AAABXRUJQVlA4TCEAAAAvZ8F3AAdQvKIUuf8BAkmb98+/7R
 # to no game: the full suite never runs in CI (#65, Eero's choice), it took about 6 minutes.
 # A game's tests are tests/test_<slug>.py or tests/test_<slug>_<more>.py (dashes as underscores),
 # or any test module that says `pytestmark = pytest.mark.games("<slug>", ...)`.
-CHANGED_GAMES = pytest.StashKey[set]()
+# Within a game, a test file runs only for the versions it tests (#116): a published version never
+# changes, so a new v9 does not run v1-v8's tests again. A file's versions are the _v<N> in its name
+# and every games/<slug>/v<N> written in it. Everything of the game runs when one of its test files
+# changes (they import each other's helpers), when a file under games/<slug>/ other than a version
+# folder, game.json or thumb.webp changes, or when a changed version is named by no test file.
+CHANGES = pytest.StashKey["Changes"]()
 REAL_GAMES = sorted((p.name for p in (ROOT / "games").iterdir() if p.is_dir()), key=len, reverse=True)
+# Files beside a game's version folders that scripts/build.py already checks: changing only them
+# runs none of the game's browser tests.
+GAME_FILES_BUILD_CHECKS = {"game.json", build.THUMB}
+
+
+class Changes:
+    """What a pull request changes, as far as choosing its tests goes."""
+
+    def __init__(self, paths: list[str]):
+        self.games = changed_games(paths)
+        self.versions = changed_versions(paths)
+        self.whole_games = whole_games_changed(paths)
 
 
 def pytest_addoption(parser):
@@ -37,9 +55,10 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "games(*slugs): the games whose folders these tests play")
+    config.addinivalue_line("markers", "alone: a heavy 3D test that runs one at a time, never beside others")
     ref = config.getoption("--changed-since")
     if ref:
-        config.stash[CHANGED_GAMES] = changed_games(changed_paths(ref))
+        config.stash[CHANGES] = Changes(changed_paths(ref))
 
 
 def changed_paths(ref: str) -> list[str]:
@@ -55,17 +74,43 @@ def changed_paths(ref: str) -> list[str]:
     return paths
 
 
+def _split(paths: list[str]):
+    for path in paths:
+        parts = path.split("/")
+        if "__pycache__" not in parts:
+            yield parts
+
+
 def changed_games(paths: list[str]) -> set[str]:
     """The games these paths touch; a path outside any one game adds none."""
     games = set()
-    for path in paths:
-        parts = path.split("/")
-        if "__pycache__" in parts:
-            continue
+    for parts in _split(paths):
         if parts[0] == "games" and len(parts) > 2:
             games.add(parts[1])
         elif parts[0] == "tests" and len(parts) == 2 and (game := game_of_test_file(parts[1])):
             games.add(game)
+    return games
+
+
+def changed_versions(paths: list[str]) -> dict[str, set[int]]:
+    """Each game's version folders these paths touch: {"hiihto": {9}}."""
+    versions: dict[str, set[int]] = {}
+    for parts in _split(paths):
+        if parts[0] == "games" and len(parts) > 3 and (m := re.fullmatch(r"v(\d+)", parts[2])):
+            versions.setdefault(parts[1], set()).add(int(m[1]))
+    return versions
+
+
+def whole_games_changed(paths: list[str]) -> set[str]:
+    """The games whose every test runs: one of their test files changed, or a file of the game
+    outside its version folders that the build does not check."""
+    games = set()
+    for parts in _split(paths):
+        if parts[0] == "tests" and len(parts) == 2 and (game := game_of_test_file(parts[1])):
+            games.add(game)
+        elif (parts[0] == "games" and len(parts) > 2 and not re.fullmatch(r"v\d+", parts[2])
+              and not (len(parts) == 3 and parts[2] in GAME_FILES_BUILD_CHECKS)):
+            games.add(parts[1])
     return games
 
 
@@ -78,6 +123,21 @@ def game_of_test_file(name: str) -> str | None:
     return None
 
 
+@functools.cache
+def versions_of_test_file(path: Path, slug: str) -> frozenset[int]:
+    """The versions of SLUG a test file tests: the _v<N> in its name, and every games/<slug>/v<N> in it."""
+    rest = path.name.removesuffix(".py").removeprefix("test_")[len(slug):]
+    versions = {int(m[1])} if (m := re.match(r"_v(\d+)(?:_|$)", rest)) else set()
+    versions |= {int(n) for n in re.findall(rf"games/{re.escape(slug)}/v(\d+)", path.read_text(encoding="utf-8"))}
+    return frozenset(versions)
+
+
+def versions_with_tests(tests: Path, slug: str) -> frozenset[int]:
+    """Every version of SLUG that some test file of it in TESTS names."""
+    return frozenset().union(*(versions_of_test_file(p, slug) for p in tests.glob("test_*.py")
+                               if game_of_test_file(p.name) == slug))
+
+
 def games_of(item) -> set[str]:
     marker = item.get_closest_marker("games")
     if marker:
@@ -86,14 +146,47 @@ def games_of(item) -> set[str]:
     return {game} if game else set()
 
 
+def runs(item, changes: Changes) -> bool:
+    """Whether a pull request with these changes runs this test."""
+    games = games_of(item)
+    if not games:
+        return True  # a shared test
+    if item.get_closest_marker("games"):
+        return bool(games & changes.games)
+    (slug,) = games
+    if slug in changes.whole_games:
+        return True
+    changed = changes.versions.get(slug, set())
+    if not changed:
+        return False  # nothing of the game, or only its game.json or thumbnail
+    mine = versions_of_test_file(item.path, slug)
+    return not mine or bool(mine & changed) or bool(changed - versions_with_tests(item.path.parent, slug))
+
+
+@functools.cache
+def is_3d(path: Path, slug: str) -> bool:
+    """Whether a game's test file plays a version drawn with three.js (one that loads lib/three)."""
+    versions = versions_of_test_file(path, slug) or {
+        int(d.name[1:]) for d in (ROOT / "games" / slug).glob("v*") if d.name[1:].isdigit()}
+    return any("lib/three" in page.read_text(encoding="utf-8")
+               for v in versions if (page := ROOT / "games" / slug / f"v{v}" / "index.html").exists())
+
+
+# Tests of 3D games run alone, never beside other tests (#116): software WebGL on CI's four cores
+# leaves too few frames for their timed races when other Chromiums run at the same time. CI runs
+# `-m "not alone"` on four workers, then `-m alone` one at a time.
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
-    if CHANGED_GAMES not in config.stash:
+    for item in items:
+        if not item.get_closest_marker("games") and (slug := game_of_test_file(item.path.name)) \
+                and is_3d(item.path, slug):
+            item.add_marker("alone")
+    if CHANGES not in config.stash:
         return
-    changed = config.stash[CHANGED_GAMES]
+    changes = config.stash[CHANGES]
     keep, drop = [], []
     for item in items:
-        games = games_of(item)
-        (drop if games and not games & changed else keep).append(item)
+        (keep if runs(item, changes) else drop).append(item)
     if drop:
         config.hook.pytest_deselected(items=drop)
         items[:] = keep
@@ -103,15 +196,20 @@ def pytest_terminal_summary(terminalreporter, config):
     # A summary line, not a report header: `pytest -q`, as CI runs it, leaves the header out.
     if not config.getoption("--changed-since"):
         return
-    changed = config.stash[CHANGED_GAMES]
+    changes = config.stash[CHANGES]
+    games = [
+        f"{g} ({', '.join(f'v{v}' for v in sorted(changes.versions[g]))})" if changes.versions.get(g) else g
+        for g in sorted(changes.games)
+    ]
     terminalreporter.write_line(
-        f"games changed: {', '.join(sorted(changed)) or 'none'}; other games' own tests were skipped")
+        f"games changed: {', '.join(games) or 'none'}; other games' and versions' own tests were skipped")
 
 
 @pytest.fixture
 def changed_games_only(request):
     """The games a --changed-since run tests, or None for all of them."""
-    return request.config.stash.get(CHANGED_GAMES, None)
+    changes = request.config.stash.get(CHANGES, None)
+    return changes.games if changes else None
 
 
 def game_page(title: str, body: str = "", script: str = "") -> str:
