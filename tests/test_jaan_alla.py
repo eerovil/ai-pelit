@@ -264,3 +264,4 @@ def test_the_controls_and_meters_fit_a_small_phone(site, browser, width, height)
         assert box[k]["top"] > box["goal"], k
     assert box["stick"]["right"] < box["act"]["left"]
     phone.close()
+# CI timing probe for #123, not to be merged

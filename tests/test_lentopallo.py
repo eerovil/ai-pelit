@@ -65,3 +65,4 @@ def test_a_won_match_raises_the_level_on_the_phone(site, context):
     assert "Voitit 11–4" in page.inner_text("#result")
     page.reload()
     assert "Taso 2" in page.inner_text("#foe")
+# CI timing probe for #123, not to be merged

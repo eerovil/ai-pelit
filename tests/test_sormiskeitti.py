@@ -71,3 +71,4 @@ def test_sormiskeitti_v4_counts_a_tap_just_after_the_lip_as_a_perfect_ollie(site
     too_late = page.evaluate(LATE, 8)
     assert too_late["ollie"] == 0 and too_late["letGo"]
     assert page.evaluate(LATE, None)["maxH"] < at_lip["maxH"]
+# CI timing probe for #123, not to be merged

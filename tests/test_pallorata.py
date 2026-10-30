@@ -193,3 +193,4 @@ def test_it_plays_offline_from_the_phones_cache(site, context):
     finally:
         context.set_offline(False)
     assert errors == []
+# CI timing probe for #123, not to be merged

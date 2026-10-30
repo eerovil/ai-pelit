@@ -48,3 +48,4 @@ def test_a_finished_song_moves_on_to_a_faster_one(site, context):
     assert page.evaluate("localStorage.getItem('ai-pelit:piano:taso')") == "2"
     page.reload()
     assert "paras taso 2" in page.inner_text("#stats")
+# CI timing probe for #123, not to be merged

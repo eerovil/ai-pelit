@@ -231,3 +231,4 @@ def test_a_full_panel_has_no_text_on_top_of_other_text(site, context, size, game
         for b in texts[i + 1:]:
             assert not overlaps(a, b), (a, b)
     assert page.errors == []
+# CI timing probe for #123, not to be merged

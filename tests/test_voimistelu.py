@@ -165,3 +165,4 @@ def test_the_saltos_in_a_dismount_count_only_the_turns_in_the_air(site, context)
           return [Math.abs(phi - flight.phi0) / TAU, touch.saltos, elements[0].name]; }}"""))
     assert abs(got[0][0] - got[1][0]) < 1e-9
     assert got[0][1:] == got[1][1:]
+# CI timing probe for #123, not to be merged

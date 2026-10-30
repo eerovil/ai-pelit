@@ -184,3 +184,4 @@ def test_it_fits_a_small_phone(site, browser):
     b = page.evaluate("vButton()")
     assert b["y"] + b["r"] <= 640 and b["x"] - b["r"] >= 0
     ctx.close()
+# CI timing probe for #123, not to be merged

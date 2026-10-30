@@ -132,3 +132,4 @@ def test_rounds_against_the_computer_end_and_the_first_caught_seeks_next(site, c
 
 
 COUNT_PLUS_SEEK = 10 + 100 + 3
+# CI timing probe for #123, not to be merged

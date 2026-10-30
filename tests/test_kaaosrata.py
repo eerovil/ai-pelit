@@ -260,3 +260,4 @@ def test_in_a_room_furthest_at_the_time_limit_is_not_a_win(site, browser):
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()
+# CI timing probe for #123, not to be merged

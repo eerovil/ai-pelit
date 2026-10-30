@@ -154,3 +154,4 @@ def test_a_drag_after_the_catch_leaves_the_phone_on_the_palm(site, context):
     page.mouse.up()
     assert page.evaluate("[handX, handY]") == hand
     assert page.evaluate("Math.abs(dot(sub(pos, hand()), N) - REST) + Math.abs(pos[0] - handX)") < 0.035
+# CI timing probe for #123, not to be merged

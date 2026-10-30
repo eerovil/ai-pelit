@@ -219,3 +219,4 @@ def test_every_level_past_the_fifth_asks_four_different_tricks(site, context):
     for lv in range(6, 31):
         tasks = page.evaluate(f"levelOf({lv}).tasks")
         assert len(tasks) == 4 and len({tuple(t) for t in tasks}) == 4, f"level {lv}: {tasks}"
+# CI timing probe for #123, not to be merged

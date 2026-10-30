@@ -199,3 +199,4 @@ def test_v3_the_friends_bow_and_sword_hurt_the_host_and_win(two_phones):
     assert host.locator("#aipr-result").inner_text() == "💀 Aino voitti"
     assert guest.locator("#aipr-result").inner_text() == "🏆 Aino voitti!"
     assert host.errors == [] and guest.errors == []
+# CI timing probe for #123, not to be merged

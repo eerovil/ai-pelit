@@ -214,3 +214,4 @@ def test_the_menu_fits_upright_and_sideways(site, context, browser):
         assert box["y"] >= 0 and box["y"] + box["height"] <= h, (w, h)
         assert page.evaluate("document.getElementById('menu').scrollHeight <= innerHeight + 1"), (w, h)
         ctx.close()
+# CI timing probe for #123, not to be merged

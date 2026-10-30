@@ -151,3 +151,4 @@ def test_a_guest_reloaded_mid_jump_carries_on_with_the_same_jump(site, browser):
     assert host.errors == guest.errors == []
     for p in (host, guest):
         p.context.close()
+# CI timing probe for #123, not to be merged

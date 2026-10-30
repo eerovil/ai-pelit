@@ -194,3 +194,4 @@ def test_the_controls_fit_a_390_px_phone_side_by_side(site, browser):
         assert page.evaluate("sy(0)") < stick["y"] + 30
     finally:
         ctx.close()
+# CI timing probe for #123, not to be merged

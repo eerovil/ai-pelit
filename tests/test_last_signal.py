@@ -302,3 +302,4 @@ def test_turning_the_phone_mid_dive_keeps_the_dive(site, browser):
     assert page.evaluate("[G.mode, innerWidth]") == ["dive", 740]
     assert page.is_visible("#stick")
     assert page.errors == []
+# CI timing probe for #123, not to be merged

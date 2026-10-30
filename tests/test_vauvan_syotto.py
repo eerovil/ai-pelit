@@ -115,3 +115,4 @@ def test_a_spoon_given_to_the_left_hand_stays_there_until_it_drops(site, context
     page.evaluate(RUN, 3)
     assert page.evaluate("spoon.where") == "floor"
     assert 0 < page.evaluate("spoon.x") < page.evaluate("G.hx")
+# CI timing probe for #123, not to be merged

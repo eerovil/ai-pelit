@@ -169,3 +169,4 @@ def test_a_clear_win_lists_every_drivers_time(site, context):
     assert all("–" not in r and r.split("\n")[-1].count(",") == 1 for r in rows), rows
     times = page.evaluate("standings().map(k => k.fin)")
     assert times == sorted(times)
+# CI timing probe for #123, not to be merged

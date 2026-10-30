@@ -403,3 +403,4 @@ def test_drawing_and_touches_use_the_canvas_own_box(site, context):
     page.evaluate("take(players[0])")
     page.touchscreen.tap(*page.evaluate("const b = buttons.find(q => q.k === 'pass'); [b.x + box.left, b.y + box.top]"))
     page.wait_for_function("owner !== players[0]")
+# CI timing probe for #123, not to be merged
