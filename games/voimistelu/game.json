@@ -29,6 +29,13 @@
       "note": "Ilmassa kädet kääntyvät lähellä olevaa tankoa kohti mihin suuntaan tahansa, joten kiinni saa myös, kun suorat kädet menisivät ohi.",
       "request": "voimistelu: prototyyppi: kun ukko on ilmassa, sen kädet voisi osoittaa automaattisesti tankoa kohti jos se on lähellä. Näin voisi ottaa kiinni myös tilanteessa kun juuri \"sormet ei osu tankoon kun kädet suorana\"",
       "issue": "eerovil/ai-pelit#84"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-30",
+      "note": "Kädet kääntyvät tankoa kohti lähes heti, ja kiinnioton jälkeen vartalo heilahtaa olkanivelen varassa linjaan käsien kanssa hyppimättä.",
+      "request": "Allow the arms to rotate much faster, almost instantly. / When the gymnast approaches the bar legs first, the attachment is a bit janky. / Could we temporarily have physics on, so there is a joint?",
+      "issue": "eerovil/ai-pelit#84"
     }
   ]
 }
