@@ -178,11 +178,15 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
   written in it. So a new version's tests go in `tests/test_<slug>_v<N>.py`, or name its folder.
   Editing an existing test file of the game runs all of them (they import each other); a new test
   file runs only itself; a version no file names runs all of them.
-  CI runs them on four workers (`-n 4 --dist loadfile -m "not alone"`, pytest-xdist), then the
-  tests of 3D games (versions that load `lib/three`, marked `alone` by `tests/conftest.py`) one at
-  a time with `-m alone`: beside other Chromiums their timed races fail. Run both locally to match. When you change a shared file
-  (`public/back.js`, `rooms.js`, `scores.js`...), play a game that uses it yourself.
-- So the pull request's CI is the last check before release. A merge to `main` deploys at once
+  GitHub CI runs them on four workers (`-n 4 --dist loadfile -m "not alone"`, pytest-xdist). The
+  tests of 3D games (versions that load `lib/three`, marked `alone` by `tests/conftest.py`) never
+  run in CI (#123): on GitHub's runner they had to run one at a time and took most of the run.
+  They run on the AgentDeck host, two side by side: prove each head you mark ready with
+  `~/agentdeck/.venv/bin/agentdeck job submit --verification --session-token <token> --cwd <checkout> -- scripts/host-tests.sh`.
+  When you change a shared file (`public/back.js`, `rooms.js`, `scores.js`...), play a game that
+  uses it yourself.
+- So that green verification job and the pull request's CI are the last checks before release:
+  the deck merges only when both are green on the same head. A merge to `main` deploys at once
   (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
   the site. `main` runs no browser tests; they already passed on the pull request's head.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
