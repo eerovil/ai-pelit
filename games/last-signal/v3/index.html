@@ -824,7 +824,8 @@ function stepCrew(dt) {
     if (dir) c.y = Math.max(UP, Math.min(LOW, c.y + dir * CLIMB * dt));
   } else if (input.x) {
     const [a, b] = DECK_X[c.y > 1 ? 1 : 0];
-    c.x = Math.max(a, Math.min(b, c.x + input.x * WALK * dt));
+    // The inside is drawn mirrored when SISU faces left: right on the stick is right on the screen either way.
+    c.x = Math.max(a, Math.min(b, c.x + input.x * (sub.dir < 0 ? -1 : 1) * WALK * dt));
   }
   if (c.y < UP + 0.01) c.y = UP; else if (c.y > LOW - 0.01) c.y = LOW;
   const dx = c.x - x0, dy = c.y - y0;

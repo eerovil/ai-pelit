@@ -760,3 +760,20 @@ def test_a_new_tap_or_the_stick_midway_changes_the_way_and_a_reload_inside_start
     assert page.is_hidden("#panel")
     assert page.evaluate("[G.mode, crew.room]") == ["home", "ohjaamo"]
     assert page.errors == []
+
+
+@pytest.mark.parametrize("facing", [1, -1])
+def test_right_on_the_stick_walks_right_on_the_screen_whichever_way_sisu_faces(site, browser, facing):
+    page = open_game(site, browser, 740, 360)
+    new_game(page)
+    page.evaluate(f"sub.dir = sub.face = {facing}")
+    inside(page)
+    page.evaluate("G.hold = true; for (let n = 0; n < 200; n++) step(1 / 60)")
+    screen_x = "sub.x + sub.face * crew.x"
+    before = page.evaluate(screen_x)
+    page.evaluate("input.x = 1; run(() => true, 0.5); input.x = 0")
+    assert page.evaluate(screen_x) > before + 1
+    before = page.evaluate(screen_x)
+    page.evaluate("input.x = -1; run(() => true, 0.5); input.x = 0")
+    assert page.evaluate(screen_x) < before - 1
+    assert page.errors == []
