@@ -19,6 +19,13 @@
 // (`game`, `v`) and how many phones the game takes (`max`, 2-8). The room keeps them from the
 // host's join and sends `game` and `v` in every `peers`, so a guest on another game or version can
 // move to the right one. A join without them (Kirkkis v2) works as before: 5 phones.
+//
+// Public rooms (#50): the host may list its room for anyone playing the same game. It sends
+// {t: '_list', on} (not passed on to anyone): on while the room is public and waits between rounds.
+// The room is listed only while that is on, the host is connected and there is space. The list is
+// one more object of this same class, named LOBBY (no room code can be that name); each room tells
+// it its state, and phones read it with GET /api/rooms?game=<slug> (server/api.js). A listing not
+// refreshed for LISTED_FOR is dropped, so a room that vanished without saying so leaves the list.
 
 const CODE = /^[A-Z]{4}$/;
 const KEY = /^[a-f0-9]{32}$/;
@@ -27,6 +34,9 @@ export const MAX_PLAYERS = 5; // when the host does not say
 export const MOST_PLAYERS = 8; // the most a host may ask for
 export const IDLE = 6 * 3600e3; // an empty room is forgotten after this long
 const MSG_MAX = 16000;
+export const LOBBY = 'lobby'; // the name of the object that keeps the list of public rooms
+export const LISTED_FOR = 3 * 60e3; // the host refreshes its listing every minute (public/rooms.js)
+const LISTED_MOST = 10;
 
 // A phone's public id: the first 32 hex digits of SHA-256 of its secret key.
 export async function publicId(key) {
@@ -53,7 +63,7 @@ export class Room {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.env = env;
-    this.room = undefined; // {host, members: {id: name}, game?, v?, max?}, read from storage on first use
+    this.room = undefined; // {host, members: {id: name}, code, game?, v?, max?, listed?, told?}, read from storage on first use
   }
 
   async load() {
@@ -75,8 +85,9 @@ export class Room {
   }
 
   async fetch(request) {
-    if (request.headers.get('upgrade') !== 'websocket') return new Response('websocket only', { status: 426 });
     const url = new URL(request.url);
+    if (url.pathname === '/lobby') return this.lobby(request, url);
+    if (request.headers.get('upgrade') !== 'websocket') return new Response('websocket only', { status: 426 });
     const code = (url.pathname.split('/').pop() || '').toUpperCase();
     const key = url.searchParams.get('key') || '', name = cleanName(url.searchParams.get('name'));
     const wantsHost = url.searchParams.get('host') === '1';
@@ -86,7 +97,8 @@ export class Room {
     let room = await this.load();
     const open = this.open();
     if (wantsHost && (!room || (room.host !== id && !open.length))) {
-      room = { host: id, members: {}, ...gameOf(url.searchParams) }; // a new room, or one everyone has left
+      // A new room, or one everyone has left. `told` makes it clear any old listing of this code.
+      room = { host: id, members: {}, code, told: true, ...gameOf(url.searchParams) };
     } else if (wantsHost && room.host !== id) {
       return refuse(4009, 'Koodi on jo käytössä');
     } else if (!room) {
@@ -107,6 +119,7 @@ export class Room {
     pair[1].serializeAttachment({ id, host: id === room.host });
     send(pair[1], JSON.stringify({ t: 'you', id }));
     await this.peers();
+    await this.tell();
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -123,7 +136,15 @@ export class Room {
       await this.store(room);
       try { ws.close(1000, 'Poistuit'); } catch (e) { /* gone */ }
       await this.peers(ws);
+      await this.tell(ws);
       await this.maybeEmpty(ws);
+      return;
+    }
+    if (msg.t === '_list') { // the host lists its room, or takes it off the list
+      if (!me.host) return;
+      room.listed = msg.on === true;
+      await this.store(room);
+      await this.tell();
       return;
     }
     const open = this.open();
@@ -138,6 +159,7 @@ export class Room {
 
   async webSocketClose(ws) {
     await this.peers(ws);
+    await this.tell(ws);
     await this.maybeEmpty(ws);
   }
 
@@ -151,6 +173,8 @@ export class Room {
 
   async alarm() {
     if (!this.open().length) {
+      const room = await this.load();
+      if (room) await this.tell(null, true);
       this.room = null;
       await this.ctx.storage.deleteAll();
     }
@@ -170,6 +194,49 @@ export class Room {
       members: Object.entries(room.members).map(([id, name]) => ({ id, name, on: on.has(id) })),
     });
     for (const o of open) send(o.ws, text);
+  }
+
+  // Tells the list whether this room is on it: public, waiting between rounds, its host here, and
+  // space left. A listed room says so every time (that keeps it on the list); one that is not says
+  // so once.
+  async tell(closing, gone = false) {
+    const room = await this.load();
+    if (!room || !room.code || !this.env.ROOMS) return;
+    const n = Object.keys(room.members).length, max = room.max || MAX_PLAYERS;
+    const hostOn = this.open(closing).some((o) => o.id === room.host);
+    const listed = !gone && !!room.listed && !!room.game && hostOn && n < max;
+    if (!listed && !room.told) return;
+    const entry = listed ? { game: room.game, v: room.v || 1, n, max } : null;
+    try {
+      const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName(LOBBY));
+      await lobby.fetch(new Request('https://rooms/lobby', { method: 'POST', body: JSON.stringify({ code: room.code, entry }) }));
+    } catch (e) { return; /* the list is an extra; it catches up on the next refresh */ }
+    if (room.told !== listed && !gone) { room.told = listed; await this.store(room); }
+  }
+
+  // The list of public rooms (only in the LOBBY object): POST {code, entry} from a room puts it on
+  // the list or (entry null) takes it off; GET ?game= reads one game's rooms, newest first.
+  async lobby(request, url) {
+    const now = Date.now();
+    const list = ((await this.ctx.storage.get('lobby')) || []).filter((r) => now - r.at < LISTED_FOR);
+    if (request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return new Response('bad body', { status: 400 }); }
+      if (!body || !CODE.test(body.code)) return new Response('bad code', { status: 400 });
+      // A room new on the list goes first; one already there keeps its place.
+      const e = body.entry, at = list.findIndex((r) => r.code === body.code);
+      const entry = e && GAME.test(e.game) && { code: body.code, game: e.game, v: e.v, n: e.n, max: e.max, at: now };
+      if (at >= 0) list.splice(at, 1, ...(entry ? [entry] : []));
+      else if (entry) list.unshift(entry);
+      await this.ctx.storage.put('lobby', list.slice(0, 200));
+      return new Response(null, { status: 204 });
+    }
+    const game = url.searchParams.get('game') || '';
+    const rooms = list.filter((r) => r.game === game).slice(0, LISTED_MOST)
+      .map((r) => ({ code: r.code, v: r.v, n: r.n, max: r.max }));
+    return new Response(JSON.stringify({ rooms }), {
+      headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    });
   }
 }
 
