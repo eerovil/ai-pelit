@@ -2,7 +2,8 @@
 
 How a match and one rally of Lentopallo play. Beach volleyball seen from the side, rally scoring
 to 11 with a two-point lead. v1 is 1 vs 1 against the computer; v2 adds 2 vs 2 and playing with
-friends on 2–4 phones through the shared room library (see `moninpeli.md`). The ball is played
+friends on 2–4 phones through the shared room library (see `moninpeli.md`); v3 makes the computer
+harder (it plays to the gaps). The ball is played
 automatically when it touches a player's hands; what the touch does depends on what the player
 is doing at that moment.
 
@@ -68,7 +69,7 @@ flowchart TD
 ## Boxes
 
 - **Miten pelataan?**: v2's menu in `games/lentopallo/v2/index.html`: pick **1 vs 1** or **2 vs 2** first (`pickMode()`, kept in `ai-pelit:lentopallo:muoto`), then **Pelaa yksin** (`newMatch()`) or **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`; the room screen says which it will be, `roomNote()`). v1 has only the 1 vs 1 match.
-- **Tietokone pelaa muut, 2 vs 2:ssa myös joukkuekaverin**: the computer's players run `cpuThink()`; the teammate Tiina plays at least as well as level 3.
+- **Tietokone pelaa muut, 2 vs 2:ssa myös joukkuekaverin**: the computer's players run `cpuThink()`; the teammate Tiina plays at least as well as level 3. In v3 a ball dropping right at the net is played from the nearest spot, not given up.
 - **Huone: 2 puhelinta pelaa tekijän valinnan, 1 vs 1 tai 2 vs 2; 3–4 puhelinta 2 vs 2; tyhjät paikat tietokoneelle**: `setupFor()` on the host: phones take turns left and right in room order; two phones play what the host picked in the menu, three or four always 2 vs 2. The room screen says so on the host's phone, and on the others that the host decides (`roomNote()`). The host sends it as `setup`, and again to a phone that comes back (`on('hello')`).
 - **Huoneen tekijä pyörittää ottelua, muut lähettävät oman pelaajansa paikan**: the host runs the rules, the ball and the computer's players, and sends `s` 20 times a second (`snapshot()`); a guest moves its own player at once and sends `p` (where it is, and whether it runs toward the net) and `toss` (`guestUpdate()`), and draws the rest from `applySnapshot()`. A phone let go with "Jatka ilman heitä" is played by the computer (`on('continue')`).
 - **Jokainen näkee oman joukkueensa vasemmalla**: `view` mirrors the drawing on a phone of the right-hand team; ◀ ▶ stay as seen on the screen (`steer()`).
@@ -80,11 +81,11 @@ flowchart TD
 - **Syöttö yli verkon, hypyssä hyppysyöttö**: the serve branch of `hit()`; `arcTo()` and `clears()` lift the arc until it passes over the net.
 - **Pallo toisella puolella: kosketukset nollaan**: `stepBall()` counts `crossings` and resets `touches` when the ball passes over the net.
 - **Hihaly tai nosto ylös omalle puolelle**: the set branch of `hit()`: a high ball that comes down 1 m from the net on the player's own side, ready for a spike.
-- **Pallo kaarella yli**: the over branch of `hit()`: an arc into the far court, always clear of the net. The third touch is always this.
-- **Smassi alaviistoon**: the spike branch of `hit()` (`shotTo()`): short and sharp, or deep when running toward the net. A ball off the middle of the hands goes a little wrong.
+- **Pallo kaarella yli**: the over branch of `hit()`: an arc into the far court, always clear of the net. The third touch is always this. From v3 the computer's return is flatter and goes to the gap: `gap()` picks the spot furthest from every player there, as often as its level's `aim` says (50 % on level 1, up to 90 %).
+- **Smassi alaviistoon**: the spike branch of `hit()` (`shotTo()`): short and sharp, or deep when running toward the net. A ball off the middle of the hands goes a little wrong. The computer's spikes go to the gap too (v3).
 - **Lähtikö smassi tarpeeksi ylhäältä?**: only a spike hit more than 0.35 m above the net top is aimed deeper until it clears; a lower one may go into the net.
 - **Kova pallo: voi karata puolustajan käsistä**: in `hit()`, a ball faster than 8.5 m/s adds error to the dig, and sometimes flies off the arms ("Karkasi käsistä!").
 - **Neljä kosketusta: piste toiselle**: `hit()` gives the point away on a fourth touch on one side.
 - **Ulos: piste viimeksi koskeneen vastustajalle**: `land()`: past 4 m from the net is out.
 - **11 pistettä ja 2 pisteen ero?**: `matchWinner()`.
-- **Taso nousee, uusi vastustaja**: `endMatch()` saves `ai-pelit:lentopallo:taso`, `voitot` and `haviot`; `cpuSetup()` makes each level's opponent quicker, quicker to react, more accurate and more eager to spike.
+- **Taso nousee, uusi vastustaja**: `endMatch()` saves `ai-pelit:lentopallo:taso`, `voitot` and `haviot`; `skill()` (`cpuSetup()` in v1) makes each level's opponent quicker, quicker to react, more accurate and more eager to spike. v3 (#36, "liian helppo") starts every level higher: 3.8 m/s, 0.3 s to react, at most 0.35 m off its spot (v2: 3.3 m/s, 0.4 s, 0.8 m), spikes half the time, and everyone's reach is 0.54 m to each side (v2: 0.62 m), so a player who stands still loses almost every point.
