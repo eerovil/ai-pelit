@@ -52,7 +52,8 @@
     }
   } catch (e) {}
   a.addEventListener('click', function (e) {
-    if (e.defaultPrevented) return;
+    // A new tab (Ctrl, Cmd, Shift, middle button) opens the link as it is.
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     if (history.state && history.state.aiPelitUp) history.back();
     else location.replace(a.href);

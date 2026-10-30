@@ -246,7 +246,7 @@
   }
   view.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a[href]');
-    if (!a || e.defaultPrevented) return;
+    if (!a || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     var href = a.getAttribute('href');
     var game = href.match(/^games\/([a-z0-9-]+)\/v\d+\/$/);
     if (href === '#/') {
@@ -266,6 +266,25 @@
       location.assign(url.href);
     }
   });
+  // A room code typed in game A that belongs to game B (rooms.js) steps back here to A's page and
+  // leaves this note: A's page becomes B's, and B opens over it, so back from B goes to B's page.
+  function openFromRoom() {
+    var to = null;
+    try {
+      to = JSON.parse(sessionStorage.getItem('ai-pelit:_avaa'));
+      sessionStorage.removeItem('ai-pelit:_avaa');
+    } catch (err) {}
+    if (!to || to.from !== location.hash || !/^#\/[a-z0-9-]+$/.test(to.page)) return;
+    var url = new URL(to.game, location.href);
+    if (url.origin !== location.origin) return;
+    history.replaceState({ up: true }, '', to.page);
+    render();
+    try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
+    location.assign(url.href);
+  }
+  window.addEventListener('pageshow', function (e) { if (e.persisted) { openFromRoom(); render(); } });
+  openFromRoom();
+
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     loadCatalog();

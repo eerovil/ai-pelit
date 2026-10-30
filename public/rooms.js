@@ -178,6 +178,19 @@
       if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
         var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
         net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
+        // Back always goes up (#68): opened from the shelf, this game has its page below it.
+        var up = history.state && history.state.aiPelitUp;
+        try {
+          // Another version: the same page stays below the new one, and back.js marks it.
+          if (up && m.game === GAME) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
+          // Another game: back to this game's page, which app.js turns into that game's page
+          // before it opens the game over it.
+          if (up && m.game !== GAME) {
+            sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + GAME, page: '#/' + m.game, game: to.href }));
+            history.back();
+            return;
+          }
+        } catch (e) {}
         location.replace(to.href);
         return;
       }

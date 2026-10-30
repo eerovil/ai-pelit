@@ -91,6 +91,19 @@ def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, cont
     assert page.url == "about:blank"
 
 
+def test_a_ctrl_click_opens_the_link_in_a_new_tab_as_before(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    for link, url in [(".card-main", f"{site.url}#/pomppu"), ("a.play", f"{site.url}games/pomppu/v1/")]:
+        with context.expect_page() as tab:
+            page.click(f'.card[data-slug="pomppu"] {link}', modifiers=["Control"])
+        tab.value.wait_for_url(url)
+        assert page.url == site.url
+        tab.value.close()
+
+
 def test_back_from_a_game_opened_with_the_play_button_goes_to_its_page(site, context):
     make_game(site.games, "pomppu", [game_page("v1")])
     site.build()
