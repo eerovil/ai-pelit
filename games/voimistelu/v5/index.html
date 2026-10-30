@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Voimistelu</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#141a2e;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<script>
+const c = document.getElementById('c'), x = c.getContext('2d');
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+}
+addEventListener('resize', resize); resize();
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:voimistelu:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = Math.max(1, Math.floor(load('taso', 1)) || 1);
+let best = Math.max(0, Number(load('paras', 0)) || 0);
+let routines = Math.max(0, Math.floor(load('suoritukset', 0)) || 0);
+
+// ---- Levels: one task each; a routine passes when it does the task and ends on the feet ----
+// Flights between the bars by whole turns: none, one, two or more.
+const DOWN = ['Siirto alatangolle', 'Pak-voltti', 'Kaksoisvoltti alatangolle'];
+const UP = ['Shaposhnikova', 'Voltti ylätangolle', 'Kaksoisvoltti ylätangolle'];
+const TASKS = [
+  ['Hyppää alas ja laskeudu jaloillesi', r => true],
+  ['Tee jättikierto ja alastulo', r => r.names.some(n => n.startsWith('Jättikierto'))],
+  ['Voltti alas', r => r.saltos >= 1],
+  ['Pysäytys: alastulo ilman askelta', r => r.stuck],
+  ['Piruetti käsilläseisonnassa tangon päällä', r => r.names.includes('Piruetti')],
+  ['Tkatchev: lennä tangon yli ja ota kiinni', r => r.names.includes('Tkatchev')],
+  ['Kaksoisvoltti alas', r => r.saltos >= 2],
+  ['Jäger tai Gienger: voltti ilmassa ja kiinni tangosta', r => r.names.includes('Jäger') || r.names.includes('Gienger')],
+  ['Kierre alastulossa', r => r.halves >= 2],
+  ['Kovacs: kaksoisvoltti tangon yli ja kiinni', r => r.names.includes('Kovacs')],
+  // Any way down to the low bar goes: the task is only to get there.
+  ['Siirry alatangolle', r => r.names.some(n => DOWN.includes(n))],
+  ['Shaposhnikova: alatangolta lentäen ylätangolle', r => r.names.includes('Shaposhnikova')],
+  ['Pak-voltti: voltti ylätangolta alatangolle', r => r.names.includes('Pak-voltti')],
+];
+function target(n) { return Math.min(14.5, 10.8 + 0.3 * (n - TASKS.length - 1)); }
+function taskText(n) { return n <= TASKS.length ? TASKS[n - 1][0] : `Saa vähintään ${fmt(target(n), 1)} pistettä`; }
+function taskDone(n, r) { return n <= TASKS.length ? TASKS[n - 1][1](r) : r.total >= target(n) - 1e-9; }
+const fmt = (v, d) => v.toFixed(d).replace('.', ',');
+
+// ---- The gymnast: a body swinging about the bar, or flying free ----
+// Lengths in metres, per unit mass. On the bar the body is a rigid pendulum whose centre of mass sits
+// R from the bar; holding a finger pulls it in (a shorter R and a smaller own inertia), so the angular
+// momentum about the bar speeds it up at the bottom, as a swing is pumped. In the air the angular momentum
+// about the centre of mass is kept, and a tuck spins it faster.
+const G = 9.81, FLOOR = -2.75;
+// Eritasonojapuut: the high bar at the origin and the low bar in front of it, 1.75 m out and 0.9 m lower.
+const BARS = [[0, 0], [1.75, -0.9]];
+const LOW = 1;
+const R_EXT = 1.05, R_PULL = 0.85, IC_EXT = 0.45, IC_PULL = 0.25, IC_TUCK = 0.12;
+const GRAB = 0.25, DAMP = 0.02, SHAPE_RATE = 7, TWIST_RATE = 4 * Math.PI, LAND_LOOK = 0.05;
+const TAU = 2 * Math.PI;
+// Reaching (#84): in the air the arms turn at the shoulders, any way round, towards the nearest bar within
+// the arm and REACH_OUT more of the shoulder, bending at the elbows when it is nearer than the arm. The
+// hands then catch it as before, within GRAB of the bar.
+const ARM = 0.58, REACH_OUT = 0.35, ARM_RATE = 60, BEND_RATE = 20; // v5: a half turn of the arms in about 0.05 s
+const lerp = (a, b, t) => a + (b - a) * t;
+const wrap = a => a - TAU * Math.round(a / TAU);
+const rBar = s => lerp(R_EXT, R_PULL, s);
+const icBar = s => lerp(IC_EXT, IC_PULL, s);
+const icAir = s => lerp(IC_EXT, IC_TUCK, s);
+
+// Body points (u along the body towards the hands, v towards the chest), around the centre of mass.
+const POSE = {
+  ext: { hand: [1.05, 0], sh: [0.47, 0], head: [0.62, 0.05], hip: [-0.05, 0], knee: [-0.5, 0], foot: [-0.95, 0] },
+  pike: { hand: [0.85, 0], sh: [0.36, -0.04], head: [0.5, 0.04], hip: [-0.14, -0.06], knee: [-0.38, 0.3], foot: [-0.55, 0.7] },
+  tuck: { hand: [0.14, 0.27], sh: [0.26, -0.1], head: [0.42, -0.02], hip: [-0.2, -0.08], knee: [0.14, 0.25], foot: [-0.22, 0.27] },
+};
+
+let mode;           // 'bar', 'air', 'land' or 'result'
+let bar = 0;        // which bar the hands are on (0 high, 1 low)
+let th, Lb;         // on the bar: angle of the body from hanging, angular momentum about the bar
+let pos, vel;       // centre of mass
+let phi, L;         // body angle (0 = hands up) and, in the air, angular momentum about the centre of mass
+let s = 0;          // 0 straight, 1 pulled in (pike on the bar, tuck in the air)
+let pk = 0;         // the legs' own pike under the low bar
+let hold = false;   // a finger is down
+let tau, tauT, facing; // twist angle, where the twist is going, which way the chest faced at the start
+let arm = 0, armT = 0, armK = 1; // the arms' turn at the shoulders, where it is going, how far they reach (bent elbows under 1)
+// v5: just after a catch the body hangs on a real joint at the shoulders for a moment (see jointStep()).
+// The body is two masses on a rod, at the shoulders and near the feet, chosen to keep its centre of mass
+// and its own inertia (IC_EXT); the arms are a massless rod from the bar to the shoulders.
+const J_SH = 0.47, J_FT = 0.957, J_MS = 0.6707, J_K = 60, J_D = 8, J_LOOSE = 0.1, J_LOCK = 0.35, J_MAX = 3;
+let jt = null;
+let flight, lastCross, elements, deductions, touch, landT, result, resultT, popups, camX, camY;
+
+function barOmega() { const r = rBar(s); return Lb / (icBar(s) + r * r); }
+function phiDot() { return mode === 'bar' ? barOmega() : L / icAir(s); }
+function chest() { return facing * (Math.cos(tau) >= 0 ? 1 : -1); }
+
+function newRoutine() {
+  pk = 0; mode = 'bar'; bar = 0; th = 1.2; Lb = 0; s = 0; tau = tauT = 0; facing = 1;
+  arm = armT = 0; armK = 1; jt = null;
+  flight = null; lastCross = 0; elements = []; deductions = []; touch = null; result = null; popups = [];
+  syncBar(); camX = 0.6; camY = 0;
+}
+
+function syncBar() {
+  const r = rBar(s), w = barOmega();
+  const B = BARS[bar];
+  pos = [B[0] + r * Math.sin(th), B[1] - r * Math.cos(th)];
+  vel = [r * w * Math.cos(th), r * w * Math.sin(th)];
+  phi = th;
+}
+
+function addElement(name, value) {
+  elements.push({ name, value });
+  popups.push({ text: `${name} ${fmt(value, 1)}`, t: 0 });
+  beep(660 + 80 * Math.min(6, elements.length), 0.12, 'triangle', 0.08);
+}
+
+function bodyPoints() {
+  const P = mode === 'bar' ? POSE.pike : POSE.tuck, k = Math.max(0, Math.min(1, s));
+  const ax = [-Math.sin(phi), Math.cos(phi)], pv = [Math.cos(phi), Math.sin(phi)];
+  const fv = facing * Math.cos(tau), out = {};
+  for (const n in POSE.ext) {
+    const kk = (n === 'hip' || n === 'knee' || n === 'foot') && mode === 'bar' ? Math.max(k, pk) : k;
+    const u = lerp(POSE.ext[n][0], P[n][0], kk), v = lerp(POSE.ext[n][1], P[n][1], kk) * fv;
+    out[n] = [pos[0] + u * ax[0] + v * pv[0], pos[1] + u * ax[1] + v * pv[1]];
+  }
+  if (mode === 'bar' && jt) out.hand = BARS[bar].slice();
+  else if (arm || armK < 1) {
+    const cs = Math.cos(arm) * armK, sn = Math.sin(arm) * armK, dx = out.hand[0] - out.sh[0], dy = out.hand[1] - out.sh[1];
+    out.hand = [out.sh[0] + dx * cs - dy * sn, out.sh[1] + dx * sn + dy * cs];
+  }
+  return out;
+}
+
+// ---- Physics ----
+function step(dt) {
+  if (mode === 'result') { resultT += dt; return; }
+  if (mode === 'land') { landStep(dt); return; }
+  const n = Math.max(1, Math.ceil(dt / 0.001)), h = dt / n;
+  for (let i = 0; i < n && (mode === 'bar' || mode === 'air'); i++) mode === 'bar' ? barStep(h) : airStep(h);
+  for (const p of popups) p.t += dt;
+  popups = popups.filter(p => p.t < 1.8);
+}
+
+function shape(h) {
+  const want = hold ? 1 : 0;
+  s += Math.max(-SHAPE_RATE * h, Math.min(SHAPE_RATE * h, want - s));
+  // On the low bar the legs pike through the bottom by themselves, or the feet would hit the floor.
+  // Only the drawing: the swing is not pumped by it, or it would grow with no finger at all.
+  const legs = mode === 'bar' && bar === LOW && Math.abs(wrap(th)) < 1.1 ? 1 : 0;
+  pk += Math.max(-SHAPE_RATE * h, Math.min(SHAPE_RATE * h, legs - pk));
+  tau += Math.max(-TWIST_RATE * h, Math.min(TWIST_RATE * h, tauT - tau));
+}
+
+function barStep(h) {
+  shape(h);
+  if (jt) { jointStep(h); return; }
+  const r = rBar(s), w = barOmega(), prev = th;
+  th += w * h;
+  Lb += (-G * r * Math.sin(th) - DAMP * w) * h;
+  // Going over the top twice the same way is one full circle: a giant swing.
+  const k0 = Math.floor((prev - Math.PI) / TAU), k1 = Math.floor((th - Math.PI) / TAU);
+  if (k0 !== k1) {
+    const dir = Math.sign(th - prev);
+    if (lastCross === dir) addElement(dir * chest() > 0 ? 'Jättikierto taakse' : 'Jättikierto eteen', 0.1);
+    lastCross = dir;
+  }
+  syncBar();
+}
+
+// Let go of the bar: the body keeps its speed and its spin.
+function release() {
+  if (mode !== 'bar') return;
+  const w = jt ? jt.wb : barOmega(); // still on the joint: its own spin
+  L = icAir(s) * w;
+  flight = { t: 0, phi0: phi, x0: pos[0] - BARS[bar][0], tau0: tauT, crossed: false, from: bar };
+  mode = 'air'; arm = armT = 0; armK = 1; jt = null;
+  noise(0.25, 0.05, 900);
+}
+
+// Start the body in the air from a given state (the tests use this).
+function launchAir(o) {
+  mode = 'air'; s = o.s || 0; tau = tauT = 0;
+  pos = [o.x, o.y]; vel = [o.vx || 0, o.vy || 0]; phi = o.phi || 0; L = (o.w || 0) * icAir(s);
+  bar = o.from || 0; arm = armT = 0; armK = 1; jt = null;
+  flight = { t: 0, phi0: phi, x0: pos[0] - BARS[bar][0], tau0: 0, crossed: false, from: bar };
+}
+
+function airStep(h) {
+  flight.t += h;
+  shape(h);
+  vel[1] -= G * h;
+  pos[0] += vel[0] * h; pos[1] += vel[1] * h;
+  phi += L / icAir(s) * h;
+  const F = BARS[flight.from];
+  if (pos[1] > F[1] - 0.3 && (pos[0] - F[0]) * flight.x0 < 0) flight.crossed = true;
+  const open = s < 0.35 && Math.abs(tau - tauT) < 0.2;
+  const ready = i => i === flight.from ? flight.t > 0.25 && vel[1] < -1 : flight.t > 0.15;
+  aim(open, ready, h);
+  const b = bodyPoints();
+  // The hands reach either bar with the body open: catch it. The bar let go of is caught only on the way
+  // down, or the body would catch it again passing over it; the other bar also on the way up, as a
+  // gymnast flying from the low bar catches the high one.
+  if (open) {
+    for (let i = 0; i < BARS.length; i++) {
+      if (ready(i) && Math.hypot(b.hand[0] - BARS[i][0], b.hand[1] - BARS[i][1]) < GRAB) { grab(i); return; }
+    }
+  }
+  let low = Infinity;
+  for (const n in b) low = Math.min(low, b[n][1]);
+  if (low <= FLOOR) land(b, low);
+}
+
+// Turn the arms towards the nearest bar in reach, or back in line with the body.
+function aim(open, ready, h) {
+  armT = 0;
+  let k = 1;
+  if (open) {
+    const was = arm; arm = 0;
+    const b = bodyPoints(), dir = Math.atan2(b.hand[1] - b.sh[1], b.hand[0] - b.sh[0]);
+    arm = was;
+    let near = Infinity;
+    for (let i = 0; i < BARS.length; i++) {
+      const dx = BARS[i][0] - b.sh[0], dy = BARS[i][1] - b.sh[1], d = Math.hypot(dx, dy);
+      const rel = wrap(Math.atan2(dy, dx) - dir);
+      if (ready(i) && d < ARM + REACH_OUT && d < near) { near = d; armT = rel; k = Math.max(0.3, Math.min(1, d / ARM)); }
+    }
+  }
+  // The short way round, so a bar passing behind the shoulder does not send the arms all the way back.
+  arm = wrap(arm + Math.max(-ARM_RATE * h, Math.min(ARM_RATE * h, wrap(armT - arm))));
+  armK += Math.max(-BEND_RATE * h, Math.min(BEND_RATE * h, k - armK));
+}
+
+// Just caught: the arms swing from the bar and the body from the shoulders, and a stiff, damped shoulder
+// pulls the body into line with the arms. Once in line, the rigid swing takes over with the same speed.
+function jointStep(h) {
+  const B = BARS[bar], S = jt.S, F = jt.F, vS = jt.vS, vF = jt.vF, mF = 1 - J_MS;
+  jt.t += h;
+  // The arms ease to their length, from bent or from reaching past it.
+  // A held finger pulls the body in through the arms, as the rigid swing does (rBar(s)).
+  const laT = rBar(s) - J_SH;
+  jt.la += Math.max(-3 * h, Math.min(3 * h, laT - jt.la));
+  if (jt.la === laT) jt.eased = true;
+  vS[1] -= G * h; vF[1] -= G * h;
+  const bx = S[0] - F[0], by = S[1] - F[1], ax = S[0] - B[0], ay = S[1] - B[1];
+  const wb = (bx * (vS[1] - vF[1]) - by * (vS[0] - vF[0])) / (bx * bx + by * by);
+  const wa = (ax * vS[1] - ay * vS[0]) / (ax * ax + ay * ay);
+  // In line: the body points from the feet to the shoulders the same way as from the shoulders to the bar.
+  // Counted on from the last step, not wrapped, so the spring never flips its push at half a turn.
+  const e = jt.e === undefined ? wrap(Math.atan2(by, bx) - Math.atan2(-ay, -ax))
+    : jt.e + wrap(Math.atan2(by, bx) - Math.atan2(-ay, -ax) - jt.e);
+  jt.e = e;
+  jt.wb = wb;
+  // The shoulder: loose (a little friction) until the body swings within J_LOCK of the arms' line by itself,
+  // then a damped spring holds it in line. It turns the arms back by as much as the body, so it only moves
+  // energy between them and adds none (the bar takes the rest). As forces: on the body a couple at the feet
+  // and the shoulders, on the arms a push at the shoulders.
+  if (jt.lock === undefined && Math.abs(wrap(e)) < J_LOCK) {
+    jt.lock = Math.round(e / TAU) * TAU;
+    // The energy to hold from here on (see below), taken before this step's spring acts.
+    jt.held = true;
+    jt.en = 0.5 * (J_MS * (vS[0] * vS[0] + vS[1] * vS[1]) + mF * (vF[0] * vF[0] + vF[1] * vF[1])) + G * (J_MS * S[1] + mF * F[1]);
+  }
+  const tq = jt.lock !== undefined ? -J_K * (e - jt.lock) - J_D * (wb - wa) : -J_LOOSE * (wb - wa);
+  const lb = Math.hypot(bx, by), nb = [-by / lb, bx / lb], na = [-ay / jt.la, ax / jt.la];
+  const fb = tq / lb, fa = tq / jt.la;
+  vF[0] -= fb * nb[0] / mF * h; vF[1] -= fb * nb[1] / mF * h;
+  vS[0] += (fb * nb[0] - fa * na[0]) / J_MS * h; vS[1] += (fb * nb[1] - fa * na[1]) / J_MS * h;
+  // Move, then hold the arm and the body to their lengths.
+  const pS = [S[0] + vS[0] * h, S[1] + vS[1] * h], pF = [F[0] + vF[0] * h, F[1] + vF[1] * h];
+  for (let it = 0; it < 4; it++) {
+    let dx = pS[0] - B[0], dy = pS[1] - B[1], d = Math.hypot(dx, dy) || 1e-9;
+    pS[0] = B[0] + dx / d * jt.la; pS[1] = B[1] + dy / d * jt.la;
+    dx = pS[0] - pF[0]; dy = pS[1] - pF[1]; d = Math.hypot(dx, dy) || 1e-9;
+    const c = (d - J_SH - J_FT) / d;
+    pS[0] -= dx * c * mF; pS[1] -= dy * c * mF; pF[0] += dx * c * J_MS; pF[1] += dy * c * J_MS;
+  }
+  for (let i = 0; i < 2; i++) { vS[i] = (pS[i] - S[i]) / h; vF[i] = (pF[i] - F[i]) / h; S[i] = pS[i]; F[i] = pF[i]; }
+  // While the arms ease to their length the body is pulled in or let out, which would speed or slow the
+  // spin as a pumped swing does; the catch is no pump, so meanwhile the energy stays what it was. And from
+  // the lock on, the spring's damping would take the body's spin against the arms away all at once, a stiff
+  // stop: there too the energy stays what it was at the lock, so that spin goes into the swing instead.
+  const ke = 0.5 * (J_MS * (vS[0] * vS[0] + vS[1] * vS[1]) + mF * (vF[0] * vF[0] + vF[1] * vF[1]));
+  const en = ke + G * (J_MS * S[1] + mF * F[1]);
+  if (jt.en === undefined) jt.en = en;
+  else if (!jt.eased || jt.pull || jt.lock !== undefined) {
+    if (jt.pull && jt.eased && jt.lock === undefined) jt.en = undefined; // eased to length: free again
+    jt.pull = !jt.eased;
+    const k = ke > 0 && jt.en !== undefined ? Math.max(0.5, Math.min(2, Math.sqrt(Math.max(0, ke + jt.en - en) / ke))) : 1;
+    for (let i = 0; i < 2; i++) { vS[i] *= k; vF[i] *= k; }
+  }
+  // What the rest of the game sees: the centre of mass, the body's angle, and its angle about the bar.
+  const ux = S[0] - F[0], uy = S[1] - F[1], u = Math.hypot(ux, uy);
+  pos = [J_MS * S[0] + mF * F[0], J_MS * S[1] + mF * F[1]];
+  vel = [J_MS * vS[0] + mF * vF[0], J_MS * vS[1] + mF * vF[1]];
+  phi = jt.phi + wrap(Math.atan2(-ux / u, uy / u) - jt.phi); jt.phi = phi;
+  const rx = pos[0] - B[0], ry = pos[1] - B[1];
+  th = th + wrap(Math.atan2(rx, -ry) - th);
+  if ((Math.abs(wrap(e)) < 0.06 && Math.abs(wb - wa) < 1.5 && jt.la === laT) || jt.t > J_MAX) {
+    // In line: the rigid swing, with the angular momentum about the bar.
+    const wB = (ux * (vS[1] - vF[1]) - uy * (vS[0] - vF[0])) / (u * u);
+    Lb = icBar(s) * wB + rx * vel[1] - ry * vel[0];
+    jt = null;
+    syncBar();
+  }
+}
+
+// Whole turns in a flight, from the body's rotation between letting go and the catch or touchdown
+// alone; half a turn or more counts as one more (1.5 turns is a double).
+function turns(rot) { return Math.floor(Math.abs(rot) / TAU + 0.5); }
+
+function grab(to) {
+  const w = L / icAir(s), B = BARS[to], rx = pos[0] - B[0], ry = pos[1] - B[1];
+  const cross = rx * vel[1] - ry * vel[0];
+  const n = turns(phi - flight.phi0);
+  const halves = Math.round(Math.abs(tauT - flight.tau0) / Math.PI);
+  let t = Math.atan2(rx, -ry);
+  bar = to;
+  th = phi + wrap(t - phi);
+  arm = armT = 0; armK = 1;
+  Lb = icAir(s) * w + cross;
+  mode = 'bar'; lastCross = 0;
+  // Hand the flight to the joint: the body as it is, the arms from the bar to the shoulders.
+  const ax = [-Math.sin(phi), Math.cos(phi)], S = [pos[0] + J_SH * ax[0], pos[1] + J_SH * ax[1]];
+  const F = [pos[0] - J_FT * ax[0], pos[1] - J_FT * ax[1]];
+  const v = p => [vel[0] - w * (p[1] - pos[1]), vel[1] + w * (p[0] - pos[0])];
+  jt = { S, F, vS: v(S), vF: v(F), la: Math.max(0.2, Math.hypot(S[0] - B[0], S[1] - B[1])), t: 0, phi };
+  if (to !== flight.from) {
+    // Between the bars, as on the women's uneven bars.
+    const k = Math.min(2, n);
+    if (to === LOW) addElement(DOWN[k], [0.1, 0.4, 0.6][k]);
+    else addElement(UP[k], [0.4, 0.5, 0.7][k]);
+  } else if (n === 0) {
+    if (flight.crossed) addElement('Tkatchev', 0.3);
+    else addElement(halves ? 'Lentoliike kierteellä' : 'Lentoliike', halves ? 0.2 : 0.1);
+  } else if (n === 1) addElement(halves % 2 ? 'Gienger' : 'Jäger', 0.4);
+  else if (n === 2) addElement(halves ? 'Kolman' : 'Kovacs', halves ? 0.6 : 0.5);
+  else addElement('Kolmoisvoltti tangolle', 0.7);
+  beep(1300, 0.08, 'square', 0.07); beep(900, 0.15, 'triangle', 0.06);
+}
+
+function land(b, low) {
+  const a = wrap(phi), w = L / icAir(s), aEff = a + w * LAND_LOOK;
+  const onFeet = b.foot[1] - low < 0.12 && Math.abs(a) < 1.2;
+  const saltos = turns(phi - flight.phi0);
+  const halves = Math.round(Math.abs(tau - flight.tau0) / Math.PI);
+  const fulls = Math.floor(halves / 2);
+  const base = ['Alastulo', 'Voltti alas', 'Kaksoisvoltti alas', 'Kolmoisvoltti alas', 'Nelinkertainen voltti alas'][Math.min(4, saltos)];
+  const twist = halves === 1 ? ' puolikierteellä' : fulls === 1 ? ' kierteellä' : fulls > 1 ? ` ${fulls} kierteellä` : '';
+  const value = [0, 0.1, 0.3, 0.5, 0.7][Math.min(4, saltos)] + 0.1 * fulls;
+  addElement(base + twist, value);
+  const e = Math.abs(aEff);
+  let fall = false, stuck = false, stepX = 0;
+  if (!onFeet || e >= 1.1) { fall = true; deductions.push(['Kaatuminen', 1.0]); }
+  else if (e < 0.3) stuck = true;
+  else {
+    const [txt, d] = e < 0.5 ? ['Pieni askel', 0.1] : e < 0.75 ? ['Askel', 0.3] : ['Iso askel', 0.5];
+    deductions.push([txt, d]); stepX = Math.sign(aEff) * -0.35 * d / 0.3;
+  }
+  if (!fall && s > 0.5) deductions.push(['Kerä auki liian myöhään', 0.3]);
+  if (!fall && Math.abs(tau - tauT) > 0.3) deductions.push(['Kierre kesken', 0.3]);
+  touch = { a, aEff, onFeet, fall, stuck, saltos, halves, x: b.foot[0], stepX, phi0: phi, y0: pos[1], s0: s };
+  mode = 'land'; landT = 0; hold = false; arm = armT = 0; armK = 1;
+  if (fall) noise(0.35, 0.18, 300); else { noise(0.12, 0.2, 200); if (stuck) setTimeout(() => noise(1.1, 0.06, 2500), 150); }
+}
+
+// After the touchdown: stand up with arms raised, step, or lie on the mat.
+function landStep(dt) {
+  landT += dt;
+  const k = Math.min(1, landT / 0.35), t = touch;
+  for (const p of popups) p.t += dt;
+  s = lerp(t.s0, 0, k); tau = tauT;
+  if (t.fall) {
+    const side = t.a >= 0 ? 1 : -1;
+    phi = lerp(t.phi0, Math.round(t.phi0 / TAU) * TAU + side * Math.PI / 2, k);
+    pos = [t.x + side * -0.5 * k, lerp(t.y0, FLOOR + 0.12, k)];
+  } else {
+    phi = lerp(t.phi0, Math.round(t.phi0 / TAU) * TAU, k);
+    pos = [t.x + t.stepX * k, FLOOR + 0.95];
+  }
+  if (landT > 1.4) finish();
+}
+
+function finish() {
+  const seen = new Set();
+  let d = 0;
+  for (const e of elements) if (!seen.has(e.name)) { seen.add(e.name); d += e.value; }
+  const ded = deductions.reduce((a, b) => a + b[1], 0);
+  const eScore = Math.max(0, 10 - ded), total = d + eScore;
+  const r = { names: elements.map(e => e.name), d, e: eScore, total, fall: touch.fall, stuck: touch.stuck,
+    saltos: touch.saltos, halves: touch.halves, level, passed: false, record: false };
+  r.passed = !r.fall && taskDone(level, r);
+  routines++;
+  if (r.passed) level++;
+  if (total > best + 1e-9) { best = Math.round(total * 1000) / 1000; r.record = true; }
+  save('taso', level); save('paras', best); save('suoritukset', routines);
+  // The online list keeps each player's best routine total.
+  if (window.AiPelitScores) AiPelitScores.submit(Math.round(total * 1000) / 1000);
+  result = r; mode = 'result'; resultT = 0;
+  if (r.passed) { beep(784, 0.15, 'triangle', 0.09); setTimeout(() => beep(1047, 0.25, 'triangle', 0.09), 140); }
+}
+
+// ---- Input: hold = pull in / tuck, flick up = let go, flick sideways = twist ----
+const touches = new Map();
+function onDown(e) {
+  e.preventDefault(); unlock();
+  if (mode === 'result') { if (resultT > 0.8) newRoutine(); return; }
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
+  hold = mode !== 'land';
+}
+function onUp(e) {
+  const t0 = touches.get(e.pointerId);
+  touches.delete(e.pointerId);
+  hold = touches.size > 0 && mode !== 'land';
+  if (!t0) return;
+  const dx = e.clientX - t0.x, dy = e.clientY - t0.y, quick = performance.now() - t0.t < 400;
+  if (!quick) return;
+  if (-dy > 40 && -dy > Math.abs(dx)) release();
+  else if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) twist(Math.sign(dx));
+}
+// A half twist: in the air at any time, on the bar only near the handstand (a pirouette).
+function twist(dir) {
+  if (Math.abs(tau - tauT) > 0.05) return;
+  if (mode === 'air') { tauT += dir * Math.PI; noise(0.15, 0.04, 1500); }
+  else if (mode === 'bar' && Math.abs(wrap(th - Math.PI)) < 0.6) { tauT += dir * Math.PI; addElement('Piruetti', 0.2); }
+}
+c.addEventListener('pointerdown', onDown, { passive: false });
+addEventListener('pointerup', onUp);
+addEventListener('pointercancel', e => { touches.delete(e.pointerId); hold = touches.size > 0; });
+
+// ---- Sound ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function beep(f, d, type, vol) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function noise(d, vol, f) {
+  if (!ac) return;
+  const n = Math.floor(ac.sampleRate * d), buf = ac.createBuffer(1, n, ac.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = buf; fl.type = 'bandpass'; fl.frequency.value = f; g.gain.value = vol;
+  src.connect(fl).connect(g).connect(ac.destination); src.start();
+}
+
+// ---- Drawing ----
+let S, BAR_Y;
+function sc(p) { return [W / 2 + (p[0] - camX) * S, BAR_Y - (p[1] - camY) * S]; }
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  S = Math.min(W / 4.6, (H - SAFE_T - SAFE_B) / 8);
+  BAR_Y = SAFE_T + (H - SAFE_T - SAFE_B) * 0.5;
+  if (mode !== 'result') {
+    // Follow the gymnast, and never let the body leave the screen, however far or high it flies.
+    const halfW = W / 2 / S - 1.2, up = (BAR_Y - SAFE_T - 110) / S - 1.2;
+    let tx = lerp(0.9, pos[0], 0.6), ty = Math.max(0, pos[1] - 1.4);
+    tx = Math.max(pos[0] - halfW, Math.min(pos[0] + halfW, tx));
+    ty = Math.max(ty, pos[1] - up);
+    camX = lerp(camX, tx, 0.08); camY = lerp(camY, ty, 0.08);
+    // Then hold every point of the body, not just its middle, inside the screen edges.
+    const b = bodyPoints(), m = 0.15, half = W / 2 / S, top = (BAR_Y - SAFE_T - 20) / S, bottom = (H - SAFE_B - 20 - BAR_Y) / S;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const n in b) { x0 = Math.min(x0, b[n][0]); x1 = Math.max(x1, b[n][0]); y0 = Math.min(y0, b[n][1]); y1 = Math.max(y1, b[n][1]); }
+    camX = Math.max(x1 + m - half, Math.min(x0 - m + half, camX));
+    camY = Math.min(y0 - m + bottom, Math.max(camY, y1 + m - top));
+  }
+  // Hall and crowd
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0d1226'); g.addColorStop(1, '#25305a');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  for (let i = 0; i < 90; i++) {
+    const cx = ((i * 73.1) % 1) * W + ((i * 37) % W), cy = BAR_Y - S * 3.2 + ((i * 53) % 70) - camY * S * 0.3;
+    x.fillStyle = ['#3a4677', '#4d5a90', '#6b3a5a', '#3f6b6b'][i % 4];
+    x.beginPath(); x.arc(cx % W, cy, 3 + (i % 3), 0, TAU); x.fill();
+  }
+  // Floor and mat
+  const fy = sc([0, FLOOR])[1];
+  x.fillStyle = '#1b2240'; x.fillRect(0, fy, W, H - fy);
+  const m0 = sc([-4, FLOOR]), m1 = sc([6, FLOOR]);
+  x.fillStyle = '#2f6fd0'; x.fillRect(m0[0], fy - 0.18 * S, m1[0] - m0[0], 0.18 * S);
+  x.fillStyle = '#5a92e8'; x.fillRect(m0[0], fy - 0.18 * S, m1[0] - m0[0], 0.04 * S);
+  // Uprights, cables and the two bars seen end on
+  const ends = BARS.map(sc), base = sc([0, FLOOR]);
+  x.strokeStyle = 'rgba(200,210,230,0.35)'; x.lineWidth = 1.5;
+  for (const [sx, i] of [[-1.8, 0], [3.6, 1]]) { const a = sc([sx, FLOOR]); x.beginPath(); x.moveTo(ends[i][0], ends[i][1] - 0.05 * S); x.lineTo(a[0], a[1]); x.stroke(); }
+  x.fillStyle = '#9aa6bf';
+  for (const e of ends) x.fillRect(e[0] - 0.05 * S, e[1], 0.1 * S, base[1] - e[1]);
+  x.fillRect(ends[0][0], base[1] - 0.06 * S, ends[1][0] - ends[0][0], 0.06 * S);
+  drawGymnast();
+  x.fillStyle = '#e8edf6'; x.strokeStyle = '#7d879c'; x.lineWidth = 2;
+  for (const e of ends) { x.beginPath(); x.arc(e[0], e[1], Math.max(4, 0.06 * S), 0, TAU); x.fill(); x.stroke(); }
+  drawHud();
+  if (mode === 'result') drawResult();
+}
+
+function drawGymnast() {
+  const p = bodyPoints(), P = {};
+  for (const n in p) P[n] = sc(p[n]);
+  const back = facing * Math.cos(tau) < 0;
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const seg = (pts, w, col) => { x.strokeStyle = col; x.lineWidth = w * S; x.beginPath(); x.moveTo(...pts[0]); for (const q of pts.slice(1)) x.lineTo(...q); x.stroke(); };
+  seg([P.hip, P.knee, P.foot], 0.13, '#f1f4fb');
+  seg([P.sh, P.hip], 0.24, back ? '#9c1d32' : '#d62845');
+  seg([P.sh, P.hand], 0.09, '#f2c9a5');
+  x.fillStyle = '#f2c9a5';
+  x.beginPath(); x.arc(P.head[0], P.head[1], 0.11 * S, 0, TAU); x.fill();
+  // Hair: all of it from behind, a cap on top of the head from the front.
+  const top = Math.atan2(P.head[1] - P.sh[1], P.head[0] - P.sh[0]);
+  x.fillStyle = '#5a3a22';
+  x.beginPath();
+  if (back) x.arc(P.head[0], P.head[1], 0.11 * S, 0, TAU);
+  else x.arc(P.head[0], P.head[1], 0.11 * S, top - 1.3, top + 1.3);
+  x.fill();
+}
+
+function text(t, px, py, size, col, align, weight) {
+  x.font = `${weight || 600} ${size}px system-ui,sans-serif`;
+  x.fillStyle = col; x.textAlign = align || 'center'; x.textBaseline = 'middle';
+  x.fillText(t, px, py);
+}
+
+function wrapText(t, maxW, size) {
+  x.font = `600 ${size}px system-ui,sans-serif`;
+  const words = t.split(' '), lines = [];
+  let line = '';
+  for (const w of words) { const tryL = line ? line + ' ' + w : w; if (x.measureText(tryL).width > maxW && line) { lines.push(line); line = w; } else line = tryL; }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawHud() {
+  const top = SAFE_T + 22;
+  text(`Taso ${level}`, W - 14, top, 16, '#ffd45c', 'right', 700);
+  text(`Paras ${fmt(best, 3)}`, W - 14, top + 20, 12, '#b8c2e0', 'right');
+  const lines = wrapText(taskText(level), W - 40, 15);
+  lines.forEach((l, i) => text(l, W / 2, top + 48 + i * 19, 15, '#ffffff'));
+  // Elements so far
+  let y = SAFE_T + 100 + lines.length * 19;
+  for (const e of elements.slice(-5)) { text(`${e.name}  ${fmt(e.value, 1)}`, 14, y, 13, '#9fe3b8', 'left'); y += 18; }
+  for (const p of popups) {
+    const a = Math.max(0, 1 - p.t / 1.8);
+    x.globalAlpha = a; text(p.text, W / 2, BAR_Y - S * 1.6 - p.t * 30, 20, '#ffe680', 'center', 800); x.globalAlpha = 1;
+  }
+  if (mode === 'result') return;
+  let hint;
+  if (mode === 'air') hint = 'Pidä sormea: kerä · irti: auki · pyyhkäise sivulle: kierre';
+  else if (mode === 'land') hint = touch.fall ? 'Kaatuminen!' : touch.stuck ? 'Pysäytys!' : 'Askel';
+  else {
+    const r = rBar(s), I = icBar(s) + r * r, w = barOmega(), e = 0.5 * I * w * w - G * r * Math.cos(th);
+    hint = e < 0 ? 'Pidä sormea alhaalla, nosta ylhäällä: vauhti kasvaa' : 'Pyyhkäise ylös: irti, lennä toiselle tangolle · sivulle ylhäällä: piruetti';
+  }
+  const hl = wrapText(hint, W - 30, 14), by = H - SAFE_B - 24 - (hl.length - 1) * 18;
+  hl.forEach((l, i) => text(l, W / 2, by + i * 18, 14, hold ? '#ffd45c' : '#cfd6ee'));
+}
+
+// The score board: each different element once (a repeat shows its count), as many rows as fit,
+// so the scores and the tap for a new routine always stay on the screen.
+let resultLayout = null;
+function drawResult() {
+  const r = result, avail = H - SAFE_T - SAFE_B - 40, pw = Math.min(W - 24, 360);
+  const rows = [];
+  for (const e of elements) {
+    const row = rows.find(q => q.name === e.name);
+    if (row) row.count++; else rows.push({ name: e.name, value: e.value, count: 1 });
+  }
+  const lines = rows.map(q => [q.count > 1 ? `${q.name} ×${q.count}` : q.name, fmt(q.value, 1), '#e8edf6', '#9fe3b8'])
+    .concat(deductions.map(([t, v]) => [t, '−' + fmt(v, 1), '#ffb0b0', '#ffb0b0']));
+  const FIXED = 64 + 114 + 40, fit = Math.max(1, Math.floor((avail - FIXED) / 20));
+  const shown = lines.length > fit ? lines.slice(0, fit - 1).concat([[`+${lines.length - fit + 1} muuta`, '', '#7d879c', '']]) : lines;
+  const ph = Math.min(avail, FIXED + shown.length * 20);
+  const px = (W - pw) / 2, py = SAFE_T + (H - SAFE_T - SAFE_B - ph) / 2;
+  x.fillStyle = 'rgba(8,12,28,0.93)'; x.strokeStyle = '#ffd45c'; x.lineWidth = 2;
+  x.beginPath(); x.roundRect(px, py, pw, ph, 14); x.fill(); x.stroke();
+  let y = py + 30;
+  text(r.passed ? 'Taso läpäisty!' : r.fall ? 'Kaatuminen' : 'Tehtävä jäi tekemättä', W / 2, y, 22, r.passed ? '#7ef0a0' : '#ff8a8a', 'center', 800);
+  y += 34;
+  for (const [t, v, c1, c2] of shown) { text(t, px + 16, y, 14, c1, 'left'); text(v, px + pw - 16, y, 14, c2, 'right'); y += 20; }
+  y += 10;
+  text('D (vaikeus)', px + 16, y, 15, '#cfd6ee', 'left'); text(fmt(r.d, 3), px + pw - 16, y, 15, '#ffffff', 'right'); y += 22;
+  text('E (suoritus)', px + 16, y, 15, '#cfd6ee', 'left'); text(fmt(r.e, 3), px + pw - 16, y, 15, '#ffffff', 'right'); y += 30;
+  const totalY = y;
+  text(fmt(r.total, 3), W / 2, y, 34, '#ffd45c', 'center', 800); y += 30;
+  if (r.record) { text('Uusi ennätys!', W / 2, y, 15, '#7ef0a0'); y += 22; }
+  if (resultT > 0.8) text('Napauta: uusi suoritus', W / 2, py + ph - 20, 14, '#b8c2e0');
+  resultLayout = { rows: shown.length, totalY, recordY: y - 22, tapY: py + ph - 20, bottom: py + ph };
+}
+
+// ---- Loop ----
+newRoutine();
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="voimistelu" data-order="high" data-corner="bottom-right"></script>
+<script>if (window.AiPelitScores) AiPelitScores.format(s => fmt(s, 3));</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
