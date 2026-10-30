@@ -69,6 +69,22 @@ def test_up_at_a_trunk_climbs_it_and_a_side_steps_onto_a_branch(site, context):
     assert page.evaluate("[S.mode, S.br && S.br.t, S.br && S.br.y]") == ["branch", 1, 200]
 
 
+def test_a_slanted_stick_at_a_branch_either_climbs_on_or_steps_out_not_both(site, context):
+    page = start(site, context)
+    page.evaluate(SMALL_FOREST)
+    # Leaning up more than sideways: it climbs past the branch.
+    page.evaluate("toTrunk(0, 240); input.up = input.right = true; input.vert = true; run(() => S.y < 300, 2)")
+    assert page.evaluate("[S.mode, S.y >= 300]") == ["trunk", True]
+    # Leaning sideways more: it steps out and keeps running out, never back onto the trunk.
+    page.evaluate("""() => {
+        toTrunk(0, 255); input.vert = false; window.modes = new Set();
+        run(() => { modes.add(S.mode); return S.mode !== 'air'; }, 1);
+    }""")
+    assert page.evaluate("[...modes]") == ["trunk", "branch", "air"]
+    page.evaluate("toTrunk(0, 255); input.vert = false; run(() => S.mode !== 'branch' || S.u < 40, 1)")
+    assert page.evaluate("[S.mode, S.br.y]") == ["branch", 260]
+
+
 def test_a_leap_from_a_branch_tip_catches_the_next_trunk(site, context):
     page = start(site, context)
     page.evaluate(SMALL_FOREST)
