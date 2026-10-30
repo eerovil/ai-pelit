@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Kaahari</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1b1036;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 18px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:rgba(27,16,54,.88);text-align:center;touch-action:manipulation;overflow-y:auto}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:40px;letter-spacing:1px;color:#ffb703;text-shadow:0 3px 0 #d62828}
+  #result{margin:0;font-size:24px;font-weight:800}
+  #result:empty,#table:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ffb4a2}
+  #table{margin:0;font-size:14px;line-height:1.5;color:#e9ddff;min-width:220px;text-align:left}
+  #table div{display:flex;justify-content:space-between;gap:16px}
+  #table .me{color:#ffd166;font-weight:800}
+  #tracks{display:flex;gap:8px}
+  .track{display:flex;flex-direction:column;align-items:center;gap:2px;width:100px;padding:8px 4px;border:3px solid transparent;border-radius:14px;background:#3a2a6e;color:#fff;font:700 14px system-ui,sans-serif;box-shadow:none}
+  .track b{font-size:28px;line-height:1.1}
+  .track small{font-weight:400;font-size:12px;color:#cbb8f5}
+  .track.on{border-color:#ffb703;background:#563d9e}
+  .track:active{transform:none;box-shadow:none}
+  #go{font:800 24px system-ui,sans-serif;padding:14px 40px;border:0;border-radius:16px;background:#ffb703;color:#3a1600;box-shadow:0 4px 0 #b06a00}
+  #go:active{transform:translateY(3px);box-shadow:0 1px 0 #b06a00}
+  #multi{font:800 18px system-ui,sans-serif;padding:12px 22px;border:0;border-radius:16px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{transform:translateY(3px);box-shadow:0 1px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#d6c8f0}
+  .help{margin:2px 0 0;font-size:13px;line-height:1.45;color:#c9b8ea;max-width:320px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🏎️ Kaahari</h1>
+  <p id="result"></p>
+  <div id="table"></div>
+  <div id="tracks"></div>
+  <button id="go">Aja!</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help">Kaasu on aina pohjassa. Ohjaa nuolilla. Pidä <b>LIUKU</b> pohjassa mutkassa,
+    ja kun kipinät vaihtuvat sinisestä oranssiin ja violettiin, päästä irti: saat turbon!
+    Aja ?-laatikoihin saadaksesi esineen, kerää hedelmiä lisävauhtiin ja osu keltaisille nuolille.</p>
+</div>
+<script src="../../../rooms.js" data-game="kaahari" data-min="2" data-max="6"></script>
+<script>
+'use strict';
+const R = window.AiPelitRooms;
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:kaahari:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), races = load('kisat', 0);
+let bests = load('ennatykset', {}), trackNo = load('rata', 0);
+if (!(trackNo >= 0 && trackNo < 3)) trackNo = 0;
+
+const FOES = ['Kaasu-Kalle', 'Rengas-Riikka', 'Turbo-Tuomas', 'Mutka-Maija', 'Vauhti-Ville', 'Pakoputki-Pia', 'Ratti-Rasmus', 'Kurvi-Kerttu'];
+const COLORS = ['#ff4d6d', '#4cc9f0', '#80ed99', '#b388eb', '#ff9f1c', '#ffe066'];
+const LAPS = 3, KARTS = 6;
+
+// ---------- The tracks ----------
+// Each track is a closed curve through `pts` on a 1024 × 1024 map, one unit a pixel of the
+// ground picture. `hw` is half the road's width; past it is the slow verge, and WALL further out
+// a barrier you bounce off. Pads are turbo arrows on the road, as a fraction of the lap and a
+// place across the road (-1 left edge, 1 right edge); crates are rows of item boxes, fruit lines of
+// fruit to collect.
+const WALL = 34;
+const TRACKS = [
+  {
+    name: 'Hiekkaranta', emoji: '🏖️', hw: 50, tree: 'palm',
+    sky: ['#3fa9f5', '#c9f0ff'], hills: '#f2c879', hills2: '#e0a95c', haze: '201,240,255',
+    out: '#4fb3d9', outDot: '#7fd0ee', verge: '#f1d48d', vergeDot: '#e2bd6a', road: '#9b8f88', roadDot: '#8a7f78',
+    kerb: ['#ff5a5a', '#ffffff'], barrier: '#c47a3a',
+    pts: [[180, 760], [170, 470], [230, 250], [420, 150], [640, 170], [820, 290], [850, 470], [700, 560], [560, 520], [440, 560], [450, 700], [620, 760], [800, 760], [860, 880], [700, 940], [380, 930], [230, 880]],
+    pads: [[0.12, 0], [0.47, 0.3], [0.80, -0.3]], crates: [0.22, 0.58, 0.9], fruit: [[0.05, 0], [0.33, -0.5], [0.66, 0.4], [0.74, -0.2]],
+  },
+  {
+    name: 'Viidakko', emoji: '🌴', hw: 46, tree: 'jungle',
+    sky: ['#5fbf8f', '#e3f7c8'], hills: '#2f7a4a', hills2: '#1f5c37', haze: '214,240,190',
+    out: '#2e8b3e', outDot: '#3fa651', verge: '#7a5a34', vergeDot: '#6a4b2a', road: '#b48a5a', roadDot: '#a07a4c',
+    kerb: ['#ffd23f', '#3a3a3a'], barrier: '#5a3a1a',
+    pts: [[150, 860], [140, 560], [190, 330], [150, 160], [330, 110], [430, 260], [520, 400], [640, 300], [600, 140], [790, 110], [890, 270], [830, 470], [680, 560], [760, 690], [900, 760], [860, 920], [620, 920], [480, 790], [340, 900]],
+    pads: [[0.08, 0], [0.37, 0], [0.62, 0.3], [0.88, -0.3]], crates: [0.18, 0.47, 0.73], fruit: [[0.03, 0.3], [0.27, -0.3], [0.55, 0], [0.82, 0.4]],
+  },
+  {
+    name: 'Laavaluola', emoji: '🌋', hw: 42, tree: 'rock',
+    sky: ['#2a0f2e', '#a8432a'], hills: '#3a1d1a', hills2: '#26100f', haze: '168,67,42',
+    out: '#e2531c', outDot: '#ffb02e', verge: '#4a3a36', vergeDot: '#3a2c29', road: '#6d6470', roadDot: '#5d5560',
+    kerb: ['#ffb703', '#2b2b2b'], barrier: '#1d1414',
+    pts: [[140, 880], [130, 600], [260, 520], [140, 400], [150, 170], [370, 120], [420, 330], [560, 400], [600, 200], [820, 130], [900, 330], [760, 430], [880, 560], [870, 760], [700, 700], [560, 600], [430, 680], [560, 820], [720, 900], [440, 940]],
+    pads: [[0.1, 0], [0.31, -0.3], [0.55, 0.3], [0.77, 0], [0.93, 0.3]], crates: [0.2, 0.44, 0.68, 0.86], fruit: [[0.05, 0], [0.25, 0.4], [0.5, -0.4], [0.62, 0], [0.82, 0.3]],
+  },
+];
+const STEP = 6, TS = 1024;
+
+// The curve through the points, sampled every STEP units: X, Y, the direction A and the distance S.
+function buildTrack(t) {
+  const raw = [], n = t.pts.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = t.pts[(i - 1 + n) % n], p1 = t.pts[i], p2 = t.pts[(i + 1) % n], p3 = t.pts[(i + 2) % n];
+    for (let k = 0; k < 40; k++) {
+      const u = k / 40, u2 = u * u, u3 = u2 * u;
+      const f = (a, b, c2, d) => 0.5 * (2 * b + (-a + c2) * u + (2 * a - 5 * b + 4 * c2 - d) * u2 + (-a + 3 * b - 3 * c2 + d) * u3);
+      raw.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+    }
+  }
+  let len = 0;
+  const cum = [0];
+  for (let i = 1; i <= raw.length; i++) { const a = raw[i - 1], b = raw[i % raw.length]; len += Math.hypot(b[0] - a[0], b[1] - a[1]); cum.push(len); }
+  const N = Math.floor(len / STEP), X = new Float32Array(N), Y = new Float32Array(N), A = new Float32Array(N);
+  let j = 0;
+  for (let i = 0; i < N; i++) {
+    const s = i * len / N;
+    while (cum[j + 1] < s) j++;
+    const a = raw[j], b = raw[(j + 1) % raw.length], f = (s - cum[j]) / (cum[j + 1] - cum[j] || 1);
+    X[i] = a[0] + (b[0] - a[0]) * f; Y[i] = a[1] + (b[1] - a[1]) * f;
+  }
+  for (let i = 0; i < N; i++) { const k = (i + 1) % N, p = (i - 1 + N) % N; A[i] = Math.atan2(Y[k] - Y[p], X[k] - X[p]); }
+  t.N = N; t.L = len; t.step = len / N; t.X = X; t.Y = Y; t.A = A;
+}
+// A point on the track: `s` along it, `lat` across (positive to the right of the way it runs).
+function at(t, s, lat) {
+  const i = ((Math.round(s / t.step) % t.N) + t.N) % t.N, a = t.A[i];
+  return { x: t.X[i] - Math.sin(a) * lat, y: t.Y[i] + Math.cos(a) * lat, a, i };
+}
+// The nearest sample to a point, searching around the last one so a road passing near another
+// part of the track never steals a kart.
+function nearest(t, px, py, hint) {
+  let best = hint, bd = 1e18;
+  for (let k = -30; k <= 30; k++) {
+    const i = (hint + k + t.N) % t.N, dx = px - t.X[i], dy = py - t.Y[i], d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+function where(t, px, py, hint) {
+  const i = nearest(t, px, py, hint), a = t.A[i], dx = px - t.X[i], dy = py - t.Y[i];
+  return { i, s: i * t.step + dx * Math.cos(a) + dy * Math.sin(a), lat: -dx * Math.sin(a) + dy * Math.cos(a), a };
+}
+
+// The ground picture, drawn once per track into a 1024 × 1024 array of pixels.
+let tex = null, texOut = 0, scenery = [];
+function u32(css) {
+  const k = document.createElement('canvas').getContext('2d');
+  k.fillStyle = css; k.fillRect(0, 0, 1, 1);
+  return new Uint32Array(k.getImageData(0, 0, 1, 1).data.buffer)[0];
+}
+function rnd(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+function paintTrack(t) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = TS;
+  const g = cv.getContext('2d'), r = rnd(7 + t.N);
+  g.fillStyle = t.out; g.fillRect(0, 0, TS, TS);
+  g.fillStyle = t.outDot;
+  for (let i = 0; i < 5000; i++) g.fillRect(r() * TS | 0, r() * TS | 0, 3, 3);
+  const path = () => { g.beginPath(); for (let i = 0; i < t.N; i++) g.lineTo(t.X[i], t.Y[i]); g.closePath(); };
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  path(); g.strokeStyle = t.barrier; g.lineWidth = 2 * (t.hw + WALL) + 12; g.stroke();
+  path(); g.strokeStyle = t.verge; g.lineWidth = 2 * (t.hw + WALL); g.stroke();
+  g.fillStyle = t.vergeDot;
+  for (let i = 0; i < t.N * 6; i++) { const p = at(t, r() * t.L, (r() * 2 - 1) * (t.hw + WALL)); g.fillRect(p.x | 0, p.y | 0, 3, 3); }
+  path(); g.strokeStyle = t.kerb[0]; g.lineWidth = 2 * t.hw + 14; g.stroke();
+  g.setLineDash([18, 18]); path(); g.strokeStyle = t.kerb[1]; g.stroke(); g.setLineDash([]);
+  path(); g.strokeStyle = t.road; g.lineWidth = 2 * t.hw; g.stroke();
+  g.fillStyle = t.roadDot;
+  for (let i = 0; i < t.N * 8; i++) { const p = at(t, r() * t.L, (r() * 2 - 1) * t.hw); g.fillRect(p.x | 0, p.y | 0, 2, 2); }
+  g.setLineDash([22, 26]); path(); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 3; g.stroke(); g.setLineDash([]);
+  // The start line, a chequered band across the road.
+  const s0 = at(t, 0, 0);
+  g.save(); g.translate(s0.x, s0.y); g.rotate(s0.a);
+  for (let row = 0; row < 2; row++) for (let k = 0; k * 10 < 2 * t.hw; k++) {
+    g.fillStyle = (k + row) % 2 ? '#111' : '#fff'; g.fillRect(-10 + row * 10, -t.hw + k * 10, 10, 10);
+  }
+  g.restore();
+  // Turbo pads: yellow arrows pointing the way the track runs.
+  for (const p of t.padsAt) {
+    const q = at(t, p.s, p.lat);
+    g.save(); g.translate(q.x, q.y); g.rotate(q.a);
+    g.fillStyle = '#ffb703'; g.fillRect(-PAD_L / 2, -PAD_W / 2, PAD_L, PAD_W);
+    g.fillStyle = '#d62828';
+    for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(-14 + k * 11, -11); g.lineTo(-6 + k * 11, 0); g.lineTo(-14 + k * 11, 11); g.lineTo(-10 + k * 11, 11); g.lineTo(-2 + k * 11, 0); g.lineTo(-10 + k * 11, -11); g.fill(); }
+    g.restore();
+  }
+  tex = new Uint32Array(g.getImageData(0, 0, TS, TS).data.buffer);
+  texOut = u32(t.out);
+}
+// Trees, palms or rocks beside the road, never on another part of it.
+function plantScenery(t) {
+  const r = rnd(99 + t.N), out = [];
+  for (let s = 20; s < t.L; s += 55) {
+    for (const side of [-1, 1]) {
+      if (r() < 0.35) continue;
+      const p = at(t, s + r() * 30, side * (t.hw + WALL + 22 + r() * 70));
+      if (p.x < 10 || p.y < 10 || p.x > TS - 10 || p.y > TS - 10) continue;
+      let ok = true;
+      for (let i = 0; i < t.N && ok; i += 2) if (Math.hypot(p.x - t.X[i], p.y - t.Y[i]) < t.hw + WALL + 20) ok = false;
+      if (ok) out.push({ x: p.x, y: p.y, k: r() });
+    }
+  }
+  return out;
+}
+const PAD_L = 40, PAD_W = 30;
+TRACKS.forEach(t => {
+  buildTrack(t);
+  t.padsAt = t.pads.map(([f, l]) => ({ s: f * t.L, lat: l * (t.hw - PAD_W / 2) }));
+});
+
+// ---------- Screen ----------
+let W, H, DPR, safeT = 0, safeB = 0;
+const FW = 200;
+let FH, fb, fbx, img, buf, SCALE, HOR, F, skyRows = null;
+const CAM_H = 48, CAM_D = 72, ZMAX = 1100;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  SCALE = W / FW; FH = Math.ceil(H / SCALE);
+  HOR = Math.round(FH * 0.3); F = FW * 0.85;
+  fb = document.createElement('canvas'); fb.width = FW; fb.height = FH; fbx = fb.getContext('2d');
+  img = fbx.createImageData(FW, FH); buf = new Uint32Array(img.data.buffer);
+  skyRows = null;
+}
+addEventListener('resize', resize);
+resize();
+
+// ---------- The race ----------
+let race = null, me = null, T = TRACKS[trackNo];
+const input = { left: false, right: false, drift: false, steer: 0 };
+const ITEMS = { turbo: '🚀', pommi: '💣', tnt: '📦', kupla: '🛡️' };
+
+// kind: 'me' (this phone's buttons), 'cpu' (moved here by the computer), 'net' (moved by another
+// phone: in a room, every phone drives its own kart and the host the computer's).
+function newKart(i, kind, id, name, bot) {
+  return {
+    i, kind, id: id === undefined ? String(i) : id, bot: !!bot, color: COLORS[i % COLORS.length],
+    name: name || (kind === 'me' ? 'Sinä' : FOES[(i + level) % FOES.length]),
+    x: 0, y: 0, a: 0, v: 0, z: 0, vz: 0, idx: 0, s: 0, lat: 0, prog: 0, lap: 0, fin: null, lapT: 0, bestLap: null,
+    boost: 0, walls: 0, drift: 0, dTime: 0, dWait: false, spin: 0, spinA: 0, fruit: 0, item: null, shield: 0, wallT: 0, yaw: 0,
+    ai: { lane: 0, laneT: 0, itemT: 0, skill: 1, turboT: 2 },
+  };
+}
+
+function soloRace(n) {
+  if (n !== undefined) trackNo = n;
+  const specs = [{ id: 'me', kind: 'me' }];
+  for (let i = 1; i < KARTS; i++) specs.push({ id: 'b' + i, kind: 'cpu', bot: true });
+  setupRace(trackNo, specs, 'solo', '');
+}
+// A race on track n with the karts in `specs` ({id, kind, name, bot}); the first one starts at the
+// back of the grid and the last at the front, in pairs. mode: 'solo' or 'net' (a room's round).
+function setupRace(n, specs, mode, round) {
+  trackNo = n; T = TRACKS[n];
+  paintTrack(T);
+  scenery = plantScenery(T);
+  skyRows = null;
+  const karts = specs.map((sp, i) => newKart(i, sp.kind, sp.id, sp.name, sp.bot));
+  karts.slice().reverse().forEach((k, place) => {
+    const back = 22 + Math.floor(place / 2) * 30, side = (place % 2 ? 1 : -1) * T.hw * 0.45;
+    const p = at(T, T.L - back, side);
+    Object.assign(k, { x: p.x, y: p.y, a: p.a, idx: p.i, prog: -back, lat: side });
+    k.s = T.L - back;
+    k.ai.skill = cpuSkill(k);
+    k.ai.lane = side / T.hw;
+  });
+  me = karts.find(k => k.kind === 'me') || karts[0];
+  race = {
+    mode, round, specs, tr: n, phase: 'cd', t: 0, cdT: 0, beeped: 0, karts, done: 0, finishers: [], msg: '', msgT: 0,
+    crates: [], fruits: [], bombs: [], tnts: [], camA: me.a, sparks: [], seq: 0, sendT: 0, firstFin: null, adopt: false,
+  };
+  for (const f of T.crates) for (const l of [-0.6, -0.2, 0.2, 0.6]) {
+    const p = at(T, f * T.L, l * T.hw); race.crates.push({ x: p.x, y: p.y, t: 0 });
+  }
+  for (const [f, l] of T.fruit) for (let k = 0; k < 5; k++) {
+    const p = at(T, f * T.L + k * 22, l * T.hw); race.fruits.push({ x: p.x, y: p.y, t: 0 });
+  }
+  input.left = input.right = input.drift = false; input.steer = 0;
+  menu.classList.add('hidden');
+  unlock();
+  engineOn(true);
+}
+
+function hit(k) {
+  if (k.fin !== null) return;
+  if (k.shield > 0) { k.shield = 0; if (k === me) say('Kupla suojasi!'); return; }
+  k.spin = 1.1; k.drift = 0; k.dTime = 0; k.boost = 0; k.fruit = Math.max(0, k.fruit - 3);
+  if (k === me) { say('Pyörit!'); beep(140, 0.35, 'sawtooth', 0.12, 50); buzz(120); }
+}
+
+function giveItem(k) {
+  // Behind in the race, better items; in front, things to slow the others.
+  const place = standings().indexOf(k);
+  const pool = place >= 3 ? ['turbo', 'turbo', 'pommi', 'kupla', 'pommi'] : place === 0 ? ['tnt', 'tnt', 'kupla', 'pommi'] : ['turbo', 'pommi', 'tnt', 'kupla'];
+  k.item = pool[Math.floor(Math.random() * pool.length)];
+  k.ai.itemT = 1 + Math.random() * 3;
+}
+
+function useItem(k = me) {
+  if (!race || race.phase !== 'run' || !k.item || k.fin !== null || k.spin > 0) return;
+  const it = k.item; k.item = null;
+  if (it === 'turbo') { k.boost = Math.max(k.boost, 1.3); if (k === me) { say('TURBO!'); beep(300, 0.3, 'square', 0.08, 900); } }
+  else if (it === 'kupla') { k.shield = 10; if (k === me) beep(600, 0.2, 'sine', 0.08, 900); }
+  else if (it === 'tnt') {
+    const p = at(T, k.s - 26, k.lat);
+    const o = { t: 'it', kind: 'tnt', id: k.id + ':' + (++race.seq), owner: k.id, x: p.x, y: p.y };
+    addThrown(o); shareNet(o);
+    if (k === me) beep(220, 0.1, 'square', 0.06);
+  } else if (it === 'pommi') {
+    const o = { t: 'it', kind: 'pommi', id: k.id + ':' + (++race.seq), owner: k.id, s: k.s + 18, lat: k.lat, v: Math.max(k.v, 120) + 150 };
+    addThrown(o); shareNet(o);
+    if (k === me) beep(180, 0.15, 'triangle', 0.08, 400);
+  }
+}
+// A bomb or a TNT box, from this phone or from another one; each is added once.
+function addThrown(o) {
+  if (race.bombs.some(b => b.id === o.id) || race.tnts.some(b => b.id === o.id)) return;
+  const owner = race.karts.find(k => k.id === o.owner) || null;
+  if (o.kind === 'tnt') race.tnts.push({ id: o.id, x: o.x, y: o.y, t: 40, owner, safe: 0.6 });
+  else { const p = at(T, o.s, o.lat); race.bombs.push({ id: o.id, s: o.s, lat: o.lat, v: o.v, t: 3, owner, x: p.x, y: p.y, safe: 0.4 }); }
+}
+// Only the karts this phone moves are hit, picked up or pushed here; the rest come from their phones.
+const local = k => k.kind === 'me' || k.kind === 'cpu';
+
+function say(t) { race.msg = t; race.msgT = 1.3; }
+
+function standings() {
+  return race.karts.slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin : b.prog - a.prog));
+}
+
+// ---------- Moving ----------
+const VMAX = 165, ACC = 95, TURN = 2.3;
+const TIERS = [0.7, 1.4, 2.1], TIER_BOOST = [0.55, 0.9, 1.35], TIER_COL = ['#4cc9f0', '#ff9f1c', '#c77dff'];
+const tierOf = d => d >= TIERS[2] ? 3 : d >= TIERS[1] ? 2 : d >= TIERS[0] ? 1 : 0;
+
+function drive(k, dt, steer, driftHeld) {
+  const w = where(T, k.x, k.y, k.idx);
+  const off = Math.abs(w.lat) > T.hw;
+  let top = VMAX * (1 + 0.015 * k.fruit) * (k.kind === 'cpu' ? k.ai.skill : 1);
+  if (off) top *= 0.55;
+  if (k.boost > 0) { top = VMAX * 1.38 * (1 + 0.015 * k.fruit); k.boost -= dt; }
+  // Turbo pads.
+  for (const p of T.padsAt) {
+    let ds = w.s - p.s; ds -= Math.round(ds / T.L) * T.L;
+    if (Math.abs(ds) < PAD_L / 2 && Math.abs(w.lat - p.lat) < PAD_W / 2 + 4) {
+      if (k.boost < 0.5 && k === me) { say('TURBO!'); beep(400, 0.2, 'square', 0.07, 1000); }
+      k.boost = Math.max(k.boost, 0.8);
+    }
+  }
+  if (k.spin > 0) {
+    k.spin -= dt; k.spinA += 12 * dt; k.v *= Math.pow(0.25, dt);
+    if (k.spin <= 0) k.spinA = 0;
+  } else if (k.v < top) k.v = Math.min(top, k.v + (k.boost > 0 ? 320 : ACC) * dt);
+  else k.v = Math.max(top, k.v - 160 * dt);
+  const grip = Math.min(1, k.v / 70);
+  // Power-sliding: a hop, then the kart keeps turning the way it slid, the stick only tightens or
+  // widens the turn. Held long enough, letting go gives a turbo: blue, orange, then purple sparks.
+  if (k.kind === 'me' && k.spin <= 0) {
+    if (driftHeld && !k.drift && !k.dWait && k.z === 0 && k.v > 60) { k.vz = 60; k.dWait = true; beep(500, 0.06, 'square', 0.04); }
+    if (k.dWait && driftHeld && !k.drift && steer !== 0) { k.drift = Math.sign(steer); k.dTime = 0; }
+    if (!driftHeld) {
+      if (k.drift) {
+        const tier = tierOf(k.dTime);
+        if (tier) { k.boost = Math.max(k.boost, TIER_BOOST[tier - 1]); say(tier === 3 ? 'SUPERTURBO!' : 'TURBO!'); beep(250 + tier * 120, 0.25, 'square', 0.08, 900 + tier * 200); buzz(30); }
+      }
+      k.drift = 0; k.dWait = false; k.dTime = 0;
+    }
+  }
+  let turn;
+  if (k.drift) {
+    const prev = tierOf(k.dTime);
+    k.dTime += dt;
+    if (tierOf(k.dTime) > prev) beep(700 + 200 * prev, 0.07, 'sine', 0.06);
+    turn = k.drift * (1.25 + 0.95 * steer * k.drift);
+    if (k.v < 50) { k.drift = 0; k.dTime = 0; }
+  } else turn = steer * (k.kind === 'cpu' ? 2.5 : TURN);
+  if (k.spin <= 0) k.a += turn * grip * dt;
+  const targetYaw = k.drift ? k.drift * 0.38 : steer * 0.12;
+  k.yaw += (targetYaw - k.yaw) * Math.min(1, dt * 10);
+  // The slide carries the kart a little outwards.
+  const slide = k.drift ? -k.drift * 0.18 : 0;
+  k.x += Math.cos(k.a + slide) * k.v * dt; k.y += Math.sin(k.a + slide) * k.v * dt;
+  k.vz -= 380 * dt; k.z = Math.max(0, k.z + k.vz * dt); if (k.z === 0) k.vz = 0;
+  // The barrier: back onto the verge, slower.
+  const w2 = where(T, k.x, k.y, w.i), lim = T.hw + WALL - 6;
+  if (Math.abs(w2.lat) > lim) {
+    const p = at(T, w2.i * T.step, Math.sign(w2.lat) * lim);
+    const dx = k.x - T.X[w2.i], dy = k.y - T.Y[w2.i];
+    const along = dx * Math.cos(w2.a) + dy * Math.sin(w2.a);
+    k.x = p.x + Math.cos(w2.a) * along; k.y = p.y + Math.sin(w2.a) * along;
+    if (k.wallT <= 0) { k.v *= 0.6; k.wallT = 0.4; k.walls++; if (k === me) { beep(90, 0.12, 'square', 0.08); buzz(40); } }
+    // Turn the nose back along the barrier.
+    let da = w2.a - k.a; da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI;
+    if (Math.abs(da) > Math.PI / 2) da -= Math.sign(da) * Math.PI;
+    k.a += da * Math.min(1, dt * 6);
+    w2.lat = Math.sign(w2.lat) * lim;
+  }
+  k.wallT -= dt;
+  // How far round: S along the lap, kept counting past the line.
+  let ds = w2.s - k.s;
+  ds -= Math.round(ds / T.L) * T.L;
+  k.s = ((w2.s % T.L) + T.L) % T.L; k.idx = w2.i; k.lat = w2.lat;
+  k.prog += ds;
+  k.shield = Math.max(0, k.shield - dt);
+}
+
+// How fast a computer driver is against the player's top speed: faster on each level.
+const cpuSkill = k => Math.min(1.03, 0.79 + 0.03 * Math.min(level, 8) + (k.i - 3) * 0.008);
+
+function think(k, dt) {
+  const ai = k.ai;
+  ai.laneT -= dt;
+  if (ai.laneT <= 0) { ai.laneT = 1.5 + Math.random() * 2.5; ai.want = (Math.random() * 2 - 1) * 0.6; }
+  ai.lane += ((ai.want || 0) - ai.lane) * Math.min(1, dt * 0.8);
+  const look = 40 + k.v * 0.38;
+  const tp = at(T, k.s + look, ai.lane * T.hw);
+  let da = Math.atan2(tp.y - k.y, tp.x - k.x) - k.a;
+  da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI;
+  const steer = Math.max(-1, Math.min(1, da * 2.4));
+  // Keeping up, but not running away from the player.
+  const gap = me.prog - k.prog;
+  ai.skill = cpuSkill(k) + (gap > 300 ? 0.04 : gap < -250 ? -0.06 : 0);
+  // A turbo now and then out of a bend, as if it slid well.
+  ai.turboT -= dt;
+  const ahead = at(T, k.s + 60, 0).a - at(T, k.s, 0).a, bend = Math.abs(Math.atan2(Math.sin(ahead), Math.cos(ahead)));
+  if (ai.turboT <= 0 && bend > 0.35 && Math.random() < 0.1 + 0.07 * Math.min(level, 8)) { k.boost = Math.max(k.boost, 0.6); ai.turboT = 4 + Math.random() * 4; }
+  if (k.item) {
+    ai.itemT -= dt;
+    if (ai.itemT <= 0) useItem(k);
+  }
+  return steer;
+}
+
+function collide() {
+  const ks = race.karts;
+  for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
+    const a = ks[i], b = ks[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    const wa = local(a) ? 1 : 0, wb = local(b) ? 1 : 0;
+    if (d < 15 && d > 0.01 && wa + wb) {
+      const push = (15 - d) / (wa + wb), nx = dx / d, ny = dy / d;
+      a.x -= nx * push * wa; a.y -= ny * push * wa; b.x += nx * push * wb; b.y += ny * push * wb;
+      if (a === me || b === me) { if (!race.bumpT || race.bumpT <= 0) { beep(120, 0.08, 'square', 0.06); race.bumpT = 0.3; } }
+    }
+  }
+}
+
+function pickups(dt) {
+  for (const cr of race.crates) {
+    if (cr.t > 0) { cr.t -= dt; continue; }
+    for (const k of race.karts) if (local(k) && Math.hypot(k.x - cr.x, k.y - cr.y) < 15) {
+      cr.t = 3;
+      if (!k.item) { giveItem(k); if (k === me) { beep(520, 0.08, 'square', 0.07, 780); say(ITEMS[k.item] + ' ' + k.item.toUpperCase()); } }
+      break;
+    }
+  }
+  for (const f of race.fruits) {
+    if (f.t > 0) { f.t -= dt; continue; }
+    for (const k of race.karts) if (local(k) && Math.hypot(k.x - f.x, k.y - f.y) < 13) {
+      f.t = 8;
+      if (k.fruit < 10) k.fruit++;
+      if (k === me) beep(880 + k.fruit * 30, 0.06, 'sine', 0.06);
+      break;
+    }
+  }
+  for (const b of race.bombs) {
+    b.s += b.v * dt; b.t -= dt; b.safe -= dt;
+    const p = at(T, b.s, b.lat); b.x = p.x; b.y = p.y;
+    for (const k of race.karts) if (local(k) && (k !== b.owner || b.safe <= 0) && Math.hypot(k.x - b.x, k.y - b.y) < 16) { hit(k); b.t = 0; boom(b, true); break; }
+    if (b.t <= 0 && !b.boomed) boom(b);
+  }
+  race.bombs = race.bombs.filter(b => b.t > 0);
+  for (const n of race.tnts) {
+    n.t -= dt; n.safe -= dt;
+    for (const k of race.karts) if (local(k) && (k !== n.owner || n.safe <= 0) && Math.hypot(k.x - n.x, k.y - n.y) < 14) { hit(k); n.t = 0; boom(n, true); break; }
+  }
+  race.tnts = race.tnts.filter(n => n.t > 0);
+}
+function boom(o, mine) {
+  if (o.boomed) return;
+  o.boomed = true; o.t = 0;
+  if (mine && o.id) shareNet({ t: 'boom', id: o.id });
+  race.sparks.push({ x: o.x, y: o.y, t: 0.5, big: true });
+  if (Math.hypot(o.x - me.x, o.y - me.y) < 400) beep(80, 0.3, 'sawtooth', 0.1, 30);
+}
+
+function tick(dt) {
+  if (race.phase === 'wait' || (race.mode === 'net' && R.paused)) return;
+  const host = race.mode !== 'net' || R.isHost;
+  if (race.phase !== 'cd') race.t += dt;
+  if (race.msgT > 0) race.msgT -= dt;
+  if (race.bumpT > 0) race.bumpT -= dt;
+  const target = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  input.steer += Math.sign(target - input.steer) * Math.min(Math.abs(target - input.steer), dt * 8);
+  if (race.phase === 'cd') {
+    if (host) race.cdT += dt;
+    if (Math.floor(race.cdT) > race.beeped) { race.beeped = Math.floor(race.cdT); beep(race.cdT >= 3 ? 880 : 440, 0.18, 'square', 0.08); }
+    if (host && race.cdT >= 3) goRun(0);
+  } else if (race.phase === 'run' || race.phase === 'done') {
+    for (const k of race.karts) {
+      if (k.kind === 'net') { carry(k, dt); continue; }
+      if (k.fin !== null && k !== me) { k.v *= Math.pow(0.5, dt); }
+      let steer;
+      if (k.kind === 'me') steer = k.fin === null ? input.steer : 0;
+      else steer = think(k, dt);
+      if (k.kind === 'me' && k.fin !== null) { k.v *= Math.pow(0.4, dt); }
+      drive(k, dt, steer, k.kind === 'me' && k.fin === null && input.drift);
+      k.lapT += dt;
+      // Laps: the line crossed with the whole lap behind.
+      const lap = Math.floor(k.prog / T.L);
+      if (lap > k.lap && k.fin === null) {
+        k.lap = lap;
+        if (k.bestLap === null || k.lapT < k.bestLap) k.bestLap = k.lapT;
+        k.lapT = 0;
+        if (lap >= LAPS) {
+          k.fin = race.t; race.finishers.push(k);
+          if (k === me) { if (race.mode === 'net') netFinishMe(); else finishMe(); }
+        } else if (k === me) { say(lap === LAPS - 1 ? 'Viimeinen kierros!' : 'Kierros ' + (lap + 1) + '/' + LAPS); beep(660, 0.12, 'square', 0.07, 990); }
+      }
+    }
+    collide();
+    pickups(dt);
+    if (race.mode === 'net') { if (host) hostTick(dt); else guestTick(dt); }
+    if (race.phase === 'done') { race.doneT -= dt; if (race.doneT <= 0) { if (race.mode === 'net') netAfter(); else showResult(); } }
+    if (!race) return;
+  }
+  for (const s of race.sparks) s.t -= dt;
+  race.sparks = race.sparks.filter(s => s.t > 0);
+  // The camera swings round after the kart, so a slide shows the kart side-on.
+  let da = me.a - race.camA; da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI;
+  race.camA += da * Math.min(1, dt * 5);
+}
+
+function goRun(t) { race.phase = 'run'; race.t = t; race.karts.forEach(k => { k.lapT = 0; }); }
+// Another phone's kart between its messages: on the way it was going.
+function carry(k, dt) {
+  k.x += Math.cos(k.a) * k.v * dt; k.y += Math.sin(k.a) * k.v * dt;
+  if (k.fin === null) k.prog += k.v * dt;
+  if (k.spin > 0) { k.spin -= dt; k.spinA += 12 * dt; } else k.spinA = 0;
+  k.boost = Math.max(0, k.boost - dt); k.shield = Math.max(0, k.shield - dt);
+  k.z = Math.max(0, k.z - 60 * dt);
+}
+
+function finishMe() {
+  race.phase = 'done'; race.doneT = 2.5;
+  const place = race.finishers.indexOf(me) + 1;
+  race.place = place;
+  say(place === 1 ? '🏆 VOITIT!' : place + '. sija');
+  beep(place === 1 ? 660 : 440, 0.5, 'square', 0.08, place === 1 ? 1320 : 330);
+  races++; save('kisat', races);
+  if (place === 1) { wins++; save('voitot', wins); level = Math.min(12, level + 1); save('taso', level); }
+  const t = Math.round(me.fin * 100) / 100;
+  race.record = !(bests[T.name] <= t);
+  if (race.record) { bests[T.name] = t; save('ennatykset', bests); }
+}
+
+function fmt(t) { const m = Math.floor(t / 60), s = t - m * 60; return m + '.' + (s < 10 ? '0' : '') + s.toFixed(2).replace('.', ','); }
+
+function showResult() {
+  engineOn(false);
+  race.phase = 'over';
+  // Drivers still on the track get the time they would finish in at their average speed so far.
+  for (const k of race.karts) if (k.fin === null) k.fin = race.t + (LAPS * T.L - k.prog) / Math.max(40, k.prog / race.t);
+  const place = race.place, res = document.getElementById('result');
+  res.textContent = place === 1 ? '🏆 Voitit kisan!' : place + '. sija';
+  res.className = place === 1 ? 'win' : 'lose';
+  const tbl = document.getElementById('table');
+  tbl.replaceChildren();
+  const add = (l, r, cls) => { const d = document.createElement('div'); if (cls) d.className = cls; const a = document.createElement('span'), b = document.createElement('span'); a.textContent = l; b.textContent = r; d.append(a, b); tbl.append(d); };
+  standings().forEach((k, n) => add((n + 1) + '. ' + k.name, k.fin !== null ? fmt(k.fin) : '–', k === me ? 'me' : ''));
+  add('Paras kierros', me.bestLap !== null ? fmt(me.bestLap) : '–');
+  if (race.record) add('Uusi ennätys radalla!', '⭐', 'me');
+  showMenu();
+}
+
+// ---------- Playing with friends ----------
+// Every phone drives its own kart and sends it to the host 12 times a second; the host drives the
+// computer's karts, sends every kart back, counts down and ends the race. A bomb or a TNT box is
+// sent to every phone, and each phone checks only its own kart against it.
+let roomTrack = trackNo;
+const r1 = n => Math.round(n * 10) / 10, r2 = n => Math.round(n * 100) / 100;
+// [13] says the host's computer drives this player's kart now (its phone is away).
+const pack = k => [r1(k.x), r1(k.y), r2(k.a), r1(k.v), r1(k.prog), k.lap, k.fin, r2(k.spin), r2(k.boost), k.drift, r1(k.z), k.fruit, r1(k.shield), k.kind === 'cpu' && !k.bot ? 1 : 0, k.bestLap];
+function unpack(k, a) {
+  [k.x, k.y, k.a, k.v, k.prog, k.lap, k.fin, k.spin, k.boost, k.drift, k.z, k.fruit, k.shield] = a;
+  if (a[14] !== undefined) k.bestLap = a[14];
+  const w = where(T, k.x, k.y, k.idx); k.idx = w.i; k.s = ((w.s % T.L) + T.L) % T.L; k.lat = w.lat;
+  if (k.drift) k.dTime = Math.max(k.dTime, TIERS[0]);
+}
+function hostState() { return { t: 's', round: race.round, tr: race.tr, ph: race.phase === 'cd' ? 'cd' : 'run', cd: r2(race.cdT), clock: r2(race.t), k: race.karts.map(pack) }; }
+function shareNet(m) { if (race && race.mode === 'net') R.send(Object.assign({ round: race.round }, m)); }
+
+R.on('start', s => {
+  const specs = s.players.map(p => ({ id: p.id, name: p.name, kind: p.id === R.me ? 'me' : 'net' }));
+  for (let b = 0; specs.length < KARTS; b++) specs.push({ id: 'b' + b, name: FOES[b], kind: R.isHost ? 'cpu' : 'net', bot: true });
+  document.getElementById('result').textContent = ''; document.getElementById('table').replaceChildren();
+  setupRace(R.isHost ? roomTrack : trackNo, specs, 'net', s.round);
+  me.name = 'Sinä';
+  // A guest waits for the host's track and clock; one reloaded mid-race takes its kart back from it.
+  if (!R.isHost) { race.phase = 'wait'; race.adopt = true; }
+  if (s.over) race.phase = 'wait';
+});
+R.on('message', (m, from) => {
+  if (!race || race.mode !== 'net' || m.round !== race.round) return;
+  if (m.t === 'it' || m.t === 'boom') {
+    if (R.isHost) R.send(m); // on to every phone; the one that threw it already has it
+    if (m.t === 'it') addThrown(m);
+    else for (const o of race.bombs.concat(race.tnts)) if (o.id === m.id) boom(o);
+    return;
+  }
+  if (m.t === 'end') { netEnd(m.res); return; }
+  if (R.isHost) {
+    const k = race.karts.find(o => o.id === from);
+    if (m.t === 'p' && k && k.kind === 'net') {
+      unpack(k, m.k);
+      if (k.fin !== null && race.firstFin === null) race.firstFin = race.t;
+    }
+    return;
+  }
+  if (m.t === 's') {
+    if (m.tr !== race.tr) {
+      const keep = race.phase;
+      setupRace(m.tr, race.specs, 'net', race.round);
+      me.name = 'Sinä'; race.phase = keep; race.adopt = true;
+    }
+    if (m.ph === 'cd' && (race.phase === 'wait' || race.phase === 'cd')) { race.phase = 'cd'; race.cdT = m.cd; }
+    if (m.ph === 'run' && (race.phase === 'wait' || race.phase === 'cd')) goRun(m.clock);
+    if (race.phase !== 'cd' && Math.abs(race.t - m.clock) > 0.25) race.t = m.clock;
+    m.k.forEach((a, i) => {
+      const k = race.karts[i];
+      if (!k) return;
+      // My own kart is mine, unless the host's computer drove it while I was away.
+      if (k === me && !a[13] && !(race.adopt && a[4] > me.prog + 30)) return;
+      unpack(k, a);
+      if (k === me) { me.camA = me.a; race.camA = me.a; }
+    });
+    if (m.ph === 'run') race.adopt = false;
+  }
+});
+R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
+R.on('continue', ids => { if (race && race.mode === 'net') race.karts.forEach(k => { if (ids.includes(k.id)) k.kind = 'cpu'; }); });
+R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') k.kind = 'net'; }); });
+R.on('lobby', () => { race = null; engineOn(false); });
+R.on('leave', () => { race = null; engineOn(false); showMenu(); });
+R.on('menu', () => { race = null; engineOn(false); showMenu(); });
+
+// The race ends once every person is in, 40 s after the first one, or after ten minutes.
+function over() {
+  const people = race.karts.filter(k => !k.bot);
+  return race.t > 600 || (race.firstFin !== null && race.t > race.firstFin + 40) ||
+    (people.every(k => k.fin !== null) && race.t > Math.max(...people.map(k => k.fin)) + 2.5);
+}
+function hostTick(dt) {
+  race.sendT -= dt;
+  if (race.sendT <= 0) { race.sendT = 1 / 12; R.send(hostState()); }
+  if (race.phase === 'run' && over()) {
+    // Karts still on the track get the time they would finish in at their average speed so far.
+    for (const k of race.karts) if (k.fin === null) k.est = race.t + (LAPS * T.L - k.prog) / Math.max(40, k.prog / race.t);
+    const res = race.karts.slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin : a.est - b.est))
+      .map(k => ({ id: k.id, name: race.specs[k.i].name || k.name, fin: r2(k.fin !== null ? k.fin : k.est), est: k.fin === null ? 1 : 0, bot: k.bot ? 1 : 0 }));
+    const m = { t: 'end', round: race.round, res };
+    R.deliver(m);
+    R.endRound();
+    netEnd(res);
+  }
+}
+function guestTick(dt) {
+  race.sendT -= dt;
+  if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !me.sentFin))) {
+    race.sendT = 1 / 12; me.sentFin = me.fin !== null;
+    R.send({ t: 'p', round: race.round, k: pack(me) });
+  }
+}
+// This phone's kart is in: its time is kept, and it waits for the others.
+function netFinishMe() {
+  say('MAALISSA!');
+  beep(660, 0.5, 'square', 0.08, 990);
+  const t = Math.round(me.fin * 100) / 100;
+  if (!(bests[T.name] <= t)) { bests[T.name] = t; save('ennatykset', bests); race.record = true; }
+}
+function netEnd(res) {
+  if (!race || race.phase === 'done' || race.phase === 'over') return;
+  race.phase = 'done'; race.doneT = 2.5; race.res = res;
+  const mine = res.findIndex(r => r.id === R.me);
+  race.place = mine + 1;
+  if (R.once(race.round) && mine >= 0) { races++; save('kisat', races); }
+  if (mine === 0) say('🏆 VOITIT!'); else if (mine > 0) say((mine + 1) + '. sija');
+}
+function netAfter() {
+  const res = race.res, mine = race.place - 1;
+  engineOn(false);
+  race = null;
+  R.note(res.map((r, i) => (i + 1) + '. ' + (r.id === R.me ? 'Sinä' : r.name) + ' ' + fmt(r.fin) + (r.est ? '*' : '')).join(' · ') +
+    (res.some(r => r.est) ? ' (* ei vielä maalissa: arvioitu aika)' : ''));
+  R.backToRoom(mine < 0 ? 'Kisa päättyi' : mine === 0 ? '🏆 Voitit kisan! ' + fmt(res[0].fin) : (mine + 1) + '. sija · ' + fmt(res[mine].fin), mine === 0 ? 'win' : 'lose');
+}
+// The host picks the track under the room's player list; the others see which one.
+const roomEl = document.createElement('div');
+function roomControls() {
+  roomEl.replaceChildren();
+  roomEl.style.cssText = 'display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px';
+  if (!R.inRoom) return;
+  if (!R.isHost) { const t = document.createElement('p'); t.style.margin = '0'; t.textContent = 'Huoneen tekijä valitsee radan.'; roomEl.append(t); return; }
+  TRACKS.forEach((t, n) => {
+    const b = document.createElement('button');
+    b.className = 'room-track';
+    b.textContent = t.emoji + ' ' + t.name;
+    b.style.cssText = 'font:700 14px system-ui;padding:8px 10px;border-radius:12px;border:2px solid ' + (n === roomTrack ? '#ffb703' : 'transparent') + ';background:' + (n === roomTrack ? '#563d9e' : '#3a2a6e') + ';color:#fff';
+    b.onclick = () => { roomTrack = n; roomControls(); };
+    roomEl.append(b);
+  });
+}
+R.extra(roomEl);
+R.on('peers', roomControls);
+
+// ---------- Drawing ----------
+function rowColors(t) {
+  // The sky's gradient, one colour a row of the picture above the horizon.
+  const k = document.createElement('canvas'); k.width = 1; k.height = HOR + 1;
+  const g = k.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, HOR);
+  gr.addColorStop(0, t.sky[0]); gr.addColorStop(1, t.sky[1]);
+  g.fillStyle = gr; g.fillRect(0, 0, 1, HOR + 1);
+  return new Uint32Array(g.getImageData(0, 0, 1, HOR + 1).data.buffer);
+}
+
+function ground(cx, cy, ca) {
+  if (!skyRows) skyRows = rowColors(T);
+  const fx = Math.cos(ca), fy = Math.sin(ca), rx = -fy, ry = fx;
+  let o = 0;
+  for (let r = 0; r < FH; r++) {
+    if (r <= HOR) { const col = skyRows[Math.min(r, HOR)]; for (let cc = 0; cc < FW; cc++) buf[o++] = col; continue; }
+    const z = CAM_H * F / (r - HOR);
+    if (z > ZMAX) { for (let cc = 0; cc < FW; cc++) buf[o++] = texOut; continue; }
+    const xs = z / F;
+    let wx = cx + fx * z - rx * (FW / 2 - 0.5) * xs, wy = cy + fy * z - ry * (FW / 2 - 0.5) * xs;
+    const dx = rx * xs, dy = ry * xs;
+    for (let cc = 0; cc < FW; cc++) {
+      const ix = Math.floor(wx), iy = Math.floor(wy);
+      buf[o++] = (ix >= 0 && iy >= 0 && ix < TS && iy < TS) ? tex[iy * TS + ix] : texOut;
+      wx += dx; wy += dy;
+    }
+  }
+  fbx.putImageData(img, 0, 0);
+}
+
+let cam = { x: 0, y: 0, fx: 1, fy: 0, rx: 0, ry: 1 };
+// A world point `h` units above the ground, on the screen: {x, y, s (pixels a unit), z}.
+function proj(wx, wy, h) {
+  const dx = wx - cam.x, dy = wy - cam.y, z = dx * cam.fx + dy * cam.fy;
+  if (z < 6) return null;
+  const xr = dx * cam.rx + dy * cam.ry, s = F * SCALE / z;
+  return { x: W / 2 + xr * s, y: HOR * SCALE + (CAM_H - h) * s, s, z };
+}
+
+function hills(t, ca) {
+  const hy = HOR * SCALE;
+  for (const [col, amp, per, sp] of [[t.hills2, 0.11, 0.9, 0.7], [t.hills, 0.07, 0.6, 1]]) {
+    x.fillStyle = col;
+    x.beginPath(); x.moveTo(0, hy + 1);
+    const off = -ca * W * sp * 1.1;
+    for (let px = 0; px <= W + 8; px += 8) {
+      const u = (px - off) / (W * per);
+      x.lineTo(px, hy - H * amp * (0.45 + 0.3 * Math.sin(u * 6.283) + 0.25 * Math.sin(u * 15.7 + 1)));
+    }
+    x.lineTo(W, hy + 1); x.closePath(); x.fill();
+  }
+  const g = x.createLinearGradient(0, hy - 2, 0, hy + H * 0.1);
+  g.addColorStop(0, `rgba(${t.haze},.85)`); g.addColorStop(1, `rgba(${t.haze},0)`);
+  x.fillStyle = g; x.fillRect(0, hy - 2, W, H * 0.1 + 2);
+}
+
+function drawKart(k) {
+  const yaw = k.a + k.yaw + k.spinA, ca = Math.cos(yaw), sa = Math.sin(yaw);
+  const P = (fw, rt, h) => proj(k.x + ca * fw - sa * rt, k.y + sa * fw + ca * rt, h + k.z);
+  const mid = proj(k.x, k.y, 0);
+  if (!mid) return;
+  // Another kart between the camera and this phone's own would cover the view: not drawn so close.
+  if (k !== me && mid.z < 50) return;
+  // Shadow.
+  const sh = [P(10, -7, -k.z), P(10, 7, -k.z), P(-9, 7, -k.z), P(-9, -7, -k.z)];
+  if (sh.some(p => !p)) return;
+  x.fillStyle = 'rgba(0,0,0,.3)'; poly(sh);
+  const wheel = (fw, rt) => { const p = P(fw, rt, 2.5); if (p) { x.fillStyle = '#1a1a1a'; x.beginPath(); x.ellipse(p.x, p.y, 3 * p.s, 2.6 * p.s, 0, 0, 7); x.fill(); } };
+  // Wheels further away first.
+  const ws = [[8, -7], [8, 7], [-7, -7], [-7, 7]].map(w => ({ w, p: P(w[0], w[1], 0) }));
+  // A kart passing the camera can have a wheel behind it: then draw none of it.
+  if (ws.some(o => !o.p)) return;
+  ws.sort((a, b) => b.p.z - a.p.z);
+  ws.slice(0, 2).forEach(o => wheel(o.w[0], o.w[1]));
+  // Body: a low tub, then the nose.
+  const lo = [P(9, -5.5, 2), P(9, 5.5, 2), P(-8, 6, 2), P(-8, -6, 2)], hi = [P(9, -5, 5), P(9, 5, 5), P(-8, 5.5, 6), P(-8, -5.5, 6)];
+  x.fillStyle = shade(k.color, -0.35);
+  for (let e = 0; e < 4; e++) { const n = (e + 1) % 4; poly([lo[e], lo[n], hi[n], hi[e]]); }
+  x.fillStyle = k.color; poly(hi);
+  ws.slice(2).forEach(o => wheel(o.w[0], o.w[1]));
+  // Driver: a round head in a helmet.
+  const hd = P(-2, 0, 13);
+  if (hd) {
+    x.fillStyle = '#ffd7b5'; x.beginPath(); x.arc(hd.x, hd.y + 2 * hd.s, 3 * hd.s, 0, 7); x.fill();
+    x.fillStyle = k.color; x.beginPath(); x.arc(hd.x, hd.y, 3.6 * hd.s, Math.PI, 0); x.fill();
+    x.fillStyle = '#fff'; x.fillRect(hd.x - 3.6 * hd.s, hd.y - 0.6 * hd.s, 7.2 * hd.s, 1.2 * hd.s);
+  }
+  // Drift sparks, a turbo's flame and a shield.
+  const rear = P(-10, 0, 3);
+  if (rear && k.drift && tierOf(k.dTime)) {
+    x.fillStyle = TIER_COL[tierOf(k.dTime) - 1];
+    for (let n = 0; n < 5; n++) { const q = P(-10 - Math.random() * 6, (Math.random() < 0.5 ? -7 : 7) + Math.random() * 4 - 2, Math.random() * 4); if (q) x.fillRect(q.x, q.y, 1.5 * q.s, 1.5 * q.s); }
+  }
+  if (rear && k.boost > 0) {
+    x.fillStyle = Math.random() < 0.5 ? '#ffb703' : '#ff5400';
+    x.beginPath(); x.moveTo(rear.x - 3 * rear.s, rear.y); x.lineTo(rear.x + 3 * rear.s, rear.y); x.lineTo(rear.x, rear.y + (6 + Math.random() * 6) * rear.s * 0.6); x.closePath(); x.fill();
+  }
+  if (k.shield > 0) {
+    const sp = P(0, 0, 7);
+    if (sp) { x.strokeStyle = 'rgba(140,220,255,.9)'; x.fillStyle = 'rgba(140,220,255,.25)'; x.lineWidth = 2; x.beginPath(); x.arc(sp.x, sp.y, 13 * sp.s, 0, 7); x.fill(); x.stroke(); }
+  }
+  if (k !== me && mid.z < 230) {
+    const tag = P(0, 0, 22);
+    if (tag) { x.font = `700 ${Math.max(9, Math.min(13, 3 * tag.s))}px system-ui`; x.textAlign = 'center'; x.fillStyle = 'rgba(0,0,0,.5)'; x.fillText(k.name, tag.x + 1, tag.y + 1); x.fillStyle = '#fff'; x.fillText(k.name, tag.x, tag.y); }
+  }
+}
+function poly(ps) { if (ps.some(p => !p)) return; x.beginPath(); ps.forEach((p, n) => n ? x.lineTo(p.x, p.y) : x.moveTo(p.x, p.y)); x.closePath(); x.fill(); }
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16), ch = s => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * (1 + f))));
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
+function drawTree(p, k) {
+  const s = p.s;
+  if (T.tree === 'palm') {
+    x.strokeStyle = '#8b5a2b'; x.lineWidth = 3 * s; x.beginPath(); x.moveTo(p.x, p.y); x.quadraticCurveTo(p.x + 6 * s, p.y - 20 * s, p.x + 3 * s, p.y - 40 * s); x.stroke();
+    x.fillStyle = '#2d9c4a';
+    for (let n = 0; n < 5; n++) { const a = n * 1.256 + k * 3; x.beginPath(); x.ellipse(p.x + 3 * s + Math.cos(a) * 9 * s, p.y - 40 * s + Math.sin(a) * 4 * s, 11 * s, 3.2 * s, a, 0, 7); x.fill(); }
+  } else if (T.tree === 'jungle') {
+    x.fillStyle = '#5a3a1a'; x.fillRect(p.x - 2.5 * s, p.y - 22 * s, 5 * s, 22 * s);
+    x.fillStyle = k < 0.5 ? '#1f7a33' : '#2a9140';
+    x.beginPath(); x.arc(p.x, p.y - 32 * s, 16 * s, 0, 7); x.arc(p.x - 11 * s, p.y - 24 * s, 10 * s, 0, 7); x.arc(p.x + 11 * s, p.y - 25 * s, 10 * s, 0, 7); x.fill();
+  } else {
+    const h = (26 + k * 30) * s;
+    x.fillStyle = '#3b2b28'; x.beginPath(); x.moveTo(p.x - 11 * s, p.y); x.lineTo(p.x - 2 * s, p.y - h); x.lineTo(p.x + 3 * s, p.y - h * 0.8); x.lineTo(p.x + 11 * s, p.y); x.closePath(); x.fill();
+    x.fillStyle = 'rgba(255,120,30,.6)'; x.fillRect(p.x - 1 * s, p.y - h * 0.6, 2 * s, h * 0.5);
+  }
+}
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const ca = race.camA;
+  cam.fx = Math.cos(ca); cam.fy = Math.sin(ca); cam.rx = -cam.fy; cam.ry = cam.fx;
+  cam.x = me.x - cam.fx * CAM_D; cam.y = me.y - cam.fy * CAM_D;
+  ground(cam.x, cam.y, ca);
+  x.imageSmoothingEnabled = false;
+  x.drawImage(fb, 0, 0, FW, FH, 0, 0, W, FH * SCALE);
+  hills(T, ca);
+  // Everything standing on the ground, far to near.
+  const list = [];
+  const add = (wx, wy, fn) => { const dx = wx - cam.x, dy = wy - cam.y, z = dx * cam.fx + dy * cam.fy; if (z > 6 && z < ZMAX) { const xr = dx * cam.rx + dy * cam.ry; if (Math.abs(xr) < z * 0.75 + 60) list.push({ z, fn }); } };
+  for (const s of scenery) add(s.x, s.y, () => { const p = proj(s.x, s.y, 0); if (p) drawTree(p, s.k); });
+  for (const cr of race.crates) if (cr.t <= 0) add(cr.x, cr.y, () => drawCrate(cr));
+  for (const f of race.fruits) if (f.t <= 0) add(f.x, f.y, () => { const p = proj(f.x, f.y, 5 + 2 * Math.sin(race.t * 4 + f.x)); if (p) { x.fillStyle = '#ff8c1a'; x.beginPath(); x.arc(p.x, p.y, 4 * p.s, 0, 7); x.fill(); x.fillStyle = '#ffd08a'; x.beginPath(); x.arc(p.x - 1.3 * p.s, p.y - 1.3 * p.s, 1.3 * p.s, 0, 7); x.fill(); x.fillStyle = '#2d9c4a'; x.fillRect(p.x - 0.6 * p.s, p.y - 6 * p.s, 1.2 * p.s, 2.5 * p.s); } });
+  for (const b of race.bombs) add(b.x, b.y, () => { const p = proj(b.x, b.y, 5); if (p) { x.fillStyle = '#111'; x.beginPath(); x.arc(p.x, p.y, 5 * p.s, 0, 7); x.fill(); x.fillStyle = Math.random() < 0.5 ? '#ffb703' : '#fff'; x.fillRect(p.x + 2 * p.s, p.y - 7 * p.s, 2 * p.s, 2 * p.s); } });
+  for (const n of race.tnts) add(n.x, n.y, () => drawBox(n.x, n.y, '#d62828', 'TNT', '#fff'));
+  for (const k of race.karts) add(k.x, k.y, () => drawKart(k));
+  for (const s of race.sparks) add(s.x, s.y, () => { const p = proj(s.x, s.y, 8); if (p) { x.fillStyle = `rgba(255,${150 + 100 * s.t | 0},40,${s.t * 2})`; x.beginPath(); x.arc(p.x, p.y, (1 - s.t) * 40 * p.s, 0, 7); x.fill(); } });
+  list.sort((a, b) => b.z - a.z).forEach(o => o.fn());
+  if (race.phase !== 'over') hud();
+}
+function drawCrate(cr) {
+  drawBox(cr.x, cr.y + 0, '#c8862a', '?', '#ffe08a', Math.sin(race.t * 3 + cr.x) * 2);
+}
+function drawBox(wx, wy, col, label, ink, bob = 0) {
+  const p = proj(wx, wy, 6 + bob);
+  if (!p) return;
+  const s = p.s, h = 6 * s;
+  x.fillStyle = col; x.fillRect(p.x - h, p.y - h, 2 * h, 2 * h);
+  x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = Math.max(1, s); x.strokeRect(p.x - h, p.y - h, 2 * h, 2 * h);
+  x.fillStyle = ink; x.font = `900 ${label.length > 1 ? 4.5 * s : 9 * s}px system-ui`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(label, p.x, p.y + 0.5 * s);
+  x.textBaseline = 'alphabetic';
+}
+
+// ---------- The controls and the top bar ----------
+const BTN = {};
+function layout() {
+  const by = H - safeB - 16;
+  BTN.left = { x: 16, y: by - 96, w: 76, h: 96 };
+  BTN.right = { x: 100, y: by - 96, w: 76, h: 96 };
+  BTN.drift = { cx: W - 66, cy: by - 52, r: 52 };
+  BTN.item = { cx: W - 152, cy: by - 112, r: 34 };
+}
+function rr(b, r) { x.beginPath(); x.roundRect ? x.roundRect(b.x, b.y, b.w, b.h, r) : x.rect(b.x, b.y, b.w, b.h); }
+function hud() {
+  layout();
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  // Steering arrows.
+  for (const [k, ch] of [['left', '◀'], ['right', '▶']]) {
+    const b = BTN[k];
+    x.fillStyle = input[k] ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.32)'; rr(b, 18); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 2; x.stroke();
+    x.fillStyle = '#fff'; x.font = '900 34px system-ui'; x.fillText(ch, b.x + b.w / 2, b.y + b.h / 2);
+  }
+  const d = BTN.drift, tier = me.drift ? tierOf(me.dTime) : 0;
+  x.fillStyle = input.drift ? (tier ? TIER_COL[tier - 1] : 'rgba(255,255,255,.5)') : 'rgba(214,40,40,.75)';
+  x.beginPath(); x.arc(d.cx, d.cy, d.r, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.7)'; x.lineWidth = 3; x.stroke();
+  if (me.drift) {
+    // How far to the next turbo.
+    const into = Math.min(1, me.dTime / TIERS[2]);
+    x.strokeStyle = '#fff'; x.lineWidth = 6; x.beginPath(); x.arc(d.cx, d.cy, d.r + 6, -Math.PI / 2, -Math.PI / 2 + into * 6.283); x.stroke();
+  }
+  x.fillStyle = '#fff'; x.font = '900 18px system-ui'; x.fillText('LIUKU', d.cx, d.cy);
+  const it = BTN.item;
+  x.fillStyle = me.item ? 'rgba(255,183,3,.85)' : 'rgba(0,0,0,.32)';
+  x.beginPath(); x.arc(it.cx, it.cy, it.r, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 2; x.stroke();
+  x.font = me.item ? '30px system-ui' : '700 12px system-ui'; x.fillStyle = '#fff';
+  x.fillText(me.item ? ITEMS[me.item] : 'ESINE', it.cx, it.cy + (me.item ? 2 : 0));
+  // Place, lap, time and fruit.
+  const top = safeT + 52;
+  const place = standings().indexOf(me) + 1;
+  x.textAlign = 'left';
+  x.font = '900 40px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.55)';
+  x.strokeText(place + '.', 14, top + 10); x.fillStyle = place === 1 ? '#ffd166' : '#fff'; x.fillText(place + '.', 14, top + 10);
+  const pw = x.measureText(place + '.').width;
+  x.font = '800 16px system-ui'; x.strokeText('/' + KARTS, 18 + pw, top + 18); x.fillStyle = '#fff'; x.fillText('/' + KARTS, 18 + pw, top + 18);
+  x.font = '800 17px system-ui';
+  const fr = '🍊 ' + me.fruit;
+  x.strokeText(fr, 14, top + 46); x.fillText(fr, 14, top + 46);
+  x.textAlign = 'center';
+  const lap = Math.min(LAPS, Math.max(1, me.lap + 1));
+  x.font = '800 17px system-ui';
+  const lt = 'Kierros ' + lap + '/' + LAPS;
+  x.strokeText(lt, W / 2, safeT + 22); x.fillText(lt, W / 2, safeT + 22);
+  x.font = '700 15px system-ui';
+  const tt = fmt(race.phase === 'cd' ? 0 : me.fin !== null ? me.fin : race.t);
+  x.strokeText(tt, W / 2, safeT + 42); x.fillText(tt, W / 2, safeT + 42);
+  minimap(W - 86, top + 4, 72);
+  // Countdown and messages.
+  if (race.phase === 'wait' || (race.mode === 'net' && R.paused)) big('Odotetaan…', '#fff', 40);
+  else if (race.phase === 'cd') big(race.cdT < 1 ? '3' : race.cdT < 2 ? '2' : '1', '#ffd166');
+  else if (race.t < 0.8 && race.phase === 'run') big('AJA!', '#7ee081');
+  else if (race.msgT > 0) {
+    x.font = '900 28px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.strokeText(race.msg, W / 2, H * 0.36); x.fillStyle = '#fff'; x.fillText(race.msg, W / 2, H * 0.36);
+  }
+  if (race.mode === 'net' && me.fin !== null && race.phase === 'run') {
+    x.font = '800 18px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.strokeText('Maalissa · odotetaan muita', W / 2, H * 0.44); x.fillStyle = '#fff'; x.fillText('Maalissa · odotetaan muita', W / 2, H * 0.44);
+  }
+  x.textBaseline = 'alphabetic';
+}
+function big(t, col, size = 72) {
+  x.font = `900 ${size}px system-ui`; x.lineWidth = 8; x.strokeStyle = 'rgba(0,0,0,.6)';
+  x.strokeText(t, W / 2, H * 0.36); x.fillStyle = col; x.fillText(t, W / 2, H * 0.36);
+}
+function minimap(mx, my, size) {
+  const sc = size / TS;
+  x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.roundRect ? x.roundRect(mx - 4, my - 4, size + 8, size + 8, 10) : x.rect(mx - 4, my - 4, size + 8, size + 8); x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.8)'; x.lineWidth = 3; x.lineJoin = 'round';
+  x.beginPath(); for (let i = 0; i < T.N; i += 4) x.lineTo(mx + T.X[i] * sc, my + T.Y[i] * sc); x.closePath(); x.stroke();
+  for (const k of race.karts.slice().reverse()) {
+    x.fillStyle = k.color; x.beginPath(); x.arc(mx + k.x * sc, my + k.y * sc, k === me ? 4.5 : 3, 0, 7); x.fill();
+    if (k === me) { x.strokeStyle = '#fff'; x.lineWidth = 1.5; x.stroke(); }
+  }
+}
+
+// Touch: each finger keeps the button it pressed; a thumb can slide between the arrows.
+const fingers = new Map();
+function which(px, py) {
+  layout();
+  const d = BTN.drift, it = BTN.item;
+  if (Math.hypot(px - it.cx, py - it.cy) < it.r + 12) return 'item';
+  if (px > W / 2) return Math.hypot(px - d.cx, py - d.cy) < d.r + 40 || py > H * 0.5 ? 'drift' : null;
+  if (py < H * 0.5) return null;
+  return px < BTN.right.x - 4 ? 'left' : 'right';
+}
+function syncInput() {
+  input.left = input.right = input.drift = false;
+  for (const b of fingers.values()) if (b && b !== 'item') input[b] = true;
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  unlock();
+  if (!race || race.phase === 'over') return;
+  const b = which(e.clientX, e.clientY);
+  fingers.set(e.pointerId, b);
+  if (b === 'item') useItem();
+  syncInput();
+});
+c.addEventListener('pointermove', e => {
+  const b = fingers.get(e.pointerId);
+  if (b === 'left' || b === 'right') { const n = e.clientX < BTN.right.x - 4 ? 'left' : 'right'; if (e.clientX < W / 2 && n !== b) { fingers.set(e.pointerId, n); syncInput(); } }
+});
+for (const ev of ['pointerup', 'pointercancel']) c.addEventListener(ev, e => { fingers.delete(e.pointerId); syncInput(); });
+
+// ---------- Sound ----------
+let ac = null, eng = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function beep(f, d, type = 'square', vol = 0.06, to) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + 0.02);
+}
+function engineOn(on) {
+  if (!ac) return;
+  if (!eng) {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 500; g.gain.value = 0;
+    o.connect(f); f.connect(g); g.connect(ac.destination); o.start();
+    eng = { o, g };
+  }
+  eng.g.gain.setTargetAtTime(on ? 0.03 : 0, ac.currentTime, 0.1);
+}
+function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+
+// ---------- Menu ----------
+function showMenu() {
+  const box = document.getElementById('tracks');
+  box.replaceChildren();
+  TRACKS.forEach((t, n) => {
+    const b = document.createElement('button');
+    b.className = 'track' + (n === trackNo ? ' on' : '');
+    const e = document.createElement('b'), nm = document.createElement('span'), bt = document.createElement('small');
+    e.textContent = t.emoji; nm.textContent = t.name; bt.textContent = bests[t.name] ? '⏱ ' + fmt(bests[t.name]) : 'ei aikaa';
+    b.append(e, nm, bt);
+    b.onclick = () => { trackNo = n; save('rata', n); if (race && race.phase === 'over') race = null; showMenu(); };
+    box.append(b);
+  });
+  document.getElementById('stats').textContent = `Taso ${level} · Voitot ${wins} / ${races} kisaa`;
+  menu.classList.remove('hidden');
+}
+document.getElementById('multi').onclick = () => { unlock(); R.open(); };
+document.getElementById('go').onclick = () => { document.getElementById('result').textContent = ''; document.getElementById('table').replaceChildren(); soloRace(); };
+document.addEventListener('visibilitychange', () => { if (document.hidden) engineOn(false); else if (race && (race.phase === 'run' || race.phase === 'cd')) engineOn(true); });
+
+// ---------- Loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (race && race.phase !== 'over') {
+    tick(dt);
+    if (eng && ac) eng.o.frequency.setTargetAtTime(45 + me.v * 0.55 + (me.boost > 0 ? 30 : 0), ac.currentTime, 0.05);
+  }
+  if (race) draw();
+  else idle();
+  requestAnimationFrame(frame);
+}
+// Behind the first menu: the track, seen from the start.
+function idle() {
+  soloRaceView();
+  draw();
+}
+function soloRaceView() {
+  if (race) return;
+  T = TRACKS[trackNo];
+  paintTrack(T); scenery = plantScenery(T); skyRows = null;
+  const k = newKart(0, 'me'), p = at(T, T.L - 30, 0);
+  Object.assign(k, { x: p.x, y: p.y, a: p.a, idx: p.i, s: T.L - 30, prog: -30 });
+  me = k;
+  race = { phase: 'over', t: 0, cdT: 0, karts: [k], finishers: [], msg: '', msgT: 0, crates: [], fruits: [], bombs: [], tnts: [], camA: p.a, sparks: [] };
+}
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
