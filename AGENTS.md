@@ -118,6 +118,10 @@ high-score lists (#25), then play counts (#26).
   game's test file, and everything runs when anything outside `games/` changes (#37). So name a
   game's tests `tests/test_<slug>.py` (or `test_<slug>_<more>.py`, dashes as underscores), or mark a
   test that plays a game with `@pytest.mark.games("<slug>")`. Locally the same flag saves time.
+- So the pull request's CI is the last check before release. A merge to `main` deploys at once
+  (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
+  the site; it does not wait for the browser tests, which already passed on the pull request's
+  head. The full browser suite still runs on `main` beside the deploy, so a broken `main` shows red.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
 - `games/<slug>/thumb.webp` shows the current version mid-play.

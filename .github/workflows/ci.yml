@@ -35,17 +35,16 @@ jobs:
       - name: Browser tests
         run: python -m pytest -q ${{ github.event_name == 'pull_request' && format('--changed-since origin/{0}', github.base_ref) || '' }}
       - run: python scripts/build.py
-      - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        with:
-          name: site
-          path: _site
 
   # A merge to main is the release: Cloudflare Pages serves it at pelit.vilpponen.fi (a CNAME
   # to ai-pelit.pages.dev at hostingpalvelu.fi).
+  # It does not wait for the test job (#65): every test already passed on the pull request's own
+  # head, and the deck re-tests that head after bringing it up to main, so waiting for the full
+  # browser suite again only delayed each release by about 6 minutes. Before deploying it runs
+  # only what takes seconds: the server tests and the build (which checks every game). The test
+  # job still runs the full suite on main beside it, so a broken main shows up red.
   deploy-cloudflare:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: test
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -64,15 +63,20 @@ jobs:
       # The checkout brings functions/ and server/: wrangler bundles them as the site's /api/.
       - uses: actions/checkout@v4
         if: steps.ready.outputs.ready == 'true'
-      - uses: actions/download-artifact@v4
+      - uses: actions/setup-python@v5
         if: steps.ready.outputs.ready == 'true'
         with:
-          name: site
-          path: _site
+          python-version: "3.12"
+      - name: Build the site
+        if: steps.ready.outputs.ready == 'true'
+        run: python scripts/build.py
       - uses: actions/setup-node@v4
         if: steps.ready.outputs.ready == 'true'
         with:
           node-version: 22
+      - name: Server tests (server/api.js on SQLite)
+        if: steps.ready.outputs.ready == 'true'
+        run: npm test
       # The live game rooms' Worker (#27) first, so the site never calls a room that is not there.
       - name: Deploy the rooms Worker
         if: steps.ready.outputs.ready == 'true'
