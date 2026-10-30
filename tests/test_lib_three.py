@@ -9,6 +9,9 @@ from PIL import Image
 import build
 from conftest import ROOT, game_page, make_game, wait_for_worker
 
+# Draws with three.js, so it runs alone (#116), as the 3D games' tests do.
+pytestmark = pytest.mark.alone
+
 DEMO = (Path(__file__).parent / "fixtures" / "three-demo.html").read_text()
 BACKGROUND = (0x11, 0x22, 0x33)
 
