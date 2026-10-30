@@ -105,6 +105,12 @@ def test_the_motion_is_read_from_its_shape(site, context):
     # A small sideways wobble at the top, or in the middle, of a straight flick is still a straight throw.
     assert read([[100, 500, 0], [100, 460, 20], [100, 420, 40], [108, 419, 50], [108, 419, 51]]) == ["suora", 1]
     assert read([[100, 500, 0], [100, 460, 20], [106, 461, 25], [106, 400, 45], [106, 340, 65]]) == ["suora", 1]
+    # The hand raised slowly, lowered a little, then flicked up: the last flick is the throw,
+    # though it stays below the earlier high point.
+    t = page.evaluate("pts => classifyThrow(pts)", [[100, 500, 0], [100, 400, 600], [100, 300, 1200], [100, 390, 1800], [100, 350, 1820], [100, 310, 1840], [100, 305, 1845]])
+    assert t["kind"] == "suora" and t["speedUp"] > 1500
+    assert read([[100, 500, 0], [100, 300, 1200], [100, 390, 1800], [140, 350, 1820], [180, 310, 1840]]) == ["kierre", 1]
+    assert read([[100, 500, 0], [100, 300, 1200], [100, 390, 1800], [100, 330, 1830], [100, 365, 1860]]) == ["voltti", 1]
     # Dragging the hand around before the flick does not count towards its shape.
     assert read([[100 - 20 * i, 500 + 10 * i, 20 * i] for i in range(6)] + [[0, 550 - 40 * i, 120 + 10 * i] for i in range(1, 7)]) == ["suora", 1]
 

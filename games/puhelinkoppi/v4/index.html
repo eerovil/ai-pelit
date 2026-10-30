@@ -449,9 +449,14 @@ function onUp(e) {
 const HOOK_PX = 20, HOOK_MS = 220, SLANT = 0.6, FLAT_PX = 25;
 function classifyThrow(pts) {
   if (!pts.length) return null;
-  // The highest point the finger reached; the upward stroke ends there.
-  let peak = 0;
-  pts.forEach((p, i) => { if (p[1] < pts[peak][1]) peak = i; });
+  // The throw is the last flick, not the touch's highest point: the hand may be moved up and
+  // down into place first. Back from where the finger lifted, past what follows the flick (a
+  // hook down, a pause, a small wobble), to the last step that clearly rose; the flick's top
+  // is the highest point from there to the lift.
+  let tail = pts.length - 1;
+  while (tail > 0 && pts[tail - 1][1] - pts[tail][1] <= 3) tail--;
+  let peak = tail;
+  for (let i = tail; i < pts.length; i++) if (pts[i][1] < pts[peak][1]) peak = i;
   const last = pts[pts.length - 1], top = pts[peak];
   const hook = last[1] - top[1] > HOOK_PX && last[2] - top[2] < HOOK_MS;
   // The shape and the way it slants come from the whole upward stroke: back from the highest
