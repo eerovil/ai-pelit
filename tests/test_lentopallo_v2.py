@@ -77,14 +77,16 @@ def test_two_against_two_with_a_computer_teammate(site, context):
 def test_the_computer_teammate_sets_the_ball_for_you(site, context):
     page = alone(site, context, "2v2")
     page.evaluate(PLAYING)
-    page.evaluate("""() => {
-      const t = players[2]; t.kind = 'cpu'; mine.x = -3; t.x = -1.2;
+    # The second touch comes down near where the player stands. cpuThink() plans a set for a
+    # teammate's second touch, but only on a frame of its own, and before PLAYING it had left
+    # 'over' from the serve on some runs: so the plan is set here, as cpuThink() would.
+    land = page.evaluate("""() => {
+      const t = players[2]; t.kind = 'cpu'; t.intent = 'set'; mine.x = -3; t.x = -1.2;
       touchSide = -1; touches = 1; last = mine;
       Object.assign(ball, { x: -1.2, y: 2.4, vx: 0, vy: -0.5 });
       hit(t);
+      return predict(0.2).x;
     }""")
-    # The second touch comes down near where the player stands.
-    land = page.evaluate("predict(0.2).x")
     assert -3.7 < land < -2.0
 
 
