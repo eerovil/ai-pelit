@@ -22,6 +22,13 @@
       "note": "Peli jatkuu pisimmältä saavutetulta tasolta (aiemmankin voi valita), joka tasolla on kolme uutta sydäntä, ja loppuun tuli neljä vaikeaa nopeaa kappaletta.",
       "request": "Muuta niin että jatkuu aina siltä tasolta mihin pääsit. Alussa voi valita vanhan tason jos haluaa. Joka tasolla on uudet 3 elämää. Tee uusia vaikeampia biisejä (vrt. Through the fire and the flames)",
       "issue": "eerovil/ai-pelit#44"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-30",
+      "note": "Osuma-alue näkyy jokaisella kaistalla valaistuna: nuotin keskikohta osuu, kun se on alueella, ja alue on yhtä pitkä aika jokaiselle nuotille, nopeillekin.",
+      "request": "Näytä pelissä paremmin se kohta missä nuotin pitää olla että se osuu. Lisäksi: Ei kai nopeissa nuoteissa ole pienempi osumis alue? Ei saa olla",
+      "issue": "eerovil/ai-pelit#44"
     }
   ]
 }

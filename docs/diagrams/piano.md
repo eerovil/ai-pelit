@@ -1,12 +1,13 @@
 # Piano: one game, from the first note to the last heart
 
-How a game of Piano plays (v1–v3). Notes of a familiar tune fall down four lanes, and the
+How a game of Piano plays (v1–v4). Notes of a familiar tune fall down four lanes, and the
 player presses the lane's key at the bottom when a note reaches the line, which plays that
 note. Each finished song is a level; the next song is a little faster. A missed note or a
 press with no note near the line costs one of three hearts. From v2 the score is also kept
 after every finished song, not only when the last heart goes, and there are nine songs. From v3
 a game starts from the furthest level reached (or an earlier one picked in the menu), every
-level starts with three fresh hearts, and four fast, hard songs end the list.
+level starts with three fresh hearts, and four fast, hard songs end the list. From v4 the hit
+zone is drawn in every lane, and a note counts when its middle is in it.
 
 ```mermaid
 flowchart TD
@@ -56,7 +57,7 @@ flowchart TD
 - **Tason alussa kolme uutta sydäntä**: v3 `startLevel()` sets `lives = LIVES` (3) on every level; in v1 and v2 the three hearts last the whole game.
 - **Kappale alkaa: nuotit putoavat neljää kaistaa**: `startLevel()` → `levelNotes()` in `games/piano/v1/index.html`. Four songs in `SONGS` (Tuiki tuiki tähtönen, Ukko Nooa, Jaakko kulta, Oodi ilolle), then round again; v2 has nine, adding Maija pikkuinen, Piippolan vaari, Lontoon silta, Paljon onnea vaan and Kulkuset; v3 adds four hard ones at the end: Vuorenpeikkojen luolassa, Turkkilainen marssi, Kimalaisen lento and Tulimyrsky (written for the game), with sixteenth notes down to 0.1 s apart. A dense song falls faster (`lead` per song) so its notes do not overlap. `nextLane()` puts each note one lane right for a step up in the tune, one left for a step down, two for a leap, and the same lane for a repeated note. From v2 a leap that would go past the edge takes one step instead of turning right round.
 - **Painat kaistan nappia**: the `pointerdown` handler: anywhere in a lane below the top bar counts as that lane's key, so several fingers can play at once.
-- **Onko tämän kaistan nuotti viivalla?**: `tap()` takes the nearest unplayed note of that lane within `GOOD` (0.16 s); within `PERFECT` (0.07 s) is "Nappiin!".
+- **Onko tämän kaistan nuotti viivalla?**: `tap()` takes the nearest unplayed note of that lane within `GOOD` (0.16 s); within `PERFECT` (0.07 s) is "Nappiin!". The window is the same time for every note and song, however fast it falls. From v4 `drawZone()` shows it in every lane: the band is ±`GOOD`, its bright middle ±`PERFECT`, the line the beat; `zonePx()` turns the window into pixels at the current fall speed, so a faster note's zone is taller; `placeLine()` sets the line per level just high enough that the whole zone, its late half too, shows above the keys. A note's middle is its beat (v1–v3 used its bottom edge), it gets a white outline while `inZone()`, and its lane lights up.
 - **Nappiin!: 100 p x putki-kerroin**: `mult()`: every 10 hits in a row add one to the multiplier, up to x4.
 - **Nuotti soi**: `piano()`: a triangle wave with a quiet octave above it and a long fade, at the note's pitch.
 - **Nuotti putoaa viivan ohi**: `update()` marks a note missed once it is more than `GOOD` past the line.
