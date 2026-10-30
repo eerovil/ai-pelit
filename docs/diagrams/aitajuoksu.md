@@ -1,15 +1,21 @@
 # Aitajuoksu: one 100 m hurdle race, alone or with friends
 
-How one race of Aitajuoksu plays (v1). The runner speeds up with taps on the left and right foot
+How one race of Aitajuoksu plays (v1, and v2 with false starts). The runner speeds up with taps on the left and right foot
 in turn, and jumps the ten hurdles with the middle button; a hurdle run into falls and slows the
 runner down. Alone it is a race against three computer runners of the player's level; in a room
 each phone runs its own runner and the phone that made the room (the host) fires the gun and
-ends the race.
+ends the race. From v2 a step after "Valmiit…" and before the gun is a false start: a yellow
+card, then a red one and that runner is out; the start is called back each time.
 
 ```mermaid
 flowchart TD
   A[Juokse! tai Aloita kierros] --> B[Paikoillenne… Valmiit…]
   B --> C[PAM! Kello käy]
+  B -- Askel ennen laukausta --> FS{Ensimmäinen varaslähtö?}
+  FS -- Kyllä --> YC[Keltainen kortti]
+  FS -- Ei --> RC[Punainen kortti: ulos radalta]
+  YC --> B
+  RC --> B
   C --> D{Mitä nappia painetaan?}
   D -- Eri jalka kuin viimeksi --> E[Vauhti kasvaa]
   D -- Sama jalka --> F[Vauhti hidastuu hieman]
@@ -31,26 +37,29 @@ flowchart TD
   Q --> R[Tulokset kaikille, takaisin huoneeseen]
   L --> S[Ennätys ja tuloslista]
   class A,B,C,D blue
-  class H,K,M,N amber
+  class H,K,M,N,FS,YC amber
   class E,F,G,I teal
   class Q,R violet
   class L,O,S green
-  class J,P rose
+  class J,P,RC rose
 ```
 
 ## Colours
 
 - **blue**: what the player sees and does
-- **amber**: a check that decides the path
+- **amber**: a check that decides the path, or a yellow card
 - **teal**: how the runner moves
 - **violet**: the race in a room with friends
 - **green**: a finish, a record or a win
-- **rose**: a knocked hurdle or a lost race
+- **rose**: a knocked hurdle, a lost race or a red card
 
 ## Boxes
 
 - **Juokse! tai Aloita kierros**: `soloRace()` in `games/aitajuoksu/v1/index.html` puts the player in lane 2 against three computer runners whose tapping rate rises with the level; in a room, `R.on('start')` gives each phone in the round its own lane, in room order (2–6 phones).
-- **Paikoillenne… Valmiit…**: `tick()` counts `race.cdT` up to `race.gunAt`, a random moment 2.1–3.2 s in. In a room only the host counts; the others follow its `s` messages. A tap before the gun does nothing and shows "Odota laukausta!".
+- **Paikoillenne… Valmiit…**: `tick()` counts `race.cdT` up to `race.gunAt`, a random moment 2.1–3.2 s in. In a room only the host counts; the others follow its `s` messages. In v1 a tap before the gun does nothing and shows "Odota laukausta!"; in v2 only during "Paikoillenne…" (`SET_AT`, 0.9 s).
+- **Ensimmäinen varaslähtö?**: v2 `step()` calls `falseStart()` for a foot tap after `SET_AT`; a guest sends `f` and the host decides, ignoring one that arrives after its gun. In a race alone each computer runner goes early in 5 % of starts (`CPU_JUMPY`, `ai.jumpy`). The runner's `card` goes up by one and `race.phase` is `false` for 2.4 s (`FS_SHOW`, `drawCard()`); guests follow it from the host's `s` (`ph`, `fs`, and each runner's card at `pack()[10]`).
+- **Keltainen kortti**: `card` 1: a small yellow card by the name and 🟨 in the top bar; `afterFalse()` calls `countdown()`, a new random gun moment.
+- **Punainen kortti: ulos radalta**: `card` 2: the runner stays at the start, dimmed, and comes last as "Hylätty" (`standings()` `dq`). Alone, the player's own red card ends the race straight to the menu, with nothing saved; in a room the race goes on without them.
 - **PAM! Kello käy**: `race.phase` becomes `run`; the race clock starts from the gun on each phone.
 - **Vauhti kasvaa**: `step()`: each tap on the other foot adds speed, less the faster the runner goes (up to 12 m/s); `move()` takes some away all the time, so about 8 taps a second holds about 8.3 m/s.
 - **Vauhti hidastuu hieman**: `step()`: the same foot twice takes 0.3 m/s off.

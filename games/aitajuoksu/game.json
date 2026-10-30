@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: 100 metrin aitajuoksu sivusta, kolmea tietokonejuoksijaa vastaan tai 2–6 kaverin kanssa samassa huoneessa.",
       "request": "Aitajuoksu peli. Multiplayer mahdollisuus",
       "issue": "eerovil/ai-pelit#46"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-30",
+      "note": "Varaslähtö: askel ennen laukausta tuo keltaisen kortin, toinen punaisen ja juoksija on ulkona; lähtö otetaan uudestaan.",
+      "request": "Aitajuoksuun varaslähtö: keltainen ja punainen kortti",
+      "issue": "eerovil/ai-pelit#87"
     }
   ]
 }
