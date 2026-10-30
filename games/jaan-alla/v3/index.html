@@ -739,7 +739,8 @@ function goal() {
   if (G.mode === 'ice') {
     if (!f.aino) return { t: 'Etsi Aino rannan leiristä.', ice: true, at: { x: CAMP.x, y: 0, z: CAMP.z } };
     if (party && (party + aboard >= SEATS || !waiting)) return { t: `Vie mukanasi olevat (${party}) avantoon ja SISUun.`, ice: true, at: { x: 0, y: 0, z: 0 } };
-    if (!waiting) return { t: 'Palaa SISUun ja vie kyydissä olevat asemalle.', ice: true, at: { x: 0, y: 0, z: 0 } };
+    // Nobody left out here, or SISU already full: nobody more can follow, so back to SISU.
+    if (!waiting || aboard >= SEATS) return { t: 'Palaa SISUun ja vie kyydissä olevat asemalle.', ice: true, at: { x: 0, y: 0, z: 0 } };
     let near = null, best = 1e9;
     for (const c of crew) if (c.at === 'ice') { const d = Math.hypot(c.x - walker.pos.x, c.z - walker.pos.z); if (d < best) { best = d; near = c; } }
     return { t: `Etsi loput: ${waiting} vielä jäällä. Punaiset soihdut näyttävät tien.`, ice: true, at: { x: near.x, y: 0, z: near.z } };

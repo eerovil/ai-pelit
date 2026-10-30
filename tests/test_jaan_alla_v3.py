@@ -225,3 +225,15 @@ def test_turning_the_phone_on_the_ice_keeps_the_walk(site, browser):
     turn(page, {"width": 740, "height": 360})
     page.wait_for_timeout(300)
     assert page.evaluate("[G.mode, Math.round(walker.pos.x), Math.round(walker.pos.z)]") == ["ice", 10, -10]
+
+
+def test_surfacing_with_sisu_full_sends_you_back_not_out_to_the_cold(site, browser):
+    page = open_game(site, browser)
+    go(page)
+    page.evaluate("G.s.flags.aino = true; G.s.crew.slice(0, 4).forEach(c => c.at = 'sub'); sub.pos.set(HOLE.x, -8, HOLE.z + 3); drawHud()")
+    page.click("#act")
+    page.evaluate("drawHud()")
+    assert page.inner_text("#goal") == "Tavoite: Palaa SISUun ja vie kyydissä olevat asemalle."
+    # Nobody joins, and walking back to the tower boards nobody new.
+    page.evaluate("const c = G.s.crew[5]; walker.pos.set(c.x, 0, c.z + 0.5); step(1 / 60)")
+    assert page.evaluate("[crewAt('follow'), crewAt('sub')]") == [0, 4]
