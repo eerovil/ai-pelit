@@ -70,3 +70,49 @@ def test_rolling_off_the_track_ends_the_round_and_saves_the_record(site, context
     page.click("#uudestaan")
     page.wait_for_function("round.phase === 'run' && round.stars === 0 && ball.z > -2", timeout=2000)
     assert not page.is_visible("#loppu")
+
+
+def test_a_drag_steers_only_while_the_ball_is_on_the_track(site, context):
+    page, _ = open_game(site, context)
+    page.evaluate("steer(200)")
+    assert page.evaluate("ball.aimX") == 0
+    page.click("#aloita")
+    page.wait_for_function("round.phase === 'run'", timeout=2000)
+    page.evaluate("ball.aimX = 5")
+    page.wait_for_function("round.phase === 'fall'", timeout=2000)
+    page.evaluate("steer(-400)")
+    assert page.evaluate("ball.aimX") == 5
+
+
+def test_it_plays_on_a_390_px_phone(site, browser):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    try:
+        page, errors = start(site, ctx)
+        page.wait_for_function("-ball.z > 4 && innerWidth === 390", timeout=5000)
+        box = page.locator("#hud").bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= 390
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+FIRST_RAMP = "(() => { for (let i = 10; i < 3000; i++) if (row(i).kind === 'ramp') return i; })()"
+
+
+def test_a_ramp_throws_the_ball_over_the_gap(site, context):
+    page, _ = start(site, context)
+    ramp = page.evaluate(FIRST_RAMP)
+    gaps = page.evaluate(f"[1, 2].filter(n => row({ramp} + n).kind === 'gap').length")
+    assert gaps >= 1
+    page.evaluate(f"ball.z = -{ramp} * 2 + 1; ball.x = ball.aimX = row({ramp}).cx")
+    page.wait_for_function("ball.air && ball.y > 1.2", timeout=3000)
+    landing = (ramp + gaps + 2) * 2
+    page.wait_for_function(f"-ball.z > {landing} && !ball.air", timeout=5000)
+    assert page.evaluate("round.phase") == "run"
+
+
+def test_rolling_into_a_gap_without_a_jump_drops_the_ball(site, context):
+    page, _ = start(site, context)
+    ramp = page.evaluate(FIRST_RAMP)
+    page.evaluate(f"ball.z = -({ramp} + 1.1) * 2; ball.x = ball.aimX = row({ramp}).cx; ball.ramp = false")
+    page.wait_for_function("round.phase === 'fall'", timeout=2000)
