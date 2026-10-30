@@ -15,6 +15,13 @@
       "note": "Pelaa kavereiden kanssa: 2–5 puhelinta samassa pihassa huoneen koodilla tai QR-koodilla, ja jokainen näkee vain oman näkökenttänsä.",
       "request": "Real-time multiplayer: kaksi tai useampi puhelin samassa pelissä. Kirkkis v2, 2–5 puhelinta, huoneen koodi ja QR-koodi, ja peli odottaa, jos puhelin putoaa pois.",
       "issue": "eerovil/ai-pelit#27"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-30",
+      "note": "Kavereiden kanssa pelataan nyt samalla huoneruudulla kuin muissa peleissä, joten huoneen voi myös avata kaikille.",
+      "request": "Siirrä Kirkkiksen moninpeli yhteiseen huonekirjastoon (public/rooms.js), niin se saa sen ominaisuudet, myös julkiset huoneet (#50). Samat säännöt ja ulkoasu, ja v1/v2-tallennukset luetaan sellaisinaan.",
+      "issue": "eerovil/ai-pelit#57"
     }
   ]
 }
