@@ -252,7 +252,10 @@ function jointStep(h) {
   const B = BARS[bar], S = jt.S, F = jt.F, vS = jt.vS, vF = jt.vF, mF = 1 - J_MS;
   jt.t += h;
   // The arms ease to their length, from bent or from reaching past it.
-  jt.la += Math.max(-3 * h, Math.min(3 * h, ARM - jt.la));
+  // A held finger pulls the body in through the arms, as the rigid swing does (rBar(s)).
+  const laT = rBar(s) - J_SH;
+  jt.la += Math.max(-3 * h, Math.min(3 * h, laT - jt.la));
+  if (jt.la === laT) jt.eased = true;
   vS[1] -= G * h; vF[1] -= G * h;
   const bx = S[0] - F[0], by = S[1] - F[1], ax = S[0] - B[0], ay = S[1] - B[1];
   const wb = (bx * (vS[1] - vF[1]) - by * (vS[0] - vF[0])) / (bx * bx + by * by);
@@ -295,9 +298,9 @@ function jointStep(h) {
   const ke = 0.5 * (J_MS * (vS[0] * vS[0] + vS[1] * vS[1]) + mF * (vF[0] * vF[0] + vF[1] * vF[1]));
   const en = ke + G * (J_MS * S[1] + mF * F[1]);
   if (jt.en === undefined) jt.en = en;
-  else if (jt.la !== ARM || jt.pull || jt.lock !== undefined) {
-    if (jt.pull && jt.la === ARM && jt.lock === undefined) jt.en = undefined; // pulled in: free again
-    jt.pull = jt.la !== ARM;
+  else if (!jt.eased || jt.pull || jt.lock !== undefined) {
+    if (jt.pull && jt.eased && jt.lock === undefined) jt.en = undefined; // eased to length: free again
+    jt.pull = !jt.eased;
     const k = ke > 0 && jt.en !== undefined ? Math.max(0.5, Math.min(2, Math.sqrt(Math.max(0, ke + jt.en - en) / ke))) : 1;
     for (let i = 0; i < 2; i++) { vS[i] *= k; vF[i] *= k; }
   }
@@ -308,7 +311,7 @@ function jointStep(h) {
   phi = jt.phi + wrap(Math.atan2(-ux / u, uy / u) - jt.phi); jt.phi = phi;
   const rx = pos[0] - B[0], ry = pos[1] - B[1];
   th = th + wrap(Math.atan2(rx, -ry) - th);
-  if ((Math.abs(wrap(e)) < 0.06 && Math.abs(wb - wa) < 1.5 && jt.la === ARM) || jt.t > J_MAX) {
+  if ((Math.abs(wrap(e)) < 0.06 && Math.abs(wb - wa) < 1.5 && jt.la === laT) || jt.t > J_MAX) {
     // In line: the rigid swing, with the angular momentum about the bar.
     const wB = (ux * (vS[1] - vF[1]) - uy * (vS[0] - vF[0])) / (u * u);
     Lb = icBar(s) * wB + rx * vel[1] - ry * vel[0];

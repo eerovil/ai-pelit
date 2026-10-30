@@ -136,3 +136,21 @@ def test_the_shoulder_lock_keeps_the_swing_and_turns_either_way(site, context):
     # before), and the body goes round the bar either way.
     assert lost < 0.5
     assert min(ways) > 10
+
+
+def test_holding_a_finger_on_the_joint_pulls_in_without_a_jump(site, context):
+    page = open_game(site, context)
+    worst, caught = page.evaluate("""() => { let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      let worst = 0, caught = 0;
+      for (let n = 0; n < 40; n++) { newRoutine(); launchAir({ from: 0, x: -0.5 + rnd() * 2.8, y: 1.6, vx: 2 * rnd() - 1, phi: rnd() * TAU, w: 4 * rnd() - 2 }); flight.t = 1;
+        while (mode === 'air') step(1 / 240);
+        if (!jt) continue;
+        caught++; hold = true; let prev = bodyPoints();
+        for (let t = 0; t < 2; t += 1 / 240) { step(1 / 240); const q = bodyPoints();
+          for (const k of ['head', 'hip', 'foot']) worst = Math.max(worst, Math.hypot(q[k][0] - prev[k][0], q[k][1] - prev[k][1]));
+          prev = q; }
+        hold = false; }
+      return [worst, caught]; }""")
+    # Pulled in on the joint as on the rigid swing, so the hand-over does not jump (it did by about 25 cm).
+    assert caught > 20
+    assert worst < 0.12
