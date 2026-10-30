@@ -130,3 +130,23 @@ def test_a_kart_between_the_camera_and_mine_is_not_drawn_over_the_view(site, con
     }"""
     assert page.evaluate(paints, 30) == 0
     assert page.evaluate(paints, 150) > 0
+
+
+def test_the_host_first_then_a_second_round_on_another_track(site, browser):
+    site.build(ROOT / "games")
+    host, guest = room_of_two(site, browser)
+    finish(host)
+    host.wait_for_function("me.fin !== null", timeout=3000)
+    finish(guest)
+    for p in (host, guest):
+        p.wait_for_function("(!race || race.phase === 'over') && document.getElementById('aipr-result').textContent !== ''", timeout=10000)
+    assert host.inner_text("#aipr-result").startswith("🏆 Voitit kisan!")
+    assert guest.inner_text("#aipr-result").startswith("2. sija")
+    # Again, on Laavaluola: a fresh race on both phones, counted once more.
+    host.locator(".room-track").nth(2).click()
+    host.click("#aipr-start")
+    for p in (host, guest):
+        p.wait_for_function("race && race.mode === 'net' && race.phase === 'run' && T.name === 'Laavaluola'", timeout=8000)
+        assert p.evaluate("[me.fin, me.lap, race.karts.every(k => k.fin === null)]") == [None, 0, True]
+    assert guest.evaluate("localStorage.getItem('ai-pelit:kaahari:kisat')") == "1"
+    assert host.errors == [] and guest.errors == []
