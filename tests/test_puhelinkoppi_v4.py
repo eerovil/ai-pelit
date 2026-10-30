@@ -97,6 +97,22 @@ def test_the_motion_is_read_from_its_shape(site, context):
     assert read(up + [[100, 325, 400]]) == ["suora", 1]
     # A small wobble at the end is no hook.
     assert read(up + [[100, 300, 90]]) == ["suora", 1]
+    # A stroke that starts slanted and ends straight up is still a slanted one: its whole rise counts.
+    slant_then_straight = [[100 + 46 * i, 500 - 44 * i, 30 * i] for i in range(6)] + [[330, 280 - 30 * i, 150 + 20 * i] for i in range(1, 4)]
+    assert read(slant_then_straight) == ["kierre", 1]
+    # Dragging the hand around before the flick does not count towards its shape.
+    assert read([[100 - 20 * i, 500 + 10 * i, 20 * i] for i in range(6)] + [[0, 550 - 40 * i, 120 + 10 * i] for i in range(1, 7)]) == ["suora", 1]
+
+
+def test_a_hook_seen_only_where_the_finger_lifts_is_a_voltti(site, context):
+    page = open_game(site, context)
+    px, py = page.evaluate("phoneOnScreen().slice(0, 2)")
+    page.dispatch_event("#c", "pointerdown", {"clientX": px, "clientY": py, "pointerId": 1, "isPrimary": True})
+    for i in range(1, 6):
+        page.evaluate(f"dispatchEvent(new PointerEvent('pointermove', {{ clientX: {px}, clientY: {py - 40 * i}, pointerId: 1 }}))")
+    # The hook down shows only in the lift.
+    page.evaluate(f"dispatchEvent(new PointerEvent('pointerup', {{ clientX: {px}, clientY: {py - 200 + 35}, pointerId: 1 }}))")
+    assert page.evaluate("[state, spinThrown]") == ["air", "voltti"]
 
 
 def test_a_catch_screen_down_or_a_drop_ends_the_streak_but_keeps_the_record(site, context):
