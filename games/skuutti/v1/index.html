@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Skuutti</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#2b2d42;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);box-sizing:border-box;background:rgba(30,32,52,.86);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:40px;color:#ffd166;text-shadow:0 3px 0 #ef476f}
+  #result{margin:0;font-size:22px;font-weight:800;color:#7ee081}
+  #result:empty,#unlocked:empty{display:none}
+  #unlocked{margin:0;font-size:15px;font-weight:700;color:#ffd166}
+  #tricks{margin:0;padding:0;list-style:none;font-size:15px;line-height:1.55;text-align:left}
+  #tricks li.locked{color:#9aa0b8}
+  #tricks b{display:inline-block;min-width:26px;text-align:center}
+  #colors{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  #colors button{width:36px;height:36px;border-radius:50%;border:3px solid transparent;padding:0;font-size:14px;color:#fff;box-shadow:0 2px 0 rgba(0,0,0,.35)}
+  #colors button.on{border-color:#fff}
+  #colors button:disabled{opacity:.45}
+  #go{font:800 22px system-ui,sans-serif;padding:14px 34px;border:0;border-radius:16px;background:#ffd166;color:#3a2600;box-shadow:0 4px 0 #b8860b}
+  #go:active{transform:translateY(3px);box-shadow:0 1px 0 #b8860b}
+  #stats{margin:0;font-size:14px;color:#c8cde6}
+  .help{margin:2px 0 0;font-size:13px;line-height:1.45;color:#c8cde6;max-width:320px}
+  #menu .col{display:contents}
+  /* A low, wide screen: the menu in two columns, the tricks on the left, the button on the right. */
+  @media (orientation:landscape) and (max-height:520px){
+    #menu{flex-direction:row;align-items:center;gap:28px;padding:calc(env(safe-area-inset-top,0px) + 40px) calc(env(safe-area-inset-right,0px) + 22px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 22px)}
+    #menu .col{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;max-width:340px}
+    #menu h1{font-size:34px}
+    #tricks{line-height:1.4}
+    .help{line-height:1.35}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <div class="col">
+  <h1>🛴 Skuutti</h1>
+  <p id="result"></p>
+  <p id="unlocked"></p>
+  <ul id="tricks"></ul>
+  <div id="colors"></div>
+  </div>
+  <div class="col">
+  <button id="go">Aja!</button>
+  <p id="stats"></p>
+  <p class="help">Pidä ruutua pohjassa, kun lasket alas, ja päästä irti, kun nouset seinää
+    ylös: se on pumppaus, ja menet kovempaa. Kun lennät rampin yli, pyyhkäise temppu ja ehdi
+    tehdä se loppuun ennen alastuloa. Minuutissa niin paljon pisteitä kuin saat.</p>
+  </div>
+</div>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+let W, H, DPR, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, wide = false;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  // Draw for the canvas's own box, so a tap lands where it is drawn (Hiihto v5 to v6).
+  const r = c.getBoundingClientRect();
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
+  SAFE_L = parseFloat(cs.paddingLeft) || 0; SAFE_R = parseFloat(cs.paddingRight) || 0;
+  wide = W > H;
+}
+addEventListener('resize', resize); resize();
+
+// ---- Saves (shared by every version) ----
+const KEY = 'ai-pelit:skuutti:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let best = Math.max(0, Math.floor(load('ennatys', 0)) || 0);   // most points in one run
+let colorIx = Math.max(0, Math.floor(load('vari', 0)) || 0);
+
+// ---- Tricks and colours; a higher record opens more ----
+// swipe: the way to swipe in the air. 'in' is towards the middle of the ramp, 'out' away from it.
+// spin: how long one takes (s). The 360 turns the whole rider and scooter round about the
+// up-down axis, the back flip head over heels; the four are the ones Eero picked (#119).
+const TRICKS = [
+  { id: 'bar', name: 'Barspin', swipe: 'up', arrow: '↑', p: 100, spin: 0.35, need: 0 },
+  { id: 'whip', name: 'Tailwhip', swipe: 'down', arrow: '↓', p: 150, spin: 0.5, need: 0 },
+  { id: 'spin', name: '360', swipe: 'out', arrow: '↔', p: 250, spin: 0.6, need: 600 },
+  { id: 'back', name: 'Takavoltti', swipe: 'in', arrow: '↔', p: 350, spin: 0.8, need: 1500 },
+];
+// Sideways depends on the wall the rider is over, so it is said in words, never as one arrow.
+const SWIPE_TEXT = { up: 'ylös', down: 'alas', in: 'sivulle rampin keskelle päin', out: 'sivulle rampista ulospäin' };
+const COLORS = [
+  { name: 'Punainen', c: '#e63946', need: 0 },
+  { name: 'Sininen', c: '#3a86ff', need: 0 },
+  { name: 'Vihreä', c: '#2a9d8f', need: 300 },
+  { name: 'Oranssi', c: '#fb8500', need: 1000 },
+  { name: 'Violetti', c: '#8338ec', need: 2200 },
+  { name: 'Kulta', c: '#ffbe0b', need: 3500 },
+];
+const isOpen = t => best >= t.need;
+const trickOf = id => TRICKS.find(t => t.id === id);
+
+// ---- The halfpipe, in metres, seen from the side ----
+// A flat bottom 2·FLAT long, a quarter circle of radius R up each side, then VERT of straight
+// wall to the coping. s is the distance along the surface from the middle: -LEN at the left
+// coping, +LEN at the right one.
+const G = 9.81, FLAT = 1.5, R = 2.8, VERT = 0.3;
+const CURVE = Math.PI * R / 2, LEN = FLAT + CURVE + VERT, TOP = R + VERT;
+const EDGE = FLAT + R;                 // the walls' distance from the middle
+// The most energy a run can have: the speed at the bottom when it is as fast as it gets, so the
+// highest air is (VMAX² − 2·G·TOP) / 2G ≈ 2.8 m over the coping.
+const VMAX = 10.8;
+const RUN = 60;                        // seconds in a run
+const PUMP = 1.6;                      // a perfect pump adds this much speed (m/s)
+const CLEAN = 0.08, SLOPPY = 0.25;     // turns of a trick still to go at the landing
+// Where s is: x, y and the slope (0 flat, π/2 a vertical wall).
+function at(s) {
+  const a = Math.abs(s), k = Math.sign(s) || 1;
+  if (a <= FLAT) return { x: s, y: 0, th: 0 };
+  if (a <= FLAT + CURVE) { const t = (a - FLAT) / R; return { x: k * (FLAT + R * Math.sin(t)), y: R * (1 - Math.cos(t)), th: t }; }
+  return { x: k * EDGE, y: R + (a - FLAT - CURVE), th: Math.PI / 2 };
+}
+
+// ---- One run ----
+// P: the rider. phase 'ride' on the ramp, 'air' over the coping, 'down' after a fall,
+// 'menu' between runs. In the air: side (-1 left wall, 1 right), h (height over the coping),
+// vy, airT and airMax (time up and back), and the tricks under way: bar and whip count spins
+// done, barTo and whipTo the spins asked; spin and spinTo 360s, flip and flipTo back flips.
+let P, phase = 'menu', points = 0, timeLeft = RUN, streak = 0, lastAir = '', pops = [], lastResult = null;
+let lastLand = null;    // how the last landing went: { name, clean, points } or { crash }
+let fingers = new Map(), crouch = false, crouchT = 0;
+function setup() {
+  points = 0; timeLeft = RUN; streak = 0; lastAir = ''; pops = []; lastLand = null;
+  dropIn(-1);
+}
+// Standing on the coping, then rolling in: the start, and the way back in after a fall.
+function dropIn(side) {
+  P = { s: side * LEN, v: 0, side, h: 0, vy: 0, airT: 0, airMax: 0, maxH: 0, face: -side,
+        bar: 0, barTo: 0, whip: 0, whipTo: 0, spin: 0, spinTo: 0, flip: 0, flipTo: 0, asked: [], pumped: false,
+        downT: 0, downX: 0, downA: 0 };
+  phase = 'ride';
+}
+function startRun() {
+  unlock();
+  setup();
+  menu.classList.add('hidden');
+}
+
+// ---- Riding the ramp ----
+function ride(dt) {
+  const p = at(P.s), k = Math.sign(P.s) || 1;
+  // Gravity along the surface, and rolling and air drag against the way you go.
+  P.v += -G * Math.sin(p.th) * k * dt;
+  const drag = (0.12 + 0.004 * P.v * P.v) * dt;
+  P.v = Math.abs(P.v) <= drag ? 0 : P.v - Math.sign(P.v) * drag;
+  P.s += P.v * dt;
+  if (P.v) P.face = Math.sign(P.v);
+  if (Math.sign(P.v) !== k || p.th === 0) P.pumped = false;   // one pump each way up a wall
+  if (Math.abs(P.s) >= LEN && Math.sign(P.v) === Math.sign(P.s)) launch();
+}
+// Letting go of the screen while climbing a wall is a pump: legs straighten in the curve and the
+// ramp throws you faster. Best in the curve; on the flat or the straight top a little; going down,
+// nothing.
+function pumpQuality() {
+  const p = at(P.s), up = Math.sign(P.v) === Math.sign(P.s) && P.v !== 0;
+  if (!up || P.pumped) return 0;
+  if (p.th === Math.PI / 2) return 0.5;
+  if (p.th === 0) return 0.25;
+  return p.th < 0.25 ? 0.25 + 3 * p.th : 1;
+}
+function pump() {
+  const held = crouchT;
+  crouch = false; crouchT = 0;
+  if (phase !== 'ride') return;
+  // Almost stopped on the flat: letting go is a kick with the foot, to get rolling again.
+  if (Math.abs(P.v) < 0.6 && at(P.s).th === 0) { P.v = (P.face || 1) * 2.6; sound('pump', 0.3); return; }
+  let q = pumpQuality();
+  if (held < 0.12) q *= 0.5;   // a quick tap is a small pump; a real one starts low
+  if (!q) return;
+  P.pumped = true;
+  const h = at(P.s).y, room = Math.max(0, VMAX * VMAX - 2 * G * h);
+  const v = Math.min(Math.sqrt(room), Math.abs(P.v) + PUMP * q);
+  P.v = Math.sign(P.v) * v;
+  sound('pump', q);
+  if (q >= 1) pop('Hyvä pumppaus!', '#ffd166', true);
+}
+
+// ---- In the air ----
+function launch() {
+  Object.assign(P, { side: Math.sign(P.s), h: 0, vy: Math.abs(P.v), airT: 0, maxH: 0, bar: 0, barTo: 0,
+                     whip: 0, whipTo: 0, spin: 0, spinTo: 0, flip: 0, flipTo: 0, asked: [] });
+  P.airMax = 2 * P.vy / G; P.face = P.side;
+  phase = 'air';
+}
+function air(dt) {
+  P.airT += dt; P.vy -= G * dt; P.h += P.vy * dt; P.maxH = Math.max(P.maxH, P.h);
+  const move = (now, to, spin) => now < to ? Math.min(to, now + dt / spin) : now > to ? Math.max(to, now - dt / spin) : now;
+  P.bar = move(P.bar, P.barTo, trickOf('bar').spin);
+  P.whip = move(P.whip, P.whipTo, trickOf('whip').spin);
+  P.spin = move(P.spin, P.spinTo, trickOf('spin').spin);
+  P.flip = move(P.flip, P.flipTo, trickOf('back').spin);
+  if (P.h <= 0 && P.vy < 0) land();
+}
+// A swipe in the air asks for one more of that trick; tricks on different parts (the bars, the
+// deck, the whole rider) turn at the same time, the same one again turns after the first.
+function trick(dir) {
+  if (phase !== 'air') return false;
+  const swipe = dir === 'left' || dir === 'right' ? ((dir === 'right') === (P.side < 0) ? 'in' : 'out') : dir;
+  const t = TRICKS.find(k => k.swipe === swipe);
+  if (!isOpen(t)) { pop(`🔒 ${t.name}: ennätys ${t.need} p`, '#c8cde6', true); return false; }
+  if (t.id === 'bar') P.barTo++;
+  else if (t.id === 'whip') P.whipTo++;
+  else if (t.id === 'spin') P.spinTo++;
+  else P.flipTo++;
+  P.asked.push(t.id);
+  sound('swish');
+  return true;
+}
+function airName(ids) {
+  const many = n => n === 1 ? '' : n === 2 ? 'Tupla-' : n === 3 ? 'Tripla-' : `${n}x `;
+  const count = {};
+  ids.forEach(id => { count[id] = (count[id] || 0) + 1; });
+  return TRICKS.filter(t => count[t.id]).map(t => {
+    const name = many(count[t.id]) + t.name;
+    return count[t.id] > 1 ? name.replace(/-(.)/, (m, ch) => '-' + ch.toLowerCase()) : name;
+  }).join(' + ');
+}
+function land() {
+  // Turns still to go on each part: a little is clean, more is a wobble, more still a fall.
+  const left = Math.max(P.barTo - P.bar, P.whipTo - P.whip, P.spinTo - P.spin, P.flipTo - P.flip);
+  const ids = P.asked;
+  if (left > SLOPPY) {
+    lastLand = { crash: 'kesken' };
+    return fall(ids.length ? 'Temppu jäi kesken!' : 'Kaaduit!');
+  }
+  const clean = left <= CLEAN;
+  P.s = P.side * LEN; P.v = -P.side * Math.abs(P.vy) * (clean ? 0.98 : 0.85);
+  P.face = -P.side; P.h = 0; P.pumped = false;
+  phase = 'ride';
+  sound('land');
+  const height = Math.round(P.maxH * 10) / 10;
+  if (!ids.length) {
+    lastLand = { name: '', clean, points: 0 };
+    if (height >= 1) pop(`Ilmaa ${height.toFixed(1).replace('.', ',')} m`, '#e0fbfc', true);
+    return;
+  }
+  score(ids, clean, height);
+}
+// An air's points: its tricks' points, more for each trick in the same air, a little for the
+// height, then the run of clean airs in a row. The same air twice in a row pays half, so the
+// list cannot be filled by one easy trick.
+function score(ids, clean, height) {
+  const name = airName(ids);
+  let p = ids.reduce((sum, id) => sum + trickOf(id).p, 0) * (1 + 0.5 * (ids.length - 1));
+  p += Math.round(20 * height);
+  streak = clean ? streak + 1 : 0;
+  p *= 1 + 0.1 * Math.min(Math.max(streak - 1, 0), 10);
+  const again = name === lastAir;
+  if (again) p /= 2;
+  if (!clean) p /= 2;
+  p = Math.round(p);
+  lastAir = name;
+  points += p;
+  lastLand = { name, clean, points: p };
+  pop(`${name}${clean ? '' : ' (horjahdus)'} +${p}`, again || !clean ? '#c8cde6' : '#fff');
+  if (streak >= 2 && clean) pop(`Putki ×${(1 + 0.1 * Math.min(streak - 1, 10)).toFixed(1).replace('.', ',')}`, '#ffd166', true);
+  sound(clean ? 'trick' : 'wobble');
+}
+function fall(why) {
+  streak = 0; lastAir = '';
+  const side = P.side || Math.sign(P.s) || -1;
+  Object.assign(P, { downT: 1.6, downX: side * (FLAT * 0.6), downA: side * Math.PI / 2, side });
+  phase = 'down';
+  pop(why, '#ffb4a2');
+  sound('crash');
+}
+
+// ---- The run's clock and its end ----
+function step(dt) {
+  pops.forEach(p => { p.t += dt; }); pops = pops.filter(p => p.t < 1.6);
+  if (crouch) crouchT += dt;
+  if (phase === 'ride') ride(dt);
+  else if (phase === 'air') air(dt);
+  else if (phase === 'down') { P.downT -= dt; if (P.downT <= 0) dropIn(P.side); }
+  if (phase === 'ride' || phase === 'air' || phase === 'down') {
+    timeLeft = Math.max(0, timeLeft - dt);
+    // Time is up: an air in progress still lands and counts.
+    if (timeLeft <= 0 && phase !== 'air') finish();
+  }
+}
+function finish() {
+  const before = best;
+  const opened = [...TRICKS, ...COLORS].filter(t => t.need > before && t.need <= points).map(t => t.name + (t.c ? ' skuutti' : ''));
+  lastResult = { points, record: points > before && points > 0, opened };
+  if (points > best) { best = points; save('ennatys', best); }
+  if (points > 0 && window.AiPelitScores) AiPelitScores.submit(points);
+  sound(lastResult.record ? 'win' : 'end');
+  showMenu();
+}
+function pop(text, color, small) { pops.push({ text, color, small: !!small, t: 0 }); }
+
+// ---- The menu ----
+function showMenu() {
+  phase = 'menu'; crouch = false; fingers.clear();
+  const r = document.getElementById('result'), u = document.getElementById('unlocked');
+  r.textContent = lastResult ? `${lastResult.record ? 'Uusi ennätys! ' : 'Aika loppui! '}${lastResult.points} p` : '';
+  u.textContent = lastResult && lastResult.opened.length ? '🔓 Avattu: ' + lastResult.opened.join(', ') : '';
+  const ul = document.getElementById('tricks'); ul.innerHTML = '';
+  TRICKS.forEach(t => {
+    const li = document.createElement('li');
+    if (isOpen(t)) li.innerHTML = `<b>${t.arrow}</b> ${t.name}: pyyhkäise ${SWIPE_TEXT[t.swipe]}`;
+    else { li.className = 'locked'; li.innerHTML = `<b>🔒</b> ${t.name}: ennätys ${t.need} p`; }
+    ul.appendChild(li);
+  });
+  if (!isOpen(COLORS[colorIx] || COLORS[0])) colorIx = 0;
+  const box = document.getElementById('colors'); box.innerHTML = '';
+  COLORS.forEach((k, i) => {
+    const b = document.createElement('button');
+    b.style.background = k.c; b.title = k.name; b.setAttribute('aria-label', k.name);
+    if (!isOpen(k)) { b.disabled = true; b.textContent = '🔒'; b.title = `${k.name}: ennätys ${k.need} p`; }
+    if (i === colorIx) b.className = 'on';
+    b.addEventListener('click', () => { colorIx = i; save('vari', i); showMenu(); });
+    box.appendChild(b);
+  });
+  const next = [...TRICKS, ...COLORS].filter(t => !isOpen(t)).sort((a, b) => a.need - b.need)[0];
+  document.getElementById('stats').textContent = `Ennätys ${best} p` + (next ? ` · Seuraava avautuu ${next.need} p` : '');
+  document.getElementById('go').textContent = lastResult ? 'Uudestaan' : 'Aja!';
+  menu.classList.remove('hidden');
+  setup(); phase = 'menu';
+}
+document.getElementById('go').addEventListener('click', startRun);
+
+// ---- Input: a finger down crouches, letting go pumps; a swipe in the air is a trick ----
+const SWIPE = 26;   // px a finger moves to make a swipe
+c.addEventListener('pointerdown', e => {
+  e.preventDefault(); unlock();
+  if (phase === 'menu') return;
+  try { c.setPointerCapture(e.pointerId); } catch (er) {}
+  fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, used: false });
+  if (!crouch) { crouch = true; crouchT = 0; }
+}, { passive: false });
+c.addEventListener('pointermove', e => {
+  const f = fingers.get(e.pointerId);
+  if (!f || f.used || phase !== 'air') return;
+  const dx = e.clientX - f.x, dy = e.clientY - f.y;
+  if (Math.hypot(dx, dy) < SWIPE) return;
+  f.used = true;
+  trick(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy < 0 ? 'up' : 'down'));
+});
+function fingerUp(e) {
+  if (!fingers.delete(e.pointerId)) return;
+  if (!fingers.size) pump();
+}
+c.addEventListener('pointerup', fingerUp);
+c.addEventListener('pointercancel', fingerUp);
+
+// ---- Drawing ----
+// The rider is drawn RIDER times the ramp's scale: true to size it would be a speck on a phone.
+const RIDER = 1.3;
+function view() {
+  // The whole ramp across, and room over it for the highest air and the rider.
+  const top = SAFE_T + (wide ? 40 : 110), bottom = H - SAFE_B - (wide ? 14 : 70);
+  const across = 2 * EDGE + 1.4, high = TOP + 2.9 + 1.8 * RIDER;
+  const S = Math.min((W - (wide ? 2 * Math.max(SAFE_L, SAFE_R) : 0)) * 0.97 / across, (bottom - top) / high, 90);
+  // Upright, the ramp is narrower than the screen is tall: lift it towards the middle.
+  const ground = bottom - Math.max(0, bottom - top - high * S) * 0.2;
+  return { S, ground, cx: W / 2 };
+}
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const v = view(), { S, ground, cx } = v;
+  const sky = x.createLinearGradient(0, 0, 0, ground);
+  sky.addColorStop(0, '#5aa9e6'); sky.addColorStop(1, '#cfe8ff');
+  x.fillStyle = sky; x.fillRect(0, 0, W, H);
+  // A city behind the skatepark fence.
+  x.fillStyle = '#9fb7cc';
+  const base = ground - TOP * S;
+  [[0.02, 2.6, 0.12], [0.16, 3.6, 0.1], [0.3, 2.2, 0.14], [0.6, 4.2, 0.1], [0.74, 2.8, 0.12], [0.88, 3.4, 0.12]].forEach(([u, h, w]) => {
+    x.fillRect(u * W, base - h * S, w * W, h * S + 2);
+  });
+  x.strokeStyle = 'rgba(60,70,80,.35)'; x.lineWidth = 1;
+  for (let px = 0; px < W; px += 10) { x.beginPath(); x.moveTo(px, base - 1.2 * S); x.lineTo(px + 10, base); x.stroke(); x.beginPath(); x.moveTo(px + 10, base - 1.2 * S); x.lineTo(px, base); x.stroke(); }
+  x.fillStyle = '#7d8597'; x.fillRect(0, ground, W, H - ground);
+  drawRamp(v);
+  drawRider(v);
+  drawHud(v);
+}
+const sx = (v, wx) => v.cx + wx * v.S, sy = (v, wy) => v.ground - wy * v.S;
+function drawRamp(v) {
+  const { S, ground } = v;
+  // The ramp's body, the riding surface and the decks on top.
+  x.beginPath();
+  x.moveTo(0, sy(v, TOP)); x.lineTo(sx(v, -EDGE), sy(v, TOP));
+  for (let i = 0; i <= 60; i++) { const p = at(-LEN + 2 * LEN * i / 60); x.lineTo(sx(v, p.x), sy(v, p.y)); }
+  x.lineTo(W, sy(v, TOP)); x.lineTo(W, ground); x.lineTo(0, ground); x.closePath();
+  x.fillStyle = '#c9a66b'; x.fill();
+  x.strokeStyle = '#8d6e3f'; x.lineWidth = Math.max(3, S * 0.1); x.lineJoin = 'round';
+  x.beginPath();
+  for (let i = 0; i <= 60; i++) { const p = at(-LEN + 2 * LEN * i / 60); i ? x.lineTo(sx(v, p.x), sy(v, p.y)) : x.moveTo(sx(v, p.x), sy(v, p.y)); }
+  x.stroke();
+  // Supports under the decks.
+  x.strokeStyle = 'rgba(90,60,30,.35)'; x.lineWidth = 2;
+  [-1, 1].forEach(k => {
+    for (let i = 0; i < 4; i++) { const wx = k * (EDGE + 0.3 + i * 0.5); x.beginPath(); x.moveTo(sx(v, wx), sy(v, TOP)); x.lineTo(sx(v, wx), ground); x.stroke(); }
+  });
+  // While a finger is down, the part of the wall ahead where letting go pumps best.
+  if (phase === 'ride' && crouch && P.v) {
+    const k = Math.sign(P.v), from = FLAT + 0.25 * R, to = FLAT + CURVE;
+    x.strokeStyle = 'rgba(126,224,129,.75)'; x.lineWidth = Math.max(5, S * 0.16); x.lineCap = 'round';
+    x.beginPath();
+    for (let i = 0; i <= 16; i++) { const p = at(k * (from + (to - from) * i / 16)); i ? x.lineTo(sx(v, p.x), sy(v, p.y) - 2) : x.moveTo(sx(v, p.x), sy(v, p.y) - 2); }
+    x.stroke(); x.lineCap = 'butt';
+  }
+  // The copings: steel tubes on the lips.
+  x.fillStyle = '#d9dde3'; x.strokeStyle = '#6c757d'; x.lineWidth = 1.5;
+  [-1, 1].forEach(k => { x.beginPath(); x.arc(sx(v, k * EDGE), sy(v, TOP), Math.max(3, S * 0.09), 0, 7); x.fill(); x.stroke(); });
+}
+function drawRider(v) {
+  const { S } = v;
+  // Where the wheels touch, and which way is up for the rider (rot: radians, clockwise on screen).
+  let wx, wy, rot, flip = 0, scaleX = P.face, crouchK = crouch && phase === 'ride' ? 1 : 0;
+  if (phase === 'air') {
+    // Over the coping the rider leaves the wall straight up and turns round to ride back down:
+    // half way up the lean eases towards upright, and the 180 shows as the rider turning.
+    const t = Math.min(1, P.airT / Math.max(0.01, P.airMax));
+    wx = P.side * (EDGE - 0.05); wy = TOP + P.h;
+    rot = -P.side * Math.PI / 2 * (1 - 0.8 * Math.sin(Math.PI * Math.min(1, t * 1.1)));
+    // The turn is quick, round the top, so the tricks before and after it show side on.
+    const u = Math.min(1, Math.max(0, (t - 0.32) / 0.36)), turn = Math.cos(Math.PI * u * u * (3 - 2 * u));
+    // A 360 turns the rider round once more on top of the turn back.
+    const sc = turn * Math.cos(2 * Math.PI * (P.spin % 1 || 0));
+    scaleX = P.side * (Math.abs(sc) < 0.3 ? 0.3 * Math.sign(sc || 1) : sc);
+    flip = P.flip * 2 * Math.PI * -P.side;
+    crouchK = 0.5;
+  } else if (phase === 'down') {
+    wx = P.downX; wy = 0; rot = P.downA;
+  } else {
+    const p = at(P.s); wx = p.x; wy = p.y;
+    rot = -(Math.sign(P.s) || 1) * p.th;
+  }
+  const s = S * RIDER;
+  x.save();
+  x.translate(sx(v, wx), sy(v, wy));
+  x.rotate(rot);
+  // A flip turns about the rider's middle, not the wheels.
+  if (flip) { x.translate(0, -0.7 * s); x.rotate(flip); x.translate(0, 0.7 * s); }
+  if (phase === 'down') { x.translate(0, -0.15 * s); }
+  x.scale(scaleX, 1);
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const L = (pts, w, col) => { x.strokeStyle = col; x.lineWidth = w * s; x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a * s, -b * s) : x.moveTo(a * s, -b * s)); x.stroke(); };
+  const col = (COLORS[colorIx] || COLORS[0]).c;
+  // The scooter: deck and back wheel turn round the stem in a tailwhip; the bars spin in a barspin.
+  const whip = Math.cos(2 * Math.PI * (P.whip % 1 || 0)), front = 0.3;
+  const wheel = (wx0) => { x.fillStyle = '#222'; x.beginPath(); x.arc(wx0 * s, -0.07 * s, 0.075 * s, 0, 7); x.fill(); x.fillStyle = '#bbb'; x.beginPath(); x.arc(wx0 * s, -0.07 * s, 0.03 * s, 0, 7); x.fill(); };
+  x.save();
+  x.translate(front * s, 0); x.scale(whip, 1); x.translate(-front * s, 0);
+  L([[-0.32, 0.1], [0.24, 0.1]], 0.07, col);
+  wheel(-0.3);
+  x.restore();
+  wheel(front);
+  L([[front, 0.07], [front - 0.04, 0.95]], 0.045, '#adb5bd');
+  const bar = Math.cos(2 * Math.PI * (P.bar % 1 || 0)) * 0.2;
+  L([[front - 0.04 - bar, 0.95], [front - 0.04 + bar, 0.95]], 0.05, col);
+  // The rider: feet on the deck (lifted off it in a tailwhip), hands on the bars.
+  const lift = P.whip % 1 ? 0.25 : 0, k = 0.18 * crouchK;
+  const hip = [-0.12, 0.85 - 0.22 * crouchK + lift * 0.4], knee = [0.05 + k * 0.5, 0.45 - 0.08 * crouchK + lift];
+  L([[-0.1, 0.14 + lift], knee, hip], 0.12, '#264653');
+  L([[0.02, 0.14 + lift], [0.12 + k * 0.5, 0.47 - 0.08 * crouchK + lift], hip], 0.12, '#1f3a44');
+  const shoulder = [hip[0] + 0.12, hip[1] + 0.5 - 0.1 * crouchK];
+  L([hip, shoulder], 0.2, '#ef476f');
+  L([shoulder, [front - 0.08, 0.98 - 0.1 * crouchK]], 0.07, '#f4c7a1');
+  x.fillStyle = '#f4c7a1'; x.beginPath(); x.arc((shoulder[0] + 0.04) * s, -(shoulder[1] + 0.16) * s, 0.12 * s, 0, 7); x.fill();
+  // A helmet.
+  x.fillStyle = col; x.beginPath(); x.arc((shoulder[0] + 0.03) * s, -(shoulder[1] + 0.19) * s, 0.13 * s, Math.PI * 1.02, Math.PI * 2.05); x.fill();
+  x.fillStyle = '#222'; x.beginPath(); x.arc((shoulder[0] + 0.11) * s, -(shoulder[1] + 0.15) * s, 0.018 * s + 0.5, 0, 7); x.fill();
+  x.restore();
+}
+function drawHud(v) {
+  if (phase === 'menu') return;
+  // A strip at the top between the "‹ Pelit" and 🏆 chips.
+  const chip = document.getElementById('ai-pelit-tulokset-nappi');
+  const side = Math.max(chip && chip.offsetWidth ? W - chip.getBoundingClientRect().left + 8 : 108, 80 + SAFE_L);
+  const y0 = wide ? SAFE_T + 6 : SAFE_T + 46, bx = wide ? side : 8, bw = W - 2 * bx;
+  x.fillStyle = 'rgba(30,32,52,.6)'; roundRect(bx, y0, bw, 34, 12); x.fill();
+  x.textBaseline = 'middle'; x.fillStyle = '#fff'; x.font = '700 16px system-ui,sans-serif';
+  x.textAlign = 'left'; x.fillText(`⏱ ${Math.ceil(timeLeft)}`, bx + 10, y0 + 17);
+  x.textAlign = 'right'; x.fillText(`${points} p`, bx + bw - 10, y0 + 17);
+  x.textAlign = 'center'; x.font = '600 13px system-ui,sans-serif';
+  x.fillText(`Ennätys ${best} p`, bx + bw / 2, y0 + 17);
+  // Pops: trick names, pumps and falls.
+  let yy = wide ? y0 + 72 : Math.max(y0 + 70, sy(v, TOP + 3.6));
+  pops.forEach(p => {
+    const a = Math.min(1, (1.6 - p.t) * 2);
+    x.globalAlpha = a; x.fillStyle = p.color;
+    let size = p.small ? 16 : 22;
+    x.font = `800 ${size}px system-ui,sans-serif`;
+    const tw = x.measureText(p.text).width;
+    if (tw > W - 24) { size = Math.floor(size * (W - 24) / tw); x.font = `800 ${size}px system-ui,sans-serif`; }
+    x.strokeStyle = 'rgba(30,32,52,.75)'; x.lineWidth = 4;
+    const ty = yy - p.t * 20;
+    x.strokeText(p.text, W / 2, ty); x.fillText(p.text, W / 2, ty);
+    x.globalAlpha = 1; yy += p.small ? 24 : 30;
+  });
+  // The first seconds of a run say what to do.
+  if (timeLeft > RUN - 6 && points === 0) {
+    x.fillStyle = 'rgba(30,32,52,.85)'; x.font = '600 14px system-ui,sans-serif';
+    const msg = phase === 'air' ? 'Pyyhkäise temppu!' : 'Pidä pohjassa alamäessä, päästä irti ylämäessä';
+    x.fillText(msg, W / 2, wide ? v.ground - 8 : H - SAFE_B - 34);
+  }
+}
+function roundRect(a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
+
+// ---- Sound (Web Audio, after the first tap) ----
+let ac = null;
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+function tone(f0, f1, dur, type = 'sine', vol = 0.2, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function sound(k, q) {
+  if (k === 'pump') tone(120, 220 + 200 * (q || 0), 0.14, 'sine', 0.22);
+  else if (k === 'swish') tone(900, 300, 0.12, 'triangle', 0.12);
+  else if (k === 'land') tone(160, 60, 0.1, 'square', 0.12);
+  else if (k === 'trick') [660, 880].forEach((f, i) => tone(f, f, 0.1, 'triangle', 0.15, i * 0.07));
+  else if (k === 'wobble') tone(400, 300, 0.15, 'triangle', 0.12);
+  else if (k === 'crash') tone(180, 50, 0.4, 'square', 0.12);
+  else if (k === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.18, 0.1 + i * 0.1));
+  else if (k === 'end') [523, 392].forEach((f, i) => tone(f, f, 0.2, 'triangle', 0.15, i * 0.12));
+}
+
+// ---- Loop: fixed 1/60 s steps ----
+let lastT = performance.now(), acc = 0;
+function frame(t) {
+  acc += Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
+  draw();
+  requestAnimationFrame(frame);
+}
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="skuutti" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
