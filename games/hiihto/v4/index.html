@@ -194,6 +194,9 @@ function push(p, side) {
 // fastest rhythm: 0.37 s a kick in classic, 0.32 s a push when skating.
 const BEAT = { perinteinen: 0.37, luistelu: 0.32 };
 function beat(p) { return clamp((p.t - p.lastKick) / BEAT[p.style], 0, 1); }
+// What the meter shows: red after a tap that came too soon, until the next full-strength moment;
+// then green; yellow while it fills.
+function meter(p) { const f = beat(p); return f >= 1 ? 'ready' : p.earlyT > 0 ? 'early' : 'filling'; }
 function physics(p, dt) {
   p.t += dt;
   const g = gradeAt(p.z);
@@ -879,7 +882,7 @@ function hint() {
   if (P.fallT > 0) return ['Kaatuminen! Noustaan ylös…', '#ffb0b0'];
   if (skating()) {
     if (P.sameT > 0) return ['Vuorotellen: vasen, oikea, vasen…', '#ffd45c'];
-    if (P.earlyT > 0) return ['Liian tiheään: odota vihreää', '#ffb0b0'];
+    if (meter(P) === 'early') return ['Liian tiheään: odota vihreää', '#ffb0b0'];
     if (P.lane === 0) return ['Perinteisen latu: pyyhkäise oikealle', '#ffd45c'];
     if (g < -0.025) return [P.hold ? 'Laskuasento, luistaa!' : 'Alamäki: pidä sormea ruudulla', '#ffffff'];
     return ['Napauta vuorotellen vasen ja oikea puoli', '#ffffff'];
@@ -887,7 +890,7 @@ function hint() {
   const behind = npcs.find(o => o.kind === 'luistelija' && !o.slow && P.lane === 2 && o.z < P.z && o.z > P.z - 25 && o.v > P.v);
   if (behind) return ['Takaa tulee luistelija!', '#ffb0b0'];
   if (P.slipT > 0 && !P.vMode) return ['Lipsuu! Paina V ja tee V-käyntiä', '#ffd45c'];
-  if (P.earlyT > 0) return ['Liian tiheään: odota vihreää', '#ffb0b0'];
+  if (meter(P) === 'early') return ['Liian tiheään: odota vihreää', '#ffb0b0'];
   if (!P.vMode && Math.max(g, ahead) > 0.075) return ['Jyrkkä ylämäki: paina V', '#ffd45c'];
   if (P.vMode && g < -0.02) return ['Alamäki: V pois, niin luistaa', '#ffd45c'];
   if (P.vMode && Math.max(g, ahead) < 0.03) return ['Mäki loppui: V pois', '#ffd45c'];
@@ -938,7 +941,7 @@ function drawHud() {
   if (hn) shadowText(hn[0], W / 2, py0 + ph + 20, 15, hn[1], 'center', 700);
   // The rhythm meter (v4): fills after each tap and turns green when the next one is at full strength.
   if (mode === 'race' && !(P.hold && P.fallT <= 0)) {
-    const r = rhythmBar(), f = beat(P), ready = f >= 1, early = P.earlyT > 0;
+    const r = rhythmBar(), f = beat(P), m = meter(P), ready = m === 'ready', early = m === 'early';
     x.fillStyle = 'rgba(20,30,55,0.45)'; x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.h / 2); x.fill();
     x.fillStyle = early ? '#ff8a8a' : ready ? '#7ef0a0' : '#ffd45c';
     x.beginPath(); x.roundRect(r.x, r.y, Math.max(r.h, r.w * f), r.h, r.h / 2); x.fill();

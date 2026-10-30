@@ -40,6 +40,12 @@ def test_the_meter_turns_green_at_the_fastest_rhythm(site, context, st, full):
     # A tap long before the meter is full says so.
     early = "P.t = 50; P.lastKick = 49.95; P.sameT = 0; P.fallT = 0; P.slipT = 0; P.style === 'luistelu' ? push(P, -P.side) : kick(P); P.slipT = 0; mode = 'race'; hint()[0]"
     assert page.evaluate(early) == "Liian tiheään: odota vihreää"
+    # The warning lasts only until the next full-strength moment: then the meter is green again.
+    states = page.evaluate("""full => [0.1, full - 0.01, full + 0.005].map(d => {
+      P.t = 50 + d; return [meter(P), (hint() || [''])[0]]; })""", full)
+    assert states[0] == ["early", "Liian tiheään: odota vihreää"]
+    assert states[1][0] == "early"
+    assert states[2][0] == "ready" and states[2][1] != "Liian tiheään: odota vihreää"
     assert page.errors == []
 
 
