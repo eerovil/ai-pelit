@@ -208,3 +208,22 @@ def test_twist_held_through_a_landing_keeps_twisting_on_the_next_jump(site, cont
     assert r[0]["clean"] is False and r[0]["trick"][1] >= 1
     assert r[1] == [True, True]
     assert r[2]["clean"] and r[2]["trick"][1] >= 1
+
+
+def test_on_the_giant_trampoline_the_twist_goes_on_as_long_as_the_button_is_held(site, context):
+    page = open_game(site, context, level=5)
+    assert page.evaluate("T.name") == "Jättitrampoliini"
+    r = page.evaluate("""() => { const s = window.__step;
+      stand(0); J.vin = T.vMax; lastLand = null;
+      while (phase === 'mat' && J.matT < CONTACT / 2) s(1 / 60);
+      twistDown(); while (phase === 'mat') s(1 / 60);
+      let stalls = 0, last = J.twist;
+      while (phase === 'air' && timeToMat() > 0.45) {   // held almost all the way down
+        s(1 / 60); if (J.twist <= last) stalls++; last = J.twist;
+      }
+      const atRelease = J.twist; twistUp();
+      while (phase === 'air') s(1 / 60);
+      return [stalls, atRelease, lastLand]; }""")
+    stalls, at_release, land = r
+    assert stalls == 0 and at_release > 3.6        # kept turning the whole time it was held
+    assert land["trick"][1] >= 4 and land["trick"][1] * 2 == int(land["trick"][1] * 2)

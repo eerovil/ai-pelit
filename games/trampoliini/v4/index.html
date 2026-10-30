@@ -139,7 +139,6 @@ let lastLand = null;  // how the last landing went: { trick, clean } or { crash 
 let squat = false, squatId = null, bend = 0, kick = 0;
 // v4: 🌀 held down keeps the twist going; let go and it finishes the twist under way.
 let twistHeld = false;
-const MAX_TWISTS = 4;
 // v3: the landing decides the sideways movement. Landing tilted (an under- or over-turned flip)
 // throws you the way you lean, SLIDE m/s per radian of lean; the mat pulls you back to the
 // middle less than in v2, so a few sloppy landings in a row walk you to the edge. Without a net
@@ -199,7 +198,7 @@ function release() { held = 0; }
 function twistDown() {
   unlock();
   if (phase === 'mat' || (phase === 'air' && timeToMat() < 0.12)) { J.queuedTwist = true; tap(); }
-  else if (phase === 'air' && J.twists < MAX_TWISTS) J.twists += 0.5;
+  else if (phase === 'air') J.twists += 0.5;
   twistHeld = true;
 }
 function twistUp() { twistHeld = false; }
@@ -238,7 +237,7 @@ function air(dt) {
     J.w += (want - J.w) * Math.min(1, dt * 8);
   }
   J.a += J.w * dt; J.rot += J.w * dt;
-  if (twistHeld && J.twists > 0) J.twists = Math.min(MAX_TWISTS, Math.max(J.twists, Math.floor(J.twist * 2) / 2 + 0.5));
+  if (twistHeld && J.twists > 0) J.twists = Math.max(J.twists, Math.floor(J.twist * 2) / 2 + 0.5);
   if (J.twist < J.twists) J.twist = Math.min(J.twists, J.twist + TWIST * dt);
   if (T.net && Math.abs(J.x) > T.half - 0.25) { J.x = Math.sign(J.x) * (T.half - 0.25); J.vx = -J.vx * 0.4; }
   if (!J.off && Math.abs(J.x) > T.half + 0.15) J.off = true;
