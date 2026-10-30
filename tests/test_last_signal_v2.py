@@ -472,3 +472,57 @@ def test_inside_nordlys_the_rooms_are_named_and_the_iceberg_hall_widens_the_view
     small = page.evaluate("diveScale()")
     page.evaluate("diver.x = 2245; diver.y = 68")
     assert page.evaluate("diveScale()") < small * 0.75
+
+
+def test_reading_the_chart_room_before_the_bridge_still_moves_on(site, browser):
+    page = open_game(site, browser, save=CH1_DONE)
+    page.click("#jatka")
+    page.click("#card button:has-text('Kohti syvyyttä')")
+    page.evaluate("G.hold = true; Object.assign(G.s.flags, { saga: true, laskeutuja: true }); G.s.up.hull = 5")
+    dive_at(page, "nordlys")
+    page.evaluate("const it = ITEMS.find(it => it.log === 'kartta'); diver.x = it.x; diver.y = it.y; step(1 / 60)")
+    page.click("#card button:has-text('Jatka')")
+    page.evaluate("endDive(false); drawHud()")
+    assert page.inner_text("#goal").startswith("Lähteet ovat 1300 metrissä")
+    # A tank or lamp found when that level was already bought pays two spare parts instead.
+    page.evaluate("G.s.up.tank = 4; G.s.up.lamp = 3; G.s.inv.osat = 0")
+    dive_at(page, "nordlys")
+    take(page, "it.k === 'saili' || it.k === 'valo'")
+    page.evaluate("endDive(false)")
+    assert page.evaluate("[G.s.up.tank, G.s.up.lamp, G.s.inv.osat]") == [4, 3, 4]
+
+
+def test_a_reload_mid_dive_in_nordlys_comes_back_at_sisu_with_the_story_kept(site, browser):
+    page = open_game(site, browser, save=CH1_DONE)
+    page.click("#jatka")
+    page.click("#card button:has-text('Kohti syvyyttä')")
+    page.evaluate("G.hold = true; Object.assign(G.s.flags, { saga: true, laskeutuja: true }); G.s.up.hull = 5")
+    dive_at(page, "nordlys")
+    page.evaluate("const it = ITEMS.find(it => it.log === 'silta'); diver.x = it.x; diver.y = it.y; step(1 / 60)")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    assert page.is_hidden("#panel")
+    page.evaluate("G.hold = true; drawHud()")
+    assert page.evaluate("[G.mode, Math.round(sub.x), Math.round(sub.y), G.s.flags.silta]") == ["sub", 3452, 879, True]
+    assert page.inner_text("#goal").startswith("Nordlys on tyhjä")
+
+
+@pytest.mark.parametrize("w,h", [(390, 844), (360, 740), (740, 360)])
+def test_chapter_2_cards_fit_upright_and_sideways(site, browser, w, h):
+    page = open_game(site, browser, w, h, save=CH1_DONE)
+    page.click("#jatka")
+    assert page.evaluate(OVERFLOW) == []
+    page.click("#card button:has-text('Kohti syvyyttä')")
+    page.evaluate("G.hold = true; G.s.up.hull = 5")
+    for log in ("labra", "kartta", "halli"):
+        dive_at(page, "nordlys")
+        page.evaluate(f"const it = ITEMS.find(it => it.log === '{log}'); diver.x = it.x; diver.y = it.y; step(1 / 60)")
+        assert page.evaluate(OVERFLOW) == [], log
+        page.click("#card button:has-text('Jatka')")
+        page.evaluate("endDive(false)")
+    page.evaluate("G.s.inv.kortti = 1; drawHud()")
+    page.click("#home")
+    page.click("#card button:has-text('soita muistikortti')")
+    assert page.evaluate(OVERFLOW) == []
+    assert page.errors == []
