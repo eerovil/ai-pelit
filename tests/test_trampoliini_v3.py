@@ -43,14 +43,25 @@ def test_the_mat_still_pulls_a_little_towards_the_middle(site, context):
     assert -0.6 < vx < 0
 
 
-def test_a_small_trampoline_slides_less_but_a_lean_still_counts(site, context):
-    page = open_game(site, context, level=3)
-    assert page.evaluate("T.name") == "Minitrampoliini"
-    vx, _ = page.evaluate(LAND, [0.3, 5, 0])
-    assert -0.5 < vx < -0.2
-    # Over a whole bounce at full height that lean keeps you on the mini trampoline.
-    drift = page.evaluate("() => -0.36 * airtime(T.vMax)")
-    assert abs(drift) < page.evaluate("T.half + 0.15")
+def test_the_steepest_clean_lean_at_full_height_takes_several_landings_to_reach_the_edge(site, context):
+    page = open_game(site, context)
+    for tramp in ("pieni", "mini", "kilpa", "jatti"):
+        # Bounce at full height, pushing at the bottom each time, and land every time leaning back
+        # 0.49 rad (still clean), through the real air() and land(). Where is each landing?
+        r = page.evaluate("""(name) => { const s = window.__step;
+          T = TRAMPS[name]; hearts = 9; stand(0); J.vin = T.vMax;
+          const xs = [];
+          for (let k = 0; k < 6; k++) {
+            while (phase === 'mat') { if (J.pumpT === null && J.matT >= CONTACT / 2) J.pumpT = CONTACT / 2; s(1 / 60); }
+            while (phase === 'air' && !J.off && !(J.vy < 0 && J.y + J.vy / 60 <= COMH)) s(1 / 60);
+            if (J.off || phase !== 'air') break;
+            J.a = 0.49; J.rot = 0.49; s(1 / 60);
+            if (phase !== 'mat' || !lastLand.clean) break;
+            xs.push(J.x);
+          }
+          return { name, xs, half: T.half, top: J.vin >= T.vMax - 0.01 }; }""", tramp)
+        assert len(r["xs"]) >= 3, r                       # on the mat for at least three landings
+        assert abs(r["xs"][1]) > 0.15 * r["half"], r     # but the lean does move you
 
 
 def test_every_trick_of_the_first_ten_levels_still_lands(site, context):

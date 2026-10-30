@@ -136,10 +136,12 @@ let lastLand = null;  // how the last landing went: { trick, clean } or { crash 
 let squat = false, squatId = null, bend = 0, kick = 0;
 // v3: the landing decides the sideways movement. Landing tilted (an under- or over-turned flip)
 // throws you the way you lean, SLIDE m/s per radian of lean; the mat pulls you back to the
-// middle less than in v2, so a few sloppy landings in a row walk you to the edge. A small mat
-// gives less slide (a mini trampoline would throw you off at the first lean), never under 40 %.
-const SLIDE = 3;
-const slideOf = t => SLIDE * Math.max(0.4, Math.min(1.3, t.half / 2.1));
+// middle less than in v2, so a few sloppy landings in a row walk you to the edge. Without a net
+// the slide is capped so that the steepest clean lean (0.5 rad) at full height carries you at
+// most 45 % of the way to the edge in one bounce: only several leaning landings take you off.
+const SLIDE = 3, CLEAN_LEAN = 0.5, ONE_BOUNCE = 0.45;
+const slideOf = t => t.net ? SLIDE
+  : Math.min(SLIDE, ONE_BOUNCE * (t.half + 0.15) / airtime(t.vMax) / Math.sin(CLEAN_LEAN));
 function setup() {
   L = levelOf(level); T = TRAMPS[L.tramp];
   tasks = L.tasks.map(t => ({ t, done: false }));
