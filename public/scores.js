@@ -45,8 +45,9 @@
     sormiskeitti: { order: 'high', score: function (s) { return s + ' cm'; }, level: function () { return saved('sormiskeitti', 'level'); } },
     // Best routine total; level: 'taso'.
     voimistelu: { order: 'high', score: function (s) { return fixed(s, 3); }, level: function () { return saved('voimistelu', 'taso'); } },
-    // The score is the level already.
-    puhelinkoppi: { order: 'high', score: function (s) { return 'taso ' + s; } },
+    // The shelf shows the longest streak (v3 on, list 'putki'); v2's level list ('main') is kept
+    // but only v2's own 🏆 shows it.
+    puhelinkoppi: { order: 'high', list: 'putki', score: function (s) { return 'putki ' + s; } },
     // Fastest time, one list per course; level: courses passed ('taso' is the first unpassed one).
     hiihto: {
       order: 'low', score: minutes, boards: true,
