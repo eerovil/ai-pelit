@@ -15,6 +15,13 @@
       "note": "Helpompi: vastustaja on hitaampi, kestää vähemmän, väistää harvemmin ja lyö heikommin.",
       "request": "Tee pelistä helpompi",
       "issue": "eerovil/ai-pelit#3"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-29",
+      "note": "Kaksintaistelu kaverin kanssa verkossa: toinen luo huoneen, toinen liittyy koodilla omalla puhelimellaan.",
+      "request": "Add multiplayer",
+      "issue": "eerovil/ai-pelit#3"
     }
   ]
 }

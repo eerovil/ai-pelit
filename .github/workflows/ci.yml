@@ -30,7 +30,10 @@ jobs:
       - name: No published version changed
         if: github.event_name == 'pull_request'
         run: python scripts/check_immutable.py origin/${{ github.base_ref }}
-      - run: python -m pytest -q
+      # On a pull request, a game's own browser tests run only when it touches that game (#37);
+      # anything outside games/ still runs them all, and so does every push to main.
+      - name: Browser tests
+        run: python -m pytest -q ${{ github.event_name == 'pull_request' && format('--changed-since origin/{0}', github.base_ref) || '' }}
       - run: python scripts/build.py
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
