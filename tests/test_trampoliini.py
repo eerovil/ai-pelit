@@ -198,3 +198,15 @@ def test_the_top_bar_and_buttons_fit_a_360_and_a_390_px_phone(site, context):
             assert boxes[0]["x"] >= 0 and boxes[2]["x"] + boxes[2]["width"] <= width
             assert all(b["width"] >= 80 for b in boxes)
         page.close()
+
+
+def test_the_same_trick_again_pays_only_what_it_beats_its_best_by(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    assert page.evaluate(TRICK, [1, 0, 1.2]) == {"trick": [1, 0], "clean": True}
+    first = page.evaluate("points")
+    for _ in range(15):
+        assert page.evaluate(TRICK, [1, 0, 1.2])["clean"]
+    # The streak bonus tops out at double: never more than one trick's points on top.
+    assert page.evaluate("points") - first <= page.evaluate("trickPoints([1, 0], true)")
+    assert page.evaluate("hearts") == 3

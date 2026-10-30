@@ -127,11 +127,12 @@ function trickPoints([n, tw], clean) {
 
 // ---- One go at a level ----
 let L, T, tasks, hearts, points, combo, phase = 'menu', J, held = 0, pops = [], endT = 0, lastResult = null;
+let paid = {};        // the most points each trick has given in this go
 let lastLand = null;  // how the last landing went: { trick, clean } or { crash }
 function setup() {
   L = levelOf(level); T = TRAMPS[L.tramp];
   tasks = L.tasks.map(t => ({ t, done: false }));
-  hearts = 3; points = 0; combo = 0; pops = [];
+  hearts = 3; points = 0; combo = 0; pops = []; paid = {};
   stand(0);
 }
 // Standing on the mat, starting with a small bounce.
@@ -223,11 +224,16 @@ function land() {
 }
 function score(trick, clean) {
   combo++;
-  let p = Math.round(trickPoints(trick, clean) * (1 + 0.1 * Math.min(combo - 1, 10)));
+  const full = Math.round(trickPoints(trick, clean) * (1 + 0.1 * Math.min(combo - 1, 10)));
+  // A trick done again pays only what it beats its best in this go by, so the points of one go
+  // have a ceiling and an easy trick repeated cannot fill the high-score list.
+  const id = trick.join(','), before = paid[id] || 0;
+  let p = Math.max(0, full - before);
+  paid[id] = Math.max(before, full);
   const task = tasks.find(k => !k.done && k.t[0] === trick[0] && k.t[1] === trick[1]);
   if (task) { task.done = true; p += 25; }
   points += p; tricksDone++; save('temput', tricksDone);
-  pop(`${trickName(trick)}${clean ? '' : ' (horjahdus)'} +${p}`, task ? '#7ee081' : '#fff');
+  pop(`${trickName(trick)}${clean ? '' : ' (horjahdus)'} +${p}`, task ? '#7ee081' : p ? '#fff' : '#c8dcef');
   sound(task ? 'task' : 'trick');
   if (tasks.every(k => k.done)) clearLevel();
 }
