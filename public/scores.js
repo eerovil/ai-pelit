@@ -63,7 +63,7 @@
     trampoliini: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('trampoliini', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
     orava: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('orava', 'taso'); } },
-    // Most points in a 10-round Pistekisa; no level.
+    // Most points in 10 rounds: Pistekisa on 'main', Mökkitikka (v2) on 'mokki'; no level.
     tikka: { order: 'high', score: function (s) { return s + ' p'; } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;

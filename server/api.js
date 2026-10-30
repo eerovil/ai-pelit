@@ -38,7 +38,7 @@ export const GAMES = {
   kaaosrata: { order: 'low', boards: /^main$/ }, // fastest obstacle course, seconds
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
-  tikka: { order: 'high', boards: /^main$/ }, // most points in a 10-round Pistekisa
+  tikka: { order: 'high', boards: /^(main|mokki)$/ }, // most points in 10 rounds: Pistekisa 'main', Mökkitikka 'mokki'
 };
 
 const ID = /^[a-f0-9]{32}$/;
