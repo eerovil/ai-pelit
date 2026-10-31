@@ -41,6 +41,7 @@ export const GAMES = {
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
   // Most points in 10 rounds: Mökkitikka 'mokki' (v2's main mode, the shelf's), Pistekisa 'main' (v1 on).
   tikka: { order: 'high', boards: /^(main|mokki)$/, first: 'mokki' },
+  keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
 };
 
 const ID = /^[a-f0-9]{32}$/;
