@@ -262,6 +262,19 @@ def test_only_what_a_lamp_lights_goes_on_the_chart_and_a_contact_astern_is_not_s
     assert page.errors == []
 
 
+def test_no_light_reaches_the_chart_through_ice(site, browser):
+    page = open_game(site, browser)
+    v4.new_game(page)
+    # SISU by the iceberg's west face, its beam pointing into the ice: the sea before the face is charted, the maze
+    # behind it is not, though the beam's reach would cover it.
+    page.evaluate("sub.x = 2040; sub.y = 30; sub.vx = sub.vy = 0; sub.dir = sub.face = 1; chartSeen.fill(0); mapStep()")
+    sq = "(x, y) => chartSeen[Math.floor((x - CH.x0) / CH.s) + Math.floor((y - CH.y0) / CH.s) * CH.w]"
+    assert page.evaluate("60 * LAMP[G.s.up.lamp] + 14 + sub.x > 2110 && inBerg(2090, 30)") is True
+    assert page.evaluate(f"({sq})(2070, 30)") == 1
+    assert page.evaluate(f"({sq})(2110, 30)") == 0
+    assert page.errors == []
+
+
 def test_an_older_save_starts_its_chart_from_what_it_knew_and_gets_back_a_guide_left_in_the_ice(site, browser):
     s = v5.save_with(known={"kontti": True, "asema": True}, flags={"pinged": True, "koti": True, "kontti": True},
                      guides=[[2200, 120], [1150, 225]], inv={"ohjain": 1})
@@ -491,6 +504,26 @@ def test_a_trip_ends_when_the_host_takes_everyone_to_the_room(site, browser):
     host.evaluate("drawHud()")
     assert abs(host.evaluate("sub.x") - x) < 0.5
     assert host.evaluate("G.auto") is None and "🧭" not in host.inner_text("#depth")
+    for p in (host, aino):
+        assert p.errors == []
+
+
+def test_a_friend_s_open_chart_closes_when_the_host_ends_the_round(site, browser):
+    host, aino = v5.room(site, browser, names=("Eero", "Aino"))
+    v5.close_cards(host, aino)
+    v5.stand(aino, "kartta")
+    aino.click("#act")
+    first_card(aino)
+    assert aino.is_visible("#chart")
+    host.evaluate("toRoom()")
+    for p in (host, aino):
+        p.wait_for_function("!document.getElementById('aipr').hidden && G.mode === 'menu'")
+    assert aino.is_visible("#chart") is False
+    host.click("#aipr-start")
+    for p in (host, aino):
+        p.wait_for_function("G.s && G.mode !== 'wait' && G.mode !== 'menu'")
+    aino.evaluate("closeCard()")
+    assert aino.is_visible("#chart") is False and aino.evaluate("G.paused") is False
     for p in (host, aino):
         assert p.errors == []
 

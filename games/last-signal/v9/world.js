@@ -602,10 +602,20 @@ function mapStep() {
     }
   }
 }
-// A lamp's lit footprint on the chart: its glow, and squares along its beam as wide as the beam is there.
+// A lamp's lit footprint on the chart: rays round its glow and across its beam, each marking the squares it passes
+// until it meets rock, ice or a wall, so no light reaches the chart through a wall.
 function chartLamp([x, y, mid, len, near, half]) {
-  if (near) chartSee(x, y, near);
-  for (let d = 10; d <= len; d += 10) chartSee(x + Math.cos(mid) * d, y + Math.sin(mid) * d, Math.max(3, d * Math.tan(half) * 0.8));
+  const ray = (a, L) => {
+    const cx = Math.cos(a), cy = Math.sin(a);
+    for (let t = 0; t <= L; t += 2) {
+      const px = x + cx * t, py = y + cy * t;
+      if (solid(px, py)) break;
+      const i = Math.floor((px - CH.x0) / CH.s), j = Math.floor((py - CH.y0) / CH.s), n = i + j * CH.w;
+      if (i >= 0 && j >= 0 && i < CH.w && j < CH.h && !chartSeen[n]) { chartSeen[n] = 1; G.mapNew = true; }
+    }
+  };
+  if (near) for (let k = 0; k < 12; k++) ray(k / 12 * 2 * Math.PI, near);
+  if (len) for (let k = -2; k <= 2; k++) ray(mid + half * k / 2, len);
 }
 // Does the lamp light the point, with nothing solid between them? (The last 1.5 m is the thing itself.)
 function lampSees([x, y, mid, len, near, half], px, py) {

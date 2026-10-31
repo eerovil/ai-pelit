@@ -205,7 +205,8 @@ function guestBegin() {
 function quiet() {
   if (net && !net.host) G.s = null;
   net = null; G.mode = 'menu'; G.carry = []; G.held = {}; G.auto = null;  // v9: a trip ends with the round
-  closeCard(); for (const id of ['hud', 'pad', 'home', 'toast']) show(id, false);
+  closeCard(); for (const id of ['hud', 'pad', 'home', 'toast', 'chart']) show(id, false);  // v9: the chart too
+  CV.sel = null;
 }
 // The host takes everyone back to the room, where new friends can come in; "Aloita kierros" carries on the same save.
 function toRoom() {
