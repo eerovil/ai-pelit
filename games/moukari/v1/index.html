@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Moukarinheitto</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(18,32,58,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:34px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #cont:active{box-shadow:0 1px 0 #3c8a3f}
+  #cont.hidden{display:none}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
+  .help.side{display:none}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,280px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#cont,#multi{grid-column:2;justify-self:stretch}
+    #go{grid-row:1 / span 2;align-self:center}
+    #cont{grid-row:3;align-self:center}
+    #multi{grid-row:4 / span 2;align-self:start;padding:12px 14px;white-space:nowrap}
+    .help{margin:0;display:none}
+    .help.side{display:block}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>Moukarinheitto</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Kisaan!</button>
+  <button id="cont" class="hidden">Jatka kisaa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help">Napauta Vauhtia aina, kun moukari käy alhaalla vihreässä kohdassa: kaksi heilautusta, sitten
+    3–4 pyörähdystä. Väärä napautus hidastaa, ja punaisella vauhdilla se vetää ulos ympyrästä. Paina Irti!, kun
+    moukari on keltaisella IRTI-kaarella, niin se lentää sektoriin. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
+  <p class="help side">Napauta Vauhtia, kun moukari käy alhaalla vihreässä kohdassa: kaksi heilautusta ja 3–4
+    pyörähdystä. Paina Irti!, kun moukari on keltaisella IRTI-kaarella. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
+</div>
+<script src="../../../rooms.js" data-game="moukari" data-min="2" data-max="8"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:moukari:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+function drop(k) { try { localStorage.removeItem(KEY + k); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), comps = load('kisat', 0), best = load('ennatys', null);
+
+const FOES = ['Kuula-Kalle', 'Pyörre-Päivi', 'Vasara-Ville', 'Kierre-Kaisa', 'Häkki-Heikki', 'Ketju-Kirsi', 'Raudan-Risto',
+  'Sinko-Sanna', 'Tukki-Tuomas', 'Myrsky-Maija', 'Lingo-Lasse', 'Vauhti-Venla', 'Karhu-Kari'];
+const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0', '#2bb3b1', '#f08a3c',
+  '#7d8c99', '#b5651d', '#5c6bc0', '#8bc34a'];
+const FIELD = 12, FINAL = 8, ROUNDS = 6, CUT = 3;   // twelve throwers, the best eight throw six times
+
+// ---------- The field (metres, seen from above: x to the right, y forward into the sector) ----------
+// World Athletics: a 2.135 m circle, a 34.92° sector from its centre, and a cage around it with a
+// 6 m mouth. The mark is measured from the inside of the rim, so from the centre less 1.0675 m.
+const CIRCLE_R = 1.0675, SECTOR = 34.92, HALF = SECTOR / 2 * Math.PI / 180;
+const CAGE_R = 3.6, CAGE_OPEN = 40 * Math.PI / 180, MOUTH = [3, 6.9];   // the net's back arc, its two door panels to the mouth
+const TAU = Math.PI * 2, DEG = Math.PI / 180;
+
+// ---------- The throw ----------
+// The hammer goes round the thrower anticlockwise. Its low point is at PHI_LOW, behind and left;
+// a tap of "Vauhtia" within WIN seconds of the hammer passing it adds speed, more the slower it
+// goes; a tap at any other time loses speed, and at the red speed pulls the thrower out of the
+// circle. Two wind-up swings, then up to four turns: the hammer must be let go before it reaches
+// the low point a fifth time. It flies along its path at the moment "Irti!" is pressed, so it
+// goes forward when let go on the right (PHI_REL); the thrower's pull halves the error (HELP).
+const PHI_LOW = 200 * DEG, PHI_REL = 0, SWINGS = 2, TURNS = 4, LAPS = SWINGS + TURNS;
+const V0 = 9, VMAX = 33, VMIN = 6, GAIN = 9, LOSS = 1.6, MISS = 0.8, RED = 25;   // m/s
+const WIN = 0.1, SLOW = 0.6, HELP = 0.5, START_A = 0.5;                        // seconds; the turns at 0.6 × their real pace
+const REL_ANG = 42 * DEG, REL_H = 1.6, DRAG = 0.0008, G = 9.81, SUB = 1 / 240;
+const LAND_T = 2.2, BOARD_T = 3.5, TURN_MAX = 60;                               // seconds; a minute for an attempt, as the rules say
+
+// Where everything is when the hammer has gone a radians round from its starting low point: the
+// thrower moves across the circle from the back during the turns, the wire lengthens a little.
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const wrap = r => ((r + Math.PI) % TAU + TAU) % TAU - Math.PI;
+function radius(a) { return 1.55 + 0.4 * clamp(a / TAU - 1.5, 0, 1); }
+function geo(a) {
+  const bx = 0, by = -0.55 + 0.95 * clamp((a / TAU - 2) / 4.6, 0, 1), phi = a + PHI_LOW, r = radius(a);
+  return { bx, by, phi, r, hx: bx + Math.cos(phi) * r, hy: by + Math.sin(phi) * r };
+}
+const omega = (a, v) => v * SLOW / radius(a);
+// How high the hammer is on its tilted path: low at the low point, about two metres opposite.
+const height = phi => 1 + 0.9 * Math.cos(phi - PHI_LOW - Math.PI);
+
+// The flight: out at 42° from 1.6 m with a little air drag; 26 m/s throws about 67 m, 29.4 m/s
+// about 85 m. The direction comes from the moment it is let go; inside 17.46° of the middle it is
+// in the sector; the cage's net and doors stop a throw that goes wide.
+function range(v) {
+  const j = hammerFly(v);
+  while (j.h > 0 && j.t < 12) flySub(j);
+  return j.s;
+}
+function hammerFly(v) { return { s: 0, h: REL_H, vs: v * Math.cos(REL_ANG), vh: v * Math.sin(REL_ANG), t: 0, acc: 0, stuck: false, trail: [] }; }
+function flySub(j) {
+  const v = Math.hypot(j.vs, j.vh);
+  j.vs += -DRAG * v * j.vs * SUB; j.vh += (-G - DRAG * v * j.vh) * SUB;
+  j.s += j.vs * SUB; j.h += j.vh * SUB; j.t += SUB;
+}
+// The cage, as line segments: the doors from the mouth back to the arc, the arc round the back.
+const CAGE = (() => {
+  const pts = [[-MOUTH[0], MOUTH[1]]];
+  for (let k = 0; k <= 24; k++) { const t = Math.PI / 2 + CAGE_OPEN + (TAU - 2 * CAGE_OPEN) * k / 24; pts.push([Math.cos(t) * CAGE_R, Math.sin(t) * CAGE_R]); }
+  pts.push([MOUTH[0], MOUTH[1]]);
+  return pts;
+})();
+// How far along the segment from p to q it first meets the net (0..1), or null.
+function cageHit(px, py, qx, qy) {
+  let best = null;
+  for (let i = 0; i + 1 < CAGE.length; i++) {
+    const [ax, ay] = CAGE[i], [bx, by] = CAGE[i + 1];
+    const dx = qx - px, dy = qy - py, ex = bx - ax, ey = by - ay, den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((ax - px) * ey - (ay - py) * ex) / den, u = ((ax - px) * dy - (ay - py) * dx) / den;
+    if (t > 0 && t <= 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
+  }
+  return best;
+}
+// Where a hammer let go at a, at v m/s, lands and why it does not count. The landing point is on
+// the line from the circle's centre in the throw's direction, so the sector lines judge it fairly.
+function flight(a, v) {
+  const g = geo(a), e = wrap(g.phi - PHI_REL), dev = e * HELP, th = Math.PI / 2 + dev;
+  const dx = Math.cos(th), dy = Math.sin(th), L = range(v);
+  const r0 = Math.max(0, g.hx * dx + g.hy * dy), lx = dx * (L + r0), ly = dy * (L + r0);
+  // The net is judged on the line from the centre, as the sector is; the flight drawn from the
+  // hammer stops where its own line meets the net.
+  const inNet = cageHit(0, 0, lx, ly), hit = inNet === null ? null : cageHit(g.hx, g.hy, lx, ly) ?? inNet;
+  const why = hit !== null ? 'Osui häkkiin' : Math.abs(dev) >= HALF ? 'Sektorin ulkopuolelle' : '';
+  const d = Math.hypot(lx, ly) - CIRCLE_R;
+  return { x0: g.hx, y0: g.hy, lx, ly, L, hit, dev: dev / DEG, mark: why ? -1 : Math.floor(d * 100) / 100, why };
+}
+
+// ---------- Layout ----------
+// The scene is drawn from SX and SW wide. Upright it is the whole width with the pads under it and
+// the sector going up; on its side the pads are columns at the edges and the sector goes right.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, ctrlTop, ctrlH, hudTop, sceneB;
+let land = false, SX = 0, SW = 0, side = 0, circS = 30, flyS = 4;
+function resize() {
+  const r = c.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  if (land) {
+    side = Math.max(110, Math.min(160, W * 0.17));
+    SX = safeL + side; SW = W - SX - safeR - side;
+    ctrlTop = H; ctrlH = 0; hudTop = safeT + 6; sceneB = H - safeB;
+  } else {
+    SX = 0; SW = W;
+    ctrlH = Math.max(140, Math.min(200, H * 0.25));
+    ctrlTop = H - safeB - ctrlH; hudTop = safeT + 44; sceneB = ctrlTop;
+  }
+  const h = sceneB - hudTop - 68;
+  // At the circle: the whole cage, 4.4 m behind the centre to 7.6 m in front. In flight: the sector to 95 m.
+  circS = land ? Math.min(SW / 12.5, h / 8.6) : Math.min(SW / 8.6, h / 12.5);
+  flyS = land ? Math.min(SW / 100, h / 62) : Math.min(SW / 62, h / 100);
+}
+addEventListener('resize', resize);
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The competition ----------
+// Plain numbers, so it saves and goes over the room as it is. A thrower: {id, name, p (the
+// player's id on a phone, null for the computer), bot (the computer throws for an absent player),
+// skill (metres the computer throws on average), col, marks: one per round, -1 a foul}.
+// Rounds 1–3 go in a drawn order; after round 3 the best eight throw three more, the last in the
+// standings first. seq counts the throws made, so a result for an older turn is not taken twice.
+let comp = null, th = null, ending = null, myId = 'me';
+const isNet = () => comp && comp.mode === 'net';
+const host = () => !isNet() || R.isHost;
+const base = lv => Math.min(76, 48 + 4 * (lv - 1));   // 48 m at level 1, 4 m more per level
+function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function newComp(mode, humans, lv) {
+  const ts = humans.map((h, i) => ({ id: 'h' + i, name: h.name, p: h.p, bot: false, skill: base(lv), col: COLORS[i % COLORS.length], marks: [] }));
+  const offs = [4, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7];
+  for (let k = 0; ts.length < FIELD; k++) {
+    ts.push({ id: 'c' + k, name: FOES[(lv - 1 + k) % FOES.length], p: null, bot: false, col: COLORS[ts.length % COLORS.length],
+      skill: base(lv) + offs[k % offs.length] + (Math.random() - 0.5) * 3, marks: [] });
+  }
+  const order = shuffle(ts.map(t => t.id));
+  return { mode, level: lv, throwers: ts, round: 1, turn: 0, order0: order, order: order.slice(), final: null, seq: 0, recent: [] };
+}
+const thrower = id => comp.throwers.find(t => t.id === id);
+const current = () => comp && comp.turn < comp.order.length ? thrower(comp.order[comp.turn]) : null;
+const bestOf = t => Math.max(-2, ...t.marks.filter(m => m !== undefined && m !== null));
+const sorted = t => t.marks.filter(m => m >= 0).sort((a, b) => b - a);
+// The standings: the best throw, then the second best, and so on (the real rule).
+function standings() {
+  return comp.throwers.slice().sort((a, b) => {
+    const sa = sorted(a), sb = sorted(b);
+    for (let i = 0; i < Math.max(sa.length, sb.length); i++) {
+      const d = (sb[i] === undefined ? -1 : sb[i]) - (sa[i] === undefined ? -1 : sa[i]);
+      if (d) return d;
+    }
+    return comp.throwers.indexOf(a) - comp.throwers.indexOf(b);
+  });
+}
+const placeOf = t => standings().indexOf(t) + 1;
+const humanTurn = t => t && t.p !== null && !t.bot;
+
+// The computer throws: around its skill, a foul about one time in seven (hammer throwers foul often).
+function cpuMark(t) {
+  if (Math.random() < 0.14) return -1;
+  return Math.max(20, Math.floor((t.skill + gauss() * 3) * 100) / 100);
+}
+// Throws everyone the computer throws for, up to the next player on a phone or the end.
+function advance() {
+  for (;;) {
+    if (comp.turn >= comp.order.length) {
+      if (comp.round === CUT) comp.final = standings().slice(0, FINAL).map(t => t.id);
+      if (comp.round >= ROUNDS) return over();
+      comp.round++; comp.turn = 0;
+      comp.order = comp.round <= CUT ? comp.order0.slice() : standings().filter(t => comp.final.includes(t.id)).reverse().map(t => t.id);
+      // No player on a phone left in the final: the rest is thrown at once.
+      if (!comp.order.some(id => humanTurn(thrower(id)))) {
+        for (; comp.round <= ROUNDS; comp.round++) comp.order.forEach(id => { const t = thrower(id); t.marks[comp.round - 1] = cpuMark(t); });
+        comp.round = ROUNDS; comp.turn = comp.order.length;
+        return over();
+      }
+    }
+    const t = current();
+    if (humanTurn(t)) return;
+    t.marks[comp.round - 1] = cpuMark(t);
+    comp.recent.push(t.id);
+    comp.turn++; comp.seq++;
+  }
+}
+// A player's throw, measured: recorded by the host (or alone), then on to the next.
+function record(seq, mark) {
+  const t = current();
+  if (!comp || comp.over || seq !== comp.seq || !t) return;
+  t.marks[comp.round - 1] = mark;
+  comp.recent = [t.id];
+  comp.turn++; comp.seq++;
+  advance();
+  if (comp.mode === 'solo' && !comp.over) save('kesken', comp);
+  if (isNet() && !comp.over) R.send({ t: 'c', round: comp.room, c: comp });
+  follow();
+}
+// Each phone draws the turn the competition is at: a new turn first shows the standings.
+function follow() {
+  if (!comp || comp.over) return;
+  const t = current();
+  if (!t || (th && th.seq === comp.seq)) return;
+  const mine = isNet() ? t.p === R.me : true;
+  th = { seq: comp.seq, id: t.id, mine, phase: 'wait', t: 0, a: 0, v: 0, chk: 0, tapped: {}, out: null,
+    jav: null, mark: null, why: '', sendT: 0, idle: 0 };
+  blend = 0; pop = null;
+}
+
+// ---------- One throw ----------
+// phase: wait (the standings), ready (the hammer on the ground), spin (swings and turns),
+// fly (in the air, or a foul in the circle), land (the mark is shown).
+let pop = null;
+function say(text, col) { pop = { text, col, t: 0.7 }; }
+function step(dt) {
+  for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
+  if (pop) { pop.t -= dt; if (pop.t <= 0) pop = null; }
+  if (ending) { ending.t += dt; if (ending.t > (isNet() ? 4 : 6)) afterEnd(); return; }
+  if (!th || !comp) return;
+  if (isNet() && R.paused) return;
+  th.t += dt;
+  const a = th;
+  if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; if (a.mine) tone(660, 0.1, 'sine', 0.06); } return; }
+  if (a.phase === 'ready') {
+    a.idle += dt;
+    if (a.mine && isNet() && a.idle > TURN_MAX) return outcome(-1, 'Aika loppui');
+    return;
+  }
+  if (a.phase === 'spin') {
+    const w = omega(a.a, a.v), was = a.a;
+    a.a += w * dt;
+    if (Math.floor(a.a / TAU) > Math.floor(was / TAU)) tone(110, 0.08, 'sine', 0.05);   // the hammer's low point
+    if (a.mine) {
+      // A low point gone by with no tap in its window: the hammer slows a little.
+      const closed = Math.floor((a.a - WIN * w) / TAU);
+      for (let n = a.chk + 1; n <= Math.min(closed, LAPS); n++) {
+        if (!a.tapped[n]) { a.v = Math.max(VMIN, a.v - MISS); say('Ei napautusta', '#ffd166'); }
+      }
+      a.chk = Math.max(a.chk, closed);
+      if (a.a >= TAU * (LAPS + 1)) return outcome(-1, 'Ei irti ajoissa: ulos ympyrästä', true);
+      a.sendT -= dt;
+      if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; sendNet({ t: 'p', a: [r3(a.a), r2(a.v), a.phase] }); }
+    }
+    return;
+  }
+  if (a.phase === 'fly' || a.phase === 'land') {
+    const j = a.jav;
+    if (a.out) a.out.t += dt;
+    if (j && !j.stuck) {
+      j.acc += dt;
+      while (j.acc >= SUB && j.h > 0) {
+        flySub(j); j.acc -= SUB;
+        if (j.stopS !== null && j.s >= j.stopS) { j.s = j.stopS; j.vs = 0; }   // the net stops it, it drops
+        if (Math.round(j.t / SUB) % 10 === 0) j.trail.push(hammerAt(j));
+      }
+      if (j.h <= 0) { j.stuck = true; j.h = 0; landed(); }
+    }
+    if (a.phase === 'land' && a.t >= LAND_T && a.mine && !a.sent) { a.sent = true; report(a.mark); }
+  }
+}
+const r2 = n => Math.round(n * 100) / 100, r3 = n => Math.round(n * 1000) / 1000;
+// The hammer in the air: along the line from where it was let go to where it lands.
+function hammerAt(j) { const f = j.L > 0 ? j.s / j.L : 1; return [j.x0 + (j.lx - j.x0) * f, j.y0 + (j.ly - j.y0) * f, j.h]; }
+
+// Vauhtia (1): the first tap starts the swings, then each tap is timed against the low point.
+function press(k) {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[k] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
+  if (k === 2) return release();
+  if (th.phase === 'ready') {
+    th.phase = 'spin'; th.t = 0; th.a = START_A; th.v = V0; th.chk = 0; th.tapped = {}; th.idle = 0;
+    tone(220, 0.08, 'triangle', 0.05, 330);
+    return;
+  }
+  if (th.phase !== 'spin') return;
+  const w = omega(th.a, th.v), n = Math.round(th.a / TAU), off = (th.a - n * TAU) / w;
+  if (n >= 1 && n <= LAPS && Math.abs(off) <= WIN) {
+    if (th.tapped[n]) return;   // a second tap in the same window: nothing
+    const q = 1 - 0.5 * Math.abs(off) / WIN;
+    th.v = Math.min(VMAX, th.v + GAIN * q * (1 - th.v / VMAX));
+    th.tapped[n] = true;
+    say(Math.abs(off) < 0.035 ? 'Täydellinen!' : 'Hyvä!', '#7ee081');
+    tone(Math.abs(off) < 0.035 ? 880 : 660, 0.07, 'sine', 0.07);
+    return;
+  }
+  // Out of rhythm: at the red speed the hammer pulls the thrower out of the circle.
+  if (th.v >= RED) return outcome(-1, 'Rytmi petti: ulos ympyrästä', true);
+  th.v = Math.max(VMIN, th.v - LOSS);
+  say('Ohi rytmistä!', '#ff9a8b');
+  tone(150, 0.12, 'sawtooth', 0.05);
+}
+// Irti! (2): let go. Only in the turns, after the first turn's low point.
+function release() {
+  if (!th || !th.mine || th.phase !== 'spin') return;
+  if (th.a < TAU * (SWINGS + 1)) { say('Ensin pyörähdys', '#ffd166'); return; }
+  // Rounded as it goes over the room, so every phone flies the very same throw.
+  const a = r3(th.a), v = r2(th.v);
+  throwNow(a, v);
+  if (isNet()) sendNet({ t: 'rel', a: [a, v] });
+}
+function throwNow(ang, v) {
+  const a = th;
+  a.phase = 'fly'; a.t = 0; a.a = ang; a.v = v;
+  const f = flight(ang, v);
+  a.mark = f.mark; a.why = f.why;
+  a.jav = Object.assign(hammerFly(v), { x0: f.x0, y0: f.y0, lx: f.lx, ly: f.ly, L: f.L,
+    stopS: f.hit === null ? null : f.hit * f.L });
+  if (a.mine) tone(520, 0.22, 'sawtooth', 0.06, 160);
+}
+function landed() {
+  th.phase = 'land'; th.t = 0;
+  if (th.mark >= 0) {
+    th.leads = comp && standings()[0] && th.mark > bestOf(standings()[0]);
+    if (th.mine) {
+      th.record = best === null || th.mark > best;
+      if (th.record) { best = th.mark; save('ennatys', best); }
+      tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
+    }
+  } else if (th.mine) tone(160, 0.3, 'sawtooth', 0.08, 70);
+}
+// A foul in the circle: the turn is over, no throw. out: the hammer pulls the thrower over the rim.
+function outcome(mark, why, out) {
+  const g = geo(th.a);
+  th.phase = 'land'; th.t = 0; th.mark = mark; th.why = why; th.jav = null;
+  th.out = out ? { t: 0, phi: g.phi } : null;
+  if (th.mine) {
+    tone(160, 0.3, 'sawtooth', 0.08, 70);
+    if (isNet()) sendNet({ t: 'rel', a: [r3(th.a), 0], why, out: !!out });
+  }
+}
+function report(mark) {
+  if (!isNet() || R.isHost) record(th.seq, mark);
+  else R.send({ t: 'res', round: comp.room, seq: th.seq, mark });
+}
+
+// ---------- Alone ----------
+function soloComp(saved) {
+  comp = saved || newComp('solo', [{ name: 'Sinä', p: 'me' }], level);
+  myId = 'me'; th = null; ending = null;
+  if (!saved) { advance(); save('kesken', comp); }
+  follow();
+  menu.classList.add('hidden');
+}
+
+// ---------- Playing with friends ----------
+// The host keeps the competition and throws for the computer; the phone whose turn it is runs its
+// own throw, sends where its hammer is (p), the release (rel) and the measured mark (res). The host
+// passes p and rel on to the others, who fly the same hammer, and sends the competition (c).
+function sendNet(m) {
+  m.round = comp.room;
+  if (R.isHost) R.send(Object.assign({ id: th.id }, m)); else R.send(m);
+}
+R.on('start', s => {
+  ending = null; th = null; myId = R.me;
+  if (R.isHost && !s.over) {
+    comp = newComp('net', s.players.map(p => ({ name: p.name, p: p.id })), level);
+    comp.room = s.round;
+    advance();
+    R.send({ t: 'c', round: s.round, c: comp });
+    follow();
+  } else comp = { mode: 'net', room: s.round, throwers: [], order: [], turn: 0, round: 1, seq: -1, wait: true };
+  menu.classList.add('hidden');
+});
+function watchFrom(m) {
+  // Another phone's thrower, as its phone sends it.
+  if (!th || th.mine || !comp || th.id !== m.id) return;
+  if (m.t === 'p' && (th.phase === 'wait' || th.phase === 'ready' || th.phase === 'spin')) {
+    th.a = m.a[0]; th.v = m.a[1]; th.phase = m.a[2];
+  }
+  if (m.t === 'rel' && th.phase !== 'fly' && th.phase !== 'land') {
+    if (m.why) { th.a = m.a[0]; outcome(-1, m.why, m.out); } else throwNow(m.a[0], m.a[1]);
+  }
+}
+R.on('message', (m, from) => {
+  if (!comp || !isNet() || m.round !== comp.room) return;
+  if (R.isHost) {
+    const t = current();
+    if (!t || t.p !== from) return;   // only the phone whose turn it is
+    if (m.t === 'p' || m.t === 'rel') { const f = Object.assign({}, m, { id: t.id }); R.send(f); watchFrom(f); }
+    if (m.t === 'res' && typeof m.mark === 'number') record(m.seq, m.mark);
+    return;
+  }
+  if (m.t === 'c') { comp = Object.assign(m.c, { room: comp.room }); follow(); }
+  else if (m.t === 'end') netEnd(m.res);
+  else watchFrom(m);
+});
+R.on('hello', id => { if (comp && isNet() && R.isHost && !comp.over) R.send({ t: 'c', round: comp.room, c: comp }, id); });
+// The computer throws for a phone that is away, and gives its turns back when it returns.
+R.on('continue', ids => {
+  if (!comp || !R.isHost) return;
+  comp.throwers.forEach(t => { if (ids.includes(t.p)) t.bot = true; });
+  const t = current();
+  if (t && t.bot) { th = null; advance(); if (!comp.over) R.send({ t: 'c', round: comp.room, c: comp }); follow(); }
+});
+R.on('back', id => {
+  if (!comp || !R.isHost) return;
+  comp.throwers.forEach(t => { if (t.p === id) t.bot = false; });
+  R.send({ t: 'c', round: comp.room, c: comp });
+});
+R.on('lobby', () => { comp = null; th = null; ending = null; });
+R.on('leave', () => { comp = null; th = null; ending = null; showMenu(); });
+R.on('menu', () => { comp = null; th = null; ending = null; showMenu(); });
+
+// ---------- The end ----------
+function results() {
+  return standings().map((t, i) => ({ id: t.id, p: t.p, name: t.name, col: t.col, best: bestOf(t), marks: t.marks.slice(), fin: !comp.final || comp.final.includes(t.id) }));
+}
+function over() {
+  comp.over = true;
+  const res = results();
+  if (isNet()) { const m = { t: 'end', round: comp.room, res }; R.deliver(m); R.endRound(); }
+  netEnd(res);
+}
+function netEnd(res) {
+  if (ending) return;
+  th = null;
+  const at = res.findIndex(r => r.p === myId), me = res[at];
+  ending = { t: 0, res, at, mark: me ? me.best : null, fin: me ? me.fin : true };
+  const counted = !isNet() || R.once(comp.room);
+  if (counted && me) {
+    comps++;
+    if (!isNet() && at === 0) { wins++; level++; }
+    save('kisat', comps); save('voitot', wins); save('taso', level);
+    if (me.best > 0) {
+      if (best === null || me.best > best) { best = me.best; save('ennatys', best); }
+      if (window.AiPelitScores) AiPelitScores.submit(me.best);
+    }
+  }
+  if (!isNet()) drop('kesken');
+  if (comp) comp.over = true;
+}
+const medal = i => ['🥇', '🥈', '🥉'][i] || '';
+const fmt = m => m === undefined || m === null ? '–' : m < 0 ? 'X' : m.toFixed(2).replace('.', ',') + ' m';
+function endText(e) {
+  if (e.at < 0) return 'Kisa päättyi';
+  if (!e.fin) return (e.at + 1) + '. sija · ei finaaliin' + (e.mark > 0 ? ' · ' + fmt(e.mark) : '');
+  const m = e.mark > 0 ? fmt(e.mark) : 'ei hyväksyttyä heittoa';
+  return e.at === 0 ? '🥇 Voitit kisan! ' + m : (medal(e.at) ? medal(e.at) + ' ' : '') + (e.at + 1) + '. sija · ' + m;
+}
+function afterEnd() {
+  const e = ending; ending = null;
+  if (isNet()) {
+    R.note(e.res.slice(0, FINAL).map((r, i) => (i + 1) + '. ' + (r.p === R.me ? 'Sinä' : r.name) + ' ' + fmt(r.best)).join(' · '));
+    comp = null;
+    R.backToRoom(endText(e), e.at === 0 ? 'win' : 'lose');
+    return;
+  }
+  comp = null;
+  showMenu(endText(e), e.at === 0 ? 'win' : 'lose');
+}
+
+// ---------- The loop ----------
+let lastT = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  step(dt);
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+// ---------- Drawing ----------
+let flash = { 1: 0, 2: 0 }, blend = 0, cam = { s: 30, y: 1.6 };
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function draw(dt = 0) {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
+  x.save();
+  if (land) { x.beginPath(); x.rect(SX, 0, SW, H); x.clip(); x.translate(SX, 0); }
+  drawScene(dt);
+  x.restore();
+  drawControls();
+}
+// The camera: close on the circle while throwing, out over the whole sector while it flies.
+function camera(dt) {
+  const fly = th && (th.phase === 'fly' || th.phase === 'land') && th.jav;
+  blend = fly ? Math.min(1, blend + dt * 1.2) : Math.max(0, blend - dt * 3);
+  const e = blend * blend * (3 - 2 * blend);
+  cam.s = circS * Math.pow(flyS / circS, e);
+  cam.y = 1.6 + (45 - 1.6) * e;
+  return cam.s;
+}
+// World (metres) to the screen: upright forward is up, on its side forward is right. h lifts a
+// point (the hammer in the air) as a camera high behind the circle would see it.
+let X0 = 0, Y0 = 0;
+function P(wx, wy, h = 0) {
+  const s = cam.s;
+  return land ? [X0 + (wy - cam.y) * s, Y0 + wx * s - h * s * 0.45] : [X0 + wx * s, Y0 - (wy - cam.y) * s - h * s * 0.45];
+}
+function drawScene(dt) {
+  const W = SW, s = camera(dt);
+  X0 = W / 2; Y0 = (hudTop + 64 + sceneB) / 2;
+  // Grass with mowing stripes across the throwing direction.
+  x.fillStyle = '#4f9a45'; x.fillRect(0, 0, W, sceneB);
+  for (let m = -10; m < 110; m += 5) {
+    if ((m / 5) % 2) continue;
+    const a = P(-60, m), b = P(60, m + 5);
+    x.fillStyle = '#58a54d';
+    x.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+  }
+  // The sector: two lines from the centre, the distance arcs every 10 m with their metres.
+  const far = 100;
+  x.strokeStyle = '#fff'; x.lineWidth = Math.max(2, 0.1 * s);
+  for (const sg of [-1, 1]) {
+    const p0 = P(Math.sin(HALF) * sg * CIRCLE_R, Math.cos(HALF) * CIRCLE_R), p1 = P(Math.sin(HALF) * sg * far, Math.cos(HALF) * far);
+    x.beginPath(); x.moveTo(p0[0], p0[1]); x.lineTo(p1[0], p1[1]); x.stroke();
+  }
+  x.font = '800 13px system-ui'; x.textAlign = 'center';
+  for (let m = 10; m <= 90; m += 10) {
+    const r = m + CIRCLE_R;
+    x.strokeStyle = 'rgba(255,255,255,.45)'; x.lineWidth = 1.5;
+    arcW(0, 0, r, Math.PI / 2 - HALF, Math.PI / 2 + HALF);
+    if (s < 12) {
+      const q = P(0, r);
+      x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.45)';
+      x.strokeText(m + ' m', q[0], q[1] - 4); x.fillStyle = '#fff'; x.fillText(m + ' m', q[0], q[1] - 4);
+    }
+  }
+  // The leader's mark and the player's own record, as arcs across the sector.
+  if (comp && comp.throwers.length) {
+    const lead = standings()[0], lb = bestOf(lead);
+    if (lb > 0) markArc(lb, '#ffd166', '1. ' + (lead.p === myId ? 'Sinä' : lead.name), -1);
+  }
+  if (best !== null) markArc(best, '#f1faee', 'Ennätys', 1);
+  drawCircle(s);
+  // The thrower and the hammer.
+  if (th) {
+    const t = thrower(th.id);
+    drawThrower(th, s, t ? t.col : COLORS[0], t ? (th.mine ? 'Sinä' : t.name) : '');
+  }
+  drawCage(s);
+  if (th && th.jav) drawFlight(th.jav, s);
+  drawHud();
+  if (th && th.phase === 'wait') drawBoard(false);
+  if (ending) drawBoard(true);
+  if (comp && comp.wait && !th && !ending) message('Odotetaan…', '#fff');
+}
+// An arc round a world point, from angle a0 to a1 (radians, anticlockwise from x).
+function arcW(cx, cy, r, a0, a1, fill) {
+  x.beginPath();
+  for (let k = 0; k <= 24; k++) { const t = a0 + (a1 - a0) * k / 24, p = P(cx + Math.cos(t) * r, cy + Math.sin(t) * r); k ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1]); }
+  x.stroke();
+}
+function markArc(m, col, label, side) {
+  const r = m + CIRCLE_R;
+  x.strokeStyle = col; x.lineWidth = 3; x.setLineDash([6, 5]);
+  arcW(0, 0, r, Math.PI / 2 - HALF, Math.PI / 2 + HALF); x.setLineDash([]);
+  if (cam.s > 12) return;
+  const a = Math.PI / 2 - side * HALF, p = P(Math.cos(a) * r, Math.sin(a) * r);
+  x.font = '700 11px system-ui'; x.textAlign = side > 0 ? 'left' : 'right'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.55)';
+  const tx = p[0] + (side > 0 ? 6 : -6), ty = p[1] + (land ? side * 12 : 4);
+  x.strokeText(label, tx, ty); x.fillStyle = '#fff'; x.fillText(label, tx, ty);
+}
+// The circle: concrete inside a white rim, the stop-board line out to the sides.
+function drawCircle(s) {
+  const o = P(0, 0);
+  x.fillStyle = '#c8553d';
+  x.beginPath(); x.arc(o[0], o[1], (CIRCLE_R + 0.55) * s, 0, 7); x.fill();
+  x.fillStyle = '#9aa3ab'; x.beginPath(); x.arc(o[0], o[1], CIRCLE_R * s, 0, 7); x.fill();
+  x.fillStyle = 'rgba(255,255,255,.08)'; x.beginPath(); x.arc(o[0] - 0.2 * s, o[1] - 0.2 * s, CIRCLE_R * 0.75 * s, 0, 7); x.fill();
+  x.strokeStyle = '#fff'; x.lineWidth = Math.max(2, 0.08 * s);
+  x.beginPath(); x.arc(o[0], o[1], CIRCLE_R * s, 0, 7); x.stroke();
+  // The white lines 0.75 m out on each side mark the circle's front and back halves.
+  x.lineWidth = Math.max(2, 0.05 * s);
+  for (const sg of [-1, 1]) { const a = P(sg * CIRCLE_R, 0), b = P(sg * (CIRCLE_R + 0.75), 0); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); }
+}
+// The cage, from above: the net round the back, the doors to the mouth, posts at the joins.
+function drawCage(s) {
+  const pts = CAGE.map(q => P(q[0], q[1]));
+  x.lineJoin = 'round'; x.lineCap = 'round';
+  x.strokeStyle = 'rgba(20,28,40,.35)'; x.lineWidth = Math.max(5, 0.3 * s);
+  x.beginPath(); pts.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.stroke();
+  x.strokeStyle = '#2b3a4f'; x.lineWidth = Math.max(2, 0.08 * s);
+  x.beginPath(); pts.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.stroke();
+  x.fillStyle = '#d9dee4';
+  pts.forEach((p, i) => { if (i % 4 === 0 || i === pts.length - 1) { x.beginPath(); x.arc(p[0], p[1], Math.max(2, 0.1 * s), 0, 7); x.fill(); } });
+  // A hammer stopped by the net shakes it.
+  if (th && th.jav && th.jav.stopS !== null && th.jav.s >= th.jav.stopS && th.jav.t < 3) {
+    const q = hammerAt(th.jav), p = P(q[0], q[1]);
+    x.strokeStyle = 'rgba(255,107,94,.8)'; x.lineWidth = 3;
+    x.beginPath(); x.arc(p[0], p[1], (0.4 + 0.3 * Math.sin(th.jav.t * 30)) * s, 0, 7); x.stroke();
+  }
+}
+// The hammer: a dark ball, its shadow on the ground, bigger the higher it is.
+function drawBall(wx, wy, h, s) {
+  const g = P(wx, wy), p = P(wx, wy, h), r = Math.max(4, 0.13 * s * (1 + h * 0.12));
+  x.fillStyle = 'rgba(0,0,0,.28)'; x.beginPath(); x.ellipse(g[0], g[1], r * 1.1, r * 0.7, 0, 0, 7); x.fill();
+  x.fillStyle = '#2d3138'; x.beginPath(); x.arc(p[0], p[1], r, 0, 7); x.fill();
+  x.fillStyle = 'rgba(255,255,255,.55)'; x.beginPath(); x.arc(p[0] - r * 0.35, p[1] - r * 0.35, r * 0.35, 0, 7); x.fill();
+  return p;
+}
+function drawFlight(j, s) {
+  if (!th.out) j.trail.forEach((q, i, all) => {
+    const p = P(q[0], q[1], q[2]);
+    x.fillStyle = 'rgba(255,255,255,' + (0.15 + 0.6 * i / all.length) + ')';
+    x.beginPath(); x.arc(p[0], p[1], 2, 0, 7); x.fill();
+  });
+  const q = hammerAt(j);
+  if (j.stuck) {
+    // Where it came down: a ring round the dent, easy to find from far.
+    const p = P(q[0], q[1]);
+    x.strokeStyle = th.mark >= 0 ? '#fff' : '#ff6b5e'; x.lineWidth = 2.5;
+    x.beginPath(); x.arc(p[0], p[1], 10, 0, 7); x.stroke();
+  }
+  drawBall(q[0], q[1], j.h, Math.max(s, 30));
+  if (j.stuck && th.mark >= 0) {
+    // The mark, and the tape back to the circle's centre that measures it.
+    const o = P(0, 0), p = P(q[0], q[1]);
+    x.strokeStyle = 'rgba(255,209,102,.8)'; x.lineWidth = 2; x.setLineDash([4, 4]);
+    x.beginPath(); x.moveTo(o[0], o[1]); x.lineTo(p[0], p[1]); x.stroke(); x.setLineDash([]);
+  }
+}
+// The thrower from above: shoulders square to the hammer, arms out to the handle, the wire to the ball.
+function drawThrower(a, s, col, name) {
+  const spin = a.phase === 'spin' || a.phase === 'fly' || a.phase === 'land';
+  const g = geo(spin ? a.a : 0);
+  let bx = g.bx, by = g.by, phi = spin ? g.phi : PHI_LOW, r = spin ? g.r : 1.35;
+  if (a.out) { const k = Math.min(1, a.out.t * 2.5); phi = a.out.phi; bx += Math.cos(phi) * 1.3 * k; by += Math.sin(phi) * 1.3 * k; }
+  const live = a.mine && a.phase === 'spin';
+  // The low point's window, as long in time at every speed, and where letting go hits the sector.
+  if (live) {
+    const w = omega(a.a, a.v), lw = Math.max(5, 0.32 * s), rr0 = radius(a.a);
+    const n = Math.round(a.a / TAU), off = Math.abs(a.a - n * TAU) / w, inWin = n >= 1 && n <= LAPS && off <= WIN && !a.tapped[n];
+    x.lineCap = 'round';
+    x.strokeStyle = 'rgba(255,255,255,.25)'; x.lineWidth = 2;
+    arcW(bx, by, rr0, 0, TAU);
+    x.strokeStyle = inWin ? '#b6ffb0' : 'rgba(126,224,129,.75)'; x.lineWidth = lw;
+    arcW(bx, by, rr0, PHI_LOW - WIN * w, PHI_LOW + WIN * w);
+    if (a.a >= TAU * (SWINGS + 1) - 0.5) {
+      const z = HALF / HELP;
+      x.strokeStyle = 'rgba(255,209,102,.8)'; x.lineWidth = lw * 0.6;
+      arcW(bx, by, rr0 + 0.45, PHI_REL - z, PHI_REL + z);
+      const t = P(bx + Math.cos(PHI_REL) * (rr0 + 0.95), by);
+      x.font = '900 13px system-ui'; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.5)';
+      x.strokeText('IRTI', t[0], t[1] + 4); x.fillStyle = '#ffd166'; x.fillText('IRTI', t[0], t[1] + 4);
+    }
+  }
+  const b = P(bx, by), dirS = (() => { const q = P(bx + Math.cos(phi), by + Math.sin(phi)); return Math.atan2(q[1] - b[1], q[0] - b[0]); })();
+  // Feet, body, head, drawn a half bigger than life so the thrower reads on a phone.
+  x.save(); x.translate(b[0], b[1]); x.rotate(dirS); x.scale(1.5, 1.5);
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(0, 0, 0.42 * s, 0.34 * s, 0, 0, 7); x.fill();
+  x.fillStyle = '#222';
+  x.beginPath(); x.ellipse(0.05 * s, -0.18 * s, 0.12 * s, 0.06 * s, 0, 0, 7); x.fill();
+  x.beginPath(); x.ellipse(0.05 * s, 0.18 * s, 0.12 * s, 0.06 * s, 0, 0, 7); x.fill();
+  x.fillStyle = col; x.beginPath(); x.ellipse(0, 0, 0.15 * s, 0.27 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = '#c98a62'; x.lineWidth = Math.max(2, 0.07 * s); x.lineCap = 'round';
+  x.beginPath(); x.moveTo(0, -0.22 * s); x.lineTo(0.4 * s, -0.03 * s); x.moveTo(0, 0.22 * s); x.lineTo(0.4 * s, 0.03 * s); x.stroke();
+  x.fillStyle = '#7a4a2c'; x.beginPath(); x.arc(-0.02 * s, 0, 0.12 * s, 0, 7); x.fill();
+  x.restore();
+  // The wire to the ball, which lifts on the high side of its path.
+  const hx = bx + Math.cos(phi) * 0.6, hy = by + Math.sin(phi) * 0.6;
+  if (!a.jav) {   // once let go, the ball is drawn in flight
+    let qx = bx + Math.cos(phi) * r, qy = by + Math.sin(phi) * r, h = spin ? height(phi) : 0;
+    if (a.out) h = Math.max(0, h * (1 - a.out.t * 2));
+    const hp = P(hx, hy, 1), qp = P(qx, qy, h);
+    x.strokeStyle = '#dfe6ee'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(qp[0], qp[1]); x.stroke();
+    drawBall(qx, qy, h, s);
+  }
+  if (name && s > 12) {
+    x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
+    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
+    const lab = a.mine ? '▼ Sinä' : name, p = P(bx, by), ly = p[1] - 0.55 * s - 8;
+    if (!live) { x.strokeText(lab, p[0], ly); x.fillStyle = a.mine ? '#ffd166' : '#fff'; x.fillText(lab, p[0], ly); }
+  }
+  if (pop && a.mine) {
+    const p = P(bx, by);
+    x.font = '900 20px system-ui'; x.textAlign = 'center'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+    const y = p[1] - (land ? 2.6 : 3.1) * s - (0.7 - pop.t) * 30;
+    x.globalAlpha = Math.min(1, pop.t * 3);
+    x.strokeText(pop.text, p[0], y); x.fillStyle = pop.col; x.fillText(pop.text, p[0], y);
+    x.globalAlpha = 1;
+  }
+}
+
+function drawHud() {
+  const W = SW, top = hudTop;
+  if (!comp || !comp.throwers.length) return;
+  x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, 64, 12); x.fill();
+  const me = comp.throwers.find(t => t.p === myId);
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
+  x.fillText('Kierros ' + Math.min(comp.round, ROUNDS) + '/' + ROUNDS, 20, top + 24);
+  x.textAlign = 'right'; x.font = '700 14px system-ui';
+  if (me) x.fillText(me.marks.length ? 'Paras ' + (bestOf(me) > 0 ? fmt(bestOf(me)) : 'X') + ' · ' + placeOf(me) + '.' : 'Ei heittoa vielä', W - 20, top + 24);
+  const t = th && thrower(th.id);
+  if (th && th.mine && th.phase === 'spin') {
+    // The hammer's speed, red where a tap out of rhythm pulls the thrower out of the circle.
+    const bx = 20, bw = W - 40 - 80, by = top + 40, full = 31;
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
+    x.fillStyle = 'rgba(255,107,94,.45)'; rr(bx + bw * RED / full, by, bw * (1 - RED / full), 12, 6); x.fill();
+    x.fillStyle = th.v >= RED ? '#ff6b5e' : th.v > 20 ? '#7ee081' : '#ffd166'; rr(bx, by, Math.max(12, bw * Math.min(1, th.v / full)), 12, 6); x.fill();
+    x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '800 14px system-ui';
+    x.fillText(th.v.toFixed(1).replace('.', ',') + ' m/s', W - 20, by + 11);
+    const n = Math.floor(th.a / TAU);
+    small(n < SWINGS ? 'Heilautus ' + (n + 1) + '/' + SWINGS : 'Pyörähdys ' + Math.min(TURNS, n - SWINGS + 1) + '/' + TURNS, n >= LAPS - 1 ? '#ffd166' : '#fff', 84);
+  } else if (t) {
+    x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
+    x.fillText(th.mine ? 'Sinun vuorosi' : 'Heittää: ' + t.name, 20, top + 50);
+  }
+  if (!th) return;
+  if (th.phase === 'ready' && th.mine) {
+    message('Sinun vuorosi!', '#ffd166');
+    small('Napauta Vauhtia: heilautus alkaa', '#fff');
+  } else if (th.phase === 'land') {
+    if (th.mark >= 0) {
+      message(fmt(th.mark), '#fff');
+      if (th.mine && th.record) small('Uusi ennätys!', '#7ee081');
+      else if (th.leads) small('Johtoon!', '#7ee081');
+    } else {
+      message('X', '#ff6b5e');
+      small(th.why || 'Hylätty', '#ff9a8b');
+    }
+  }
+}
+// Over the circle the texts go under the score panel; over the whole sector they go low, below
+// where the hammers land.
+const lowText = () => th && th.jav && blend > 0.5;
+function message(s, col) {
+  x.textAlign = 'center'; x.font = '900 34px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = lowText() ? sceneB - (land ? 54 : 96) : hudTop + 106, cx = lowText() && land ? SW * 0.32 : SW / 2;
+  x.strokeText(s, cx, y); x.fillStyle = col; x.fillText(s, cx, y);
+}
+function small(s, col, dy = 136) {
+  x.textAlign = 'center'; x.font = '800 17px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const low = lowText() && dy === 136, y = low ? sceneB - (land ? 24 : 66) : hudTop + dy, cx = low && land ? SW * 0.32 : SW / 2;
+  x.strokeText(fit(s, SW - 20), cx, y); x.fillStyle = col; x.fillText(fit(s, SW - 20), cx, y);
+}
+// The standings: between turns, and at the end with the medals.
+let boardBox = null;
+function fit(s, w) { if (x.measureText(s).width <= w) return s; while (s.length > 1 && x.measureText(s + '…').width > w) s = s.slice(0, -1); return s + '…'; }
+function drawBoard(final) {
+  const W = SW, rows = final ? ending.res : results();
+  const head = final ? 50 : 62, foot = final ? 0 : 26;
+  const avail = (land ? sceneB - safeT - 12 : sceneB - hudTop - 76) - head - foot;
+  const rowH = Math.min(24, Math.floor(avail / rows.length));
+  const h = head + rowH * rows.length + foot + 8;
+  const y0 = land ? Math.max(safeT + 6, (sceneB + safeT - h) / 2) : hudTop + 72;
+  x.fillStyle = 'rgba(10,20,40,.92)'; rr(12, y0, W - 24, h, 14); x.fill();
+  boardBox = { x: 12, y: y0, w: W - 24, h, rowH };
+  x.textAlign = 'center'; x.fillStyle = '#ffd166'; x.font = '900 19px system-ui';
+  x.fillText(final ? 'Lopputulokset' : comp.round > CUT ? 'Finaali · kierros ' + comp.round + '/' + ROUNDS : 'Kierros ' + comp.round + '/' + ROUNDS, W / 2, y0 + 30);
+  const fs = Math.min(15, rowH - 7), right = W - 26, lastW = 74;
+  if (!final) {
+    x.font = '700 11px system-ui'; x.fillStyle = '#8fa5bb'; x.textAlign = 'right';
+    x.fillText('VIIMEISIN', right - lastW - 6, y0 + 52); x.fillText('PARAS', right, y0 + 52);
+  }
+  rows.forEach((r, i) => {
+    const y = y0 + head + i * rowH + rowH * 0.7, mine = r.p === myId;
+    if (i === FINAL && (final || comp.round <= CUT)) {
+      x.strokeStyle = 'rgba(255,255,255,.35)'; x.setLineDash([4, 4]); x.lineWidth = 1;
+      x.beginPath(); x.moveTo(24, y - rowH * 0.7); x.lineTo(W - 24, y - rowH * 0.7); x.stroke(); x.setLineDash([]);
+    }
+    const out = !r.fin;
+    if (mine) { x.fillStyle = 'rgba(255,209,102,.18)'; x.fillRect(16, y - rowH * 0.72, W - 32, rowH); }
+    x.globalAlpha = out ? 0.55 : 1;
+    x.fillStyle = r.col; x.beginPath(); x.arc(46, y - fs * 0.33, Math.max(3, fs * 0.33), 0, 7); x.fill();
+    x.font = '700 ' + fs + 'px system-ui'; x.textAlign = 'right'; x.fillStyle = '#b9cfe0';
+    x.fillText((final && medal(i)) || (i + 1) + '.', 38, y);
+    x.textAlign = 'left'; x.font = (mine ? '900 ' : '600 ') + fs + 'px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+    const name = mine && isNet() ? 'Sinä' : r.name;
+    // The latest throw (dimmer), then the best.
+    const last = r.marks.length ? r.marks[r.marks.length - 1] : undefined;
+    const recent = !final && comp.recent.includes(r.id);
+    x.fillText(fit(name, right - lastW - 74 - 56), 56, y);
+    x.textAlign = 'right'; x.font = '900 ' + fs + 'px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+    x.fillText(r.best > 0 ? fmt(r.best) : r.marks.length ? 'X' : '–', right, y);
+    if (!final) {
+      x.font = (recent ? '800 ' : '600 ') + (fs - 2) + 'px system-ui'; x.fillStyle = recent ? (last < 0 ? '#ff9a8b' : '#8ecae6') : 'rgba(185,207,224,.7)';
+      x.fillText(fmt(last), right - lastW - 6, y);
+    }
+    x.globalAlpha = 1;
+  });
+  if (!final) {
+    const t = current();
+    x.textAlign = 'center'; x.font = '700 14px system-ui'; x.fillStyle = '#b9cfe0';
+    const who = t && (t.p === myId ? 'Seuraavaksi: sinä' : 'Seuraavaksi: ' + t.name);
+    x.fillText(comp.round <= CUT ? who + ' · 8 parasta jatkaa' : who, W / 2, y0 + h - 14);
+  }
+}
+
+// Two pads: Vauhtia (the rhythm) and Irti! (let go). Upright side by side under the scene; on its
+// side a column at each edge, Vauhtia on the left and Irti! on the right, where the thumbs rest.
+function pads() {
+  if (land) {
+    const y = safeT + 40, h = H - safeB - 6 - y, w = side - 12;
+    return [{ k: 1, x: safeL + 6, y, w, h }, { k: 2, x: W - safeR - side + 6, y, w, h }];
+  }
+  const y = ctrlTop + 6, h = ctrlH - 12, w1 = Math.round(W * 0.56);
+  return [{ k: 1, x: 6, y, w: w1 - 9, h }, { k: 2, x: w1 + 3, y, w: W - w1 - 9, h }];
+}
+function drawControls() {
+  if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
+  const live = th && th.mine && (th.phase === 'ready' || th.phase === 'spin');
+  const canGo = live && th.phase === 'spin' && th.a >= TAU * (SWINGS + 1);
+  for (const b of pads()) {
+    const on = b.k === 1 ? live : canGo;
+    x.fillStyle = !on ? '#22385a' : flash[b.k] > 0 ? '#ffe08a' : b.k === 2 ? '#ffb703' : '#4f7fc4';
+    rr(b.x, b.y, b.w, b.h, 18); x.fill();
+    x.fillStyle = !on ? '#6f86a6' : b.k === 2 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    x.font = '900 32px system-ui';
+    x.fillText(b.k === 1 ? '⟳' : '➶', b.x + b.w / 2, b.y + b.h / 2 + 4);
+    x.font = '800 15px system-ui';
+    x.fillText(b.k === 1 ? 'Vauhtia' : 'Irti!', b.x + b.w / 2, b.y + b.h / 2 + 30);
+  }
+}
+
+// ---------- Input ----------
+// Which pad a finger is on: 1 Vauhtia, 2 Irti!. A tap on the scene skips the standings.
+function padAt(cx, cy) {
+  const b = pads().find(p => cx >= p.x - 6 && cx <= p.x + p.w + 6 && cy >= p.y - 6 && cy <= p.y + p.h + 6);
+  if (b) return b.k;
+  if (land) return cx < SX ? 1 : cx >= SX + SW ? 2 : 0;
+  return 0;
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (ending && !isNet()) { ending.t = 99; return; }  // alone, a tap leaves the results
+  const k = padAt(e.clientX, e.clientY);
+  if (k) press(k);
+  else if (th && th.mine && th.phase === 'wait' && !isNet()) th.t = BOARD_T;
+});
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
+  else if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'x') press(2);
+});
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja 10 muuta';
+  document.getElementById('stats').textContent = 'Kisat ' + comps + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
+  const kept = load('kesken', null), cont = document.getElementById('cont');
+  cont.classList.toggle('hidden', !kept);
+  if (kept) cont.textContent = 'Jatka kisaa (kierros ' + kept.round + '/' + ROUNDS + ')';
+  menu.classList.remove('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); drop('kesken'); soloComp(); });
+document.getElementById('cont').addEventListener('click', () => {
+  unlock();
+  const kept = load('kesken', null);
+  if (kept && kept.throwers && kept.mode === 'solo') soloComp(kept); else showMenu();
+});
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="moukari" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
