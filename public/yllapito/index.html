@@ -16,6 +16,8 @@
   form { display: flex; gap: 8px; }
   form[hidden] { display: none; }
   button { font-family: inherit; }
+  .palaute { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .palaute p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   form input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 0; font: 16px system-ui, sans-serif; }
 </style>
 </head>
@@ -30,6 +32,9 @@
   </form>
   <p id="msg" class="muted"></p>
   <div id="list"></div>
+  <h1 id="feedback-title" hidden>Palautteet</h1>
+  <p id="feedback-note" class="muted" hidden>Pelaajien palautteet peleistä. Kerran päivässä uudet kootaan GitHubiin, ja agentti kysyy sinulta, mitkä korjataan.</p>
+  <div id="feedback"></div>
 </main>
 <script>
 // The admin's page for nicknames (#25). The key is the ADMIN_KEY secret on Cloudflare; it is
@@ -50,8 +55,8 @@
   var note = ''; // said once above the list after it reloads
   var LABEL = { pending: 'odottaa', approved: 'hyväksytty', rejected: 'hylätty' };
 
-  function call(method, body) {
-    return fetch('../api/admin/players', {
+  function call(method, body, path) {
+    return fetch('../api/admin/' + (path || 'players'), {
       method: method,
       headers: { 'content-type': 'application/json', 'x-admin-key': localStorage.getItem(KEY) || '' },
       body: body ? JSON.stringify(body) : undefined,
@@ -91,6 +96,39 @@
         list.appendChild(row);
       });
     }, fail);
+    showFeedback();
+  }
+
+  // The players' feedback, newest first, with the GitHub issue each was filed in (#184).
+  function showFeedback() {
+    var box = document.getElementById('feedback');
+    var titles = {};
+    Promise.all([
+      call('GET', undefined, 'feedback'),
+      fetch('../catalog.json').then(function (r) { return r.json(); }).then(function (c) {
+        c.games.forEach(function (g) { titles[g.slug] = g.title; });
+      }).catch(function () {}),
+    ]).then(function (all) {
+      var b = all[0];
+      document.getElementById('feedback-title').hidden = false;
+      document.getElementById('feedback-note').hidden = false;
+      box.textContent = '';
+      if (!b.feedback.length) { box.textContent = 'Ei vielä palautteita.'; return; }
+      b.feedback.forEach(function (f) {
+        var row = document.createElement('div'); row.className = 'palaute';
+        var head = document.createElement('div'); head.className = 'muted';
+        var at = new Date(f.at).toLocaleString('fi-FI', { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        head.textContent = (titles[f.game] || f.game) + (f.version ? ' v' + f.version : '') + ' · ' + f.name + ' · ' + at + ' · ';
+        if (f.issue) {
+          var a = document.createElement('a');
+          a.href = 'https://github.com/eerovil/ai-pelit/issues/' + f.issue; a.textContent = '#' + f.issue;
+          head.appendChild(a);
+        } else head.appendChild(document.createTextNode('uusi'));
+        var text = document.createElement('p'); text.textContent = f.text;
+        row.appendChild(head); row.appendChild(text);
+        box.appendChild(row);
+      });
+    }, function () { box.textContent = ''; });
   }
 
   function fail(e) {
