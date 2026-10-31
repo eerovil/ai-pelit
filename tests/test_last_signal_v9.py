@@ -439,6 +439,51 @@ def test_in_the_dark_a_cave_find_shows_only_where_a_lamp_lights_it(site, browser
     assert page.errors == []
 
 
+def test_stopping_the_autopilot_at_speed_leaves_sisu_still_at_the_helm(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    page.evaluate("G.s.up.hull = 2; G.s.known.nordvik = 1; G.mode = 'home'; crew.room = 'kartta'; doAct('me', 'auto', 'nordvik');"
+                  " run(() => true, 8)")
+    assert page.evaluate("Math.hypot(sub.vx, sub.vy)") > 5
+    page.evaluate("answer(doAct('me', 'autostop'))")
+    assert page.evaluate("[G.auto, sub.vx, sub.vy]") == [None, 0, 0]
+    # again at speed, then straight to the helm with the stick let go
+    page.evaluate("doAct('me', 'auto', 'nordvik'); run(() => true, 6)")
+    assert page.evaluate("Math.hypot(sub.vx, sub.vy)") > 5
+    page.click("#home")
+    x = page.evaluate("sub.x")
+    page.evaluate("input.x = input.y = 0; run(() => true, 2)")
+    assert page.evaluate("[G.mode, G.auto]") == ["sub", None]
+    assert abs(page.evaluate("sub.x") - x) < 0.5
+    assert page.errors == []
+
+
+def test_in_the_dark_iceberg_a_guide_and_a_friend_s_hose_show_only_in_lamp_light(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    cave_dive(page)
+    page.evaluate(f"({GLIDE})(4 * MAZE.cols + 1); draw()")
+    # A crossing on the screen that no lamp lights (behind ice).
+    spot = page.evaluate("""(() => { const v = G.view;
+      return MAZE_P.filter(p => p && !litAt(p[0], p[1]) && Math.hypot(p[0] - diver.x, p[1] - diver.y) < 12
+        && v.ox + p[0] * v.sc > 20 && v.ox + p[0] * v.sc < W - 20 && v.oy + p[1] * v.sc > 120 && v.oy + p[1] * v.sc < H - 200)[0]; })()""")
+    assert spot
+    px = """(() => { draw(); const v = G.view, d = ctx.getImageData(Math.round((v.ox + %s * v.sc) * DPR) - 6, Math.round((v.oy + %s * v.sc) * DPR) - 6, 12, 12).data;
+      let m = 0; for (let k = 0; k < d.length; k += 4) m = Math.max(m, d[k] + d[k + 1] + d[k + 2]); return m; })()""" % (spot[0], spot[1])
+    dark = page.evaluate(px)
+    # A guide clamped there, and a friend beside this diver (lit by both lamps) whose hose bends round that corner.
+    page.evaluate(f"""G.s.guides.push([{spot[0]}, {spot[1]}]);
+      net = {{ host: true, others: {{ x: {{ name: 'Aino', mode: 'dive', x: diver.x, y: diver.y, tx: diver.x, ty: diver.y, dir: 1,
+        suit: true, kit: 'hose', ang: 0, walkT: 0, hose: [0, 0, {spot[0]}, {spot[1]}] }} }}, names: {{ x: 'Aino' }},
+        cols: {{ x: '#3fcf7f' }}, helm: null }}""")
+    assert page.evaluate(px) <= dark + 30
+    # Without the dark (the diver out of the berg's view), the same guide and hose do show there: the test can see them.
+    page.evaluate("window.bergView = () => false")
+    assert page.evaluate(px) > dark + 100
+    page.evaluate("net = null")
+    assert page.errors == []
+
+
 def test_the_autopilot_finds_its_way_under_the_iceberg_and_up_an_opening(site, browser):
     page = open_game(site, browser)
     ready(page)

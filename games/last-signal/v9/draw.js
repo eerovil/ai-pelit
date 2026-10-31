@@ -73,6 +73,30 @@ function draw() {
   drawBeams();
   drawLayout();
   drawCaveLines(ctx, X0, X1, Y0, Y1, Math.max(0.12, 1.1 / sc), bergView() ? 'rgba(150,215,245,.55)' : 'rgba(20,60,90,.5)');
+  // v9 (#160): inside the dark iceberg everything drawn over the dark — finds, SISU, guides, hoses, divers, the spear,
+  // bubbles — shows only outside the berg or where a lamp lights it; the mapped wall outlines above stay.
+  if (G.lit) {
+    ctx.save(); ctx.beginPath(); ctx.rect(X0 - 50, Y0 - 50, X1 - X0 + 100, Y1 - Y0 + 100);
+    BERG.poly.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.clip('evenodd');
+    drawOverlays(X0, X1, Y0, Y1); ctx.restore();
+    ctx.save(); polyPath(ctx, BERG.poly); ctx.clip(); ctx.beginPath();
+    for (const p of G.lit) { for (let k = 0; k < p.length; k += 2) k ? ctx.lineTo(p[k], p[k + 1]) : ctx.moveTo(p[k], p[k + 1]); ctx.closePath(); }
+    ctx.clip(); drawOverlays(X0, X1, Y0, Y1); ctx.restore();
+  } else drawOverlays(X0, X1, Y0, Y1);
+  ctx.restore();
+  // marine snow
+  ctx.fillStyle = 'rgba(210,235,255,.35)';
+  if (!G.lit) for (const p of snow) {
+    const x = ((p.x * W - G.cx * sc * 0.3 * p.z) % W + W) % W, y = ((p.y * H - G.cy * sc * 0.3 * p.z + G.t * 8 * p.z) % H + H) % H;
+    if (y > sy) ctx.fillRect(x, y, 1.4 * p.z, 1.4 * p.z);
+  }
+  if (G.mode === 'ice') drawWeather(oy);
+  if (G.s && G.mode !== 'menu') drawSonar(ox, oy, sc);
+  if (net) drawNames(ox, oy, sc);
+  window.drawn = true;
+}
+// Everything drawn over the dark: finds, fish, SISU, guides, hoses, divers, walkers, bubbles and sparkles.
+function drawOverlays(X0, X1, Y0, Y1) {
   drawItems(X0, X1, Y0, Y1);
   if (G.s && X0 < 1700) drawSchools(X0, X1, Y0, Y1);
   if (X1 > 3200) drawFish();
@@ -93,17 +117,6 @@ function draw() {
   ctx.fillStyle = 'rgba(220,240,255,.5)';
   for (const b of bubbles) { ctx.beginPath(); ctx.arc(b.x, b.y, 0.12 + b.t * 0.05, 0, 7); ctx.fill(); }
   if (G.s && G.mode === 'dive') sparkles();
-  ctx.restore();
-  // marine snow
-  ctx.fillStyle = 'rgba(210,235,255,.35)';
-  for (const p of snow) {
-    const x = ((p.x * W - G.cx * sc * 0.3 * p.z) % W + W) % W, y = ((p.y * H - G.cy * sc * 0.3 * p.z + G.t * 8 * p.z) % H + H) % H;
-    if (y > sy) ctx.fillRect(x, y, 1.4 * p.z, 1.4 * p.z);
-  }
-  if (G.mode === 'ice') drawWeather(oy);
-  if (G.s && G.mode !== 'menu') drawSonar(ox, oy, sc);
-  if (net) drawNames(ox, oy, sc);
-  window.drawn = true;
 }
 function drawGlacier() {
   const top = [[0, -64], [12, -66], [22, -58], [30, -61], [40, -44], [44, -28], [38, -14], [42, -6], [34, 0], [0, 0]];
@@ -899,6 +912,8 @@ function drawNames(ox, oy, sc) {
   ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const [id, o] of Object.entries(net.others)) {
     let wx, wy;
+    // v9: a friend in the dark iceberg goes unnamed until a lamp lights them
+    if (o.mode === 'dive' && G.lit && pip(o.x, o.y, BERG.poly) && !litAt(o.x, o.y)) continue;
     if (o.mode === 'dive') { wx = o.x; wy = o.y - 1.3; }
     // Inside, clear of the room names: over the hull for the upper deck, on the deck between them for the lower.
     else if (o.mode === 'home' && G.mode === 'home' && G.homeT > 0.5) { wx = sub.x + sub.face * o.x; wy = sub.y + (o.y > 1 ? 0.35 : o.y < -1 ? o.y - 2.1 : -2.75); }
