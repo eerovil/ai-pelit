@@ -136,13 +136,15 @@ high-score lists (#25), then play counts (#26).
   (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
   `get(id)`. Trampoliini v6 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-1/kisa.js"></script>` after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-2/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
   game keeps its own attempt and drawing. The options are listed at the top of `kisa.js`;
-  Pituushyppy v2 is the model. Like `lib/three-r*/`, the folder never changes once published: a
-  fix goes in `yleisurheilu-2/`, used by the next versions. The bar-height format (high jump, pole
+  Pituushyppy v4 is the model. At the end, `K.drawPodium(ctx, box)` draws the medal ceremony
+  (`yleisurheilu-2/`, #176): the top three on the podium, the medals hung around their necks, the
+  final standings under it. Like `lib/three-r*/`, a folder never changes once published: a fix
+  goes in the next one (`yleisurheilu-3/`), used by the next versions. The bar-height format (high jump, pole
   vault) is `korkeus.js` beside it, loaded after `kisa.js` (Korkeushyppy v2). A new format may be
   added beside them as a new file.
 - `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
