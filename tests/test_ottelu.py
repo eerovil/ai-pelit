@@ -134,7 +134,7 @@ def test_a_match_goes_on_after_a_reload(site, context):
     assert page.errors == []
 
 
-@pytest.mark.parametrize("size", [(360, 640), (740, 360)])
+@pytest.mark.parametrize("size", [(360, 640), (390, 844), (740, 360)])
 def test_the_menu_and_the_board_fit(site, context, size):
     page = open_game(site, context, saved={"lajit": ["keihas", "moukari"]})
     turn(page, {"width": size[0], "height": size[1]})
