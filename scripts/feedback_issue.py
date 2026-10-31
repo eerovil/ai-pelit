@@ -6,7 +6,8 @@
     python3 scripts/feedback_issue.py --show <n>   # print the feedback filed in issue <n>
 
 Players write feedback on a game's page in the shelf (approved nicknames only); it waits in the
-site's database until this script files it. The feedback is private and the repository is
+site's database until this script files it. The issue is filed bare, its feedback linked to it,
+and only then given the label that starts its Work. The feedback is private and the repository is
 public, so the issue names only the items' numbers and games: never a nickname or a player's
 words. The issue's agent reads them on this host with --show, which asks the site with the
 admin key. The issue carries the `claude` label, so AgentDeck starts a Work on it: its agent
@@ -18,6 +19,7 @@ in ~/.local/share/ai-pelit/admin-key and `gh` speaking as AgentDeck's GitHub App
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -108,10 +110,23 @@ def filed_earlier(feedback: list[dict], issues: list[dict]) -> dict[int, list[in
     return found
 
 
+def unstarted(issues: list[dict]) -> list[int]:
+    """The App's open issues whose feedback is linked but whose Work never started: the label
+    is added only after the linking, and a run cut off between the two leaves the issue bare."""
+    return [i["number"] for i in issues
+            if (i.get("author") or {}).get("login") in AUTHORS and i.get("state") == "OPEN"
+            and MARKER.search(i.get("body") or "") and LABEL not in [lb["name"] for lb in i.get("labels") or []]]
+
+
 def earlier_issues() -> list[dict]:
     out = subprocess.run(["gh", "issue", "list", "--repo", REPO, "--state", "all", "--search", "Palautteet in:title",
-                          "--limit", "30", "--json", "number,body,author"], check=True, capture_output=True, text=True).stdout
+                          "--limit", "30", "--json", "number,body,author,state,labels"], check=True, capture_output=True, text=True).stdout
     return json.loads(out)
+
+
+def start(number: int) -> None:
+    """Adds the ownership label, which starts the issue's Work, once its feedback is linked."""
+    subprocess.run(["gh", "issue", "edit", str(number), "--repo", REPO, "--add-label", LABEL], check=True, capture_output=True, text=True)
 
 
 def main() -> int:
@@ -128,16 +143,19 @@ def main() -> int:
         print(shown(feedback, titles()) if feedback else f"no feedback filed in #{args.show}")
         return 0
     feedback = call("GET", "api/admin/feedback?new=1", key)["feedback"]
-    if not feedback:
-        print("no new feedback")
-        return 0
     if not args.dry_run:
-        for number, ids in filed_earlier(feedback, earlier_issues()).items():
+        # Finish what a run cut off left: link its feedback, then start its Work.
+        issues = earlier_issues()
+        for number, ids in filed_earlier(feedback, issues).items():
             call("POST", "api/admin/feedback", key, {"ids": ids, "issue": number})
             print(f"already filed in {REPO}#{number}: {ids}")
             feedback = [f for f in feedback if f["id"] not in ids]
-        if not feedback:
-            return 0
+        for number in unstarted(issues):
+            start(number)
+            print(f"started {REPO}#{number}")
+    if not feedback:
+        print("no new feedback")
+        return 0
     names = titles()
     title, body = issue_title(feedback, datetime.now(TZ)), issue_body(feedback, names)
     if args.dry_run:
@@ -146,13 +164,16 @@ def main() -> int:
     with tempfile.NamedTemporaryFile("w", suffix=".md", dir="/var/tmp") as f:
         f.write(body)
         f.flush()
-        out = subprocess.run(["gh", "issue", "create", "--repo", REPO, "--title", title, "--label", LABEL, "--body-file", f.name],
-                             check=True, capture_output=True, text=True).stdout
+        # No label yet: its Work starts only once the feedback is linked, so the agent never
+        # finds an empty list (#184, Eero's choice).
+        out = subprocess.run(["gh", "issue", "create", "--repo", REPO, "--title", title, "--body-file", f.name],
+                             check=True, capture_output=True, text=True, env={**os.environ, "AGENTDECK_NO_OWNER_LABEL": "1"}).stdout
     m = re.search(r"/issues/(\d+)", out)
     if not m:
         print(f"filed, but no issue number in: {out!r}", file=sys.stderr)
         return 1
     call("POST", "api/admin/feedback", key, {"ids": [f["id"] for f in feedback], "issue": int(m[1])})
+    start(int(m[1]))
     print(f"filed {len(feedback)} as {REPO}#{m[1]}")
     return 0
 
