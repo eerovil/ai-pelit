@@ -145,8 +145,9 @@ high-score lists (#25), then play counts (#26).
   (`yleisurheilu-2/`, #176): the top three on the podium, the medals hung around their necks, the
   final standings under it. Like `lib/three-r*/`, a folder never changes once published: a fix
   goes in the next one (`yleisurheilu-3/`), used by the next versions. The bar-height format (high jump, pole
-  vault) is `korkeus.js` beside it, loaded after `kisa.js` (Korkeushyppy v2). A new format may be
-  added beside them as a new file.
+  vault) is `yleisurheilu-1/korkeus.js`, loaded after that folder's `kisa.js` (Korkeushyppy v2);
+  `yleisurheilu-2/` has no `korkeus.js` yet, so the next Korkeus and Seiväs versions add it there
+  (#176). A new format may be added beside them as a new file.
 - `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
