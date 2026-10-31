@@ -120,3 +120,15 @@ def test_the_free_panel_has_no_text_on_text_or_under_the_stop_button(site, conte
         for b in texts[i + 1:]:
             assert a["x1"] <= b["x0"] or b["x1"] <= a["x0"] or a["y1"] <= b["y0"] or b["y1"] <= a["y0"], (a, b)
     assert page.errors == []
+
+
+def test_a_reload_mid_free_throwing_keeps_the_saves_and_the_board_choice(site, context):
+    page = open_game(site, context, {"mokki": 231, "ennatys": 412, "voitot": 3, "vastus": "kova"})
+    page.click("#frees button[data-b=darts]")
+    throw_turn(page, 0, 0)
+    page.reload()
+    page.evaluate(RUN)
+    # A reload ends the free session, like leaving it; every earlier save is still there.
+    assert page.evaluate("[phase, freeBoard, opp]") == ["menu", "darts", "kova"]
+    assert page.inner_text("#stats") == "Ennätykset: Mökkitikka 231 p · Pistekisa 412 p · Voittoja tietokoneesta 3"
+    assert page.errors == []
