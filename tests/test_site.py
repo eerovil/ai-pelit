@@ -32,7 +32,8 @@ def test_every_real_version_loads_without_errors(site, context, changed_games_on
         if changed_games_only is not None and game["slug"] not in changed_games_only:
             continue
         # Back to the shelf for each game: the loop below leaves the page on a game.
-        page.goto(site.url)
+        # A game in a shelf group (#153) has its card on the group's page.
+        page.goto(site.url + ("#/" + game["group"] if game.get("group") else ""))
         # The shelf draws its cards after fetching catalog.json: wait for the card, a busy runner
         # can take longer than the page's load event (#123).
         page.wait_for_selector(f'.card[data-slug="{game["slug"]}"]', state="visible")
@@ -184,6 +185,37 @@ def test_a_game_joining_a_group_moves_into_its_card_on_an_open_shelf(site, conte
     page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
     page.wait_for_selector('.card[data-slug="hyppy"]', state="detached", timeout=10000)
     assert page.locator('.card[data-slug="yleisurheilu"] .meta').inner_text().startswith("2 peliä")
+
+
+@pytest.mark.parametrize("start, target, ups", [
+    ("vanha", "hyppy", ["#/hyppy", "#/yleisurheilu", ""]),
+    ("hyppy", "vanha", ["#/vanha", ""]),
+    ("hyppy", "keihas", ["#/keihas", "#/yleisurheilu", ""]),
+])
+def test_a_room_code_for_another_game_keeps_that_games_own_way_up(site, context, start, target, ups):
+    # rooms.js steps back to the first game's page and leaves this note (moninpeli.md); the page
+    # below becomes the target game's, under its own group's page when it has one.
+    make_game(site.games, "vanha", [game_page("v1")])
+    make_game(site.games, "hyppy", [game_page("v1")], group="yleisurheilu")
+    make_game(site.games, "keihas", [game_page("v1")], group="yleisurheilu")
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    if start != "vanha":
+        page.click('.card[data-slug="yleisurheilu"] .card-main')
+        page.wait_for_url(f"{site.url}#/yleisurheilu")
+    page.click(f'.card[data-slug="{start}"] .card-main')
+    page.wait_for_url(f"{site.url}#/{start}")
+    page.evaluate("""([s, t]) => sessionStorage.setItem('ai-pelit:_avaa',
+        JSON.stringify({ from: '#/' + s, page: '#/' + t, game: 'games/' + t + '/v1/' }))""", [start, target])
+    page.reload()
+    page.wait_for_url(f"**/games/{target}/v1/")
+    for hash_ in ups:
+        page.go_back()
+        page.wait_for_url(site.url + hash_)
+    page.wait_for_selector(".card")
+    page.go_back()
+    assert page.url == "about:blank"
 
 
 def test_a_ctrl_click_opens_the_link_in_a_new_tab_as_before(site, context):

@@ -298,6 +298,7 @@
 
   // Network first, every time the shelf is opened or comes back on screen, so a new
   // game shows without reinstalling. The service worker answers from its cache offline.
+  var catalogReady = null;
   function loadCatalog() {
     return fetch('catalog.json', { cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -350,6 +351,13 @@
   });
   // A room code typed in game A that belongs to game B (rooms.js) steps back here to A's page and
   // leaves this note: A's page becomes B's, and B opens over it, so back from B goes to B's page.
+  // When B's page belongs under another parent than A's (a shelf group, #153), the history below
+  // it is made B's own: shelf → B's group → B's page, or shelf → B's page.
+  function parentOf(hash) {
+    var game = catalog.games.filter(function (g) { return '#/' + g.slug === hash; })[0];
+    return game && game.group && findGroup(game.group) ? '#/' + game.group : '#/';
+  }
+
   function openFromRoom() {
     var to = null;
     try {
@@ -359,10 +367,39 @@
     if (!to || to.from !== location.hash || !/^#\/[a-z0-9-]+$/.test(to.page)) return;
     var url = new URL(to.game, location.href);
     if (url.origin !== location.origin) return;
-    history.replaceState({ up: true }, '', to.page);
-    render();
-    try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
-    location.assign(url.href);
+    function open() {
+      render();
+      try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
+      location.assign(url.href);
+    }
+    // Over the page below, which is the shelf: B's group's page first, when it has one.
+    function onShelf(dest) {
+      if (dest === '#/') history.replaceState({ up: true }, '', to.page);
+      else { history.replaceState({ up: true }, '', dest); history.pushState({ up: true }, '', to.page); }
+      open();
+    }
+    // The groups come from the catalog, which may still be on its way.
+    (catalogReady || (catalogReady = loadCatalog())).then(function () {
+      if (!catalog) return;
+      var from = parentOf(to.from), dest = parentOf(to.page);
+      if (from === dest) {
+        history.replaceState({ up: true }, '', to.page);
+        open();
+      } else if (from === '#/') {
+        onShelf(dest);
+      } else if (history.state && history.state.up) {
+        // A's group page is just below: step back to it, and build B's way up over the shelf.
+        window.addEventListener('popstate', function once() {
+          window.removeEventListener('popstate', once);
+          onShelf(dest);
+        });
+        history.back();
+      } else {
+        // Nothing of ours below: B's page takes A's place, and its back link goes up by address.
+        history.replaceState({ up: false }, '', to.page);
+        open();
+      }
+    });
   }
   window.addEventListener('pageshow', function (e) { if (e.persisted) { openFromRoom(); render(); } });
   // Only once the page has loaded: a page still loading would open the game in place of B's page.
@@ -389,5 +426,5 @@
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }
 
-  loadCatalog();
+  if (!catalogReady) catalogReady = loadCatalog();
 })();
