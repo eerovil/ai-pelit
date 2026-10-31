@@ -11,7 +11,8 @@ URL = "games/moukari/v1/"
 # Test helpers in the page: run(cond, max) steps the game 1/120 s at a time; tapAt(n, err) waits
 # for the n-th low point and taps Vauhtia err seconds before it; letGo(dev) waits until the hammer
 # is where letting go throws dev degrees off the middle and presses Irti!; spin(turns, err, dev)
-# is a whole throw; quick() lands it and reports it.
+# is a whole throw: a tap at every low point up to the one that starts the last turn, and the
+# release in that turn; quick() lands it and reports it.
 HELPERS = """() => {
   window.run = (cond, max = 10) => { for (let t = 0; t < max && cond(); t += 1 / 120) step(1 / 120); };
   window.tapAt = (n, err = 0) => {
@@ -28,7 +29,7 @@ HELPERS = """() => {
   window.spin = (turns = 4, err = 0, dev = 0) => {
     if (th.phase === 'wait') { th.t = 99; step(0.001); }
     press(1);
-    for (let n = 1; n <= SWINGS + turns; n++) tapAt(n, err);
+    for (let n = 1; n < SWINGS + turns; n++) tapAt(n, err);
     if (th.phase === 'spin') letGo(dev);
   };
   window.quick = () => {
@@ -98,14 +99,14 @@ def test_rhythm_taps_add_speed_and_bad_taps_lose_it(site, context):
     assert v1 > 14
     page.evaluate("run(() => th.a < 1.5 * TAU); press(1)")
     assert page.evaluate("th.v") == pytest.approx(v1 - 1.6, abs=0.01)
+    # Irti! does nothing in the swings, before the first turn's low point.
+    page.evaluate("run(() => th.a < 1.9 * TAU); press(2)")
+    assert page.evaluate("th.phase") == "spin"
     # A second tap in the same window does nothing more.
     page.evaluate("tapAt(2, 0)")
     v2 = page.evaluate("th.v")
     page.evaluate("press(1)")
     assert page.evaluate("th.v") == v2
-    # Irti! does nothing before the first turn's low point.
-    page.evaluate("press(2)")
-    assert page.evaluate("th.phase") == "spin"
     # A low point with no tap slows a little.
     page.evaluate("run(() => th.a < 3 * TAU + 1)")
     assert page.evaluate("th.v") == pytest.approx(v2 - 0.8, abs=0.01)
@@ -116,16 +117,36 @@ def test_fouls_in_the_circle(site, context):
     page = open_game(site, context)
     start(page)
     # Out of rhythm at the red speed: the hammer pulls the thrower out of the circle.
-    page.evaluate("press(1); for (let n = 1; n <= 5; n++) tapAt(n, 0)")
+    page.evaluate("press(1); for (let n = 1; n <= 4; n++) tapAt(n, 0)")
     assert page.evaluate("th.v") >= page.evaluate("RED")
-    page.evaluate("run(() => th.a < 5.5 * TAU); press(1)")
+    page.evaluate("run(() => th.a < 4.5 * TAU); press(1)")
     assert page.evaluate("[th.phase, th.mark, th.why]") == ["land", -1, "Rytmi petti: ulos ympyrästä"]
     page.evaluate("quick()")
     assert page.evaluate("comp.throwers.find(t => t.p === 'me').marks") == [-1]
-    # Not letting go by the fifth low point after the swings.
+    # Not letting go before the low point that would start a fifth turn.
     page.evaluate("run(() => th.phase === 'wait'); th.t = 99; step(0.001); press(1); run(() => th.phase === 'spin', 30)")
     assert page.evaluate("[th.phase, th.mark, th.why]") == ["land", -1, "Ei irti ajoissa: ulos ympyrästä"]
-    assert page.evaluate("th.a") == pytest.approx(7 * 6.2832, abs=0.2)
+    assert page.evaluate("th.a") == pytest.approx(6 * 6.2832, abs=0.2)
+    assert page.errors == []
+
+
+def test_the_fifth_turn_never_starts_so_a_release_in_it_cannot_score(site, context):
+    page = open_game(site, context)
+    start(page)
+    # Every low point tapped up to the one that starts the fourth turn: the fastest legal hammer.
+    page.evaluate("press(1); for (let n = 1; n < LAPS; n++) tapAt(n, 0)")
+    assert page.evaluate("[th.phase, Math.floor(th.a / TAU) - SWINGS + 1]") == ["spin", 4]
+    # Waiting for the release spot after the fourth turn ends: the foul comes at the low point first.
+    page.evaluate("run(() => th.phase === 'spin' && th.a < LAPS * TAU + ((PHI_REL - PHI_LOW) % TAU + TAU) % TAU)")
+    assert page.evaluate("[th.phase, th.mark, th.why, th.jav]") == ["land", -1, "Ei irti ajoissa: ulos ympyrästä", None]
+    page.evaluate("press(2)")
+    assert page.evaluate("[th.jav, th.mark]") == [None, -1]
+    # Let go in the fourth turn instead, and it scores.
+    page.evaluate("quick(); run(() => th.phase === 'wait'); th.t = 99; step(0.001); press(1); for (let n = 1; n < LAPS; n++) tapAt(n, 0)")
+    page.evaluate("letGo(0)")
+    assert page.evaluate("[th.phase, th.a > (LAPS - 1) * TAU, th.a < LAPS * TAU]") == ["fly", True, True]
+    page.evaluate("quick()")
+    assert page.evaluate("comp.throwers.find(t => t.p === 'me').marks[1]") > 0
     assert page.errors == []
 
 
@@ -197,14 +218,14 @@ def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
     wild = page.evaluate("many(20, () => { press(1); for (let i = 0; i < 80 && th.phase === 'spin' && th.a < 5 * TAU + 3; i++) { run(() => true, 0.125); press(1); } if (th.phase === 'spin') letGo(0); })")
     assert max(m for m in wild) < min(skills(1))
     # A fair player (taps a few hundredths off) beats level 1's average comfortably, not level 7's.
-    fair = page.evaluate("many(40, gs => { press(1); for (let n = 1; n <= 6; n++) tapAt(n, gs() * 0.05); if (th.phase === 'spin') letGo(gs() * 6); })")
+    fair = page.evaluate("many(40, gs => { press(1); for (let n = 1; n < LAPS; n++) tapAt(n, gs() * 0.05); if (th.phase === 'spin') letGo(gs() * 6); })")
     good = sorted(m for m in fair if m >= 0)
     assert len(good) >= 20
     median = good[len(good) // 2]
     assert median > sum(skills(1)) / 11 + 15
     assert median < max(skills(7))
     # Perfect timing still beats the strongest computer at the top level.
-    top = page.evaluate("many(1, () => { press(1); for (let n = 1; n <= 6; n++) tapAt(n, 0); letGo(0); })")[0]
+    top = page.evaluate("many(1, () => { press(1); for (let n = 1; n < LAPS; n++) tapAt(n, 0); letGo(0); })")[0]
     assert top > max(skills(30)) + 2
     assert page.errors == []
 

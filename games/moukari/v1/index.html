@@ -95,11 +95,12 @@ const TAU = Math.PI * 2, DEG = Math.PI / 180;
 // The hammer goes round the thrower anticlockwise. Its low point is at PHI_LOW, behind and left;
 // a tap of "Vauhtia" within WIN seconds of the hammer passing it adds speed, more the slower it
 // goes; a tap at any other time loses speed, and at the red speed pulls the thrower out of the
-// circle. Two wind-up swings, then up to four turns: the hammer must be let go before it reaches
-// the low point a fifth time. It flies along its path at the moment "Irti!" is pressed, so it
+// circle. Laps of the hammer from its first low point: two wind-up swings, then up to four turns
+// (a = 0..TAU*LAPS); each later low point (1..LAPS-1) starts the next lap, and the low point at
+// TAU*LAPS would start a fifth turn, so reaching it before letting go is a foul. It flies along its path at the moment "Irti!" is pressed, so it
 // goes forward when let go on the right (PHI_REL); the thrower's pull halves the error (HELP).
 const PHI_LOW = 200 * DEG, PHI_REL = 0, SWINGS = 2, TURNS = 4, LAPS = SWINGS + TURNS;
-const V0 = 9, VMAX = 33, VMIN = 6, GAIN = 9, LOSS = 1.6, MISS = 0.8, RED = 25;   // m/s
+const V0 = 9, VMAX = 33, VMIN = 6, GAIN = 10.8, LOSS = 1.6, MISS = 0.8, RED = 26;   // m/s
 const WIN = 0.1, SLOW = 0.6, HELP = 0.5, START_A = 0.5;                        // seconds; the turns at 0.6 × their real pace
 const REL_ANG = 42 * DEG, REL_H = 1.6, DRAG = 0.0008, G = 9.81, SUB = 1 / 240;
 const LAND_T = 2.2, BOARD_T = 3.5, TURN_MAX = 60;                               // seconds; a minute for an attempt, as the rules say
@@ -323,11 +324,11 @@ function step(dt) {
     if (a.mine) {
       // A low point gone by with no tap in its window: the hammer slows a little.
       const closed = Math.floor((a.a - WIN * w) / TAU);
-      for (let n = a.chk + 1; n <= Math.min(closed, LAPS); n++) {
+      for (let n = a.chk + 1; n <= Math.min(closed, LAPS - 1); n++) {
         if (!a.tapped[n]) { a.v = Math.max(VMIN, a.v - MISS); say('Ei napautusta', '#ffd166'); }
       }
       a.chk = Math.max(a.chk, closed);
-      if (a.a >= TAU * (LAPS + 1)) return outcome(-1, 'Ei irti ajoissa: ulos ympyrästä', true);
+      if (a.a >= TAU * LAPS) return outcome(-1, 'Ei irti ajoissa: ulos ympyrästä', true);
       a.sendT -= dt;
       if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; sendNet({ t: 'p', a: [r3(a.a), r2(a.v), a.phase] }); }
     }
@@ -366,7 +367,7 @@ function press(k) {
   }
   if (th.phase !== 'spin') return;
   const w = omega(th.a, th.v), n = Math.round(th.a / TAU), off = (th.a - n * TAU) / w;
-  if (n >= 1 && n <= LAPS && Math.abs(off) <= WIN) {
+  if (n >= 1 && n < LAPS && Math.abs(off) <= WIN) {
     if (th.tapped[n]) return;   // a second tap in the same window: nothing
     const q = 1 - 0.5 * Math.abs(off) / WIN;
     th.v = Math.min(VMAX, th.v + GAIN * q * (1 - th.v / VMAX));
@@ -381,10 +382,10 @@ function press(k) {
   say('Ohi rytmistä!', '#ff9a8b');
   tone(150, 0.12, 'sawtooth', 0.05);
 }
-// Irti! (2): let go. Only in the turns, after the first turn's low point.
+// Irti! (2): let go. Only in the turns, from the first turn's low point on.
 function release() {
   if (!th || !th.mine || th.phase !== 'spin') return;
-  if (th.a < TAU * (SWINGS + 1)) { say('Ensin pyörähdys', '#ffd166'); return; }
+  if (th.a < TAU * SWINGS) { say('Ensin pyörähdys', '#ffd166'); return; }
   // Rounded as it goes over the room, so every phone flies the very same throw.
   const a = r3(th.a), v = r2(th.v);
   throwNow(a, v);
@@ -711,13 +712,13 @@ function drawThrower(a, s, col, name) {
   // The low point's window, as long in time at every speed, and where letting go hits the sector.
   if (live) {
     const w = omega(a.a, a.v), lw = Math.max(5, 0.32 * s), rr0 = radius(a.a);
-    const n = Math.round(a.a / TAU), off = Math.abs(a.a - n * TAU) / w, inWin = n >= 1 && n <= LAPS && off <= WIN && !a.tapped[n];
+    const n = Math.round(a.a / TAU), off = Math.abs(a.a - n * TAU) / w, inWin = n >= 1 && n < LAPS && off <= WIN && !a.tapped[n];
     x.lineCap = 'round';
     x.strokeStyle = 'rgba(255,255,255,.25)'; x.lineWidth = 2;
     arcW(bx, by, rr0, 0, TAU);
     x.strokeStyle = inWin ? '#b6ffb0' : 'rgba(126,224,129,.75)'; x.lineWidth = lw;
     arcW(bx, by, rr0, PHI_LOW - WIN * w, PHI_LOW + WIN * w);
-    if (a.a >= TAU * (SWINGS + 1) - 0.5) {
+    if (a.a >= TAU * SWINGS - 0.5) {
       const z = HALF / HELP;
       x.strokeStyle = 'rgba(255,209,102,.8)'; x.lineWidth = lw * 0.6;
       arcW(bx, by, rr0 + 0.45, PHI_REL - z, PHI_REL + z);
@@ -881,7 +882,7 @@ function pads() {
 function drawControls() {
   if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
   const live = th && th.mine && (th.phase === 'ready' || th.phase === 'spin');
-  const canGo = live && th.phase === 'spin' && th.a >= TAU * (SWINGS + 1);
+  const canGo = live && th.phase === 'spin' && th.a >= TAU * SWINGS;
   for (const b of pads()) {
     const on = b.k === 1 ? live : canGo;
     x.fillStyle = !on ? '#22385a' : flash[b.k] > 0 ? '#ffe08a' : b.k === 2 ? '#ffb703' : '#4f7fc4';
