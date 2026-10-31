@@ -26,9 +26,23 @@ HELPERS = """() => {
 }"""
 
 
-def open_game(site, context, saved=None):
+# Math.random seeded (mulberry32) before the game loads, so the computer's skills and throws and
+# the tests' own scatter are the same on every run.
+SEEDED = """(() => {
+  let s = %d >>> 0;
+  Math.random = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+})();"""
+
+
+def open_game(site, context, saved=None, seed=1):
     site.build(ROOT / "games")
     page = context.new_page()
+    page.add_init_script(SEEDED % seed)
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.goto(site.url + URL)
@@ -187,6 +201,8 @@ def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
       };
       return { lazy: play(6.0, 0.6, 0.8), fair: play(7.6, 0.95, 1.0), good: play(8.8, 1, 1.0) };
     }""")
+    # Seeded, so the same every run: with seed 1 the fair player wins 26 of 60; seeds 2-8 gave
+    # 29, 30, 31, 25, 20, 19 and 23, lazy always 0 and good always 60, the best computer 4,34-4,37 m.
     assert res["lazy"][0] == 0
     assert 0.15 < res["fair"][0] < 0.85
     assert res["good"][0] > 0.85
