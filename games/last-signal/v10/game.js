@@ -141,7 +141,7 @@ function drawHud() {
     else if (c) acts = [s.inv.ohjain ? { label: `📌 Kiinnitä ohjain (${s.inv.ohjain})`, fn: () => act('guide', [r2(c[0]), r2(c[1])]) }
       : { label: '📌 Ohjaimet loppu', off: true, fn: () => {} }];
     // v10 (#196): a guide clamped here comes off again, back into the stores.
-    const g = Math.hypot(diver.x - a.x, diver.y - a.y) >= 4.5 && guideNear();
+    const g = guideNear();
     if (g) acts.push({ label: '📌 Irrota ohjain', fn: () => act('unguide', [g[0], g[1]]) });
   }
   // Inside, the room's own actions, once the person stands still in it.

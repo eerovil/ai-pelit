@@ -171,3 +171,19 @@ def test_the_guide_buttons_fit_a_390_px_phone_and_sideways(site, browser, w, h):
     assert page.is_visible("button:has-text('📌 Irrota ohjain')")
     assert page.evaluate(v4.OVERFLOW) == []
     assert page.errors == []
+
+
+def test_by_the_airlock_a_guide_comes_off_beside_the_way_back_in(site, browser):
+    page = v7.hose_game(site, browser)
+    v7.dive_at(page, "asema")
+    # a guide clamped where SISU's airlock now lies (SISU parked beside it later): both buttons show
+    page.evaluate("const a = airlock(); diver.x = a.x + 1; diver.y = a.y; G.s.guides.push([a.x + 2, a.y]); drawHud()")
+    n = page.evaluate("G.s.inv.ohjain")
+    assert page.inner_text("#act") == "Palaa veneeseen"
+    assert page.inner_text("#act2") == "📌 Irrota ohjain"
+    page.click("#act2")
+    assert page.evaluate("[G.s.guides.length, G.s.inv.ohjain, G.mode]") == [0, n + 1, "dive"]
+    page.evaluate("G.paused = false; drawHud()")
+    assert not page.is_visible("#act2")
+    assert page.inner_text("#act") == "Palaa veneeseen"
+    assert page.errors == []
