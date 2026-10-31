@@ -42,4 +42,10 @@ def test_sideways_the_gap_under_each_jump_pad_is_that_sides_foot(site, context):
         assert page.evaluate(f"[padAt({cx}, {bottom - 8}), padAt({cx}, {bottom + 20}), padAt({cx}, {foot['y'] + 20})]") == [foot["k"]] * 3
         assert page.evaluate(f"[padAt({cx}, {top['y'] + 10}), padAt({cx}, {bottom - 14})]") == [3, 3]
     assert page.evaluate("padAt(370, 200)") == 3
+    # Turned upright again mid-meet, the gap under the bar is the feet's again.
+    turn(page, {"width": 360, "height": 740})
+    page.wait_for_function("!land")
+    jump, left, right = page.evaluate("pads()")
+    gap = jump["y"] + jump["h"] + 20
+    assert page.evaluate(f"[padAt(60, {gap}), padAt(300, {gap})]") == [1, 2]
     assert page.errors == []
