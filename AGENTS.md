@@ -12,6 +12,9 @@ player sees is Finnish unless the request says otherwise.
 - "<Peli> v<N> (<slug>): …" — a new version. Copy the newest version still in `games/<slug>/`
   (usually `v<N-1>/`) to the next free number and change the copy; a withdrawn number (rule 1) is
   skipped for good, so Puhelinkoppi goes from `v2/` to `v5/`. Append the version to `game.json`.
+  If the copy is past about 2000 lines in one file, split it into files (rule 2) as part of this
+  version, without being asked, and say so in the pull request. Do the same for a new game that
+  grows past it.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
@@ -39,8 +42,16 @@ start a new game or version.
    so a published version cannot change by accident and needs no tools to keep working. A library
    a game needs is copied into its folder as one file, except a shared library under
    `public/lib/` (three.js, #99, Eero's choice), which games load from there and never copy; see
-   "3D games". Think again only when a single game passes
-   about 2000 lines, or the same code is copied into a third game; then propose it as its own Work.
+   "3D games". Think again only when the same code is copied into a third game; then propose it
+   as its own Work.
+   A version past about 2000 lines is split into a few plain files in its own folder (#161, Eero's
+   choice, first Last Signal v9). Do it yourself in the next version, unasked: `index.html` loads
+   them with classic `<script src="world.js"></script>` tags, so their functions stay global for
+   the tests. Still no
+   build step: each new version copies the whole folder, and an agent reads only the files its
+   change touches. Keep a `lib/three` import in `index.html` itself, because `scripts/build.py`
+   and `tests/conftest.py` look for it there. Old versions stay as they are, and none is deleted
+   for being big: phones cache only the versions they open, and git stores each copy as a diff.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
