@@ -209,6 +209,86 @@
     return el('section', { class: 'score-list' }, [el('h2', { text: '🏆 Tulokset' }), picker, box]);
   }
 
+  // Feedback (#184): a player whose nickname the admin approved writes what to fix or add. Only the
+  // admin sees it; once a day the host files the new ones in a "Palautteet" issue, and its agent
+  // asks Eero which to fix. The box opens from one button, so the page stays as short as it was.
+  function feedbackSection(game) {
+    if (!scores || !scores.me) return null;
+    var box = el('div', { class: 'feedback-box' });
+    // What the player wrote, kept while the name is asked again (the admin rejected or the name
+    // changed between opening the box and sending), so it is there when the form comes back,
+    // on this page or after leaving it, until the tab closes.
+    var DRAFT = 'ai-pelit:_palaute:' + game.slug;
+    var draft = '';
+    try { draft = sessionStorage.getItem(DRAFT) || ''; } catch (e) {}
+    function keep(v) {
+      draft = v;
+      try { if (v) sessionStorage.setItem(DRAFT, v); else sessionStorage.removeItem(DRAFT); } catch (e) {}
+    }
+    var open = el('button', { type: 'button', class: 'secondary feedback-open', text: '💬 Anna palautetta' });
+    open.addEventListener('click', function () { open.remove(); show(); });
+
+    function nameForm(text, value) {
+      var input = el('input', { class: 'feedback-name', maxlength: '16', placeholder: 'Nimimerkki', 'aria-label': 'Nimimerkki' });
+      input.value = value || '';
+      var save = el('button', { type: 'button', class: 'button', text: 'Tallenna' });
+      save.addEventListener('click', function () {
+        if (!input.value.trim()) return;
+        save.disabled = true;
+        scores.setName(input.value).then(show, show);
+      });
+      box.replaceChildren(el('p', { class: 'muted', text: text }), el('div', { class: 'feedback-row' }, [input, save]));
+    }
+
+    function form(name) {
+      var versions = el('select', { class: 'feedback-version', 'aria-label': 'Versio' });
+      game.versions.slice().reverse().forEach(function (ver, i) {
+        versions.appendChild(el('option', { value: String(ver.n), text: 'v' + ver.n + (i ? '' : ' (uusin)') }));
+      });
+      var text = el('textarea', { class: 'feedback-text', rows: '4', maxlength: '1000', placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
+      text.value = draft;
+      text.addEventListener('input', function () { keep(text.value); });
+      var send = el('button', { type: 'button', class: 'button', text: 'Lähetä' });
+      var note = el('p', { class: 'muted feedback-note', role: 'status' });
+      send.addEventListener('click', function () {
+        if (send.disabled) return; // a second tap while the first is on its way sends nothing
+        if (!text.value.trim()) { note.textContent = 'Kirjoita ensin palaute.'; return; }
+        send.disabled = true;
+        note.textContent = 'Lähetetään…';
+        fetch('api/feedback', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ player: scores.id(), game: game.slug, version: Number(versions.value), text: text.value }),
+        }).then(function (r) {
+          send.disabled = false;
+          if (r.ok) { text.value = ''; keep(''); note.textContent = 'Kiitos, ' + name + '! Palaute meni perille.'; return; }
+          if (r.status === 403) { keep(text.value); show(); return; }
+          note.textContent = r.status === 429 ? 'Olet antanut tänään jo paljon palautetta. Jatka huomenna.' : 'Palautetta ei saatu lähetettyä. Yritä uudelleen.';
+        }).catch(function () {
+          send.disabled = false;
+          note.textContent = 'Ei verkkoyhteyttä. Yritä uudelleen, kun verkko toimii.';
+        });
+      });
+      box.replaceChildren(
+        el('p', { class: 'muted', text: 'Nimimerkillä ' + name + '. Vain ylläpitäjä näkee palautteen.' }),
+        el('div', { class: 'feedback-row' }, [el('span', { text: 'Versio' }), versions]),
+        text,
+        el('div', { class: 'feedback-row' }, [note, send])
+      );
+      text.focus();
+    }
+
+    function show() {
+      box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
+      scores.me().then(function (me) {
+        if (me.status === 'approved') form(me.name);
+        else if (!me.name) nameForm('Palautetta voi antaa hyväksytyllä nimimerkillä. Valitse nimimerkki: ylläpitäjä hyväksyy sen, ja se näkyy myös tuloslistoilla.');
+        else if (me.status === 'rejected' || me.status === 'taken') nameForm('Nimimerkkiä ' + me.name + (me.status === 'taken' ? ' käyttää jo joku muu.' : ' ei hyväksytty.') + ' Valitse toinen.', '');
+        else box.replaceChildren(el('p', { class: 'muted feedback-waiting', text: 'Nimimerkkisi ' + me.name + ' odottaa ylläpitäjän hyväksyntää. Sen jälkeen voit antaa palautetta.' }));
+      });
+    }
+    return el('section', { class: 'feedback' }, [open, box]);
+  }
+
   // Play counts (#26): how many times each game has been opened, all versions together, on
   // every phone. The last answer is kept on the phone, so the shelf shows it at once and offline.
   var PLAYS_KEY = 'ai-pelit:_pelikerrat:yhteensa';
@@ -284,6 +364,7 @@
       ]),
       el('a', { class: 'button big', href: playUrl(game.slug, v.n), text: 'Pelaa uusinta (v' + v.n + ')' }),
       scoreSection(game.slug),
+      feedbackSection(game),
       el('h2', { text: 'Versiot' }),
       versions,
     ].filter(Boolean));
