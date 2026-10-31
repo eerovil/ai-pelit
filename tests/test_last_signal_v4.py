@@ -818,11 +818,22 @@ def test_an_open_card_pauses_the_pressure_and_a_reload_keeps_the_damage(site, br
     page.evaluate("const h = G.s.m.hull; upgradeCard(); run(() => true, 3); window.kept = G.s.m.hull === h")
     assert page.evaluate("kept")
     page.click("#card button:has-text('Takaisin')")
-    page.evaluate("run(() => true, 2); save(); window.h = G.s.m.hull")
+    # No save by hand: the game's own save every 4 s keeps the damage, inside and on a dive.
+    page.evaluate("run(() => true, 4.5); window.h = JSON.parse(localStorage.getItem('%s')).m.hull" % SAVE)
     hull = page.evaluate("h")
-    assert hull < 55
+    assert hull < 45
     page.reload()
     page.wait_for_function("window.drawn === true")
     page.click("#jatka")
     assert page.evaluate("[G.mode, Math.round(G.s.m.hull)]") == ["sub", round(hull)]
+    page.evaluate(RUN)
+    page.evaluate("G.hold = true")
+    dive_at(page, "polaris")
+    page.evaluate("run(() => true, 4.5); window.h = G.s.m.hull")
+    hull = page.evaluate("h")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    assert page.evaluate("Math.round(G.s.m.hull)") <= round(hull) + 2
+    assert page.evaluate("G.s.m.hull") < 30
     assert page.errors == []

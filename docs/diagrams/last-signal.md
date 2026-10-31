@@ -13,11 +13,15 @@ flowchart TD
   A[Valikko: Jatka tai Uusi peli] --> B[Aja SISUa: ohjain, syvyys / runkoraja]
   B --> C[📡 Ping: kaiku piirtää pohjan, kohteet nimetään]
   C --> B
-  B --> D{Syvemmällä kuin runko kestää?}
+  B --> D{Syvemmällä kuin runko kestää? Ohjaamossa, sukelluksella tai sisällä}
+  I --> D
+  Q --> D
   D -- Kyllä --> E[Paine: runko kärsii]
   E --> F{Runko loppu?}
   F -- Kyllä --> G[Hätänousu turvasyvyyteen, runko 25 %]
-  F -- Ei --> B
+  F -- Ei, ohjaamossa --> B
+  F -- Ei, sukelluksella --> I
+  F -- Ei, sisällä --> Q
   G --> B
   SU --> I[Sukeltaja ui, happi vähenee, kohde avautuu poikkileikkaukseksi]
   I --> J{Mihin sukeltaja koskee?}
@@ -85,7 +89,7 @@ flowchart TD
 
 - **Aja SISUa: ohjain, syvyys / runkoraja**: `stepSub()` in `games/last-signal/v4/index.html` (v3, v2 and v1 in their own folders) turns the stick (`input`) into speed, bumps off the sea floor (`floorY()`), the glacier, the ice shelf, the iceberg (`inBerg()`), the hot vents (`VENTS`) and the wrecks (`solid(…, true)`); a hard bump costs hull (`bump()`). Below 300 m `subBoost()` speeds SISU up (up to 2.2×) so the long slope does not drag. The HUD shows depth against the hull's rating (`RATING`: 160, 260, 380, 620, 1000, 1450 m); within 25 m of it "Runko natisee". Saved every 4 s.
 - **📡 Ping: kaiku piirtää pohjan, kohteet nimetään**: `doPing()` sends a ring out to 450 m; contacts inside it become known (`G.s.known`) and `drawSonar()` draws the floor, the iceberg and the wrecks in sonar green for a moment. Contacts up to 1000 m show at the screen's edge as "TUNTEMATON KONTAKTI, 640 m" until pinged; the current goal's contact is yellow (`goalNow().target`).
-- **Paine: runko kärsii**: `pressure()`: below the rating the hull loses 4 % a second and "PAINE! Nouse ylemmäs" shows. Since v4 this goes on during a dive and inside SISU too ("PAINE! SISU on liian syvällä"); v3 and earlier spared the hull once the player left the helm.
+- **Paine: runko kärsii**: `pressure()`: below the rating the hull loses 4 % a second and "PAINE! Nouse ylemmäs" shows. Since v4 this goes on during a dive and inside SISU too ("PAINE! SISU on liian syvällä"), and the game saves every 4 s in all three, so a reload keeps the damage; v3 and earlier spared the hull once the player left the helm.
 - **Hätänousu turvasyvyyteen, runko 25 %**: `breach()` ends a dive or a walk inside (the haul is lost) and lifts SISU to 40 m above the hull's rating (v1 lifted it to the surface, a long way back from the deep sea); the hull is never fatal.
 - **Sukeltaja ui, happi vähenee, kohde avautuu poikkileikkaukseksi**: `stepDive()`. Sites are grids in `SITES` (2 m cells: station A-3, two containers, the wrecks Polaris and Nordvik, the aid container in the trench); `drawSite()` fades the hull away to show the rooms when the diver is inside. The iceberg's caves are segments with a radius in `BERG.caves` (way in, upper caves, the great chamber, the side passage to cache K-7, the lower cave, the deep crack). In a big cave `diveScale()` widens the view, and `drawLayout()` shows the ice around the caves (layers, cracks, bubbles) so the great chamber reads as a hall in the ice.
 - **Mukaan: lasketaan vasta kotona**: finds go into `G.carry`; `endDive(false)` moves them into `G.s.inv` and `G.s.got`.

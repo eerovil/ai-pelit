@@ -985,8 +985,6 @@ function stepSub(dt) {
       s.m.hull -= 5; G.fishCd = 3; clang(); toast('Valokala törmäsi runkoon', 1.4);
     }
   }
-  G.saveCd -= dt;
-  if (G.saveCd <= 0) { save(); G.saveCd = 4; }
 }
 // The sea presses on SISU wherever the player is (v4, #132): at the helm, out on a dive or walking inside. v3 and
 // earlier only did this while driving, so diving out or going inside below the hull's rating saved the hull.
@@ -1053,7 +1051,12 @@ function step(dt) {
     if (G.mode === 'sub') stepSub(dt);
     else if (G.mode === 'dive') stepDive(dt);
     else if (G.mode === 'home') stepCrew(dt);
-    if (G.mode === 'sub' || G.mode === 'dive' || G.mode === 'home') pressure(dt);
+    if (G.mode === 'sub' || G.mode === 'dive' || G.mode === 'home') {
+      pressure(dt);
+      // Saved every 4 s in every mode (v4): pressure damage on a dive or inside must survive a reload too.
+      G.saveCd -= dt;
+      if (G.saveCd <= 0) { save(); G.saveCd = 4; }
+    }
     if (G.mode === 'sub' || G.mode === 'dive') { needs(dt); G.s.t += dt; }
   }
   sub.face += (sub.dir - sub.face) * Math.min(1, dt * 4);
