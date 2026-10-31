@@ -50,6 +50,13 @@
       "note": "Uudet tasot 21–32: yhdistelmät, kokopiruetti ja vaikeammat alastulot, ja pisteraja nousee 15,5:een.",
       "request": "Voimistelu on lemppari pelini. Mitä voitaisi keksiä lisää tähän? Olen jo taso 20",
       "issue": "eerovil/ai-pelit#133"
+    },
+    {
+      "n": 8,
+      "date": "2026-10-31",
+      "note": "Voimistelijalle voi valita asun, myös Halloween-asuja: kurpitsa, noita, haamu, luuranko, vampyyri ja muumio.",
+      "request": "Kaikkiin peleihin, joissa voisi olla järkevää olla erilaisia asuja. Voisi tehdä asuvalinta. Ja. Nyt kun on Halloween, niin voisi olla Halloween-asuja sitten tänään saatavilla ja muulloinkin.",
+      "issue": "eerovil/ai-pelit#158"
     }
   ]
 }
