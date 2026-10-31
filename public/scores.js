@@ -346,5 +346,27 @@
     },
     row: function (game, r, mine) { return rowEl(game, r, mine); },
     scoreText: scoreText,
+    // For the shelf's feedback box (#184): this phone's id, and its nickname with the admin's
+    // word on it ('' when it has none; 'pending', 'approved', 'rejected', 'taken' or 'busy').
+    id: playerId,
+    me: function () {
+      var name = load(K + 'nimi', '');
+      if (!name) return Promise.resolve({ name: '', status: '' });
+      var mine = function () { return { name: name, status: load(K + 'tila', 'pending') }; };
+      return flush().then(function () {
+        if (load(K + 'lahetetty', '') !== name) return mine();
+        return fetch(API + 'players/' + playerId()).then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
+          if (p && p.name === name) save(K + 'tila', p.status);
+          return mine();
+        });
+      }).catch(mine);
+    },
+    // Choose or change the nickname, as the list's name field does.
+    setName: function (name) {
+      var v = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+      if (!v) return Promise.resolve();
+      save(K + 'nimi', v); save(K + 'tila', 'pending');
+      return flush();
+    },
   };
 })();

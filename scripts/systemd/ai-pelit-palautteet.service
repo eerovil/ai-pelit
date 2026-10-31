@@ -1,0 +1,16 @@
+# Files the players' new feedback as a "Palautteet" issue (#184): scripts/feedback_issue.py.
+# Installed on the AgentDeck host with
+#   cp scripts/systemd/ai-pelit-palautteet.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now ai-pelit-palautteet.timer
+[Unit]
+Description=AI-pelit: file new player feedback as a GitHub issue
+After=network-online.target
+
+[Service]
+Type=oneshot
+# The script as it is on origin/main, never the checkout's working tree: the main checkout may
+# stand on any branch. A timer job inherits almost no PATH; gh is in ~/.local/bin.
+WorkingDirectory=/var/tmp
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/sh -c 'git -C %h/ai-pelit fetch -q origin main && git -C %h/ai-pelit show origin/main:scripts/feedback_issue.py | python3 -I -'
+TimeoutStartSec=120
