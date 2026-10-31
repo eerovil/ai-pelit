@@ -339,6 +339,32 @@ def test_the_autopilot_will_not_go_to_an_unknown_contact_or_deeper_than_the_hull
     assert page.errors == []
 
 
+def test_the_autopilot_waits_while_the_player_dives_and_a_reload_leaves_sisu_where_it_was(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    page.evaluate("G.s.up.hull = 2; G.s.known.nordvik = 1; G.mode = 'home'; crew.room = 'kartta'; doAct('me', 'auto', 'nordvik');"
+                  " run(() => true, 4)")
+    assert page.evaluate("G.auto && G.auto.id") == "nordvik"
+    # Out through the airlock mid-trip: SISU holds still while the diver is out, and drives on once they are back.
+    page.evaluate("crew.suit = true; crew.kit = 'tank'; startDive(); if (G.paused) closeCard(); run(() => true, 1)")
+    x = page.evaluate("sub.x")
+    page.evaluate("run(() => true, 3)")
+    assert abs(page.evaluate("sub.x") - x) < 0.5 and page.evaluate("!!G.auto") is True
+    page.evaluate("const a = airlock(); diver.x = a.x; diver.y = a.y; endDive(false); closeCard(); run(() => true, 3)")
+    assert page.evaluate("sub.x") > x + 10
+    # A reload mid-trip: the autopilot is off, and SISU is where it was last saved, not back at the start.
+    page.evaluate("save()")
+    saved = page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE}')).sub.x")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.evaluate(v4.RUN)
+    page.click("#jatka")
+    page.evaluate("G.hold = true; closeCard(); step(1 / 60)")
+    assert page.evaluate("G.auto") is None
+    assert abs(page.evaluate("sub.x") - saved) < 1 and saved > 400
+    assert page.errors == []
+
+
 def test_the_autopilot_finds_its_way_under_the_iceberg_and_up_an_opening(site, browser):
     page = open_game(site, browser)
     ready(page)
