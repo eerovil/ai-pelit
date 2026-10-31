@@ -96,7 +96,7 @@ def test_alone_a_tap_finishes_the_ceremony_and_the_next_leaves_it(site, context)
     assert page.errors == []
 
 
-@pytest.mark.parametrize("size", [(360, 640), (360, 740), (740, 360), (640, 360)])
+@pytest.mark.parametrize("size", [(360, 640), (360, 740), (390, 844), (740, 360), (640, 360)])
 def test_the_ceremony_and_the_standings_fit(site, context, size):
     w, h = size
     page = open_game(site, context)
@@ -125,6 +125,20 @@ def test_the_ceremony_and_the_standings_fit(site, context, size):
     rows = [t for t in texts if t[0].endswith(".") and t[0][:-1].isdigit()]
     assert len(rows) == 9  # places 4–12; the top three show medals
     assert all(n > 20 for n in page.evaluate(MEDAL_PIXELS))
+    assert page.errors == []
+
+
+def test_a_place_with_no_valid_mark_gets_no_medal(site, context):
+    page = open_game(site, context)
+    win_meet(page)
+    at(page, 0.2)
+    base = page.evaluate(MEDAL_PIXELS)
+    # Only two jumpers with a valid mark: the third block stays empty, and nobody gets the bronze.
+    page.evaluate("K.ending.res.slice(2).forEach(r => { r.best = -1; r.marks = [-1, -1, -1]; })")
+    at(page, 6.5)
+    gold, silver, bronze = [n - b for n, b in zip(page.evaluate(MEDAL_PIXELS), base)]
+    assert gold > 20 and silver > 20 and bronze < 10  # a medal is 80 or more; confetti edges a few
+    assert page.evaluate("K.ending.res.slice(2).every(r => r.best < 0)")
     assert page.errors == []
 
 
