@@ -57,6 +57,13 @@
       "note": "Meren äänet ja moottorit, kalaparvet ja harppuuna ruoaksi, torni sisältä niin että jäälle kiivetään yhtä matkaa, laboratorio näytteille, ja ohjaamon ruoripainike pinnalla taas paikallaan.",
       "request": "Heikki: Päivityslista: \r\nLisää merenalainen ambient-äänimaisema ja sukellusveneen moottoriäänet. Lisää kalaparvia ja harppuuna ruuan keräämistä varten. Piirrä sisätilat veneen torniin asti jolloin pinnalla ulossiirtymästä tulee portaaton. Lisää veneeseen laboratorio jossa voi tutkia kerättyjä näytteitä. Korjaa jään päältä takaisin veneeseen mennessä ohjaamon aktivointinappi.\n",
       "issue": "eerovil/ai-pelit#151"
+    },
+    {
+      "n": 9,
+      "date": "2026-10-31",
+      "note": "Merikartta navigointihuoneeseen: sonarin kuulemat kohteet näkyvät ensin kysymysmerkkeinä ja tarkentuvat, kun ne tunnistetaan ja nähdään, ja jääluolasto on nyt pimeä ja sokkeloinen ja kartoittuu valokeilassa.",
+      "request": "Last signal: No seuraavaksi sitten koko pelialueen iso kartta, joka päivittyy tutkimalla ja sitä pääsee katsomaan vain navigointihuoneesta. Siellä näkyy ensin sonarin löytämät tunnistamattomat kohteet ja sitten ne päivittyy sinne sitä mukaa ku ne tunnistetaan. Samalla vois vähän muuttaa jääluolastoa: pienemmät etäisyydet ja sokkeloisempi. Aluksi täysin pimeä siten että vain valokeilassa oleva näkyy. Tutkiessa reittien ääriviivat voivat sitten jäädä näkyviin jolloin luolasto ”kartoittuu”",
+      "issue": "eerovil/ai-pelit#160"
     }
   ]
 }

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#04121f">
+<title>Last Signal</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #04121f; color: #e8f6ff;
+    font-family: system-ui, sans-serif; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  .hidden { display: none !important; }
+  #hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top) + 8px) 10px 0 10px; pointer-events: none; }
+  #meters { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0 52px 0 78px; min-height: 36px; align-items: center; }
+  .m { display: flex; align-items: center; gap: 3px; font-size: 13px; }
+  .m i { display: block; width: 26px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.18); overflow: hidden; }
+  .m s { display: block; height: 100%; width: 100%; background: #7fe0ff; border-radius: 4px; }
+  .m em { font-style: normal; font-size: 12px; color: #cfeeff; }
+  .m.low s { background: #ff6b6b; }
+  .m.low { animation: blink 0.8s infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+  #depth { font: 700 13px ui-monospace, monospace; color: #9fffd0; white-space: nowrap; }
+  #depth.over { color: #ff7b7b; animation: blink 0.6s infinite; }
+  #goalbar { margin-top: 8px; display: flex; align-items: center; gap: 8px; background: rgba(2,14,26,.66);
+    border: 1px solid rgba(127,224,255,.25); border-radius: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; }
+  #goal { flex: 1; }
+  #carry { flex: none; font-size: 13px; color: #ffd65a; white-space: nowrap; }
+  #home { position: fixed; top: calc(env(safe-area-inset-top) + 6px); right: 8px; width: 44px; height: 44px; border-radius: 50%;
+    border: 2px solid rgba(255,214,90,.75); background: rgba(40,26,8,.8); font-size: 22px; padding: 0; touch-action: manipulation; }
+  #toast { position: fixed; left: 16px; right: 16px; top: 32dvh; text-align: center; font-size: 21px; font-weight: 800;
+    color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.9); pointer-events: none; }
+  #pad { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 14px calc(env(safe-area-inset-bottom) + 14px); pointer-events: none; }
+  #stick { position: relative; width: 140px; height: 140px; border-radius: 50%; background: rgba(127,224,255,.08);
+    border: 2px solid rgba(127,224,255,.4); touch-action: none; pointer-events: auto; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+    background: rgba(200,240,255,.5); pointer-events: none; }
+  #right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: none; }
+  #act, #act2 { pointer-events: auto; touch-action: manipulation; font: inherit; font-size: 17px; font-weight: 800; color: #2b1d00;
+    background: #ffd65a; border: 0; border-radius: 14px; padding: 12px 14px; max-width: 180px; box-shadow: 0 4px 0 #b88a00; }
+  #act:active, #act2:active { transform: translateY(3px); box-shadow: 0 1px 0 #b88a00; }
+  #act:disabled, #act2:disabled { opacity: .5; }
+  /* Inside SISU (v3): the room's actions in warm colours, the name of the room above them. */
+  #pad.inside #act, #pad.inside #act2 { font-size: 16px; padding: 11px 13px; }
+  #pad.inside #act2 { background: #ffe9b0; box-shadow: 0 4px 0 #b8975a; }
+  #roomName { font: 800 13px system-ui, sans-serif; letter-spacing: 1px; color: #ffe6b8; text-shadow: 0 1px 4px #000; text-transform: uppercase; }
+  #ping { pointer-events: auto; touch-action: manipulation; width: 76px; height: 76px; border-radius: 50%; font-size: 28px; line-height: 1;
+    color: #c8ffe4; background: rgba(40,180,120,.18); border: 2px solid rgba(120,255,190,.6); padding: 0; }
+  #ping small { display: block; font: 700 11px ui-monospace, monospace; letter-spacing: 1px; margin-top: 2px; }
+  #ping.cool { opacity: .45; }
+  /* v8: the harpoon, on a dive where the ping is at the helm */
+  #harp { pointer-events: auto; touch-action: manipulation; width: 76px; height: 76px; border-radius: 50%; font-size: 28px; line-height: 1;
+    color: #ffe9c0; background: rgba(200,120,40,.22); border: 2px solid rgba(255,190,110,.7); padding: 0; }
+  #harp small { display: block; font: 700 10px ui-monospace, monospace; letter-spacing: 0; margin-top: 2px; }
+  #harp.cool { opacity: .45; }
+  #panel, #menu { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px;
+    box-sizing: border-box; background: rgba(1,8,16,.55); touch-action: manipulation; }
+  .card { width: 100%; max-width: 340px; max-height: 88dvh; overflow-y: auto; background: rgba(6,24,42,.95); border-radius: 18px;
+    border: 1px solid rgba(127,224,255,.35); padding: 18px 16px; box-sizing: border-box; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  .card h2 { margin: 0 0 8px; font-size: 22px; color: #7fffd4; }
+  .card p { margin: 0 0 10px; font-size: 16px; line-height: 1.45; }
+  .card p.log { font-style: italic; background: rgba(255,255,255,.06); border-left: 3px solid #ffd65a; padding: 8px 10px; border-radius: 6px; }
+  .card p.msg { color: #ffd65a; font-weight: 700; }
+  .card p.small { font-size: 13px; color: #cbb89a; margin-bottom: 6px; }
+  .card button { display: block; width: 100%; margin-top: 8px; font: inherit; font-size: 16px; font-weight: 700; text-align: left;
+    color: #e8f6ff; background: rgba(127,224,255,.12); border: 1px solid rgba(127,224,255,.35); border-radius: 12px; padding: 11px 12px; }
+  .card button:disabled { opacity: .45; }
+  #multi { text-align: center; font-size: 16px; }
+  .card button.go { text-align: center; color: #2b1d00; background: #ffd65a; border: 0; box-shadow: 0 4px 0 #b88a00; font-size: 18px; }
+  #menu { background: linear-gradient(rgba(1,8,16,.05), rgba(1,8,16,.8)); align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 28px); }
+  #menu .card { background: rgba(6,24,42,.84); }
+  #menu h1 { margin: 0; font-size: 40px; letter-spacing: 3px; color: #e8f6ff; text-shadow: 0 3px 12px #000; }
+  #menu .sub { margin: 0 0 12px; font-size: 13px; letter-spacing: 2px; color: #9fffd0; }
+  #menu .help { font-size: 13px; color: #a8cfe6; margin-top: 10px; }
+  #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s; }
+  #fade.on { opacity: 1; transition: none; }
+  /* The logbook: the logs found, two to a row. */
+  .card .btns.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 6px; }
+  .card .btns.grid button { font-size: 13px; line-height: 1.2; padding: 6px 8px; margin-top: 5px; overflow-wrap: anywhere; hyphens: auto; }
+  /* Sideways the rows are wide but few fit: one line each. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .card .btns.grid button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+  .card .btns.grid button.go { grid-column: 1 / 3; }
+  /* v9 (#160): the chart in the navigation room, over the whole screen: the sea as explored, zoomed and dragged. */
+  #chart { position: fixed; inset: 0; z-index: 2; background: #07131d; touch-action: none; }
+  #panel, #menu { z-index: 3; }
+  #toast { z-index: 4; }
+  #chart canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #chartBar { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px;
+    padding: calc(env(safe-area-inset-top) + 10px) 12px 8px 96px; background: linear-gradient(rgba(4,14,24,.92), rgba(4,14,24,0));
+    pointer-events: none; }
+  #chartBar b { font-size: 18px; color: #7fffd4; }
+  #chartKey { font-size: 12px; color: #cfe6f2; }
+  #chartAuto { flex-basis: 100%; font-size: 14px; font-weight: 700; color: #ffd65a; }
+  #chartBtns { position: absolute; right: calc(env(safe-area-inset-right) + 10px); bottom: calc(env(safe-area-inset-bottom) + 12px);
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  #chartBtns button, #chartPick button { font: inherit; font-weight: 800; touch-action: manipulation; border-radius: 14px; }
+  #chartBtns .z { width: 52px; height: 52px; font-size: 26px; padding: 0; color: #e8f6ff; background: rgba(6,24,42,.9);
+    border: 1px solid rgba(127,224,255,.5); }
+  #chartX { width: 64px; font-size: 16px; padding: 12px 0; color: #2b1d00; background: #ffd65a; border: 0; box-shadow: 0 4px 0 #b88a00; }
+  #chartPick { position: absolute; left: calc(env(safe-area-inset-left) + 10px); right: calc(env(safe-area-inset-right) + 84px);
+    bottom: calc(env(safe-area-inset-bottom) + 12px); max-width: 330px; background: rgba(6,24,42,.95); border: 1px solid rgba(127,224,255,.4);
+    border-radius: 16px; padding: 10px 12px; box-sizing: border-box; }
+  #pickName { font-size: 17px; font-weight: 800; color: #7fffd4; }
+  #pickTxt { font-size: 13px; color: #cfe6f2; margin: 2px 0 8px; line-height: 1.35; }
+  #pickGo { display: block; width: 100%; font-size: 16px; padding: 10px 12px; color: #2b1d00; background: #ffd65a; border: 0;
+    box-shadow: 0 4px 0 #b88a00; }
+  #pickGo:disabled { color: #cfe6f2; background: rgba(127,224,255,.12); box-shadow: none; }
+  /* Sideways (#95): the HUD in one row along the top, cards in two columns, the home card at the right. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    #hud { display: flex; align-items: flex-start; gap: 8px; padding-top: calc(env(safe-area-inset-top) + 6px);
+      padding-left: calc(env(safe-area-inset-left) + 10px); padding-right: calc(env(safe-area-inset-right) + 60px); }
+    #meters { flex: none; flex-wrap: nowrap; margin: 0 0 0 78px; min-height: 40px; }
+    #goalbar { flex: 1; min-width: 0; margin-top: 0; padding: 4px 8px; font-size: 13px; line-height: 1.25; }
+    #home { right: calc(env(safe-area-inset-right) + 8px); }
+    #pad { padding: 0 calc(env(safe-area-inset-right) + 18px) calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 18px); }
+    #stick { width: 128px; height: 128px; }
+    #right { flex-direction: row-reverse; align-items: flex-end; }
+    #toast { top: 26dvh; }
+    #panel { padding: 8px calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 70px); }
+    #panel .card { display: flex; align-items: center; gap: 16px; max-width: 760px; max-height: calc(100dvh - 16px); padding: 12px 14px; }
+    #panel .txt { flex: 1; min-width: 0; }
+    #panel .btns { flex: 1; min-width: 0; }
+    #panel .btns.few { flex: 0 0 190px; }
+    #panel .btns button:first-child { margin-top: 0; }
+    #pad.inside #right { flex-direction: column; align-items: flex-end; gap: 8px; }
+    #panel .btns.grid { flex: 2.2; }
+    .card h2 { font-size: 20px; margin-bottom: 6px; }
+    .card p { font-size: 15px; line-height: 1.38; margin-bottom: 7px; }
+    .card p:last-child { margin-bottom: 0; }
+    .card button { font-size: 15px; line-height: 1.25; padding: 7px 11px; margin-top: 6px; }
+    .card button.go { font-size: 17px; }
+    #menu { align-items: center; padding: 10px calc(env(safe-area-inset-right) + 14px) 10px calc(env(safe-area-inset-left) + 14px); }
+    #menu .card { display: grid; grid-template-columns: 1fr 210px; column-gap: 18px; align-items: center; max-width: 620px; padding: 14px 16px; }
+    #menu h1 { grid-column: 1; grid-row: 1; font-size: 34px; }
+    #menu .sub { grid-column: 1; grid-row: 2; margin-bottom: 8px; }
+    #menuText { grid-column: 1; grid-row: 3; }
+    #menu .help { grid-column: 1; grid-row: 4; margin: 4px 0 0; }
+    #jatka { grid-column: 2; grid-row: 1 / 3; align-self: end; }
+    #uusi { grid-column: 2; grid-row: 3; align-self: start; }
+    #jatka.hidden + #uusi { grid-row: 2 / 4; align-self: center; }
+    #multi { grid-column: 2; grid-row: 4; align-self: start; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <div id="meters">
+    <span class="m" id="mFood"><b>🍲</b><i><s></s></i></span>
+    <span class="m" id="mHealth"><b>❤️</b><i><s></s></i></span>
+    <span class="m" id="mHull"><b>🛡️</b><i><s></s></i></span>
+    <span class="m hidden" id="mAir"><b id="airI">➰</b><i><s></s></i><em id="airS"></em></span>
+    <span class="m hidden" id="mWarm"><b>🥶</b><i><s></s></i><em id="warmS"></em></span>
+    <span id="depth"></span>
+  </div>
+  <div id="goalbar"><span id="goal"></span><span id="carry"></span></div>
+</div>
+<button id="home" class="hidden" aria-label="Koti">🏠</button>
+<div id="toast" class="hidden"></div>
+<div id="pad" class="hidden">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="right">
+    <span id="roomName" class="hidden"></span>
+    <button id="act2" class="hidden"></button>
+    <button id="act" class="hidden"></button>
+    <button id="ping">📡<small>PING</small></button>
+    <button id="harp" class="hidden" aria-label="Harppuuna">🔱<small>HARPPUUNA</small></button>
+  </div>
+</div>
+<div id="fade"></div>
+<div id="chart" class="hidden">
+  <canvas id="chartC"></canvas>
+  <div id="chartBar"><b>🗺️ Merikartta</b><span id="chartKey">❓ kuultu · ◆ tunnistettu · ● nähty</span><span id="chartAuto" class="hidden"></span></div>
+  <div id="chartPick" class="hidden"><div id="pickName"></div><div id="pickTxt"></div><button id="pickGo"></button></div>
+  <div id="chartBtns"><button class="z" id="zIn" aria-label="Lähennä">+</button><button class="z" id="zOut" aria-label="Loitonna">−</button>
+    <button class="z" id="zSisu" aria-label="Näytä SISU">⛵</button><button id="chartX">Sulje</button></div>
+</div>
+<div id="panel" class="hidden"><div class="card" id="card"></div></div>
+<div id="menu" class="hidden"><div class="card">
+  <h1>LAST SIGNAL</h1>
+  <p class="sub">SELVIYTYMINEN ARKTISELLA MERELLÄ</p>
+  <p id="menuText">Maailma on hiljentynyt. Sinulla on pieni ydinsukellusvene, kylmä meri ja yksi kysymys: onko ketään muuta jäljellä?</p>
+  <button class="go hidden" id="jatka">Jatka</button>
+  <button class="go" id="uusi">Uusi peli</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p class="help">Vasen ohjain ajaa. 📡 kuuntelee merta. 🏠 vie sisälle: kävele huoneesta toiseen, pue puku ja sukella ilmalukosta. 🔱 harppuunalla saat kalaa ruoaksi.</p>
+</div></div>
+<!-- Last Signal v8 (#151): the sound of the sea and SISU's engines, schools of fish and a harpoon for food, the tower's
+     inside with the ladder up to its hatch (so going out onto the ice is one climb), a lab in the navigation room for
+     the samples found, and the control room's helm button back when SISU lies surfaced.
+     Last Signal v7 (#145): two diving suits. The tank gear goes down to 260 m; the hose suit breathes through a hose
+     from SISU and goes as deep as SISU: its length and the corners it rubs on limit a dive, hose guides stop the wear,
+     and a small emergency air supply brings a diver home from a cut hose.
+     Last Signal v6 (#143): v5 with the sea frozen over: SISU surfaces only in a few openings in the ice, the person climbs
+     out through the tower onto the ice, and the abandoned station A-3 on the ice shelf is walked like SISU's rooms.
+     Last Signal v5 (#138): v4 with friends (2–4 phones) in the host's game, each walking and diving as their own person.
+     Last Signal v4 (#132): v3 with the sea's pressure on the hull also during a dive and inside SISU.
+     Last Signal v3 (#132): v2 (#129) with SISU's inside walked as a person: two decks of rooms joined by a ladder, as in
+     the SISU picture of #125; eating, medicine, repairs, the radio, sleep and dives are done in their own rooms. -->
+<script src="../../../rooms.js" data-game="last-signal" data-min="2" data-max="4"></script>
+<script src="world.js"></script>
+<script src="game.js"></script>
+<script src="chart.js"></script>
+<script src="play.js"></script>
+<script src="draw.js"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
