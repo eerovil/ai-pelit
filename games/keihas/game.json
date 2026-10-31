@@ -16,6 +16,13 @@
       "note": "Heittäjälle voi valita asun, myös Halloween-asuja, ja kaverit näkevät sen huoneessa.",
       "request": "Kaikkiin peleihin, joissa voisi olla järkevää olla erilaisia asuja. Voisi tehdä asuvalinta. Ja. Nyt kun on Halloween, niin voisi olla Halloween-asuja sitten tänään saatavilla ja muulloinkin.",
       "issue": "eerovil/ai-pelit#158"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-31",
+      "note": "Helpommat kontrollit: keltainen alue kertoo, milloin Heitä painetaan, koko vauhtirata näkyy alusta asti, keihäs lähtee itse vihreän alueen lopussa, ja Heitä-nappi on jalkanappien yläpuolella eikä niiden välissä.",
+      "request": "Keihäänheitto kontrollit on vähä liian hankala, ja se vihreä alue tulee yllättäen enkä kerkeä lataamaan heittoa. Lisäksi kun heittonappi on siinä välissä niin sitä painaa vahingossa",
+      "issue": "eerovil/ai-pelit#166"
     }
   ]
 }
