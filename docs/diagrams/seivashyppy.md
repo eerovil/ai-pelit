@@ -1,7 +1,7 @@
 # Seiväshyppy: one vault and one meet
 
-How Seiväshyppy plays (v1; v2 plays the same, with the meet, the results board, the saves and the
-room handling from the shared athletics library's bar-height format, `public/lib/yleisurheilu-1/korkeus.js`,
+How Seiväshyppy plays (v1; v3 (#176) ends the meet with the medal ceremony from `yleisurheilu-3`, the podium staying until a tap; v2 plays the same, with the meet, the results board, the saves and the
+room handling from the shared athletics library's bar-height format, `public/lib/yleisurheilu-1/korkeus.js` (from v3 `yleisurheilu-3/korkeus.js`),
 see `yleisurheilu-kirjasto.md`: there a vaulter's attempts are `rec` per height, failures in a row `run`, the
 computer's start `first`, a stop `S`; v2 also has Keihäänheitto v3's buttons, the plant a full-width bar above
 the two feet with a gap that does nothing, and the running knee bends the right way, #170). A meet left unfinished is shared both ways: v2 reads v1's saved meet, and saves its own with v1's
@@ -45,13 +45,14 @@ flowchart TD
   NX -- Joku tällä korkeudella --> T
   NX -- Kaikki yli, ohi tai ulkona --> UP[Rima nousee 10 cm]
   UP --> T
-  NX -- Kaikki ulkona --> END[Lopputulokset: korkein rima, uusintalaskenta]
+  NX -- Kaikki ulkona --> END[Palkintojenjako; Lopputulokset: korkein rima, uusintalaskenta]
   END --> S[Ennätys, tuloslista, voitosta seuraava taso]
-  S --> M
-  END --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
+  END --> TAP{Koroke jää: napautus?}
+  TAP -- Yksin --> M
+  TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,B,F,T blue
   class CPU,WT violet
-  class Q,P,PL,SL,OK,NX amber
+  class Q,P,PL,SL,OK,NX,TAP amber
   class K,O,PS,UP teal
   class X,XB rose
   class END,S,RM green
@@ -85,6 +86,7 @@ flowchart TD
 - **O: yli, ennätys talteen**: `landed()`: a new record (`ennatys`, the highest bar cleared) is saved at once. The vaulter's phone reports the outcome (`res`); the host records it once (`seq`, `record()`) and sends the meet to everyone (`c`).
 - **X: läpijuoksu** and **X: rima putosi**: `outcome()` or `vaultNow()`; `apply()` adds X and counts the failures in a row (`cons`); the third is out (`out`).
 - **Kuka vielä yrittää?**: `advance()`: the next round at this height while someone is still trying there; otherwise the bar rises (`comp.hi`); when everyone is out (or the bar would pass 7 m) the meet is over. With no player on a phone left in, the rest is vaulted at once.
-- **Lopputulokset: korkein rima, uusintalaskenta**: `standings()` and `cmp()` (v2: `standings()` and `score()` in `korkeus.js`): the highest bar cleared, then fewer failures at it, then fewer failures in all up to it (the countback); still level, the place is shared (`placeOf()`). `over()` and `netEnd()` show them with 🥇🥈🥉 for a few seconds.
+- **Palkintojenjako; Lopputulokset: korkein rima, uusintalaskenta**: `standings()` and `cmp()` (v2: `standings()` and `score()` in `korkeus.js`): the highest bar cleared, then fewer failures at it, then fewer failures in all up to it (the countback); still level, the place is shared (`placeOf()`). `over()` and `netEnd()` show them with 🥇🥈🥉 for a few seconds. From v3 (#176) the end is the medal ceremony, `K.drawPodium()` at the end of `draw()` over the whole screen: the top three on the podium in the game's kit (`look`), an official hangs their medals with a chime each (`chime`), and the final standings under it. Medals go by the order of the standings, so a shared place in the top three shows different medals (the library folder is published; a fix would go in `yleisurheilu-4/`).
+- **Koroke jää: napautus?**: from v3 nothing leaves the podium by itself: the tap handler calls `K.skip()` alone and with friends; a tap during the ceremony finishes it (alone only), a tap after it shows the menu, or `R.backToRoom()` in a room, each phone by its own tap. Before v3 this came by itself after a few seconds.
 - **Ennätys, tuloslista, voitosta seuraava taso**: `netEnd()` saves `kisat`, and alone a first place adds `voitot` and the next level (`taso`); the meet's best height goes to the high-score list with `AiPelitScores.submit()` (`seivashyppy` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: the host sends the results with `R.deliver()`; each phone saves its own meet once (`R.once()`), shows its place and the top eight in the room (`afterEnd()`, `R.note()`, `R.backToRoom()`).

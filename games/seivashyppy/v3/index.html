@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Seiväshyppy</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(18,32,58,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:36px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #cont:active{box-shadow:0 1px 0 #3c8a3f}
+  #cont.hidden{display:none}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
+  .help.side{display:none}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,280px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#cont,#multi{grid-column:2;justify-self:stretch}
+    #go{grid-row:1 / span 2;align-self:center}
+    #cont{grid-row:3;align-self:center}
+    #multi{grid-row:4 / span 2;align-self:start;padding:12px 14px;white-space:nowrap}
+    .help{margin:0;display:none}
+    .help.side{display:block}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>Seiväshyppy</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Kisaan!</button>
+  <button id="cont" class="hidden">Jatka kisaa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help">Ota vauhtia painamalla vasenta ja oikeaa jalkaa vuorotellen. Paina Istuta, kun olet
+    vihreällä alueella, ja pidä pohjassa: jalat nousevat. Päästä irti, kun seiväs on suorassa.
+    Kolme yritystä korkeudella, kolme hylättyä peräkkäin ja kisa on ohi.</p>
+  <p class="help side">Ota vauhtia reunojen jalkanapeista vuorotellen. Paina Istuta vihreällä alueella,
+    pidä pohjassa ja päästä irti, kun seiväs on suorassa. Kolme hylättyä peräkkäin ja kisa on ohi.</p>
+</div>
+<script src="../../../rooms.js" data-game="seivashyppy" data-min="2" data-max="8"></script>
+<script src="../../../lib/yleisurheilu-3/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-3/korkeus.js"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+const FOES = ['Ponnistus-Pekka', 'Kaari-Kaisa', 'Lento-Leena', 'Taivas-Tero', 'Jousi-Jonna', 'Vauhti-Veera', 'Jänne-Jussi',
+  'Salama-Saara', 'Tähti-Tapio', 'Rima-Riikka', 'Pilvi-Pentti', 'Tuuli-Tiina', 'Ukko-Urho'];
+const TRIES = 3, STEP_H = 0.10, MAX_H = 7.0;   // twelve vaulters; the bar goes up 10 cm at a time
+
+// ---------- The vault ----------
+// The runway in metres, the box at 0 (where the pole's tip goes), the bar over x = BAR_X. Running is
+// Aitajuoksu's and Keihäänheitto's: each step on the other foot adds speed, more the slower you go;
+// tapping 8 times a second holds about 8.3 m/s. "Istuta" plants the pole; holding it swings the legs
+// up while the pole bends and straightens; letting go at the top pushes off the pole.
+const START = -32, VMAX = 12, STEP = 1.0;
+const TAKEOFF = -4.0, PLANT_OK = 0.8, PLANT_BEST = 0.3;  // the take-off spot, and how far from it a plant still goes
+const PLANT_FROM = TAKEOFF - PLANT_OK - 3;              // a press further back than this is not a plant yet
+const T_POLE = 1.0, HANG = 0.5, PUSH_W = 0.4, TAP_MIN = 0.12;  // s: the pole straightens; hold after it; the push window
+const SWING_T = 0.7, PUSH = 0.5, LEGS = 0.5, VSTALL = 4.5;  // s to full swing; metres from the push and lost with the legs down
+const G = 9.81, BAR_X = 0.5, MAT_H = 0.8, PL = 4.6;
+const LAND_T = 2.0, BOARD_T = 3.5, TURN_MAX = 45;          // seconds
+const smooth = u => { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); };
+
+// How good the plant was: 1 within 0.3 m of the take-off spot, down to 0.7 at the edge of the green.
+function plantQ(px) { const d = Math.abs(px - TAKEOFF); return d > PLANT_OK ? 0 : 1 - 0.3 * Math.max(0, d - PLANT_BEST) / (PLANT_OK - PLANT_BEST); }
+// The vaulter's hips on the pole, metres up, tau seconds after the plant: the run's energy, as much as
+// the plant passes on, lifts them; after the pole is straight they start to fall.
+function poleTop(px, v, sw) { return 1.0 + plantQ(px) * v * v / (2 * G) * (0.85 + 0.15 * sw); }
+function hipAt(px, v, sw, tau) {
+  const top = poleTop(px, v, sw);
+  return tau <= T_POLE ? 1.0 + (top - 1.0) * Math.sin(Math.PI / 2 * tau / T_POLE) : top - 0.5 * G * (tau - T_POLE) * (tau - T_POLE);
+}
+// The whole vault from four numbers, the same on every phone: where the pole was planted, the run's
+// speed, how far the legs swung up, and when the vaulter let go. clear is the height they get over.
+function vaultResult(px, v, sw, tr) {
+  const q = plantQ(px);
+  if (v * Math.sqrt(q) < VSTALL) return { stall: true, clear: 0, peak: 1.5 };
+  const r = Math.max(0, 1 - Math.abs(tr - T_POLE) / PUSH_W);
+  const at = hipAt(px, v, sw, tr), clear = at + PUSH * r - LEGS * (1 - sw);
+  return { stall: false, clear: Math.round(clear * 100) / 100, peak: Math.max(at, clear + 0.1), at, r };
+}
+
+// ---------- Layout ----------
+// The scene is drawn from SX and SW wide. Upright it is the whole width with the pads under it;
+// on its side the pads are columns at the left and right edges, under the thumbs.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, ctrlTop, ctrlH, groundY, hudTop, sceneB;
+let land = false, SX = 0, SW = 0, side = 0, runS = 30;
+function resize() {
+  const r = c.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  if (land) {
+    side = Math.max(110, Math.min(160, W * 0.17));
+    SX = safeL + side; SW = W - SX - safeR - side;
+    ctrlTop = H; ctrlH = 0; hudTop = safeT + 6; sceneB = H - safeB;
+    groundY = sceneB - 46;
+  } else {
+    SX = 0; SW = W;
+    // v2: taller, for the plant bar above the two feet.
+    ctrlH = Math.max(176, Math.min(236, H * 0.3));
+    ctrlTop = H - safeB - ctrlH; hudTop = safeT + 44; sceneB = ctrlTop;
+    groundY = ctrlTop - 64;
+  }
+  // Running, about 8 m across; vaulting, the bar and a metre over it fit under the score panel.
+  runS = Math.min(SW / 8.5, (groundY - hudTop - 90) / 3.4);
+}
+// The scale over the box: from the take-off to past the bar, and the bar with room over it.
+function vaultS() { const bar = K.comp && K.comp.heights && K.comp.heights.length ? barH(K.comp.hi) : 4; return Math.min(SW / 7, (groundY - hudTop - 80) / (bar + 1.2)); }
+addEventListener('resize', resize);
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The competition ----------
+// v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
+// in its bar-height format (lib/yleisurheilu-3/korkeus.js). The real rules: the bar rises 10 cm at a
+// time; at each height everyone still trying takes a first attempt in the drawn order, then those
+// who failed a second, then a third. A vaulter may pass any height, even after failing at it; three
+// failures in a row and they are out. K.comp is the meet: a vaulter is {id, name, p, bot, skill (the
+// height the computer clears on average), first and skip (where the computer comes in and the
+// heights it passes), col, rec: per height its attempts ('XO', 'XX-'...), run: failures in a row,
+// out}. th is this phone's view of the attempt.
+let th = null;
+const base = lv => Math.min(5.9, 4.0 + 0.2 * (lv - 1));
+const h0Of = lv => Math.round((base(lv) - 0.8) * 10) / 10;
+const heightsFor = lv => { const hs = []; for (let i = 0; h0Of(lv) + STEP_H * i <= MAX_H + 1e-9; i++) hs.push(Math.round((h0Of(lv) + STEP_H * i) * 100) / 100); return hs; };
+const isNet = () => K.isNet();
+const fmt = m => m === undefined || m === null || m < 0 ? 'ei tulosta' : m.toFixed(2).replace('.', ',') + ' m';
+const K = AiPelitKisa.meet({
+  slug: 'seivashyppy', foes: FOES, skill: base,
+  format: AiPelitKisa.heights({ heights: heightsFor, tries: TRIES, plan: cpuPlan }),
+  spread: [0.3, 0.2, 0.1, 0.05, 0, -0.1, -0.15, -0.2, -0.3, -0.4, -0.5], jitter: 0.16,
+  cpu: cpuTry, turn: newTurn, clear: () => { th = null; }, menu: showMenu, fmt,
+  live: ['p', 'pl', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä tulosta',
+  started: () => menu.classList.add('hidden'),
+  // v3 (#176): the medal ceremony at the end, the jumpers in their own kit, a chime per medal.
+  look: () => ({ skin: '#c98a62', bottom: '#1b1b2f', shoe: '#fff', hair: '#3a2616' }),
+  chime: i => { tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06); if (i === 0) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140); },
+});
+const thrower = id => K.thrower(id);
+const barH = i => { const h = K.comp && K.comp.heights ? K.comp.heights[i] : undefined; return h === undefined ? 4 : h; };
+const marksAt = (t, i) => (t.rec && t.rec[i]) || '';
+const bestIdx = t => K.F.score(K.comp, t).b;
+const bestOf = t => K.F.score(K.comp, t).h;
+const placeOf = t => K.placeOf(t);
+const standings = () => K.standings();
+const current = () => K.current();
+const soleWinner = t => K.F.soleWinner(K.comp, t);
+const COLORS = K.COLORS;
+
+// The meet kept alone (kesken) is shared with v1, which reads its own fields (h0, the turn queue q,
+// and per vaulter att, cons, entry). The library has just saved it (each turn starts after the
+// save), so it is saved again with v1's fields beside v2's; v2seq says which side played last.
+// v1 reads every att entry as a string: the heights not tried (holes, null after a reload) are left out.
+function v1Att(rec) { const a = {}; (rec || []).forEach((r, i) => { if (typeof r === 'string') a[i] = r; }); return a; }
+function keepForV1() {
+  const c = K.comp;
+  if (!c || c.mode !== 'solo' || c.over || !c.heights || !c.heights.length) return;
+  const q = c.order.slice(c.turn).filter(id => K.F.due(K.thrower(id), c.hi, c.att));
+  K.save('kesken', Object.assign({}, c, { h0: c.heights[0], q, v2seq: c.seq,
+    throwers: c.throwers.map(t => Object.assign({}, t, { att: v1Att(t.rec), cons: t.run, entry: t.first || 0 })) }));
+}
+function cpuPlan(t, c) {
+  // Comes in some 50–80 cm under its best, and now and then passes a height well under it.
+  const h0 = c.heights[0];
+  t.first = Math.max(0, Math.round((t.skill - 0.5 - Math.random() * 0.3 - h0) / STEP_H));
+  t.skip = [];
+  for (let i = t.first + 1; h0 + STEP_H * i < t.skill - 0.3; i++) if (Math.random() < 0.25) t.skip.push(i);
+}
+// The computer vaults: around its skill, now and then a run-through.
+function cpuTry(t) {
+  if (Math.random() < 0.05) return 'X';
+  return t.skill + K.gauss() * 0.13 >= barH(K.comp.hi) ? 'O' : 'X';
+}
+// A new turn: this phone draws it, and runs it when it is its own.
+function newTurn(t, mine, seq) {
+  keepForV1();
+  th = { seq, id: t.id, mine, phase: 'wait', t: 0, x: START, v: 0, foot: 0, ph: 0,
+    px: null, vrel: 0, tau: 0, sw: 0, held: false, tr: null, res: null, why: '', fly: null, knock: 0, sendT: 0, idle: 0 };
+  blend = 0;
+}
+
+// ---------- One attempt ----------
+function step(dt) {
+  for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
+  if (K.step(dt)) return;
+  if (!th || !K.comp) return;
+  if (isNet() && R.paused) return;
+  th.t += dt; th.idle += dt;
+  const a = th;
+  if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; if (a.mine) tone(660, 0.1, 'sine', 0.06); } return; }
+  if (a.phase === 'ready' || a.phase === 'run') {
+    a.v = Math.max(0, a.v - (1.2 + 0.15 * a.v) * dt);
+    if (a.mine || a.phase !== 'ready') a.x += a.v * dt;
+    a.ph += a.v * dt * 1.5;
+    if (a.mine) {
+      if (a.x >= TAKEOFF + PLANT_OK + 0.4) return outcome('Läpijuoksu: seiväs jäi istuttamatta');
+      if (isNet() && a.idle > TURN_MAX) return outcome('Aika loppui');
+      a.sendT -= dt;
+      if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; K.send({ t: 'p', a: [r2(a.x), r2(a.v), a.phase, a.foot] }); }
+    }
+    return;
+  }
+  if (a.phase === 'pole') {
+    a.tau += dt;
+    if (a.held) a.sw = Math.min(1, a.sw + dt / SWING_T);
+    if (a.mine) {
+      if (a.v * Math.sqrt(plantQ(a.px)) < VSTALL && a.tau >= 0.55 * T_POLE) { a.x = a.px; return outcome('Liian hidas: seiväs ei noussut pystyyn'); }
+      if (a.tau >= T_POLE + HANG) letGoPole();
+      a.sendT -= dt;
+      if (isNet() && a.sendT <= 0 && a.phase === 'pole') { a.sendT = 1 / 12; K.send({ t: 'p', a: [r2(a.px), r2(a.v), 'pole', a.foot, r2(a.tau), r2(a.sw)] }); }
+    }
+    return;
+  }
+  if (a.phase === 'fly' || a.phase === 'land') {
+    const f = a.fly;
+    if (f) f.pt += dt;
+    if (f && !f.down) {
+      f.t += dt;
+      const hx = f.x0 + f.vx * f.t, hy = f.y0 + f.vy * f.t - 0.5 * G * f.t * f.t;
+      f.hx = hx; f.hy = hy; f.rot = Math.min(1, f.t / 1.1);
+      if (hx >= BAR_X - 0.15 && !a.knock && a.res === 'X') { a.knock = 0.001; tone(200, 0.25, 'triangle', 0.06, 90); }
+      if (hy <= (hx > 0.2 ? MAT_H + 0.15 : 0.9) && f.t > 0.2) { f.down = true; f.hy = Math.max(hy, hx > 0.2 ? MAT_H + 0.15 : 0.9); landed(); }
+    }
+    if (a.knock) a.knock = Math.min(1, a.knock + dt * 1.6);
+    if (a.phase === 'land' && a.t >= LAND_T && a.mine && !a.sent) { a.sent = true; report(a.res); }
+  }
+}
+const r2 = n => Math.round(n * 100) / 100;
+
+function press(k) {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[k] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
+  if (th.phase !== 'ready' && th.phase !== 'run') return;
+  if (th.phase === 'ready') { th.phase = 'run'; th.t = 0; }
+  th.idle = 0;  // the time limit counts only while nothing is pressed
+  if (k !== th.foot) th.v = Math.min(VMAX, th.v + STEP * (1 - th.v / VMAX));
+  else th.v = Math.max(0, th.v - 0.3);  // the same foot twice is a stumble, not a stride
+  th.foot = k;
+  tone(k === 1 ? 190 : 230, 0.03, 'triangle', 0.05);
+}
+// The middle pad: the first press plants the pole, holding swings the legs up, letting go pushes off.
+let holdPtr = null;
+function hold(ptr) {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[3] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
+  if (th.phase === 'pole') { th.held = true; holdPtr = ptr; return; }
+  // Standing at the start, or still well short of the green zone, a press is a stray tap (skipping
+  // the standings, missing the pass button), not a plant: only a plant just too early runs through.
+  if (th.phase !== 'run' || th.x < PLANT_FROM) return;
+  th.idle = 0;
+  const d = th.x - TAKEOFF;
+  if (d < -PLANT_OK) return outcome('Liian aikaisin: läpijuoksu');
+  if (d > PLANT_OK) return outcome('Liian myöhään: läpijuoksu');
+  plantNow(r2(th.x), r2(th.v));  // rounded, so every phone works the vault out from the same numbers
+  th.held = true; holdPtr = ptr;
+  if (isNet()) K.send({ t: 'pl', a: [th.px, th.v] });
+}
+function letGo() {
+  holdPtr = null;
+  if (!th || !th.mine || th.phase !== 'pole') return;
+  th.held = false;
+  if (th.tau < TAP_MIN) return;  // the press that planted the pole, let go at once: just hanging on
+  letGoPole();
+}
+function letGoPole() {
+  const a = th;
+  a.held = false;
+  vaultNow(a.px, a.v, r2(a.sw), r2(a.tau));
+  if (isNet()) K.send({ t: 'rel', a: [a.px, a.v, a.sw, a.tr] });
+}
+function plantNow(px, v) {
+  const a = th;
+  a.phase = 'pole'; a.t = 0; a.tau = 0; a.px = px; a.x = px; a.v = v; a.vrel = v; a.sw = 0;
+  if (a.mine) tone(140, 0.12, 'triangle', 0.08, 90);
+}
+// Let go: the four numbers decide the vault; the flight shows it, the same on every phone.
+function vaultNow(px, v, sw, tr) {
+  const a = th;
+  a.px = px; a.v = v; a.sw = sw; a.tr = tr; a.tau = tr;
+  const res = vaultResult(px, v, sw, tr), bar = barH(K.comp.hi);
+  a.clear = res.clear; a.res = res.clear >= bar ? 'O' : 'X';
+  a.why = a.res === 'O' ? (res.clear - bar < 0.04 ? 'Rima heilui, mutta pysyi!' : '') : res.clear < bar - 0.45 ? 'Liian matala hyppy' : 'Rima putosi';
+  const p = posePole(a, tr), x0 = p.hip[0], y0 = p.hip[1];
+  const vy = Math.sqrt(2 * G * Math.max(0.02, res.peak - y0)), ta = vy / G;
+  a.fly = { t: 0, pt: 0, x0, y0, vy, vx: Math.max(0.8, (BAR_X + 0.15 - x0) / Math.max(0.25, ta)), hx: x0, hy: y0, rot: 0, down: false, b0: p.body };
+  a.phase = 'fly'; a.t = 0;
+  if (a.mine) tone(520, 0.16, 'sawtooth', 0.05, 900);
+}
+function landed() {
+  th.phase = 'land'; th.t = 0;
+  if (th.res === 'O') {
+    const h = barH(K.comp.hi);
+    th.leads = standings()[0] && bestOf(standings()[0]) < h;
+    if (th.mine) {
+      th.record = K.record(h);
+      tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
+    }
+  } else if (th.mine) tone(160, 0.3, 'sawtooth', 0.08, 70);
+}
+// A failure before the vaulter leaves the ground (a run-through, the clock): the attempt is over.
+function outcome(why) {
+  th.phase = 'land'; th.t = 0; th.res = 'X'; th.why = why; th.fly = null;
+  if (th.mine) {
+    tone(160, 0.3, 'sawtooth', 0.08, 70);
+    if (isNet()) K.send({ t: 'rel', a: [r2(th.x), 0, 0, 0], why });
+  }
+}
+// Passing this height (or, the winner alone, stopping): no attempt, straight on.
+function pass() {
+  if (!th || !th.mine || th.phase !== 'ready') return;
+  const r = soleWinner(thrower(th.id)) ? 'S' : '-';   // v2: the library's mark for stopping (v1: 'R')
+  th.phase = 'done';
+  tone(420, 0.08, 'sine', 0.05);
+  report(r);
+}
+function report(r) { K.report(th.seq, r); }
+
+// Another phone's vaulter, as its phone sends it: where it is (p), the plant (pl), the let-go (rel).
+function watchFrom(m) {
+  // Another phone's vaulter, as its phone sends it.
+  if (!th || th.mine || !K.comp || th.id !== m.id) return;
+  const live = th.phase === 'wait' || th.phase === 'ready' || th.phase === 'run';
+  if (m.t === 'p' && m.a[2] !== 'pole' && live) { th.x = m.a[0]; th.v = m.a[1]; th.phase = m.a[2]; th.foot = m.a[3]; }
+  if (m.t === 'p' && m.a[2] === 'pole') {
+    if (live) plantNow(m.a[0], m.a[1]);
+    if (th.phase === 'pole') { th.tau = Math.max(th.tau, m.a[4]); th.sw = m.a[5]; }
+  }
+  if (m.t === 'pl' && live) plantNow(m.a[0], m.a[1]);
+  if (m.t === 'rel' && th.phase !== 'fly' && th.phase !== 'land') {
+    if (m.why) { th.x = m.a[0]; outcome(m.why); } else vaultNow(m.a[0], m.a[1], m.a[2], m.a[3]);
+  }
+}
+const medal = p => ['🥇', '🥈', '🥉'][p - 1] || '';
+
+// ---------- The loop ----------
+let lastT = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  step(dt);
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+// ---------- Drawing ----------
+let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3, passBox = null;
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function draw(dt = 0) {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
+  x.save();
+  if (land) { x.beginPath(); x.rect(SX, 0, SW, H); x.clip(); x.translate(SX, 0); }
+  drawScene(dt);
+  x.restore();
+  drawControls();
+  // v3 (#176): the end of the meet is the medal ceremony over the whole screen, the standings
+  // under it (beside it on a phone on its side), clear of the corner chips. It stays until a tap.
+  if (K.ending) {
+    x.fillStyle = 'rgba(8,16,32,.82)'; x.fillRect(0, 0, W, H);
+    K.drawPodium(x, { left: safeL + 8, top: safeT + 44, w: W - safeL - safeR - 16, bottom: H - safeB - 8 });
+  }
+}
+// The camera: on the vaulter while running, out over the box and the bar from the plant on.
+function camera(dt) {
+  const vault = th && th.px !== null && (th.phase === 'pole' || th.phase === 'fly' || th.phase === 'land');
+  blend = vault ? Math.min(1, blend + dt * 2.2) : Math.max(0, blend - dt * 3);
+  const e = smooth(blend), vs = vaultS();
+  const s = runS + (vs - runS) * e;
+  const ax = th ? th.x : START;
+  camX = (ax - 0.32 * SW / s) * (1 - e) + (-4.9) * e;
+  return s;
+}
+function drawScene(dt) {
+  const W = SW, s = camera(dt);
+  const sx = m => (m - camX) * s, sy = h => groundY - h * s;
+  // Sky, and the stands behind the runway.
+  const sky = x.createLinearGradient(0, 0, 0, groundY);
+  sky.addColorStop(0, '#5fa8e8'); sky.addColorStop(1, '#cfe9ff');
+  x.fillStyle = sky; x.fillRect(0, 0, W, groundY);
+  x.fillStyle = 'rgba(255,255,255,.85)';
+  for (let k = 0; k < 6; k++) {
+    const span = W + 240, cx = ((k * 157 - camX * 4 - performance.now() / 400) % span + span) % span - 120;
+    const cy = hudTop + 90 + ((k * 61) % 5) * 26, r = 14 + (k % 3) * 5;
+    x.beginPath(); x.arc(cx, cy, r, 0, 7); x.arc(cx + r, cy - r * 0.5, r * 1.1, 0, 7); x.arc(cx + r * 2.1, cy, r * 0.9, 0, 7); x.fill();
+  }
+  const standH = Math.max(50, (groundY - hudTop) * 0.3), standTop = groundY - 22 - standH;
+  x.fillStyle = '#2b374b'; x.fillRect(0, standTop - 10, W, 10);
+  x.fillStyle = '#3b4a63'; x.fillRect(0, standTop, W, standH);
+  const crowd = ['#e63946', '#f1faee', '#ffb703', '#8ecae6', '#2a9d8f', '#f4a261'], gap = 11, pc = camX * 9;
+  for (let row = 0; row * 12 + 8 < standH; row++) {
+    const off = (row % 2) * gap / 2;
+    for (let k = Math.floor((pc - off) / gap) - 1; k * gap + off - pc < W + gap; k++) {
+      const n = (k * 7919 + row * 104729) >>> 0;
+      x.fillStyle = crowd[n % crowd.length];
+      x.beginPath(); x.arc(k * gap + off - pc, standTop + 8 + row * 12, 3.6, 0, 7); x.fill();
+    }
+  }
+  x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, groundY - standTop - standH);
+  const bw = 120, bo = ((camX * 30) % bw + bw) % bw;
+  x.font = '900 11px system-ui'; x.textAlign = 'center';
+  for (let k = -1; k * bw - bo < W + bw; k++) {
+    const bx = k * bw - bo, n = (Math.floor(camX * 30 / bw) + k) & 1;
+    x.fillStyle = n ? '#1d4e89' : '#f1faee'; x.fillRect(bx, standTop + standH - 16, bw - 2, 16);
+    x.fillStyle = n ? '#ffd166' : '#1d4e89'; x.fillText(n ? 'AI-PELIT' : 'SEIVÄS', bx + bw / 2, standTop + standH - 4);
+  }
+  // The runway up to the box, grass beyond the mat.
+  x.fillStyle = '#5aa64e'; x.fillRect(0, groundY, W, sceneB - groundY);
+  x.fillStyle = '#c8553d'; x.fillRect(0, groundY, Math.max(0, Math.min(W, sx(0.2))), sceneB - groundY);
+  x.fillStyle = 'rgba(255,255,255,.75)'; x.fillRect(0, groundY, Math.max(0, Math.min(W, sx(0.2))), 2);
+  // Where the plant goes: green around the take-off spot, brighter at its heart.
+  if (th && th.mine && (th.phase === 'ready' || th.phase === 'run')) {
+    x.fillStyle = 'rgba(126,224,129,.45)'; x.fillRect(sx(TAKEOFF - PLANT_OK), groundY, 2 * PLANT_OK * s, sceneB - groundY);
+    x.fillStyle = 'rgba(126,224,129,.75)'; x.fillRect(sx(TAKEOFF - PLANT_BEST), groundY, 2 * PLANT_BEST * s, sceneB - groundY);
+  }
+  // Metres to the box every 5 m.
+  x.textAlign = 'center';
+  for (let m = -30; m < 0; m += 5) {
+    const px = sx(m);
+    if (px < -40 || px > W + 40) continue;
+    x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(px - 1, groundY, 2, m % 10 ? 8 : 14);
+    if (m % 10 === 0) {
+      x.font = '800 12px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.4)';
+      x.strokeText(-m + ' m', px, groundY + 30); x.fillStyle = '#fff'; x.fillText(-m + ' m', px, groundY + 30);
+    }
+  }
+  // The box, sunk in the runway.
+  x.fillStyle = '#333'; x.beginPath(); x.moveTo(sx(-0.9), groundY); x.lineTo(sx(0), groundY + Math.max(6, 0.2 * s)); x.lineTo(sx(0.05), groundY); x.fill();
+  drawPit(sx, sy, s);
+  // The vaulter.
+  if (th) {
+    const t = thrower(th.id), col = t ? t.col : COLORS[0], name = t ? (th.mine ? 'Sinä' : t.name) : '';
+    if (th.phase === 'pole') drawOnPole(th, sx, sy, s, col);
+    else if ((th.phase === 'fly' || th.phase === 'land') && th.fly) drawFlying(th, sx, sy, s, col);
+    else drawRunner(th, sx(th.x), groundY, s, col, name);
+  }
+  drawHud();
+  if (th && th.phase === 'wait') drawBoard(false);
+  if (K.comp && K.comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
+}
+// The mat, the uprights and the bar (knocked off when th.knock runs), with the height on a sign.
+function drawPit(sx, sy, s) {
+  const comp = K.comp, bar = comp && comp.heights && comp.heights.length ? barH(comp.hi) : 4;
+  x.fillStyle = '#1f5fa8'; x.fillRect(sx(0.2), sy(MAT_H), 5.5 * s, MAT_H * s);
+  x.fillStyle = '#2f7fd0'; x.fillRect(sx(0.2), sy(MAT_H), 5.5 * s, Math.max(4, 0.12 * s));
+  // Two uprights, the far one a little up and right, as if seen from a little above.
+  const near = sx(BAR_X), far = near + 0.5 * s, lift = 0.25 * s;
+  x.fillStyle = '#d9dde3';
+  x.fillRect(far - 2, sy(bar + 0.6) - lift, 4, (bar + 0.6) * s);
+  // The bar: white and red, falling when it is knocked.
+  let k = th && th.knock ? th.knock : 0;
+  const y0 = sy(bar), drop = k * k * (bar - MAT_H) * s;
+  x.lineCap = 'round'; x.lineWidth = Math.max(4, 0.05 * s);
+  x.strokeStyle = '#fff'; x.beginPath(); x.moveTo(near, y0 + drop); x.lineTo(far, y0 - lift + drop * (1 - 0.5 * k)); x.stroke();
+  x.strokeStyle = '#e63946'; x.setLineDash([Math.max(4, 0.12 * s), Math.max(4, 0.12 * s)]);
+  x.beginPath(); x.moveTo(near, y0 + drop); x.lineTo(far, y0 - lift + drop * (1 - 0.5 * k)); x.stroke(); x.setLineDash([]);
+  x.fillStyle = '#eef1f5'; x.fillRect(near - 3, sy(bar + 0.6), 6, (bar + 0.6) * s);
+  // The height ticks on the near upright, every half metre.
+  x.fillStyle = 'rgba(30,40,60,.7)';
+  for (let h = 0.5; h < bar + 0.5; h += 0.5) x.fillRect(near - 3, sy(h), 6, 1.5);
+  const lab = bar.toFixed(2).replace('.', ',');
+  x.font = '900 14px system-ui'; x.textAlign = 'left'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.5)';
+  x.strokeText(lab, far + 8, y0 - lift + 5); x.fillStyle = '#ffd166'; x.fillText(lab, far + 8, y0 - lift + 5);
+}
+function drawPole(x0, y0, x1, y1, bend, s) {
+  // Tip at (x0, y0), the vaulter's end at (x1, y1); bend pushes the middle out sideways.
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
+  const cx = mx - (dy / L) * bend * s, cy = my + (dx / L) * bend * s;   // bowing forward, towards the pit
+  x.lineCap = 'round';
+  x.strokeStyle = 'rgba(20,30,50,.6)'; x.lineWidth = Math.max(4, 0.08 * s);
+  x.beginPath(); x.moveTo(x0, y0); x.quadraticCurveTo(cx, cy, x1, y1); x.stroke();
+  x.strokeStyle = '#f2c94c'; x.lineWidth = Math.max(2.5, 0.05 * s);
+  x.beginPath(); x.moveTo(x0, y0); x.quadraticCurveTo(cx, cy, x1, y1); x.stroke();
+}
+// A body by its shoulders and an angle (0 head up, π head down), the legs bent by tuck (0 straight).
+function drawBody(shX, shY, ang, tuck, s, col, arms) {
+  const lw = Math.max(2.5, 0.11 * s), dir = [Math.sin(ang), Math.cos(ang)];  // from shoulders to hips, in screen terms
+  const hipX = shX - dir[0] * 0.55 * s, hipY = shY + dir[1] * 0.55 * s;
+  const knee = [hipX - Math.sin(ang - tuck) * 0.46 * s, hipY + Math.cos(ang - tuck) * 0.46 * s];
+  const foot = [knee[0] - Math.sin(ang + tuck * 0.4) * 0.46 * s, knee[1] + Math.cos(ang + tuck * 0.4) * 0.46 * s];
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  x.strokeStyle = '#a86f4c'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(knee[0] - 0.05 * s, knee[1]); x.lineTo(foot[0] - 0.05 * s, foot[1]); x.stroke();
+  x.strokeStyle = col; x.lineWidth = lw * 2.1;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(shX, shY); x.stroke();
+  x.strokeStyle = '#c98a62'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(knee[0], knee[1]); x.lineTo(foot[0], foot[1]); x.stroke();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(hipX + (knee[0] - hipX) * 0.35, hipY + (knee[1] - hipY) * 0.35); x.stroke();
+  if (arms) { x.strokeStyle = '#c98a62'; x.lineWidth = lw; x.beginPath(); x.moveTo(shX, shY); x.lineTo(arms[0], arms[1]); x.stroke(); }
+  const hx = shX + dir[0] * 0.18 * s, hy = shY - dir[1] * 0.18 * s;
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
+  return [hipX, hipY];
+}
+// Where the vaulter is on the pole tau s after the plant (metres): the hips rise as the run lifts them;
+// the hands at the pole's top end, under the hips once the legs have swung up.
+function posePole(a, tau) {
+  const u = Math.min(1, tau / T_POLE), hy = hipAt(a.px, a.v, a.sw, tau);
+  const body = Math.PI * Math.min(1, a.sw * 0.6 + 0.4 * a.sw * u);   // 0 hanging, π upside down
+  const handY = hy + 0.55 * Math.cos(body) - 0.05, handX = (a.px + 0.3) * (1 - smooth(u)) + 0.05 * smooth(u);
+  const bend = 0.9 * Math.min(1, a.v / 9) * Math.sin(Math.PI * u);
+  return { hip: [handX - 0.55 * Math.sin(body) * 0.3, hy], hand: [handX, Math.max(1.6, handY)], body, bend };
+}
+function drawOnPole(a, sx, sy, s, col) {
+  const p = posePole(a, a.tau);
+  drawPole(sx(0), sy(-0.15), sx(p.hand[0]), sy(p.hand[1]), p.bend, s);
+  const shX = sx(p.hand[0]) + Math.sin(p.body) * 0.1 * s, shY = sy(p.hand[1]) + (Math.cos(p.body) > 0 ? 0.22 : -0.1) * s;
+  drawBody(shX, shY, p.body, 0.3 + 0.9 * a.sw * (1 - Math.min(1, a.tau / T_POLE)), s, col, [sx(p.hand[0]), sy(p.hand[1])]);
+}
+function drawFlying(a, sx, sy, s, col) {
+  const f = a.fly;
+  // The pole, let go, falls back behind the box.
+  const k = Math.min(1, f.pt / 0.8);
+  drawPole(sx(0), sy(-0.15), sx(-Math.sin(k * 1.2) * PL * 0.9 + 0.05), sy(Math.cos(k * 1.2) * PL * 0.85), 0, s);
+  // Over the bar face down-ish, then onto the back on the mat.
+  const ang = f.down ? Math.PI * 1.5 : f.b0 + (Math.PI * 1.5 - f.b0) * f.rot;
+  const shX = sx(f.hx) + Math.sin(ang) * 0.55 * s, shY = sy(f.hy) - Math.cos(ang) * 0.55 * s;
+  drawBody(shX, shY, ang, f.down ? 0.8 : 0.2, s, col);
+}
+// A vaulter running to the right with the pole, its tip lowering as the box comes near.
+function drawRunner(a, px, base, s, col, name) {
+  if (px < -80 || px > SW + 80) return;
+  const lw = Math.max(2.5, 0.11 * s);
+  const moving = a.v > 0.3, stopped = a.phase === 'land' || a.phase === 'done';
+  const lean = stopped ? -0.05 : 0.08 + Math.min(a.v, 10) * 0.016;
+  const hipX = px, hipY = base - 0.92 * s;
+  const neckX = hipX + Math.sin(lean) * 0.55 * s, neckY = hipY - Math.cos(lean) * 0.55 * s;
+  const L = 0.46 * s;
+  const pt = (x0, y0, ang, l) => [x0 + Math.sin(ang) * l, y0 + Math.cos(ang) * l];
+  let legs;
+  const p = a.ph * 2.2;
+  if (!moving) legs = [[0.12, 0.05], [-0.1, -0.1]];
+  else {
+    const amp = 0.25 + Math.min(a.v, 10) * 0.06;
+    legs = [0, Math.PI].map(o => { const q = Math.sin(p + o) * amp; return [q, q - 0.25 - (0.6 + amp) * Math.max(0, Math.cos(p + o))]; });   // v2 (#170): the knee bends as the thigh swings forward
+  }
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const limb = (ox, oy, [a1, a2], len, c2) => {
+    const k = pt(ox, oy, a1, len), e = pt(k[0], k[1], a2, len);
+    x.strokeStyle = c2; x.lineWidth = lw;
+    x.beginPath(); x.moveTo(ox, oy); x.lineTo(k[0], k[1]); x.lineTo(e[0], e[1]); x.stroke();
+    return e;
+  };
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(px, base, 0.35 * s, 0.06 * s, 0, 0, 7); x.fill();
+  const back = limb(neckX, neckY + 0.05 * s, [Math.PI * 0.75, Math.PI * 0.45], 0.3 * s, '#a86f4c');
+  const far = limb(hipX, hipY, legs[1], L, '#a86f4c');
+  x.fillStyle = '#222'; x.beginPath(); x.ellipse(far[0] + 0.06 * s, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = col; x.lineWidth = lw * 2.1;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(neckX, neckY); x.stroke();
+  const near = limb(hipX, hipY, legs[0], L, '#c98a62');
+  x.fillStyle = '#fff'; x.beginPath(); x.ellipse(near[0] + 0.06 * s, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); x.stroke();
+  const hand = limb(neckX, neckY + 0.05 * s, [Math.PI * 0.35, Math.PI * 0.62], 0.3 * s, '#c98a62');
+  // The pole: carried high at the start of the run, lowered to the box near the take-off.
+  const near2box = Math.max(0, Math.min(1, (a.x - (TAKEOFF - 12)) / 12));
+  const pa = (stopped ? 0.2 : 0.8 - 0.6 * near2box);
+  const tipX = back[0] + Math.cos(pa) * PL * 0.8 * s, tipY = back[1] - Math.sin(pa) * PL * 0.8 * s;
+  const endX = back[0] - Math.cos(pa) * PL * 0.2 * s, endY = back[1] + Math.sin(pa) * PL * 0.2 * s;
+  drawPole(tipX, tipY, endX, endY, 0, s);
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hand[0], hand[1], 0.05 * s, 0, 7); x.fill();
+  const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
+  if (s > 18 && name) {
+    x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
+    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
+    const lab = a.mine ? '▼ Sinä' : name, ly = hy - 0.62 * s;
+    x.strokeText(lab, hx, ly); x.fillStyle = a.mine ? '#ffd166' : '#fff'; x.fillText(lab, hx, ly);
+  }
+}
+function drawHud() {
+  const W = SW, top = hudTop;
+  passBox = null;
+  const comp = K.comp;
+  if (!comp || !comp.throwers.length) return;
+  x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, 64, 12); x.fill();
+  const me = K.mine();
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
+  x.fillText('Rima ' + fmt(barH(K.comp.hi)), 20, top + 24);
+  x.textAlign = 'right'; x.font = '700 14px system-ui';
+  if (me) x.fillText(me.out ? 'Paras ' + fmt(bestOf(me)) + ' · ' + placeOf(me) + '.' : bestIdx(me) >= 0 ? 'Paras ' + fmt(bestOf(me)) + ' · ' + placeOf(me) + '.' : 'Ei tulosta vielä', W - 20, top + 24);
+  const t = th && thrower(th.id);
+  if (th && th.mine && th.phase === 'pole') {
+    // On the pole: how far it has straightened, green where letting go pushes off it.
+    const bx = 20, bw = W - 40 - 100, by = top + 40, full = T_POLE + HANG, at = u => bx + bw * Math.min(1, u / full);
+    const ok = Math.abs(th.tau - T_POLE) <= PUSH_W * 0.6;
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
+    x.fillStyle = '#7ee081'; x.fillRect(at(T_POLE - PUSH_W * 0.6), by, at(T_POLE + PUSH_W * 0.6) - at(T_POLE - PUSH_W * 0.6), 12);
+    x.fillStyle = '#ffd166'; x.fillRect(at(th.tau) - 2, by - 4, 5, 20);
+    x.textAlign = 'right'; x.fillStyle = ok ? '#7ee081' : '#fff'; x.font = '800 14px system-ui';
+    x.fillText(ok ? 'Päästä irti!' : th.held ? 'Jalat ylös…' : 'Pidä pohjassa', W - 20, by + 11);
+  } else if (th && th.mine && th.phase !== 'wait') {
+    // The run-up speed.
+    const bx = 20, bw = W - 40 - 80, by = top + 40;
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
+    x.fillStyle = th.v > 8 ? '#7ee081' : th.v > 5.5 ? '#ffd166' : '#ff9a8b'; rr(bx, by, Math.max(12, bw * Math.min(1, th.v / 11)), 12, 6); x.fill();
+    x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '800 14px system-ui';
+    x.fillText(th.v.toFixed(1).replace('.', ',') + ' m/s', W - 20, by + 11);
+  } else if (t) {
+    x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
+    x.fillText(th.mine ? 'Sinun vuorosi' : 'Hyppää: ' + t.name, 20, top + 50);
+  }
+  if (!th) return;
+  if (th.phase === 'ready' && th.mine) {
+    const left = TRIES - t.run, n = marksAt(t, K.comp.hi).length + 1;
+    message('Yritys ' + n + ' · ' + fmt(barH(K.comp.hi)), '#ffd166');
+    if (!land) small(left < TRIES ? 'Hylättyjä putkeen ' + t.run + '/3' : 'Ota vauhtia: vasen, oikea…', '#fff');
+    // Pass this height (choose where to start), or, alone at the top, stop and keep the win.
+    const lab = soleWinner(t) ? 'Lopeta kisa' : 'Ohita korkeus', bw = 170, bh = 36;
+    passBox = { x: (W - bw) / 2 + SX, y: top + (land ? 120 : 154), w: bw, h: bh, lab };
+    x.fillStyle = 'rgba(10,20,40,.7)'; rr(passBox.x - SX, passBox.y, bw, bh, 12); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 2; x.stroke();
+    x.fillStyle = '#fff'; x.font = '800 15px system-ui'; x.textAlign = 'center';
+    x.fillText((lab === 'Lopeta kisa' ? '🏁 ' : '⏭ ') + lab, passBox.x - SX + bw / 2, passBox.y + 23);
+  } else if (th.phase === 'land') {
+    if (th.res === 'O') {
+      message('O · ' + fmt(barH(K.comp.hi)), '#7ee081');
+      if (th.mine && th.record) small('Uusi ennätys!', '#7ee081');
+      else small(th.why || (th.leads ? 'Johtoon!' : 'Yli!'), '#fff');
+    } else {
+      message('X', '#ff6b5e');
+      small(th.why || 'Hylätty', '#ff9a8b');
+    }
+  }
+}
+function message(s, col) {
+  x.textAlign = 'center'; x.font = '900 30px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 106; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function small(s, col) {
+  x.textAlign = 'center'; x.font = '800 17px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 136; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+// The standings, drawn by the library's bar-height format (v2): between attempts, and at the end
+// with the medals and the failures that settle a tie.
+let boardBox = null;
+function fit(s, w) { if (x.measureText(s).width <= w) return s; while (s.length > 1 && x.measureText(s + '…').width > w) s = s.slice(0, -1); return s + '…'; }
+function drawBoard(final) {
+  boardBox = land ? K.drawBoard(x, final, { w: SW, top: safeT + 6, bottom: sceneB - 6, middle: true })
+    : K.drawBoard(x, final, { w: SW, top: hudTop + 72, bottom: sceneB - 4 });
+}
+
+// The pads. v2 (Keihäänheitto v3's, #166): upright, the two feet side by side at the bottom,
+// where the thumbs drum, and the plant a bar of its own above them, a gap apart (v1 had it between
+// the feet). The foot to press next glows. On its side, a column at each edge: a plant pad on top
+// and that side's foot under it, where the thumb rests.
+const PAD_GAP = 18;
+function pads() {
+  if (land) {
+    const y = safeT + 40, h = H - safeB - 6 - y, jh = Math.round(h * 0.38), w = side - 12;
+    const lx = safeL + 6, rx = W - safeR - side + 6;
+    return [{ k: 3, x: lx, y, w, h: jh }, { k: 1, x: lx, y: y + jh + PAD_GAP, w, h: h - jh - PAD_GAP },
+      { k: 3, x: rx, y, w, h: jh }, { k: 2, x: rx, y: y + jh + PAD_GAP, w, h: h - jh - PAD_GAP }];
+  }
+  const y = ctrlTop + 6, h = ctrlH - 12, th3 = Math.round(Math.min(64, h * 0.3)), fy = y + th3 + PAD_GAP, fh = h - th3 - PAD_GAP;
+  return [{ k: 3, x: 6, y, w: W - 12, h: th3 },
+    { k: 1, x: 6, y: fy, w: W / 2 - 9, h: fh }, { k: 2, x: W / 2 + 3, y: fy, w: W / 2 - 9, h: fh }];
+}
+function drawControls() {
+  if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
+  const live = th && th.mine && (th.phase === 'ready' || th.phase === 'run' || th.phase === 'pole');
+  const pole = live && th.phase === 'pole', next = th && th.foot === 1 ? 2 : 1;
+  const inZone = live && !pole && Math.abs(th.x - TAKEOFF) <= PLANT_OK;
+  for (const b of pads()) {
+    const held = b.k === 3 && pole && th.held;
+    const glow = b.k !== 3 && live && !pole && b.k === next;
+    x.fillStyle = !live ? '#22385a' : flash[b.k] > 0 || held ? '#ffe08a' : b.k === 3 ? (inZone ? '#7ee081' : '#ffb703') : glow ? '#4f7fc4' : '#2c4a75';
+    rr(b.x, b.y, b.w, b.h, 18); x.fill();
+    x.fillStyle = !live ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    const lab = b.k === 1 ? 'Vasen' : b.k === 2 ? 'Oikea' : !pole ? 'Istuta' : Math.abs(th.tau - T_POLE) <= PUSH_W * 0.6 ? 'Päästä irti!' : 'Pidä pohjassa';
+    const icon = b.k === 3 ? (pole ? '⤴' : '⟋') : '👟';
+    if (b.k === 3 && b.w > b.h * 2) {
+      // The wide plant bar: icon and word on one line.
+      x.font = '900 22px system-ui'; x.fillText(icon + ' ' + lab, b.x + b.w / 2, b.y + b.h / 2 + 8);
+      continue;
+    }
+    x.font = '900 32px system-ui';
+    x.fillText(icon, b.x + b.w / 2, b.y + b.h / 2 + 4);
+    x.font = '800 14px system-ui';
+    x.fillText(lab, b.x + b.w / 2, b.y + b.h / 2 + 30);
+  }
+}
+
+// ---------- Input ----------
+// Which pad a finger is on: 1 and 2 the feet, 3 the plant. Anywhere on the scene is the plant too.
+function padAt(cx, cy) {
+  if (land) {
+    if (cx >= SX && cx < SX + SW) return 3;
+    const col = pads().filter(p => cx >= p.x - 6 && cx <= p.x + p.w + 6);
+    // v2: the gap between the plant pad and the foot does nothing; below the foot is still the foot.
+    const last = col[col.length - 1], b = col.find(p => cy >= p.y - 4 && cy < p.y + p.h + 4) || (last && cy >= last.y ? last : null);
+    return b ? b.k : 0;
+  }
+  if (cy < ctrlTop) return 3;
+  // v2: a touch in the gap between the plant bar and the feet does nothing.
+  const b = pads().find(p => cx >= p.x - 4 && cx <= p.x + p.w + 4 && cy >= p.y - 4 && cy <= p.y + p.h + 6);
+  return b ? b.k : 0;
+}
+const inPass = (cx, cy) => passBox && cx >= passBox.x - 6 && cx <= passBox.x + passBox.w + 6 && cy >= passBox.y - 6 && cy <= passBox.y + passBox.h + 6;
+let passPtr = null;
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (K.ending) { K.skip(); return; }  // v3: a tap ends the ceremony, the next leaves the podium
+  if (inPass(e.clientX, e.clientY)) { passPtr = e.pointerId; return; }  // acts when the finger lifts on it
+  const k = padAt(e.clientX, e.clientY);
+  if (k === 3) hold(e.pointerId); else if (k) press(k);
+});
+addEventListener('pointerup', e => {
+  if (e.pointerId === passPtr) { passPtr = null; if (inPass(e.clientX, e.clientY)) pass(); return; }
+  if (e.pointerId === holdPtr) letGo();
+});
+addEventListener('pointercancel', e => { if (e.pointerId === passPtr) passPtr = null; if (e.pointerId === holdPtr) letGo(); });
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
+  else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
+  else if (e.key === ' ' || e.key === 'ArrowUp') hold('key');
+});
+addEventListener('keyup', e => { if ((e.key === ' ' || e.key === 'ArrowUp') && holdPtr === 'key') letGo(); });
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + K.level + ': ' + FOES[(K.level - 1) % FOES.length] + ' ja 10 muuta · alkaen ' + fmt(h0Of(K.level));
+  document.getElementById('stats').textContent = 'Kisat ' + K.comps + ' · Voitot ' + K.wins + (K.best !== null ? ' · Ennätys ' + fmt(K.best) : '');
+  const kept = keptMeet(), cont = document.getElementById('cont');
+  cont.classList.toggle('hidden', !kept);
+  if (kept) cont.textContent = 'Jatka kisaa (rima ' + fmt(kept.heights[kept.hi]) + ')';
+  menu.classList.remove('hidden');
+}
+// A meet left unfinished: v2's, or v1's read as it is (v1 keeps each vaulter's attempts in `att`,
+// failures in a row in `cons`, the computer's start in `entry`, and the turn as a queue `q`); v1's
+// own save is left for v1.
+function keptMeet() {
+  const k = K.load('kesken', null);
+  if (!k || k.mode !== 'solo' || !k.throwers || k.over) return null;
+  // v2's own, unless v1 has played on since (v1 saves the same object back with its own fields).
+  if (k.heights && k.seq === k.v2seq) return k;
+  if (typeof k.h0 !== 'number' || !k.q || !k.q.length) return null;
+  const heights = []; for (let i = 0; k.h0 + STEP_H * i <= MAX_H + 1e-9; i++) heights.push(Math.round((k.h0 + STEP_H * i) * 100) / 100);
+  const throwers = k.throwers.map(t => {
+    const rec = []; for (const i in t.att || {}) rec[+i] = t.att[i];
+    return { id: t.id, name: t.name, p: t.p, bot: t.bot, skill: t.skill, col: t.col, marks: [], rec, run: t.cons || 0, out: !!t.out,
+      first: t.entry || 0, skip: t.skip || [] };
+  });
+  const now = throwers.find(t => t.id === k.q[0]);
+  return { mode: 'solo', level: k.level, heights, hi: k.hi, att: (now.rec[k.hi] || '').length + 1, turn: k.order.indexOf(k.q[0]),
+    order: k.order, throwers, seq: k.seq, recent: k.recent || [] };
+}
+function soloComp(saved) { K.solo(saved); menu.classList.add('hidden'); }
+document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });
+document.getElementById('cont').addEventListener('click', () => {
+  unlock();
+  const kept = keptMeet();
+  if (kept) soloComp(kept); else showMenu();
+});
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="seivashyppy" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
