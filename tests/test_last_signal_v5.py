@@ -169,6 +169,14 @@ def test_whoever_takes_the_helm_first_drives_and_the_others_see_who(site, browse
     host.wait_for_function(f"sub.x > {x0 + 5}")
     aino.evaluate("input.x = 0")
     host.wait_for_function(f"JSON.parse(localStorage.getItem('{SAVE}')).sub.x > {x0 + 5}", timeout=8000)
+    # Aino leaves the helm at full speed: SISU stops where she left it, and Ville can dive out of the airlock.
+    aino.evaluate("input.x = 1")
+    aino.wait_for_timeout(300)
+    aino.evaluate("openHome(); input.x = 0")
+    close_cards(aino)
+    host.wait_for_function("!net.helm && Math.abs(sub.vx) < 0.5")
+    ville.wait_for_function("!net.helm && Math.abs(sub.vx) < 0.5")
+    dive(ville)
     for p in (host, aino, ville):
         assert p.errors == []
 

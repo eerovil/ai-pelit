@@ -872,7 +872,7 @@ function doAct(who, a, arg) {
       if (net) { net.helm = who; net.subT = null; }
       return { helm: 1 };
     }
-    case 'unhelm': if (net && net.helm === who) net.helm = null; return null;
+    case 'unhelm': if (net && net.helm === who) { net.helm = null; stopSub(); } return null;
     case 'take': {
       const it = allItems().find(t => t.id === arg);
       if (!it || s.got[it.id]) return null;
@@ -1184,8 +1184,10 @@ R.on('message', (m, from) => {
 // Host: a friend's phone is back (a reload): its person starts again in the control room, its haul lost.
 function letGo(id) {
   for (const k of Object.keys(G.held)) if (G.held[k] === id) delete G.held[k];
-  if (net.helm === id) net.helm = null;
+  if (net.helm === id) { net.helm = null; stopSub(); }
 }
+// Host: nobody drives now, so SISU stays where its driver left it, still (else its last speed would keep the airlock shut).
+function stopSub() { if (net && net.subT) net.subT = [net.subT[0], net.subT[1], net.subT[2], 0, 0]; }
 R.on('hello', id => {
   if (!net || !net.host || !net.others[id]) return;
   letGo(id); net.others[id].mode = 'wait';
@@ -1227,7 +1229,7 @@ function needs(dt) {
 function faint() {
   const s = G.s;
   s.day++; s.m.health = 35; s.m.food = Math.max(s.m.food, 25);
-  G.held = {}; if (net) net.helm = null;
+  G.held = {}; if (net) { net.helm = null; stopSub(); }
   save();
   story('faint');
 }
