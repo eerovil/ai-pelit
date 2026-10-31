@@ -95,6 +95,11 @@ const AIM0 = 5, AIM_RATE = 45, AIM_MAX = 45, TAP_MIN = 0.1;   // degrees, degree
 const GREEN = [16, 24];                                         // the angles that jump within about 20 cm of the best
 const BOARD = 0.2, PLASTI = 0.1, PIT0 = 1.0, PIT1 = 9.6;        // the board, the plasticine past the line, the pit
 const CHECK = -2.8;                                             // the check mark: start holding here
+// Timing is generous and in time, not distance: holding never fouls by itself. A release up to
+// GRACE seconds after the foot passes the line still takes off at the line; only a later one (or
+// none) is a foul. The green zone is the last ZONE seconds of running before the line.
+const GRACE = 0.08, ZONE = 0.12;
+const overLimit = v => Math.max(v, 1) * GRACE;                  // metres past the line still allowed
 const LAND_T = 2.4, BOARD_T = 3.5, TURN_MAX = 45;               // seconds
 const G = 9.81, H0 = 1.05, H1 = 0.5, BONUS = 1.2, STEEP = 1.1, WIND_K = 0.05;
 // The legs: thrown forward this long (s) before the heels reach the sand is a good landing.
@@ -283,7 +288,7 @@ function step(dt) {
     a.ph += a.v * dt * 1.5;
     if (a.phase === 'aim') { a.aimT += dt; a.ang = Math.min(AIM_MAX, AIM0 + AIM_RATE * a.aimT); }
     if (a.mine) {
-      if (a.x > 0) return outcome(-1, 'Yliastuttu');
+      if (a.x > overLimit(a.v)) return outcome(-1, 'Yliastuttu');
       if (isNet() && a.idle > TURN_MAX && a.phase !== 'aim') return outcome(-1, 'Aika loppui');
       a.sendT -= dt;
       if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; sendNet({ t: 'p', a: [r2(a.x), r2(a.v), a.phase, Math.round(a.ang), a.foot] }); }
@@ -336,7 +341,7 @@ function release() {
   aimPtr = null;
   if (!th || !th.mine || th.phase !== 'aim') return;
   if (th.aimT < TAP_MIN) { th.phase = th.v > 0 ? 'run' : 'ready'; th.ang = AIM0; return; }  // a slip of the thumb
-  jumpNow(th.x, th.v, Math.round(th.ang));
+  jumpNow(Math.min(th.x, 0), th.v, Math.round(th.ang));   // just past the line: taken off at the line
   if (isNet()) sendNet({ t: 'rel', a: [r2(th.relX), r2(th.vrel), th.ang] });
 }
 // The take-off from where the foot is now.
@@ -581,7 +586,8 @@ function drawScene(dt) {
   x.fillStyle = '#b89a5c'; { const [p, q] = clipX(PIT0, PIT1); if (q > p) x.fillRect(p, groundY, q - p, 3); }
   // Where taking off is close to the line, while the player runs.
   if (th && th.mine && (th.phase === 'ready' || th.phase === 'run' || th.phase === 'aim')) {
-    x.fillStyle = 'rgba(126,224,129,.55)'; x.fillRect(sx(-0.5), groundY, 0.5 * s, gh);
+    const z = Math.max(0.3, th.v * ZONE);
+    x.fillStyle = 'rgba(126,224,129,.55)'; x.fillRect(sx(-z), groundY, z * s, gh);
   }
   // The take-off board, the plasticine past the line, and the check mark.
   x.fillStyle = '#f6f6f2'; x.fillRect(sx(-BOARD), groundY, BOARD * s, gh);

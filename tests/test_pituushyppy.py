@@ -87,13 +87,15 @@ def test_stepping_over_the_line_is_a_foul_and_a_slip_of_the_thumb_is_not_a_jump(
     assert mark(page, 0.03, 8.3, 20) ["why"] == "Yliastuttu"
     assert mark(page, 0, 8.3, 20)["mark"] > 0   # on the line is still on the board
     page.click("#go")
-    # Running over the line without taking off.
+    # Running over the line and on past the grace without taking off.
     page.evaluate("th.t = 99; step(0.001); th.phase = 'run'; th.x = -0.2; th.v = 8; step(0.05)")
+    assert page.evaluate("th.phase") == "run"   # 25 cm past the line: still within the grace
+    page.evaluate("step(0.1)")
     assert page.evaluate("[th.phase, th.mark, th.why]") == ["land", -1, "Yliastuttu"]
     page.evaluate("draw()")
     page.evaluate("quick()")
     assert page.evaluate("comp.throwers.find(t => t.p === 'me').marks") == [-1]
-    # Holding Hyppää over the line is a foul too.
+    # Holding Hyppää on past the line and the grace, never taking off, is a foul too.
     page.evaluate("run(() => th.phase === 'wait'); th.phase = 'run'; th.x = -1; th.v = 8; startAim(1); run(() => th.phase === 'aim', 1)")
     assert page.evaluate("[th.phase, th.why]") == ["land", "Yliastuttu"]
     page.evaluate("quick()")
@@ -110,6 +112,32 @@ def test_stepping_over_the_line_is_a_foul_and_a_slip_of_the_thumb_is_not_a_jump(
     assert page.evaluate("th.q === q1 && q1 > 0.15")
     page.evaluate("run(() => th.phase === 'fly', 2)")
     assert page.evaluate("[th.phase, th.kind, th.mark > 4]") == ["land", "good", True]
+    assert page.errors == []
+
+
+def test_the_take_off_is_generous_in_time(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.evaluate("th.t = 99; step(0.001)")
+    # Holding never fouls by itself: at 8.5 m/s, 60 ms past the line while holding is still fine.
+    page.evaluate("th.phase = 'run'; th.v = 8.5; th.x = -0.3; startAim(1); th.aimT = 0.33; th.x = 8.5 * 0.06; step(0.001)")
+    assert page.evaluate("th.phase") == "aim"
+    # Letting go there takes off at the line: a legal jump measured from the line.
+    page.evaluate("release()")
+    assert page.evaluate("[th.phase, th.relX]") == ["fly", 0]
+    page.evaluate("quick()")
+    me = "comp.throwers.find(t => t.p === 'me').marks"
+    assert page.evaluate(me)[0] > 6
+    # 150 ms past the line is a foul, before any release.
+    page.evaluate("run(() => th.phase === 'wait'); th.phase = 'run'; th.v = 8.5; th.x = -0.3; startAim(1); th.aimT = 0.33; th.x = 8.5 * 0.15; step(0.001)")
+    assert page.evaluate("[th.phase, th.mark, th.why]") == ["land", -1, "Yliastuttu"]
+    page.evaluate("quick()")
+    assert page.evaluate(me)[1] == -1
+    # The clean zone: the green last stretch before the line and the grace after it are at least
+    # 180 ms of running at top speed; an early release only costs distance.
+    zone, grace = page.evaluate("[ZONE, GRACE]")
+    assert zone + grace >= 0.18 and grace >= 0.08
+    assert mark(page, -0.5, 8.5, 20)["mark"] < mark(page, -0.1, 8.5, 20)["mark"]
     assert page.errors == []
 
 
@@ -169,7 +197,7 @@ def test_three_fouls_leave_you_out_of_the_final_eight(site, context):
     page = open_game(site, context)
     page.click("#go")
     for _ in range(3):
-        page.evaluate("th.t = 99; step(0.001); th.phase = 'run'; th.x = -0.05; th.v = 8; step(0.05); quick()")
+        page.evaluate("th.t = 99; step(0.001); th.phase = 'run'; th.x = -0.05; th.v = 8; step(0.2); quick()")
     assert page.evaluate("comp.over && !ending.fin")
     page.evaluate("ending.t = 99; step(0.01)")
     assert "ei finaaliin" in page.inner_text("#result")

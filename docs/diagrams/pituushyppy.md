@@ -16,7 +16,7 @@ flowchart TD
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> R[Vauhdinotto: vasen, oikea vuorotellen]
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama lento]
-  R --> LN{Viivan yli ennen ponnistusta?}
+  R --> LN{Yli viivan ja armon ilman ponnistusta?}
   LN -- Kyllä --> X[X: yliastuttu, punainen lippu]
   LN -- Ei --> A[Pidä Hyppää merkistä: kulma nousee]
   A --> RL{Kosketus alle 0,1 s?}
@@ -63,8 +63,8 @@ flowchart TD
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()`, shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best jump, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` jumps for every computer jumper up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's, with the wind for it (`windFor(seq)`, −1.5 to +2.5 m/s, shown as "Tuuli").
 - **Tietokone hyppää heti**: `cpuMark()`: the skill plus a scatter of 20 cm and 5 cm per m/s of wind, a foul about one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's jumps to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
-- **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the jumper goes (as in Keihäänheitto and Aitajuoksu), the same foot twice slows; about 8.3 m/s at eight taps a second. The bar in the score panel shows the speed; the green part of the runway is the last half metre before the line, the yellow "merkki" 2.8 m before it is where to start holding.
-- **Viivan yli ennen ponnistusta?**: `step()`: the foot passing the line (x > 0) while running or holding is a foul, "Yliastuttu", with the shoe's print in the plasticine. In a room 45 s with no tap (`TURN_MAX`, counted in `th.idle`) is a foul, "Aika loppui".
+- **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the jumper goes (as in Keihäänheitto and Aitajuoksu), the same foot twice slows; about 8.3 m/s at eight taps a second. The bar in the score panel shows the speed; the green part of the runway is the last 120 ms of running before the line at the speed now (`ZONE`), so with the grace past the line the clean take-off zone is 200 ms; an earlier release is legal but shorter, as the jump is measured from the line, the yellow "merkki" 2.8 m before it is where to start holding.
+- **Yli viivan ja armon ilman ponnistusta?**: `step()` and `overLimit()`: timing is measured in time, not distance, and holding Hyppää never fouls by itself. The foot may pass the line by up to 80 ms of running (`GRACE`, at least 8 cm); a release within it takes off at the line (`release()`), so it is legal and measured from the line. Only running on past that, holding or not, is a foul, "Yliastuttu", with the shoe's print in the plasticine. In a room 45 s with no tap (`TURN_MAX`, counted in `th.idle`) is a foul, "Aika loppui".
 - **Pidä Hyppää merkistä: kulma nousee**: `startAim()`: holding the middle pad (upright), the top pad of either side column or anywhere on the scene (sideways) raises the take-off angle from 5° at 45° a second (`AIM_RATE`); the dial beside the jumper shows it, green from 16° to 24° (`GREEN`), the angles within about 20 cm of the best. The jumper crouches and keeps most of the speed.
 - **Kosketus alle 0,1 s?**: `release()`: a touch shorter than `TAP_MIN` is a slip of the thumb and goes back to running.
 - **Päästä irti laudalla: ponnistus**: `jumpNow()` and `takeoff()`: the take-off is from where the foot is (`relX`); the speed is the run-up plus 1.2 m/s, less the steeper the take-off (`STEEP`), so the best angle is about 20°: 8.3 m/s jumps about 6.4 m, 9.5 m/s about 7.6 m. The camera turns to the board and the whole pit.
