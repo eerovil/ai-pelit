@@ -731,7 +731,8 @@ function padAt(cx, cy) {
   if (land) {
     if (cx >= SX && cx < SX + SW) return 3;
     const col = pads().filter(p => cx >= p.x - 6 && cx <= p.x + p.w + 6);
-    const b = col.find(p => cy < p.y + p.h + 4) || col[col.length - 1];
+    // v2: the gap between the jump pad and the foot does nothing; below the foot is still the foot.
+    const last = col[col.length - 1], b = col.find(p => cy >= p.y - 4 && cy < p.y + p.h + 4) || (last && cy >= last.y ? last : null);
     return b ? b.k : 0;
   }
   if (cy < ctrlTop) return 3;

@@ -465,6 +465,16 @@ def test_the_jump_bar_sits_above_the_feet_and_the_gap_does_nothing(site, context
     gap = jump["y"] + jump["h"] + 9
     assert page.evaluate(f"padAt(180, {gap})") == 0
     assert page.evaluate(f"[padAt(180, {jump['y'] + 10}), padAt(60, {left['y'] + 20}), padAt(300, {left['y'] + 20})]") == [3, 1, 2]
+    # Sideways too: the gap between each column's jump pad and its foot does nothing.
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("land")
+    pl = page.evaluate("pads()")
+    for top, foot in ((pl[0], pl[1]), (pl[2], pl[3])):
+        cx = top["x"] + top["w"] / 2
+        assert page.evaluate(f"padAt({cx}, {top['y'] + top['h'] + 9})") == 0
+        assert page.evaluate(f"[padAt({cx}, {top['y'] + 10}), padAt({cx}, {foot['y'] + 20})]") == [3, foot["k"]]
+    turn(page, {"width": 360, "height": 740})
+    page.wait_for_function("!land")
     # The yellow zone: start holding there, and the angle is green at the line.
     z = page.evaluate("zones(8.5)")
     lo, hi = page.evaluate("GREEN")
