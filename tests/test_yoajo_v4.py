@@ -220,3 +220,14 @@ def test_saves_from_v3_carry_on(site, context):
       localStorage.setItem('ai-pelit:yoajo:pisteet', '{"4":310}'); }""")
     page = open_game(site, context)
     assert page.evaluate("[maxLeg, driven, bests[4], level, controls]") == [5, 4, 310, 5, "yksi"]
+
+
+def test_a_retry_starts_clean(site, context):
+    page = open_game(site, context)
+    # Mid-leg: a thumb down, out overtaking unsafely, speeding, points from high beams; then a crash.
+    page.evaluate("""() => { HOLD = true; newLeg(1); thumbs.set(1, { kind: 'one', x0: 100, y0: 600, x: 150, y: 560 }); setThumbs();
+      P.unsafe = true; P.overT = 0.8; P.highRun = 90; tally.hurjastelu = 2; tally.pitkatP = 40; crash('Kolari!'); }""")
+    b = page.evaluate("(() => { draw(); const b = btns.find(b => b.id === 'uudelleen'); return [b.x + b.w / 2, b.y + b.h / 2]; })()")
+    page.touchscreen.tap(*b)
+    r = page.evaluate("({ mode, unsafe: P.unsafe, overT: P.overT, highRun: P.highRun, h: tally.hurjastelu, p: tally.pitkatP, steer: input.steer, gas: input.gas })")
+    assert r == {"mode": "drive", "unsafe": False, "overT": 0, "highRun": 0, "h": 0, "p": 0, "steer": 0, "gas": 0}
