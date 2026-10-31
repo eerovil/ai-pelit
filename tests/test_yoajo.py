@@ -182,7 +182,7 @@ def test_the_buttons_drive_the_car(site, context):
     assert page.errors == []
 
 
-@pytest.mark.parametrize("size", [{"width": 360, "height": 640}, {"width": 740, "height": 360}])
+@pytest.mark.parametrize("size", [{"width": 360, "height": 640}, {"width": 390, "height": 844}, {"width": 740, "height": 360}])
 def test_every_button_fits_on_the_screen(site, context, size):
     page = open_game(site, context)
     turn(page, size)
@@ -207,4 +207,49 @@ def test_the_night_is_drawn_in_3d(site, context):
     r = page.evaluate("""() => ({ world: V3.built === road, cars: V3.meshes.size, snow: !!V3.weather && V3.weather.userData.snow,
       beam: V3.beam.intensity > 0, other: V3.other.intensity > 0 })""")
     assert r == {"world": True, "cars": 2, "snow": True, "beam": True, "other": True}
+    assert page.errors == []
+
+
+def test_two_oncoming_cars_are_judged_one_by_one(site, context):
+    page = open_game(site, context)
+    # Dipped for the first, back on high beams, kept on for the second (held in the lane by hand).
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(1); things = []; events = []; road.cams = [];
+      P.high = true; P.v = 20; add('vastaan', { s: P.s + 500, lat: -LANE, v: -25 }); add('vastaan', { s: P.s + 880, lat: -LANE, v: -25 });
+      const run = secs => { for (let i = 0; i < 60 * secs && mode === 'drive'; i++) { P.lat = LANE; P.vl = 0; P.v = 20; step(1 / 60); } };
+      run(3); P.high = false; run(9); P.high = true; run(14);
+      return { mode, points, tally: Object.assign({}, tally) }; }""")
+    assert r["mode"] == "drive" and r["tally"]["valot"] == 1 and r["tally"]["haikaisyt"] == 1 and r["points"] == -10, r
+
+
+def test_steering_and_braking_at_once(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; newLeg(1); things = []; events = []; P.v = 25; const lat = P.lat;
+      input.left = true; input.brake = true; for (let i = 0; i < 60; i++) step(1 / 60);
+      return { v: P.v, moved: lat - P.lat, mode }; }""")
+    assert r["mode"] == "drive" and r["v"] < 18 and r["moved"] > 1, r
+
+
+def test_a_retry_after_a_crash_starts_the_leg_afresh(site, context):
+    page = open_game(site, context)
+    page.evaluate("HOLD = true; maxLeg = 8; newLeg(3); P.s = 900; points = -50; P.damage = 3; P.tired = 0.8; P.high = true; crash('Törmäsit hirveen.')")
+    assert page.evaluate("mode") == "crash"
+    b = page.evaluate("(() => { draw(); const b = btns.find(b => b.id === 'uudelleen'); return [b.x + b.w / 2, b.y + b.h / 2]; })()")
+    page.touchscreen.tap(*b)
+    r = page.evaluate("({ mode, level, s: P.s, points, damage: P.damage, tired: P.tired, high: P.high, cams: road.cams.every(c => !c.done), T })")
+    assert r == {"mode": "drive", "level": 3, "s": 6, "points": 0, "damage": 0, "tired": 0, "high": False, "cams": True, "T": 0}
+    # Played on: the second try runs as the first.
+    legs = page.evaluate(BOT, [3])
+    assert legs[0]["mode"] == "done", legs
+    assert page.errors == []
+
+
+def test_turning_the_phone_mid_leg_keeps_the_leg(site, context):
+    page = open_game(site, context)
+    page.evaluate("HOLD = true; newLeg(1); things = []; events = []; P.s = 700; P.lat = 1.2; points = 90; T = 31")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("W === 740 && H === 360 && LAND")
+    assert page.evaluate("[mode, P.s, P.lat, points, T]") == ["drive", 700, 1.2, 90, 31]
+    turn(page, {"width": 360, "height": 740})
+    page.wait_for_function("W === 360 && !LAND")
+    assert page.evaluate("[mode, P.s, points]") == ["drive", 700, 90]
     assert page.errors == []
