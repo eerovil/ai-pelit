@@ -13,8 +13,8 @@
     {
       "n": 2,
       "date": "2026-10-31",
-      "note": "Huoneessa kierrosta ei voi aloittaa, ennen kuin isäntä on valinnut ainakin kaksi lajia; ennen ottelu vaihtui silloin huomaamatta kaikkiin viiteen lajiin.",
-      "request": "Katselmoinnin korjaus #168:aan: huoneen isäntä pystyi aloittamaan ottelun alle kahdella valitulla lajilla, jolloin peli valitsi huomaamatta kaikki viisi.",
+      "note": "Laji ottaa nyt huomioon puhelimen loven ja eleiden alueen, joten tulospaneeli ei jää Pelit- ja Tulokset-nappien alle eivätkä hyppy- ja jalkanapit ulotu ruudun alareunan elealueelle; huoneessa kierrosta ei voi aloittaa ennen kuin lajeja on valittu ainakin kaksi.",
+      "request": "Katselmoinnin korjaus #168:aan (huoneen isäntä pystyi aloittamaan alle kahdella lajilla) ja Eeron bugi: \"Sain bugin 5 ottelussa, laji 2. Napit ei ota kunnolla, hitboxit jotenkin ihan oudot\"",
       "issue": "eerovil/ai-pelit#168"
     }
   ]

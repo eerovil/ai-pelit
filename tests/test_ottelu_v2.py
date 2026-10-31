@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from conftest import ROOT
+from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
 import test_ottelu as v1
@@ -82,3 +82,30 @@ def test_the_host_cannot_start_a_room_match_with_fewer_than_two_events(site, bro
     for p in pages:
         assert p.errors == []
         p.context.close()
+
+
+def test_the_event_in_the_frame_gets_the_phones_safe_areas(site, context):
+    """A frame's own env(safe-area-inset-*) is 0: the event gets the match page's (#168)."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    # A phone with a notch and a home bar, as the match page sees it.
+    page.add_init_script("""if (window.top === window) document.addEventListener('DOMContentLoaded', () => {
+      const s = document.createElement('style'); s.id = 'notch';
+      s.textContent = '#safe{padding:44px 0px 30px 0px!important}'; document.head.appendChild(s); });""")
+    page.goto(site.url + URL)
+    page.click(".laji[data-slug=pituushyppy]")
+    page.click(".laji[data-slug=seivashyppy]")
+    page.click(".laji[data-slug=moukari]")
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.heights", timeout=10000)
+    frame = page.query_selector("#laji").content_frame()
+    assert frame.evaluate("[safeT, safeB]") == [44, 30]
+    # The buttons end above the home bar.
+    assert frame.evaluate("pads().every(p => p.y + p.h <= innerHeight - 30)")
+    # The phone turns: the frame follows.
+    page.evaluate("document.getElementById('notch').textContent = '#safe{padding:0px 40px 20px 40px!important}'")
+    turn(page, {"width": 740, "height": 360})
+    frame.wait_for_function("safeL === 40 && safeB === 20 && safeT === 0", timeout=5000)
+    assert page.errors == []

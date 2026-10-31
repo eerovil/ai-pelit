@@ -9,6 +9,7 @@
   html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
   #laji{position:fixed;inset:0;width:100vw;height:100dvh;border:0;display:block;background:#1d3557}
   .hidden{display:none!important}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
   .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 20px calc(env(safe-area-inset-bottom,0px) + 20px);box-sizing:border-box;background:linear-gradient(#1d3557,#12233f);text-align:center;touch-action:manipulation}
   h1{margin:0;font-size:36px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
   #result{margin:0;font-size:20px;font-weight:800}
@@ -73,6 +74,7 @@
 </style>
 </head>
 <body>
+<div id="safe"></div>
 <div id="menu" class="screen">
   <h1>Ottelu</h1>
   <p id="result"></p>
@@ -218,11 +220,24 @@ async function lajiHtml(slug) {
   let t = await r.text();
   const rooms = /<script src="\.\.\/\.\.\/\.\.\/rooms\.js"[^>]*><\/script>/;
   if (!rooms.test(t)) throw new Error('no rooms.js');
-  t = t.replace(/<head>/i, '<head><base href="' + base + '"><style>#menu{display:none!important}</style>')
+  t = t.replace(/<head>/i, '<head><base href="' + base + '"><style>#menu{display:none!important}</style><style id="ottelu-safe"></style>')
     .replace(rooms, '<script src="' + new URL('laji.js', location.href).href + '"><\/script>')
     .replace(/<script src="\.\.\/\.\.\/\.\.\/(scores|back)\.js"[^>]*><\/script>/g, '');
   return (html[slug] = t);
 }
+// A page in a frame gets no safe areas of its own (env() is 0 there): v2 hands the event this
+// page's, the notch and the home bar, so its panel clears the chips and its buttons stay out of
+// the phone's gesture area. Kept up to date when the phone turns.
+function safeCss() {
+  const cs = getComputedStyle($('safe'));
+  return '#safe{padding:' + [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(' ') + '!important}';
+}
+addEventListener('resize', () => {
+  const d = frame && frame.contentDocument, st = d && d.getElementById('ottelu-safe');
+  if (!st) return;
+  const css = safeCss();
+  if (st.textContent !== css) { st.textContent = css; frame.contentWindow.dispatchEvent(new Event('resize')); }
+});
 function unload() {
   if (frame) frame.remove();
   frame = null; frameAt = -1; frameReady = false; frameDone = false;
@@ -249,7 +264,7 @@ async function loadEvent(at, resume) {
   frame = document.createElement('iframe');
   frame.id = 'laji';
   frame.addEventListener('load', () => begin(at, resume), { once: true });
-  frame.srcdoc = t;
+  frame.srcdoc = t.replace('<style id="ottelu-safe"></style>', '<style id="ottelu-safe">' + safeCss() + '</style>');
   document.body.insertBefore(frame, document.body.firstChild);
   show(null);
 }
