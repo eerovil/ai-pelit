@@ -278,3 +278,21 @@ def test_a_guest_cannot_throw_out_of_turn_and_an_away_phone_is_thrown_for(site, 
     for p in pages:
         assert p.errors == []
         p.context.close()
+
+
+def test_in_a_room_only_a_turn_with_no_taps_times_out(site, browser):
+    relay, pages = room(site, browser, ["Eero", "Aino"])
+    p = thrower_page(pages)
+    p.wait_for_function("th && th.mine && th.phase !== 'wait'", timeout=8000)
+    # A slow player, tapping once a second for 60 s, keeps the turn.
+    p.evaluate("""() => {
+        th.phase = 'run';
+        for (let s = 0; s < 60; s++) { th.x = -20; press(s % 2 + 1); for (let i = 0; i < 60; i++) step(1 / 60); }
+    }""")
+    assert p.evaluate("[th.phase, th.why]") == ["run", ""]
+    # Nothing pressed for 45 s: a foul.
+    p.evaluate("th.x = -20; th.v = 0; run(() => th.phase === 'run', 50)")
+    assert p.evaluate("[th.phase, th.mark, th.why]") == ["land", -1, "Aika loppui"]
+    for q in pages:
+        assert q.errors == []
+        q.context.close()

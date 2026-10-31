@@ -251,7 +251,7 @@ function follow() {
   if (!t || (th && th.seq === comp.seq)) return;
   const mine = isNet() ? t.p === R.me : true;
   th = { seq: comp.seq, id: t.id, mine, phase: 'wait', t: 0, x: START, v: 0, foot: 0, ph: 0, ang: AIM0, aimT: 0,
-    relX: null, vrel: 0, jav: null, mark: null, why: '', sendT: 0, held: 0 };
+    relX: null, vrel: 0, jav: null, mark: null, why: '', sendT: 0, idle: 0 };
   blend = 0;
 }
 
@@ -261,7 +261,7 @@ function step(dt) {
   if (ending) { ending.t += dt; if (ending.t > (isNet() ? 4 : 6)) afterEnd(); return; }
   if (!th || !comp) return;
   if (isNet() && R.paused) return;
-  th.t += dt;
+  th.t += dt; th.idle += dt;
   const a = th;
   if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; if (a.mine) tone(660, 0.1, 'sine', 0.06); } return; }
   if (a.phase === 'ready' || a.phase === 'run' || a.phase === 'aim') {
@@ -271,7 +271,7 @@ function step(dt) {
     if (a.phase === 'aim') { a.aimT += dt; a.ang = Math.min(AIM_MAX, AIM0 + AIM_RATE * a.aimT); }
     if (a.mine) {
       if (a.x >= 0) return outcome(-1, 'Yliastuttu!');
-      if (isNet() && a.t > TURN_MAX && a.phase !== 'aim') return outcome(-1, 'Aika loppui');
+      if (isNet() && a.idle > TURN_MAX && a.phase !== 'aim') return outcome(-1, 'Aika loppui');
       a.sendT -= dt;
       if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; sendNet({ t: 'p', a: [r2(a.x), r2(a.v), a.phase, Math.round(a.ang), a.foot] }); }
     }
@@ -302,6 +302,7 @@ function press(k) {
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
   if (th.phase !== 'ready' && th.phase !== 'run') return;
   if (th.phase === 'ready') { th.phase = 'run'; th.t = 0; }
+  th.idle = 0;  // the time limit counts only while nothing is pressed
   if (k !== th.foot) th.v = Math.min(VMAX, th.v + STEP * (1 - th.v / VMAX));
   else th.v = Math.max(0, th.v - 0.3);  // the same foot twice is a stumble, not a stride
   th.foot = k;
@@ -314,7 +315,7 @@ function startAim(ptr) {
   flash[3] = 0.09;
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
   if (th.phase !== 'ready' && th.phase !== 'run') return;
-  th.phase = 'aim'; th.aimT = 0; th.ang = AIM0; aimPtr = ptr;
+  th.phase = 'aim'; th.aimT = 0; th.ang = AIM0; aimPtr = ptr; th.idle = 0;
   tone(300, 0.06, 'triangle', 0.04, 420);
 }
 function release() {
