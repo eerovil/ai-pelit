@@ -159,3 +159,15 @@ def test_the_haul_from_the_station_goes_into_the_stores_once_inside(site, browse
     assert "nouse railosta" not in page.inner_text("#goal")
     assert page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE}')).inv.osat") == 2
     assert page.errors == []
+
+
+@pytest.mark.parametrize("w,h", [(390, 844), (740, 360)])
+def test_the_guide_buttons_fit_a_390_px_phone_and_sideways(site, browser, w, h):
+    page = v7.hose_game(site, browser, w, h)
+    page.evaluate("reach('nordvik', SITES.find(s => s.id === 'nordvik').spot, 1, ITEMS.find(i => i.site === 'nordvik' && i.k === 'loki').id, 'hose')")
+    page.evaluate("closeCard(); const p = hose.pts[hose.pts.length - 1]; diver.x = p[0]; diver.y = p[1]; drawHud()")
+    page.click("#act")
+    page.evaluate("G.paused = false; drawHud()")
+    assert page.is_visible("button:has-text('📌 Irrota ohjain')")
+    assert page.evaluate(v4.OVERFLOW) == []
+    assert page.errors == []
