@@ -42,7 +42,9 @@ player sees is Finnish unless the request says otherwise.
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
 asked to change in past versions: [docs/making-games.md](docs/making-games.md). Read it before you
-start a new game or version.
+start a new game or version. Its "Phone gotchas" list is what only showed on a real phone: when you
+hit a new one (a layout, touch, sound or browser surprise), add one line there in the same pull
+request, with the version that taught it (#181, Eero's choice).
 
 ## Rules
 
@@ -76,7 +78,11 @@ start a new game or version.
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
    with `data-corner="top-right"`, `"bottom-left"` or `"bottom-right"` on that script tag.
 4. **Phone first.** Touch only, playable on a 360 × 640 screen, no hover, no keyboard
-   needed. Use `100dvh`, safe-area insets, and `touch-action: none` on the play area. Short
+   needed. Fill the screen with a fixed box (`position:fixed; top:0; bottom:0`, or `height:100%`),
+   not `100dvh`, and draw for that box as it is each frame (#181: in the installed full-screen
+   app on Eero's Android phone, the bottom of Yöajo v1 was under the screen's edge until the system
+   bars moved; `100dvh` keeping the old height is the likely cause, not proven). Safe-area
+   insets, and `touch-action: none` on the play area. Short
    sounds through Web Audio only after the first tap. Portrait first, and sideways too (#95): the
    installed app may turn, so a new version also plays at 740 × 360 — menus and end screens fit
    without scrolling, buttons sit where thumbs rest, and turning the phone mid-round keeps the
@@ -152,7 +158,7 @@ high-score lists (#25), then play counts (#26).
   (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
   `get(id)`. Trampoliini v6 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-3/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-4/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
@@ -161,7 +167,7 @@ high-score lists (#25), then play counts (#26).
   (#176): the top three on the podium, the medals hung around their necks, the final standings
   under it; it stays until the player taps it away (the game passes its taps to `K.skip()`).
   Like `lib/three-r*/`, a folder never changes once published: a fix goes in the next one
-  (`yleisurheilu-4/`), used by the next versions. The bar-height format (high jump, pole vault)
+  (`yleisurheilu-5/`), used by the next versions. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose
@@ -205,8 +211,8 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
   and a `SOURCE` line, in its own pull request. Old games keep the release they were made with.
 - Core three.js only. An add-on (a model loader, camera controls) is copied into the game's own
   folder as one file, with its import of `three` changed to the relative path above.
-- The canvas fills `100dvh` with `touch-action: none`; size the renderer from `innerWidth` and
-  `innerHeight`. Wrap `new THREE.WebGLRenderer` in `try` and show a Finnish message when the phone
+- The canvas fills the screen as a fixed box (rule 4, not `100dvh`) with `touch-action: none`; size
+  the renderer from the canvas's own size (`clientWidth`, `clientHeight`). Wrap `new THREE.WebGLRenderer` in `try` and show a Finnish message when the phone
   cannot draw 3D.
 - The phone downloads the library (about 420 KB compressed) the first time it opens a 3D game,
   and `sw.js` keeps it for offline play. `scripts/build.py` refuses a version that loads a
