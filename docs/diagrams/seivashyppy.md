@@ -4,7 +4,8 @@ How Seiväshyppy plays (v1; v2 plays the same, with the meet, the results board,
 room handling from the shared athletics library's bar-height format, `public/lib/yleisurheilu-1/korkeus.js`,
 see `yleisurheilu-kirjasto.md`: there a vaulter's attempts are `rec` per height, failures in a row `run`, the
 computer's start `first`, a stop `S`; v2 also has Keihäänheitto v3's buttons, the plant a full-width bar above
-the two feet with a gap that does nothing, and the running knee bends the right way, #170). A meet has twelve vaulters: the player and eleven computer vaulters
+the two feet with a gap that does nothing, and the running knee bends the right way, #170). A meet left unfinished is shared both ways: v2 reads v1's saved meet, and saves its own with v1's
+fields beside it (`keepForV1()`), so v1 can go on with it too. A meet has twelve vaulters: the player and eleven computer vaulters
 alone, or 2–8 phones in a room with the computer filling the rest. The bar starts at the level's
 first height and rises 10 cm at a time. At each height everyone still trying takes a first attempt
 in a drawn order, then those who failed a second, then a third. Anyone may pass a height, even after
@@ -26,7 +27,8 @@ flowchart TD
   P -- Lopeta kisa, voittaja yksin --> NX
   P -- Juokse --> R[Vauhdinotto: vasen, oikea vuorotellen]
   R --> PL{Istuta vihreällä alueella?}
-  PL -- Liian aikaisin, myöhään tai ei lainkaan --> X[X: läpijuoksu]
+  PL -- Painallus kaukana alueesta --> R
+  PL -- Hieman liian aikaisin, myöhään tai ei lainkaan --> X[X: läpijuoksu]
   PL -- Kyllä --> B[Seiväs taipuu: pidä pohjassa, jalat ylös]
   B --> SL{Vauhtia tarpeeksi?}
   SL -- Ei --> X

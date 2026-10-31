@@ -431,6 +431,24 @@ def test_a_meet_kept_by_v1_goes_on_in_v2(site, context):
     page.click("#cont")
     assert page.evaluate("[me().rec[0], th.mine]") == [att, True]
     page.evaluate("go(9.2); quick()")
+    rec = page.evaluate("me().rec.map(r => r || '')")
+    # Back to v1: it still reads the meet (v2 keeps v1's fields beside its own) and goes on.
+    page.goto(site.url + "games/seivashyppy/v1/")
+    page.evaluate(HELPERS)
+    cont = page.inner_text("#cont")
+    assert cont.startswith("Jatka kisaa (rima ") and "NaN" not in cont
+    page.click("#cont")
+    v1att = page.evaluate("Object.assign([], comp.throwers.find(t => t.p === 'me').att).map(r => r || '')")
+    assert v1att == rec
+    assert page.evaluate("th && th.mine")
+    page.evaluate("go(9.2); quick()")
+    v1att = page.evaluate("Object.assign([], comp.throwers.find(t => t.p === 'me').att).map(r => r || '')")
+    # And to v2 again: it takes up what v1 played.
+    page.goto(site.url + "games/seivashyppy/v2/")
+    page.evaluate(HELPERS)
+    page.click("#cont")
+    assert page.evaluate("me().rec.map(r => r || '')") == v1att
+    assert page.evaluate("th.mine")
     assert page.errors == []
 
 

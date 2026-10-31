@@ -189,6 +189,16 @@ const current = () => K.current();
 const soleWinner = t => K.F.soleWinner(K.comp, t);
 const COLORS = K.COLORS;
 
+// The meet kept alone (kesken) is shared with v1, which reads its own fields (h0, the turn queue q,
+// and per vaulter att, cons, entry). The library has just saved it (each turn starts after the
+// save), so it is saved again with v1's fields beside v2's; v2seq says which side played last.
+function keepForV1() {
+  const c = K.comp;
+  if (!c || c.mode !== 'solo' || c.over || !c.heights || !c.heights.length) return;
+  const q = c.order.slice(c.turn).filter(id => K.F.due(K.thrower(id), c.hi, c.att));
+  K.save('kesken', Object.assign({}, c, { h0: c.heights[0], q, v2seq: c.seq,
+    throwers: c.throwers.map(t => Object.assign({}, t, { att: Object.assign({}, t.rec), cons: t.run, entry: t.first || 0 })) }));
+}
 function cpuPlan(t, c) {
   // Comes in some 50–80 cm under its best, and now and then passes a height well under it.
   const h0 = c.heights[0];
@@ -203,6 +213,7 @@ function cpuTry(t) {
 }
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {
+  keepForV1();
   th = { seq, id: t.id, mine, phase: 'wait', t: 0, x: START, v: 0, foot: 0, ph: 0,
     px: null, vrel: 0, tau: 0, sw: 0, held: false, tr: null, res: null, why: '', fly: null, knock: 0, sendT: 0, idle: 0 };
   blend = 0;
@@ -756,13 +767,14 @@ function showMenu(result, cls) {
   if (kept) cont.textContent = 'Jatka kisaa (rima ' + fmt(kept.heights[kept.hi]) + ')';
   menu.classList.remove('hidden');
 }
-// A meet left unfinished: v2's, or v1's read as it is (v1 kept each vaulter's attempts in `att`,
+// A meet left unfinished: v2's, or v1's read as it is (v1 keeps each vaulter's attempts in `att`,
 // failures in a row in `cons`, the computer's start in `entry`, and the turn as a queue `q`); v1's
 // own save is left for v1.
 function keptMeet() {
   const k = K.load('kesken', null);
   if (!k || k.mode !== 'solo' || !k.throwers || k.over) return null;
-  if (k.heights) return k;
+  // v2's own, unless v1 has played on since (v1 saves the same object back with its own fields).
+  if (k.heights && k.seq === k.v2seq) return k;
   if (typeof k.h0 !== 'number' || !k.q || !k.q.length) return null;
   const heights = []; for (let i = 0; k.h0 + STEP_H * i <= MAX_H + 1e-9; i++) heights.push(Math.round((k.h0 + STEP_H * i) * 100) / 100);
   const throwers = k.throwers.map(t => {
