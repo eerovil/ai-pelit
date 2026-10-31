@@ -423,6 +423,8 @@ function finish() {
   // 'taso' stops at the last leg, so the legs driven are kept apart for the high-score lists.
   if (level > driven) { driven = level; save('ajettu', driven); }
   mode = 'done';
-  if (points > 0 && window.AiPelitScores) AiPelitScores.submit(points);
+  // Every leg driven to the end goes to its list, even at zero or below after fines: it still
+  // counts as a leg driven.
+  if (window.AiPelitScores) AiPelitScores.submit(points);
   if (typeof onEnd === 'function') onEnd();
 }

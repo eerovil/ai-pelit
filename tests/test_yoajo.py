@@ -287,3 +287,16 @@ def test_new_worlds_free_the_old_ones(site, context):
       return out; }""")
     assert counts[-2:] == counts[2:4], counts
     assert page.errors == []
+
+
+def test_a_finish_below_zero_still_reaches_the_list(site, context):
+    page = open_game(site, context)
+    # Leg 1 driven to the end with fines that left the points below zero.
+    page.evaluate("""() => { HOLD = true; newLeg(1); things = []; events = []; P.s = leg.len - 0.1; P.v = 25; T = 500; points = -150; tally.sakot = 1; step(1 / 60); }""")
+    assert page.evaluate("[mode, points, driven]") == ["done", -150, 1]
+    queue = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono') || '{}')")
+    entry = queue.get("yoajo|osa-1") or page.evaluate(
+        "JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')").get("yoajo|osa-1")
+    assert entry is not None and entry["score"] == -150, (queue, entry)
+    # The level sent with it is the legs driven.
+    assert page.evaluate("localStorage.getItem('ai-pelit:yoajo:ajettu')") == "1"
