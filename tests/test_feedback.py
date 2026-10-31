@@ -122,3 +122,19 @@ def test_the_admin_page_lists_the_feedback(site, context, fake):
     rows = page.locator(".palaute").all_inner_texts()
     assert rows[0].startswith("Kissa v1 · Aino") and "uusi" in rows[0] and rows[0].endswith("Toka\nrivi")
     assert "#190" in rows[1]
+
+
+def test_a_double_tap_sends_once_and_the_box_fits_a_390px_phone(site, context, fake):
+    fake.players = {ME: {"name": "Aino", "status": "approved"}}
+    page = shelf(site, context, "Aino")
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_selector(".feedback-text")
+    page.fill(".feedback-text", "Kaksi kertaa")
+    page.locator(".feedback button:has-text('Lähetä')").dispatch_event("click")
+    page.locator(".feedback button:has-text('Lähetä')").dispatch_event("click")
+    page.wait_for_selector(".feedback-note:text('Kiitos')")
+    page.wait_for_timeout(200)
+    assert len(fake.feedback) == 1
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
+    box = page.locator(".feedback-box").bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= 390

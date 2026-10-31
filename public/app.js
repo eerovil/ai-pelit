@@ -239,6 +239,7 @@
       var send = el('button', { type: 'button', class: 'button', text: 'Lähetä' });
       var note = el('p', { class: 'muted feedback-note', role: 'status' });
       send.addEventListener('click', function () {
+        if (send.disabled) return; // a second tap while the first is on its way sends nothing
         if (!text.value.trim()) { note.textContent = 'Kirjoita ensin palaute.'; return; }
         send.disabled = true;
         note.textContent = 'Lähetetään…';
