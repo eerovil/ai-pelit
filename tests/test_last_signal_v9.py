@@ -453,6 +453,29 @@ def test_a_friend_sets_the_autopilot_and_sisu_moves_on_every_phone(site, browser
 
 # ---------- v8's tests about the navigation room, as it is now ----------
 
+def test_a_trip_ends_when_the_host_takes_everyone_to_the_room(site, browser):
+    host, aino = v5.room(site, browser, names=("Eero", "Aino"))
+    v5.close_cards(host, aino)
+    host.evaluate("G.s.up.hull = 2; G.s.known.polaris = 1; G.mode = 'home'; crew.room = 'kartta'; act('auto', 'polaris')")
+    host.wait_for_function("G.auto && G.auto.id === 'polaris'")
+    host.evaluate("toRoom()")
+    for p in (host, aino):
+        p.wait_for_function("!document.getElementById('aipr').hidden && G.mode === 'menu'")
+    assert host.evaluate("G.auto") is None
+    host.click("#aipr-start")
+    for p in (host, aino):
+        p.wait_for_function("G.s && G.mode !== 'wait' && G.mode !== 'menu'")
+    host.click("#home")
+    v5.close_cards(host)
+    x = host.evaluate("sub.x")
+    host.wait_for_timeout(1500)
+    host.evaluate("drawHud()")
+    assert abs(host.evaluate("sub.x") - x) < 0.5
+    assert host.evaluate("G.auto") is None and "🧭" not in host.inner_text("#depth")
+    for p in (host, aino):
+        assert p.errors == []
+
+
 def test_samples_are_studied_in_the_lab_and_the_logbook_is_in_its_card(site, browser):
     page = open_game(site, browser)
     ready(page)

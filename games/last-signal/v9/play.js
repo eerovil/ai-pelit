@@ -204,7 +204,7 @@ function guestBegin() {
 // Out of the game: the HUD goes, and a friend's phone forgets the host's game.
 function quiet() {
   if (net && !net.host) G.s = null;
-  net = null; G.mode = 'menu'; G.carry = []; G.held = {};
+  net = null; G.mode = 'menu'; G.carry = []; G.held = {}; G.auto = null;  // v9: a trip ends with the round
   closeCard(); for (const id of ['hud', 'pad', 'home', 'toast']) show(id, false);
 }
 // The host takes everyone back to the room, where new friends can come in; "Aloita kierros" carries on the same save.

@@ -184,7 +184,7 @@ function storyCard(key, then) {
 
 // ---------- the round ----------
 function begin(s) {
-  G.s = s; G.carry = []; G.held = {}; G.lastGoal = '';
+  G.s = s; G.carry = []; G.held = {}; G.lastGoal = ''; G.auto = null;
   sub.x = s.sub.x; sub.y = s.sub.y; sub.dir = sub.face = s.sub.dir || 1; sub.vx = sub.vy = 0;
   // A save from v5 or earlier may have left SISU near the surface where the sea is ice now (v6): down under it.
   while (subHits(sub.x, sub.y) && sub.y < 60) sub.y += 1;
