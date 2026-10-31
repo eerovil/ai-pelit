@@ -22,6 +22,13 @@
       "note": "SISUn sisällä kävellään ihmisenä: kaksi kerrosta ja tikkaat kuten SISUn kuvassa, ja syöminen, lääkkeet, korjaukset, radio, uni ja sukellukset tehdään omissa huoneissaan.",
       "request": "Oman aluksen sisällä suoritettavat toiminnot hoidetaan ihmismoodissa kävelemällä eri huoneisiin",
       "issue": "eerovil/ai-pelit#132"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-31",
+      "note": "Korjaus: liian syvällä paine kuluttaa runkoa myös sukelluksen aikana ja SISUn sisällä, ei vain ohjaamossa.",
+      "request": "Onko bugi että jos menen liian syvälle ja hyppään ulos aluksesta, runko ei enää menetä elämää",
+      "issue": "eerovil/ai-pelit#132"
     }
   ]
 }
