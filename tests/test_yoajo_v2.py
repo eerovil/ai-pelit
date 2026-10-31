@@ -31,13 +31,18 @@ def test_a_screen_that_grows_or_shrinks_is_measured_again(site, context):
     # Going full screen makes the screen taller, showing the bars again shorter. The canvas box
     # is compared with the size drawn for every frame, so even a change no event announced is
     # caught: here the size is made wrong behind the game's back.
-    for h in (820, 640):
-        page.set_viewport_size({"width": 360, "height": h})
+    for w, h in ((360, 820), (360, 640), (390, 844), (740, 360)):
+        page.set_viewport_size({"width": w, "height": h})
         page.evaluate("H = 1000")
-        page.wait_for_function(f"H === {h}")
+        page.wait_for_function(f"W === {w} && H === {h}")
         assert bottom_of_buttons(page) <= h
-    page.evaluate("document.dispatchEvent(new Event('fullscreenchange'))")
-    assert page.evaluate("H") == 640
+        # Mid-leg too: the drive buttons and the leg itself.
+        page.evaluate("HOLD = true; newLeg(1); P.s = 300; H = 1000")
+        page.wait_for_function(f"H === {h}")
+        assert bottom_of_buttons(page) <= h and page.evaluate("[mode, P.s]") == ["drive", 300]
+        page.evaluate("preview(1)")
+    page.evaluate("HOLD = true; H = 1000; document.dispatchEvent(new Event('fullscreenchange'))")
+    assert page.evaluate("H") == 360
     assert page.errors == []
 
 
