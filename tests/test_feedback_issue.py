@@ -23,3 +23,14 @@ def test_the_issue_quotes_each_feedback_with_its_game_and_writer():
 
 def test_a_player_cannot_mention_anyone_or_hide_text():
     assert feedback_issue.quoted("@eerovil katso #12 <!-- x -->") == ["> @\u200beerovil katso #\u200b12 &lt;!-- x -->"]
+
+
+def test_a_run_that_stopped_after_filing_is_finished_not_filed_again():
+    feedback = [{"id": 7}, {"id": 8}, {"id": 9}]
+    issues = [
+        {"number": 200, "body": "...\n<!-- feedback-ids: 5,6,7,8 -->\n"},  # filed, never marked
+        {"number": 150, "body": "<!-- feedback-ids: 1,2 -->"},  # older, all marked
+        {"number": 199, "body": None},
+    ]
+    assert feedback_issue.filed_earlier(feedback, issues) == {200: [7, 8]}
+    assert feedback_issue.filed_earlier(feedback, []) == {}

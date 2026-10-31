@@ -1,5 +1,5 @@
 # Files the players' new feedback as a "Palautteet" issue (#184): scripts/feedback_issue.py.
-# Installed on the AgentDeck host with
+# Installed on the AgentDeck host (31.10.2026, #184) with
 #   cp scripts/systemd/ai-pelit-palautteet.* ~/.config/systemd/user/
 #   systemctl --user daemon-reload && systemctl --user enable --now ai-pelit-palautteet.timer
 [Unit]

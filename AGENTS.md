@@ -20,7 +20,8 @@ player sees is Finnish unless the request says otherwise.
   pull request: for each item, look at the game it names, then ask Eero in the question box
   whether to fix it (say in one line what you would change; group items that ask the same).
   Each yes becomes a normal request issue, "<Peli> v<N> (<slug>): <what to change, in Finnish>",
-  quoting the feedback and naming this issue; it starts its own Work. Post his answers on the
+  quoting the feedback and naming this issue, made with `gh issue create --label claude` (the
+  poller's ownership label, so it starts its own Work); check its labels after. Post his answers on the
   issue, then close it.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run

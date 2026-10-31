@@ -73,6 +73,30 @@ def issue_title(feedback: list[dict], today: datetime) -> str:
     return f"Palautteet {today.day}.{today.month}.{today.year}: {len(feedback)} kpl"
 
 
+MARKER = re.compile(r"<!-- feedback-ids: ([0-9,]+) -->")
+
+
+def filed_earlier(feedback: list[dict], issues: list[dict]) -> dict[int, list[int]]:
+    """Which of `feedback` an earlier run already filed, by its issue's feedback-ids marker:
+    {issue number: [ids]}. A run that filed the issue but stopped before marking the items
+    (network, a restart) is finished here instead of filing them again."""
+    waiting = {f["id"] for f in feedback}
+    found: dict[int, list[int]] = {}
+    for issue in issues:
+        for m in MARKER.finditer(issue.get("body") or ""):
+            ids = [int(i) for i in m[1].split(",") if i and int(i) in waiting]
+            if ids:
+                found.setdefault(issue["number"], []).extend(ids)
+                waiting -= set(ids)
+    return found
+
+
+def earlier_issues() -> list[dict]:
+    out = subprocess.run(["gh", "issue", "list", "--repo", REPO, "--state", "all", "--search", "Palautteet in:title",
+                          "--limit", "30", "--json", "number,body"], check=True, capture_output=True, text=True).stdout
+    return json.loads(out)
+
+
 def main() -> int:
     global SITE
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -85,6 +109,13 @@ def main() -> int:
     if not feedback:
         print("no new feedback")
         return 0
+    if not args.dry_run:
+        for number, ids in filed_earlier(feedback, earlier_issues()).items():
+            call("POST", "api/admin/feedback", key, {"ids": ids, "issue": number})
+            print(f"already filed in {REPO}#{number}: {ids}")
+            feedback = [f for f in feedback if f["id"] not in ids]
+        if not feedback:
+            return 0
     with urllib.request.urlopen(urllib.request.Request(SITE + "catalog.json", headers={"user-agent": "ai-pelit-palautteet"}), timeout=30) as res:
         titles = {g["slug"]: g["title"] for g in json.load(res)["games"]}
     title, body = issue_title(feedback, datetime.now(TZ)), issue_body(feedback, titles)
