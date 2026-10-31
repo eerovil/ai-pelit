@@ -41,11 +41,12 @@ flowchart TD
   NX -- Kuudes kierros --> END[Lopputulokset ja mitalit]
   CUT --> T
   END --> S[Ennätys, tuloslista, voitosta seuraava taso]
-  S --> M
-  END --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
+  END --> TAP{Koroke jää: napautus?}
+  TAP -- Yksin --> M
+  TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,A,F,T blue
   class CPU,WT violet
-  class Q,LN,RL,AU,L,NX amber
+  class Q,LN,RL,AU,L,NX,TAP amber
   class K,D,DR,HB,CUT,AUTO teal
   class X rose
   class END,S,RM green
@@ -80,6 +81,7 @@ flowchart TD
 - **Tulos viivasta lähimpään jälkeen, valkoinen lippu**: `jumpMark()` and `landed()`: the mark is measured from the take-off line to the nearest break in the sand, down to the centimetre (rounded down), plus 5 cm per m/s of wind; landing short of the pit is a foul. The official by the board raises a white flag (red for a foul), a tape runs from the line to the mark, and a new record is saved at once (`ennatys`). The jumper's phone reports it (`res`); the host records it once (`seq`) and sends the meet to everyone (`c`).
 - **Kaverin hyppy näkyy, sama lento**: the jumper's phone sends where its jumper is twelve times a second (`p`), the take-off (`rel`) and when the legs went forward (`leg`); the host passes them on, and every phone flies the same jump with `jumpNow()`, waiting at the sand for `leg`, and lands on the same mark.
 - **8 parasta jatkaa, viimeisestä alkaen**: after round 3 `advance()` keeps the best eight (`final`), each later round in reverse order of the standings. With no player on a phone left in the final the rest is jumped at once.
-- **Lopputulokset ja mitalit**: `over()` and `netEnd()` (v2: the library's `over()`, `end()` and `K.step()`): the standings with 🥇🥈🥉, shown for a few seconds. From v5 (#176) it is the medal ceremony, `K.drawPodium()` in `draw()` over the whole screen: the top three on the podium, an official hangs their medals, a chime each (`look`, `chime` in the meet's options), the final standings under it, for 11 s; alone a tap finishes the ceremony and the next leaves it.
+- **Lopputulokset ja mitalit**: `over()` and `netEnd()` (v2: the library's `over()`, `end()` and `K.step()`): the standings with 🥇🥈🥉, shown for a few seconds. From v5 (#176) it is the medal ceremony, `K.drawPodium()` in `draw()` over the whole screen: the top three on the podium, an official hangs their medals, a chime each (`look`, `chime` in the meet's options), the final standings under it. In v5 it goes on by itself after 11 s (alone a tap finishes the ceremony and the next leaves it).
+- **Koroke jää: napautus?**: from v6 (`yleisurheilu-3`, #176) nothing leaves the podium by itself: the game's tap handler calls `K.skip()` alone and with friends; a tap during the ceremony finishes it (alone only), and a tap after it sets `leave`, and `K.step()` then shows the menu alone, or `R.backToRoom()` in a room, each phone by its own tap. Before v6 this step came by itself after a few seconds (11 s in v5).
 - **Ennätys, tuloslista, voitosta seuraava taso**: `netEnd()` saves `kisat`, and alone a win adds `voitot` and the next level (`taso`); the meet's best jump goes to the high-score list with `AiPelitScores.submit()` (`pituushyppy` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: the host sends the results with `R.deliver()`; each phone saves its own meet once (`R.once()`), shows its place and the top eight in the room (`afterEnd()`, `R.note()`, `R.backToRoom()`).

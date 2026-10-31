@@ -76,6 +76,7 @@ def test_with_friends_each_phone_leaves_the_podium_by_its_own_tap(site, browser)
         # Played through and a minute more, the podium is still there.
         p.evaluate("for (let i = 0; i < 70 * 60; i++) step(1 / 60)")
         assert p.evaluate("K.ending !== null")
+        p.evaluate("draw()")  # the steps above draw nothing: draw the podium as it is now
         assert all(n > 20 for n in p.evaluate(MEDAL_PIXELS))
     # The host leaves to the room; Aino's phone keeps the podium until she taps too.
     tap(host)
