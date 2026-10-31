@@ -37,6 +37,15 @@ the version that taught it, so you can read the code that fixed it.
   opened the friends game, because the buttons were close and acted on touch-down. Put a button
   that leaves the screen away from the ones used every round, and fire it on `pointerup` inside
   the button.
+- **Never swap one game frame for another in the same page.** Ottelu v1–v2 (#168) ran each
+  event in an `<iframe>` and, between events, removed it and added a new one. On Eero's phone the
+  second frame then took no taps at all, every time (the first frame, and the same event after a
+  reload, played fine). The test phone and headless Chromium did not show it, and adb taps
+  reached the game, so neither proves a fix. Load the page afresh for each new frame (Ottelu v3
+  reloads between events), and let Eero try a preview (`wrangler pages deploy … --branch`) on his
+  own phone before calling a touch bug fixed.
+- **A frame gets no safe areas.** Inside an `<iframe>`, `env(safe-area-inset-*)` is 0; the page
+  around it must hand them in (Ottelu v2 sets the frame's `#safe` padding).
 - **Two thumbs, two corners.** Put the buttons a round uses most where thumbs rest: the lower
   corners in landscape, the lower edge in portrait. Leave the top-left for the "‹ Pelit" chip.
 - **Sound follows the game, not the finger.** Piano v5 plays each note when the song reaches it;

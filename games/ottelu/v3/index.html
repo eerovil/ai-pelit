@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ottelu</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  #laji{position:fixed;inset:0;width:100vw;height:100dvh;border:0;display:block;background:#1d3557}
+  .hidden{display:none!important}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 20px calc(env(safe-area-inset-bottom,0px) + 20px);box-sizing:border-box;background:linear-gradient(#1d3557,#12233f);text-align:center;touch-action:manipulation}
+  h1{margin:0;font-size:36px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:20px;font-weight:800}
+  #result:empty{display:none}
+  .win{color:#7ee081}.lose{color:#ff9a8b}
+  button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  button:disabled{background:#6b7a8c;color:#d5dde6;box-shadow:0 4px 0 #3d4855}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:330px}
+  /* The events: tapped in the order they are played. */
+  #pick{display:flex;flex-direction:column;align-items:center;gap:6px;max-width:340px}
+  #pick .lbl{margin:0;font-size:14px;font-weight:700;color:#ffc9a8}
+  #lajit{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+  .laji{font:700 15px system-ui,sans-serif;padding:8px 12px 8px 8px;border-radius:12px;background:#2c4a73;color:#cfe0ee;box-shadow:0 3px 0 #16294a;display:flex;align-items:center;gap:7px}
+  .laji:active{box-shadow:0 1px 0 #16294a}
+  .laji b{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:2px solid #6c8bb0;font-size:13px;color:#fff;box-sizing:border-box}
+  .laji.on{background:#ffd166;color:#2a1a05;box-shadow:0 3px 0 #9a5b12}
+  .laji.on b{background:#2a1a05;border-color:#2a1a05;color:#ffd166}
+  /* The standings between events and at the end. */
+  #board h2{margin:0;font-size:22px;color:#ffd166}
+  #board .sub{margin:-6px 0 0;font-size:14px;color:#b9cfe0}
+  #rows{width:100%;max-width:400px;border-collapse:collapse;background:rgba(10,20,40,.6);border-radius:14px;overflow:hidden}
+  #rows td{padding:5px 5px;font-size:15px;white-space:nowrap}
+  #next{font-size:20px;padding:14px 24px;white-space:nowrap}
+  #rows td.n{width:30px;text-align:right;color:#b9cfe0;font-weight:700}
+  #rows td.who{text-align:left;max-width:140px;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  #rows td.who i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+  #rows td.ev{text-align:right;color:#8ecae6;font-size:13px}
+  #rows td.ev small{color:#8fa5bb}
+  #rows td.tot{text-align:right;font-weight:900;padding-right:12px}
+  #rows tr.me td{background:rgba(255,209,102,.18);color:#ffd166}
+  #rows th{font:700 11px system-ui,sans-serif;color:#8fa5bb;padding:6px 6px 2px;text-align:right}
+  #mine{margin:0;font-size:14px;color:#cfe0ee;line-height:1.5}
+  #waiting{margin:0;font-size:16px;color:#b9cfe0}
+  #loading p{margin:0;font-size:18px;color:#b9cfe0}
+  /* A phone on its side: two columns. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,280px) minmax(0,340px);align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 10px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu h1{font-size:30px;grid-column:1;grid-row:1}
+    #result{grid-column:1;grid-row:2;font-size:18px}
+    #btns{grid-column:1;grid-row:3;gap:8px}
+    #btns button{padding:10px 12px;font-size:16px;white-space:nowrap}
+    #stats{grid-column:1;grid-row:4}
+    #pickHome{grid-column:2;grid-row:1 / span 3;align-self:center}
+    #menu .help{grid-column:2;grid-row:4;font-size:12px}
+    #board{flex-direction:row;flex-wrap:wrap;align-content:center;column-gap:24px;row-gap:8px;padding-top:calc(env(safe-area-inset-top,0px) + 10px)}
+    #board .side{display:flex;flex-direction:column;gap:10px;max-width:260px}
+    #rows td{padding:3px 6px;font-size:14px}
+  }
+  /* In the room screen (the host's pick), on its light background. */
+  #aipr #pick .lbl{color:#7a5a3a}
+  #aipr #lajit .laji{display:inline-flex;margin:0;width:auto;font:700 15px system-ui,sans-serif;padding:7px 11px 7px 7px;background:#d9cdb8;color:#4a3a28;box-shadow:0 3px 0 #a99b84}
+  #aipr #lajit .laji b{border-color:#8c7b62;color:#4a3a28}
+  #aipr #lajit .laji.on{background:#ffd166;color:#2a1a05;box-shadow:0 3px 0 #9a5b12}
+  #aipr #lajit .laji.on b{background:#2a1a05;border-color:#2a1a05;color:#ffd166}
+  #btns{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  #board .side{display:flex;flex-direction:column;align-items:center;gap:10px}
+</style>
+</head>
+<body>
+<div id="safe"></div>
+<div id="menu" class="screen">
+  <h1>Ottelu</h1>
+  <p id="result"></p>
+  <div id="pickHome"><div id="pick">
+    <p class="lbl">Valitse lajit siinä järjestyksessä kuin ne kisataan</p>
+    <div id="lajit"></div>
+  </div></div>
+  <div id="btns">
+    <button id="go">Otteluun!</button>
+    <button id="cont" class="hidden">Jatka ottelua</button>
+    <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  </div>
+  <p id="stats"></p>
+  <p class="help">Jokaisessa lajissa kolme suoritusta; korkeus- ja seiväshypyssä rima nousee, kunnes
+    pudotat kolmesti peräkkäin. Tulokset muuttuvat pisteiksi kuten kymmenottelussa.</p>
+</div>
+<div id="board" class="screen hidden">
+  <div class="side">
+    <h2 id="bTitle"></h2>
+    <p class="sub" id="bSub"></p>
+    <p id="mine"></p>
+  </div>
+  <table id="rows"></table>
+  <div class="side">
+    <button id="next"></button>
+    <p id="waiting" class="hidden"></p>
+  </div>
+</div>
+<div id="loading" class="screen hidden"><p id="loadText">Ladataan lajia…</p><button id="retry" class="hidden">Yritä uudelleen</button></div>
+<script src="../../../rooms.js" data-game="ottelu" data-min="2" data-max="8"></script>
+<script>
+// ---------- The match (#168) ----------
+// A combined event: the player (or the host, for a room) picks some of the athletics field events
+// and their order, and the same eight athletes compete in each. Every event is a published version
+// of that event's own game, run in a frame (#laji) with laji.js: it plays exactly as on its own
+// page, but with the match's field of eight, three rounds, and saves of its own under this game's
+// keys (ai-pelit:ottelu:<event>:…). Each event's best mark becomes points by the World Athletics
+// combined-event tables, and the points add up.
+//
+// M, the match, is plain data, so it saves and goes over the room as it is: {mode ('solo' or
+// 'net'), round (the room's round), level, events: [slug…], at (the event now), phase ('event',
+// 'board' between events, 'over'), humans: [{id, name}] (the phones, in room order), bots (phones
+// the computer plays for), rows: [{id, name, p, col, marks: [], pts: []}] (one mark and its points
+// per event; a mark of null counted nothing)}.
+const R = window.AiPelitRooms;
+const KEY = 'ai-pelit:ottelu:';
+const load = (k, d) => { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
+const save = (k, v) => { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} };
+const drop = k => { try { localStorage.removeItem(KEY + k); } catch (e) {} };
+
+// Points: A·(P − B)^C, P in centimetres for the jumps and metres for the throws, rounded down
+// (World Athletics scoring tables for combined events: the decathlon's long jump, high jump, pole
+// vault and javelin; the hammer, which no decathlon has, by the throws pentathlon's table).
+const table = (A, B, C) => P => P > B ? Math.floor(A * Math.pow(P - B, C) + 1e-9) : 0;
+// The published event versions the match plays. A newer version of an event joins in a new
+// version of this game, never by changing this one.
+const LAJIT = {
+  pituushyppy: { v: 4, name: 'Pituushyppy', pts: m => table(0.14354, 220, 1.40)(Math.round(m * 100)) },
+  korkeushyppy: { v: 2, name: 'Korkeushyppy', pts: m => table(0.8465, 75, 1.42)(Math.round(m * 100)) },
+  seivashyppy: { v: 2, name: 'Seiväshyppy', pts: m => table(0.2797, 100, 1.35)(Math.round(m * 100)) },
+  keihas: { v: 4, name: 'Keihäänheitto', pts: table(10.14, 7, 1.08) },
+  moukari: { v: 2, name: 'Moukarinheitto', pts: table(13.0449, 7, 1.05) },
+};
+const ORDER = ['pituushyppy', 'korkeushyppy', 'seivashyppy', 'keihas', 'moukari'];
+const NAMES = { 2: 'Kaksiottelu', 3: 'Kolmiottelu', 4: 'Neliottelu', 5: 'Viisiottelu' };
+const FIELD = 8;
+const NEXT = 'ai-pelit:ottelu:seuraava';   // sessionStorage: the event to start after the reload
+const FOES = ['Kymppi-Kimmo', 'Seiska-Selma', 'Ottelu-Otto', 'Moni-Maija', 'Viisikko-Ville', 'Sitkeä-Saara',
+  'Taituri-Tapio', 'Rohkea-Riikka', 'Pisteiden Pekka', 'Nopea-Nelli', 'Vahva-Veikko', 'Kestävä-Kaisa'];
+const fmt = m => m === null || m === undefined ? '–' : m.toFixed(2).replace('.', ',') + ' m';
+const space = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const medal = i => ['🥇', '🥈', '🥉'][i] || '';
+const $ = id => document.getElementById(id);
+
+let M = null;
+let level = load('taso', 1), wins = load('voitot', 0), played = load('ottelut', 0), best = load('ennatys', {});
+let picked = (load('lajit', ORDER) || []).filter(s => LAJIT[s]);
+if (picked.length < 2) picked = ORDER.slice();
+
+// ---------- The event in the frame ----------
+// The frame's view of the room: the match's messages carry the event's inside {t: 'L', at, m}, so
+// a message from an event already over never reaches the next one.
+let frame = null, frameAt = -1, frameReady = false, frameDone = false;
+const html = {};
+window.Ottelu = { proxy: null, K: null, patch };
+const isNet = () => !!(M && M.mode === 'net');
+const evRound = at => M.round + ':' + at;
+function newProxy(at) {
+  const h = {};
+  const p = {
+    on(t, fn) { (h[t] = h[t] || []).push(fn); return p; },
+    fire(t, ...a) { (h[t] || []).forEach(f => f(...a)); },
+    send(msg, to) { if (isNet()) R.send({ t: 'L', at, m: msg }, to); },
+    deliver(msg) { if (isNet() && R.isHost) R.deliver({ t: 'L', at, m: msg }); },
+    // The match keeps the room's round, the result and the room screen; an event has none of them.
+    endRound() {}, once: () => true, note() {}, backToRoom() {}, open() {}, extra() {}, leave() {},
+    get isHost() { return !isNet() || R.isHost; },
+    get me() { return isNet() ? R.me : 'me'; },
+    get paused() { return isNet() && R.paused; },
+    get inRoom() { return isNet(); },
+  };
+  return p;
+}
+// The shared athletics library, as the event loads it: the match's field and names, three rounds,
+// saves under this game's keys, and the end of the event to the match.
+function patch(A) {
+  if (A.ottelu) return A;
+  A.ottelu = true;
+  const rounds = A.rounds, meet = A.meet;
+  A.rounds = o => {
+    const F = rounds(Object.assign({}, o, { rounds: 3, cut: 3 }));
+    // No final in a match: the board's "the best eight go on" line goes.
+    const board = F.board;
+    F.board = (x, K, final, box) => {
+      const ft = x.fillText;
+      x.fillText = function (s, ...a) { return ft.call(this, typeof s === 'string' ? s.replace(/ · \d+ parasta jatkaa$/, '') : s, ...a); };
+      try { return board(x, K, final, box); } finally { delete x.fillText; }
+    };
+    return F;
+  };
+  A.meet = o => {
+    const K = meet(Object.assign({}, o, { slug: 'ottelu:' + o.slug, foes: FOES, field: FIELD, menu: () => {} }));
+    const step = K.step;
+    // The event is scored as soon as its results appear (the library drops the event's own save
+    // then), and the match moves on once they have been shown.
+    K.step = dt => {
+      const e = K.ending;
+      if (e && !e.scored) { e.scored = true; eventScored(e.res); }
+      const r = step(dt);
+      if (e && !K.ending) eventOver();
+      return r;
+    };
+    window.Ottelu.K = K;
+    return K;
+  };
+  return A;
+}
+// The event's own page, with laji.js for rooms.js and without its high scores and back chip.
+async function lajiHtml(slug) {
+  if (html[slug]) return html[slug];
+  const L = LAJIT[slug], base = new URL('../../' + slug + '/v' + L.v + '/', location.href).href;
+  const r = await fetch(base);
+  if (!r.ok) throw new Error(r.status);
+  let t = await r.text();
+  const rooms = /<script src="\.\.\/\.\.\/\.\.\/rooms\.js"[^>]*><\/script>/;
+  if (!rooms.test(t)) throw new Error('no rooms.js');
+  t = t.replace(/<head>/i, '<head><base href="' + base + '"><style>#menu{display:none!important}</style><style id="ottelu-safe"></style>')
+    .replace(rooms, '<script src="' + new URL('laji.js', location.href).href + '"><\/script>')
+    .replace(/<script src="\.\.\/\.\.\/\.\.\/(scores|back)\.js"[^>]*><\/script>/g, '');
+  return (html[slug] = t);
+}
+// A page in a frame gets no safe areas of its own (env() is 0 there): v2 hands the event this
+// page's, the notch and the home bar, so its panel clears the chips and its buttons stay out of
+// the phone's gesture area. Kept up to date when the phone turns.
+function safeCss() {
+  const cs = getComputedStyle($('safe'));
+  return '#safe{padding:' + [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(' ') + '!important}';
+}
+addEventListener('resize', () => {
+  const d = frame && frame.contentDocument, st = d && d.getElementById('ottelu-safe');
+  if (!st) return;
+  const css = safeCss();
+  if (st.textContent !== css) { st.textContent = css; frame.contentWindow.dispatchEvent(new Event('resize')); }
+});
+function unload() {
+  if (frame) frame.remove();
+  frame = null; frameAt = -1; frameReady = false; frameDone = false;
+  window.Ottelu.K = null; window.Ottelu.proxy = null;
+}
+async function loadEvent(at, resume) {
+  unload();
+  frameAt = at;
+  const slug = M.events[at];
+  window.Ottelu.proxy = newProxy(at);
+  // The computer's skill in the event follows the match's level.
+  try { localStorage.setItem(KEY + slug + ':taso', JSON.stringify(M.level)); } catch (e) {}
+  if (!resume) drop(slug + ':kesken');
+  show('loading'); $('loadText').textContent = 'Ladataan: ' + LAJIT[slug].name + '…'; $('retry').classList.add('hidden');
+  let t;
+  try { t = await lajiHtml(slug); } catch (e) {
+    if (frameAt !== at) return;
+    $('loadText').textContent = 'Lajia ei saatu ladattua. Tarkista yhteys.';
+    $('retry').classList.remove('hidden');
+    $('retry').onclick = () => loadEvent(at, resume);
+    return;
+  }
+  if (frameAt !== at || !M) return;
+  frame = document.createElement('iframe');
+  frame.id = 'laji';
+  frame.addEventListener('load', () => begin(at, resume), { once: true });
+  frame.srcdoc = t.replace('<style id="ottelu-safe"></style>', '<style id="ottelu-safe">' + safeCss() + '</style>');
+  document.body.insertBefore(frame, document.body.firstChild);
+  show(null);
+}
+// The event's page has loaded: start its meet, alone or in the room.
+function begin(at, resume) {
+  if (frameAt !== at || !M) return;
+  const P = window.Ottelu.proxy, d = frame.contentDocument, K = window.Ottelu.K;
+  frameReady = true;
+  if (!isNet()) {
+    d.getElementById(resume && K && K.kept() ? 'cont' : 'go').click();
+  } else if (R.isHost) {
+    P.fire('start', { round: evRound(at), players: M.humans, host: true, over: false });
+    if (M.bots.length) P.fire('continue', M.bots.slice());
+  } else {
+    P.fire('start', { round: evRound(at), players: M.humans, host: false, over: false });
+    R.send({ t: 'Lr', at });
+  }
+}
+// The event's results are up: alone or on the host, its points go into the match, saved at once,
+// so a reload while they show keeps them.
+function eventScored(res) {
+  if (!M || (isNet() && !R.isHost)) return;
+  if (M.phase !== 'event' || !M.rows.every(r => r.marks.length <= M.at)) return;
+  score(res);
+  M.phase = M.at + 1 >= M.events.length ? 'over' : 'board';
+  if (M.phase === 'over') finish();
+  else { keep(); if (isNet()) R.send({ t: 'M', M }); }
+}
+// The event's results have been shown on this phone.
+function eventOver() {
+  if (!M) return;
+  frameDone = true;
+  after();
+}
+// Each athlete's best mark in the event, and its points.
+function score(res) {
+  const L = LAJIT[M.events[M.at]];
+  res.forEach(r => {
+    let row = M.rows.find(w => w.id === r.id);
+    if (!row) M.rows.push(row = { id: r.id, name: r.name, p: r.p, col: r.col, marks: [], pts: [] });
+    const m = r.best > 0 ? r.best : null;
+    row.marks[M.at] = m; row.pts[M.at] = m === null ? 0 : L.pts(m);
+  });
+}
+const total = r => r.pts.reduce((a, b) => a + (b || 0), 0);
+const standings = () => M.rows.slice().sort((a, b) => total(b) - total(a) || M.rows.indexOf(a) - M.rows.indexOf(b));
+const mine = () => M && M.rows.find(r => r.p === (isNet() ? R.me : 'me'));
+function keep() { if (M && !isNet()) save('kesken', M); }
+
+// What this phone shows now, by the match.
+function after() {
+  if (!M) return;
+  if (M.phase === 'event') {
+    if (frameAt !== M.at) loadEvent(M.at, false);
+    else if (isNet() && !R.isHost && frameReady) R.send({ t: 'Lr', at: M.at });
+    return;
+  }
+  // The event's own results stay up until they are done on this phone.
+  if (frameAt === M.at && frameReady && !frameDone) return;
+  unload();
+  showBoard();
+}
+
+// ---------- Screens ----------
+function show(id) { ['menu', 'board', 'loading'].forEach(s => $(s).classList.toggle('hidden', s !== id)); }
+function showBoard() {
+  const over = M.phase === 'over', n = M.events.length, done = over ? n : M.at + 1;
+  const at = done - 1, L = LAJIT[M.events[at]];
+  $('bTitle').textContent = over ? 'Lopputulokset' : L.name + ' · laji ' + done + '/' + n;
+  $('bSub').textContent = over ? NAMES[n] + ' · ' + M.events.map(s => LAJIT[s].name).join(', ') : NAMES[n] + ' · pisteet yhteensä';
+  const rows = standings(), me = mine();
+  const t = $('rows');
+  t.textContent = '';
+  const head = t.insertRow();
+  ['', '', over ? '' : L.name.toUpperCase(), 'PISTEET'].forEach(s => { const th = document.createElement('th'); th.textContent = s; head.appendChild(th); });
+  rows.forEach((r, i) => {
+    const tr = t.insertRow();
+    if (r === me) tr.className = 'me';
+    tr.insertCell().textContent = (over && medal(i)) || (i + 1) + '.';
+    tr.cells[0].className = 'n';
+    const who = tr.insertCell(); who.className = 'who';
+    const dot = document.createElement('i'); dot.style.background = r.col; who.appendChild(dot);
+    who.appendChild(document.createTextNode(r === me && isNet() ? 'Sinä' : r.name));
+    const ev = tr.insertCell(); ev.className = 'ev';
+    if (!over) { ev.textContent = fmt(r.marks[at]) + ' '; const s = document.createElement('small'); s.textContent = r.pts[at] + ' p'; ev.appendChild(s); }
+    const tot = tr.insertCell(); tot.className = 'tot'; tot.textContent = space(total(r));
+  });
+  // This phone's player, event by event.
+  $('mine').textContent = me ? M.events.slice(0, done).map((s, i) => LAJIT[s].name + ' ' + fmt(me.marks[i]) + ' · ' + me.pts[i] + ' p').join('\n') : '';
+  $('mine').style.whiteSpace = 'pre-line';
+  const next = $('next'), wait = $('waiting');
+  const lead = isNet() && !R.isHost;
+  next.classList.toggle('hidden', lead && !over);
+  wait.classList.toggle('hidden', !(lead && !over));
+  if (over) next.textContent = isNet() ? 'Takaisin huoneeseen' : 'Valmis';
+  else if (lead) wait.textContent = 'Seuraavaksi ' + LAJIT[M.events[M.at + 1]].name + '. Isäntä aloittaa sen.';
+  else next.textContent = 'Seuraava: ' + LAJIT[M.events[M.at + 1]].name;
+  show('board');
+}
+$('next').addEventListener('click', () => {
+  if (!M) return showMenu();
+  if (M.phase === 'over') {
+    const text = endText(), win = place() === 1 ? 'win' : 'lose';
+    if (isNet()) { M = null; show(null); R.backToRoom(text, win); }
+    else { M = null; showMenu(text, win); }
+    return;
+  }
+  if (M.phase !== 'board' || (isNet() && !R.isHost)) return;
+  M.at++; M.phase = 'event';
+  keep();
+  if (isNet()) R.send({ t: 'M', M });
+  // v3 (#168): alone, the next event starts in a freshly loaded page. On Eero's phone the second
+  // event's frame in the same page took no taps at all, every time, while the same event after a
+  // reload did; a new page for each event is what worked there.
+  if (!isNet()) {
+    try { sessionStorage.setItem(NEXT, String(M.at)); sessionStorage.setItem('ai-pelit:_jatkuu', location.pathname); } catch (e) {}
+    location.reload();
+    return;
+  }
+  loadEvent(M.at, false);
+});
+const place = () => standings().indexOf(mine()) + 1;
+function endText() {
+  const me = mine(), p = place();
+  if (!me) return 'Ottelu päättyi';
+  const pts = space(total(me)) + ' p';
+  return p === 1 ? '🥇 Voitit ottelun! ' + pts : (medal(p - 1) ? medal(p - 1) + ' ' : '') + p + '. sija · ' + pts;
+}
+
+// ---------- The end ----------
+function finish() {
+  if (isNet()) { R.deliver({ t: 'F', M }); R.endRound(); }
+  ended();
+}
+// Once per match on this phone: the saves and the high score.
+function ended() {
+  const me = mine();
+  const counted = !isNet() || R.once(M.round);
+  if (!isNet()) drop('kesken');
+  if (!counted || !me) return;
+  const n = M.events.length, pts = total(me);
+  played++;
+  if (!isNet() && place() === 1) { wins++; level++; }
+  if (!(best[n] >= pts)) best[n] = pts;
+  save('ottelut', played); save('voitot', wins); save('taso', level); save('ennatys', best);
+  if (window.AiPelitScores && pts > 0) { AiPelitScores.board('lajit-' + n, NAMES[n]); AiPelitScores.submit(pts); }
+}
+
+// ---------- Alone ----------
+function newMatch(mode, humans, round) {
+  const events = picked.slice();
+  return { mode, round: round || 'solo', level, events, at: 0, phase: 'event', humans, bots: [], rows: [] };
+}
+$('go').addEventListener('click', () => {
+  if (picked.length < 2) return;
+  ORDER.forEach(s => drop(s + ':kesken'));
+  M = newMatch('solo', [{ id: 'me', name: 'Sinä' }]);
+  keep();
+  loadEvent(0, false);
+});
+$('cont').addEventListener('click', () => {
+  const k = kept();
+  if (!k) return showMenu();
+  M = k;
+  if (M.phase === 'event') loadEvent(M.at, true); else showBoard();
+});
+function kept() {
+  const k = load('kesken', null);
+  return k && k.mode === 'solo' && Array.isArray(k.events) && k.events.every(s => LAJIT[s]) && k.phase !== 'over' ? k : null;
+}
+
+// ---------- Menu and the events to pick ----------
+function drawPick() {
+  const box = $('lajit');
+  box.textContent = '';
+  ORDER.forEach(s => {
+    const b = document.createElement('button'), i = picked.indexOf(s);
+    b.className = 'laji' + (i >= 0 ? ' on' : '');
+    b.dataset.slug = s;
+    const n = document.createElement('b'); n.textContent = i >= 0 ? i + 1 : '';
+    b.appendChild(n); b.appendChild(document.createTextNode(LAJIT[s].name));
+    b.addEventListener('click', () => {
+      const k = picked.indexOf(s);
+      if (k >= 0) picked.splice(k, 1); else picked.push(s);
+      save('lajit', picked);
+      drawPick();
+    });
+    box.appendChild(b);
+  });
+  const go = $('go');
+  go.disabled = picked.length < 2;
+  roomStart();
+  go.textContent = picked.length < 2 ? 'Valitse ainakin kaksi' : NAMES[picked.length] + 'un!';
+}
+function showMenu(result, cls) {
+  unload();
+  M = null;
+  $('pickHome').appendChild($('pick'));
+  const r = $('result'); r.textContent = result || ''; r.className = cls || '';
+  const rec = Object.keys(best).sort((a, b) => b - a).map(n => NAMES[n] + ' ' + space(best[n]) + ' p');
+  $('stats').textContent = 'Taso ' + level + ' · Ottelut ' + played + ' · Voitot ' + wins + (rec.length ? ' · Ennätys: ' + rec[0] : '');
+  const k = kept(), cont = $('cont');
+  cont.classList.toggle('hidden', !k);
+  if (k) cont.textContent = 'Jatka ottelua (laji ' + (k.at + (k.phase === 'board' ? 2 : 1)) + '/' + k.events.length + ')';
+  drawPick();
+  show('menu');
+}
+$('multi').addEventListener('click', () => R.open());
+
+// ---------- Playing with friends ----------
+// The host keeps the match, runs each event's meet in its frame and sends the match (M) after
+// every event; every phone loads the same event, and a guest's frame says it is ready (Lr) so the
+// host's event sends it the meet. The host picks the events in the room screen.
+function hostPick() {
+  if (R.inRoom && R.isHost) R.extra($('pick'));
+  else { R.extra(null); $('pickHome').appendChild($('pick')); }
+}
+R.on('peers', hostPick);
+// The room's own start button, on the host: off, with a note, while fewer than two events are
+// picked. rooms.js sets it again on every render, so it is kept off as it changes, and a tap that
+// still gets through starts nothing.
+let startBtn = null;
+const tooFew = () => picked.length < 2;
+function roomStart() {
+  const b = document.getElementById('aipr-start');
+  if (b && b !== startBtn) {
+    startBtn = b;
+    new MutationObserver(() => { if (tooFew() && !b.disabled) b.disabled = true; }).observe(b, { attributes: true, attributeFilter: ['disabled'] });
+  }
+  if (b && tooFew()) b.disabled = true;
+  if (R.inRoom && R.isHost) R.note(tooFew() ? 'Valitse ainakin kaksi lajia.' : '');
+}
+R.on('peers', roomStart);
+document.addEventListener('click', e => {
+  if (tooFew() && e.target.closest && e.target.closest('#aipr-start')) { e.stopImmediatePropagation(); e.preventDefault(); }
+}, true);
+R.on('start', s => {
+  if (s.over) return;   // the end comes again by itself
+  unload();
+  if (R.isHost && tooFew()) {
+    R.endRound(); R.backToRoom('Valitse ainakin kaksi lajia.', 'lose');
+    return;
+  }
+  if (R.isHost) {
+    M = newMatch('net', s.players.map(p => ({ id: p.id, name: p.name })), s.round);
+    R.send({ t: 'M', M });
+    loadEvent(0, false);
+  } else {
+    M = null;
+    show('loading'); $('loadText').textContent = 'Ottelu alkaa…'; $('retry').classList.add('hidden');
+  }
+});
+R.on('message', (m, from) => {
+  if (!m) return;
+  if (m.t === 'L') {
+    const P = window.Ottelu.proxy;
+    if (P && frameReady && m.at === frameAt) P.fire('message', m.m, from);
+  } else if (m.t === 'Lr') {
+    const P = window.Ottelu.proxy;
+    if (R.isHost && M && m.at === M.at && P && frameReady && frameAt === m.at) P.fire('hello', from);
+  } else if (!R.isHost && (m.t === 'M' || m.t === 'F') && m.M) {
+    const was = M && M.phase;
+    M = m.M;
+    if (m.t === 'F' || (M.phase === 'over' && was !== 'over')) ended();
+    after();
+  }
+});
+R.on('hello', id => { if (M && isNet() && M.phase !== 'over') R.send({ t: 'M', M }, id); });
+// The computer plays for a phone that is away ("Jatka ilman heitä"), and gives it back.
+R.on('continue', ids => {
+  if (!M) return;
+  ids.forEach(id => { if (!M.bots.includes(id)) M.bots.push(id); });
+  const P = window.Ottelu.proxy;
+  if (P && frameReady) P.fire('continue', ids);
+});
+R.on('back', id => {
+  if (!M) return;
+  M.bots = M.bots.filter(b => b !== id);
+  const P = window.Ottelu.proxy;
+  if (P && frameReady) P.fire('back', id);
+});
+R.on('lobby', () => { M = null; unload(); show(null); });
+R.on('leave', () => showMenu());
+R.on('menu', () => showMenu());
+
+// Every event's page and the files it loads, fetched once while online, so the service worker
+// keeps them and a match plays offline even with events this phone has not played yet.
+function prefetch() {
+  ORDER.forEach(slug => lajiHtml(slug).then(t => {
+    const base = new URL('../../' + slug + '/v' + LAJIT[slug].v + '/', location.href);
+    (t.match(/<script src="[^"]+"/g) || []).forEach(m => fetch(new URL(m.slice(13, -1), base)).catch(() => {}));
+  }).catch(() => {}));
+}
+showMenu();
+// The next event after the reload above: the saved match, from that event's start.
+(() => {
+  let at = null;
+  try { at = sessionStorage.getItem(NEXT); sessionStorage.removeItem(NEXT); } catch (e) {}
+  const k = kept();
+  if (at !== null && k && k.phase === 'event' && String(k.at) === at) { M = k; loadEvent(M.at, false); }
+})();
+if (navigator.onLine !== false) setTimeout(prefetch, 1500);
+</script>
+<script src="../../../scores.js" data-game="ottelu" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
