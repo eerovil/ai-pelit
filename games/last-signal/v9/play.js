@@ -204,7 +204,7 @@ function guestBegin() {
 // Out of the game: the HUD goes, and a friend's phone forgets the host's game.
 function quiet() {
   if (net && !net.host) G.s = null;
-  net = null; G.mode = 'menu'; G.carry = []; G.held = {}; G.auto = null;  // v9: a trip ends with the round
+  net = null; G.mode = 'menu'; G.carry = []; G.held = {}; G.auto = null; G.coast = false; sub.vx = sub.vy = 0;  // v9: a trip ends with the round
   closeCard(); for (const id of ['hud', 'pad', 'home', 'toast', 'chart']) show(id, false);  // v9: the chart too
   CV.sel = null;
 }
@@ -614,6 +614,11 @@ function step(dt) {
   }
   // v9: the autopilot drives SISU on the host (or alone) whatever this phone's person is doing.
   if (G.auto && G.s && (!net || net.host) && !away && G.mode !== 'sub') stepAuto(dt);
+  else if (G.coast && G.s && (!net || net.host) && !away) {
+    // At the helm the driver's own stick takes over; let go, SISU still settles to a full stop.
+    if (G.mode === 'sub') { if (input.x || input.y) G.coast = false; else if (Math.hypot(sub.vx, sub.vy) < 0.3) { sub.vx = sub.vy = 0; G.coast = false; } }
+    else if (net && net.helm && present(net.helm)) G.coast = false; else stepCoast(dt);
+  }
   if (net && !away) stepNet(dt);
   if (G.card === 'chart' && (G.chartT = (G.chartT || 0) - dt) <= 0) { G.chartT = 0.25; drawChart(); }
   // v9: alone, an open card or chart stops only the person; while the autopilot drives, the sea, hunger, pressure,

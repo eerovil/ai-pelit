@@ -270,9 +270,16 @@ function startAuto(id) {
   if (net) { net.helm = null; net.subT = null; }
   return { say: '🧭 Autopilotti: kohti ' + name, snd: 'up', sec: 2.2 };
 }
+// Every way the autopilot ends goes through here (owner's choice on #160: glide to a stop): SISU brakes smoothly
+// until it stands still (`G.coast`, see `stepCoast`), so no speed is left over to drift with later.
 function stopAuto(say) {
-  G.auto = null;
+  G.auto = null; G.coast = true;
   if (say) { toast(say, 2.4); tone(...SND.home); if (net && net.host) R.send({ t: 're', say, sec: 2.4 }); }
+}
+// The glide after the autopilot, on the host (or alone) while nobody drives: the stick let go until SISU is still.
+function stepCoast(dt) {
+  stepSub(dt, { x: 0, y: 0 });
+  if (Math.hypot(sub.vx, sub.vy) < 0.3) { sub.vx = sub.vy = 0; G.coast = false; }
 }
 // One step of the autopilot: steer at the next point, slow down for the last, and give up if stuck.
 function stepAuto(dt) {

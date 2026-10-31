@@ -439,22 +439,57 @@ def test_in_the_dark_a_cave_find_shows_only_where_a_lamp_lights_it(site, browser
     assert page.errors == []
 
 
-def test_stopping_the_autopilot_at_speed_leaves_sisu_still_at_the_helm(site, browser):
+# Owner's choice (#160): every way the autopilot ends lets SISU glide to a stop, and nothing is left to drift with.
+STILL = "Math.hypot(sub.vx, sub.vy)"
+
+
+def at_speed(page, target="nordvik"):
+    page.evaluate(f"G.s.up.hull = 2; G.s.known.{target} = 1; G.mode = 'home'; crew.room = 'kartta';"
+                  f" doAct('me', 'auto', '{target}'); run(() => true, 8)")
+    assert page.evaluate(STILL) > 5
+
+
+def glides_still_then_holds_at_the_helm(page):
+    v = page.evaluate(STILL)
+    page.evaluate("run(() => true, 0.5)")
+    assert 0 < page.evaluate(STILL) < v  # slowing, not stopped dead
+    page.evaluate("run(() => G.coast, 15)")
+    assert page.evaluate(f"[G.auto, !!G.coast, {STILL}]") == [None, False, 0]
+    if page.evaluate("G.mode") != "sub":
+        page.click("#home")
+    x, y = page.evaluate("[sub.x, sub.y]")
+    page.evaluate("input.x = input.y = 0; run(() => true, 3)")
+    assert page.evaluate("G.mode") == "sub"
+    assert abs(page.evaluate("sub.x") - x) < 0.05 and abs(page.evaluate("sub.y") - y) < 0.05
+
+
+@pytest.mark.parametrize("how", ["button", "helm", "arrival", "blocked"])
+def test_every_autopilot_end_glides_sisu_to_a_stop_with_nothing_left_to_drift(site, browser, how):
     page = open_game(site, browser)
     ready(page)
-    page.evaluate("G.s.up.hull = 2; G.s.known.nordvik = 1; G.mode = 'home'; crew.room = 'kartta'; doAct('me', 'auto', 'nordvik');"
-                  " run(() => true, 8)")
-    assert page.evaluate("Math.hypot(sub.vx, sub.vy)") > 5
-    page.evaluate("answer(doAct('me', 'autostop'))")
-    assert page.evaluate("[G.auto, sub.vx, sub.vy]") == [None, 0, 0]
-    # again at speed, then straight to the helm with the stick let go
-    page.evaluate("doAct('me', 'auto', 'nordvik'); run(() => true, 6)")
-    assert page.evaluate("Math.hypot(sub.vx, sub.vy)") > 5
-    page.click("#home")
-    x = page.evaluate("sub.x")
-    page.evaluate("input.x = input.y = 0; run(() => true, 2)")
-    assert page.evaluate("[G.mode, G.auto]") == ["sub", None]
-    assert abs(page.evaluate("sub.x") - x) < 0.5
+    if how == "arrival":
+        at_speed(page, "kontti")
+        page.evaluate("run(() => G.auto, 120)")
+        assert page.evaluate("G.auto") is None and "Perillä" in toast(page)
+        page.evaluate("run(() => G.coast, 15)")
+        assert page.evaluate(f"[!!G.coast, {STILL}]") == [False, 0]
+        x = page.evaluate("sub.x")
+        page.click("#home")
+        page.evaluate("input.x = input.y = 0; run(() => true, 3)")
+        assert abs(page.evaluate("sub.x") - x) < 0.05
+        return
+    at_speed(page)
+    if how == "button":
+        page.evaluate("answer(doAct('me', 'autostop'))")
+        assert "Autopilotti pois" in toast(page)
+    elif how == "blocked":
+        # a route that never gets shorter: after its tries the autopilot gives up
+        page.evaluate("G.auto.tries = 2; G.auto.best = -1e9; run(() => G.auto, 10)")
+        assert page.evaluate("G.auto") is None and "reitti tukossa" in toast(page)
+    else:
+        page.click("#home")
+        assert page.evaluate("[G.mode, G.auto]") == ["sub", None]
+    glides_still_then_holds_at_the_helm(page)
     assert page.errors == []
 
 

@@ -184,7 +184,7 @@ function storyCard(key, then) {
 
 // ---------- the round ----------
 function begin(s) {
-  G.s = s; G.carry = []; G.held = {}; G.lastGoal = ''; G.auto = null;
+  G.s = s; G.carry = []; G.held = {}; G.lastGoal = ''; G.auto = null; G.coast = false;
   sub.x = s.sub.x; sub.y = s.sub.y; sub.dir = sub.face = s.sub.dir || 1; sub.vx = sub.vy = 0;
   // A save from v5 or earlier may have left SISU near the surface where the sea is ice now (v6): down under it.
   while (subHits(sub.x, sub.y) && sub.y < 60) sub.y += 1;
@@ -470,7 +470,8 @@ function doAct(who, a, arg) {
       if (at && at.room !== 'ohjaamo') return { say: 'Ruoriin pääsee ohjaamosta', snd: 'no' };
       if (net && net.helm && net.helm !== who && present(net.helm)) return { say: nameOf(net.helm) + ' on ruorissa', snd: 'no' };
       if (net) { net.helm = who; net.subT = null; }
-      if (G.auto) { G.auto = null; sub.vx = sub.vy = 0; return { helm: 1, say: '🧭 Autopilotti pois: ruori on käsissäsi', sec: 2 }; }
+      // the one at the helm now drives; SISU glides on under them to a stop unless they steer
+      if (G.auto) { stopAuto(); return { helm: 1, say: '🧭 Autopilotti pois: ruori on käsissäsi', sec: 2 }; }
       return { helm: 1 };
     }
     case 'unhelm': if (net && net.helm === who) { net.helm = null; stopSub(); } return null;
@@ -482,7 +483,7 @@ function doAct(who, a, arg) {
         return { say: nameOf(net.helm) + ' on ruorissa', snd: 'no' };
       return startAuto(String(arg));
     }
-    case 'autostop': if (G.auto) { G.auto = null; stopSub(); sub.vx = sub.vy = 0; } return { say: '🧭 Autopilotti pois', snd: 'home' };
+    case 'autostop': if (G.auto) { stopAuto(); stopSub(); } return { say: '🧭 Autopilotti pois', snd: 'home' };
     case 'take': {
       const it = allItems().find(t => t.id === arg);
       if (!it || s.got[it.id]) return null;
