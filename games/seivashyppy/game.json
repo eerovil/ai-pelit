@@ -1,0 +1,14 @@
+{
+  "title": "Seiväshyppy",
+  "description": "Ota vauhtia, istuta seiväs ja ponnista riman yli: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "group": "yleisurheilu",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-31",
+      "note": "Ensimmäinen versio: vauhdinotto jalkanapeilla, seipään istutus laatikkoon, jalat ylös pitämällä ja irti huipulla; rima nousee 10 cm kerrallaan, kolme yritystä ja korkeuksien ohitus kuten oikeassa kisassa, yksin tai 2–8 kaverin kanssa.",
+      "request": "Pituushyppy, korkeushyppy, moukari, seiväshyppy. Oisko järkeä tehdä kaikista eri pelit. Jos ei, niin pitäisikö myös keihäänheitto ja juoksu yhdistää? Tai sitten kategoria yleisurheilu ja erilliset pelit",
+      "issue": "eerovil/ai-pelit#153"
+    }
+  ]
+}
