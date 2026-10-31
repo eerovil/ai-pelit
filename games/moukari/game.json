@@ -1,0 +1,14 @@
+{
+  "title": "Moukarinheitto",
+  "group": "yleisurheilu",
+  "description": "Heilauta, pyöri rytmissä ja päästä moukari irti sektoriin: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-31",
+      "note": "Ensimmäinen versio: kaksi heilautusta ja 3–4 pyörähdystä rytmissä napauttaen, irrotus sektoriin häkin sisältä, ympyrästä ulos ja häkkiin osuminen hylättyjä; kuuden kierroksen arvokisa, jossa kahdeksan parasta jatkaa, yksin tai 2–8 kaverin kanssa.",
+      "request": "Pituushyppy, korkeushyppy, moukari, seiväshyppy. Oisko järkeä tehdä kaikista eri pelit. Jos ei, niin pitäisikö myös keihäänheitto ja juoksu yhdistää? Tai sitten kategoria yleisurheilu ja erilliset pelit",
+      "issue": "eerovil/ai-pelit#153"
+    }
+  ]
+}
