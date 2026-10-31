@@ -42,6 +42,7 @@ export const GAMES = {
   // Most points in 10 rounds: Mökkitikka 'mokki' (v2's main mode, the shelf's), Pistekisa 'main' (v1 on).
   tikka: { order: 'high', boards: /^(main|mokki)$/, first: 'mokki' },
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
+  pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
 };
 
