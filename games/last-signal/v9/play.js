@@ -621,9 +621,9 @@ function step(dt) {
   }
   if (net && !away) stepNet(dt);
   if (G.card === 'chart' && (G.chartT = (G.chartT || 0) - dt) <= 0) { G.chartT = 0.25; drawChart(); }
-  // v9: alone, an open card or chart stops only the person; while the autopilot drives, the sea, hunger, pressure,
+  // v9: alone, an open card or chart stops only the person; while the autopilot drives (or SISU glides after it), the sea, hunger, pressure,
   // saving and the chart go on.
-  if (playing && (net ? !away : !G.paused || G.auto)) {
+  if (playing && (net ? !away : !G.paused || G.auto || G.coast)) {
     pressure(dt);
     if (!net || net.host) {
       // Saved every 4 s in every mode (v4): pressure damage on a dive or inside must survive a reload too.

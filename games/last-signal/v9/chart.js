@@ -279,7 +279,7 @@ function stopAuto(say) {
 // The glide after the autopilot, on the host (or alone) while nobody drives: the stick let go until SISU is still.
 function stepCoast(dt) {
   stepSub(dt, { x: 0, y: 0 });
-  if (Math.hypot(sub.vx, sub.vy) < 0.3) { sub.vx = sub.vy = 0; G.coast = false; }
+  if (Math.hypot(sub.vx, sub.vy) < 0.3) { sub.vx = sub.vy = 0; G.coast = false; save(); }  // where it came to rest
 }
 // One step of the autopilot: steer at the next point, slow down for the last, and give up if stuck.
 function stepAuto(dt) {

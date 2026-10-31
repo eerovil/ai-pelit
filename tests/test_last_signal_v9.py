@@ -463,6 +463,24 @@ def glides_still_then_holds_at_the_helm(page):
     assert abs(page.evaluate("sub.x") - x) < 0.05 and abs(page.evaluate("sub.y") - y) < 0.05
 
 
+def test_stopped_from_the_open_chart_the_glide_is_still_charted_and_saved(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    page.evaluate("G.s.flags.merikartta = true")
+    at_speed(page)
+    chart(page)
+    page.evaluate("answer(doAct('me', 'autostop'))")
+    assert page.evaluate("[G.auto, !!G.coast, G.paused]") == [None, True, True]
+    x0, seen = page.evaluate("[sub.x, chartSeen.reduce((a, b) => a + b, 0)]")
+    page.evaluate("chartSeen.fill(0); run(() => G.coast, 15); run(() => true, 4.5)")
+    assert page.evaluate(f"[!!G.coast, {STILL}]") == [False, 0]
+    x = page.evaluate("sub.x")
+    assert x > x0 + 3  # it glided, with the chart open
+    assert page.evaluate("chartSeen[Math.floor((sub.x - CH.x0) / CH.s) + Math.floor((sub.y - CH.y0) / CH.s) * CH.w]") == 1
+    assert abs(page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE}')).sub.x") - x) < 0.2
+    assert page.errors == []
+
+
 @pytest.mark.parametrize("how", ["button", "helm", "arrival", "blocked"])
 def test_every_autopilot_end_glides_sisu_to_a_stop_with_nothing_left_to_drift(site, browser, how):
     page = open_game(site, browser)
