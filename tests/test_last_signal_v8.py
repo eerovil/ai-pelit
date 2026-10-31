@@ -146,15 +146,13 @@ def test_out_through_the_tower_to_the_station_and_back_down_into_the_control_roo
     page.evaluate("input.x = -1; run(() => !G.paused, 10); input.x = 0")
     page.click("#card button:has-text('Jatka')")
     walk_to(page, 121)
-    # The store's crates, and v8's snow sample from the station's lab.
-    assert sorted(page.evaluate("G.carry")) == ["pinta:l", "pinta:nayte", "pinta:o1", "pinta:o2", "pinta:r1", "pinta:r2"]
+    assert sorted(page.evaluate("G.carry")) == ["pinta:l", "pinta:o1", "pinta:o2", "pinta:r1", "pinta:r2"]
     walk_to(page, page.evaluate("hatchX()"))
     assert page.inner_text("#act") == "⬇️ Alas torniin"
     page.click("#act")
     # In at the tower's top, then down the ladder by itself into the control room.
     assert page.evaluate("[G.mode, crew.room, crew.x === LADDER, crew.y === TOP]") == ["home", "torni", True, True]
     assert page.evaluate("[G.s.inv.ruoka, G.s.inv.osat, G.s.inv.laake, G.s.flags.pinta]") == [4, 2, 2, True]
-    assert "vie labraan" in toast(page)
     page.evaluate("run(() => crew.to, 6); step(1 / 60)")
     assert page.evaluate("[crew.room, crew.y]") == ["ohjaamo", 0]
     assert page.errors == []
@@ -256,10 +254,10 @@ def test_samples_are_studied_in_the_lab_for_a_lasting_help(site, browser):
     assert page.inner_text("#act") == "🔬 Laboratorio"
     assert page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE}')).lab") == {"vesi": True}
     # Every sample's help, before and after.
-    helps = "[lab('vesi', 1.1), lab('jaa', 0.5), lab('lumi', 1.3), lab('pullo', 0.45), lab('suomu', 0.5)]"
-    assert page.evaluate(helps) == [1.1, 1, 1, 1, 1]
-    page.evaluate("Object.assign(G.s.lab, { jaa: true, lumi: true, pullo: true, suomu: true })")
-    assert page.evaluate(helps) == [1.1, 0.5, 1.3, 0.45, 0.5]
+    helps = "[lab('vesi', 1.1), lab('jaa', 0.5), lab('bakteeri', 0.45), pingR(), lab('suomu', 0.5)]"
+    assert page.evaluate(helps) == [1.1, 1, 1, 450, 1]
+    page.evaluate("Object.assign(G.s.lab, { jaa: true, bakteeri: true, pullo: true, suomu: true })")
+    assert page.evaluate(helps) == [1.1, 0.5, 0.45, 600, 0.5]
     page.evaluate("closeHome(); sub.x = 700; sub.y = 40; sub.vx = 0; input.x = 1; run(() => true, 8); input.x = 0")
     assert page.evaluate("sub.vx") == pytest.approx(16 * 1.1, rel=0.03)
     page.evaluate("G.mode = 'dive'; diver.x = 3600; diver.y = 800")
@@ -271,7 +269,7 @@ def test_there_are_five_samples_one_a_place_each_reachable(site, browser):
     page = open_game(site, browser)
     ready(page)
     found = page.evaluate("ITEMS.concat(ICE_ITEMS).filter(it => it.k === 'nayte').map(it => [it.site, it.sample])")
-    assert sorted(found) == sorted([["asema", "vesi"], ["jaavuori", "jaa"], ["pinta", "lumi"], ["nordlys", "pullo"],
+    assert sorted(found) == sorted([["asema", "vesi"], ["jaavuori", "jaa"], ["majakka", "bakteeri"], ["nordlys", "pullo"],
                                     ["majakka", "suomu"]])
     reach = page.evaluate(v4.REACH)
     for site_id, r in reach.items():
@@ -292,7 +290,7 @@ def test_the_harpoon_lab_and_galley_fit_upright_and_sideways(site, browser, w, h
     walk(page, "kartta")
     page.click("#act")
     assert page.evaluate(v4.OVERFLOW) == []
-    page.click("#card button:has-text('Tutki: Valokalan suomu')")
+    page.click("#card button:has-text('Tutki: Lähteiden bakteerimatto')")
     assert page.evaluate(v4.OVERFLOW) == []
     page.evaluate("closeCard(); closeHome()")
     dive_near_school(page, 3)
