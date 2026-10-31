@@ -202,7 +202,7 @@ def test_an_old_save_with_sisu_where_the_ice_is_now_starts_under_it(site, browse
     assert page.evaluate("[G.s.day, G.s.inv.osat]") == [4, 2]
 
 
-@pytest.mark.parametrize("w,h", [(360, 640), (740, 360)])
+@pytest.mark.parametrize("w,h", [(360, 640), (390, 844), (740, 360)])
 def test_the_ice_cards_and_controls_fit_upright_and_sideways(site, browser, w, h):
     page = v4.open_game(site, browser, w, h)
     ready(page)
@@ -250,3 +250,26 @@ def test_sisu_holds_still_while_a_friend_is_on_the_ice_and_their_haul_is_the_hos
     assert aino.evaluate(f"localStorage.getItem('{SAVE}')") is None
     for p in (host, aino):
         assert p.errors == []
+
+
+def test_a_reload_on_the_ice_comes_back_at_the_helm_in_the_opening_with_the_haul_still_in_the_station(site, browser):
+    page = v4.open_game(site, browser)
+    ready(page)
+    surface(page)
+    out_on_the_ice(page)
+    walk_to(page, 135)
+    assert len(page.evaluate("G.carry")) >= 2
+    page.evaluate("save()")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.evaluate(v4.RUN)
+    page.click("#jatka")
+    page.evaluate("G.hold = true")
+    # SISU still lies surfaced in the opening, and the person is back at the helm; nothing carried was banked.
+    assert page.evaluate("[G.mode, surfaced(), G.s.inv.osat, G.s.inv.ruoka]") == ["sub", True, 0, 2]
+    assert page.evaluate("ICE_ITEMS.filter(it => it.k !== 'loki').every(itemHere)") is True
+    v4.inside(page)
+    page.evaluate("drawHud()")
+    v4.act(page, "Tornista jäälle")
+    assert page.evaluate("G.mode") == "ice"
+    assert page.errors == []
