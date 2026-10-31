@@ -124,6 +124,9 @@ here in the same pull request (AGENTS.md says so), naming the version that taugh
   keeping the height from before full screen. Fill the screen with a fixed box (`position:fixed;
   top:0; bottom:0`) and compare its `getBoundingClientRect()` with the size you drew for every
   frame (`fitCheck()` in Yöajo v2's `ui.js`); listen to `fullscreenchange` too.
+- **A prototype the phone never updates.** Yöajo v4's prototype (#181): `sw.js` served the played
+  version folder from its cache, so Eero saw no edit and could not clear it on the phone. Serve a
+  prototype with `scripts/serve_prototype.py` (AGENTS.md, "Running it locally").
 - **A tap lands where the finger is** (Hiihto v5, see "Controls that feel right"): draw for the
   canvas's own box, not `innerWidth × innerHeight`.
 

@@ -22,6 +22,13 @@
       "note": "Ohjaus yhdellä peukalolla kummallakin puolella: vasen liu'uttaa sivuttain loivasti tai jyrkästi, oikea on kaasu, jota painetaan ylös vähän tai paljon, ja alas jarruttaa.",
       "request": "Ohjaus voisi kuitenkin olla yhdellä peukalolla. Vasemmalla kääntyminen (tarvitaan jyrkempi ja loivempi kääntyminen kuin nyt) ja oikealla kaasu, jota voi painaa paljon tai vähän",
       "issue": "eerovil/ai-pelit#181"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-31",
+      "note": "Ohjaus yhdellä peukalolla pyöreällä tikulla, häikäisy ei tule yhtä herkästi, pitkistä valoista saa pisteitä (ei katuvaloissa), hurjastelusta ja vaarallisesta ohituksesta tulee miinusta, rajoitukset vaihtuvat harvemmin ja muut autot noudattavat niitä.",
+      "request": "Yhden peukalon ohjaus keskeltä ruutua voisi olla parempi\n\nVoisi olla ihan normaali ympyrä siinä kuten muissakin peleissä\n\nSitten pitkät valot. Häikäisy tulee liian herkästi. Lisäksi pitkien valojen käyttöä ei rohkaista mitenkään\n\nHurjastelusta pitää antaa miinusta. Eli liian suuri ylinopeus ainakin 20kmh. Ja sitte vastaantulijoiden kaistalle ei saa mennä jos on tulossa auto vastaan 150-200m päässä\n\nOhituksesta ei pidä antaa + pisteitä jos oli vaarallinen.\n\nNopeusrajoitukset muuttuu vähän liian usein. 60kmh tulee olla harvinaisempi (vasta myöhemmissä tasoissa)\n\nPitkiä ei tarvitse käyttää jos on katuvalot (ei lisäpisteitä). Muut autot voisi seurata vähän paremmin nopeusrajoituksia. Osa voisi ajaa vähän ylinopeuttakin.",
+      "issue": "eerovil/ai-pelit#181"
     }
   ]
 }
