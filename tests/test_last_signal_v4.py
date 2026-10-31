@@ -806,3 +806,23 @@ def test_above_the_rating_a_dive_and_inside_leave_the_hull_alone(site, browser):
     dive_at(page, "kontti")
     page.evaluate("G.hold = true; run(() => true, 3); endDive(false); run(() => true, 3)")
     assert page.evaluate("G.s.m.hull") == 60
+
+
+def test_an_open_card_pauses_the_pressure_and_a_reload_keeps_the_damage(site, browser):
+    page = open_game(site, browser)
+    new_game(page)
+    page.evaluate("sub.x = 1180; sub.y = 222; G.s.m.hull = 60")
+    inside(page)
+    # Reading a card (the workshop's upgrades) stops time, the pressure too.
+    walk(page, "paja")
+    page.evaluate("const h = G.s.m.hull; upgradeCard(); run(() => true, 3); window.kept = G.s.m.hull === h")
+    assert page.evaluate("kept")
+    page.click("#card button:has-text('Takaisin')")
+    page.evaluate("run(() => true, 2); save(); window.h = G.s.m.hull")
+    hull = page.evaluate("h")
+    assert hull < 55
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    assert page.evaluate("[G.mode, Math.round(G.s.m.hull)]") == ["sub", round(hull)]
+    assert page.errors == []
