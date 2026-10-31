@@ -468,3 +468,25 @@ def test_the_plant_bar_sits_above_the_feet_and_the_gaps_do_nothing(site, context
         assert page.evaluate(f"padAt({cx}, {top['y'] + top['h'] + 9})") == 0
         assert page.evaluate(f"[padAt({cx}, {top['y'] + 10}), padAt({cx}, {foot['y'] + 20})]") == [3, foot["k"]]
     assert page.errors == []
+
+
+def test_a_v2_meet_reloaded_then_opened_in_v1_does_not_break(site, context):
+    # The computer comes in higher up, so its attempts have gaps; after a reload JSON makes them
+    # null. v1 reads every att entry as a string, so v2 keeps only the heights tried.
+    page = open_game(site, context)
+    page.click("#go")
+    for _ in range(4):
+        page.evaluate("ready(); go(9.2); quick()")
+    assert page.evaluate("K.comp.throwers.some(t => t.p === null && [...t.rec].some(r => r === undefined))")
+    page.reload()
+    page.evaluate(HELPERS)
+    page.click("#cont")
+    page.evaluate("ready(); go(9.2); quick()")
+    saved = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:seivashyppy:kesken'))")
+    assert all(isinstance(v, str) for t in saved["throwers"] for v in t["att"].values())
+    page.goto(site.url + "games/seivashyppy/v1/")
+    page.evaluate(HELPERS)
+    page.click("#cont")
+    page.evaluate("draw(); go(9.2); quick(); draw()")
+    assert page.evaluate("comp.throwers.length") == 12
+    assert page.errors == []

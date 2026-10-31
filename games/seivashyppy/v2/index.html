@@ -192,12 +192,14 @@ const COLORS = K.COLORS;
 // The meet kept alone (kesken) is shared with v1, which reads its own fields (h0, the turn queue q,
 // and per vaulter att, cons, entry). The library has just saved it (each turn starts after the
 // save), so it is saved again with v1's fields beside v2's; v2seq says which side played last.
+// v1 reads every att entry as a string: the heights not tried (holes, null after a reload) are left out.
+function v1Att(rec) { const a = {}; (rec || []).forEach((r, i) => { if (typeof r === 'string') a[i] = r; }); return a; }
 function keepForV1() {
   const c = K.comp;
   if (!c || c.mode !== 'solo' || c.over || !c.heights || !c.heights.length) return;
   const q = c.order.slice(c.turn).filter(id => K.F.due(K.thrower(id), c.hi, c.att));
   K.save('kesken', Object.assign({}, c, { h0: c.heights[0], q, v2seq: c.seq,
-    throwers: c.throwers.map(t => Object.assign({}, t, { att: Object.assign({}, t.rec), cons: t.run, entry: t.first || 0 })) }));
+    throwers: c.throwers.map(t => Object.assign({}, t, { att: v1Att(t.rec), cons: t.run, entry: t.first || 0 })) }));
 }
 function cpuPlan(t, c) {
   // Comes in some 50–80 cm under its best, and now and then passes a height well under it.
