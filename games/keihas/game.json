@@ -1,0 +1,13 @@
+{
+  "title": "Keihäänheitto",
+  "description": "Ota vauhtia, nosta kulma ja heitä keihäs: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-31",
+      "note": "Ensimmäinen versio: vauhdinotto jalkanapeilla, kulma pitämällä Heitä-nappia, yliastuttu viivalla; kuuden kierroksen arvokisa, jossa kahdeksan parasta jatkaa, yksin tai 2–8 kaverin kanssa.",
+      "request": "Keihäänheitto",
+      "issue": "eerovil/ai-pelit#146"
+    }
+  ]
+}
