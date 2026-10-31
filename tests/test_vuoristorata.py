@@ -310,3 +310,79 @@ def test_a_phone_reloaded_mid_race_carries_on_from_where_it_was(site, browser):
     finally:
         for c in ctxs:
             c.close()
+
+
+def test_a_guest_rides_the_hosts_level_even_if_it_has_not_unlocked_it(site, browser):
+    build(site)
+    relay = Relay()
+    ctxs = []
+    try:
+        hctx, host = open_page(site, browser, name="Eero", relay=relay, saves={"taso": 4, "valittu": 4})
+        gctx, guest = open_page(site, browser, name="Aino", relay=relay)
+        ctxs = [hctx, gctx]
+        host.click("#kaverit")
+        host.click("#aipr-create")
+        host.wait_for_function("AiPelitRooms.isHost")
+        guest.click("#kaverit")
+        guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+        guest.click("#aipr-joinBtn")
+        host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && net.cfg && game.mode === 'ride'", timeout=10000)
+        assert guest.evaluate("game.level") == 4
+        assert guest.evaluate("game.track.len") == host.evaluate("game.track.len")
+        # Alone again, the guest's own progress is as it was: level 4 is still locked.
+        guest.evaluate("toSolo()")
+        assert guest.evaluate("[game.level, maxLevel]") == [1, 1]
+    finally:
+        for c in ctxs:
+            c.close()
+
+
+def test_the_faster_ride_wins_even_when_its_finish_is_heard_later(site, browser):
+    relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
+    guest = guests[0]
+    try:
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        # Aino's ride is 5 s faster, but the host finishes first and hears her finish after its own.
+        guest.evaluate("game.car.t -= 5")
+        host.evaluate("auto = true; game.car.s = game.track.finish - 5")
+        host.wait_for_function("game.car.fin !== null", timeout=10000)
+        guest.evaluate("auto = true; game.car.s = game.track.finish - 5")
+        for p in [host, guest]:
+            p.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
+        assert guest.locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
+        assert host.locator("#loppu-otsikko").inner_text() == "2. sija"
+    finally:
+        for c in ctxs:
+            c.close()
+
+
+def test_a_finished_phone_reloaded_while_others_ride_keeps_its_time_and_place(site, browser):
+    relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
+    guest = guests[0]
+    try:
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        guest.evaluate("auto = true; game.car.s = game.track.finish - 5")
+        guest.wait_for_function("game.car.fin !== null", timeout=10000)
+        fin = guest.evaluate("game.car.fin")
+        host.wait_for_function("net.cars.find(k => k.kind === 'net').fin !== null", timeout=8000)
+        guest.reload()
+        guest.wait_for_function("net && game.car.fin !== null", timeout=15000)
+        assert abs(guest.evaluate("game.car.fin") - fin) < 0.02
+        host.wait_for_timeout(800)   # the reloaded phone's messages reach the host
+        assert abs(host.evaluate("net.cars.find(k => k.kind === 'net').fin") - fin) < 0.02
+        host.evaluate("auto = true; game.car.s = game.track.finish - 5")
+        for p in [host, guest]:
+            p.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
+        assert guest.locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
+        assert host.locator("#loppu-otsikko").inner_text() == "2. sija"
+        assert guest.errors == []
+    finally:
+        for c in ctxs:
+            c.close()

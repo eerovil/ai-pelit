@@ -380,8 +380,10 @@ game.level = clamp(+load('valittu', maxLevel) || 1, 1, maxLevel);
 function bests() { return load('ajat', {}); }
 function starsOf() { return load('tahdet', {}); }
 
-function setLevel(n) {
-  game.level = clamp(n, 1, maxLevel);
+// In a room the host's level is ridden even if this phone has not unlocked it (it stays locked
+// for riding alone).
+function setLevel(n, any) {
+  game.level = any ? Math.max(1, n) : clamp(n, 1, maxLevel);
   if (!net) save('valittu', game.level);
   game.track = makeLevel(game.level);
   game.car = newCar();
@@ -609,7 +611,7 @@ function netStart(s) {
   else { game.mode = 'netwait'; $('odota').classList.remove('hidden'); document.body.classList.add('riding'); }
   window.dispatchEvent(new Event('rata'));
 }
-function netLevel() { setLevel(net.cfg.level); }
+function netLevel() { setLevel(net.cfg.level, true); }
 const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0];
 function synced(k) {
   if (k.kind === 'me') { k.s = game.car.s; k.v = game.car.v; }
@@ -636,8 +638,8 @@ function netTick(dt) {
       }
     } else if (net.phase === 'run' && k.fin === null) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
   }
-  // The places, for the HUD: finished by arrival, the rest by how far they are.
-  const list = net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? (a.at ?? a.fin) - (b.at ?? b.fin) : b.s - a.s));
+  // The places, for the HUD: finished by their time on the race clock, the rest by how far they are.
+  const list = net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s));
   net.order = list.map((k, i) => `<span style="color:${k.color}">${i + 1}. ${k.kind === 'me' ? 'Sinä' : esc(k.name)}</span>`).join('');
   net.sendT -= dt;
   if (RM.isHost) {
@@ -675,9 +677,12 @@ function guestState(m) {
     if ((first && m.ph === 'run' && a[0] > game.car.s + 5) || (a[4] && game.mode === 'ride')) {
       game.car.s = a[0]; game.car.v = Math.max(5, a[1]); game.car.t = m.clock; game.car.check = a[0];
     }
-    if (a[2] !== null && a[5] && game.car.fin === null) {
+    if (a[2] !== null && game.car.fin === null) {
+      game.car.s = Math.max(game.car.s, game.track.finish);
       // The computer took me to the finish: my place stands, but it is not my time.
-      game.car.fin = a[2]; game.mode = 'done'; game.result = { t: a[2], stars: 0, cpu: true };
+      if (a[5]) { game.car.fin = a[2]; game.mode = 'done'; game.result = { t: a[2], stars: 0, cpu: true }; }
+      // My own finish, heard again after a reload: the same time, saved once (RM.once).
+      else { game.car.fin = game.car.t = a[2]; finishRide(); }
     }
   });
   $('odota').classList.add('hidden');
@@ -689,7 +694,7 @@ function cpuTakes(k) {
   k.car = Object.assign(newCar(), { s: k.s, v: Math.max(5, k.v), t: net.clock, check: k.s });
 }
 function standings() {
-  return net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? (a.at ?? a.fin) - (b.at ?? b.fin) : b.s - a.s))
+  return net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s))
     .map(k => ({ id: k.id, name: k.name, fin: k.fin, color: k.color }));
 }
 function netEnd(res) {
@@ -764,7 +769,8 @@ if (RM) {
       // Given back by the computer: the phone's own car counts again once it has caught up.
       if (k.handback && m.c[0] < k.s - 1) return;
       k.handback = false;
-      k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2];
+      // A finish the host has heard stands, whatever a reloaded phone sends after it.
+      if (k.fin === null) { k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2]; }
       arrive(k);
       return;
     }
