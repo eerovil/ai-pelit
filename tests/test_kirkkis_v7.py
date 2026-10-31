@@ -244,3 +244,30 @@ def test_with_friends_the_host_picks_hippa_and_a_tag_reaches_the_guest(phones): 
       seeker.x = g.x; seeker.y = g.y; }""")
     guest.wait_for_function("seeker === player && player.freeze > 0")
     assert host.errors == [] and guest.errors == []
+
+
+def test_a_guest_back_mid_wait_after_a_tag_still_waits(phones):  # noqa: F811
+    host = phones("Eero", URL)
+    host.click("#modes button[data-mode=hippa]")
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    guest = phones("Aino", URL)
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    guest.click("#aipr-joinBtn")
+    guest.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length > 1")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-start")
+    host.wait_for_function("phase === 'seek' && mode === 'hippa'")
+    # The guest has just been tagged, and waits a long while (so the reload cannot outlast it).
+    host.evaluate("""() => { const g = people.find(p => p.ctrl === 'remote'); for (const b of bots) b.ctrl = 'still';
+      setIt(g); g.st = 'seek'; g.freeze = 60; for (const p of people) if (p !== g) p.st = 'hiding'; }""")
+    guest.reload()
+    guest.wait_for_function("phase === 'seek' && seeker === player && player.freeze > 30")
+    # Moving anyway: the host keeps the guest where it is.
+    x0 = host.evaluate("people.find(p => p.ctrl === 'remote').x")
+    guest.evaluate("() => { joy = { id: 1, ox: 60, oy: 500, x: 160, y: 500 }; player.freeze = 0; }")
+    guest.wait_for_timeout(600)
+    assert host.evaluate("people.find(p => p.ctrl === 'remote').x") == x0
+    assert host.errors == [] and guest.errors == []

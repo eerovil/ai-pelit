@@ -1322,7 +1322,8 @@ let castRound = '';  // a guest: the round its cast was made for (the host's kr 
 let overStart = false; // a guest: the round had ended before this page heard of it
 let events = [], sendT = 0, meT = 0, roomCode = '';
 const r2 = v => Math.round(v * 100) / 100;
-const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0)]);
+// v7: the sixth is how long one still waits after being tagged in Hippa, so a phone back mid-wait waits too.
+const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0), r2(Math.max(0, p.freeze || 0))]);
 // The round as another phone needs it: who is who, who seeks, and where everyone is.
 function roundMsg(t) {
   return { t, round: rid, map: mapId, mode, seeker: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(),
@@ -1339,7 +1340,8 @@ R.on('message', (m, from) => {
   if (m.round !== rid) return;
   if (R.isHost) {
     const p = people.find(q => q.id === from && q.ctrl === 'remote');
-    if (m.t === 'kme' && p && racing() && [m.x, m.y, m.a].every(Number.isFinite)) {
+    // A phone still waiting after being tagged (Hippa) stays where it is.
+    if (m.t === 'kme' && p && racing() && !(p.freeze > 0) && [m.x, m.y, m.a].every(Number.isFinite)) {
       p.x = Math.max(0, Math.min(WW, m.x)); p.y = Math.max(0, Math.min(WH, m.y)); p.a = m.a; p.moving = +m.m || 0;
     }
     return;
@@ -1432,6 +1434,7 @@ function guestState(m, snap) {
   m.p.forEach((q, i) => {
     const p = people[i];
     p.st = q[3];
+    if (Number.isFinite(q[5]) && (snap || p !== player)) p.freeze = q[5];
     if (p === player && !snap) return; // this phone moves its own player
     p.tx = q[0]; p.ty = q[1]; p.a = q[2]; p.moving = q[4];
     if (snap) { p.x = q[0]; p.y = q[1]; }
