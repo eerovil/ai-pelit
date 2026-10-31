@@ -33,7 +33,7 @@ flowchart TD
   X --> NX
   P --> NX
   NX -- Ei --> T
-  NX -- Yksi jäljellä --> GO[Voittaja jatkaa tai lopettaa]
+  NX -- Yksi jäljellä --> GO[Viimeisenä jäljellä: johtaja voi lopettaa, muuten jatkaa]
   GO --> T
   NX -- Kaikki ulos --> END[Lopputulokset: paras korkeus, sitten pudotukset]
   END --> S[Ennätys, tuloslista, voitosta seuraava taso]
@@ -73,7 +73,7 @@ flowchart TD
 - **Kaverin hyppy näkyy, sama floppi lentää**: the jumper's phone sends where its jumper is twelve times a second (`p`), the take-off (`up`), each tap with its flight time (`tap`) and the whole jump on landing (`done`); the host passes them on, and every phone flies the same jump with `jumpResult()`, so all show the same result.
 - **O: yli, ennätys talteen**: `landed()`: a new record is saved at once (`ennatys`). The jumper's phone reports the attempt (`res`: O, X, - or S); the host records it once (`seq`) and sends the meet to everyone (`c`).
 - **Kolme peräkkäistä X tai kaikki ulos?**: `mark()` and `advance()`: three failures in a row put a jumper out; the meet ends when no one is left in. With no player on a phone left in, the computer jumps the rest at once.
-- **Voittaja jatkaa tai lopettaa**: the last one in, with everyone else out, may go on jumping the next heights; "🏁 Lopeta" (`stopMeet()`, 'S') ends their meet there.
+- **Viimeisenä jäljellä: johtaja voi lopettaa, muuten jatkaa**: the last one in, with everyone else out, goes on jumping the next heights. Only when they also lead the standings (`soleWinner()`: best height, then countback, `placeOf() === 1`) does the turn say "Voitit! Jatka?" and offer "🏁 Lopeta" (`stopMeet()`, 'S'), which ends their meet there. Behind a jumper already out (a worse countback, or a height passed that the other cleared) it says "Viimeisenä jäljellä" and offers only the pass, so they can still try to win.
 - **Lopputulokset: paras korkeus, sitten pudotukset**: `over()` and `netEnd()`: the standings with 🥇🥈🥉 and each jumper's failures at their best height and in all up to it (the countback), shown for a few seconds.
 - **Ennätys, tuloslista, voitosta seuraava taso**: `netEnd()` saves `kisat`, and alone a first place adds `voitot` and the next level (`taso`); the meet's best height goes to the high-score list with `AiPelitScores.submit()` (`korkeushyppy` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: the host sends the results with `R.deliver()`; each phone saves its own meet once (`R.once()`), shows its place and the top eight in the room (`afterEnd()`, `R.note()`, `R.backToRoom()`).

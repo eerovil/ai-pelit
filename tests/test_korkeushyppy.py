@@ -158,6 +158,32 @@ def test_the_rules_attempts_passes_and_countback(site, context):
     assert page.errors == []
 
 
+def test_the_last_one_in_has_won_only_when_leading(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    # The rival went out at the third height with a cleaner record at the second: the player, last
+    # in with one failure at the third height, is behind on countback and may not stop as a winner.
+    page.evaluate("""() => {
+      const me = mine(), rival = comp.jumpers.find(t => t !== me);
+      comp.jumpers.forEach(t => { if (t !== me) { t.rec = ['XXX']; t.run = 3; t.out = true; } });
+      rival.rec = ['O', 'O', 'XXX'];
+      me.rec = ['O', 'XO', 'X']; me.run = 1; me.out = false;
+      comp.hi = 2; comp.att = 2; comp.turn = comp.order.indexOf(me.id); comp.seq += 5;
+      th = null; follow(); ready(); draw();
+    }""")
+    assert page.evaluate("[lastIn(mine()), soleWinner(mine()), placeOf(mine())]") == [True, False, 2]
+    assert page.evaluate("actBoxes.map(b => b.k)") == ["pass"]
+    page.evaluate("stopMeet()")
+    assert page.evaluate("[th.phase, comp.over || false]") == ["ready", False]
+    # Clearing the third height puts them ahead: now they have won, and may stop.
+    page.evaluate("good(); ready(); draw()")
+    assert page.evaluate("[mine().rec[2], soleWinner(mine()), placeOf(mine())]") == ["XO", True, 1]
+    assert page.evaluate("actBoxes.map(b => b.k)") == ["pass", "stop"]
+    page.evaluate("stopMeet(); quick()")
+    assert page.evaluate("comp.over && ending.place === 1")
+    assert page.errors == []
+
+
 def test_heights_rise_in_steps_that_never_grow(site, context):
     page = open_game(site, context)
     for lv in (1, 4, 9):
@@ -181,7 +207,7 @@ def test_a_whole_meet_alone_is_won_and_saved(site, context):
         if page.evaluate("comp.over"):
             break
         # The last one in may stop once they have won.
-        page.evaluate("ready(); if (lastIn(mine()) && bestOf(mine()) >= 1.95) { stopMeet(); quick(); } else good()")
+        page.evaluate("ready(); if (soleWinner(mine()) && bestOf(mine()) >= 1.95) { stopMeet(); quick(); } else good()")
     assert page.evaluate("comp.over && ending.place === 1")
     best = page.evaluate("ending.mark")
     assert best >= 1.9
@@ -221,7 +247,7 @@ def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
       // in stops once they have won. Lazy: a slow run, no arch, only the legs.
       window.attempt = lazy => {
         ready();
-        if (lastIn(mine()) && bestOf(mine()) > 0) stopMeet();
+        if (soleWinner(mine())) stopMeet();
         else {
           th.phase = 'run'; th.v = lazy ? 6.5 : 8 - Math.abs(gs()) * 0.3; th.x = -(1.1 + gs() * 0.25); jumpPress();
           const f = th.f;
@@ -244,8 +270,8 @@ def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
         return won;
       };
     }""")
-    # With this seed 0, 20, 19, 6 and 12 of 20; other seeds gave 0, 20, 20, 6, 10; 0, 20, 19, 8, 7;
-    # 0, 20, 19, 9, 13; 0, 19, 20, 13, 8.
+    # With this seed 0, 20, 19, 8 and 10 of 20; other seeds gave 0, 20, 20, 10, 7; 0, 20, 19, 10, 10;
+    # 0, 20, 19, 9, 11; 0, 19, 20, 12, 10.
     lazy, l1, l4, l7, l10 = page.evaluate("[meets(1, 20, true), meets(1, 20), meets(4, 20), meets(7, 20), meets(10, 20)]")
     assert lazy <= 2
     assert l1 >= 17 and l4 >= 13

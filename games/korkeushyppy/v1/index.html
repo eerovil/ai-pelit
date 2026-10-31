@@ -344,6 +344,9 @@ function record(seq, m) {
 }
 // Is this jumper the only one left in, with everyone else out? Then they may go on alone.
 const lastIn = t => comp.jumpers.every(o => o === t || o.out);
+// The last one in who also leads (by countback too): they have won, and may stop. The last one in
+// behind a jumper already out goes on, to try to win.
+const soleWinner = t => t && !t.out && lastIn(t) && bestOf(t) > 0 && placeOf(t) === 1;
 // Each phone draws the turn the competition is at: a new turn first shows the standings.
 function follow() {
   if (!comp || comp.over) return;
@@ -453,7 +456,7 @@ function outcome(m, why) {
   }
 }
 function pass() { if (th && th.mine && th.phase === 'ready') outcome('-', 'Jätti korkeuden väliin'); }
-function stopMeet() { if (th && th.mine && th.phase === 'ready' && lastIn(jumper(th.id))) outcome('S', 'Lopetti kisan'); }
+function stopMeet() { if (th && th.mine && th.phase === 'ready' && soleWinner(jumper(th.id))) outcome('S', 'Lopetti kisan'); }
 function report(m) {
   if (!isNet() || R.isHost) record(th.seq, m);
   else R.send({ t: 'res', round: comp.room, seq: th.seq, mark: m });
@@ -843,10 +846,10 @@ function drawHud() {
   }
   if (!th) return;
   if (th.phase === 'ready' && th.mine) {
-    const alone = lastIn(t);
-    message(alone ? 'Voitit! Jatka?' : 'Sinun vuorosi!', '#ffd166');
+    const alone = soleWinner(t);
+    message(alone ? 'Voitit! Jatka?' : lastIn(t) ? 'Viimeisenä jäljellä' : 'Sinun vuorosi!', '#ffd166');
     small('Ota vauhtia: vasen, oikea…', '#fff');
-    // Pass this height (or, the last one in, stop): acts when the finger lifts on it.
+    // Pass this height (or, the winner left alone, stop): acts when the finger lifts on it.
     const y = hudTop + 162, bw = alone ? Math.min(150, (W - 48) / 2) : 190, gap = 12;
     const boxes = alone ? [['pass', '⏭ Jätä väliin'], ['stop', '🏁 Lopeta']] : [['pass', '⏭ Jätä korkeus väliin']];
     const tw = boxes.length * bw + (boxes.length - 1) * gap;
