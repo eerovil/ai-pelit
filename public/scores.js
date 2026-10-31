@@ -78,6 +78,10 @@
     seivashyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('seivashyppy', 'taso'); } },
     // Highest bar cleared in a meet, metres; level: 'taso', the level the player is on.
     korkeushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('korkeushyppy', 'taso'); } },
+    // Most points in a combined event (#168), one list per number of events, the five first;
+    // level: 'taso', the level the player is on.
+    ottelu: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('ottelu', 'taso'); },
+      lists: [['lajit-5', 'Viisiottelu'], ['lajit-4', 'Neliottelu'], ['lajit-3', 'Kolmiottelu'], ['lajit-2', 'Kaksiottelu']] },
     // Most points on one leg of the night drive, one list per leg ('osa-N'); level: legs driven
     // to the end ('ajettu'; 'taso', the furthest leg open, stops at the last one).
     yoajo: {
