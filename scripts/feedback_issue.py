@@ -31,8 +31,9 @@ SITE = "https://pelit.vilpponen.fi/"
 REPO = "eerovil/ai-pelit"
 LABEL = "claude"  # the poller's ownership label: a Work starts on the issue
 # Who files the issues: AgentDeck's GitHub App, through the gh shim. Only its issues are trusted
-# when an interrupted run is finished: anyone may open an issue in a public repository.
-AUTHOR = "app/agentdeck-eerovil"
+# when an interrupted run is finished: anyone may open an issue in a public repository. `gh issue
+# list --json author` names it "app/agentdeck-eerovil", GitHub's REST API "agentdeck-eerovil[bot]".
+AUTHORS = {"app/agentdeck-eerovil", "agentdeck-eerovil[bot]"}
 KEY_FILE = Path.home() / ".local/share/ai-pelit/admin-key"
 TZ = ZoneInfo("Europe/Helsinki")
 
@@ -92,12 +93,12 @@ MARKER = re.compile(r"<!-- feedback-ids: ([0-9,]+) -->")
 def filed_earlier(feedback: list[dict], issues: list[dict]) -> dict[int, list[int]]:
     """Which of `feedback` an earlier run already filed, by its issue's feedback-ids marker:
     {issue number: [ids]}. A run that filed the issue but stopped before marking the items
-    (network, a restart) is finished here instead of filing them again. Only issues AUTHOR
+    (network, a restart) is finished here instead of filing them again. Only issues AUTHORS
     filed count, so a marker someone else writes cannot hide new feedback."""
     waiting = {f["id"] for f in feedback}
     found: dict[int, list[int]] = {}
     for issue in issues:
-        if (issue.get("author") or {}).get("login") != AUTHOR:
+        if (issue.get("author") or {}).get("login") not in AUTHORS:
             continue
         for m in MARKER.finditer(issue.get("body") or ""):
             ids = [int(i) for i in m[1].split(",") if i and int(i) in waiting]

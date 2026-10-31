@@ -35,12 +35,15 @@ def test_show_prints_the_feedback_in_full_for_the_agent():
 
 def test_a_run_that_stopped_after_filing_is_finished_by_its_own_issue_only():
     feedback = [{"id": 7}, {"id": 8}, {"id": 9}]
-    app = {"login": feedback_issue.AUTHOR}
-    issues = [
-        {"number": 201, "author": {"login": "joku"}, "body": "<!-- feedback-ids: 9 -->"},  # forged
-        {"number": 200, "author": app, "body": "...\n<!-- feedback-ids: 5,6,7,8 -->\n"},  # filed, never marked
-        {"number": 150, "author": app, "body": "<!-- feedback-ids: 1,2 -->"},  # older, all marked
-        {"number": 199, "author": None, "body": None},
-    ]
-    assert feedback_issue.filed_earlier(feedback, issues) == {200: [7, 8]}
+    # The App as `gh issue list --json author` names it (checked on #184), and as the REST API does.
+    for login in ("app/agentdeck-eerovil", "agentdeck-eerovil[bot]"):
+        app = {"is_bot": True, "login": login}
+        issues = [
+            {"number": 201, "author": {"login": "joku"}, "body": "<!-- feedback-ids: 9 -->"},  # forged
+            {"number": 202, "author": {"login": "agentdeck-eerovil"}, "body": "<!-- feedback-ids: 9 -->"},  # a look-alike user
+            {"number": 200, "author": app, "body": "...\n<!-- feedback-ids: 5,6,7,8 -->\n"},  # filed, never marked
+            {"number": 150, "author": app, "body": "<!-- feedback-ids: 1,2 -->"},  # older, all marked
+            {"number": 199, "author": None, "body": None},
+        ]
+        assert feedback_issue.filed_earlier(feedback, issues) == {200: [7, 8]}
     assert feedback_issue.filed_earlier(feedback, []) == {}
