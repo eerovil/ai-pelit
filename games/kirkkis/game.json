@@ -43,6 +43,13 @@
       "note": "Kolme uutta kenttää (koulun piha, metsä ja kirkonmäki) valikosta tai huoneesta, ja juoksu kuuluu: lähellä juoksevan askeleet 👣 näkyvät seinienkin läpi, ja tietokone-etsijä menee katsomaan.",
       "request": "Keksi kirkkikseen parannuksia. Ja uusia kenttiä",
       "issue": "eerovil/ai-pelit#109"
+    },
+    {
+      "n": 7,
+      "date": "2026-10-31",
+      "note": "Kaksi uutta leikkiä, Piilosta ja Hippa, spurtti ⚡, ohjaus kahdella peukalolla (vasen kävelee, oikea katsoo) ja näkö ilman rajaa: terävä lähellä, sumea kaukana ja sivuilla.",
+      "request": "Kirkkis lisää moodeja: normaali piilosta. Hippa. Lisätään sprint mahdollisuus ja jos keksit jotain joka tekisi kontrolloinnista luonnollisempaa (prototyyppi)\n",
+      "issue": "eerovil/ai-pelit#137"
     }
   ]
 }

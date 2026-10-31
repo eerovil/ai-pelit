@@ -1,0 +1,1528 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Kirkkis</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#24351c;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#2b2416}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(246,239,220,.94);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:38px;line-height:1.1;color:#7a3b8f;text-shadow:0 3px 0 #dcc3e6}
+  #sub{margin:-4px 0 4px;font-size:15px;font-weight:700;color:#8b6aa0}
+  #result{margin:0;font-size:22px;font-weight:800;max-width:320px}
+  #result.win{color:#3f8a3a}#result.lose{color:#c4432f}
+  #info{margin:0;font-size:15px;font-weight:600;color:#6a5638;max-width:320px;line-height:1.4}
+  .row{display:flex;gap:12px;margin-top:6px}
+  .row button{font:800 20px system-ui,sans-serif;padding:13px 14px;border:0;border-radius:16px;color:#fff;min-width:130px;white-space:nowrap}
+  #hide{background:#4f9a3a;box-shadow:0 4px 0 #2f6a22}
+  #seek{background:#d0533b;box-shadow:0 4px 0 #8f3020}
+  .row button:active{transform:translateY(3px);box-shadow:none}
+  .row button.next{outline:4px solid #f2c94c;outline-offset:2px}
+  #total{margin:4px 0 0;font-size:14px;color:#8a7658}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#7d6a4c;max-width:320px}
+  #maps{display:flex;gap:6px;justify-content:center;margin-top:4px}
+  #maps button{display:flex;flex-direction:column;align-items:center;gap:1px;width:72px;font:700 13px system-ui,sans-serif;padding:5px 0;border:3px solid transparent;border-radius:14px;background:#e9dcc0;color:#5a4528}
+  #maps button b{font-size:20px;line-height:1.1}
+  #maps button.on{border-color:#7a3b8f;background:#fff;color:#7a3b8f}
+  /* The game to play (v7, #137): Kirkkis, Piilosta or Hippa. */
+  #modes{display:flex;gap:6px;justify-content:center}
+  #modes button{white-space:nowrap;font:800 15px system-ui,sans-serif;padding:7px 9px;border:3px solid transparent;border-radius:14px;background:#e9dcc0;color:#5a4528}
+  #modes button.on{border-color:#7a3b8f;background:#7a3b8f;color:#fff}
+  #multi{font:800 17px system-ui,sans-serif;padding:11px 18px;border:0;border-radius:16px;color:#fff;background:#7a3b8f;box-shadow:0 4px 0 #4f2260;margin-top:4px}
+  #multi:active{transform:translateY(3px);box-shadow:none}
+  /* Upright the two columns are no boxes at all: the menu is one column, as in v4. */
+  .col{display:contents}
+  .help.short{display:none}
+  /* Sideways (#95): the title and the result on the left, the buttons on the right, a short help. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{flex-direction:row;gap:28px;padding:calc(env(safe-area-inset-top,0px) + 12px) max(24px, env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(24px, env(safe-area-inset-left,0px))}
+    .col{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex:0 1 340px;min-width:0}
+    .col:first-child{flex-basis:300px}
+    #menu h1{font-size:34px}
+    .row button{white-space:nowrap;min-width:120px;padding:13px 14px}
+    .help.long{display:none}
+    .help.short{display:block}
+    #modes button{font-size:14px;padding:6px 7px}
+  }
+  /* A short phone upright: the short help. */
+  @media (orientation: portrait) and (max-height: 700px) {
+    .help.long{display:none}
+    .help.short{display:block}
+    #menu{gap:8px}
+  }
+  @media (orientation: landscape) and (max-height: 400px) {
+    .help.short{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <div class="col">
+  <h1>⛪ Kirkkis</h1>
+  <p id="sub">Kirkonrotta</p>
+  <p id="result"></p>
+  <p id="info"></p>
+  <div id="modes"></div>
+  </div>
+  <div class="col">
+  <div class="row"><button id="hide">🙈 Piiloudu</button><button id="seek">👀 Etsi</button></div>
+  <div id="maps"></div>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="total"></p>
+  <p class="help short"></p>
+  <p class="help long"></p>
+  </div>
+</div>
+<script src="../../../rooms.js" data-game="kirkkis" data-min="2" data-max="5"></script>
+<script>
+'use strict';
+const R = window.AiPelitRooms; // the shared room library (public/rooms.js)
+const c = document.getElementById('c'), x = c.getContext('2d');
+const fog = document.createElement('canvas'), fx = fog.getContext('2d');
+const menu = document.getElementById('menu');
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:kirkkis:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+const stats = Object.assign({ kierrokset: 0, pelastuit: 0, kirkattiin: 0, kirkkasit: 0 }, load('tilasto', {}));
+
+// ---------- The games to play (v7, #137) ----------
+// Kirkkis is kirkonrotta as in v1–v6. Piilosta is plain hide and seek: whoever the seeker sees is
+// found, and there is no base to race to. Hippa is tag: whoever "it" touches is it next, and whoever
+// is it when the time runs out lost. Each has its own tally; Kirkkis keeps v1's.
+const MODES = {
+  kirkkis: { name: 'Kirkkis', sub: 'Kirkonrotta', emoji: '⛪', count: 10, time: 200, roles: ['🙈 Piiloudu', '👀 Etsi'],
+    short: 'Etsijä näkee piiloutujan ja juoksee pesään: ”Ainon nimet!”. Jos piiloutuja ehtii ensin, hän huutaa ”Omat nimet!”. Juoksu kuuluu 👣, hiipiminen ei.',
+    long: 'Yksi on etsijä, muut piiloutuvat. Jokainen näkee vain oman näkökenttänsä. Kun etsijä näkee piiloutujan, hänen pitää juosta pesään ja huutaa ”Ainon nimet!”. Jos piiloutuja ehtii pesään ensin, hän huutaa ”Omat nimet!” ja pelastuu. Jos joku on jo nimetty, se on ”Kaikki pelastettu!”: kaikki piiloutuvat uudestaan ja etsijä laskee taas. Juoksu kuuluu läheltä seinienkin läpi 👣, mutta hiipiminen ei. Spurtti ⚡ on nopea mutta lyhyt.' },
+  piilosta: { name: 'Piilosta', sub: 'Piiloleikki', emoji: '🙈', count: 10, time: 120, roles: ['🙈 Piiloudu', '👀 Etsi'],
+    short: 'Etsijä löytää sen, jonka näkee. Pysy piilossa, kunnes aika loppuu – voit hiipiä uuteen piiloon.',
+    long: 'Yksi on etsijä, muut piiloutuvat. Jokainen näkee vain oman näkökenttänsä. Kun etsijä näkee piiloutujan, hän huutaa ”Löysin Ainon!”. Pysy piilossa kahden minuutin ajan. Jos etsijä tulee lähelle, hiivi hiljaa uuteen piiloon: juoksu kuuluu 👣. Ensimmäinen löydetty etsii seuraavaksi.' },
+  hippa: { name: 'Hippa', sub: 'Hippaleikki', emoji: '🏃', count: 3, time: 90, roles: ['💨 Pakene', '✋ Ole hippa'],
+    short: 'Hippa koskee jotakuta, ja tämä on hippa. Joka on hippa, kun aika loppuu, hävisi. Spurtti ⚡ auttaa.',
+    long: 'Yksi on hippa, muut pakenevat. Jokainen näkee vain oman näkökenttänsä. Kun hippa koskee jotakuta, tämä on hippa ja laskee hetken. Takaisin heti ei saa hipata. Joka on hippa, kun puolitoista minuuttia on kulunut, hävisi. Spurtti ⚡ on nopea mutta lyhyt.' },
+};
+const MODE_IDS = Object.keys(MODES);
+let soloMode = MODES[load('moodi', 'kirkkis')] ? load('moodi', 'kirkkis') : 'kirkkis', mode = soloMode, roomMode = soloMode;
+const statsP = Object.assign({ kierrokset: 0, selvisit: 0, loydettiin: 0, loysit: 0 }, load('tilasto-piilosta', {}));
+const statsH = Object.assign({ kierrokset: 0, selvisit: 0, jait: 0, hippasit: 0 }, load('tilasto-hippa', {}));
+
+// ---------- The places to play, in metres (y grows down the screen) ----------
+const BASE_POLE = 0.3, BASE_REACH = 1.4;
+const BODY = 0.36;               // a player's radius
+const FOV = 110 * Math.PI / 180; // the field of view, and how far it reaches
+// v7 (#137): sight has no length of its own any more (10 m in v1–v6), only walls and things stop it.
+const RANGE = 60, NEAR = 1.3;    // anyone this close is heard and seen, whichever way you look
+// Side vision (v7, #137): a wider blur around the sharp view. In it one sees only that
+// someone moves there, as a shape with no colour or name; the computer seeker turns to look.
+const WIDE = 200 * Math.PI / 180, FAR = RANGE, STIR = 1;
+const BUSH_SEEN = 2.4;           // someone inside a bush is seen only from this close
+const HEAR = 7, LOUD = 2.6;      // running faster than LOUD m/s is heard this far, through walls (v6, #109)
+const SPEED = 4.0, BOT_HIDE = 3.4, BOT_RUN = 3.7, BOT_SEEK = 3.5, BOT_RACE = 3.85, BOT_CHASE = 3.9;
+// Sprint (v7, #137): half as fast again, for three seconds on a full breath, which comes back in five.
+const SPRINT = 1.5, BREATH = 3, REST = 5;
+// Hippa: a touch is this close; the new "it" waits FREEZE s, and cannot tag back the one who tagged them for NO_BACK s.
+// Piilosta: the seeker must be this close to tell who it is ("Löysin Ainon!"); farther off it is only a shape.
+const FIND = 6;
+// Kirkkis: farther than this one sees someone but cannot tell who it is, so cannot name them (v7: sight has no length).
+const KNOW = 10;
+// Piilosta: how long a still hider must stay in the seeker's sight before it is noticed from afar.
+const NOTICE = 1.5;
+const TAG = 2 * BODY + 0.2, FREEZE = 1.5, NO_BACK = 3;
+
+// Each map (v6, #109): its size, its base, solid things (which block both walking and sight) and
+// bushes (which can be walked into; whoever is inside is seen only from close by). `piha` is the
+// yard of v1–v5, unchanged. A row of `n` same things `d` metres apart is written once (`row()`).
+const row = (n, d, s) => Array.from({ length: n }, (_, i) => Object.assign({}, s, { x: s.x + i * d }));
+const MAPS = {
+  piha: { name: 'Piha', emoji: '🏡', w: 30, h: 44, base: { x: 15, y: 22 }, ground: '#7cbf5a',
+    solids: [
+      { k: 'talo', x: 2, y: 2, w: 10, h: 7 }, { k: 'sauna', x: 21, y: 3, w: 6, h: 5 }, { k: 'vaja', x: 3, y: 34, w: 6, h: 5 },
+      { k: 'auto', x: 21, y: 34, w: 2.2, h: 4.4 }, { k: 'halot', x: 23.5, y: 24, w: 4, h: 1.2 }, { k: 'aita', x: 6, y: 17, w: 0.8, h: 9 },
+      { k: 'maja', x: 21.5, y: 14.5, w: 3, h: 3 },
+      { k: 'puu', x: 10, y: 13, r: 0.9 }, { k: 'puu', x: 19, y: 29, r: 0.9 }, { k: 'puu', x: 26, y: 41, r: 0.9 },
+      { k: 'puu', x: 7, y: 30, r: 0.9 }, { k: 'puu', x: 27, y: 9.5, r: 0.8 }, { k: 'kivi', x: 13, y: 37, r: 1.2 },
+    ],
+    bushes: [
+      { x: 15, y: 11, r: 1.5 }, { x: 3, y: 13, r: 1.4 }, { x: 27.5, y: 19, r: 1.4 }, { x: 11, y: 27, r: 1.5 },
+      { x: 26, y: 30, r: 1.4 }, { x: 16, y: 41, r: 1.5 }, { x: 2.5, y: 24, r: 1.3 }, { x: 9, y: 41.5, r: 1.3 },
+    ],
+    // Gravel around the base, and a path to the house.
+    decor(g) { g.fillStyle = '#d8c79a'; g.beginPath(); g.arc(15, 22, 2.4, 0, 7); g.fill(); g.fillRect(14.4, 9, 1.2, 13); },
+  },
+  koulu: { name: 'Koulu', emoji: '🏫', w: 34, h: 46, base: { x: 17, y: 27 }, ground: '#7cbf5a',
+    solids: [
+      { k: 'koulu', x: 2, y: 2, w: 20, h: 9 }, { k: 'sali', x: 24, y: 2, w: 8, h: 12 }, { k: 'katos', x: 2, y: 15, w: 7, h: 2.5 },
+      { k: 'teline', x: 22, y: 20, w: 3, h: 3 }, { k: 'liuku', x: 27, y: 24, w: 1.4, h: 4 }, { k: 'roskis', x: 2, y: 38, w: 4, h: 3 },
+      { k: 'auto', x: 12, y: 40, w: 2.2, h: 4.4 }, { k: 'auto', x: 15.5, y: 40, w: 2.2, h: 4.4 },
+      { k: 'aita', x: 14, y: 34, w: 6, h: 0.6 }, { k: 'penkki', x: 7, y: 30, w: 3, h: 0.6 },
+      { k: 'puu', x: 6, y: 24, r: 0.9 }, { k: 'puu', x: 29, y: 40, r: 0.9 }, { k: 'puu', x: 11, y: 19, r: 0.8 },
+      { k: 'puu', x: 31, y: 31, r: 0.9 }, { k: 'kivi', x: 24, y: 36, r: 1.1 },
+    ],
+    bushes: [
+      { x: 17, y: 14.5, r: 1.5 }, { x: 3, y: 28, r: 1.4 }, { x: 31, y: 18, r: 1.3 }, { x: 9, y: 35, r: 1.4 },
+      { x: 22, y: 43, r: 1.4 }, { x: 4, y: 44, r: 1.3 }, { x: 28, y: 16.5, r: 1.3 }, { x: 32, y: 44.5, r: 1.2 },
+    ],
+    // Asphalt in front of the school, a sandbox, and a painted ball field.
+    decor(g) {
+      g.fillStyle = '#a9a69c'; g.fillRect(0, 11, 34, 3.2); g.fillRect(15.6, 14, 2.8, 11);
+      g.fillStyle = '#d8c79a'; g.beginPath(); g.arc(17, 27, 2.4, 0, 7); g.fill();
+      g.fillStyle = '#8a6a3c'; g.fillRect(12.6, 20.6, 3.8, 3.8); g.fillStyle = '#ecd9a0'; g.fillRect(13, 21, 3, 3);
+      g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 0.12; g.strokeRect(21, 29, 11, 9);
+      g.beginPath(); g.moveTo(26.5, 29); g.lineTo(26.5, 38); g.stroke(); g.beginPath(); g.arc(26.5, 33.5, 1.5, 0, 7); g.stroke();
+    },
+  },
+  metsa: { name: 'Metsä', emoji: '🌲', w: 34, h: 48, base: { x: 17, y: 24 }, ground: '#5e9e48',
+    solids: [
+      { k: 'laavu', x: 24, y: 3, w: 5, h: 3.5 }, { k: 'kelo', x: 4, y: 31, w: 6, h: 0.8 }, { k: 'kelo', x: 23, y: 40, w: 0.8, h: 5 },
+      ...[[5, 5, 1.1], [11, 9, 1], [8, 16, 1.2], [27, 14, 1.1], [30, 22, 1], [13, 33, 1.1], [26, 30, 1.2], [6, 40, 1],
+          [18, 44, 1.1], [29, 44, 1], [20, 8, 1], [3, 25, 1], [23, 19, 0.9]].map(([x, y, r]) => ({ k: 'kuusi', x, y, r })),
+      ...[[14, 17], [10, 26], [21, 30], [31, 8], [16, 39]].map(([x, y]) => ({ k: 'koivu', x, y, r: 0.7 })),
+      ...[[6, 21, 1.6], [28, 37, 1.8], [12, 44, 1.3], [19, 13, 1.4]].map(([x, y, r]) => ({ k: 'kivi', x, y, r })),
+    ],
+    bushes: [
+      { x: 14, y: 4, r: 1.5 }, { x: 31, y: 30, r: 1.4 }, { x: 9, y: 36, r: 1.5 }, { x: 25, y: 10, r: 1.4 },
+      { x: 3, y: 12, r: 1.4 }, { x: 20, y: 36, r: 1.4 }, { x: 32, y: 41, r: 1.3 }, { x: 4, y: 46, r: 1.3 }, { x: 11, y: 21.5, r: 1.3 },
+    ],
+    // A trodden path from the base to the lean-to, and patches of moss.
+    decor(g) {
+      g.fillStyle = '#4f8a3c';
+      for (const [x, y, r] of [[8, 8, 3], [27, 25, 3.5], [10, 41, 3], [30, 5, 2.5], [21, 41, 2.5]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      g.strokeStyle = '#a4875a'; g.lineWidth = 1; g.beginPath(); g.moveTo(17, 24); g.quadraticCurveTo(24, 16, 26.5, 7); g.stroke();
+      g.fillStyle = '#a4875a'; g.beginPath(); g.arc(17, 24, 2.2, 0, 7); g.fill();
+    },
+  },
+  kirkko: { name: 'Kirkko', emoji: '⛪', w: 36, h: 46, base: { x: 18, y: 30 }, ground: '#86c062',
+    solids: [
+      { k: 'kirkko', x: 11, y: 4, w: 14, h: 12 }, { k: 'tapuli', x: 29, y: 6, w: 4, h: 4 }, { k: 'vaja', x: 2, y: 2, w: 5, h: 4 },
+      { k: 'muuri', x: 2, y: 20, w: 12, h: 0.8 }, { k: 'muuri', x: 22, y: 20, w: 12, h: 0.8 },
+      // The graves, in rows at both sides of the path down from the base.
+      ...[36, 39, 42].flatMap(y => [...row(4, 2.5, { k: 'hauta', x: 3, y, w: 0.9, h: 0.35 }), ...row(4, 2.5, { k: 'hauta', x: 24, y, w: 0.9, h: 0.35 })]),
+      ...[[5, 9], [31, 15], [4, 27], [32, 27], [18, 42.5]].map(([x, y]) => ({ k: 'koivu', x, y, r: 0.8 })),
+      { k: 'kuusi', x: 6, y: 15, r: 1 },
+    ],
+    bushes: [
+      { x: 27, y: 24, r: 1.5 }, { x: 9, y: 25, r: 1.5 }, { x: 8, y: 31, r: 1.4 }, { x: 28, y: 32, r: 1.4 },
+      { x: 14, y: 40, r: 1.4 }, { x: 22, y: 40, r: 1.4 }, { x: 3, y: 44.5, r: 1.2 }, { x: 33, y: 44.5, r: 1.2 }, { x: 33, y: 2.5, r: 1.3 },
+    ],
+    // Gravel paths: from the base up through the gate in the wall to the church door, and to the bell tower.
+    decor(g) {
+      g.fillStyle = '#d8c79a'; g.beginPath(); g.arc(18, 30, 2.4, 0, 7); g.fill();
+      g.fillRect(17, 16, 2, 14); g.fillRect(17.5, 30, 1, 16); g.fillRect(18, 11, 13, 1.4); g.fillRect(25, 11, 1.4, 6);
+      g.fillStyle = '#e46a9b';
+      for (const s of SOLIDS) if (s.k === 'hauta') { g.beginPath(); g.arc(s.x + 0.45, s.y + 0.75, 0.16, 0, 7); g.fill(); }
+    },
+  },
+};
+const MAP_IDS = Object.keys(MAPS);
+// The map in play, and what follows from it. loadMap() sets them all.
+let camSnap = true, frameDt = 1 / 60; // jump the camera to its place next frame; the last frame's length
+let mapId = '', MAP, WW, WH, BASE, SOLIDS, BUSHES;
+
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+const rand = (a, b) => a + Math.random() * (b - a);
+function bushAt(px, py) { return BUSHES.find(b => Math.hypot(px - b.x, py - b.y) < b.r - 0.15) || null; }
+
+// ---------- Sight: rays against the solid things ----------
+function rayRect(ox, oy, dx, dy, r) {
+  let t0 = -Infinity, t1 = Infinity;
+  if (dx === 0) { if (ox < r.x || ox > r.x + r.w) return Infinity; }
+  else { let a = (r.x - ox) / dx, b = (r.x + r.w - ox) / dx; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); }
+  if (dy === 0) { if (oy < r.y || oy > r.y + r.h) return Infinity; }
+  else { let a = (r.y - oy) / dy, b = (r.y + r.h - oy) / dy; if (a > b) [a, b] = [b, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, b); }
+  if (t0 > t1 || t1 < 0) return Infinity;
+  return Math.max(0, t0);
+}
+function rayCirc(ox, oy, dx, dy, s) {
+  const px = ox - s.x, py = oy - s.y, b = px * dx + py * dy, d = b * b - (px * px + py * py - s.r * s.r);
+  if (d < 0) return Infinity;
+  const q = Math.sqrt(d);
+  if (-b - q >= 0) return -b - q;
+  return -b + q >= 0 ? 0 : Infinity;
+}
+// How far one can see from (ox, oy) in the direction a.
+function castRay(ox, oy, a, max) {
+  const dx = Math.cos(a), dy = Math.sin(a);
+  let t = max;
+  if (dx > 0) t = Math.min(t, (WW - ox) / dx); else if (dx < 0) t = Math.min(t, -ox / dx);
+  if (dy > 0) t = Math.min(t, (WH - oy) / dy); else if (dy < 0) t = Math.min(t, -oy / dy);
+  for (const s of SOLIDS) t = Math.min(t, s.r ? rayCirc(ox, oy, dx, dy, s) : rayRect(ox, oy, dx, dy, s));
+  return t;
+}
+function clearSight(a, b) { const d = dist(a, b); return castRay(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x), d) >= d - 0.05; }
+
+// Can o see the point p? The counting seeker has their eyes shut.
+function seesPoint(o, p) {
+  if (o.st === 'count') return false;
+  const d = dist(o, p);
+  if (d < NEAR) return true;
+  if (d > RANGE) return false;
+  if (Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - o.a)) > FOV / 2) return false;
+  return clearSight(o, p);
+}
+function canSee(o, t) {
+  if (o === t) return true;
+  if (!seesPoint(o, t)) return false;
+  return !bushAt(t.x, t.y) || dist(o, t) < BUSH_SEEN;
+}
+// Has o looked into this hiding place? A bush only counts from as close as someone in it is seen.
+function spotChecked(o, s) { return seesPoint(o, s) && (!s.bush || dist(o, s) < BUSH_SEEN); }
+// Does o glimpse p from the side of its eye, or far off: p moves, in the open, within the blur but not seen sharp?
+function glimpses(o, p) {
+  if (o === p || o.st === 'count' || !((p.moving || 0) > STIR)) return false;
+  const d = dist(o, p);
+  if (d > FAR || Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - o.a)) > WIDE / 2) return false;
+  return !bushAt(p.x, p.y) && !canSee(o, p) && clearSight(o, p);
+}
+// Running is heard (v6, #109): o hears p run within HEAR metres when it cannot see p, through walls
+// too. The seeker hears the hiders still out, and a hider still out hears the seeker. Sneaking is quiet.
+function hears(o, p) {
+  if (phase !== 'seek' || o === p || o.st === 'count' || !((p.moving || 0) > LOUD) || dist(o, p) >= HEAR || canSee(o, p)) return false;
+  return o === seeker ? p.role === 'hider' && active(p) : p === seeker && active(o);
+}
+// The outline of what o sees: a fan of rays across the field of view.
+// The player's own view uses more rays (v7), so its far edge does not flicker as one moves.
+function viewPoly(o, fov = FOV, range = RANGE, n = 64) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = o.a - fov / 2 + fov * i / n, d = castRay(o.x, o.y, a, range);
+    pts.push(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d);
+  }
+  return pts;
+}
+
+// ---------- Walking: a grid of free cells and A* paths across it ----------
+const CELL = 0.5;
+let GW, GH, blocked;
+function solidNear(px, py, m) {
+  if (px < m || py < m || px > WW - m || py > WH - m) return true;
+  if (Math.hypot(px - BASE.x, py - BASE.y) < BASE_POLE + m) return true;
+  for (const s of SOLIDS) {
+    if (s.r) { if (Math.hypot(px - s.x, py - s.y) < s.r + m) return true; }
+    else if (px > s.x - m && px < s.x + s.w + m && py > s.y - m && py < s.y + s.h + m) return true;
+  }
+  return false;
+}
+const cellOf = (px, py) => Math.max(0, Math.min(GH - 1, Math.floor(py / CELL))) * GW + Math.max(0, Math.min(GW - 1, Math.floor(px / CELL)));
+const walkable = (px, py) => !blocked[cellOf(px, py)];
+function nearestFree(k) {
+  if (!blocked[k]) return k;
+  const ci = k % GW, cj = (k - ci) / GW;
+  for (let r = 1; r < 20; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+    const i = ci + di, j = cj + dj;
+    if (i >= 0 && j >= 0 && i < GW && j < GH && !blocked[j * GW + i]) return j * GW + i;
+  }
+  return k;
+}
+function clearWalk(ax, ay, bx, by) {
+  const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 0.2);
+  for (let i = 1; i <= n; i++) if (!walkable(ax + (bx - ax) * i / n, ay + (by - ay) * i / n)) return false;
+  return true;
+}
+function findPath(from, to) {
+  const s = nearestFree(cellOf(from.x, from.y)), g = nearestFree(cellOf(to.x, to.y)), N = GW * GH;
+  const cost = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+  const heap = [], hf = [];
+  const push = (k, f) => { heap.push(k); hf.push(f); let i = heap.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (hf[p] <= hf[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; [hf[p], hf[i]] = [hf[i], hf[p]]; i = p; } };
+  const pop = () => { const top = heap[0], lk = heap.pop(), lf = hf.pop();
+    if (heap.length) { heap[0] = lk; hf[0] = lf; let i = 0;
+      for (;;) { const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < heap.length && hf[l] < hf[m]) m = l; if (r < heap.length && hf[r] < hf[m]) m = r;
+        if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; [hf[m], hf[i]] = [hf[i], hf[m]]; i = m; } }
+    return top; };
+  const gi = g % GW, gj = (g - gi) / GW;
+  const h = k => { const di = Math.abs(k % GW - gi), dj = Math.abs(Math.floor(k / GW) - gj); return Math.max(di, dj) + 0.414 * Math.min(di, dj); };
+  cost[s] = 0; push(s, h(s));
+  while (heap.length) {
+    const k = pop();
+    if (done[k]) continue;
+    done[k] = 1;
+    if (k === g) break;
+    const ki = k % GW, kj = (k - ki) / GW;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      if (!di && !dj) continue;
+      const i = ki + di, j = kj + dj;
+      if (i < 0 || j < 0 || i >= GW || j >= GH) continue;
+      const n = j * GW + i;
+      if (blocked[n] || done[n]) continue;
+      if (di && dj && (blocked[kj * GW + i] || blocked[j * GW + ki])) continue; // no cutting corners
+      const nc = cost[k] + (di && dj ? 1.414 : 1);
+      if (nc < cost[n]) { cost[n] = nc; prev[n] = k; push(n, nc + h(n)); }
+    }
+  }
+  if (!done[g]) return [];
+  const cells = [];
+  for (let k = g; k !== -1 && k !== s; k = prev[k]) cells.push(k);
+  cells.reverse();
+  const pts = cells.map(k => ({ x: (k % GW + 0.5) * CELL, y: (Math.floor(k / GW) + 0.5) * CELL }));
+  if (pts.length && walkable(to.x, to.y)) pts[pts.length - 1] = { x: to.x, y: to.y };
+  // Straighten the path: keep only the corners.
+  const out = [];
+  let at = from, i = 0;
+  while (i < pts.length) {
+    let j = pts.length - 1;
+    while (j > i && !clearWalk(at.x, at.y, pts[j].x, pts[j].y)) j--;
+    out.push(pts[j]); at = pts[j]; i = j + 1;
+  }
+  return out;
+}
+
+// Hiding places: free spots that cannot be seen from the base, or inside a bush.
+let SPOTS = [];
+// Puts a map in play: the grid of free cells and the hiding places follow from it.
+function loadMap(id) {
+  if (!MAPS[id]) id = 'piha';
+  if (id === mapId) return;
+  mapId = id; MAP = MAPS[id]; camSnap = true;
+  WW = MAP.w; WH = MAP.h; BASE = MAP.base; SOLIDS = MAP.solids; BUSHES = MAP.bushes;
+  GW = WW / CELL; GH = WH / CELL; blocked = new Uint8Array(GW * GH);
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) blocked[j * GW + i] = solidNear((i + 0.5) * CELL, (j + 0.5) * CELL, BODY + 0.08) ? 1 : 0;
+  SPOTS = [];
+  for (let sy = 1.5; sy < WH - 1; sy += 1.5) for (let sx = 1.5; sx < WW - 1; sx += 1.5) {
+    if (!walkable(sx, sy) || Math.hypot(sx - BASE.x, sy - BASE.y) < 7) continue;
+    const bush = !!bushAt(sx, sy);
+    if (bush || !clearSight(BASE, { x: sx, y: sy })) SPOTS.push({ x: sx, y: sy, bush, seen: -99 });
+  }
+}
+// The map this phone last played alone, and the one its room plays.
+let soloMap = MAPS[load('kentta', 'piha')] ? load('kentta', 'piha') : 'piha', roomMap = soloMap;
+loadMap(soloMap);
+
+// Pushes a body out of solid things and keeps it inside the fence.
+function collide(p) {
+  for (const s of SOLIDS) {
+    let nx, ny, r;
+    if (s.r) { nx = s.x; ny = s.y; r = s.r; }
+    else { nx = Math.max(s.x, Math.min(s.x + s.w, p.x)); ny = Math.max(s.y, Math.min(s.y + s.h, p.y)); r = 0; }
+    const dx = p.x - nx, dy = p.y - ny, d = Math.hypot(dx, dy);
+    if (d < r + BODY) {
+      if (d > 1e-6) { p.x = nx + dx / d * (r + BODY); p.y = ny + dy / d * (r + BODY); }
+      else p.y = s.r ? s.y + s.r + BODY : s.y - BODY;
+    }
+  }
+  const dx = p.x - BASE.x, dy = p.y - BASE.y, d = Math.hypot(dx, dy);
+  if (d < BASE_POLE + BODY && d > 1e-6) { p.x = BASE.x + dx / d * (BASE_POLE + BODY); p.y = BASE.y + dy / d * (BASE_POLE + BODY); }
+  p.x = Math.max(BODY, Math.min(WW - BODY, p.x)); p.y = Math.max(BODY, Math.min(WH - BODY, p.y));
+}
+
+// ---------- Players ----------
+// `ctrl` says who moves a person on this phone: 'me' (this phone's finger), 'bot' (the computer,
+// run by the phone that runs the round), 'remote' (another phone, as the host hears it) or 'net'
+// (anyone, as a guest phone hears it from the host). `id` is the phone's room id.
+function person(name, color, isPlayer) {
+  return { name, color, isPlayer, ctrl: isPlayer ? 'me' : 'bot', id: null, x: BASE.x, y: BASE.y, a: 0, role: 'hider', st: 'hiding', left: false,
+           path: [], goal: null, repath: 0, look: 0, brave: 30, saw: null, peek: false, run: false, spot: null, bubble: '', bt: 0, moving: 0, stuck: 0, lx: 0, ly: 0,
+           breath: 1, spr: false, winded: false, freeze: 0, from: null, noBack: 0 };
+}
+const COLORS = ['#f2c94c', '#e46a9b', '#4a8fe0', '#9b6ae0', '#e07b3a'];
+const BOT_NAMES = ['Aino', 'Eetu', 'Iida', 'Onni', 'Venla'];
+// Alone: the player and four computer players, as in v1. With friends the cast is made per round.
+const SOLO = [person('Sinä', COLORS[0], true), ...BOT_NAMES.slice(0, 4).map((n, i) => person(n, COLORS[i + 1]))];
+let player = SOLO[0], people = SOLO, bots = SOLO.slice(1);
+let seeker = bots[0], nextSeeker = null, firstCaught = null;
+let played = false, phase = 'menu', timer = 0, time = 0, msg = '', msgT = 0, endT = 0, spotScan = 0;
+// While the seeker counts again after "Kaikki pelastettu!", the seek clock keeps running here.
+let seekLeft = null;
+const hiders = () => people.filter(p => p.role === 'hider');
+const active = p => p.st === 'hiding' || p.st === 'spotted';
+const M = () => MODES[mode];
+// Hippa: p is "it" now. Only the roles change here; whether one is still counting is the state's.
+function setIt(p) { seeker = p; for (const q of people) q.role = q === p ? 'seeker' : 'hider'; }
+// Sprinting spends breath, and resting brings it back; an empty breath must come back a third first.
+function breathe(p, dt) {
+  if (p.spr) { p.breath = Math.max(0, p.breath - dt / BREATH); if (!p.breath) p.winded = true; }
+  else p.breath = Math.min(1, p.breath + dt / REST);
+  if (p.winded && p.breath > 0.33) p.winded = false;
+}
+const canSprint = p => !p.winded && p.breath > 0;
+function say(p, text, t = 1.8) { p.bubble = text; p.bt = t; }
+function toast(text, t = 2) { msg = text; msgT = t; }
+// "Ainon", "Mikaelin": the genitive of a name, for "Näin Ainon!".
+const gen = n => /[aeiouyäö]$/i.test(n) ? n + 'n' : n + 'in';
+
+// Something the players should hear about. The phone running the round passes it on to the others,
+// and each phone tells it from its own player's side ("Sinut nähtiin!" or "Näit Ainon!").
+function happen(ev) { if (R.isHost) events.push(ev); show(ev); }
+function show(ev) {
+  const p = people[ev[1]];
+  switch (ev[0]) {
+    case 'count':
+      if (mode === 'hippa') {
+        say(seeker, '1, 2, 3…', 2);
+        toast(seeker === player ? 'Olet hippa! Laske…' : `${seeker.name} on hippa – pakene!`, 2.5);
+      } else if (seeker === player) toast('Laske silmät kiinni!', 2);
+      else { say(seeker, '1, 2, 3…', 2); toast(`${seeker.name} laskee – piiloudu!`, 2.5); }
+      break;
+    case 'ready': say(seeker, 'Valmis tai ei, täältä tullaan!', 2.2); sfx.ready(); break;
+    case 'say': if (p) say(p, ev[2], ev[3]); break;
+    case 'spot':
+      if (!p) break;
+      if (seeker === player) toast(`Näit ${gen(p.name)}! Pesään!`);
+      else if (p === player) toast('Sinut nähtiin! Juokse pesään!');
+      say(seeker, `Näin ${p === player ? 'sinut' : gen(p.name)}!`);
+      sfx.spot();
+      break;
+    case 'save':
+      if (!p) break;
+      say(p, 'Omat nimet!', 2);
+      if (p === player) toast('Pelastuit! 🎉', 2.5); else if (seeker === player) toast(`${p.name} pelastui`);
+      sfx.save();
+      break;
+    case 'kirk': {
+      const seen = ev[1].map(i => people[i]).filter(Boolean);
+      say(seeker, seen.map(h => (h === player ? 'Sinun' : gen(h.name)) + ' nimet').join(', ') + '!', 2.4);
+      if (seen.includes(player)) toast('Sinut nimettiin! 😱', 2.5); else if (seeker === player) toast('Nimesit! ✋', 1.6);
+      sfx.kirkkis();
+      break;
+    }
+    case 'all': // "Kaikki pelastettu!": everyone hides again, and the same seeker counts at the base.
+      if (p) say(p, 'Omat nimet! Kaikki pelastettu!', 2.6);
+      if (seeker === player) { toast('Kaikki pelastettu! 😮', 2.6); toBase(player, people.indexOf(player)); }
+      else toast('Kaikki pelastettu! Piiloudu!', 2.6);
+      say(seeker, '1, 2, 3…', 2.6);
+      sfx.save();
+      break;
+    case 'timeup': toast('Aika loppui!', 2); break;
+    case 'found': // Piilosta: seen is found.
+      if (!p) break;
+      say(seeker, `Löysin ${p === player ? 'sinut' : gen(p.name)}!`, 2);
+      if (p === player) toast('Sinut löydettiin! 😱', 2.5); else if (seeker === player) toast(`Löysit ${gen(p.name)}! 🔎`, 1.8);
+      sfx.spot();
+      break;
+    case 'tag': { // Hippa: p is it now, tagged by ev[2].
+      const by = people[ev[2]];
+      if (!p || !by) break;
+      if (seeker !== p) setIt(p);
+      p.st = 'seek'; by.st = 'hiding'; p.freeze = FREEZE; p.from = by; p.noBack = NO_BACK; by.freeze = 0;
+      say(by, 'Hippa!', 1.4); say(p, '1, 2, 3…', FREEZE);
+      if (p === player) toast('Sinut hipattiin! Olet hippa ✋', 2.4);
+      else if (by === player) toast(`Hippasit ${gen(p.name)}! Pakene! 💨`, 2.2);
+      else toast(`${p.name} on hippa`, 1.6);
+      if (by === player) { statsH.hippasit++; save('tilasto-hippa', statsH); }
+      sfx.kirkkis();
+      break;
+    }
+  }
+}
+
+function useSolo() { people = SOLO; player = SOLO[0]; bots = SOLO.slice(1); }
+function newRound(role) {
+  useSolo(); loadMap(soloMap); mode = soloMode;
+  setupRound(role === 'seek' ? player : (nextSeeker && bots.includes(nextSeeker) ? nextSeeker : bots[Math.floor(Math.random() * bots.length)]));
+}
+// Puts everyone at the base, the seeker counting, and the computer hiders off to their places.
+function setupRound(who) {
+  camSnap = true;
+  seeker = who;
+  firstCaught = null; seekLeft = null;
+  people.forEach((p, i) => {
+    toBase(p, i);
+    p.role = p === seeker ? 'seeker' : 'hider'; p.st = p === seeker ? 'count' : 'hiding';
+    p.left = false; p.path = []; p.goal = null; p.repath = 0; p.run = false; p.spot = null; p.bt = 0; p.look = 0;
+    p.brave = rand(20, 55); p.saw = null; p.peek = false;
+    p.breath = 1; p.spr = false; p.winded = false; p.freeze = 0; p.from = null; p.noBack = 0; p.tags = 0; p.wait = 0;
+  });
+  seeker.a = Math.atan2(BASE.y - seeker.y, BASE.x - seeker.x); // face the base, eyes shut
+  pickSpots();
+  phase = 'count'; timer = M().count; msg = ''; msgT = 0; letGo(); prints = [];
+  show(['count', 0]);
+  menu.classList.add('hidden');
+}
+// Someone's place in the ring around the base where a round starts.
+function toBase(p, i) {
+  const a = i / people.length * Math.PI * 2;
+  p.x = BASE.x + Math.cos(a) * 1.1; p.y = BASE.y + Math.sin(a) * 1.1; p.a = a;
+  if (p === seeker) p.a = Math.atan2(BASE.y - p.y, BASE.x - p.x);
+}
+// Each hiding bot picks its own place, away from the others'; the seeker forgets where it looked.
+function pickSpots() {
+  SPOTS.forEach(s => { s.seen = -99; });
+  const taken = [];
+  for (const b of bots) {
+    if (b === seeker) continue;
+    const free = SPOTS.filter(s => dist(s, BASE) < 19 && taken.every(t => dist(t, s) > 4));
+    b.spot = free[Math.floor(Math.random() * free.length)] || SPOTS[0];
+    taken.push(b.spot); b.goal = b.spot;
+  }
+}
+// A computer player takes over someone who is away: a hider gets the nearest hiding place.
+function botTakes(p) {
+  p.ctrl = 'bot'; p.path = []; p.repath = 0; p.run = false; p.peek = false; p.brave = rand(10, 30);
+  if (p.role === 'hider') {
+    p.spot = SPOTS.reduce((a, s) => dist(p, s) < dist(p, a) ? s : a, SPOTS[0]);
+    p.goal = active(p) ? (p.st === 'spotted' ? BASE : p.spot) : null;
+  } else p.goal = null;
+  if (!bots.includes(p)) bots.push(p);
+}
+
+// ---------- Rules ----------
+function startSeek() {
+  phase = 'seek'; timer = seekLeft ?? M().time; seekLeft = null; seeker.st = 'seek';
+  happen(['ready', 0]);
+}
+function spot(h) {
+  h.st = 'spotted';
+  happen(['spot', people.indexOf(h)]);
+}
+function rules() {
+  if (mode === 'piilosta') return rulesHide();
+  if (mode === 'hippa') return rulesTag();
+  for (const h of hiders()) {
+    if (!active(h)) continue;
+    if (!h.left && dist(h, BASE) > 5) h.left = true;
+    // A hider who touches the base first is free ("Omat nimet!"), and frees everyone once
+    // someone has been named: "Kaikki pelastettu!".
+    if (h.left && dist(h, BASE) < BASE_REACH) {
+      if (hiders().some(o => o.st === 'caught')) return allSaved(h);
+      h.st = 'saved';
+      happen(['save', people.indexOf(h)]);
+      continue;
+    }
+    if (h.st === 'hiding' && dist(seeker, h) <= KNOW && canSee(seeker, h)) spot(h);
+  }
+  // The seeker at the base calls out everyone they have seen.
+  const seen = hiders().filter(h => h.st === 'spotted');
+  if (seeker.st === 'seek' && seen.length && dist(seeker, BASE) < BASE_REACH) {
+    seen.forEach(h => { h.st = 'caught'; h.run = false; if (!firstCaught) firstCaught = h; });
+    happen(['kirk', seen.map(h => people.indexOf(h))]);
+  }
+  if (!hiders().some(active)) end();
+  else if (timer <= 0) timeUp();
+}
+// Piilosta: whoever the seeker sees is found. Nobody races to the base.
+function rulesHide() {
+  for (const h of hiders()) {
+    if (h.st !== 'hiding' || dist(seeker, h) > FIND || !canSee(seeker, h)) continue;
+    h.st = 'caught'; h.run = false; h.peek = false;
+    if (!firstCaught) firstCaught = h;
+    happen(['found', people.indexOf(h)]);
+  }
+  if (!hiders().some(active)) end();
+  else if (timer <= 0) timeUp();
+}
+// Hippa: "it" touches someone, who is it next. Not the one who just tagged them, for a moment.
+function rulesTag() {
+  if (timer <= 0) { happen(['timeup', 0]); return end(); }
+  if (seeker.freeze > 0) return;
+  for (const h of hiders()) {
+    if (dist(h, seeker) > TAG || (h === seeker.from && seeker.noBack > 0)) continue;
+    const by = seeker;
+    setIt(h); h.st = 'seek'; by.st = 'hiding'; h.freeze = FREEZE; h.from = by; h.noBack = NO_BACK;
+    h.tags = (h.tags || 0) + 1; h.path = []; h.goal = null; by.path = []; by.goal = null;
+    happen(['tag', people.indexOf(h), people.indexOf(by)]);
+    return;
+  }
+}
+// Whoever is still out when the time is up is saved.
+function timeUp() {
+  hiders().filter(active).forEach(h => { h.st = 'saved'; });
+  happen(['timeup', 0]); end();
+}
+// "Kaikki pelastettu!": every hider, the saved and the named too, hides again, and the same seeker
+// counts at the base again. The seek clock goes on from where it was.
+function allSaved(h) {
+  seekLeft = timer; timer = M().count; phase = 'count'; firstCaught = null;
+  seeker.st = 'count'; seeker.goal = null; seeker.path = []; seeker.look = 0;
+  toBase(seeker, people.indexOf(seeker));
+  for (const p of hiders()) {
+    p.st = 'hiding'; p.left = false; p.run = false; p.peek = false; p.saw = null; p.path = []; p.repath = 0;
+    p.brave = rand(20, 55); p.bench = null;
+  }
+  pickSpots();
+  happen(['all', people.indexOf(h)]);
+}
+function end() {
+  // As in the playground, the first one caught seeks next; in Hippa, whoever is it.
+  roundOver(mode === 'hippa' ? seeker : firstCaught || seeker);
+  if (R.isHost) {
+    hostSend();
+    // Every phone in the round gets its end, one away at the time too when it is back (deliver()).
+    R.deliver(Object.assign(roundMsg('kfin'), { next: people.indexOf(nextSeeker) }));
+    R.endRound();
+  }
+}
+// Every phone keeps its own player's tally. The keys keep v1's words (kirkattiin, kirkkasit).
+function roundOver(next) {
+  phase = 'end'; endT = 2.2; played = true; letGo();
+  lastRes = result(); lastMode = mode;
+  const found = hiders().filter(h => h.st === 'caught').length;
+  if (mode === 'piilosta') {
+    statsP.kierrokset++;
+    if (seeker === player) statsP.loysit += found; else if (player.st === 'caught') statsP.loydettiin++; else statsP.selvisit++;
+    save('tilasto-piilosta', statsP);
+  } else if (mode === 'hippa') {
+    statsH.kierrokset++;
+    if (seeker === player) statsH.jait++; else statsH.selvisit++;
+    save('tilasto-hippa', statsH);
+  } else {
+    stats.kierrokset++;
+    if (seeker === player) stats.kirkkasit += found;
+    else if (player.st === 'saved') stats.pelastuit++; else stats.kirkattiin++;
+    save('tilasto', stats);
+  }
+  nextSeeker = next;
+}
+
+// ---------- Bots ----------
+// A computer player sprints (v7) when `fast` and it has the breath for it.
+function steer(p, speed, dt, fast) {
+  p.spr = !!fast && canSprint(p);
+  if (p.spr) speed *= SPRINT;
+  if (p.goal && (p.repath <= 0 || !p.path.length && dist(p, p.goal) > 0.4)) { p.path = findPath(p, p.goal); p.repath = 1.5; }
+  p.repath -= dt;
+  while (p.path.length && dist(p, p.path[0]) < 0.25) p.path.shift();
+  if (!p.path.length) { p.moving = 0; p.spr = false; return; }
+  const t = p.path[0], d = dist(p, t), s = Math.min(speed * dt, d);
+  const a = Math.atan2(t.y - p.y, t.x - p.x);
+  p.x += Math.cos(a) * s; p.y += Math.sin(a) * s; collide(p);
+  p.moving = s / dt; p.want = a;
+  // Stuck against a corner: plan again.
+  p.stuck += dt;
+  if (p.stuck > 0.8) { if (Math.hypot(p.x - p.lx, p.y - p.ly) < 0.2) p.repath = 0; p.lx = p.x; p.ly = p.y; p.stuck = 0; }
+}
+function turnTo(p, a, rate, dt) { const d = wrap(a - p.a); p.a = wrap(p.a + Math.max(-rate * dt, Math.min(rate * dt, d))); }
+
+function seekerBot(p, dt) {
+  if (p.st === 'count') return;
+  const seen = hiders().filter(h => h.st === 'spotted');
+  if (seen.length) {
+    if (p.goal !== BASE) { p.goal = BASE; p.repath = 0; }
+    steer(p, BOT_RACE, dt, dist(p, BASE) < 14);
+    turnTo(p, p.want ?? p.a, 8, dt);
+    return;
+  }
+  if (p.goal === BASE) p.goal = null;
+  if (mode === 'hippa' && itBot(p, dt)) return;
+  // Piilosta: someone seen but too far off to tell who: walk up to them until they are found. Far off
+  // (beyond KNOW) only someone moving catches the eye; someone keeping still there blends in.
+  if (mode === 'piilosta') {
+    // Someone keeping still is noticed only after being in sight for a moment (`eyed`).
+    for (const h of hiders()) h.eyed = h.st === 'hiding' && canSee(p, h) ? (h.eyed || 0) + dt : 0;
+    const far = hiders().filter(h => h.st === 'hiding' && (h.moving > STIR || (dist(p, h) <= KNOW && h.eyed > NOTICE)) && canSee(p, h)).sort((a, b) => dist(p, a) - dist(p, b))[0];
+    if (far) {
+      if ((p.chaseT = (p.chaseT || 0) - dt) <= 0 || !p.goal) { p.goal = { x: far.x, y: far.y }; p.repath = 0; p.chaseT = 0.4; }
+      p.look = 0; steer(p, BOT_SEEK, dt); turnTo(p, Math.atan2(far.y - p.y, far.x - p.x), 6, dt);
+      return;
+    }
+  }
+  // A hider heard running out of sight: go and look where the steps were.
+  // Or seen running at the side of its eye, not too far off; someone sneaking there goes unnoticed.
+  const heard = hiders().find(h => hears(p, h) || (phase === 'seek' && active(h) && h.moving > LOUD && dist(p, h) < KNOW && glimpses(p, h)));
+  if (heard && !(time - p.heardT < 1.5)) { p.goal = { x: heard.x, y: heard.y }; p.repath = 0; p.look = 0; p.heardT = time; }
+  if (p.look > 0) { // Arrived: a look all around.
+    p.look -= dt; p.moving = 0; p.a = wrap(p.a + dt * 4.2);
+    return;
+  }
+  if (!p.goal || dist(p, p.goal) < 0.5) {
+    if (p.goal) { p.look = 1.5; p.goal = null; return; }
+    let best = null, bs = Infinity;
+    for (const s of SPOTS) {
+      if (time - s.seen < 30) continue;
+      const sc = dist(p, s) + 0.5 * dist(s, BASE) + Math.random() * 8;
+      if (sc < bs) { bs = sc; best = s; }
+    }
+    p.goal = best || SPOTS[Math.floor(Math.random() * SPOTS.length)]; p.repath = 0;
+  }
+  steer(p, BOT_SEEK, dt);
+  turnTo(p, (p.want ?? p.a) + Math.sin(time * 2.3) * 0.6, 6, dt);
+}
+
+function hiderBot(p, dt) {
+  if (!active(p)) { // Out of the round: wait beside the base.
+    const i = people.indexOf(p) - 1;
+    const bench = { x: BASE.x - 3 + i * 1.3, y: BASE.y + (p.st === 'caught' ? 3 : -3) };
+    if (p.goal !== p.bench) { p.bench = bench; p.goal = bench; p.repath = 0; }
+    steer(p, 2.5, dt); if (p.moving) turnTo(p, p.want, 6, dt);
+    return;
+  }
+  const sees = canSee(p, seeker);
+  if (mode === 'piilosta') return hideBot(p, dt);
+  if (mode === 'hippa') return runnerBot(p, dt);
+  if (p.st === 'spotted' || p.run) {
+    if (p.goal !== BASE) { p.goal = BASE; p.repath = 0; }
+    steer(p, BOT_RUN, dt, dist(p, BASE) < 14); turnTo(p, p.want ?? p.a, 8, dt);
+    return;
+  }
+  if (sees) p.saw = { x: seeker.x, y: seeker.y, t: time };
+  if (phase === 'seek') {
+    p.brave -= dt;
+    const mine = dist(p, BASE) + 4, ago = p.saw ? time - p.saw.t : Infinity;
+    const away = Math.abs(wrap(Math.atan2(p.y - seeker.y, p.x - seeker.x) - seeker.a)) > FOV / 2 + 0.3;
+    // Run when the seeker is seen far off and looking elsewhere, or was seen going far just now.
+    // A seeker last seen guarding the base is not gambled against.
+    const go = sees ? dist(seeker, BASE) > mine && away
+      : ago < 6 ? dist(p.saw, BASE) > mine
+      : p.peek && dist(p, BASE) < 8 && clearSight(p, BASE);
+    if (go) { p.run = true; p.peek = false; happen(['say', people.indexOf(p), '💨', 1]); return; }
+    // Brave enough: creep toward the base to peek. A seeker guarding it sends one back.
+    if (sees && dist(seeker, BASE) < 6) { if (p.peek) { p.peek = false; p.goal = p.spot; p.repath = 0; } p.brave = Math.max(p.brave, rand(12, 30)); }
+    else if (!p.peek && p.brave <= 0) { p.peek = true; p.goal = BASE; p.repath = 0; }
+    if (p.peek) { steer(p, 2.2, dt); turnTo(p, p.want ?? p.a, 6, dt); return; }
+  }
+  steer(p, phase === 'count' ? BOT_HIDE : 2, dt);
+  if (p.moving) turnTo(p, p.want, 7, dt);
+  else turnTo(p, sees ? Math.atan2(seeker.y - p.y, seeker.x - p.x) : Math.atan2(BASE.y - p.y, BASE.x - p.x) + Math.sin(time * 0.9 + p.x) * 0.9, 3, dt);
+}
+
+// Piilosta: stay put; when the seeker comes close looking elsewhere, sneak quietly to a place it cannot see.
+function hideBot(p, dt) {
+  // The seeker coming this way: get to a place it cannot see. If it is looking this way, dash for it;
+  // if not, creep there slower than the eye notices from afar.
+  if (phase === 'seek' && canSee(p, seeker) && dist(p, seeker) < 12 && !(time - (p.sneakT ?? -99) < 4)) {
+    const away = SPOTS.filter(s => dist(s, p) < 10 && dist(s, seeker) > dist(p, seeker) + 2 && !seesPoint(seeker, s));
+    if (away.length) { p.spot = away[Math.floor(Math.random() * away.length)]; p.goal = p.spot; p.repath = 0; p.sneakT = time; p.dash = seesPoint(seeker, p); }
+  }
+  if (p.dash && !p.path.length) p.dash = false;
+  steer(p, phase === 'count' ? BOT_HIDE : p.dash ? BOT_RUN : 0.9, dt, p.dash);
+  if (p.moving) turnTo(p, p.want, 7, dt);
+  else { const sees = canSee(p, seeker); turnTo(p, sees ? Math.atan2(seeker.y - p.y, seeker.x - p.x) : p.a + Math.sin(time * 0.7 + p.x) * 0.02, 3, dt); }
+}
+// Hippa, the one who is it: chase whoever it sees, nearest first. Returns false when it sees nobody,
+// and seekerBot() goes on searching as in the other games (and goes to look where it heard steps).
+function itBot(p, dt) {
+  if (p.freeze > 0) { p.moving = 0; p.spr = false; return true; }
+  let t = null;
+  for (const h of hiders()) if (!(h === p.from && p.noBack > 0) && canSee(p, h) && (!t || dist(p, h) < dist(p, t))) t = h;
+  if (!t) { if (p.chasing) { p.chasing = false; p.goal = { x: p.last.x, y: p.last.y }; p.repath = 0; } return false; }
+  p.chasing = true; p.last = { x: t.x, y: t.y }; p.look = 0;
+  if ((p.chaseT = (p.chaseT || 0) - dt) <= 0) { p.goal = { x: t.x, y: t.y }; p.repath = 0; p.chaseT = 0.3; }
+  steer(p, BOT_CHASE, dt, dist(p, t) < 6);
+  turnTo(p, p.want ?? p.a, 9, dt);
+  return true;
+}
+// Hippa, everyone else: run from "it" when it is seen or heard close; otherwise wander between hiding places.
+function runnerBot(p, dt) {
+  const it = seeker, d = dist(p, it), near = phase === 'seek' && it.freeze <= 0 && d < 9 && (canSee(p, it) || hears(p, it) || glimpses(p, it) || d < 3);
+  if (near) {
+    if ((p.fleeT = (p.fleeT || 0) - dt) <= 0) {
+      p.fleeT = 0.7;
+      let best = null, bs = -Infinity;
+      for (const s of SPOTS) {
+        const ds = dist(s, p);
+        if (ds < 3 || ds > 12) continue;
+        // away from it, and not past it
+        const sc = dist(s, it) - 0.4 * ds - ((s.x - p.x) * (it.x - p.x) + (s.y - p.y) * (it.y - p.y) > 0 ? 20 : 0) + Math.random() * 2;
+        if (sc > bs) { bs = sc; best = s; }
+      }
+      if (best) { p.goal = best; p.repath = 0; }
+    }
+    steer(p, BOT_RUN, dt, d < 5);
+    turnTo(p, p.want ?? p.a, 8, dt);
+    return;
+  }
+  if (!p.path.length && (p.wait = (p.wait || 0) - dt) <= 0) {
+    const near = SPOTS.filter(s => dist(s, p) < 14 && dist(s, it) > 6);
+    p.goal = near[Math.floor(Math.random() * near.length)] || p.spot; p.repath = 0; p.wait = rand(3, 8);
+  }
+  steer(p, phase === 'count' ? BOT_HIDE : 2.2, dt);
+  if (p.moving) turnTo(p, p.want, 7, dt);
+  else turnTo(p, Math.atan2(it.y - p.y, it.x - p.x) + Math.sin(time * 0.9 + p.x) * 0.9, 3, dt);
+}
+
+// ---------- The player's finger ----------
+// Two thumbs (v7, #137; Eero picked it from three tried in a prototype): the left half of the screen
+// walks, and pushing that stick past its outer ring sprints; the right half turns the eyes, so one can
+// walk one way and look another, or back away watching the seeker. Alone, the left thumb turns the
+// eyes too, the way one walks, as in v1–v6.
+const STICK = 46, PUSH = 84; // the stick's ring, and how far a push sprints
+let joy = null, eye = null; // the walking finger, and the looking finger
+function movePlayer(dt) {
+  player.moving = 0; player.spr = false;
+  if (player.freeze > 0) player.freeze -= dt;
+  if (player.noBack > 0) player.noBack -= dt;
+  const still = (seeker === player && (player.st === 'count' || player.freeze > 0)) || !racing();
+  if (eye && !still) {
+    const dx = eye.x - eye.ox, dy = eye.y - eye.oy;
+    if (Math.hypot(dx, dy) > 8) turnTo(player, Math.atan2(dy, dx), 14, dt);
+  }
+  if (joy && !still) {
+    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy);
+    if (d >= 6) {
+      const a = Math.atan2(dy, dx);
+      if (!eye) turnTo(player, a, 12, dt);
+      let s = SPEED * Math.min(1, Math.max(0, (d - 10) / 40));
+      if (d > PUSH && s > SPEED * 0.6 && canSprint(player)) { s *= SPRINT; player.spr = true; }
+      player.x += Math.cos(a) * s * dt; player.y += Math.sin(a) * s * dt; collide(player);
+      player.moving = s;
+    }
+  }
+  breathe(player, dt);
+}
+c.addEventListener('pointerdown', e => {
+  unlock();
+  if (!racing()) return;
+  const r = c.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  const f = { id: e.pointerId, ox: px, oy: py, x: px, y: py };
+  if (px > r.width / 2) { if (!eye) { eye = f; c.setPointerCapture(e.pointerId); } return; }
+  if (!joy) { joy = f; c.setPointerCapture(e.pointerId); }
+});
+c.addEventListener('pointermove', e => {
+  const r = c.getBoundingClientRect();
+  for (const f of [joy, eye]) if (f && e.pointerId === f.id) { f.x = e.clientX - r.left; f.y = e.clientY - r.top; }
+});
+const lift = e => {
+  if (joy && e.pointerId === joy.id) joy = null;
+  if (eye && e.pointerId === eye.id) eye = null;
+};
+c.addEventListener('pointerup', lift); c.addEventListener('pointercancel', lift);
+const letGo = () => { joy = eye = null; };
+
+// ---------- One step of the game ----------
+// Alone, and on the phone that made the room, this runs the round. A guest phone runs guestStep().
+function step(dt) {
+  time += dt;
+  for (const p of people) if (p.bt > 0) p.bt -= dt;
+  if (msgT > 0) msgT -= dt;
+  if (!racing()) return;
+  listen(dt);
+  if (R.inRoom && !R.isHost) return guestStep(dt);
+  if (R.isHost) {
+    hostTick(dt);
+    if (R.paused && phase !== 'end') return;
+  }
+  if (phase === 'end') { endT -= dt; if (endT <= 0) afterRound(); }
+  else timer -= dt;
+  if (phase === 'count' && seekLeft !== null && (seekLeft -= dt) <= 0) { seekLeft = null; return timeUp(); }
+  movePlayer(dt);
+  for (const p of people) if (p !== player) { if (p.freeze > 0) p.freeze -= dt; if (p.noBack > 0) p.noBack -= dt; }
+  for (const b of bots) if (b.ctrl === 'bot') { b === seeker ? seekerBot(b, dt) : hiderBot(b, dt); breathe(b, dt); }
+  if (phase === 'count' && timer <= 0) startSeek();
+  if (phase === 'seek') {
+    rules();
+    // The seeker remembers which hiding places they have already looked at.
+    if ((spotScan -= dt) <= 0) { spotScan = 0.25; for (const s of SPOTS) if (spotChecked(seeker, s)) s.seen = time; }
+  }
+}
+
+// Footprints 👣 where this phone's player hears someone run, each fading in a second.
+let prints = [];
+function listen(dt) {
+  prints = prints.filter(f => (f.t -= dt) > 0);
+  for (const p of people) {
+    if ((p.pt = (p.pt || 0) - dt) > 0 || !hears(player, p)) continue;
+    p.pt = 0.3; prints.push({ x: p.x, y: p.y, t: 1.1 }); sfx.step();
+  }
+}
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'sine', vol = 0.08, to = 0, delay = 0) {
+  if (!ac) return;
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+const sfx = {
+  ready() { [392, 523].forEach((f, i) => tone(f, 0.16, 'triangle', 0.08, 0, i * 0.16)); },
+  spot() { tone(880, 0.12, 'square', 0.05); tone(1175, 0.16, 'square', 0.05, 0, 0.12); },
+  kirkkis() { [659, 523, 392].forEach((f, i) => tone(f, 0.18, 'triangle', 0.09, 0, i * 0.15)); },
+  save() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.14, 'triangle', 0.08, 0, i * 0.1)); },
+  step() { tone(140, 0.06, 'triangle', 0.05, 90); },
+};
+
+// ---------- Drawing ----------
+const LEAD = 0.45; // how far the camera leads the player's eyes, as a share of half the screen
+let W, H, DPR, S, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, camX = BASE.x, camY = BASE.y;
+function resize() {
+  camSnap = true;
+  DPR = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  c.width = fog.width = W * DPR; c.height = fog.height = H * DPR;
+  // Upright 17 m across and 27 m down (v7, #137: farther than v6's 12 × 19); sideways (#95) the same
+  // turned, so things are the same size.
+  wide = W > H;
+  S = wide ? Math.min(W / 27, H / 17) : Math.min(W / 17, H / 27); // pixels per metre
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+}
+addEventListener('resize', resize); resize();
+const sx = px => (px - camX) * S + W / 2, sy = py => (py - camY) * S + H / 2;
+function world(ctx) { ctx.setTransform(DPR * S, 0, 0, DPR * S, DPR * (W / 2 - camX * S), DPR * (H / 2 - camY * S)); }
+function rrect(ctx, a, b, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(a, b, w, h, r) : ctx.rect(a, b, w, h); }
+
+function drawYard() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.fillStyle = '#24351c'; x.fillRect(0, 0, W, H);
+  world(x);
+  x.fillStyle = MAP.ground; x.fillRect(0, 0, WW, WH);
+  x.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < WW; i += 3) x.fillRect(i, 0, 1.5, WH);
+  MAP.decor(x);
+  x.strokeStyle = '#8a6a3c'; x.lineWidth = 0.25; x.strokeRect(0.1, 0.1, WW - 0.2, WH - 0.2);
+  for (const s of SOLIDS) drawSolid(s);
+  // The post where a round starts (it stands in every game, and is walked round).
+  x.fillStyle = '#7a4e2a'; x.beginPath(); x.arc(BASE.x, BASE.y, BASE_POLE, 0, 7); x.fill();
+  // Only Kirkkis has a base to reach: its ring, and the arrow to it (v7: not in Piilosta or Hippa).
+  if (!baseGame()) return;
+  x.strokeStyle = 'rgba(122,59,143,0.5)'; x.lineWidth = 0.08; x.setLineDash([0.3, 0.2]);
+  x.beginPath(); x.arc(BASE.x, BASE.y, BASE_REACH, 0, 7); x.stroke(); x.setLineDash([]);
+}
+const baseGame = () => mode === 'kirkkis';
+function drawSolid(s) {
+  const k = s.k;
+  if (s.r) {
+    if (k === 'kivi') { x.fillStyle = '#9a9a96'; x.beginPath(); x.arc(s.x, s.y, s.r, 0, 7); x.fill(); x.fillStyle = '#b8b8b2'; x.beginPath(); x.arc(s.x - 0.3, s.y - 0.3, s.r * 0.55, 0, 7); x.fill(); return; }
+    if (k === 'kuusi') { // a spruce: a dark star of branches
+      for (const [r, c] of [[s.r + 0.6, '#1f4f26'], [s.r * 0.75, '#2a6331']]) {
+        x.fillStyle = c; x.beginPath();
+        for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, d = i % 2 ? r * 0.7 : r; x.lineTo(s.x + Math.cos(a) * d, s.y + Math.sin(a) * d); }
+        x.fill();
+      }
+      return;
+    }
+    const leaf = k === 'koivu' ? ['#5f9e3a', '#86bf52'] : ['#2f6b2a', '#3f8a35'];
+    x.fillStyle = leaf[0]; x.beginPath(); x.arc(s.x, s.y, s.r + 0.5, 0, 7); x.fill();
+    x.fillStyle = leaf[1]; x.beginPath(); x.arc(s.x - 0.25, s.y - 0.25, s.r * 0.9, 0, 7); x.fill();
+    if (k === 'koivu') { x.fillStyle = '#f3f0e6'; x.beginPath(); x.arc(s.x, s.y, 0.22, 0, 7); x.fill(); } // the white trunk
+    return;
+  }
+  const col = { talo: ['#c85b45', '#a7432f'], sauna: ['#6b4a35', '#55392a'], vaja: ['#b3382c', '#8f2a20'], maja: ['#e6b84a', '#c99a2e'],
+                halot: ['#9a6a3a', '#7a4e2a'], aita: ['#2f6b2a', '#255522'], auto: ['#3f7fd0', '#2c5fa0'],
+                koulu: ['#d9a35a', '#b07f3a'], sali: ['#9a8f86', '#7a7068'], katos: ['#4f7fa0', '#3a5f78'], teline: ['#e05a3a', '#b0402a'],
+                liuku: ['#f2c94c', '#c9a032'], roskis: ['#6a8a5a', '#4d6a40'], penkki: ['#a87a4a', '#7a5530'],
+                laavu: ['#8a6440', '#6a4a2e'], kelo: ['#a89a84', '#857a68'], kirkko: ['#f4f1ea', '#cfc8b8'], tapuli: ['#a8382c', '#80281f'],
+                muuri: ['#a7a59e', '#85837c'], hauta: ['#8c8c94', '#6c6c74'] }[k];
+  const round = k === 'auto' ? 0.5 : k === 'kelo' ? 0.4 : 0.15;
+  x.fillStyle = col[1]; rrect(x, s.x, s.y, s.w, s.h, round); x.fill();
+  x.fillStyle = col[0]; rrect(x, s.x + 0.12, s.y + 0.12, Math.max(0.05, s.w - 0.24), Math.max(0.05, s.h - 0.24), Math.max(0, round - 0.05)); x.fill();
+  if (k === 'kirkko') { // a cross on the roof
+    x.fillStyle = '#c9a032'; x.fillRect(s.x + s.w / 2 - 0.2, s.y + s.h / 2 - 1.6, 0.4, 3.2); x.fillRect(s.x + s.w / 2 - 1, s.y + s.h / 2 - 0.8, 2, 0.4);
+  }
+  if (k === 'teline') { // the bars of the climbing frame
+    x.strokeStyle = '#8f2a1c'; x.lineWidth = 0.1; x.beginPath();
+    for (let i = 0.5; i < s.w; i += 0.5) { x.moveTo(s.x + i, s.y + 0.15); x.lineTo(s.x + i, s.y + s.h - 0.15); }
+    x.stroke();
+  }
+  if (k === 'muuri') { // stones in the wall
+    x.fillStyle = 'rgba(0,0,0,0.15)';
+    for (let i = 0.3; i < s.w; i += 0.9) x.fillRect(s.x + i, s.y + 0.15, 0.06, s.h - 0.3);
+  }
+  if (k === 'talo' || k === 'sauna' || k === 'vaja' || k === 'maja' || k === 'koulu' || k === 'sali' || k === 'laavu' || k === 'tapuli' || k === 'katos') { // a roof ridge
+    x.strokeStyle = 'rgba(0,0,0,0.25)'; x.lineWidth = 0.12; x.beginPath();
+    if (s.w > s.h) { x.moveTo(s.x + 0.3, s.y + s.h / 2); x.lineTo(s.x + s.w - 0.3, s.y + s.h / 2); }
+    else { x.moveTo(s.x + s.w / 2, s.y + 0.3); x.lineTo(s.x + s.w / 2, s.y + s.h - 0.3); }
+    x.stroke();
+  }
+  if (k === 'auto') { x.fillStyle = '#bfe0f5'; x.fillRect(s.x + 0.35, s.y + 0.9, s.w - 0.7, 0.7); x.fillRect(s.x + 0.35, s.y + s.h - 1.3, s.w - 0.7, 0.5); }
+  if (k === 'halot') { x.fillStyle = '#d8b07a'; for (let i = 0.35; i < s.w; i += 0.5) { x.beginPath(); x.arc(s.x + i, s.y + s.h / 2, 0.2, 0, 7); x.fill(); } }
+}
+function drawBushes() {
+  for (const b of BUSHES) {
+    x.globalAlpha = bushAt(player.x, player.y) === b ? 0.55 : 0.96;
+    x.fillStyle = '#3d8a33';
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; x.beginPath(); x.arc(b.x + Math.cos(a) * b.r * 0.45, b.y + Math.sin(a) * b.r * 0.45, b.r * 0.6, 0, 7); x.fill(); }
+    x.fillStyle = '#56a845'; x.beginPath(); x.arc(b.x - 0.2, b.y - 0.2, b.r * 0.55, 0, 7); x.fill();
+  }
+  x.globalAlpha = 1;
+}
+function drawCone(p, fill) {
+  const pts = viewPoly(p);
+  x.fillStyle = fill; x.beginPath(); x.moveTo(p.x, p.y);
+  for (let i = 0; i < pts.length; i += 2) x.lineTo(pts[i], pts[i + 1]);
+  x.closePath(); x.fill();
+}
+function drawPerson(p) {
+  const out = !active(p) && p.role === 'hider';
+  x.globalAlpha = out ? 0.6 : 1;
+  x.fillStyle = 'rgba(0,0,0,0.2)'; x.beginPath(); x.arc(p.x + 0.08, p.y + 0.1, BODY, 0, 7); x.fill();
+  x.fillStyle = p.color; x.beginPath(); x.arc(p.x, p.y, BODY, 0, 7); x.fill();
+  x.lineWidth = p.isPlayer ? 0.1 : 0.06; x.strokeStyle = p.isPlayer ? '#fff' : 'rgba(0,0,0,0.4)'; x.stroke();
+  if (p.role === 'seeker') { x.strokeStyle = '#d0302a'; x.lineWidth = 0.12; x.beginPath(); x.arc(p.x, p.y, BODY * 0.72, p.a + 1.2, p.a + 5.1); x.stroke(); }
+  // Eyes look where the field of view points; shut while counting.
+  const ex = Math.cos(p.a), ey = Math.sin(p.a), nx = -ey, ny = ex;
+  for (const side of [-1, 1]) {
+    const px = p.x + ex * 0.18 + nx * side * 0.12, py = p.y + ey * 0.18 + ny * side * 0.12;
+    if (p.st === 'count') { x.strokeStyle = '#222'; x.lineWidth = 0.05; x.beginPath(); x.moveTo(px - nx * 0.05, py - ny * 0.05); x.lineTo(px + nx * 0.05, py + ny * 0.05); x.stroke(); }
+    else { x.fillStyle = '#fff'; x.beginPath(); x.arc(px, py, 0.08, 0, 7); x.fill(); x.fillStyle = '#222'; x.beginPath(); x.arc(px + ex * 0.03, py + ey * 0.03, 0.045, 0, 7); x.fill(); }
+  }
+  x.globalAlpha = 1;
+}
+function label(p, text, y, font, color) {
+  x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,0.5)'; x.strokeText(text, sx(p.x), y); x.fillStyle = color; x.fillText(text, sx(p.x), y);
+}
+// Splits text into lines no wider than max in the current font: after a comma when it can
+// ("Ainon nimet, / Eetun nimet!"), else at spaces.
+function wrapText(text, max) {
+  const greedy = (parts, sep) => {
+    const out = [];
+    for (const w of parts) {
+      const line = out.length ? out[out.length - 1] + sep + w : w;
+      if (out.length && x.measureText(line).width <= max) out[out.length - 1] = line; else out.push(w);
+    }
+    return out;
+  };
+  return greedy(text.split(', ').map((t, i, a) => i < a.length - 1 ? t + ',' : t), ' ')
+    .flatMap(l => x.measureText(l).width <= max ? [l] : greedy(l.split(' '), ' '));
+}
+const LINE = 17;
+// The seeking player sees a hider too far off to tell who it is: a ❔, not a name, until closer.
+const unknown = p => seeker === player && mode !== 'hippa' && p.st === 'hiding' && dist(player, p) > (mode === 'piilosta' ? FIND : KNOW);
+function drawBubble(p) {
+  x.font = '700 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  // A long call ("Ainon nimet, Eetun nimet, …") goes on more lines, so it stays on the screen.
+  const lines = wrapText(p.bubble, W - 24), extra = (lines.length - 1) * LINE;
+  const w = Math.max(...lines.map(l => x.measureText(l).width)) + 16, bx = Math.max(4, Math.min(W - w - 4, sx(p.x) - w / 2)), by = sy(p.y) - BODY * S - 34 - extra;
+  x.globalAlpha = Math.min(1, p.bt * 3);
+  x.fillStyle = '#fff'; rrect(x, bx, by, w, 24 + extra, 10); x.fill();
+  x.beginPath(); x.moveTo(sx(p.x) - 5, by + extra + 23); x.lineTo(sx(p.x) + 5, by + extra + 23); x.lineTo(sx(p.x), by + extra + 30); x.fill();
+  x.fillStyle = '#2b2416'; lines.forEach((l, i) => x.fillText(l, bx + w / 2, by + 12 + i * LINE));
+  x.globalAlpha = 1;
+}
+
+function draw() {
+  // The camera follows the player but stays over the yard. v7 (#137): it leads a little the way the
+  // player looks, so more of the field of view is on the screen, and glides there.
+  // Along each axis it leads by nearly half the screen, so most of the screen is ahead of the player.
+  const hw = W / 2 / S, hh = H / 2 / S, on = racing() && player.st !== 'count';
+  const lead = h => on ? h * LEAD : 0;
+  const tx = WW > 2 * hw ? Math.max(hw, Math.min(WW - hw, player.x + Math.cos(player.a) * lead(hw))) : WW / 2;
+  const ty = WH > 2 * hh ? Math.max(hh - 1.5, Math.min(WH - hh + 1.5, player.y + Math.sin(player.a) * lead(hh))) : WH / 2;
+  // It glides at the same pace whatever the frame rate (v7: v6 jumped when the target moved far, which
+  // the bigger lead made happen on every quick turn); only a new round, map or screen size jumps.
+  const k = camSnap ? 1 : 1 - Math.exp(-frameDt * 4);
+  camSnap = false;
+  camX += (tx - camX) * k; camY += (ty - camY) * k;
+  drawYard();
+  const playing = racing();
+  const shown = people.filter(p => p === player || (playing && canSee(player, p)));
+  for (const p of shown) if (p !== player && (p === seeker ? p.st === 'seek' : active(p))) drawCone(p, p === seeker ? 'rgba(220,40,30,0.16)' : 'rgba(255,255,255,0.08)');
+  for (const p of shown) if (p !== player) drawPerson(p);
+  drawBushes();
+  drawPerson(player);
+  // The player's breath for sprinting, under them, while it is not full.
+  if (playing && player.breath < 1) {
+    x.fillStyle = 'rgba(0,0,0,0.35)'; rrect(x, player.x - 0.5, player.y + BODY + 0.18, 1, 0.16, 0.08); x.fill();
+    x.fillStyle = player.winded ? '#e0703a' : '#f2c94c'; rrect(x, player.x - 0.5, player.y + BODY + 0.18, Math.max(0.02, player.breath), 0.16, 0.08); x.fill();
+  }
+
+  // The fog: only what the player sees is clear.
+  fx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  fx.globalCompositeOperation = 'source-over'; fx.clearRect(0, 0, W, H);
+  fx.fillStyle = 'rgba(10,16,30,0.66)'; fx.fillRect(0, 0, W, H);
+  if (player.st !== 'count') {
+    world(fx); fx.globalCompositeOperation = 'destination-out';
+    // The blur at the sides and far off is half clear, the sharp view wholly.
+    fx.fillStyle = 'rgba(0,0,0,0.42)';
+    const wide = viewPoly(player, WIDE, FAR, 180);
+    fx.beginPath(); fx.moveTo(player.x, player.y);
+    for (let i = 0; i < wide.length; i += 2) fx.lineTo(wide[i], wide[i + 1]);
+    fx.closePath(); fx.fill();
+    // Sharp up close, and blurring with distance (v7): wholly clear to KNOW, half clear far off.
+    const far = fx.createRadialGradient(player.x, player.y, 0, player.x, player.y, KNOW + 10);
+    far.addColorStop(0, '#000'); far.addColorStop(KNOW / (KNOW + 10), '#000'); far.addColorStop(1, 'rgba(0,0,0,0.5)');
+    fx.fillStyle = far;
+    const pts = viewPoly(player, FOV, RANGE, 160);
+    fx.beginPath(); fx.moveTo(player.x, player.y);
+    for (let i = 0; i < pts.length; i += 2) fx.lineTo(pts[i], pts[i + 1]);
+    fx.closePath(); fx.fill();
+    fx.beginPath(); fx.arc(player.x, player.y, NEAR, 0, 7); fx.fill();
+  }
+  x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(fog, 0, 0);
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.font = '18px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (const f of prints) { x.globalAlpha = Math.min(1, f.t * 2); x.fillText('👣', sx(f.x), sy(f.y)); }
+  x.globalAlpha = 1;
+  // Someone moving in the blur: a soft shape, no colour, no name.
+  if (playing) for (const p of people) {
+    if (!glimpses(player, p)) continue;
+    const g = x.createRadialGradient(sx(p.x), sy(p.y), 0, sx(p.x), sy(p.y), BODY * S * 2.2);
+    g.addColorStop(0, 'rgba(225,230,240,0.75)'); g.addColorStop(0.45, 'rgba(225,230,240,0.4)'); g.addColorStop(1, 'rgba(225,230,240,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(sx(p.x), sy(p.y), BODY * S * 2.2, 0, 7); x.fill();
+  }
+
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (const p of shown) {
+    if (p !== player && p.st === 'spotted' && phase !== 'count') label(p, '❗', sy(p.y) - BODY * S - 12, '700 18px system-ui', '#ffd23a');
+    if (p.bt > 0) drawBubble(p);
+    else if (p !== player) label(p, unknown(p) ? '❔' : p.name, sy(p.y) + BODY * S + 10, '600 11px system-ui', '#fff');
+  }
+  if (player.bt > 0 && !shown.includes(player)) drawBubble(player);
+  // Words from the seeker are heard even when the seeker is out of sight.
+  if (playing && seeker !== player && seeker.bt > 0 && !shown.includes(seeker)) {
+    x.font = '700 14px system-ui'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,0.9)';
+    const lines = wrapText(`${seeker.name}: ${seeker.bubble}`, W - 24);
+    lines.forEach((l, i) => x.fillText(l, W / 2, H - safeB - 64 - (lines.length - 1 - i) * LINE));
+  }
+  if (playing) { if (baseGame()) drawBaseArrow(); drawHud(); drawFingers(); }
+  if (phase === 'count' && seeker === player) {
+    x.fillStyle = 'rgba(8,10,20,0.92)'; x.fillRect(0, 0, W, H);
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+    // Sideways the words sit lower, clear of the message under the HUD.
+    const ys = wide ? [0.43, 0.61, 0.77] : [0.36, 0.5, 0.62];
+    x.font = '800 26px system-ui'; x.fillText('Silmät kiinni!', W / 2, H * ys[0]);
+    x.font = '800 80px system-ui'; x.fillText(Math.ceil(timer), W / 2, H * ys[1]);
+    x.font = '600 15px system-ui'; x.fillStyle = '#c9c4d8'; x.fillText(mode === 'hippa' ? 'Olet hippa – muut pakenevat…' : 'Muut piiloutuvat…', W / 2, H * ys[2]);
+  }
+  if (msgT > 0) {
+    x.globalAlpha = Math.min(1, msgT * 3);
+    x.font = '800 20px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const fit = x.measureText(msg).width + 28;
+    if (fit > W - 16) x.font = `800 ${Math.floor(20 * (W - 16) / fit)}px system-ui`; // a long one shrinks to fit
+    const w = Math.min(fit, W - 16), y = safeT + 96;
+    x.fillStyle = 'rgba(30,20,40,0.78)'; rrect(x, W / 2 - w / 2, y - 20, w, 40, 14); x.fill();
+    x.fillStyle = '#fff'; x.fillText(msg, W / 2, y);
+    x.globalAlpha = 1;
+  }
+}
+// The sticks under the fingers, and the ⚡ button.
+function drawFingers() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (joy) {
+    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy);
+    x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 3; x.beginPath(); x.arc(joy.ox, joy.oy, STICK, 0, 7); x.stroke();
+    // the ring a push must pass to sprint ⚡
+    x.strokeStyle = player.spr ? 'rgba(242,201,76,0.9)' : 'rgba(255,255,255,0.28)'; x.setLineDash([6, 6]);
+    x.beginPath(); x.arc(joy.ox, joy.oy, PUSH, 0, 7); x.stroke(); x.setLineDash([]);
+    const k = d > PUSH ? PUSH / d : 1;
+    x.fillStyle = player.spr ? 'rgba(242,201,76,0.9)' : 'rgba(255,255,255,0.6)'; x.beginPath(); x.arc(joy.ox + dx * k, joy.oy + dy * k, 18, 0, 7); x.fill();
+  }
+  if (eye) { // the eyes' stick: an arrow the way one looks
+    x.strokeStyle = 'rgba(190,220,255,0.5)'; x.lineWidth = 3; x.beginPath(); x.arc(eye.ox, eye.oy, STICK, 0, 7); x.stroke();
+    x.save(); x.translate(eye.ox, eye.oy); x.rotate(player.a);
+    x.fillStyle = 'rgba(190,220,255,0.75)'; x.beginPath(); x.moveTo(STICK - 4, 0); x.lineTo(14, -12); x.lineTo(14, 12); x.fill();
+    x.restore();
+    x.font = '20px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('👀', eye.ox, eye.oy);
+  } else if (!joy && phase !== 'end') { // a hint where the two thumbs go
+    x.font = '700 12px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = 'rgba(255,255,255,0.55)';
+    x.fillText('🕹️ kävele · ⚡ työnnä pitkälle', W * 0.25, H - safeB - 26); x.fillText('👀 katso', W * 0.75, H - safeB - 26);
+  }
+}
+// An arrow on the screen's edge toward the base when it is out of view.
+function drawBaseArrow() {
+  const bx = sx(BASE.x), by = sy(BASE.y), m = 34;
+  if (bx > m && bx < W - m && by > safeT + 80 && by < H - safeB - m) return;
+  const a = Math.atan2(by - H / 2, bx - W / 2);
+  const k = Math.min((W / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (H / 2 - m - 40) / Math.abs(Math.sin(a) || 1e-6));
+  const ax = W / 2 + Math.cos(a) * k, ay = H / 2 + Math.sin(a) * k;
+  x.save(); x.translate(ax, ay); x.rotate(a);
+  x.fillStyle = 'rgba(122,59,143,0.85)'; x.beginPath(); x.moveTo(16, 0); x.lineTo(-6, -11); x.lineTo(-6, 11); x.fill();
+  x.restore();
+  x.font = '18px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('⛪', ax - Math.cos(a) * 22, ay - Math.sin(a) * 22);
+}
+function drawHud() {
+  // Upright across the top beside the back chip; sideways a panel in the top-right corner.
+  const w = wide ? Math.min(290, W - safeR - 100) : W - 100, x0 = wide ? W - safeR - 8 - w : 92, y0 = safeT + 8;
+  x.fillStyle = 'rgba(255,255,255,0.88)'; rrect(x, x0, y0, w, 52, 12); x.fill();
+  x.textBaseline = 'middle'; x.textAlign = 'left'; x.fillStyle = '#2b2416'; x.font = '800 14px system-ui';
+  const t = Math.max(0, Math.ceil(timer));
+  let head;
+  const left = phase === 'count' ? seekLeft : timer; // the seek clock, also during a recount
+  if (phase === 'count') head = seeker === player ? `Lasket… ${t}` : `${seeker.name} laskee: ${t}`;
+  else if (mode === 'hippa') head = seeker === player ? (player.freeze > 0 ? '✋ Olet hippa – laske…' : '✋ Olet hippa – hippaa!') : `💨 Pakene! Hippa: ${seeker.name}`;
+  else if (seeker === player) head = '👀 Etsit';
+  else if (mode === 'piilosta') head = { hiding: '🙈 Piilossa', saved: '✅ Selvisit', caught: '🔎 Löydetty' }[player.st] || '';
+  else head = { hiding: '🙈 Piilossa', spotted: '❗ Nähty – pesään!', saved: '✅ Pelastuit', caught: '✋ Nimetty' }[player.st] || '';
+  x.fillText(head, x0 + 10, y0 + 15);
+  if (left !== null) { const l = Math.max(0, Math.ceil(left)); x.textAlign = 'right'; x.fillText(`${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`, x0 + w - 10, y0 + 15); }
+  // Every hider and what has become of them; in Hippa everyone, and who is it.
+  x.textAlign = 'center'; x.font = '700 11px system-ui';
+  const hs = mode === 'hippa' ? people : hiders(), gap = Math.min(52, (w - 12) / hs.length);
+  const icons = mode === 'piilosta' ? { hiding: '🙈', saved: '✅', caught: '🔎' } : { hiding: '🙈', spotted: '❗', saved: '✅', caught: '✋' };
+  hs.forEach((h, i) => {
+    const cx = x0 + 10 + gap * i + gap / 2 - 4, cy = y0 + 38;
+    x.fillStyle = h.color; x.beginPath(); x.arc(cx - 12, cy, 6, 0, 7); x.fill();
+    if (h.isPlayer) { x.strokeStyle = '#2b2416'; x.lineWidth = 2; x.stroke(); }
+    x.fillStyle = '#2b2416'; x.fillText(mode === 'hippa' ? (h === seeker ? '✋' : '💨') : icons[h.st] || '', cx + 6, cy);
+  });
+}
+
+// ---------- Menu ----------
+// What became of this phone's player in the round just played.
+function result() {
+  const caught = hiders().filter(h => h.st === 'caught');
+  if (mode === 'hippa') return seeker === player ? ['Jäit hipaksi! 😅', 'lose'] : ['Et jäänyt hipaksi! 🎉', 'win'];
+  if (mode === 'piilosta') {
+    if (seeker === player) return caught.length ? [`Löysit ${caught.length}/${hiders().length}!`, 'win'] : ['Et löytänyt ketään', 'lose'];
+    return player.st === 'caught' ? ['Sinut löydettiin!', 'lose'] : ['Selvisit! 🎉', 'win'];
+  }
+  if (seeker === player) return caught.length ? [`Nimesit ${caught.length}/${hiders().length}!`, 'win'] : ['Kaikki pelastuivat!', 'lose'];
+  return player.st === 'caught' ? ['Sinut nimettiin!', 'lose'] : ['Pelastuit! 🎉', 'win'];
+}
+function showMenu() {
+  camSnap = true;
+  phase = 'menu'; letGo();
+  if (mapId !== soloMap) { loadMap(soloMap); SOLO.forEach(toBase); } // back from a room's map
+  const res = document.getElementById('result'), info = document.getElementById('info');
+  const hideB = document.getElementById('hide'), seekB = document.getElementById('seek');
+  res.className = ''; res.textContent = ''; info.textContent = '';
+  if (played) {
+    [res.textContent, res.className] = lastRes;
+    info.textContent = nextLine();
+  }
+  menuMode();
+  menu.classList.remove('hidden');
+}
+// Who seeks (or is it) next, in the words of the game just played.
+function nextLine() {
+  if (!nextSeeker) return '';
+  if (lastMode === 'hippa') return nextSeeker === player ? 'Sinä olet hippa seuraavaksi.' : `Seuraavaksi hippa on ${nextSeeker.name}.`;
+  return nextSeeker === player ? 'Sinä etsit seuraavaksi.' : `Seuraavaksi etsii ${nextSeeker.name}.`;
+}
+// The parts of the menu that follow the game picked: its buttons, help and tally.
+function menuMode() {
+  mode = soloMode;
+  const m = MODES[soloMode], hideB = document.getElementById('hide'), seekB = document.getElementById('seek');
+  [hideB.textContent, seekB.textContent] = m.roles;
+  hideB.classList.toggle('next', played && !!nextSeeker && nextSeeker !== player);
+  seekB.classList.toggle('next', played && nextSeeker === player);
+  document.getElementById('sub').textContent = m.sub;
+  document.querySelector('.help.short').textContent = m.short;
+  document.querySelector('.help.long').textContent = m.long;
+  document.getElementById('total').textContent =
+    soloMode === 'hippa' ? (statsH.kierrokset ? `Kierroksia ${statsH.kierrokset} · selvisit ${statsH.selvisit} · hippasit ${statsH.hippasit}` : '')
+    : soloMode === 'piilosta' ? (statsP.kierrokset ? `Kierroksia ${statsP.kierrokset} · selvisit ${statsP.selvisit} · löysit ${statsP.loysit}` : '')
+    : stats.kierrokset ? `Kierroksia ${stats.kierrokset} · pelastuit ${stats.pelastuit} · nimesit ${stats.kirkkasit}` : '';
+  modeButtons(document.getElementById('modes'), soloMode, pickMode);
+}
+// The game picker (v7, #137): the choice is kept on the phone.
+function modeButtons(el, on, pick) {
+  el.replaceChildren(...MODE_IDS.map(id => {
+    const b = document.createElement('button');
+    b.textContent = `${MODES[id].emoji} ${MODES[id].name}`; b.dataset.mode = id;
+    b.classList.toggle('on', id === on);
+    b.addEventListener('click', () => pick(id));
+    return b;
+  }));
+}
+// Another game starts afresh: the last round's result and who goes next belonged to the old one.
+function pickMode(id) {
+  if (id !== soloMode) {
+    played = false; nextSeeker = null;
+    const res = document.getElementById('result');
+    res.textContent = ''; res.className = ''; document.getElementById('info').textContent = '';
+  }
+  soloMode = id; save('moodi', id); menuMode();
+}
+// The map picker (v6, #109): the choice is kept on the phone.
+const mapsEl = document.getElementById('maps');
+function mapButtons(el, on, pick) {
+  el.replaceChildren(...MAP_IDS.map(id => {
+    const b = document.createElement('button');
+    const e = document.createElement('b'); e.textContent = MAPS[id].emoji;
+    b.append(e, MAPS[id].name); b.dataset.map = id;
+    b.classList.toggle('on', id === on);
+    b.addEventListener('click', () => pick(id));
+    return b;
+  }));
+}
+function pickSolo(id) {
+  soloMap = id; save('kentta', id); loadMap(id);
+  SOLO.forEach(toBase);
+  mapButtons(mapsEl, soloMap, pickSolo);
+}
+mapButtons(mapsEl, soloMap, pickSolo);
+document.getElementById('hide').addEventListener('click', () => { unlock(); newRound('hide'); });
+document.getElementById('seek').addEventListener('click', () => { unlock(); newRound('seek'); });
+// After the end screen: the menu, or with friends the room with this phone's result.
+function afterRound() {
+  if (!R.inRoom) return showMenu();
+  phase = 'room'; letGo();
+  R.note(nextLine());
+  R.backToRoom(...lastRes);
+}
+let lastRes = ['', ''], lastMode = 'kirkkis'; // the result of the round just played, and its game
+const racing = () => phase === 'count' || phase === 'seek' || phase === 'end';
+
+// ---------- Playing with friends (#27; on the shared room library since v3, #57) ----------
+// v4 (#67) adds "Kaikki pelastettu!" (the 'all' event) and the seek clock during the recount (sl).
+// The room itself is public/rooms.js: making one, joining by code or QR link, who is in,
+// reconnecting, the pause while a phone in the round is away, and its "Jatka ilman heitä". This is
+// the game's part. The phone that made the room (the host) runs the round: the computer players,
+// the rules, the clock. Every phone moves its own player and sends where it is; the host sends
+// everyone the round 12 times a second, and each phone draws it from its own player's eyes.
+// The messages are named apart from v2's (start, s, end), so a v2 phone that joins a v3 room by
+// its code hears none of them.
+let rid = '';        // the room's round this phone plays
+let castRound = '';  // a guest: the round its cast was made for (the host's kr or kfin)
+let overStart = false; // a guest: the round had ended before this page heard of it
+let events = [], sendT = 0, meT = 0, roomCode = '';
+const r2 = v => Math.round(v * 100) / 100;
+// v7: the sixth is how long one still waits after being tagged in Hippa, so a phone back mid-wait waits too.
+const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0), r2(Math.max(0, p.freeze || 0))]);
+// The round as another phone needs it: who is who, who seeks, and where everyone is.
+function roundMsg(t) {
+  return { t, round: rid, map: mapId, mode, seeker: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(),
+           people: people.map(p => ({ n: p.name, c: p.color, id: p.id })) };
+}
+
+R.on('start', s => {
+  menu.classList.add('hidden');
+  if (s.host) return hostStart(s);
+  // A guest waits for the host's round (kr), or for the end of a round it missed (kfin).
+  rid = s.round; overStart = s.over; castRound = ''; phase = 'wait'; letGo();
+});
+R.on('message', (m, from) => {
+  if (m.round !== rid) return;
+  if (R.isHost) {
+    const p = people.find(q => q.id === from && q.ctrl === 'remote');
+    // A phone still waiting after being tagged (Hippa) stays where it is.
+    if (m.t === 'kme' && p && racing() && !(p.freeze > 0) && [m.x, m.y, m.a].every(Number.isFinite)) {
+      p.x = Math.max(0, Math.min(WW, m.x)); p.y = Math.max(0, Math.min(WH, m.y)); p.a = m.a; p.moving = +m.m || 0;
+    }
+    return;
+  }
+  if (m.t === 'kr') guestStart(m);
+  else if (m.t === 'ks' && castRound === rid) guestState(m);
+  else if (m.t === 'kfin') guestEnd(m);
+});
+// The host: a phone in the round is back (a reload, a dropped connection), and gets the round as it is.
+R.on('hello', id => { if (phase === 'count' || phase === 'seek') R.send(roundMsg('kr'), id); });
+R.on('continue', ids => { for (const p of people) if (p.id && ids.includes(p.id) && p.ctrl === 'remote') botTakes(p); });
+R.on('back', id => {
+  const p = people.find(q => q.id === id);
+  if (p && p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
+});
+R.on('peers', members => {
+  // A new room starts from the beginning: nobody seeks next yet.
+  if (roomCode !== R.code) { roomCode = R.code; useSolo(); played = false; nextSeeker = null; }
+  if (!played) R.note(members.filter(m => m.on).length < 5 ? 'Tyhjät paikat täyttävät tietokonepelaajat.' : '');
+});
+R.on('lobby', () => { phase = 'room'; letGo(); played = false; castRound = ''; });
+R.on('leave', () => {
+  useSolo(); played = false; nextSeeker = null; msgT = 0; rid = castRound = roomCode = '';
+  showMenu();
+});
+R.on('menu', showMenu);
+
+// ----- On the host -----
+// The cast: the phones in the round, then computer players up to five.
+function hostStart(s) {
+  const cast = s.players.slice(0, 5).map((m, i) => {
+    const p = person(m.name, COLORS[i], m.id === R.me);
+    p.id = m.id; p.ctrl = m.id === R.me ? 'me' : 'remote';
+    return p;
+  });
+  const humans = cast.length, taken = new Set(cast.map(p => p.name.toLowerCase()));
+  for (const n of BOT_NAMES) if (cast.length < 5 && !taken.has(n.toLowerCase())) cast.push(person(n, COLORS[cast.length]));
+  loadMap(roomMap); mode = roomMode;
+  people = cast; player = cast.find(p => p.isPlayer); bots = cast.filter(p => p.ctrl === 'bot');
+  // The first one caught last round seeks; the first round, a phone picked at random.
+  const next = nextSeeker && cast.find(p => (nextSeeker.id ? p.id === nextSeeker.id : !p.id && p.name === nextSeeker.name));
+  rid = s.round; events = []; sendT = 0;
+  setupRound(next || cast[Math.floor(Math.random() * humans)]);
+  R.send(roundMsg('kr'));
+}
+function hostTick(dt) {
+  if ((sendT -= dt) > 0) return;
+  sendT = R.paused ? 0.5 : 1 / 12;
+  hostSend();
+}
+function hostSend() { R.send({ t: 'ks', round: rid, sk: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(), ev: events.splice(0) }); }
+
+// ----- On a guest phone -----
+function castFrom(m) {
+  if (!Array.isArray(m.people) || !Array.isArray(m.p)) return false;
+  loadMap(m.map); mode = MODES[m.mode] ? m.mode : 'kirkkis';
+  const cast = m.people.map(q => {
+    const p = person(q.n, q.c, q.id === R.me);
+    p.id = q.id; p.ctrl = q.id === R.me ? 'me' : 'net';
+    return p;
+  });
+  const me = cast.find(p => p.isPlayer);
+  if (!me) return false;
+  people = cast; player = me; bots = [];
+  seeker = people[m.seeker] || people[0];
+  people.forEach(p => { p.role = p === seeker ? 'seeker' : 'hider'; });
+  firstCaught = null; letGo(); castRound = m.round;
+  guestState(m, true);
+  return true;
+}
+function guestStart(m) {
+  if ((m.ph !== 'count' && m.ph !== 'seek') || !castFrom(m)) return;
+  overStart = false;
+  phase = m.ph; timer = m.tm;
+  if (m.ph === 'count' && m.tm > M().count - 1) show(['count', 0]);
+  menu.classList.add('hidden');
+}
+// The round is over: this phone saves its result once per round, however many times it hears so.
+function guestEnd(m) {
+  if (castRound === m.round) guestState(m); else if (!castFrom(m)) return;
+  const next = people[m.next] || seeker;
+  if (R.once(m.round)) roundOver(next); else { phase = 'end'; endT = 2.2; played = true; nextSeeker = next; lastRes = result(); lastMode = mode; }
+  if (overStart) endT = 0; // it ended while this page was away: straight to the room
+  menu.classList.add('hidden');
+}
+function guestState(m, snap) {
+  if (!m.p || m.p.length !== people.length) return;
+  // Hippa: who is it changes in the round.
+  if (Number.isInteger(m.sk) && people[m.sk] && people[m.sk] !== seeker) setIt(people[m.sk]);
+  m.p.forEach((q, i) => {
+    const p = people[i];
+    p.st = q[3];
+    if (Number.isFinite(q[5]) && (snap || p !== player)) p.freeze = q[5];
+    if (p === player && !snap) return; // this phone moves its own player
+    p.tx = q[0]; p.ty = q[1]; p.a = q[2]; p.moving = q[4];
+    if (snap) { p.x = q[0]; p.y = q[1]; }
+  });
+  if ((m.ph === 'count' || m.ph === 'seek') && (phase === 'count' || phase === 'seek')) phase = m.ph;
+  if (Number.isFinite(m.tm)) timer = m.tm;
+  seekLeft = Number.isFinite(m.sl) ? m.sl : null;
+  for (const ev of m.ev || []) show(ev);
+}
+function guestStep(dt) {
+  if (phase === 'end') { endT -= dt; if (endT <= 0) afterRound(); return; }
+  if (R.paused || castRound !== rid) return;
+  timer -= dt;
+  if (seekLeft !== null) seekLeft = Math.max(0, seekLeft - dt);
+  movePlayer(dt);
+  // The others glide to where the host last saw them.
+  const k = Math.min(1, dt * 12);
+  for (const p of people) if (p !== player && p.tx !== undefined) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+  if ((meT -= dt) <= 0) {
+    meT = 0.1;
+    R.send({ t: 'kme', round: rid, x: r2(player.x), y: r2(player.y), a: r2(player.a), m: r2(player.moving) });
+  }
+}
+// The host picks the map under the room's player list; the others are told who picks.
+const roomEl = document.createElement('div');
+function roomControls() {
+  roomEl.replaceChildren();
+  roomEl.style.cssText = 'display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px';
+  if (!R.inRoom) return;
+  if (!R.isHost) { const t = document.createElement('p'); t.style.margin = '0'; t.textContent = 'Huoneen tekijä valitsee pelin ja kentän.'; roomEl.append(t); return; }
+  const modesEl = document.createElement('div'), mapsBox = document.createElement('div');
+  modesEl.style.cssText = mapsBox.style.cssText = 'display:flex;gap:6px;justify-content:center;flex-wrap:wrap;width:100%';
+  modeButtons(modesEl, roomMode, id => { roomMode = id; roomControls(); });
+  for (const b of modesEl.children) {
+    const on = b.dataset.mode === roomMode;
+    b.style.cssText = `font:800 14px system-ui;padding:6px 10px;border-radius:12px;border:2px solid ${on ? '#f2c94c' : 'transparent'};background:${on ? '#7a3b8f' : '#4f2260'};color:#fff`;
+  }
+  mapButtons(mapsBox, roomMap, id => { roomMap = id; roomControls(); });
+  for (const b of mapsBox.children) {
+    const on = b.dataset.map === roomMap;
+    b.style.cssText = `display:flex;flex-direction:column;align-items:center;width:72px;font:700 13px system-ui;padding:5px 0;border-radius:12px;border:2px solid ${on ? '#f2c94c' : 'transparent'};background:${on ? '#7a3b8f' : '#4f2260'};color:#fff`;
+  }
+  roomEl.append(modesEl, mapsBox);
+}
+R.extra(roomEl);
+R.on('peers', roomControls);
+document.getElementById('multi').addEventListener('click', () => { unlock(); roomMode = soloMode; roomControls(); R.open(); });
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; frameDt = dt;
+  // Once the player is out, the rest of the round plays out faster (alone only: friends still play).
+  const out = !R.inRoom && phase === 'seek' && player.role === 'hider' && !active(player);
+  for (let i = 0; i < (out ? 3 : 1); i++) step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
