@@ -10,6 +10,8 @@ picks 100, 200 or 400 m, with or without hurdles, and each kind keeps its own re
 
 From v5 (#158) the player's runner wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's runner wears its own (`body()` in `games/aitajuoksu/v5/index.html`; the picker is `asut.md`).
 
+From v6 (#170) the legs run forwards: in `body()` in `games/aitajuoksu/v6/index.html` the knee bends while the thigh swings forward and the leg is near straight while it pushes back, where v1–v5 bent it on the wrong half of the stride, so the runner looked to run backwards.
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]
@@ -68,7 +70,7 @@ flowchart TD
 - **Keltainen kortti**: `card` 1: a small yellow card by the name and 🟨 in the top bar; `afterFalse()` calls `countdown()`, a new random gun moment.
 - **Punainen kortti: ulos radalta**: `card` 2: the runner stays at the start, dimmed, and comes last as "Hylätty" (`standings()` `dq`). Alone, the player's own red card ends the race straight to the menu, with nothing saved; in a room the race goes on without them.
 - **PAM! Kello käy**: `race.phase` becomes `run`; the race clock starts from the gun on each phone.
-- **Vauhti kasvaa**: `step()`: each tap on the other foot adds speed, less the faster the runner goes (up to 12 m/s); `move()` takes some away all the time, so about 8 taps a second holds about 8.3 m/s.
+- **Vauhti kasvaa**: `step()`: each tap on the other foot adds speed, less the faster the runner goes (up to 12 m/s); `move()` takes some away all the time, so about 8 taps a second holds about 8.3 m/s. The stride's speed follows it (`r.ph`); from v6 the knee bends as each leg swings forward (`body()`).
 - **Vauhti hidastuu hieman**: `step()`: the same foot twice takes 0.3 m/s off.
 - **Hyppy**: `jump()`: a jump of about half a second, 0.58 m high; no steps in the air.
 - **Aidat ja aidan kohdalla?**: `move()` checks each of `HURDLES` the runner passes this frame: 13 m, then every 8.5 m in v1-v2; from v3 the selected race's ten (`setTrack()`), or none in a race without hurdles, so a flat race never knocks anything.
