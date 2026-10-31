@@ -142,11 +142,19 @@ def test_whoever_takes_the_helm_first_drives_and_the_others_see_who(site, browse
     aino.click("#home")
     aino.wait_for_function("$('toast').textContent === 'Eero on ruorissa'")
     assert aino.evaluate("G.mode") == "home"
-    # The host goes inside: the first friend to ask gets the helm, the second is told who has it.
+    # The host goes inside. The helm is in the control room: from the galley the ⛵ corner button only says so, and
+    # an ask from there is refused by the host too.
     host.click("#home")
     close_cards(host)
     aino.wait_for_function("!net.helm")
     ville.wait_for_function("!net.helm")
+    stand(ville, "keittio")
+    ville.click("#home")
+    assert toast(ville) == "Kävele ohjaamoon: ruori on siellä"
+    ville.evaluate("AiPelitRooms.send({ t: 'do', a: 'helm', p: mine() })")
+    ville.wait_for_function("$('toast').textContent === 'Ruoriin pääsee ohjaamosta'")
+    assert ville.evaluate("G.mode") == "home" and host.evaluate("net.helm") is None
+    # In the control room the first friend to ask gets the helm, the second is told who has it.
     stand(ville, "ohjaamo")
     aino.evaluate("toHelm()")
     aino.wait_for_function("G.mode === 'sub'")
@@ -324,4 +332,31 @@ def test_when_the_host_s_page_reloads_everyone_goes_back_to_the_room_and_the_gam
         p.wait_for_function("G.s && G.s.day === 4 && G.mode !== 'wait' && G.mode !== 'menu'")
     assert aino.evaluate(f"localStorage.getItem('{SAVE}')") is None
     for p in (host, aino):
+        assert p.errors == []
+
+
+def test_four_phones_play_one_game_each_as_their_own_person(site, browser):
+    pages = room(site, browser, names=("Eero", "Aino", "Ville", "Sanni"))
+    host, guests = pages[0], pages[1:]
+    close_cards(*pages)
+    # Everyone is in the host's game, each friend their own person in their own colour, the host at the helm.
+    assert host.evaluate("[G.mode, G.s.day]") == ["sub", 4]
+    assert sorted(host.evaluate("Object.values(net.others).map(o => o.name)")) == ["Aino", "Sanni", "Ville"]
+    assert len(set(host.evaluate("Object.values(net.cols)"))) == 4
+    # Each goes their own way: one eats, one puts on a suit, one goes to the bunk.
+    for g, r in zip(guests, ["keittio", "puvut", "punkka"]):
+        stand(g, r)
+    guests[0].click("#act")
+    guests[1].click("#act")
+    host.wait_for_function("G.s.inv.ruoka === 0")
+    host.wait_for_function("""people().map(p => p.room).sort().join() === ',keittio,punkka,puvut'""")
+    for g in guests[1:]:
+        g.wait_for_function("Object.values(net.others).filter(o => o.mode === 'home').length === 2")
+    # Sanni sees Ville in his suit.
+    guests[2].wait_for_function("Object.values(net.others).find(o => o.name === 'Ville').suit")
+    # Only the host's save is written.
+    for g in guests:
+        assert g.evaluate(f"localStorage.getItem('{SAVE}')") is None
+    host.wait_for_function(f"JSON.parse(localStorage.getItem('{SAVE}')).inv.ruoka === 0")
+    for p in pages:
         assert p.errors == []
