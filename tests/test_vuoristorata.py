@@ -412,3 +412,17 @@ def test_changing_the_track_frees_the_old_tracks_materials_and_textures(page):
     assert res["keptMaterials"] == 4   # rails, spine, ties, posts: shared by every track
     assert res["scenes"] == 1
     assert page.errors == []
+
+
+def test_a_slow_phones_clock_keeps_real_time(page):
+    # Every frame takes about 150 ms (under 7 a second): the ride's clock still follows the wall clock.
+    page.click("#aja")
+    page.wait_for_function("game.mode === 'ride'", timeout=8000)
+    page.evaluate("game.car.s = 120; game.car.v = 10; auto = true")
+    page.evaluate("""() => { const raf = window.requestAnimationFrame;
+      window.requestAnimationFrame = f => raf(t => { const end = performance.now() + 150; while (performance.now() < end); f(t); }); }""")
+    page.wait_for_timeout(600)
+    t0, w0 = page.evaluate("[game.car.t, performance.now()]")
+    page.wait_for_timeout(3000)
+    t1, w1 = page.evaluate("[game.car.t, performance.now()]")
+    assert (t1 - t0) == pytest.approx((w1 - w0) / 1000, rel=0.15)

@@ -806,10 +806,12 @@ function wire() {
   show('menu');
   let last = performance.now();
   // The rules run on their own timer, so the round goes on even where 3D cannot be drawn.
+  // A slow phone's long frame is ridden in 50 ms steps, so its clock keeps real time and a race
+  // between fast and slow phones stays fair. Only a gap over a second (the page was hidden) is cut.
   (function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    let rest = Math.min(1, Math.max(0, (now - last) / 1000));
     last = now;
-    step(dt);
+    while (rest > 1e-6) { const dt = Math.min(0.05, rest); step(dt); rest -= dt; }
     requestAnimationFrame(frame);
   })(last);
 }
