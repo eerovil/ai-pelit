@@ -15,6 +15,13 @@
       "note": "Peli mahtuu ruudulle heti avattaessa: koko ruudun tilaan siirtyessä alaosa ei enää jää näytön alle.",
       "request": "Kun avaan pelin, osa UI sta on näytön alapuolella. Sitren kun swaippaan navbarin näkyviin ja takaisin, se korjautuu",
       "issue": "eerovil/ai-pelit#181"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-31",
+      "note": "Ohjaus yhdellä peukalolla kummallakin puolella: vasen liu'uttaa sivuttain loivasti tai jyrkästi, oikea on kaasu, jota painetaan ylös vähän tai paljon, ja alas jarruttaa.",
+      "request": "Ohjaus voisi kuitenkin olla yhdellä peukalolla. Vasemmalla kääntyminen (tarvitaan jyrkempi ja loivempi kääntyminen kuin nyt) ja oikealla kaasu, jota voi painaa paljon tai vähän",
+      "issue": "eerovil/ai-pelit#181"
     }
   ]
 }

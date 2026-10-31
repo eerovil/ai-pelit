@@ -1,6 +1,6 @@
 # Yöajo: one leg of the night drive
 
-How one leg of Yöajo plays (v1, #181; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`). The player drives at night up Valtatie 4 from Helsinki
+How one leg of Yöajo plays (v1, #181; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`). The player drives at night up Valtatie 4 from Helsinki
 to Rovaniemi, one leg a level, seen in 3D from behind the car. The car pulls up to speed by
 itself; the player steers, brakes and switches the high beams. On the road come oncoming cars,
 slow tractors, trucks and cars to overtake, walkers, reckless drivers, bad stretches, speed
@@ -8,7 +8,7 @@ cameras, moose (and reindeer in Lapland), rain and snow, and the driver grows sl
 
 ```mermaid
 flowchart TD
-  A[Valitse osuus, Aja] --> B[Auto kiihtyy itse: ohjaa, jarruta, valot]
+  A[Valitse osuus, Aja] --> B[Aja: ohjaa, kaasuta, jarruta, valot]
   B --> C{Mitä tiellä?}
   C -- Vastaantulija --> D{Pitkät pois ajoissa?}
   D -- Kyllä --> D1[Lähivaloille ajoissa +20]
@@ -56,7 +56,7 @@ flowchart TD
 ## Boxes
 
 - **Valitse osuus, Aja**: the menu (`menu()` in `games/yoajo/v1/ui.js`) lists the eight legs of `LEGS` in `game.js`, from Helsinki → Järvenpää to Oulu → Rovaniemi; a leg opens when the one before is driven (`maxLeg`, saved as `ai-pelit:yoajo:taso`). Each leg has its own weather (dry, rain, snow, blizzard) and its own mix of traffic. `newLeg()` builds the road (`makeRoad()`: bends and hills from the leg's seed), the speed limits and signs, and the list of what happens where (`events`).
-- **Auto kiihtyy itse: ohjaa, jarruta, valot**: `drive()` in `game.js`. The car pulls up to 130 km/h unless JARRU is held; ◀ ▶ move it across the road, and a bend pushes it outwards, more the faster and the slipperier (`WEATHER[...].grip`). VALOT switches between low beams (42 m) and high beams (135 m), less in rain and snow; `view.js` draws them as one spot light, so what is beyond the beam stays dark. The buttons are drawn and read in `ui.js` (`driveButtons()`), held buttons by pointer.
+- **Aja: ohjaa, kaasuta, jarruta, valot**: `drive()` in `game.js`. v1 and v2: the car pulls up to 130 km/h by itself unless JARRU is held, and ◀ ▶ buttons steer fully. v3 (#181 feedback, Eero's choice): one thumb a side, anywhere below the top line (`thumbs` and `setThumbs()` in `games/yoajo/v3/ui.js`). The left thumb slides sideways from where it landed: a short slide is a gentle turn, a long one sharper than v1's buttons (`input.steer`, the slide to the power 1.4). The right thumb is the gas: landing is a light press (35 %), sliding up gives more, up to full, and sliding down past where it landed brakes by how far (`input.gas`, `input.brake`). Off the gas the engine slows the car a little. A bend pushes the car outwards, more the faster and the slipperier (`WEATHER[...].grip`). VALOT (a button in the middle in v3) switches between low beams (42 m) and high beams (135 m), less in rain and snow; `view.js` draws them as one spot light, so what is beyond the beam stays dark.
 - **Pitkät pois ajoissa?**: `lights()` in `game.js`. An oncoming car is released 620 m ahead; if the high beams were on when it came into sight and are off before it is 150 m away, +20. Still on at 150 m: −30 and it flashes its own at the player. A car ahead within 70 m dazzled for 1.5 s costs −20.
 - **Ohitus +40..60**: `meet()`: passing a slow vehicle in the player's direction scores once (tractor 40, car 50, truck 60). Same-direction cars keep behind slower ones and behind the player.
 - **Väljä ohitus +20**: walkers keep to the left edge facing traffic, or now and then the right edge; a third have no reflector and show only in the beam. Passing with under a metre of room above 40 km/h costs −40; touching one ends the leg as a near miss ("Vaaratilanne").
