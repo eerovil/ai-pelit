@@ -361,7 +361,7 @@ for (const s of SITES) {
 
 // The station on the ice (v6): two notes, and the stores the crew left behind.
 const ICE_ITEMS = [
-  { id: 'pinta:loki', k: 'loki', x: 190, y: -3.3, site: 'pinta', log: 'pinta' },
+  { id: 'pinta:loki', k: 'loki', x: 190, y: -3.3, site: 'pinta', log: 'paivakirja' },
   { id: 'pinta:taulu', k: 'loki', x: 170, y: -3.3, site: 'pinta', log: 'taulu' },
   { id: 'pinta:l', k: 'laake', x: 151, y: -3.1, site: 'pinta' },
   { id: 'pinta:r1', k: 'ruoka', x: 136, y: -3.1, site: 'pinta' },
@@ -375,7 +375,7 @@ const LOGS = {
     { t: '4.3. Mantereelta ei vastata millään taajuudella. Satelliittipuhelin näyttää vain viivaa.', c: 'log' },
     { t: '6.3. Nordlys hakee meidät huomenna. Jätin radion varavahvistimen tutkimusmoduuliin – jos joku joskus tarvitsee sitä.', c: 'log' },
     { t: 'Joku muukin on siis ollut täällä. Minne he lähtivät?' }] },
-  pinta: { title: 'A-3:n radiopäiväkirja', paras: [
+  paivakirja: { title: 'A-3:n radiopäiväkirja', paras: [
     { t: '»1.3. Aurinko ei noussut, vaikka kalenterin mukaan pitäisi. Revontulet loistavat keskipäivällä.»', c: 'log' },
     { t: '»5.3. Meri jäätyy umpeen. Vain railot pysyvät auki. Nordlys lupasi lähettää veneen alakautta, jään alta.»', c: 'log' },
     { t: 'He odottivat täällä apua. Apu tuli meren alta – niin kuin sinäkin.' }] },
@@ -583,7 +583,8 @@ function goalNow() {
   // v6: while the parts are short, the station on the ice has some: its opening is where the sonar points.
   if (s.up.hull < 2) return s.inv.osat >= COST.hull[2] ? { text: 'Vahvista runko: 🏠 sisälle, alakerran työpajaan.', target: null }
     : { text: `Hylkykenttä on yli ${RATING[1]} metrissä. Kerää ⚙️ ${s.inv.osat}/${COST.hull[2]} ja vahvista runko.`
-      + (f.pinta ? '' : G.mode === 'ice' ? ' Asema A-3 on vasemmalla, jäätikön reunalla.' : ' Aseman yläosa on jäällä: nouse railosta pintaan.'),
+      + (f.pinta ? '' : G.mode !== 'ice' ? ' Aseman yläosa on jäällä: nouse railosta pintaan.'
+        : inStation(walker.x) ? ' Vie aseman varaston osat SISUun.' : ' Asema A-3 on vasemmalla, jäätikön reunalla.'),
       target: f.pinta ? null : 'railo0' };
   if (!f.nordvik) return { text: 'Tutki hylkykenttä idässä. Pysy rungon syvyysrajan yläpuolella.', target: f.polaris ? 'nordvik' : 'polaris' };
   if (!s.inv.antenni) return { text: 'Etsi Nordlysin huoltovarasto K-7 jäävuoren luolista.', target: 'jaavuori' };
@@ -1756,8 +1757,8 @@ function drawWeather(oy) {
     if (y < oy + 4) ctx.fillRect(x, y, 2 * p.z, 2 * p.z);
   }
   if (walker.warm < 50) {
-    const k = (50 - walker.warm) / 50, g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
-    g.addColorStop(0, 'rgba(200,235,255,0)'); g.addColorStop(1, `rgba(200,235,255,${0.55 * k})`);
+    const k = (50 - walker.warm) / 50, g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.hypot(W, H) / 2);
+    g.addColorStop(0, 'rgba(225,245,255,0)'); g.addColorStop(1, `rgba(225,245,255,${0.9 * k})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
 }
