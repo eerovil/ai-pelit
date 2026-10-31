@@ -90,6 +90,21 @@ def test_run_throughs_too_early_too_late_or_never_and_a_slip_of_the_thumb(site, 
     assert page.errors == []
 
 
+def test_a_stray_tap_at_the_start_or_far_from_the_zone_does_not_plant(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    # Standing at the start (a tap that skipped the standings, or missed the pass button).
+    page.evaluate("ready(); hold(1); letGo()")
+    assert page.evaluate("[th.phase, th.res, me().att[0] || '']") == ["ready", None, ""]
+    # Running, but still well short of the green zone.
+    page.evaluate("press(1); th.x = -12; th.v = 8; hold(1); letGo()")
+    assert page.evaluate("[th.phase, th.res, th.px]") == ["run", None, None]
+    # Just before the zone: still a run-through.
+    page.evaluate("th.x = -5.5; hold(1)")
+    assert page.evaluate("[th.phase, th.res, th.why]") == ["land", "X", "Liian aikaisin: läpijuoksu"]
+    assert page.errors == []
+
+
 def test_holding_swings_the_legs_up_and_letting_go_at_the_top_clears(site, context):
     page = open_game(site, context)
     page.click("#go")

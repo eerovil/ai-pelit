@@ -91,6 +91,7 @@ const FIELD = 12, TRIES = 3, STEP_H = 0.10, MAX_H = 7.0;   // twelve vaulters; t
 // up while the pole bends and straightens; letting go at the top pushes off the pole.
 const START = -32, VMAX = 12, STEP = 1.0;
 const TAKEOFF = -4.0, PLANT_OK = 0.8, PLANT_BEST = 0.3;  // the take-off spot, and how far from it a plant still goes
+const PLANT_FROM = TAKEOFF - PLANT_OK - 3;              // a press further back than this is not a plant yet
 const T_POLE = 1.0, HANG = 0.5, PUSH_W = 0.4, TAP_MIN = 0.12;  // s: the pole straightens; hold after it; the push window
 const SWING_T = 0.7, PUSH = 0.5, LEGS = 0.5, VSTALL = 4.5;  // s to full swing; metres from the push and lost with the legs down
 const G = 9.81, BAR_X = 0.5, MAT_H = 0.8, PL = 4.6;
@@ -350,7 +351,9 @@ function hold(ptr) {
   flash[3] = 0.09;
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
   if (th.phase === 'pole') { th.held = true; holdPtr = ptr; return; }
-  if (th.phase !== 'ready' && th.phase !== 'run') return;
+  // Standing at the start, or still well short of the green zone, a press is a stray tap (skipping
+  // the standings, missing the pass button), not a plant: only a plant just too early runs through.
+  if (th.phase !== 'run' || th.x < PLANT_FROM) return;
   th.idle = 0;
   const d = th.x - TAKEOFF;
   if (d < -PLANT_OK) return outcome('Liian aikaisin: läpijuoksu');
