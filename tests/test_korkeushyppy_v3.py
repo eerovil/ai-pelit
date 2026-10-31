@@ -1,4 +1,4 @@
-"""Korkeushyppy v3: the medal ceremony, and the podium stays until a tap (yleisurheilu-3, #176)."""
+"""Korkeushyppy v3: the medal ceremony, and the podium stays until a tap (yleisurheilu-4, #176)."""
 
 import pytest
 from conftest import ROOT, turn
@@ -117,3 +117,27 @@ def test_with_friends_each_phone_leaves_the_podium_by_its_own_tap(site, browser)
     for p in pages:
         assert p.errors == []
         p.context.close()
+
+
+def test_a_shared_place_shares_the_medal(site, context):
+    page = open_game(site, context)
+    win_meet(page)
+    page.evaluate("K.ending.t = 0.2; draw()")
+    base = page.evaluate(MEDAL_PIXELS)
+    # The second jumper ties the winner on the countback: both share the 1st place, the next is 3rd.
+    page.evaluate("const r = K.ending.res; r[1].best = r[0].best; r[1].place = 1;")
+    texts = page.evaluate("""() => {
+      const real = CanvasRenderingContext2D.prototype.fillText, pod = K.drawPodium, out = [];
+      K.drawPodium = (...a) => {
+        CanvasRenderingContext2D.prototype.fillText = function (s) { out.push(String(s)); return real.apply(this, arguments); };
+        try { pod(...a); } finally { CanvasRenderingContext2D.prototype.fillText = real; }
+      };
+      K.ending.t = 6.5; draw(); K.drawPodium = pod;
+      return out;
+    }""")
+    gold, silver, bronze = [n - b for n, b in zip(page.evaluate(MEDAL_PIXELS), base)]
+    # Two golds on the podium, no silver, the bronze for the 3rd.
+    assert gold > 40 and silver < 5 and bronze > 20
+    assert texts.count("🥇") == 2 and texts.count("🥈") == 0 and texts.count("🥉") == 1
+    assert texts.count("1") >= 2 and "2" not in [t for t in texts if t in ("1", "2", "3")]
+    assert page.errors == []

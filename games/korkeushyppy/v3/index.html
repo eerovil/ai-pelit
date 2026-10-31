@@ -65,8 +65,8 @@
     napauta: selkä kaarelle, sitten jalat ylös. Kolme peräkkäistä pudotusta päättää kisan.</p>
 </div>
 <script src="../../../rooms.js" data-game="korkeushyppy" data-min="2" data-max="8"></script>
-<script src="../../../lib/yleisurheilu-3/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-3/korkeus.js"></script>
+<script src="../../../lib/yleisurheilu-4/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-4/korkeus.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -228,7 +228,7 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-3/korkeus.js): the bar rises; at each height everyone
+// in its bar-height format (lib/yleisurheilu-4/korkeus.js): the bar rises; at each height everyone
 // still in takes a first attempt in the drawn order, then those who failed a second, then a third;
 // a pass is allowed, three failures in a row and you are out. K.comp is the meet: a jumper is {id,
 // name, p, bot, skill (the height the computer clears half the time), first (the height index it
