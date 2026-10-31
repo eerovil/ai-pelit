@@ -37,6 +37,13 @@
       "note": "Kisan lopuksi palkintojenjako: kolme parasta nousee palkintokorokkeelle, toimitsija ripustaa pronssin, hopean ja kullan kaulaan, ja lopputulokset näkyvät korokkeen alla.",
       "request": "165 follow up: podium cutscene, mitalien ripustus kaulaan",
       "issue": "eerovil/ai-pelit#176"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-31",
+      "note": "Palkintokoroke jää näkyviin, kunnes napautat sen pois – myös kavereiden kanssa – eikä katoa enää itsestään.",
+      "request": "Podium saisi jäädä siihen kunnes poistuu. Nyt taitaa automaattisesti kadota. Tämä kaikkiin kisoihin",
+      "issue": "eerovil/ai-pelit#176"
     }
   ]
 }
