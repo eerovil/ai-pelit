@@ -21,7 +21,7 @@ flowchart TD
   NET -- Yksin --> RES
   HOST --> RES[Lajin lopputulokset näkyvät]
   GUEST --> RES
-  RES --> PTS[Paras tulos pisteiksi: A·P−B^C]
+  RES --> PTS["Paras tulos pisteiksi: A·(P−B)^C"]
   PTS --> LAST{Viimeinen laji?}
   LAST -- Ei --> BOARD[Pisteet yhteensä, Seuraava laji]
   BOARD --> LOAD
@@ -53,5 +53,5 @@ flowchart TD
 - **Kirjasto muutetaan: 8 urheilijaa, 3 kierrosta, omat tallennukset**: `patch()`: `rounds()` gets three rounds, `meet()` gets the match's field and names and the slug `ottelu:<event>`, so the event saves under `ai-pelit:ottelu:<event>:…`; `K.step` scores the event as soon as its results appear (`eventScored()`, saved at once, since the library drops the event's own save then) and moves the match on once they have been shown (`eventOver()`). `prefetch()` fetches every event's page and scripts once online, so the service worker keeps them for offline play.
 - **Isännän laji vetää kisaa, viestit kääreessä L**: `newProxy()` is the event's `AiPelitRooms`; the event's messages go as `{t: 'L', at, m}`, so one from an event already over never reaches the next.
 - **Vieraan kehys valmis: Lr, isäntä lähettää kisan**: a guest's frame sends `{t: 'Lr'}` once loaded; the host's event hears it as `hello` and sends that phone the meet.
-- **Paras tulos pisteiksi: A·P−B^C**: `LAJIT[…].pts`, World Athletics combined-event tables (the decathlon's jumps and javelin; the hammer by the throws pentathlon), rounded down; no mark is 0 points.
+- **Paras tulos pisteiksi: A·(P−B)^C**: `LAJIT[…].pts`, World Athletics combined-event tables (the decathlon's jumps and javelin; the hammer by the throws pentathlon), rounded down; no mark is 0 points.
 - **Ennätys, tuloslista lajimäärän mukaan, voitosta seuraava taso**: `ended()`; the high-score list is `lajit-<number of events>`.
