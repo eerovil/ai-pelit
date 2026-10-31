@@ -17,6 +17,26 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
     assert [v["n"] for v in catalog["games"][0]["versions"]] == [1, 2]
 
 
+def test_a_group_gathers_its_games_and_is_listed_only_when_used(tmp_path):
+    make_game(tmp_path, "yksin", [game_page("a")])
+    assert build.build_catalog(tmp_path)["groups"] == []
+    make_game(tmp_path, "hyppy", [game_page("a")], group="yleisurheilu")
+    catalog = build.build_catalog(tmp_path)
+    assert [g["slug"] for g in catalog["groups"]] == ["yleisurheilu"]
+    assert {g["slug"]: g.get("group") for g in catalog["games"]} == {"yksin": None, "hyppy": "yleisurheilu"}
+
+
+def test_an_unknown_group_or_a_game_named_like_a_group_is_refused(tmp_path):
+    make_game(tmp_path, "hyppy", [game_page("a")], group="talviurheilu")
+    with pytest.raises(build.GameError, match="unknown group"):
+        build.build_catalog(tmp_path)
+    (tmp_path / "hyppy" / "game.json").unlink()
+    make_game(tmp_path, "hyppy", [game_page("a")])
+    make_game(tmp_path, "yleisurheilu", [game_page("a")])
+    with pytest.raises(build.GameError, match="group's address"):
+        build.build_catalog(tmp_path)
+
+
 def small_webp():
     # A real 3 x 4 WebP: the build reads the size from its header, without Pillow.
     return bytes.fromhex("524946463c000000574542505650382030000000f001009d012a0300040001402625a00274ba01f800044c0000feec70dffd26cf136789b3e491ffcec1b12ed780000000")

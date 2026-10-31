@@ -12,6 +12,9 @@ player sees is Finnish unless the request says otherwise.
 - "<Peli> v<N> (<slug>): …" — a new version. Copy the newest version still in `games/<slug>/`
   (usually `v<N-1>/`) to the next free number and change the copy; a withdrawn number (rule 1) is
   skipped for good, so Puhelinkoppi goes from `v2/` to `v5/`. Append the version to `game.json`.
+- A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
+  own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
+  group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
@@ -55,7 +58,7 @@ start a new game or version.
    `ai-pelit:<slug>:<name>` (keys starting `ai-pelit:_` belong to the shared scripts). All versions of a game share those keys: a new version must read
    the previous version's saved data (or migrate it in place) and never rename, reset or clear
    it. Never touch another game's keys.
-6. **game.json** — `title`, one-line `description`, and per version `n` (1, 2, 3… in order),
+6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (1, 2, 3… in order),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
    (the issue text) and `issue` (`eerovil/ai-pelit#<n>`).
 

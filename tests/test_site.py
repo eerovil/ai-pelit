@@ -93,6 +93,64 @@ def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, cont
     assert page.url == "about:blank"
 
 
+def test_a_group_is_one_card_on_the_shelf_and_its_games_go_up_to_it(site, context):
+    # Shelf groups (#153): the group's card sits where its newest game would, and each level's
+    # back goes one step up: game -> its page -> the group -> the shelf -> out.
+    make_game(site.games, "vanha", [game_page("v1")], dates=["2026-01-01"])
+    make_game(site.games, "keihas", [game_page("v1")], dates=["2026-02-01"], group="yleisurheilu", title="Keihäs")
+    make_game(site.games, "hyppy", [game_page("v1")], dates=["2026-03-01"], group="yleisurheilu", title="Hyppy")
+    make_game(site.games, "uusi", [game_page("v1")], dates=["2026-04-01"])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    page.wait_for_selector(".card")
+    assert page.eval_on_selector_all(".cards > .card", "cs => cs.map(c => c.dataset.slug)") == ["uusi", "yleisurheilu", "vanha"]
+    assert page.locator('.card[data-slug="yleisurheilu"] .desc').inner_text() == "Hyppy, Keihäs"
+    page.click('.card[data-slug="yleisurheilu"] .card-main')
+    page.wait_for_url(f"{site.url}#/yleisurheilu")
+    assert page.locator("h1").inner_text() == "Yleisurheilu"
+    assert page.eval_on_selector_all(".card", "cs => cs.map(c => c.dataset.slug)") == ["hyppy", "keihas"]
+    page.click('.card[data-slug="keihas"] .card-main')
+    page.wait_for_selector(".version")
+    assert page.locator("a.back").inner_text() == "‹ Yleisurheilu"
+    page.click('.version[data-n="1"] a')
+    page.wait_for_url("**/games/keihas/v1/")
+    page.click("#ai-pelit-back")
+    page.wait_for_url(f"{site.url}#/keihas")
+    page.click("a.back")
+    page.wait_for_url(f"{site.url}#/yleisurheilu")
+    page.click("a.back")
+    page.wait_for_selector('.card[data-slug="uusi"]')
+    page.go_back()
+    assert page.url == "about:blank"
+
+
+def test_a_game_played_from_its_groups_page_goes_back_through_its_own_page(site, context):
+    make_game(site.games, "hyppy", [game_page("v1")], group="yleisurheilu", title="Hyppy")
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    page.click('.card[data-slug="yleisurheilu"] a.play')
+    page.wait_for_url(f"{site.url}#/yleisurheilu")
+    page.click('.card[data-slug="hyppy"] a.play')
+    page.wait_for_url("**/games/hyppy/v1/")
+    page.go_back()
+    page.wait_for_url(f"{site.url}#/hyppy")
+    page.go_back()
+    page.wait_for_url(f"{site.url}#/yleisurheilu")
+
+
+def test_a_groups_game_opened_from_a_link_goes_up_to_the_group(site, context):
+    make_game(site.games, "hyppy", [game_page("v1")], group="yleisurheilu", title="Hyppy")
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}#/hyppy")
+    page.click("a.back")
+    page.wait_for_url(f"{site.url}#/yleisurheilu")
+    page.click("a.back")
+    page.wait_for_selector('.card[data-slug="yleisurheilu"]')
+
+
 def test_a_ctrl_click_opens_the_link_in_a_new_tab_as_before(site, context):
     make_game(site.games, "pomppu", [game_page("v1")])
     site.build()
