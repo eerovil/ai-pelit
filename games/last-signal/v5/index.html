@@ -1,0 +1,2056 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#04121f">
+<title>Last Signal</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #04121f; color: #e8f6ff;
+    font-family: system-ui, sans-serif; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  .hidden { display: none !important; }
+  #hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top) + 8px) 10px 0 10px; pointer-events: none; }
+  #meters { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0 52px 0 78px; min-height: 36px; align-items: center; }
+  .m { display: flex; align-items: center; gap: 3px; font-size: 13px; }
+  .m i { display: block; width: 26px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.18); overflow: hidden; }
+  .m s { display: block; height: 100%; width: 100%; background: #7fe0ff; border-radius: 4px; }
+  .m em { font-style: normal; font-size: 12px; color: #cfeeff; }
+  .m.low s { background: #ff6b6b; }
+  .m.low { animation: blink 0.8s infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+  #depth { font: 700 13px ui-monospace, monospace; color: #9fffd0; white-space: nowrap; }
+  #depth.over { color: #ff7b7b; animation: blink 0.6s infinite; }
+  #goalbar { margin-top: 8px; display: flex; align-items: center; gap: 8px; background: rgba(2,14,26,.66);
+    border: 1px solid rgba(127,224,255,.25); border-radius: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; }
+  #goal { flex: 1; }
+  #carry { flex: none; font-size: 13px; color: #ffd65a; white-space: nowrap; }
+  #home { position: fixed; top: calc(env(safe-area-inset-top) + 6px); right: 8px; width: 44px; height: 44px; border-radius: 50%;
+    border: 2px solid rgba(255,214,90,.75); background: rgba(40,26,8,.8); font-size: 22px; padding: 0; touch-action: manipulation; }
+  #toast { position: fixed; left: 16px; right: 16px; top: 32dvh; text-align: center; font-size: 21px; font-weight: 800;
+    color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.9); pointer-events: none; }
+  #pad { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 14px calc(env(safe-area-inset-bottom) + 14px); pointer-events: none; }
+  #stick { position: relative; width: 140px; height: 140px; border-radius: 50%; background: rgba(127,224,255,.08);
+    border: 2px solid rgba(127,224,255,.4); touch-action: none; pointer-events: auto; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+    background: rgba(200,240,255,.5); pointer-events: none; }
+  #right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: none; }
+  #act, #act2 { pointer-events: auto; touch-action: manipulation; font: inherit; font-size: 17px; font-weight: 800; color: #2b1d00;
+    background: #ffd65a; border: 0; border-radius: 14px; padding: 12px 14px; max-width: 180px; box-shadow: 0 4px 0 #b88a00; }
+  #act:active, #act2:active { transform: translateY(3px); box-shadow: 0 1px 0 #b88a00; }
+  #act:disabled, #act2:disabled { opacity: .5; }
+  /* Inside SISU (v3): the room's actions in warm colours, the name of the room above them. */
+  #pad.inside #act, #pad.inside #act2 { font-size: 16px; padding: 11px 13px; }
+  #pad.inside #act2 { background: #ffe9b0; box-shadow: 0 4px 0 #b8975a; }
+  #roomName { font: 800 13px system-ui, sans-serif; letter-spacing: 1px; color: #ffe6b8; text-shadow: 0 1px 4px #000; text-transform: uppercase; }
+  #ping { pointer-events: auto; touch-action: manipulation; width: 76px; height: 76px; border-radius: 50%; font-size: 28px; line-height: 1;
+    color: #c8ffe4; background: rgba(40,180,120,.18); border: 2px solid rgba(120,255,190,.6); padding: 0; }
+  #ping small { display: block; font: 700 11px ui-monospace, monospace; letter-spacing: 1px; margin-top: 2px; }
+  #ping.cool { opacity: .45; }
+  #panel, #menu { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px;
+    box-sizing: border-box; background: rgba(1,8,16,.55); touch-action: manipulation; }
+  .card { width: 100%; max-width: 340px; max-height: 88dvh; overflow-y: auto; background: rgba(6,24,42,.95); border-radius: 18px;
+    border: 1px solid rgba(127,224,255,.35); padding: 18px 16px; box-sizing: border-box; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  .card h2 { margin: 0 0 8px; font-size: 22px; color: #7fffd4; }
+  .card p { margin: 0 0 10px; font-size: 16px; line-height: 1.45; }
+  .card p.log { font-style: italic; background: rgba(255,255,255,.06); border-left: 3px solid #ffd65a; padding: 8px 10px; border-radius: 6px; }
+  .card p.msg { color: #ffd65a; font-weight: 700; }
+  .card p.small { font-size: 13px; color: #cbb89a; margin-bottom: 6px; }
+  .card button { display: block; width: 100%; margin-top: 8px; font: inherit; font-size: 16px; font-weight: 700; text-align: left;
+    color: #e8f6ff; background: rgba(127,224,255,.12); border: 1px solid rgba(127,224,255,.35); border-radius: 12px; padding: 11px 12px; }
+  .card button:disabled { opacity: .45; }
+  #multi { text-align: center; font-size: 16px; }
+  .card button.go { text-align: center; color: #2b1d00; background: #ffd65a; border: 0; box-shadow: 0 4px 0 #b88a00; font-size: 18px; }
+  #menu { background: linear-gradient(rgba(1,8,16,.05), rgba(1,8,16,.8)); align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 28px); }
+  #menu .card { background: rgba(6,24,42,.84); }
+  #menu h1 { margin: 0; font-size: 40px; letter-spacing: 3px; color: #e8f6ff; text-shadow: 0 3px 12px #000; }
+  #menu .sub { margin: 0 0 12px; font-size: 13px; letter-spacing: 2px; color: #9fffd0; }
+  #menu .help { font-size: 13px; color: #a8cfe6; margin-top: 10px; }
+  #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s; }
+  #fade.on { opacity: 1; transition: none; }
+  /* The logbook: the logs found, two to a row. */
+  .card .btns.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 6px; }
+  .card .btns.grid button { font-size: 13px; line-height: 1.2; padding: 6px 8px; margin-top: 5px; overflow-wrap: anywhere; hyphens: auto; }
+  /* Sideways the rows are wide but few fit: one line each. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .card .btns.grid button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+  .card .btns.grid button.go { grid-column: 1 / 3; }
+  /* Sideways (#95): the HUD in one row along the top, cards in two columns, the home card at the right. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    #hud { display: flex; align-items: flex-start; gap: 8px; padding-top: calc(env(safe-area-inset-top) + 6px);
+      padding-left: calc(env(safe-area-inset-left) + 10px); padding-right: calc(env(safe-area-inset-right) + 60px); }
+    #meters { flex: none; flex-wrap: nowrap; margin: 0 0 0 78px; min-height: 40px; }
+    #goalbar { flex: 1; min-width: 0; margin-top: 0; padding: 4px 8px; font-size: 13px; line-height: 1.25; }
+    #home { right: calc(env(safe-area-inset-right) + 8px); }
+    #pad { padding: 0 calc(env(safe-area-inset-right) + 18px) calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 18px); }
+    #stick { width: 128px; height: 128px; }
+    #right { flex-direction: row-reverse; align-items: flex-end; }
+    #toast { top: 26dvh; }
+    #panel { padding: 8px calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 70px); }
+    #panel .card { display: flex; align-items: center; gap: 16px; max-width: 760px; max-height: calc(100dvh - 16px); padding: 12px 14px; }
+    #panel .txt { flex: 1; min-width: 0; }
+    #panel .btns { flex: 1; min-width: 0; }
+    #panel .btns.few { flex: 0 0 190px; }
+    #panel .btns button:first-child { margin-top: 0; }
+    #pad.inside #right { flex-direction: column; align-items: flex-end; gap: 8px; }
+    #panel .btns.grid { flex: 2.2; }
+    .card h2 { font-size: 20px; margin-bottom: 6px; }
+    .card p { font-size: 15px; line-height: 1.38; margin-bottom: 7px; }
+    .card p:last-child { margin-bottom: 0; }
+    .card button { font-size: 15px; line-height: 1.25; padding: 7px 11px; margin-top: 6px; }
+    .card button.go { font-size: 17px; }
+    #menu { align-items: center; padding: 10px calc(env(safe-area-inset-right) + 14px) 10px calc(env(safe-area-inset-left) + 14px); }
+    #menu .card { display: grid; grid-template-columns: 1fr 210px; column-gap: 18px; align-items: center; max-width: 620px; padding: 14px 16px; }
+    #menu h1 { grid-column: 1; grid-row: 1; font-size: 34px; }
+    #menu .sub { grid-column: 1; grid-row: 2; margin-bottom: 8px; }
+    #menuText { grid-column: 1; grid-row: 3; }
+    #menu .help { grid-column: 1; grid-row: 4; margin: 4px 0 0; }
+    #jatka { grid-column: 2; grid-row: 1 / 3; align-self: end; }
+    #uusi { grid-column: 2; grid-row: 3; align-self: start; }
+    #jatka.hidden + #uusi { grid-row: 2 / 4; align-self: center; }
+    #multi { grid-column: 2; grid-row: 4; align-self: start; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <div id="meters">
+    <span class="m" id="mFood"><b>🍲</b><i><s></s></i></span>
+    <span class="m" id="mHealth"><b>❤️</b><i><s></s></i></span>
+    <span class="m" id="mHull"><b>🛡️</b><i><s></s></i></span>
+    <span class="m hidden" id="mAir"><b>🫁</b><i><s></s></i><em id="airS"></em></span>
+    <span id="depth"></span>
+  </div>
+  <div id="goalbar"><span id="goal"></span><span id="carry"></span></div>
+</div>
+<button id="home" class="hidden" aria-label="Koti">🏠</button>
+<div id="toast" class="hidden"></div>
+<div id="pad" class="hidden">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="right">
+    <span id="roomName" class="hidden"></span>
+    <button id="act2" class="hidden"></button>
+    <button id="act" class="hidden"></button>
+    <button id="ping">📡<small>PING</small></button>
+  </div>
+</div>
+<div id="fade"></div>
+<div id="panel" class="hidden"><div class="card" id="card"></div></div>
+<div id="menu" class="hidden"><div class="card">
+  <h1>LAST SIGNAL</h1>
+  <p class="sub">SELVIYTYMINEN ARKTISELLA MERELLÄ</p>
+  <p id="menuText">Maailma on hiljentynyt. Sinulla on pieni ydinsukellusvene, kylmä meri ja yksi kysymys: onko ketään muuta jäljellä?</p>
+  <button class="go hidden" id="jatka">Jatka</button>
+  <button class="go" id="uusi">Uusi peli</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p class="help">Vasen ohjain ajaa. 📡 kuuntelee merta. 🏠 vie sisälle: kävele huoneesta toiseen, pue puku ja sukella ilmalukosta.</p>
+</div></div>
+<!-- Last Signal v5 (#138): v4 with friends (2–4 phones) in the host's game, each walking and diving as their own person.
+     Last Signal v4 (#132): v3 with the sea's pressure on the hull also during a dive and inside SISU.
+     Last Signal v3 (#132): v2 (#129) with SISU's inside walked as a person: two decks of rooms joined by a ladder, as in
+     the SISU picture of #125; eating, medicine, repairs, the radio, sleep and dives are done in their own rooms. -->
+<script src="../../../rooms.js" data-game="last-signal" data-min="2" data-max="4"></script>
+<script>
+'use strict';
+const KEY = 'ai-pelit:last-signal:';
+const C = 2;                       // a site's grid cell, in metres
+const WORLD_W = 4500;
+const SHELF_X = 240, SHELF_Y = 5;  // the ice shelf at the head of the bay
+const RATING = [0, 160, 260, 380, 620, 1000, 1450]; // hull level → safe depth (m)
+const TANK = [0, 60, 90, 120, 150];  // tank level → seconds of air
+const LAMP = [0, 1, 1.45, 1.9];
+const COST = { hull: [0, 0, 3, 5, 5, 6, 7], tank: [0, 0, 2, 3, 4], lamp: [0, 0, 2, 4] };
+const COLD = 600, CHILL = 1.35;     // below this depth the cold water drains the diver's air faster
+const DIVER_SPEED = 4.4, SUB_SPEED = 16;
+const WALK = 4.2, CLIMB = 2.6;      // the person inside SISU (v3), in m/s
+
+// The sea floor, left to right: glacier bay, a ridge, the wreck field, a deep trench, the iceberg field, and
+// in v2 the continental slope down in ledges, the Nordlys ledge at ~900 m and the deep sea beyond 1300 m.
+const FLOOR = [[0, 105], [60, 112], [140, 118], [230, 122], [330, 126], [450, 132], [560, 136], [640, 136], [720, 130],
+  [800, 138], [860, 104], [905, 110], [960, 180], [1040, 238], [1090, 246], [1180, 246], [1260, 242], [1340, 248],
+  [1400, 248], [1470, 252], [1580, 252], [1660, 240], [1730, 300], [1765, 362], [1815, 362], [1850, 310], [1920, 250],
+  [2000, 230], [2080, 270], [2200, 300], [2350, 290], [2480, 300], [2560, 330], [2700, 345], [2760, 400], [2830, 440],
+  [2900, 445], [2950, 500], [3020, 580], [3120, 590], [3180, 650], [3260, 760], [3330, 860], [3400, 902], [3560, 906],
+  [3640, 900], [3700, 960], [3780, 1090], [3850, 1210], [3920, 1320], [4000, 1345], [4160, 1350], [4260, 1330],
+  [4380, 1352], [4460, 1300], [4500, 1250]];
+function floorY(x) {
+  if (x <= FLOOR[0][0]) return FLOOR[0][1];
+  for (let i = 1; i < FLOOR.length; i++) {
+    const [x1, y1] = FLOOR[i];
+    if (x <= x1) { const [x0, y0] = FLOOR[i - 1]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); }
+  }
+  return FLOOR[FLOOR.length - 1][1];
+}
+function glacierX(y) { return 34 + Math.max(0, y) * 0.12; }
+
+// Places the diver can swim into. '#' wall, '.' water inside, ' ' outside; letters are finds:
+// r food, l medicine, o spare part, A radio amplifier, a air pocket, L the site's log.
+const SITES = [
+  { id: 'asema', kind: 'METALLIRAKENNE', name: 'Tutkimusasema A-3', shell: 'station', x: 150, y: 22, log: 'asema',
+    spot: [180, 46], cells: [
+      '##############################',
+      '#....#........#.....#........#',
+      '#.L..#...r....#..o..#...a....#',
+      '#............................#',
+      '#....#........#.....#........#',
+      '#.l..#..o.....#..A..#...r....#',
+      '#....#........#.....#........#',
+      '#######...####################'] },
+  { id: 'kontti', kind: 'KONTTI', name: 'Kontti', shell: 'box', x: 596, floor: true, color: '#b5532c',
+    spot: [575, 122], cells: [
+      '#######',
+      '..r..o#',
+      '....r.#',
+      '#######'] },
+  { id: 'polaris', kind: 'HYLKY', name: 'Polaris', shell: 'ship', x: 1104, floor: true, log: 'polaris',
+    spot: [1180, 222], cells: [
+      '         ######      #      ',
+      '         #.L..#      #      ',
+      '#########.....#############.',
+      '#...r..#......#....o......#.',
+      '#......D......D...........D.',
+      '#..#####......#####.#######.',
+      '#..#..o.......#.....#..r..#.',
+      '##.#....l.....D.....D.....#.',
+      ' ###########################'] },
+  { id: 'kontit', kind: 'KONTTEJA', name: 'Konttipino', shell: 'box', x: 1362, floor: true, color: '#2f6f8f',
+    spot: [1350, 228], cells: [
+      '######  ',
+      '..o.l#  ',
+      '######  ',
+      '  ######',
+      '  ..r..#',
+      '  ######'] },
+  { id: 'nordvik', kind: 'HYLKY', name: 'Nordvik', shell: 'ship', x: 1490, floor: true, log: 'nordvik',
+    spot: [1478, 232], cells: [
+      '  ####                          ',
+      '  #..#                          ',
+      '###..##########################',
+      '#.......#.......#.......#.....##',
+      'D...o...D...r...D...L...D..o...#',
+      '#.......#.......#.......#.....##',
+      '#..r....#...l...#.......#..a..# ',
+      '############################### '] },
+  { id: 'syva', kind: 'KONTTI', name: 'Avustuskontti', shell: 'box', x: 1780, floor: true, color: '#c9b23a', log: 'avustus',
+    spot: [1770, 345], cells: [
+      '########',
+      '...o.o.#',
+      '..L.o.l#',
+      '########'] },
+  // Chapter 2 (v2): the cable ship on the slope's edge, the Nordlys lander and containers on the ledges, the
+  // research vessel Nordlys at the foot of the slope, and the Lyra beacon on the deep plain. A digit is a log,
+  // named in the site's `logs`; T, V and K are the Nordlys diving tank, Lyra's lamp and the beacon's memory card.
+  { id: 'saga', kind: 'HYLKY', name: 'Kaapelilaiva Saga', shell: 'ship', x: 2588, floor: true, log: 'saga',
+    spot: [2570, 300], cells: [
+      '   ####                   ',
+      '   #L.#                   ',
+      '###..#####################',
+      '#..o...#.....o..#....o...#',
+      'D..........r....D........D',
+      '#..#####.#######.#####...#',
+      '#..o...#..o.a...#..o.....#',
+      '##########################'] },
+  { id: 'laskeutuja', kind: 'METALLIRAKENNE', name: 'Nordlysin pohjalaskeutuja', shell: 'station', x: 2842, floor: true,
+    log: 'laskeutuja', spot: [2812, 414], cells: [
+      '  ######  ',
+      '  #.L..#  ',
+      '###....###',
+      '#o..##..o#',
+      '...r..a.o#',
+      '##########'] },
+  { id: 'rinne', kind: 'KONTTEJA', name: 'Rinteen kontit', shell: 'box', x: 3052, floor: true, color: '#7a3f8f',
+    spot: [3034, 566], cells: [
+      '######  ',
+      '..o.r#  ',
+      '######  ',
+      '  ######',
+      '  ..l.o#',
+      '  ######'] },
+  { id: 'nordlys', kind: 'SUURI HYLKY', name: 'Tutkimusalus Nordlys', shell: 'rv', x: 3420, floor: true, deck: 4,
+    logs: { 1: 'silta', 2: 'labra', 3: 'kartta', 4: 'halli' }, spot: [3452, 879],
+    rooms: [[38, 1, 'Karttahuone'], [46.5, 1, 'Komentosilta'], [5, 5, 'Työpaja'], [15.5, 5, 'Laboratorio'],
+      [26.5, 5, 'Messi'], [37.5, 5, 'Sukellusvarusteet'], [50, 5, 'Keulavarasto'], [9, 9, 'Tutkimussukellusveneen halli'],
+      [31, 9, 'Lastiruuma'], [51, 9, 'Konehuone']], cells: [
+      '                                  ##################          ',
+      '                                  #......#.........#          ',
+      '                                  #..3...D....1....D          ',
+      '                                  #......#.........#          ',
+      '############D###############################D#################',
+      '#......o.#...........#........a.#.........#.........r....#####',
+      '#..o.....D....2......D......r...D....T....D.....o........#####',
+      '#.....o..#........l..#...r......#.......a.#...........l..#### ',
+      '####D####################D####################D############## ',
+      'D................#.................a........#.........a..###  ',
+      'D.......4........D......o...................D.....o......###  ',
+      'D............V...#............r.........o...#............##   ',
+      '##########################################################    '] },
+  { id: 'majakka', kind: 'HEIKKO SIGNAALI', name: 'Lyran majakka', shell: 'beacon', x: 4172, floor: true,
+    logs: { 4: 'majakka' }, spot: [4150, 1320], cells: [
+      '  ####  ',
+      '###..###',
+      '..K.4..#',
+      '#..a...#',
+      '########'] },
+];
+
+// The iceberg: an outline that is solid ice, hollowed by caves (segments with a radius), as in the picture of
+// the berg: the way in on the left, narrow upper caves, the great middle chamber, a side passage to a cache,
+// the lower cave and a crack down to the deep hollows.
+const BERG = {
+  poly: [[2088, -1], [2082, 30], [2090, 75], [2110, 130], [2150, 178], [2215, 203], [2295, 200], [2360, 172], [2400, 120],
+    [2418, 60], [2420, -1]],
+  top: [[2084, 0], [2096, -14], [2110, -18], [2124, -34], [2140, -36], [2158, -52], [2178, -48], [2196, -60], [2214, -54],
+    [2236, -40], [2262, -44], [2286, -30], [2318, -38], [2336, -70], [2350, -66], [2366, -40], [2392, -26], [2412, -10], [2422, 0]],
+  caves: [
+    [2058, 52, 2118, 50, 1.7], [2118, 50, 2138, 42, 1.7], [2136, 42, 2166, 43, 5], [2160, 40, 2161, 9, 1.6],
+    [2157, 9, 2165, 9, 2.4], [2166, 44, 2196, 58, 1.7], [2205, 68, 2285, 68, 13], [2282, 56, 2300, 4, 3],
+    [2295, 4, 2305, 4, 3.5], [2288, 74, 2338, 96, 1.7], [2335, 99, 2368, 102, 5], [2228, 80, 2218, 108, 1.7],
+    [2185, 114, 2262, 116, 7], [2236, 121, 2244, 168, 1.3], [2244, 168, 2250, 186, 1.0]],
+};
+const BERG_SITE = { id: 'jaavuori', kind: 'AUKKO JÄÄSSÄ', name: 'Jäävuoren luolasto', x: 2072, y: 52, spot: [2050, 52] };
+
+const KINDS = { r: 'ruoka', l: 'laake', o: 'osa', A: 'vahvistin', N: 'antenni', a: 'ilma', L: 'loki', T: 'saili', V: 'valo',
+  K: 'kortti' };
+const ICON = { ruoka: '🥫', laake: '💊', osa: '⚙️', vahvistin: '📟', antenni: '📡', loki: '📓', saili: '🤿', valo: '🔦', kortti: '💾' };
+const NAME = { ruoka: 'Ruoka-annos', laake: 'Lääkkeet', osa: 'Varaosa', vahvistin: 'Radion vahvistin', antenni: 'Radioantenni',
+  saili: 'Nordlysin happisäiliö', valo: 'Lyran valonheitin', kortti: 'Majakan muistikortti' };
+const ITEMS = [];
+for (const s of SITES) {
+  s.h = s.cells.length;
+  s.w = Math.max(...s.cells.map(r => r.length));
+  if (s.floor) s.y = Math.min(...[0, 0.5, 1].map(f => floorY(s.x + f * s.w * C))) - s.h * C + 0.6;
+  s.cells.forEach((row, j) => [...row].forEach((ch, i) => {
+    const log = ch === 'L' ? s.log : s.logs && s.logs[ch];
+    if (KINDS[ch] || log) ITEMS.push({ id: s.id + ':' + i + ',' + j, k: log ? 'loki' : KINDS[ch], x: s.x + i * C + 1,
+      y: s.y + j * C + 1, site: s.id, log: log || null });
+  }));
+}
+[['a', 2152, 39], ['a', 2250, 57], ['a', 2192, 110], ['a', 2161, 10], ['a', 2300, 5], ['r', 2150, 46], ['o', 2215, 78], ['r', 2265, 77],
+  ['L', 2337, 100, 'k7'], ['N', 2366, 102], ['o', 2345, 104], ['o', 2356, 97], ['r', 2350, 101], ['l', 2361, 105],
+  ['o', 2205, 119], ['L', 2248, 180, 'syvyys']].forEach(([ch, x, y, log], n) =>
+  ITEMS.push({ id: 'jaavuori:' + n, k: KINDS[ch], x, y, site: 'jaavuori', log: log || null }));
+
+const LOGS = {
+  asema: { title: 'Aseman päiväkirja', paras: [
+    { t: '2.3. Revontulet eivät sammu, vaikka on päivä. Kompassit pyörivät ympyrää.', c: 'log' },
+    { t: '4.3. Mantereelta ei vastata millään taajuudella. Satelliittipuhelin näyttää vain viivaa.', c: 'log' },
+    { t: '6.3. Nordlys hakee meidät huomenna. Jätin radion varavahvistimen tutkimusmoduuliin – jos joku joskus tarvitsee sitä.', c: 'log' },
+    { t: 'Joku muukin on siis ollut täällä. Minne he lähtivät?' }] },
+  polaris: { title: 'Polariksen radioloki', paras: [
+    { t: '»...kaikille aluksille: älkää palatko satamiin. Toistan: älkää palatko satamiin...»', c: 'log' },
+    { t: 'Alla käsin kirjoitettuna: »Hilma, odota minua. Tulen kotiin keväällä.»', c: 'log' },
+    { t: 'Kevät tuli. Polaris ei koskaan lähtenyt.' }] },
+  nordvik: { title: 'Nordvikin rahtikirja', paras: [
+    { t: 'Rahtikirjan kääntöpuolelle on piirretty kartta: »Nordlysin huoltovarasto K-7 – jäävuoren luolassa itäisellä kentällä. Varaosia, ruokaa, radioantenni.»', c: 'log' },
+    { t: 'Nordlys – sama alus, joka haki aseman väen. Itään siis.', c: 'msg' }] },
+  avustus: { title: 'Avustuskontti', paras: [
+    { t: 'Kontin kyljessä lukee: HUMANITARIAN AID. Sisällä on lääkkeitä ja varaosia, siististi pakattuina.', c: 'log' },
+    { t: 'Joku yritti auttaa. Se tuntuu oudon lohdulliselta.' }] },
+  k7: { title: 'Huoltovarasto K-7', paras: [
+    { t: '»K-7. Otimme mitä tarvitsimme. Nordlys lähtee syvemmälle, mannerrinteelle – siellä vesi on lämpimämpää ja hiljaista.»', c: 'log' },
+    { t: '»Jätimme varaantennin. Jos löydät tämän, kuuntele 4,2 megahertsiä.»', c: 'log' },
+    { t: 'Ota antenni mukaan ja vie se kotiin radioon.', c: 'msg' }] },
+  syvyys: { title: 'Syvä railo', paras: [
+    { t: 'Railo kapenee liian ahtaaksi. Jostain syvältä kuuluu tasaista naputusta: kolme lyhyttä, kolme pitkää, kolme lyhyttä.', c: 'log' },
+    { t: 'Ehkä se on vain jää. Ehkä ei.' }] },
+  saga: { title: 'Sagan kaapeliloki', paras: [
+    { t: '»14.3. Laskimme kaapelia mannerrinteen reunalle, kun kaikki yhteydet katkesivat yhtä aikaa. Vika ei ollut kaapelissa.»', c: 'log' },
+    { t: '»Nordlys kävi luonamme. He laskivat rinteelle pohjalaskeutujan mittaamaan jotain ja jatkoivat alas, syvemmälle.»', c: 'log' },
+    { t: 'Rinne jatkuu jyrkkänä pimeyteen. Laskeutuja on yli 380 metrissä.', c: 'msg' }] },
+  laskeutuja: { title: 'Pohjalaskeutujan muisti', paras: [
+    { t: '»NORDLYS / LASKEUTUJA 2. Veden lämpötila nousee syvemmällä. Pohjasta kuuluu ääniä, joita emme tunnista.»', c: 'log' },
+    { t: '»Viimeinen merkintä: Nordlys ankkuroi rinteen juurelle, 900 metriin.»', c: 'log' },
+    { t: 'Yhdeksänsataa metriä – sama luku kuin radiossa.', c: 'msg' }] },
+  silta: { title: 'Kapteenin loki', paras: [
+    { t: '»Päivä 41. Ankkuroimme rinteen juurelle. Täällä on hiljaista. Liian hiljaista nukkua.»', c: 'log' },
+    { t: '»Päivä 58. Runko vuotaa, eikä Nordlys enää nouse. Lähdemme Lyralla. Emme anna periksi.»', c: 'log' },
+    { t: 'Komentosilta on tyhjä. Nordlys on hylätty – mutta miehistö lähti itse.', c: 'msg' }] },
+  labra: { title: 'Tutkijan muistiinpanot', paras: [
+    { t: '»Revontulet näkyivät päivälläkin, kaikkialla maailmassa yhtä aikaa. Sähköverkot paloivat. Sen jälkeen tuli hiljaisuus.»', c: 'log' },
+    { t: '»Pinnalla on kylmää ja autiota. Syvällä, lämpimien lähteiden luona, elämä jatkuu kuin mitään ei olisi tapahtunut.»', c: 'log' },
+    { t: 'Ehkä vastaus on syvemmällä.' }] },
+  kartta: { title: 'Karttahuone', paras: [
+    { t: 'Pöydällä on kartta. Lyijykynäviiva kulkee rinnettä alas syvälle tasangolle ja päättyy ympyrään: »Lähteet, 1300 m. Majakka.»', c: 'log' },
+    { t: '»Jos joku tulee perässä: seuraa majakan naputusta.»', c: 'log' },
+    { t: 'Naputusta – samaa, jonka kuulit jäävuoren railossa?', c: 'msg' }] },
+  halli: { title: 'Lyran halli', paras: [
+    { t: 'Halli on tyhjä. Lattiassa on Lyran kiinnityspultit, irrotettuina. Seinään on raapustettu: »9 + Lyra. Alas.»', c: 'log' },
+    { t: 'Yhdeksän ihmistä pienessä sukellusveneessä, matkalla syvemmälle. Lyran varavalonheitin on jäänyt hyllylle.', c: 'msg' }] },
+  majakka: { title: 'Lyran majakka', paras: [
+    { t: 'Majakka naputtaa tasaisesti: kolme lyhyttä, kolme pitkää, kolme lyhyttä. Sama ääni kuului jäävuoren railossa.', c: 'log' },
+    { t: 'Sen kyljessä on muistikortti ja teksti: »Soita tämä radiolla.»', c: 'log' },
+    { t: 'Vie muistikortti kotiin radioon.', c: 'msg' }] },
+};
+// The deep sea (v2): glowing fish swim slow loops (x, y, reach across, reach up and down, speed) and bump into the
+// diver or SISU; hot vents stand on the deep plain, solid chimneys whose warm water keeps the cold away.
+const FISH = [[3300, 742, 22, 6, 0.3], [3600, 860, 28, 8, 0.25], [3810, 1075, 16, 8, 0.35], [4080, 1300, 36, 10, 0.22],
+  [4300, 1288, 30, 10, 0.28], [4425, 1262, 18, 8, 0.32]];
+const VENTS = [[4062, 12], [4112, 8], [4232, 14], [4318, 10]];
+function fishAt(n, t) {
+  const [x, y, rx, ry, sp] = FISH[n];
+  return { x: x + Math.sin(t * sp + n * 2) * rx, y: y + Math.sin(t * sp * 1.7 + n) * ry, dir: Math.cos(t * sp + n * 2) >= 0 ? 1 : -1 };
+}
+function nearVent(x, y, r) { return VENTS.some(([vx, h]) => Math.hypot(x - vx, y - (floorY(vx) - h)) < r); }
+const DAY_LINES = ['Unessa kuulit lokkien huudon. Herätessä oli taas vain reaktorin humina.',
+  'Keität teetä viimeisistä lehdistä. Ikkunan takana on pimeää ja hiljaista.',
+  'Kirjoitat päiväkirjaan yhden rivin: vielä täällä.',
+  'Radio rätisee hetken. Sitten taas kohinaa.',
+  'Näit unta kaupungista, jossa kaikki valot paloivat.'];
+
+// SISU inside (v3, #132), from the SISU picture of #125: the reactor in the stern and the airlock in the bow are full
+// height; between them two decks joined by the ladder under the tower. x runs stern → bow in metres from the middle of
+// the hull, y down; a person stands on the upper deck at y = UP and on the lower deck at y = LOW.
+const UP = 0, LOW = 2, LADDER = -1.4;
+const DECK_X = [[-8.2, 9.3], [-11.2, 11.8]];
+const ROOMS = [
+  { id: 'reaktori', name: 'Reaktori', x0: -14, x1: -8.5, deck: 1, tall: true, col: '#3a3f44',
+    say: 'Reaktori hurisee tasaisesti. Virtaa riittää vuosiksi.' },
+  { id: 'keittio', name: 'Keittiö', x0: -8.5, x1: -2, deck: 0, col: '#5a3b22' },
+  { id: 'ohjaamo', name: 'Ohjaamo', x0: -2, x1: 3.3, deck: 0, col: '#3b3422' },
+  { id: 'kartta', name: 'Navigointi', x0: 3.3, x1: 6.3, deck: 0, col: '#2c3836' },
+  { id: 'punkka', name: 'Punkka', x0: 6.3, x1: 10, deck: 0, col: '#55372a' },
+  { id: 'sahko', name: 'Sähkö', x0: -8.5, x1: -5.3, deck: 1, col: '#33393a',
+    say: 'Sähkötaulu napsuu. Kaikki valot palavat vihreinä.' },
+  { id: 'paja', name: 'Työpaja', x0: -5.3, x1: -2, deck: 1, col: '#43372c' },
+  { id: 'varasto', name: 'Varasto', x0: -2, x1: 4, deck: 1, col: '#4a3926' },
+  { id: 'puvut', name: 'Sukelluspuvut', x0: 4, x1: 10, deck: 1, col: '#3d3527' },
+  { id: 'ilmalukko', name: 'Ilmalukko', x0: 10, x1: 15, deck: 1, tall: true, col: '#33393d' },
+];
+// The room at (x, y) in hull coordinates; the tall rooms reach from the ceiling to the lower deck.
+function roomOf(x, y) {
+  const deck = y > 0 ? 1 : 0;
+  return ROOMS.find(r => x >= r.x0 && x < r.x1 && (r.tall || r.deck === deck)) || null;
+}
+
+// ---------- state ----------
+// `held` (v5): every find a diver has picked up and not yet brought home, by who holds it ('me' when playing alone);
+// `carry` is this phone's own share of it. `asked`: finds this phone has asked the host for on this dive.
+const G = { mode: 'menu', s: null, t: 0, hold: false, paused: false, sc: 4, cx: 380, cy: 30, ping: null, pingCd: 0,
+  carry: [], held: {}, asked: {}, homeT: 0, toastT: 0, hitCd: 0, warnCd: 0, saveCd: 0, lastGoal: '', fishCd: 0,
+  coldSaid: false, card: '' };
+const sub = { x: 330, y: 30, vx: 0, vy: 0, dir: 1, face: 1, prop: 0 };
+const diver = { x: 0, y: 0, vx: 0, vy: 0, dir: 1, air: 60, ang: 0 };
+// The person inside SISU: where they stand, whether the diving suit is on, and where a tap sent them (`to`).
+const crew = { x: 0.6, y: UP, dir: 1, suit: false, to: null, room: 'ohjaamo', said: '', walkT: 0, moving: false, climbing: false,
+  mark: null };
+const input = { x: 0, y: 0 };
+// Playing with friends (v5, #138): null when playing alone. See "playing with friends" below.
+let net = null;
+const snow = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), z: 0.4 + Math.random() * 0.8 }));
+const bubbles = [];
+
+function fresh() {
+  return { v: 1, day: 1, t: 0, sub: { x: 330, y: 30, dir: 1 }, m: { food: 70, health: 100, hull: 100 },
+    inv: { ruoka: 2, laake: 1, osat: 0, vahvistin: 0, antenni: 0, kortti: 0 }, up: { hull: 1, tank: 1, lamp: 1 },
+    got: {}, known: {}, flags: {}, finds: [{ id: 'f0', k: 'ruoka', x: 700, y: floorY(700) - 0.9 }], findN: 1 };
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY + 'peli'));
+    // A v1 save loads as it is (AGENTS.md rule 5); the parts v2 added start empty.
+    if (s && s.v === 1) { const f = fresh(), o = Object.assign(f, s); o.inv = Object.assign({ kortti: 0 }, s.inv); return o; }
+  } catch (e) {}
+  return null;
+}
+function save() {
+  // A friend in the host's game (v5) never saves it, so their own Last Signal save stays as it was.
+  if (!G.s || (net && !net.host)) return;
+  if (net) net.dirty = true;
+  G.s.sub = { x: Math.round(sub.x * 10) / 10, y: Math.round(sub.y * 10) / 10, dir: sub.dir };
+  try { localStorage.setItem(KEY + 'peli', JSON.stringify(G.s)); } catch (e) {}
+}
+
+// ---------- geometry ----------
+function pip(x, y, p) {
+  let c = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const [xi, yi] = p[i], [xj, yj] = p[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+  const t = l ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l)) : 0;
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+function inCave(x, y) {
+  for (const c of BERG.caves) if (segDist(x, y, c[0], c[1], c[2], c[3]) < c[4]) return true;
+  return false;
+}
+function inBerg(x, y) { return x > 2078 && x < 2424 && y < 206 && pip(x, y, BERG.poly) && !inCave(x, y); }
+function siteAt(x, y) {
+  for (const s of SITES) {
+    const i = Math.floor((x - s.x) / C), j = Math.floor((y - s.y) / C);
+    if (i >= 0 && j >= 0 && i < s.w && j < s.h) return s;
+  }
+  return null;
+}
+function cellAt(s, x, y) { return s.cells[Math.floor((y - s.y) / C)][Math.floor((x - s.x) / C)] || ' '; }
+// Is (x, y) rock, ice or wall? A big body (the submarine) cannot enter a site's rooms either.
+function solid(x, y, big) {
+  if (y > floorY(x)) return true;
+  if (x < glacierX(y) || x > WORLD_W - 8) return true;
+  if (y < SHELF_Y && x < SHELF_X) return true;
+  if (inBerg(x, y)) return true;
+  if (x > 4040) for (const [vx, h] of VENTS) if (Math.abs(x - vx) < 1.6 + (y - floorY(vx) + h) * 0.08 && y > floorY(vx) - h) return true;
+  const s = siteAt(x, y);
+  if (!s) return false;
+  const ch = cellAt(s, x, y);
+  return ch === '#' || (big && ch !== ' ');
+}
+function subHits(x, y) {
+  for (let a = 0; a < 12; a++) {
+    const t = a / 12 * Math.PI * 2;
+    if (solid(x + Math.cos(t) * 13.6, y + Math.sin(t) * 2.4, true)) return true;
+  }
+  return solid(x, y - 5, true);
+}
+function diverHits(x, y) {
+  for (let a = 0; a < 8; a++) {
+    const t = a / 8 * Math.PI * 2;
+    if (solid(x + Math.cos(t) * 0.5, y + Math.sin(t) * 0.5)) return true;
+  }
+  return false;
+}
+function airlock() { return { x: sub.x + sub.dir * 11, y: sub.y + 1.2 }; }
+
+// ---------- items, contacts, goals ----------
+function allItems() { return ITEMS.concat(G.s ? G.s.finds.map(f => ({ ...f, site: 'find' })) : []); }
+function itemHere(it) { return !G.s.got[it.id] && !G.held[it.id] && !G.carry.includes(it.id); }
+function contacts() {
+  const list = SITES.map(s => ({ id: s.id, kind: s.kind, name: s.name, x: s.x + s.w * C / 2, y: s.y + s.h * C / 2 }));
+  list.push({ id: BERG_SITE.id, kind: BERG_SITE.kind, name: BERG_SITE.name, x: BERG_SITE.x, y: BERG_SITE.y });
+  for (const f of G.s.finds) list.push({ id: f.id, kind: 'PIENI KAIKU', name: 'Pieni löytö', x: f.x, y: f.y });
+  return list;
+}
+function goalNow() {
+  const s = G.s, f = s.flags;
+  if (!f.pinged) return { text: 'Paina 📡 – kaiku paljastaa pohjan ja kohteet.', target: null };
+  if (!f.kontti) return { text: 'Ruoka on vähissä. Aja kontin luo ja pysähdy. Sisällä puku päälle ja ulos ilmalukosta.', target: 'kontti' };
+  if (!f.asema) return { text: 'Sonar kuuli metallia lahden pohjukassa. Tutki se.', target: 'asema' };
+  if (s.up.hull < 2) return { text: s.inv.osat >= COST.hull[2] ? 'Vahvista runko: 🏠 sisälle, alakerran työpajaan.'
+    : `Hylkykenttä on yli ${RATING[1]} metrissä. Kerää ⚙️ ${s.inv.osat}/${COST.hull[2]} ja vahvista runko.`, target: null };
+  if (!f.nordvik) return { text: 'Tutki hylkykenttä idässä. Pysy rungon syvyysrajan yläpuolella.', target: f.polaris ? 'nordvik' : 'polaris' };
+  if (!s.inv.antenni) return { text: 'Etsi Nordlysin huoltovarasto K-7 jäävuoren luolista.', target: 'jaavuori' };
+  if (!s.inv.vahvistin) return { text: 'Hae radion vahvistin tutkimusasemalta.', target: 'asema' };
+  if (!f.end) return { text: 'Korjaa radio: 🏠 sisälle, yläkerran ohjaamoon.', target: null };
+  // Chapter 2: down the continental slope, one hull level for each step.
+  const hull = (lvl, where) => ({ target: null, text: s.inv.osat >= COST.hull[lvl] ? 'Vahvista runko: 🏠 sisälle, alakerran työpajaan.'
+    : `${where} Kerää ⚙️ ${s.inv.osat}/${COST.hull[lvl]} ja vahvista runko ${RATING[lvl]} metriin.` });
+  if (s.up.hull < 3) return hull(3, 'Mannerrinne alkaa jäävuorten takaa yli 260 metrissä.');
+  if (!f.saga) return { text: 'Aja itään jäävuorten ohi. Tutki kaapelilaiva Saga rinteen reunalla.', target: 'saga' };
+  if (s.up.hull < 4) return hull(4, 'Pohjalaskeutuja on yli 380 metrissä.');
+  if (!f.laskeutuja) return { text: 'Laskeudu rinnettä alas Nordlysin pohjalaskeutujalle.', target: 'laskeutuja' };
+  if (s.up.hull < 5) return hull(5, 'Nordlys on 900 metrissä.');
+  if (!f.kartta) return { text: f.silta ? 'Nordlys on tyhjä. Etsi karttahuoneesta, minne miehistö lähti.'
+    : 'Etsi tutkimusalus Nordlys rinteen juurelta, noin 900 metristä.', target: 'nordlys' };
+  if (s.up.hull < 6) return hull(6, 'Lähteet ovat 1300 metrissä.');
+  if (!s.inv.kortti && !f.end2) return { text: 'Seuraa naputusta syvään mereen: Lyran majakka lähteiden luona.', target: 'majakka' };
+  if (!f.end2) return { text: 'Soita majakan muistikortti: 🏠 sisälle, ohjaamon radioon.', target: null };
+  return { text: 'Luku 2 on päättynyt. Lyra kuuluu yhä radiosta, jostain syvältä.', target: null };
+}
+
+// ---------- sound ----------
+let AC = null;
+function audio() {
+  if (AC) return;
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+}
+function tone(f1, f2, dur, type = 'sine', vol = 0.12, delay = 0) {
+  if (!AC) return;
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+function clang() { tone(140, 60, 0.35, 'square', 0.08); tone(90, 40, 0.5, 'sawtooth', 0.06); }
+
+// ---------- HUD and cards ----------
+const $ = id => document.getElementById(id);
+function show(id, on) { $(id).classList.toggle('hidden', !on); }
+function toast(t, sec = 1.8) { $('toast').textContent = t; show('toast', true); G.toastT = sec; }
+function meter(id, v) {
+  const el = $(id);
+  el.querySelector('s').style.width = Math.max(0, Math.min(100, v)) + '%';
+  el.classList.toggle('low', v < 25);
+}
+function drawHud() {
+  const s = G.s, home = G.mode === 'home', playing = G.mode === 'sub' || G.mode === 'dive';
+  show('hud', playing || home); show('pad', playing || home); show('home', G.mode === 'sub' || home);
+  $('pad').classList.toggle('inside', home);
+  // The corner button goes inside from the helm, and from inside straight back to the helm.
+  const hb = home ? '⛵' : '🏠';
+  if ($('home').textContent !== hb) { $('home').textContent = hb; $('home').setAttribute('aria-label', home ? 'Ruoriin' : 'Sisälle'); }
+  if (!s) return;
+  meter('mFood', s.m.food); meter('mHealth', s.m.health); meter('mHull', s.m.hull);
+  show('mAir', G.mode === 'dive');
+  if (G.mode === 'dive') {
+    meter('mAir', diver.air / TANK[s.up.tank] * 100);
+    $('airS').textContent = Math.ceil(diver.air) + ' s' + (chill() > 1 ? ' ❄️' : '');
+    const a = airlock();
+    $('depth').textContent = '⛵ ' + Math.round(Math.hypot(diver.x - a.x, diver.y - a.y)) + ' m';
+    $('depth').className = '';
+  } else {
+    $('depth').textContent = '▼ ' + Math.round(sub.y) + ' / ' + RATING[s.up.hull] + ' m';
+    $('depth').className = sub.y > RATING[s.up.hull] ? 'over' : '';
+  }
+  const g = goalNow().text;
+  if (g !== G.lastGoal) { $('goal').textContent = g; G.lastGoal = g; }
+  const counts = {};
+  for (const id of G.carry) { const it = allItems().find(i => i.id === id); if (it) counts[it.k] = (counts[it.k] || 0) + 1; }
+  $('carry').textContent = Object.entries(counts).map(([k, n]) => ICON[k] + n).join(' ');
+  show('ping', G.mode === 'sub');
+  $('ping').classList.toggle('cool', G.pingCd > 0);
+  let acts = [];
+  if (G.mode === 'sub' && Math.hypot(sub.vx, sub.vy) < 2.5) acts = [{ label: '🚶 Sisälle', fn: openHome }];
+  if (G.mode === 'dive') { const a = airlock(); if (Math.hypot(diver.x - a.x, diver.y - a.y) < 4.5) acts = [{ label: 'Palaa veneeseen', fn: () => endDive(false) }]; }
+  // Inside, the room's own actions, once the person stands still in it.
+  if (home && !crew.moving && !crew.climbing) acts = roomActs();
+  G.acts = acts;
+  actButton('act', acts[0]); actButton('act2', acts[1]);
+  const room = home && ROOMS.find(r => r.id === crew.room);
+  const rn = room ? room.name + (Math.abs(crew.x - LADDER) < 0.4 ? ' · tikkaat ↕' : '') : '';
+  if ($('roomName').textContent !== rn) $('roomName').textContent = rn;
+  show('roomName', !!rn);
+}
+function actButton(id, a) {
+  const el = $(id);
+  show(id, !!a);
+  if (!a) return;
+  if (el.textContent !== a.label) el.textContent = a.label;
+  el.disabled = !!a.off;
+}
+// A card: a title, paragraphs ({t, c}) and buttons ({label, fn, cls, off}); `grid` puts the buttons two to a row.
+function card(title, paras, buttons, grid) {
+  const el = $('card');
+  el.innerHTML = '';
+  const txt = document.createElement('div'); txt.className = 'txt';
+  if (title) { const h = document.createElement('h2'); h.textContent = title; txt.appendChild(h); }
+  for (const p of paras) { const e = document.createElement('p'); e.textContent = p.t; if (p.c) e.className = p.c; txt.appendChild(e); }
+  const btns = document.createElement('div'); btns.className = 'btns' + (grid ? ' grid' : buttons.length <= 2 ? ' few' : '');
+  for (const b of buttons) {
+    const e = document.createElement('button');
+    e.textContent = b.label; if (b.cls) e.className = b.cls; if (b.off) e.disabled = true;
+    e.addEventListener('click', () => { audio(); b.fn(); });
+    btns.appendChild(e);
+  }
+  el.appendChild(txt); el.appendChild(btns);
+  show('panel', true);
+  G.paused = true; G.card = '';
+}
+function closeCard() { show('panel', false); G.paused = false; G.card = ''; }
+function storyCard(key, then) {
+  const L = LOGS[key];
+  card('📓 ' + L.title, L.paras, [{ label: 'Jatka', cls: 'go', fn: () => { closeCard(); if (then) then(); } }]);
+}
+
+// ---------- the round ----------
+function begin(s) {
+  G.s = s; G.carry = []; G.held = {}; G.lastGoal = '';
+  sub.x = s.sub.x; sub.y = s.sub.y; sub.dir = sub.face = s.sub.dir || 1; sub.vx = sub.vy = 0;
+  G.cx = sub.x; G.cy = sub.y; G.sc = subScale(); G.mode = 'sub';
+  show('menu', false);
+  if (s.flags.end && !s.flags.ch2) chapter2();
+}
+// Chapter 2 opens once chapter 1 has ended, also for a player coming from v1 with chapter 1 done.
+function chapter2() { G.s.flags.ch2 = true; save(); story('ch2'); }
+function newGame() { begin(fresh()); save(); story('intro'); }
+function menu() {
+  G.mode = 'menu';
+  const s = load();
+  show('jatka', !!s);
+  $('uusi').textContent = s ? 'Uusi peli (vanha tallennus poistuu)' : 'Uusi peli';
+  $('menuText').textContent = !s ? 'Maailma on hiljentynyt. Sinulla on pieni ydinsukellusvene, kylmä meri ja yksi kysymys: onko ketään muuta jäljellä?'
+    : s.flags.end2 ? `Päivä ${s.day}. Luku 2 on päättynyt: Lyra kuuluu yhä syvältä.`
+    : s.flags.end ? `Päivä ${s.day}. Luku 2: Nordlys odottaa mannerrinteen alla.`
+    : `Päivä ${s.day}. SISU odottaa siinä, mihin jäit.`;
+  show('menu', true); show('panel', false); G.paused = false;
+  if (s) { sub.x = s.sub.x; sub.y = s.sub.y; G.cx = sub.x; G.cy = sub.y; }
+}
+$('jatka').addEventListener('click', () => { audio(); begin(load()); });
+$('uusi').addEventListener('click', () => { audio(); newGame(); });
+
+// The story's moments (v5): shown on every phone in the game, each closing its own. On the host (or alone) `story`
+// shows it and sends it on; `storyFx` is what the moment does to this phone's own person.
+const STORY = {
+  intro: () => card('Päivä 1', [
+    { t: 'Kolme viikkoa sitten radio vaikeni. Ensin hiljenivät uutiset, sitten satamat, sitten kaikki.' },
+    { t: 'Sinulla on SISU – pieni ydinkäyttöinen sukellusvene. Reaktori antaa virtaa vuosiksi. Ruoka, lääkkeet ja varaosat loppuvat paljon aiemmin.' },
+    { t: 'Tavoite: selviä huomiseen.', c: 'msg' },
+    { t: 'Vasen ohjain ajaa. 📡 kuuntelee merta. 🏠 vie sisälle: siellä kävelet huoneesta toiseen syömään, korjaamaan ja nukkumaan, ja ilmalukosta sukellat ulos tutkimaan.', c: 'small' }],
+  [{ label: 'Aloita', cls: 'go', fn: closeCard }]),
+  ch2: () => card('Luku 2: Mannerrinne', [
+    { t: 'Nordlys on yhdeksänsadassa metrissä, mannerrinteen alla. Rinne alkaa jäävuorten takaa idässä.' },
+    { t: 'Mitä syvemmälle menet, sitä pimeämpää, kylmempää ja oudompaa. Vahvista runkoa, niin rinne aukeaa.', c: 'msg' },
+    { t: 'Syvällä kylmä vesi kuluttaa happea nopeammin, ja pimeässä uivat valokalat tönivät. Mikään ei silti lopeta peliä.', c: 'small' }],
+  [{ label: 'Kohti syvyyttä', cls: 'go', fn: closeCard }]),
+  end1: () => { tone(200, 2000, 1.5, 'sawtooth', 0.03); card('Viimeinen signaali', [
+    { t: 'Vahvistin paikalleen, antenni tornin läpi, viritin 4,2 megahertsiin. Kohinaa... ja sitten ääni.' },
+    { t: '»...tässä tutkimusalus Nordlys. Meitä on yhdeksän, mannerrinteen alla. Jos joku kuulee tämän – vastatkaa...»', c: 'log' },
+    { t: 'Et olekaan yksin.', c: 'msg' },
+    { t: 'Jos vanha maailma on poissa, mitä varten kannattaa jatkaa? Ehkä juuri heitä varten. Luku 1 päättyy.' }],
+  [{ label: 'Luku 2', cls: 'go', fn: STORY_ch2 }]); },
+  end2: () => { tone(300, 1200, 1.8, 'sine', 0.05); card('Ääniä syvyydestä', [
+    { t: 'Muistikortti radioon. Rätinää – ja sitten monta ääntä, yksi kerrallaan.' },
+    { t: '»Tässä Lyra. Meitä on yhä yhdeksän. Lähteiden takana on syvänne, ja syvänteessä valoa. Emme tiedä, mitä se on.»', c: 'log' },
+    { t: '»Jos kuulet tämän: et ole yksin. Kukaan meistä ei ole.»', c: 'log' },
+    { t: 'Jos vanha maailma on poissa, mitä varten kannattaa jatkaa? Toisiamme varten. Luku 2 päättyy.', c: 'msg' }],
+  [{ label: 'Takaisin', cls: 'go', fn: closeCard }]); },
+  day: () => card(`Päivä ${G.s.day}`, [{ t: DAY_LINES[G.s.day % DAY_LINES.length] },
+    { t: G.s.finds.length ? 'Sonar kuulee yöllä uusia pieniä kaikuja – virta on tuonut jotain pohjaan.' : 'Meri on hiljaa.', c: 'msg' }],
+  [{ label: 'Nouse', cls: 'go', fn: closeCard }]),
+  faint: () => card(`Päivä ${G.s.day}`, [{ t: 'Pyörryt. Heräät punkasta tunteja myöhemmin – kaapin pohjalta löytyy viimeinen näkkileipä.' },
+    { t: 'Syö ja hae ruokaa ja lääkkeitä ennen kuin voimat loppuvat.', c: 'msg' }], [{ label: 'Jatka', cls: 'go', fn: closeCard }]),
+  breach: () => card('Runko pettää!', [{ t: 'Hälytys ulvoo. Hätäpainolasti nostaa SISUn turvalliseen syvyyteen.' },
+    { t: 'Korjaa runko kotona varaosilla, ja pysy syvyysrajan yläpuolella.', c: 'msg' }], [{ label: 'Jatka', cls: 'go', fn: closeCard }]),
+};
+function STORY_ch2() { STORY.ch2(); }
+function story(k, extra) {
+  const m = Object.assign({ t: 'card', k }, extra);
+  if (net && net.host) { sendState(); R.send(m); }
+  showStory(m);
+}
+function showStory(m) {
+  if (!G.s || !STORY[m.k]) return;
+  if (m.k === 'faint') {
+    G.carry = [];
+    G.mode = 'home'; sub.vx = sub.vy = 0;
+    Object.assign(crew, { x: 8, y: UP, dir: -1, suit: false, to: null, moving: false, climbing: false });
+    enterRoom(true);
+  }
+  if (m.k === 'breach') {
+    if (m.sub) { sub.x = m.sub[0]; sub.y = m.sub[1]; if (net) net.subT = null; }
+    sub.vx = sub.vy = 0;
+    // Alone the player is back at the helm (v4); with friends a diver comes in by the airlock, the others stay.
+    if (!net && G.mode !== 'sub') { G.carry = []; G.mode = 'sub'; crew.to = null; }
+    if (net && G.mode === 'dive') {
+      G.carry = []; G.mode = 'home';
+      Object.assign(crew, { x: 11, y: LOW, dir: -1, suit: true, to: null, moving: false, climbing: false });
+      enterRoom(true);
+    }
+    clang();
+  }
+  STORY[m.k]();
+}
+
+function doPing() {
+  if (G.mode !== 'sub' || G.pingCd > 0) return;
+  G.ping = { x: sub.x, y: sub.y, t: G.t };
+  G.pingCd = 3;
+  tone(1250, 900, 0.5, 'sine', 0.14);
+  for (const c of contacts()) {
+    const d = Math.hypot(c.x - sub.x, c.y - sub.y);
+    if (d < 450) tone(900, 880, 0.25, 'sine', 0.05, 0.25 + d / 260);
+  }
+  act('ping');
+}
+$('ping').addEventListener('click', () => { audio(); doPing(); });
+
+function startDive() {
+  // With friends (v5) SISU may be on the move under someone else at the helm: the airlock opens only when it is still.
+  if (net && Math.hypot(sub.vx, sub.vy) > 2.5) { toast('SISU liikkuu – odota, että se pysähtyy'); return; }
+  const a = airlock();
+  const spots = [[a.x, a.y], [sub.x, sub.y + 3.6], [sub.x - sub.dir * 6, sub.y + 3.6], [sub.x, sub.y - 3.4]];
+  const p = spots.find(([x, y]) => !diverHits(x, y));
+  if (!p) { toast('Ei tilaa ilmalukolle'); return; }
+  diver.x = p[0]; diver.y = p[1]; diver.vx = diver.vy = 0; diver.dir = sub.dir;
+  diver.air = TANK[G.s.up.tank];
+  if (!net) sub.vx = sub.vy = 0;
+  crew.suit = true; crew.to = null;
+  G.carry = []; G.asked = {}; G.mode = 'dive'; G.coldSaid = false;
+  tone(300, 120, 0.6, 'sine', 0.06);
+  save();
+}
+// Back through the airlock (v3): the person stands in it, still in the suit. The host counts the haul (v5).
+function endDive(blackout) {
+  G.mode = 'home';
+  Object.assign(crew, { x: 11, y: LOW, dir: -1, suit: true, to: null, moving: false, climbing: false });
+  enterRoom(true);
+  G.carry = [];
+  if (blackout) {
+    act('lost');
+    card('Happi loppui', [{ t: 'Näkökenttä kapenee. Viimeisillä voimilla vedät itsesi ilmalukkoon.' },
+      { t: 'Kaikki mukana ollut jäi mereen. Löydöt odottavat yhä paikoillaan.', c: 'msg' }],
+    [{ label: 'Jatka', cls: 'go', fn: closeCard }]);
+    return;
+  }
+  act('home');
+}
+// The haul `who` holds goes into the stores (on the host, or alone): the text to show them.
+function bank(who) {
+  const s = G.s, counts = {};
+  let extra = '';
+  for (const id of Object.keys(G.held)) {
+    if (G.held[id] !== who) continue;
+    delete G.held[id];
+    const it = allItems().find(i => i.id === id);
+    if (!it || s.got[id]) continue;
+    s.got[id] = true;
+    counts[it.k] = (counts[it.k] || 0) + 1;
+    if (it.site !== 'find') s.flags[it.site] = true;
+    // The Nordlys tank and Lyra's lamp are upgrades as found; one already bought pays two spare parts instead.
+    const up = { saili: 'tank', valo: 'lamp' }[it.k];
+    if (up) {
+      if (COST[up][s.up[up] + 1] !== undefined) { s.up[up]++; extra = up === 'tank' ? ` · happea ${TANK[s.up.tank]} s` : ' · valo kirkkaampi'; }
+      else s.inv.osat += 2;
+      continue;
+    }
+    const k = it.k === 'osa' ? 'osat' : it.k;
+    s.inv[k] = (s.inv[k] || 0) + 1;
+  }
+  s.finds = s.finds.filter(f => !s.got[f.id]);
+  save();
+  const got = Object.entries(counts).map(([k, n]) => ICON[k] + ' ' + n).join('  ');
+  return got ? 'Kotona: ' + got + extra : 'Takaisin kotona';
+}
+// Everything that changes the shared game goes through act (v5): alone or on the host it is done at once (`doAct`);
+// a friend's phone asks the host, which does it in the order the asks arrive (the first one wins) and answers.
+const SND = { eat: [500, 650, 0.2, 'triangle', 0.07], med: [600, 800, 0.2, 'triangle', 0.07], up: [400, 800, 0.3, 'triangle', 0.08],
+  got: [700, 1100, 0.15, 'triangle', 0.08], log: [500, 500, 0.4, 'triangle', 0.06], home: [500, 700, 0.2, 'triangle', 0.08],
+  no: [300, 220, 0.15, 'square', 0.04] };
+function me() { return net ? R.me : 'me'; }
+function act(a, arg) {
+  // Where this person stands goes with the ask, so the host judges it from where they are now.
+  if (net && !net.host) { R.send({ t: 'do', a, arg, p: mine() }); return; }
+  answer(doAct(me(), a, arg));
+}
+// What the host's answer means on the phone that asked.
+function answer(r) {
+  if (!r) return;
+  if (r.got && G.mode === 'dive') { G.carry.push(r.got); const it = allItems().find(i => i.id === r.got); if (it) toast('+ ' + ICON[it.k] + ' ' + NAME[it.k], 1.2); }
+  if (r.say) toast(r.say, r.sec || 1.8);
+  if (r.snd === 'clang') clang(); else if (SND[r.snd]) tone(...SND[r.snd]);
+  if (r.helm && G.mode === 'home') closeHome();
+  if (r.log) storyCard(r.log);
+  if (r.radio) radioCard();
+  if ('up' in r && G.card === 'up') upgradeCard(r.up);
+}
+function doAct(who, a, arg) {
+  const s = G.s, i = s.inv, m = s.m;
+  switch (a) {
+    case 'eat':
+      if (!i.ruoka) return { say: 'Ruoka loppui juuri.', snd: 'no' };
+      if (m.food > 95) return { say: 'Vatsa on jo täynnä.', snd: 'no' };
+      i.ruoka--; m.food = Math.min(100, m.food + 35); m.health = Math.min(100, m.health + 5); save();
+      return { say: 'Lämmin ateria. Olo paranee.', snd: 'eat' };
+    case 'med':
+      if (!i.laake) return { say: 'Lääkkeet loppuivat juuri.', snd: 'no' };
+      if (m.health > 95) return { say: 'Kunto on jo hyvä.', snd: 'no' };
+      i.laake--; m.health = Math.min(100, m.health + 40); save();
+      return { say: 'Lääke auttaa.', snd: 'med' };
+    case 'fix':
+      if (!i.osat) return { say: 'Varaosat loppuivat juuri.', snd: 'no' };
+      if (m.hull > 95) return { say: 'Runko on jo kunnossa.', snd: 'no' };
+      i.osat--; m.hull = Math.min(100, m.hull + 35); save();
+      return { say: 'Hitsaat vuotavan sauman umpeen.', snd: 'clang' };
+    case 'up': {
+      const u = s.up, cost = COST[arg] && COST[arg][u[arg] + 1];
+      if (!cost || i.osat < cost) return { up: null, say: 'Varaosat eivät riitä.', snd: 'no' };
+      i.osat -= cost; u[arg]++; if (arg === 'hull') m.hull = 100; save();
+      return { snd: 'up', up: arg === 'hull' ? `Runko kestää nyt ${RATING[u.hull]} metriä.`
+        : arg === 'tank' ? `Happea riittää nyt ${TANK[u.tank]} sekuntia.` : 'Valonheitin näkee nyt kauemmas.' };
+    }
+    case 'radio':
+      if (i.kortti && !s.flags.end2) { i.kortti = 0; s.flags.end2 = true; save(); story('end2'); return null; }
+      if (!s.flags.end && i.vahvistin && i.antenni) { s.flags.end = s.flags.ch2 = true; save(); story('end1'); return null; }
+      return { radio: 1 };
+    case 'sleep': {
+      // With friends everyone sleeps at once: the night comes when all of them are in the bunk room.
+      const away = people().filter(p => !(p.mode === 'home' && p.room === 'punkka')).map(p => p.name);
+      if (away.length) return { say: 'Kaikki punkkaan: odotetaan ' + away.join(', '), sec: 2.6 };
+      sleep(); return null;
+    }
+    case 'helm': {
+      // With friends the helm is taken in the control room (alone the ⛵ corner button goes straight there, as in v4).
+      const at = net && people().find(p => p.id === who);
+      if (at && at.room !== 'ohjaamo') return { say: 'Ruoriin pääsee ohjaamosta', snd: 'no' };
+      if (net && net.helm && net.helm !== who && present(net.helm)) return { say: nameOf(net.helm) + ' on ruorissa', snd: 'no' };
+      if (net) { net.helm = who; net.subT = null; }
+      return { helm: 1 };
+    }
+    case 'unhelm': if (net && net.helm === who) { net.helm = null; stopSub(); } return null;
+    case 'take': {
+      const it = allItems().find(t => t.id === arg);
+      if (!it || s.got[it.id]) return null;
+      if (G.held[it.id]) return G.held[it.id] === who ? null : { say: nameOf(G.held[it.id]) + ' ehti ensin', sec: 1.2 };
+      if (it.k === 'loki') { s.got[it.id] = true; s.flags[it.log] = true; save(); return { log: it.log, snd: 'log' }; }
+      G.held[it.id] = who;
+      return { got: it.id, snd: 'got' };
+    }
+    case 'home': return { say: bank(who), snd: 'home' };
+    case 'lost':
+      for (const id of Object.keys(G.held)) if (G.held[id] === who) delete G.held[id];
+      m.health = Math.max(5, m.health - 25); save();
+      return null;
+    case 'ping':
+      for (const c of contacts()) if (Math.hypot(c.x - sub.x, c.y - sub.y) < 450) s.known[c.id] = true;
+      s.flags.pinged = true; save();
+      return null;
+    case 'dmg': m.hull -= Math.max(0, Math.min(30, +arg || 0)); return null;
+  }
+  return null;
+}
+for (const [id, n] of [['act', 0], ['act2', 1]]) $(id).addEventListener('click', () => {
+  audio();
+  const a = G.acts && G.acts[n];
+  if (a && !a.off && !G.paused) a.fn();
+  drawHud();
+});
+
+// ---------- home: the lit inside of SISU, walked as a person (v3) ----------
+function openHome() {
+  if (G.mode !== 'sub') return;
+  sub.vx = sub.vy = 0;
+  G.mode = 'home';
+  act('unhelm');
+  Object.assign(crew, { x: 0.6, y: UP, dir: 1, to: null, moving: false, climbing: false });  // up from the helm
+  enterRoom(true);
+  if (!G.s.flags.koti) {
+    G.s.flags.koti = true; save();
+    card('SISU sisältä', [
+      { t: 'Napauta huonetta, niin kävelet sinne. Voit kävellä myös ohjaimella. Tikkaat vievät kerrosten välillä.' },
+      { t: 'Yläkerta: keittiö, ohjaamo (ruori ja radio), navigointi ja punkka. Alakerta: reaktori, sähkö, työpaja, varasto, sukelluspuvut ja ilmalukko.' },
+      { t: 'Sukeltamaan: puku päälle ja ulos ilmalukosta. ⛵ vie takaisin ruoriin.', c: 'msg' }],
+    [{ label: 'Selvä', cls: 'go', fn: closeCard }]);
+  }
+}
+function closeHome() { closeCard(); G.mode = 'sub'; crew.to = null; save(); }
+// To the helm (v5): with friends only one drives, so the host is asked first; `answer` then calls closeHome.
+function toHelm() {
+  if (net && crew.room !== 'ohjaamo') { toast('Kävele ohjaamoon: ruori on siellä'); tone(...SND.no); return; }
+  act('helm');
+}
+$('home').addEventListener('click', () => { audio(); if (G.mode === 'home') toHelm(); else openHome(); drawHud(); });
+// The room the person stands in; a room with nothing to do says something once each time they come in.
+function enterRoom(quiet) {
+  const r = roomOf(crew.x, crew.y), id = r ? r.id : '';
+  if (id === crew.room && !quiet) return;
+  crew.room = id;
+  if (!quiet && r && r.say) toast(r.say, 2.2);
+}
+// What can be done in the room the person stands in: one or two actions, the first on the big button.
+function roomActs() {
+  const s = G.s, i = s.inv;
+  switch (crew.room) {
+    case 'keittio': return [{ label: `🍲 Syö annos (${i.ruoka})`, off: !i.ruoka || s.m.food > 95, fn: () => act('eat') }];
+    case 'varasto': return [{ label: `💊 Ota lääke (${i.laake})`, off: !i.laake || s.m.health > 95, fn: () => act('med') }];
+    case 'paja': return [{ label: '🔧 Korjaa runko (⚙️ 1)', off: !i.osat || s.m.hull > 95, fn: () => act('fix') },
+      { label: '🛠️ Parannukset', fn: () => upgradeCard() }];
+    case 'ohjaamo': return [net && net.helm && net.helm !== me() && present(net.helm)
+      ? { label: `⛵ ${nameOf(net.helm)} ruorissa`, off: true, fn: () => {} } : { label: '⛵ Ruoriin', fn: toHelm },
+      { label: s.flags.end2 ? '📻 Radio: Lyra' : i.kortti ? '📻 Soita muistikortti' : s.flags.end ? '📻 Radio: Nordlys'
+        : i.vahvistin && i.antenni ? '📻 Korjaa radio' : '📻 Radio (kohinaa)', fn: radio }];
+    case 'kartta': return [{ label: '🗺️ Lokikirja', fn: logBook }].concat(net && net.host ? [{ label: '👥 Huoneeseen', fn: toRoom }] : []);
+    case 'punkka': return [{ label: '🛏️ Nuku yön yli', fn: () => act('sleep') }];
+    case 'puvut': return [{ label: crew.suit ? '🧥 Riisu puku' : '🤿 Pue sukelluspuku', fn: () => {
+      crew.suit = !crew.suit; tone(crew.suit ? 300 : 400, crew.suit ? 450 : 250, 0.2, 'triangle', 0.06);
+      toast(crew.suit ? 'Puku päällä. Ilmalukko on vieressä.' : 'Puku naulakkoon.', 1.4); } }];
+    case 'ilmalukko': return [crew.suit ? { label: '🌊 Sukella ulos', fn: startDive }
+      : { label: '🤿 Pue ensin puku', off: true, fn: () => {} }];
+  }
+  return [];
+}
+// A tap inside SISU, in hull coordinates: the person walks there, by the ladder when it is on the other deck.
+function walkTo(lx, ly) {
+  if (lx < -14.2 || lx > 14.6 || ly < -2.6 || ly > 2.6) return false;
+  const r = roomOf(lx, ly), deck = r ? r.deck : ly > 0 ? 1 : 0, [a, b] = DECK_X[deck];
+  crew.to = { x: Math.max(a, Math.min(b, lx)), deck };
+  crew.mark = { x: crew.to.x, y: deck ? LOW : UP, t: G.t };
+  return true;
+}
+function stepCrew(dt) {
+  const c = crew, x0 = c.x, y0 = c.y;
+  const mid = c.y > UP + 0.01 && c.y < LOW - 0.01;
+  const toward = (v, goal, sp) => v + Math.sign(goal - v) * Math.min(sp * dt, Math.abs(goal - v));
+  if (input.x || input.y) c.to = null;  // the stick takes over from a tap
+  if (c.to) {
+    const fy = c.to.deck ? LOW : UP;
+    if (Math.abs(c.y - fy) > 0.01) {
+      if (!mid && Math.abs(c.x - LADDER) > 0.01) c.x = toward(c.x, LADDER, WALK);
+      else { c.x = LADDER; c.y = toward(c.y, fy, CLIMB); }
+    } else if (Math.abs(c.x - c.to.x) > 0.01) c.x = toward(c.x, c.to.x, WALK);
+    else c.to = null;
+  } else if (mid || (Math.abs(c.x - LADDER) < 0.4 && Math.abs(input.y) > 0.5 && Math.abs(input.y) > Math.abs(input.x))) {
+    // On the ladder the stick climbs; pushed sideways halfway, the person climbs on to the nearer deck.
+    c.x = LADDER;
+    const dir = Math.abs(input.y) > 0.3 ? Math.sign(input.y) : Math.abs(input.x) > 0.5 ? (c.y > (UP + LOW) / 2 ? 1 : -1) : 0;
+    if (dir) c.y = Math.max(UP, Math.min(LOW, c.y + dir * CLIMB * dt));
+  } else if (input.x) {
+    const [a, b] = DECK_X[c.y > 1 ? 1 : 0];
+    // The inside is drawn mirrored when SISU faces left: right on the stick is right on the screen either way.
+    c.x = Math.max(a, Math.min(b, c.x + input.x * (sub.dir < 0 ? -1 : 1) * WALK * dt));
+  }
+  if (c.y < UP + 0.01) c.y = UP; else if (c.y > LOW - 0.01) c.y = LOW;
+  const dx = c.x - x0, dy = c.y - y0;
+  if (Math.abs(dx) > 1e-4) c.dir = Math.sign(dx);
+  c.moving = Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4 || !!c.to;
+  c.climbing = c.y > UP + 0.01 && c.y < LOW - 0.01;
+  c.walkT += Math.abs(dx) + Math.abs(dy);
+  enterRoom();
+}
+function upgradeCard(msg) {
+  const s = G.s, u = s.up;
+  const row = (key, name, now, next) => {
+    const cost = COST[key][u[key] + 1];
+    return cost ? { label: `${name}: ${now} → ${next} (⚙️ ${cost})`, off: s.inv.osat < cost, fn: () => act('up', key) }
+      : { label: `${name}: ${now} (täysi)`, off: true, fn: () => {} };
+  };
+  const paras = [{ t: `Varaosia: ⚙️ ${s.inv.osat}`, c: 'small' }];
+  if (msg) paras.push({ t: msg, c: 'msg' });
+  card('🛠️ Työpaja', paras, [
+    row('hull', '🛡️ Paineenkesto', RATING[u.hull] + ' m', RATING[u.hull + 1] + ' m'),
+    row('tank', '🫁 Happisäiliö', TANK[u.tank] + ' s', TANK[u.tank + 1] + ' s'),
+    row('lamp', '🔦 Valonheitin', 'tavallinen', 'kirkas'),
+    { label: 'Takaisin', cls: 'go', fn: closeCard }]);
+  G.card = 'up';
+}
+// The navigation room's logbook: every log read so far, to read again.
+function logBook() {
+  const s = G.s, read = Object.keys(LOGS).filter(k => ITEMS.some(it => it.log === k && s.got[it.id]));
+  card('🗺️ Lokikirja', [
+    { t: read.length ? 'Luetut viestit – napauta lukeaksesi uudelleen.' : 'Lokikirja on vielä tyhjä. Löytämäsi viestit kirjataan tänne.', c: 'small' }],
+  read.map(k => ({ label: LOGS[k].title, fn: () => storyCard(k, logBook) })).concat([{ label: 'Takaisin', cls: 'go', fn: closeCard }]),
+  read.length > 2);
+}
+function radio() { act('radio'); }
+// The radio as it is, when pressing it changes nothing: the host's `doAct('radio')` plays the card or ends chapter 1.
+function radioCard() {
+  const s = G.s, i = s.inv;
+  if (s.flags.end2) {
+    card('📻 Lyra', [{ t: '»...tässä Lyra. Syvänteessä on valoa. Jos kuulet tämän, et ole yksin...»', c: 'log' },
+      { t: 'Muistikortti soi yhä uudelleen. Jossain syvällä yhdeksän ihmistä jatkaa matkaa.' }],
+    [{ label: 'Takaisin', cls: 'go', fn: closeCard }]);
+  } else if (s.flags.end) {
+    card('📻 4,2 MHz', [{ t: '»...tässä Nordlys. Meitä on yhdeksän. Mannerrinteen alla, yhdeksänsadassa metrissä. Jos kuulet, vastaa...»', c: 'log' },
+      { t: 'Viesti toistuu tunnin välein. Joku jaksaa yhä lähettää sitä.' }],
+    [{ label: 'Takaisin', cls: 'go', fn: closeCard }]);
+  } else {
+    card('📻 Radio', [{ t: 'Radio on rikki: vahvistin puuttuu ja antenni on katkennut. Kohinan seasta kuulet välillä jotain – vai kuvitteletko?' },
+      { t: `Vahvistin ${i.vahvistin ? '✓' : '✗'} · Antenni ${i.antenni ? '✓' : '✗'}`, c: 'msg' }],
+    [{ label: 'Takaisin', cls: 'go', fn: closeCard }]);
+  }
+}
+// The night, on the host (or alone) once everyone is in the bunk room; every phone gets the new day's card.
+function sleep() {
+  const s = G.s;
+  s.day++;
+  s.m.food = Math.max(0, s.m.food - 12);
+  s.m.health = Math.min(100, s.m.health + 15);
+  newFinds();
+  save();
+  story('day');
+}
+// Small random finds the current brings each night: a crate, a buoy, a lost bag.
+function newFinds() {
+  const s = G.s, max = [0, 820, 1640, 2700, 3100, 3640, 4440][s.up.hull];
+  for (let tries = 0; s.finds.length < 3 && tries < 40; tries++) {
+    // Rounded before the checks: on the steep slope a find moved half a metre after them could end up in the rock.
+    const x = Math.round(260 + Math.random() * (max - 260)), y = Math.floor((floorY(x) - 0.9) * 10) / 10;
+    if (y > RATING[s.up.hull] - 4 || siteAt(x, y) || siteAt(x, y - 6) || diverHits(x, y)) continue;
+    const r = Math.random(), deep = x > 2450 ? 0.15 : 0;  // the slope's finds are more often spare parts
+    s.finds.push({ id: 'f' + (s.findN++), k: r < 0.65 - deep ? 'ruoka' : r < 0.85 ? 'osa' : 'laake', x, y });
+  }
+}
+
+// ---------- playing with friends (v5, #138) ----------
+// The phone that made the room (the host) keeps the game: its own save, SISU's stores, meters, day and story. Each
+// friend has their own person, walked and swum on their own phone, which tells the host where it is ('me', ten
+// times a second); whoever is at the helm drives SISU on their phone the same way. The host sends everyone the
+// game when it changes ('s'), where everybody and SISU are ('f'), the story's moments ('card') and the answer to
+// each thing a friend asked for ('re', see `act`). A friend's phone never saves.
+const R = window.AiPelitRooms;
+const COLS = ['#4fa3ff', '#3fcf7f', '#ff8a5c', '#c88aff'];
+const r2 = v => Math.round(v * 100) / 100;
+// Everyone in the game, this phone's player first: where they are ('sub' at the helm, 'home' inside, 'dive' out).
+function people() {
+  const mine = { id: me(), name: net ? nameOf(R.me) : '', mode: G.mode, room: G.mode === 'home' ? crew.room : '' };
+  if (!net) return [mine];
+  return [mine].concat(Object.entries(net.others).filter(([, o]) => o.mode !== 'wait').map(([id, o]) =>
+    ({ id, name: o.name, mode: o.mode, room: o.mode === 'home' ? (roomOf(o.tx, o.ty) || {}).id || '' : '' })));
+}
+function present(id) { return id === me() || !!(net && net.others[id] && net.others[id].mode !== 'wait'); }
+function nameOf(id) { return (net && net.names[id]) || 'Kaveri'; }
+function mine() {
+  const d = G.mode === 'dive';
+  return [G.mode, r2(d ? diver.x : crew.x), r2(d ? diver.y : crew.y), d ? diver.dir : crew.dir, crew.suit ? 1 : 0, d ? r2(diver.ang) : 0];
+}
+function subPack() { return [r2(sub.x), r2(sub.y), sub.dir, r2(sub.vx), r2(sub.vy)]; }
+function setOther(id, p) {
+  const o = net.others[id];
+  if (!o || !Array.isArray(p)) return;
+  const jump = o.mode !== p[0];
+  [o.mode, o.tx, o.ty, o.dir, o.suit, o.ang] = [String(p[0]), +p[1] || 0, +p[2] || 0, p[3] < 0 ? -1 : 1, !!p[4], +p[5] || 0];
+  if (jump) { o.x = o.tx; o.y = o.ty; }
+}
+function sendState(to) { if (net && net.host && G.s) { R.send({ t: 's', s: G.s }, to); if (!to) net.dirty = false; } }
+function snapshot() {
+  const ps = { [R.me]: mine() };
+  for (const [id, o] of Object.entries(net.others)) ps[id] = [o.mode, o.tx, o.ty, o.dir, o.suit ? 1 : 0, o.ang];
+  const m = G.s.m;
+  return { t: 'f', sub: subPack(), helm: net.helm, held: G.held, m: [r2(m.food), r2(m.health), r2(m.hull)], ps };
+}
+function stepNet(dt) {
+  // The others glide to where their phones last said; SISU too, unless this phone drives it.
+  const k = Math.min(1, dt * 10);
+  for (const o of Object.values(net.others)) {
+    const x0 = o.x, y0 = o.y;
+    if (Math.hypot(o.tx - o.x, o.ty - o.y) > 8) { o.x = o.tx; o.y = o.ty; }
+    o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k;
+    const d = Math.abs(o.x - x0) + Math.abs(o.y - y0);
+    o.moving = d > 0.002; o.walkT += d;
+    o.climbing = o.mode === 'home' && o.y > UP + 0.05 && o.y < LOW - 0.05;
+  }
+  const T = net.subT;
+  if (T && G.mode !== 'sub') {
+    if (Math.hypot(T[0] - sub.x, T[1] - sub.y) > 40) { sub.x = T[0]; sub.y = T[1]; }
+    sub.x += (T[0] - sub.x) * k; sub.y += (T[1] - sub.y) * k; sub.dir = T[2] < 0 ? -1 : 1; sub.vx = T[3]; sub.vy = T[4];
+    sub.prop += dt * (2 + Math.abs(sub.vx));
+  }
+  if ((net.sendT -= dt) > 0) return;
+  net.sendT = 0.1;
+  if (net.host) { if (net.dirty) sendState(); R.send(snapshot()); }
+  else if (G.s && G.mode !== 'wait') R.send(G.mode === 'sub' ? { t: 'me', p: mine(), sub: subPack() } : { t: 'me', p: mine() });
+}
+// A friend's phone, once the host's game has arrived: their person starts in the control room.
+function guestBegin() {
+  const s = G.s;
+  G.carry = []; G.lastGoal = '';
+  sub.x = s.sub.x; sub.y = s.sub.y; sub.dir = sub.face = s.sub.dir || 1; sub.vx = sub.vy = 0;
+  G.cx = sub.x; G.cy = sub.y; G.sc = homeScale(); G.mode = 'home';
+  Object.assign(crew, { x: 0.6, y: UP, dir: 1, suit: false, to: null, moving: false, climbing: false });
+  enterRoom(true);
+  show('menu', false); show('toast', false); G.toastT = 0;
+  card('Mukana SISUssa', [
+    { t: `SISU ja sen tallennus ovat huoneen tekijän (${nameOf(R.hostId)}). Sinä tulit auttamaan – omaan peliisi tämä ei koske.` },
+    { t: 'Kävele huoneesta toiseen, pue puku ja sukella ilmalukosta. Ruorissa on yksi kerrallaan: kuka ehtii ensin.', c: 'msg' },
+    { t: 'Löydöt lasketaan, kun tuot ne ilmalukkoon. Nukkumaan mennään yhdessä: kaikki punkkaan.', c: 'small' }],
+  [{ label: 'Selvä', cls: 'go', fn: closeCard }]);
+}
+// Out of the game: the HUD goes, and a friend's phone forgets the host's game.
+function quiet() {
+  if (net && !net.host) G.s = null;
+  net = null; G.mode = 'menu'; G.carry = []; G.held = {};
+  closeCard(); for (const id of ['hud', 'pad', 'home', 'toast']) show(id, false);
+}
+// The host takes everyone back to the room, where new friends can come in; "Aloita kierros" carries on the same save.
+function toRoom() {
+  if (!net || !net.host) return;
+  save(); R.deliver({ t: 'end' }); R.endRound();
+  quiet(); R.backToRoom('Retki jatkuu, kun aloitat kierroksen.');
+}
+R.on('start', st => {
+  quiet();
+  net = { host: st.host, others: {}, names: {}, cols: {}, helm: null, sendT: 0, dirty: true, subT: null };
+  st.players.forEach((p, n) => {
+    net.names[p.id] = p.name; net.cols[p.id] = COLS[n % COLS.length];
+    if (p.id !== R.me) net.others[p.id] = { name: p.name, mode: 'wait', x: 0, y: 0, tx: 0, ty: 0, dir: 1, suit: false, ang: 0, walkT: 0 };
+  });
+  if (st.over) { quiet(); return; }
+  if (st.host) {
+    const s = load();
+    if (s) begin(s); else newGame();
+    net.helm = R.me; sendState();
+  } else { G.s = null; G.mode = 'wait'; show('menu', false); toast('Odotetaan huoneen tekijää…', 4); }
+});
+R.on('message', (m, from) => {
+  if (!net || !m) return;
+  if (net.host) {
+    if (!net.others[from] || !G.s) return;
+    if (m.t === 'me') { setOther(from, m.p); if (net.helm === from && Array.isArray(m.sub) && m.p[0] === 'sub') net.subT = m.sub; }
+    if (m.t === 'do') {
+      setOther(from, m.p);
+      const r = doAct(from, String(m.a), m.arg);
+      if (net.dirty) sendState();  // the game as it is now reaches them before the answer
+      if (r) R.send(Object.assign({ t: 're' }, r), from);
+    }
+    return;
+  }
+  if (m.t === 's' && m.s) { G.s = m.s; if (G.mode === 'wait') guestBegin(); return; }
+  if (!G.s || G.mode === 'wait') return;
+  if (m.t === 'f') {
+    G.held = m.held || {}; net.helm = m.helm || null;
+    if (Array.isArray(m.m)) [G.s.m.food, G.s.m.health, G.s.m.hull] = m.m;
+    for (const [id, p] of Object.entries(m.ps || {})) if (id !== R.me) setOther(id, p);
+    if (G.mode !== 'sub') net.subT = m.sub;
+  }
+  if (m.t === 're') answer(m);
+  if (m.t === 'card') showStory(m);
+  if (m.t === 'end') { quiet(); R.backToRoom('Retki jatkuu, kun huoneen tekijä aloittaa kierroksen.'); }
+});
+// Host: a friend's phone is back (a reload): its person starts again in the control room, its haul lost.
+function letGo(id) {
+  for (const k of Object.keys(G.held)) if (G.held[k] === id) delete G.held[k];
+  if (net.helm === id) { net.helm = null; stopSub(); }
+}
+// Host: nobody drives now, so SISU stays where its driver left it, still (else its last speed would keep the airlock shut).
+function stopSub() { if (net && net.subT) net.subT = [net.subT[0], net.subT[1], net.subT[2], 0, 0]; }
+R.on('hello', id => {
+  if (!net || !net.host || !net.others[id]) return;
+  letGo(id); net.others[id].mode = 'wait';
+  sendState(id); R.send(snapshot(), id);
+});
+R.on('continue', ids => { if (net && net.host) for (const id of ids) { letGo(id); delete net.others[id]; } });
+R.on('back', id => {
+  if (net && net.host && net.names[id]) net.others[id] = { name: net.names[id], mode: 'wait', x: 0, y: 0, tx: 0, ty: 0, dir: 1, suit: false, ang: 0, walkT: 0 };
+});
+R.on('lobby', () => { quiet(); });
+R.on('leave', () => { quiet(); menu(); });
+R.on('menu', () => { quiet(); menu(); });
+$('multi').addEventListener('click', () => { audio(); R.open(); });
+
+// ---------- every frame ----------
+function subScale() { return Math.min(W, H) / 110; }
+// In a big cave (the iceberg's great chamber) the view widens to show its walls; inside Nordlys a little too.
+function diveScale() {
+  let span = 24;
+  for (const c of BERG.caves) if (c[4] >= 5 && segDist(diver.x, diver.y, c[0], c[1], c[2], c[3]) < c[4]) span = Math.max(span, c[4] * 2 + 10);
+  const n = SITES.find(s => s.id === 'nordlys');
+  if (diver.x > n.x && diver.x < n.x + n.w * C && diver.y > n.y && diver.y < n.y + n.h * C) span = 30;
+  return Math.min(W, H) / span;
+}
+// Deep down SISU's engines run harder, so the long way down the slope does not drag.
+function subBoost() { return Math.min(2.2, 1 + Math.max(0, sub.y - 300) / 500); }
+// Cold water below COLD drains the diver's air faster, except in a hot vent's warm water.
+function chill() { return diver.y > COLD && !nearVent(diver.x, diver.y, 16) ? CHILL : 1; }
+function homeScale() { return W > H ? Math.min((W - 30) / 30, (H - 150) / 8) : W / 14; }
+function needs(dt) {
+  const m = G.s.m;
+  m.food = Math.max(0, m.food - dt * 100 / 720);
+  if (m.food <= 0) m.health -= dt * 0.4;
+  if (m.health <= 0) faint();
+  if (m.hull <= 0) breach();
+}
+// Fainting and the hull giving way happen on the host (or alone); every phone gets the card and what it does to
+// its own person (`showStory`).
+function faint() {
+  const s = G.s;
+  s.day++; s.m.health = 35; s.m.food = Math.max(s.m.food, 25);
+  G.held = {}; if (net) { net.helm = null; stopSub(); }
+  save();
+  story('faint');
+}
+function breach() {
+  const s = G.s;
+  s.m.hull = 25; s.m.health = Math.max(10, s.m.health - 15);
+  G.held = {};  // every diver's haul is lost
+  if (net && net.helm && net.helm !== me()) net.helm = present(net.helm) ? net.helm : null;
+  // v2: the emergency ballast lifts SISU only into safe water, not all the way to the surface from the deep sea.
+  sub.y = Math.max(6, Math.min(sub.y, RATING[s.up.hull] - 40)); sub.vx = sub.vy = 0;
+  while (subHits(sub.x, sub.y) && sub.y > 6) sub.y -= 4;
+  while (subHits(sub.x, sub.y) && sub.x > 300) sub.x -= 10;
+  save();
+  story('breach', { sub: [sub.x, sub.y] });
+}
+function stepSub(dt) {
+  const k = subBoost();
+  let inp = input;
+  // With friends (v5) SISU holds still while someone is out: their way home is the airlock.
+  const out = net ? people().filter(p => p.mode === 'dive').map(p => p.name) : [];
+  if (out.length) {
+    inp = { x: 0, y: 0 };
+    if ((input.x || input.y) && G.warnCd <= 0) { toast('Odota: ' + out.join(', ') + ' sukeltaa', 1.6); G.warnCd = 2.5; }
+  }
+  sub.vx += (inp.x * SUB_SPEED * k - sub.vx) * Math.min(1, dt * (inp.x ? 0.9 : 0.6));
+  sub.vy += (inp.y * 7 * k - sub.vy) * Math.min(1, dt * 1.3);
+  if (inp.x > 0.2) sub.dir = 1; else if (inp.x < -0.2) sub.dir = -1;
+  const nx = sub.x + sub.vx * dt;
+  if (subHits(nx, sub.y)) { bump(Math.abs(sub.vx) / k); sub.vx *= -0.3; } else sub.x = nx;
+  const ny = Math.max(4, sub.y + sub.vy * dt);
+  if (subHits(sub.x, ny)) { bump(Math.abs(sub.vy) / k); sub.vy *= -0.3; } else sub.y = ny;
+  sub.prop += dt * (2 + Math.abs(sub.vx));
+  // A glowing fish that meets SISU bumps the hull a little.
+  for (let n = 0; n < FISH.length && G.fishCd <= 0; n++) {
+    const f = fishAt(n, G.t);
+    if (Math.abs(f.x - sub.x) < 15 && Math.abs(f.y - sub.y) < 3.5) {
+      hurt(5); G.fishCd = 3; clang(); toast('Valokala törmäsi runkoon', 1.4);
+    }
+  }
+}
+// The sea presses on SISU wherever the player is (v4, #132): at the helm, out on a dive or walking inside. v3 and
+// earlier only did this while driving, so diving out or going inside below the hull's rating saved the hull.
+// With friends (v5) the host's hull takes the damage; every phone warns its own player.
+function pressure(dt) {
+  const s = G.s, helm = G.mode === 'sub', mine = !net || net.host;
+  if (sub.y > RATING[s.up.hull]) {
+    if (mine) s.m.hull -= dt * 4;
+    if (G.warnCd <= 0) { toast(helm ? 'PAINE! Nouse ylemmäs' : 'PAINE! SISU on liian syvällä'); tone(70, 50, 0.8, 'sawtooth', 0.06); G.warnCd = 2.5; }
+    if (mine && s.m.hull <= 0) breach();
+  } else if (helm && sub.y > RATING[s.up.hull] - 25 && G.warnCd <= 0) {
+    toast('Runko natisee', 1.2); tone(90, 70, 0.6, 'triangle', 0.05); G.warnCd = 5;
+  }
+}
+// Damage SISU's driver causes: on a friend's phone it goes to the host.
+function hurt(n) { if (net && !net.host) act('dmg', n); else G.s.m.hull -= n; }
+function bump(v) {
+  if (v < 4 || G.hitCd > 0) return;
+  hurt((v - 4) * 2.2);
+  G.hitCd = 0.6;
+  clang(); toast('Kolahdus!', 0.8);
+}
+function stepDive(dt) {
+  diver.vx += (input.x * DIVER_SPEED - diver.vx) * Math.min(1, dt * 3);
+  diver.vy += (input.y * DIVER_SPEED - diver.vy) * Math.min(1, dt * 3);
+  if (Math.abs(diver.vx) > 0.3) diver.dir = Math.sign(diver.vx);
+  const nx = diver.x + diver.vx * dt;
+  if (!diverHits(nx, diver.y)) diver.x = nx; else diver.vx = 0;
+  const ny = Math.max(1, diver.y + diver.vy * dt);
+  if (!diverHits(diver.x, ny)) diver.y = ny; else diver.vy = 0;
+  diver.ang += ((Math.hypot(diver.vx, diver.vy) > 0.5 ? Math.atan2(diver.vy, Math.abs(diver.vx)) * 0.6 : 0) - diver.ang) * Math.min(1, dt * 5);
+  diver.air -= dt * chill();
+  if (chill() > 1 && !G.coldSaid) { G.coldSaid = true; toast('Kylmä vesi: happi kuluu nopeammin'); }
+  for (let n = 0; n < FISH.length && G.fishCd <= 0; n++) {
+    const f = fishAt(n, G.t), d = Math.hypot(f.x - diver.x, f.y - diver.y);
+    if (d < 2.8) {
+      diver.air = Math.max(1, diver.air - 8); G.fishCd = 3;
+      diver.vx = (diver.x - f.x) / d * 6; diver.vy = (diver.y - f.y) / d * 6;
+      toast('Valokala tönäisi! −8 s happea', 1.6); tone(220, 140, 0.3, 'square', 0.05);
+    }
+  }
+  if (Math.random() < dt * 2.5) bubbles.push({ x: diver.x + diver.dir * 0.5, y: diver.y - 0.4, t: 0 });
+  for (const it of allItems()) {
+    if (!itemHere(it) || Math.hypot(it.x - diver.x, it.y - diver.y) > 1.7) continue;
+    if (it.k === 'ilma') {
+      if (diver.air < TANK[G.s.up.tank] - 1) { diver.air = TANK[G.s.up.tank]; toast('Ilmatasku: happi täyttyy'); tone(600, 900, 0.3, 'sine', 0.06); }
+      continue;
+    }
+    // Each find is asked for once a dive; with friends the host gives it to whoever asked first.
+    if (G.asked[it.id]) continue;
+    G.asked[it.id] = true;
+    act('take', it.id);
+    if (G.paused) return;  // a log's card
+  }
+  if (diver.air <= 0) endDive(true);
+  else if (diver.air < 12 && G.warnCd <= 0) { toast('Happi vähissä!'); G.warnCd = 4; tone(400, 300, 0.3, 'square', 0.05); }
+}
+function step(dt) {
+  G.t += dt;
+  G.hitCd -= dt; G.warnCd -= dt; G.fishCd -= dt; G.pingCd = Math.max(0, G.pingCd - dt);
+  if (G.toastT > 0 && (G.toastT -= dt) <= 0) show('toast', false);
+  const playing = G.mode === 'sub' || G.mode === 'dive' || G.mode === 'home';
+  // With friends (v5) a card stops only this phone's own person: the sea goes on for the others. The room stops
+  // everything while a phone in it is away.
+  const away = net && R.paused;
+  if (!G.paused && !away) {
+    if (G.mode === 'sub') stepSub(dt);
+    else if (G.mode === 'dive') stepDive(dt);
+    else if (G.mode === 'home') stepCrew(dt);
+  }
+  if (net && !away) stepNet(dt);
+  if (playing && (net ? !away : !G.paused)) {
+    pressure(dt);
+    if (!net || net.host) {
+      // Saved every 4 s in every mode (v4): pressure damage on a dive or inside must survive a reload too.
+      G.saveCd -= dt;
+      if (G.saveCd <= 0) { save(); G.saveCd = 4; }
+      // Hunger runs while someone is at the helm or out diving; inside SISU time stands still.
+      if (people().some(p => p.mode === 'sub' || p.mode === 'dive')) { needs(dt); G.s.t += dt; }
+    }
+  }
+  sub.face += (sub.dir - sub.face) * Math.min(1, dt * 4);
+  for (const b of bubbles) { b.t += dt; b.y -= dt * 1.6; b.x += Math.sin(b.t * 6) * dt * 0.3; }
+  while (bubbles.length && bubbles[0].t > 3) bubbles.shift();
+  const home = G.mode === 'home';
+  G.homeT += ((home ? 1 : 0) - G.homeT) * Math.min(1, dt * 3);
+  const sc = G.mode === 'dive' ? diveScale() : home ? homeScale() : subScale();
+  G.sc += (sc - G.sc) * Math.min(1, dt * 2.5);
+  let tx = sub.x, ty = sub.y;
+  if (G.mode === 'dive') { tx = diver.x; ty = diver.y; }
+  // Inside: sideways the whole of SISU fits; upright the view follows the person along the hull.
+  if (home) { ty += H * (W > H ? 0.07 : 0.08) / G.sc; if (W <= H) tx = sub.x + sub.face * Math.max(-7.3, Math.min(7.7, crew.x)); }
+  if (G.mode === 'sub') tx += sub.vx * 1.2;
+  if (!home) ty = Math.max(ty, (H * 0.3) / G.sc);
+  G.cx += (tx - G.cx) * Math.min(1, dt * 4);
+  G.cy += (ty - G.cy) * Math.min(1, dt * 4);
+  if (G.s) drawHud();
+}
+
+// ---------- drawing ----------
+const cv = $('c'), ctx = cv.getContext('2d');
+const dark = document.createElement('canvas'), dctx = dark.getContext('2d');
+let W = 360, H = 740, DPR = 1;
+function resize() {
+  const r = cv.getBoundingClientRect();
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  cv.width = dark.width = Math.round(W * DPR);
+  cv.height = dark.height = Math.round(H * DPR);
+}
+addEventListener('resize', resize);
+resize();
+
+function polyPath(c, pts) { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); }
+function hullPath(c) {
+  c.beginPath();
+  c.moveTo(-12, -2.3); c.lineTo(10, -2.3);
+  c.quadraticCurveTo(14.4, -2.2, 14.4, 0); c.quadraticCurveTo(14.4, 2.2, 10, 2.3);
+  c.lineTo(-11, 2.3); c.quadraticCurveTo(-14, 1.6, -14, 0); c.quadraticCurveTo(-14, -1.8, -12, -2.3);
+  c.closePath();
+}
+function draw() {
+  const sc = G.sc, ox = W / 2 - G.cx * sc, oy = H / 2 - G.cy * sc;
+  G.view = { ox, oy, sc };
+  const X0 = -ox / sc, X1 = (W - ox) / sc, Y0 = -oy / sc, Y1 = (H - oy) / sc;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // sky and water
+  const sy = oy;
+  if (sy > 0) {
+    const g = ctx.createLinearGradient(0, sy - 120 * sc, 0, sy);
+    g.addColorStop(0, '#0d1b33'); g.addColorStop(0.7, '#3a5378'); g.addColorStop(1, '#c79a8a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, Math.min(H, sy));
+  }
+  const wg = ctx.createLinearGradient(0, sy, 0, sy + 320 * sc);
+  wg.addColorStop(0, '#2a6f95'); wg.addColorStop(0.25, '#0f3d5e'); wg.addColorStop(1, '#020a14');
+  ctx.fillStyle = wg; ctx.fillRect(0, Math.max(0, sy), W, H);
+
+  ctx.save(); ctx.translate(ox, oy); ctx.scale(sc, sc);
+  // light shafts near the surface
+  ctx.globalAlpha = 0.07; ctx.fillStyle = '#bfe8ff';
+  for (let i = Math.floor(X0 / 40) - 1; i < X1 / 40 + 1; i++) {
+    const x = i * 40 + Math.sin(i * 7.3 + G.t * 0.2) * 8;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 6, 0); ctx.lineTo(x + 26, 90); ctx.lineTo(x + 12, 90); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  drawGlacier();
+  drawBerg(X0, X1);
+  drawFloor(X0, X1, Y1);
+  if (X1 > 3900) drawDeep(X0, X1);
+  for (const s of SITES) if (s.x < X1 && s.x + s.w * C > X0 && s.y < Y1 && s.y + s.h * C > Y0) drawSite(s);
+  // the sea surface
+  ctx.strokeStyle = 'rgba(200,235,255,.6)'; ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  for (let x = Math.floor(X0); x < X1 + 2; x += 2) { const y = Math.sin(x * 0.2 + G.t * 1.5) * 0.25; x === Math.floor(X0) ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+  ctx.stroke();
+  ctx.restore();
+
+  drawDark(ox, oy, sc);
+
+  ctx.save(); ctx.translate(ox, oy); ctx.scale(sc, sc);
+  drawBeams();
+  drawLayout();
+  drawItems(X0, X1, Y0, Y1);
+  if (X1 > 3200) drawFish();
+  drawSub();
+  if (net) for (const [id, o] of Object.entries(net.others)) if (o.mode === 'dive') drawDiver(o, net.cols[id]);
+  if (G.mode === 'dive') drawDiver(diver, net && net.cols[R.me]);
+  ctx.fillStyle = 'rgba(220,240,255,.5)';
+  for (const b of bubbles) { ctx.beginPath(); ctx.arc(b.x, b.y, 0.12 + b.t * 0.05, 0, 7); ctx.fill(); }
+  if (G.s && G.mode === 'dive') sparkles();
+  ctx.restore();
+  // marine snow
+  ctx.fillStyle = 'rgba(210,235,255,.35)';
+  for (const p of snow) {
+    const x = ((p.x * W - G.cx * sc * 0.3 * p.z) % W + W) % W, y = ((p.y * H - G.cy * sc * 0.3 * p.z + G.t * 8 * p.z) % H + H) % H;
+    if (y > sy) ctx.fillRect(x, y, 1.4 * p.z, 1.4 * p.z);
+  }
+  if (G.s && G.mode !== 'menu') drawSonar(ox, oy, sc);
+  if (net) drawNames(ox, oy, sc);
+  window.drawn = true;
+}
+function drawGlacier() {
+  const top = [[0, -64], [12, -66], [22, -58], [30, -61], [40, -44], [44, -28], [38, -14], [42, -6], [34, 0], [0, 0]];
+  ctx.fillStyle = '#dcebf5'; polyPath(ctx, top); ctx.fill();
+  ctx.fillStyle = '#a9c6dc'; polyPath(ctx, [[22, -58], [30, -61], [40, -44], [44, -28], [38, -14], [32, -30]]); ctx.fill();
+  const under = [[0, 0]];
+  for (let y = 0; y <= 120; y += 10) under.push([glacierX(y) + Math.sin(y * 0.5) * 1.5, y]);
+  under.push([0, 120]);
+  const g = ctx.createLinearGradient(0, 0, 0, 120); g.addColorStop(0, '#6fb0d6'); g.addColorStop(1, '#1d4a6b');
+  ctx.fillStyle = g; polyPath(ctx, under); ctx.fill();
+  // the ice shelf and the abandoned station on it
+  ctx.fillStyle = '#d3e6f2'; ctx.fillRect(30, -2.5, SHELF_X - 30, 2.5);
+  ctx.fillStyle = '#8fbcd8'; polyPath(ctx, [[30, 0], [SHELF_X, 0], [SHELF_X - 4, SHELF_Y], [34, SHELF_Y]]); ctx.fill();
+  ctx.fillStyle = '#5d6970';
+  for (const x of [156, 176, 196, 206]) ctx.fillRect(x, SHELF_Y, 1.2, 22 - SHELF_Y);
+  ctx.fillStyle = '#4b555c'; ctx.fillRect(118, -16, 96, 13.5);
+  ctx.fillStyle = '#8a2e22'; ctx.fillRect(118, -16, 96, 1.6); ctx.fillRect(118, -5, 96, 1.2);
+  ctx.fillStyle = '#e6f0f6'; ctx.fillRect(116, -17.5, 100, 1.6);
+  ctx.fillStyle = '#1c2429';
+  for (let x = 124; x < 210; x += 9) ctx.fillRect(x, -12, 5, 3.5);
+  ctx.strokeStyle = '#4b555c'; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(140, -17); ctx.lineTo(143, -44); ctx.lineTo(146, -17); ctx.moveTo(141, -30); ctx.lineTo(145, -30); ctx.stroke();
+  ctx.fillStyle = (G.t % 2 < 1) ? '#ff4030' : '#601810'; ctx.beginPath(); ctx.arc(143, -45, 0.9, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2a3a52'; ctx.fillRect(200, -32, 0.5, 15); ctx.fillRect(200.5, -32, 7, 4.5);
+}
+function drawBerg(X0, X1) {
+  if (X1 < 2070 || X0 > 2430) return;
+  ctx.fillStyle = '#e8f3fa'; polyPath(ctx, BERG.top); ctx.fill();
+  ctx.fillStyle = '#b6d3e6'; polyPath(ctx, [[2318, -38], [2336, -70], [2350, -66], [2340, -30]]); ctx.fill();
+  const g = ctx.createLinearGradient(0, 0, 0, 205); g.addColorStop(0, '#d2f0fb'); g.addColorStop(0.45, '#6fb8dc'); g.addColorStop(1, '#2a6890');
+  ctx.fillStyle = g; polyPath(ctx, BERG.poly); ctx.fill();
+  ctx.strokeStyle = 'rgba(235,250,255,.7)'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#0c2f4a';
+  for (const [ax, ay, bx, by, r] of BERG.caves) { ctx.lineWidth = r * 2; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx + 0.01, by); ctx.stroke(); }
+  ctx.strokeStyle = '#123f60';
+  for (const [ax, ay, bx, by, r] of BERG.caves) { ctx.lineWidth = r * 1.4; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx + 0.01, by); ctx.stroke(); }
+  // icicles in the great chamber, and the old lifeboat in the lower cave
+  ctx.fillStyle = '#7cc4e4';
+  for (let x = 2196; x < 2292; x += 7) { const l = 3 + (x * 13 % 5); ctx.beginPath(); ctx.moveTo(x - 1, 56); ctx.lineTo(x + 1, 56); ctx.lineTo(x, 56 + l); ctx.fill(); }
+  for (let x = 2202; x < 2290; x += 11) { const l = 2 + (x * 7 % 4); ctx.beginPath(); ctx.moveTo(x - 1.4, 81.5); ctx.lineTo(x + 1.4, 81.5); ctx.lineTo(x, 81.5 - l); ctx.fill(); }
+  ctx.fillStyle = '#5a3a26'; polyPath(ctx, [[2224, 119], [2240, 119], [2237, 122.5], [2227, 122.5]]); ctx.fill();
+  ctx.fillStyle = '#7a5236'; ctx.fillRect(2229, 116.5, 5, 2.5);
+  ctx.lineCap = 'butt';
+}
+function drawFloor(X0, X1, Y1) {
+  const pts = [];
+  for (const [x, y] of FLOOR) if (x > X0 - 120 && x < X1 + 120) pts.push([x, y]);
+  if (!pts.length) return;
+  const bottom = Math.max(Y1, 400) + 10;
+  const g = ctx.createLinearGradient(0, 100, 0, 380); g.addColorStop(0, '#2b3b40'); g.addColorStop(1, '#0d1519');
+  ctx.fillStyle = g;
+  polyPath(ctx, [[pts[0][0], bottom], ...pts, [pts[pts.length - 1][0], bottom]]); ctx.fill();
+  ctx.strokeStyle = '#4c6168'; ctx.lineWidth = 0.6; ctx.beginPath();
+  pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  // stones and kelp on the floor
+  for (let x = Math.floor(X0 / 9) * 9; x < X1; x += 9) {
+    const r = (Math.sin(x * 12.9898) * 43758.5453) % 1, y = floorY(x);
+    if (Math.abs(r) < 0.35) { ctx.fillStyle = '#3a4a50'; ctx.beginPath(); ctx.ellipse(x, y, 1.6, 0.8, 0, Math.PI, 0); ctx.fill(); }
+    else if (Math.abs(r) > 0.8 && y < 200) {
+      ctx.strokeStyle = '#2f5a3a'; ctx.lineWidth = 0.35; ctx.beginPath(); ctx.moveTo(x, y);
+      for (let k = 1; k < 6; k++) ctx.lineTo(x + Math.sin(G.t + k + x) * 0.6, y - k * 1.3);
+      ctx.stroke();
+    }
+  }
+}
+// The deep plain: hot vents with shimmering plumes, and the bones of a whale that sank long ago.
+function drawDeep(X0, X1) {
+  ctx.strokeStyle = '#c9c2a8'; ctx.lineWidth = 0.5; ctx.lineCap = 'round';
+  const by = floorY(3990);
+  ctx.beginPath(); ctx.moveTo(3968, by - 1); ctx.quadraticCurveTo(3990, by - 4, 4014, by - 1.2); ctx.stroke();
+  for (let x = 3974; x < 4010; x += 3) { ctx.beginPath(); ctx.moveTo(x, by - 2.4); ctx.quadraticCurveTo(x + 1.5, by - 6, x + 3, by - 0.6); ctx.stroke(); }
+  ctx.fillStyle = '#c9c2a8'; ctx.beginPath(); ctx.ellipse(4016, by - 1.4, 3, 1.4, -0.1, 0, 7); ctx.fill();
+  ctx.lineCap = 'butt';
+  for (const [vx, h] of VENTS) {
+    if (vx < X0 - 20 || vx > X1 + 20) continue;
+    const fy = floorY(vx), top = fy - h, w = 1.6 + h * 0.08;
+    ctx.fillStyle = '#2b2522'; polyPath(ctx, [[vx - w, fy + 1], [vx - 1.6, top], [vx + 1.6, top], [vx + w, fy + 1]]); ctx.fill();
+    ctx.fillStyle = '#ff7a2a'; ctx.fillRect(vx - 1, top - 0.3, 2, 0.5);
+    ctx.fillStyle = 'rgba(40,36,34,.35)';
+    for (let k = 0; k < 6; k++) {
+      const a = (G.t * 0.6 + k / 6) % 1;
+      ctx.beginPath(); ctx.arc(vx + Math.sin(G.t + k * 2) * a * 2, top - a * 16, 0.8 + a * 2.4, 0, 7); ctx.fill();
+    }
+  }
+}
+function drawSite(s) {
+  const inside = G.mode === 'dive' && diver.x > s.x - 1 && diver.x < s.x + s.w * C + 1 && diver.y > s.y - 1 && diver.y < s.y + s.h * C + 1;
+  s.open = (s.open || 0) + ((inside ? 1 : 0) - (s.open || 0)) * 0.12;
+  const shell = s.shell === 'station' ? '#79838a' : s.shell === 'ship' ? '#4d3b2f' : s.shell === 'beacon' ? '#c0582a' : s.color;
+  if (s.shell === 'rv') return drawNordlys(s);
+  if (s.shell === 'ship') { // masts and rails before the hull
+    ctx.strokeStyle = '#3d2f26'; ctx.lineWidth = 0.4;
+    ctx.beginPath(); ctx.moveTo(s.x + 6, s.y + 4); ctx.lineTo(s.x + 6, s.y - 8); ctx.moveTo(s.x + 3, s.y - 5); ctx.lineTo(s.x + 9, s.y - 5); ctx.stroke();
+  }
+  for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) {
+    const ch = s.cells[j][i] || ' ';
+    if (ch === ' ') continue;
+    const x = s.x + i * C, y = s.y + j * C;
+    if (ch === '#') ctx.fillStyle = s.open > 0.5 ? '#6a5446' : shell;
+    else ctx.fillStyle = s.open > 0.5 ? (s.shell === 'station' ? '#2c3a40' : '#2a241f') : shell;
+    ctx.fillRect(x - 0.02, y - 0.02, C + 0.04, C + 0.04);
+  }
+  if (s.open < 0.5) {
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.15;
+    for (let j = 1; j < s.h; j += 2) { ctx.beginPath(); ctx.moveTo(s.x, s.y + j * C); ctx.lineTo(s.x + s.w * C, s.y + j * C); ctx.stroke(); }
+    if (s.shell === 'station') { ctx.fillStyle = '#8a2e22'; ctx.fillRect(s.x, s.y + 1.2, s.w * C, 0.8); }
+    if (s.shell === 'box') { ctx.fillStyle = 'rgba(0,0,0,.25)'; for (let x = s.x + 0.6; x < s.x + s.w * C; x += 1.2) ctx.fillRect(x, s.y + 0.3, 0.4, s.h * C - 0.6); }
+    ctx.fillStyle = '#e8d7a8'; ctx.font = '1.4px system-ui'; ctx.textAlign = 'center';
+    if (s.shell === 'ship') ctx.fillText(s.name.toUpperCase(), s.x + s.w * C - 12, s.y + 9);
+    if (s.id === 'asema') ctx.fillText('A-3', s.x + s.w * C - 4, s.y + 9.6);
+    if (s.shell === 'beacon') { // a mast with a slow red light
+      ctx.fillStyle = '#5a5a5a'; ctx.fillRect(s.x + 7.6, s.y - 6, 0.6, 6);
+      ctx.fillStyle = (G.t % 1.6 < 0.4) ? '#ff5030' : '#5a1a10'; ctx.beginPath(); ctx.arc(s.x + 7.9, s.y - 6.4, 0.7, 0, 7); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = 'rgba(255,220,150,.08)'; // furniture hints inside
+    for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) if ((s.cells[j][i] === '.') && s.cells[j + 1] && s.cells[j + 1][i] === '#' && (i * 7 + j) % 3 === 0)
+      ctx.fillRect(s.x + i * C + 0.3, s.y + j * C + 1.1, 1.4, 0.9);
+  }
+}
+// RV Nordlys: white superstructure, a dark blue hull with a red stripe and her name; inside, rooms as in the picture.
+function drawNordlys(s) {
+  const inside = s.open > 0.5;
+  for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) {
+    const ch = s.cells[j][i] || ' ';
+    if (ch === ' ') continue;
+    if (inside) ctx.fillStyle = ch === '#' ? '#56606a' : j < s.deck ? '#26343e' : '#1d2a33';
+    else ctx.fillStyle = j <= s.deck ? '#d7dee2' : j === s.deck + 2 ? '#a83226' : '#1f3a5a';
+    ctx.fillRect(s.x + i * C - 0.02, s.y + j * C - 0.02, C + 0.04, C + 0.04);
+  }
+  const x1 = s.x + s.w * C;
+  if (!inside) {
+    ctx.fillStyle = '#1b2a33';
+    for (let x = s.x + 71; x < s.x + 101; x += 3.2) ctx.fillRect(x, s.y + 2.4, 2, 1.2);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    for (let x = s.x + 4; x < x1 - 10; x += 4) { ctx.beginPath(); ctx.arc(x, s.y + 11.6, 0.45, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#e8eef2'; ctx.font = '700 2.4px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('NORDLYS', s.x + 64, s.y + 17);
+  }
+  // masts, the radar and the A-frame crane at the stern
+  ctx.strokeStyle = '#9aa6ac'; ctx.lineWidth = 0.45;
+  ctx.beginPath(); ctx.moveTo(s.x + 88, s.y); ctx.lineTo(s.x + 88, s.y - 12); ctx.moveTo(s.x + 85, s.y - 9); ctx.lineTo(s.x + 91, s.y - 9);
+  ctx.moveTo(s.x + 4, s.y + 8); ctx.lineTo(s.x + 1, s.y - 2); ctx.lineTo(s.x + 9, s.y - 2); ctx.lineTo(s.x + 8, s.y + 8); ctx.stroke();
+  ctx.fillStyle = '#9aa6ac'; ctx.fillRect(s.x + 86, s.y - 12.5, 4, 0.6);
+}
+function drawItems(X0, X1, Y0, Y1) {
+  if (!G.s) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '1.5px system-ui';
+  // Finds are drawn over the dark, but only as far as a lamp reaches.
+  const eye = G.mode === 'dive' ? diver : sub, reach = G.mode === 'dive' ? 13 * LAMP[G.s.up.lamp] : 26;
+  for (const it of allItems()) {
+    if (it.x < X0 - 2 || it.x > X1 + 2 || it.y < Y0 - 2 || it.y > Y1 + 2 || !itemHere(it)) continue;
+    const vis = Math.min(1, 1.5 - Math.hypot(it.x - eye.x, it.y - eye.y) / reach);
+    if (vis <= 0) continue;
+    ctx.globalAlpha = vis;
+    if (it.k === 'ilma') {
+      ctx.strokeStyle = 'rgba(220,245,255,.8)'; ctx.lineWidth = 0.12;
+      for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(it.x + Math.sin(G.t * 2 + k) * 0.5, it.y - ((G.t * 0.8 + k * 0.4) % 1.6) + 0.6, 0.25 + k * 0.05, 0, 7); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(200,240,255,.25)'; ctx.beginPath(); ctx.ellipse(it.x, it.y - 0.8, 1.8, 0.6, 0, 0, 7); ctx.fill();
+      continue;
+    }
+    if (it.site === 'find') { ctx.fillStyle = '#a8792e'; ctx.fillRect(it.x - 0.8, it.y - 0.5, 1.6, 1.4); }
+    ctx.fillText(ICON[it.k], it.x, it.y + Math.sin(G.t * 2 + it.x) * 0.15);
+  }
+  ctx.globalAlpha = 1;
+}
+// Glowing fish: a dark body, a fin, and a lit lure on a stalk ahead of the mouth.
+function drawFish() {
+  for (let n = 0; n < FISH.length; n++) {
+    const f = fishAt(n, G.t);
+    ctx.save(); ctx.translate(f.x, f.y); ctx.scale(f.dir * 1.6, 1.6);
+    ctx.fillStyle = '#3b2f3f'; ctx.beginPath(); ctx.ellipse(0, 0, 1.8, 1.1, 0, 0, 7); ctx.fill();
+    polyPath(ctx, [[-1.5, 0], [-2.8, -0.9 + Math.sin(G.t * 5 + n) * 0.3], [-2.8, 0.9 + Math.sin(G.t * 5 + n) * 0.3]]); ctx.fill();
+    ctx.fillStyle = '#e8e0c0'; for (let k = 0; k < 4; k++) ctx.fillRect(0.9 + k * 0.2, 0.15, 0.08, 0.3);
+    ctx.fillStyle = '#9fffe0'; ctx.beginPath(); ctx.arc(0.6, -0.4, 0.18, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#5a4a5a'; ctx.lineWidth = 0.12; ctx.beginPath(); ctx.moveTo(0.4, -1); ctx.quadraticCurveTo(1.6, -2.2, 2.2, -1); ctx.stroke();
+    ctx.fillStyle = `rgba(150,255,220,${0.7 + 0.3 * Math.sin(G.t * 3 + n)})`; ctx.beginPath(); ctx.arc(2.2, -1, 0.35, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+}
+function sparkles() {
+  for (const it of allItems()) {
+    if (!itemHere(it)) continue;
+    const d = Math.hypot(it.x - diver.x, it.y - diver.y);
+    if (d > 14) continue;
+    const a = (1 - d / 14) * (0.5 + 0.5 * Math.sin(G.t * 4 + it.x));
+    ctx.fillStyle = it.k === 'ilma' ? `rgba(200,240,255,${a * 0.6})` : `rgba(255,230,140,${a})`;
+    ctx.beginPath(); ctx.arc(it.x, it.y, 0.25, 0, 7); ctx.fill();
+  }
+}
+function drawDark(ox, oy, sc) {
+  const d = dctx;
+  d.setTransform(DPR, 0, 0, DPR, 0, 0);
+  d.globalCompositeOperation = 'source-over';
+  d.clearRect(0, 0, W, H);
+  // v2: darker still on the slope and in the deep sea
+  const g = d.createLinearGradient(0, oy, 0, oy + 900 * sc);
+  g.addColorStop(0, 'rgba(0,4,12,0.08)'); g.addColorStop(0.058, 'rgba(0,4,12,0.42)'); g.addColorStop(0.29, 'rgba(0,3,10,0.9)');
+  g.addColorStop(0.75, 'rgba(0,1,6,0.97)'); g.addColorStop(1, 'rgba(0,1,5,0.98)');
+  d.fillStyle = g; d.fillRect(0, Math.max(0, oy), W, H);
+  d.globalCompositeOperation = 'destination-out';
+  const S = (x, y) => [ox + x * sc, oy + y * sc];
+  const glow = (x, y, r, a = 1) => {
+    const [px, py] = S(x, y), R = r * sc, rg = d.createRadialGradient(px, py, 0, px, py, R);
+    rg.addColorStop(0, `rgba(0,0,0,${a})`); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    d.fillStyle = rg; d.beginPath(); d.arc(px, py, R, 0, 7); d.fill();
+  };
+  const cone = (x, y, ang, len, half) => {
+    const [px, py] = S(x, y), R = len * sc, rg = d.createRadialGradient(px, py, 0, px, py, R);
+    rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(0.6, 'rgba(0,0,0,.7)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    d.fillStyle = rg; d.beginPath(); d.moveTo(px, py); d.arc(px, py, R, ang - half, ang + half); d.closePath(); d.fill();
+  };
+  const lamp = G.s ? LAMP[G.s.up.lamp] : 1;
+  glow(sub.x, sub.y, 22);
+  cone(sub.x + sub.face * 14, sub.y + 0.5, sub.face > 0 ? 0.12 : Math.PI - 0.12, 60 * lamp, 0.42);
+  if (G.mode === 'dive') {
+    glow(diver.x, diver.y, 8 * lamp);
+    cone(diver.x, diver.y, diver.dir > 0 ? diver.ang : Math.PI - diver.ang, 22 * lamp, 0.55);
+  }
+  if (net) for (const o of Object.values(net.others)) if (o.mode === 'dive') {
+    glow(o.x, o.y, 8 * lamp);
+    cone(o.x, o.y, o.dir > 0 ? o.ang : Math.PI - o.ang, 22 * lamp, 0.55);
+  }
+  glow(2300, 10, 26, 0.7); glow(2161, 12, 10, 0.5); glow(2248, 182, 6, 0.6);
+  for (const [vx, h] of VENTS) glow(vx, floorY(vx) - h, 14, 0.55);
+  for (let n = 0; n < FISH.length; n++) { const f = fishAt(n, G.t); glow(f.x + f.dir * 3.5, f.y - 1.6, 8, 0.6); }
+  const mk = SITES.find(s => s.id === 'majakka');
+  if (G.t % 1.6 < 0.4) glow(mk.x + 7.9, mk.y - 6.4, 9, 0.7);
+  if (G.ping) {
+    const age = G.t - G.ping.t, R = Math.min(450, age * 260);
+    if (age < 1.8) { const [px, py] = S(G.ping.x, G.ping.y); d.strokeStyle = `rgba(0,0,0,${0.35 * (1 - age / 1.8)})`; d.lineWidth = 14; d.beginPath(); d.arc(px, py, R * sc, 0, 7); d.stroke(); }
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(dark, 0, 0);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+// Inside a wreck or the iceberg the walls stay faintly visible beyond the lamp, like a cross-section drawing.
+function drawLayout() {
+  if (G.mode !== 'dive') return;
+  for (const s of SITES) {
+    if (!(s.open > 0.05)) continue;
+    ctx.fillStyle = s.shell === 'rv' ? `rgba(150,180,200,${0.32 * s.open})` : `rgba(214,170,120,${0.3 * s.open})`;
+    for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++)
+      if (s.cells[j][i] === '#') ctx.fillRect(s.x + i * C - 0.02, s.y + j * C - 0.02, C + 0.04, C + 0.04);
+    if (s.rooms) {
+      ctx.fillStyle = `rgba(255,236,190,${0.85 * s.open})`; ctx.font = '600 1.1px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      for (const [i, j, name] of s.rooms) ctx.fillText(name, s.x + i * C, s.y + j * C + 0.25);
+    }
+  }
+  if (diver.x > 2060 && diver.x < 2430 && diver.y < 210) {
+    // v2 (#129): the ice itself shows faintly around the caves — layers, cracks and trapped bubbles — so the great
+    // chamber reads as a hall in the ice, not as a plain band.
+    ctx.save(); polyPath(ctx, BERG.poly); ctx.clip();
+    ctx.fillStyle = 'rgba(120,190,228,.24)'; ctx.fillRect(2078, -2, 350, 210);
+    ctx.strokeStyle = 'rgba(200,240,255,.22)'; ctx.lineWidth = 0.35;
+    for (let y = 6; y < 206; y += 5.5) {
+      ctx.beginPath();
+      for (let x = 2080; x <= 2424; x += 8) { const yy = y + Math.sin(x * 0.05 + y) * 1.2; x === 2080 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy); }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(230,250,255,.3)'; ctx.lineWidth = 0.2;
+    for (let n = 0; n < 40; n++) {
+      const x = 2090 + (n * 97.3) % 330, y = 8 + (n * 53.7) % 195;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 2 - (n % 4), y + 3); ctx.lineTo(x + 1, y + 6); ctx.stroke();
+      ctx.fillStyle = 'rgba(230,250,255,.35)'; ctx.beginPath(); ctx.arc(x + 4, y + 2, 0.25 + (n % 3) * 0.12, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(170,225,250,.38)'; ctx.lineCap = 'round';
+    for (const [ax, ay, bx, by, r] of BERG.caves) { ctx.lineWidth = r * 2 + 0.6; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx + 0.01, by); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(6,26,44,.82)';
+    for (const [ax, ay, bx, by, r] of BERG.caves) { ctx.lineWidth = r * 2 - 0.3; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx + 0.01, by); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+    // the great chamber's ceiling icicles, floor of ice rubble, and a frozen-in anchor chain
+    ctx.fillStyle = 'rgba(150,215,240,.75)';
+    for (let x = 2193; x < 2296; x += 4.5) { const l = 2.5 + (x * 13 % 5); ctx.beginPath(); ctx.moveTo(x - 1.1, 54.6); ctx.lineTo(x + 1.1, 54.6); ctx.lineTo(x, 54.6 + l); ctx.fill(); }
+    ctx.fillStyle = 'rgba(120,190,220,.7)';
+    for (let x = 2194; x < 2296; x += 6) { const r = 1 + (x * 7 % 3) * 0.5; ctx.beginPath(); ctx.ellipse(x, 81.4, r * 1.4, r, 0, Math.PI, 0); ctx.fill(); }
+    ctx.strokeStyle = 'rgba(150,130,110,.8)'; ctx.lineWidth = 0.3;
+    for (let k = 0; k < 9; k++) { ctx.beginPath(); ctx.ellipse(2238 + k * 0.4, 56 + k * 1.3, 0.35, 0.65, 0.3, 0, 7); ctx.stroke(); }
+  }
+}
+function drawBeams() {
+  // daylight through the moulin and the air gap into the iceberg; the deep crack glows faintly blue
+  ctx.globalCompositeOperation = 'lighter';
+  const beam = (x, y, w, len, a) => {
+    const g = ctx.createLinearGradient(0, y, 0, y + len); g.addColorStop(0, `rgba(150,220,255,${a})`); g.addColorStop(1, 'rgba(150,220,255,0)');
+    ctx.fillStyle = g; polyPath(ctx, [[x - w, y], [x + w, y], [x + w * 2.4, y + len], [x - w * 2.4, y + len]]); ctx.fill();
+  };
+  beam(2298, 2, 2.2, 78, 0.22); beam(2286, 20, 1.4, 60, 0.12); beam(2161, 8, 1, 36, 0.18);
+  const p = 0.25 + 0.2 * Math.sin(G.t * 2.2);
+  const g = ctx.createRadialGradient(2248, 184, 0, 2248, 184, 5); g.addColorStop(0, `rgba(90,200,255,${p})`); g.addColorStop(1, 'rgba(90,200,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(2248, 184, 5, 0, 7); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
+function drawSub() {
+  ctx.save(); ctx.translate(sub.x, sub.y); ctx.scale(sub.face, 1);
+  const inside = G.homeT;
+  // tower, rudder and propeller
+  ctx.fillStyle = '#c8901f';
+  polyPath(ctx, [[-3, -2.2], [-2.2, -5.2], [3.6, -5.2], [4.6, -2.2]]); ctx.fill();
+  ctx.fillStyle = '#3b3a36'; ctx.fillRect(-1.4, -7.4, 0.35, 2.3); ctx.fillRect(0, -6.8, 0.3, 1.7); ctx.fillRect(1.2, -7.8, 0.3, 2.7);
+  ctx.fillStyle = '#b07a18'; polyPath(ctx, [[-13.2, -1], [-15.6, -3.4], [-16, -3.2], [-15.2, 0], [-16, 3.2], [-15.6, 3.4], [-13.2, 1]]); ctx.fill();
+  ctx.fillStyle = '#6b6457';
+  const pr = Math.sin(sub.prop * 6) * 1.6;
+  ctx.fillRect(-14.8, -Math.abs(pr), 0.4, Math.abs(pr) * 2);
+  // hull
+  const hg = ctx.createLinearGradient(0, -2.4, 0, 2.4); hg.addColorStop(0, '#f2bd3c'); hg.addColorStop(0.6, '#c58b1c'); hg.addColorStop(1, '#7a520f');
+  ctx.fillStyle = hg; hullPath(ctx); ctx.fill();
+  ctx.fillStyle = 'rgba(30,20,10,.55)';
+  ctx.fillRect(-9.2, -2.3, 0.5, 4.6); ctx.fillRect(7.8, -2.3, 0.5, 4.6);
+  if (inside < 0.98) {
+    ctx.globalAlpha = 1;
+    for (const x of [-5, -2, 1, 4, 6.5]) { // warm portholes: home is lit
+      ctx.fillStyle = '#ffd88a'; ctx.beginPath(); ctx.arc(x, -0.6, 0.45, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,200,110,.25)'; ctx.beginPath(); ctx.arc(x, -0.6, 1.2, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = '#fff8d0'; ctx.beginPath(); ctx.arc(14, 0.4, 0.35, 0, 7); ctx.fill();
+  }
+  if (inside > 0.02) { ctx.globalAlpha = inside; drawInterior(); ctx.globalAlpha = 1; }
+  ctx.restore();
+}
+// The cross-section of SISU from the SISU picture of #125 (v3): the reactor in the stern, the airlock in the bow, and two
+// decks between them joined by the ladder under the tower. The person walks in it.
+function drawInterior() {
+  ctx.save();
+  hullPath(ctx); ctx.clip();
+  ctx.fillStyle = '#2a1d13'; ctx.fillRect(-15, -3, 30, 6);
+  const A = ctx.globalAlpha, labels = [];
+  for (const r of ROOMS) {
+    const y0 = r.tall || !r.deck ? -2.3 : 0.15, y1 = r.tall || r.deck ? 2.3 : 0, x0 = Math.max(r.x0, -14.2), x1 = Math.min(r.x1, 14.6);
+    ctx.fillStyle = r.col; ctx.fillRect(x0 + 0.06, y0 + 0.06, x1 - x0 - 0.12, y1 - y0 - 0.12);
+    const g = ctx.createRadialGradient((x0 + x1) / 2, y0 + 0.3, 0, (x0 + x1) / 2, y0 + 0.3, (x1 - x0) * 0.7);
+    g.addColorStop(0, 'rgba(255,210,130,.42)'); g.addColorStop(1, 'rgba(255,210,130,0)');
+    ctx.fillStyle = g; ctx.fillRect(x0 + 0.06, y0 + 0.06, x1 - x0 - 0.12, y1 - y0 - 0.12);
+    if (G.mode === 'home' && crew.room === r.id) { ctx.fillStyle = 'rgba(255,230,160,.12)'; ctx.fillRect(x0 + 0.06, y0 + 0.06, x1 - x0 - 0.12, y1 - y0 - 0.12); }
+    // The two tall rooms sit in the hull's curved ends: their names go a little in from the curve.
+    labels.push([r.tall ? (r.x0 < 0 ? -10.9 : 11.7) : (x0 + x1) / 2, r.tall ? -1.5 : y0 + 0.22, r.tall ? 2.8 : x1 - x0 - 0.5, r.name]);
+  }
+  // the decks: the upper one has a hatch for the ladder; door frames between the rooms
+  ctx.fillStyle = '#6b5236';
+  ctx.fillRect(-8.5, UP, LADDER - 0.45 + 8.5, 0.15); ctx.fillRect(LADDER + 0.45, UP, 10 - LADDER - 0.45, 0.15);
+  ctx.fillRect(-14, LOW, 29, 0.35);
+  ctx.fillStyle = '#1e150d';
+  for (const r of ROOMS) if (r.x0 > -14) {
+    const y0 = r.tall || !r.deck ? -2.3 : 0.15;
+    ctx.fillRect(r.x0 - 0.08, y0, 0.16, r.tall ? 4.3 : 2.15); // the bulkhead, with a doorway cut in it below
+  }
+  for (const r of ROOMS) if (r.x0 > -14 && r.id !== 'keittio') {  // the galley's back wall is the reactor's: no door
+    const doors = r.tall ? [r.x0 < 0 ? null : LOW] : [r.deck ? LOW : UP];
+    for (const fy of doors) if (fy != null) { ctx.fillStyle = r.col; ctx.fillRect(r.x0 - 0.1, fy - 1.75, 0.2, 1.75); }
+  }
+  // the reactor: two floors of steel and a blue glow
+  ctx.fillStyle = '#b8c0c6'; ctx.fillRect(-12.6, -1.6, 2.8, 3.6);
+  ctx.fillStyle = '#8b959c'; ctx.fillRect(-12.6, -0.2, 2.8, 0.2); ctx.fillRect(-12.9, -1.8, 3.4, 0.25);
+  ctx.fillStyle = '#8fd8ff'; ctx.globalAlpha = A * (0.6 + 0.3 * Math.sin(G.t * 3)); ctx.fillRect(-11.7, -0.9, 1, 2.4); ctx.globalAlpha = A;
+  ctx.strokeStyle = '#a0603a'; ctx.lineWidth = 0.12;
+  ctx.beginPath(); ctx.moveTo(-9.8, -1.2); ctx.lineTo(-8.9, -1.2); ctx.lineTo(-8.9, 1.6); ctx.stroke();
+  // galley: stove, kettle, counter, shelf with jars, table
+  ctx.fillStyle = '#2c2c2c'; ctx.fillRect(-8.1, -0.9, 1.5, 0.9);
+  ctx.fillStyle = '#ff8a3a'; ctx.fillRect(-7.95, -1.0, 1.2, 0.12);
+  ctx.fillStyle = '#c9c9c9'; ctx.fillRect(-7.6, -1.35, 0.45, 0.35);
+  ctx.fillStyle = 'rgba(255,255,255,.25)';
+  for (let n = 0; n < 3; n++) { ctx.beginPath(); ctx.arc(-7.3 + Math.sin(G.t * 2 + n) * 0.15, -1.6 - n * 0.25 - (G.t * 0.3 % 0.25), 0.1, 0, 7); ctx.fill(); }
+  ctx.fillStyle = '#9b6b3c'; ctx.fillRect(-6.2, -0.9, 2, 0.9); ctx.fillRect(-6.2, -1.9, 2.2, 0.12);
+  for (let n = 0; n < 4; n++) { ctx.fillStyle = ['#d9772e', '#6aa84f', '#e8c050', '#b0473a'][n]; ctx.fillRect(-6.05 + n * 0.5, -2.2, 0.3, 0.3); }
+  ctx.fillStyle = '#7a5530'; ctx.fillRect(-3.9, -0.75, 1.4, 0.12); ctx.fillRect(-3.3, -0.65, 0.15, 0.65);
+  // control room: the helm's screens and window, the chair, a plant; the ladder runs up the tower
+  ctx.fillStyle = '#123'; ctx.fillRect(0.1, -1.9, 2.6, 1.1);
+  ctx.fillStyle = '#5fe0a0'; ctx.fillRect(0.3, -1.7, 1, 0.65); ctx.fillStyle = '#5fb0ff'; ctx.fillRect(1.5, -1.7, 1, 0.65);
+  ctx.fillStyle = '#6b4a2a'; ctx.fillRect(0.2, -0.65, 2.4, 0.65);
+  ctx.fillStyle = '#3a2a1a'; ctx.fillRect(1.2, -1.0, 0.5, 0.5); ctx.fillRect(1.4, -0.5, 0.12, 0.5);
+  ctx.fillStyle = '#3c7d3a'; ctx.beginPath(); ctx.arc(2.95, -0.9, 0.3, 0, 7); ctx.fill();
+  ctx.fillStyle = '#6a4a2a'; ctx.fillRect(2.8, -0.6, 0.3, 0.6);
+  // navigation: the chart on the wall and the chart table
+  ctx.fillStyle = '#1b3550'; ctx.fillRect(3.7, -2.0, 2.2, 1.0);
+  ctx.strokeStyle = '#7fd0ff'; ctx.lineWidth = 0.05;
+  ctx.beginPath(); ctx.moveTo(3.8, -1.3); ctx.quadraticCurveTo(4.6, -1.9, 5.2, -1.4); ctx.lineTo(5.8, -1.15); ctx.stroke();
+  ctx.fillStyle = '#ffd65a'; ctx.beginPath(); ctx.arc(5.5, -1.3, 0.08, 0, 7); ctx.fill();
+  ctx.fillStyle = '#8a6a40'; ctx.fillRect(3.8, -0.7, 2.1, 0.15); ctx.fillRect(3.95, -0.55, 0.12, 0.55); ctx.fillRect(5.65, -0.55, 0.12, 0.55);
+  ctx.fillStyle = '#e8dcc0'; ctx.fillRect(4.1, -0.78, 1.2, 0.08);
+  // bunks
+  ctx.fillStyle = '#6e4a32'; ctx.fillRect(6.7, -0.45, 3.0, 0.15); ctx.fillRect(6.7, -1.45, 3.0, 0.15); ctx.fillRect(9.55, -2.2, 0.12, 2.2);
+  ctx.fillStyle = '#9fb6c9'; ctx.fillRect(6.75, -0.68, 2.9, 0.24); ctx.fillRect(6.75, -1.68, 2.9, 0.24);
+  ctx.fillStyle = '#c9a2a2'; ctx.fillRect(9.0, -0.82, 0.6, 0.2); ctx.fillStyle = '#d8c070'; ctx.fillRect(6.85, -1.85, 0.8, 0.2);
+  // electrical: cabinets with blinking lights
+  for (let n = 0; n < 3; n++) {
+    ctx.fillStyle = '#566064'; ctx.fillRect(-8.2 + n * 0.95, 0.5, 0.8, 1.5);
+    ctx.fillStyle = (Math.floor(G.t * 2 + n) % 3) ? '#5fe08a' : '#ffb04a'; ctx.fillRect(-8.0 + n * 0.95, 0.75, 0.15, 0.12);
+    ctx.fillStyle = '#5fe08a'; ctx.fillRect(-7.75 + n * 0.95, 0.75, 0.15, 0.12);
+  }
+  ctx.strokeStyle = '#2a2f31'; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(-8.3, 0.35); ctx.lineTo(-5.5, 0.35); ctx.stroke();
+  // workshop: the bench, tools on the wall, the welder
+  ctx.fillStyle = '#7a5a3a'; ctx.fillRect(-5.0, 1.25, 2.6, 0.2); ctx.fillRect(-4.9, 1.45, 0.12, 0.55); ctx.fillRect(-2.6, 1.45, 0.12, 0.55);
+  ctx.fillStyle = '#c0c0c0'; for (let x = -4.8; x < -2.6; x += 0.45) ctx.fillRect(x, 0.45, 0.1, 0.5);
+  ctx.fillStyle = '#c04030'; ctx.fillRect(-3.9, 0.95, 0.6, 0.3);
+  // stores: one tin per ration, one box per medicine, gears per spare part (the ladder passes on the left)
+  const inv = G.s ? G.s.inv : { ruoka: 0, laake: 0, osat: 0 };
+  ctx.fillStyle = '#8a6a40'; ctx.fillRect(-0.6, 1.1, 4.3, 0.1); ctx.fillRect(-0.6, 1.95, 4.3, 0.06); ctx.fillRect(-0.6, 0.45, 0.1, 1.55); ctx.fillRect(3.6, 0.45, 0.1, 1.55);
+  for (let n = 0; n < Math.min(inv.ruoka, 7); n++) { ctx.fillStyle = '#d9772e'; ctx.fillRect(-0.4 + n * 0.55, 0.62, 0.4, 0.48); }
+  for (let n = 0; n < Math.min(inv.laake, 4); n++) { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(-0.4 + n * 0.6, 1.5, 0.45, 0.45); ctx.fillStyle = '#d33'; ctx.fillRect(-0.22 + n * 0.6, 1.62, 0.1, 0.22); }
+  for (let n = 0; n < Math.min(inv.osat, 5); n++) { ctx.fillStyle = '#9aa'; ctx.beginPath(); ctx.arc(2.0 + n * 0.35, 1.78, 0.16, 0, 7); ctx.fill(); }
+  // diving suits on their hooks: one is gone while someone wears it; with friends (v5) a hook for each
+  const worn = (crew.suit ? 1 : 0) + (net ? Object.values(net.others).filter(o => o.suit && o.mode !== 'wait').length : 0);
+  const hooks = net && Object.keys(net.others).length > 1 ? [[0, 4.3], [1, 5.4], [2, 6.5], [3, 7.6]] : [[0, 5.2], [1, 7.4]];
+  for (const [n, x] of hooks) {
+    ctx.fillStyle = '#5a4a3a'; ctx.fillRect(x + 0.35, 0.3, 0.2, 0.12);
+    if (n < worn) continue;
+    ctx.fillStyle = '#e0b020'; ctx.fillRect(x, 0.85, 0.9, 1.0);
+    ctx.beginPath(); ctx.arc(x + 0.45, 0.6, 0.32, 0, 7); ctx.fill();
+    ctx.fillStyle = '#7fc8e8'; ctx.beginPath(); ctx.arc(x + 0.5, 0.58, 0.16, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = '#c9b23a'; ctx.fillRect(8.6, 1.3, 0.35, 0.7); ctx.fillRect(9.05, 1.3, 0.35, 0.7);
+  // the airlock: the round outer hatch in the bow, the light over it green when the suit is on
+  ctx.strokeStyle = '#9aa4aa'; ctx.lineWidth = 0.22; ctx.beginPath(); ctx.ellipse(13.0, 0.8, 0.55, 1.05, 0, 0, 7); ctx.stroke();
+  ctx.fillStyle = '#1d2a33'; ctx.beginPath(); ctx.ellipse(13.0, 0.8, 0.42, 0.9, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#7fd0ff'; ctx.fillRect(12.85, 0.5, 0.3, 0.5);
+  ctx.fillStyle = crew.suit ? '#5fe08a' : '#ff6b5a'; ctx.beginPath(); ctx.arc(12.0, -0.6, 0.14, 0, 7); ctx.fill();
+  // the ladder from the lower deck up into the tower
+  ctx.strokeStyle = '#c09050'; ctx.lineWidth = 0.08;
+  ctx.beginPath(); ctx.moveTo(LADDER - 0.32, -2.3); ctx.lineTo(LADDER - 0.32, LOW); ctx.moveTo(LADDER + 0.32, -2.3); ctx.lineTo(LADDER + 0.32, LOW); ctx.stroke();
+  for (let y = -2.2; y < LOW; y += 0.4) { ctx.beginPath(); ctx.moveTo(LADDER - 0.32, y); ctx.lineTo(LADDER + 0.32, y); ctx.stroke(); }
+  // where a tap sent the person
+  if (G.mode === 'home' && crew.mark && G.t - crew.mark.t < 0.7) {
+    const k = (G.t - crew.mark.t) / 0.7;
+    ctx.strokeStyle = `rgba(255,230,150,${1 - k})`; ctx.lineWidth = 0.08;
+    ctx.beginPath(); ctx.ellipse(crew.mark.x, crew.mark.y - 0.05, 0.3 + k * 0.5, 0.1 + k * 0.12, 0, 0, 7); ctx.stroke();
+  }
+  if (G.mode === 'home') {
+    if (net) for (const [id, o] of Object.entries(net.others)) if (o.mode === 'home') drawCrew(o, net.cols[id]);
+    drawCrew(crew, net && net.cols[R.me]);
+  }
+  // Room names over everything, on a dark strip, as large as the room allows.
+  ctx.save(); ctx.scale(sub.face < 0 ? -1 : 1, 1);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (const [cx, ty, maxw, label] of labels) {
+    ctx.font = '700 1px system-ui';
+    const f = Math.min(0.62, maxw / ctx.measureText(label).width), w = ctx.measureText(label).width * f, x = (sub.face < 0 ? -1 : 1) * cx;
+    ctx.fillStyle = 'rgba(20,12,4,.6)'; ctx.fillRect(x - w / 2 - 0.12, ty - 0.04, w + 0.24, f * 1.05);
+    ctx.font = `700 ${f}px system-ui`; ctx.fillStyle = '#ffe6b8'; ctx.fillText(label, x, ty);
+  }
+  ctx.restore();
+  ctx.restore();
+  ctx.strokeStyle = '#e0a526'; ctx.lineWidth = 0.35; hullPath(ctx); ctx.stroke();
+}
+// The person: blue overalls, or the yellow diving suit and helmet; legs swing as they walk, arms reach on the ladder.
+function drawCrew(c = crew, col) {
+  const swing = c.moving && !c.climbing ? Math.sin(c.walkT * 4.5) * 0.28 : 0;
+  ctx.save(); ctx.translate(c.x, c.y); ctx.scale((c.climbing ? 1 : c.dir) * 1.1, 1.1);
+  const body = c.suit ? '#f2c230' : col || '#4fa3ff', dark = c.suit ? '#a07a10' : col ? 'rgba(0,0,0,.45)' : '#2a5c94';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = dark; ctx.lineWidth = 0.2;
+  ctx.beginPath(); ctx.moveTo(0, -0.78); ctx.lineTo(swing, -0.02); ctx.moveTo(0, -0.78); ctx.lineTo(-swing, -0.02); ctx.stroke();
+  ctx.fillStyle = '#222'; ctx.fillRect(swing - 0.05, -0.08, 0.24, 0.08); ctx.fillRect(-swing - 0.05, -0.08, 0.24, 0.08);
+  ctx.fillStyle = body; ctx.fillRect(-0.2, -1.38, 0.4, 0.66);
+  ctx.strokeStyle = body; ctx.lineWidth = 0.15;
+  const reach = c.climbing ? Math.sin(c.walkT * 4) * 0.25 : 0;
+  ctx.beginPath();
+  if (c.climbing) { ctx.moveTo(-0.15, -1.3); ctx.lineTo(-0.3, -1.75 + reach); ctx.moveTo(0.15, -1.3); ctx.lineTo(0.3, -1.75 - reach); }
+  else { ctx.moveTo(0, -1.3); ctx.lineTo(-swing * 0.8, -0.85); ctx.moveTo(0, -1.3); ctx.lineTo(swing * 0.8 + 0.05, -0.85); }
+  ctx.stroke();
+  if (c.suit) {
+    ctx.fillStyle = '#e0b020'; ctx.beginPath(); ctx.arc(0, -1.58, 0.27, 0, 7); ctx.fill();
+    ctx.fillStyle = '#9fe2ff'; ctx.beginPath(); ctx.arc(0.08, -1.6, 0.15, 0, 7); ctx.fill();
+  } else {
+    ctx.fillStyle = '#f0c8a0'; ctx.beginPath(); ctx.arc(0, -1.55, 0.19, 0, 7); ctx.fill();
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(-0.2, -1.78, 0.4, 0.12); // a red knit cap
+  }
+  ctx.restore(); ctx.lineCap = 'butt';
+}
+function drawDiver(d = diver, col) {
+  ctx.save(); ctx.translate(d.x, d.y); ctx.scale(d.dir, 1); ctx.rotate(d.ang);
+  const k = Math.sin(G.t * 9) * ((d === diver ? Math.hypot(d.vx, d.vy) > 0.4 : d.moving) ? 0.35 : 0.1);
+  ctx.strokeStyle = '#d9a514'; ctx.lineWidth = 0.32; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-0.5, 0.05); ctx.lineTo(-1.25, 0.1 + k); ctx.moveTo(-0.5, 0.1); ctx.lineTo(-1.25, 0.15 - k); ctx.stroke();
+  ctx.fillStyle = '#222'; ctx.beginPath();
+  ctx.ellipse(-1.5, 0.12 + k * 1.2, 0.4, 0.12, k, 0, 7); ctx.ellipse(-1.5, 0.15 - k * 1.2, 0.4, 0.12, -k, 0, 7); ctx.fill();
+  ctx.fillStyle = '#9aa7ad'; ctx.fillRect(-0.55, -0.48, 0.9, 0.3);
+  ctx.fillStyle = '#e8b21a'; ctx.beginPath(); ctx.ellipse(0, 0, 0.62, 0.28, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#e8b21a'; ctx.beginPath(); ctx.arc(0.8, -0.08, 0.27, 0, 7); ctx.fill();
+  ctx.fillStyle = '#9fe2ff'; ctx.fillRect(0.88, -0.2, 0.18, 0.16);
+  ctx.strokeStyle = '#e8b21a'; ctx.lineWidth = 0.16; ctx.beginPath(); ctx.moveTo(0.3, 0.05); ctx.lineTo(0.95, 0.25); ctx.stroke();
+  ctx.fillStyle = '#fffbd8'; ctx.beginPath(); ctx.arc(1.0, 0.25, 0.1, 0, 7); ctx.fill();
+  if (col) { ctx.fillStyle = col; ctx.fillRect(-0.35, -0.27, 0.42, 0.55); }  // the friend's colour on the suit (v5)
+  ctx.restore(); ctx.lineCap = 'butt';
+}
+// Friends' names (v5) over their divers, and inside SISU over the people in it.
+function drawNames(ox, oy, sc) {
+  ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const [id, o] of Object.entries(net.others)) {
+    let wx, wy;
+    if (o.mode === 'dive') { wx = o.x; wy = o.y - 1.3; }
+    // Inside, clear of the room names: over the hull for the upper deck, on the deck between them for the lower.
+    else if (o.mode === 'home' && G.mode === 'home' && G.homeT > 0.5) { wx = sub.x + sub.face * o.x; wy = sub.y + (o.y > 1 ? 0.35 : -2.75); }
+    else continue;
+    const x = ox + wx * sc, y = Math.max(10, oy + wy * sc - 8), w = ctx.measureText(o.name).width + 10;
+    if (x < -w || x > W + w || y > H) continue;
+    ctx.fillStyle = 'rgba(2,12,22,.72)'; ctx.fillRect(x - w / 2, y - 8, w, 16);
+    ctx.fillStyle = net.cols[id]; ctx.fillText(o.name, x, y + 0.5);
+  }
+}
+// Sonar: the ping ring, the outlines it lights for a moment, and the contacts at the screen's edge.
+function drawSonar(ox, oy, sc) {
+  const S = (x, y) => [ox + x * sc, oy + y * sc];
+  if (G.ping) {
+    const age = G.t - G.ping.t, R = Math.min(450, age * 260), a = Math.max(0, 1 - age / 5);
+    if (a <= 0) G.ping = null;
+    else {
+      const [px, py] = S(G.ping.x, G.ping.y);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(px, py, R * sc, 0, 7); ctx.clip();
+      ctx.translate(ox, oy); ctx.scale(sc, sc);
+      ctx.strokeStyle = `rgba(110,255,180,${0.8 * a})`; ctx.lineWidth = 2 / sc;
+      ctx.beginPath(); FLOOR.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+      polyPath(ctx, BERG.poly); ctx.stroke();
+      ctx.lineCap = 'round';
+      for (const [ax, ay, bx, by, r] of BERG.caves) { ctx.lineWidth = 1.5 / sc; ctx.beginPath(); ctx.moveTo(ax, ay - r); ctx.lineTo(bx, by - r); ctx.moveTo(ax, ay + r); ctx.lineTo(bx, by + r); ctx.stroke(); }
+      ctx.lineCap = 'butt'; ctx.lineWidth = 2 / sc;
+      ctx.beginPath(); for (let y = 0; y <= 120; y += 10) y ? ctx.lineTo(glacierX(y), y) : ctx.moveTo(glacierX(y), y); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,230,120,${0.9 * a})`;
+      for (const s of SITES) ctx.strokeRect(s.x, s.y, s.w * C, s.h * C);
+      ctx.restore();
+      if (age < 1.8) { ctx.strokeStyle = `rgba(110,255,180,${0.7 * (1 - age / 1.8)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, R * sc, 0, 7); ctx.stroke(); }
+    }
+  }
+  if (G.mode !== 'sub') return;
+  const target = goalNow().target;
+  const top = W > H ? 64 : 112, bottom = H - (W > H ? 110 : 180);
+  const list = contacts().map(c => ({ ...c, d: Math.hypot(c.x - sub.x, c.y - sub.y) }))
+    .filter(c => c.d < 1000 && c.d > 30).sort((a, b) => a.d - b.d);
+  const shown = list.slice(0, 3);
+  const tgt = list.find(c => c.id === target);
+  if (tgt && !shown.includes(tgt)) shown.push(tgt);
+  ctx.font = '700 11px ui-monospace, monospace'; ctx.textBaseline = 'middle';
+  const placed = [];
+  for (const c of shown) {
+    const known = G.s.known[c.id], hot = c.id === target && known;
+    const col = hot ? '255,214,90' : '120,255,190';
+    const label = known ? c.kind : 'TUNTEMATON KONTAKTI';
+    let [x, y] = S(c.x, c.y);
+    const on = x > 14 && x < W - 14 && y > top && y < bottom;
+    if (!on) {
+      const cx = W / 2, cy = (top + bottom) / 2, dx = x - cx, dy = y - cy;
+      const k = Math.min((W / 2 - 18) / Math.abs(dx || 1e-6), ((bottom - top) / 2 - 10) / Math.abs(dy || 1e-6));
+      x = cx + dx * k; y = cy + dy * k;
+      const ang = Math.atan2(dy, dx);
+      ctx.fillStyle = `rgba(${col},.95)`;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+      ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.fill(); ctx.restore();
+    } else {
+      ctx.strokeStyle = `rgba(${col},${0.6 + 0.3 * Math.sin(G.t * 4)})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 12, 0, 7); ctx.stroke();
+    }
+    const t1 = label, t2 = Math.round(c.d) + ' m';
+    const tw = Math.max(ctx.measureText(t1).width, ctx.measureText(t2).width) + 10;
+    let lx = Math.min(W - tw - 6, Math.max(6, x - tw / 2)), ly = on ? y - 38 : (y > (top + bottom) / 2 ? y - 40 : y + 12);
+    ly = Math.max(top - 6, Math.min(bottom - 28, ly));
+    for (let n = 0; n < 6 && placed.some(r => lx < r[0] + r[2] && r[0] < lx + tw && ly < r[1] + 30 && r[1] < ly + 30); n++)
+      ly = ly + 32 > bottom ? ly - 32 * (n + 1) : ly + 32;
+    placed.push([lx, ly, tw]);
+    ctx.fillStyle = 'rgba(0,12,10,.7)'; ctx.fillRect(lx, ly, tw, 28);
+    ctx.fillStyle = `rgb(${col})`; ctx.textAlign = 'left';
+    ctx.fillText(t1, lx + 5, ly + 8); ctx.fillText(t2, lx + 5, ly + 20);
+  }
+}
+
+// ---------- the stick ----------
+(() => {
+  const st = $('stick'), kn = $('knob');
+  let id = null;
+  const move = e => {
+    const r = st.getBoundingClientRect(), R = r.width / 2;
+    let dx = e.clientX - r.left - R, dy = e.clientY - r.top - R;
+    const l = Math.hypot(dx, dy), m = R * 0.75;
+    if (l > m) { dx *= m / l; dy *= m / l; }
+    kn.style.transform = `translate(${dx}px, ${dy}px)`;
+    input.x = Math.abs(dx / m) < 0.12 ? 0 : dx / m; input.y = Math.abs(dy / m) < 0.12 ? 0 : dy / m;
+  };
+  const end = () => { id = null; input.x = input.y = 0; kn.style.transform = ''; };
+  st.addEventListener('pointerdown', e => { audio(); id = e.pointerId; st.setPointerCapture(id); move(e); });
+  st.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
+  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+})();
+
+// Inside SISU a tap on a room walks the person there.
+cv.addEventListener('pointerup', e => {
+  if (G.mode !== 'home' || G.paused || !G.view) return;
+  audio();
+  const r = cv.getBoundingClientRect(), V = G.view, f = Math.abs(sub.face) > 0.2 ? sub.face : sub.dir;
+  walkTo(((e.clientX - r.left - V.ox) / V.sc - sub.x) / f, (e.clientY - r.top - V.oy) / V.sc - sub.y);
+});
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!G.hold) step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+menu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
