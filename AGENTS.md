@@ -112,7 +112,16 @@ high-score lists (#25), then play counts (#26).
     `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project as `ROOMS`. It only relays, and
     keeps the host's `game`, `v` and `max` (2–8). CI deploys `rooms/` before the site; a change to
     it must keep every published version's messages working.
-- `public/scores.js` and `public/rooms.js` are shared by every version that uses them: change them
+- **Outfits (#158).** A version whose player has a figure to dress opts in with
+  `<script src="../../../outfits.js" data-game="<slug>"></script>` before its own script, calls
+  `AiPelitOutfits.setup({ outfits, draw, change })` with its own everyday outfits (the first is the
+  default) and a "👕 Asu" menu button that calls `AiPelitOutfits.open()`. The six Halloween
+  costumes are added by the library, always available, first in the picker around Halloween;
+  `AiPelitOutfits.head()` draws their heads. An outfit is a palette (`skin`, `hair`, `top`,
+  `bottom`, `cape`, `head`) the game's own drawing reads. The choice is saved per game
+  (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
+  `get(id)`. Trampoliini v6 is the model.
+- `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
