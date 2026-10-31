@@ -32,10 +32,6 @@
   #modes{display:flex;gap:6px;justify-content:center}
   #modes button{white-space:nowrap;font:800 15px system-ui,sans-serif;padding:7px 9px;border:3px solid transparent;border-radius:14px;background:#e9dcc0;color:#5a4528}
   #modes button.on{border-color:#7a3b8f;background:#7a3b8f;color:#fff}
-  /* How the finger steers (v7, #137, a prototype to try). */
-  #ctl{display:flex;gap:4px;align-items:center;justify-content:center;font:700 12px system-ui,sans-serif;color:#7d6a4c}
-  #ctl button{white-space:nowrap;font:700 12px system-ui,sans-serif;padding:5px 7px;border:2px solid transparent;border-radius:10px;background:#e9dcc0;color:#5a4528}
-  #ctl button.on{border-color:#7a3b8f;background:#fff;color:#7a3b8f}
   #multi{font:800 17px system-ui,sans-serif;padding:11px 18px;border:0;border-radius:16px;color:#fff;background:#7a3b8f;box-shadow:0 4px 0 #4f2260;margin-top:4px}
   #multi:active{transform:translateY(3px);box-shadow:none}
   /* Upright the two columns are no boxes at all: the menu is one column, as in v4. */
@@ -51,7 +47,6 @@
     .help.long{display:none}
     .help.short{display:block}
     #modes button{font-size:14px;padding:6px 7px}
-    #ctl button{padding:4px 6px}
   }
   /* A short phone upright: the short help. */
   @media (orientation: portrait) and (max-height: 700px) {
@@ -79,7 +74,6 @@
   <div class="row"><button id="hide">🙈 Piiloudu</button><button id="seek">👀 Etsi</button></div>
   <div id="maps"></div>
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
-  <div id="ctl"></div>
   <p id="total"></p>
   <p class="help short"></p>
   <p class="help long"></p>
@@ -123,7 +117,10 @@ const statsH = Object.assign({ kierrokset: 0, selvisit: 0, jait: 0, hippasit: 0 
 const BASE_POLE = 0.3, BASE_REACH = 1.4;
 const BODY = 0.36;               // a player's radius
 const FOV = 110 * Math.PI / 180; // the field of view, and how far it reaches
-const RANGE = 10, NEAR = 1.3;    // anyone this close is heard and seen, whichever way you look
+const RANGE = 12, NEAR = 1.3;    // anyone this close is heard and seen, whichever way you look; v7 (#137): 12 m, was 10
+// Side vision (v7, #137): a wider and farther blur around the sharp view. In it one sees only that
+// someone moves there, as a shape with no colour or name; the computer seeker turns to look.
+const WIDE = 200 * Math.PI / 180, FAR = 16, STIR = 1;
 const BUSH_SEEN = 2.4;           // someone inside a bush is seen only from this close
 const HEAR = 7, LOUD = 2.6;      // running faster than LOUD m/s is heard this far, through walls (v6, #109)
 const SPEED = 4.0, BOT_HIDE = 3.4, BOT_RUN = 3.7, BOT_SEEK = 3.5, BOT_RACE = 3.85, BOT_CHASE = 3.9;
@@ -271,6 +268,13 @@ function canSee(o, t) {
 }
 // Has o looked into this hiding place? A bush only counts from as close as someone in it is seen.
 function spotChecked(o, s) { return seesPoint(o, s) && (!s.bush || dist(o, s) < BUSH_SEEN); }
+// Does o glimpse p from the side of its eye, or far off: p moves, in the open, within the blur but not seen sharp?
+function glimpses(o, p) {
+  if (o === p || o.st === 'count' || !((p.moving || 0) > STIR)) return false;
+  const d = dist(o, p);
+  if (d > FAR || Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - o.a)) > WIDE / 2) return false;
+  return !bushAt(p.x, p.y) && !canSee(o, p) && clearSight(o, p);
+}
 // Running is heard (v6, #109): o hears p run within HEAR metres when it cannot see p, through walls
 // too. The seeker hears the hiders still out, and a hider still out hears the seeker. Sneaking is quiet.
 function hears(o, p) {
@@ -278,10 +282,10 @@ function hears(o, p) {
   return o === seeker ? p.role === 'hider' && active(p) : p === seeker && active(o);
 }
 // The outline of what o sees: a fan of rays across the field of view.
-function viewPoly(o) {
+function viewPoly(o, fov = FOV, range = RANGE) {
   const pts = [], n = 64;
   for (let i = 0; i <= n; i++) {
-    const a = o.a - FOV / 2 + FOV * i / n, d = castRay(o.x, o.y, a, RANGE);
+    const a = o.a - fov / 2 + fov * i / n, d = castRay(o.x, o.y, a, range);
     pts.push(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d);
   }
   return pts;
@@ -690,7 +694,7 @@ function seekerBot(p, dt) {
   if (p.goal === BASE) p.goal = null;
   if (mode === 'hippa' && itBot(p, dt)) return;
   // A hider heard running out of sight: go and look where the steps were.
-  const heard = hiders().find(h => hears(p, h));
+  const heard = hiders().find(h => hears(p, h) || (phase === 'seek' && active(h) && glimpses(p, h)));
   if (heard && !(time - p.heardT < 1.5)) { p.goal = { x: heard.x, y: heard.y }; p.repath = 0; p.look = 0; p.heardT = time; }
   if (p.look > 0) { // Arrived: a look all around.
     p.look -= dt; p.moving = 0; p.a = wrap(p.a + dt * 4.2);
@@ -772,7 +776,7 @@ function itBot(p, dt) {
 }
 // Hippa, everyone else: run from "it" when it is seen or heard close; otherwise wander between hiding places.
 function runnerBot(p, dt) {
-  const it = seeker, d = dist(p, it), near = phase === 'seek' && it.freeze <= 0 && d < 9 && (canSee(p, it) || hears(p, it) || d < 3);
+  const it = seeker, d = dist(p, it), near = phase === 'seek' && it.freeze <= 0 && d < 9 && (canSee(p, it) || hears(p, it) || glimpses(p, it) || d < 3);
   if (near) {
     if ((p.fleeT = (p.fleeT || 0) - dt) <= 0) {
       p.fleeT = 0.7;
@@ -800,17 +804,12 @@ function runnerBot(p, dt) {
 }
 
 // ---------- The player's finger ----------
-// Three ways to steer, to try on the phone (v7, #137, a prototype; the choice is kept on the phone):
-// 'nappi': a stick wherever the finger lands, as in v1–v6, and a ⚡ button to hold for a sprint.
-// 'tyonto': the same stick; pushing it past its outer ring sprints.
-// 'kaksi': two thumbs. The left half of the screen walks (push far to sprint), the right half turns
-//   the eyes, so one can walk one way and look another, or back away watching the seeker.
-const CONTROLS = { nappi: '⚡ Nappi', tyonto: '🫸 Työnnä', kaksi: '✌️ Kaksi' };
-let ctl = CONTROLS[load('ohjaus', 'nappi')] ? load('ohjaus', 'nappi') : 'nappi';
+// Two thumbs (v7, #137; Eero picked it from three tried in a prototype): the left half of the screen
+// walks, and pushing that stick past its outer ring sprints; the right half turns the eyes, so one can
+// walk one way and look another, or back away watching the seeker. Alone, the left thumb turns the
+// eyes too, the way one walks, as in v1–v6.
 const STICK = 46, PUSH = 84; // the stick's ring, and how far a push sprints
-let joy = null, eye = null, dash = null; // the walking finger, the looking finger, the finger on ⚡
-// Where the ⚡ button is: the lower right corner, where the right thumb rests.
-const dashBtn = () => ({ x: W - safeR - 62, y: H - safeB - 74, r: 40 });
+let joy = null, eye = null; // the walking finger, and the looking finger
 function movePlayer(dt) {
   player.moving = 0; player.spr = false;
   if (player.freeze > 0) player.freeze -= dt;
@@ -826,8 +825,7 @@ function movePlayer(dt) {
       const a = Math.atan2(dy, dx);
       if (!eye) turnTo(player, a, 12, dt);
       let s = SPEED * Math.min(1, Math.max(0, (d - 10) / 40));
-      const want = ctl === 'nappi' ? !!dash : d > PUSH;
-      if (want && s > SPEED * 0.6 && canSprint(player)) { s *= SPRINT; player.spr = true; }
+      if (d > PUSH && s > SPEED * 0.6 && canSprint(player)) { s *= SPRINT; player.spr = true; }
       player.x += Math.cos(a) * s * dt; player.y += Math.sin(a) * s * dt; collide(player);
       player.moving = s;
     }
@@ -839,8 +837,7 @@ c.addEventListener('pointerdown', e => {
   if (!racing()) return;
   const r = c.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
   const f = { id: e.pointerId, ox: px, oy: py, x: px, y: py };
-  if (ctl === 'nappi') { const b = dashBtn(); if (Math.hypot(px - b.x, py - b.y) < b.r + 12) { dash = f; c.setPointerCapture(e.pointerId); return; } }
-  if (ctl === 'kaksi' && px > r.width / 2) { if (!eye) { eye = f; c.setPointerCapture(e.pointerId); } return; }
+  if (px > r.width / 2) { if (!eye) { eye = f; c.setPointerCapture(e.pointerId); } return; }
   if (!joy) { joy = f; c.setPointerCapture(e.pointerId); }
 });
 c.addEventListener('pointermove', e => {
@@ -850,10 +847,9 @@ c.addEventListener('pointermove', e => {
 const lift = e => {
   if (joy && e.pointerId === joy.id) joy = null;
   if (eye && e.pointerId === eye.id) eye = null;
-  if (dash && e.pointerId === dash.id) dash = null;
 };
 c.addEventListener('pointerup', lift); c.addEventListener('pointercancel', lift);
-const letGo = () => { joy = eye = dash = null; };
+const letGo = () => { joy = eye = null; };
 
 // ---------- One step of the game ----------
 // Alone, and on the phone that made the room, this runs the round. A guest phone runs guestStep().
@@ -912,15 +908,16 @@ const sfx = {
 };
 
 // ---------- Drawing ----------
-const LEAD = 2.2; // metres the camera leads the player's eyes
+const LEAD = 3; // metres the camera leads the player's eyes
 let W, H, DPR, S, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, camX = BASE.x, camY = BASE.y;
 function resize() {
   DPR = window.devicePixelRatio || 1;
   W = innerWidth; H = innerHeight;
   c.width = fog.width = W * DPR; c.height = fog.height = H * DPR;
-  // Upright 12 m across and 19 m down; sideways (#95) the same turned, so things are the same size.
+  // Upright 15 m across and 24 m down (v7, #137: farther than v6's 12 × 19, so the whole field of
+  // view fits); sideways (#95) the same turned, so things are the same size.
   wide = W > H;
-  S = wide ? Math.min(W / 19, H / 12) : Math.min(W / 12, H / 19); // pixels per metre
+  S = wide ? Math.min(W / 24, H / 15) : Math.min(W / 15, H / 24); // pixels per metre
   const cs = getComputedStyle(document.getElementById('safe'));
   safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
   safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
@@ -1058,9 +1055,11 @@ function drawBubble(p) {
 function draw() {
   // The camera follows the player but stays over the yard. v7 (#137): it leads a little the way the
   // player looks, so more of the field of view is on the screen, and glides there.
-  const hw = W / 2 / S, hh = H / 2 / S, ahead = racing() && player.st !== 'count' ? LEAD : 0;
-  const tx = WW > 2 * hw ? Math.max(hw, Math.min(WW - hw, player.x + Math.cos(player.a) * ahead)) : WW / 2;
-  const ty = WH > 2 * hh ? Math.max(hh - 1.5, Math.min(WH - hh + 1.5, player.y + Math.sin(player.a) * ahead)) : WH / 2;
+  // Along each axis it leads as far as the sharp view needs to fit on the screen (more across an upright phone).
+  const hw = W / 2 / S, hh = H / 2 / S, on = racing() && player.st !== 'count';
+  const lead = h => on ? Math.max(LEAD, RANGE + 0.6 - h) : 0;
+  const tx = WW > 2 * hw ? Math.max(hw, Math.min(WW - hw, player.x + Math.cos(player.a) * lead(hw))) : WW / 2;
+  const ty = WH > 2 * hh ? Math.max(hh - 1.5, Math.min(WH - hh + 1.5, player.y + Math.sin(player.a) * lead(hh))) : WH / 2;
   const k = Math.abs(tx - camX) + Math.abs(ty - camY) > 8 ? 1 : 0.12; // a new round or map: jump there
   camX += (tx - camX) * k; camY += (ty - camY) * k;
   drawYard();
@@ -1081,7 +1080,14 @@ function draw() {
   fx.globalCompositeOperation = 'source-over'; fx.clearRect(0, 0, W, H);
   fx.fillStyle = 'rgba(10,16,30,0.66)'; fx.fillRect(0, 0, W, H);
   if (player.st !== 'count') {
-    world(fx); fx.globalCompositeOperation = 'destination-out'; fx.fillStyle = '#000';
+    world(fx); fx.globalCompositeOperation = 'destination-out';
+    // The blur at the sides and far off is half clear, the sharp view wholly.
+    fx.fillStyle = 'rgba(0,0,0,0.42)';
+    const wide = viewPoly(player, WIDE, FAR);
+    fx.beginPath(); fx.moveTo(player.x, player.y);
+    for (let i = 0; i < wide.length; i += 2) fx.lineTo(wide[i], wide[i + 1]);
+    fx.closePath(); fx.fill();
+    fx.fillStyle = '#000';
     const pts = viewPoly(player);
     fx.beginPath(); fx.moveTo(player.x, player.y);
     for (let i = 0; i < pts.length; i += 2) fx.lineTo(pts[i], pts[i + 1]);
@@ -1093,6 +1099,13 @@ function draw() {
   x.font = '18px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
   for (const f of prints) { x.globalAlpha = Math.min(1, f.t * 2); x.fillText('👣', sx(f.x), sy(f.y)); }
   x.globalAlpha = 1;
+  // Someone moving in the blur: a soft shape, no colour, no name.
+  if (playing) for (const p of people) {
+    if (!glimpses(player, p)) continue;
+    const g = x.createRadialGradient(sx(p.x), sy(p.y), 0, sx(p.x), sy(p.y), BODY * S * 2.2);
+    g.addColorStop(0, 'rgba(225,230,240,0.75)'); g.addColorStop(0.45, 'rgba(225,230,240,0.4)'); g.addColorStop(1, 'rgba(225,230,240,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(sx(p.x), sy(p.y), BODY * S * 2.2, 0, 7); x.fill();
+  }
 
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   for (const p of shown) {
@@ -1105,7 +1118,7 @@ function draw() {
   if (playing && seeker !== player && seeker.bt > 0 && !shown.includes(seeker)) {
     x.font = '700 14px system-ui'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,0.9)';
     const lines = wrapText(`${seeker.name}: ${seeker.bubble}`, W - 24);
-    lines.forEach((l, i) => x.fillText(l, W / 2, H - safeB - (ctl === 'nappi' ? 136 : 64) - (lines.length - 1 - i) * LINE));
+    lines.forEach((l, i) => x.fillText(l, W / 2, H - safeB - 64 - (lines.length - 1 - i) * LINE));
   }
   if (playing) { if (mode !== 'hippa') drawBaseArrow(); drawHud(); drawFingers(); }
   if (phase === 'count' && seeker === player) {
@@ -1134,11 +1147,10 @@ function drawFingers() {
   if (joy) {
     const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy);
     x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 3; x.beginPath(); x.arc(joy.ox, joy.oy, STICK, 0, 7); x.stroke();
-    if (ctl !== 'nappi') { // the ring a push must pass to sprint
-      x.strokeStyle = player.spr ? 'rgba(242,201,76,0.9)' : 'rgba(255,255,255,0.28)'; x.setLineDash([6, 6]);
-      x.beginPath(); x.arc(joy.ox, joy.oy, PUSH, 0, 7); x.stroke(); x.setLineDash([]);
-    }
-    const m = ctl === 'nappi' ? STICK : PUSH, k = d > m ? m / d : 1;
+    // the ring a push must pass to sprint ⚡
+    x.strokeStyle = player.spr ? 'rgba(242,201,76,0.9)' : 'rgba(255,255,255,0.28)'; x.setLineDash([6, 6]);
+    x.beginPath(); x.arc(joy.ox, joy.oy, PUSH, 0, 7); x.stroke(); x.setLineDash([]);
+    const k = d > PUSH ? PUSH / d : 1;
     x.fillStyle = player.spr ? 'rgba(242,201,76,0.9)' : 'rgba(255,255,255,0.6)'; x.beginPath(); x.arc(joy.ox + dx * k, joy.oy + dy * k, 18, 0, 7); x.fill();
   }
   if (eye) { // the eyes' stick: an arrow the way one looks
@@ -1147,19 +1159,9 @@ function drawFingers() {
     x.fillStyle = 'rgba(190,220,255,0.75)'; x.beginPath(); x.moveTo(STICK - 4, 0); x.lineTo(14, -12); x.lineTo(14, 12); x.fill();
     x.restore();
     x.font = '20px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('👀', eye.ox, eye.oy);
-  } else if (ctl === 'kaksi' && !joy && phase !== 'end') { // a hint where the two thumbs go
+  } else if (!joy && phase !== 'end') { // a hint where the two thumbs go
     x.font = '700 12px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = 'rgba(255,255,255,0.55)';
-    x.fillText('🕹️ kävele', W * 0.25, H - safeB - 26); x.fillText('👀 katso', W * 0.75, H - safeB - 26);
-  }
-  if (ctl === 'nappi') {
-    const b = dashBtn(), on = player.spr || (dash && canSprint(player));
-    x.globalAlpha = player.winded ? 0.45 : 1;
-    x.fillStyle = on ? 'rgba(242,201,76,0.95)' : 'rgba(255,255,255,0.28)'; x.beginPath(); x.arc(b.x, b.y, b.r, 0, 7); x.fill();
-    // the breath, as a ring round the button
-    x.strokeStyle = player.winded ? '#e0703a' : '#f2c94c'; x.lineWidth = 5;
-    x.beginPath(); x.arc(b.x, b.y, b.r + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * player.breath); x.stroke();
-    x.font = '26px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff'; x.fillText('⚡', b.x, b.y + 1);
-    x.globalAlpha = 1;
+    x.fillText('🕹️ kävele · ⚡ työnnä pitkälle', W * 0.25, H - safeB - 26); x.fillText('👀 katso', W * 0.75, H - safeB - 26);
   }
 }
 // An arrow on the screen's edge toward the base when it is out of view.
@@ -1247,7 +1249,6 @@ function menuMode() {
     : soloMode === 'piilosta' ? (statsP.kierrokset ? `Kierroksia ${statsP.kierrokset} · selvisit ${statsP.selvisit} · löysit ${statsP.loysit}` : '')
     : stats.kierrokset ? `Kierroksia ${stats.kierrokset} · pelastuit ${stats.pelastuit} · nimesit ${stats.kirkkasit}` : '';
   modeButtons(document.getElementById('modes'), soloMode, pickMode);
-  ctlButtons();
 }
 // The game picker (v7, #137): the choice is kept on the phone.
 function modeButtons(el, on, pick) {
@@ -1260,17 +1261,6 @@ function modeButtons(el, on, pick) {
   }));
 }
 function pickMode(id) { soloMode = id; save('moodi', id); menuMode(); }
-// The way to steer (v7 prototype): tried from the menu, kept on the phone.
-function ctlButtons() {
-  const el = document.getElementById('ctl'), t = document.createElement('span');
-  t.textContent = 'Ohjaus:';
-  el.replaceChildren(t, ...Object.keys(CONTROLS).map(id => {
-    const b = document.createElement('button');
-    b.textContent = CONTROLS[id]; b.dataset.ctl = id; b.classList.toggle('on', id === ctl);
-    b.addEventListener('click', () => { ctl = id; save('ohjaus', id); ctlButtons(); });
-    return b;
-  }));
-}
 // The map picker (v6, #109): the choice is kept on the phone.
 const mapsEl = document.getElementById('maps');
 function mapButtons(el, on, pick) {

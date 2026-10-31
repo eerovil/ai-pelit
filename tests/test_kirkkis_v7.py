@@ -92,32 +92,25 @@ def test_the_computer_it_chases_what_it_sees(site, browser):
     ctx.close()
 
 
-@pytest.mark.parametrize("ctl", ["nappi", "tyonto", "kaksi"])
-def test_sprint_is_faster_runs_out_and_comes_back(site, browser, ctl):
-    ctx, page = open_game(site, browser, init=f"localStorage.setItem('ai-pelit:kirkkis:ohjaus', '\"{ctl}\"')")
-    page.evaluate("newRound('hide'); player.x = 3; player.y = 20.5; player.a = 0")
-    W = page.evaluate("innerWidth")
-    # The finger lands on the left half, and pushes far (or holds ⚡ too).
-    page.evaluate(f"""() => {{ joy = {{ id: 1, ox: 60, oy: 500, x: 60 + {ctl == 'nappi' and 50 or 100}, y: 500 }};
-      dash = {'{ id: 2 }' if ctl == 'nappi' else 'null'}; }}""")
-    page.evaluate("() => { player.x = 3; player.y = 20.5; for (let i = 0; i < 15; i++) step(1 / 30); }")
-    fast = page.evaluate("player.moving")
-    assert fast == pytest.approx(6.0, abs=0.01)
+def test_a_far_push_sprints_runs_out_of_breath_and_it_comes_back(site, browser):
+    ctx, page = open_game(site, browser)
+    page.click("#hide")
+    # A short push walks, a push past the outer ring sprints.
+    page.evaluate("() => { joy = { id: 1, ox: 60, oy: 500, x: 110, y: 500 }; player.x = 3; player.y = 20.5; step(1 / 30); }")
+    assert page.evaluate("[player.moving, player.spr]") == [4, False]
+    page.evaluate("() => { joy.x = 160; for (let i = 0; i < 15; i++) step(1 / 30); }")
+    assert page.evaluate("player.moving") == pytest.approx(6.0, abs=0.01)
     page.evaluate(RUN, 3.5)
     assert page.evaluate("[player.winded, player.moving]") == [True, 4]
     page.evaluate("letGo()")
     page.evaluate(RUN, 2)
     assert page.evaluate("player.winded") is False
-    assert W == 360
     assert page.errors == []
     ctx.close()
 
 
 def test_two_thumbs_walk_one_way_and_look_another(site, browser):
     ctx, page = open_game(site, browser)
-    page.click("#ctl button[data-ctl=kaksi]")
-    page.reload()
-    assert page.evaluate("ctl") == "kaksi"
     page.click("#hide")
     box = page.evaluate("[innerWidth, innerHeight]")
     page.evaluate(RUN, 0.5)
@@ -132,6 +125,44 @@ def test_two_thumbs_walk_one_way_and_look_another(site, browser):
     page.evaluate(RUN, 1)
     r = page.evaluate("[player.x, player.a]")
     assert r[0] > x0 + 2 and abs(r[1] + 1.5708) < 0.1
+    # Letting go of the eyes: the eyes turn the way one walks again.
+    page.evaluate("() => c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2, bubbles: true }))")
+    page.evaluate(RUN, 0.5)
+    assert abs(page.evaluate("player.a")) < 0.1
+    assert page.errors == []
+    ctx.close()
+
+
+def test_the_whole_field_of_view_fits_on_the_screen(site, browser):
+    for w, h in [(360, 740), (740, 360)]:
+        ctx, page = open_game(site, browser, w, h)
+        page.click("#hide")
+        page.evaluate(RUN, 1)
+        # Wherever the player looks, the far end of a clear 12 m view is drawn on the screen.
+        out = page.evaluate("""() => { const o = []; player.x = 15; player.y = 22;
+          for (let k = 0; k < 8; k++) { player.a = k * Math.PI / 4; for (let i = 0; i < 40; i++) draw();
+            const ex = sx(player.x + Math.cos(player.a) * RANGE), ey = sy(player.y + Math.sin(player.a) * RANGE);
+            o.push(ex >= -1 && ex <= innerWidth + 1 && ey >= -1 && ey <= innerHeight + 1); } return [RANGE, o]; }""")
+        assert out[0] == 12 and all(out[1]), out
+        assert page.errors == []
+        ctx.close()
+
+
+def test_side_vision_shows_only_someone_moving_and_the_seeker_goes_to_look(site, browser):
+    ctx, page = open_game(site, browser)
+    r = page.evaluate("""() => { newRound('hide'); for (let i = 0; i < 10.2 * 30; i++) step(1 / 30);
+      player.x = 28; player.y = 42; player.st = 'saved';
+      const h = bots.find(b => b !== seeker); for (const b of bots) if (b !== seeker && b !== h) b.st = 'saved';
+      // On the open yard, 13 m off to the seeker's side: too far and too wide for the sharp view.
+      seeker.x = 15; seeker.y = 28; seeker.a = 0; seeker.look = 0; seeker.goal = { x: 16, y: 28 }; seeker.path = [];
+      h.x = 21; h.y = 40; h.st = 'hiding'; h.moving = 0;
+      const still = [canSee(seeker, h), glimpses(seeker, h)];
+      h.moving = 2;
+      const moving = [canSee(seeker, h), glimpses(seeker, h)];
+      seekerBot(seeker, 1 / 30);
+      return [still, moving, seeker.goal]; }""")
+    assert r[0] == [False, False] and r[1] == [False, True]
+    assert abs(r[2]["x"] - 21) < 1 and abs(r[2]["y"] - 40) < 1
     assert page.errors == []
     ctx.close()
 
@@ -157,7 +188,7 @@ def test_old_saves_still_read_and_each_game_keeps_its_own_tally(site, browser):
 def test_the_menu_fits_upright_and_sideways(site, browser, width, height):
     ctx, page = open_game(site, browser, width, height)
     page.evaluate("stats.kierrokset = 12; newRound('hide'); played = true; nextSeeker = bots[1]; lastRes = ['Pelastuit! 🎉', 'win']; showMenu()")
-    for sel in ["#menu h1", "#modes button", "#hide", "#seek", "#maps button", "#ctl button", "#multi", "#result", "#info", "#total"]:
+    for sel in ["#menu h1", "#modes button", "#hide", "#seek", "#maps button", "#multi", "#result", "#info", "#total"]:
         inside(page, sel)
     assert page.evaluate("menu.scrollHeight <= menu.clientHeight && menu.scrollWidth <= menu.clientWidth")
     assert page.errors == []
