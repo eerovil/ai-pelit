@@ -208,6 +208,14 @@
     document.body.appendChild(panel);
   }
 
+  // Turning the phone with the picker open lays it out again for the new shape.
+  var wasWide = innerWidth > innerHeight;
+  addEventListener('resize', function () {
+    var wide = innerWidth > innerHeight;
+    if (panel && wide !== wasWide) open();
+    wasWide = wide;
+  });
+
   window.AiPelitOutfits = {
     setup: function (opts) {
       opts = opts || {};

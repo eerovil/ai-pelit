@@ -67,3 +67,22 @@ def test_costumes_come_first_around_halloween_and_stay_all_year(site, browser, d
     assert headings == first
     assert page.locator("#ai-pelit-asut .asu").count() == 8
     ctx.close()
+
+
+def test_turning_the_phone_with_the_picker_open_keeps_it_and_the_choice(lib_page):
+    page, errors = lib_page
+    page.evaluate("AiPelitOutfits.open()")
+    page.click("[data-asu=noita]")
+    page.set_viewport_size({"width": 740, "height": 360})
+    page.wait_for_timeout(100)
+    assert page.evaluate("AiPelitOutfits.isOpen()") is True
+    # Sideways the cards are smaller, and all eight fit with the ready button on screen.
+    assert page.locator("#ai-pelit-asut canvas").first.bounding_box()["height"] == 58
+    assert page.locator("[data-asu=noita]").get_attribute("class") == "asu valittu"
+    last = page.locator("#ai-pelit-asut .asu").last.bounding_box()
+    assert last["y"] + last["height"] <= 360
+    page.set_viewport_size({"width": 360, "height": 740})
+    page.wait_for_timeout(100)
+    assert page.locator("#ai-pelit-asut canvas").first.bounding_box()["height"] == 80
+    assert page.locator("#ai-pelit-asut").count() == 1
+    assert errors == []

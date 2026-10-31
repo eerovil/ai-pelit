@@ -7,6 +7,8 @@ turn the player takes a run-up by tapping the left and right foot in turn, holds
 javelin's angle rises, and lets go when the angle is in the green and they are on the green part of
 the runway, before the line. The computer's throws are worked out at once.
 
+From v2 (#158) the player's athlete wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's thrower wears its own (`drawAthlete()` in `games/keihas/v2/index.html`; the picker is `asut.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

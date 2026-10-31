@@ -69,7 +69,7 @@ def test_an_unknown_saved_outfit_falls_back_to_the_first(tramp_site, browser):
     ctx.close()
 
 
-@pytest.mark.parametrize("w,h", [(360, 640), (740, 360), (640, 360), (844, 390)])
+@pytest.mark.parametrize("w,h", [(360, 640), (390, 844), (740, 360), (640, 360), (844, 390)])
 def test_the_menu_with_the_outfit_button_fits(tramp_site, browser, w, h):
     ctx, page, errors = open_at(browser, tramp_site, w, h, level=4)
     page.evaluate("lastResult = { won: false, points: 123, level: 4 }; showMenu()")
