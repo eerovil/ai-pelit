@@ -486,6 +486,7 @@ function bindHold(el, which) {
 function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.toggle('hidden', s.id !== id);
   const riding = id === null;
+  if (!riding) { clearTimeout(toastT); $('toast').classList.add('hidden'); }
   $('hud').classList.toggle('hidden', !riding);
   $('ohjaimet').classList.toggle('hidden', !riding);
   document.body.classList.toggle('riding', riding);
