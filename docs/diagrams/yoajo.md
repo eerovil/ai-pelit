@@ -1,8 +1,10 @@
 # Yöajo: one leg of the night drive
 
 How one leg of Yöajo plays (v1, #181; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`). The player drives at night up Valtatie 4 from Helsinki
-to Rovaniemi, one leg a level, seen in 3D from behind the car. The car pulls up to speed by
-itself; the player steers, brakes and switches the high beams. On the road come oncoming cars,
+to Rovaniemi, one leg a level, seen in 3D from behind the car. In v1 and v2 the car pulls up
+to speed by itself and the player steers and brakes with buttons; in v3 the left thumb steers and
+the right thumb presses the gas or brakes, by how far each slides. The player also switches the
+high beams. On the road come oncoming cars,
 slow tractors, trucks and cars to overtake, walkers, reckless drivers, bad stretches, speed
 cameras, moose (and reindeer in Lapland), rain and snow, and the driver grows sleepy.
 
