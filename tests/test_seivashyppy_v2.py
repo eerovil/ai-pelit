@@ -387,13 +387,22 @@ def test_three_phones_vault_in_turns_and_every_phone_sees_the_same_meet(site, br
 def test_a_guest_cannot_vault_out_of_turn_and_an_away_phone_is_vaulted_for(site, browser):
     relay, pages = room(site, browser, ["Eero", "Aino"])
     host, aino = pages
-    if vaulter_page(pages) is host:
+    # Play on until it is the host's turn, so Aino is the guest out of turn.
+    for _ in range(10):
+        if vaulter_page(pages) is host:
+            break
+        aino.wait_for_function("th && th.mine && (th.phase === 'wait' || th.phase === 'ready')", timeout=8000)
         n = host.evaluate("K.comp.seq")
-        aino.evaluate(f"AiPelitRooms.send({{ t: 'res', round: K.comp.room, seq: {n}, r: 'O' }})")
-        host.wait_for_timeout(300)
-        assert host.evaluate("K.comp.seq") == n
-        host.wait_for_function("th.mine && th.phase !== 'wait'", timeout=8000)
-        host.evaluate("go(8.5); quick()")
+        aino.evaluate("go(8.5); quick()")
+        host.wait_for_function(f"K.comp.seq > {n}", timeout=5000)
+    assert vaulter_page(pages) is host
+    # A well-formed result from Aino out of turn, for the turn now: the host ignores it.
+    n, before = host.evaluate("[K.comp.seq, JSON.stringify(K.comp.throwers.map(t => t.rec))]")
+    aino.evaluate(f"AiPelitRooms.send({{ t: 'res', round: K.comp.room, seq: {n}, mark: 'O' }})")
+    host.wait_for_timeout(300)
+    assert host.evaluate("[K.comp.seq, JSON.stringify(K.comp.throwers.map(t => t.rec))]") == [n, before]
+    host.wait_for_function("th.mine && th.phase !== 'wait'", timeout=8000)
+    host.evaluate("go(8.5); quick()")
     aino.wait_for_function("th && th.mine", timeout=8000)
     n = host.evaluate("K.comp.seq")
     relay.drop(aino)
