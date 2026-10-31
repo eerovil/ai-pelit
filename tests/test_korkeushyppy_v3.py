@@ -132,20 +132,19 @@ PODIUM_TEXTS = """() => {
 }"""
 
 
-# How many separate silver medals the podium shows: runs of columns holding silver pixels.
-SILVER_SPOTS = """() => {
-  const top = Math.round((safeT + 44) * DPR), h = Math.round((land ? H - safeT - 52 : 200) * DPR);
-  const w = Math.round((land ? W * 0.5 : W) * DPR), d = x.getImageData(0, top, w, h).data, cols = new Array(w).fill(0);
-  for (let i = 0; i < d.length; i += 4)
-    if (Math.abs(d[i] - 0xdd) < 6 && Math.abs(d[i + 1] - 0xe3) < 6 && Math.abs(d[i + 2] - 0xea) < 6) cols[(i / 4) % w]++;
+# How many medal discs of one colour the podium draws in one frame: the fills made while the fill
+# colour is that medal's face colour, counted during one K.drawPodium call at a fixed time, so it
+# does not depend on how the browser draws them.
+MEDALS = """hex => {
+  const real = CanvasRenderingContext2D.prototype.fill, pod = K.drawPodium;
   let n = 0;
-  for (let c = 0; c < w; c++) if (cols[c] > 2 && !(cols[c - 1] > 2)) n++;
+  K.drawPodium = (...a) => {
+    CanvasRenderingContext2D.prototype.fill = function () { if (String(this.fillStyle).toLowerCase() === hex) n++; return real.apply(this, arguments); };
+    try { pod(...a); } finally { CanvasRenderingContext2D.prototype.fill = real; }
+  };
+  K.ending.t = 6.5; draw(); K.drawPodium = pod;
   return n;
 }"""
-
-BRONZE_SPOTS = SILVER_SPOTS.replace("0xdd) < 6 && Math.abs(d[i + 1] - 0xe3) < 6 && Math.abs(d[i + 2] - 0xea)",
-                                    "0xdd) < 6 && Math.abs(d[i + 1] - 0x8d) < 6 && Math.abs(d[i + 2] - 0x4c)")
-assert BRONZE_SPOTS != SILVER_SPOTS
 
 
 def shared(page, places):
@@ -178,7 +177,7 @@ def test_three_sharing_the_2nd_place_all_get_silver_on_the_podium(site, context)
     assert texts.count("🥇") == 1 and texts.count("🥈") == 3 and texts.count("🥉") == 0
     assert gold > 20 and bronze < 5
     # Three separate silver medals on the silver block.
-    assert silver > 30 and page.evaluate(SILVER_SPOTS) == 3
+    assert silver > 30 and page.evaluate(MEDALS, '#dde3ea') == 3
     assert page.evaluate("K.ending.res[3].place") == 2
     assert page.errors == []
 
@@ -189,5 +188,5 @@ def test_two_sharing_the_3rd_place_both_get_bronze_on_the_podium(site, context):
     texts, (gold, silver, bronze) = shared(page, [1, 2, 3, 3, 5])
     assert texts.count("🥇") == 1 and texts.count("🥈") == 1 and texts.count("🥉") == 2
     assert gold > 20 and silver > 20 and bronze > 20
-    assert page.evaluate(BRONZE_SPOTS) == 2
+    assert page.evaluate(MEDALS, '#dd8d4c') == 2
     assert page.errors == []
