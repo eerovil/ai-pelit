@@ -27,6 +27,13 @@
     {
       "n": 4,
       "date": "2026-10-31",
+      "note": "Hyppää-nappi on ylempänä ja kauempana jalkanapeista, ja niiden välinen rako kuuluu jalkanappeihin, joten juostessa ei enää hypätä vahingossa.",
+      "request": "Hyppynappi tulee siirtää vielä ylemmäs, tai ainakin sen hitbox ylemmäs. Vahingossa tulee painettua juostessa",
+      "issue": "eerovil/ai-pelit#177"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-31",
       "note": "Kisan lopuksi palkintojenjako: kolme parasta nousee palkintokorokkeelle, toimitsija ripustaa pronssin, hopean ja kullan kaulaan, ja lopputulokset näkyvät korokkeen alla.",
       "request": "165 follow up: podium cutscene, mitalien ripustus kaulaan",
       "issue": "eerovil/ai-pelit#176"

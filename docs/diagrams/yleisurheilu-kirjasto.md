@@ -5,7 +5,7 @@ itself (the run-up, the throw or the jump, the drawing), the library runs everyt
 the field of twelve, whose turn it is, the standings and the results board, the saves, the end of
 the meet, and playing it with friends through `rooms.js`. First users: Pituushyppy v2, Keihäänheitto v4, Moukarinheitto v2, Korkeushyppy v2. The folder is
 frozen once published, like three.js: a change goes in the next folder. `yleisurheilu-2/` (#176,
-first user Pituushyppy v4) adds the medal ceremony at the end of the meet; the next change goes in
+first user Pituushyppy v5) adds the medal ceremony at the end of the meet; the next change goes in
 `yleisurheilu-3/`.
 
 ```mermaid

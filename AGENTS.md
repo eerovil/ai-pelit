@@ -141,7 +141,7 @@ high-score lists (#25), then play counts (#26).
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
   game keeps its own attempt and drawing. The options are listed at the top of `kisa.js`;
-  Pituushyppy v4 is the model. At the end, `K.drawPodium(ctx, box)` draws the medal ceremony
+  Pituushyppy v5 is the model. At the end, `K.drawPodium(ctx, box)` draws the medal ceremony
   (`yleisurheilu-2/`, #176): the top three on the podium, the medals hung around their necks, the
   final standings under it. Like `lib/three-r*/`, a folder never changes once published: a fix
   goes in the next one (`yleisurheilu-3/`), used by the next versions. The bar-height format (high jump, pole

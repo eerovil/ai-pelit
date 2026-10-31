@@ -66,7 +66,7 @@
     hiekkaa: jalat eteen. Kolme hyppyä, kahdeksan parasta saa kolme lisää.</p>
 </div>
 <script src="../../../rooms.js" data-game="pituushyppy" data-min="2" data-max="8"></script>
-<script src="../../../lib/yleisurheilu-2/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-1/kisa.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -194,9 +194,6 @@ const K = AiPelitKisa.meet({
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'rel', 'leg'], watch: watchFrom, none: 'ei hyväksyttyä hyppyä',
   started: () => menu.classList.add('hidden'),
-  // v4 (#176): the medal ceremony at the end, the jumpers in their own kit, a chime per medal.
-  look: () => ({ skin: '#c98a62', bottom: '#1b1b2f', shoe: '#fff', hair: '#3a2616' }),
-  chime: i => { tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06); if (i === 0) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140); },
 });
 const thrower = id => K.thrower(id);
 
@@ -364,12 +361,6 @@ function draw(dt = 0) {
   drawScene(dt);
   x.restore();
   drawControls();
-  // v4 (#176): the end of the meet is the medal ceremony over the whole screen, the standings
-  // under it (beside it on a phone on its side), clear of the corner chips.
-  if (K.ending) {
-    x.fillStyle = 'rgba(8,16,32,.82)'; x.fillRect(0, 0, W, H);
-    K.drawPodium(x, { left: safeL + 8, top: safeT + 44, w: W - safeL - safeR - 16, bottom: H - safeB - 8 });
-  }
 }
 // The camera: on the jumper while running, out over the board and the pit in the air.
 function camera(dt) {
@@ -487,6 +478,7 @@ function drawScene(dt) {
   drawHud();
   drawStrip();
   if (th && th.phase === 'wait') drawBoard(false);
+  if (K.ending) drawBoard(true);
   if (comp && comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
 }
 function flag(px, col, label, up) {
@@ -697,15 +689,18 @@ function drawBoard(final) {
 // where the thumbs drum, and the jump a bar of its own above them, a gap apart (v1 had it between
 // the feet). The foot to press next glows. On its side, a column at each edge: a jump pad on top
 // and that side's foot under it, where the thumb rests.
-const PAD_GAP = 18;
+// v4 (#177): the thumbs drumming the feet hit the jump by mistake, so the jump sits higher, a wider
+// gap above the feet, and the gap belongs to the feet: only a touch on the jump itself, above its
+// bottom edge less JUMP_EDGE, jumps.
+const PAD_GAP = 44, JUMP_EDGE = 12;
 function pads() {
   if (land) {
-    const y = safeT + 40, h = H - safeB - 6 - y, jh = Math.round(h * 0.38), w = side - 12;
+    const y = safeT + 40, h = H - safeB - 6 - y, jh = Math.round(h * 0.34), w = side - 12;
     const lx = safeL + 6, rx = W - safeR - side + 6;
     return [{ k: 3, x: lx, y, w, h: jh }, { k: 1, x: lx, y: y + jh + PAD_GAP, w, h: h - jh - PAD_GAP },
       { k: 3, x: rx, y, w, h: jh }, { k: 2, x: rx, y: y + jh + PAD_GAP, w, h: h - jh - PAD_GAP }];
   }
-  const y = ctrlTop + 6, h = ctrlH - 12, th3 = Math.round(Math.min(64, h * 0.3)), fy = y + th3 + PAD_GAP, fh = h - th3 - PAD_GAP;
+  const y = ctrlTop + 6, h = ctrlH - 12, th3 = Math.round(Math.min(60, h * 0.28)), fy = y + th3 + PAD_GAP, fh = h - th3 - PAD_GAP;
   return [{ k: 3, x: 6, y, w: W - 12, h: th3 },
     { k: 1, x: 6, y: fy, w: W / 2 - 9, h: fh }, { k: 2, x: W / 2 + 3, y: fy, w: W / 2 - 9, h: fh }];
 }
@@ -739,18 +734,19 @@ function padAt(cx, cy) {
   if (land) {
     if (cx >= SX && cx < SX + SW) return 3;
     const col = pads().filter(p => cx >= p.x - 6 && cx <= p.x + p.w + 6);
-    // v2: the gap between the jump pad and the foot does nothing; below the foot is still the foot.
-    const last = col[col.length - 1], b = col.find(p => cy >= p.y - 4 && cy < p.y + p.h + 4) || (last && cy >= last.y ? last : null);
-    return b ? b.k : 0;
+    if (!col.length) return 0;
+    // v4: above the jump pad's bottom edge less JUMP_EDGE is the jump; the gap and below, the foot.
+    return cy < col[0].y + col[0].h - JUMP_EDGE ? 3 : col[1].k;
   }
-  if (cy < ctrlTop) return 3;
-  // v2: a touch in the gap between the jump bar and the feet does nothing.
-  const b = pads().find(p => cx >= p.x - 4 && cx <= p.x + p.w + 4 && cy >= p.y - 4 && cy <= p.y + p.h + 6);
-  return b ? b.k : 0;
+  // v4: the scene and the jump bar down to JUMP_EDGE above its bottom are the jump; the rest of the
+  // controls, the gap included, are the feet, each its own half.
+  const jump = pads()[0];
+  if (cy < jump.y + jump.h - JUMP_EDGE) return 3;
+  return cx < W / 2 ? 1 : 2;
 }
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
-  if (K.ending && !isNet()) { K.skip(); return; }  // alone, a tap ends the ceremony, the next leaves
+  if (K.ending && !isNet()) { K.skip(); return; }  // alone, a tap leaves the results
   if (th && th.mine && th.phase === 'fly') { unlock(); return legs(); }  // in the air any touch is the legs
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) startAim(e.pointerId); else if (k) press(k);
