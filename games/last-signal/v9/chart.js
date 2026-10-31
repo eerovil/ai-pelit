@@ -285,7 +285,7 @@ function stepAuto(dt) {
   for (let k = A.i; k < A.pts.length - 1; k++) A.left += Math.hypot(A.pts[k + 1][0] - A.pts[k][0], A.pts[k + 1][1] - A.pts[k][1]);
   // to an opening, all the way up until SISU lies surfaced in it
   const up = A.id.startsWith('railo');
-  if (up ? surfaced() : last && A.left < 3 && Math.hypot(sub.vx, sub.vy) < 3) {
+  if (up ? surfaced() && holeAt(sub.x) === +A.id.slice(5) : last && A.left < 3 && Math.hypot(sub.vx, sub.vy) < 3) {
     // by now it may have been seen on the way: then by its name
     const k = contacts().find(c => c.id === A.id);
     stopAuto('🧭 Perillä: ' + (k && knowOf(k) === 3 ? k.name : A.name)); stepSub(dt, { x: 0, y: 0 }); return;

@@ -420,8 +420,7 @@ function drawItems(X0, X1, Y0, Y1) {
     if (it.x < X0 - 2 || it.x > X1 + 2 || it.y < Y0 - 2 || it.y > Y1 + 2 || !itemHere(it)) continue;
     if ((it.site === 'pinta') !== seeIn) continue;
     // v9: in the dark iceberg a find shows only to a lamp that sees it, not through the ice
-    if (it.site === 'jaavuori' && G.mode === 'dive' && !sightTo(eye.x, eye.y, it.x, it.y)) continue;
-    if (it.site === 'jaavuori' && G.mode !== 'dive') continue;
+    if (caveHidden(it, eye)) continue;
     const vis = Math.min(1, 1.5 - Math.hypot(it.x - eye.x, it.y - eye.y) / reach);
     if (vis <= 0) continue;
     ctx.globalAlpha = vis;
@@ -516,14 +515,31 @@ function sparkles() {
   for (const it of allItems()) {
     if (!itemHere(it)) continue;
     const d = Math.hypot(it.x - diver.x, it.y - diver.y);
-    if (d > 14) continue;
+    if (d > 14 || caveHidden(it, diver)) continue;
     const a = (1 - d / 14) * (0.5 + 0.5 * Math.sin(G.t * 4 + it.x));
     ctx.fillStyle = it.k === 'ilma' ? `rgba(200,240,255,${a * 0.6})` : `rgba(255,230,140,${a})`;
     ctx.beginPath(); ctx.arc(it.x, it.y, 0.25, 0, 7); ctx.fill();
   }
 }
+// v9: what the lamps light inside the iceberg this frame (`G.lit`, set by drawDark); null outside it.
+function litAt(x, y) {
+  if (!G.lit) return true;
+  return G.lit.some(p => {
+    let c = false;
+    for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2)
+      if ((p[i + 1] > y) !== (p[j + 1] > y) && x < (p[j] - p[i]) * (y - p[i + 1]) / (p[j + 1] - p[i + 1]) + p[i]) c = !c;
+    return c;
+  });
+}
+// A cave find shows only where a lamp lights it: inside the berg its light, from outside a clear line of sight.
+function caveHidden(it, eye) {
+  if (it.site !== 'jaavuori') return false;
+  if (G.mode !== 'dive') return true;
+  return bergView() ? !litAt(it.x, it.y) : !sightTo(eye.x, eye.y, it.x, it.y);
+}
 function drawDark(ox, oy, sc) {
   const d = dctx;
+  G.lit = null;
   d.setTransform(DPR, 0, 0, DPR, 0, 0);
   d.globalCompositeOperation = 'source-over';
   d.clearRect(0, 0, W, H);
@@ -572,8 +588,10 @@ function drawDark(ox, oy, sc) {
     d.beginPath(); BERG.poly.forEach(([x, y], i) => { const [px, py] = S(x, y); i ? d.lineTo(px, py) : d.moveTo(px, py); }); d.closePath(); d.fill();
     d.globalCompositeOperation = 'destination-out';
     const lit = [diver].concat(net ? Object.values(net.others).filter(o => o.mode === 'dive') : []);
+    G.lit = [];
     for (const o of lit) {
       const [x, y, mid, len, near] = lampOf(o), pts = lampPoly(x, y, mid, 0.55, len, near);
+      G.lit.push(pts);
       d.save(); d.beginPath();
       for (let k = 0; k < pts.length; k += 2) { const [px, py] = S(pts[k], pts[k + 1]); k ? d.lineTo(px, py) : d.moveTo(px, py); }
       d.closePath(); d.clip();

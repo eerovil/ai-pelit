@@ -365,6 +365,48 @@ def test_the_autopilot_waits_while_the_player_dives_and_a_reload_leaves_sisu_whe
     assert page.errors == []
 
 
+def test_with_the_chart_open_alone_the_autopilot_trip_still_maps_saves_and_makes_hungry(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    page.evaluate("G.s.up.hull = 2; G.s.known.nordvik = 1; G.s.m.food = 80; G.s.flags.merikartta = true")
+    chart(page)
+    page.evaluate("CV.sel = 'nordvik'; drawChart()")
+    page.click("#pickGo")
+    seen = page.evaluate("chartSeen.reduce((a, b) => a + b, 0)")
+    page.evaluate("run(() => true, 20)")
+    assert page.evaluate("G.paused") is True and page.evaluate("!!G.auto") is True
+    assert page.evaluate("chartSeen.reduce((a, b) => a + b, 0)") > seen
+    assert page.evaluate("G.s.m.food") < 80
+    assert page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE}')).sub.x") > 400
+    assert page.errors == []
+
+
+def test_surfaced_in_one_opening_the_autopilot_still_goes_to_another(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    v6.surface(page)
+    page.evaluate("G.s.up.hull = 2; G.s.known.railo1 = 1; G.mode = 'home'; crew.room = 'kartta'; doAct('me', 'auto', 'railo1');"
+                  " run(() => true, 1)")
+    assert page.evaluate("G.auto && G.auto.id") == "railo1"
+    page.evaluate("run(() => G.auto, 200)")
+    assert page.evaluate("[G.auto, surfaced(), holeAt(sub.x)]") == [None, True, 1]
+    assert page.errors == []
+
+
+def test_in_the_dark_a_cave_find_shows_only_where_a_lamp_lights_it(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    cave_dive(page)
+    page.evaluate(f"({GLIDE})(4 * MAZE.cols + 1); draw()")
+    # Just behind the diver, in plain sight but outside the beam and the glow: hidden, and so is its sparkle.
+    hidden = page.evaluate("""(() => { const [x, y, mid, len, near] = lampOf(diver);
+      const it = { site: 'jaavuori', x: diver.x - Math.cos(mid) * (near + 1.5), y: diver.y - Math.sin(mid) * (near + 1.5) };
+      const ahead = { site: 'jaavuori', x: diver.x + Math.cos(mid) * 1.5, y: diver.y + Math.sin(mid) * 1.5 };
+      return [caveHidden(it, diver), caveHidden(ahead, diver)]; })()""")
+    assert hidden == [True, False]
+    assert page.errors == []
+
+
 def test_the_autopilot_finds_its_way_under_the_iceberg_and_up_an_opening(site, browser):
     page = open_game(site, browser)
     ready(page)
