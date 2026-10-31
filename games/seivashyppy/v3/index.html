@@ -65,8 +65,8 @@
     pidä pohjassa ja päästä irti, kun seiväs on suorassa. Kolme hylättyä peräkkäin ja kisa on ohi.</p>
 </div>
 <script src="../../../rooms.js" data-game="seivashyppy" data-min="2" data-max="8"></script>
-<script src="../../../lib/yleisurheilu-3/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-3/korkeus.js"></script>
+<script src="../../../lib/yleisurheilu-4/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-4/korkeus.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -157,7 +157,7 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-3/korkeus.js). The real rules: the bar rises 10 cm at a
+// in its bar-height format (lib/yleisurheilu-4/korkeus.js). The real rules: the bar rises 10 cm at a
 // time; at each height everyone still trying takes a first attempt in the drawn order, then those
 // who failed a second, then a third. A vaulter may pass any height, even after failing at it; three
 // failures in a row and they are out. K.comp is the meet: a vaulter is {id, name, p, bot, skill (the
