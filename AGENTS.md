@@ -30,6 +30,9 @@ player sees is Finnish unless the request says otherwise.
 - A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
   own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
   group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
+- Ottelu (#168), the athletics match, plays published versions of the field events in a frame,
+  unchanged (`LAJIT` in `games/ottelu/v1/index.html`): a version it names is never withdrawn
+  without a new Ottelu version first. A newer event version joins the match in a new Ottelu version.
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
 asked to change in past versions: [docs/making-games.md](docs/making-games.md). Read it before you
