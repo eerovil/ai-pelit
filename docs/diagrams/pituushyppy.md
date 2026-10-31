@@ -19,11 +19,14 @@ flowchart TD
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama lento]
   R --> LN{Yli viivan ja armon ilman ponnistusta?}
   LN -- Kyllä --> X[X: yliastuttu, punainen lippu]
-  LN -- Ei --> A[Pidä Hyppää merkistä: kulma nousee]
+  LN -- Ei --> A[Pidä Hyppää: v1 merkistä, v2 keltaiselta alueelta; kulma nousee]
   A --> RL{Kosketus alle 0,1 s?}
   RL -- Kyllä --> R
-  RL -- Ei --> F[Päästä irti laudalla: ponnistus]
+  RL -- Ei --> AU{v2: yhä pohjassa viivalla?}
+  AU -- Ei, päästi irti --> F[Päästä irti laudalla: ponnistus]
+  AU -- Kyllä --> AUTO[v2: ponnistus itsestään viivalta]
   F --> L{Jalat eteen ajoissa?}
+  AUTO --> L
   L -- Liian aikaisin tai ei lainkaan --> DR[Jalat putoavat: lyhyempi]
   L -- Juuri ennen hiekkaa --> D
   L -- Liian myöhään --> HB[Kädet hiekkaan: paljon lyhyempi]
@@ -42,8 +45,8 @@ flowchart TD
   END --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,A,F,T blue
   class CPU,WT violet
-  class Q,LN,RL,L,NX amber
-  class K,D,DR,HB,CUT teal
+  class Q,LN,RL,AU,L,NX amber
+  class K,D,DR,HB,CUT,AUTO teal
   class X rose
   class END,S,RM green
 ```
@@ -66,7 +69,9 @@ flowchart TD
 - **Tietokone hyppää heti**: `cpuMark()`: the skill plus a scatter of 20 cm and 5 cm per m/s of wind, a foul about one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's jumps to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
 - **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the jumper goes (as in Keihäänheitto and Aitajuoksu), the same foot twice slows; about 8.3 m/s at eight taps a second. The bar in the score panel shows the speed; the green part of the runway is the last 120 ms of running before the line at the speed now (`ZONE`), so with the grace past the line the clean take-off zone is 200 ms; an earlier release is legal but shorter, as the jump is measured from the line, the yellow "merkki" 2.8 m before it is where to start holding. v2 (Keihäänheitto v3's controls, #166): no "merkki"; a yellow zone at the speed now (`zones()`) shows where to start holding so the angle is green at the line, and a strip under the runway (`drawStrip()`) shows the whole run-up from the first step: you, the yellow and the green part.
 - **Yli viivan ja armon ilman ponnistusta?**: `step()` and `overLimit()`: timing is measured in time, not distance, and holding Hyppää never fouls by itself. The foot may pass the line by up to 80 ms of running (`GRACE`, at least 8 cm); a release within it takes off at the line (`release()`), so it is legal and measured from the line. Only running on past that, holding or not, is a foul, "Yliastuttu", with the shoe's print in the plasticine. v2: still holding when the foot reaches the line takes off by itself, from the line (`leap()`), so only running on without holding fouls. In a room 45 s with no tap (`TURN_MAX`, counted in `th.idle`) is a foul, "Aika loppui".
-- **Pidä Hyppää merkistä: kulma nousee**: `startAim()`: holding the middle pad (upright; v2: a full-width bar above the two feet, 18 px apart, `PAD_GAP`, and a touch in the gap does nothing, upright and sideways), the top pad of either side column or anywhere on the scene (sideways) raises the take-off angle from 5° at 45° a second (`AIM_RATE`); the dial beside the jumper shows it, green from 16° to 24° (`GREEN`), the angles within about 20 cm of the best. The jumper crouches and keeps most of the speed.
+- **Pidä Hyppää: v1 merkistä, v2 keltaiselta alueelta; kulma nousee**: `startAim()`: holding the middle pad (upright; v2: a full-width bar above the two feet, 18 px apart, `PAD_GAP`, and a touch in the gap does nothing, upright and sideways), the top pad of either side column or anywhere on the scene (sideways) raises the take-off angle from 5° at 45° a second (`AIM_RATE`); the dial beside the jumper shows it, green from 16° to 24° (`GREEN`), the angles within about 20 cm of the best. The jumper crouches and keeps most of the speed.
+- **v2: yhä pohjassa viivalla?**: `step()` in `games/pituushyppy/v2/index.html`: while the player holds Hyppää (`th.phase === 'aim'`), the foot reaching the line (`th.x >= 0`) takes off by itself; a release before it is the normal take-off. v1 has no such check: holding on past the grace is a foul there.
+- **v2: ponnistus itsestään viivalta**: `leap()`: the same take-off as letting go, from the line (`relX` 0) with the angle reached so far; started in the yellow zone (`zones()`), that angle is green. Other phones get it as `rel`.
 - **Kosketus alle 0,1 s?**: `release()`: a touch shorter than `TAP_MIN` is a slip of the thumb and goes back to running.
 - **Päästä irti laudalla: ponnistus**: `jumpNow()` and `takeoff()`: the take-off is from where the foot is (`relX`); the speed is the run-up plus 1.2 m/s, less the steeper the take-off (`STEEP`), so the best angle is about 20°: 8.3 m/s jumps about 6.4 m, 9.5 m/s about 7.6 m. The camera turns to the board and the whole pit.
 - **Jalat eteen ajoissa?**: `legs()` and `reachOf()`: a tap in the air (any pad or the scene) throws the legs forward, once; it counts by how long was left before the sand (`q`). 0.12–0.34 s (`LEGS`) is a good landing, the heels about 0.55–0.6 m ahead of the body.
