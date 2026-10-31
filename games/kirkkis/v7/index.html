@@ -132,6 +132,8 @@ const SPRINT = 1.5, BREATH = 3, REST = 5;
 const FIND = 6;
 // Kirkkis: farther than this one sees someone but cannot tell who it is, so cannot name them (v7: sight has no length).
 const KNOW = 10;
+// Piilosta: how long a still hider must stay in the seeker's sight before it is noticed from afar.
+const NOTICE = 1.5;
 const TAG = 2 * BODY + 0.2, FREEZE = 1.5, NO_BACK = 3;
 
 // Each map (v6, #109): its size, its base, solid things (which block both walking and sight) and
@@ -699,6 +701,18 @@ function seekerBot(p, dt) {
   }
   if (p.goal === BASE) p.goal = null;
   if (mode === 'hippa' && itBot(p, dt)) return;
+  // Piilosta: someone seen but too far off to tell who: walk up to them until they are found. Far off
+  // (beyond KNOW) only someone moving catches the eye; someone keeping still there blends in.
+  if (mode === 'piilosta') {
+    // Someone keeping still is noticed only after being in sight for a moment (`eyed`).
+    for (const h of hiders()) h.eyed = h.st === 'hiding' && canSee(p, h) ? (h.eyed || 0) + dt : 0;
+    const far = hiders().filter(h => h.st === 'hiding' && (h.moving > STIR || (dist(p, h) <= KNOW && h.eyed > NOTICE)) && canSee(p, h)).sort((a, b) => dist(p, a) - dist(p, b))[0];
+    if (far) {
+      if ((p.chaseT = (p.chaseT || 0) - dt) <= 0 || !p.goal) { p.goal = { x: far.x, y: far.y }; p.repath = 0; p.chaseT = 0.4; }
+      p.look = 0; steer(p, BOT_SEEK, dt); turnTo(p, Math.atan2(far.y - p.y, far.x - p.x), 6, dt);
+      return;
+    }
+  }
   // A hider heard running out of sight: go and look where the steps were.
   // Or seen running at the side of its eye, not too far off; someone sneaking there goes unnoticed.
   const heard = hiders().find(h => hears(p, h) || (phase === 'seek' && active(h) && h.moving > LOUD && dist(p, h) < KNOW && glimpses(p, h)));
@@ -760,11 +774,14 @@ function hiderBot(p, dt) {
 
 // Piilosta: stay put; when the seeker comes close looking elsewhere, sneak quietly to a place it cannot see.
 function hideBot(p, dt) {
-  if (phase === 'seek' && canSee(p, seeker) && dist(p, seeker) < 8 && !(time - (p.sneakT ?? -99) < 6)) {
+  // The seeker coming this way: get to a place it cannot see. If it is looking this way, dash for it;
+  // if not, creep there slower than the eye notices from afar.
+  if (phase === 'seek' && canSee(p, seeker) && dist(p, seeker) < 12 && !(time - (p.sneakT ?? -99) < 4)) {
     const away = SPOTS.filter(s => dist(s, p) < 10 && dist(s, seeker) > dist(p, seeker) + 2 && !seesPoint(seeker, s));
-    if (away.length) { p.spot = away[Math.floor(Math.random() * away.length)]; p.goal = p.spot; p.repath = 0; p.sneakT = time; }
+    if (away.length) { p.spot = away[Math.floor(Math.random() * away.length)]; p.goal = p.spot; p.repath = 0; p.sneakT = time; p.dash = seesPoint(seeker, p); }
   }
-  steer(p, phase === 'count' ? BOT_HIDE : 2.2, dt);
+  if (p.dash && !p.path.length) p.dash = false;
+  steer(p, phase === 'count' ? BOT_HIDE : p.dash ? BOT_RUN : 0.9, dt, p.dash);
   if (p.moving) turnTo(p, p.want, 7, dt);
   else { const sees = canSee(p, seeker); turnTo(p, sees ? Math.atan2(seeker.y - p.y, seeker.x - p.x) : p.a + Math.sin(time * 0.7 + p.x) * 0.02, 3, dt); }
 }
@@ -1280,7 +1297,15 @@ function modeButtons(el, on, pick) {
     return b;
   }));
 }
-function pickMode(id) { soloMode = id; save('moodi', id); menuMode(); }
+// Another game starts afresh: the last round's result and who goes next belonged to the old one.
+function pickMode(id) {
+  if (id !== soloMode) {
+    played = false; nextSeeker = null;
+    const res = document.getElementById('result');
+    res.textContent = ''; res.className = ''; document.getElementById('info').textContent = '';
+  }
+  soloMode = id; save('moodi', id); menuMode();
+}
 // The map picker (v6, #109): the choice is kept on the phone.
 const mapsEl = document.getElementById('maps');
 function mapButtons(el, on, pick) {

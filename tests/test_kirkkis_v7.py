@@ -287,3 +287,35 @@ def test_only_kirkkis_shows_the_way_to_the_base(site, browser, mode, guides):
     assert drawn == ([1, 1] if guides else [0, 0])
     assert page.errors == []
     ctx.close()
+
+
+def test_the_piilosta_seeker_walks_up_to_someone_seen_far_off(site, browser):
+    ctx, page = open_game(site, browser)
+    page.click("#modes button[data-mode=piilosta]")
+    r = page.evaluate("""() => { newRound('hide'); for (let i = 0; i < 10.2 * 30; i++) step(1 / 30);
+      player.x = 28; player.y = 42; player.st = 'saved';
+      const h = bots.find(b => b !== seeker); for (const b of bots) if (b !== seeker && b !== h) b.st = 'saved';
+      h.ctrl = 'still'; h.x = 15; h.y = 35; h.moving = 0;
+      seeker.x = 15; seeker.y = 26; seeker.a = Math.PI / 2; seeker.goal = { x: 1, y: 1 }; seeker.path = []; seeker.look = 0;
+      const seen = [canSee(seeker, h), dist(seeker, h) > FIND];
+      // Kept in sight a moment already: noticed.
+      h.eyed = NOTICE;
+      let t = 0; while (h.st === 'hiding' && t < 8) { step(1 / 30); t += 1 / 30; }
+      return [seen, h.st, t < 8]; }""")
+    assert r == [[True, True], "caught", True]
+    assert page.errors == []
+    ctx.close()
+
+
+def test_another_game_after_a_round_starts_afresh(site, browser):
+    ctx, page = open_game(site, browser)
+    page.evaluate("""() => { newRound('hide'); let t = 0; while (phase !== 'menu' && t < 260) { step(1 / 30); t += 1 / 30; } }""")
+    assert page.locator("#result").inner_text() != "" and page.locator(".row button.next").count() == 1
+    page.click("#modes button[data-mode=hippa]")
+    assert page.locator("#result").inner_text() == "" and page.locator("#info").inner_text() == ""
+    assert page.locator(".row button.next").count() == 0
+    assert page.evaluate("nextSeeker") is None
+    page.click("#hide")
+    assert page.evaluate("[mode, seeker !== player]") == ["hippa", True]
+    assert page.errors == []
+    ctx.close()
