@@ -50,6 +50,13 @@
       "note": "Kaksi sukelluspukua: säiliöpuku kuten ennen 260 metriin asti, ja letkupuku, joka saa ilman letkulla SISUsta – letkun pituus ja kulmiin hankautuminen rajaavat sukellusta, letkunohjaimet suojaavat kulmissa ja katkenneesta letkusta pääsee kotiin hätähapella.",
       "request": "Heikin idea (kuvakaappaus keskustelusta): Letkumekaniikka. Sukeltaja käyttää veneeseen letkulla yhdistettyä sukelluspukua. Letku syöttää hengitysilmaa, lämpöä, sähköä ja viestiyhteyden, joten tavallisen jatkuvasti vähenevän happimittarin sijaan sukellusten keskeisiä rajoitteita ovat letkun pituus, reitti ja vaurioitumisriski. Hylyissä ja jääluolissa pelaajan täytyy suunnitella kulkureittinsä niin, ettei letku tartu rakenteisiin tai kierry hankalasti esteiden ympärille. Letkunohjaimia voidaan kiinnittää sopiviin kohtiin helpottamaan etenemistä. Pidemmät ja kestävämmät letkut toimivat samalla pelin kehityskohteina ja mahdollistavat aikaisempaa kauemmas ulottuvat tutkimusretket. Sukelluspuvussa on lisäksi pieni hätähappivarasto. Jos letku katkeaa tai ilmansyöttö häiriintyy, pelaajalla on vain rajallinen…\n\nEero: Missä vaiheessa tarinaa saa tuon letkun ulockattua?\nHeikki: En tiiä, ehkä se vois olla alusta asti. Se toki vaikuttaa nuihin hylkyihin ja luoliin\n\nHeikki: Jos siinä ois kaks pukua valittavana: tethered diving suit tai sitten vaan perus sukellusvarusteet. Siinähän ois järkeä ettei ilman tuommoista syvänmerenpukua voi kovin syvällä uida\n\nOwner's choices (2026-10-31): two suits from the start – the tank gear (as before, only down to 260 m) and the hose suit (no air timer while the hose is whole; its length and corner wear limit a dive; fish bite it; a cut hose leaves a small emergency air supply); the workshop upgrades the tank and the hose separately; hose guides (2 at the start, from the workshop and night finds) are clamped to corners; the Nordlys reel lengthens the hose; with friends one hose each, no tangling.",
       "issue": "eerovil/ai-pelit#145"
+    },
+    {
+      "n": 8,
+      "date": "2026-10-31",
+      "note": "Meren äänet ja moottorit, kalaparvet ja harppuuna ruoaksi, torni sisältä niin että jäälle kiivetään yhtä matkaa, laboratorio näytteille, ja ohjaamon ruoripainike pinnalla taas paikallaan.",
+      "request": "Heikki: Päivityslista: \r\nLisää merenalainen ambient-äänimaisema ja sukellusveneen moottoriäänet. Lisää kalaparvia ja harppuuna ruuan keräämistä varten. Piirrä sisätilat veneen torniin asti jolloin pinnalla ulossiirtymästä tulee portaaton. Lisää veneeseen laboratorio jossa voi tutkia kerättyjä näytteitä. Korjaa jään päältä takaisin veneeseen mennessä ohjaamon aktivointinappi.\n",
+      "issue": "eerovil/ai-pelit#151"
     }
   ]
 }

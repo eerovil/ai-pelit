@@ -1,6 +1,6 @@
 # Last Signal: sukellusvene, sonar ja sukellukset
 
-How a day in Last Signal plays (v1 #125, v2 #129, v3 #132, v5 #138, v6 #143, v7 #145). The player drives the submarine SISU through a side view
+How a day in Last Signal plays (v1 #125, v2 #129, v3 #132, v5 #138, v6 #143, v7 #145, v8 #151). The player drives the submarine SISU through a side view
 of an arctic sea (glacier bay, wreck field, iceberg caves), listens with the sonar, stops, swims out, and brings finds
 home: in the tank gear with limited air down to 260 m, or (v7) in the hose suit, as deep as SISU but only as far
 as its hose reaches. Inside SISU (v3) they walk as a person between rooms on two decks: they eat in the
@@ -10,10 +10,13 @@ Nordlys and on to the deep sea, where the cold and glowing fish cost air, hose o
 hunger, air and the hull each send the player back. Since v5, 2–4 phones can play one game together: the game and
 its save are the host's, and each friend walks and dives as their own person. Since v6 the sea is frozen over: SISU
 comes up only in a few openings, and the person climbs out through the tower to walk the ice to the abandoned station A-3.
+Since v8 the sea and the engines sound, a harpoon takes fish from schools for food, the ladder goes on up inside the
+tower to its hatch, and a lab studies the samples found for a lasting help.
 
 ```mermaid
 flowchart TD
   A[Valikko: Jatka tai Uusi peli] --> B[Aja SISUa: ohjain, syvyys / runkoraja]
+  A --> AU[🔊 Meri ja moottorit soivat ensimmäisestä napautuksesta]
   A --> MP[👥 Kaverit: huone, 2–4 puhelinta]
   MP --> MH[Huoneen tekijä: oma tallennus, aloittaa ruorista]
   MP --> MG[Kaveri: oma ihminen ohjaamossa, ei tallenna]
@@ -51,7 +54,9 @@ flowchart TD
   EM --> N
   CUT -- Ei --> I
   I --> J{Mihin sukeltaja koskee?}
-  J -- Ruoka, lääke, varaosa, radion osa --> K[Mukaan: lasketaan vasta kotona]
+  J -- Ruoka, lääke, varaosa, radion osa, näyte --> K[Mukaan: lasketaan vasta kotona]
+  I --> HA[🔱 Harppuuna osuu parven kalaan]
+  HA --> K
   J -- Kaveri ehti ensin --> I
   J -- Loki --> L[Tarina etenee: seuraava tavoite]
   J -- Ilmatasku --> M[Säiliön tai hätähapen happi täyttyy]
@@ -71,12 +76,12 @@ flowchart TD
   B --> Q[🏠 Sisälle: ihminen SISUn kahdessa kerroksessa]
   Q --> QW[Napauta huonetta tai kävele ohjaimella, tikkaat kerrosten välillä]
   QW --> QR{Missä huoneessa seisot?}
-  QR -- Keittiö, varasto --> R[Syö annos, ota lääke]
+  QR -- Keittiö, varasto --> R[Syö annos, paista kalat, ota lääke]
   QR -- Työpaja --> S[Korjaa runko, paineenkesto, säiliö, letku, ohjaimet, valonheitin]
   QR -- Punkka --> TA{Kaikki punkassa?}
-  TA -- Kyllä --> T[Nuku: uusi päivä, virta tuo pieniä löytöjä]
+  TA -- Kyllä --> T[Nuku: uusi päivä, virta tuo pieniä löytöjä, parvet palaavat]
   TA -- Ei, odotetaan --> QW
-  QR -- Navigointi --> LB[Lokikirja: luetut viestit uudelleen]
+  QR -- Labra ja kartat --> LB[🔬 Tutki näyte: pysyvä apu; lokikirja]
   QR -- Sukelluspuvut --> PU[🤿 Säiliöpuku tai ➰ letkupuku]
   QR -- Ilmalukko --> SU{Puku päällä?}
   SU -- Ei --> QW
@@ -105,21 +110,24 @@ flowchart TD
   JE --> B
   JY -- Kyllä --> JP[Pinnalla railossa]
   JP --> Q
-  QR -- Ohjaamo, SISU pinnalla --> JT[🧗 Tornista jäälle]
+  QR -- Torni, tikkaiden yläpää --> TO{SISU pinnalla railossa?}
+  TO -- Kyllä --> JT[🧗 Tornista jäälle]
+  TO -- Ei --> LU[🔒 Luukku pysyy kiinni]
+  LU --> QW
   JT --> JW[Kävele jäällä: 🥶 laskee ulkona]
   JW --> JA[Asema A-3: huoneet lämmittävät, lokit ja varaston löydöt]
   JA --> JW
   JW --> JK{Kylmä loppu?}
   JK -- Kyllä --> JL[Takaisin SISUun, löydöt jäävät jäälle, kunto -25]
   JL --> Q
-  JK -- Ei, tornin luukulla --> JH[Alas torniin: löydöt varastoon]
+  JK -- Ei, tornin luukulla --> JH[Alas torniin ja tikkaita ohjaamoon: löydöt varastoon]
   JH --> Q
   B --> W{Ruoka ja kunto loppu?}
   W -- Kyllä --> X[Pyörryt: uusi päivä, kunto 35]
   X --> Q
-  class A,B,C,Q,QW,MP,MH,MG blue
-  class D,F,J,N,U,W,CO,QR,SU,SL,TA,RU,JY,JK,SD,KIT,HW,CUT amber
-  class I,K,M,P,R,S,T,NC,LB,PU,SW,JP,JT,JW,JA,JH,TA2,HO,OH teal
+  class A,B,C,Q,QW,MP,MH,MG,AU blue
+  class D,F,J,N,U,W,CO,QR,SU,SL,TA,RU,JY,JK,SD,KIT,HW,CUT,TO amber
+  class I,K,M,P,R,S,T,NC,LB,PU,SW,JP,JT,JW,JA,JH,TA2,HO,OH,HA,LU teal
   class E,G,O,X,CP,FI,JE,JL,HX,EM rose
   class L,V,Y,Z,NA,NB,ND,NE,KA green
 ```
@@ -134,7 +142,8 @@ flowchart TD
 
 ## Boxes
 
-- **Aja SISUa: ohjain, syvyys / runkoraja**: `stepSub()` in `games/last-signal/v7/index.html` (v6 down to v1 in their own folders) turns the stick (`input`) into speed, bumps off the sea floor (`floorY()`), the glacier, the ice shelf, the iceberg (`inBerg()`), the hot vents (`VENTS`) and the wrecks (`solid(…, true)`); a hard bump costs hull (`bump()`). Below 300 m `subBoost()` speeds SISU up (up to 2.2×) so the long slope does not drag. The HUD shows depth against the hull's rating (`RATING`: 160, 260, 380, 620, 1000, 1450 m); within 25 m of it "Runko natisee". Saved every 4 s.
+- **Aja SISUa: ohjain, syvyys / runkoraja**: `stepSub()` in `games/last-signal/v8/index.html` (v7 down to v1 in their own folders) turns the stick (`input`) into speed, bumps off the sea floor (`floorY()`), the glacier, the ice shelf, the iceberg (`inBerg()`), the hot vents (`VENTS`) and the wrecks (`solid(…, true)`); a hard bump costs hull (`bump()`). Below 300 m `subBoost()` speeds SISU up (up to 2.2×) so the long slope does not drag. The HUD shows depth against the hull's rating (`RATING`: 160, 260, 380, 620, 1000, 1450 m); within 25 m of it "Runko natisee". Saved every 4 s.
+- **🔊 Meri ja moottorit soivat ensimmäisestä napautuksesta**: v8's `audio()` builds `soundscape()` on the first tap: Web Audio only, no sound files. Filtered noise is the sea (darker the deeper) and the wind on the ice; a low sawtooth and triangle are the engines, a band of noise the propeller, a sine the reactor's hum inside. `mix()` says how loud each is for where this phone's person is (helm, dive, inside, ice) and SISU's speed; `soundStep()` eases them there every frame and now and then plays a far whale, the ice creaking overhead or clicks in the deep. A hidden page suspends the sound.
 - **📡 Ping: kaiku piirtää pohjan, kohteet nimetään**: `doPing()` sends a ring out to 450 m; contacts inside it become known (`G.s.known`) and `drawSonar()` draws the floor, the iceberg and the wrecks in sonar green for a moment. Since v7 a crack in the iceberg's east side (`BERG_EAST`, contact "RAILO JÄÄSSÄ") leads to the cache K-7 within the first hose's reach, and chapter 1's goal points there. Contacts up to 1000 m show at the screen's edge as "TUNTEMATON KONTAKTI, 640 m" until pinged; the current goal's contact is yellow (`goalNow().target`).
 - **Paine: runko kärsii**: `pressure()`: below the rating the hull loses 4 % a second and "PAINE! Nouse ylemmäs" shows. Since v4 this goes on during a dive and inside SISU too ("PAINE! SISU on liian syvällä"), and the game saves every 4 s in all three, so a reload keeps the damage; v3 and earlier spared the hull once the player left the helm.
 - **Hätänousu turvasyvyyteen, runko 25 %**: `breach()` ends a dive or a walk inside (the haul is lost) and lifts SISU to 40 m above the hull's rating (v1 lifted it to the surface, a long way back from the deep sea); the hull is never fatal.
@@ -148,7 +157,8 @@ flowchart TD
 - **📌 Kiinnitä ohjain kulmaan**: near an unguided corner the dive's button is "📌 Kiinnitä ohjain (n)": `act('guide')` uses one of `inv.ohjain` (2 at the start, two for a spare part in the workshop, some night finds) and saves it in `G.s.guides`, where `drawGuides()` shows it and every later hose there is guided.
 - **Letku poikki?**: `wearHose()` at 100 % calls `cutHose()`; a glowing fish's bite (`FISH_BITE` 30 % times `TOUGH`) counts too.
 - **Hätähappi 25 s: ui ilmalukkoon**: a cut hose leaves `EMERG` seconds of the suit's own air (cold drains it faster, air pockets fill it); back at the airlock the haul counts, and the next dive has a whole hose.
-- **Mukaan: lasketaan vasta kotona**: a touched find is asked for with `act('take')` and held for that diver (`G.held`; this phone's own in `G.carry`); since v5 `endDive(false)` asks for `act('home')`, and the host's (or, alone, the phone's own) `bank()` moves that diver's haul into `G.s.inv` and `G.s.got`.
+- **Mukaan: lasketaan vasta kotona**: a touched find is asked for with `act('take')` and held for that diver (`G.held`; this phone's own in `G.carry`); since v5 `endDive(false)` asks for `act('home')`, and the host's (or, alone, the phone's own) `bank()` moves that diver's haul into `G.s.inv` and `G.s.got`. v8's fish go to `inv.kala`, and a sample (`S` in a site, `SAMPLES`) says "vie labraan".
+- **🔱 Harppuuna osuu parven kalaan**: v8: `SCHOOLS` are five schools of small fish in the shallow bay and the wreck field; `schoolFish()` moves each fish by the clock and away from a diver within 6 m, and `drawSchools()` draws them. On a dive the round 🔱 button (`#harp`, where 📡 is at the helm) runs `fire()`: one spear along the way the diver swims, turned onto a fish just off that line (`SPEAR`: 11 m, 1 s reload); `stepSpear()` stops it in a wall or the ice, and a fish it meets is asked for with `act('fish')`, which marks it caught for the day (`G.s.caught`) and holds it like a find (`'kala:<day>:<school>:<fish>'`). The first school near a diver says "Kalaparvi! 🔱 Harppuunalla saat ruokaa" (`flags.parvi`).
 - **Tarina etenee: seuraava tavoite**: a log (`LOGS`) opens a card and sets a flag; `goalNow()` reads the flags: container → station → hull upgrade → wrecks (Nordvik's map) → iceberg cache (antenna) → station amplifier → radio.
 - **Takaisin SISUun, löydöt jäävät paikoilleen, kunto -25**: `endDive(true)`: since v5 it asks for `act('lost')`, which lets go only this diver's haul (its finds wait where they were) and takes 25 health; the person comes to in the airlock.
 - **Palaa veneeseen: löydöt varastoon**: `endDive(false)` and the host's `bank()` (v5); since v3 the person then stands in the airlock, still in the suit (`crew`), not at the helm.
@@ -156,11 +166,12 @@ flowchart TD
 - **Napauta huonetta tai kävele ohjaimella, tikkaat kerrosten välillä**: a tap on the canvas goes to `walkTo()`, which picks the room and deck; `stepCrew()` walks there, by the ladder (`LADDER`) when it is on the other deck. The stick walks along a deck (`DECK_X`), right on the stick right on the screen whichever way SISU faces (the inside is drawn mirrored when it faces left), and climbs when pushed up or down at the ladder; halfway the person holds on.
 - **Missä huoneessa seisot?**: `roomOf()` and `enterRoom()`; once the person stands still, `roomActs()` puts the room's one or two actions on the big buttons (`#act`, `#act2`) above its name. The reactor and electrical rooms only say something (`say`).
 - **Korjaa runko, paineenkesto, säiliö, letku, ohjaimet, valonheitin**: the workshop's two buttons: one spare part mends 35 % hull; `upgradeCard()` buys upgrades with spare parts (`COST`): the tank and (v7) the hose apart, and two hose guides for one spare part (`act('guides')`).
-- **Nuku: uusi päivä, virta tuo pieniä löytöjä**: `sleep()`; `newFinds()` drops up to three small finds on the floor within the hull's reach, so food never runs out for good.
-- **Lokikirja: luetut viestit uudelleen**: `logBook()` lists every log read so far (`LOGS`, found in `G.s.got`) to read again, under the current goal.
+- **Nuku: uusi päivä, virta tuo pieniä löytöjä, parvet palaavat**: `sleep()`; `newFinds()` drops up to three small finds on the floor within the hull's reach, so food never runs out for good; since v8 every school is whole again (`G.s.caught` empties).
+- **Syö annos, paista kalat, ota lääke**: the galley's "🍲 Syö annos" (`act('eat')`) and, with fish home, v8's "🐟 Paista kalat (n)" (`act('cook')`): two fish make one ration; one alone cannot be cooked. The fish hang over the galley's table. The stores' button gives medicine.
+- **🔬 Tutki näyte: pysyvä apu; lokikirja**: v8's navigation room is "Labra ja kartat". "🔬 Laboratorio (n)" opens `labCard()`: each sample brought home and not yet studied (`unstudied()`) has a "🧪 Tutki" button (`act('study')`, saved in `G.s.lab`), which shows its note (`studiedCard()`) and from then on its help (`lab()`): the station's sea water makes SISU 10 % faster, the iceberg's ice core halves hose wear on ice, the bacterial mat by the hot vents slows the cold water's air drain, Nordlys's sample bottle makes the ping reach 600 m (`pingR()`), and the scale from Lyra's beacon halves glowing fish bumps and bites. The rack on the chart table lights a tube for each studied sample. The second button is `logBook()`, every log read so far (`LOGS`, found in `G.s.got`); with friends it is the host's "👥 Huoneeseen", and the logbook is in the lab's card.
 - **🤿 Säiliöpuku tai ➰ letkupuku**: v7's suit room offers both (`crew.kit`), and "🧥 Riisu puku" once one is on; one suit leaves its hook while worn, and the hose reel hangs by the airlock. The hose suit is drawn copper-coloured.
 - **Puku päällä?**: the airlock's button: "🌊 Sukella ulos" runs `startDive()`, which puts the diver at the bow airlock with a full tank, or (v7) on a fresh hose with `EMERG` seconds of emergency air and, the first time, the card "➰ Letku" (`flags.letku`); without the suit it says "Pue ensin puku" and cannot be pressed.
-- **Radio: vahvistin ja antenni?**: the control room's second button opens `radio()`; its first, "⛵ Ruoriin", goes back to driving (`toHelm()`, then `closeHome()` once allowed). Alone the ⛵ corner button does the same from anywhere inside; with friends only from the control room (see "Ruori vapaana?").
+- **Radio: vahvistin ja antenni?**: the control room's second button opens `radio()`; its first, "⛵ Ruoriin", goes back to driving (since v8 also while SISU lies surfaced: v6 and v7 put "Tornista jäälle" in its place there, so after the ice the helm button was gone, #151) (`toHelm()`, then `closeHome()` once allowed). Alone the ⛵ corner button does the same from anywhere inside; with friends only from the control room (see "Ruori vapaana?").
 - **Viimeinen signaali: Nordlys vastaa, luku 1 päättyy**: `radio()` with both parts sets `flags.end`; play goes on.
 - **Pyörryt: uusi päivä, kunto 35**: `faint()`, when hunger has emptied health; since v3 the person wakes in the bunk.
 - **Kylmä vesi: happi kuluu nopeammin, paitsi lähteiden luona**: `chill()`: below `COLD` (600 m) air drains 1.35× (`CHILL`), not within 16 m of a vent's top (`nearVent()`); the HUD's air shows ❄️. Since v7 only a cut hose's emergency air runs there (the tank gear cannot go so deep).
@@ -182,9 +193,11 @@ flowchart TD
 - **Tarinan hetket kaikkien puhelimiin**: `story()` / `showStory()`: a new day, the start, chapter 1's last signal, chapter 2, chapter 2's end, fainting and the hull giving way show on every phone, each closing its own; fainting puts everyone in the bunk, and the hull giving way pulls divers in by the airlock. A card a player opens themselves (workshop, a log they found, the radio's state, the logbook) shows only on their phone, and the sea goes on for the others.
 - **Ylös railon kohdalla?**: v6: `solid()` makes the sea ice (`underIce()`, from the ice shelf to the far end, not around the iceberg) solid above `ICE_Y`; only the openings in `HOLES` (one in front of the station, one on the ridge, one before the iceberg, one on the slope) let SISU up to `SURF`. Each opening is a sonar contact ("RAILO JÄÄSSÄ"), and while the first hull's parts are short `goalNow()` points at the first one until its store's finds are home (`flags.pinta`).
 - **Jää pysäyttää SISUn pinnan alle**: `stepSub()`: the ice overhead, or an opening's edge when SISU is steered sideways while surfaced, stops SISU without a bump or hull damage (`onlyIce()`: anything else it touches, the iceberg or the shelf, still bumps) and says "Jää yläpuolella – pintaan pääsee vain railoista 📡". A save from v5 or earlier that left SISU where the ice is now starts just under it (`begin()`); the hull's emergency lift stops 10 m down.
-- **Pinnalla railossa**: under an opening `stepSub()` draws SISU to its middle, so it comes up straight; `surfaced()` is true once it lies there with its back out of the water. The first time says "Pinnalla! 🏠 sisälle ja ohjaamon tikkaita ylös jäälle" (`flags.pinnalla`).
-- **🧗 Tornista jäälle**: in the control room, while SISU is surfaced, `roomActs()` offers it in place of the helm (the ⛵ corner button still goes to the helm); pushing the stick up at the ladder does the same (`stepCrew()`). `goIce()` puts the person (`walker`) on the tower's hatch with the warmth meter full; they climb down onto SISU's back. The first time a card explains the cold (`flags.jaa`).
+- **Pinnalla railossa**: under an opening `stepSub()` draws SISU to its middle, so it comes up straight; `surfaced()` is true once it lies there with its back out of the water. The first time says "Pinnalla! 🏠 sisälle ja tikkaita ylös torniin" (`flags.pinnalla`).
+- **SISU pinnalla railossa?**: v8: the ladder goes on up inside the tower (`drawTower()`, the tower `TOWER` in `roomOf()`) to `TOP`, under the hatch; the stick or a tap in the tower (`walkTo()`, deck −1) climbs there. At the top `roomActs()` asks `surfaced()`; the view rises with the person (`step()`) so the tower shows sideways too.
+- **🔒 Luukku pysyy kiinni**: under water the tower's button reads "🔒 Luukku: SISU on veden alla" and cannot be pressed; the stick pushed up says "Luukku ei aukea: SISU on veden alla".
+- **🧗 Tornista jäälle**: at the top of the tower, while SISU is surfaced, the button or the stick pushed on up runs `goIce()`: the person (`walker`) comes up out of the hatch from where they stood inside (`walker.rise`, sheltered from the cold), onto the tower's top, then down its side onto SISU's back, while the inside fades out and the view widens: one climb, no cut. The hatch lid stands open while anyone is out. The first time a card explains the cold (`flags.jaa`).
 - **Kävele jäällä: 🥶 laskee ulkona**: `stepIce()`: the stick or a tap walks along `groundAt()`: SISU's back and planks across its opening, the sea ice, a drift up onto the shelf; open water in another opening stops the walk ("Railo: avovettä edessä"), and so does the iceberg's wall ("Jäävuoren seinä: tästä ei pääse"). Outside the meter (`walker.warm`, `#mWarm`) runs down in `WARM` (60) seconds; snow blows and frost creeps in at the screen's edge (`drawWeather()`). With friends each phone walks its own person and the others see them (`mine()`, `'ice'`).
 - **Asema A-3: huoneet lämmittävät, lokit ja varaston löydöt**: the station on the shelf, `STATION` and its rooms `SROOMS` (store, bunk room, lab, radio room, hall), drawn by `drawStation()`; with the person inside its wall comes off (`drawStationInside()`) and the room's name shows. Inside the meter fills again (`WARMUP`). The radio room's diary and the lab's whiteboard are logs (`LOGS.paivakirja`, `LOGS.taulu`); bringing the store's finds home sets `flags.pinta`; the store's two spare parts and two rations and the bunk room's medicine are `ICE_ITEMS`, carried like a diver's finds (`act('take')`).
 - **Takaisin SISUun, löydöt jäävät jäälle, kunto -25**: `endIce(true)` when the warmth runs out: the person comes down the ladder into the control room, `act('lost')` drops their haul (it waits in the station) and takes 25 health.
-- **Alas torniin: löydöt varastoon**: by the tower's hatch (`atHatch()`) the big button "⬇️ Alas torniin" runs `endIce(false)`: the person stands at the ladder in the control room, and `act('home')` banks the haul (`bank()`), as after a dive.
+- **Alas torniin ja tikkaita ohjaamoon: löydöt varastoon**: by the tower's hatch (`atHatch()`, over the ladder since v8) the big button "⬇️ Alas torniin" runs `endIce(false)`: the person comes in at the top of the tower and climbs down by themselves into the control room (`crew.to`), and `act('home')` banks the haul (`bank()`), as after a dive.

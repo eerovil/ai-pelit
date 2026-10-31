@@ -5,6 +5,8 @@ trunks, runs along the branches and leaps from branch to branch and tree to tree
 cone in the forest before the time runs out. A pine marten climbs a trunk from level 2 and a
 goshawk swoops from level 3.
 
+From v3 (#158) the squirrel wears the outfit picked under "👕 Asu" in the menu, Halloween costumes too (`games/orava/v3/index.html`; the picker is `asut.md`).
+
 ```mermaid
 flowchart TD
   A[Taso n: mäntyjä ja käpyjä, Kiipeä!] --> B[Orava maassa ensimmäisen männyn vieressä]

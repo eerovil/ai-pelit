@@ -36,6 +36,13 @@
       "note": "Peliä voi pelata myös vaakatasossa: trampoliini mahtuu ruudun korkeuteen, voltinapit ovat alakulmissa ja kierrenappi kummankin peukalon yllä.",
       "request": "Add landscape to all games where it's possible",
       "issue": "eerovil/ai-pelit#95"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-31",
+      "note": "Hyppääjälle voi valita asun, myös Halloween-asuja: kurpitsa, noita, haamu, luuranko, vampyyri ja muumio.",
+      "request": "Kaikkiin peleihin, joissa voisi olla järkevää olla erilaisia asuja. Voisi tehdä asuvalinta. Ja. Nyt kun on Halloween, niin voisi olla Halloween-asuja sitten tänään saatavilla ja muulloinkin.",
+      "issue": "eerovil/ai-pelit#158"
     }
   ]
 }

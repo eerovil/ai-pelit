@@ -8,6 +8,8 @@ ends the race. From v2 a step after "Valmiit…" and before the gun is a false s
 card, then a red one and that runner is out; the start is called back each time. From v3 the player
 picks 100, 200 or 400 m, with or without hurdles, and each kind keeps its own record and list.
 
+From v5 (#158) the player's runner wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's runner wears its own (`body()` in `games/aitajuoksu/v5/index.html`; the picker is `asut.md`).
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]

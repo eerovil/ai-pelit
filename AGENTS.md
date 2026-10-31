@@ -12,14 +12,17 @@ player sees is Finnish unless the request says otherwise.
 - "<Peli> v<N> (<slug>): …" — a new version. Copy the newest version still in `games/<slug>/`
   (usually `v<N-1>/`) to the next free number and change the copy; a withdrawn number (rule 1) is
   skipped for good, so Puhelinkoppi goes from `v2/` to `v5/`. Append the version to `game.json`.
-- A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
-  own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
-  group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
+  If the copy is past about 2000 lines in one file, split it into files (rule 2) as part of this
+  version, without being asked, and say so in the pull request. Do the same for a new game that
+  grows past it.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
   A new game needs one (the build refuses a game without it); retake it in a new version when the
   game looks different.
+- A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
+  own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
+  group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
 asked to change in past versions: [docs/making-games.md](docs/making-games.md). Read it before you
@@ -42,8 +45,16 @@ start a new game or version.
    so a published version cannot change by accident and needs no tools to keep working. A library
    a game needs is copied into its folder as one file, except a shared library under
    `public/lib/` (three.js, #99, Eero's choice), which games load from there and never copy; see
-   "3D games". Think again only when a single game passes
-   about 2000 lines, or the same code is copied into a third game; then propose it as its own Work.
+   "3D games". Think again only when the same code is copied into a third game; then propose it
+   as its own Work.
+   A version past about 2000 lines is split into a few plain files in its own folder (#161, Eero's
+   choice, first Last Signal v9). Do it yourself in the next version, unasked: `index.html` loads
+   them with classic `<script src="world.js"></script>` tags, so their functions stay global for
+   the tests. Still no
+   build step: each new version copies the whole folder, and an agent reads only the files its
+   change touches. Keep a `lib/three` import in `index.html` itself, because `scripts/build.py`
+   and `tests/conftest.py` look for it there. Old versions stay as they are, and none is deleted
+   for being big: phones cache only the versions they open, and git stores each copy as a diff.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
@@ -115,7 +126,16 @@ high-score lists (#25), then play counts (#26).
     `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project as `ROOMS`. It only relays, and
     keeps the host's `game`, `v` and `max` (2–8). CI deploys `rooms/` before the site; a change to
     it must keep every published version's messages working.
-- `public/scores.js` and `public/rooms.js` are shared by every version that uses them: change them
+- **Outfits (#158).** A version whose player has a figure to dress opts in with
+  `<script src="../../../outfits.js" data-game="<slug>"></script>` before its own script, calls
+  `AiPelitOutfits.setup({ outfits, draw, change })` with its own everyday outfits (the first is the
+  default) and a "👕 Asu" menu button that calls `AiPelitOutfits.open()`. The six Halloween
+  costumes are added by the library, always available, first in the picker around Halloween;
+  `AiPelitOutfits.head()` draws their heads. An outfit is a palette (`skin`, `hair`, `top`,
+  `bottom`, `cape`, `head`) the game's own drawing reads. The choice is saved per game
+  (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
+  `get(id)`. Trampoliini v6 is the model.
+- `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
