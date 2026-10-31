@@ -9,8 +9,10 @@ After=network-online.target
 [Service]
 Type=oneshot
 # The script as it is on origin/main, never the checkout's working tree: the main checkout may
-# stand on any branch. A timer job inherits almost no PATH; gh is in ~/.local/bin.
+# stand on any branch. A timer job inherits almost no PATH. gh is AgentDeck's shim, so the issue
+# is filed as its GitHub App (feedback_issue.py trusts only that author); the host's own gh in
+# ~/.local/bin is not logged in.
 WorkingDirectory=/var/tmp
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/share/agentdeck/gh-shim:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/bin/sh -c 'git -C %h/ai-pelit fetch -q origin main && git -C %h/ai-pelit show origin/main:scripts/feedback_issue.py | python3 -I -'
 TimeoutStartSec=120

@@ -15,7 +15,7 @@
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
 //   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
-//   GET  /api/admin/feedback?new=1 (X-Admin-Key)             -> {feedback}
+//   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
 //   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
@@ -318,13 +318,14 @@ async function addFeedback(env, url, body) {
   return json({ ok: true });
 }
 
-// The newest first; with ?new=1 only those not yet filed in an issue, oldest first.
+// The newest first; with ?new=1 only those not yet filed in an issue, and with ?issue=<n> those
+// filed in issue n (what its agent reads), both oldest first.
 async function adminFeedback(env, url) {
-  const fresh = url.searchParams.get('new') === '1';
-  const { results } = await env.DB.prepare(
-    `SELECT id, name, game, version, text, at, issue FROM feedback
-     ${fresh ? 'WHERE issue IS NULL ORDER BY id ASC' : 'ORDER BY id DESC'} LIMIT 200`
-  ).all();
+  const fresh = url.searchParams.get('new') === '1', issue = Number(url.searchParams.get('issue'));
+  const where = fresh ? 'WHERE issue IS NULL ORDER BY id ASC' : issue > 0 ? 'WHERE issue = ? ORDER BY id ASC' : 'ORDER BY id DESC';
+  let q = env.DB.prepare(`SELECT id, name, game, version, text, at, issue FROM feedback ${where} LIMIT 200`);
+  if (!fresh && issue > 0) q = q.bind(issue);
+  const { results } = await q.all();
   return json({ feedback: results });
 }
 

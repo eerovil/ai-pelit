@@ -59,6 +59,10 @@ test('the admin reads it, and the daily check files it once', async () => {
   await call('POST', '/api/admin/feedback', { ids: all.map((f) => f.id), issue: 191 }, ADMIN);
   const issues = (await call('GET', '/api/admin/feedback', undefined, ADMIN)).body.feedback.map((f) => [f.text, f.issue]);
   assert.deepEqual(issues, [['Toka\n\nrivi', 191], ['Eka', 190]]);
+  // What the issue's agent reads: only the feedback filed in its issue.
+  const in190 = (await call('GET', '/api/admin/feedback?issue=190', undefined, ADMIN)).body.feedback;
+  assert.deepEqual(in190.map((f) => f.text), ['Eka']);
+  assert.equal((await call('GET', '/api/admin/feedback?issue=190')).status, 403);
 });
 
 test('feedback is 1 to 1000 characters, about a real game, and limited per day', async () => {
