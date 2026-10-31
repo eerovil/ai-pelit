@@ -344,7 +344,11 @@ def test_friends_see_each_other_s_hose(site, browser):
                   " swim(route(ITEMS.find(i => i.site === 'nordvik' && i.k === 'loki').x, ITEMS.find(i => i.site === 'nordvik' && i.k === 'loki').y,"
                   " [s.x - 14, s.x + s.w * C + 14, s.y - 14, s.y + s.h * C + 14])); G.hold = false")
     assert aino.evaluate("hose.pts.length") >= 1
-    host.wait_for_function("Object.values(net.others).some(o => o.mode === 'dive' && o.kit === 'hose' && o.hose && o.hose.length >= 3)")
+    host.wait_for_function("Object.values(net.others).some(o => o.mode === 'dive' && o.kit === 'hose' && o.hose && o.hose.length >= 4)")
+    host.evaluate("draw()")
+    # Her hose wears: the host sees how worn it is, so it is drawn reddening there too.
+    aino.evaluate("hose.wear = 80")
+    host.wait_for_function("Object.values(net.others).some(o => o.mode === 'dive' && o.hose && o.hose[1] === 80)")
     host.evaluate("draw()")
     assert host.errors == [] and aino.errors == []
 
@@ -427,3 +431,32 @@ def test_friends_clamp_guides_into_the_hosts_game_and_the_last_one_goes_to_whoev
     assert len(host.evaluate("JSON.parse(localStorage.getItem('%s')).guides" % SAVE)) == 1
     assert aino.evaluate("localStorage.getItem('%s')" % SAVE) is None
     assert "Ohjaimet loppuivat juuri" in (v5.toast(aino) + v5.toast(ville))
+
+
+def test_rounding_a_corner_near_the_hose_s_end_never_pulls_it_past_its_length(site, browser):
+    """The hose catches on a door frame as the diver rounds it: the move is measured with the new corner, so the
+    hose never ends up longer than it is, even a step at a time round the snag."""
+    page = hose_game(site, browser)
+    page.evaluate("HOSE[1] = 40")
+    out = page.evaluate("""() => {
+      const S = SITES.find(s => s.id === 'nordvik'), it = ITEMS.find(i => i.site === 'nordvik' && i.k === 'loki');
+      G.mode = 'home'; crew.suit = true; crew.kit = 'hose'; sub.x = S.spot[0]; sub.y = S.spot[1]; sub.dir = sub.face = 1;
+      startDive(); if (G.paused) closeCard();
+      const box = [Math.min(S.x - 14, diver.x - 3), Math.max(S.x + S.w * C + 14, diver.x + 3), S.y - 14, S.y + S.h * C + 14];
+      const path = route(it.x, it.y, box);
+      let i = 0, worst = 0, corners = 0;
+      for (let t = 0; t < 60 && i < path.length - 1; t += 1 / 60) {
+        while (i < path.length - 1 && Math.hypot(path[i][0] - diver.x, path[i][1] - diver.y) < 1.0) i++;
+        const j = Math.min(path.length - 1, i + 2), dx = path[j][0] - diver.x, dy = path[j][1] - diver.y, l = Math.hypot(dx, dy) || 1;
+        input.x = dx / l; input.y = dy / l;
+        if (G.paused) closeCard();
+        step(1 / 60);
+        worst = Math.max(worst, hoseLen(diver.x, diver.y)); corners = Math.max(corners, hose.pts.length);
+      }
+      input.x = input.y = 0;
+      return { worst, corners, reached: i >= path.length - 1 };
+    }""")
+    # The log is further than 40 m of hose: the diver is held at the hose's end, round at least one corner.
+    assert not out["reached"] and out["corners"] >= 1
+    assert out["worst"] <= 40.001, out
+    assert page.errors == []

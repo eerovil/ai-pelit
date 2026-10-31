@@ -1297,8 +1297,8 @@ function people() {
 }
 function present(id) { return id === me() || !!(net && net.others[id] && net.others[id].mode !== 'wait'); }
 function nameOf(id) { return (net && net.names[id]) || 'Kaveri'; }
-// v7: a diver's hose goes with it, [cut, x1, y1, x2, y2, ...], so the other phones draw it.
-function hosePack() { return [hose.cut ? 1 : 0].concat(...hose.pts.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10])); }
+// v7: a diver's hose goes with it, [cut, wear %, x1, y1, x2, y2, ...], so the other phones draw it as worn as it is.
+function hosePack() { return [hose.cut ? 1 : 0, Math.round(hose.wear)].concat(...hose.pts.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10])); }
 function mine() {
   const d = G.mode === 'dive', b = d ? diver : G.mode === 'ice' ? walker : crew;
   return [G.mode, r2(b.x), r2(b.y), b.dir, crew.suit ? (crew.kit === 'hose' ? 2 : 1) : 0, d ? r2(diver.ang) : 0,
@@ -1311,7 +1311,7 @@ function setOther(id, p) {
   const jump = o.mode !== p[0];
   [o.mode, o.tx, o.ty, o.dir, o.suit, o.ang] = [String(p[0]), +p[1] || 0, +p[2] || 0, p[3] < 0 ? -1 : 1, !!p[4], +p[5] || 0];
   o.kit = p[4] === 2 ? 'hose' : 'tank';
-  o.hose = Array.isArray(p[6]) ? p[6].slice(0, 121).map(Number) : null;
+  o.hose = Array.isArray(p[6]) ? p[6].slice(0, 122).map(Number) : null;
   if (jump) { o.x = o.tx; o.y = o.ty; }
 }
 function sendState(to) { if (net && net.host && G.s) { R.send({ t: 's', s: G.s }, to); if (!to) net.dirty = false; } }
@@ -1644,7 +1644,14 @@ function stepDive(dt) {
   if (held && G.warnCd <= 0) { toast('Letku on lopussa (' + max + ' m). Aja SISU lähemmäs tai pidennä letkua.', 2.2); G.warnCd = 2.5; tone(260, 200, 0.2, 'triangle', 0.05); }
   diver.ang += ((Math.hypot(diver.vx, diver.vy) > 0.5 ? Math.atan2(diver.vy, Math.abs(diver.vx)) * 0.6 : 0) - diver.ang) * Math.min(1, dt * 5);
   if (onHose) {
+    // The move counts only if the hose, caught on any new corner, still reaches: else the diver and the corners
+    // stay where they were.
+    const before = hose.pts.map(p => p.slice());
     hoseFollow(px, py);
+    if (hoseLen(diver.x, diver.y) > max && hoseLen(diver.x, diver.y) > L0 + 1e-6) {
+      hose.pts = before; diver.x = px; diver.y = py; diver.vx = diver.vy = 0;
+      if (G.warnCd <= 0) { toast('Letku on lopussa (' + max + ' m). Aja SISU lähemmäs tai pidennä letkua.', 2.2); G.warnCd = 2.5; tone(260, 200, 0.2, 'triangle', 0.05); }
+    }
     hose.len = hoseLen(diver.x, diver.y);
     // The hose slides over every corner it bends round as it pays out or reels in; an unguided corner wears it,
     // sharp metal twice as fast as ice or rock. A longer hose level is also a tougher one.
@@ -1815,8 +1822,8 @@ function draw() {
   drawSub();
   if (G.s) drawGuides(X0, X1, Y0, Y1);
   if (net) for (const o of Object.values(net.others)) if (o.mode === 'dive' && o.hose) {
-    const pts = []; for (let k = 1; k + 1 < o.hose.length; k += 2) pts.push([o.hose[k], o.hose[k + 1], 0]);
-    drawHose(pts, o, !!o.hose[0], 0);
+    const pts = []; for (let k = 2; k + 1 < o.hose.length; k += 2) pts.push([o.hose[k], o.hose[k + 1], 0]);
+    drawHose(pts, o, !!o.hose[0], +o.hose[1] || 0);
   }
   if (G.mode === 'dive' && diver.kit === 'hose') drawHose(hose.pts, diver, hose.cut, hose.wear);
   if (net) for (const [id, o] of Object.entries(net.others)) if (o.mode === 'dive') drawDiver(o, net.cols[id]);
