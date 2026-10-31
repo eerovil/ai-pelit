@@ -82,6 +82,19 @@
     // level: 'taso', the level the player is on.
     ottelu: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('ottelu', 'taso'); },
       lists: [['lajit-5', 'Viisiottelu'], ['lajit-4', 'Neliottelu'], ['lajit-3', 'Kolmiottelu'], ['lajit-2', 'Kaksiottelu']] },
+    // Most points on one leg of the night drive, one list per leg ('osa-N'); level: legs driven
+    // to the end ('ajettu'; 'taso', the furthest leg open, stops at the last one).
+    yoajo: {
+      order: 'high', score: function (s) { return s + ' p'; }, boards: true,
+      level: function () { return saved('yoajo', 'ajettu'); },
+      levelText: function (n) { return n + (n === 1 ? ' osuus' : ' osuutta') + ' ajettu'; },
+    },
+    // Fastest ride, one list per level ('taso-N'); level: levels finished ('taso' is the first unfinished one).
+    vuoristorata: {
+      order: 'low', score: minutes, boards: true,
+      level: function () { return saved('vuoristorata', 'taso') - 1; },
+      levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' ajettu'; },
+    },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
