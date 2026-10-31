@@ -70,6 +70,8 @@
     tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki', 'Mökkitikka'], ['main', 'Pistekisa']] },
     // Longest javelin throw in metres; level: 'taso', the level the player is on.
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
+    // Highest bar cleared in a meet, metres; level: 'taso', the level the player is on.
+    korkeushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('korkeushyppy', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
