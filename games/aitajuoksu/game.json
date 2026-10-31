@@ -1,6 +1,7 @@
 {
   "title": "Aitajuoksu",
   "description": "Aitajuoksu ja pikajuoksu 100–400 m: paina jalkoja vuorotellen ja hyppää aidat, yksin tai kavereiden kanssa.",
+  "group": "yleisurheilu",
   "versions": [
     {
       "n": 1,

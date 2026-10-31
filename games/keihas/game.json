@@ -1,6 +1,7 @@
 {
   "title": "Keihäänheitto",
   "description": "Ota vauhtia, nosta kulma ja heitä keihäs: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "group": "yleisurheilu",
   "versions": [
     {
       "n": 1,

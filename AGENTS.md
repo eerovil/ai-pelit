@@ -20,6 +20,9 @@ player sees is Finnish unless the request says otherwise.
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
   A new game needs one (the build refuses a game without it); retake it in a new version when the
   game looks different.
+- A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
+  own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
+  group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
 asked to change in past versions: [docs/making-games.md](docs/making-games.md). Read it before you
@@ -66,7 +69,7 @@ start a new game or version.
    `ai-pelit:<slug>:<name>` (keys starting `ai-pelit:_` belong to the shared scripts). All versions of a game share those keys: a new version must read
    the previous version's saved data (or migrate it in place) and never rename, reset or clear
    it. Never touch another game's keys.
-6. **game.json** — `title`, one-line `description`, and per version `n` (1, 2, 3… in order),
+6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (1, 2, 3… in order),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
    (the issue text) and `issue` (`eerovil/ai-pelit#<n>`).
 
