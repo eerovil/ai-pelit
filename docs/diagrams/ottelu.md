@@ -1,6 +1,6 @@
 # Ottelu: several athletics events in one match
 
-How Ottelu v1 plays (#168). The player, or the host of a room, picks two to five field events and
+How Ottelu v1 plays (#168); v2 plays the same, but a room starts only once the host has picked at least two events. The player, or the host of a room, picks two to five field events and
 their order. Each event runs a published version of that event's own game in a frame, unchanged:
 `laji.js` stands in for `rooms.js` and changes the shared athletics library as it loads, so the event
 has the match's eight athletes, three rounds and saves of its own. Each athlete's best mark becomes
@@ -47,7 +47,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: valitse lajit järjestyksessä**: `drawPick()` in `games/ottelu/v1/index.html`; the pick is saved as `ai-pelit:ottelu:lajit`, and two to five events name the match (Kaksiottelu … Viisiottelu).
-- **Huone: isäntä valitsee lajit, Aloita kierros**: `hostPick()` moves the same picker into the room screen with `AiPelitRooms.extra()` on the host.
+- **Huone: isäntä valitsee lajit, Aloita kierros**: `hostPick()` moves the same picker into the room screen with `AiPelitRooms.extra()` on the host. v2: `roomStart()` keeps the room's "Aloita kierros" off with the note "Valitse ainakin kaksi lajia." while fewer than two events are picked, and a start that gets through anyway starts nothing (v1 quietly played all five).
 - **Uusi ottelu: lajit, taso, 8 urheilijaa**: `newMatch()`; M is plain data, saved as `ai-pelit:ottelu:kesken` alone and sent as `{t: 'M'}` in a room.
 - **Lajin sivu kehykseen: laji.js rooms.js:n tilalle**: `lajiHtml()` and `loadEvent()` fetch the event's published page (`LAJIT`: Pituushyppy v4, Korkeushyppy v2, Seiväshyppy v2, Keihäänheitto v4, Moukarinheitto v2), add a `<base>`, hide its menu, swap `rooms.js` for `laji.js` and drop `scores.js` and `back.js`.
 - **Kirjasto muutetaan: 8 urheilijaa, 3 kierrosta, omat tallennukset**: `patch()`: `rounds()` gets three rounds, `meet()` gets the match's field and names and the slug `ottelu:<event>`, so the event saves under `ai-pelit:ottelu:<event>:…`; `K.step` scores the event as soon as its results appear (`eventScored()`, saved at once, since the library drops the event's own save then) and moves the match on once they have been shown (`eventOver()`). `prefetch()` fetches every event's page and scripts once online, so the service worker keeps them for offline play.

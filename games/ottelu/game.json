@@ -9,6 +9,13 @@
       "note": "Ensimmäinen versio: valitse kahdesta viiteen lajia ja niiden järjestys, kolme suoritusta lajia kohden, pisteet kymmenottelun taulukoista, yksin tai 2–8 kaverin kanssa samassa huoneessa.",
       "request": "Yleisurheilu: ottelu, jossa useampi laji samassa kisassa (yksin ja kavereiden kanssa). Eero pyysi #165:ssä tätä omana jatko-Workinaan: sama huone (tai yksinpeli) pelaa useamman lajin peräkkäin, esim. pituushyppy, keihäänheitto ja korkeushyppy, ja tulokset lasketaan yhteen (esim. ottelupisteinä kuten seitsen- ja kymmenottelussa).",
       "issue": "eerovil/ai-pelit#168"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-31",
+      "note": "Huoneessa kierrosta ei voi aloittaa, ennen kuin isäntä on valinnut ainakin kaksi lajia; ennen ottelu vaihtui silloin huomaamatta kaikkiin viiteen lajiin.",
+      "request": "Katselmoinnin korjaus #168:aan: huoneen isäntä pystyi aloittamaan ottelun alle kahdella valitulla lajilla, jolloin peli valitsi huomaamatta kaikki viisi.",
+      "issue": "eerovil/ai-pelit#168"
     }
   ]
 }
