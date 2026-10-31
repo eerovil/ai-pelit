@@ -286,3 +286,27 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
     finally:
         for c in ctxs:
             c.close()
+
+
+def test_a_phone_reloaded_mid_race_carries_on_from_where_it_was(site, browser):
+    relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
+    guest = guests[0]
+    try:
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        guest.evaluate("auto = true; game.car.s = 200; game.car.check = 200")
+        host.wait_for_function("net.cars.find(k => k.kind === 'net').s > 200", timeout=8000)
+        guest.reload()
+        guest.wait_for_function("net && game.mode === 'ride' && game.car.s > 195", timeout=15000)
+        assert guest.evaluate("game.car.t") > 1   # the race clock, not a fresh start
+        guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
+        host.evaluate("auto = true; game.car.s = game.track.finish - 60")
+        for p in [host, guest]:
+            p.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
+        assert guest.locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
+        assert host.locator("#loppu-otsikko").inner_text() == "2. sija"
+        assert guest.errors == [] and host.errors == []
+    finally:
+        for c in ctxs:
+            c.close()

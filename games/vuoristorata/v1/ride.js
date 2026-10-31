@@ -661,6 +661,11 @@ function guestState(m) {
   net.heard = true;
   if (!net.cfg) { net.cfg = m.cfg; netLevel(); }
   net.phase = m.ph; net.clock = m.clock;
+  // Waiting for the race (just joined it, or reloaded in it): on the train first, then to its place.
+  if (game.mode === 'netwait') {
+    if (m.ph === 'cd') { startRide(); game.count = m.cd; }
+    else if (m.ph === 'run') { startRide(); game.mode = 'ride'; game.car.t = m.clock; }
+  }
   m.c.forEach((a, i) => {
     const k = net.cars[i];
     if (!k) return;
@@ -676,10 +681,6 @@ function guestState(m) {
     }
   });
   $('odota').classList.add('hidden');
-  if (game.mode === 'netwait') {
-    if (m.ph === 'cd') { startRide(); game.count = m.cd; }
-    else if (m.ph === 'run') { startRide(); game.mode = 'ride'; game.car.t = Math.max(game.car.t, m.clock); }
-  }
   if (game.mode === 'count') game.count = m.cd;
   if (m.ph === 'run' && game.mode === 'count') { go(); game.car.t = m.clock; }
 }
