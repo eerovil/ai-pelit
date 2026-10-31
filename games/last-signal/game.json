@@ -64,6 +64,13 @@
       "note": "Merikartta navigointihuoneeseen: sonarin kuulemat kohteet näkyvät ensin kysymysmerkkeinä ja tarkentuvat, kun ne tunnistetaan ja nähdään, ja jääluolasto on nyt pimeä ja sokkeloinen ja kartoittuu valokeilassa.",
       "request": "Last signal: No seuraavaksi sitten koko pelialueen iso kartta, joka päivittyy tutkimalla ja sitä pääsee katsomaan vain navigointihuoneesta. Siellä näkyy ensin sonarin löytämät tunnistamattomat kohteet ja sitten ne päivittyy sinne sitä mukaa ku ne tunnistetaan. Samalla vois vähän muuttaa jääluolastoa: pienemmät etäisyydet ja sokkeloisempi. Aluksi täysin pimeä siten että vain valokeilassa oleva näkyy. Tutkiessa reittien ääriviivat voivat sitten jäädä näkyviin jolloin luolasto ”kartoittuu”",
       "issue": "eerovil/ai-pelit#160"
+    },
+    {
+      "n": 10,
+      "date": "2026-10-31",
+      "note": "Kiinnitetyn letkunohjaimen saa irrotettua takaisin varastoon, ja jäältä palataan SISUun samaa reittiä kuin mentiin ulos: tornin ulkotikkaat ylös, luukusta sisään ja sisätikkaat alas.",
+      "request": "Kaksi korjausta pelaajapalautteen pohjalta (Eero hyväksyi 2026-10-31, Last Signal v9 #160):\n\n1. **Letkunohjaimet saa takaisin.** Kun sukeltaja on kiinnitetyn letkunohjaimen luona, napista \"📌 Irrota ohjain\" ohjain irtoaa ja palaa SISUn varastoon (`inv.ohjain`). Nyt ohjain jää kulmaan pysyvästi, joten kalliita ohjaimia ei kannata käyttää.\n2. **Jäältä sisään samaa reittiä kuin ulos.** Kun ihminen palaa jäältä SISUun, hän kulkee täsmälleen ulosmenon reitin takaperin: tornin ulkotikkaat ylös, sisään luukusta ja sisätikkaat alas. Nyt sisääntulo kulkee eri reittiä kuin ulosmeno, mikä näyttää oudolta.\n\nKopioi `games/last-signal/v9/` versioksi v10.",
+      "issue": "eerovil/ai-pelit#196"
     }
   ]
 }
