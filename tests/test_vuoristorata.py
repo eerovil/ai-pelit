@@ -296,10 +296,10 @@ def test_a_phone_reloaded_mid_race_carries_on_from_where_it_was(site, browser):
         for p in [host, guest]:
             p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
         guest.evaluate("auto = true; game.car.s = 200; game.car.check = 200")
-        host.wait_for_function("net.cars.find(k => k.kind === 'net').s > 200", timeout=8000)
+        host.wait_for_function("net.cars.find(k => k.kind === 'net').s > 200 && net.clock > 3", timeout=15000)
         guest.reload()
         guest.wait_for_function("net && game.mode === 'ride' && game.car.s > 195", timeout=15000)
-        assert guest.evaluate("game.car.t") > 1   # the race clock, not a fresh start
+        assert guest.evaluate("game.car.t") > 2.5   # the race clock, not a fresh start
         guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
         host.evaluate("auto = true; game.car.s = game.track.finish - 60")
         for p in [host, guest]:
