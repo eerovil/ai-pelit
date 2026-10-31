@@ -1,5 +1,5 @@
 // The shelf: lists every game from catalog.json and every version of one game.
-// Routes are the hash: "" or "#/" is the shelf, "#/<slug>" is one game.
+// Routes are the hash: "" or "#/" is the shelf, "#/<slug>" is one game or one group of games.
 (function () {
   'use strict';
 
@@ -46,26 +46,75 @@
     ]);
   }
 
+  function gameCard(game) {
+    var v = latest(game);
+    return el('li', { class: 'card', 'data-slug': game.slug }, [
+      el('a', { class: 'card-main', href: '#/' + game.slug }, [
+        thumb(game, 'thumb', 72, 96),
+        el('div', {}, [
+          el('h2', { text: game.title }),
+          el('p', { class: 'desc', text: game.description }),
+          metaLine(game),
+          el('p', { class: 'top-score', 'data-top': game.slug, text: topText(game.slug) }),
+        ]),
+      ]),
+      el('a', { class: 'button play', href: playUrl(game.slug, v.n), 'aria-label': 'Pelaa ' + game.title, text: '▶' }),
+    ]);
+  }
+
+  // Shelf groups (#153): one card on the shelf, where its newest game would be, opens a page of
+  // its games. The build lists only groups that have games (scripts/build.py GROUPS).
+  function findGroup(slug) {
+    return (catalog.groups || []).filter(function (g) { return g.slug === slug; })[0];
+  }
+
+  function members(slug) {
+    return catalog.games.filter(function (g) { return g.group === slug; });
+  }
+
+  function groupCard(group) {
+    var games = members(group.slug);
+    return el('li', { class: 'card group', 'data-slug': group.slug }, [
+      el('a', { class: 'card-main', href: '#/' + group.slug }, [
+        thumb(games[0], 'thumb stack', 72, 96),
+        el('div', {}, [
+          el('h2', { text: group.title }),
+          el('p', { class: 'desc', text: games.map(function (g) { return g.title; }).join(', ') }),
+          el('p', { class: 'muted meta' }, [
+            document.createTextNode(games.length + ' peliä'),
+            el('span', { class: 'plays', text: playsText(group.slug) }),
+          ]),
+        ]),
+      ]),
+      el('a', { class: 'button play open', href: '#/' + group.slug, 'aria-label': 'Avaa ' + group.title, text: '›' }),
+    ]);
+  }
+
   function renderShelf() {
     document.title = 'AI-pelit';
     var list = el('ul', { class: 'cards' });
+    var shown = {};
     catalog.games.forEach(function (game) {
-      var v = latest(game);
-      list.appendChild(el('li', { class: 'card', 'data-slug': game.slug }, [
-        el('a', { class: 'card-main', href: '#/' + game.slug }, [
-          thumb(game, 'thumb', 72, 96),
-          el('div', {}, [
-            el('h2', { text: game.title }),
-            el('p', { class: 'desc', text: game.description }),
-            metaLine(game),
-            el('p', { class: 'top-score', 'data-top': game.slug, text: topText(game.slug) }),
-          ]),
-        ]),
-        el('a', { class: 'button play', href: playUrl(game.slug, v.n), 'aria-label': 'Pelaa ' + game.title, text: '▶' }),
-      ]));
+      var group = game.group && findGroup(game.group);
+      if (!group) { list.appendChild(gameCard(game)); return; }
+      if (shown[group.slug]) return;
+      shown[group.slug] = true;
+      list.appendChild(groupCard(group));
     });
     view.replaceChildren(catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
     showWaitingNames();
+    loadPlays();
+    loadTops();
+  }
+
+  function renderGroup(group) {
+    document.title = group.title + ' · AI-pelit';
+    view.replaceChildren(
+      el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
+      el('h1', { text: group.title }),
+      el('p', { class: 'group-desc', text: group.description }),
+      el('ul', { class: 'cards' }, members(group.slug).map(gameCard))
+    );
     loadPlays();
     loadTops();
   }
@@ -167,7 +216,10 @@
   try { plays = JSON.parse(localStorage.getItem(PLAYS_KEY)) || {}; } catch (e) {}
 
   function playsText(slug) {
-    var n = plays[slug];
+    // A group's card counts all its games together.
+    var n = catalog && findGroup(slug)
+      ? members(slug).reduce(function (sum, g) { return sum + (plays[g.slug] || 0); }, 0)
+      : plays[slug];
     if (!n) return '';
     return ' · pelattu ' + n + (n === 1 ? ' kerran' : ' kertaa');
   }
@@ -209,6 +261,8 @@
     }
     document.title = game.title + ' · AI-pelit';
     var v = latest(game);
+    // A game in a group goes up to the group's page, the others to the shelf.
+    var group = game.group && findGroup(game.group);
     var versions = el('ol', { class: 'versions', reversed: '' });
     game.versions.slice().reverse().forEach(function (ver) {
       versions.appendChild(el('li', { class: 'version', 'data-n': String(ver.n) }, [
@@ -221,7 +275,9 @@
       ]));
     });
     view.replaceChildren.apply(view, [
-      el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
+      group
+        ? el('a', { class: 'back', href: '#/' + group.slug, 'data-up': '', text: '‹ ' + group.title })
+        : el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('div', { class: 'game-head' }, [
         thumb(game, 'thumb big', 120, 160),
         el('div', {}, [el('h1', { text: game.title }), el('p', { text: game.description }), metaLine(game)]),
@@ -236,11 +292,13 @@
   function render() {
     if (!catalog) return;
     var m = location.hash.match(/^#\/([a-z0-9-]+)/);
-    if (m) renderGame(m[1]); else renderShelf();
+    var group = m && findGroup(m[1]);
+    if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
   }
 
   // Network first, every time the shelf is opened or comes back on screen, so a new
   // game shows without reinstalling. The service worker answers from its cache offline.
+  var catalogReady = null;
   function loadCatalog() {
     return fetch('catalog.json', { cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -272,18 +330,20 @@
     if (!a || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     var href = a.getAttribute('href');
     var game = href.match(/^games\/([a-z0-9-]+)\/v\d+\/$/);
-    if (href === '#/') {
+    if (href === '#/' || a.hasAttribute('data-up')) {
+      // Up: back to the page below when this one was opened from it, else in this page's place.
       e.preventDefault();
       if (history.state && history.state.up) history.back();
-      else location.replace('#/');
+      else location.replace(href);
     } else if (/^#\/[a-z0-9-]+$/.test(href)) {
       e.preventDefault();
       goDown(href);
     } else if (game) {
       e.preventDefault();
       var url = new URL(href, location.href);
-      // A game opened from the shelf gets its page between them, so back from it goes there.
-      if (!/^#\/[a-z0-9-]/.test(location.hash)) goDown('#/' + game[1]);
+      // A game opened from the shelf or a group's page gets its own page between them, so back
+      // from it goes there.
+      if (location.hash !== '#/' + game[1]) goDown('#/' + game[1]);
       // back.js reads this and steps back here from the chip instead of opening the page anew.
       try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
       location.assign(url.href);
@@ -291,6 +351,13 @@
   });
   // A room code typed in game A that belongs to game B (rooms.js) steps back here to A's page and
   // leaves this note: A's page becomes B's, and B opens over it, so back from B goes to B's page.
+  // When B's page belongs under another parent than A's (a shelf group, #153), the history below
+  // it is made B's own: shelf → B's group → B's page, or shelf → B's page.
+  function parentOf(hash) {
+    var game = catalog.games.filter(function (g) { return '#/' + g.slug === hash; })[0];
+    return game && game.group && findGroup(game.group) ? '#/' + game.group : '#/';
+  }
+
   function openFromRoom() {
     var to = null;
     try {
@@ -300,10 +367,39 @@
     if (!to || to.from !== location.hash || !/^#\/[a-z0-9-]+$/.test(to.page)) return;
     var url = new URL(to.game, location.href);
     if (url.origin !== location.origin) return;
-    history.replaceState({ up: true }, '', to.page);
-    render();
-    try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
-    location.assign(url.href);
+    function open() {
+      render();
+      try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
+      location.assign(url.href);
+    }
+    // Over the page below, which is the shelf: B's group's page first, when it has one.
+    function onShelf(dest) {
+      if (dest === '#/') history.replaceState({ up: true }, '', to.page);
+      else { history.replaceState({ up: true }, '', dest); history.pushState({ up: true }, '', to.page); }
+      open();
+    }
+    // The groups come from the catalog, which may still be on its way.
+    (catalogReady || (catalogReady = loadCatalog())).then(function () {
+      if (!catalog) return;
+      var from = parentOf(to.from), dest = parentOf(to.page);
+      if (from === dest) {
+        history.replaceState({ up: true }, '', to.page);
+        open();
+      } else if (from === '#/') {
+        onShelf(dest);
+      } else if (history.state && history.state.up) {
+        // A's group page is just below: step back to it, and build B's way up over the shelf.
+        window.addEventListener('popstate', function once() {
+          window.removeEventListener('popstate', once);
+          onShelf(dest);
+        });
+        history.back();
+      } else {
+        // Nothing of ours below: B's page takes A's place, and its back link goes up by address.
+        history.replaceState({ up: false }, '', to.page);
+        open();
+      }
+    });
   }
   window.addEventListener('pageshow', function (e) { if (e.persisted) { openFromRoom(); render(); } });
   // Only once the page has loaded: a page still loading would open the game in place of B's page.
@@ -330,5 +426,5 @@
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }
 
-  loadCatalog();
+  if (!catalogReady) catalogReady = loadCatalog();
 })();

@@ -70,6 +70,8 @@
     tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki', 'Mökkitikka'], ['main', 'Pistekisa']] },
     // Longest javelin throw in metres; level: 'taso', the level the player is on.
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
+    // Longest legal long jump in metres; level: 'taso', the level the player is on.
+    pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
     // Longest hammer throw in metres; level: 'taso', the level the player is on.
     moukari: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('moukari', 'taso'); } },
   };

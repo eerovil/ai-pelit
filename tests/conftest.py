@@ -224,7 +224,7 @@ def game_page(title: str, body: str = "", script: str = "") -> str:
     )
 
 
-def make_game(games: Path, slug: str, pages: list[str], title: str | None = None, dates=None) -> None:
+def make_game(games: Path, slug: str, pages: list[str], title: str | None = None, dates=None, group: str | None = None) -> None:
     d = games / slug
     d.mkdir(parents=True, exist_ok=True)
     versions = []
@@ -234,6 +234,8 @@ def make_game(games: Path, slug: str, pages: list[str], title: str | None = None
         date = dates[i - 1] if dates else f"2026-10-{i:02d}"
         versions.append({"n": i, "date": date, "note": f"Versio {i}", "request": "", "issue": None})
     meta = {"title": title or slug.capitalize(), "description": f"Peli {slug}", "versions": versions}
+    if group:
+        meta["group"] = group
     (d / "game.json").write_text(json.dumps(meta))
     (d / build.THUMB).write_bytes(THUMB)
 
