@@ -16,7 +16,8 @@
 //
 // New in yleisurheilu-4 (#176): medals go by place, not by order. In the bar-height format a full
 // countback tie shares the place, so two jumpers sharing the 1st both get gold (and no silver goes
-// out), on the podium, its blocks and the standings alike. In the rounds format places never tie,
+// out), in the standings and on the podium, where everyone placed 1st–3rd stands on their place's
+// block, a shared place side by side, however many share it. In the rounds format places never tie,
 // so it ends as in yleisurheilu-3.
 //
 // New in yleisurheilu-2 (#176): the medal ceremony. At the end of the meet the top three hop onto
@@ -258,25 +259,31 @@
     const fh = Math.min(bw * 1.35, (gy - bh[0] - pa.t - 44) / 1.08);
     const bx = [cx, cx - bw, cx + bw];
     const top = i => gy - bh[i];
-    // Where each medallist is now: hopping up from the ground, then on the block.
-    const there = [0, 1, 2].map(i => {
-      const r = res[i];
-      if (medalOf(r) < 0) return null;
-      const k = clamp01((t - HOP_T[i]) / HOP);
-      if (k <= 0) return null;
-      return { r, i, m: medalOf(r), fx: bx[i], fy: mix(gy + 6, top(i), ease(k)) - Math.sin(Math.PI * k) * fh * 0.35, k, L: lookOf(o, r) };
-    });
-    // The official walks over the podium from medal to medal, standing on the block beside the
-    // medallist's (the gold one for the bronze and the silver, the silver one for the gold).
+    // Everyone placed 1st–3rd stands on that place's block (a shared place shares the step, side
+    // by side and a little smaller), hopping up from the ground, then on the block. Index i is the
+    // block: 0 gold, 1 silver, 2 bronze; j a medallist's spot on it, n how many share it.
+    const groups = [[], [], []];
+    res.forEach(r => { const m = medalOf(r); if (m >= 0) groups[m].push(r); });
+    const there = [];
+    groups.forEach((g, i) => g.forEach((r, j) => {
+      const n = g.length, k = clamp01((t - HOP_T[i] - j * 0.12) / HOP);
+      if (k <= 0) return;
+      const sh = n === 1 ? fh : fh * Math.max(0.5, 1.25 / n), gap = Math.min(bw / n, sh * 0.62);
+      there.push({ r, i, j, n, sh, fx: bx[i] + (j - (n - 1) / 2) * gap,
+        fy: mix(gy + 6, top(i), ease(k)) - Math.sin(Math.PI * k) * sh * 0.35, k, L: lookOf(o, r) });
+    }));
+    // The official walks over the podium from block to block, standing on the block beside the
+    // medallists' (the gold one for the bronze and the silver, the silver one for the gold), and
+    // hangs the medals of a shared place one after another within the block's time.
     const SPOT = [[cx - bw * 0.58, top(1)], [cx - bw * 0.42, top(0)], [cx + bw * 0.42, top(0)]];
     const offAt = () => {
-      const seq = [2, 1, 0].filter(i => there[i]);
+      const seq = [2, 1, 0].filter(i => groups[i].length);
       if (!seq.length || t < MEDAL_T[seq[0]] - 0.4 || t > MEDAL_T[seq[seq.length - 1]] + HANG + 0.5) return null;
       let [ox, oy] = SPOT[seq[0]], now = null;
       seq.forEach(i => {
         const k = ease((t - (MEDAL_T[i] - 0.5)) / 0.45);
         if (k > 0) { ox = mix(ox, SPOT[i][0], k); oy = mix(oy, SPOT[i][1], k); }
-        if (t >= MEDAL_T[i] && t < MEDAL_T[i] + HANG) now = i;
+        if (t >= MEDAL_T[i] && t < MEDAL_T[i] + HANG) now = [i, Math.floor((t - MEDAL_T[i]) / HANG * groups[i].length)];
       });
       const last = seq[seq.length - 1], away = ease((t - (MEDAL_T[last] + HANG)) / 0.5);
       const come = ease((t - (MEDAL_T[seq[0]] - 0.4)) / 0.3);
@@ -289,22 +296,21 @@
       x.fillStyle = '#c9d3e0'; x.fillRect(bx[i] - bw / 2, y0, bw, bh[i]);
       x.fillStyle = '#eef3f8'; x.fillRect(bx[i] - bw / 2, y0, bw, Math.max(4, bh[i] * 0.16));
       x.strokeStyle = 'rgba(0,0,0,.25)'; x.lineWidth = 1; x.strokeRect(bx[i] - bw / 2 + 0.5, y0 + 0.5, bw - 1, bh[i] - 1);
-      // The block's number is the place of who stands on it: a shared 1st shows 1 on two blocks.
-      const m = medalOf(res[i]), k = m >= 0 ? m : i;
-      x.fillStyle = MEDAL[k][1]; x.font = '900 ' + Math.round(Math.min(28, bh[i] * 0.6)) + 'px system-ui'; x.textAlign = 'center';
-      x.fillText(String(k + 1), bx[i], y0 + bh[i] * 0.5 + Math.min(28, bh[i] * 0.6) * 0.38);
+      x.fillStyle = MEDAL[i][1]; x.font = '900 ' + Math.round(Math.min(28, bh[i] * 0.6)) + 'px system-ui'; x.textAlign = 'center';
+      x.fillText(String(i + 1), bx[i], y0 + bh[i] * 0.5 + Math.min(28, bh[i] * 0.6) * 0.38);
     });
     if (off) { x.globalAlpha = off.a; front(x, off.ox, off.oy, fh * 1.02, OFF, 0); x.globalAlpha = 1; }
     there.forEach(p => {
-      if (!p) return;
+      const fh = p.sh;
       const up = p.i === 0 ? ease((t - CHEER) / 0.3) : ease((t - CHEER - 0.15) / 0.3);
       const jump = p.i === 0 && t > CHEER + 0.3 ? Math.abs(Math.sin((t - CHEER - 0.3) * 5)) * fh * 0.08 : 0;
       // The medal: carried over the head on its ribbon, lowered to the neck, then it swings still.
-      const u = (t - MEDAL_T[p.i]) / HANG, neck = p.fy - jump - fh * 0.8, r = Math.max(4, fh * 0.055);
+      // A shared place's medals go on one after another, each in its share of the block's time.
+      const u = ((t - MEDAL_T[p.i]) / HANG) * p.n - p.j, neck = p.fy - jump - fh * 0.8, r = Math.max(4, fh * 0.055);
       const hi = Math.min(fh * 0.55, neck - pa.t - 36), lift = u < 0.45 ? mix(hi, hi * 0.8, ease(u / 0.45)) : mix(hi * 0.8, 0, ease((u - 0.45) / 0.35));
       const w = mix(fh * 0.13, fh * 0.065, ease((u - 0.6) / 0.3)), drop = mix(fh * 0.24, fh * 0.19, ease((u - 0.6) / 0.3));
       // The official's arms reach behind the medallist; the hands hold the ribbon's ends until it is on.
-      const hands = off && off.now === p.i && u > 0 && u < 0.85;
+      const hands = off && off.now && off.now[0] === p.i && off.now[1] === p.j && u > 0 && u < 0.85;
       if (hands) {
         x.strokeStyle = OFF.top; x.lineWidth = Math.max(2, fh * 0.07); x.lineCap = 'round';
         [-1, 1].forEach(d => { x.beginPath(); x.moveTo(off.ox + d * fh * 0.11, off.oy - fh * 0.74); x.lineTo(p.fx + d * w, neck - lift); x.stroke(); });
@@ -314,18 +320,21 @@
       x.globalAlpha = 1;
       if (u > 0) {
         const swing = u > 0.8 ? Math.sin((u - 0.8) * 14) * fh * 0.04 * Math.max(0, 1 - (u - 0.8) * 1.2) : 0;
-        medalAt(x, p.m, p.fx, neck - lift, w, drop, r, swing);
+        medalAt(x, p.i, p.fx, neck - lift, w, drop, r, swing);
         if (hands) {
           x.fillStyle = OFF.skin;
           [-1, 1].forEach(d => { x.beginPath(); x.arc(p.fx + d * w, neck - lift, Math.max(2, fh * 0.045), 0, 7); x.fill(); });
         }
       }
-      // The name and the mark under the block.
-      const mine = p.r.p === K.me;
-      x.textAlign = 'center'; x.font = (mine ? '900 ' : '700 ') + '13px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
-      x.fillText(fit(x, mine && K.isNet() ? 'Sinä' : p.r.name, bw - 4), bx[p.i], gy + 16);
+    });
+    // The names and the mark under each block; a shared place lists its medallists together.
+    groups.forEach((g, i) => {
+      if (!g.length || !there.some(p => p.i === i)) return;
+      const mine = g.some(r => r.p === K.me), name = r => r.p === K.me && K.isNet() ? 'Sinä' : r.name;
+      x.textAlign = 'center'; x.font = (mine ? '900 ' : '700 ') + (g.length > 1 ? '11px' : '13px') + ' system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+      x.fillText(fit(x, g.map(name).join(' · '), bw - 4), bx[i], gy + 16);
       x.font = '800 12px system-ui'; x.fillStyle = '#d6e4f0';
-      x.fillText(K.fmt(p.r.best), bx[p.i], gy + 31);
+      x.fillText(K.fmt(g[0].best), bx[i], gy + 31);
     });
     // Confetti once all the medals are on.
     if (t > CHEER) {
@@ -543,8 +552,8 @@
       if (!e) return false;
       const was = e.t;
       e.t += dt;
-      // A chime as each medal goes on (not when a tap skips past it).
-      if (o.chime) MEDAL_T.forEach((m, i) => { const at = m + HANG * 0.8; if (was < at && e.t >= at && e.t - at < 0.3 && medalOf(e.res[i]) >= 0) o.chime(medalOf(e.res[i])); });
+      // A chime as each block's medals are on (not when a tap skips past it).
+      if (o.chime) MEDAL_T.forEach((m, i) => { const at = m + HANG * 0.8; if (was < at && e.t >= at && e.t - at < 0.3 && e.res.some(r => medalOf(r) === i)) o.chime(i); });
       if (e.leave) {
         K.ending = null;
         const win = e.place === 1 && e.mark > 0 ? 'win' : 'lose';

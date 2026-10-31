@@ -119,25 +119,61 @@ def test_with_friends_each_phone_leaves_the_podium_by_its_own_tap(site, browser)
         p.context.close()
 
 
-def test_a_shared_place_shares_the_medal(site, context):
-    page = open_game(site, context)
+
+# Every text the podium draws at the end of the ceremony.
+PODIUM_TEXTS = """() => {
+  const real = CanvasRenderingContext2D.prototype.fillText, pod = K.drawPodium, out = [];
+  K.drawPodium = (...a) => {
+    CanvasRenderingContext2D.prototype.fillText = function (s) { out.push(String(s)); return real.apply(this, arguments); };
+    try { pod(...a); } finally { CanvasRenderingContext2D.prototype.fillText = real; }
+  };
+  K.ending.t = 6.5; draw(); K.drawPodium = pod;
+  return out;
+}"""
+
+
+# How many separate silver medals the podium shows: runs of columns holding silver pixels.
+SILVER_SPOTS = """() => {
+  const top = Math.round((safeT + 44) * DPR), h = Math.round((land ? H - safeT - 52 : 200) * DPR);
+  const w = Math.round((land ? W * 0.5 : W) * DPR), d = x.getImageData(0, top, w, h).data, cols = new Array(w).fill(0);
+  for (let i = 0; i < d.length; i += 4)
+    if (Math.abs(d[i] - 0xdd) < 6 && Math.abs(d[i + 1] - 0xe3) < 6 && Math.abs(d[i + 2] - 0xea) < 6) cols[(i / 4) % w]++;
+  let n = 0;
+  for (let c = 0; c < w; c++) if (cols[c] > 2 && !(cols[c - 1] > 2)) n++;
+  return n;
+}"""
+
+
+def shared(page, places):
+    """Ends a won meet with the top of the standings at these places (a countback tie shares one)."""
     win_meet(page)
     page.evaluate("K.ending.t = 0.2; draw()")
     base = page.evaluate(MEDAL_PIXELS)
-    # The second jumper ties the winner on the countback: both share the 1st place, the next is 3rd.
-    page.evaluate("const r = K.ending.res; r[1].best = r[0].best; r[1].place = 1;")
-    texts = page.evaluate("""() => {
-      const real = CanvasRenderingContext2D.prototype.fillText, pod = K.drawPodium, out = [];
-      K.drawPodium = (...a) => {
-        CanvasRenderingContext2D.prototype.fillText = function (s) { out.push(String(s)); return real.apply(this, arguments); };
-        try { pod(...a); } finally { CanvasRenderingContext2D.prototype.fillText = real; }
-      };
-      K.ending.t = 6.5; draw(); K.drawPodium = pod;
-      return out;
-    }""")
-    gold, silver, bronze = [n - b for n, b in zip(page.evaluate(MEDAL_PIXELS), base)]
-    # Two golds on the podium, no silver, the bronze for the 3rd.
+    page.evaluate(f"""const r = K.ending.res, pl = {places};
+      pl.forEach((p, i) => {{ r[i].place = p; if (i && p === pl[i - 1]) r[i].best = r[i - 1].best; }});""")
+    texts = page.evaluate(PODIUM_TEXTS)
+    return texts, [n - b for n, b in zip(page.evaluate(MEDAL_PIXELS), base)]
+
+
+def test_a_shared_1st_place_shares_the_gold(site, context):
+    page = open_game(site, context)
+    # The second jumper ties the winner on the countback: both 1st, then 3rd.
+    texts, (gold, silver, bronze) = shared(page, [1, 1, 3, 4])
+    # Two golds side by side on the gold block, no silver, the bronze for the 3rd.
     assert gold > 40 and silver < 5 and bronze > 20
     assert texts.count("🥇") == 2 and texts.count("🥈") == 0 and texts.count("🥉") == 1
-    assert texts.count("1") >= 2 and "2" not in [t for t in texts if t in ("1", "2", "3")]
+    names = page.evaluate("K.ending.res.slice(0, 2).map(r => r.name)")
+    assert any(t.startswith(names[0]) and " · " in t for t in texts)
+    assert page.errors == []
+
+
+def test_three_sharing_the_2nd_place_all_get_silver_on_the_podium(site, context):
+    page = open_game(site, context)
+    # The 4th in the list shares the 2nd place: four medallists, the last of them on the podium too.
+    texts, (gold, silver, bronze) = shared(page, [1, 2, 2, 2, 5])
+    assert texts.count("🥇") == 1 and texts.count("🥈") == 3 and texts.count("🥉") == 0
+    assert gold > 20 and bronze < 5
+    # Three separate silver medals on the silver block.
+    assert silver > 30 and page.evaluate(SILVER_SPOTS) == 3
+    assert page.evaluate("K.ending.res[3].place") == 2
     assert page.errors == []
