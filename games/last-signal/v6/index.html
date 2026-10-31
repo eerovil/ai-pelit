@@ -541,7 +541,7 @@ function solid(x, y, big) {
   if (y > floorY(x)) return true;
   if (x < glacierX(y) || x > WORLD_W - 8) return true;
   if (y < SHELF_Y && x < SHELF_X) return true;
-  if (y < ICE_Y && underIce(x)) return true;
+  if (iceOn && y < ICE_Y && underIce(x)) return true;
   if (inBerg(x, y)) return true;
   if (x > 4040) for (const [vx, h] of VENTS) if (Math.abs(x - vx) < 1.6 + (y - floorY(vx) + h) * 0.08 && y > floorY(vx) - h) return true;
   const s = siteAt(x, y);
@@ -549,6 +549,9 @@ function solid(x, y, big) {
   const ch = cellAt(s, x, y);
   return ch === '#' || (big && ch !== ' ');
 }
+// Does SISU at (x, y) touch only the sea ice (v6)? Then it stops softly, without a bump; anything else still bumps.
+let iceOn = true;
+function onlyIce(x, y) { iceOn = false; const hit = subHits(x, y); iceOn = true; return !hit; }
 function subHits(x, y) {
   for (let a = 0; a < 12; a++) {
     const t = a / 12 * Math.PI * 2;
@@ -1109,6 +1112,7 @@ function groundAt(x) {
   if (x < SHELF_X) return STATION.floor;
   if (x < SHELF_X + 6) return STATION.floor + (x - SHELF_X) / 6 * (ICE_TOP - STATION.floor);
   const n = holeAt(x);
+  if (x > BERG_X[0] && x < BERG_X[1]) return null;  // the iceberg's wall: no way up it
   if (n < 0) return ICE_TOP;
   return surfaced() && holeAt(sub.x) === n ? sub.y - 2.3 : null;
 }
@@ -1161,7 +1165,7 @@ function stepIce(dt) {
     const g = groundAt(nx);
     if (g == null) {
       w.to = null;
-      if (G.iceCd <= 0) { toast('Railo: avovettä edessä', 1.2); G.iceCd = 1; }  // stays up while the stick pushes
+      if (G.iceCd <= 0) { toast(nx > BERG_X[0] && nx < BERG_X[1] ? 'Jäävuoren seinä: tästä ei pääse' : 'Railo: avovettä edessä', 1.2); G.iceCd = 1; }  // stays up while the stick pushes
     } else { w.x = nx; w.y = g; }
     if (w.to != null && Math.abs(w.to - w.x) < 0.02) w.to = null;
   }
@@ -1413,11 +1417,11 @@ function stepSub(dt) {
   sub.vy += (inp.y * 7 * k - sub.vy) * Math.min(1, dt * 1.3);
   if (inp.x > 0.2) sub.dir = 1; else if (inp.x < -0.2) sub.dir = -1;
   const nx = sub.x + sub.vx * dt;
-  if (subHits(nx, sub.y)) { bump(Math.abs(sub.vx) / k); sub.vx *= -0.3; } else sub.x = nx;
+  if (subHits(nx, sub.y)) { if (!onlyIce(nx, sub.y)) bump(Math.abs(sub.vx) / k); sub.vx *= -0.3; } else sub.x = nx;
   const hole = holeAt(sub.x), ny = Math.max(hole >= 0 ? SURF : 4, sub.y + sub.vy * dt);
   if (subHits(sub.x, ny)) {
     // v6: the ice overhead stops SISU softly, and says where the way up is.
-    if (sub.vy < 0 && sub.y < ICE_Y + 10) {
+    if (sub.vy < 0 && onlyIce(sub.x, ny)) {
       if (G.iceCd <= 0) { toast('Jää yläpuolella – pintaan pääsee vain railoista 📡', 2.2); G.iceCd = 4; tone(160, 120, 0.3, 'triangle', 0.05); }
     } else bump(Math.abs(sub.vy) / k);
     sub.vy *= -0.3;

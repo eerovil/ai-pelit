@@ -273,3 +273,36 @@ def test_a_reload_on_the_ice_comes_back_at_the_helm_in_the_opening_with_the_haul
     v4.act(page, "Tornista jäälle")
     assert page.evaluate("G.mode") == "ice"
     assert page.errors == []
+
+
+def test_steering_sideways_in_an_opening_is_soft_but_the_iceberg_still_bumps(site, browser):
+    page = v4.open_game(site, browser)
+    ready(page)
+    surface(page)
+    # Surfaced, the stick sideways runs SISU into the opening's ice lip, both ways: no hull lost.
+    for d in (1, -1):
+        page.evaluate(f"G.s.m.hull = 100; G.hitCd = 0; input.x = {d}; run(() => true, 2); input.x = 0; run(() => true, 1)")
+        assert page.evaluate("G.s.m.hull") == 100
+        assert holes(page)
+    # Just under the ice by the iceberg, a hard run into its wall still costs hull.
+    page.evaluate("sub.x = 2040; sub.y = 12; sub.vx = 0; sub.vy = 0; G.s.m.hull = 100; G.hitCd = 0; input.x = 1;"
+                  " run(() => G.s.m.hull === 100, 6); input.x = 0")
+    assert page.evaluate("G.s.m.hull") < 100
+    assert page.errors == []
+
+
+def holes(page):
+    return page.evaluate("holeAt(sub.x) === 0 && sub.y < ICE_Y")
+
+
+def test_the_iceberg_s_wall_stops_a_walk_on_the_ice(site, browser):
+    page = v4.open_game(site, browser)
+    ready(page)
+    surface(page)
+    out_on_the_ice(page)
+    page.evaluate("walker.x = 2070; walker.y = ICE_TOP; walker.warm = 100")
+    walk_to(page, 2100)
+    assert 2070 < page.evaluate("walker.x") <= 2084
+    assert "Jäävuoren seinä" in toast(page)
+    assert page.evaluate("groundAt(2200)") is None
+    assert page.errors == []
