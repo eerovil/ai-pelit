@@ -115,3 +115,33 @@ def test_saves_from_v2_carry_on(site, context):
       localStorage.setItem('ai-pelit:yoajo:tahdet', '{"3":2}'); }""")
     page = open_game(site, context)
     assert page.evaluate("[maxLeg, driven, stars[3], level]") == [4, 3, 2, 4]
+
+
+def test_a_second_finger_on_the_same_side_takes_over(site, context):
+    page = open_game(site, context)
+    page.evaluate("newLeg(1); HOLD = true")
+    cdp = page.context.new_cdp_session(page)
+    a, b = {"x": 80, "y": 560, "id": 1}, {"x": 140, "y": 600, "id": 2}
+    thumb(cdp, "touchStart", [a])
+    thumb(cdp, "touchMove", [dict(a, x=180)])
+    page.wait_for_function("input.steer === 1")
+    # The new finger starts from where it lands: no turn until it slides.
+    thumb(cdp, "touchStart", [dict(a, x=180), b])
+    page.wait_for_function("thumbs.size === 1 && input.steer === 0")
+    thumb(cdp, "touchMove", [dict(a, x=180), dict(b, x=40)])
+    page.wait_for_function("input.steer === -1")
+    # The first finger lifting leaves the second in charge (a touch left out of a move is lifted).
+    thumb(cdp, "touchMove", [dict(b, x=40)])
+    page.wait_for_timeout(100)
+    assert page.evaluate("input.steer") == -1
+    thumb(cdp, "touchEnd", [])
+    assert page.errors == []
+
+
+def test_a_retry_after_a_crash_starts_with_no_gas(site, context):
+    page = open_game(site, context)
+    page.evaluate("HOLD = true; newLeg(1); input.gas = 1; input.steer = 0.5; input.brake = 0; crash('Kolari!')")
+    b = page.evaluate("(() => { draw(); const b = btns.find(b => b.id === 'uudelleen'); return [b.x + b.w / 2, b.y + b.h / 2]; })()")
+    page.touchscreen.tap(*b)
+    assert page.evaluate("[mode, input.gas, input.steer, input.brake, P.s]") == ["drive", 0, 0, 0, 6]
+    assert page.errors == []
