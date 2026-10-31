@@ -43,6 +43,7 @@ export const GAMES = {
   tikka: { order: 'high', boards: /^(main|mokki)$/, first: 'mokki' },
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
   pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
+  moukari: { order: 'high', boards: /^main$/ }, // longest hammer throw in metres
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
 };
 
