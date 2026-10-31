@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Korkeushyppy</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(18,32,58,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:36px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8;white-space:pre-line}
+  button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #cont:active{box-shadow:0 1px 0 #3c8a3f}
+  #cont.hidden{display:none}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
+  .help.side{display:none}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,280px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#cont,#multi{grid-column:2;justify-self:stretch}
+    #go{grid-row:1 / span 2;align-self:center}
+    #cont{grid-row:3;align-self:center}
+    #multi{grid-row:4 / span 2;align-self:start;padding:12px 14px;white-space:nowrap}
+    .help{margin:0;display:none}
+    .help.side{display:block}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>Korkeushyppy</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Kisaan!</button>
+  <button id="cont" class="hidden">Jatka kisaa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help">Ota vauhtia painamalla vasenta ja oikeaa jalkaa vuorotellen ja ponnista vihreältä.
+    Riman päällä napauta kahdesti: ensin selkä kaarelle, sitten jalat ylös. Kolme yritystä korkeudella,
+    korkeuden saa jättää väliin; kolme peräkkäistä pudotusta päättää kisan.</p>
+  <p class="help side">Ota vauhtia reunojen jalkanapeista vuorotellen ja ponnista vihreältä. Riman päällä
+    napauta: selkä kaarelle, sitten jalat ylös. Kolme peräkkäistä pudotusta päättää kisan.</p>
+</div>
+<script src="../../../rooms.js" data-game="korkeushyppy" data-min="2" data-max="8"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:korkeushyppy:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+function drop(k) { try { localStorage.removeItem(KEY + k); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), comps = load('kisat', 0), best = load('ennatys', null);
+
+const FOES = ['Rima-Riikka', 'Loikka-Lasse', 'Kaari-Kalle', 'Sulka-Sanna', 'Hyppy-Heikki', 'Pilvi-Pirjo', 'Jousi-Jaana',
+  'Taivas-Taneli', 'Kiepsi-Kirsi', 'Leija-Leo', 'Nousu-Noora', 'Selkä-Seppo', 'Ponnu-Pekka'];
+const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0', '#2bb3b1', '#f08a3c',
+  '#7d8c99', '#b5651d', '#5c6bc0', '#8bc34a'];
+const FIELD = 12, TRIES = 3;   // twelve jumpers; three failures in a row and you are out
+
+// ---------- The jump ----------
+// Metres along the run-up, the plane of the bar at 0, the landing mat beyond it. Running is
+// Aitajuoksu's: each step on the other foot adds speed, more the slower you go. The last metres
+// are the curve of the J, where the speed you can carry is capped. The jump button takes off;
+// over the bar a first tap arches the back (hips up), a second lifts the legs.
+const START = -20, VMAX = 12, STEP = 1.0, CURVE0 = -6, VCURVE = 8.0;
+const RUN_PAST = -0.25, JUMP_FROM = -4;   // running this far without a take-off is a failure; earlier taps do nothing
+const ZONE = [0.8, 1.4];                  // the take-off distances drawn green
+const H0 = 1.12, G = 9.81, VX0 = 2.0, VY0 = 2.25, VYK = 0.27, LAND_Y = 0.95, LOSS = [0.1, 0.12];
+const T_LAY = 0.4, T_ARCH = 0.1, T_KICK = 0.09, ROT = 0.9, TAP_GAP = 0.08, SUB = 1 / 240;
+const SLOW = 0.45;   // the flight plays at this speed, so the two taps over the bar can be timed
+const LAND_T = 2.2, BOARD_T = 3.5, TURN_MAX = 60;   // seconds; a minute for an attempt, as in the rules
+
+// The jumper's body, from the head to the feet, as points around the centre of mass (metres,
+// forward and up): standing at take-off, lying back over the bar, arched (hips up) and with the
+// legs kicked up (the hips drop as the legs rise). What is drawn is what touches the bar.
+const UP = [[0.05, 0.78], [0.02, 0.52], [0, -0.02], [0.28, -0.35], [0.05, -0.95]];
+const LAY = [[0.70, 0.32], [0.48, 0.22], [0, -0.12], [-0.45, -0.10], [-0.86, -0.25]];
+const ARCH = [[0.62, -0.15], [0.45, -0.05], [0, 0.14], [-0.42, -0.10], [-0.80, -0.35]];
+const KICK = [[0.55, -0.42], [0.40, -0.28], [0, -0.20], [-0.22, 0.32], [-0.30, 0.70]];
+// Points along the body checked against the bar, with how thick the body is there; each is
+// [joint, next joint, how far towards it, radius]. 0 head, 1 shoulders, 2 hips, 3 knees, 4 feet.
+const LIE = [[0.6, 0.82], [0.38, 0.8], [0, 0.98], [-0.32, 1.25], [-0.72, 1.3]];   // on the mat, from the centre of mass
+const SAMPLES = [[0, 1, 0, 0.11], [0, 1, 0.5, 0.1], [1, 2, 0, 0.1], [1, 2, 0.33, 0.1], [1, 2, 0.67, 0.1],
+  [2, 3, 0, 0.11], [2, 3, 0.5, 0.09], [3, 4, 0, 0.07], [3, 4, 0.5, 0.06], [3, 4, 1, 0.06]];
+const ss = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+function pose(f, t) {
+  const L = ss(t / T_LAY), A = f.archT === null ? 0 : ss((t - f.archT) / T_ARCH), K = f.kickT === null ? 0 : ss((t - f.kickT) / T_KICK);
+  const th = ROT * Math.max(0, t - T_LAY * 0.8), co = Math.cos(th), si = Math.sin(th);
+  return UP.map((u, i) => {
+    let px = u[0] + (LAY[i][0] - u[0]) * L, py = u[1] + (LAY[i][1] - u[1]) * L;
+    px += (ARCH[i][0] - px) * A; py += (ARCH[i][1] - py) * A;
+    px += (KICK[i][0] - px) * K; py += (KICK[i][1] - py) * K;
+    // The body turns over the bar, head down and feet up, after it has laid out.
+    return [px * co + py * si, py * co - px * si];
+  });
+}
+// The flight from a take-off d metres before the bar at v m/s: faster runs fly higher, and the
+// jumper's drift over the bar suits the distance a little, so a near miss still flies.
+function flight(d, v, bar, archT = null, kickT = null) {
+  // Off the green spot the take-off loses lift, the more the further off.
+  const off = Math.max(0, ZONE[0] - d, d - ZONE[1]);
+  const vy = (VY0 + VYK * v) * (1 - LOSS[0] * off - LOSS[1] * off * off), tp = vy / G;
+  const vx = Math.max(1.0, Math.min(4.5, 0.85 * d / tp + 0.15 * VX0));
+  return { d, v, bar, vx, vy, archT, kickT, t: 0, cx: -d, cy: H0, crossed: SAMPLES.map(() => false),
+    min: 9, fail: null, done: false, acc: 0 };
+}
+function points(f, t) {
+  const p = pose(f, t), cx = -f.d + f.vx * t, cy = H0 + f.vy * t - G * t * t / 2;
+  return { joints: p.map(q => [cx + q[0], cy + q[1]]), cx, cy };
+}
+function samplesAt(f, t) {
+  const { joints } = points(f, t);
+  return SAMPLES.map(([a, b, u, r]) => [joints[a][0] + (joints[b][0] - joints[a][0]) * u, joints[a][1] + (joints[b][1] - joints[a][1]) * u, r]);
+}
+// Each point of the body must pass the plane of the bar above it; the lowest pass is the margin.
+function check(f, i, y, r) {
+  f.crossed[i] = true;
+  const m = y - r - f.bar;
+  if (m < f.min) f.min = m;
+  if (m < 0 && !f.fail) f.fail = { i, t: f.t, m };
+}
+function flyStep(f) {
+  if (f.done) return;
+  if (f.t === 0) samplesAt(f, 0).forEach((s, i) => { if (s[0] >= 0) check(f, i, s[1], s[2]); });
+  const before = samplesAt(f, f.t);
+  f.t += SUB;
+  const now = samplesAt(f, f.t);
+  now.forEach((s, i) => {
+    if (f.crossed[i] || s[0] < 0) return;
+    const p = before[i], u = (0 - p[0]) / (s[0] - p[0]);
+    check(f, i, p[1] + (s[1] - p[1]) * u, s[2]);
+  });
+  const vy = f.vy - G * f.t, cy = H0 + f.vy * f.t - G * f.t * f.t / 2;
+  if ((vy < 0 && cy <= LAND_Y) || f.t > 2.5) {
+    f.done = true;
+    // A part of the body still in front of the bar comes down on it.
+    f.crossed.forEach((k, i) => { if (!k) { f.min = Math.min(f.min, -1); if (!f.fail) f.fail = { i, t: f.t, m: -1 }; } });
+  }
+}
+// The whole jump at once: cleared or not, by how much, and why not.
+function jumpResult(d, v, bar, archT = null, kickT = null) {
+  const f = flight(d, v, bar, archT, kickT);
+  while (!f.done) flyStep(f);
+  return { ok: !f.fail, min: f.min, why: f.fail ? whyFail(f) : '', f };
+}
+// What a failed jump did wrong, for the player to learn from.
+function whyFail(f) {
+  const { i, t } = f.fail, vy = f.vy - G * t;
+  const A = f.archT === null || t < f.archT ? 0 : ss((t - f.archT) / T_ARCH), K = f.kickT === null || t < f.kickT ? 0 : ss((t - f.kickT) / T_KICK);
+  const near = 'Liian läheltä: ponnista vihreältä', far = 'Liian kaukaa: ponnista vihreältä';
+  const height = () => f.d < ZONE[0] - 0.1 ? near : f.d > ZONE[1] + 0.1 ? far : 'Korkeus ei riittänyt: ota lisää vauhtia';
+  // Well outside the green the take-off was the mistake, whatever the taps did.
+  if (f.d < ZONE[0] - 0.3) return near;
+  if (f.d > ZONE[1] + 0.4) return far;
+  if (i <= 1) return A > 0.3 ? 'Kaari liian aikaisin: hartiat osuivat' : height();
+  if (i <= 6) {
+    if (K > 0.3) return 'Jalat liian aikaisin: lantio putosi rimaan';
+    if (A < 0.6) return f.archT === null ? 'Kaarra selkä: napauta riman päällä' : 'Selkä kaarelle liian myöhään';
+    return height();
+  }
+  if (K < 0.6) return f.kickT === null ? 'Nosta jalat: napauta toisen kerran' : 'Jalat ylös liian myöhään';
+  return height();
+}
+
+// ---------- Layout ----------
+// The scene is drawn from SX and SW wide. Upright it is the whole width with the pads under it;
+// on its side the pads are columns at the left and right edges, under the thumbs.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, ctrlTop, ctrlH, groundY, hudTop, sceneB;
+let land = false, SX = 0, SW = 0, side = 0, runS = 30, flyS = 60;
+function resize() {
+  const r = c.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  if (land) {
+    side = Math.max(110, Math.min(160, W * 0.17));
+    SX = safeL + side; SW = W - SX - safeR - side;
+    ctrlTop = H; ctrlH = 0; hudTop = safeT + 6; sceneB = H - safeB;
+    groundY = sceneB - 40;
+  } else {
+    SX = 0; SW = W;
+    ctrlH = Math.max(140, Math.min(200, H * 0.25));
+    ctrlTop = H - safeB - ctrlH; hudTop = safeT + 44; sceneB = ctrlTop;
+    groundY = ctrlTop - 64;
+  }
+  // Running, about 8.5 m across; over the bar, about 4 m, with the highest bar and the jumper on it.
+  runS = Math.min(SW / 8.5, (groundY - hudTop - 90) / 3.0);
+  flyS = Math.min(SW / 3.8, (groundY - hudTop - 70) / 3.0);
+}
+addEventListener('resize', resize);
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The competition ----------
+// Plain numbers, so it saves and goes over the room as it is. A jumper: {id, name, p (the player's
+// id on a phone, null for the computer), bot (the computer jumps for an absent player), skill (the
+// height the computer clears half the time), first (the height it starts at), col, rec: per height
+// its attempts as on a real result sheet, 'O' cleared, 'X' a failure, '-' passed; run: failures in
+// a row; out: three of them, or the winner stopped}. The bar rises through `heights`; at each
+// height everyone still in takes a first attempt in the drawn order, then those who failed a second,
+// then a third. seq counts the attempts, so a result for an older turn is not taken twice.
+let comp = null, th = null, ending = null, myId = 'me';
+const isNet = () => comp && comp.mode === 'net';
+const base = lv => Math.min(1.9, 1.75 + 0.025 * (lv - 1));
+const r2 = n => Math.round(n * 100) / 100;
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+// The bar's heights: 5 cm steps, then 3 cm, then 2 cm near the top (never more than before).
+function heightsFor(lv) {
+  const b = base(lv), hs = [];
+  for (let h = Math.round((b - 0.25) * 20) / 20; h < 3; h = r2(h + (h < b - 0.02 ? 0.05 : h < b + 0.12 ? 0.03 : 0.02))) hs.push(r2(h));
+  return hs;
+}
+function newComp(mode, humans, lv) {
+  const heights = heightsFor(lv);
+  const ts = humans.map((h, i) => ({ id: 'h' + i, name: h.name, p: h.p, bot: false, skill: base(lv), first: 0, col: COLORS[i % COLORS.length], rec: [], run: 0, out: false }));
+  const offs = [4, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7];
+  for (let k = 0; ts.length < FIELD; k++) {
+    const skill = base(lv) + offs[k % offs.length] * 0.015 + (Math.random() - 0.5) * 0.03;
+    const want = skill - 0.13 - Math.random() * 0.1;
+    ts.push({ id: 'c' + k, name: FOES[(lv - 1 + k) % FOES.length], p: null, bot: false, skill, col: COLORS[ts.length % COLORS.length],
+      first: Math.max(0, heights.findIndex(h => h >= want)), rec: [], run: 0, out: false });
+  }
+  const order = shuffle(ts.map(t => t.id));
+  return { mode, level: lv, heights, hi: 0, att: 1, turn: 0, order, jumpers: ts, seq: 0, recent: [] };
+}
+const jumper = id => comp.jumpers.find(t => t.id === id);
+const barNow = () => comp.heights[comp.hi];
+const humanTurn = t => t && t.p !== null && !t.bot;
+// Does this jumper take an attempt now, in round `att` at height `hi`?
+function due(t, hi, att) {
+  if (t.out) return false;
+  if (t.p === null && hi < t.first) return false;
+  const r = t.rec[hi] || '';
+  return !/[O-]/.test(r) && r.length === att - 1;
+}
+const current = () => comp && !comp.over && comp.turn < comp.order.length && due(jumper(comp.order[comp.turn]), comp.hi, comp.att) ? jumper(comp.order[comp.turn]) : null;
+// The best height cleared (index), the failures there and in all up to it: the real countback.
+function score(t) {
+  let b = -1;
+  t.rec.forEach((r, i) => { if (r && r.includes('O')) b = i; });
+  const xs = r => (r || '').split('X').length - 1;
+  let total = 0;
+  for (let i = 0; i <= b; i++) total += xs(t.rec[i]);
+  return { b, h: b >= 0 ? comp.heights[b] : -1, at: b >= 0 ? xs(t.rec[b]) : 0, total };
+}
+const better = (sa, sb) => sa.h !== sb.h ? sa.h > sb.h : sa.at !== sb.at ? sa.at < sb.at : sa.total < sb.total;
+const tied = (sa, sb) => sa.h === sb.h && sa.at === sb.at && sa.total === sb.total;
+function standings() {
+  const sc = new Map(comp.jumpers.map(t => [t, score(t)]));
+  return comp.jumpers.slice().sort((a, b) => {
+    const sa = sc.get(a), sb = sc.get(b);
+    if (!tied(sa, sb)) return better(sa, sb) ? -1 : 1;
+    return comp.jumpers.indexOf(a) - comp.jumpers.indexOf(b);
+  });
+}
+// A shared place for a full tie, as the rules say (no jump-off here).
+function placeOf(t) {
+  const s = score(t);
+  return 1 + comp.jumpers.filter(o => o !== t && better(score(o), s)).length;
+}
+const bestOf = t => score(t).h;
+
+// The computer jumps: it clears a height around its skill, the lower the likelier.
+function cpuTry(t, h) { return Math.random() < 1 / (1 + Math.exp((h - t.skill) / 0.025)) ? 'O' : 'X'; }
+function mark(t, m) {
+  const hi = comp.hi;
+  if (m === 'S') { t.out = true; t.stop = true; return; }
+  t.rec[hi] = (t.rec[hi] || '') + m;
+  if (m === 'O') t.run = 0;
+  if (m === 'X' && ++t.run >= TRIES) t.out = true;
+}
+// Jumps for everyone the computer jumps for, up to the next player on a phone or the end.
+function advance() {
+  for (let guard = 0; guard < 5000; guard++) {
+    const left = comp.jumpers.filter(t => !t.out);
+    if (!left.length || comp.hi >= comp.heights.length) return over();
+    if (comp.turn >= comp.order.length) {
+      comp.turn = 0;
+      if (++comp.att > TRIES || !comp.order.some(id => due(jumper(id), comp.hi, comp.att))) { comp.hi++; comp.att = 1; }
+      continue;
+    }
+    const t = jumper(comp.order[comp.turn]);
+    if (!due(t, comp.hi, comp.att)) { comp.turn++; continue; }
+    if (humanTurn(t)) return;
+    mark(t, cpuTry(t, barNow()));
+    comp.recent.push(t.id);
+    comp.turn++; comp.seq++;
+  }
+  over();
+}
+// A player's attempt ('O', 'X', '-' a pass, 'S' the winner stops): recorded by the host (or
+// alone), then on to the next.
+function record(seq, m) {
+  const t = current();
+  if (!comp || comp.over || seq !== comp.seq || !t || !/^[OX\-S]$/.test(m)) return;
+  mark(t, m);
+  comp.recent = [t.id];
+  comp.turn++; comp.seq++;
+  advance();
+  if (comp.mode === 'solo' && !comp.over) save('kesken', comp);
+  if (isNet() && !comp.over) R.send({ t: 'c', round: comp.room, c: comp });
+  follow();
+}
+// Is this jumper the only one left in, with everyone else out? Then they may go on alone.
+const lastIn = t => comp.jumpers.every(o => o === t || o.out);
+// The last one in who also leads (by countback too): they have won, and may stop. The last one in
+// behind a jumper already out goes on, to try to win.
+const soleWinner = t => t && !t.out && lastIn(t) && bestOf(t) > 0 && placeOf(t) === 1;
+// Each phone draws the turn the competition is at: a new turn first shows the standings.
+function follow() {
+  if (!comp || comp.over) return;
+  const t = current();
+  if (!t || (th && th.seq === comp.seq)) return;
+  const mine = isNet() ? t.p === R.me : true;
+  th = { seq: comp.seq, id: t.id, mine, phase: 'wait', t: 0, x: START, v: 0, foot: 0, ph: 0, bar: barNow(),
+    f: null, res: null, mark: null, why: '', sendT: 0, idle: 0, sent: false };
+  blend = 0;
+}
+
+// ---------- One attempt ----------
+function step(dt) {
+  for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
+  if (ending) { ending.t += dt; if (ending.t > (isNet() ? 4 : 6)) afterEnd(); return; }
+  if (!th || !comp) return;
+  if (isNet() && R.paused) return;
+  th.t += dt; th.idle += dt;
+  const a = th;
+  if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; if (a.mine) tone(660, 0.1, 'sine', 0.06); } return; }
+  if (a.phase === 'ready' || a.phase === 'run') {
+    a.v = Math.max(0, a.v - (1.2 + 0.15 * a.v) * dt);
+    // On the curve the speed you can carry is capped.
+    if (a.x > CURVE0 && a.v > VCURVE) a.v = Math.max(VCURVE, a.v - (a.v - VCURVE) * 4 * dt);
+    if (a.mine || a.phase !== 'ready') a.x += a.v * dt;
+    a.ph += a.v * dt * 1.5;
+    if (a.mine) {
+      if (a.x >= RUN_PAST) return outcome('X', 'Ohijuoksu: et ponnistanut');
+      if (isNet() && a.idle > TURN_MAX) return outcome('X', 'Aika loppui');
+      a.sendT -= dt;
+      if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; sendNet({ t: 'p', a: [r2(a.x), r2(a.v), a.phase, a.foot] }); }
+    }
+    return;
+  }
+  if (a.phase === 'air') {
+    const f = a.f;
+    f.acc += dt * SLOW;
+    while (f.acc >= SUB && !f.done) { flyStep(f); f.acc -= SUB; }
+    if (f.fail && !a.knock) { a.knock = { t: 0 }; tone(150, 0.25, 'square', 0.07, 90); }
+    if (f.done) landed();
+  }
+  if (a.knock) a.knock.t += dt;
+  if (a.phase === 'land' && a.t >= LAND_T && a.mine && !a.sent) { a.sent = true; report(a.mark); }
+}
+
+function press(k) {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[k] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
+  if (th.phase === 'air') return airTap();
+  if (th.phase !== 'ready' && th.phase !== 'run') return;
+  if (th.phase === 'ready') { th.phase = 'run'; th.t = 0; }
+  th.idle = 0;  // the time limit counts only while nothing is pressed
+  if (k !== th.foot) th.v = Math.min(VMAX, th.v + STEP * (1 - th.v / VMAX));
+  else th.v = Math.max(0, th.v - 0.3);  // the same foot twice is a stumble, not a stride
+  th.foot = k;
+  tone(k === 1 ? 190 : 230, 0.03, 'triangle', 0.05);
+}
+// The jump button: take off on the curve, then over the bar arch, then the legs.
+function jumpPress() {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[3] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
+  if (th.phase === 'air') return airTap();
+  if (th.phase !== 'run' || th.x < JUMP_FROM) return;
+  th.idle = 0;
+  takeOff(-th.x, th.v);
+  if (isNet()) sendNet({ t: 'up', a: [r2(th.f.d), r2(th.f.v)] });
+}
+function takeOff(d, v) {
+  const a = th;
+  a.phase = 'air'; a.t = 0; a.x = -d;
+  a.f = flight(d, v, a.bar);
+  if (a.mine) tone(300, 0.12, 'triangle', 0.06, 620);
+}
+function airTap() {
+  const f = th.f;
+  if (!f || f.done || f.t < TAP_GAP) return;
+  let k = 0;
+  if (f.archT === null) { f.archT = f.t; k = 1; tone(520, 0.06, 'sine', 0.06); }
+  else if (f.kickT === null && f.t - f.archT >= TAP_GAP) { f.kickT = f.t; k = 2; tone(700, 0.06, 'sine', 0.06); }
+  if (k && isNet()) sendNet({ t: 'tap', a: [k, f.t] });
+}
+function landed() {
+  const f = th.f;
+  th.phase = 'land'; th.t = 0;
+  th.res = { ok: !f.fail, min: f.min, why: f.fail ? whyFail(f) : '' };
+  th.mark = th.res.ok ? 'O' : 'X'; th.why = th.res.why;
+  if (th.mine) {
+    if (isNet()) sendNet({ t: 'done', a: [f.d, f.v, f.archT, f.kickT] });
+    if (th.res.ok) {
+      th.record = best === null || th.bar > best;
+      if (th.record) { best = th.bar; save('ennatys', best); }
+      tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
+    }
+  }
+}
+// A failure or a choice before the take-off: no jump.
+function outcome(m, why) {
+  th.phase = 'land'; th.t = 0; th.mark = m; th.why = why; th.f = null;
+  if (th.mine) {
+    if (m === 'X') tone(160, 0.3, 'sawtooth', 0.08, 70);
+    if (isNet()) sendNet({ t: 'up', a: [r2(th.x), 0], why, m });
+    if (m !== 'X') { th.t = LAND_T - 0.6; }
+  }
+}
+function pass() { if (th && th.mine && th.phase === 'ready') outcome('-', 'Jätti korkeuden väliin'); }
+function stopMeet() { if (th && th.mine && th.phase === 'ready' && soleWinner(jumper(th.id))) outcome('S', 'Lopetti kisan'); }
+function report(m) {
+  if (!isNet() || R.isHost) record(th.seq, m);
+  else R.send({ t: 'res', round: comp.room, seq: th.seq, mark: m });
+}
+
+// ---------- Alone ----------
+function soloComp(saved) {
+  comp = saved || newComp('solo', [{ name: 'Sinä', p: 'me' }], level);
+  myId = 'me'; th = null; ending = null;
+  if (!saved) { advance(); save('kesken', comp); }
+  follow();
+  menu.classList.add('hidden');
+}
+
+// ---------- Playing with friends ----------
+// The host keeps the competition and jumps for the computer; the phone whose turn it is runs its
+// own attempt, sends where its jumper is (p), the take-off (up), the taps in the air (tap), the
+// whole jump when it lands (done) and the result (res). The host passes p, up, tap and done on to
+// the others, who fly the same jump, and sends the competition (c).
+function sendNet(m) {
+  m.round = comp.room;
+  if (R.isHost) R.send(Object.assign({ id: th.id }, m)); else R.send(m);
+}
+R.on('start', s => {
+  ending = null; th = null; myId = R.me;
+  if (R.isHost && !s.over) {
+    comp = newComp('net', s.players.map(p => ({ name: p.name, p: p.id })), level);
+    comp.room = s.round;
+    advance();
+    R.send({ t: 'c', round: s.round, c: comp });
+    follow();
+  } else comp = { mode: 'net', room: s.round, jumpers: [], order: [], heights: heightsFor(level), hi: 0, att: 1, turn: 0, seq: -1, wait: true };
+  menu.classList.add('hidden');
+});
+function watchFrom(m) {
+  // Another phone's jumper, as its phone sends it.
+  if (!th || th.mine || !comp || th.id !== m.id) return;
+  if (m.t === 'p' && (th.phase === 'wait' || th.phase === 'ready' || th.phase === 'run')) {
+    th.x = m.a[0]; th.v = m.a[1]; th.phase = m.a[2]; th.foot = m.a[3];
+  }
+  if (m.t === 'up' && th.phase !== 'air' && th.phase !== 'land') {
+    if (m.why) { th.x = m.a[0]; outcome(m.m || 'X', m.why); } else takeOff(m.a[0], m.a[1]);
+  }
+  if (m.t === 'tap' && th.f && !th.f.done) { if (m.a[0] === 1) th.f.archT = m.a[1]; else th.f.kickT = m.a[1]; }
+  if (m.t === 'done' && (th.phase === 'air' || th.phase === 'land')) {
+    // The whole jump as the jumper's phone flew it: the same result on every phone.
+    const r = jumpResult(m.a[0], m.a[1], th.bar, m.a[2], m.a[3]);
+    th.f = r.f; th.f.acc = 0;
+    if (r.f.fail && !th.knock) th.knock = { t: 0 };
+    landed();
+  }
+}
+R.on('message', (m, from) => {
+  if (!comp || !isNet() || m.round !== comp.room) return;
+  if (R.isHost) {
+    const t = current();
+    if (!t || t.p !== from) return;   // only the phone whose turn it is
+    if (m.t === 'p' || m.t === 'up' || m.t === 'tap' || m.t === 'done') { const f = Object.assign({}, m, { id: t.id }); R.send(f); watchFrom(f); }
+    if (m.t === 'res' && typeof m.mark === 'string') record(m.seq, m.mark);
+    return;
+  }
+  if (m.t === 'c') { comp = Object.assign(m.c, { room: comp.room }); follow(); }
+  else if (m.t === 'end') netEnd(m.res);
+  else watchFrom(m);
+});
+R.on('hello', id => { if (comp && isNet() && R.isHost && !comp.over) R.send({ t: 'c', round: comp.room, c: comp }, id); });
+// The computer jumps for a phone that is away, and gives its turns back when it returns.
+R.on('continue', ids => {
+  if (!comp || !R.isHost) return;
+  comp.jumpers.forEach(t => { if (ids.includes(t.p)) t.bot = true; });
+  const t = current();
+  if (t && t.bot) { th = null; advance(); if (!comp.over) R.send({ t: 'c', round: comp.room, c: comp }); follow(); }
+});
+R.on('back', id => {
+  if (!comp || !R.isHost) return;
+  comp.jumpers.forEach(t => { if (t.p === id) t.bot = false; });
+  R.send({ t: 'c', round: comp.room, c: comp });
+});
+R.on('lobby', () => { comp = null; th = null; ending = null; });
+R.on('leave', () => { comp = null; th = null; ending = null; showMenu(); });
+R.on('menu', () => { comp = null; th = null; ending = null; showMenu(); });
+
+// ---------- The end ----------
+function results() {
+  return standings().map(t => { const s = score(t); return { id: t.id, p: t.p, name: t.name, col: t.col, best: s.h, at: s.at, total: s.total, place: placeOf(t), out: t.out }; });
+}
+function over() {
+  comp.over = true;
+  const res = results();
+  if (isNet()) { const m = { t: 'end', round: comp.room, res }; R.deliver(m); R.endRound(); }
+  netEnd(res);
+}
+function netEnd(res) {
+  if (ending) return;
+  th = null;
+  const at = res.findIndex(r => r.p === myId), me = res[at];
+  ending = { t: 0, res, at, place: me ? me.place : 0, mark: me ? me.best : null };
+  const counted = !isNet() || R.once(comp.room);
+  if (counted && me) {
+    comps++;
+    if (!isNet() && me.place === 1) { wins++; level++; }
+    save('kisat', comps); save('voitot', wins); save('taso', level);
+    if (me.best > 0) {
+      if (best === null || me.best > best) { best = me.best; save('ennatys', best); }
+      if (window.AiPelitScores) AiPelitScores.submit(me.best);
+    }
+  }
+  if (!isNet()) drop('kesken');
+  if (comp) comp.over = true;
+}
+const medal = i => ['🥇', '🥈', '🥉'][i - 1] || '';
+const fmt = m => m === undefined || m === null || m < 0 ? '–' : m.toFixed(2).replace('.', ',') + ' m';
+function endText(e) {
+  if (e.at < 0) return 'Kisa päättyi';
+  const m = e.mark > 0 ? fmt(e.mark) : 'ei hyväksyttyä tulosta';
+  return e.place === 1 ? '🥇 Voitit kisan! ' + m : (medal(e.place) ? medal(e.place) + ' ' : '') + e.place + '. sija · ' + m;
+}
+function afterEnd() {
+  const e = ending; ending = null;
+  if (isNet()) {
+    R.note(e.res.slice(0, 8).map(r => r.place + '. ' + (r.p === R.me ? 'Sinä' : r.name) + ' ' + fmt(r.best)).join(' · '));
+    comp = null;
+    R.backToRoom(endText(e), e.place === 1 ? 'win' : 'lose');
+    return;
+  }
+  comp = null;
+  showMenu(endText(e), e.place === 1 ? 'win' : 'lose');
+}
+
+// ---------- The loop ----------
+let lastT = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  step(dt);
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+// ---------- Drawing ----------
+let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3;
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function draw(dt = 0) {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
+  x.save();
+  if (land) { x.beginPath(); x.rect(SX, 0, SW, H); x.clip(); x.translate(SX, 0); }
+  drawScene(dt);
+  x.restore();
+  drawControls();
+}
+// The J of the run-up: a straight run nearer the camera, then the curve to the bar's side.
+const DEPTH = 1.6;
+function depth(m) { const u = Math.max(0, Math.min(1, (m - CURVE0) / (-0.9 - CURVE0))); return DEPTH * Math.sqrt(1 - u * u); }
+// The camera: on the runner, stopping with the bar in view; zoomed in on the bar in the air.
+function camera(dt) {
+  const fly = th && (th.phase === 'air' || (th.phase === 'land' && th.f));
+  blend = fly ? Math.min(1, blend + dt * 2.2) : Math.max(0, blend - dt * 3);
+  const e = blend * blend * (3 - 2 * blend);
+  const s = runS + (flyS - runS) * e;
+  const ax = th ? th.x : START;
+  const runCam = Math.min(ax - 0.3 * SW / s, 0.6 - 0.62 * SW / s), flyCam = 0.6 - 0.5 * SW / s;
+  camX = runCam + (flyCam - runCam) * e;
+  return s;
+}
+let S = 30;
+const sx = m => (m - camX) * S, sy = h => groundY - h * S;
+function drawScene(dt) {
+  const W = SW, s = S = camera(dt);
+  // Sky, and the stands across the arena.
+  const sky = x.createLinearGradient(0, 0, 0, groundY);
+  sky.addColorStop(0, '#5fa8e8'); sky.addColorStop(1, '#cfe9ff');
+  x.fillStyle = sky; x.fillRect(0, 0, W, groundY);
+  x.fillStyle = 'rgba(255,255,255,.85)';
+  for (let k = 0; k < 6; k++) {
+    const span = W + 240, cx = ((k * 157 - camX * 4 - performance.now() / 400) % span + span) % span - 120;
+    const cy = hudTop + 90 + ((k * 61) % 5) * 26, r = 14 + (k % 3) * 5;
+    x.beginPath(); x.arc(cx, cy, r, 0, 7); x.arc(cx + r, cy - r * 0.5, r * 1.1, 0, 7); x.arc(cx + r * 2.1, cy, r * 0.9, 0, 7); x.fill();
+  }
+  const far = groundY - 0.55 * s;   // the far edge of the apron
+  const standH = Math.max(60, (far - hudTop) * 0.42), standTop = far - 22 - standH;
+  x.fillStyle = '#2b374b'; x.fillRect(0, standTop - 10, W, 10);
+  x.fillStyle = '#3b4a63'; x.fillRect(0, standTop, W, standH);
+  const crowd = ['#e63946', '#f1faee', '#ffb703', '#8ecae6', '#2a9d8f', '#f4a261'], gap = 11, pc = camX * 9;
+  for (let row = 0; row * 12 + 8 < standH; row++) {
+    const off = (row % 2) * gap / 2;
+    for (let k = Math.floor((pc - off) / gap) - 1; k * gap + off - pc < W + gap; k++) {
+      const n = (k * 7919 + row * 104729) >>> 0;
+      x.fillStyle = crowd[n % crowd.length];
+      x.beginPath(); x.arc(k * gap + off - pc, standTop + 8 + row * 12, 3.6, 0, 7); x.fill();
+    }
+  }
+  // The crowd a little hazy, so the jumper stands out against it.
+  x.fillStyle = 'rgba(59,74,99,.45)'; x.fillRect(0, standTop, W, standH);
+  // Boards along the front of the stands, the infield grass, then the apron.
+  x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, far - standTop - standH);
+  const bw = 120, bo = ((camX * 30) % bw + bw) % bw;
+  x.font = '900 11px system-ui'; x.textAlign = 'center';
+  for (let k = -1; k * bw - bo < W + bw; k++) {
+    const bx = k * bw - bo, n = (Math.floor(camX * 30 / bw) + k) & 1;
+    x.fillStyle = n ? '#1d4e89' : '#f1faee'; x.fillRect(bx, standTop + standH - 16, bw - 2, 16);
+    x.fillStyle = n ? '#ffd166' : '#1d4e89'; x.fillText(n ? 'AI-PELIT' : 'KORKEUS', bx + bw / 2, standTop + standH - 4);
+  }
+  x.fillStyle = '#c8553d'; x.fillRect(0, far, W, sceneB - far);
+  x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(0, far, W, 2);
+  // The J painted on the apron, the runner's path to the take-off.
+  x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 2; x.setLineDash([8, 8]);
+  x.beginPath();
+  for (let m = START - 2; m <= -0.9; m += 0.25) { const px = sx(m), py = groundY + depth(m) * s * 0.35; m === START - 2 ? x.moveTo(px, py) : x.lineTo(px, py); }
+  x.stroke(); x.setLineDash([]);
+  // Where to take off, while it is the player's own run.
+  if (th && th.mine && (th.phase === 'ready' || th.phase === 'run')) {
+    x.fillStyle = 'rgba(126,224,129,.75)';
+    x.beginPath(); x.ellipse(sx(-(ZONE[0] + ZONE[1]) / 2), groundY, (ZONE[1] - ZONE[0]) / 2 * s, 0.12 * s, 0, 0, 7); x.fill();
+  }
+  // Marks along the run every 5 m.
+  x.textAlign = 'center';
+  for (let m = -20; m < 0; m += 5) {
+    const px = sx(m);
+    if (px < -40 || px > W + 40) continue;
+    x.fillStyle = 'rgba(255,255,255,.5)'; x.fillRect(px - 1, groundY + depth(m) * s * 0.35 + 8, 2, 8);
+  }
+  drawMat(s);
+  const bar = th ? th.bar : comp && comp.heights ? barNow() : 1.5;
+  drawStand(s, bar, false);
+  drawBar(s, bar);
+  if (th) {
+    const t = jumper(th.id), col = t ? t.col : COLORS[0], name = t ? (th.mine ? 'Sinä' : t.name) : '';
+    if (th.f) drawFlyer(th, s, col, name);
+    else drawAthlete(th, sx(th.x), groundY + depth(th.x) * s * 0.35, s, col, name);
+  }
+  drawStand(s, bar, true);
+  drawHud();
+  if (th && th.phase === 'wait') drawBoard(false);
+  if (ending) drawBoard(true);
+  if (comp && comp.wait && !th && !ending) message('Odotetaan…', '#fff');
+}
+// The landing mat: a blue block behind the bar.
+function drawMat(s) {
+  const x0 = sx(-0.3), x1 = sx(4.8), top = sy(0.7), d = 0.5 * s;
+  x.fillStyle = '#1e5aa8'; x.fillRect(x0, top, x1 - x0, groundY + 0.25 * s - top);
+  x.fillStyle = '#3f7fd1'; x.beginPath(); x.moveTo(x0, top); x.lineTo(x0 + d * 0.5, top - d * 0.35); x.lineTo(x1 + d * 0.5, top - d * 0.35); x.lineTo(x1, top); x.fill();
+  x.fillStyle = 'rgba(255,255,255,.2)'; x.fillRect(x0, top + 6, x1 - x0, 3);
+}
+// The two standards: the far one behind the bar, the near one in front of it.
+function drawStand(s, bar, near) {
+  const px = sx(0) + (near ? -0.55 : 0.55) * s, by = groundY + (near ? 0.22 : -0.22) * s, top = by - (Math.max(bar, 1.5) + 0.25) * s;
+  x.strokeStyle = near ? '#d9dde2' : '#a9b0b8'; x.lineWidth = Math.max(3, 0.06 * s); x.lineCap = 'butt';
+  x.beginPath(); x.moveTo(px, by); x.lineTo(px, top); x.stroke();
+  x.fillStyle = '#333'; x.fillRect(px - 0.12 * s, by - 3, 0.24 * s, 6);
+}
+// The bar, seen across from the side: it falls when the jumper knocks it.
+function drawBar(s, bar) {
+  let lift = 0, tilt = 0;
+  const k = th && th.knock;
+  if (k) { const u = Math.min(1, k.t / 0.45); lift = -(bar - 0.75) * u * u; tilt = 0.35 * u; }
+  else if (th && th.phase === 'land' && th.res && th.res.ok && th.res.min < 0.03) tilt = Math.sin(th.t * 30) * 0.06 * Math.max(0, 1 - th.t);
+  const cx = sx(0), cy = sy(bar + lift), hw = 0.55 * s;
+  const dx = Math.cos(tilt) * hw, dy = 0.22 * s + Math.sin(tilt) * hw * 0.5;
+  x.lineCap = 'round';
+  x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = Math.max(5, 0.07 * s);
+  x.beginPath(); x.moveTo(cx - dx, cy + dy); x.lineTo(cx + dx, cy - dy); x.stroke();
+  x.lineWidth = Math.max(3, 0.045 * s);
+  const g = x.createLinearGradient(cx - dx, 0, cx + dx, 0);
+  for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, i % 2 ? '#f1faee' : '#e63946');
+  x.strokeStyle = g; x.beginPath(); x.moveTo(cx - dx, cy + dy); x.lineTo(cx + dx, cy - dy); x.stroke();
+  // The height beside the bar.
+  if (!k) {
+    x.font = '800 12px system-ui'; x.textAlign = 'left'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.5)';
+    const lab = fmt(bar); x.strokeText(lab, cx + dx + 6, cy - dy + 4); x.fillStyle = '#fff'; x.fillText(lab, cx + dx + 6, cy - dy + 4);
+  }
+}
+// The jumper in the air (and lying on the mat after), from the same points that meet the bar.
+function drawFlyer(a, s, col, name) {
+  const f = a.f, t = Math.min(f.t, 2.5);
+  let { joints, cx, cy } = points(f, t);
+  // After landing the jumper settles on the upper back, legs over, on the mat.
+  if (f.done && cx > -0.3) {
+    const u = ss(a.phase === 'land' ? a.t / 0.3 : 0);
+    joints = joints.map((j, i) => [j[0] + (cx + LIE[i][0] - j[0]) * u, j[1] + (LIE[i][1] - j[1]) * u]);
+  }
+  const lift = (1 - ss(t / 0.25)) * depth(-f.d) * 0.35;   // from the curve's last step to the bar's line
+  const P = j => [sx(j[0]), groundY - j[1] * s + lift * s];
+  const [hd, sh, hp, kn, ft] = joints.map(P);
+  const lw = Math.max(2.5, 0.11 * s);
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  x.fillStyle = 'rgba(0,0,0,.2)'; x.beginPath(); x.ellipse(sx(cx), cy > 0.8 && cx > -0.3 ? sy(0.7) : groundY, 0.35 * s, 0.06 * s, 0, 0, 7); x.fill();
+  // A dark edge first, so the body reads against the crowd.
+  x.strokeStyle = 'rgba(10,20,40,.45)'; x.lineWidth = lw * 2.1 + 4;
+  x.beginPath(); x.moveTo(hd[0], hd[1]); x.lineTo(sh[0], sh[1]); x.lineTo(hp[0], hp[1]); x.lineTo(kn[0], kn[1]); x.lineTo(ft[0], ft[1]); x.stroke();
+  x.fillStyle = 'rgba(10,20,40,.45)'; x.beginPath(); x.arc(hd[0], hd[1], 0.13 * s + 2, 0, 7); x.fill();
+  // The far leg a little behind the near one.
+  const off = [0.08 * s, -0.05 * s];
+  x.strokeStyle = '#a86f4c'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(kn[0] + off[0], kn[1] + off[1]); x.lineTo(ft[0] + off[0], ft[1] + off[1]); x.stroke();
+  x.strokeStyle = col; x.lineWidth = lw * 2.1;
+  x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(sh[0], sh[1]); x.stroke();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
+  x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(hp[0] + (kn[0] - hp[0]) * 0.35, hp[1] + (kn[1] - hp[1]) * 0.35); x.stroke();
+  x.strokeStyle = '#c98a62'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(kn[0], kn[1]); x.lineTo(ft[0], ft[1]); x.stroke();
+  x.fillStyle = '#fff'; x.beginPath(); x.arc(ft[0], ft[1], Math.max(2, 0.06 * s), 0, 7); x.fill();
+  // Arms along the body towards the hips.
+  x.strokeStyle = '#c98a62'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(sh[0], sh[1]); x.lineTo(sh[0] + (hp[0] - sh[0]) * 0.55 + 0.05 * s, sh[1] + (hp[1] - sh[1]) * 0.55 + 0.08 * s); x.stroke();
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hd[0], hd[1], 0.13 * s, 0, 7); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hd[0], hd[1], 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
+  if (name && !a.mine && a.phase === 'air') {
+    x.font = '600 13px system-ui'; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
+    x.strokeText(name, sx(cx), sy(cy + 1.1)); x.fillStyle = '#fff'; x.fillText(name, sx(cx), sy(cy + 1.1));
+  }
+}
+// A runner seen from the side, running to the right, heights in metres from the feet.
+function drawAthlete(a, px, base, s, col, name) {
+  if (px < -80 || px > SW + 80) return;
+  const lw = Math.max(2.5, 0.11 * s);
+  const moving = a.v > 0.3, after = a.phase === 'land';
+  // On the curve the runner leans in, away from the camera, and back a little before the take-off.
+  const curve = a.x > CURVE0 && !after ? 1 : 0;
+  const lean = after ? 0 : 0.08 + Math.min(a.v, 10) * 0.016 - curve * 0.14;
+  const hipX = px, hipY = base - 0.92 * s;
+  const neckX = hipX + Math.sin(lean) * 0.55 * s, neckY = hipY - Math.cos(lean) * 0.55 * s;
+  const L = 0.46 * s;
+  const pt = (x0, y0, ang, l) => [x0 + Math.sin(ang) * l, y0 + Math.cos(ang) * l];
+  let legs;
+  const p = a.ph * 2.2;
+  if (!moving) legs = [[0.12, 0.05], [-0.1, -0.1]];
+  else {
+    const amp = 0.25 + Math.min(a.v, 10) * 0.06;
+    legs = [0, Math.PI].map(o => { const q = Math.sin(p + o) * amp; return [q, q - 0.25 - (0.6 + amp) * Math.max(0, -Math.cos(p + o))]; });
+  }
+  const q = moving ? Math.sin(p) * 0.7 : 0.15;
+  const arm = [-q, -q + 1.2], other = [q, q + 1.2];
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  const limb = (ox, oy, [a1, a2], len, c2) => {
+    const k = pt(ox, oy, a1, len), e = pt(k[0], k[1], a2, len);
+    x.strokeStyle = c2; x.lineWidth = lw;
+    x.beginPath(); x.moveTo(ox, oy); x.lineTo(k[0], k[1]); x.lineTo(e[0], e[1]); x.stroke();
+    return e;
+  };
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(px, base, 0.35 * s, 0.06 * s, 0, 0, 7); x.fill();
+  limb(neckX, neckY + 0.05 * s, other, 0.3 * s, '#a86f4c');
+  const farL = limb(hipX, hipY, legs[1], L, '#a86f4c');
+  x.fillStyle = '#222'; x.beginPath(); x.ellipse(farL[0] + 0.06 * s, farL[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = col; x.lineWidth = lw * 2.1;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(neckX, neckY); x.stroke();
+  const near = limb(hipX, hipY, legs[0], L, '#c98a62');
+  x.fillStyle = '#fff'; x.beginPath(); x.ellipse(near[0] + 0.06 * s, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); x.stroke();
+  limb(neckX, neckY + 0.05 * s, arm, 0.3 * s, '#c98a62');
+  const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
+  if (s > 18 && name) {
+    x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
+    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
+    const lab = a.mine ? '▼ Sinä' : name, ly = hy - 0.62 * s;
+    x.strokeText(lab, hx, ly); x.fillStyle = a.mine ? '#ffd166' : '#fff'; x.fillText(lab, hx, ly);
+  }
+}
+
+// A jumper's attempts at the height now, as on the result sheet.
+const marksAt = (t, hi) => (t.rec[hi] || '').replace(/-/g, '–');
+let actBoxes = [];
+function drawHud() {
+  const W = SW, top = hudTop;
+  actBoxes = [];
+  if (!comp || !comp.jumpers.length) return;
+  x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, 64, 12); x.fill();
+  const me = comp.jumpers.find(t => t.p === myId);
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
+  x.fillText('Rima ' + fmt(th ? th.bar : barNow()), 20, top + 24);
+  x.textAlign = 'right'; x.font = '700 14px system-ui';
+  if (me) x.fillText(bestOf(me) > 0 ? 'Paras ' + fmt(bestOf(me)) + ' · ' + placeOf(me) + '.' : me.rec.length ? 'Ei tulosta vielä' : 'Ei hyppyä vielä', W - 20, top + 24);
+  const t = th && jumper(th.id);
+  if (th && th.mine && (th.phase === 'ready' || th.phase === 'run')) {
+    // The run-up speed; on the curve more than about 8 m/s cannot be carried.
+    const bx = 20, bw = W - 40 - 80, by = top + 40;
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
+    x.fillStyle = th.v > 7 ? '#7ee081' : th.v > 5 ? '#ffd166' : '#ff9a8b'; rr(bx, by, Math.max(12, bw * Math.min(1, th.v / VCURVE)), 12, 6); x.fill();
+    x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '800 14px system-ui';
+    x.fillText(th.v.toFixed(1).replace('.', ',') + ' m/s', W - 20, by + 11);
+  } else if (t) {
+    x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
+    const n = (t.rec[comp.hi] || '').length + 1;
+    x.fillText((th.mine ? 'Sinun vuorosi' : 'Hyppää: ' + t.name) + ' · ' + n + '. yritys', 20, top + 50);
+  }
+  if (!th) return;
+  if (th.phase === 'ready' && th.mine) {
+    const alone = soleWinner(t);
+    message(alone ? 'Voitit! Jatka?' : lastIn(t) ? 'Viimeisenä jäljellä' : 'Sinun vuorosi!', '#ffd166');
+    small('Ota vauhtia: vasen, oikea…', '#fff');
+    // Pass this height (or, the winner left alone, stop): acts when the finger lifts on it.
+    const y = hudTop + 162, bw = alone ? Math.min(150, (W - 48) / 2) : 190, gap = 12;
+    const boxes = alone ? [['pass', '⏭ Jätä väliin'], ['stop', '🏁 Lopeta']] : [['pass', '⏭ Jätä korkeus väliin']];
+    const tw = boxes.length * bw + (boxes.length - 1) * gap;
+    boxes.forEach(([k, lab], i) => {
+      const b = { k, x: (W - tw) / 2 + i * (bw + gap), y, w: bw, h: 40 };
+      actBoxes.push(b);
+      x.fillStyle = actDown && actDown.k === k ? '#ffe08a' : 'rgba(10,20,40,.72)'; rr(b.x, b.y, b.w, b.h, 20); x.fill();
+      x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 1.5; rr(b.x, b.y, b.w, b.h, 20); x.stroke();
+      x.fillStyle = actDown && actDown.k === k ? '#2a1a05' : '#fff'; x.textAlign = 'center'; x.font = '800 15px system-ui';
+      x.fillText(lab, b.x + b.w / 2, b.y + 26);
+    });
+  } else if (th.phase === 'air' && th.mine && th.f) {
+    // Sideways the hint goes under the bar, out of the jumper's way.
+    small(th.f.archT === null ? 'Napauta: selkä kaarelle' : th.f.kickT === null ? 'Napauta: jalat ylös' : '', '#fff', land ? sceneB - 12 : 0);
+  } else if (th.phase === 'land') {
+    if (th.mark === 'O') {
+      message('Yli! ' + fmt(th.bar), '#7ee081');
+      if (th.mine && th.record) small('Uusi ennätys!', '#7ee081');
+      else if (th.res && th.res.min < 0.03) small('Rima heilui, mutta pysyi!', '#ffd166');
+    } else if (th.mark === 'X') {
+      message('X', '#ff6b5e');
+      small(th.why || 'Hylätty', '#ff9a8b');
+    } else {
+      message(th.mark === '-' ? '–' : '🏁', '#fff');
+      small(th.why, '#fff');
+    }
+  }
+}
+function message(s, col) {
+  x.textAlign = 'center'; x.font = '900 34px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 110; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function small(s, col, at = 0) {
+  if (!s) return;
+  x.font = '800 18px system-ui';
+  s = fit(s, SW - 24);
+  x.textAlign = 'center'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = at || hudTop + 140; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+// The standings: between turns, and at the end with the medals.
+let boardBox = null;
+function fit(s, w) { if (x.measureText(s).width <= w) return s; while (s.length > 1 && x.measureText(s + '…').width > w) s = s.slice(0, -1); return s + '…'; }
+function drawBoard(final) {
+  const W = SW, rows = final ? ending.res : results();
+  const head = final ? 50 : 62, foot = final ? 0 : 26;
+  const avail = (land ? sceneB - safeT - 12 : sceneB - hudTop - 76) - head - foot;
+  const rowH = Math.min(24, Math.floor(avail / rows.length));
+  const h = head + rowH * rows.length + foot + 8;
+  const y0 = land ? Math.max(safeT + 6, (sceneB + safeT - h) / 2) : hudTop + 72;
+  x.fillStyle = 'rgba(10,20,40,.92)'; rr(12, y0, W - 24, h, 14); x.fill();
+  boardBox = { x: 12, y: y0, w: W - 24, h, rowH };
+  x.textAlign = 'center'; x.fillStyle = '#ffd166'; x.font = '900 19px system-ui';
+  x.fillText(final ? 'Lopputulokset' : 'Rima ' + fmt(barNow()), W / 2, y0 + 30);
+  const fs = Math.min(15, rowH - 7), right = W - 26, lastW = 62;
+  x.font = '700 11px system-ui'; x.fillStyle = '#8fa5bb'; x.textAlign = 'right';
+  if (!final) { x.fillText('NYT', right - lastW - 6, y0 + 52); x.fillText('PARAS', right, y0 + 52); }
+  else { x.fillText('PUDOTUKSET', right - lastW - 10, y0 + 44); x.fillText('TULOS', right, y0 + 44); }
+  rows.forEach((r, i) => {
+    const y = y0 + head + i * rowH + rowH * 0.7, mine = r.p === myId, t = !final && jumper(r.id);
+    if (mine) { x.fillStyle = 'rgba(255,209,102,.18)'; x.fillRect(16, y - rowH * 0.72, W - 32, rowH); }
+    x.globalAlpha = !final && r.out ? 0.5 : 1;
+    x.fillStyle = r.col; x.beginPath(); x.arc(46, y - fs * 0.33, Math.max(3, fs * 0.33), 0, 7); x.fill();
+    x.font = '700 ' + fs + 'px system-ui'; x.textAlign = 'right'; x.fillStyle = '#b9cfe0';
+    x.fillText((final && medal(r.place)) || r.place + '.', 38, y);
+    x.textAlign = 'left'; x.font = (mine ? '900 ' : '600 ') + fs + 'px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+    const name = mine && isNet() ? 'Sinä' : r.name;
+    x.fillText(fit(name, right - lastW - 64 - 56), 56, y);
+    x.textAlign = 'right'; x.font = '900 ' + fs + 'px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+    x.fillText(r.best > 0 ? fmt(r.best) : '–', right, y);
+    // Now: the attempts at this height (an X red), "ulos" when out; at the end the failures counted.
+    x.font = '800 ' + (fs - 2) + 'px system-ui';
+    if (final) {
+      x.fillStyle = 'rgba(185,207,224,.8)';
+      // Failures at the best height, then in all up to it: the countback for a tie.
+      if (r.best > 0) x.fillText(r.at + ' / ' + r.total, right - lastW - 10, y);
+    } else {
+      const now = t ? marksAt(t, comp.hi) : '';
+      const recent = comp.recent.includes(r.id);
+      x.fillStyle = r.out ? '#ff9a8b' : /X$/.test(now) ? '#ff9a8b' : recent ? '#8ecae6' : 'rgba(185,207,224,.85)';
+      x.fillText(r.out && !now.includes('O') ? (now ? now + ' ulos' : 'ulos') : t && comp.hi < t.first && t.p === null ? '' : now, right - lastW - 6, y);
+    }
+    x.globalAlpha = 1;
+  });
+  if (!final) {
+    const t = current();
+    x.textAlign = 'center'; x.font = '700 14px system-ui'; x.fillStyle = '#b9cfe0';
+    const n = t ? (t.rec[comp.hi] || '').length + 1 : 1;
+    x.fillText(t ? (t.p === myId ? 'Seuraavaksi: sinä' : 'Seuraavaksi: ' + fit(t.name, W - 160)) + ' · ' + n + '. yritys' : '', W / 2, y0 + h - 14);
+  }
+}
+
+// Three pads: left foot, jump, right foot. The foot to press next glows. On its side, a column
+// at each edge: a jump pad on top and that side's foot under it, where the thumb rests.
+function pads() {
+  if (land) {
+    const y = safeT + 40, h = H - safeB - 6 - y, jh = Math.round(h * 0.42), w = side - 12;
+    const lx = safeL + 6, rx = W - safeR - side + 6;
+    return [{ k: 3, x: lx, y, w, h: jh }, { k: 1, x: lx, y: y + jh + 8, w, h: h - jh - 8 },
+      { k: 3, x: rx, y, w, h: jh }, { k: 2, x: rx, y: y + jh + 8, w, h: h - jh - 8 }];
+  }
+  const w3 = W / 3, y = ctrlTop + 6, h = ctrlH - 12;
+  return [{ k: 1, x: 6, y, w: w3 - 9, h }, { k: 3, x: w3 + 3, y, w: w3 - 6, h }, { k: 2, x: 2 * w3 + 3, y, w: w3 - 9, h }];
+}
+function drawControls() {
+  if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
+  const live = th && th.mine && (th.phase === 'ready' || th.phase === 'run' || th.phase === 'air');
+  const air = live && th.phase === 'air', canJump = live && th.phase === 'run' && th.x >= JUMP_FROM;
+  const next = th && th.foot === 1 ? 2 : 1;
+  for (const b of pads()) {
+    const on = b.k === 3 ? canJump || (air && th.f && th.f.kickT === null) : live && !air;
+    const glow = b.k !== 3 && on && b.k === next;
+    x.fillStyle = !on ? '#22385a' : flash[b.k] > 0 ? '#ffe08a' : b.k === 3 ? '#ffb703' : glow ? '#4f7fc4' : '#2c4a75';
+    rr(b.x, b.y, b.w, b.h, 18); x.fill();
+    x.fillStyle = !on ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    x.font = '900 32px system-ui';
+    const label = b.k === 1 ? 'Vasen' : b.k === 2 ? 'Oikea' : !air ? 'Ponnista' : th.f.archT === null ? 'Kaari' : 'Jalat ylös';
+    x.fillText(b.k !== 3 ? '👟' : !air ? '⤴' : th.f.archT === null ? '🌈' : '🦵', b.x + b.w / 2, b.y + b.h / 2 + 4);
+    x.font = '800 14px system-ui';
+    x.fillText(label, b.x + b.w / 2, b.y + b.h / 2 + 30);
+  }
+}
+
+// ---------- Input ----------
+// Which pad a finger is on: 1 and 2 the feet, 3 the jump. Anywhere on the scene is the jump too.
+function padAt(cx, cy) {
+  if (land) {
+    if (cx >= SX && cx < SX + SW) return 3;
+    const col = pads().filter(p => cx >= p.x - 6 && cx <= p.x + p.w + 6);
+    const b = col.find(p => cy < p.y + p.h + 4) || col[col.length - 1];
+    return b ? b.k : 0;
+  }
+  if (cy < ctrlTop) return 3;
+  const b = pads().find(p => cx >= p.x - 4 && cx <= p.x + p.w + 4);
+  return b ? b.k : 0;
+}
+let actDown = null;
+const actAt = (cx, cy) => actBoxes.find(b => cx - SX >= b.x && cx - SX <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (ending && !isNet()) { ending.t = 99; return; }  // alone, a tap leaves the results
+  const b = actAt(e.clientX, e.clientY);
+  if (b) { unlock(); actDown = { k: b.k, id: e.pointerId }; return; }
+  const k = padAt(e.clientX, e.clientY);
+  if (k === 3) jumpPress(); else if (k) press(k);
+});
+addEventListener('pointerup', e => {
+  if (!actDown || actDown.id !== e.pointerId) return;
+  const b = actAt(e.clientX, e.clientY), k = actDown.k; actDown = null;
+  if (b && b.k === k) { if (k === 'pass') pass(); else stopMeet(); }
+});
+addEventListener('pointercancel', () => { actDown = null; });
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
+  else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
+  else if (e.key === ' ' || e.key === 'ArrowUp') jumpPress();
+});
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja 10 muuta\nRima alkaa ' + fmt(heightsFor(level)[0]);
+  document.getElementById('stats').textContent = 'Kisat ' + comps + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
+  const kept = load('kesken', null), cont = document.getElementById('cont');
+  cont.classList.toggle('hidden', !kept);
+  if (kept && kept.heights) cont.textContent = 'Jatka kisaa (rima ' + fmt(kept.heights[kept.hi]) + ')';
+  menu.classList.remove('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); drop('kesken'); soloComp(); });
+document.getElementById('cont').addEventListener('click', () => {
+  unlock();
+  const kept = load('kesken', null);
+  if (kept && kept.jumpers && kept.mode === 'solo') soloComp(kept); else showMenu();
+});
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="korkeushyppy" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>

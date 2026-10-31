@@ -74,6 +74,10 @@
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
     // Longest hammer throw in metres; level: 'taso', the level the player is on.
     moukari: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('moukari', 'taso'); } },
+    // Highest bar cleared in metres; level: 'taso', the level the player is on.
+    seivashyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('seivashyppy', 'taso'); } },
+    // Highest bar cleared in a meet, metres; level: 'taso', the level the player is on.
+    korkeushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('korkeushyppy', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
