@@ -31,9 +31,23 @@ HELPERS = """() => {
 }"""
 
 
-def open_game(site, context, saved=None):
+# Math.random seeded (mulberry32) before the game loads, so the computer's skills and attempts and
+# the tests' own scatter are the same on every run.
+SEEDED = """(() => {
+  let s = %d >>> 0;
+  Math.random = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+})();"""
+
+
+def open_game(site, context, saved=None, seed=1):
     site.build(ROOT / "games")
     page = context.new_page()
+    page.add_init_script(SEEDED % seed)
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.goto(site.url + URL)
@@ -200,37 +214,45 @@ def test_a_meet_goes_on_after_a_reload(site, context):
 
 def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
     page = open_game(site, context)
-    # The winning height of the eleven computer jumpers alone, over many meets.
-    wins = page.evaluate("""lv => {
-      const out = [], real = over;
-      for (let n = 0; n < 150; n++) {
-        comp = newComp('solo', [], lv);
-        over = () => { comp.over = true; };
-        advance(); over = real;
-        out.push(bestOf(standings()[0]));
-      }
-      comp = null; return out.sort((a, b) => a - b);
-    }""", 1)
-    top = page.evaluate("""() => {
-      const out = [], real = over;
-      for (let n = 0; n < 150; n++) {
-        comp = newComp('solo', [], 20);
-        over = () => { comp.over = true; };
-        advance(); over = real;
-        out.push(bestOf(standings()[0]));
-      }
-      comp = null; return out.sort((a, b) => a - b);
+    page.evaluate("""() => {
+      window.gs = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+      // A fair player: full speed less a little, taking off a normal 0.25 m off 1.1 m (about 0.03 s
+      // at 8 m/s), each tap a normal 0.04 s of flight off (0.09 s of the slowed play). The last one
+      // in stops once they have won. Lazy: a slow run, no arch, only the legs.
+      window.attempt = lazy => {
+        ready();
+        if (lastIn(mine()) && bestOf(mine()) > 0) stopMeet();
+        else {
+          th.phase = 'run'; th.v = lazy ? 6.5 : 8 - Math.abs(gs()) * 0.3; th.x = -(1.1 + gs() * 0.25); jumpPress();
+          const f = th.f;
+          for (const at of lazy ? [0.46 + gs() * 0.04] : [0.3 + gs() * 0.04, 0.46 + gs() * 0.04]) {
+            while (f.t < at && !f.done) flyStep(f);
+            airTap();
+          }
+        }
+        quick();
+      };
+      // Whole meets alone at level lv: how many of k the player wins.
+      window.meets = (lv, k, lazy = false) => {
+        let won = 0;
+        for (let i = 0; i < k; i++) {
+          level = lv; comp = null; th = null; ending = null; soloComp();
+          while (!ending) attempt(lazy);
+          if (ending.place === 1) won++;
+          ending = null;
+        }
+        return won;
+      };
     }""")
-    median, top_median, top_p90 = wins[75], top[75], top[135]
-    # Lazy: a slow run, no arch, the legs late. It does not win at level 1.
-    assert clears(page, 1.05, 6, None, 0.5) < median
-    # Kicking only, at full speed: about level 1's winning height, not the top's.
-    assert clears(page, 1.05, 8, None, 0.46) < top_median
-    # A good jump wins level 1 easily, and the best jumps still beat the top levels.
-    assert clears(page, 1.05, 8, 0.3, 0.46) > wins[-1]
+    # With this seed 0, 20, 19, 6 and 12 of 20; other seeds gave 0, 20, 20, 6, 10; 0, 20, 19, 8, 7;
+    # 0, 20, 19, 9, 13; 0, 19, 20, 13, 8.
+    lazy, l1, l4, l7, l10 = page.evaluate("[meets(1, 20, true), meets(1, 20), meets(4, 20), meets(7, 20), meets(10, 20)]")
+    assert lazy <= 2
+    assert l1 >= 17 and l4 >= 13
+    assert 3 <= l7 <= 17 and 3 <= l10 <= 17
+    # The best-timed jump beats even the strongest computer jumper possible (base 1.90 + 0.06 + 0.015).
     best = max(clears(page, 1.05, 8, a / 100, k / 100) for a in range(24, 40, 3) for k in range(40, 56, 3))
-    assert best > top_p90
-    assert best - top_median < 0.15
+    assert best > page.evaluate("base(99) + 0.075")
     assert page.errors == []
 
 
