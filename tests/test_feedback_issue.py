@@ -19,3 +19,7 @@ def test_the_issue_quotes_each_feedback_with_its_game_and_writer():
     assert "## 8. uusi (uusi)\nBertta, 1.11.2026 10.00\n\n> Kiva!\n" in body
     assert body.rstrip().endswith("<!-- feedback-ids: 7,8 -->")
     assert feedback_issue.issue_title(feedback, datetime(2026, 11, 1)) == "Palautteet 1.11.2026: 2 kpl"
+
+
+def test_a_player_cannot_mention_anyone_or_hide_text():
+    assert feedback_issue.quoted("@eerovil katso #12 <!-- x -->") == ["> @\u200beerovil katso #\u200b12 &lt;!-- x -->"]

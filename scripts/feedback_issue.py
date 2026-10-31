@@ -44,6 +44,16 @@ def fi_date(iso: str) -> str:
     return f"{t.day}.{t.month}.{t.year} {t:%H.%M}"
 
 
+def safe(text: str) -> str:
+    """A player's words that cannot mention anyone, link an issue or hide in HTML: a zero-width
+    space after @ and #, and < as &lt;."""
+    return text.replace("<", "&lt;").replace("@", "@\u200b").replace("#", "#\u200b")
+
+
+def quoted(text: str) -> list[str]:
+    return ["> " + line if line else ">" for line in safe(text).split("\n")]
+
+
 def issue_body(feedback: list[dict], titles: dict[str, str]) -> str:
     lines = [
         "Pelaajien uudet palautteet pelihyllystä (#184). Kysy minulta jokaisesta, korjataanko;"
@@ -52,8 +62,8 @@ def issue_body(feedback: list[dict], titles: dict[str, str]) -> str:
     ]
     for f in feedback:
         game = f"{titles.get(f['game'], f['game'])} ({f['game']})" + (f" v{f['version']}" if f.get("version") else "")
-        lines += [f"## {f['id']}. {game}", f"{f['name']}, {fi_date(f['at'])}", ""]
-        lines += ["> " + line if line else ">" for line in f["text"].split("\n")]
+        lines += [f"## {f['id']}. {game}", f"{safe(f['name'])}, {fi_date(f['at'])}", ""]
+        lines += quoted(f["text"])
         lines.append("")
     lines.append(f"<!-- feedback-ids: {','.join(str(f['id']) for f in feedback)} -->")
     return "\n".join(lines) + "\n"
