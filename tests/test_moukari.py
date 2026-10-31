@@ -39,9 +39,23 @@ HELPERS = """() => {
 }"""
 
 
-def open_game(site, context, saved=None):
+# Math.random seeded (mulberry32) before the game loads, so the computer's skills and throws and
+# the tests' own scatter are the same on every run.
+SEEDED = """(() => {
+  let s = %d >>> 0;
+  Math.random = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+})();"""
+
+
+def open_game(site, context, saved=None, seed=1):
     site.build(ROOT / "games")
     page = context.new_page()
+    page.add_init_script(SEEDED % seed)
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.goto(site.url + URL)
@@ -204,11 +218,23 @@ def test_three_fouls_leave_you_out_of_the_final_eight(site, context):
 def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
     page = open_game(site, context)
     start(page)
-    # Many throws of each kind, from a fresh turn each time.
     page.evaluate("""() => {
       window.fresh = () => { th = Object.assign({}, th, { phase: 'ready', a: 0, v: 0, chk: 0, tapped: {}, jav: null, mark: null, out: null }); };
-      const gs = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
-      window.many = (k, play) => { const out = []; for (let i = 0; i < k; i++) { fresh(); play(gs); out.push(th.mark); } return out; };
+      window.gs = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+      window.many = (k, play) => { const out = []; for (let i = 0; i < k; i++) { fresh(); play(); out.push(th.mark); } return out; };
+      // A fair player: every tap a normal 0.05 s off the low point, letting go about 6° off.
+      window.fair = () => { press(1); for (let n = 1; n < LAPS; n++) tapAt(n, gs() * 0.05); if (th.phase === 'spin') letGo(gs() * 6); };
+      // Whole meets alone at level lv, the player throwing fair: how many of k they win.
+      window.meets = (lv, k) => {
+        let won = 0;
+        for (let i = 0; i < k; i++) {
+          level = lv; comp = null; th = null; ending = null; soloComp();
+          while (!ending) { th.t = 99; step(0.001); fair(); quick(); }
+          if (ending.at === 0) won++;
+          ending = null;
+        }
+        return won;
+      };
     }""")
     skills = lambda lv: page.evaluate(f"newComp('solo', [{{ name: 'x', p: 'me' }}], {lv}).throwers.slice(1).map(t => t.skill)")
     # Lazy: one tap to start, no rhythm, let go in the first turn. Short, far behind level 1.
@@ -216,15 +242,15 @@ def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
     assert max(lazy) < min(skills(1)) - 10
     # Reckless: tapping Vauhtia eight times a second and letting go in the fourth turn.
     wild = page.evaluate("many(20, () => { press(1); for (let i = 0; i < 80 && th.phase === 'spin' && th.a < 5 * TAU + 3; i++) { run(() => true, 0.125); press(1); } if (th.phase === 'spin') letGo(0); })")
-    assert max(m for m in wild) < min(skills(1))
-    # A fair player (taps a few hundredths off) beats level 1's average comfortably, not level 7's.
-    fair = page.evaluate("many(40, gs => { press(1); for (let n = 1; n < LAPS; n++) tapAt(n, gs() * 0.05); if (th.phase === 'spin') letGo(gs() * 6); })")
-    good = sorted(m for m in fair if m >= 0)
-    assert len(good) >= 20
-    median = good[len(good) // 2]
-    assert median > sum(skills(1)) / 11 + 15
-    assert median < max(skills(7))
+    assert max(wild) < min(skills(1))
+    # Fair play wins nearly every meet at level 1, under half at level 7 and hardly any at level 9:
+    # with this seed 20, 8 and 0 of 20 (other seeds gave 20, 9, 0; 20, 10, 2; 20, 8, 0).
+    l1, l7, l9 = page.evaluate("[meets(1, 20), meets(7, 20), meets(9, 20)]")
+    assert l1 >= 18
+    assert l7 <= 12
+    assert l9 <= 4
     # Perfect timing still beats the strongest computer at the top level.
+    page.evaluate("comp = null; ending = null; level = 1; soloComp(); th.t = 99; step(0.001)")
     top = page.evaluate("many(1, () => { press(1); for (let n = 1; n < LAPS; n++) tapAt(n, 0); letGo(0); })")[0]
     assert top > max(skills(30)) + 2
     assert page.errors == []
