@@ -142,8 +142,9 @@ high-score lists (#25), then play counts (#26).
   away phone's turns), so a new event gets playing with friends without room code of its own. The
   game keeps its own attempt and drawing. The options are listed at the top of `kisa.js`;
   Pituushyppy v2 is the model. Like `lib/three-r*/`, the folder never changes once published: a
-  fix goes in `yleisurheilu-2/`, used by the next versions. A new meet format (bar heights) may be
-  added beside `kisa.js` as a new file.
+  fix goes in `yleisurheilu-2/`, used by the next versions. The bar-height format (high jump, pole
+  vault) is `korkeus.js` beside it, loaded after `kisa.js` (Korkeushyppy v2). A new format may be
+  added beside them as a new file.
 - `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
