@@ -381,7 +381,7 @@ $('next').addEventListener('click', () => {
   // event's frame in the same page took no taps at all, every time, while the same event after a
   // reload did; a new page for each event is what worked there.
   if (!isNet()) {
-    try { sessionStorage.setItem(NEXT, String(M.at)); } catch (e) {}
+    try { sessionStorage.setItem(NEXT, String(M.at)); sessionStorage.setItem('ai-pelit:_jatkuu', location.pathname); } catch (e) {}
     location.reload();
     return;
   }

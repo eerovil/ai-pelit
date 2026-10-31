@@ -79,3 +79,41 @@ def test_a_plain_reload_still_shows_the_menu_with_the_match_to_go_on(site, conte
     page.click("#cont")
     assert page.inner_text("#bTitle") == "Keihäänheitto · laji 1/2"
     assert page.errors == []
+
+
+def test_a_match_counts_one_play_however_many_events(site, context):
+    plays = []
+    context.route("**/api/plays", lambda route: (plays.append(route.request.post_data), route.fulfill(status=204)))
+    page = open_game(site, context)
+    page.evaluate("picked.splice(0); ['keihas', 'moukari', 'pituushyppy'].forEach(s => picked.push(s)); drawPick()")
+    page.click("#go")
+    for at in range(3):
+        page.wait_for_function(f"window.Ottelu && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === {at}", timeout=10000)
+        finish_event(page)
+        if at < 2:
+            with page.expect_navigation():
+                page.click("#next")
+    assert page.inner_text("#bTitle") == "Lopputulokset"
+    assert len(plays) == 1 and '"game":"ottelu"' in plays[0]
+    # Opening the game again is a new play.
+    page.goto(site.url + URL)
+    page.wait_for_timeout(300)
+    assert len(plays) == 2
+    assert page.errors == []
+
+
+def test_in_a_browser_tab_a_tap_in_the_event_keeps_the_match_full_screen(site, context):
+    page = open_game(site, context)
+    page.evaluate("picked.splice(0); ['keihas', 'moukari'].forEach(s => picked.push(s)); drawPick()")
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    finish_event(page)
+    with page.expect_navigation():
+        page.click("#next")
+    page.wait_for_function("window.Ottelu && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
+    # The reload left full screen; the first tap, inside the event, asks for it again.
+    assert page.evaluate("document.fullscreenElement") is None
+    page.mouse.click(180, 300)
+    page.wait_for_function("document.fullscreenElement === document.documentElement", timeout=5000)
+    page.evaluate("document.exitFullscreen()")
+    assert page.errors == []

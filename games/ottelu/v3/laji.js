@@ -14,4 +14,17 @@
     get: function () { return kisa; },
     set: function (v) { kisa = O.patch(v, window); },
   });
+  // v3: play full screen in a browser tab, as back.js does on the match page. A tap in here never
+  // reaches the match page, and after the reload between events every tap is in here; the tap
+  // lets the match page ask for full screen too.
+  var root = parent.document.documentElement;
+  function fullScreen() {
+    if (parent.document.fullscreenElement || !root.requestFullscreen) return;
+    if (parent.matchMedia && parent.matchMedia('(display-mode: fullscreen)').matches) return;
+    var asked = root.requestFullscreen({ navigationUI: 'hide' });
+    if (asked && asked.catch) asked.catch(function () {});
+  }
+  ['pointerup', 'touchend', 'click'].forEach(function (type) {
+    window.addEventListener(type, fullScreen, { capture: true, passive: true });
+  });
 })();
