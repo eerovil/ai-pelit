@@ -569,28 +569,52 @@ function seedMaps() {
     if (s.known[c.id]) s.heard[c.id] = 1;
     if (s.flags[c.id]) { s.heard[c.id] = s.seen[c.id] = 1; chartSee(c.x, c.y, 80); }
   }
-  chartSee(sub.x, sub.y, 60);
+  chartSee(sub.x, sub.y, 22);
   G.mapNew = true;
 }
-// Every 0.1 s on the host (or alone): what SISU, each diver and each walker reaches goes on the chart; every lamp in
-// the iceberg maps the walls it lights; contacts within the sonar's hearing are heard, and those close by seen.
+// Every 0.1 s on the host (or alone): what the lamps light goes on the chart — SISU's glow and beam, each diver's —
+// and walkers on the ice see round them in the daylight; every lamp in the iceberg maps the walls it lights. Contacts
+// within the sonar's hearing are heard; one is seen only when a lamp actually lights it with nothing in between.
 function mapStep() {
-  const s = G.s, eyes = [[sub.x, sub.y, 60, 45]];
+  const s = G.s, f = sub.face >= 0 ? 1 : -1, L = LAMP[s.up.lamp];
+  // [x, y, beam direction, beam reach, glow, beam half-width]
+  const lamps = [[sub.x, sub.y, 0, 0, 22, 0], [sub.x + f * 14, sub.y + 0.5, f > 0 ? 0.12 : Math.PI - 0.12, 60 * L, 0, 0.42]];
+  const walkers = [];
   const mark = d => {
-    eyes.push([d.x, d.y, 25, 16]);
-    if (d.x > 2078 && d.x < 2424 && d.y < 206 && pip(d.x, d.y, BERG.poly)) { const l = lampOf(d); lampPoly(l[0], l[1], l[2], 0.55, l[3], l[4], true); }
+    const l = lampOf(d);
+    lamps.push([...l, 0.55]);
+    if (d.x > 2078 && d.x < 2424 && d.y < 206 && pip(d.x, d.y, BERG.poly)) lampPoly(l[0], l[1], l[2], 0.55, l[3], l[4], true);
   };
   if (G.mode === 'dive') mark(diver);
-  if (G.mode === 'ice') eyes.push([walker.x, walker.y, 40, 30]);
+  if (G.mode === 'ice') walkers.push(walker);
   if (net) for (const o of Object.values(net.others)) {
     if (o.mode === 'dive') mark(o);
-    else if (o.mode === 'ice') eyes.push([o.x, o.y, 40, 30]);
+    else if (o.mode === 'ice') walkers.push(o);
   }
-  for (const [x, y, r] of eyes) chartSee(x, y, r);
+  for (const l of lamps) chartLamp(l);
+  for (const w of walkers) chartSee(w.x, w.y, 40);
   for (const c of contacts()) {
     if (!s.heard[c.id] && Math.hypot(c.x - sub.x, c.y - sub.y) < 1000) { s.heard[c.id] = 1; G.mapNew = true; }
-    if (!s.seen[c.id] && eyes.some(([x, y, , r]) => Math.hypot(c.x - x, c.y - y) < r + c.r)) { s.seen[c.id] = s.heard[c.id] = 1; G.mapNew = true; }
+    if (s.seen[c.id]) continue;
+    const near = (x, y) => c.box ? [Math.max(c.box[0], Math.min(c.box[2], x)), Math.max(c.box[1], Math.min(c.box[3], y))] : [c.x, c.y];
+    if (lamps.some(l => lampSees(l, ...near(l[0], l[1]))) || walkers.some(w => Math.hypot(c.x - w.x, c.y - w.y) < 30 + c.r)) {
+      s.seen[c.id] = s.heard[c.id] = 1; G.mapNew = true;
+    }
   }
+}
+// A lamp's lit footprint on the chart: its glow, and squares along its beam as wide as the beam is there.
+function chartLamp([x, y, mid, len, near, half]) {
+  if (near) chartSee(x, y, near);
+  for (let d = 10; d <= len; d += 10) chartSee(x + Math.cos(mid) * d, y + Math.sin(mid) * d, Math.max(3, d * Math.tan(half) * 0.8));
+}
+// Does the lamp light the point, with nothing solid between them? (The last 1.5 m is the thing itself.)
+function lampSees([x, y, mid, len, near, half], px, py) {
+  const d = Math.hypot(px - x, py - y);
+  let a = Math.atan2(py - y, px - x) - mid;
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  if (!(d <= near || (d <= len && Math.abs(a) <= half))) return false;
+  const k = d > 1.5 ? 1 - 1.5 / d : 0;
+  return sightTo(x, y, x + (px - x) * k, y + (py - y) * k);
 }
 
 // ---------- geometry ----------
@@ -657,7 +681,7 @@ function itemById(id) { return String(id).startsWith('kala:') ? { id, k: 'kala' 
 function contacts() {
   // v9: `r` is how big it is, for seeing it up close; `spot` is where the autopilot takes SISU for it.
   const list = SITES.map(s => ({ id: s.id, kind: s.kind, name: s.name, x: s.x + s.w * C / 2, y: s.y + s.h * C / 2,
-    r: Math.max(s.w, s.h) * C / 2, spot: s.spot }));
+    r: Math.max(s.w, s.h) * C / 2, box: [s.x, s.y, s.x + s.w * C, s.y + s.h * C], spot: s.spot }));
   for (const b of [BERG_SITE, BERG_EAST]) list.push({ id: b.id, kind: b.kind, name: b.name, x: b.x, y: b.y, r: 6, spot: b.spot });
   HOLES.forEach((h, n) => list.push({ id: 'railo' + n, kind: 'RAILO JÄÄSSÄ', name: 'Railo', x: holeMid(n), y: ICE_Y, r: 17,
     spot: [holeMid(n), SURF] }));

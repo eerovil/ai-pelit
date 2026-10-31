@@ -226,7 +226,8 @@ def test_a_contact_is_heard_then_known_then_seen(site, browser):
     page.evaluate("sub.x = 1000; sub.y = 150; doPing(); run(() => true, 0.3)")
     assert page.evaluate(know) == 2
     # Up close, in SISU's lamp, it is seen: its name.
-    page.evaluate("sub.x = 1150; sub.y = 200; run(() => true, 0.3)")
+    page.evaluate("const s = SITES.find(s => s.id === 'polaris'); sub.x = s.x - 30; sub.y = s.y + 6; sub.dir = sub.face = 1;"
+                  " run(() => true, 0.3)")
     assert page.evaluate(know) == 3
     inside(page)
     walk(page, "kartta")
@@ -240,6 +241,24 @@ def test_a_contact_is_heard_then_known_then_seen(site, browser):
     page.mouse.click(x, y)
     assert page.inner_text("#pickName") == "Polaris"
     assert "m SISUsta" in page.inner_text("#pickTxt")
+    assert page.errors == []
+
+
+def test_only_what_a_lamp_lights_goes_on_the_chart_and_a_contact_astern_is_not_seen(site, browser):
+    page = open_game(site, browser)
+    v4.new_game(page)
+    # SISU faces east without pinging: the sea 60 m ahead is on the chart, the sea 60 m astern is not.
+    page.evaluate("sub.x = 700; sub.y = 60; sub.dir = sub.face = 1; chartSeen.fill(0); run(() => true, 0.3)")
+    sq = "(x, y) => chartSeen[Math.floor((x - CH.x0) / CH.s) + Math.floor((y - CH.y0) / CH.s) * CH.w]"
+    assert page.evaluate(f"({sq})(sub.x + 14 + 50, sub.y)") == 1
+    assert page.evaluate(f"({sq})(sub.x - 60, sub.y)") == 0
+    # A known wreck 40 m astern, out of the beam and the glow, stays known; facing it, the beam shows it.
+    page.evaluate("""(() => { const s = SITES.find(s => s.id === 'polaris'); G.s.known.polaris = G.s.heard.polaris = 1;
+      sub.x = s.x + s.w * C + 40; sub.y = s.y + 4; sub.dir = sub.face = 1; run(() => true, 0.5); })()""")
+    know = "knowOf(contacts().find(c => c.id === 'polaris'))"
+    assert page.evaluate(know) == 2
+    page.evaluate("sub.dir = sub.face = -1; run(() => true, 0.5)")
+    assert page.evaluate(know) == 3
     assert page.errors == []
 
 
