@@ -3,10 +3,11 @@
 How a field event's version uses the shared athletics library (#165): the game does the attempt
 itself (the run-up, the throw or the jump, the drawing), the library runs everything around it:
 the field of twelve, whose turn it is, the standings and the results board, the saves, the end of
-the meet, and playing it with friends through `rooms.js`. First users: Pituushyppy v2, Keihäänheitto v4, Moukarinheitto v2, Korkeushyppy v2. The folder is
+the meet, and playing it with friends through `rooms.js`. First users: Pituushyppy v2, Keihäänheitto v4, Moukarinheitto v2, Korkeushyppy v2, Seiväshyppy v2. The folder is
 frozen once published, like three.js: a change goes in the next folder. `yleisurheilu-2/` (#176,
 first user Pituushyppy v5) adds the medal ceremony at the end of the meet; the next change goes in
-`yleisurheilu-3/`.
+`yleisurheilu-3/`. The bar-height format is still only in `yleisurheilu-1/` (Korkeushyppy and
+Seiväshyppy add it to `yleisurheilu-2/` when they move to the ceremony).
 
 ```mermaid
 flowchart TD
@@ -18,7 +19,7 @@ flowchart TD
   end
   subgraph Kirjasto[public/lib/yleisurheilu-2/kisa.js]
     K1[meet: 12 kilpailijaa, tietokone täyttää]
-    K2[Muoto: rounds 3 + 3 kierrosta tai heights rima nousee]
+    K2[Muoto: rounds 3 + 3 kierrosta]
     K3{Kenen vuoro?}
     K4[Tietokone tekee suorituksensa heti]
     K5[Tulos kirjataan kerran, seq]
@@ -28,6 +29,8 @@ flowchart TD
     K8[Huone: isäntä vetää kisaa, välittää suoritukset]
   end
   G1 --> K1 --> K2 --> K3
+  K1 -. Korkeus, Seiväs: vielä v1 .-> H1[yleisurheilu-1/korkeus.js: heights, rima nousee]
+  H1 --> K3
   K3 -- Tietokone tai poissa oleva --> K4 --> K3
   K3 -- Tämä puhelin --> G2
   K3 -- Kaveri --> G3
@@ -43,7 +46,7 @@ flowchart TD
   class G1,G2,G4 blue
   class G3,K8 violet
   class K3 amber
-  class K1,K2,K4,K5 teal
+  class K1,K2,K4,K5,H1 teal
   class K6,K7,K9 green
 ```
 
@@ -58,7 +61,8 @@ flowchart TD
 ## Boxes
 
 - **meet: 12 kilpailijaa, tietokone täyttää**: `AiPelitKisa.meet(opts)` in `public/lib/yleisurheilu-2/kisa.js` (`yleisurheilu-1/kisa.js` for the versions made before #176, the same but without the ceremony), loaded with a classic `<script>` after `rooms.js`. The game gives its slug (save keys), the computer's names (`foes`), its skill by level (`skill`, `spread`, `jitter`), how a computer turn goes (`cpu`), and hooks for a new turn (`turn`), a cleared turn (`clear`), the menu (`menu`) and its live messages (`live`, `watch`). The meet is `K.comp`, plain numbers, the same shape as the v1 games' (so a meet left unfinished in v1 goes on in v2).
-- **Muoto: rounds 3 + 3 kierrosta tai heights rima nousee**: `AiPelitKisa.rounds()`: the throws and the long jump. Rounds 1–3 in a drawn order, then the best eight three more, the last first; the standings by the best mark, then the second best. The bar-height format for the high jump and the pole vault is `AiPelitKisa.heights()` in `yleisurheilu-1/korkeus.js` (Korkeushyppy v2), for now only beside v1's `kisa.js`: `yleisurheilu-2/` has no `korkeus.js` yet, and the Korkeus and Seiväs versions that move to the ceremony add it there in their own pull requests (#176): the bar rises through the game's `heights(level)`, three attempts per height in the drawn order, passes, three failures in a row out, the last one in who leads may stop, the countback, and its own board (the attempts at this height; at the end the failures that settle a tie). The computer's start height and passes come from the game's `plan(t, comp)`.
+- **Muoto: rounds 3 + 3 kierrosta**: `AiPelitKisa.rounds()` in `yleisurheilu-2/kisa.js`: the throws and the long jump. Rounds 1–3 in a drawn order, then the best eight three more, the last first; the standings by the best mark, then the second best.
+- **yleisurheilu-1/korkeus.js: heights, rima nousee**: the bar-height format for the high jump and the pole vault, `AiPelitKisa.heights()`, used with v1's `kisa.js` (Korkeushyppy v2, Seiväshyppy v2). `yleisurheilu-2/` has no `korkeus.js` yet: the Korkeus and Seiväs versions that move to the ceremony add it there in their own pull requests (#176). The bar rises through the game's `heights(level)`, three attempts per height in the drawn order, passes, three failures in a row out, the last one in who leads may stop, the countback, and its own board (the attempts at this height; at the end the failures that settle a tie). The computer's start height and passes come from the game's `plan(t, comp)`.
 - **Kenen vuoro?**: `advance()` and `follow()` in the library: the computer's turns up to the next player on a phone, then `opts.turn(t, mine, seq)` once per turn, where the game sets up its own attempt (`th`).
 - **Tietokone tekee suorituksensa heti**: `opts.cpu(t, comp)`; also for a phone that is away after the host's "Jatka ilman heitä" (`R.on('continue')`), until it is back (`R.on('back')`).
 - **Tulos kirjataan kerran, seq**: `K.report(seq, mark)`: alone or on the host it is recorded at once (`take()`), a guest sends `res`; the host takes it only from the phone whose turn it is and only for the turn now (`seq`), saves an unfinished meet alone (`kesken`) and sends the meet to every phone (`c`).

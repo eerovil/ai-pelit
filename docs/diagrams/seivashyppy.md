@@ -1,6 +1,11 @@
 # Seiväshyppy: one vault and one meet
 
-How Seiväshyppy plays (v1). A meet has twelve vaulters: the player and eleven computer vaulters
+How Seiväshyppy plays (v1; v2 plays the same, with the meet, the results board, the saves and the
+room handling from the shared athletics library's bar-height format, `public/lib/yleisurheilu-1/korkeus.js`,
+see `yleisurheilu-kirjasto.md`: there a vaulter's attempts are `rec` per height, failures in a row `run`, the
+computer's start `first`, a stop `S`; v2 also has Keihäänheitto v3's buttons, the plant a full-width bar above
+the two feet with a gap that does nothing, and the running knee bends the right way, #170). A meet left unfinished is shared both ways: v2 reads v1's saved meet, and saves its own with v1's
+fields beside it (`keepForV1()`), so v1 can go on with it too. A meet has twelve vaulters: the player and eleven computer vaulters
 alone, or 2–8 phones in a room with the computer filling the rest. The bar starts at the level's
 first height and rises 10 cm at a time. At each height everyone still trying takes a first attempt
 in a drawn order, then those who failed a second, then a third. Anyone may pass a height, even after
@@ -22,7 +27,8 @@ flowchart TD
   P -- Lopeta kisa, voittaja yksin --> NX
   P -- Juokse --> R[Vauhdinotto: vasen, oikea vuorotellen]
   R --> PL{Istuta vihreällä alueella?}
-  PL -- Liian aikaisin, myöhään tai ei lainkaan --> X[X: läpijuoksu]
+  PL -- Painallus kaukana alueesta --> R
+  PL -- Hieman liian aikaisin, myöhään tai ei lainkaan --> X[X: läpijuoksu]
   PL -- Kyllä --> B[Seiväs taipuu: pidä pohjassa, jalat ylös]
   B --> SL{Vauhtia tarpeeksi?}
   SL -- Ei --> X
@@ -63,9 +69,9 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/seivashyppy/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`), the menu shows its first height; "Jatka kisaa (rima N m)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's attempts); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella**: `newComp()`: the players, then computer vaulters up to twelve (`FIELD`), each with a skill around `base(level)` (4,00 m at level 1, 20 cm more per level up to 5,90 m); the first height is 80 cm under it (`h0Of()`), the bar then rises `STEP_H` (10 cm). `cpuPlan()` picks where each computer vaulter comes in (50–80 cm under its skill) and a few heights it passes. The order (`order`) is drawn once.
-- **Tulostaulu: rima, tämän korkeuden merkinnät, paras**: `drawBoard()`, shown for 3.5 s (`BOARD_T`) before each player's attempt; alone a tap skips it. Each row shows the place, the marks at this height (O, X, - for a pass; "ulos" when out) and the best height; "NM" (no mark) before any. The foot line says who is next and how many attempts they have left (`TRIES - cons`).
-- **Kenen vuoro?**: `advance()` makes every computer attempt up to the next player on a phone; a round at a height is `comp.q`, the vaulters still `trying()` there, in the drawn order. `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
+- **Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella**: `newComp()` (v2: `meet()` and `heights()` in the library, with `heightsFor()` and `cpuPlan()` from the game): the players, then computer vaulters up to twelve (`FIELD`), each with a skill around `base(level)` (4,00 m at level 1, 20 cm more per level up to 5,90 m); the first height is 80 cm under it (`h0Of()`), the bar then rises `STEP_H` (10 cm). `cpuPlan()` picks where each computer vaulter comes in (50–80 cm under its skill) and a few heights it passes. The order (`order`) is drawn once.
+- **Tulostaulu: rima, tämän korkeuden merkinnät, paras**: `drawBoard()` (v2: `board()` in `korkeus.js`, as in Korkeushyppy v2), shown for 3.5 s (`BOARD_T`) before each player's attempt; alone a tap skips it. Each row shows the place, the marks at this height (O, X, - for a pass; "ulos" when out) and the best height; "NM" (no mark) before any. The foot line says who is next and how many attempts they have left (`TRIES - cons`).
+- **Kenen vuoro?**: `advance()` (v2: in `korkeus.js`, rounds at a height by `att`, not a queue) makes every computer attempt up to the next player on a phone; a round at a height is `comp.q`, the vaulters still `trying()` there, in the drawn order. `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone hyppää heti**: `cpuTry()`: clears when its skill plus a scatter of 13 cm reaches the bar; a run-through one time in twenty. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`, from the height it is at) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
 - **Hyppää vai ohita?**: before the first foot tap the "⏭ Ohita korkeus" button (`passBox`, acts when the finger lifts on it) passes this height, `pass()`; passing the lowest heights is how the player picks the height to start at. Passing after a failure keeps the failure: the next height then has fewer attempts left. The player alone at the top, everyone else out, sees "🏁 Lopeta kisa" instead (`soleWinner()`), and keeps the win.
 - **- ohitettu**: `apply()` with `-`: no attempt, failures in a row unchanged.
@@ -79,6 +85,6 @@ flowchart TD
 - **O: yli, ennätys talteen**: `landed()`: a new record (`ennatys`, the highest bar cleared) is saved at once. The vaulter's phone reports the outcome (`res`); the host records it once (`seq`, `record()`) and sends the meet to everyone (`c`).
 - **X: läpijuoksu** and **X: rima putosi**: `outcome()` or `vaultNow()`; `apply()` adds X and counts the failures in a row (`cons`); the third is out (`out`).
 - **Kuka vielä yrittää?**: `advance()`: the next round at this height while someone is still trying there; otherwise the bar rises (`comp.hi`); when everyone is out (or the bar would pass 7 m) the meet is over. With no player on a phone left in, the rest is vaulted at once.
-- **Lopputulokset: korkein rima, uusintalaskenta**: `standings()` and `cmp()`: the highest bar cleared, then fewer failures at it, then fewer failures in all up to it (the countback); still level, the place is shared (`placeOf()`). `over()` and `netEnd()` show them with 🥇🥈🥉 for a few seconds.
+- **Lopputulokset: korkein rima, uusintalaskenta**: `standings()` and `cmp()` (v2: `standings()` and `score()` in `korkeus.js`): the highest bar cleared, then fewer failures at it, then fewer failures in all up to it (the countback); still level, the place is shared (`placeOf()`). `over()` and `netEnd()` show them with 🥇🥈🥉 for a few seconds.
 - **Ennätys, tuloslista, voitosta seuraava taso**: `netEnd()` saves `kisat`, and alone a first place adds `voitot` and the next level (`taso`); the meet's best height goes to the high-score list with `AiPelitScores.submit()` (`seivashyppy` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: the host sends the results with `R.deliver()`; each phone saves its own meet once (`R.once()`), shows its place and the top eight in the room (`afterEnd()`, `R.note()`, `R.backToRoom()`).

@@ -79,7 +79,9 @@ def test_alone_a_tap_finishes_the_ceremony_and_the_next_leaves_it(site, context)
     win_meet(page)
     page.evaluate("step(1)")
     page.mouse.click(180, 400)
-    assert page.evaluate("K.ending.t") == page.evaluate("AiPelitKisa.PODIUM_DONE")
+    # At the end of the ceremony (an animation frame may have run since the tap).
+    done = page.evaluate("AiPelitKisa.PODIUM_DONE")
+    assert done <= page.evaluate("K.ending.t") < done + 0.5
     assert page.is_hidden("#menu")
     page.mouse.click(180, 400)
     page.evaluate("step(0.01)")
