@@ -57,6 +57,13 @@
       "note": "Voimistelijalle voi valita asun, myös Halloween-asuja: kurpitsa, noita, haamu, luuranko, vampyyri ja muumio.",
       "request": "Kaikkiin peleihin, joissa voisi olla järkevää olla erilaisia asuja. Voisi tehdä asuvalinta. Ja. Nyt kun on Halloween, niin voisi olla Halloween-asuja sitten tänään saatavilla ja muulloinkin.",
       "issue": "eerovil/ai-pelit#158"
+    },
+    {
+      "n": 9,
+      "date": "2026-10-31",
+      "note": "Pistetasot loppuvat 12,0:aan (taso 18:n jälkeen suoraan tasolle 21), kiinniotto ei enää lisää vauhtia, ja sarjan D-pisteet näkyvät koko ajan.",
+      "request": "Palautteista (#198):\n\n1. **Pistetasot loppuvat 12,0:aan.** Tasot 14–18 pysyvät ennallaan (10,8 … 12,0), mutta pistetasot 19 (12,3) ja 20 (12,6) poistetaan: tason 18 jälkeen siirrytään suoraan tasolle 21 (uudet tehtävät). Pelaaja, jonka tallennettu taso on 19 tai 20, jatkaa tasolta 21. Tallennettu taso tarkoittaa muuten samaa kuin ennenkin.\n2. **Bugi kiinniotossa:** tietyssä kulmassa tangosta kiinni otettaessa pyörimisnopeus on todella kova (voimistelija tekee jättikiertoja eteen yksi toisensa perään). Etsi syy kiinnioton heilahduslaskusta ja korjaa niin, ettei kiinniotto lisää vauhtia. Testi, joka ottaa kiinni monesta kulmasta.\n3. **Vaikeuspisteet näkyviin jo sarjan aikana:** nykyisen sarjan D-pisteet (esim. \"D 1,8\") näkyvät koko ajan, ei vasta lopussa.",
+      "issue": "eerovil/ai-pelit#199"
     }
   ]
 }
