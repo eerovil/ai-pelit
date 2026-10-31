@@ -66,8 +66,9 @@ def test_the_medals_are_hung_bronze_silver_gold_and_chime(site, context):
     # Played through, one chime per medal (the gold has two notes).
     page.evaluate("K.ending.t = 0; chimes = []")
     page.evaluate("for (let i = 0; i < 6.5 * 60; i++) step(1 / 60)")
-    page.wait_for_function("chimes.length >= 4", timeout=2000)
-    assert page.evaluate("chimes") == [523, 659, 784, 1047]
+    # Only the ceremony's notes: a record jump's own two notes come a moment late and may land here.
+    page.wait_for_function("chimes.includes(1047)", timeout=2000)
+    assert [f for f in page.evaluate("chimes") if f in (523, 659, 784, 1047)] == [523, 659, 784, 1047]
     assert page.evaluate("K.ending !== null")
     assert page.is_hidden("#menu")
     assert page.errors == []
