@@ -44,6 +44,7 @@ export const GAMES = {
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
   pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
   moukari: { order: 'high', boards: /^main$/ }, // longest hammer throw in metres
+  seivashyppy: { order: 'high', boards: /^main$/ }, // highest pole vault cleared in metres
 };
 
 const ID = /^[a-f0-9]{32}$/;
