@@ -16,6 +16,13 @@
       "note": "Pelaa kuten ennen, mutta kisa, tulostaulu ja kavereiden kanssa pelaaminen tulevat nyt yhteisestä yleisurheilukirjastosta.",
       "request": "Yleisurheilupelien yhteinen koodi omaksi kirjastoksi, moninpeli mukaan lukien. Toive: yhteinen yleisurheilukirjasto, jota uudet versiot käyttävät; moninpeli kirjastoon, niin että kaikki lajit pelaavat kavereiden kanssa samalla tavalla; jokaisesta lajista uusi versio, joka käyttää kirjastoa ja pelaa kuten nyt.",
       "issue": "eerovil/ai-pelit#165"
+    },
+    {
+      "n": 3,
+      "date": "2026-10-31",
+      "note": "Kisan lopuksi palkintojenjako: kolme parasta nousee korokkeelle, mitalit ripustetaan kaulaan, ja koroke jää näkyviin, kunnes napautat sen pois.",
+      "request": "165 follow up: podium cutscene, mitalien ripustus kaulaan. Podium saisi jäädä siihen kunnes poistuu. Tämä kaikkiin kisoihin",
+      "issue": "eerovil/ai-pelit#176"
     }
   ]
 }
