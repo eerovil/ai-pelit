@@ -1,6 +1,6 @@
 # Moukarinheitto: one throw and one meet
 
-How Moukarinheitto plays (v1; v2 plays the same, with the meet, the results board, the saves and the
+How Moukarinheitto plays (v1; v3 (#176) ends the meet with the medal ceremony from `yleisurheilu-3`, the podium staying until a tap; v2 plays the same, with the meet, the results board, the saves and the
 room handling from the shared athletics library, see `yleisurheilu-kirjasto.md`). A meet has twelve throwers: the player and eleven computer
 throwers alone, or 2–8 phones in a room with the computer filling the rest. Everyone throws three
 times in a drawn order; the best eight throw three more, the last in the standings first. The
@@ -35,14 +35,15 @@ flowchart TD
   X --> NX
   NX -- Ei --> T
   NX -- Kolmas kierros --> CUT[8 parasta jatkaa, viimeisestä alkaen]
-  NX -- Kuudes kierros --> END[Lopputulokset ja mitalit]
+  NX -- Kuudes kierros --> END[Palkintojenjako ja lopputulokset]
   CUT --> T
   END --> SV[Ennätys, tuloslista, voitosta seuraava taso]
-  SV --> M
-  END --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
+  END --> TAP{Koroke jää: napautus?}
+  TAP -- Yksin --> M
+  TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,S,I,T,UP,DN blue
   class CPU,WT violet
-  class Q,LP,N5,SEC,NX amber
+  class Q,LP,N5,SEC,NX,TAP amber
   class K,D,CUT teal
   class X rose
   class END,SV,RM green
@@ -60,7 +61,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/moukari/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's throws); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 heittäjää, arvottu järjestys**: `newComp()` (v2: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js`): the players, then computer throwers up to twelve (`FIELD`), each with a skill around `base(level)` metres (48 m at level 1, 4 m more per level up to 76 m); the order of rounds 1–3 is drawn once (`order0`).
+- **Kisa: 12 heittäjää, arvottu järjestys**: `newComp()` (v2: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js`, from v3 `yleisurheilu-3/kisa.js`): the players, then computer throwers up to twelve (`FIELD`), each with a skill around `base(level)` metres (48 m at level 1, 4 m more per level up to 76 m); the order of rounds 1–3 is drawn once (`order0`).
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()` (v2: the library's `K.drawBoard()`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best throw, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` (v2: the library's) throws for every computer thrower up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone heittää heti**: `cpuMark()`: the skill plus a scatter of 3 m, a foul one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's throws to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
@@ -75,6 +76,7 @@ flowchart TD
 - **Kaverin heitto näkyy, sama moukari lentää**: the thrower's phone sends where its hammer is twelve times a second (`p`: the angle gone round, the speed) and the release (`rel`, rounded before its own phone throws it, so every phone flies the same throw); the host passes both on, and every phone flies the same hammer with `throwNow()`, landing at the same mark. A foul in the circle goes as `rel` with its reason.
 - **Tulos metreinä kehän sisäreunasta, ennätys talteen**: `flight()` and `landed()`: the mark is the distance from the circle's centre less its radius (1.0675 m), down to the centimetre, as World Athletics measures it; the range comes from the speed (`range()`: out at 42° from 1.6 m with a little air drag, `hammerFly()`, `flySub()`). A new record is saved at once (`ennatys`). The thrower's phone reports it (`res`); the host records it once (`seq`) and sends the meet to everyone (`c`).
 - **8 parasta jatkaa, viimeisestä alkaen**: after round 3 `advance()` keeps the best eight (`final`), each later round in reverse order of the standings. With no player on a phone left in the final the rest is thrown at once.
-- **Lopputulokset ja mitalit**: `over()` and `netEnd()` (v2: the library's `over()`, `end()` and `K.step()`): the standings with 🥇🥈🥉, shown for a few seconds.
+- **Palkintojenjako ja lopputulokset**: `over()` and `netEnd()` (v2: the library's `over()`, `end()` and `K.step()`): before v3 the standings with 🥇🥈🥉, shown for a few seconds. From v3 (#176) the medal ceremony, `K.drawPodium()` at the end of `draw()` over the whole screen: the top three on the podium in the game's kit (`look`), an official hangs their medals with a chime each (`chime`), and the final standings under it.
+- **Koroke jää: napautus?**: from v3 nothing leaves the podium by itself: the tap handler calls `K.skip()` alone and with friends; a tap during the ceremony finishes it (alone only), a tap after it shows the menu, or `R.backToRoom()` in a room, each phone by its own tap. Before v3 this came by itself after a few seconds.
 - **Ennätys, tuloslista, voitosta seuraava taso**: `netEnd()` saves `kisat`, and alone a win adds `voitot` and the next level (`taso`); the meet's best throw goes to the high-score list with `AiPelitScores.submit()` (`moukari` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: the host sends the results with `R.deliver()`; each phone saves its own meet once (`R.once()`), shows its place and the top eight in the room (`afterEnd()`, `R.note()`, `R.backToRoom()`).
