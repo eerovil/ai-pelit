@@ -23,6 +23,13 @@
       "note": "Jalat liikkuvat oikein päin: polvi koukistuu, kun jalka heilahtaa eteen, eikä juoksija enää näytä juoksevan takaperin.",
       "request": "Potuushyppy: jalat animoituu takaperin, eli näyttöä kuin juoksisi taaksepäin. Onko samaa muissa yleisurheilupeleissä? Pitää korjata",
       "issue": "eerovil/ai-pelit#170"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-31",
+      "note": "Hyppää-nappi on ylempänä ja kauempana jalkanapeista, ja niiden välinen rako kuuluu jalkanappeihin, joten juostessa ei enää hypätä vahingossa.",
+      "request": "Hyppynappi tulee siirtää vielä ylemmäs, tai ainakin sen hitbox ylemmäs. Vahingossa tulee painettua juostessa",
+      "issue": "eerovil/ai-pelit#177"
     }
   ]
 }
