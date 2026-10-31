@@ -31,6 +31,14 @@ THUMB_SIZE = (360, 480)
 # A shared library a version loads from public/lib/ (#99), e.g. '../../../lib/three-r187/three.module.js'.
 LIB_REF = re.compile(r"""['"]\.\./\.\./\.\./lib/([^'"?#]+)""")
 LIB_DIR = ROOT / "public" / "lib"
+# Shelf groups (#153): a game.json with "group": "<key>" shows inside that group's card, and the
+# group's page lists its games. A key is a shelf address like a game's slug, so no game may take it.
+GROUPS = {
+    "yleisurheilu": {
+        "title": "Yleisurheilu",
+        "description": "Juoksut, hypyt ja heitot, jokainen omana pelinään.",
+    },
+}
 
 
 def webp_size(data: bytes) -> tuple[int, int] | None:
@@ -103,10 +111,14 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path =
     extra = folders - {f"v{v['n']}" for v in versions}
     if extra:
         raise GameError(f"{slug}: folders without a game.json version: {', '.join(sorted(extra))}")
+    group = meta.get("group")
+    if group is not None and group not in GROUPS:
+        raise GameError(f"{slug}: game.json names an unknown group {group!r} (GROUPS in scripts/build.py)")
     return {
         "slug": slug,
         "title": meta["title"],
         "description": meta["description"],
+        **({"group": group} if group else {}),
         # A new picture gets a new name, so no phone keeps showing an old one from its cache.
         "thumb": f"thumbs/{slug}-{hashlib.sha256(thumb.read_bytes()).hexdigest()[:8]}.webp",
         "versions": [
@@ -120,7 +132,12 @@ def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     games = [load_game(d, lib_dir=lib_dir) for d in sorted(games_dir.iterdir()) if d.is_dir()]
     # Newest version first, so a fresh game or version is at the top of the shelf.
     games.sort(key=lambda g: (g["versions"][-1]["date"], g["slug"]), reverse=True)
-    return {"games": games}
+    taken = {g["slug"] for g in games} & set(GROUPS)
+    if taken:
+        raise GameError(f"{', '.join(sorted(taken))}: a game's slug is a group's address (GROUPS in scripts/build.py)")
+    used = {g["group"] for g in games if "group" in g}
+    groups = [{"slug": k, **v} for k, v in GROUPS.items() if k in used]
+    return {"games": games, "groups": groups}
 
 
 def build(games_dir: Path, public_dir: Path, out_dir: Path) -> dict:

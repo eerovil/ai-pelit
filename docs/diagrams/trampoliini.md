@@ -6,6 +6,8 @@ button to spin tucked, lets go to stretch out and spot the landing, and taps �
 v3 a tilted landing slides the jumper sideways on the next bounce. Each level has its own size of trampoline and a list of tricks; the level is cleared when
 every trick is done before three hearts run out.
 
+From v6 (#158) the jumper wears the outfit picked under "👕 Asu" in the menu (`figure()` in `games/trampoliini/v6/index.html`; the picker is `asut.md`).
+
 ```mermaid
 flowchart TD
   A[Taso: trampoliini ja temppulista] --> B[Matolla: napauta, v2: päästä irti, pohjalla]

@@ -7,6 +7,8 @@ finger tucks it to spin faster, and a sideways flick adds a half twist. Hands th
 open catch it again (a release move; from v4 the arms turn towards a bar within reach first), and v2 adds a low bar in front, as on the women's uneven bars, to fly to and from; otherwise the routine ends on the mat, where the landing is judged. The score is
 the Olympic one: D (the difficulty of each different element) plus E (10 less the deductions).
 
+From v8 (#158) the gymnast wears the outfit picked under "👕 Asu" at the top of the screen before the first touch and on the score board (`figure()` in `games/voimistelu/v8/index.html`; the picker is `asut.md`).
+
 ```mermaid
 flowchart TD
   A[Roikkuu tangossa, pieni heilahdus] --> B[Sormi alhaalla: vartalo vetäytyy, heilahdus kasvaa]
