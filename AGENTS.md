@@ -39,8 +39,15 @@ start a new game or version.
    so a published version cannot change by accident and needs no tools to keep working. A library
    a game needs is copied into its folder as one file, except a shared library under
    `public/lib/` (three.js, #99, Eero's choice), which games load from there and never copy; see
-   "3D games". Think again only when a single game passes
-   about 2000 lines, or the same code is copied into a third game; then propose it as its own Work.
+   "3D games". Think again only when the same code is copied into a third game; then propose it
+   as its own Work.
+   A version past about 2000 lines is split into a few plain files in its own folder (#161, Eero's
+   choice, first Last Signal v9): `index.html` loads them with classic
+   `<script src="world.js"></script>` tags, so their functions stay global for the tests. Still no
+   build step: each new version copies the whole folder, and an agent reads only the files its
+   change touches. Keep a `lib/three` import in `index.html` itself, because `scripts/build.py`
+   and `tests/conftest.py` look for it there. Old versions stay as they are, and none is deleted
+   for being big: phones cache only the versions they open, and git stores each copy as a diff.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip

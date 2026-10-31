@@ -98,6 +98,9 @@ the version that taught it, so you can read the code that fixed it.
   A test that waits on real time is slow and flaky on CI.
 - **Test what a player would complain about**: a level that cannot be passed, a tap that misses,
   a save that is lost, a second round after a finished one, a 390 px phone.
+- **Split a big version into files** once it passes about 2000 lines (#161): `index.html` plus a
+  few plain `.js` files in the same folder, each one part of the game (world, screens, sound),
+  loaded with classic `<script src>` tags. A file you can read whole is one you can change safely.
 - **Play it yourself before you hand it over**, a whole round and a second one, in both
   orientations. Fix what feels wrong even if no test says so.
 
