@@ -151,6 +151,41 @@ def test_a_groups_game_opened_from_a_link_goes_up_to_the_group(site, context):
     page.wait_for_selector('.card[data-slug="yleisurheilu"]')
 
 
+@pytest.mark.parametrize("width", [360, 390])
+def test_a_group_page_fits_a_small_phone(site, context, width):
+    for slug in ("pitka", "toinen"):
+        make_game(site.games, slug, [game_page("v1")], group="yleisurheilu", title="Hyvin pitkä pelin nimi " + slug)
+    site.build()
+    page = context.new_page()
+    page.set_viewport_size({"width": width, "height": 740})
+    for hash_ in ("", "#/yleisurheilu"):
+        page.goto(site.url + hash_)
+        page.wait_for_selector(".card")
+        assert page.evaluate("document.documentElement.scrollWidth") <= width
+
+
+def test_a_game_joining_a_group_moves_into_its_card_on_an_open_shelf(site, context):
+    make_game(site.games, "keihas", [game_page("v1")], group="yleisurheilu")
+    make_game(site.games, "hyppy", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    page.wait_for_selector('.card[data-slug="hyppy"]')
+    # A reload on the group's page keeps it.
+    page.click('.card[data-slug="yleisurheilu"] .card-main')
+    page.wait_for_url(f"{site.url}#/yleisurheilu")
+    page.reload()
+    page.wait_for_selector('.card[data-slug="keihas"]')
+    assert page.locator("h1").inner_text() == "Yleisurheilu"
+    page.click("a.back")
+    page.wait_for_selector('.card[data-slug="hyppy"]')
+    make_game(site.games, "hyppy", [game_page("v1")], group="yleisurheilu")
+    site.build()
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_selector('.card[data-slug="hyppy"]', state="detached", timeout=10000)
+    assert page.locator('.card[data-slug="yleisurheilu"] .meta').inner_text().startswith("2 peliä")
+
+
 def test_a_ctrl_click_opens_the_link_in_a_new_tab_as_before(site, context):
     make_game(site.games, "pomppu", [game_page("v1")])
     site.build()
