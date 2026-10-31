@@ -29,6 +29,13 @@
       "note": "Korjaus: liian syvällä paine kuluttaa runkoa myös sukelluksen aikana ja SISUn sisällä, ei vain ohjaamossa.",
       "request": "Onko bugi että jos menen liian syvälle ja hyppään ulos aluksesta, runko ei enää menetä elämää",
       "issue": "eerovil/ai-pelit#132"
+    },
+    {
+      "n": 5,
+      "date": "2026-10-31",
+      "note": "Kaverit mukaan: 2–4 puhelinta samassa SISUssa – peli ja tallennus ovat huoneen tekijän, jokainen kävelee ja sukeltaa omana ihmisenään, ruoriin ehtii yksi kerrallaan ja nukkumaan mennään yhdessä.",
+      "request": "Owner's request (voice, 2026-10-31, in the chat of #132): \"Tähän voisi lisätä multiplayerin silleen, että liittyy jonkun toisen peliin. Eli se tallennus olisi tavallaan sen huoneen pitäjän oma tallennus, mutta siihen voisi kaveri tulla vaan auttelemaan.\"\n\nA new version of Last Signal (copy the newest, `games/last-signal/v4/`, to the next free number).\n\n## Owner's choices (asked in chat, 2026-10-31)\n- **Save:** the game and its save are the room host's; friends only come to help (from the request). A friend's own Last Signal save is not touched.\n- **Friend's role:** each friend has their own person inside SISU and on dives: they walk the rooms and swim out through the airlock, collecting finds on the same dive as the host.\n- **Driving:** whoever walks to the control room and takes the helm drives SISU; the others can do other things inside meanwhile.\n- **Players:** the host and up to three friends (2–4 phones).\n\n## Context\n- Shared live rooms: `public/rooms.js` (AGENTS.md \"Live rooms\"): the host runs the round, the others draw it; a \"👥 Pelaa kavereiden kanssa\" button calls `AiPelitRooms.open()`.\n- v3/v4 inside SISU: `crew`, `ROOMS`, `stepCrew()`, `roomActs()`; dives: `startDive()`, `stepDive()`, `endDive()`; diagram `docs/diagrams/last-signal.md`.\n\n## Open questions (for the owner; ask before building)\n1. Two people want the same thing at once (both at the helm, both pressing eat, the radio card): who gets it, and what does the other see?\n2. Air on a dive: does each diver have their own tank, and does a diver who runs out lose only their own haul?\n3. Cards (logs, the radio's story, sleep): shown on every phone, and who closes them?",
+      "issue": "eerovil/ai-pelit#138"
     }
   ]
 }
