@@ -133,17 +133,27 @@ def test_two_thumbs_walk_one_way_and_look_another(site, browser):
     ctx.close()
 
 
-def test_the_whole_field_of_view_fits_on_the_screen(site, browser):
+def test_sight_has_no_length_and_the_screen_shows_more_ahead(site, browser):
     for w, h in [(360, 740), (740, 360)]:
         ctx, page = open_game(site, browser, w, h)
         page.click("#hide")
-        page.evaluate(RUN, 1)
-        # Wherever the player looks, the far end of a clear 12 m view is drawn on the screen.
-        out = page.evaluate("""() => { const o = []; player.x = 15; player.y = 22;
+        page.evaluate(RUN, 11)
+        # Across the open middle of the school yard, 20 m off: seen (v1–v6 saw 10 m).
+        r = page.evaluate("""() => { const o = bots.find(b => b !== seeker && b !== player);
+          player.x = 15; player.y = 22; player.a = Math.PI / 2; o.x = 15; o.y = 42.5; o.ctrl = 'still';
+          return [clearSight(player, o), canSee(player, o)]; }""")
+        assert r[0] == r[1]
+        page.evaluate("() => { loadMap('koulu'); }")
+        r = page.evaluate("""() => { const o = bots.find(b => b !== seeker && b !== player);
+          player.x = 26.5; player.y = 29.5; player.a = Math.PI / 2; o.x = 26.5; o.y = 37.5 + 0; return dist(player, o) > 7 && canSee(player, o); }""")
+        assert r
+        # Wherever the player looks, most of the screen is ahead (unless the yard fits across), and the player stays on it.
+        out = page.evaluate("""() => { loadMap('piha'); const o = []; player.x = 15; player.y = 22;
           for (let k = 0; k < 8; k++) { player.a = k * Math.PI / 4; for (let i = 0; i < 40; i++) draw();
-            const ex = sx(player.x + Math.cos(player.a) * RANGE), ey = sy(player.y + Math.sin(player.a) * RANGE);
-            o.push(ex >= -1 && ex <= innerWidth + 1 && ey >= -1 && ey <= innerHeight + 1); } return [RANGE, o]; }""")
-        assert out[0] == 12 and all(out[1]), out
+            const px = sx(player.x), py = sy(player.y);
+            o.push(px > 40 && px < innerWidth - 40 && py > 40 && py < innerHeight - 40
+              && (Math.cos(player.a) * (innerWidth / 2 - px) + Math.sin(player.a) * (innerHeight / 2 - py)) >= -1); } return o; }""")
+        assert all(out), out
         assert page.errors == []
         ctx.close()
 
@@ -153,16 +163,30 @@ def test_side_vision_shows_only_someone_moving_and_the_seeker_goes_to_look(site,
     r = page.evaluate("""() => { newRound('hide'); for (let i = 0; i < 10.2 * 30; i++) step(1 / 30);
       player.x = 28; player.y = 42; player.st = 'saved';
       const h = bots.find(b => b !== seeker); for (const b of bots) if (b !== seeker && b !== h) b.st = 'saved';
-      // On the open yard, 13 m off to the seeker's side: too far and too wide for the sharp view.
-      seeker.x = 15; seeker.y = 28; seeker.a = 0; seeker.look = 0; seeker.goal = { x: 16, y: 28 }; seeker.path = [];
-      h.x = 21; h.y = 40; h.st = 'hiding'; h.moving = 0;
+      // On the open yard, 9 m off to the seeker's side: too wide for the sharp view.
+      const look = () => { seeker.x = 15; seeker.y = 28; seeker.a = 0; seeker.look = 0; seeker.goal = { x: 16, y: 28 }; seeker.path = []; seeker.heardT = -99; };
+      look(); h.x = 19; h.y = 36; h.st = 'hiding'; h.moving = 0;
       const still = [canSee(seeker, h), glimpses(seeker, h)];
       h.moving = 2;
       const moving = [canSee(seeker, h), glimpses(seeker, h)];
-      seekerBot(seeker, 1 / 30);
-      return [still, moving, seeker.goal]; }""")
+      seekerBot(seeker, 1 / 30); const sneak = seeker.goal;
+      look(); h.moving = 3.7; seekerBot(seeker, 1 / 30);
+      return [still, moving, sneak, seeker.goal]; }""")
     assert r[0] == [False, False] and r[1] == [False, True]
-    assert abs(r[2]["x"] - 21) < 1 and abs(r[2]["y"] - 40) < 1
+    assert r[2]["x"] == 16  # sneaking at the side of its eye goes unnoticed
+    assert abs(r[3]["x"] - 19) < 1 and abs(r[3]["y"] - 36) < 1  # running does not
+    assert page.errors == []
+    ctx.close()
+
+
+def test_far_off_the_seeker_cannot_tell_who_it_is(site, browser):
+    ctx, page = open_game(site, browser)
+    r = page.evaluate("""() => { newRound('seek'); for (let i = 0; i < 10.2 * 30; i++) step(1 / 30);
+      for (const b of bots) { b.ctrl = 'still'; b.x = 28; b.y = 42; }
+      const h = bots[0]; player.x = 15; player.y = 25; player.a = Math.PI / 2; h.x = 15; h.y = 39;
+      step(1 / 30); const far = [canSee(player, h), h.st, unknown(h)];
+      player.y = 30; step(1 / 30); return [far, h.st, unknown(h)]; }""")
+    assert r == [[True, "hiding", True], "spotted", False]
     assert page.errors == []
     ctx.close()
 

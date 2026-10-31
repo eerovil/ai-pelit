@@ -117,10 +117,11 @@ const statsH = Object.assign({ kierrokset: 0, selvisit: 0, jait: 0, hippasit: 0 
 const BASE_POLE = 0.3, BASE_REACH = 1.4;
 const BODY = 0.36;               // a player's radius
 const FOV = 110 * Math.PI / 180; // the field of view, and how far it reaches
-const RANGE = 12, NEAR = 1.3;    // anyone this close is heard and seen, whichever way you look; v7 (#137): 12 m, was 10
-// Side vision (v7, #137): a wider and farther blur around the sharp view. In it one sees only that
+// v7 (#137): sight has no length of its own any more (10 m in v1–v6), only walls and things stop it.
+const RANGE = 60, NEAR = 1.3;    // anyone this close is heard and seen, whichever way you look
+// Side vision (v7, #137): a wider blur around the sharp view. In it one sees only that
 // someone moves there, as a shape with no colour or name; the computer seeker turns to look.
-const WIDE = 200 * Math.PI / 180, FAR = 16, STIR = 1;
+const WIDE = 200 * Math.PI / 180, FAR = RANGE, STIR = 1;
 const BUSH_SEEN = 2.4;           // someone inside a bush is seen only from this close
 const HEAR = 7, LOUD = 2.6;      // running faster than LOUD m/s is heard this far, through walls (v6, #109)
 const SPEED = 4.0, BOT_HIDE = 3.4, BOT_RUN = 3.7, BOT_SEEK = 3.5, BOT_RACE = 3.85, BOT_CHASE = 3.9;
@@ -129,6 +130,8 @@ const SPRINT = 1.5, BREATH = 3, REST = 5;
 // Hippa: a touch is this close; the new "it" waits FREEZE s, and cannot tag back the one who tagged them for NO_BACK s.
 // Piilosta: the seeker must be this close to tell who it is ("Löysin Ainon!"); farther off it is only a shape.
 const FIND = 6;
+// Kirkkis: farther than this one sees someone but cannot tell who it is, so cannot name them (v7: sight has no length).
+const KNOW = 10;
 const TAG = 2 * BODY + 0.2, FREEZE = 1.5, NO_BACK = 3;
 
 // Each map (v6, #109): its size, its base, solid things (which block both walking and sight) and
@@ -578,7 +581,7 @@ function rules() {
       happen(['save', people.indexOf(h)]);
       continue;
     }
-    if (h.st === 'hiding' && canSee(seeker, h)) spot(h);
+    if (h.st === 'hiding' && dist(seeker, h) <= KNOW && canSee(seeker, h)) spot(h);
   }
   // The seeker at the base calls out everyone they have seen.
   const seen = hiders().filter(h => h.st === 'spotted');
@@ -694,7 +697,8 @@ function seekerBot(p, dt) {
   if (p.goal === BASE) p.goal = null;
   if (mode === 'hippa' && itBot(p, dt)) return;
   // A hider heard running out of sight: go and look where the steps were.
-  const heard = hiders().find(h => hears(p, h) || (phase === 'seek' && active(h) && glimpses(p, h)));
+  // Or seen running at the side of its eye, not too far off; someone sneaking there goes unnoticed.
+  const heard = hiders().find(h => hears(p, h) || (phase === 'seek' && active(h) && h.moving > LOUD && dist(p, h) < KNOW && glimpses(p, h)));
   if (heard && !(time - p.heardT < 1.5)) { p.goal = { x: heard.x, y: heard.y }; p.repath = 0; p.look = 0; p.heardT = time; }
   if (p.look > 0) { // Arrived: a look all around.
     p.look -= dt; p.moving = 0; p.a = wrap(p.a + dt * 4.2);
@@ -908,16 +912,16 @@ const sfx = {
 };
 
 // ---------- Drawing ----------
-const LEAD = 3; // metres the camera leads the player's eyes
+const LEAD = 0.45; // how far the camera leads the player's eyes, as a share of half the screen
 let W, H, DPR, S, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, camX = BASE.x, camY = BASE.y;
 function resize() {
   DPR = window.devicePixelRatio || 1;
   W = innerWidth; H = innerHeight;
   c.width = fog.width = W * DPR; c.height = fog.height = H * DPR;
-  // Upright 15 m across and 24 m down (v7, #137: farther than v6's 12 × 19, so the whole field of
-  // view fits); sideways (#95) the same turned, so things are the same size.
+  // Upright 17 m across and 27 m down (v7, #137: farther than v6's 12 × 19); sideways (#95) the same
+  // turned, so things are the same size.
   wide = W > H;
-  S = wide ? Math.min(W / 24, H / 15) : Math.min(W / 15, H / 24); // pixels per metre
+  S = wide ? Math.min(W / 27, H / 17) : Math.min(W / 17, H / 27); // pixels per metre
   const cs = getComputedStyle(document.getElementById('safe'));
   safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
   safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
@@ -1040,6 +1044,8 @@ function wrapText(text, max) {
     .flatMap(l => x.measureText(l).width <= max ? [l] : greedy(l.split(' '), ' '));
 }
 const LINE = 17;
+// The seeking player sees a hider too far off to tell who it is: a ❔, not a name, until closer.
+const unknown = p => seeker === player && mode !== 'hippa' && p.st === 'hiding' && dist(player, p) > (mode === 'piilosta' ? FIND : KNOW);
 function drawBubble(p) {
   x.font = '700 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
   // A long call ("Ainon nimet, Eetun nimet, …") goes on more lines, so it stays on the screen.
@@ -1055,9 +1061,9 @@ function drawBubble(p) {
 function draw() {
   // The camera follows the player but stays over the yard. v7 (#137): it leads a little the way the
   // player looks, so more of the field of view is on the screen, and glides there.
-  // Along each axis it leads as far as the sharp view needs to fit on the screen (more across an upright phone).
+  // Along each axis it leads by nearly half the screen, so most of the screen is ahead of the player.
   const hw = W / 2 / S, hh = H / 2 / S, on = racing() && player.st !== 'count';
-  const lead = h => on ? Math.max(LEAD, RANGE + 0.6 - h) : 0;
+  const lead = h => on ? h * LEAD : 0;
   const tx = WW > 2 * hw ? Math.max(hw, Math.min(WW - hw, player.x + Math.cos(player.a) * lead(hw))) : WW / 2;
   const ty = WH > 2 * hh ? Math.max(hh - 1.5, Math.min(WH - hh + 1.5, player.y + Math.sin(player.a) * lead(hh))) : WH / 2;
   const k = Math.abs(tx - camX) + Math.abs(ty - camY) > 8 ? 1 : 0.12; // a new round or map: jump there
@@ -1111,7 +1117,7 @@ function draw() {
   for (const p of shown) {
     if (p !== player && p.st === 'spotted' && phase !== 'count') label(p, '❗', sy(p.y) - BODY * S - 12, '700 18px system-ui', '#ffd23a');
     if (p.bt > 0) drawBubble(p);
-    else if (p !== player) label(p, p.name, sy(p.y) + BODY * S + 10, '600 11px system-ui', '#fff');
+    else if (p !== player) label(p, unknown(p) ? '❔' : p.name, sy(p.y) + BODY * S + 10, '600 11px system-ui', '#fff');
   }
   if (player.bt > 0 && !shown.includes(player)) drawBubble(player);
   // Words from the seeker are heard even when the seeker is out of sight.
