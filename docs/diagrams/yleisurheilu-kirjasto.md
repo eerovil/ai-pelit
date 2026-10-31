@@ -3,7 +3,7 @@
 How a field event's version uses the shared athletics library (#165): the game does the attempt
 itself (the run-up, the throw or the jump, the drawing), the library runs everything around it:
 the field of twelve, whose turn it is, the standings and the results board, the saves, the end of
-the meet, and playing it with friends through `rooms.js`. First user: Pituushyppy v2. The folder is
+the meet, and playing it with friends through `rooms.js`. First users: Pituushyppy v2, Keihäänheitto v4. The folder is
 frozen once published, like three.js: a change goes in `yleisurheilu-2/`.
 
 ```mermaid
