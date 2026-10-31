@@ -1,4 +1,4 @@
-# Kirkkis: one round of kirkonrotta against the computer
+# Kirkkis: one round of kirkonrotta, piilosta or hippa
 
 How one round of Kirkkis plays (v4, #67). The player either hides or seeks; the other four are
 computer players, or friends' phones. Everyone, the computer players too, sees only their own
@@ -7,16 +7,23 @@ reaches the base first and calls "Ainon nimet!"; a hider who reaches the base fi
 nimet!" and is saved, and once someone has been named that frees everyone: "Kaikki pelastettu!".
 Versions 1–3 called these "Kirkkis Aino!" and "Kirkkis minä!", had no "Kaikki pelastettu!", and
 seeking took 100 s. v6 (#109) adds three more maps to pick from (the yard of v1–v5 is the first),
-and running is heard: steps 👣 show through walls, and the computer seeker goes to look.
+and running is heard: steps 👣 show through walls, and the computer seeker goes to look. v7 (#137)
+adds two more games, plain hide and seek (Piilosta) and tag (Hippa), a sprint, two-thumb steering
+(left walks, right looks), a wider view and blurry side vision.
 
 ```mermaid
 flowchart TD
+  L0[Valitse leikki: Kirkkis, Piilosta tai Hippa] --> K0
   K0[Valitse kenttä: Piha, Koulu, Metsä tai Kirkko] --> A
   A[Valitse: Piiloudu tai Etsi] --> B[Etsijä laskee pesällä silmät kiinni, muut piiloutuvat]
   B --> C[Etsintä alkaa: jokainen näkee vain oman näkökenttänsä]
   C --> D{Näkeekö etsijä piiloutujan?}
   D -- Ei --> E[Etsijä kiertää piilopaikkoja ja katsoo ympärilleen]
   E --> D
+  C --> V[Ohjaus kahdella peukalolla: vasen kävelee, oikea katsoo; pitkä työntö spurttaa ⚡]
+  C --> W{Liikkuuko joku sivunäössä tai kaukana?}
+  W -- Kyllä --> X[Epätarkka hahmo näkyy; tietokone-etsijä menee katsomaan]
+  X --> D
   C --> S{Juokseeko joku lähellä näkymättömissä?}
   S -- Kyllä --> T[Askeleet 👣 kuuluvat; tietokone-etsijä menee katsomaan]
   T --> D
@@ -37,12 +44,23 @@ flowchart TD
   M -- Ei --> C
   M -- Kyllä --> N[Tulos ja tilasto puhelimeen; ensimmäinen nimetty etsii seuraavaksi]
   N --> A
-  class K0,A,N blue
-  class D,G,K,M,P,S amber
-  class B,C,E violet
-  class F,J,L,T teal
-  class I,Q green
-  class H rose
+  B -. Piilosta .-> PA{Näkeekö etsijä piiloutujan alle 6 m:n päästä?}
+  PA -- Kyllä --> PB[Löysin Ainon! Ei pesää eikä kilpajuoksua]
+  PA -- Ei --> PC[Piiloutuja hiipii hiljaa uuteen piiloon]
+  PB --> PD[120 s: piilossa pysyneet selvisivät; ensimmäinen löydetty etsii]
+  PD --> N
+  B -. Hippa .-> HA[Hippa laskee 3 s, muut pakenevat]
+  HA --> HB{Koskeeko hippa jotakuta?}
+  HB -- Kyllä --> HC[Tämä on hippa, laskee 1,5 s; ei takaisinhippaa 3 s]
+  HC --> HB
+  HB -- Aika loppui, 90 s --> HD[Joka on hippa, hävisi ja on hippa seuraavaksi]
+  HD --> N
+  class L0,K0,A,N blue
+  class D,G,K,M,P,S,W,PA,HB amber
+  class B,C,E,V,HA violet
+  class F,J,L,T,X,PC,HC teal
+  class I,Q,PD green
+  class H,PB,HD rose
 ```
 
 ## Colours
@@ -56,7 +74,19 @@ flowchart TD
 
 ## Boxes
 
-- **Valitse kenttä: Piha, Koulu, Metsä tai Kirkko**: `games/kirkkis/v6/index.html` `MAPS` (size, base, solid things, bushes and the drawing under them per map) and `loadMap()`, which rebuilds the walking grid (`blocked`) and the hiding places (`SPOTS`). Alone the menu's tiles pick it (`pickSolo()`, saved in `ai-pelit:kirkkis:kentta`, the yard when nothing is saved); with friends the host picks it under the room's player list (`roomControls()`), and the round's `kr` and `kfin` carry it (`map`), so every phone loads the same one in `castFrom()`.
+- **Valitse leikki: Kirkkis, Piilosta tai Hippa**: `games/kirkkis/v7/index.html` `MODES` (v7, #137): each game's count, time, button words and help; `mode` is the game in play. Alone the menu's buttons pick it (`pickMode()`, saved in `ai-pelit:kirkkis:moodi`); with friends the host picks it under the player list (`roomControls()`), and `kr`/`kfin` carry it (`mode`). Each game keeps its own tally: `tilasto` (Kirkkis, as in v1–v6), `tilasto-piilosta`, `tilasto-hippa`.
+- **Ohjaus kahdella peukalolla: vasen kävelee, oikea katsoo; pitkä työntö spurttaa ⚡**: v7 `movePlayer()` and the pointer handlers: a finger on the left half is the walking stick (`joy`), on the right half the eyes (`eye`); with no eye finger one looks the way one walks. Pushing past `PUSH` (84 px, the dashed ring) sprints: `SPRINT` 1.5× for `BREATH` 3 s, back in `REST` 5 s (`breathe()`, a bar under the player). Computer players sprint when racing, chasing or fleeing (`steer(…, fast)`). Picked by Eero from three tried in a prototype. The camera shows 15 × 24 m and leads the eyes so the sharp view fits (`draw()`).
+- **Liikkuuko joku sivunäössä tai kaukana?**: `glimpses()` (v7): within `WIDE` 200° and `FAR` 16 m, outside the sharp view (110°, `RANGE` 12 m, was 10), in the open and moving faster than `STIR` 1 m/s. The fog is half clear there.
+- **Epätarkka hahmo näkyy; tietokone-etsijä menee katsomaan**: drawn over the fog as a soft grey shape with no colour or name; `seekerBot()` treats it as it treats steps it hears, and a Hippa runner flees it (`runnerBot()`).
+- **Näkeekö etsijä piiloutujan alle 6 m:n päästä?**: `rulesHide()`: `canSee()` within `FIND` (6 m); farther off it is only a shape.
+- **Löysin Ainon! Ei pesää eikä kilpajuoksua**: the `found` event in `show()`; the found one waits by the base.
+- **Piiloutuja hiipii hiljaa uuteen piiloon**: `hideBot()`: a computer hider that sees the seeker within 8 m creeps (quietly) to a place farther away that the seeker cannot see.
+- **120 s: piilossa pysyneet selvisivät; ensimmäinen löydetty etsii**: `timeUp()` and `end()`.
+- **Hippa laskee 3 s, muut pakenevat**: `MODES.hippa.count`; `runnerBot()` wanders between hiding places and runs from "it" when it sees, hears or glimpses it close.
+- **Koskeeko hippa jotakuta?**: `rulesTag()`: closer than `TAG` (two bodies and 0.2 m); `itBot()` chases the nearest one it sees.
+- **Tämä on hippa, laskee 1,5 s; ei takaisinhippaa 3 s**: `setIt()`, the `tag` event (`FREEZE`, `NO_BACK`); `ks` carries who is it (`sk`) to the other phones.
+- **Joka on hippa, hävisi ja on hippa seuraavaksi**: `end()` with `mode === 'hippa'`.
+- **Valitse kenttä: Piha, Koulu, Metsä tai Kirkko**: `games/kirkkis/v7/index.html` `MAPS` (size, base, solid things, bushes and the drawing under them per map) and `loadMap()`, which rebuilds the walking grid (`blocked`) and the hiding places (`SPOTS`). Alone the menu's tiles pick it (`pickSolo()`, saved in `ai-pelit:kirkkis:kentta`, the yard when nothing is saved); with friends the host picks it under the room's player list (`roomControls()`), and the round's `kr` and `kfin` carry it (`map`), so every phone loads the same one in `castFrom()`.
 - **Valitse: Piiloudu tai Etsi**: `newRound()` (v4 onwards); the button for the role the rules give next is outlined.
 - **Etsijä laskee pesällä silmät kiinni, muut piiloutuvat**: `setupRound()`; `COUNT` is 10 s; the counting seeker sees nothing (`seesPoint()`), and a seeking player sees a dark screen. Computer hiders walk to their own place in `SPOTS`: spots out of sight of the base, or inside a bush.
 - **Etsintä alkaa: jokainen näkee vain oman näkökenttänsä**: `canSee()`: 110° wide and 10 m long, cut by solid things (`castRay()`), anyone within 1.3 m whatever way one looks, and someone in a bush only from 2.4 m. The player's own view is cut out of the fog (`viewPoly()`); the seeker's view is drawn red when the player can see the seeker.
