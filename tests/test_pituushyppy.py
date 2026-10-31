@@ -134,11 +134,16 @@ def test_the_take_off_is_generous_in_time(site, context):
     page.click("#go")
     page.evaluate("th.t = 99; step(0.001)")
     # Holding never fouls by itself: at 8.5 m/s, 60 ms past the line while holding is still fine.
-    page.evaluate("th.phase = 'run'; th.v = 8.5; th.x = -0.3; startAim(1); th.aimT = 0.33; th.x = 8.5 * 0.06; step(0.001)")
-    assert page.evaluate("th.phase") == "aim"
-    # Letting go there takes off at the line: a legal jump measured from the line.
-    page.evaluate("release()")
-    assert page.evaluate("[th.phase, th.relX]") == ["fly", 0]
+    # Letting go there takes off at the line: a legal jump measured from the line. All in one
+    # evaluate, so no animation frame runs between them and carries the runner past the grace.
+    held, flown = page.evaluate("""() => {
+        th.phase = 'run'; th.v = 8.5; th.x = -0.3; startAim(1); th.aimT = 0.33; th.x = 8.5 * 0.06; step(0.001);
+        const held = th.phase;
+        release();
+        return [held, [th.phase, th.relX]];
+    }""")
+    assert held == "aim"
+    assert flown == ["fly", 0]
     page.evaluate("quick()")
     me = "comp.throwers.find(t => t.p === 'me').marks"
     assert page.evaluate(me)[0] > 6
