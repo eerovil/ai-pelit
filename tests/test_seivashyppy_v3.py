@@ -190,3 +190,19 @@ def test_two_sharing_the_3rd_place_both_get_bronze_on_the_podium(site, context):
     assert gold > 20 and silver > 20 and bronze > 20
     assert page.evaluate(MEDALS, '#dd8d4c') == 2
     assert page.errors == []
+
+
+def test_every_medal_of_a_shared_place_chimes(site, context):
+    page = open_game(site, context)
+    win_meet(page)
+    # Two share the 1st, then the 3rd: two golds and a bronze, each with its own chime.
+    page.evaluate("""() => {
+      const r = K.ending.res; [1, 1, 3, 4].forEach((p, i) => { r[i].place = p; }); r[1].best = r[0].best;
+      window.notes = []; const real = tone; tone = (f, ...a) => { notes.push(f); return real(f, ...a); };
+      K.ending.t = 0;
+      for (let i = 0; i < 6.5 * 60; i++) step(1 / 60);
+    }""")
+    notes = page.evaluate("notes.filter(f => [523, 659, 784].includes(f))")
+    # The chimes are 523 bronze, 659 silver, 784 gold, in the order the medals go on.
+    assert notes == [523, 784, 784]
+    assert page.errors == []

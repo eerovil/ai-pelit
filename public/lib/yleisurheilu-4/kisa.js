@@ -552,8 +552,18 @@
       if (!e) return false;
       const was = e.t;
       e.t += dt;
-      // A chime as each block's medals are on (not when a tap skips past it).
-      if (o.chime) MEDAL_T.forEach((m, i) => { const at = m + HANG * 0.8; if (was < at && e.t >= at && e.t - at < 0.3 && e.res.some(r => medalOf(r) === i)) o.chime(i); });
+      // A chime as each medal goes on (not when a tap skips past it): a shared place's medals go
+      // on one after another in their block's time, as podium() hangs them, each with its chime.
+      if (o.chime) {
+        const seen = [0, 0, 0], all = [0, 0, 0];
+        e.res.forEach(r => { const m = medalOf(r); if (m >= 0) all[m]++; });
+        e.res.forEach(r => {
+          const m = medalOf(r);
+          if (m < 0) return;
+          const at = MEDAL_T[m] + HANG * (seen[m]++ + 0.8) / all[m];
+          if (was < at && e.t >= at && e.t - at < 0.3) o.chime(m);
+        });
+      }
       if (e.leave) {
         K.ending = null;
         const win = e.place === 1 && e.mark > 0 ? 'win' : 'lose';
