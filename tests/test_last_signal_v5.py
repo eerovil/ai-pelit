@@ -303,9 +303,25 @@ def test_the_host_takes_everyone_to_the_room_and_the_next_round_goes_on_with_the
     assert host.evaluate("G.mode") == "sub"
 
 
-def test_it_fits_sideways_with_friends(site, browser):
-    host, aino = room(site, browser, names=("Eero", "Aino"), w=740, h=360)
+@pytest.mark.parametrize("w,h", [(740, 360), (390, 844)])
+def test_it_fits_sideways_and_on_a_390_px_phone_with_friends(site, browser, w, h):
+    host, aino = room(site, browser, names=("Eero", "Aino"), w=w, h=h)
     assert aino.evaluate(v4.OVERFLOW) == []
     close_cards(host, aino)
     stand(aino, "kartta")
     assert aino.evaluate(v4.OVERFLOW) == []
+
+
+def test_when_the_host_s_page_reloads_everyone_goes_back_to_the_room_and_the_game_goes_on(site, browser):
+    host, aino = room(site, browser, names=("Eero", "Aino"))
+    close_cards(host, aino)
+    host.reload()
+    host.wait_for_function("typeof G === 'object' && AiPelitRooms.isHost && !document.getElementById('aipr').hidden")
+    aino.wait_for_function("G.mode === 'menu' && !document.getElementById('aipr').hidden")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-start")
+    for p in (host, aino):
+        p.wait_for_function("G.s && G.s.day === 4 && G.mode !== 'wait' && G.mode !== 'menu'")
+    assert aino.evaluate(f"localStorage.getItem('{SAVE}')") is None
+    for p in (host, aino):
+        assert p.errors == []
