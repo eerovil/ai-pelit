@@ -134,6 +134,42 @@ def test_a_match_goes_on_after_a_reload(site, context):
     assert page.errors == []
 
 
+def test_a_reload_while_an_events_results_show_keeps_its_points(site, context):
+    page = open_game(site, context, saved={"lajit": ["pituushyppy", "keihas"]})
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    # Play the long jump without skipping its results, and reload while they show.
+    for _ in range(400):
+        if page.evaluate("!!(Ottelu.K && Ottelu.K.ending)"):
+            break
+        page.evaluate("Ottelu.K.ending || play()")
+        page.wait_for_timeout(20)
+    page.wait_for_function("M.phase === 'board'", timeout=3000)
+    assert page.evaluate("!!Ottelu.K.ending && !document.getElementById('laji').classList.contains('hidden')")
+    page.reload()
+    page.evaluate(HELPERS)
+    assert page.inner_text("#cont") == "Jatka ottelua (laji 2/2)"
+    page.click("#cont")
+    assert page.inner_text("#bTitle") == "Pituushyppy · laji 1/2"
+    assert page.evaluate("M.rows.find(r => r.p === 'me').pts") == [697]
+    page.click("#next")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
+    play_event([page])
+    assert page.evaluate("M.rows.find(r => r.p === 'me').pts") == [697, 738]
+    assert page.errors == []
+
+
+def test_the_event_pages_are_fetched_ahead_for_offline_play(site, context):
+    page = open_game(site, context)
+    urls = []
+    page.on("request", lambda r: urls.append(r.url))
+    page.reload()
+    page.wait_for_timeout(2500)
+    for slug, v in [("pituushyppy", 4), ("korkeushyppy", 2), ("seivashyppy", 2), ("keihas", 4), ("moukari", 2)]:
+        assert any(u.endswith(f"/games/{slug}/v{v}/") for u in urls), slug
+    assert any(u.endswith("/lib/yleisurheilu-1/korkeus.js") for u in urls)
+
+
 @pytest.mark.parametrize("size", [(360, 640), (390, 844), (740, 360)])
 def test_the_menu_and_the_board_fit(site, context, size):
     page = open_game(site, context, saved={"lajit": ["keihas", "moukari"]})

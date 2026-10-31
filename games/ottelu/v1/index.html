@@ -195,7 +195,15 @@ function patch(A) {
   A.meet = o => {
     const K = meet(Object.assign({}, o, { slug: 'ottelu:' + o.slug, foes: FOES, field: FIELD, menu: () => {} }));
     const step = K.step;
-    K.step = dt => { const e = K.ending, r = step(dt); if (e && !K.ending) eventOver(e.res); return r; };
+    // The event is scored as soon as its results appear (the library drops the event's own save
+    // then), and the match moves on once they have been shown.
+    K.step = dt => {
+      const e = K.ending;
+      if (e && !e.scored) { e.scored = true; eventScored(e.res); }
+      const r = step(dt);
+      if (e && !K.ending) eventOver();
+      return r;
+    };
     window.Ottelu.K = K;
     return K;
   };
@@ -260,18 +268,20 @@ function begin(at, resume) {
     R.send({ t: 'Lr', at });
   }
 }
+// The event's results are up: alone or on the host, its points go into the match, saved at once,
+// so a reload while they show keeps them.
+function eventScored(res) {
+  if (!M || (isNet() && !R.isHost)) return;
+  if (M.phase !== 'event' || !M.rows.every(r => r.marks.length <= M.at)) return;
+  score(res);
+  M.phase = M.at + 1 >= M.events.length ? 'over' : 'board';
+  if (M.phase === 'over') finish();
+  else { keep(); if (isNet()) R.send({ t: 'M', M }); }
+}
 // The event's results have been shown on this phone.
-function eventOver(res) {
+function eventOver() {
   if (!M) return;
   frameDone = true;
-  if (!isNet() || R.isHost) {
-    if (M.phase === 'event' && M.rows.every(r => r.marks.length <= M.at)) {
-      score(res);
-      M.phase = M.at + 1 >= M.events.length ? 'over' : 'board';
-      if (M.phase === 'over') finish();
-      else { keep(); if (isNet()) R.send({ t: 'M', M }); }
-    }
-  }
   after();
 }
 // Each athlete's best mark in the event, and its points.
@@ -434,7 +444,7 @@ function showMenu(result, cls) {
   $('stats').textContent = 'Taso ' + level + ' · Ottelut ' + played + ' · Voitot ' + wins + (rec.length ? ' · Ennätys: ' + rec[0] : '');
   const k = kept(), cont = $('cont');
   cont.classList.toggle('hidden', !k);
-  if (k) cont.textContent = 'Jatka ottelua (laji ' + (k.at + 1) + '/' + k.events.length + ')';
+  if (k) cont.textContent = 'Jatka ottelua (laji ' + (k.at + (k.phase === 'board' ? 2 : 1)) + '/' + k.events.length + ')';
   drawPick();
   show('menu');
 }
@@ -494,7 +504,16 @@ R.on('lobby', () => { M = null; unload(); show(null); });
 R.on('leave', () => showMenu());
 R.on('menu', () => showMenu());
 
+// Every event's page and the files it loads, fetched once while online, so the service worker
+// keeps them and a match plays offline even with events this phone has not played yet.
+function prefetch() {
+  ORDER.forEach(slug => lajiHtml(slug).then(t => {
+    const base = new URL('../../' + slug + '/v' + LAJIT[slug].v + '/', location.href);
+    (t.match(/<script src="[^"]+"/g) || []).forEach(m => fetch(new URL(m.slice(13, -1), base)).catch(() => {}));
+  }).catch(() => {}));
+}
 showMenu();
+if (navigator.onLine !== false) setTimeout(prefetch, 1500);
 </script>
 <script src="../../../scores.js" data-game="ottelu" data-order="high" data-corner="top-right"></script>
 <script src="../../../back.js"></script>
