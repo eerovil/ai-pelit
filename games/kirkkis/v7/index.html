@@ -220,6 +220,7 @@ const MAPS = {
 };
 const MAP_IDS = Object.keys(MAPS);
 // The map in play, and what follows from it. loadMap() sets them all.
+let camSnap = true, frameDt = 1 / 60; // jump the camera to its place next frame; the last frame's length
 let mapId = '', MAP, WW, WH, BASE, SOLIDS, BUSHES;
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -285,8 +286,9 @@ function hears(o, p) {
   return o === seeker ? p.role === 'hider' && active(p) : p === seeker && active(o);
 }
 // The outline of what o sees: a fan of rays across the field of view.
-function viewPoly(o, fov = FOV, range = RANGE) {
-  const pts = [], n = 64;
+// The player's own view uses more rays (v7), so its far edge does not flicker as one moves.
+function viewPoly(o, fov = FOV, range = RANGE, n = 64) {
+  const pts = [];
   for (let i = 0; i <= n; i++) {
     const a = o.a - fov / 2 + fov * i / n, d = castRay(o.x, o.y, a, range);
     pts.push(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d);
@@ -377,7 +379,7 @@ let SPOTS = [];
 function loadMap(id) {
   if (!MAPS[id]) id = 'piha';
   if (id === mapId) return;
-  mapId = id; MAP = MAPS[id];
+  mapId = id; MAP = MAPS[id]; camSnap = true;
   WW = MAP.w; WH = MAP.h; BASE = MAP.base; SOLIDS = MAP.solids; BUSHES = MAP.bushes;
   GW = WW / CELL; GH = WH / CELL; blocked = new Uint8Array(GW * GH);
   for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) blocked[j * GW + i] = solidNear((i + 0.5) * CELL, (j + 0.5) * CELL, BODY + 0.08) ? 1 : 0;
@@ -516,6 +518,7 @@ function newRound(role) {
 }
 // Puts everyone at the base, the seeker counting, and the computer hiders off to their places.
 function setupRound(who) {
+  camSnap = true;
   seeker = who;
   firstCaught = null; seekLeft = null;
   people.forEach((p, i) => {
@@ -915,6 +918,7 @@ const sfx = {
 const LEAD = 0.45; // how far the camera leads the player's eyes, as a share of half the screen
 let W, H, DPR, S, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, camX = BASE.x, camY = BASE.y;
 function resize() {
+  camSnap = true;
   DPR = window.devicePixelRatio || 1;
   W = innerWidth; H = innerHeight;
   c.width = fog.width = W * DPR; c.height = fog.height = H * DPR;
@@ -1066,7 +1070,10 @@ function draw() {
   const lead = h => on ? h * LEAD : 0;
   const tx = WW > 2 * hw ? Math.max(hw, Math.min(WW - hw, player.x + Math.cos(player.a) * lead(hw))) : WW / 2;
   const ty = WH > 2 * hh ? Math.max(hh - 1.5, Math.min(WH - hh + 1.5, player.y + Math.sin(player.a) * lead(hh))) : WH / 2;
-  const k = Math.abs(tx - camX) + Math.abs(ty - camY) > 8 ? 1 : 0.12; // a new round or map: jump there
+  // It glides at the same pace whatever the frame rate (v7: v6 jumped when the target moved far, which
+  // the bigger lead made happen on every quick turn); only a new round, map or screen size jumps.
+  const k = camSnap ? 1 : 1 - Math.exp(-frameDt * 4);
+  camSnap = false;
   camX += (tx - camX) * k; camY += (ty - camY) * k;
   drawYard();
   const playing = racing();
@@ -1089,12 +1096,15 @@ function draw() {
     world(fx); fx.globalCompositeOperation = 'destination-out';
     // The blur at the sides and far off is half clear, the sharp view wholly.
     fx.fillStyle = 'rgba(0,0,0,0.42)';
-    const wide = viewPoly(player, WIDE, FAR);
+    const wide = viewPoly(player, WIDE, FAR, 180);
     fx.beginPath(); fx.moveTo(player.x, player.y);
     for (let i = 0; i < wide.length; i += 2) fx.lineTo(wide[i], wide[i + 1]);
     fx.closePath(); fx.fill();
-    fx.fillStyle = '#000';
-    const pts = viewPoly(player);
+    // Sharp up close, and blurring with distance (v7): wholly clear to KNOW, half clear far off.
+    const far = fx.createRadialGradient(player.x, player.y, 0, player.x, player.y, KNOW + 10);
+    far.addColorStop(0, '#000'); far.addColorStop(KNOW / (KNOW + 10), '#000'); far.addColorStop(1, 'rgba(0,0,0,0.5)');
+    fx.fillStyle = far;
+    const pts = viewPoly(player, FOV, RANGE, 160);
     fx.beginPath(); fx.moveTo(player.x, player.y);
     for (let i = 0; i < pts.length; i += 2) fx.lineTo(pts[i], pts[i + 1]);
     fx.closePath(); fx.fill();
@@ -1222,6 +1232,7 @@ function result() {
   return player.st === 'caught' ? ['Sinut nimettiin!', 'lose'] : ['Pelastuit! 🎉', 'win'];
 }
 function showMenu() {
+  camSnap = true;
   phase = 'menu'; letGo();
   if (mapId !== soloMap) { loadMap(soloMap); SOLO.forEach(toBase); } // back from a room's map
   const res = document.getElementById('result'), info = document.getElementById('info');
@@ -1471,7 +1482,7 @@ document.getElementById('multi').addEventListener('click', () => { unlock(); roo
 
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; frameDt = dt;
   // Once the player is out, the rest of the round plays out faster (alone only: friends still play).
   const out = !R.inRoom && phase === 'seek' && player.role === 'hider' && !active(player);
   for (let i = 0; i < (out ? 3 : 1); i++) step(dt);
