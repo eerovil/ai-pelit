@@ -57,3 +57,14 @@ def test_a_release_move_is_still_caught(voim_site, context):
     assert mode == "bar" and t >= 0.5
     assert names == ["Tkatchev"]
     assert errors == []
+
+
+def test_the_other_bar_is_still_caught_at_once(voim_site, context):
+    # Let go of the low bar right under the high one: its hands take the high bar well before 0.5 s.
+    page, errors = open_game(voim_site, context)
+    mode, bar, at = page.evaluate("""() => { newRoutine(); hold = false;
+      launchAir({ x: 0, y: -1.3, vx: 0, vy: 3, phi: 0, w: 0, from: 1 });
+      for (let t = 0; t < 1 && mode === 'air'; t += 1 / 240) step(1 / 240);
+      return [mode, bar, flight.t]; }""")
+    assert (mode, bar) == ("bar", 0) and at < 0.5
+    assert errors == []
