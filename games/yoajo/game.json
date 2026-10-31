@@ -1,0 +1,13 @@
+{
+  "title": "Yöajo",
+  "description": "Aja yöllä Valtatie 4:ää pohjoiseen: pitkät päälle ja pois, ohita traktorit ja rekat, varo hirviä, kuoppia ja nopeuskameroita.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-31",
+      "note": "Ensimmäinen versio: kahdeksan osuutta Helsingistä Rovaniemelle pimeässä, pitkät valot, ohitukset, jalankulkijat, huonot tieosuudet, vesi- ja lumisade, hurjastelijat, rekat, hirvet, nopeuskamerat ja väsymys.",
+      "request": "Matka ajoa pimeällä suomessa. Åitkät päälle ja pois. Traktorin ja jalankulkijoiden ohituksia. Huonoja tie osuuksia. Lumi ja vesisade. Hurjastelevia muita kuskeja. Rekkoja. Hirvi\n\nNopeus kamerat\n\nKuskia väsyttää",
+      "issue": "eerovil/ai-pelit#181"
+    }
+  ]
+}
