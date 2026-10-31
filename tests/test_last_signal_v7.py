@@ -399,3 +399,31 @@ def test_the_tank_gear_still_works_as_before_with_air_pockets(site, browser):
     page.evaluate("diver.air = 5")
     take(page, "it.site === 'asema' && it.k === 'ilma'")
     assert page.evaluate("diver.air") == 60
+
+
+@pytest.mark.parametrize("w,h", [(390, 844), (740, 360)])
+def test_a_hose_dive_with_its_guide_button_fits_a_390_px_phone_and_sideways(site, browser, w, h):
+    page = hose_game(site, browser, w, h)
+    page.evaluate("reach('nordvik', SITES.find(s => s.id === 'nordvik').spot, 1, ITEMS.find(i => i.site === 'nordvik' && i.k === 'loki').id, 'hose')")
+    page.evaluate("closeCard(); const p = hose.pts[hose.pts.length - 1]; diver.x = p[0]; diver.y = p[1]; drawHud()")
+    assert page.inner_text("#act").startswith("📌 Kiinnitä ohjain")
+    assert page.evaluate(v4.OVERFLOW) == []
+    page.evaluate("wearHose(100); drawHud()")
+    assert page.evaluate(v4.OVERFLOW) == []
+    assert page.errors == []
+
+
+def test_friends_clamp_guides_into_the_hosts_game_and_the_last_one_goes_to_whoever_asks_first(site, browser):
+    host, aino, ville = v5.room(site, browser, saves=[v5.save_with(inv={"ohjain": 1}), None, None])
+    v5.close_cards(host, aino, ville)
+    assert host.evaluate("G.s.inv.ohjain") == 1
+    # Both ask for the last guide at once, at two different corners: the host answers the first ask only.
+    aino.evaluate("act('guide', [700, 120])")
+    ville.evaluate("act('guide', [720, 120])")
+    host.wait_for_function("G.s.guides.length === 1 && G.s.inv.ohjain === 0")
+    for g in (aino, ville):
+        g.wait_for_function("G.s.guides.length === 1 && G.s.inv.ohjain === 0")
+    # The guide is in the host's save, not in a friend's.
+    assert len(host.evaluate("JSON.parse(localStorage.getItem('%s')).guides" % SAVE)) == 1
+    assert aino.evaluate("localStorage.getItem('%s')" % SAVE) is None
+    assert "Ohjaimet loppuivat juuri" in (v5.toast(aino) + v5.toast(ville))
