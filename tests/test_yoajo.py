@@ -253,3 +253,37 @@ def test_turning_the_phone_mid_leg_keeps_the_leg(site, context):
     page.wait_for_function("W === 360 && !LAND")
     assert page.evaluate("[mode, P.s, points]") == ["drive", 700, 90]
     assert page.errors == []
+
+
+def test_the_last_leg_counts_as_driven(site, context):
+    page = open_game(site, context)
+    page.evaluate("""() => { localStorage.setItem('ai-pelit:yoajo:taso', '8'); localStorage.setItem('ai-pelit:yoajo:ajettu', '7'); }""")
+    page.reload()
+    page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    page.evaluate("HOLD = true; newLeg(8); things = []; events = []; P.s = leg.len - 0.1; P.v = 25; step(1 / 60)")
+    assert page.evaluate("[mode, maxLeg, driven, localStorage.getItem('ai-pelit:yoajo:ajettu')]") == ["done", 8, 8, "8"]
+    # What the high-score list sends and shows beside the score.
+    assert page.evaluate("localStorage.getItem('ai-pelit:yoajo:taso')") == "8"
+    # Driving an earlier leg again does not lower it.
+    page.evaluate("newLeg(2); things = []; events = []; P.s = leg.len - 0.1; P.v = 25; step(1 / 60)")
+    assert page.evaluate("[driven, localStorage.getItem('ai-pelit:yoajo:ajettu')]") == [8, "8"]
+
+
+def test_new_worlds_free_the_old_ones(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("!!V3 || no3d", timeout=15000)
+    if page.evaluate("no3d"):
+        pytest.skip("this Chromium has no WebGL")
+    # Each leg's world and its traffic are drawn, then replaced by the next; what the GPU holds
+    # stays the same instead of growing with every rebuild.
+    counts = page.evaluate("""() => { HOLD = true; maxLeg = 8; const m = V3.renderer.info.memory, out = [];
+      for (let k = 0; k < 4; k++) for (const n of [5, 2]) {
+        newLeg(n); things = []; events = [];
+        add('vastaan', { s: P.s + 80, lat: -LANE, v: -25 }); add('kavelija', { s: P.s + 30, lat: 4.1, v: 1.3, reflector: true });
+        add('rekka', { s: P.s + 60, lat: 1.8, v: 20 }); add('hirvi', { s: P.s + 40, lat: 6, dir: -1, walk: 2, stop: false, wait: 0 });
+        draw3d(); things = []; draw3d();
+        out.push([m.geometries, m.textures]);
+      }
+      return out; }""")
+    assert counts[-2:] == counts[2:4], counts
+    assert page.errors == []

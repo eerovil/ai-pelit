@@ -132,11 +132,25 @@ function deerMesh(poro) {
   return g;
 }
 
+// Frees what a removed world or vehicle made for itself on the GPU: its own geometries,
+// materials and textures, but never the shared shapes, materials and the glow picture.
+function dispose(root) {
+  const geos = new Set(Object.values(V3.geo)), mats = new Set(Object.values(V3.mats));
+  root.traverse(o => {
+    if (o.geometry && !geos.has(o.geometry)) o.geometry.dispose();
+    for (const m of [].concat(o.material || [])) {
+      if (mats.has(m)) continue;
+      if (m.map && m.map !== V3.glow) m.map.dispose();
+      m.dispose();
+    }
+  });
+}
+
 // ---- Building a leg's world: the road, the forest, signs ----
 function buildWorld() {
   const old = V3.world;
-  if (old) { V3.scene.remove(old); old.traverse(o => { if (o.geometry && !Object.values(V3.geo).includes(o.geometry)) o.geometry.dispose(); }); }
-  for (const m of V3.meshes.values()) V3.scene.remove(m);
+  if (old) { V3.scene.remove(old); dispose(old); }
+  for (const m of V3.meshes.values()) { V3.scene.remove(m); dispose(m); }
   V3.meshes.clear();
   const w = new THREE.Group(); V3.world = w; V3.built = road; V3.scene.add(w);
   const wx = leg.weather, snowy = wx === 'lumi' || wx === 'pyry', wet = wx === 'sade';
@@ -452,7 +466,7 @@ function draw3d(now) {
       if (t.v < 0 && t.s > P.s && t.s - P.s < 220 && (!near || t.s < near.s)) near = t;
     }
   }
-  for (const [id, m] of V3.meshes) if (!seen.has(id)) { scene.remove(m); V3.meshes.delete(id); }
+  for (const [id, m] of V3.meshes) if (!seen.has(id)) { scene.remove(m); dispose(m); V3.meshes.delete(id); }
   if (near) {
     const op = worldAt(near.s - near.len / 2, near.lat, 0.8), ot = worldAt(near.s - 40, near.lat, 0);
     other.position.set(...op); other.target.position.set(...ot); other.intensity = near.high ? 9 : 5; other.distance = near.high ? 120 : 60; other.decay = 0.6;

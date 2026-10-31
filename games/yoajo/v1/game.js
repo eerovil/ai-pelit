@@ -45,6 +45,7 @@ let maxLeg = clamp(Math.floor(load('taso', 1)) || 1, 1, LEGS.length);   // the f
 let stars = load('tahdet', {}) || {};                                    // leg -> best stars
 let bests = load('pisteet', {}) || {};                                   // leg -> best points
 let level = maxLeg;
+let driven = clamp(Math.floor(load('ajettu', 0)) || 0, 0, LEGS.length); // legs driven to the end at least once
 
 // ---- The road of a leg ----
 const SEG = 2;                       // the road is sampled every 2 m
@@ -419,6 +420,8 @@ function finish() {
   stars[level] = Math.max(stars[level] || 0, st); save('tahdet', stars);
   if (result.record) { bests[level] = points; save('pisteet', bests); }
   if (level === maxLeg && maxLeg < LEGS.length) { maxLeg++; save('taso', maxLeg); }
+  // 'taso' stops at the last leg, so the legs driven are kept apart for the high-score lists.
+  if (level > driven) { driven = level; save('ajettu', driven); }
   mode = 'done';
   if (points > 0 && window.AiPelitScores) AiPelitScores.submit(points);
   if (typeof onEnd === 'function') onEnd();

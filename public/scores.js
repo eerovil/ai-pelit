@@ -79,10 +79,10 @@
     // Highest bar cleared in a meet, metres; level: 'taso', the level the player is on.
     korkeushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('korkeushyppy', 'taso'); } },
     // Most points on one leg of the night drive, one list per leg ('osa-N'); level: legs driven
-    // ('taso' is the furthest leg open).
+    // to the end ('ajettu'; 'taso', the furthest leg open, stops at the last one).
     yoajo: {
       order: 'high', score: function (s) { return s + ' p'; }, boards: true,
-      level: function () { return saved('yoajo', 'taso') - 1; },
+      level: function () { return saved('yoajo', 'ajettu'); },
       levelText: function (n) { return n + (n === 1 ? ' osuus' : ' osuutta') + ' ajettu'; },
     },
   };
