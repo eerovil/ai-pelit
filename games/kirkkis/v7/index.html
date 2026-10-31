@@ -945,11 +945,14 @@ function drawYard() {
   MAP.decor(x);
   x.strokeStyle = '#8a6a3c'; x.lineWidth = 0.25; x.strokeRect(0.1, 0.1, WW - 0.2, WH - 0.2);
   for (const s of SOLIDS) drawSolid(s);
-  // The base: a post with a little church on it.
+  // The post where a round starts (it stands in every game, and is walked round).
   x.fillStyle = '#7a4e2a'; x.beginPath(); x.arc(BASE.x, BASE.y, BASE_POLE, 0, 7); x.fill();
+  // Only Kirkkis has a base to reach: its ring, and the arrow to it (v7: not in Piilosta or Hippa).
+  if (!baseGame()) return;
   x.strokeStyle = 'rgba(122,59,143,0.5)'; x.lineWidth = 0.08; x.setLineDash([0.3, 0.2]);
   x.beginPath(); x.arc(BASE.x, BASE.y, BASE_REACH, 0, 7); x.stroke(); x.setLineDash([]);
 }
+const baseGame = () => mode === 'kirkkis';
 function drawSolid(s) {
   const k = s.k;
   if (s.r) {
@@ -1136,7 +1139,7 @@ function draw() {
     const lines = wrapText(`${seeker.name}: ${seeker.bubble}`, W - 24);
     lines.forEach((l, i) => x.fillText(l, W / 2, H - safeB - 64 - (lines.length - 1 - i) * LINE));
   }
-  if (playing) { if (mode !== 'hippa') drawBaseArrow(); drawHud(); drawFingers(); }
+  if (playing) { if (baseGame()) drawBaseArrow(); drawHud(); drawFingers(); }
   if (phase === 'count' && seeker === player) {
     x.fillStyle = 'rgba(8,10,20,0.92)'; x.fillRect(0, 0, W, H);
     x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';

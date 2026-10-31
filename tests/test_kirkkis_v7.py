@@ -271,3 +271,19 @@ def test_a_guest_back_mid_wait_after_a_tag_still_waits(phones):  # noqa: F811
     guest.wait_for_timeout(600)
     assert host.evaluate("people.find(p => p.ctrl === 'remote').x") == x0
     assert host.errors == [] and guest.errors == []
+
+
+@pytest.mark.parametrize("mode,guides", [("kirkkis", True), ("piilosta", False), ("hippa", False)])
+def test_only_kirkkis_shows_the_way_to_the_base(site, browser, mode, guides):
+    ctx, page = open_game(site, browser)
+    page.click(f"#modes button[data-mode={mode}]")
+    page.click("#hide")
+    page.evaluate(RUN, 12)
+    # Far from the base: count the arrow and the base's ring drawn in one frame.
+    drawn = page.evaluate("""() => { player.x = 3; player.y = 42; let arrows = 0, rings = 0;
+      const da = drawBaseArrow; drawBaseArrow = () => { arrows++; da(); };
+      const arc = x.arc.bind(x); x.arc = (cx, cy, r, ...a) => { if (cx === BASE.x && cy === BASE.y && r === BASE_REACH) rings++; return arc(cx, cy, r, ...a); };
+      draw(); x.arc = arc; drawBaseArrow = da; return [arrows, rings]; }""")
+    assert drawn == ([1, 1] if guides else [0, 0])
+    assert page.errors == []
+    ctx.close()
