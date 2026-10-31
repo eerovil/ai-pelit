@@ -15,6 +15,18 @@ player sees is Finnish unless the request says otherwise.
   If the copy is past about 2000 lines in one file, split it into files (rule 2) as part of this
   version, without being asked, and say so in the pull request. Do the same for a new game that
   grows past it.
+- "Palautteet <päivä>: <N> kpl" — the players' feedback (#184), filed once a day by
+  `scripts/feedback_issue.py`. The feedback is private and this repository public, so the issue
+  lists only each item's number and game; read the items with
+  `python3 scripts/feedback_issue.py --show <this issue's number>` (it uses the admin key on this
+  host). No pull request: for each item, look at the game it names, then ask Eero in the
+  question box whether to fix it (quote it there, and say in one line what you would change;
+  group items that ask the same). Each yes becomes a normal request issue,
+  "<Peli> v<N> (<slug>): <what to change, in Finnish>", made with `gh issue create --label claude`
+  (the poller's ownership label, so it starts its own Work; check its labels after). Write it in
+  your own words and naming this issue: never a player's nickname or their words, on any issue
+  or pull request. Post only Eero's yes or no per item number on this issue, then close it. Post his answers on the
+  issue, then close it.
 - Either way, take the game's picture for the shelf (#33): during your mid-play check at
   360 × 740, save a screenshot of a moment that shows the game well and run
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
@@ -152,6 +164,11 @@ high-score lists (#25), then play counts (#26).
   (`yleisurheilu-4/`), used by the next versions. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
+- **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose
+  nickname the admin approved writes what to fix, and `POST /api/feedback` keeps it (private,
+  shown on `/yllapito/`, never on GitHub). A game needs nothing for it. Once a day at 17.00 the host's
+  `ai-pelit-palautteet.timer` (`scripts/systemd/`) runs `scripts/feedback_issue.py` from
+  `origin/main`, which files the new ones as one "Palautteet" issue (see "What a request means").
 - `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
