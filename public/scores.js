@@ -78,6 +78,12 @@
     seivashyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('seivashyppy', 'taso'); } },
     // Highest bar cleared in a meet, metres; level: 'taso', the level the player is on.
     korkeushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('korkeushyppy', 'taso'); } },
+    // Fastest ride, one list per level ('taso-N'); level: levels finished ('taso' is the first unfinished one).
+    vuoristorata: {
+      order: 'low', score: minutes, boards: true,
+      level: function () { return saved('vuoristorata', 'taso') - 1; },
+      levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' ajettu'; },
+    },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }

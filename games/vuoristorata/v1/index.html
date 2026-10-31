@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#7cc4ef">
+<title>Vuoristorata</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #7cc4ef; font-family: system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; position: fixed; inset: 0; width: 100vw; height: 100dvh; touch-action: none; }
+  .hidden { display: none !important; }
+  body.riding #ai-pelit-tulokset-nappi { display: none; }
+
+  /* The ride's HUD: speed and the next sign in the middle, the clock top-right. */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,.55); }
+  #mitta { position: absolute; top: calc(env(safe-area-inset-top) + 8px); left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #nopeus { font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  #nopeus small { font-size: 15px; font-weight: 700; }
+  #nopeus.huono { color: #ff6b5e; }
+  #merkki { display: flex; align-items: center; gap: 6px; min-height: 34px; font-weight: 700; font-size: 15px; }
+  #merkki b { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%;
+    font-size: 15px; text-shadow: none; box-sizing: border-box; }
+  #merkki b.max { background: #fff; color: #111; border: 4px solid #d8262c; }
+  #merkki b.min { background: #1f5fbf; color: #fff; border: 2px solid #fff; }
+  #oikea { position: absolute; top: calc(env(safe-area-inset-top) + 10px); right: calc(env(safe-area-inset-right) + 10px);
+    display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  #kello { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; background: rgba(0,0,0,.3);
+    border-radius: 999px; padding: 4px 10px; }
+  #kisa { display: flex; flex-direction: column; align-items: flex-end; font-size: 14px; font-weight: 800;
+    text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+  #lahto { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font-size: 96px; font-weight: 900; }
+  #toast { position: fixed; left: 0; right: 0; top: 30%; text-align: center; color: #fff; font-size: 28px; font-weight: 800;
+    text-shadow: 0 3px 8px rgba(0,0,0,.6); pointer-events: none; padding: 0 16px; }
+  #valko { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+
+  /* Two held buttons, one under each thumb. */
+  #ohjaimet { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 22px);
+    display: flex; justify-content: space-between; padding: 0 calc(env(safe-area-inset-right) + 18px) 0 calc(env(safe-area-inset-left) + 18px);
+    pointer-events: none; }
+  .nappi { pointer-events: auto; touch-action: none; width: 104px; height: 104px; border-radius: 50%; border: 0; color: #fff;
+    font: 800 17px system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    box-shadow: 0 6px 0 rgba(0,0,0,.3); }
+  .nappi span { font-size: 30px; line-height: 1; }
+  .nappi.down { transform: translateY(4px) scale(.96); box-shadow: 0 2px 0 rgba(0,0,0,.3); filter: brightness(1.15); }
+  #jarru { background: #d8343a; }
+  #vauhti { --e: 1; background: radial-gradient(circle, #22a35a 0 58%, transparent 59%),
+    conic-gradient(#ffd23f calc(var(--e) * 360deg), rgba(0,0,0,.35) 0); }
+  #vauhti.tyhja { filter: grayscale(.8); }
+
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 24px; text-align: center; color: #fff; background: rgba(15,30,60,.5); box-sizing: border-box; }
+  .screen h1 { margin: 0; font-size: 42px; text-shadow: 0 3px 0 rgba(0,0,0,.3); }
+  .screen p { margin: 0; font-size: 16px; line-height: 1.4; max-width: 320px; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .screen .help b.max { color: #ff8f86; }
+  .screen .help b.min { color: #9cc6ff; }
+  button.go { font: inherit; font-size: 24px; font-weight: 800; color: #123; background: #ffd23f; border: 0;
+    border-radius: 18px; padding: 14px 44px; box-shadow: 0 5px 0 #c99a00; touch-action: manipulation; }
+  button.go:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a00; }
+  button.alt { font: inherit; font-size: 17px; font-weight: 700; color: #fff; background: rgba(255,255,255,.18);
+    border: 2px solid rgba(255,255,255,.6); border-radius: 14px; padding: 9px 18px; touch-action: manipulation; }
+  .taso { display: flex; align-items: center; gap: 14px; }
+  .taso b { font-size: 22px; min-width: 90px; }
+  .taso button { font: inherit; font-size: 24px; font-weight: 800; width: 48px; height: 44px; border-radius: 12px; border: 0;
+    background: rgba(255,255,255,.85); color: #123; touch-action: manipulation; }
+  .taso button:disabled { opacity: .3; }
+  #ennatys { min-height: 22px; font-weight: 700; }
+  #aika { font-size: 40px; font-weight: 900; font-variant-numeric: tabular-nums; }
+  #tahdet { font-size: 34px; color: #ffd23f; letter-spacing: 4px; min-height: 0; }
+  #tulokset { margin: 0; padding: 0; list-style: none; font-size: 18px; font-weight: 800; text-shadow: 0 1px 2px #000; }
+  #tulokset b { color: #fff; margin-left: 6px; }
+  .rivi { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #odota { position: fixed; left: 0; right: 0; top: 40%; text-align: center; color: #fff; font-size: 20px; font-weight: 700;
+    text-shadow: 0 2px 4px #000; pointer-events: none; }
+  #ei { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; color: #fff; padding: 24px;
+    text-align: center; background: #345; font-size: 18px; }
+
+  /* Sideways (#95): menus in two columns, the buttons low in the corners. */
+  @media (orientation: landscape) and (max-height: 540px) {
+    .screen:not(.hidden) { display: grid; grid-template-columns: minmax(0, 360px) auto; column-gap: 40px; row-gap: 10px;
+      align-content: center; justify-content: center; justify-items: center; padding: 14px calc(env(safe-area-inset-right) + 24px) 14px calc(env(safe-area-inset-left) + 24px); }
+    .screen > .vasen { grid-column: 1; }
+    .screen > :not(.vasen) { grid-column: 2; }
+    .screen h1 { font-size: 34px; }
+    .screen p { font-size: 15px; max-width: 360px; }
+    #menu h1 { grid-row: 1; } #menu .help { grid-row: 2 / span 3; }
+    #loppu-otsikko { grid-row: 1; } #aika { grid-row: 2; } #tahdet { grid-row: 3; } #loppu-teksti { grid-row: 4; } #tulokset { grid-row: 2 / span 3; }
+    .nappi { width: 92px; height: 92px; }
+    #ohjaimet { bottom: calc(env(safe-area-inset-bottom) + 14px); }
+    #lahto { top: 26%; }
+  }
+</style>
+<script src="../../../rooms.js" data-game="vuoristorata" data-min="2" data-max="6"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="valko"></div>
+<div id="hud" class="hidden">
+  <div id="mitta"><div id="nopeus">0<small> km/h</small></div><div id="merkki"></div></div>
+  <div id="oikea"><div id="kello">0.00.0</div><div id="kisa"></div></div>
+  <div id="lahto"></div>
+</div>
+<div id="ohjaimet" class="hidden">
+  <button class="nappi" id="jarru" aria-label="Jarru"><span>✋</span>Jarru</button>
+  <button class="nappi" id="vauhti" aria-label="Vauhti"><span>⚡</span>Vauhti</button>
+</div>
+<div id="toast" class="hidden"></div>
+<div id="odota" class="hidden">Odotetaan huoneen tekijää…</div>
+
+<div class="screen" id="menu">
+  <h1 class="vasen">Vuoristorata</h1>
+  <p class="vasen help">Aja juna maaliin nopeasti. Pidä <b>⚡ Vauhti</b>-nappia, niin juna kiihdyttää, ja <b>✋ Jarru</b>a, niin se hidastaa.
+    Katso merkit: <b class="max">punainen</b> on suurin nopeus, <b class="min">sininen</b> pienin. Liian kovaa mutkaan tai mäen harjalle,
+    tai liian hiljaa silmukkaan, ja juna suistuu.</p>
+  <div class="taso"><button id="edel" aria-label="Edellinen taso">‹</button><b id="taso">Taso 1</b><button id="seur" aria-label="Seuraava taso">›</button></div>
+  <p id="ennatys"></p>
+  <button class="go" id="aja">Aja!</button>
+  <button class="alt" id="kaverit">👥 Pelaa kavereiden kanssa</button>
+</div>
+
+<div class="screen hidden" id="loppu">
+  <h1 id="loppu-otsikko">Maalissa!</h1>
+  <div id="aika"></div>
+  <div id="tahdet"></div>
+  <p id="loppu-teksti"></p>
+  <ol id="tulokset" class="vasen"></ol>
+  <div class="rivi">
+    <button class="go" id="uudestaan">Uudestaan</button>
+    <button class="go hidden" id="seuraava">Seuraava taso</button>
+    <button class="go hidden" id="huoneeseen">Takaisin huoneeseen</button>
+  </div>
+  <button class="alt" id="valikkoon">Valikkoon</button>
+</div>
+<div id="ei"><p>Tämä puhelin ei osaa piirtää 3D-kuvaa, joten vuoristorataa ei näy.</p></div>
+
+<script src="ride.js"></script>
+<!-- Vuoristorata v1 (#180): the rider's view, drawn with the shared three.js from ride.js's numbers. -->
+<script type="module">
+import * as THREE from '../../../lib/three-r187/three.module.js';
+
+const c = document.getElementById('c');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true });
+} catch (e) {
+  c.style.display = 'none';
+  document.getElementById('ei').style.display = 'flex';
+  window.noWebgl = true;
+}
+
+if (renderer) {
+  let ratio = Math.min(devicePixelRatio, 2);
+  renderer.setPixelRatio(ratio);
+  const SKY = 0x9fd3f2;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 90, 330);
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 600);
+  scene.add(camera);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x557744, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff2d8, 2.0);
+  sun.position.set(80, 140, 40);
+  scene.add(sun);
+
+  const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+  const mat = (color, more) => new THREE.MeshLambertMaterial(Object.assign({ color }, more));
+
+  // Ground, a lake and far hills; they stay put, the track is built over them per level.
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), mat(0x6aa84f));
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+  const hillMat = mat(0x7d9fb8);
+  for (let i = 0; i < 14; i++) {
+    const a = i / 14 * Math.PI * 2, r = 520 + (i % 3) * 60, h = 70 + (i * 37 % 60);
+    const m = new THREE.Mesh(new THREE.ConeGeometry(110 + (i * 53 % 70), h, 7), hillMat);
+    m.position.set(Math.cos(a) * r, h / 2 - 2, Math.sin(a) * r - 200);
+    scene.add(m);
+  }
+  const cloudMat = new THREE.MeshBasicMaterial({ color: 0xf4f7fb, fog: false });
+  const cloudGeo = new THREE.SphereGeometry(1, 10, 7);
+  for (let i = 0; i < 18; i++) {
+    const g = new THREE.Group();
+    for (let k = 0; k < 4; k++) {
+      const p = new THREE.Mesh(cloudGeo, cloudMat);
+      p.scale.set(14 + k * 3, 5 + (k % 2) * 2, 10);
+      p.position.set(k * 13 - 20, (k % 2) * 3, (k % 3) * 4);
+      g.add(p);
+    }
+    const a = i * 2.4;
+    g.position.set(Math.cos(a) * (200 + i * 17), 120 + (i % 4) * 15, Math.sin(a) * (200 + i * 17) - 250);
+    scene.add(g);
+  }
+
+  // ---- The level's track: rails, spine, ties, supports, station, finish gate, signs, pickups, trees ----
+  let world = null;
+  const railMat = mat(0xc9ced6), spineMat = mat(0xd8343a), tieMat = mat(0x6b5a4a), postMat = mat(0xf2f2f2);
+  // A tube along the track at an offset in its own frame (right, up), `sides` corners round.
+  function sweep(S, stride, dr, du, rad, sides) {
+    const pos = [], idx = [];
+    const rings = Math.floor((S.length - 1) / stride) + 1;
+    for (let k = 0; k < rings; k++) {
+      const o = S[Math.min(S.length - 1, k * stride)];
+      const cx = o.x + o.r[0] * dr + o.u[0] * du, cy = o.y + o.r[1] * dr + o.u[1] * du, cz = o.z + o.r[2] * dr + o.u[2] * du;
+      for (let j = 0; j < sides; j++) {
+        const a = j / sides * Math.PI * 2 + Math.PI / sides, ca = Math.cos(a) * rad, sa = Math.sin(a) * rad;
+        pos.push(cx + o.r[0] * ca + o.u[0] * sa, cy + o.r[1] * ca + o.u[1] * sa, cz + o.r[2] * ca + o.u[2] * sa);
+      }
+      if (k) for (let j = 0; j < sides; j++) {
+        const a = (k - 1) * sides + j, b = (k - 1) * sides + (j + 1) % sides, d = k * sides + j, e = k * sides + (j + 1) % sides;
+        idx.push(a, d, b, b, d, e);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pv = new THREE.Vector3();
+  const bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
+  function frameMatrix(o, dr, du, df, sx, sy, sz) {
+    bx.set(o.r[0], o.r[1], o.r[2]); by.set(o.u[0], o.u[1], o.u[2]); bz.set(-o.f[0], -o.f[1], -o.f[2]);
+    m4.makeBasis(bx, by, bz);
+    q.setFromRotationMatrix(m4);
+    pv.set(o.x + o.r[0] * dr + o.u[0] * du + o.f[0] * df, o.y + o.r[1] * dr + o.u[1] * du + o.f[1] * df, o.z + o.r[2] * dr + o.u[2] * du + o.f[2] * df);
+    return m4.compose(pv, q, sc.set(sx, sy, sz));
+  }
+  function signTexture(z) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const g = cv.getContext('2d');
+    g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2);
+    g.fillStyle = z.min && !z.max ? '#1f5fbf' : '#ffffff'; g.fill();
+    if (z.max) { g.lineWidth = 16; g.strokeStyle = '#d8262c'; g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.stroke(); }
+    else { g.lineWidth = 5; g.strokeStyle = '#fff'; g.stroke(); }
+    g.fillStyle = z.max ? '#111' : '#fff';
+    g.font = '800 54px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(z.max || z.min), 64, 68);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  function checkerTexture() {
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 32;
+    const g = cv.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 8, y * 8, 8, 8); }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    return t;
+  }
+
+  function buildWorld() {
+    if (world) { scene.remove(world.group); world.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    const tr = game.track, S = tr.S, group = new THREE.Group();
+    group.add(new THREE.Mesh(sweep(S, 2, -0.55, 0, 0.07, 6), railMat));
+    group.add(new THREE.Mesh(sweep(S, 2, 0.55, 0, 0.07, 6), railMat));
+    group.add(new THREE.Mesh(sweep(S, 2, 0, -0.38, 0.17, 4), spineMat));
+    // Ties every 2 m.
+    const ties = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), tieMat, Math.ceil(S.length / 4));
+    let n = 0;
+    for (let i = 0; i < S.length; i += 4) ties.setMatrixAt(n++, frameMatrix(S[i], 0, -0.16, 0, 1.3, 0.1, 0.22));
+    ties.count = n;
+    group.add(ties);
+    // Supports from the ground to the spine, where the track is upright.
+    const posts = [];
+    for (let i = 0; i < S.length; i += 12) { const o = S[i]; if (o.u[1] > 0.6 && o.y > 1.4) posts.push(o); }
+    const sup = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.2, 1, 6), postMat, Math.max(1, posts.length));
+    posts.forEach((o, k) => { const h = o.y - 0.5; m4.compose(pv.set(o.x, h / 2, o.z), q.identity(), sc.set(1, h, 1)); sup.setMatrixAt(k, m4); });
+    sup.count = posts.length;
+    group.add(sup);
+    // The station: a platform and a roof over the start.
+    const st = S[Math.floor(7 / DS)];
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 14), mat(0xb08a5a));
+    plat.position.set(st.x + 2.4, st.y - 0.6, st.z); group.add(plat);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 15), mat(0xd8343a));
+    roof.position.set(st.x + 1, st.y + 3.6, st.z); group.add(roof);
+    for (const [dx, dz] of [[-2.3, -6.5], [4.3, -6.5], [-2.3, 6.5], [4.3, 6.5]]) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 4.2, 0.25), postMat);
+      p.position.set(st.x + dx, st.y + 1.5, st.z + dz); group.add(p);
+    }
+    // The finish gate: a chequered banner across the track.
+    const fo = S[Math.floor(tr.finish / DS)];
+    const gate = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshBasicMaterial({ map: checkerTexture(), side: THREE.DoubleSide }));
+    gate.matrixAutoUpdate = false;
+    gate.matrix.copy(frameMatrix(fo, 0, 3, 0, 1, 1, 1));
+    group.add(gate);
+    for (const dr of [-2, 2]) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.6, 0.2), postMat);
+      p.position.set(fo.x + fo.r[0] * dr, fo.y + 1.6, fo.z + fo.r[2] * dr); group.add(p);
+    }
+    // A sign beside the track SIGN_AHEAD metres before each place it warns of, facing the riders.
+    for (const z of tr.zones) {
+      const o = S[Math.max(0, Math.floor((z.s0 - SIGN_AHEAD) / DS))];
+      const side = o.u[1] > 0.5 ? 1 : -1;
+      const board = new THREE.Mesh(new THREE.CircleGeometry(0.8, 28), new THREE.MeshBasicMaterial({ map: signTexture(z), fog: true }));
+      board.matrixAutoUpdate = false;
+      board.matrix.copy(frameMatrix(o, 2.1 * side, 1.6, 0, 1, 1, 1));
+      group.add(board);
+      if (z.min && z.max) {   // a loop with both: the blue one beside it
+        const b2 = new THREE.Mesh(new THREE.CircleGeometry(0.8, 28), new THREE.MeshBasicMaterial({ map: signTexture({ min: z.min }) }));
+        b2.matrixAutoUpdate = false; b2.matrix.copy(frameMatrix(o, 3.9 * side, 1.6, 0, 1, 1, 1)); group.add(b2);
+      }
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2, 0.1), postMat);
+      p.matrixAutoUpdate = false; p.matrix.copy(frameMatrix(o, 2.1 * side, 0.4, 0.05, 1, 1, 1)); group.add(p);
+    }
+    // Energy pickups: glowing yellow bolts above the track.
+    const pick = [];
+    const pmat = new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0xc08a00 });
+    for (const pk of tr.pickups) {
+      const o = S[Math.floor(pk.s / DS)];
+      const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), pmat);
+      m.position.set(o.x + o.u[0] * 1.3, o.y + o.u[1] * 1.3, o.z + o.u[2] * 1.3);
+      group.add(m);
+      pick.push({ id: pk.id, m });
+    }
+    // Trees, kept off the track's footprint.
+    const near = new Set(), cell = 6;
+    for (let i = 0; i < S.length; i += 4) {
+      const o = S[i], gx = Math.floor(o.x / cell), gz = Math.floor(o.z / cell);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) near.add((gx + a) + ',' + (gz + b));
+    }
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const o of S) { minX = Math.min(minX, o.x); maxX = Math.max(maxX, o.x); minZ = Math.min(minZ, o.z); maxZ = Math.max(maxZ, o.z); }
+    const rnd = rng(tr.len * 100 | 0), spots = [];
+    for (let k = 0; k < 900 && spots.length < 420; k++) {
+      const x = minX - 120 + rnd() * (maxX - minX + 240), z = minZ - 120 + rnd() * (maxZ - minZ + 240);
+      if (!near.has(Math.floor(x / cell) + ',' + Math.floor(z / cell))) spots.push([x, z, 0.8 + rnd() * 0.8]);
+    }
+    const crowns = new THREE.InstancedMesh(new THREE.ConeGeometry(2.2, 7, 7), mat(0x2f6b3a), spots.length);
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 2, 5), mat(0x6b4a2f), spots.length);
+    spots.forEach(([x, z, s], k) => {
+      crowns.setMatrixAt(k, m4.compose(pv.set(x, 2 * s + 3.5 * s, z), q.identity(), sc.set(s, s, s)));
+      trunks.setMatrixAt(k, m4.compose(pv.set(x, s, z), q.identity(), sc.set(s, s, s)));
+    });
+    group.add(crowns, trunks);
+    scene.add(group);
+    world = { group, pick };
+    ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
+  }
+
+  // ---- The own car's front, seen from the seat, and the friends' trains ----
+  const front = new THREE.Group();
+  // Low in the view: the car's red nose ahead of the seat, the yellow lap bar and the rider's hands.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 1.2), mat(0xd8343a));
+  body.position.set(0, -1.5, -2.7);
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.3, 16, 1, false, 0, Math.PI), mat(0xb82a30));
+  nose.rotation.set(0, Math.PI / 2, Math.PI / 2); nose.position.set(0, -1.5, -3.3);
+  const bar = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.045, 8, 20, Math.PI), mat(0xffd23f));
+  bar.position.set(0, -0.86, -1.25); bar.rotation.x = -Math.PI / 2 + 0.35;
+  const handGeo = new THREE.SphereGeometry(0.08, 10, 8), handMat = mat(0xf0c8a0);
+  const hands = [-0.36, 0.36].map(x => { const h = new THREE.Mesh(handGeo, handMat); h.position.set(x, -0.84, -1.3); return h; });
+  front.add(body, nose, bar, ...hands);
+  camera.add(front);
+
+  const trainGeo = new THREE.BoxGeometry(1.5, 0.8, 2.2), headGeo = new THREE.SphereGeometry(0.28, 12, 9);
+  const trains = new Map();
+  function trainFor(k) {
+    let t = trains.get(k.id);
+    if (!t) {
+      const g = new THREE.Group();
+      const m = mat(new THREE.Color(k.color).getHex());
+      for (const dz of [0, 2.5]) {
+        const car = new THREE.Mesh(trainGeo, m); car.position.set(0, 0.45, dz); g.add(car);
+        for (const x of [-0.35, 0.35]) { const h = new THREE.Mesh(headGeo, handMat); h.position.set(x, 1.1, dz + 0.2); g.add(h); }
+      }
+      g.matrixAutoUpdate = false;
+      scene.add(g);
+      t = g; trains.set(k.id, t);
+    }
+    return t;
+  }
+
+  // ---- The camera: in the front seat, along the track's frame ----
+  const P = new THREE.Vector3(), F = new THREE.Vector3(), U = new THREE.Vector3(), R = new THREE.Vector3(), look = new THREE.Vector3();
+  function frameAt(s) {
+    const p = at(game.track, s), a = p.a, b = p.b, t = p.t;
+    P.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
+    F.set(a.f[0] + (b.f[0] - a.f[0]) * t, a.f[1] + (b.f[1] - a.f[1]) * t, a.f[2] + (b.f[2] - a.f[2]) * t).normalize();
+    U.set(a.u[0] + (b.u[0] - a.u[0]) * t, a.u[1] + (b.u[1] - a.u[1]) * t, a.u[2] + (b.u[2] - a.u[2]) * t).normalize();
+    R.crossVectors(F, U);
+  }
+  let shake = 0, crashSpin = 0;
+  function place(dt) {
+    const car = game.car;
+    if (game.mode === 'crash') {
+      // Off the track: flying on along the way it went, falling and tumbling, into a white-out.
+      const t = game.crashT, f = game.crashFrom;
+      frameAt(f.s);
+      look.copy(P).addScaledVector(F, f.v * t).addScaledVector(U, 1.25);
+      look.y -= 0.5 * 9.81 * t * t * 0.6;
+      camera.position.copy(look);
+      crashSpin += dt * 3;
+      camera.up.copy(U).applyAxisAngle(F, crashSpin);
+      camera.lookAt(look.addScaledVector(F, 10));
+      document.getElementById('valko').style.opacity = Math.min(1, Math.max(0, (t - 0.5) / 0.8));
+      return;
+    }
+    crashSpin = 0;
+    document.getElementById('valko').style.opacity = 0;
+    frameAt(car.s);
+    camera.position.copy(P).addScaledVector(U, 1.25);
+    // Over a limit the car shakes, harder the closer it is to going.
+    shake = game.mode === 'ride' ? car.warn : 0;
+    if (shake > 0) camera.position.addScaledVector(R, (Math.random() - 0.5) * 0.12 * shake).addScaledVector(U, (Math.random() - 0.5) * 0.12 * shake);
+    camera.up.copy(U);
+    look.copy(P).addScaledVector(F, 12).addScaledVector(U, 0.9);
+    camera.lookAt(look);
+    const fov = baseFov + Math.min(14, Math.max(0, car.v) * 0.3);
+    if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
+  }
+
+  let baseFov = 70, sizedW = 0, sizedH = 0;
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    sizedW = w; sizedH = h;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    baseFov = w / h < 0.8 ? 78 : 62;
+    camera.fov = baseFov;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  // A cheap phone runs short of pixels: measure the first seconds of the ride and step down.
+  let tuneT = 0, tuneN = 0, tuned = false;
+  function tune(dt) {
+    if (tuned || game.mode !== 'ride') return;
+    tuneT += dt; tuneN++;
+    if (tuneT > 3) {
+      const ms = tuneT / tuneN * 1000;
+      if (ms > 24 && ratio > 1) { ratio = 1; renderer.setPixelRatio(ratio); resize(); }
+      else if (ms > 24 && ratio > 0.75) { ratio = 0.75; renderer.setPixelRatio(ratio); resize(); }
+      tuneT = tuneN = 0;
+      if (ms <= 24 || ratio <= 0.75) tuned = true;
+    }
+  }
+
+  addEventListener('rata', buildWorld);
+  if (game.track) buildWorld();
+  const mo = new THREE.Matrix4();
+  let last = performance.now();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (innerWidth !== sizedW || innerHeight !== sizedH) resize();
+    if (!world) return;
+    place(dt);
+    for (const p of world.pick) { p.m.visible = !game.car.took.has(p.id); p.m.rotation.y += dt * 2.5; }
+    // Friends' trains, hidden while right on top of mine.
+    const seen = new Set();
+    if (net) {
+      for (const k of net.cars) {
+        if (k.kind === 'me') continue;
+        const t = trainFor(k); seen.add(k.id);
+        t.visible = Math.abs(k.s - game.car.s) > 3.5;
+        if (t.visible) {
+          const o = at(game.track, Math.max(0, k.s)).a;
+          t.matrix.copy(frameMatrix(o, 0, 0, 0, 1, 1, 1));
+        }
+      }
+    }
+    for (const [id, t] of trains) if (!seen.has(id)) t.visible = false;
+    tune(dt);
+    renderer.render(scene, camera);
+    window.drawn = true;
+  });
+  Object.assign(window, { camera, renderer });
+}
+</script>
+<script src="../../../scores.js" data-game="vuoristorata" data-order="low" data-corner="top-right"></script>
+<script>if (window.AiPelitScores) { AiPelitScores.format(fmtTime); AiPelitScores.board('taso-' + game.level, 'Taso ' + game.level); }</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

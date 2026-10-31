@@ -46,6 +46,7 @@ export const GAMES = {
   moukari: { order: 'high', boards: /^main$/ }, // longest hammer throw in metres
   seivashyppy: { order: 'high', boards: /^main$/ }, // highest pole vault cleared in metres
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
+  vuoristorata: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest ride per level, seconds
 };
 
 const ID = /^[a-f0-9]{32}$/;
