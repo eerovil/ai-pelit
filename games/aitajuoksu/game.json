@@ -37,6 +37,13 @@
       "note": "Juoksijalle voi valita asun, myös Halloween-asuja, ja kaverit näkevät huoneessa toistensa asut.",
       "request": "Kaikkiin peleihin, joissa voisi olla järkevää olla erilaisia asuja. Voisi tehdä asuvalinta. Ja. Nyt kun on Halloween, niin voisi olla Halloween-asuja sitten tänään saatavilla ja muulloinkin.",
       "issue": "eerovil/ai-pelit#158"
+    },
+    {
+      "n": 6,
+      "date": "2026-10-31",
+      "note": "Jalat liikkuvat oikein päin: polvi koukistuu, kun jalka heilahtaa eteen, eikä juoksija enää näytä juoksevan takaperin.",
+      "request": "Potuushyppy: jalat animoituu takaperin, eli näyttöä kuin juoksisi taaksepäin. Onko samaa muissa yleisurheilupeleissä? Pitää korjata",
+      "issue": "eerovil/ai-pelit#170"
     }
   ]
 }
