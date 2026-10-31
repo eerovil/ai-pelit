@@ -34,3 +34,13 @@ def test_a_run_that_stopped_after_filing_is_finished_not_filed_again():
     ]
     assert feedback_issue.filed_earlier(feedback, issues) == {200: [7, 8]}
     assert feedback_issue.filed_earlier(feedback, []) == {}
+
+
+def test_a_big_backlog_is_filed_over_several_days_never_too_big_for_github():
+    worst = "<@#" * 333 + "x"  # 1000 characters, each escaped as long as it can be
+    feedback = [{"id": i, "name": "Aino", "game": "hiihto", "version": 9, "text": worst, "at": "2026-10-31T16:05:00Z"}
+                for i in range(1, 201)]
+    first = feedback_issue.fitting(feedback, {})
+    assert 1 < len(first) < 200 and first == feedback[:len(first)]
+    assert len(feedback_issue.issue_body(first, {})) <= feedback_issue.BODY_LIMIT < 65536
+    assert feedback_issue.fitting(feedback[:3], {}) == feedback[:3]

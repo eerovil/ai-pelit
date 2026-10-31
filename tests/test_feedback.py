@@ -138,3 +138,29 @@ def test_a_double_tap_sends_once_and_the_box_fits_a_390px_phone(site, context, f
     assert page.evaluate("document.documentElement.scrollWidth") <= 390
     box = page.locator(".feedback-box").bounding_box()
     assert box["x"] >= 0 and box["x"] + box["width"] <= 390
+
+
+def test_a_name_rejected_while_writing_keeps_the_text_for_after(site, context, fake):
+    fake.players = {ME: {"name": "Aino", "status": "approved"}}
+    page = shelf(site, context, "Aino")
+    page.wait_for_selector(".feedback-text")
+    page.fill(".feedback-text", "Tärkeä ajatus")
+    fake.players[ME]["status"] = "rejected"
+    page.click(".feedback button:has-text('Lähetä')")
+    page.wait_for_selector(".feedback:has-text('Nimimerkkiä Aino ei hyväksytty. Valitse toinen.')")
+    assert fake.feedback == []
+    page.fill(".feedback-name", "Aino2")
+    page.click(".feedback button:has-text('Tallenna')")
+    page.wait_for_selector(".feedback-waiting")
+    fake.players[ME]["status"] = "approved"
+    page.reload()  # back later: the box asks the server again, and the text is still there
+    page.click("button:has-text('Anna palautetta')")
+    page.wait_for_selector(".feedback-text")
+    assert page.locator(".feedback-text").input_value() == "Tärkeä ajatus"
+    page.click(".feedback button:has-text('Lähetä')")
+    page.wait_for_selector(".feedback-note:text('Kiitos, Aino2!')")
+    assert [f["text"] for f in fake.feedback] == ["Tärkeä ajatus"]
+    page.reload()
+    page.click("button:has-text('Anna palautetta')")
+    page.wait_for_selector(".feedback-text")
+    assert page.locator(".feedback-text").input_value() == ""

@@ -215,6 +215,16 @@
   function feedbackSection(game) {
     if (!scores || !scores.me) return null;
     var box = el('div', { class: 'feedback-box' });
+    // What the player wrote, kept while the name is asked again (the admin rejected or the name
+    // changed between opening the box and sending), so it is there when the form comes back,
+    // on this page or after leaving it, until the tab closes.
+    var DRAFT = 'ai-pelit:_palaute:' + game.slug;
+    var draft = '';
+    try { draft = sessionStorage.getItem(DRAFT) || ''; } catch (e) {}
+    function keep(v) {
+      draft = v;
+      try { if (v) sessionStorage.setItem(DRAFT, v); else sessionStorage.removeItem(DRAFT); } catch (e) {}
+    }
     var open = el('button', { type: 'button', class: 'secondary feedback-open', text: '💬 Anna palautetta' });
     open.addEventListener('click', function () { open.remove(); show(); });
 
@@ -236,6 +246,8 @@
         versions.appendChild(el('option', { value: String(ver.n), text: 'v' + ver.n + (i ? '' : ' (uusin)') }));
       });
       var text = el('textarea', { class: 'feedback-text', rows: '4', maxlength: '1000', placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
+      text.value = draft;
+      text.addEventListener('input', function () { keep(text.value); });
       var send = el('button', { type: 'button', class: 'button', text: 'Lähetä' });
       var note = el('p', { class: 'muted feedback-note', role: 'status' });
       send.addEventListener('click', function () {
@@ -248,8 +260,8 @@
           body: JSON.stringify({ player: scores.id(), game: game.slug, version: Number(versions.value), text: text.value }),
         }).then(function (r) {
           send.disabled = false;
-          if (r.ok) { text.value = ''; note.textContent = 'Kiitos, ' + name + '! Palaute meni perille.'; return; }
-          if (r.status === 403) { show(); return; }
+          if (r.ok) { text.value = ''; keep(''); note.textContent = 'Kiitos, ' + name + '! Palaute meni perille.'; return; }
+          if (r.status === 403) { keep(text.value); show(); return; }
           note.textContent = r.status === 429 ? 'Olet antanut tänään jo paljon palautetta. Jatka huomenna.' : 'Palautetta ei saatu lähetettyä. Yritä uudelleen.';
         }).catch(function () {
           send.disabled = false;

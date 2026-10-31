@@ -308,11 +308,13 @@ async function addFeedback(env, url, body) {
   if (known !== 'any' && !(known.get(game) && (version === null || known.get(game).has(version)))) return fail(404, 'no such game');
   const p = await env.DB.prepare('SELECT name, status FROM players WHERE id = ?').bind(player).first();
   if (!p || p.status !== 'approved') return fail(403, 'approved nickname needed');
+  // The count and the insert are one statement, so posts at once cannot pass the limit together.
   const day = new Date(Date.now() - 864e5).toISOString();
-  const made = await env.DB.prepare('SELECT COUNT(*) AS n FROM feedback WHERE player = ? AND at > ?').bind(player, day).first();
-  if (made.n >= FEEDBACK_PER_DAY) return fail(429, 'too much feedback today');
-  await env.DB.prepare('INSERT INTO feedback (player, name, game, version, text, at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(player, p.name, game, version, text, now()).run();
+  const res = await env.DB.prepare(
+    `INSERT INTO feedback (player, name, game, version, text, at)
+     SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM feedback WHERE player = ? AND at > ?) < ?`
+  ).bind(player, p.name, game, version, text, now(), player, day, FEEDBACK_PER_DAY).run();
+  if (!res.meta.changes) return fail(429, 'too much feedback today');
   return json({ ok: true });
 }
 

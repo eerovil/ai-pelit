@@ -69,6 +69,19 @@ def issue_body(feedback: list[dict], titles: dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+BODY_LIMIT = 60000  # GitHub refuses an issue body over 65 536 characters
+
+
+def fitting(feedback: list[dict], titles: dict[str, str], limit: int = BODY_LIMIT) -> list[dict]:
+    """The oldest feedback that fits in one issue body. The rest waits for the next day's issue,
+    so a big backlog never blocks the daily run. One item always fits (1000 characters, at most
+    four times that escaped)."""
+    n = len(feedback)
+    while n > 1 and len(issue_body(feedback[:n], titles)) > limit:
+        n -= 1
+    return feedback[:n]
+
+
 def issue_title(feedback: list[dict], today: datetime) -> str:
     return f"Palautteet {today.day}.{today.month}.{today.year}: {len(feedback)} kpl"
 
@@ -118,7 +131,12 @@ def main() -> int:
             return 0
     with urllib.request.urlopen(urllib.request.Request(SITE + "catalog.json", headers={"user-agent": "ai-pelit-palautteet"}), timeout=30) as res:
         titles = {g["slug"]: g["title"] for g in json.load(res)["games"]}
+    left = len(feedback)
+    feedback = fitting(feedback, titles)
+    left -= len(feedback)
     title, body = issue_title(feedback, datetime.now(TZ)), issue_body(feedback, titles)
+    if left:
+        print(f"{left} more wait for the next run (issue body limit)")
     if args.dry_run:
         print(title, body, sep="\n\n")
         return 0

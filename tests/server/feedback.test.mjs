@@ -84,3 +84,13 @@ test('cleanText keeps line breaks and drops control characters', () => {
   assert.equal(cleanText(' a\u0007b \t c\n\n\n\nd '), 'ab c\n\nd');
   assert.equal(cleanText(42), '');
 });
+
+test('posts sent at once never pass the daily limit', async () => {
+  const { env, call, player } = setup();
+  await player(A, 'Aino', 'approved');
+  const answers = await Promise.all(Array.from({ length: FEEDBACK_PER_DAY + 5 }, (_, i) =>
+    call('POST', '/api/feedback', { player: A, game: 'hiihto', text: `nro ${i}` })));
+  assert.equal(answers.filter((a) => a.status === 200).length, FEEDBACK_PER_DAY);
+  assert.equal(answers.filter((a) => a.status === 429).length, 5);
+  assert.equal(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM feedback').get().n, FEEDBACK_PER_DAY);
+});
