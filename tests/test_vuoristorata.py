@@ -386,3 +386,29 @@ def test_a_finished_phone_reloaded_while_others_ride_keeps_its_time_and_place(si
     finally:
         for c in ctxs:
             c.close()
+
+
+def test_changing_the_track_frees_the_old_tracks_materials_and_textures(page):
+    # Each level change frees the old track's own geometry, materials and textures (the signs'
+    # pictures, the finish banner...), and keeps the rail materials every track shares.
+    res = page.evaluate("""() => {
+      const freed = new Set(), seen = [];
+      for (const lv of [2, 3, 2, 3]) {
+        const old = scene.getObjectByName('rata'), own = new Set();
+        old.traverse(o => { for (const x of [o.geometry, o.material, o.material && o.material.map]) if (x) own.add(x); });
+        for (const x of own) x.addEventListener('dispose', () => freed.add(x));
+        seen.push(own);
+        maxLevel = 3; setLevel(lv);
+      }
+      const all = seen.flatMap(s => [...s]);
+      const kept = all.filter(x => !freed.has(x));
+      const signs = all.filter(x => x.isTexture).length;
+      return { signs, keptTextures: kept.filter(x => x.isTexture).length, keptGeometries: kept.filter(x => x.isBufferGeometry).length,
+               keptMaterials: new Set(kept.filter(x => x.isMaterial)).size, scenes: scene.children.filter(o => o.name === 'rata').length };
+    }""")
+    assert res["signs"] > 10
+    assert res["keptTextures"] == 0
+    assert res["keptGeometries"] == 0
+    assert res["keptMaterials"] == 4   # rails, spine, ties, posts: shared by every track
+    assert res["scenes"] == 1
+    assert page.errors == []

@@ -196,6 +196,7 @@ if (renderer) {
   // ---- The level's track: rails, spine, ties, supports, station, finish gate, signs, pickups, trees ----
   let world = null;
   const railMat = mat(0xc9ced6), spineMat = mat(0xd8343a), tieMat = mat(0x6b5a4a), postMat = mat(0xf2f2f2);
+  const SHARED = new Set([railMat, spineMat, tieMat, postMat]);
   // A tube along the track at an offset in its own frame (right, up), `sides` corners round.
   function sweep(S, stride, dr, du, rad, sides) {
     const pos = [], idx = [];
@@ -254,8 +255,17 @@ if (renderer) {
   }
 
   function buildWorld() {
-    if (world) { scene.remove(world.group); world.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    // The old level's meshes go, with their geometry and the materials and textures made for them;
+    // the shared track materials stay.
+    if (world) {
+      scene.remove(world.group);
+      const mats = new Set();
+      world.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) mats.add(o.material); });
+      for (const m of mats) { if (SHARED.has(m)) continue; m.map?.dispose(); m.dispose(); }
+      renderer.renderLists.dispose();
+    }
     const tr = game.track, S = tr.S, group = new THREE.Group();
+    group.name = 'rata';
     group.add(new THREE.Mesh(sweep(S, 2, -0.55, 0, 0.07, 6), railMat));
     group.add(new THREE.Mesh(sweep(S, 2, 0.55, 0, 0.07, 6), railMat));
     group.add(new THREE.Mesh(sweep(S, 2, 0, -0.38, 0.17, 4), spineMat));
@@ -469,7 +479,7 @@ if (renderer) {
     renderer.render(scene, camera);
     window.drawn = true;
   });
-  Object.assign(window, { camera, renderer });
+  Object.assign(window, { camera, renderer, scene });
 }
 </script>
 <script src="../../../scores.js" data-game="vuoristorata" data-order="low" data-corner="top-right"></script>
