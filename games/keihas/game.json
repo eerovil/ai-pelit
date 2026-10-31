@@ -23,6 +23,13 @@
       "note": "Helpommat kontrollit: keltainen alue kertoo, milloin Heitä painetaan, koko vauhtirata näkyy alusta asti, keihäs lähtee itse vihreän alueen lopussa, ja Heitä-nappi on jalkanappien yläpuolella eikä niiden välissä.",
       "request": "Keihäänheitto kontrollit on vähä liian hankala, ja se vihreä alue tulee yllättäen enkä kerkeä lataamaan heittoa. Lisäksi kun heittonappi on siinä välissä niin sitä painaa vahingossa",
       "issue": "eerovil/ai-pelit#166"
+    },
+    {
+      "n": 4,
+      "date": "2026-10-31",
+      "note": "Pelaa kuten v3, mutta kisa, tulostaulu ja kavereiden kanssa pelaaminen tulevat yhteisestä yleisurheilukirjastosta; juoksijan polvi koukistuu nyt oikeaan suuntaan, ja vaaka-asennossa nappien välinen rako ei enää ole askel.",
+      "request": "Yleisurheilupelien yhteinen koodi omaksi kirjastoksi, moninpeli mukaan lukien. Toive: yhteinen yleisurheilukirjasto, jota uudet versiot käyttävät; moninpeli kirjastoon, niin että kaikki lajit pelaavat kavereiden kanssa samalla tavalla; jokaisesta lajista uusi versio, joka käyttää kirjastoa ja pelaa kuten nyt.",
+      "issue": "eerovil/ai-pelit#165"
     }
   ]
 }
