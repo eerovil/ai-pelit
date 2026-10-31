@@ -79,8 +79,9 @@ request, with the version that taught it (#181, Eero's choice).
    with `data-corner="top-right"`, `"bottom-left"` or `"bottom-right"` on that script tag.
 4. **Phone first.** Touch only, playable on a 360 × 640 screen, no hover, no keyboard
    needed. Fill the screen with a fixed box (`position:fixed; top:0; bottom:0`, or `height:100%`),
-   not `100dvh` (#181: on Android, after going full screen, `100dvh` kept the old height and the
-   bottom of Yöajo v1 was under the edge), and draw for that box as it is each frame. Safe-area
+   not `100dvh`, and draw for that box as it is each frame (#181: in the installed full-screen
+   app on Eero's Android phone, the bottom of Yöajo v1 was under the screen's edge until the system
+   bars moved; `100dvh` keeping the old height is the likely cause, not proven). Safe-area
    insets, and `touch-action: none` on the play area. Short
    sounds through Web Audio only after the first tap. Portrait first, and sideways too (#95): the
    installed app may turn, so a new version also plays at 740 × 360 — menus and end screens fit

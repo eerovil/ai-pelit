@@ -118,9 +118,10 @@ the version that taught it, so you can read the code that fixed it.
 What only showed on a real phone, never in the headless tests. When you hit a new one, add a line
 here in the same pull request (AGENTS.md says so), naming the version that taught it.
 
-- **Not `100dvh`.** Yöajo v1 (#181): the installed app opens full screen, and on Android `100dvh`
-  kept the old, smaller-screen height, so the bottom of the game was under the screen's edge until
-  the system bars were swiped in and out. Fill the screen with a fixed box (`position:fixed;
+- **Not `100dvh`.** Yöajo v1 (#181), seen on Eero's Android phone: in the installed app, which
+  opens full screen, the bottom of the game was under the screen's edge until the system bars were
+  swiped in and out. The likely cause, not proven (a test phone did not show it), is `100dvh`
+  keeping the height from before full screen. Fill the screen with a fixed box (`position:fixed;
   top:0; bottom:0`) and compare its `getBoundingClientRect()` with the size you drew for every
   frame (`fitCheck()` in Yöajo v2's `ui.js`); listen to `fullscreenchange` too.
 - **A tap lands where the finger is** (Hiihto v5, see "Controls that feel right"): draw for the
