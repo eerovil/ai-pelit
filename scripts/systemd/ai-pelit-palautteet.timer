@@ -1,0 +1,10 @@
+# Once a day at 17.00 (#184); a day the host was off is caught up when it is back.
+[Unit]
+Description=AI-pelit: file new player feedback once a day
+
+[Timer]
+OnCalendar=*-*-* 17:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

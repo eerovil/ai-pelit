@@ -1,0 +1,13 @@
+{
+  "title": "Vuoristorata",
+  "description": "Aja vuoristoradan junaa etupenkistä: vauhtia ja jarrua, ettei juna suistu mutkassa, mäen harjalla tai silmukassa. Yksin tai kavereiden kanssa kilpaa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-10-31",
+      "note": "Ensimmäinen versio: 3D-ajo etupenkistä, vauhti- ja jarrunappi, nopeusmerkit mutkiin, mäkiin ja silmukoihin, tasot, tähdet, tuloslista joka radalle ja kilpa kavereiden kanssa.",
+      "request": "Vuoristoratapeli",
+      "issue": "eerovil/ai-pelit#180"
+    }
+  ]
+}
