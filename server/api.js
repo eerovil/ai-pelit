@@ -14,6 +14,9 @@
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
+//   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
+//   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
+//   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -55,7 +58,7 @@ const ID = /^[a-f0-9]{32}$/;
 const NAME_MAX = 16;
 export const NEW_PER_DAY = 5;
 export const PENDING_MAX = 30;
-const BODY_MAX = 2000;
+const BODY_MAX = 4000; // room for 1000 characters of feedback (#184), emoji and all
 const LIST = 10;
 
 function json(body, status = 200) {
@@ -281,6 +284,63 @@ function isAdmin(request, env) {
   return !!env.ADMIN_KEY && key === env.ADMIN_KEY;
 }
 
+// Feedback on a game (#184). Only a player whose current nickname the admin approved may write,
+// so it needs no moderation of its own; at most FEEDBACK_PER_DAY a day per player. Private: no
+// route shows it to players.
+export const FEEDBACK_MAX = 1000;
+export const FEEDBACK_PER_DAY = 10;
+
+// Like cleanName(), but keeps line breaks (at most two in a row).
+export function cleanText(text) {
+  if (typeof text !== 'string') return '';
+  const s = text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
+    .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return [...s].length <= FEEDBACK_MAX ? s : '';
+}
+
+async function addFeedback(env, url, body) {
+  const player = String(body.player || ''), game = String(body.game || ''), text = cleanText(body.text);
+  const version = body.version === undefined || body.version === null ? null : Number(body.version);
+  if (!ID.test(player)) return fail(400, 'bad player');
+  if (!SLUG.test(game)) return fail(400, 'bad game');
+  if (version !== null && (!Number.isInteger(version) || version < 1 || version > 999)) return fail(400, 'bad version');
+  if (!text) return fail(400, `feedback is 1–${FEEDBACK_MAX} characters`);
+  const known = await knownVersions(env, url);
+  if (!known) return fail(503, 'no catalog');
+  if (known !== 'any' && !(known.get(game) && (version === null || known.get(game).has(version)))) return fail(404, 'no such game');
+  const p = await env.DB.prepare('SELECT name, status FROM players WHERE id = ?').bind(player).first();
+  if (!p || p.status !== 'approved') return fail(403, 'approved nickname needed');
+  // The count and the insert are one statement, so posts at once cannot pass the limit together.
+  const day = new Date(Date.now() - 864e5).toISOString();
+  const res = await env.DB.prepare(
+    `INSERT INTO feedback (player, name, game, version, text, at)
+     SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM feedback WHERE player = ? AND at > ?) < ?`
+  ).bind(player, p.name, game, version, text, now(), player, day, FEEDBACK_PER_DAY).run();
+  if (!res.meta.changes) return fail(429, 'too much feedback today');
+  return json({ ok: true });
+}
+
+// The newest first; with ?new=1 only those not yet filed in an issue, and with ?issue=<n> those
+// filed in issue n (what its agent reads), both oldest first.
+async function adminFeedback(env, url) {
+  const fresh = url.searchParams.get('new') === '1', issue = Number(url.searchParams.get('issue'));
+  const where = fresh ? 'WHERE issue IS NULL ORDER BY id ASC' : issue > 0 ? 'WHERE issue = ? ORDER BY id ASC' : 'ORDER BY id DESC';
+  let q = env.DB.prepare(`SELECT id, name, game, version, text, at, issue FROM feedback ${where} LIMIT 200`);
+  if (!fresh && issue > 0) q = q.bind(issue);
+  const { results } = await q.all();
+  return json({ feedback: results });
+}
+
+async function adminFiled(env, body) {
+  const ids = body.ids, issue = Number(body.issue);
+  if (!Array.isArray(ids) || !ids.length || ids.length > 200 || !ids.every((i) => Number.isInteger(i) && i > 0)) return fail(400, 'bad ids');
+  if (!Number.isInteger(issue) || issue < 1) return fail(400, 'bad issue');
+  for (const id of ids) {
+    await env.DB.prepare('UPDATE feedback SET issue = ? WHERE id = ? AND issue IS NULL').bind(issue, id).run();
+  }
+  return json({ ok: true });
+}
+
 async function adminPlayers(env) {
   // Waiting names first, then the newest.
   const { results } = await env.DB.prepare(
@@ -346,6 +406,18 @@ async function route(request, env) {
   if (path === '/api/plays' && method === 'POST') {
     const body = await readBody(request);
     return body ? addPlay(env, url, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/feedback' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? addFeedback(env, url, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/admin/feedback') {
+    if (!isAdmin(request, env)) return fail(403, 'admin key needed');
+    if (method === 'GET') return adminFeedback(env, url);
+    if (method === 'POST') {
+      const body = await readBody(request);
+      return body ? adminFiled(env, body) : fail(400, 'bad body');
+    }
   }
   if (path === '/api/admin/players') {
     if (!isAdmin(request, env)) return fail(403, 'admin key needed');
