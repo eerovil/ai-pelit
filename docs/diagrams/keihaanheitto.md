@@ -7,6 +7,11 @@ turn the player takes a run-up by tapping the left and right foot in turn, holds
 javelin's angle rises, and lets go when the angle is in the green and they are on the green part of
 the runway, before the line. The computer's throws are worked out at once.
 
+From v3 (#166) the run is easier: a yellow mark on the runway says when to start holding
+"Heitä", a strip under the ground shows the whole runway from the first step, a throw still held
+at the end of the green goes by itself, and upright the throw is a bar above the two feet, not a
+pad between them (`games/keihas/v3/index.html`).
+
 From v2 (#158) the player's athlete wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's thrower wears its own (`drawAthlete()` in `games/keihas/v2/index.html`; the picker is `asut.md`).
 
 ```mermaid
@@ -18,10 +23,13 @@ flowchart TD
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> R[Vauhdinotto: vasen, oikea vuorotellen]
   Q -- Kaveri toisella puhelimella --> WT[Kaverin heitto näkyy, sama keihäs lentää]
+  R --> Y[Keltainen alue: aloita Heitä]
   R --> LN{Viivan yli keihäs kädessä?}
   LN -- Kyllä --> X[X: yliastuttu]
-  LN -- Ei --> A[Pidä Heitä: kulma nousee]
-  A --> RL{Kosketus alle 0,12 s?}
+  Y --> A[Pidä Heitä: kulma nousee]
+  A --> AU{Vihreän alueen loppu?}
+  AU -- Kyllä --> F
+  AU -- Ei, päästit irti --> RL{Kosketus alle 0,12 s?}
   RL -- Kyllä --> R
   RL -- Ei --> F[Päästä irti: keihäs lentää]
   F --> OK{Lattea tai liuku viivan yli?}
@@ -38,9 +46,9 @@ flowchart TD
   END --> S[Ennätys, tuloslista, voitosta seuraava taso]
   S --> M
   END --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
-  class M,R,A,F,T blue
+  class M,R,Y,A,F,T blue
   class CPU,WT violet
-  class Q,LN,RL,OK,NX amber
+  class Q,LN,AU,RL,OK,NX amber
   class K,D,CUT teal
   class X rose
   class END,S,RM green
@@ -62,9 +70,11 @@ flowchart TD
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()`, shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best throw, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` throws for every computer thrower up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone heittää heti**: `cpuMark()`: the skill plus a scatter of 3.5 m, a foul one time in eight. In a room the host's "Jatka ilman heitä" hands an away phone's throws to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
-- **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the thrower goes (as in Aitajuoksu), the same foot twice slows; about 8 m/s at eight taps a second. The bar under the score panel shows the speed; the green part of the runway (`stopDist()`) is where letting go stops the thrower before the line at that speed.
+- **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the thrower goes (as in Aitajuoksu), the same foot twice slows (from v3 it only adds nothing); about 8 m/s at eight taps a second. The bar under the score panel shows the speed; the green part of the runway (`stopDist()`) is where letting go stops the thrower before the line at that speed.
+- **Keltainen alue: aloita Heitä**: v3 `zones()` and `drawStrip()`: at the speed now, the yellow part of the runway is where pressing "Heitä" brings the angle into the green just as the thrower reaches the end of the green part; "Pidä Heitä pohjassa!" shows there. The whole runway, the thrower, the yellow and the green show as a strip under the ground's distances from the first step, and the camera looks further ahead (about 11 m across) than v2's. Upright, the throw is a bar of its own above the two feet (`pads()`), and a touch in the gap between them does nothing (`padAt()`).
+- **Vihreän alueen loppu?**: v3 `step()`: a throw still held at the last safe step (`-stopDist(v)`) goes by itself (`letFly()`), at least at 10°, so holding too long is no longer a foul. It is thrown from the position and speed rounded to the centimetre, the same numbers other phones get.
 - **Viivan yli keihäs kädessä?**: `step()`: reaching the line (x = 0) before letting go is a foul, "Yliastuttu!". In a room 45 s with no tap (`TURN_MAX`, counted in `th.idle`, which every foot tap and press of Heitä sets back to nought) is a foul, "Aika loppui"; a slow player who keeps tapping is never timed out.
-- **Pidä Heitä: kulma nousee**: `startAim()`: holding the middle pad (upright), the top pad of either side column or anywhere on the scene (sideways) raises the angle from 5° at 50° a second (`AIM_RATE`); the dial beside the thrower shows it, green from 33° to 42° (`GREEN`), the angles within about 2 m of the best. The thrower slows a little while aiming.
+- **Pidä Heitä: kulma nousee**: `startAim()`: holding the middle pad (upright), the top pad of either side column or anywhere on the scene (sideways) raises the angle from 5° at 50° a second (`AIM_RATE`); the dial beside the thrower shows it, green from 33° to 42° (`GREEN`), the angles within about 2 m of the best. From v3 the angle rises at 40° a second and the green is 32°–44°, within 3 m of the best. The thrower slows a little while aiming.
 - **Kosketus alle 0,12 s?**: `release()`: a touch shorter than `TAP_MIN` is a slip of the thumb and goes back to running.
 - **Päästä irti: keihäs lentää**: `throwNow()` and `javelin()`: the release speed is 9 m/s plus 2.35 times the run-up (`relSpeed()`), less when thrown steeper than 34°; the flight has gravity and air drag (`flySub()`, 1/240 s steps), so the best angle is about 37°. The camera follows the javelin out over the field.
 - **Lattea tai liuku viivan yli?**: `flight()`: thrown below 10° the tip does not land first; or the thrower slides over the line after letting go (`stopDist()`, braking at 18 m/s²). Either is a foul.
