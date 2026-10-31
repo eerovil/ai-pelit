@@ -12,7 +12,7 @@ From v3 (#166) the run is easier: a yellow mark on the runway says when to start
 at the end of the green goes by itself, and upright the throw is a bar above the two feet, not a
 pad between them (`games/keihas/v3/index.html`).
 
-v4 (#165) plays as v3, with the meet, the results board, the saves, the outfit message and the room handling from the shared athletics library (see `yleisurheilu-kirjasto.md`); the running knee bends the right way (#170), and sideways the gap between a column's throw pad and its foot does nothing.
+v4 (#165) plays as v3, with the meet, the results board, the saves, the outfit message and the room handling from the shared athletics library (see `yleisurheilu-kirjasto.md`); the running knee bends the right way (#170), and sideways the gap between a column's throw pad and its foot does nothing. v5 (#176) plays as v4 on `yleisurheilu-3`: the meet ends with the medal ceremony, the medallists in their outfits, and the podium stays until a tap.
 
 From v2 (#158) the player's athlete wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's thrower wears its own (`drawAthlete()` in `games/keihas/v2/index.html`; the picker is `asut.md`).
 
@@ -43,14 +43,15 @@ flowchart TD
   X --> NX
   NX -- Ei --> T
   NX -- Kolmas kierros --> CUT[8 parasta jatkaa, viimeisestä alkaen]
-  NX -- Kuudes kierros --> END[Lopputulokset ja mitalit]
+  NX -- Kuudes kierros --> END[Palkintojenjako ja lopputulokset]
   CUT --> T
   END --> S[Ennätys, tuloslista, voitosta seuraava taso]
-  S --> M
-  END --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
+  END --> TAP{Koroke jää: napautus?}
+  TAP -- Yksin --> M
+  TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,Y,A,F,T blue
   class CPU,WT violet
-  class Q,LN,AU,RL,OK,NX amber
+  class Q,LN,AU,RL,OK,NX,TAP amber
   class K,D,CUT teal
   class X rose
   class END,S,RM green
@@ -68,7 +69,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/keihas/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's throws, so a reload or a trip to the shelf keeps it); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 heittäjää, arvottu järjestys**: `newComp()` (v4: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js`): the players, then computer throwers up to twelve (`FIELD`), each with a skill around `base(level)` metres (50 m at level 1, 4 m more per level up to 84 m); the order of rounds 1–3 is drawn once (`order0`).
+- **Kisa: 12 heittäjää, arvottu järjestys**: `newComp()` (v4: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js`, from v5 `yleisurheilu-3/kisa.js`): the players, then computer throwers up to twelve (`FIELD`), each with a skill around `base(level)` metres (50 m at level 1, 4 m more per level up to 84 m); the order of rounds 1–3 is drawn once (`order0`).
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()` (v4: the library's `K.drawBoard()`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best throw, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` (v4: the library's) throws for every computer thrower up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone heittää heti**: `cpuMark()`: the skill plus a scatter of 3.5 m, a foul one time in eight. In a room the host's "Jatka ilman heitä" hands an away phone's throws to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
@@ -83,6 +84,7 @@ flowchart TD
 - **Kaverin heitto näkyy, sama keihäs lentää**: the thrower's phone sends where its thrower is twelve times a second (`p`) and the release (`rel`); the host passes both on, and every phone flies the same javelin with `throwNow()`, landing at the same mark.
 - **Tulos metreinä viivasta, ennätys talteen**: `landed()` and `record()`: the mark is where the tip lands, from the line, down to the centimetre; a new record is saved at once (`ennatys`). The thrower's phone reports it (`res`); the host records it once (`seq`) and sends the meet to everyone (`c`).
 - **8 parasta jatkaa, viimeisestä alkaen**: after round 3 `advance()` keeps the best eight (`final`), each later round in reverse order of the standings. With no player on a phone left in the final the rest is thrown at once.
-- **Lopputulokset ja mitalit**: `over()` and `netEnd()` (v4: the library's `over()`, `end()` and `K.step()`): the standings with 🥇🥈🥉, shown for a few seconds.
+- **Palkintojenjako ja lopputulokset**: `over()` and `netEnd()` (v4: the library's `over()`, `end()` and `K.step()`): before v5 the standings with 🥇🥈🥉, shown for a few seconds. From v5 (#176) the medal ceremony, `K.drawPodium()` at the end of `draw()` over the whole screen: the top three on the podium in their outfits (`look` in the meet's options, from `looks()`/`plain()`), an official hangs their medals with a chime each (`chime`), and the final standings under it.
+- **Koroke jää: napautus?**: from v5 nothing leaves the podium by itself: the tap handler calls `K.skip()` alone and with friends; a tap during the ceremony finishes it (alone only), a tap after it shows the menu, or `R.backToRoom()` in a room, each phone by its own tap. Before v5 this came by itself after a few seconds.
 - **Ennätys, tuloslista, voitosta seuraava taso**: `netEnd()` saves `kisat`, and alone a win adds `voitot` and the next level (`taso`); the meet's best throw goes to the high-score list with `AiPelitScores.submit()` (`keihas` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: the host sends the results with `R.deliver()`; each phone saves its own meet once (`R.once()`), shows its place and the top eight in the room (`afterEnd()`, `R.note()`, `R.backToRoom()`).
