@@ -26,9 +26,23 @@ HELPERS = """() => {
 }"""
 
 
-def open_game(site, context, saved=None):
+# Math.random seeded (mulberry32) before the game loads, as in test_moukari.py, so the computer's
+# skills and jumps and the tests' own scatter are the same on every run.
+SEEDED = """(() => {
+  let s = %d >>> 0;
+  Math.random = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+})();"""
+
+
+def open_game(site, context, saved=None, seed=1):
     site.build(ROOT / "games")
     page = context.new_page()
+    page.add_init_script(SEEDED % seed)
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.goto(site.url + URL)
@@ -207,29 +221,50 @@ def test_three_fouls_leave_you_out_of_the_final_eight(site, context):
 
 def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
     page = open_game(site, context)
-    # The winning computer jumper's best over many meets, at a level.
-    winner = """lv => {
-      const out = [];
-      for (let n = 0; n < 60; n++) {
-        comp = newComp('solo', [], lv);
-        out.push(Math.max(...comp.throwers.map(t => Math.max(...[1, 2, 3, 4, 5, 6].map(() => cpuMark(t))))));
-      }
-      out.sort((a, b) => a - b);
-      return [out[6], out[30], out[53]];
-    }"""
-    lo, mid, hi = page.evaluate(winner, 1)
-    # Lazy: a slow run, taking off far back, too flat, no legs. It never wins at level 1.
-    lazy = mark(page, -0.6, 6.5, 12, None)["mark"]
-    assert lazy < lo
-    # Careless at a fair speed (7.5 m/s, 40 cm back, legs late) loses most meets.
-    assert mark(page, -0.4, 7.5, 26, 0.05)["mark"] < mid
-    # A good jump (8.5 m/s, close to the line, legs on time) wins nearly every meet at level 1.
-    good = mark(page, -0.1, 8.5, 20)["mark"]
-    assert good > hi
-    # At the top level only a very fast and clean jump is in the running, and it can win.
-    lo8, mid8, hi8 = page.evaluate(winner, 12)
-    assert good < lo8
-    assert lo8 < mark(page, -0.05, 9.6, 20)["mark"]
+    page.evaluate("""() => {
+      window.gs = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+      // One jump: run-up speed v, letting go dt seconds from the line (negative: before it), the
+      // angle ang, the legs q seconds before the sand (null: never). Past the grace it is a foul.
+      window.jumpAs = (v, dt, ang, q) => {
+        if (th.phase === 'wait') { th.t = 99; step(0.001); }
+        th.phase = 'run'; th.v = v; th.x = -1;
+        startAim(1); th.aimT = (ang - AIM0) / AIM_RATE; th.ang = ang; th.x = v * dt;
+        step(0.0001);
+        if (th.phase === 'aim') {
+          release();
+          if (q !== null) { th.ft = th.f.t - q; legs(); }
+          th.ft = th.f.t; step(0.001);
+        }
+        th.t = 99; step(0.001);
+      };
+      // A fair player: about 8.4 m/s (eight to nine taps a second), letting go about 50 ms before
+      // the line give or take 60 ms, the angle 20° give or take 3°, the legs on time give or take 80 ms.
+      window.fair = () => jumpAs(8.4 + gs() * 0.3, -0.05 + gs() * 0.06, 20 + gs() * 3, 0.23 + gs() * 0.08);
+      // A strong player: fast tapping (9.4 m/s) and clean timing.
+      window.strong = () => jumpAs(9.4 + gs() * 0.15, -0.02 + gs() * 0.03, 20 + gs() * 1.5, 0.23 + gs() * 0.04);
+      // A lazy one: slow, letting go far back, flat, never the legs.
+      window.lazy = () => jumpAs(6.5, -0.15, 12, null);
+      // Whole meets alone at level lv: how many of k the player wins.
+      window.meets = (lv, k, play) => {
+        let won = 0;
+        for (let i = 0; i < k; i++) {
+          level = lv; comp = null; th = null; ending = null; soloComp();
+          while (!ending) play();
+          if (ending.at === 0) won++;
+          ending = null;
+        }
+        return won;
+      };
+    }""")
+    # With this seed 20, 13 and 0 of 20 for fair play at levels 1, 4 and 9, 14 for strong play at
+    # level 9, 0 for lazy play at level 1 (seeds 2, 3, 7 and 42 gave 19-20, 11-14, 0, 12-16, 0).
+    fair1, fair4, fair9, strong9, lazy1 = page.evaluate(
+        "[meets(1, 20, fair), meets(4, 20, fair), meets(9, 20, fair), meets(9, 20, strong), meets(1, 20, lazy)]")
+    assert fair1 >= 17          # level 1 is nearly always won by fair play
+    assert 6 <= fair4 <= 17     # a middle level is a contest
+    assert fair9 <= 3           # the top level is rarely won by fair play...
+    assert strong9 >= 6         # ...but a fast, clean jumper can win it
+    assert lazy1 == 0           # lazy play never wins, even at level 1
     assert page.errors == []
 
 
