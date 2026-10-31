@@ -231,3 +231,31 @@ def test_a_retry_starts_clean(site, context):
     page.touchscreen.tap(*b)
     r = page.evaluate("({ mode, unsafe: P.unsafe, overT: P.overT, highRun: P.highRun, h: tally.hurjastelu, p: tally.pitkatP, steer: input.steer, gas: input.gas })")
     assert r == {"mode": "drive", "unsafe": False, "overT": 0, "highRun": 0, "h": 0, "p": 0, "steer": 0, "gas": 0}
+
+
+def test_the_reckless_driver_waits_behind_a_slow_player_moving_back_in(site, context):
+    page = open_game(site, context)
+    # The player crawls back from the oncoming lane into their own; the reckless driver close
+    # behind, still waiting to pass, must keep its distance.
+    r = page.evaluate("""() => { HOLD = true; newLeg(1); things = []; events = [];
+      add('vastaan', { s: P.s + 250, lat: -LANE, habit: 0 });
+      const t = add('takaa', { s: P.s - 20, v: 10, high: true, plan: 'catch', lat: LANE });
+      P.lat = -LANE; let least = 1e9;
+      for (let i = 0; i < 60 * 6 && mode === 'drive'; i++) {
+        P.lat = Math.min(LANE, P.lat + 0.6 / 60); P.vl = 0; P.v = 4; things[0].v = -1; step(1 / 60);
+        least = Math.min(least, P.s - t.s);
+      }
+      return { mode, least, lat: P.lat }; }""")
+    assert r["mode"] == "drive" and r["least"] > 4.5 and r["lat"] > 1.7, r
+
+
+def test_a_pass_in_the_same_moment_a_car_comes_within_180_m_earns_nothing(site, context):
+    page = open_game(site, context)
+    # One frame: the tractor is passed, and the oncoming car crosses into 180 m.
+    r = page.evaluate("""() => { HOLD = true; newLeg(1); things = []; events = []; points = 0;
+      P.lat = -LANE; P.vl = 0; P.v = 25;
+      const tr = add('traktori', { s: P.s + 0.1, lat: 2.4, v: 0 });
+      const o = add('vastaan', { s: P.s + 180.2, lat: -LANE, habit: 0 }); o.v = -0.5;
+      tr.base = 0; step(1 / 60);
+      return { points, ohitukset: tally.ohitukset, passed: tr.passed, unsafe: tally.hurjastelu }; }""")
+    assert r == {"points": -50, "ohitukset": 0, "passed": True, "unsafe": 1}

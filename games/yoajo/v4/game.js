@@ -266,6 +266,9 @@ function drive(dt) {
   while (events.length && events[0].s <= P.s) release(events.shift());
   for (const t of things) move(t, dt);
   things = things.filter(t => t.s > P.s - 260 && t.s < P.s + 900);
+  // An overtake is judged unsafe before it is scored, so a pass in the same moment as an oncoming
+  // car comes within 180 m earns nothing.
+  unsafeOvertake();
   for (const t of things) if (meet(t, dt)) return;
   lights(dt);
   highBeams(dt);
@@ -292,7 +295,11 @@ function move(t, dt) {
     // v4: never into the player's back: it waits while the player is out overtaking, and slows
     // behind them if they pull out in front of it (v1–v3 could drive into them there).
     const out = P.lat < LANE - 0.6;
-    if (t.plan === 'catch' && t.s > P.s - 30) { if (clear && !out) t.plan = 'pass'; else { t.v = Math.max(P.v, 10); } }
+    // Waiting behind: never faster than the player, and slower still when closer than 15 m.
+    if (t.plan === 'catch' && t.s > P.s - 30) {
+      if (clear && !out) t.plan = 'pass';
+      else t.v = P.s - t.s < 15 ? P.v * 0.85 : P.v;
+    }
     if (t.plan === 'pass') {
       t.v = 44; t.lat += (-LANE - t.lat) * Math.min(1, dt * 2); if (t.s > P.s + 16) t.plan = 'back';
       if (P.s > t.s && P.s - t.s < 40 && Math.abs(P.lat - t.lat) < 2.3) t.v = Math.min(t.v, P.v);
@@ -379,6 +386,8 @@ function reckless(dt) {
     P.overT += dt;
     if (P.overT > 1) { P.overT -= RECKLESS_EVERY; tally.hurjastelu++; score(-25, `Hurjastelu: ${Math.round(kmh)} km/h`); }
   } else P.overT = 0;
+}
+function unsafeOvertake() {
   if (P.lat < 0) for (const t of things) {
     if (t.v < 0 && vehicle(t) && !t.cutIn && t.s > P.s && t.s - P.s < ONCOMING_GAP) {
       t.cutIn = true; tally.hurjastelu++; score(-50, 'Vaarallinen ohitus'); P.unsafe = true;
