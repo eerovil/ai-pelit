@@ -113,6 +113,19 @@ the version that taught it, so you can read the code that fixed it.
 - **Play it yourself before you hand it over**, a whole round and a second one, in both
   orientations. Fix what feels wrong even if no test says so.
 
+## Phone gotchas
+
+What only showed on a real phone, never in the headless tests. When you hit a new one, add a line
+here in the same pull request (AGENTS.md says so), naming the version that taught it.
+
+- **Not `100dvh`.** Yöajo v1 (#181): the installed app opens full screen, and on Android `100dvh`
+  kept the old, smaller-screen height, so the bottom of the game was under the screen's edge until
+  the system bars were swiped in and out. Fill the screen with a fixed box (`position:fixed;
+  top:0; bottom:0`) and compare its `getBoundingClientRect()` with the size you drew for every
+  frame (`fitCheck()` in Yöajo v2's `ui.js`); listen to `fullscreenchange` too.
+- **A tap lands where the finger is** (Hiihto v5, see "Controls that feel right"): draw for the
+  canvas's own box, not `innerWidth × innerHeight`.
+
 ## When a change is about feel
 
 When Eero is unsure how something should feel ("prototyyppi:" in the request, as in Trampoliini v3

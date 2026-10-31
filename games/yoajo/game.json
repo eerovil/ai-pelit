@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: kahdeksan osuutta Helsingistä Rovaniemelle pimeässä, pitkät valot, ohitukset, jalankulkijat, huonot tieosuudet, vesi- ja lumisade, hurjastelijat, rekat, hirvet, nopeuskamerat ja väsymys.",
       "request": "Matka ajoa pimeällä suomessa. Åitkät päälle ja pois. Traktorin ja jalankulkijoiden ohituksia. Huonoja tie osuuksia. Lumi ja vesisade. Hurjastelevia muita kuskeja. Rekkoja. Hirvi\n\nNopeus kamerat\n\nKuskia väsyttää",
       "issue": "eerovil/ai-pelit#181"
+    },
+    {
+      "n": 2,
+      "date": "2026-10-31",
+      "note": "Peli mahtuu ruudulle heti avattaessa: koko ruudun tilaan siirtyessä alaosa ei enää jää näytön alle.",
+      "request": "Kun avaan pelin, osa UI sta on näytön alapuolella. Sitren kun swaippaan navbarin näkyviin ja takaisin, se korjautuu",
+      "issue": "eerovil/ai-pelit#181"
     }
   ]
 }
