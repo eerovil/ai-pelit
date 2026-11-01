@@ -215,8 +215,10 @@ const VIEW_X = 5, VIEW_Y = 3.5;  // metres: how far round the hole a fish is in 
 const inSight = (f, s) => Math.abs(f.lx - s.x) < VIEW_X && Math.abs(f.ly - s.y) < VIEW_Y;
 // From what is known of these fish in winter (#291, docs/research/pilkkiminen-kalat.md): roach and
 // bream gather in big schools in deep water; tagged perch swim about 0.06-0.10 m/s on average, the
-// others no faster in cold water; a pike keeps to a home area of 0.02-0.95 ha near the shore. The
-// gap between schooling fish is wider than the real 1-2 body lengths, so a school reads on a phone.
+// others no faster in cold water; a pike keeps to a home area of 0.02-0.95 ha near the shore.
+// The lake holds far fewer fish than a real one, so each fish here stands for several, and the gap
+// between schooling fish is wider than the real 1-2 body lengths to match: a real school of a
+// thousand roach 0.4 m apart is some 13 m across, as is one of fifty here 3 m apart (Eero, #291).
 // school: how many start together; gap: the space a fish keeps from its neighbours, in metres;
 // pace: its cruising speed, m/s; stay: seconds at a spot before heading on.
 const HABITS = {
@@ -565,7 +567,9 @@ let beat = 0, lastTwitch = -9, playT = 0, target = null, biter = null, fight = n
 let myG = 0, myN = 0, myBig = null, rivals = [], texts = [], baitOpen = false, hookedOnce = false;
 let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {} };
 const playing = () => ['ice', 'drill', 'jig', 'bite', 'fight', 'caught', 'snap', 'bait'].includes(phase);
-const SAVE = 'kisa2';  // v1 keeps its own unfinished contest under 'kisa'
+// Each version keeps its unfinished contest under its own key (v1 'kisa', v2 'kisa2'): the saved
+// fish differ, so one version never reads another's.
+const SAVE = 'kisa3';
 
 const RIVALS = ['Pilkki-Pekka', 'Ahven-Aili', 'Kaira-Kalle'];
 // The computer's anglers: a catch that grows the more the levels go up.

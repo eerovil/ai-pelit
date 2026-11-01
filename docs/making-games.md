@@ -73,6 +73,10 @@ the version that taught it, so you can read the code that fixed it.
   Piano v2 (save after every song, even without a fail).
 - **Continue where the player was.** Start at the highest level reached and let them pick an
   earlier one (Piano v3). A new level gives fresh lives.
+- **A saved round in a new shape gets a new key.** Lasting saves (level, records) are shared by
+  every version, but a version that saves an unfinished round in a different shape keeps it under
+  its own key (Pilkkiminen v2 `kisa2`, v3 `kisa3`): a phone that opens an older version again must
+  never find a save that version cannot read.
 - **A reload is not a lost round.** If the page reloads or the phone turns mid-round, the round
   goes on or comes back (Jään alla saves the submarine's place on each dive; rule 4 in AGENTS.md
   for turning).

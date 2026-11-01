@@ -258,3 +258,9 @@ A next round could read the full texts behind the paywalls named above (Jacobsen
 perch speed, Kobler 2008 for winter activity-centre hectares, Harper & Blake 1991 for strike
 numbers), or look for Finnish winter hydroacoustics (Malinen et al.) and Diana 1979 for pike
 winter rations.
+
+## Decided for the game
+
+- **School spacing stays wider than life** (Eero, #291): the game's lake holds far fewer fish than a
+  real one, so each fish stands for several, and the gap grows to keep a school's real extent. A
+  school of a thousand roach 0.4 m apart is about 13 m across; fifty 3 m apart cover about the same.

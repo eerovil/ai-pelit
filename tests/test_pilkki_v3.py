@@ -358,9 +358,9 @@ def test_the_computer_anglers_get_better_level_by_level(site, context):
     assert 50 < means[0] < 2500 and means[1] > means[0] * 1.3
 
 
-def test_a_reload_keeps_the_contest_the_lake_and_v1_s_save(site, context):
+def test_a_reload_keeps_the_contest_the_lake_and_the_older_versions_saves(site, context):
     page = start(site, context)
-    page.evaluate("localStorage.setItem('ai-pelit:pilkki:kisa', '\"v1\"')")
+    page.evaluate("localStorage.setItem('ai-pelit:pilkki:kisa', '\"v1\"'); localStorage.setItem('ai-pelit:pilkki:kisa2', '\"v2\"')")
     page.evaluate("stand(LAKE_W / 2, LAKE_H / 2); iceAction(); turnAuger(99); toIce(); me.tx = me.x + 6; run(() => !standing(), 3); myG = 700; myN = 3; left = 200; keepContest()")
     before = page.evaluate("[r1(me.x), r1(me.y), holes.length, pond.length, pond.map(f => f.sp + f.g).sort().join()]")
     page.reload()
@@ -369,7 +369,7 @@ def test_a_reload_keeps_the_contest_the_lake_and_v1_s_save(site, context):
     page.click("#resume")
     assert page.evaluate("[r1(me.x), r1(me.y), holes.length, pond.length, pond.map(f => f.sp + f.g).sort().join()]") == before
     assert page.evaluate("[phase, myG, myN]") == ["ice", 700, 3]
-    assert page.evaluate("localStorage.getItem('ai-pelit:pilkki:kisa')") == '"v1"'
+    assert page.evaluate("[localStorage.getItem('ai-pelit:pilkki:kisa'), localStorage.getItem('ai-pelit:pilkki:kisa2')]") == ['"v1"', '"v2"']
 
 
 def test_the_contest_ends_and_a_win_raises_the_level(site, context):
