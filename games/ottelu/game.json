@@ -23,6 +23,13 @@
       "note": "Yksin pelatessa jokainen seuraava laji alkaa juuri ladatulla sivulla, sillä toisen lajin napit eivät ottaneet painalluksia lainkaan.",
       "request": "Sama bugi edelleen. Otin keihäänheitto ja moukari ottelu. Moukarissa ei ota kunnolla tuo pyörimisnappi. Keskeltä ei ainakaan ota. — I can reproduce 100% of the time. Keihäs -> moukari. When it's my first turn in moukari, I cannot tap.",
       "issue": "eerovil/ai-pelit#168"
+    },
+    {
+      "n": 4,
+      "date": "2026-11-01",
+      "note": "Mukana myös kuulantyöntö ja 100 metrin aitajuoksu, joten ottelusta voi tehdä jopa seitsenottelun; lajit ovat uusimpia versioitaan oikeine äänineen, ja palkintojenjaon sijaan lajin jälkeen näkyvät sen lopputulokset.",
+      "request": "Ottelusta puuttuu lajeja",
+      "issue": "eerovil/ai-pelit#287"
     }
   ]
 }

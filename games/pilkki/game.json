@@ -1,0 +1,20 @@
+{
+  "title": "Pilkkiminen",
+  "description": "Kairaa reikä jäähän, nykytä pilkkiä rytmissä ja kelaa kala ylös ennen kuin siima katkeaa. Viiden minuutin pilkkikisa yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-01",
+      "note": "Ensimmäinen versio: kairaa pyörittämällä, laske pilkki vetämällä, nykytä rytmissä ja kelaa siimaa kiristämättä; viiden minuutin kisa tietokoneen pilkkijöitä tai 2–8 kaverin puhelinta vastaan samalla järvellä.",
+      "request": "Uusi peli: pilkkiminen. Kaira reikä jäähän, laske pilkki ja nykytä oikeassa rytmissä, kunnes kala tarttuu, ja kelaa se ylös ennen kuin siima katkeaa. Pilkkikisa: suurin saalis viidessä minuutissa voittaa, yksin tai kavereiden kanssa samalla järvellä.\n\nIdeoista #246.",
+      "issue": "eerovil/ai-pelit#271"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-01",
+      "note": "Kävele jäällä minne haluat ja kairaa reikä mihin vain; kalat näkyvät vain valitulla tutkalla tai kaikuluotaimella, syötin voi vaihtaa ja kukin kala syö omaansa, ja kalat parveilevat, pelkäävät haukea ja järvessä ui jättihauki.",
+      "request": "Tehdään kävelymoodi missä voi valita mielivaltaisen paikan. Kaloja ei saa näyttää jos ei ole tutkaa (oletuksena pois, ja tutka ei näytä tarkasti). Myös semmoinen tutka joka näyttää vain suoraan alaspäin suurin piirtein koon. Eri syötti sopii eri kalalle.",
+      "issue": "eerovil/ai-pelit#289"
+    }
+  ]
+}
