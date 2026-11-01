@@ -182,7 +182,7 @@
   panel.id = 'ai-pelit-aani-paneeli';
   panel.style.cssText = [
     'all:unset', 'display:none', 'position:fixed', 'z-index:2147483647', 'box-sizing:border-box', 'width:230px', 'padding:12px 14px',
-    'border-radius:14px', 'background:rgba(20,22,30,.94)', 'color:#fff', 'box-shadow:0 6px 24px rgba(0,0,0,.4)',
+    'border-radius:14px', 'background:#16181f', 'color:#fff', 'box-shadow:0 6px 24px rgba(0,0,0,.4)',
     'font:14px/1.3 system-ui,sans-serif', 'touch-action:manipulation',
     vertical + ':calc(env(safe-area-inset-' + vertical + ', 0px) + 44px)',
     horizontal + ':calc(env(safe-area-inset-' + horizontal + ', 0px) + 6px)',
