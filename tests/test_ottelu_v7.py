@@ -2,33 +2,173 @@
 
 The athletics events and Ottelu share one outfit choice (outfits.js data-share="yleisurheilu"),
 so each event of the match, loaded in its frame, wears what was picked here.
+
+Ottelu plays each event's newest version by itself (from v6, #303), so these tests also run when
+any event's game changes (the marker below): a new event version that does not play in the match
+fails its own pull request.
 """
 
+import json
+
 import pytest
-
-import test_ottelu as v1
-import test_ottelu_v4 as v4
-import test_ottelu_v5 as v5
-import test_ottelu_v6 as v6
 from conftest import ROOT, turn
-from test_ottelu_v4 import in_frame, open_game
-# v7 plays as v6 does: a few of v6's tests run on v7 too.
-from test_ottelu_v6 import test_every_event_plays_its_newest_version  # noqa: F401
-from test_ottelu_v5 import test_a_match_alone_with_the_hurdles_and_the_shot_put  # noqa: F401
-from test_ottelu import test_the_menu_and_the_board_fit  # noqa: F401
 
-pytestmark = pytest.mark.games("ottelu", *v6.EVENTS)
+EVENTS = ["aitajuoksu", "pituushyppy", "kuula", "korkeushyppy", "seivashyppy", "keihas", "moukari"]
+pytestmark = pytest.mark.games("ottelu", *EVENTS)
 
 URL = "games/ottelu/v7/"
 SHARED = "ai-pelit:_asut:yleisurheilu"
 
+# play() takes this phone's turn in the event in its frame, once per turn: a set mark in the
+# throws and the long jump, and over the bar up to a height (then misses) in the jumps over a bar.
+# Alone it also skips the event's results, and leaves the match's ceremony (to its end, then the
+# tap that goes on) unless window.leavePodium is false. run() is the computer's taps and jumps for
+# this phone's runner in the hurdles.
+HELPERS = """() => {
+  const MARK = { pituushyppy: 6.5, keihas: 60, moukari: 55, kuula: 15 }, UPTO = { korkeushyppy: 1.8, seivashyppy: 4.2 };
+  window.play = () => {
+    if (window.leavePodium !== false && typeof cer !== 'undefined' && cer && cer.K.ending) {
+      const tap = () => document.getElementById('pallit').dispatchEvent(new Event('pointerdown'));
+      tap(); tap();
+      return 'podium';
+    }
+    if (M && M.events[M.at] === 'aitajuoksu') return run();
+    const K = Ottelu.K;
+    if (!K || !K.comp || !M) return 'none';
+    if (K.ending) { K.skip(); return 'end'; }
+    const t = K.current(), me = M.mode === 'net' ? AiPelitRooms.me : 'me';
+    if (!t || t.p !== me || window.done === K.comp.room + ':' + K.comp.seq) return 'wait';
+    window.done = K.comp.room + ':' + K.comp.seq;
+    const slug = M.events[M.at];
+    K.report(K.comp.seq, slug in MARK ? MARK[slug] : K.comp.heights[K.comp.hi] <= UPTO[slug] + 1e-9 ? 'O' : 'X');
+    return 'me';
+  };
+  window.run = () => {
+    const f = document.getElementById('laji'), w = f && f.contentWindow;
+    if (!w || !frameReady) return 'none';
+    return w.eval("(() => { if (!race || !me) return 'none'; me.rate = 8.5; think(me, 0.05); return race.phase; })()");
+  };
+}"""
 
-@pytest.fixture(autouse=True)
-def v7(monkeypatch):
-    for m in (v1, v4, v6):
-        monkeypatch.setattr(m, "URL", URL)
-    for m in (v1, v4):
-        monkeypatch.setattr(m, "HELPERS", v5.HELPERS)
+
+def open_game(site, context, saved=None):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.add_init_script("addEventListener('DOMContentLoaded', () => { if (window.top === window) (" + HELPERS + ")(); })")
+    page.goto(site.url + URL)
+    if saved:
+        for k, v in saved.items():
+            page.evaluate(f"localStorage.setItem('ai-pelit:ottelu:{k}', {json.dumps(json.dumps(v))})")
+        page.goto(site.url + URL)
+    return page
+
+
+def in_frame(page, js):
+    return page.evaluate("(js) => document.getElementById('laji').contentWindow.eval(js)", js)
+
+
+def finish_event(page, timeout=60000):
+    for _ in range(timeout // 20):
+        page.evaluate("play()")
+        if page.evaluate("frameAt === -1 && !document.getElementById('board').classList.contains('hidden')"):
+            return
+        page.wait_for_timeout(20)
+    raise AssertionError("the event did not end")
+
+
+def play_event(pages, timeout=60000):
+    """Every phone plays its turns until the event's results are done and the board shows."""
+    host = pages[0]
+    at = host.evaluate("M.at")
+    for _ in range(timeout // 50):
+        for p in pages:
+            p.evaluate("play()")
+        if all(p.evaluate(f"!document.getElementById('board').classList.contains('hidden') && frameAt === -1 && M && M.at === {at}") for p in pages):
+            return
+        host.wait_for_timeout(50)
+    raise AssertionError("the event did not end")
+
+
+def podium_up(page):
+    return page.evaluate("!document.getElementById('pallit').classList.contains('hidden') && !!cer")
+
+
+def play_to_podium(pages):
+    for p in pages:
+        p.evaluate("window.leavePodium = false")
+    for _ in range(1500):
+        for p in pages:
+            p.evaluate("play()")
+        if all(podium_up(p) for p in pages):
+            return
+        pages[0].wait_for_timeout(20)
+    raise AssertionError("no ceremony at the end of the match")
+
+
+def newest(slug):
+    return max(v["n"] for v in json.loads((ROOT / "games" / slug / "game.json").read_text())["versions"] if v.get("ottelu") is not False)
+
+
+def ready(page):
+    """Waits until the match has read the catalog."""
+    page.evaluate("newest.then(() => true)")
+
+
+def test_every_event_plays_its_newest_version(site, context):
+    page = open_game(site, context, saved={"lajit": EVENTS})
+    ready(page)
+    assert page.evaluate("NEWEST") == {s: newest(s) for s in EVENTS}
+    page.click("#go")
+    page.wait_for_function("frameReady && frameAt === 0", timeout=10000)
+    assert page.evaluate("M.v") == {s: newest(s) for s in EVENTS}
+    assert in_frame(page, "document.baseURI").endswith(f"/games/aitajuoksu/v{newest('aitajuoksu')}/")
+    assert page.errors == []
+
+
+def test_a_match_alone_with_the_hurdles_and_the_shot_put(site, context):
+    page = open_game(site, context, saved={"lajit": ["aitajuoksu", "kuula"]})
+    page.evaluate("localStorage.setItem('ai-pelit:aitajuoksu:taso', '4')")
+    page.click("#go")
+    # The race: the match's eight athletes, 100 m with ten hurdles, the race's menu out of sight.
+    page.wait_for_function("frameReady && document.getElementById('laji').contentWindow.eval('race')", timeout=10000)
+    race = in_frame(page, "({ n: race.runners.length, d: race.dist, h: HURDLES.length, ids: race.runners.map(r => r.mid).join(), me: me.name })")
+    assert race == {"n": 8, "d": 100, "h": 10, "ids": "h0,c0,c1,c2,c3,c4,c5,c6", "me": "Sinä"}
+    assert in_frame(page, "getComputedStyle(document.getElementById('menu')).display") == "none"
+    finish_event(page)
+    assert page.inner_text("#bTitle") == "100 m aidat · laji 1/2"
+    me = page.evaluate("M.rows.find(r => r.p === 'me')")
+    assert 10 < me["marks"][0] < 20 and me["pts"][0] == page.evaluate(f"LAJIT.aitajuoksu.pts({me['marks'][0]})")
+    assert " s" in page.inner_text("#rows") and len(page.evaluate("M.rows")) == 8
+    with page.expect_navigation():
+        page.click("#next")
+    # The shot put: the same eight, by the same ids.
+    page.wait_for_function("window.Ottelu && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
+    assert page.evaluate("Ottelu.K.comp.throwers.map(t => t.id + t.name).sort().join()") \
+        == page.evaluate("M.rows.map(r => r.id + r.name).sort().join()")
+    finish_event(page)
+    me = page.evaluate("M.rows.find(r => r.p === 'me')")
+    assert me["marks"][1] == 15 and me["pts"][1] == 790
+    assert page.inner_text("#bTitle") == "Lopputulokset"
+    # Aitajuoksu's own saves are left alone.
+    assert page.evaluate("Object.keys(localStorage).filter(k => /^ai-pelit:(aitajuoksu|kuula):/.test(k))") == ["ai-pelit:aitajuoksu:taso"]
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(360, 640), (390, 844), (740, 360)])
+def test_the_menu_and_the_board_fit(site, context, size):
+    page = open_game(site, context, saved={"lajit": ["keihas", "moukari"]})
+    turn(page, {"width": size[0], "height": size[1]})
+    fits = """() => [...document.querySelectorAll('#%s button:not(.hidden), #%s h1, #%s h2, #%s table')]
+      .filter(e => e.offsetParent).every(e => { const r = e.getBoundingClientRect();
+        return r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth; })"""
+    assert page.evaluate(fits.replace("%s", "menu"))
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    play_event([page])
+    assert page.evaluate(fits.replace("%s", "board"))
+    assert page.errors == []
 
 
 @pytest.mark.parametrize("slug", ["pituushyppy", "aitajuoksu"])
@@ -76,7 +216,6 @@ def test_the_menu_with_the_outfit_button_fits(site, context, size):
 
 def test_the_player_wears_the_outfit_on_the_podium_at_the_end_of_the_match(site, context):
     # Review of #315: the match's own medal ceremony drew everyone in the plain kit.
-    from test_ottelu_v4 import finish_event
     context.add_init_script(f"localStorage.setItem('{SHARED}', JSON.stringify('noita'))")
     page = open_game(site, context, saved={"lajit": ["kuula", "keihas"]})
     assert page.text_content("#asu") == "👕 Asu: Noita"
@@ -86,7 +225,7 @@ def test_the_player_wears_the_outfit_on_the_podium_at_the_end_of_the_match(site,
     with page.expect_navigation():
         page.click("#next")
     page.wait_for_function("window.Ottelu && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
-    v5.play_to_podium([page])
+    play_to_podium([page])
     rows = page.evaluate("cer.K.ending.res.map(r => [r.p, (podiumLook(r) || {}).head || null])")
     assert [h for p, h in rows if p == "me"] == ["witch"]
     assert all(h is None for p, h in rows if p != "me")
@@ -109,9 +248,12 @@ def test_a_kept_match_with_the_outfit_button_fits_a_short_phone(site, context):
     assert page.errors == []
 
 
-GAMES = {"ottelu": "games/ottelu/v7/", "keihas": "games/keihas/v9/", "kuula": "games/kuula/v3/",
-         "aitajuoksu": "games/aitajuoksu/v10/", "pituushyppy": "games/pituushyppy/v10/",
-         "korkeushyppy": "games/korkeushyppy/v6/", "seivashyppy": "games/seivashyppy/v7/", "moukari": "games/moukari/v6/"}
+def last(slug):
+    return json.loads((ROOT / "games" / slug / "game.json").read_text())["versions"][-1]["n"]
+
+
+# Each game's newest version: only that folder is kept (#346).
+GAMES = {s: f"games/{s}/v{last(s)}/" for s in ["ottelu", *EVENTS]}
 
 
 @pytest.mark.parametrize("order", [

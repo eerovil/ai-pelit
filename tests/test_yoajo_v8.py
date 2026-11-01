@@ -3,18 +3,48 @@ of its own and signs, side roads with cars pulling out, no overtaking through a 
 the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
-from test_yoajo_v7 import BOT as BOT_V7, RUN
 
 URL = "games/yoajo/v8/"
 
-# v7's careful driver, which now also leaves a car waiting at a side road alone and never
-# starts an overtake with a solid centre line within 250 m (once out, it goes on).
-BOT = BOT_V7.replace(
-    "const slow = things.find(t => t.v >= 0 &&",
-    "const slow = things.find(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') &&", 1).replace(
-    "if (slow && !onc && slow.kind !== 'kavelija') want = -LANE;",
-    "if (slow && !onc && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;", 1)
-assert BOT.count("liittyja") == 1 and BOT.count("noPass") == 1
+# A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
+# overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
+# oncoming cars and cars ahead, slows for moose and the speed limits (at most 90 on snow), gets
+# out of the way of an oncoming overtaker, leaves a car waiting at a side road alone, and stops
+# for coffee when sleepy, waiting behind a slow car before it turns into the rest area.
+BOT = """(legs) => { maxLeg = 8; const out = [];
+  for (const n of legs) { newLeg(n); HOLD = true;
+    for (let i = 0; i < 60 * 400 && mode === 'drive'; i++) {
+      let want = LANE;
+      const slow = things.find(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro');
+      const onc = things.some(t => t.v < 0 && t.s > P.s - 5 && t.s - P.s < 330 && vehicle(t));
+      const head = things.find(t => t.v < 0 && t.lat > 0.5 && t.s > P.s && t.s - P.s < 260);
+      if (slow && !onc && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
+      if (slow && slow.kind === 'kavelija' && !onc) want = slow.lat > 0 ? 0 : LANE;
+      const beside = things.find(t => t.v >= 0 && vehicle(t) && t.kind !== 'takaa' && t.lat > 0 && t.s - P.s > -7 && t.s - P.s < 7);
+      if (beside && P.lat < 0.5) want = -LANE;
+      if (head) want = 4.0;
+      const deer = things.find(t => (t.kind === 'hirvi' || t.kind === 'poro') && t.s > P.s && t.s - P.s < 120 && Math.abs(t.lat) < 6);
+      const bay = road.bays.find(b => P.s > b.s0 - 5 && P.s < b.s1 - 10);
+      const rest = bay && P.tired > 0.15;
+      if (rest && !(slow && slow.lat > 0 && slow.s - P.s < 25)) want = 7;
+      const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
+      input.left = err > 0.15; input.right = err < -0.15;
+      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200);
+      input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
+        || (slow && want === LANE && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35);
+      P.high = !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
+      input.gas = input.brake ? 0 : 1; step(1 / 60);
+    }
+    out.push({ n, mode, why: crashWhy, T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
+  }
+  return out; }"""
+
+# Leg n with nobody else on the road, the clock held, the car kept in its lane at kmh.
+RUN = """([n, setup, kmh, secs]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; events = []; road.cams = [];
+  const seen = []; eval(setup);
+  for (let i = 0; i < 60 * secs && mode === 'drive'; i++) { P.v = kmh / KMH; P.lat = LANE; P.vl = 0; step(1 / 60);
+    for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text); }
+  return { mode, why: crashWhy, points, damage: P.damage, tally: Object.assign({}, tally), seen }; }"""
 
 
 def open_game(site, context):

@@ -1,15 +1,23 @@
 """Aitajuoksu v10: the athletics events' outfit set, one choice for every event and Ottelu (#311)."""
 
 import json
+import shutil
 
-import test_aitajuoksu_v5 as v5
+from conftest import ROOT
 
 URL = "games/aitajuoksu/v10/"
 SHARED = "ai-pelit:_asut:yleisurheilu"
 
 
+def build(site):
+    # Only this game, so another game's work in progress does not stop the build.
+    if not (site.games / "aitajuoksu").exists():
+        shutil.copytree(ROOT / "games" / "aitajuoksu", site.games / "aitajuoksu")
+        site.build()
+
+
 def open_game(site, browser, store=None):
-    v5.build(site)
+    build(site)
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
     for k, v in (store or {}).items():
         ctx.add_init_script(f"localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))})")

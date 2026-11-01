@@ -1,10 +1,45 @@
 """Hiihto v10 (#213): v9 with recorded sounds from the shared library public/lib/aanet-2/ (#205)."""
 
 from conftest import ROOT
-from test_hiihto import BOT
 
 URL = "games/hiihto/v10/"
 SOUNDS = ["valinta", "naksu", "lumi", "askel", "puu", "tomahdys", "voitto", "tappio", "aplodit", "tuuli"]
+
+# Plays one race as a careful skier: the given wax (the right one by default), V on the steep
+# climbs, tuck down the hills, a kick every 0.4 s, and overtaking a granny on the oncoming track
+# when it is clear (or the skating lane when it is not).
+BOT = """(opts) => {
+  opts = opts || {};
+  const tap = (px, py) => { down(7, px, py); up(7); };
+  const swipe = d => { down(8, W / 2, H / 2); move(8, W / 2 + 60 * d, H / 2); up(8); };
+  draw();
+  if (mode === 'wax') { const r = ui.wax[opts.wax ?? bestWax(course.weather.T)]; tap(r.x + 5, r.y + 5); }
+  for (let i = 0; i < 400 && mode === 'count'; i++) step(1 / 60);
+  let next = 0, holding = false, lastSteer = -9;
+  const near = (kind, lane, a, b) => npcs.some(o => o.kind === kind && o.lane === lane && o.z - P.z > a && o.z - P.z < b);
+  for (let i = 0; i < 60 * 900 && mode === 'race'; i++) {
+    const g = gradeAt(P.z + 2);
+    const wantV = opts.noV ? false : g > 0.075;
+    if (wantV !== P.vMode) { const b = vButton(); tap(b.x, b.y); }
+    if (clock - lastSteer > 0.4 && P.fallT <= 0) {
+      const look = 6 + P.v * 1.6;
+      if (P.lane === 1 && near('mummo', 1, -0.5, look)) {
+        if (!near('vasta', 0, -3, 12 + look * 2.2)) { swipe(-1); lastSteer = clock; }
+        else if (!npcs.some(o => o.kind === 'luistelija' && o.z - P.z > -22 && o.z - P.z < 3)) { swipe(1); lastSteer = clock; }
+      } else if (P.lane === 0 && (near('vasta', 0, -1, 10 + P.v * 1.5) || !near('mummo', 1, -3, 3))) {
+        if (!near('mummo', 1, -2.5, 3)) { swipe(1); lastSteer = clock; }
+      } else if (P.lane === 2 && !near('mummo', 1, -2.5, 3)) { swipe(-1); lastSteer = clock; }
+    }
+    const blocked = P.lane === 1 && near('mummo', 1, 0, 3 + P.v);
+    const wantHold = g < -0.02 && !blocked && P.v > 3;
+    if (wantHold && !holding) { down(9, W / 2, H / 2); holding = true; }
+    if (!wantHold && holding) { up(9); holding = false; }
+    if (!holding && !blocked && clock >= next) { tap(W / 2, H / 2 + 40); next = clock + 0.4; }
+    step(1 / 60);
+  }
+  if (holding) up(9);
+  return { mode, t: P.t, par: course.par, falls, passes, stars: result && result.stars };
+}"""
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
 SPY = """() => {

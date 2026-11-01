@@ -2,11 +2,10 @@
 
 import shutil
 
-import test_puhelinkoppi_v5 as v5
 from conftest import ROOT
 
 URL = "games/puhelinkoppi/v6/"
-FLY = v5.FLY
+FLY = """(seconds) => { for (let t = 0; t < seconds && (state === 'air' || state === 'drop' || state === 'settle'); t += 1 / 60) step(1 / 60); return state; }"""
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
 SPY = """() => {
@@ -18,12 +17,17 @@ SOUNDS = ["suhahdus", "osuma", "tomahdys", "lasi", "voitto", "tappio"]
 
 
 def open_game(site, browser):
-    old = v5.URL
-    v5.URL = URL
-    try:
-        ctx, page = v5.open_game(site, browser, 360, 740)
-    finally:
-        v5.URL = old
+    shutil.copytree(ROOT / "games" / "puhelinkoppi", site.games / "puhelinkoppi")
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+    # A nickname, so the first catch does not open the scores panel's name question.
+    ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi'))")
+    page = ctx.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.wait_for_selector("#ai-pelit-tulokset-nappi")
+    page.evaluate("noise = 0")
     page.evaluate(SPY)
     return ctx, page
 
