@@ -184,6 +184,9 @@ const teamPlayers = t => players.filter(p => team(p) === t);
 let players = [], mine = null, me = null, ball, score = [0, 0], server = null, served = [0, 0], touches = 0, touchSide = 0, last = null;
 let state = 'menu', stateT = 0, pauseT = 0, msg = null, texts = [], crossings = 0, tossed = false, shake = 0;
 let net = { on: false, round: '', sendT: 0 };     // a match in a room
+// Sounds only the host's rules know of, counted so a guest hears them from the snapshots:
+// serve tosses, balls into the net, balls into the sand. `fxSeen` is what this guest has played.
+let fx = [0, 0, 0], fxSeen = null;
 const input = { left: false, right: false };
 
 // A match alone against the computer: 1 vs 1, or 2 vs 2 with a computer teammate.
@@ -229,7 +232,7 @@ function jump(p) { if (p.y === 0 && state === 'play') { p.vy = JUMP_V; if (p ===
 function toss(p) {
   if (state !== 'serve' || server !== p || tossed) return;
   tossed = true; ball.held = false; ball.vx = 0; ball.vy = 5.4; p.cd = 0.3;
-  state = 'play';
+  state = 'play'; fx[0]++;
   S.play('naksu', { vol: 0.7 }) || tone(500, 0.05, 'sine', 0.05);
 }
 function press(p) {
@@ -326,13 +329,13 @@ function hit(p) {
 }
 function say(wx, wy, s, col) { texts.push({ x: wx, y: wy, s, c: col, t: 0.9 }); }
 
-function pointTo(t, why) {
+function pointTo(t, why, sand) {
   if (state !== 'play') return;
   score[t]++;
   if (team(server) !== t) server = nextServer(t);
   msg = { s: why, t };
   state = 'point'; pauseT = 1.8;
-  pointSound(ball.y < 0.5);
+  pointSound(!!sand);
 }
 
 // 11 points wins, but only two points ahead. Returns 0, 1 (the winning team) or -1 (not yet).
@@ -471,6 +474,7 @@ function stepBall(dt, rules) {
   if (ball.y < NET_H && (Math.sign(px) !== Math.sign(ball.x) || Math.abs(ball.x) < BR)) {
     const s = Math.sign(px) || 1;
     ball.x = s * (BR + 0.03); ball.vx = -ball.vx * 0.3; ball.vy *= 0.6;
+    if (rules) fx[1]++;
     if (rules) S.play('verkko', { vol: 0.8 }) || tone(150, 0.08, 'triangle', 0.05);
   } else {
     const dx = ball.x, dy = ball.y - NET_H, d = Math.hypot(dx, dy);
@@ -505,9 +509,10 @@ function stepBall(dt, rules) {
 }
 function land() {
   const sideOf = Math.sign(ball.x) || 1;
-  if (last === null) { pointTo(1 - team(server), 'Syöttövirhe'); return; }
-  if (Math.abs(ball.x) > COURT + BR) { pointTo(1 - team(last), 'Ulos!'); return; }
-  pointTo(sideOf < 0 ? 1 : 0, 'Pallo maassa!');
+  fx[2]++;
+  if (last === null) { pointTo(1 - team(server), 'Syöttövirhe', true); return; }
+  if (Math.abs(ball.x) > COURT + BR) { pointTo(1 - team(last), 'Ulos!', true); return; }
+  pointTo(sideOf < 0 ? 1 : 0, 'Pallo maassa!', true);
 }
 
 // This phone's own player: the buttons move it left and right on the screen.
@@ -554,6 +559,7 @@ function setupFor(round, list) {
   return { t: 'setup', round, mode: two ? '2v2' : '1v1', pl };
 }
 function applySetup(s) {
+  fxSeen = null;
   net = { on: true, round: s.round, sendT: 0, setup: s, hits: 0 };
   players = s.pl.map(q => {
     const kind = q.kind === 'cpu' ? 'cpu' : q.id === R.me ? 'me' : R.isHost ? 'remote' : 'shown';
@@ -570,12 +576,17 @@ function snapshot() {
     b: [r2(ball.x), r2(ball.y), r2(ball.vx), r2(ball.vy), ball.held ? 1 : 0],
     p: players.map(p => [r2(p.x), r2(p.y), p.arms > 0 ? 1 : 0, p.hits, r2(p.vx || 0)]),
     sc: score, sv: players.indexOf(server), tc: touches, ts: touchSide, tos: tossed ? 1 : 0, ls: last ? players.indexOf(last) : -1,
-    m: msg, tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]) };
+    m: msg, tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]), fx };
 }
 const r2 = v => Math.round(v * 100) / 100;
 function applySnapshot(s) {
   const was = state;
   state = s.st; pauseT = s.pt;
+  // The host's sound counters: play what went up since the last snapshot (none on the first one).
+  const f = s.fx || [0, 0, 0], up = i => fxSeen !== null && f[i] > fxSeen[i], sand = up(2);
+  if (up(0)) S.play('naksu', { vol: 0.7 }) || tone(500, 0.05, 'sine', 0.05);
+  if (up(1)) S.play('verkko', { vol: 0.8 }) || tone(150, 0.08, 'triangle', 0.05);
+  fxSeen = f.slice();
   [ball.x, ball.y, ball.vx, ball.vy] = s.b; ball.held = !!s.b[4];
   s.p.forEach((q, i) => {
     const p = players[i];
@@ -586,7 +597,7 @@ function applySnapshot(s) {
   if (mine && s.p[players.indexOf(mine)][3] > mine.hits) { mine.hits = s.p[players.indexOf(mine)][3]; mine.arms = 0.3; mine.cd = 0.28; slap(mine, mine.y > 0.05 && Math.hypot(s.b[2], s.b[3]) > 8.5); }
   score = s.sc; server = players[s.sv] || null; touches = s.tc; touchSide = s.ts; tossed = !!s.tos; last = players[s.ls] || null;
   msg = s.m; texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
-  if (state === 'point' && was !== 'point') pointSound(ball.y < 0.5);
+  if (state === 'point' && was !== 'point') pointSound(sand);
   // The host just started a new rally: put this phone's player where the rally starts it.
   if (state === 'serve' && was !== 'serve' && mine) { mine.x = mine.side * (mine === server ? 4.6 : mates(mine).length ? (team(mine) === team(server) ? 1.4 : mine.slot === 0 ? 1.4 : 3.0) : 2.2); mine.y = 0; mine.vy = 0; }
 }
@@ -616,16 +627,15 @@ function hostEnd(w) {
   finish(m);
 }
 function finish(m) {
-  // A phone that gets the end again (it came back from away) hears the tune only once.
-  const fresh = state !== 'done';
   state = 'done';
   const own = (m.pl || []).find(q => q[0] === R.me);
   const t = own ? (own[1] < 0 ? 0 : 1) : mine ? team(mine) : 0, won = m.w === t, a = m.sc[t], b = m.sc[1 - t];
+  // An end heard again (the phone came back from away, or reloaded) is saved and sounds once.
   if (R.once(m.round)) {
     if (won) friends.voitot++; else friends.haviot++;
     save('kaverit', friends);
+    matchSound(won);
   }
-  if (fresh) matchSound(won);
   R.backToRoom((won ? 'Voitto ' : 'Häviö ') + a + '–' + b + (won ? '! 🏆' : ''), won ? 'win' : 'lose');
 }
 
