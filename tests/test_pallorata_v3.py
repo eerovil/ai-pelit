@@ -70,16 +70,16 @@ def game(site, browser):
 def test_rolling_sounds_with_the_speed_and_stops_in_the_air(game):
     page = game
     page.wait_for_timeout(300)
-    assert page.evaluate("roll.vol") == 0  # the menu's ball rolls silently
+    assert page.evaluate("roll") is None  # the menu's ball rolls silently
     start(page)
     page.wait_for_function("roll.playing() && roll.vol > 0.3", timeout=3000)
     slow = page.evaluate("roll.rate")
     page.evaluate("ball.boost = 3")
     page.wait_for_function(f"roll.rate > {slow + 0.2}", timeout=3000)
-    page.evaluate("clearInterval(keep); ball.aimX = 50")
+    page.evaluate("window.last = roll; clearInterval(keep); ball.aimX = 50")
     page.wait_for_function("round.phase !== 'run'", timeout=5000)
-    page.wait_for_timeout(100)
-    assert page.evaluate("roll.vol") == 0
+    # Off the track the loop is stopped for good, not just turned down.
+    page.wait_for_function("roll === null && !last.playing()", timeout=1000)
     assert page.errors == []
 
 
@@ -141,7 +141,7 @@ def test_without_the_sound_files_it_still_plays(site, browser):
         page.evaluate("ball.aimX = 50")
         page.wait_for_function("round.phase === 'over'", timeout=5000)
         assert played(page) == []
-        assert not page.evaluate("roll.playing()")
+        assert page.evaluate("roll") is None
         assert page.errors == []
     finally:
         ctx.close()
@@ -164,14 +164,14 @@ def test_a_second_round_rolls_and_sounds_again(game):
     page = game
     start(page)
     page.wait_for_function("roll.vol > 0.3", timeout=3000)
-    page.evaluate("clearInterval(keep); ball.aimX = 50")
+    page.evaluate("window.last = roll; clearInterval(keep); ball.aimX = 50")
     page.wait_for_function("round.phase === 'over'", timeout=5000)
-    page.wait_for_function("roll.vol === 0", timeout=1000)
+    page.wait_for_function("roll === null && !last.playing()", timeout=1000)
     played(page)
     page.click("#uudestaan")
     page.wait_for_function("round.phase === 'run'", timeout=2000)
     page.evaluate("window.keep = setInterval(() => { ball.aimX = row(Math.floor(-ball.z / 2)).cx; }, 16)")
-    page.wait_for_function("roll.playing() && roll.vol > 0.3", timeout=3000)
+    page.wait_for_function("roll.playing() && roll.vol > 0.3 && roll !== last", timeout=3000)
     # A star and a turbo in the same frame both sound.
     page.evaluate("ball.boost = 0")
     page.evaluate(STAR_AT_BALL)

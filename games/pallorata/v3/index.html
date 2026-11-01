@@ -305,6 +305,8 @@ if (renderer) {
 
   function start() {
     unlockAudio();
+    roll?.stop();
+    roll = S?.loop('rullaus', { vol: 0 }) || null;
     reset();
     round.phase = 'run';
     $('menu').classList.add('hidden');
@@ -521,11 +523,14 @@ if (renderer) {
   const S = window.AiPelitAanet;
   const SOUNDS = { jump: 'hyppy', boost: 'nousu', star: 'valinta', bump: 'osuma', fall: 'putoaminen', land: 'tomahdys' };
   S?.load(Object.values(SOUNDS).concat('rullaus'));
-  // The ball rolling: a loop that follows the speed, silent in the air and between rounds.
-  const roll = S?.loop('rullaus', { vol: 0 }) || { set() {} };
+  // The ball rolling: a loop made when a round starts and stopped when the ball leaves the track.
+  // It follows the speed, and is silent in the air.
+  let roll = null;
   function rollSound() {
-    const on = round.phase === 'run' && !ball.air;
-    roll.set({ vol: on ? 0.25 + Math.min(1, ball.v / 23) * 0.35 : 0, rate: 0.7 + Math.min(1, ball.v / 23) * 0.8 });
+    if (!roll) return;
+    if (round.phase !== 'run') { roll.stop(); roll = null; return; }
+    const k = Math.min(1, ball.v / 23);
+    roll.set({ vol: ball.air ? 0 : 0.25 + k * 0.35, rate: 0.7 + k * 0.8 });
   }
   let ac = null;
   function unlockAudio() {
@@ -593,7 +598,8 @@ if (renderer) {
   });
 
   // For tests and the curious: the round as it is.
-  Object.assign(window, { ball, round, start, steer, row, camera, renderer, roll });
+  Object.assign(window, { ball, round, start, steer, row, camera, renderer });
+  Object.defineProperty(window, 'roll', { get: () => roll });
   Object.defineProperty(window, 'stars', { get: () => stars });
   Object.defineProperty(window, 'blocks', { get: () => blocks });
 }
