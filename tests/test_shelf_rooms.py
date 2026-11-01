@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from conftest import game_page, make_game
 
 
@@ -53,3 +55,53 @@ def test_no_open_rooms_or_no_connection_shows_nothing(site, context):
     page.wait_for_selector(".card")
     page.wait_for_timeout(300)
     assert page.locator(".open-rooms").is_hidden()
+
+
+def test_the_list_updates_while_the_shelf_shows_and_after_a_round_trip(site, context):
+    make_game(site.games, "pallo", [game_page("v1")], title="Pallo")
+    site.build()
+    rooms = [{"code": "PELI", "game": "pallo", "v": 1, "n": 1, "max": 5}]
+    reads = []
+
+    def answer(route):
+        reads.append(1)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"rooms": rooms}))
+    context.route("**/api/rooms", answer)
+    page = context.new_page()
+    page.clock.install()
+    page.goto(site.url)
+    page.wait_for_selector('.room[data-code="PELI"]')
+    # Another phone's room opens, and this one fills up: the next read, 10 s later, shows it.
+    rooms[:] = [{"code": "UUSI", "game": "pallo", "v": 1, "n": 2, "max": 5}]
+    page.clock.run_for(10_500)
+    page.wait_for_selector('.room[data-code="UUSI"]')
+    assert page.locator(".room").count() == 1
+    # Away on a game's page the list is not read; back on the shelf it is read again at once,
+    # and only one refresh keeps going (no second timer from the earlier shelf).
+    page.click('.card[data-slug="pallo"] .card-main')
+    page.wait_for_url(f"{site.url}#/pallo")
+    before = len(reads)
+    page.clock.run_for(30_000)
+    assert len(reads) == before
+    rooms[:] = []
+    page.go_back()
+    page.wait_for_url(site.url)
+    page.wait_for_function("document.querySelector('.open-rooms').hidden")
+    after = len(reads)
+    page.clock.run_for(10_500)
+    page.wait_for_timeout(200)
+    assert len(reads) == after + 1
+
+
+@pytest.mark.parametrize("width", [360, 390])
+def test_a_long_game_name_in_the_list_fits_the_phone(site, context, width):
+    make_game(site.games, "pitka", [game_page("v1")], title="Hyvin pitkä pelin nimi joka jatkuu ja jatkuu vielä")
+    site.build()
+    answer_rooms(context, [{"code": "PITK", "game": "pitka", "v": 1, "n": 7, "max": 8}])
+    page = context.new_page()
+    page.set_viewport_size({"width": width, "height": 740})
+    page.goto(site.url)
+    page.wait_for_selector(".room")
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    box = page.locator(".room a").bounding_box()
+    assert box["x"] + box["width"] <= width
