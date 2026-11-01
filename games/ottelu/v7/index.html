@@ -443,7 +443,7 @@ function podium() {
   let K;
   try {
     window.AiPelitRooms = null;
-    K = A.meet({ slug: 'ottelu:palli', format: A.rounds(), foes: FOES, skill: () => 0, cpu: () => 0, turn() {}, clear() {}, menu() {}, fmt: p => space(p) + ' p' });
+    K = A.meet({ slug: 'ottelu:palli', format: A.rounds(), foes: FOES, skill: () => 0, cpu: () => 0, turn() {}, clear() {}, menu() {}, fmt: p => space(p) + ' p', look: podiumLook });
   } catch (e) { return podiumOff(); } finally { window.AiPelitRooms = real; }
   K.me = isNet() ? R.me : 'me';
   K.isNet = isNet;
@@ -453,6 +453,13 @@ function podium() {
   cer = { K, last: 0 };
   show('pallit');
   requestAnimationFrame(podiumFrame);
+}
+// v7 (#311): the player stands on the podium in the outfit picked; the others (the computer, and
+// friends, whose outfits the match does not keep) in the library's plain kit in their colour, as
+// before. 'perus' is that plain kit too.
+function podiumLook(r) {
+  const mine = cer ? r.p === cer.K.me : r.p === (isNet() ? R.me : 'me');
+  return mine && outfit && outfit.top ? outfit : null;
 }
 function podiumFrame(now) {
   const c = cer, cv = $('pallit');

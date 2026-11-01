@@ -58,7 +58,7 @@ flowchart TD
 - **Asulista: omat + 6 Halloween-asua**: `HALLOWEEN` in `public/outfits.js`: Kurpitsa, Noita, Haamu, Luuranko, Vampyyri, Muumio, each a palette plus a costume head drawn by `AiPelitOutfits.head()`.
 - **Onko 20.10.–2.11.?**: `season()` in `public/outfits.js`.
 - **Tallennus: ai-pelit:_asut:slug**: one key per game, shared by all its versions.
-- **Ottelun valikko: 👕 Asu**: from Ottelu v7 (#311) the match's menu has its own button (`drawKit()` draws the cards' figure from the front, in `games/ottelu/v7/index.html`); events in a match hide their own menu.
+- **Ottelun valikko: 👕 Asu**: from Ottelu v7 (#311) the match's menu has its own button (`drawKit()` draws the cards' figure from the front, in `games/ottelu/v7/index.html`); events in a match hide their own menu. At the end of the match the player stands on the podium in the outfit (`podiumLook()`); the others in their plain kit.
 - **Yleisurheilun yhteiset 7 asua**: `AiPelitOutfits.yleisurheilu` in `public/outfits.js` (#311): Perus, Sinivalkoinen, Musta, Punainen, Vihreä, Kulta, Neon, the ids the events had on their own, so an earlier choice is found. Used from Pituushyppy v9, Korkeushyppy v6, Seiväshyppy v6, Moukari v6, Keihäs v8, Kuula v3, Aitajuoksu v9 and Ottelu v7.
 - **data-share?**: `data-share="yleisurheilu"` on the script tag. `current()` reads the shared key first, then the game's own (an earlier choice made before #311).
 - **Tallennus: ai-pelit:_asut:yleisurheilu + pelin oma**: a pick is saved under both keys, so the game's older versions, which read only their own, follow it too.

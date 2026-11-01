@@ -72,3 +72,24 @@ def test_the_menu_with_the_outfit_button_fits(site, context, size):
     done = page.locator("#ai-pelit-asut-valmis").bounding_box()
     assert done["y"] >= 0 and done["y"] + done["height"] <= h
     assert page.errors == []
+
+
+def test_the_player_wears_the_outfit_on_the_podium_at_the_end_of_the_match(site, context):
+    # Review of #315: the match's own medal ceremony drew everyone in the plain kit.
+    from test_ottelu_v4 import finish_event
+    context.add_init_script(f"localStorage.setItem('{SHARED}', JSON.stringify('noita'))")
+    page = open_game(site, context, saved={"lajit": ["kuula", "keihas"]})
+    assert page.text_content("#asu") == "👕 Asu: Noita"
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    finish_event(page)
+    with page.expect_navigation():
+        page.click("#next")
+    page.wait_for_function("window.Ottelu && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
+    v5.play_to_podium([page])
+    rows = page.evaluate("cer.K.ending.res.map(r => [r.p, (podiumLook(r) || {}).head || null])")
+    assert [h for p, h in rows if p == "me"] == ["witch"]
+    assert all(h is None for p, h in rows if p != "me")
+    page.wait_for_function("cer.K.ending.t > 2", timeout=8000)
+    page.screenshot(path="/var/tmp/i311/ottelu-podium.png")
+    assert page.errors == []
