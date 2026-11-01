@@ -62,16 +62,18 @@
   // This phone's friend id: the first 32 hex digits of SHA-256 of its player id (the high-score
   // lists' own, made here as scores.js makes it). Only a phone with a nickname tells it.
   var PLAYER = 'ai-pelit:_pelaaja:id';
-  var myFid = '', fidFor = '';
+  // The hash takes a moment: connect() waits for it (fidWait), so even the first join (a room
+  // link, or a name typed on the room screen just now) carries it.
+  var myFid = '', fidFor = '', fidWait = null;
   function findFid() {
     if (!cleanName(load(NAME, '')) || !window.crypto || !crypto.subtle) return;
     var id = load(PLAYER, '');
     if (!/^[a-f0-9]{32}$/.test(id)) { id = hex(16); save(PLAYER, id); }
     if (fidFor === id) return;
     fidFor = id;
-    crypto.subtle.digest('SHA-256', new TextEncoder().encode(id)).then(function (h) {
+    var wait = fidWait = crypto.subtle.digest('SHA-256', new TextEncoder().encode(id)).then(function (h) {
       myFid = Array.prototype.map.call(new Uint8Array(h).slice(0, 16), function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join('');
-    }).catch(function () { fidFor = ''; });
+    }).catch(function () { fidFor = ''; }).then(function () { if (fidWait === wait) fidWait = null; });
   }
   findFid();
   function friendsLib() { return window.AiPelitKaverit || null; }
@@ -124,6 +126,12 @@
   // ---- The connection ----
   function connect() {
     clearTimeout(net.timer);
+    findFid();
+    if (fidWait) {
+      render();
+      fidWait.then(function () { if (net.on && !net.ws) connect(); });
+      return;
+    }
     var u = new URL(net.code, API);
     u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
     var q = { key: myKey, name: myName() };

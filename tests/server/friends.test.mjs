@@ -1,7 +1,7 @@
 // Friends (#324): server/api.js on SQLite with the migrations.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handle, pidOf, FRIENDS_MAX, ASKS_PER_HOUR, PLAYING_FOR } from '../../server/api.js';
+import { handle, pidOf, FRIENDS_MAX, ASKS_PER_HOUR, INVITES_PER_HOUR, PLAYING_FOR } from '../../server/api.js';
 import { makeD1 } from './d1.mjs';
 
 const ADMIN = { 'x-admin-key': 'avain' };
@@ -173,4 +173,33 @@ test('accepting twice at once, or answering a request already answered, is harml
   assert.deepEqual((await state(A)).friends.map((f) => f.name), ['Bertta']);
   assert.equal((await answer(B, PA, false)).status, 404);
   assert.deepEqual((await state(A)).friends.map((f) => f.name), ['Bertta']);
+});
+
+test('the hourly limits count what was sent, also after it was accepted, answered or replaced', async () => {
+  const { player, ask, answer, call, env } = setup();
+  await player(A, 'Aino');
+  // Thirty asks, each accepted at once: the requests are gone, but the next ask is still refused.
+  for (let i = 0; i < ASKS_PER_HOUR; i++) {
+    const id = String(i + 100).padStart(32, 'e');
+    env.DB.raw.prepare("INSERT INTO players (id, name, status, created_at, updated_at, pid) VALUES (?, ?, 'approved', 'x', 'x', ?)")
+      .run(id, 'P' + i, await pidOf(id)); // past the new-name limits of server/api.js
+    assert.equal((await ask(A, await pidOf(id))).status, 200);
+    assert.equal((await answer(id, PA, true)).status, 200);
+  }
+  await player(B, 'Bertta');
+  assert.equal((await ask(A, PB)).status, 429);
+  // Bertta asks Aino; Aino asking back would make them friends, but it is an ask too.
+  assert.equal((await ask(B, PA)).status, 200);
+  assert.equal((await ask(A, PB)).status, 429);
+  // An hour later Aino may ask again.
+  env.DB.raw.prepare('UPDATE friend_sends SET at = ?').run(new Date(Date.now() - 3601e3).toISOString());
+  assert.deepEqual((await ask(A, PB)).body, { ok: true, friends: true });
+  // Invites: replacing the same friend's invite, or the friend answering it, still counts.
+  const inv = () => call('POST', '/api/invites', { player: A, to: PB, game: 'pilkki', version: 2, room: 'KISA' });
+  for (let i = 0; i < INVITES_PER_HOUR; i++) {
+    assert.equal((await inv()).status, 200);
+    const got = (await call('POST', '/api/presence', { player: B })).body.invites;
+    if (i % 2) await call('POST', `/api/invites/${got[0].id}/answer`, { player: B });
+  }
+  assert.equal((await inv()).status, 429);
 });

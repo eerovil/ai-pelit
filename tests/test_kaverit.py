@@ -134,6 +134,8 @@ class RelayWithFids(Relay):
         q = {k: v[0] for k, v in parse_qs(urlparse(ws.url).query).items()}
         me = hashlib.sha256(q["key"].encode()).hexdigest()[:32]
         self.fids = getattr(self, "fids", {})
+        self.joins = getattr(self, "joins", [])
+        self.joins.append((q["name"], q.get("fid")))
         if re.fullmatch(r"[a-f0-9]{32}", q.get("fid", "")):
             self.fids[me] = q["fid"]
         else:
@@ -157,6 +159,7 @@ def phones(site, browser):
     site.build()
     relay, api, contexts = RelayWithFids(), FriendsApi(), []
 
+
     def phone(name, path="huonetesti/v1/", player=None, width=360, height=740):
         ctx = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
@@ -177,6 +180,7 @@ def phones(site, browser):
 
     phone.api = api
     phone.site = site
+    phone.relay = relay
     yield phone
     for ctx in contexts:
         ctx.close()
@@ -348,3 +352,26 @@ def test_the_shelf_shows_a_friend_start_playing_without_a_reload(phones):
     shelf.wait_for_selector(".friends-playing:not([hidden]) .friend", timeout=40_000)
     assert "Pelaa: Huonetesti" in shelf.locator(".friends-playing").inner_text()
     assert shelf.evaluate("document.documentElement.scrollWidth") <= 390
+
+
+def test_the_very_first_join_carries_the_friend_id(phones):
+    host = phones("Aino", player=A)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    # A room link opens the game straight into the room.
+    phones("Bertta", f"huonetesti/v1/?huone={code}", player=B)
+    # A phone with no nickname types one on the room screen and joins at once.
+    c = "c" * 32
+    ceci = phones(None, player=c)
+    ceci.click("#multi")
+    ceci.fill("#aipr-name", "Ceci")
+    ceci.fill("#aipr-codeIn", code)
+    ceci.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.length === 3 && AiPelitRooms.members.every(m => m.fid)")
+    first = {}
+    for name, fid in phones.relay.joins:
+        first.setdefault(name, fid)
+    assert first == {"Aino": pid_of(A), "Bertta": pid_of(B), "Ceci": pid_of(c)}
+    assert host.locator("#aipr-members button.fr").count() == 2

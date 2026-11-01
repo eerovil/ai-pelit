@@ -457,6 +457,19 @@ async function presence(env, url, body) {
 
 const usable = (p) => p && p.status !== 'rejected';
 
+// Counts one send of `kind` ('ask' or 'invite') against the player's hourly limit. False when the
+// limit is reached. The count and the insert are one statement, so sends at once cannot pass the
+// limit together; what was sent stays counted after it is accepted, answered or replaced.
+async function countSend(env, player, kind, most) {
+  const hour = ago(3600e3);
+  await env.DB.prepare('DELETE FROM friend_sends WHERE at < ?').bind(hour).run();
+  const res = await env.DB.prepare(
+    `INSERT INTO friend_sends (player, kind, at)
+     SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM friend_sends WHERE player = ? AND kind = ? AND at > ?) < ?`
+  ).bind(player, kind, now(), player, kind, hour, most).run();
+  return res.meta.changes > 0;
+}
+
 async function befriend(env, x, y) {
   const [a, b] = pair(x, y);
   await env.DB.prepare('INSERT INTO friends (a, b, at) VALUES (?, ?, ?) ON CONFLICT (a, b) DO NOTHING').bind(a, b, now()).run();
@@ -474,21 +487,19 @@ async function askFriend(env, body) {
   const other = await env.DB.prepare('SELECT id, status FROM players WHERE pid = ?').bind(to).first();
   if (other && (await areFriends(env, player, other.id))) return json({ ok: true, friends: true });
   if ((await friendCount(env, player)) >= FRIENDS_MAX) return fail(409, 'too many friends');
+  // Asked already (and maybe declined, which the asker is never told): nothing new is sent.
+  if (await env.DB.prepare('SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = ?').bind(player, to).first()) {
+    return json({ ok: true, friends: false });
+  }
+  if (!(await countSend(env, player, 'ask', ASKS_PER_HOUR))) return fail(429, 'too many requests');
   // Both asked: they are friends at once.
   if (usable(other) && (await env.DB.prepare('SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = ?').bind(other.id, me.pid).first())) {
     if ((await friendCount(env, other.id)) >= FRIENDS_MAX) return fail(409, 'too many friends');
     await befriend(env, player, other.id);
     return json({ ok: true, friends: true });
   }
-  // The count and the insert are one statement, so asks at once cannot pass the limit together.
-  const res = await env.DB.prepare(
-    `INSERT INTO friend_requests (sender, receiver, at)
-     SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM friend_requests WHERE sender = ? AND at > ?) < ?
-     ON CONFLICT (sender, receiver) DO NOTHING`
-  ).bind(player, to, now(), player, ago(3600e3), ASKS_PER_HOUR).run();
-  if (!res.meta.changes && !(await env.DB.prepare('SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = ?').bind(player, to).first())) {
-    return fail(429, 'too many requests');
-  }
+  await env.DB.prepare('INSERT INTO friend_requests (sender, receiver, at) VALUES (?, ?, ?) ON CONFLICT (sender, receiver) DO NOTHING')
+    .bind(player, to, now()).run();
   return json({ ok: true, friends: false });
 }
 
@@ -538,8 +549,7 @@ async function invite(env, url, body) {
   const me = await friendSelf(env, player);
   const other = await env.DB.prepare('SELECT id FROM players WHERE pid = ?').bind(to).first();
   if (!usable(me) || !other || !(await areFriends(env, player, other.id))) return fail(403, 'friends only');
-  const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM invites WHERE sender = ? AND at > ?').bind(player, ago(3600e3)).first();
-  if (sent.n >= INVITES_PER_HOUR) return fail(429, 'too many invites');
+  if (!(await countSend(env, player, 'invite', INVITES_PER_HOUR))) return fail(429, 'too many invites');
   // One open invite per pair: a new one replaces the old.
   await env.DB.prepare('DELETE FROM invites WHERE sender = ? AND receiver = ?').bind(player, other.id).run();
   await env.DB.prepare('INSERT INTO invites (sender, receiver, game, version, room, at) VALUES (?, ?, ?, ?, ?, ?)')
