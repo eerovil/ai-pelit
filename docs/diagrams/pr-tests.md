@@ -6,7 +6,8 @@ themselves. Old, published versions never change, so their tests stay quiet. The
 files then run on four Chromium workers side by side, one whole file per worker at a time, except
 the 3D games' tests. Those never run in GitHub CI: they run on the AgentDeck host (bazzite) as
 the deck's verification job for the pull request's head, and the deck merges only when that job
-and GitHub CI are both green on the same head (#123).
+and GitHub CI are both green on the same head (#123). On the host, Chromium draws 3D on its graphics
+card instead of in software on the processor (#248).
 
 ```mermaid
 flowchart TD
@@ -34,18 +35,22 @@ flowchart TD
   R --> T
   T -- No --> P[pytest -n 4 --dist loadfile -m 'not alone']
   T -- Yes --> L[On bazzite: scripts/host-tests.sh, two side by side]
+  L --> GP{Graphics card found?}
+  GP -- Yes --> GN[WebGL on the NVIDIA card]
+  GP -- No --> SW[WebGL in software, as before]
+  GN & SW --> J
   P --> W1[Worker 1: own Chromium]
   P --> W2[Worker 2: own Chromium]
   P --> W3[Worker 3: own Chromium]
   P --> W4[Worker 4: own Chromium]
   W1 & W2 & W3 & W4 --> G[GitHub CI result]
-  L --> J[Verification job result]
+  J[Verification job result]
   G & J --> Z[Deck merges only on both]
   class A,B blue
-  class C,M,H,D,N,V,F,E,U,T amber
+  class C,M,H,D,N,V,F,E,U,T,GP amber
   class S,R green
   class K rose
-  class P,W1,W2,W3,W4,L teal
+  class P,W1,W2,W3,W4,L,GN,SW teal
   class G,J,Z violet
 ```
 
@@ -74,5 +79,7 @@ flowchart TD
 - **pytest -n 4 --dist loadfile -m 'not alone'**: `pytest-xdist` in `requirements-dev.txt`; the step in `.github/workflows/ci.yml`. `loadfile` keeps a file's tests on one worker, so the per-file Chromium (`browser` fixture, scope `module`) still starts once per file.
 - **Worker 1: own Chromium**: each worker is its own Python process with its own Playwright and Chromium; each test's `site` fixture already serves on its own free port.
 - **GitHub CI result**: the `test` job in `.github/workflows/ci.yml`: server tests, the published-version check, the non-3D browser tests and the build.
+- **Graphics card found?**: the `browser` fixture in `tests/conftest.py` starts Chromium with `--use-angle=vulkan --enable-features=Vulkan --enable-gpu --ignore-gpu-blocklist` unless `CI` is set. Chromium's WebGL already runs on Vulkan; these flags only let it pick the real card instead of SwiftShader (software). With no card it still gets SwiftShader, so the flags are harmless. After a run with 3D tests, the summary names the renderer it got (`webgl_renderer()`).
+- **WebGL on the NVIDIA card**: on bazzite's GTX 1660 SUPER, three 3D test files took 1 min 12 s of processor time instead of 20 min 52 s, and 2 min 11 s instead of 3 min 35 s on the clock (#248). 2D games' tests barely use the processor either way.
 - **Verification job result**: the deck's record of a green `agentdeck job submit --verification` run for the exact head.
 - **Deck merges only on both**: AgentDeck's ai-pelit setting `verification = "agentdeck_job"` (eerovil/agentdeck#3919): a green verification job and finished, green GitHub checks on the same head.
