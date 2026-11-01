@@ -10,6 +10,7 @@ does not play in the match fails its own pull request.
 """
 
 import json
+import shutil
 
 import pytest
 
@@ -17,6 +18,7 @@ import test_ottelu as v1
 import test_ottelu_v4 as v4
 import test_ottelu_v5 as v5
 from conftest import ROOT
+from test_rooms_lib import Relay
 from test_ottelu_v4 import finish_event, in_frame, open_game, room
 # v6 plays as v5 does once its events are loaded: v5's tests run on v6 too.
 from test_ottelu_v5 import (  # noqa: F401
@@ -214,3 +216,69 @@ def test_the_newest_event_pages_are_fetched_ahead_for_offline_play(site, context
     for slug in EVENTS:
         assert any(u.endswith(f"/games/{slug}/v{newest(slug)}/") for u in urls), slug
     assert any(u.endswith("/lib/yleisurheilu-5/korkeus.js") for u in urls)
+
+
+
+def slow_catalog_site(site):
+    """A site whose catalog names a Kuulantyöntö v99 (a copy of the newest), and a list the test
+    holds catalog requests in, to answer them when it likes."""
+    site.build(ROOT / "games")
+    shutil.copytree(site.out / "games" / "kuula" / f"v{newest('kuula')}", site.out / "games" / "kuula" / "v99")
+    catalog = json.loads((site.out / "catalog.json").read_text())
+    next(g for g in catalog["games"] if g["slug"] == "kuula")["versions"].append({"n": 99, "date": "2026-12-01", "note": "x"})
+    return catalog
+
+
+def test_a_new_match_alone_waits_for_a_slow_catalog(site, context):
+    catalog, held = slow_catalog_site(site), []
+    context.route("**/catalog.json", lambda r: held.append(r))
+    context.add_init_script("localStorage.setItem('ai-pelit:ottelu:lajit', JSON.stringify(['kuula', 'keihas']))")
+    page = context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.wait_for_function("!document.getElementById('go').disabled")
+    page.click("#go")
+    page.wait_for_timeout(300)
+    # Not started on the versions v6 was made with: it waits for the catalog.
+    assert page.evaluate("M") is None and page.inner_text("#loadText") == "Ladataan lajeja…"
+    held[0].fulfill(json=catalog)
+    page.wait_for_function("M && M.v.kuula === 99 && frameReady", timeout=10000)
+    assert in_frame(page, "document.baseURI").endswith("/games/kuula/v99/")
+    assert page.errors == []
+
+
+def test_a_new_match_with_friends_waits_for_a_slow_catalog(site, browser):
+    catalog, held = slow_catalog_site(site), []
+    relay = Relay()
+    pages = []
+    for name in ["Eero", "Aino"]:
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
+        if not pages:
+            ctx.route("**/catalog.json", lambda r: held.append(r))
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        pages.append(page)
+    host, aino = pages
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    aino.click("#multi")
+    aino.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    aino.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.evaluate("picked.splice(0); ['kuula', 'keihas'].forEach(s => picked.push(s)); drawPick()")
+    host.click("#aipr-start")
+    host.wait_for_timeout(300)
+    assert host.evaluate("M") is None and host.inner_text("#loadText") == "Ladataan lajeja…"
+    held[0].fulfill(json=catalog)
+    for p in pages:
+        p.wait_for_function("M && M.v.kuula === 99 && frameReady", timeout=10000)
+        assert in_frame(p, "document.baseURI").endswith("/games/kuula/v99/")
+    for p in pages:
+        assert p.errors == []
+        p.context.close()

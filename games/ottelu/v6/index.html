@@ -161,6 +161,17 @@ const newest = fetch('../../../catalog.json', { cache: 'no-cache' }).then(r => r
     if (ns.length) NEWEST[g.slug] = Math.max(...ns);
   });
 }).catch(() => {});
+// A new match waits for the catalog, so a slow connection never starts it on an older version
+// than the shelf has; at most CATALOG_WAIT ms, then the versions known by then. Offline the
+// fetch fails at once (or the service worker answers it), so nothing waits.
+const CATALOG_WAIT = 5000;
+let catalogDone = false;
+newest.then(() => { catalogDone = true; });
+function versionsKnown() {
+  if (catalogDone) return Promise.resolve();
+  show('loading'); $('loadText').textContent = 'Ladataan lajeja…'; $('retry').classList.add('hidden');
+  return Promise.race([newest, new Promise(r => setTimeout(r, CATALOG_WAIT))]);
+}
 // The version of an event this match plays.
 const vOf = slug => (M && M.v && M.v[slug]) || NEWEST[slug];
 // In the decathlon's order where it has the event, the hammer last.
@@ -575,8 +586,13 @@ function newMatch(mode, humans, round) {
   events.forEach(s => { v[s] = NEWEST[s]; });
   return { mode, round: round || 'solo', level, events, v, at: 0, phase: 'event', humans, bots: [], rows: [] };
 }
-$('go').addEventListener('click', () => {
-  if (picked.length < 2) return;
+let starting = false;
+$('go').addEventListener('click', async () => {
+  if (picked.length < 2 || starting) return;
+  starting = true;
+  await versionsKnown();
+  starting = false;
+  if (M) return;
   ORDER.forEach(s => drop(s + ':kesken'));
   M = newMatch('solo', [{ id: 'me', name: 'Sinä' }]);
   keep();
@@ -661,8 +677,10 @@ R.on('peers', roomStart);
 document.addEventListener('click', e => {
   if (tooFew() && e.target.closest && e.target.closest('#aipr-start')) { e.stopImmediatePropagation(); e.preventDefault(); }
 }, true);
-R.on('start', s => {
+let startRound = null;
+R.on('start', async s => {
   if (s.over) return;   // the end comes again by itself
+  startRound = s.round;
   unload();
   podiumShown = false; cer = null; sendScore();
   if (R.isHost && tooFew()) {
@@ -670,6 +688,9 @@ R.on('start', s => {
     return;
   }
   if (R.isHost) {
+    M = null;
+    await versionsKnown();
+    if (startRound !== s.round || !R.inRoom || !R.isHost) return;
     M = newMatch('net', s.players.map(p => ({ id: p.id, name: p.name })), s.round);
     R.send({ t: 'M', M });
     loadEvent(0, false);
@@ -721,7 +742,7 @@ R.on('hello', id => {
   const P = window.Ottelu.proxy;
   if (P && frameReady) P.fire('back', id);
 });
-R.on('lobby', () => { M = null; unload(); show(null); });
+R.on('lobby', () => { M = null; startRound = null; unload(); show(null); });
 R.on('leave', () => showMenu());
 R.on('menu', () => showMenu());
 
