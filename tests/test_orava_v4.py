@@ -106,11 +106,34 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
     try:
         ctx.route("**/*.mp3", lambda route: route.abort())
-        page = open_game(site, ctx)
+        page = open_game(site, ctx, level=3)
         start(page, wait=False)
-        page.evaluate("pressJump(); step(1 / 60); run(() => S.mode === 'air', 2)")
+        # Each v3 beep, by its first frequency, in window.beeps.
+        page.evaluate("""() => {
+          window.beeps = [];
+          const real = tone;
+          tone = (f0, ...rest) => { beeps.push(f0); return real(f0, ...rest); };
+        }""")
+        beeps = lambda: page.evaluate("beeps.splice(0)")
+        assert page.evaluate("ac !== null")   # the tap turned the beeps on
+        page.evaluate("martens = []; hawk.t = 0; step(1 / 60)")
+        assert beeps() == [1400]                       # the hawk's shriek
+        page.evaluate("Object.assign(S, { mode: 'ground', x: 30, y: 0 }); pressJump(); step(1 / 60)")
+        assert beeps() == [420]                        # the jump
+        page.evaluate("trees = []; branches = []; run(() => S.mode === 'air', 2)")
+        assert beeps() == [220]                        # the landing
+        page.evaluate("const k = cones[0]; Object.assign(S, { x: k.x, y: k.y - 9 }); eat()")
+        assert beeps() == [900, 700]                   # the crunch
+        page.evaluate("S.inv = 0; hurt('Haukka nappasi!', 1)")
+        assert beeps() == [300]                        # the hit
+        page.evaluate("hearts = 1; S.inv = 0; hurt('Haukka nappasi!', 1)")
+        assert page.evaluate("phase") == "over"
+        assert beeps() == [300, 300]                   # the hit, then the loss
+        # A new go (the score list covers the menu after a loss, so start it in code).
+        page.evaluate("startGo(); input.left = input.right = input.up = input.down = false; beeps.splice(0)")
         page.evaluate("cones.forEach(k => { if (!k.eaten) { Object.assign(S, { x: k.x, y: k.y - 9 }); eat(); } })")
         assert page.evaluate("phase") == "clear"
+        assert beeps()[-4:] == [523, 659, 784, 1047]   # the win tune
         assert played(page) == []
         assert page.errors == []
     finally:
