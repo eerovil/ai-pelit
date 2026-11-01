@@ -36,7 +36,7 @@ def test_the_outfit_picked_on_the_menu_is_worn_in_the_events(site, context, slug
     page = open_game(site, context, saved={"lajit": [slug, "kuula"]})
     assert page.text_content("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    assert page.locator("#ai-pelit-asut .asu").count() == 13
+    assert page.locator("#ai-pelit-asut .asu").count() == 16  # 7 kits, 6 Halloween, 3 Tylypahka (#321)
     page.click("[data-asu=vampyyri]")
     page.click("#ai-pelit-asut-valmis")
     assert page.text_content("#asu") == "👕 Asu: Vampyyri"
