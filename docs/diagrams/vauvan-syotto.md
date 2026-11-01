@@ -3,7 +3,8 @@
 How one level of Vauvan syöttäminen plays (v1). The player carries spoonfuls from the bowl to the
 baby's mouth, while the baby opens its mouth, turns away, sways and asks for the spoon. A spoon
 given to the baby is dropped on the floor and must be washed. The level is won when the tummy is
-full and lost when the baby's mood runs out.
+full and lost when the baby's mood runs out. v3 (#232) plays recorded sounds from the shared
+library instead of beeps.
 
 ```mermaid
 flowchart TD
@@ -31,6 +32,7 @@ flowchart TD
   class H,I,J teal
   class K,P1,P2,P3 violet
   class E,M green
+  class Q blue
   class F,G,O rose
 ```
 
@@ -56,3 +58,4 @@ flowchart TD
 - **📱 Video: suu auki, mieli ei laske**: 6 s of a cartoon on a phone; the baby stares with its mouth wide open and its head still. A spoon the baby is holding still gets dropped, and a bite is still chewed, before it stares again.
 - **✈️ Lentokone: lusikka menee aina perille**: the next spoonful, let go anywhere above the bowl, loops into the mouth by itself; let go right at the mouth, it goes straight in. Either way it is never spat out.
 - **Röyh! Taso läpi, tähdet ja seuraava taso tallennetaan**: `win()`: 3 stars with no misses, 2 with up to two, else 1. Every four bites in a row without a miss earn one more power-up (at most 3 of each).
+- **Äänet: nams, litsahdus, lusikka, vauva, röyhtäys, pruut, suhahdus, valinta**: `games/vauvan-syotto/v3/index.html` (#232) loads `lib/aanet-2/aanet.js`, and each `sfx` entry plays a library sound, falling back to the old beep when it cannot play: a bite eaten nams, a miss litsahdus, a scoop from the bowl litsahdus quietly, the spoon on the floor lusikka, the baby's laugh vauva (faster) and its cry vauva twice (slower), the level won royhtays, a spit pruut, the aeroplane suhahdus, a power-up earned valinta twice. The song and the video keep their own tunes.
