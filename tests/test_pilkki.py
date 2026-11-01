@@ -257,8 +257,9 @@ def test_a_reload_keeps_every_fish_of_the_lake(site, context):
     here = page.evaluate("spot.i")
     # This place fished out (nothing near it), the rest of the lake as it swims.
     page.evaluate("pond = pond.filter(f => Math.abs(f.lx - spot.x) > 6 || Math.abs(f.ly - spot.y) > 4.5); sight()")
-    before = page.evaluate("pond.map(f => [f.sp, f.g, f.tgt]).sort().join(';')")
-    page.evaluate("keepContest()")
+    # Read in the same moment as it is saved: the fish keep swimming (and picking new targets) between
+    # two evaluate() calls on a slow machine (#337, CI).
+    before = page.evaluate("keepContest(), pond.map(f => [f.sp, f.g, f.tgt]).sort().join(';')")
     page.reload()
     page.evaluate(RUN)
     page.click("#resume")
