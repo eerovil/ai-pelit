@@ -116,3 +116,24 @@ def test_v4_saves_are_read_as_they_are(game):
     assert "Taso 3" in page.inner_text("#foe")
     assert page.inner_text("#stats").startswith("Voitot 2 · Häviöt 5")
     assert page.errors == []
+
+
+def test_a_guest_hears_the_point_and_the_end_once(game):
+    # A phone in a room draws the host's snapshots: the point and the match end sound there too,
+    # and an end sent again (the phone was away) does not play the tune twice.
+    page = game()
+    ready(page)
+    page.evaluate("""() => {
+      state = 'play'; const s = snapshot(); s.st = 'point'; s.b[1] = 0.2; s.m = { s: 'Pallo maassa!', t: 0 };
+      applySnapshot(s);
+    }""")
+    assert played(page) == ["hiekka", "pilli", "aplodit"]
+    page.evaluate("state = 'play'; const s = snapshot(); s.st = 'point'; s.b[1] = 2; applySnapshot(s)")
+    assert played(page) == ["pilli", "aplodit"]
+    page.evaluate("""() => {
+      R.backToRoom = () => {};
+      const m = { round: 1, w: 0, sc: [11, 5], pl: [] };
+      finish(m); finish(m);
+    }""")
+    assert played(page) == ["voitto"]
+    assert page.errors == []
