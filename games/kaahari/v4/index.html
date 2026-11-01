@@ -1038,8 +1038,9 @@ for (const ev of ['pointerup', 'pointercancel']) c.addEventListener(ev, e => { f
 
 // ---------- Sound ----------
 // Recorded sounds from the shared library (#205); each falls back to the old beep when it cannot
-// play (before it loads, offline on the very first open).
-const S = AiPelitAanet;
+// play (before it loads, offline on the very first open). If the library script itself did not
+// load, a silent stand-in keeps the game playing on its beeps.
+const S = window.AiPelitAanet || { load() {}, play: () => false, ready: () => false, loop: () => ({ set() { return this; }, stop() {}, playing: () => false }) };
 S.load(['kartti', 'valinta', 'onnistui', 'voitto', 'tappio', 'kitka', 'hyppy', 'nousu', 'naksu', 'suhahdus', 'rajahdys', 'metalli', 'osuma', 'aplodit']);
 let ac = null, eng = null, kart = null;
 function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }

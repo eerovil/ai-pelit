@@ -148,3 +148,25 @@ def test_in_a_room_the_line_claps_then_each_phone_hears_its_own_place(site, brow
     got = played(host)
     assert "tappio" in got and "voitto" not in got, got
     assert host.errors == [] and guest.errors == []
+
+
+def test_without_the_sound_library_script_it_still_races_with_its_beeps(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
+                              service_workers="block")
+    try:
+        ctx.route("**/aanet.js", lambda route: route.abort())
+        site.build(ROOT / "games")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e: page.errors.append(str(e)))
+        page.goto(site.url + URL)
+        assert page.evaluate("typeof AiPelitAanet") == "undefined"
+        page.click("#go")
+        page.wait_for_function("race.phase === 'run'", timeout=6000)
+        assert page.evaluate("eng !== null && !kart.playing()")
+        finish(page)
+        page.wait_for_function("race.phase === 'over'", timeout=6000)
+        assert page.inner_text("#result") == "🏆 Voitit kisan!"
+        assert page.errors == []
+    finally:
+        ctx.close()
