@@ -237,8 +237,13 @@ function pondMsg() {
 // A guest takes the host's fish, except the ones it is busy with itself.
 function applyPond(m) {
   net.claims = Object.assign({}, m.c || {});
-  // A fish another phone got first is let go here; one still on its way to the host stays ours.
-  for (const f of pond) if (f.look && net.claims[f.id] && net.claims[f.id] !== R.me) { f.look = false; f.int = 0; }
+  const has = new Set((m.f || []).map(q => q[0]));
+  // A fish the host gave another phone first, or that is gone (someone caught it), is lost here,
+  // even mid-bite or on the line; one whose claim is still on its way to the host stays ours.
+  for (const f of pond) {
+    const other = (net.claims[f.id] && net.claims[f.id] !== R.me) || !has.has(f.id);
+    if (other && (f.look || f === biter || (fight && f === fight.fish))) lost(f);
+  }
   const old = new Map(pond.map(f => [f.id, f])), mineNow = f => f.look || f === biter || (fight && f === fight.fish);
   const next = [];
   for (const q of m.f || []) {
@@ -248,10 +253,17 @@ function applyPond(m) {
     Object.assign(f, { sp: SP[q[1]] || 'ahven', g: q[2], lx: q[3], ly: q[4], d: q[5], wx: q[6], wy: q[7], tgt: q[8], go: !!q[9], flee: q[10] ? 1 : 0, hf: q[11] });
     next.push(f); old.delete(q[0]);
   }
-  // A fish the host no longer has was caught by someone; one this phone is working stays.
-  for (const f of old.values()) if (mineNow(f)) next.push(f);
   pond = next;
   sight();
+}
+// Another phone had this fish first: it slips away from this one.
+function lost(f) {
+  f.look = false; f.int = 0;
+  if (f === biter || (fight && f === fight.fish)) {
+    biter = fight = null; jigD = Math.min(jigD, lastDepth);
+    say('Kala oli jo toisen pilkissä', '#ffd166');
+    toJig(); jigGoal = lastDepth;
+  }
 }
 // The host hears a guest's fish.
 function hostFish(m, from) {
@@ -269,9 +281,11 @@ function hostFish(m, from) {
       if (m.s) { f.flee = 4; leave(f); } else wander(f, lake[f.tgt]);
     }
   } else if (m.t === 'caught') {
-    if (net.claims[m.id] !== from) return;
+    // Only the phone the fish was given to catches it; any other is told it does not count.
+    if (net.claims[m.id] !== from || !f) { R.send({ t: 'nocatch', round: net.round, id: m.id }, from); return; }
     delete net.claims[m.id];
-    if (f) { pond.splice(pond.indexOf(f), 1); R.send({ t: 'gone', round: net.round, id: m.id }); }
+    pond.splice(pond.indexOf(f), 1);
+    R.send({ t: 'gone', round: net.round, id: m.id, by: from, sp: f.sp, g: f.g });
   }
 }
 // A phone that left or came back again holds no fish any more.
@@ -284,7 +298,7 @@ let phase = 'menu', phaseT = 0, left = CONTEST, seed = 1, lake = makeLake(1), sp
 let fish = [], jigD = 0, jigGoal = null, jigKick = 0, lastDepth = 2, drill = 0, walkTo = null, walkT = 0;
 let beat = 0, lastTwitch = -9, playT = 0, target = null, biter = null, fight = null, landed = null;
 let myG = 0, myN = 0, myBig = null, rivals = [], texts = [], mapOpen = false, hookedOnce = false;
-let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {} };
+let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {} };
 const playing = () => ['drill', 'walk', 'jig', 'bite', 'fight', 'caught', 'snap'].includes(phase);
 
 const RIVALS = ['Pilkki-Pekka', 'Ahven-Aili', 'Kaira-Kalle'];
@@ -292,7 +306,7 @@ const RIVALS = ['Pilkki-Pekka', 'Ahven-Aili', 'Kaira-Kalle'];
 function rivalRate(l) { l = Math.min(l, 12) - 1; return { perMin: 0.9 + 0.25 * l, big: Math.min(0.9, 0.15 + 0.07 * l) }; }
 
 function newContest(resume) {
-  net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {} };
+  net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {} };
   menu.classList.add('hidden');
   seed = resume ? resume.seed : Math.floor(Math.random() * 1e9);
   lake = makeLake(seed);
@@ -480,13 +494,18 @@ function land() {
   caught(f);
   fight = null; phase = 'caught'; phaseT = 0; jigD = 0;
   landed = { sp: f.sp, g: f.g };
-  myG += f.g; myN++;
-  if (!myBig || f.g > myBig.g) myBig = { s: f.sp, g: f.g };
-  // Saved the moment it is earned: the lifetime catch and the biggest fish ever.
-  caughtAll[f.sp] = (caughtAll[f.sp] || 0) + 1; save('kalat', caughtAll);
-  if (!biggest || f.g > biggest.g) { biggest = { s: f.sp, g: f.g }; save('suurin', biggest); }
   S.play('loiskis', { vol: 0.7 });
   S.play(f.g >= 1000 ? 'aplodit' : 'onnistui', { vol: 0.5, delay: 0.25 });
+  // A guest's fish counts once the host says it was this phone's to catch (credit()).
+  if (net.on && !R.isHost) net.pending[f.id] = { sp: f.sp, g: f.g };
+  else credit(f.sp, f.g);
+}
+function credit(sp, g) {
+  myG += g; myN++;
+  if (!myBig || g > myBig.g) myBig = { s: sp, g };
+  // Saved the moment it is earned: the lifetime catch and the biggest fish ever.
+  caughtAll[sp] = (caughtAll[sp] || 0) + 1; save('kalat', caughtAll);
+  if (!biggest || g > biggest.g) { biggest = { s: sp, g }; save('suurin', biggest); }
   keepContest();
   if (net.on) sendMe();
 }
@@ -579,7 +598,7 @@ function setupFor(round, list) {
   return { t: 'setup', round, seed: Math.floor(Math.random() * 1e9), players, spots: players.map((_, i) => (i * 5 + 2) % SPOTS) };
 }
 function applySetup(s) {
-  net = { on: true, round: s.round, setup: s, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {} };
+  net = { on: true, round: s.round, setup: s, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {} };
   seed = s.seed; lake = makeLake(seed); holes = []; left = CONTEST;
   // The host's fish are everybody's: a guest waits for them (pondMsg()).
   if (R.isHost) stockPond(); else pond = [];
@@ -656,7 +675,12 @@ R.on('message', (m, from) => {
   } else if (m.t === 'p' && net.on && m.round === net.round) applyPond(m);
   else if (m.t === 'gone' && net.on && m.round === net.round) {
     const f = pond.find(q => q.id === m.id);
-    if (f && f !== biter && !(fight && f === fight.fish)) { pond.splice(pond.indexOf(f), 1); f.look = false; sight(); }
+    if (f) { lost(f); pond.splice(pond.indexOf(f), 1); sight(); }
+    // The host says this phone's catch counts.
+    const p = net.pending[m.id];
+    if (p && m.by === R.me) { delete net.pending[m.id]; credit(p.sp, p.g); }
+  } else if (m.t === 'nocatch' && net.on && m.round === net.round) {
+    if (net.pending[m.id]) { delete net.pending[m.id]; say('Kala oli jo toisen pilkissä', '#ffd166'); }
   } else if (m.t === 's' && net.on && m.round === net.round) {
     // The host's clock rules; a returning phone takes back the catch the host has for it.
     if (Math.abs(m.left - left) > 0.6) left = m.left;

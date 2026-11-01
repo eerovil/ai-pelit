@@ -423,7 +423,9 @@ def test_friends_fish_one_shared_lake_of_fish(room):
     }""")
     for p in (host, third):
         p.wait_for_function(f"!pond.some(f => f.id === {caught[0]})", timeout=4000)
-    assert guest.evaluate("[myG, pond.some(f => f.id === %d)]" % caught[0]) == [caught[1], False]
+    # It counts on her phone once the host has said it was hers.
+    guest.wait_for_function(f"myG === {caught[1]} && myN === 1", timeout=4000)
+    assert guest.evaluate("pond.some(f => f.id === %d)" % caught[0]) is False
     host.wait_for_function("standings().find(s => s.name === 'Aino').g === %d" % caught[1], timeout=4000)
     assert host.errors == guest.errors == third.errors == []
 
@@ -446,6 +448,34 @@ def test_a_guest_jigs_and_lands_a_shared_fish_by_playing(room):
     guest.evaluate("strike()")
     assert guest.evaluate(FIGHT) == "caught"
     host.wait_for_function(f"!pond.some(f => f.id === {guest.evaluate('want')})", timeout=4000)
+    assert host.errors == guest.errors == []
+
+
+def test_two_phones_racing_for_one_fish_only_the_first_gets_it(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.wait_for_function("pond.length > 50", timeout=5000)
+    me = host.evaluate("AiPelitRooms.me")
+    reel = """(id) => {
+      const f = pond.find(q => q.id === id); f.look = true; holes.push(spot.i); toJig(); lastDepth = 2;
+      fight = { fish: f, L: 2, T: 0.3, over: 0, burst: 0, next: 9, t: 0, sway: 0 }; phase = 'fight';
+    }"""
+    # The host's phone had the fish first; Aino's phone lands it before it hears so: it does not count.
+    x = host.evaluate("const f = pond[1]; net.claims[f.id] = AiPelitRooms.me; f.id")
+    guest.evaluate(reel, x)
+    guest.evaluate("holding = 1; fight.L = 0.001; fightStep(DT); holding = 0")
+    assert guest.evaluate("phase") == "caught"
+    guest.wait_for_function("!Object.keys(net.pending).length", timeout=4000)
+    assert guest.evaluate("[myG, myN]") == [0, 0]
+    assert host.evaluate(f"[pond.some(f => f.id === {x}), net.claims[{x}]]") == [True, me]
+    host.wait_for_timeout(1200)
+    assert host.evaluate("standings().find(s => s.name === 'Aino').g") == 0
+    # On the line when it hears the host gave the fish to another: it slips off, nothing is counted.
+    guest.evaluate("afterCatch()")
+    y = host.evaluate("const f = pond[2]; net.claims[f.id] = AiPelitRooms.me; f.id")
+    guest.evaluate(reel, y)
+    host.evaluate("AiPelitRooms.send(pondMsg())")
+    guest.wait_for_function("phase === 'jig' && !fight", timeout=4000)
+    assert guest.evaluate("[myG, myN]") == [0, 0]
     assert host.errors == guest.errors == []
 
 
