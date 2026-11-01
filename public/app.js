@@ -151,8 +151,9 @@
     if (!window.fetch) return;
     fetch('api/rooms', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (b) { if (b && Array.isArray(b.rooms)) openRooms = b.rooms; })
-      .catch(function () {})
+      // No answer (offline, an error) hides the list: an old room may be gone by now.
+      .then(function (b) { openRooms = b && Array.isArray(b.rooms) ? b.rooms : []; })
+      .catch(function () { openRooms = []; })
       .then(function () {
         // Only while this same shelf is still on screen; another page drops it.
         if (!box.isConnected) return;

@@ -105,3 +105,24 @@ def test_a_long_game_name_in_the_list_fits_the_phone(site, context, width):
     assert page.evaluate("document.documentElement.scrollWidth") <= width
     box = page.locator(".room a").bounding_box()
     assert box["x"] + box["width"] <= width
+
+
+def test_the_list_goes_when_the_connection_does(site, context):
+    make_game(site.games, "pallo", [game_page("v1")])
+    site.build()
+    online = [True]
+
+    def answer(route):
+        if online[0]:
+            route.fulfill(status=200, content_type="application/json",
+                          body=json.dumps({"rooms": [{"code": "PELI", "game": "pallo", "v": 1, "n": 1, "max": 5}]}))
+        else:
+            route.abort()
+    context.route("**/api/rooms", answer)
+    page = context.new_page()
+    page.clock.install()
+    page.goto(site.url)
+    page.wait_for_selector('.room[data-code="PELI"]')
+    online[0] = False
+    page.clock.run_for(10_500)
+    page.wait_for_function("document.querySelector('.open-rooms').hidden")
