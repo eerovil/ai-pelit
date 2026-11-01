@@ -64,6 +64,13 @@
       "note": "Hienommat 3D-hiihtäjät ja sulavampi liike, piirretyn näköiset kuuset, latuun ura kummallekin suksella, kirkkaampi lumi ja pehmeämmät varjot; pystyssä ja vaakatasossa.",
       "request": "The 3d looks worse than the old version. I wonder why? / Yeah and the models did look better flat. 3d makes them stand out that they are spheres and cones. / 3d piirretty. Ja oli ne 3d hahmot sittenkin paremmat. / Pitää tuo latu saada paremman näköiseksi, siinä ei ole kahdelle sukselle uraa. / Tee vielä prototyyppi jossa latua ja hahmoa korjataan paremmaksi. / Ja paremmat animaatiot. / Joo 3d parempi on hyvä.",
       "issue": "eerovil/ai-pelit#103"
+    },
+    {
+      "n": 10,
+      "date": "2026-11-01",
+      "note": "Oikeat äänet piippausten tilalle: potkut lumessa, tuulen humina vauhdin mukaan, askeleet tiellä, monojen naksahdus, kaatumisen tömähdys ja aplodit maalissa.",
+      "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): lähtö valinta, voitelu valinta, tyylin vaihto naksu, potku ja luisto lumi, monojen naksahdus naksu, askel tiellä askel, lumen kopistelu puu, kaatuminen tomahdys, tulos voitto/tappio, maalissa aplodit; luistoon silmukka tuuli tai rullaus hiljaa, nopeuden mukaan.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v10 on jo varattu, käytä seuraavaa vapaata numeroa.",
+      "issue": "eerovil/ai-pelit#213"
     }
   ]
 }
