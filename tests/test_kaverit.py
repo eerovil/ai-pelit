@@ -294,9 +294,10 @@ def test_an_invite_reaches_a_friend_in_another_game_and_joins_the_room(phones):
     host.locator("#aipr-invClose").click()
     assert host.locator("#aipr-inv").is_hidden()
     # Back goes up from the invited game, never into the game Bertta was playing: the chip to the
-    # invited game's page, then the phone's back to the shelf.
+    # invited game's page (through its menu, #336), then the phone's back to the shelf.
     bertta.wait_for_function("AiPelitRooms.inRoom")
     bertta.click("#ai-pelit-back")
+    bertta.click("#ai-pelit-takaisin")
     bertta.wait_for_url(re.compile(r".*/#/huonetesti$"))
     bertta.go_back()
     bertta.wait_for_timeout(500)
