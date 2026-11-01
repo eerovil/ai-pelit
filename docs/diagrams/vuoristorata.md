@@ -5,7 +5,8 @@ drawn in 3D with the shared three.js, holds ⚡ Vauhti to speed up and ✋ Jarru
 rides a level's track (a lift hill, drops, hills, banked curves, loops and spirals) to the finish
 as fast as they can. Too fast over a crest or into a curve, or too slow into a loop, and the car
 flies off; signs before each such place give the speed. With friends, every phone rides the
-host's level at once and the first to the finish wins.
+host's level at once and the first to the finish wins. From v2 (#234) the ride sounds with
+recorded sounds from the shared library (see `aanikirjasto.md`).
 
 ```mermaid
 flowchart TD
@@ -21,6 +22,7 @@ flowchart TD
   J --> E
   E --> K[Salamat: lisää vauhtienergiaa]
   K --> E
+  E --> V[Äänet: jyrinä nopeuden mukaan, ketju, kirkuna pudotuksessa, jarru, kolari, voitto]
   H -- Ei --> E
   H -- Kyllä --> L[Aika, tähdet tietokoneen ajasta, ennätys]
   L --> M[Tallennus: aika, tähdet, seuraava taso auki, tuloslista]
@@ -35,6 +37,7 @@ flowchart TD
   class A,C,E,N blue
   class G,H,Q amber
   class B,D,F,K teal
+  class V blue
   class I,J rose
   class L,M,R green
   class O,P,S,T violet
@@ -42,7 +45,7 @@ flowchart TD
 
 ## Colours
 
-- **blue**: what the player sees and does
+- **blue**: what the player sees, hears and does
 - **amber**: a check that decides the path
 - **teal**: how the track is made and what is on it
 - **rose**: flying off the track
@@ -64,3 +67,4 @@ flowchart TD
 - **Jokainen puhelin ajaa samaa rataa, kaverit näkyvät omina junina**: `netStart()`, `netTick()`: each phone rides its own car and sends where it is ten times a second; the host sends the race (count-down, clock, every car) to all. Friends' trains are drawn in their colours (`trainFor()`), and the HUD lists the places. A phone reloaded mid-race gets the race from the host (`guestState()`) and carries on from where its train was, on the race clock.
 - **Puhelin poissa: tietokone ajaa sen junaa**: on "Jatka ilman heitä" (`on('continue')`) the host's `botStep()` rides the away phone's car; it gets it back when it returns (`on('back')`). A finish the computer rode keeps its place but saves no time.
 - **Kaikki maalissa tai 40 s ensimmäisestä?**: `netTick()` on the host ends the race and `deliver()`s the standings, ordered by each car's finish time on the race clock (every phone's clock is set from the host's at the start and after a reload), so a finish whose message arrives late keeps its place.
+- **Äänet: jyrinä nopeuden mukaan, ketju, kirkuna pudotuksessa, jarru, kolari, voitto**: v2's `sound()` in `games/vuoristorata/v2/ride.js` (`index.html` loads `lib/aanet-2/aanet.js`): the `rullaus` loop's rate and volume follow the speed while riding, the `ketju` loop is turned up on the lift, `kirkuna` plays once as the car enters each drop piece, `jarru` each time the brake goes down above 2 m/s; `startRide()` and the count-down play `valinta`, `go()` `onnistui`, a bolt `nousu`, `crash()` `kolari`, `finishRide()` `voitto`. Each falls back to v1's own beep or hum when the recorded one did not play; the limit warning's whine stays the game's own (the library has no fitting sound). `quiet()` turns the loops down on a crash, the finish and back to the menu.
