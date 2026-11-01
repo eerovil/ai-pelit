@@ -443,6 +443,33 @@ def test_a_new_version_keeps_the_save_and_the_old_ones_files_go(site, context):
     assert page.title() == "paras 7"
 
 
+def test_an_old_shortcut_opens_the_newest_offline(site, context):
+    # #346: a home-screen shortcut to v1, after v2 came and v1's files were dropped from the cache.
+    make_game(site.games, "pikakuvake", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    wait_for_worker(page)
+    page.goto(f"{site.url}games/pikakuvake/v1/")
+    make_game(site.games, "pikakuvake", [game_page("v1"), game_page("v2")])
+    site.build()
+    page.goto(site.url)
+    page.wait_for_function("caches.keys().then(k => Promise.all(k.filter(n => n.startsWith('ai-pelit-shell-'))"
+                           ".map(n => caches.open(n).then(c => c.match('catalog.json')).then(r => r.json()))))"
+                           ".then(cs => cs.length === 1 && cs[0].games[0].versions.length === 2)", timeout=10000)
+    page.goto(f"{site.url}games/pikakuvake/v2/")
+    assert page.title() == "v2"
+    context.set_offline(True)
+    try:
+        page.goto(f"{site.url}games/pikakuvake/v1/?huone=ABCD")
+        assert page.url == f"{site.url}games/pikakuvake/v2/?huone=ABCD"
+        assert page.title() == "v2"
+        page.goto(f"{site.url}games/pikakuvake/v1/index.html")
+        assert page.url == f"{site.url}games/pikakuvake/v2/"
+    finally:
+        context.set_offline(False)
+
+
 @pytest.mark.parametrize("width", [360])
 def test_shelf_fits_a_small_phone(site, context, width):
     make_game(site.games, "pitka-nimi", [game_page("x")], title="Hyvin pitkä pelin nimi joka jatkuu ja jatkuu")
