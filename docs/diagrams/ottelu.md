@@ -1,6 +1,6 @@
 # Ottelu: several athletics events in one match
 
-How Ottelu v1 plays (#168); v2 plays the same, but a room starts only once the host has picked at least two events, and the event in the frame gets the phone's safe areas; v3 starts each next event alone in a freshly loaded page; v4 (#287) adds the shot put and the 100 m hurdles, plays the newest version of each event and shows no medal ceremony after an event. The player, or the host of a room, picks two to five (v4: up to seven) events and
+How Ottelu v1 plays (#168); v2 plays the same, but a room starts only once the host has picked at least two events, and the event in the frame gets the phone's safe areas; v3 starts each next event alone in a freshly loaded page; v4 (#287) adds the shot put and the 100 m hurdles, plays the newest version of each event and shows no medal ceremony after an event; v5 (#294) holds the medal ceremony once, when the whole match ends. The player, or the host of a room, picks two to five (v4: up to seven) events and
 their order. Each event runs a published version of that event's own game in a frame, unchanged:
 `laji.js` stands in for `rooms.js` and changes the shared athletics library as it loads, so the event
 has the match's eight athletes, three rounds and saves of its own. Each athlete's best mark becomes
@@ -28,15 +28,17 @@ flowchart TD
   PTS --> LAST{Viimeinen laji?}
   LAST -- Ei --> BOARD[Pisteet yhteensä, Seuraava laji]
   BOARD --> LOAD
-  LAST -- Kyllä --> END[Lopputulokset ja mitalit]
-  END --> SAVE[Ennätys, tuloslista lajimäärän mukaan, voitosta seuraava taso]
-  SAVE --> MENU
+  LAST -- Kyllä --> PODIUM[Palkintojenjako: kolme parasta ottelupisteillä palkintopallilla]
+  PODIUM -->|napautus| END[Lopputulokset ja mitalit]
+  PODIUM --> SAVE[Ennätys, voitosta seuraava taso]
+  END --> LIST[Tulos tuloslistalle lajimäärän mukaan, nimimerkkikysely]
+  LIST --> MENU
   END --> BACK[Huoneessa: takaisin huoneeseen]
   class MENU,ROOM,BOARD,PLAY blue
   class HOST,GUEST violet
   class Q,NET,LAST,KIND amber
   class NEW,LOAD,PATCH,AITA,PTS teal
-  class RES,END,SAVE,BACK green
+  class RES,END,SAVE,BACK,PODIUM,LIST green
 ```
 
 ## Colours
@@ -60,4 +62,6 @@ flowchart TD
 - **Vieraan kehys valmis: Lr, isäntä lähettää kisan**: a guest's frame sends `{t: 'Lr'}` once loaded; the host's event hears it as `hello` and sends that phone the meet.
 - **Pisteet yhteensä, Seuraava laji**: `showBoard()`; "Seuraava" on the host or alone. v3: alone it saves the match, marks the next event in sessionStorage (`ai-pelit:ottelu:seuraava`) and reloads the page (marked `ai-pelit:_jatkuu`, so `back.js` does not count it as a new play), which starts that event at once; a tap inside the event asks for full screen again in a browser tab (`laji.js`), as the reload leaves it: on Eero's phone a second frame swapped into the same page took no taps. In a room the event still changes in place.
 - **Paras tulos pisteiksi: A·(P−B)^C**: `LAJIT[…].pts`, World Athletics combined-event tables (the decathlon's jumps, shot put and javelin; the hammer by the throws pentathlon; v4's 100 m hurdles by the heptathlon's, A·(B−P)^C in seconds), rounded down; no mark is 0 points.
-- **Ennätys, tuloslista lajimäärän mukaan, voitosta seuraava taso**: `ended()`; the high-score list is `lajit-<number of events>` (v4: up to `lajit-7`, allowed in `server/api.js` and named in `public/scores.js`).
+- **Palkintojenjako: kolme parasta ottelupisteillä palkintopallilla**: v5 (#294): `podium()` in `games/ottelu/v5/index.html` makes a meet of the shared athletics library (`lib/yleisurheilu-4/kisa.js`, loaded on the match page) only to draw its ceremony on the `#pallit` canvas, with no room and the match's standings (points) as its ending; every phone in a room shows it. A tap finishes the ceremony, the next leaves it (`podiumOff()`).
+- **Ennätys, voitosta seuraava taso**: `ended()`; once per match on this phone.
+- **Tulos tuloslistalle lajimäärän mukaan, nimimerkkikysely**: the high-score list is `lajit-<number of events>` (v4: up to `lajit-7`, allowed in `server/api.js` and named in `public/scores.js`). v5: `ended()` only keeps the score (`pendingScore`); `sendScore()` submits it once the podium is left, so `scores.js`'s first-score nickname question opens over the final standings, not over the ceremony.
