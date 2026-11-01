@@ -178,6 +178,7 @@ function buildWorld() {
     m.position.set(...p); w.add(m);
   }
   for (const b of road.bays) w.add(restStop(b, snowy));
+  for (const J of road.junctions) w.add(junctionLamp(J));
   w.add(townLights());
   if (wx !== 'kuiva') w.add(V3.weather = weatherMesh(wx));
   else { V3.weather = null; w.add(starField()); }
@@ -394,7 +395,8 @@ function signMesh(sg) {
   const plate = new THREE.Mesh(V3.geo.plate, mat); plate.scale.set(wide ? 1.8 : 0.9, 0.9, 1); plate.position.y = 2.2;
   const post = part(V3.geo.pole, V3.mats.grey, 0.04, 2.2, 0.04, 0, 1.1, 0);
   g.add(plate, post);
-  const lat = 5.4, p = worldAt(sg.s, lat); g.position.set(...p); g.rotation.y = -headingAt(sg.s);
+  // v8: beside the rest area's paving, not on it.
+  const lat = Math.max(5.4, EDGE + bayWidth(sg.s) + 1.2), p = worldAt(sg.s, lat); g.position.set(...p); g.rotation.y = -headingAt(sg.s);
   g.userData = { s: sg.s, lat, mat };
   return g;
 }
@@ -430,6 +432,17 @@ function restStop(b, snowy) {
   house.position.set(...p); house.rotation.y = -headingAt(s) + Math.PI / 2;
   g.add(house);
   for (const sx of [b.s0, b.s1]) { const q = worldAt(sx, 9.5), l = sprite(V3.mats.glowY, 3.2); l.position.set(q[0], q[1] + 6, q[2]); g.add(l); g.add(part(V3.geo.pole, V3.mats.grey, 0.06, 6, 0.06, q[0], q[1] + 3, q[2])); }
+  return g;
+}
+// v8 (#306): a street light over each side road's mouth, as on the main roads, so the junction
+// shows from afar; its pool of light falls on the side road and the car waiting there.
+function junctionLamp(J) {
+  const g = new THREE.Group();
+  for (const side of J.both ? [-1, 1] : [J.side]) {
+    const q = worldAt(J.s + 7, side * 6.6), l = sprite(V3.mats.glowY, 4); l.position.set(q[0], q[1] + 7, q[2]); g.add(l);
+    g.add(part(V3.geo.pole, V3.mats.grey, 0.07, 7, 0.07, q[0], q[1] + 3.5, q[2]));
+    const pool = new THREE.PointLight(0xffc477, 18, 26, 1.2), p = worldAt(J.s, side * 6.5, 6.5); pool.position.set(...p); g.add(pool);
+  }
   return g;
 }
 // The town at the end: street lights and lit windows.

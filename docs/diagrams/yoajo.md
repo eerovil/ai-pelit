@@ -1,6 +1,6 @@
 # Yöajo: one leg of the night drive
 
-How one leg of Yöajo plays (v1, #181; v4 drives with one thumb as a round stick and adds the reckless-driving rules; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`; v5 shows the speed on a car's dial at the top, #206; v6 plays recorded sounds from the shared library, #235; v7 shows and explains the potholes, #266). The player drives at night up Valtatie 4 from Helsinki
+How one leg of Yöajo plays (v1, #181; v4 drives with one thumb as a round stick and adds the reckless-driving rules; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`; v5 shows the speed on a car's dial at the top, #206; v6 plays recorded sounds from the shared library, #235; v7 shows and explains the potholes, #266; v8 adds junctions with cars pulling out, no overtaking through them, a rest area with a lane of its own, the lights button on the left and a livelier gas pedal, #306). The player drives at night up Valtatie 4 from Helsinki
 to Rovaniemi, one leg a level, seen in 3D from behind the car. In v1 and v2 the car pulls up
 to speed by itself and the player steers and brakes with buttons; in v3 the left thumb steers and
 the right thumb presses the gas or brakes, by how far each slides. The player also switches the
@@ -18,7 +18,11 @@ flowchart TD
   C -- Traktori, rekka tai auto edellä --> E{Vastaan tulee joku?}
   E -- Ei --> E1[Ohitus +40..60]
   E -- Kyllä --> E2[Odota takana, lähivaloilla]
-  E -- Ohitit silti, vastaantulija alle 180 m --> E3[Vaarallinen ohitus -50, ei ohituspisteitä]
+  E -- Ohitit silti, vastaantulija alle 130 m --> E3[Vaarallinen ohitus -50, ei ohituspisteitä]
+  C -- Risteys --> J[Risteysmerkki, ohituskieltomerkki, yhtenäinen keltainen keskiviiva, katuvalo]
+  J --> J1{Ohitatko viivan yli?}
+  J1 -- Kyllä --> J2[Ohitit sulkuviivan yli -30, ei ohituspisteitä]
+  J --> J3[Sivutieltä auto eteen tai vastaan: jarruta tai ohita myöhemmin]
   B --> M[Nopeusmittari yläreunassa: viisari, rajoitus vieressä]
   B --> N[Äänet: moottori ja sade silmukkana, jokaiselle tapahtumalle oma ääni]
   B --> P{Pitkät tyhjällä tiellä?}
@@ -42,7 +46,8 @@ flowchart TD
   K -- Ei --> K2[Rajoituksissa +25]
   C -- Hurjastelija --> L[Ohittaja omalla kaistalla: väistä pientareelle]
   B --> V{Väsyttää?}
-  V -- Levähdysalue --> V1[Kahvitauko: vireys täyteen, +10 s]
+  V -- Levähdysalue --> VP[P-merkit 500 m ja 100 m, oma kaista, pysäköintiruudut]
+  VP --> V1[Kahvitauko: vireys täyteen, +10 s]
   V -- Ei taukoa --> V2[Silmät painuvat kiinni]
   V2 --> X
   B --> Y{Ojaan tai kolari?}
@@ -51,10 +56,10 @@ flowchart TD
   Z --> S[Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä]
   S --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
   X --> A
-  class A,B,E2,L,P2,M,N,HW,XH blue
-  class C,D,E,F,G,H,K,V,Y,P,R amber
+  class A,B,E2,L,P2,M,N,HW,XH,J,J3,VP blue
+  class C,D,E,F,G,H,K,V,Y,P,R,J1 amber
   class D1,E1,F1,K2,V1,P1,H0 teal
-  class D2,F2,H1,K1,V2,X,E3,R1 rose
+  class D2,F2,H1,K1,V2,X,E3,R1,J2 rose
   class Z,S,T green
 ```
 
@@ -88,3 +93,8 @@ flowchart TD
 - **+5 joka 100 m, ei katuvaloissa**: v4 `highBeams()`: every 100 m on high beams earns 5 points, announced every 500 m and shown on the end screen as "Pitkillä ajettu". Not under street lights (`streetLit()`: the town at the end and the villages). After 6 s on low beams with an empty road ahead, a reminder.
 - **Hurjastelu -25, joka 5 s uudelleen**: v4 `reckless()`: 20 km/h or more over the limit for over a second costs 25, and again every 5 s it goes on.
 - **Äänet: moottori ja sade silmukkana, jokaiselle tapahtumalle oma ääni**: v6 (#235) loads `lib/aanet-2/aanet.js` (#205); the sound code is the "Sound" part of `games/yoajo/v6/ui.js`, called from `game.js`. Two loops start with the first tap: `moottori`, its pitch following the speed and its volume the gas, silent off the road (`engineSound()`), and `sade` on rain, snow and blizzard legs (softer and lower on snow) while the leg goes on, paused too, silent on the crash and end screens. Events: `naksu` for the lights and every menu button, `tomahdys` for a pothole (`holes()`, also the fourth hard hit that bursts the tyre, before its screech), `kamera` then `virhe` for a camera fine (`cameras()`), `torvi` when a driver is dazzled (`lights()`), `suhahdus` when a truck is beside the car, oncoming or overtaken (`meet()`), `kitka`, `kolari` and `lasi` for a crash (`crash()`; a walker who jumped aside and a burst tyre only screech), `voitto` at the end of a leg (`finish()`). Each falls back to v5's beep while its file is not loaded; the whoosh, the glass and the fine's buzz have none.
+- **Risteysmerkki, ohituskieltomerkki, yhtenäinen keltainen keskiviiva, katuvalo**: v8 (#306 "Välillä voisi olla risteyksiä mistä tulee autoja", "Ohituskielto merkinnät risteyksien kohdalla"). `newLeg()` in `games/yoajo/v8/game.js` places two or three side roads a leg (`road.junctions`, `LEGS[...].junctions`), each from its own random numbers so the rest of the leg stays where v7 had it; they keep clear of the rest area and the bad stretches only. Each has a junction warning sign 140 m before, a no-overtaking sign where the solid centre line starts, and the line from 110 m before to 30 m after (`road.nopass`, `noPass()`). `view.js` paves the side road out to the forest (`sideRoads()`, `paved()`), breaks the edge line at its mouth, draws the centre line solid there (patchy under snow), and hangs a street light over the mouth (`junctionLamp()`).
+- **Ohitit sulkuviivan yli -30, ei ohituspisteitä**: v8 `unsafeOvertake()`: the car's centre over the centre line within a no-overtaking stretch costs 30 once until it is back in its lane, counts as reckless (no third star), and the pass earns nothing.
+- **Sivutieltä auto eteen tai vastaan: jarruta tai ohita myöhemmin**: v8 `joiner()` in `game.js`: nine side roads in ten have a car waiting, facing the road. It pulls out into the player's lane ahead (`dir 'same'`) or turns towards the player (`'vastaan'`), over 1.8 s, then drives on as an ordinary car by its own speed habit. A careful one goes when the player is five to seven seconds away; a careless one (one in three) at two and a half to three seconds, at least 60 m, with "Auto risteyksestä!" on the screen. A car that missed its moment because traffic came stays put. Cars in the player's lane now brake for a slower one from 70 m, as hard as they need (v1–v7: matched its speed at once from 30 m).
+- **P-merkit 500 m ja 100 m, oma kaista, pysäköintiruudut**: v8 (#306 "P paikka pitää olla selkeämpi. Tie siihen ja merkkejä"). Blue P signs at 500 m and 100 m, an exit sign with an arrow where the lane begins, and a tall lit P sign by the kiosk. The lane widens from the edge over 40 m (`BAY_IN`, `bayWidth()` in `game.js`), runs 8 m wide past white parking places, and narrows back; a dashed line parts it from the road. Its kerb keeps the car on the paving and leads it back onto the road. The screen shows "P Levähdysalue N m: oikealle ja pysähdy" from 300 m on (v1–v7: only while sleepy, no distance). Signs along it stand beyond the paving.
+- **Valot ja kaasu (v8)**: the lights button is in the lower left corner with one thumb (v4–v7: lower right; with two thumbs it stays in the middle), and the idle stick waits right of the middle (`stickHome()` in `games/yoajo/v8/ui.js`). The gas pulls 2.5 times harder (`PULL` in `drive()`): full gas takes the car from 0 to 100 in about 7 s (v1–v7: about 17 s); each gas still settles at the same speed, and easing off slows the car as before. Unsafe overtaking is judged within 130 m of an oncoming car (`ONCOMING_GAP`, v4–v7: 180 m).

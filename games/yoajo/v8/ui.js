@@ -368,8 +368,9 @@ function thumbGuides() {
 }
 // v4: one thumb: a round stick as in the other games (Areena): a faint circle where the thumb
 // landed and a knob that follows it, kept inside the circle. While the thumb is lifted the circle
-// waits in the lower middle with a word under it.
-function stickHome() { return LAND ? { x: SAFE_L + 110, y: H - SAFE_B - 84 } : { x: W * 0.36, y: H - SAFE_B - 92 }; }
+// waits in the lower middle with a word under it. v8: right of the middle, mirrored, now that the
+// lights are on the left (v5–v7: left of it).
+function stickHome() { return LAND ? { x: W - SAFE_R - 110, y: H - SAFE_B - 84 } : { x: W * 0.64, y: H - SAFE_B - 92 }; }
 function oneThumbGuide() {
   const R = STICK;
   const t = [...thumbs.values()].find(t => t.kind === 'one'), home = stickHome();
