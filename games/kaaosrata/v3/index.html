@@ -145,8 +145,9 @@ function tone(f, d, type = 'square', vol = 0.08, to = 0) {
 }
 function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
 // v3 (#217): recorded sounds from the shared library; each falls back to the old beep while its
-// file is not there yet (the first open offline). The bumpers keep their own beep.
-const S = AiPelitAanet;
+// file is not there yet (the first open offline). The bumpers keep their own beep. Without the
+// library itself (its script never cached), every sound is the beep.
+const S = window.AiPelitAanet || { load() {}, play() { return false; } };
 S.load(['valinta', 'hyppy', 'potku', 'putoaminen', 'ohhoo', 'osuma', 'tomahdys', 'voitto', 'suhahdus']);
 
 // ---------- The race ----------

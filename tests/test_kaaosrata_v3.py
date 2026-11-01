@@ -142,3 +142,22 @@ def test_only_this_phones_runner_sounds_and_a_new_race_starts_quiet(site, contex
     page.wait_for_function("race.phase === 'run'", timeout=6000)
     assert "suhahdus" not in heard(page)
     assert page.errors == []
+
+
+def test_without_the_sound_library_it_still_plays_with_its_beeps(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route("**/aanet.js", lambda route: route.abort())
+        site.build(ROOT / "games")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e: page.errors.append(str(e)))
+        page.goto(site.url + URL)
+        page.click("#go")
+        page.wait_for_function("race && race.phase === 'run'", timeout=6000)
+        page.evaluate("Object.assign(me, { x: 0, y: 139.5, z: 0, vx: 0, vy: 5, cp: 4 }); input.y = 1; press()")
+        page.wait_for_function("!race", timeout=12000)
+        assert page.inner_text("#result").startswith("Voitit!")
+        assert page.errors == []
+    finally:
+        ctx.close()
