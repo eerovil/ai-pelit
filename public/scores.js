@@ -72,8 +72,10 @@
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
-    // Most points in a ski-jumping meet (two jumps); level: 'taso', the level the player is on.
-    makihyppy: { order: 'high', score: function (s) { return fixed(s, 1) + ' p'; }, level: function () { return saved('makihyppy', 'taso'); } },
+    // Most points in a ski-jumping meet; level: 'taso', the level the player is on. Named lists, the
+    // shelf's first: Mäkiviikko (v2, four hills, #283) on 'viikko', one meet of two jumps (v1) on 'main'.
+    makihyppy: { order: 'high', score: function (s) { return fixed(s, 1) + ' p'; }, level: function () { return saved('makihyppy', 'taso'); },
+      lists: [['viikko', 'Mäkiviikko'], ['main', 'Yksi kisa']] },
     // Longest hammer throw in metres; level: 'taso', the level the player is on.
     moukari: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('moukari', 'taso'); } },
     // Longest shot put in metres; level: 'taso', the level the player is on.
@@ -82,10 +84,10 @@
     seivashyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('seivashyppy', 'taso'); } },
     // Highest bar cleared in a meet, metres; level: 'taso', the level the player is on.
     korkeushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('korkeushyppy', 'taso'); } },
-    // Most points in a combined event (#168), one list per number of events, the five first;
+    // Most points in a combined event (#168), one list per number of events, the most first (v4, #287: up to seven);
     // level: 'taso', the level the player is on.
     ottelu: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('ottelu', 'taso'); },
-      lists: [['lajit-5', 'Viisiottelu'], ['lajit-4', 'Neliottelu'], ['lajit-3', 'Kolmiottelu'], ['lajit-2', 'Kaksiottelu']] },
+      lists: [['lajit-7', 'Seitsenottelu'], ['lajit-6', 'Kuusiottelu'], ['lajit-5', 'Viisiottelu'], ['lajit-4', 'Neliottelu'], ['lajit-3', 'Kolmiottelu'], ['lajit-2', 'Kaksiottelu']] },
     // Most points on one leg of the night drive, one list per leg ('osa-N'); level: legs driven
     // to the end ('ajettu'; 'taso', the furthest leg open, stops at the last one).
     yoajo: {

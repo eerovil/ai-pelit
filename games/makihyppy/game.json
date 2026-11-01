@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: suurmäki (K 120, HS 134), ponnistus nokalta napauttamalla, lentoasento Taakse- ja Eteen-napeilla, telemark-alastulo; pisteet pituudesta ja viiden tuomarin tyylistä, kahden kierroksen kisa, jossa kymmenen parasta pääsee toiselle, yksin tai 2–8 kaverin kanssa.",
       "request": "Uusi peli: mäkihyppy. Laske vauhtimäki alas, ponnista nokalta oikeaan aikaan, pidä tasapaino ja hyvä lentoasento ilmassa ja tee telemark-alastulo. Pisteet pituudesta ja tyylistä, kisa tietokonetta vastaan tai kavereiden kanssa.\n\nIdeoista #246.",
       "issue": "eerovil/ai-pelit#269"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-01",
+      "note": "Mäkiviikko: neljä mäkeä peräkkäin (Lahti, Kuopio, Rovaniemi, Ruka), kussakin kaksi kierrosta, pisteet lasketaan yhteen koko viikolta ja palkintojenjako tulee vasta viimeisen mäen jälkeen.",
+      "request": "Muutetaan podium: ainoastaan kun kisa loppuu. — Mäkihypyssä podium tuli melkein joka hypyn jälkeen; Eero valitsi pidemmän kisan: useampi mäki peräkkäin kuten mäkiviikolla, podium vasta viimeisen jälkeen.",
+      "issue": "eerovil/ai-pelit#283"
     }
   ]
 }
