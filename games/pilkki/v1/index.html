@@ -254,6 +254,9 @@ function applyPond(m) {
     next.push(f); old.delete(q[0]);
   }
   pond = next;
+  // A fish this phone holds that the host does not know is ours (it freed our claims when this
+  // phone came back after a dropped connection, or the claim is still on its way): claim it again.
+  for (const f of pond) if (mineNow(f) && (m.c || {})[f.id] !== R.me) R.send({ t: 'claim', round: net.round, id: f.id });
   sight();
 }
 // Another phone had this fish first: it slips away from this one.

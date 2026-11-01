@@ -495,6 +495,18 @@ def test_a_fish_is_one_phone_s_at_a_time(room):
     # Scared off on her phone, it is free again and swims away on the host.
     guest.evaluate(f"scare(pond.find(q => q.id === {y}), 3)")
     host.wait_for_function(f"!net.claims[{y}] && pond.find(f => f.id === {y}).go", timeout=4000)
+    # A phone whose connection drops and comes back keeps the fish it is reeling.
+    w = guest.evaluate("""() => {
+      const f = pond[4]; f.look = true; claim(f); holes.push(spot.i); toJig(); lastDepth = 2;
+      fight = { fish: f, L: 2, T: 0.3, over: 0, burst: 0, next: 9, t: 0, sway: 0 }; phase = 'fight'; return f.id;
+    }""")
+    host.wait_for_function(f"net.claims[{w}] === {json.dumps(aino)}", timeout=4000)
+    room.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.paused", timeout=5000)
+    room.relay.back(guest)
+    host.wait_for_function(f"!AiPelitRooms.paused && net.claims[{w}] === {json.dumps(aino)}", timeout=8000)
+    assert guest.evaluate(f"[phase, fight && fight.fish.id]") == ["fight", w]
+    guest.evaluate("fight = null; toJig()")
     # A phone that reloads holds no fish any more.
     z = guest.evaluate("const f = pond[3]; f.look = true; claim(f); f.id")
     host.wait_for_function(f"net.claims[{z}] === {json.dumps(aino)}", timeout=4000)
