@@ -86,7 +86,7 @@ def test_a_thumb_on_the_speedometer_does_not_drive(site, context):
 def test_v4_saves_carry_over(site, context):
     page = open_game(site, context)
     page.evaluate("""() => { localStorage.setItem('ai-pelit:yoajo:taso', '4');
-      localStorage.setItem('ai-pelit:yoajo:ohjaus', 'kaksi'); }""")
+      localStorage.setItem('ai-pelit:yoajo:ohjaus', JSON.stringify('kaksi')); }""")
     page.reload()
     page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
     assert page.evaluate("[maxLeg, controls]") == [4, "kaksi"]
