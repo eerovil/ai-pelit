@@ -122,3 +122,38 @@ def test_the_podium_still_stays_until_a_tap(site, context):
         v3.test_the_medals_are_hung_and_the_podium_stays_until_a_tap(site, context)
     finally:
         v3.URL = old
+
+
+def test_in_a_room_the_watching_phone_hears_the_bar_and_the_mat_and_after_a_reload_too(site, browser):
+    old = v2.URL
+    v2.URL = URL
+    try:
+        relay, pages = v2.room(site, browser, ["Eero", "Aino"])
+    finally:
+        v2.URL = old
+    try:
+        first = v2.jumper_page(pages)
+        other = next(p for p in pages if p is not first)
+        # Sound sleeps on a hidden page, and only one page of the browser is shown: the watcher.
+        other.bring_to_front()
+        other.evaluate(SPY)
+        other.mouse.click(180, 150)  # a tap on the sky turns sound on and does nothing else
+        other.wait_for_function(f"{json.dumps(ALL)}.every(AiPelitAanet.ready)", timeout=10000)
+        other.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+        first.wait_for_function("th.mine && th.phase === 'ready'", timeout=8000)
+        other.evaluate("heard.splice(0)")
+        first.evaluate("go(1.05, 8, null, null); quick()")
+        other.wait_for_function("heard.some(h => h[0] === 'tomahdys')", timeout=5000)
+        # The jumper's crowd (ohhoo) is its own phone's; every phone hears the bar and the mat.
+        assert played(other) == ["rima", "tomahdys"]
+        # The watching phone reloads mid-meet: after its next tap the sounds play again.
+        other.reload()
+        other.evaluate(v2.HELPERS)
+        other.wait_for_function("K.comp", timeout=10000)
+        other.mouse.click(180, 150)
+        other.wait_for_function("['rima', 'tomahdys'].every(AiPelitAanet.ready)", timeout=10000)
+        other.wait_for_function("AiPelitAanet.play('tomahdys', { vol: 0 })", timeout=5000)
+        assert all(p.errors == [] for p in pages)
+    finally:
+        for p in pages:
+            p.context.close()
