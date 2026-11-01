@@ -531,15 +531,20 @@ function ended() {
   if (!(best[n] >= pts)) best[n] = pts;
   save('ottelut', played); save('voitot', wins); save('taso', level); save('ennatys', best);
   // v5 (#294): sent once the podium is left (podiumOff), or at once when this phone shows none.
-  if (pts > 0) pendingScore = { n, pts };
+  // Kept on the phone until then, so a reload during the podium sends it at the menu.
+  if (pts > 0) { pendingScore = { n, pts }; save('lahettamatta', pendingScore); }
   if (podiumShown && !cer) sendScore();
 }
-let pendingScore = null;
+let pendingScore = load('lahettamatta', null);
 function sendScore() {
   const s = pendingScore;
+  if (!s || !window.AiPelitScores) return;
   pendingScore = null;
-  if (s && window.AiPelitScores) { AiPelitScores.board('lajit-' + s.n, NAMES[s.n]); AiPelitScores.submit(s.pts); }
+  drop('lahettamatta');
+  AiPelitScores.board('lajit-' + s.n, NAMES[s.n]); AiPelitScores.submit(s.pts);
 }
+// After a reload, scores.js loads after this script: the kept score goes once it is there.
+addEventListener('load', () => { if (!cer) sendScore(); });
 
 // ---------- Alone ----------
 function newMatch(mode, humans, round) {

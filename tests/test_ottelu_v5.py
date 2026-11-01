@@ -12,6 +12,7 @@ import pytest
 
 import test_ottelu as v1
 import test_ottelu_v4 as v4
+from conftest import turn
 from test_ottelu_v4 import finish_event, in_frame, open_game, room
 # v5 plays as v4 up to the end of the match: v4's tests that play a match to its end run on v5
 # too, their play() also tapping the ceremony away.
@@ -126,4 +127,41 @@ def test_the_bar_rises_in_twice_the_events_steps(site, context, slug):
     # The computer's plan moved onto the kept heights.
     for first, skip in json.loads(in_frame(page, "JSON.stringify(K.comp.throwers.filter(t => t.p === null).map(t => [t.first, t.skip || []]))")):
         assert 0 <= first < len(kept) and all(0 <= i < len(kept) for i in skip)
+    assert page.errors == []
+
+
+def test_a_reload_during_the_podium_still_sends_the_score(site, context):
+    page = open_game(site, context, saved={"lajit": ["kuula", "keihas"]})
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Eero'))")
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    finish_event(page)
+    with page.expect_navigation():
+        page.click("#next")
+    page.wait_for_function("window.Ottelu && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
+    play_to_podium([page])
+    pts = page.evaluate("total(mine())")
+    assert page.evaluate("localStorage.getItem('ai-pelit:_tulokset:jono')") is None
+    page.reload()
+    # The match is over: the menu, with the score sent and nothing kept to send again.
+    assert page.is_visible("#menu") and page.is_hidden("#cont")
+    queued = json.loads(page.evaluate("localStorage.getItem('ai-pelit:_tulokset:jono')"))
+    assert [q["score"] for q in queued.values()] == [pts]
+    assert page.evaluate("localStorage.getItem('ai-pelit:ottelu:lahettamatta')") is None
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(390, 844), (740, 360)])
+def test_the_podium_fills_the_screen(site, context, size):
+    page = open_game(site, context, saved={"lajit": ["kuula", "keihas"]})
+    turn(page, {"width": size[0], "height": size[1]})
+    page.evaluate("picked.splice(0); ['kuula', 'keihas'].forEach(s => picked.push(s)); M = newMatch('solo', [{ id: 'me', name: 'Sinä' }]); M.at = 1;"
+                  "M.rows = field().map((f, i) => ({ ...f, marks: [10, 50], pts: [500 + i, 600 - i * 20] })); eventScored([]);")
+    # eventScored took no event: end the match by hand, as after the last event.
+    page.evaluate("M.phase = 'over'; finish(); after()")
+    assert podium_up(page)
+    page.wait_for_timeout(300)
+    box = page.evaluate("(() => { const c = document.getElementById('pallit'); return [c.clientWidth, c.clientHeight, innerWidth, innerHeight]; })()")
+    assert box[0] == box[2] and box[1] == box[3]
+    assert page.evaluate("cer.K.ending.res.slice(0, 3).map(r => r.place).join()") == "1,2,3"
     assert page.errors == []
