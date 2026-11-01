@@ -31,17 +31,19 @@ def plays_on(context):
 
 
 def test_opening_a_version_counts_one_play(site, context):
+    # Only each game's newest version is on the site (#346).
     make_game(site.games, "pomppu", [game_page("v1"), game_page("v2")])
+    make_game(site.games, "hyppy", [game_page("v1")])
     site.build()
     fake = plays_on(context)
     page = context.new_page()
     page.goto(f"{site.url}games/pomppu/v2/")
     page.wait_for_selector("#ai-pelit-back")
-    page.goto(f"{site.url}games/pomppu/v1/index.html")
+    page.goto(f"{site.url}games/hyppy/v1/index.html")
     page.wait_for_selector("#ai-pelit-back")
     page.goto(site.url)  # leaving the page must not lose the beacon
     page.wait_for_selector(".card")
-    assert fake.sent == [{"game": "pomppu", "version": 2}, {"game": "pomppu", "version": 1}]
+    assert fake.sent == [{"game": "pomppu", "version": 2}, {"game": "hyppy", "version": 1}]
 
 
 def test_the_shelf_shows_each_games_total_and_keeps_it_offline(site, context):
