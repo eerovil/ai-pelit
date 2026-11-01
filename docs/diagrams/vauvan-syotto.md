@@ -27,6 +27,7 @@ flowchart TD
   L -- Ei --> B
   N{Mieli loppui?} -- Kyllä --> O[Buaaa! Sama taso uudestaan]
   G --> N
+  B -.-> Q[Äänet: nams, litsahdus, lusikka, vauva, röyhtäys, pruut, suhahdus, valinta]
   class A,B blue
   class C,D,L,N amber
   class H,I,J teal

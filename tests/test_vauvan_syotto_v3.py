@@ -91,6 +91,25 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
         ctx.close()
 
 
+def test_without_the_library_itself_it_still_plays_with_its_beeps(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route("**/aanet.js", lambda route: route.abort())
+        shutil.copytree(ROOT / "games" / "vauvan-syotto", site.games / "vauvan-syotto")
+        site.build()
+        page = ctx.new_page()
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(site.url + URL)
+        assert page.evaluate("typeof AiPelitAanet") == "undefined"
+        page.click("#go")
+        page.evaluate("mood = 100; bite(false); miss(); give(true, 0); gainPower()")
+        assert page.evaluate("[state, tummy, misses]") == ["play", 1, 1]
+        assert errors == []
+    finally:
+        ctx.close()
+
+
 def test_the_saves_of_v2_are_read_as_they_are(site, context):
     page = open_game(site, context)
     page.evaluate("localStorage.setItem('ai-pelit:vauvan-syotto:taso', '4'); location.reload()")

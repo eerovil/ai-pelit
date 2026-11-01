@@ -124,7 +124,8 @@ function tone(f, d, type = 'sine', vol = 0.08, to = 0, delay = 0) {
 function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
 // v3 (#232): recorded sounds from the shared library; each falls back to the old beep while its
 // file is not there yet (the first open offline). The song and the video keep their own tunes.
-const S = AiPelitAanet;
+// Without the library (aanet.js failed to load) every sound is the old beep.
+const S = window.AiPelitAanet || { load() {}, play: () => false };
 S.load(['valinta', 'nams', 'litsahdus', 'lusikka', 'vauva', 'royhtays', 'pruut', 'suhahdus']);
 const sfx = {
   nam() { S.play('nams', { vol: 0.9 }) || (tone(520, 0.1, 'triangle', 0.09), tone(660, 0.14, 'triangle', 0.09, 0, 0.11)); },
