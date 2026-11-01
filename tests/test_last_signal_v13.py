@@ -730,7 +730,7 @@ def test_icebergs_of_other_sizes_and_keels_under_the_ice_stop_sisu(site, browser
 def test_the_sea_s_hiss_the_engine_and_steps_in_the_snow_are_quieter(site, browser):
     page = game(site, browser)
     page.evaluate("""(() => { const vols = {}; window.heard13 = vols;
-      BED = { next: 99 }; for (const k of ['sea', 'engine', 'hum', 'wind']) BED[k] = { set: o => { vols[k] = o.vol; }, playing: () => true };
+      window.BED = {}; for (const k of ['sea', 'engine', 'hum', 'wind']) BED[k] = { set: o => { vols[k] = o.vol; }, playing: () => true }; BED.next = 99;
       AC = { state: 'running' }; soundStep(0.01); })()""")
     v = page.evaluate("heard13")
     assert v["sea"] <= 0.75 * 0.35 + 1e-9 and v["engine"] <= 0.32 + 1e-9
