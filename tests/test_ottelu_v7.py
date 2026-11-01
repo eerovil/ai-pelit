@@ -53,7 +53,7 @@ def test_the_outfit_picked_on_the_menu_is_worn_in_the_events(site, context, slug
     assert page.errors == []
 
 
-@pytest.mark.parametrize("size", [(360, 640), (360, 740), (740, 360), (640, 360)])
+@pytest.mark.parametrize("size", [(360, 640), (360, 740), (390, 844), (740, 360), (640, 360)])
 def test_the_menu_with_the_outfit_button_fits(site, context, size):
     w, h = size
     page = open_game(site, context, saved={"lajit": ["keihas", "moukari"]})

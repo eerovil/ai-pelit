@@ -86,3 +86,39 @@ def menu_fits(site, context, url, size):
     done = page.locator("#ai-pelit-asut-valmis").bounding_box()
     assert done["y"] >= 0 and done["y"] + done["height"] <= h
     assert page.errors == []
+
+
+def friends_see_each_others_outfits(site, browser, url):
+    from test_rooms_lib import Relay
+    site.build(ROOT / "games")
+    relay = Relay()
+    pages = []
+    for name, fit in (("Eero", "kurpitsa"), ("Aino", "luuranko")):
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))});"
+                            f"localStorage.setItem('{SHARED}', {json.dumps(json.dumps(fit))})")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + url)
+        pages.append(page)
+    host, aino = pages
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    aino.click("#multi")
+    aino.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    aino.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-start")
+    aino_id = json.dumps(aino.evaluate("AiPelitRooms.me"))
+    host_id = json.dumps(host.evaluate("AiPelitRooms.me"))
+    for p in pages:
+        p.wait_for_function(f"K.comp && K.comp.throwers.length === 12 && (K.comp.throwers.find(t => t.p === {aino_id}) || {{}}).fit === 'luuranko'", timeout=8000)
+        assert p.evaluate(f"K.comp.throwers.find(t => t.p === {host_id}).fit") == "kurpitsa"
+        # Each phone draws the other in that outfit.
+        assert p.evaluate(f"kit(K.comp.throwers.find(t => t.p === {aino_id}).fit).head") == "skull"
+        assert p.errors == []
+    for p in pages:
+        p.context.close()

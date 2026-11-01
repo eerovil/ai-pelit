@@ -20,6 +20,10 @@ def test_the_games_own_older_choice_is_kept(site, context):
     asut.reads_its_own_older_choice(site, context, URL, SLUG)
 
 
-@pytest.mark.parametrize("size", [(360, 640), (360, 740), (740, 360), (640, 360)])
+@pytest.mark.parametrize("size", [(360, 640), (360, 740), (390, 844), (740, 360), (640, 360)])
 def test_the_menu_with_the_outfit_button_fits(site, context, size):
     asut.menu_fits(site, context, URL, size)
+
+
+def test_friends_see_each_others_outfits(site, browser):
+    asut.friends_see_each_others_outfits(site, browser, URL)
