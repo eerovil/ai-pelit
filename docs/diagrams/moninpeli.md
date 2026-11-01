@@ -34,6 +34,7 @@ flowchart TD
     L13 -- Kyllä, ei hänen vuoronsa --> G2
     L13 -- Kyllä, hänen vuoronsa --> L14[⏸ Odotetaan, isännällä Ohita vuoro]
     L15[↩ Palaa kierrokseen KOOD]
+    L16[➕ Kaveriksi ja 📨 Kutsu kaveri]
     L7[Tallenna tulos kerran per kierros]
     L8{Väärä peli tai versio?}
     L8 -- Kyllä --> L9[Avaa oikean pelin version]
@@ -64,6 +65,7 @@ flowchart TD
   L6 --> G7
   L14 --> G2
   L15 --> C1
+  L2 --> L16
   G7 --> G2
   G2 --> G5
   G5 --> L7
@@ -96,7 +98,7 @@ flowchart TD
   V4 --> V6
   V7 --> V6
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16 blue
   class C1,C2,C3,C4,C5,C7 violet
   class V1,V2,V4,V5,V6,V7 blue
   class S1 green
@@ -128,7 +130,7 @@ flowchart TD
 - **Isäntä lähettää tilanteen monta kertaa sekunnissa**: the game's `AiPelitRooms.send()`. A phone that joined after the round began hears none of it (`net.listening` in `onMessage()`), and waits for the next round. Kirkkis: `hostSend()` (`ks`), 12 times a second, with what happened since (`happen()`).
 - **Oma sormi liikuttaa omaa pelaajaa, sijainti isännälle**: a guest moves its own player at once and sends where it is (`send()`); the host hears it in `on('message', (msg, from))`. Kirkkis: `guestStep()` (`kme`).
 - **Piirtää pelin oman pelaajan silmin**: the game's drawing, from this phone's player. Kirkkis: `draw()` with the fog cut by that player's field of view.
-- **Huone: välittää viestit, muistaa pelin ja version**: `rooms/worker.js` `Room`, in the `ai-pelit-rooms` Worker, at `/api/rooms/<KOODI>` through `server/api.js` (`ROOMS` binding). Each phone connects with a secret key and is known by a hash of it, so nobody can take another phone's place. The host's messages go to all (or `to`), the others' to the host with `from`; `peers` says who is in and connected. It keeps the host's `game`, `v` and `max` (2–8, default 5) and sends `game` and `v` in `peers`. An empty room is forgotten after 6 hours.
+- **Huone: välittää viestit, muistaa pelin ja version**: `rooms/worker.js` `Room`, in the `ai-pelit-rooms` Worker, at `/api/rooms/<KOODI>` through `server/api.js` (`ROOMS` binding). Each phone connects with a secret key and is known by a hash of it, so nobody can take another phone's place. The host's messages go to all (or `to`), the others' to the host with `from`; `peers` says who is in and connected. It keeps the host's `game`, `v` and `max` (2–8, default 5) and sends `game` and `v` in `peers`. A phone with a nickname joins with `fid`, its friend id (#324), which the room keeps and sends with that member in `peers`. An empty room is forgotten after 6 hours.
 - **Väärä peli tai versio?**: `onPeers()` on a guest's first `peers`: the room's `game` and `v` against the page's own. A room that names no game (made by Kirkkis v2, from before the library) is left at once with "Huone on toisessa pelissä."
 - **Avaa oikean pelin version**: the guest moves to `../../<game>/v<v>/?huone=<KOODI>`, which joins the room there. Back still goes up (#68): a game opened from the shelf has its page below it, so another version takes the game's place over that same page; another game steps back to the page, which `public/app.js` (`openFromRoom()`) turns into the new game's page once it has loaded, before opening the game over it. When the new game sits under another parent than the old one (a shelf group, #153), `openFromRoom()` first makes the history below its own: from a shelf game into a grouped one it puts the group's page between, from a grouped game into one outside the group it steps back to the group's page and turns that into the new game's page over the shelf; the room screen steps back only once, however many room updates arrive meanwhile. A game opened any other way is simply replaced.
 - **Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen**: `connect()` retries with a growing wait; the room this tab is in is kept in `sessionStorage` (`ai-pelit:_huone:nyt`). On every connection a guest says `hello`; the host sends a phone in the round `_start` again and fires `on('hello')`, so the game sends the round as it is. A host that comes back without its round (a reload) sends `_lobby`, and everyone goes back to the room. Kirkkis: `on('hello')` sends that phone `kr`.
@@ -151,3 +153,4 @@ flowchart TD
 - **TURN-välityspalvelin, jos suora yhteys ei onnistu**: Cloudflare Realtime TURN passes the sound on when two phones cannot reach each other directly (some mobile networks). Nothing is recorded or kept.
 - **Tämän kuun käyttö alle 800 Gt?**: `underCap()` in `server/api.js`: the relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so credentials are handed out only while this month's row in `turn_usage` (migration 0008) is under `TURN_CAP` (800 GB, Eero's choice) and was written within 3 days. No: only STUN; calls then go only directly. Read at most every 10 minutes.
 - **Koneen tarkistus kerran tunnissa: käyttö Cloudflarelta**: `scripts/turn_usage.py`, run hourly from `origin/main` by `scripts/systemd/ai-pelit-turn.timer` on the AgentDeck host: the whole account's TURN bytes this month from Cloudflare's GraphQL (`callsTurnUsageAdaptiveGroups`), written with the admin key to `POST /api/admin/turn-usage`. A host that is off for 3 days turns the relay off.
+- **➕ Kaveriksi ja 📨 Kutsu kaveri**: friends in the room (#324), drawn by `friendButton()` and `renderFriends()` in `public/rooms.js` once `public/kaverit.js` is on the page: "➕ Kaveriksi" beside each other player with a `fid`, the requests to this phone with Hyväksy / Ei under the list (read every 10 s while the room screen shows), and "📨 Kutsu kaveri", a list of friends that sends an invite to this room. See `kaverit.md`.

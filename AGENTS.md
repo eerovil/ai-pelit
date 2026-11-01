@@ -213,7 +213,15 @@ high-score lists (#25), then play counts (#26).
   shown on `/yllapito/`, never on GitHub). A game needs nothing for it. Once a day at 17.00 the host's
   `ai-pelit-palautteet.timer` (`scripts/systemd/`) runs `scripts/feedback_issue.py` from
   `origin/main`, which files the new ones as one "Palautteet" issue (see "What a request means").
-- `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
+- **Friends (#324).** Two phones become friends in a game room: `rooms.js` shows "➕ Kaveriksi"
+  beside each other player who has a nickname, and the other phone accepts. `public/kaverit.js`
+  (loaded by `back.js` in every game, and by the shelf) tells the server what a phone with
+  friends plays every 30 s while a page is on screen, shows invites ("Liity") and requests as a
+  banner, and the room screen's "📨 Kutsu kaveri" invites a friend into the room. The shelf has
+  the friends page at `#/kaverit` and "Kaverit pelaamassa" on its front page. A game needs nothing
+  for it. Phones know each other only by a friend id, a hash of the secret player id
+  (`pidOf()` in `server/api.js`), which a phone with a nickname sends to the room as `fid`.
+- `public/scores.js`, `public/rooms.js`, `public/kaverit.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and

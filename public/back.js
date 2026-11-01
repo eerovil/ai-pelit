@@ -115,4 +115,11 @@
   });
   function add() { document.body.appendChild(a); }
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  // Friends (#324): what this game is, for the friend list, and invites into rooms, in every game.
+  if (/^https?:$/.test(location.protocol) && !window.AiPelitKaverit) {
+    var friends = document.createElement('script');
+    friends.src = shelf + 'kaverit.js';
+    friends.async = true;
+    (document.head || document.documentElement).appendChild(friends);
+  }
 })();

@@ -334,3 +334,20 @@ test('GET /api/rooms with no game lists every game\'s public rooms, each naming 
   ]);
   assert.equal((await handle(new Request('https://pelit.test/api/rooms?game='), { ROOMS })).status, 400);
 });
+
+test('a phone with a nickname tells its friend id, and the room passes it on (#324)', async () => {
+  const { room, join } = setup();
+  const fid = '0123456789abcdef'.repeat(2);
+  const h = await join(H, 'Eero', true, 'KISA', { fid });
+  const a = await join(A, 'Aino', false, 'KISA', { fid: 'not a fid' });
+  assert.deepEqual(a.server.last('peers').members, [
+    { id: H, name: 'Eero', on: true, fid }, { id: A, name: 'Aino', on: true },
+  ]);
+  // Joining again without it forgets it; leaving for good forgets it too.
+  await join(H, 'Eero', true);
+  assert.deepEqual(a.server.last('peers').members[0], { id: H, name: 'Eero', on: true });
+  await join(A, 'Aino', false, 'KISA', { fid });
+  await room.webSocketMessage(a.server, JSON.stringify({ t: 'bye' }));
+  assert.equal((await room.load()).fids[A], undefined);
+  void h;
+});
