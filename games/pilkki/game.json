@@ -15,6 +15,13 @@
       "note": "Kävele jäällä minne haluat ja kairaa reikä mihin vain; kalat näkyvät vain valitulla tutkalla tai kaikuluotaimella, syötin voi vaihtaa ja kukin kala syö omaansa, ja kalat parveilevat, pelkäävät haukea ja järvessä ui jättihauki.",
       "request": "Tehdään kävelymoodi missä voi valita mielivaltaisen paikan. Kaloja ei saa näyttää jos ei ole tutkaa (oletuksena pois, ja tutka ei näytä tarkasti). Myös semmoinen tutka joka näyttää vain suoraan alaspäin suurin piirtein koon. Eri syötti sopii eri kalalle.",
       "issue": "eerovil/ai-pelit#289"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-01",
+      "note": "Näykkäys: kun kala tulee pilkille, vavan kärki nykäisee, kuuluu hiljainen naksahdus ja puhelin värähtää, ja näykkäykset voimistuvat kalan innostuessa, joten kalan tuntee ilman tutkaakin.",
+      "request": "Ilman tutkaa kalan läsnäolon pitää tuntua: kun kala tulee katsomaan pilkkiä, vavan kärki nykäisee kevyesti ja kuuluu hiljainen naksahdus (näykkäys), ja näykkäykset voimistuvat kalan innostuessa. Rytmipalkin vihreät reunat jäävät.",
+      "issue": "eerovil/ai-pelit#291"
     }
   ]
 }
