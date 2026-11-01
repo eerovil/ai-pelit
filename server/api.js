@@ -55,6 +55,7 @@ export const GAMES = {
   ottelu: { order: 'high', boards: /^lajit-[2-7]$/, first: 'lajit-5' }, // most combined-event points, one list per number of events
   yoajo: { order: 'high', boards: /^osa-[1-9]$/, first: 'osa-1' }, // most points on one leg of the night drive ('osa-N')
   vuoristorata: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest ride per level, seconds
+  pilkki: { order: 'high', boards: /^main$/ }, // biggest catch in a five-minute ice-fishing contest, grams
 };
 
 const ID = /^[a-f0-9]{32}$/;
