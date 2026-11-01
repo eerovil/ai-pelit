@@ -68,3 +68,6 @@ p { margin: 0 0 6px; }
 /* The shelf's order (#279): a small menu in the header, beside the name. */
 .top .sort { margin-left: auto; background: var(--card); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 6px 8px; font: 14px system-ui, sans-serif; }
 .top .sort + .status { margin-left: 10px; }
+/* Playing right now (#325): only the number, after a green dot. */
+.now { margin-left: 6px; color: #5ee38a; font-weight: 700; white-space: nowrap; }
+.now:empty { display: none; }

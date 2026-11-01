@@ -1,4 +1,4 @@
-"""The shared sound effects in public/lib/aanet-1/ and aanet-2/ (#205), on a test-only game."""
+"""The shared sound effects in public/lib/aanet-1/, aanet-2/ (#205) and aanet-3/ (#330), on a test-only game."""
 
 import re
 from pathlib import Path
@@ -18,7 +18,7 @@ def sounds(lib=LIB):
     return dict(re.findall(r"^\s+(\w+): '([\w-]+\.mp3)',", text, re.M))
 
 
-@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2"])
+@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2", "aanet-3"])
 def test_every_sound_is_there_small_and_its_source_named(folder):
     lib = LIB.parent / folder
     listed = sounds(lib)
@@ -34,11 +34,17 @@ def test_every_sound_is_there_small_and_its_source_named(folder):
     assert {p.name for p in lib.glob("*.mp3")} == set(listed.values())
 
 
-def test_aanet_2_keeps_every_sound_of_aanet_1_as_it_is():
-    one, two = sounds(LIB), sounds(LIB.parent / "aanet-2")
+@pytest.mark.parametrize("old,new", [("aanet-1", "aanet-2"), ("aanet-2", "aanet-3")])
+def test_each_folder_keeps_every_sound_of_the_one_before_as_it_is(old, new):
+    a, b = LIB.parent / old, LIB.parent / new
+    one, two = sounds(a), sounds(b)
     for name, file in one.items():
         assert two[name] == file
-        assert (LIB / file).read_bytes() == (LIB.parent / "aanet-2" / file).read_bytes()
+        assert (a / file).read_bytes() == (b / file).read_bytes()
+    # The code beside the sounds is the same too, but for its comments and the list.
+    if new == "aanet-3":
+        code = lambda p: [l for l in (p / "aanet.js").read_text().splitlines() if not l.strip().startswith("//") and "mp3'" not in l]
+        assert code(a) == code(b)
 
 
 def open_demo(site, context, names, tag=TAG):

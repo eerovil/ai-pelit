@@ -51,6 +51,13 @@
       "note": "Asut: valitse hyppääjällesi asu tai Halloween-puku, ja sama asu on käytössä kaikissa yleisurheilulajeissa ja Ottelussa.",
       "request": "Puvut voisi toimia kaikissa ottelu peleissä ainakin. Onko puvuille jo oma shared lib",
       "issue": "eerovil/ai-pelit#311"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-01",
+      "note": "Kannustuksen ääni on nyt lyhyt ”jee!” muutamalta ihmiseltä eikä pitkä väkijoukon huuto.",
+      "request": "Cheer ääni on karsea",
+      "issue": "eerovil/ai-pelit#330"
     }
   ]
 }

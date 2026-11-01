@@ -3,7 +3,8 @@
 Each phone is its own Chromium context. The room (rooms/worker.js on Cloudflare) is played by
 `Relay`, which answers the pages' WebSockets the same way: the host's messages to everyone (or to
 `to`), the others' to the host with `from`, and `peers` (with the host's game and version) whenever
-someone comes or goes. It keeps the list of public rooms (#50) too, read with GET /api/rooms?game=.
+someone comes or goes. It keeps the list of public rooms (#50) too, read with GET /api/rooms?game=,
+and passes a voice call's setup (`_rtc`, #322) from anyone to the one phone in `to`.
 """
 
 import asyncio
@@ -37,10 +38,15 @@ class Relay:
         self.rooms = {}
         self.blocked = set()  # ids whose phone has no connection
         self.slow = {}  # id -> its held hellos, for a phone whose hello is late
+        self.old = False  # the room from before voice (#322): `_rtc` is routed like any message
+        self.lose_hi = 0  # this many voice greetings (`_rtc` hi) are lost on the way
 
     def attach(self, page):
         page.route_web_socket(re.compile(r".*/api/rooms/.*"), self.connect)
         page.route(re.compile(r".*/api/rooms\?.*"), self.listing)
+        # Voice (#322): no STUN or TURN server; the test's phones reach each other directly.
+        page.route(re.compile(r".*/api/voice/ice$"), lambda route: route.fulfill(
+            status=200, content_type="application/json", body='{"iceServers": []}'))
 
     def listing(self, route):
         game = parse_qs(urlparse(route.request.url).query).get("game", [""])[0]
@@ -88,6 +94,15 @@ class Relay:
         if msg.get("t") == "_list":
             if me == room["host"]:
                 room["listed"] = msg.get("on") is True
+            return
+        if msg.get("t") == "_rtc" and msg.get("k") == "hi" and self.lose_hi > 0:
+            self.lose_hi -= 1
+            return
+        if msg.get("t") == "_rtc" and not self.old:
+            msg["from"] = me
+            ws = room["socks"].get(msg.get("to"))
+            if ws and msg.get("to") != me:
+                ws.send(json.dumps(msg))
             return
         if msg.get("t") == "bye":
             room["members"].pop(me, None)
@@ -209,8 +224,11 @@ def test_phones_meet_by_code_and_by_link(phones):
     assert host.locator("#aipr-start").is_disabled()
     guest = join(phones, "Aino", code)
     host.wait_for_function("AiPelitRooms.members.length === 2")
-    assert host.locator("#aipr-members li").all_inner_texts() == ["👑 Eero (sinä)", "Aino"]
-    assert guest.locator("#aipr-members li").all_inner_texts() == ["👑 Eero", "Aino (sinä)"]
+    # Each other phone has its voice's mute button (🔊, #322) once their call is set up.
+    host.wait_for_function("document.querySelectorAll('#aipr-members button.mute').length === 1")
+    guest.wait_for_function("document.querySelectorAll('#aipr-members button.mute').length === 1")
+    assert host.locator("#aipr-members li").all_inner_texts() == ["👑 Eero (sinä)", "Aino\n🔊"]
+    assert guest.locator("#aipr-members li").all_inner_texts() == ["👑 Eero\n🔊", "Aino (sinä)"]
     assert text(guest, "info") == "Odotetaan, että Eero aloittaa kierroksen…"
     assert host.locator("#aipr-start").is_enabled()
     # A link joins at once, and a reload goes back to the same room.
