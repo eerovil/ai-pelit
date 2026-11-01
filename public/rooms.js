@@ -438,7 +438,10 @@
     });
     others().forEach(function (m) {
       var p = vpeer(m.id);
-      if (!p.greet) { p.greet = true; greet(m.id, true); }
+      // Greeted when it comes (back), and again while no call is up with it: a lost message or a
+      // call made in the middle of a reconnect heals by itself.
+      var nocall = voice.on && !live(p) && !p.dialing;
+      if (!p.greet || (nocall && Date.now() - (p.greetAt || 0) > 10e3)) { p.greet = true; p.greetAt = Date.now(); greet(m.id, true); }
       var pc = p.pc, broken = !pc || pc.sid !== p.sid || pc.connectionState === 'failed' || pc.connectionState === 'closed';
       if (voice.on && p.on && net.me < m.id && broken && !p.dialing && Date.now() >= p.retryAt) dial(m.id);
     });
@@ -473,7 +476,7 @@
     p.dialing = true;
     getIce().then(function (servers) {
       p.dialing = false;
-      if (!voice.on || !net.on || !p.on) return;
+      if (!voice.on || !net.on || !p.on || voice.peers[id] !== p) return; // it left meanwhile
       hang(id);
       var pc = newPc(id, p, hex(4), servers);
       pc.sid = p.sid;
@@ -487,7 +490,7 @@
     var p = vpeer(id);
     if (!voice.on || typeof m.sdp !== 'string' || (p.pc && p.pc.c === m.c)) return;
     getIce().then(function (servers) {
-      if (!voice.on || !net.on) return;
+      if (!voice.on || !net.on || voice.peers[id] !== p) return;
       hang(id);
       var pc = newPc(id, p, m.c, servers);
       pc.setRemoteDescription({ type: 'offer', sdp: m.sdp }).then(function () {
@@ -1108,5 +1111,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(autoJoin); });
   else setTimeout(autoJoin);
   setInterval(function () { renderPause(); renderVoice(); }, 250);
+  setInterval(voiceSync, 3000);
   setInterval(function () { readList(); tellList(); }, 5000);
 })();

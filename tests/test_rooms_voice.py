@@ -198,3 +198,15 @@ def test_two_phones_talk_on_a_room_from_before_voice(phones):
     a.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Eero'")
     a.wait_for_function(f"window.__heard().then(n => n > {before} + 2000)", polling=200)
     host.mouse.up()
+
+
+def test_lost_greetings_heal_by_themselves(phones):
+    # Both phones' first greetings are lost (as in a reconnect): neither knows the other takes
+    # calls until one greets again, which it does while no call is up.
+    host, code = make_room(phones)
+    phones.relay.lose_hi = 2
+    a = join(phones, "Aino", code)
+    a.wait_for_timeout(2000)
+    assert host.evaluate("AiPelitRooms.voice.calls") == 0
+    for p in (host, a):
+        p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=20000)
