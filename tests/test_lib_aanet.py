@@ -120,3 +120,27 @@ def test_a_loop_waits_for_its_sound_follows_set_and_stops(site, context):
     assert page.evaluate("engine.playing()") is False
     assert page.evaluate("none.set({ rate: 2 }).playing()") is False
     assert page.errors == []
+
+
+def test_two_loops_at_once_and_sound_sleeps_while_the_page_is_hidden(site, context):
+    page = open_demo(site, context, ["tuuli", "sade"], TAG2)
+    page.wait_for_function("AiPelitAanet.ready('tuuli') && AiPelitAanet.ready('sade')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.evaluate("window.a = AiPelitAanet.loop('tuuli'); window.b = AiPelitAanet.loop('sade', { vol: 0.3 })")
+    page.wait_for_function("a.playing() && b.playing()", timeout=5000)
+    # Stopping one leaves the other.
+    page.evaluate("a.stop()")
+    assert page.evaluate("[a.playing(), b.playing()]") == [False, True]
+    # The page hidden (the phone locked, another app): the sound context sleeps, and wakes again.
+    states = page.evaluate("""async () => {
+      const wait = () => new Promise(r => setTimeout(r, 200));
+      const hide = h => { Object.defineProperty(document, 'hidden', { value: h, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); };
+      const seen = [];
+      const probe = AiPelitAanet.loop('sade', { vol: 0 });
+      hide(true); await wait(); seen.push(AiPelitAanet.play('sade', { vol: 0 }));
+      hide(false); await wait(); seen.push(AiPelitAanet.play('sade', { vol: 0 }));
+      probe.stop();
+      return seen;
+    }""")
+    assert states == [False, True]
+    assert page.errors == []
