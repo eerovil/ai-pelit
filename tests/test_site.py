@@ -74,13 +74,14 @@ def test_shelf_game_page_and_back_chip(site, context):
     page.click('.version[data-n="2"] a')
     page.wait_for_url("**/games/pomppu/v2/")
     page.click("#ai-pelit-back")
+    page.click("#ai-pelit-takaisin")
     page.wait_for_selector("h1")
     assert page.url == f"{site.url}#/pomppu"
     assert page.locator("h1").inner_text() == "Pomppu"
 
 
 def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, context):
-    # The chip and the phone's back both go up, never back into the game (#68).
+    # The chip's menu and the phone's back both go up, never back into the game (#68, #336).
     make_game(site.games, "pomppu", [game_page("v1"), game_page("v2")])
     site.build()
     page = context.new_page()
@@ -92,6 +93,7 @@ def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, cont
     page.reload()
     page.wait_for_selector("#ai-pelit-back")
     page.click("#ai-pelit-back")
+    page.click("#ai-pelit-takaisin")
     page.wait_for_url(f"{site.url}#/pomppu")
     assert page.locator("h1").inner_text() == "Pomppu"
     page.go_forward()
@@ -128,6 +130,7 @@ def test_a_group_is_one_card_on_the_shelf_and_its_games_go_up_to_it(site, contex
     page.click('.version[data-n="1"] a')
     page.wait_for_url("**/games/keihas/v1/")
     page.click("#ai-pelit-back")
+    page.click("#ai-pelit-takaisin")
     page.wait_for_url(f"{site.url}#/keihas")
     page.click("a.back")
     page.wait_for_url(f"{site.url}#/yleisurheilu")
@@ -278,6 +281,7 @@ def test_the_chip_on_a_game_opened_from_a_link_never_leads_back_into_it(site, co
     page = context.new_page()
     page.goto(f"{site.url}games/pomppu/v1/")
     page.click("#ai-pelit-back")
+    page.click("#ai-pelit-takaisin")
     page.wait_for_url(f"{site.url}#/pomppu")
     page.wait_for_selector("h1")
     page.click("a.back")
