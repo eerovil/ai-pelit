@@ -152,7 +152,7 @@ function slap(p, spike) {
 // A point: the ball into the sand when it fell there, the whistle, then applause.
 function pointSound(sand) {
   if (sand) S.play('hiekka', { vol: 0.8 });
-  if (!S.play('pilli', { vol: 0.7, delay: sand ? 0.15 : 0 })) { whistle(); return; }
+  S.play('pilli', { vol: 0.7, delay: sand ? 0.15 : 0 }) || whistle();
   S.play('aplodit', { vol: 0.4, delay: 0.6 });
 }
 function matchSound(won) { S.play(won ? 'voitto' : 'tappio', { vol: 0.8, delay: 0.3 }); }

@@ -107,17 +107,58 @@ def test_a_fault_with_the_ball_up_has_no_sand(game):
     assert played(page) == ["pilli", "aplodit"]
 
 
-def test_without_the_sound_files_it_still_plays_with_its_beeps(game, browser):
+# Every beep the game makes, by its pitch, in window.beeps (tone() is global, so it can be wrapped).
+BEEPS = """() => {
+  window.beeps = [];
+  const real = window.tone;
+  window.tone = (f, ...rest) => { beeps.push(f); return real(f, ...rest); };
+}"""
+
+
+def no_mp3(browser, game, which="**/*.mp3"):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    ctx.route(which, lambda route: route.abort())
+    page = game(ctx)
+    page.evaluate(BEEPS)
+    return ctx, page
+
+
+def test_without_the_sound_files_it_still_plays_with_its_beeps(game, browser):
+    ctx, page = no_mp3(browser, game)
     try:
-        ctx.route("**/*.mp3", lambda route: route.abort())
-        page = game(ctx)
+        # The files are refused: wait until the library has given up on them, then play each moment.
+        page.wait_for_timeout(500)
         page.evaluate("""() => {
           server = mine; ball.held = true; tossed = false; state = 'serve'; press(mine);
-          for (let i = 0; i < 60 * 20; i++) update(1 / 60);
-          score = [11, 4]; endMatch(true);
+          ball.served = true; touchSide = 0; touches = 0; mine.y = 0; mine.intent = 'set';
+          Object.assign(ball, { x: mine.x, y: 1.2 }); hit(mine);
+          mine.cd = 0; mine.y = 0; mine.vy = 0; jump(mine);
+          Object.assign(ball, { x: -0.3, y: 1.5, vx: 6, vy: 0, held: false }); stepBall(0.1, true);
+          state = 'play'; last = mine; touchSide = 1; touches = 0;
+          Object.assign(ball, { x: 3, y: 0.2, vx: 0, vy: -3 }); stepBall(0.1, true);
         }""")
+        # v4's beeps: the toss, a touch, the jump, the net, the whistle's two notes (one now, one later).
+        page.wait_for_function("beeps.includes(1900)", timeout=2000)
+        assert page.evaluate("beeps") == [500, 560, 330, 150, 2100, 1900]
+        page.evaluate("score = [11, 4]; endMatch(true)")
         assert played(page) == []
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_without_the_whistle_file_the_point_still_has_its_applause(game, browser):
+    ctx, page = no_mp3(browser, game, "**/pilli.mp3")
+    try:
+        page.wait_for_function("AiPelitAanet.ready('aplodit') && AiPelitAanet.ready('hiekka')", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('naksu', { vol: 0 })", timeout=5000)
+        page.evaluate("heard.splice(0)")
+        page.evaluate("""() => {
+          state = 'play'; last = mine; touchSide = 1; touches = 0;
+          Object.assign(ball, { x: 3, y: 0.2, vx: 0, vy: -3, held: false }); stepBall(0.1, true);
+        }""")
+        assert played(page) == ["hiekka", "aplodit"]
+        assert page.evaluate("beeps")[:1] == [2100]
         assert page.errors == []
     finally:
         ctx.close()
