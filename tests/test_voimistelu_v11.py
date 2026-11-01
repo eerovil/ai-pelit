@@ -116,3 +116,21 @@ def test_v10_saves_are_read_as_they_are(voim_site, context):
     page.goto(voim_site.url + URL)
     page.wait_for_function("typeof newRoutine === 'function'")
     assert page.evaluate("[level, best, routines]") == [23, 12.345, 40]
+
+
+def test_before_the_first_tap_it_is_silent_and_the_next_routine_sounds_again(voim_site, context):
+    # The online list asks once for a nickname on the first score: asked already, so the board is the game's.
+    context.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:kysytty', 'true')")
+    page, errors = open_game(voim_site, context, sound=False)
+    page.evaluate(DROP, [0, 1])
+    assert played(page) == []
+    # The tap on the score board starts the next routine and turns sound on; it then sounds as the first.
+    page.evaluate("resultT = 1")
+    page.mouse.click(180, 500)
+    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
+    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+    assert page.evaluate("mode") == "bar"
+    page.evaluate("heard.splice(0)")
+    page.evaluate(DROP, [1.8, 2])
+    assert played(page) == ["valinta", "tomahdys", "ohhoo", "tappio"]
+    assert errors == []
