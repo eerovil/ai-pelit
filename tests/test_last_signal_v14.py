@@ -20,11 +20,17 @@ def _v14(monkeypatch):
 @pytest.mark.parametrize("mode", ["home", "sub", "dive"])
 def test_no_hiss_inside_sisu_at_the_helm_or_on_a_dive(site, browser, mode):
     page = v13.game(site, browser)
+    # BED and AC are the game's own top-level `let`s: assigned by name (not as window properties) so soundStep() sees them
     page.evaluate(f"""(() => {{ const vols = {{}}; window.heard14 = vols;
-      window.BED = {{}}; for (const k of ['sea', 'engine', 'hum', 'wind']) BED[k] = {{ set: o => {{ vols[k] = o.vol; }}, playing: () => true }}; BED.next = 99;
-      AC = {{ state: 'running' }}; G.mode = '{mode}'; soundStep(0.01); }})()""")
+      BED = {{ next: 99 }}; for (const k of ['sea', 'engine', 'hum', 'wind']) BED[k] = {{ set: o => {{ vols[k] = o.vol; }}, playing: () => true }};
+      AC = {{ state: 'running' }}; G.mode = '{mode}'; sub.vx = sub.vy = 0; soundStep(0.01); }})()""")
     v = page.evaluate("heard14")
+    assert set(v) == {"sea", "engine", "hum", "wind"}
     assert v["hum"] == 0
+    # the sea and the engine as in v13 (both halved there): the sea by where the person is, the engine idling
+    sea = {"home": 0.35, "sub": 0.75, "dive": 1}[mode] * 0.35
+    engine = {"home": 0, "sub": 0.25, "dive": 0}[mode] * 0.32  # alone and still, the engine idles only at the helm
+    assert v["sea"] == pytest.approx(sea) and v["engine"] == pytest.approx(engine)
     assert page.errors == []
 
 
