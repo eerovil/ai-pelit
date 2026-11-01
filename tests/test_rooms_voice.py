@@ -93,9 +93,13 @@ def test_a_held_chip_is_heard_by_everyone_in_the_room_guest_to_guest_too(phones)
         assert p.locator("#aipr-mic").is_visible()
         assert p.locator("#aipr-voice").is_checked()
     before = {p: heard(p) for p in (host, b)}
+    # A quick tap says how the chip works; the next press takes the hint away.
+    a.locator("#aipr-mic").click()
+    a.wait_for_function("document.getElementById('aipr-talk').textContent === 'Pidä pohjassa ja puhu.'")
     hold(a)
     a.wait_for_function("AiPelitRooms.voice.talking")
     assert a.locator("#aipr-mic").get_attribute("class") == "live mid"
+    assert a.evaluate("document.getElementById('aipr-talk').hidden")  # no "hold to talk" hint while holding
     for p in (host, b):
         p.wait_for_function("document.getElementById('aipr-talk').textContent === '🔊 Aino'")
         p.wait_for_function(f"window.__heard().then(n => n > {before[p]} + 2000)", polling=200)

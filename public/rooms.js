@@ -564,7 +564,7 @@
   // ---- Push to talk ----
   function press() {
     if (voice.pressed || !voice.on || !net.on) return;
-    voice.pressed = true; voice.pressAt = Date.now();
+    voice.pressed = true; voice.pressAt = Date.now(); voice.err = ''; voice.errAt = 0;
     renderVoice();
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }).then(function (s) {
       if (voice.stream) voice.stream.getTracks().forEach(function (t) { t.stop(); });
@@ -667,7 +667,9 @@
     if (k === vShown) return;
     vShown = k;
     vel.chip.hidden = !on;
-    vel.chip.className = cls + (/^(right|left)$/.test(VOICE_AT) ? ' mid' : '');
+    var mid = /^(right|left)$/.test(VOICE_AT) ? 'mid' : '';
+    vel.chip.className = cls + (mid ? ' ' + mid : '');
+    vel.bubble.className = mid;
     vel.bubble.hidden = !text;
     vel.bubble.textContent = text;
   }
