@@ -62,7 +62,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/makihyppy/v1/index.html`: a new meet at the player's level (`taso`), "Jatka kisaa" for a meet left unfinished (`kesken`), and the room (`rooms.js`, 2–8 phones). It shows meets, wins, the longest jump (`pisin`) and the best meet (`ennatys`).
-- **Kisa: 12 hyppääjää, arvottu järjestys**: `AiPelitKisa.meet()` from `public/lib/yleisurheilu-4/kisa.js` with the game's own format `totals()`: the computer jumpers average `base(level)` metres (104 m at level 1, 3 m more per level up to 131 m), spread around it.
+- **Kisa: 12 hyppääjää, arvottu järjestys**: `AiPelitKisa.meet()` from `public/lib/yleisurheilu-4/kisa.js` with the game's own format `totals()`: the computer jumpers average `base(level)` metres (104 m at level 1, 3 m more per level up to 126 m), spread around it.
 - **Tulostaulu: hyppy ja pisteet yhteensä**: `board()` in `totals()`: the latest jump's length and the points so far; a dashed line after ten in the first round. Shown 3.5 s (`BOARD_T`); alone a tap skips it.
 - **Tietokone hyppää heti**: `cpuMark()`: the skill, a scatter of 4.5 m and 2.2 m per m/s of wind, style from the skill; now and then a landing on both feet, a hand in the snow or a fall.
 - **Kaverin hyppy näkyy samana**: the jumping phone sends where its jumper is twelve times a second (`p`) and the judged result (`fin`); other phones ease the jumper along (`watchStep()`) and show the same result card.

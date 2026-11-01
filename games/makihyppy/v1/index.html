@@ -366,11 +366,11 @@ function fitText(s, w, ctx) { ctx = ctx || x; if (ctx.measureText(s).width <= w)
 // th is this phone's view of the jump on the hill now.
 let th = null;
 // The computer jumpers' average distance at the player's level.
-const base = lv => Math.min(131, 104 + 3 * (lv - 1));
+const base = lv => Math.min(126, 104 + 3 * (lv - 1));
 const isNet = () => K.isNet();
 const K = AiPelitKisa.meet({
   slug: 'makihyppy', format: totals(), foes: FOES, skill: base, fmt: fmtP,
-  spread: [6, 3.5, 2, 0.5, -1, -2.5, -4, -5.5, -7, -9, -11], jitter: 2,
+  spread: [5, 3.5, 2, 0.5, -1, -2.5, -4, -5.5, -7, -9, -11], jitter: 2,
   // The wind for each jump comes from the meet's seed, the same on every phone.
   init: c => { c.seed = Math.floor(Math.random() * 1e6); },
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
