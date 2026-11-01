@@ -1,11 +1,12 @@
 # Tikanheitto: one throw and one game
 
-How Tikanheitto plays (v1 to v3). The player aims by holding a finger on the screen and moving
+How Tikanheitto plays (v1 to v4). The player aims by holding a finger on the screen and moving
 the sight like a touchpad; the hand sways, more the longer they hold, and letting go throws the
 dart. From v2 the first mode is Mökkitikka on the Finnish cottage board (10 in the middle, ten
 rounds of three darts), and friends can play together, one phone each, in a room; Pistekisa and
 501 on the darts board stay. From v3 Vapaa heitto throws on either board with no computer and
-no end, until the player taps Lopeta.
+no end, until the player taps Lopeta. v4 plays recorded sounds from the shared library
+(`lib/aanet-2/`) instead of beeps.
 
 ```mermaid
 flowchart TD
@@ -21,6 +22,7 @@ flowchart TD
   S --> F
   E --> F
   F --> G[Osuma: mökkitaulun rengas tai darts-taulun piste]
+  F -.-> AU[Ääni: suhahdus, puu, virhe, yleisö, voitto]
   G --> H{Pisteitä vai 501?}
   H -- Mökkitikka tai Pistekisa --> I[Pisteet kasvavat]
   I --> M{Tikkoja jäljellä?}
@@ -54,6 +56,7 @@ flowchart TD
   class G,I,RH,FV teal
   class K rose
   class L,O,P,X,T,FL green
+  class AU teal
 ```
 
 ## Colours
@@ -61,13 +64,13 @@ flowchart TD
 - **blue**: what the player sees and does
 - **violet**: someone else throwing: the computer, or a friend on another phone
 - **amber**: a check that decides the path
-- **teal**: where the dart lands, the points, and the phone that keeps them
+- **teal**: where the dart lands, the points, the phone that keeps them, and the sounds
 - **rose**: a bust in 501
 - **green**: a won game, a record or the results
 
 ## Boxes
 
-- **Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501**: `showMenu()` in `games/tikka/v3/index.html` (v2: `games/tikka/v2/index.html`, without Vapaa heitto; v1: `games/tikka/v1/index.html`, without Mökkitikka and rooms). Mökkitikka is the big first button; "👥 Pelaa kavereiden kanssa" opens the room (`AiPelitRooms.open()`); "Vapaa heitto, ilman tietokonetta" has Mökkitaulu and Darts-taulu (the last one picked is saved as `ai-pelit:tikka:vapaa`); Pistekisa, 501 and the 501 opponent (Helppo, Keskitaso, Kova or Kaveri on the same phone, saved as `ai-pelit:tikka:vastus`) sit under "Darts-taulu". The menu shows the records (`mokki`, `ennatys`) and wins against the computer (`voitot`).
+- **Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501**: `showMenu()` in `games/tikka/v4/index.html` (v3: `games/tikka/v3/index.html`, the same; v2: `games/tikka/v2/index.html`, without Vapaa heitto; v1: `games/tikka/v1/index.html`, without Mökkitikka and rooms). Mökkitikka is the big first button; "👥 Pelaa kavereiden kanssa" opens the room (`AiPelitRooms.open()`); "Vapaa heitto, ilman tietokonetta" has Mökkitaulu and Darts-taulu (the last one picked is saved as `ai-pelit:tikka:vapaa`); Pistekisa, 501 and the 501 opponent (Helppo, Keskitaso, Kova or Kaveri on the same phone, saved as `ai-pelit:tikka:vastus`) sit under "Darts-taulu". The menu shows the records (`mokki`, `ennatys`) and wins against the computer (`voitot`).
 - **Yksin vai huoneessa?**: `newGame()` starts a game on this phone alone; `R.on('start')` starts one in a room (`public/rooms.js`, 2 to 5 phones).
 - **Huoneen tekijä valitsee pelin ja pitää kirjaa**: `roomControls()` shows the host Mökkitikka or 501 under the players (saved as `huonepeli`); the others see who picks. The host keeps the score: a guest sends its throws (`th`), and the host sends each dart's flight (`f`) and the whole game after every change (`g`, `state()` and `adopt()`). A phone that reloads gets the game again (`R.on('hello')`).
 - **Vuoro: 3 tikkaa**: `startTurn()` clears the board, gives three darts and puts the player's sight back where they last let go.
@@ -84,3 +87,4 @@ flowchart TD
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: `hostEnd()` ranks the players (most points, then most tens; in 501 the one at nought first, then the least left), sends it with `R.deliver()`, and every phone shows its place and the full list in the room (`netFinish()`, `R.backToRoom()`).
 - **Uusi vuoro, keskiarvo ja paras vuoro**: in Vapaa heitto (`mode === 'vapaa'`, v3) `endTurn()` adds each finished turn to `freeTurns`, `freeSum` and `freeBest` and never ends the game; the panel shows the turn's points, the average (`freeAvg()`) and the best turn, with a Lopeta button (`#stop`). Nothing is saved or sent to a list.
 - **Valikossa kierrokset, keskiarvo ja paras**: `stopBtn.onclick` stops at once (a turn not finished does not count) and the menu reads "Vapaa heitto: <n> kierrosta, keskiarvo <x> p, paras <y> p".
+- **Ääni: suhahdus, puu, virhe, yleisö, voitto**: v4 (#230) loads `lib/aanet-2/aanet.js` and `sound()` plays `suhahdus` when a dart flies (`throwAt()`), `puu` when it sticks in the board and a quiet, lower `puu` when it misses (`land()`, and on a guest's phone `step()`), `virhe` on a 501 bust, `yleiso` for a full turn (30 or 180, `endTurn()`, and on a guest when that banner arrives in `adopt()`) and `voitto` at the end (`endGame()`). Each falls back to v3's own beep when `AiPelitAanet.play()` returns false (the first open offline), and all of them do when `aanet.js` itself did not load.
