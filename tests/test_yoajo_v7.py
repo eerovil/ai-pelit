@@ -97,3 +97,18 @@ def test_each_hole_has_a_pale_rim_in_3d(site, context):
       return { rims, holes: road.holes.length }; }""")
     assert r["holes"] > 0 and r["rims"] >= r["holes"], r
     assert page.errors == []
+
+
+def test_a_retry_after_a_burst_tyre_warns_again_and_starts_with_a_whole_tyre(site, context):
+    page = open_game(site, context)
+    holes = ("road.holes = []; for (let k = 1; k <= 8; k++) for (const d of [-0.75, 0.75]) "
+             "road.holes.push({ s: P.s + 10 + k * 9, lat: LANE + d, r: 0.6 }); "
+             "road.bad = [{ s0: P.s + 10, s1: P.s + 100, told: false }];")
+    r = run(page, holes, 85, 4, n=3)
+    assert r["mode"] == "crash" and "Rengas" in r["why"], r
+    r = page.evaluate("""() => { act({ id: 'uudelleen' });
+      return { mode, level, damage: P.damage, told: road.bad.map(b => b.told), hit: road.holes.some(h => h.hit),
+        holes50: road.holes.every(h => limitAt(h.s) === 50) }; }""")
+    assert r["mode"] == "drive" and r["level"] == 3 and r["damage"] == 0, r
+    assert r["told"] and not any(r["told"]) and not r["hit"] and r["holes50"], r
+    assert page.errors == []
