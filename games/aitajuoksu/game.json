@@ -58,6 +58,20 @@
       "note": "Hyppynappi on nyt jalkojen yläpuolella oma palkkinsa kuten Pituushypyssä, ja välissä on rako, joten jalkoja rummuttaessa ei hypätä vahingossa.",
       "request": "Juoksukisassa on vielä hyppynappi eri kohdassa",
       "issue": "eerovil/ai-pelit#308"
+    },
+    {
+      "n": 9,
+      "date": "2026-11-01",
+      "note": "Napit, jotka eivät juuri silloin tee mitään, näkyvät harmaina eivätkä välähdä: jalat ja Hyppää-nappi aidan yllä, kompastuessa ja maalin jälkeen, Hyppää lähdössä ja ilman aitoja.",
+      "request": "Ottelun lajeissa (yleisurheilu) napit, jotka eivät sillä hetkellä tee mitään, pitää näyttää pois käytöstä (harmaina/himmennettyinä), ettei pelaaja luule niiden toimivan. Esimerkki (#312): Keihäänheitto v7:ssä jalkanapit välähtävät, kun niitä painaa Heitä-napin ollessa pohjassa, vaikka askel ei lisää vauhtia. Tähtäyksen aikana jalkanappien pitäisi näkyä pois käytöstä eikä välähtää.",
+      "issue": "eerovil/ai-pelit#313"
+    },
+    {
+      "n": 10,
+      "date": "2026-11-01",
+      "note": "Sama asu kaikissa yleisurheilulajeissa ja Ottelussa, ja asuja on nyt seitsemän.",
+      "request": "Puvut voisi toimia kaikissa ottelu peleissä ainakin. Onko puvuille jo oma shared lib",
+      "issue": "eerovil/ai-pelit#311"
     }
   ]
 }

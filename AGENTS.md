@@ -176,7 +176,10 @@ high-score lists (#25), then play counts (#26).
   `AiPelitOutfits.head()` draws their heads. An outfit is a palette (`skin`, `hair`, `top`,
   `bottom`, `cape`, `head`) the game's own drawing reads. The choice is saved per game
   (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
-  `get(id)`. Trampoliini v6 is the model.
+  `get(id)`. Trampoliini v6 is the model. An athletics event (and Ottelu) adds
+  `data-share="yleisurheilu"` and passes `outfits: AiPelitOutfits.yleisurheilu` (#311): one
+  choice and one set of kits for every event, so the match wears the same outfit throughout;
+  Pituushyppy v10 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
   `<script src="../../../lib/yleisurheilu-5/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
