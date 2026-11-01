@@ -47,12 +47,14 @@ def phones(site, browser):
     relay = Relay()
     contexts = []
 
-    def phone(name, path="huonetesti/v2/", no_mic=False, width=360, height=740):
+    def phone(name, path="huonetesti/v2/", no_mic=False, width=360, height=740, init=None):
         ctx = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
         ctx.grant_permissions(["microphone"])
         ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify({name!r}))")
         ctx.add_init_script(COUNT_CALLS)
+        if init:
+            ctx.add_init_script(init)
         if no_mic:
             ctx.add_init_script("navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('no', 'NotAllowedError'))")
         page = ctx.new_page()
@@ -271,3 +273,25 @@ def test_a_chip_with_no_one_to_hear_never_opens_the_microphone(phones):
     assert page.evaluate("window.__mic") == 1
     page.mouse.up()
     assert a.errors == []
+
+
+SLOW_ICE = """(() => { const f = window.fetch; window.fetch = (u, o) => String(u).includes('/api/voice/ice')
+  ? new Promise((ok) => setTimeout(ok, 1500)).then(() => f(u, o)) : f(u, o); })()"""
+
+HOST_CANDIDATES = """(async () => { let n = 0; for (const pc of window.__pcs) { if (pc.connectionState !== 'connected') continue;
+  (await pc.getStats()).forEach((r) => { if (r.type === 'remote-candidate' && r.candidateType === 'host') n++; }); } return n; })()"""
+
+
+def test_candidates_that_arrive_while_the_servers_are_read_are_kept(phones):
+    # The servers' list comes slowly, so the answering phone hears the offer's candidates before
+    # it has made its call: they wait, and are added once the offer is in.
+    host = phones("Eero", init=SLOW_ICE)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.code")
+    a = phones("Aino", f"huonetesti/v2/?huone={host.evaluate('AiPelitRooms.code')}", init=SLOW_ICE)
+    for p in (host, a):
+        p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=20000)
+    # Both phones know the other's own (host) candidates, not only addresses learnt from checks.
+    for p in (host, a):
+        assert p.evaluate(HOST_CANDIDATES) >= 1

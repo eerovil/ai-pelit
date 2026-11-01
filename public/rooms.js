@@ -491,7 +491,11 @@
     if (!voice.on || typeof m.sdp !== 'string' || (p.pc && p.pc.c === m.c)) return;
     getIce().then(function (servers) {
       if (!voice.on || !net.on || voice.peers[id] !== p) return;
+      // Candidates for this offer that came while the servers were read wait through the reset,
+      // and are added once the offer is in (flushIce()).
+      var early = p.early.filter(function (e) { return e.c === m.c; });
       hang(id);
+      p.early = early;
       var pc = newPc(id, p, m.c, servers);
       pc.setRemoteDescription({ type: 'offer', sdp: m.sdp }).then(function () {
         var t = pc.getTransceivers()[0];
