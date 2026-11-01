@@ -1,6 +1,6 @@
 # Yöajo: one leg of the night drive
 
-How one leg of Yöajo plays (v1, #181; v4 drives with one thumb as a round stick and adds the reckless-driving rules; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`; v5 shows the speed on a car's dial at the top, #206; v6 plays recorded sounds from the shared library, #235). The player drives at night up Valtatie 4 from Helsinki
+How one leg of Yöajo plays (v1, #181; v4 drives with one thumb as a round stick and adds the reckless-driving rules; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`; v5 shows the speed on a car's dial at the top, #206; v6 plays recorded sounds from the shared library, #235; v7 shows and explains the potholes, #266). The player drives at night up Valtatie 4 from Helsinki
 to Rovaniemi, one leg a level, seen in 3D from behind the car. In v1 and v2 the car pulls up
 to speed by itself and the player steers and brakes with buttons; in v3 the left thumb steers and
 the right thumb presses the gas or brakes, by how far each slides. The player also switches the
@@ -31,9 +31,12 @@ flowchart TD
   F -- Ei --> F2[Liian läheltä -40]
   C -- Hirvi tai poro --> G{Jarrutit tai väistit?}
   G -- Ei --> X[Kolari: osuus päättyy]
-  C -- Huono tie --> H{Hitaasti kuoppien yli?}
+  C -- Huono tie --> HW[Kuoppamerkki, 50-rajoitus, varoitus ruudulla]
+  HW --> H{Hitaasti kuoppien yli?}
+  H -- Alle 55 km/h --> H0[Kuopat eivät tee mitään]
   H -- Ei --> H1[Kuoppa -15, neljäs kova isku puhkaisee renkaan]
   H1 --> X
+  X -- Rengas rikki --> XH[Ohje: hidasta alle 50 km/h]
   C -- Nopeuskamera --> K{Yli rajoituksen +5?}
   K -- Kyllä --> K1[Salama, sakko -150]
   K -- Ei --> K2[Rajoituksissa +25]
@@ -48,9 +51,9 @@ flowchart TD
   Z --> S[Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä]
   S --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
   X --> A
-  class A,B,E2,L,P2,M,N blue
+  class A,B,E2,L,P2,M,N,HW,XH blue
   class C,D,E,F,G,H,K,V,Y,P,R amber
-  class D1,E1,F1,K2,V1,P1 teal
+  class D1,E1,F1,K2,V1,P1,H0 teal
   class D2,F2,H1,K1,V2,X,E3,R1 rose
   class Z,S,T green
 ```
@@ -72,7 +75,10 @@ flowchart TD
 - **Ohitus +40..60**: `meet()`: passing a slow vehicle in the player's direction scores once (tractor 40, car 50, truck 60). Same-direction cars keep behind slower ones and behind the player.
 - **Väljä ohitus +20**: walkers keep to the left edge facing traffic, or now and then the right edge; a third have no reflector and show only in the beam. Passing with under a metre of room above 40 km/h costs −40; touching one ends the leg as a near miss ("Vaaratilanne").
 - **Jarrutit tai väistit?**: a moose (or a reindeer on the last leg) steps out of the forest about four seconds of driving ahead, after a warning sign; some stop on the road. Its eyes shine in the beam (`deerMesh()` in `view.js`).
-- **Kuoppa -15, neljäs kova isku puhkaisee renkaan**: `holes()`: a bad stretch after an "Epätasainen tie" sign has potholes; below 50 km/h they do nothing, above it they jolt the car; the fourth hit above 70 km/h bursts a tyre.
+- **Kuoppa -15, neljäs kova isku puhkaisee renkaan**: `holes()`: a bad stretch after an "Epätasainen tie" sign has potholes; below 50 km/h (v1–v6; up to 55 km/h from v7) they do nothing, above it they jolt the car; the fourth hit above 70 km/h bursts a tyre.
+- **Kuoppamerkki, 50-rajoitus, varoitus ruudulla**: v7 (#266 "Mitä kuopille mahtaa?", Eero's choice: show and explain, same difficulty). `newLeg()` in `games/yoajo/v7/game.js` puts a 50 limit 40 m after each bad stretch's sign, over all its holes, and the limit it was 290 m after the sign (other limit changes inside the stretch go; the stretch is kept in `road.bad`). `holes()` says "Kuoppia: hidasta alle 50 km/h" once per stretch. `buildWorld()` in `view.js` lays each hole on the crowned road with a pale rim the headlights catch (v1–v6 drew them at a flat height, under the asphalt within 1.25 m of the centre line). The menu's tip on a leg with bad stretches is "Kuoppamerkin jälkeen hidasta alle 50 km/h." (`menu()` in `ui.js`).
+- **Kuopat eivät tee mitään**: v7: up to 55 km/h (`HOLE_SAFE`, the 50 limit and a little), a hole does nothing; v1–v6 under 50.
+- **Ohje: hidasta alle 50 km/h**: v7: the burst-tyre screen (`crashScreen()` in `ui.js`) adds "Kuoppien kohdalla hidasta alle 50 km/h." under the reason.
 - **Yli rajoituksen +5?**: `cameras()`: a camera stands 340 m after its sign; over the limit by more than 5 km/h it flashes and fines −150, otherwise +25.
 - **Ohittaja omalla kaistalla: väistä pientareelle**: two kinds of reckless drivers (`move()`): one from behind with high beams on, overtaking when nobody comes and cutting in; one oncoming, pulling out from behind a truck into the player's lane with its high beams on.
 - **Kahvitauko: vireys täyteen, +10 s**: `tiredness()` (#181 "Kuskia väsyttää"), from leg 3. Sleepiness grows with the road driven; past 40 % the eyes close for a moment now and then (black lids in `dashboard()`), longer as it grows. Stopping in the rest area's bay (a sign, then a paved bay and a lit kiosk on the right) wakes the driver; without a stop they fall asleep after the rest area, before the town.
