@@ -76,6 +76,6 @@ flowchart TD
 - **Pisteet: keilan numero**: `pointsOf()`; the fallen pins get green number tags while the points show.
 - **Pois pelistä**: `rules()` counts misses in a row in `misses`; a hit starts the count again.
 - **Takaisin 25 pisteeseen**: `rules()` sets the score to `BACK_TO`.
-- **Kaatuneet keilat pystyyn siihen missä ne makaavat**: `raise()` stands each fallen pin on its middle and moves pins stood on the same spot apart. From v2 pins slide and roll less (`SCATTER`, `ROLL`, `BOUNCE`) and are stood up within the yard's edge (8.5 m out, 2 m to a side: `YARD_Y`, `YARD_X`), so they stay within reach of a throw for a whole game.
+- **Kaatuneet keilat pystyyn siihen missä ne makaavat**: `raise()` stands each fallen pin on its middle and moves pins stood on the same spot apart. From v2 pins slide and roll less (`SCATTER`, `ROLL`, `BOUNCE`) and are stood up within the yard's edge (8.5 m out, 2 m to a side: `YARD_Y`, `YARD_X`; `inYard()` sets them apart without crossing it), so they stay within reach of a throw for a whole game. A game saved by v1 is brought inside the yard when continued.
 - **Taso nousee, uusi vastustaja**: `record()` saves `taso`, `voitot` and `haviot` the moment the game is won or lost.
 - **Voittaja kaikille kerran, takaisin huoneeseen**: `hostEnd()` → `AiPelitRooms.deliver()`; each phone saves its result once in `ai-pelit:molkky:kaverit` (`finish()`).

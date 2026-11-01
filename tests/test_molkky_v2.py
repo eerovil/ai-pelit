@@ -265,6 +265,41 @@ def test_a_full_pull_throws_to_eight_metres_and_half_a_pull_about_four(site, con
     assert page.evaluate("phase") == "aim"
 
 
+def test_pins_pushed_apart_at_the_yards_edge_stay_inside_it(site, context):
+    page = open_game(site, context)
+    res = page.evaluate("""() => {
+      // Every pin fallen past the same far corner: stood up there, then set apart.
+      const pins = setUp().map(p => Object.assign(pin(p.n, 5 + p.n * 0.001, 12), { s: 'down', dx: 1, dy: 0 }));
+      pins[3].x = 5; pins[4].x = 5;   // two on the very same spot
+      raise(pins);
+      let near = Infinity;
+      for (const a of pins) for (const b of pins) if (a !== b) near = Math.min(near, Math.hypot(a.x - b.x, a.y - b.y));
+      return { inside: pins.every(p => Math.abs(p.x) <= YARD_X + 1e-9 && p.y <= YARD_Y + 1e-9 && p.y >= 1.2), near, gap: GAP };
+    }""")
+    assert res["inside"] is True
+    assert res["near"] >= res["gap"] - 1e-3
+
+
+def test_a_game_saved_by_v1_with_pins_far_away_continues_within_reach(site, context):
+    page = open_game(site, context)
+    # v1 saved its game under the same key, with the pins 10-13 m out and wide, and two misses.
+    page.evaluate("""() => save('peli', { pins: setUp().map((p, i) => [-4 + i * 0.7, 10 + (i % 4)]),
+      sc: [30, 41], mi: [2, 0], ou: [false, false], tu: 0, n: 17, lv: level })""")
+    page.reload()
+    page.evaluate(RUN)
+    page.click("#resume")
+    res = page.evaluate("""() => {
+      let near = Infinity;
+      for (const a of world.pins) for (const b of world.pins) if (a !== b) near = Math.min(near, Math.hypot(a.x - b.x, a.y - b.y));
+      return { phase, sc: score.join('-'), mi: misses.join('-'), n: throwN, near,
+        inside: world.pins.every(p => Math.abs(p.x) <= YARD_X + 1e-9 && p.y <= YARD_Y + 1e-9),
+        reachable: pointsOf(simulate(world.pins, cpuPlan(world.pins, 0, 0)).pins) > 0 };
+    }""")
+    assert res["phase"] == "aim" and res["sc"] == "30-41" and res["mi"] == "2-0" and res["n"] == 17
+    assert res["inside"] is True and res["reachable"] is True
+    assert res["near"] >= page.evaluate("GAP") - 1e-3
+
+
 # Eero's case: pins spread far out and to both sides, to the yard's edges.
 SPREAD = """() => { world.pins = setUp().map((p, i) => pin(p.n, [-2, 2, -1.5, 1.2, 0.3, -0.6, 1.6, -1.8, 0.8, 1.9, -1.0, 0.1][i],
   [4.2, 5.1, 5.8, 6.6, 7.4, 8.5, 4.8, 7.0, 6.1, 8.0, 3.3, 5.5][i])); turn = 0; toAim(); camSnap(); draw(); }"""

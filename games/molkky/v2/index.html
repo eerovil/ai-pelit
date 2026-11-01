@@ -263,18 +263,27 @@ function raise(pins) {
   for (const p of pins) {
     if (p.s === 'down') { p.x += p.dx * PH / 2; p.y += p.dy * PH / 2; }
     Object.assign(p, { s: 'up', a: 0, w: 0, vx: 0, vy: 0, on: -1, hit: [], wob: 0 });
-    p.y = Math.max(1.2, Math.min(YARD_Y, p.y)); p.x = Math.max(-YARD_X, Math.min(YARD_X, p.x));
   }
-  // Two stood up on the same spot are set a little apart.
-  for (let it = 0; it < 40; it++) {
+  inYard(pins);
+}
+// Every pin inside the yard's edge, and two stood up on the same spot set a little apart. A move
+// apart never takes a pin over the edge (v2 review, #270): a pin pushed against it stays there and
+// the other one moves inwards, towards the middle of the yard when they stand on the very same spot.
+const toYard = p => { p.y = Math.max(1.2, Math.min(YARD_Y, p.y)); p.x = Math.max(-YARD_X, Math.min(YARD_X, p.x)); };
+function inYard(pins) {
+  pins.forEach(toYard);
+  for (let it = 0; it < 200; it++) {
     let moved = false;
     for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
       const a = pins[i], b = pins[j];
       let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
       if (d >= GAP - 1e-6) continue;
-      if (d < 1e-6) { dx = Math.cos(i + j); dy = Math.sin(i + j); d = 1; }
+      if (d < 1e-6) {
+        dx = -(a.x + b.x) / 2 + Math.cos(i + j) * 0.01; dy = LINE + 1 - (a.y + b.y) / 2 + Math.sin(i + j) * 0.01; d = Math.hypot(dx, dy);
+      }
       const push = (GAP - Math.hypot(b.x - a.x, b.y - a.y)) / 2 + 1e-4;
       a.x -= dx / d * push; a.y -= dy / d * push; b.x += dx / d * push; b.y += dy / d * push;
+      toYard(a); toYard(b);
       moved = true;
     }
     if (!moved) break;
@@ -357,6 +366,8 @@ function newGame(resume) {
   players = [{ id: 'me', name: 'Sinä' }, { id: 'cpu', name: foeName(lv), cpu: true }];
   if (resume) {
     world = newWorld(resume.pins.map((q, i) => pin(FORM[i][0], q[0], q[1])));
+    // A game saved by v1 may have its pins far past reach: they are brought inside v2's yard.
+    inYard(world.pins);
     score = resume.sc.slice(); misses = resume.mi.slice(); outs = resume.ou.slice(); turn = resume.tu; throwN = resume.n;
   } else {
     world = newWorld(setUp());
