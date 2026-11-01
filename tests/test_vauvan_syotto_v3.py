@@ -112,6 +112,6 @@ def test_without_the_library_itself_it_still_plays_with_its_beeps(site, browser)
 
 def test_the_saves_of_v2_are_read_as_they_are(site, context):
     page = open_game(site, context)
-    page.evaluate("localStorage.setItem('ai-pelit:vauvan-syotto:taso', '4'); location.reload()")
-    page.wait_for_load_state()
+    page.evaluate("localStorage.setItem('ai-pelit:vauvan-syotto:taso', '4')")
+    page.reload()
     assert page.evaluate("level") == 4
