@@ -51,6 +51,28 @@ def test_each_moment_has_its_own_sound(site, browser):
     ctx.close()
 
 
+def test_the_other_games_and_a_second_round_sound_too(site, browser):
+    ctx, page = start(site, browser)
+    page.wait_for_function(f"{NAMES}.every(AiPelitAanet.ready)", timeout=10000)
+    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+    # Piilosta: found is the seen sound; Hippa: a tag is the named sound.
+    page.evaluate("pickMode('piilosta')")
+    page.evaluate("newRound('hide'); heard.splice(0); show(['found', people.indexOf(bots[0])])")
+    assert played(page) == ["onnistui"]
+    page.evaluate("pickMode('hippa')")
+    page.evaluate("""() => { newRound('hide'); heard.splice(0);
+      show(['tag', people.indexOf(bots[0]), people.indexOf(seeker === bots[0] ? bots[1] : seeker)]); }""")
+    assert played(page) == ["tappio"]
+    # Back to Kirkkis: a whole round to the end, then the next one; two events at once both sound.
+    page.evaluate("pickMode('kirkkis')")
+    page.evaluate("""() => { newRound('hide'); let t = 0; while (phase !== 'menu' && t < 260) { step(1 / 30); t += 1 / 30; }
+      newRound('seek'); heard.splice(0); const a = people.indexOf(bots[0]), b = people.indexOf(bots[1]);
+      show(['save', a]); show(['kirk', [b]]); }""")
+    assert played(page) == ["onnistui", "tappio"]
+    assert page.errors == []
+    ctx.close()
+
+
 def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
     ctx, page = start(site, browser, silent=True)
     page.evaluate("""() => { const b = people.indexOf(bots[0]);
