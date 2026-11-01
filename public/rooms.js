@@ -702,8 +702,9 @@
     if (!text && on) {
       var who = speakers();
       // The phone held the sound back (no tap on this page yet): a tap anywhere lets it play.
+      // The hint goes on its own line, so a narrow phone shows it whole (#333).
       var held = Object.keys(voice.peers).some(function (id) { var a = voice.peers[id].audio; return a && a.paused && voice.peers[id].talking; });
-      if (who.length) text = '🔊 ' + who.join(', ') + (held ? ' – napauta ruutua' : '');
+      if (who.length) text = '🔊 ' + who.join(', ') + (held ? '\nNapauta ruutua' : '');
     }
     var k = on + cls + text;
     if (k === vShown) return;
@@ -771,7 +772,7 @@
     '#aipr-mic.none{opacity:.45}',
     '#aipr-mic.wait{background:#e0a526}',
     '#aipr-mic.live{background:#d33b2c;transform:scale(1.15)}',
-    '#aipr-talk{position:fixed;z-index:2147483642;max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 12px;border-radius:14px;background:rgba(40,30,50,.85);color:#fff;font:700 15px/1.3 system-ui,sans-serif;pointer-events:none}',
+    '#aipr-talk{position:fixed;z-index:2147483642;max-width:60vw;white-space:pre-line;overflow-wrap:anywhere;padding:5px 12px;border-radius:14px;background:rgba(40,30,50,.85);color:#fff;font:700 15px/1.3 system-ui,sans-serif;pointer-events:none}',
     // On its side the athletics events' action buttons fill both edges: the chip goes to the top
     // bar instead, right of the middle, where the games' scores are not.
     '@media (orientation:landscape) and (max-height:500px){' +

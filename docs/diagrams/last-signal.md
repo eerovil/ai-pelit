@@ -9,6 +9,10 @@ logs and the nomads, who trade what they know for food, medicine and supplies �
 Nothing ends the game: hunger, air, cold and the hull each send the player back. 2–4 phones can play one game: the
 game and its save are the host's. Since v13 the research station Aurora (the old A-3) stands on the ice over the first
 opening: SISU docks in its moon pool and the tower opens straight into it, and its three survivors need a new water pump.
+v15 (#329) rebuilds the sea (far more floor relief, big icebergs to pass under, rock bridges with a tunnel, wrecks in
+hollows, a far background layer), lets the sonar tell of every new contact, opens small openings where only the tower
+comes up, starts Aurora dark and empty (its power first, then the nomads moving in, then the pump from the nearest
+wreck, Saukko), and lets a fed player sleep through the autopilot's trip.
 
 ```mermaid
 flowchart TD
@@ -17,6 +21,7 @@ flowchart TD
   MP --> QW
   B --> C[📡 Ping 150 m nimeää lähikohteet, sonar kuulee 300 m]
   C --> B
+  C --> SO[📡 Sonar kertoo jokaisesta uudesta kaiusta: laji, koko, etäisyys]
   B --> F{Runko loppu kolhuista tai valokaloista?}
   F -- Kyllä --> G[Hätänousu 40 m, runko 25 %]
   G --> B
@@ -29,6 +34,8 @@ flowchart TD
   QR -- Varasto --> VR[🗄️ Laatikko hyllyyn, 8 paikkaa; sisältö varastoon; reppuun nomadeille]
   QR -- Työpaja --> S[Korjaa runko, säiliö, letku, valonheitin]
   QR -- Punkka --> T[Nuku: uusi päivä, virta tuo pieniä löytöjä]
+  T --> FT{Autopilotti päällä ja syöty tänään?}
+  FT -- Kyllä --> FT2[🧭 Yön aikana SISU ajaa perille]
   QR -- Labra ja kartat --> MK[🗺️ Merikartta: tutkittu meri, kontaktit ja 🔍 alueet]
   MK --> AP[🧭 Autopilotti kohteeseen tai alueelle, matkanopeus avovedessä]
   AP --> B
@@ -36,12 +43,18 @@ flowchart TD
   QR -- Ilmalukko --> I[Sukeltaja ui: hylyissä ohuet seinät, huonekalut ja paljon tavaraa]
   QR -- Ohjaamo --> U{Radio: vahvistin ja antenni?}
   QR -- Torni, SISU railossa --> JW[Kävele jäällä: 🥶 laskee ulkona]
-  QR -- Torni, SISU Auroran railossa --> AU[🚪 Aurora: kolme kerrosta tikkailla, Ingrid, Jon ja Mari]
-  AU --> PM{Pumppu käsissä?}
+  QR -- Torni, pieni avanto --> PA[Vain torni pinnalla: lankut reunoille]
+  PA --> JW
+  QR -- Torni, SISU Auroran railossa --> AU[🚪 Aurora: kolme kerrosta tikkailla, aluksi pimeä ja tyhjä]
+  AU --> PW{Sähköt korjattu?}
+  PW -- Ei --> FZ[🔌 Varasulakkeet alamoduulista sähkökeskukseen]
+  FZ --> JA
+  PW -- Kyllä, nomadit asemalla --> PM{Pumppu käsissä?}
   PM -- Ei --> VI
   PM -- Kyllä --> GR[🌱 Vesiviljely toimii: tuoretta ruokaa päivittäin ja vihje]
   GR --> VI
   B --> TE[Jäävuoria, jääkölejä, pohjan kasvillisuus]
+  TE --> TW[Mutkitteleva reitti: harjanteet, isot jäävuoret alta, kalliosillan tunneli, hylyt syvänteissä, taustakerros]
   I --> KIT{Kumpi puku?}
   KIT -- Säiliö --> TA2[Happi vähenee, ilmataskut täyttävät, ei alle 260 m]
   KIT -- Letku --> HO[Letku kiertää kulmat, pituus pysäyttää, ei kulu]
@@ -67,6 +80,8 @@ flowchart TD
   I --> DK[Jäävuoren luolat: salit ja ahtaat käytävät, vain valokeila näyttää]
   AU --> JA[Auroran radiopäiväkirja kertoo nomadeista]
   JW --> JN[🔥 Nomadien leiri: vie ruokaa, lääkkeitä, tarvikkeita]
+  JN --> SU[🏠 Kerro: Aurorassa on suojaa, koko leiri muuttaa asemalle]
+  SU --> AU
   JN --> VI
   JW --> JS[Sääasema: kaksi kerrosta tikkailla, laatikoita]
   JW --> JH[Tornin kautta sisään: reppu varastoon, laatikko mukana]
@@ -81,6 +96,10 @@ flowchart TD
   class F,J,U,W,QR,KIT,LB2,PM amber
   class I,K,P,R,S,T,PU,TA2,HO,HA,AP,DK,JW,JA,JS,JH,VR,LA,LF,SE,AU,TE teal
   class G,N,X rose
+  class SO,FT2 blue
+  class FT,PW amber
+  class PA,FZ,TW teal
+  class SU green
   class L,V,Y,NE,VI,JN,GR green
 ```
 
@@ -93,6 +112,16 @@ flowchart TD
 - **green**: the story and the hints moving on
 
 ## Boxes
+
+- **📡 Sonar kertoo jokaisesta uudesta kaiusta: laji, koko, etäisyys**: v15 (#329): `mapStep()` in `games/last-signal/v15/world.js` calls `heardNew()` for each contact heard the first time; `sonarText()` says what it sounds like (`sonarWord()`: metallinen kohde, onkalo, avovettä jään yllä, pieni avanto jäässä, pieni kaiku, heikko signaali), its size and how far and which way. `G.sonarQ` shows them one at a time under the goal (`#sonarMsg`, in `step()` in `play.js`); the host sends each to its friends (`{t: 'sonar'}`). The start's goal no longer mentions food or the container.
+- **Autopilotti päällä ja syöty tänään?**: v15: in the bunk room, with the autopilot set, "🧭 Nuku, autopilotti ajaa perille" (`act('sleepgo')` in `game.js`) works only once a meal was eaten today (`s.ate`, set by `act('eat')`); otherwise the button says to eat first.
+- **🧭 Yön aikana SISU ajaa perille**: `sleep(true)` in `play.js`: SISU moves to the route's end (surfaced in an opening), the chart is drawn along the way and the sonar hears what it passed, each contact told (`heardNew()`) and listed with its kind, size and distance in the day's card, which also says where SISU is.
+- **Vain torni pinnalla: lankut reunoille**: v15: `HOLES` with a third number (1) are small (18 m): SISU lies at `SURF_S` (`holeSurf()`), its hull under the ice and only the tower's top out of the water; `groundAt()` puts the person on the tower's top with a plank to each edge (`towerSpan()`).
+- **🚪 Aurora: kolme kerrosta tikkailla, aluksi pimeä ja tyhjä**: v15: until `flags.sahko` Aurora is dark (only the person's own light, `drawAurora()` in `scenery.js`) and nobody lives there; its first visit says so (`flags.pimea`, `stepIce()`), and its finds wait in the dark. v15 saves under `peli15`, reading v13's `peli13` once (`toW15()`): SISU waits by Aurora again, the chart starts from what the save knew, and a save already past the start finds the lights on (and the nomads moved in once it had traded or met Ingrid).
+- **Sähköt korjattu?**: `flags.sahko`, set by `act('power')` at the fuse box (`FUSE`, `nearFuse()` in `cargo.js`).
+- **🔌 Varasulakkeet alamoduulista sähkökeskukseen**: the spare fuses (`Z`, kind `sulake`) lie in Aurora's underwater module (`asema`); brought home they are in the stores, and "🔌 Vaihda sulakkeet" puts them in: the lights come on and the radio diary can be read.
+- **🏠 Kerro: Aurorassa on suojaa, koko leiri muuttaa asemalle**: v15 (Eero's choice: the whole camp moves): with the power on, the elder's card (`campCard()`) offers it (`act('suoja')`, `flags.suoja`); offered first even when every trade is already done; the camp is left cold and empty (`drawCamp()`, `nearFire()`), Ingrid, Jon, Mari and the elder (`ELDER`, in the mess) live in Aurora, and trading goes on there (`nearElder()`).
+- **Mutkitteleva reitti: harjanteet, isot jäävuoret alta, kalliosillan tunneli, hylyt syvänteissä, taustakerros**: v15: `buildFloor()` in `world.js` rebuilds the floor every 6 m from the old shape with far more relief (`relief()`), `RIDGES` rising high and `HOLLOWS` (rims round each wreck, so it lies off the way); `BERGS` hang down to 168 m, narrow over a ridge; `ROCKS` are rock bridges, over the top or through the tunnel under (`inRock()` in `solid()`); `drawBackdrop()` in `draw.js` draws far ridges and icebergs at half speed behind the sea, their edge faintly over the dark (`drawBackEdge()`). The autopilot's `subFits()` looks at the floor every 3 m under SISU.
 
 - **Aja SISUa: ohjain tai sormi merellä, runko kestää kaiken syvyyden**: v13: a finger held on the sea steers SISU towards it (`G.subTo`, `seaPoint()` in `draw.js`); the stick takes over. `stepSub()` in `games/last-signal/v14/play.js` (v9 on are split into files, #161) turns the stick, or the autopilot's `steer`, into speed; SISU bumps off the floor (`floorY()`), the ice, the iceberg (`inBerg()`) and the wrecks (`solid(…, true)`), a hard bump costing hull (`bump()`). Since v12 (#300) the hull is no longer reinforced and the sea's pressure does nothing (`pressure()` and `RATING` are gone): the HUD shows only the depth. The world (`world.js`) is `WX()` of v11's east of the bay, 13.5 km wide; the floor's long stretches get gentle rises and dips.
 - **📡 Ping 150 m nimeää lähikohteet, sonar kuulee 300 m**: `doPing()` in `game.js`: contacts within `PING` (150 m, `pingR()`) become known and the echo draws the floor onto the chart; `mapStep()` in `world.js` hears contacts within `HEAR` (300 m, v11: 1000 m). At the helm `drawSonar()` in `draw.js` shows the heard ones at the screen's edge, and the goal's search area (gold) until SISU is in it.
@@ -132,7 +161,7 @@ flowchart TD
 - **👥 Kaverit: huone, 2–4 puhelinta, peli on tekijän**: `rooms.js`; the host keeps the game, crates and their physics; every change goes through `act()` / `doAct()` (v12: `lift`, `drop`, `shelf`, `unshelf`, `pack`, `trade`). A friend whose phone reloads or leaves (`letGo()`) drops their crate where they were, and goods they packed go back into the stores (`unpackGood()`).
 - **Pyörryt: uusi päivä, kunto 35**: `faint()`; packed goods are lost, crates in hands fall.
 - **🚪 Aurora: kolme kerrosta tikkailla, Ingrid, Jon ja Mari**: v13 (#300): `AUR` in `world.js` replaces v12's one-floor A-3 on the shelf (Eero: Aurora is A-3): a station on the ice over the first opening (`pool: 0`). Surfaced there, the tower's button is "🚪 Aurora-asemalle" (`goIce()`): the person comes up onto SISU's back in the moon pool, inside the station (`groundAt()`: the dock's floor has the pool in it). Three floors (`floors`) joined by ladders (`ladders`, climbed with the stick or by a tap on another floor, `tapIce()`); no door out. `drawAurora()` and `survivor()` in `scenery.js` draw it. Back down: "⬇️ Alas torniin" by the hatch.
-- **Pumppu käsissä?**: "💬 Puhu Ingridille" by her in the hydroponics (`nearIngrid()`, `auroraCard()`, `auroraAct()` in `cargo.js`): the first talk puts Kestrel's area on the chart (`f.ingrid`); the pump (`k: 'pumppu'`, `X` in Kestrel's hold) is carried like a crate, never shelved; "🔧 Anna pumppu".
+- **Pumppu käsissä?**: "💬 Puhu Ingridille" by her in the hydroponics (`nearIngrid()`, `auroraCard()`, `auroraAct()` in `cargo.js`): the first talk puts Saukko's area on the chart (`f.ingrid`; v15: Saukko is the nearest wreck, by Aurora, and the pump is `X` in its hold); the pump (`k: 'pumppu'`) is carried like a crate and, since v15, shelved like one; "🔧 Anna pumppu".
 - **🌱 Vesiviljely toimii: tuoretta ruokaa päivittäin ja vihje**: `f.pumppu`: the racks turn green, the containers go on the chart (`learn('kontit')`), and once a day "🥬 Ota tuoretta ruokaa" puts two rations in the bag (`tuore:` finds, banked as food). `goalText()` asks for the pump after the wreck field, before the antenna.
 - **Jäävuoria, jääkölejä, pohjan kasvillisuus**: v13: `BERGS` (five icebergs of other sizes, solid, rough), `keel()` (ice hanging under the sea ice, never by an opening), rockier floor ridges; `drawSmallBergs()`, ridges on the ice in `drawIce()`, and `drawGrowth()` in `draw.js` (kelp, sea grass, starfish, anemones in the shallows; sponges and coral fans deeper; sea pens in the deep). The autopilot keeps clear (`subFits()`).
 - **Sukeltaja ui: hylyissä ohuet seinät, huonekalut ja paljon tavaraa**, v13 scale: wreck cells are 1.5 m (`C`), a room 2.7 m clear, the furniture life-sized (`drawDecor()`), ladders through hatches (`H`); every ship has a bridge, cabins, a galley, holds and an engine room. SISU is drawn and moves 15 % bigger (`SS`) while the people keep their size, so heads clear the lower deck. The sea's hiss, the engine and the steps in the snow are quieter. v13 saves under `peli13`, reading v12's `peli12` once.
