@@ -100,9 +100,52 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
     try:
         ctx.route("**/*.mp3", lambda route: route.abort())
+        page = open_game(site, ctx, {"ennatys": 2.9})
+        # Every beep the game asks for, by its first frequency, in window.beeps.
+        page.evaluate("""() => {
+          window.beeps = [];
+          const real = window.tone;
+          window.tone = (f, ...rest) => { beeps.push(f); return real(f, ...rest); };
+        }""")
+        beeps = lambda: page.evaluate("beeps.splice(0)")
+        page.click("#go")
+        page.evaluate("th.t = 99; step(0.001)")
+        assert beeps() == [660]                      # the turn
+        page.evaluate("press(1); press(2)")
+        assert beeps() == [190, 230]                 # the run-up's steps
+        page.evaluate("go(1.05, 8, 0.3, 0.46)")
+        assert beeps() == [300, 520, 700]            # take-off, arch, legs
+        page.evaluate("quick()")
+        assert beeps() == [880]                      # a clear (its second note follows by timer)
+        for _ in range(80):  # v3.win_meet without its click: this meet is already on
+            if page.evaluate("K.comp.over"):
+                break
+            page.evaluate("ready(); if (soleWinner(mine()) && bestOf(mine()) >= 1.95) { stopMeet(); quick(); } else good()")
+        assert page.evaluate("K.comp.over && K.ending.place === 1")
+        page.evaluate("beeps.splice(0); for (let i = 0; i < 60 * 15; i++) step(1 / 60)")
+        assert sorted(set(beeps())) == [523, 659, 784]   # a chime per medal
+        assert played(page) == []
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_without_the_sound_files_a_knocked_bar_and_running_past_still_beep(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route("**/*.mp3", lambda route: route.abort())
         page = open_game(site, ctx)
-        v3.win_meet(page)
-        page.evaluate("for (let i = 0; i < 60 * 15; i++) step(1 / 60)")
+        page.evaluate("""() => {
+          window.beeps = [];
+          const real = window.tone;
+          window.tone = (f, ...rest) => { beeps.push(f); return real(f, ...rest); };
+        }""")
+        page.click("#go")
+        page.evaluate("go(1.05, 8, null, null); beeps.splice(0); quick()")
+        assert page.evaluate("beeps.splice(0)") == [150]   # the bar falls
+        page.evaluate("for (let i = 0; i < 600 && !(th && th.mine && th.phase === 'wait'); i++) step(1 / 60)")
+        page.evaluate("ready(); th.phase = 'run'; th.v = 6; th.x = RUN_PAST - 0.01; beeps.splice(0); step(1 / 60)")
+        assert page.evaluate("beeps.splice(0)") == [160]   # running past
         assert played(page) == []
         assert page.errors == []
     finally:
