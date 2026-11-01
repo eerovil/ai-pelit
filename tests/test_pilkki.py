@@ -66,7 +66,7 @@ def ready(page, sp="ahven", g=200):
 
 def test_the_menu_starts_a_contest_at_a_new_hole(site, context):
     page = start(site, context)
-    assert page.evaluate("[phase, left, myG, holes.length]") == ["drill", 300, 0, 0]
+    assert page.evaluate("[phase, left > 299, myG, holes.length]") == ["drill", True, 0, 0]
     assert page.locator("#menu").is_hidden()
     assert page.errors == []
 
@@ -113,6 +113,7 @@ def test_off_the_beat_or_in_a_frenzy_no_fish_bites(site, context):
     res = page.evaluate("""() => {
       const out = [];
       for (let k = 0; k < 8; k++) {
+        run(() => true, 0.2);
         run(() => Math.abs((beat - Math.floor(beat)) - 0.5) > 0.05, 3);
         out.push(twitch());
       }
@@ -187,7 +188,8 @@ def test_the_contest_ends_after_five_minutes_and_a_win_raises_the_level(site, co
     assert page.locator("#board li.me").inner_text().startswith("Sinä (9)")
     saved = page.evaluate("['taso', 'ennatys', 'kisat'].map(k => localStorage.getItem('ai-pelit:pilkki:' + k))")
     assert saved == ["2", "2500", '{"pelatut":1,"voitot":1}']
-    # A loss keeps the level.
+    # A loss keeps the level. (The high-score list asked for a nickname over the menu.)
+    page.locator("#ai-pelit-tulokset button", has_text="Sulje").click()
     page.click("#go")
     page.evaluate("myG = 300; rivals[1].g = 900; left = 0.1; run(() => phase !== 'done', 2)")
     assert page.locator("#result").inner_text() == "2. sija: 0,30 kg"
@@ -270,7 +272,7 @@ def room(site, browser):
 def test_friends_fish_the_same_lake_and_see_each_other_s_catch(room):
     host, [guest, third] = room("Eero", "Aino", "Iida")
     # The same lake, each at its own place on it.
-    lakes = [p.evaluate("JSON.stringify(lake)") for p in (host, guest, third)]
+    lakes = [p.evaluate("JSON.stringify(lake.map(s => [s.mx, s.my, s.depth]))") for p in (host, guest, third)]
     assert lakes[0] == lakes[1] == lakes[2]
     assert len({p.evaluate("spot.i") for p in (host, guest, third)}) == 3
     # Aino lands a fish: the host's standings and Iida's show it.

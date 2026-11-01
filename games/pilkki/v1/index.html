@@ -174,7 +174,7 @@ function goTo(s, now) {
   for (let i = 0; i < n; i++) fish.push(newFish(spot));
   spot.start = n;
   jigD = 0; jigGoal = null;
-  if (!now) { phase = 'walk'; walkT = 1.2 + Math.hypot(walkTo.mx - walkTo.from.mx, walkTo.my - walkTo.from.my) * 4; phaseT = 0; return; }
+  if (!now) { phase = 'walk'; walkT = 1.2 + Math.hypot(walkTo.to.mx - walkTo.from.mx, walkTo.to.my - walkTo.from.my) * 4; phaseT = 0; return; }
   if (holes.includes(spot.i)) toJig(); else { phase = 'drill'; drill = 0; phaseT = 0; }
 }
 function toJig() { phase = 'jig'; phaseT = 0; biter = fight = null; }
@@ -346,6 +346,8 @@ function turnAuger(da) {
     S.play('jaa', { vol: 0.6 }); S.play('loiskis', { vol: 0.35, delay: 0.15 });
     say('Reikä on valmis!', '#7ee081');
     toJig();
+    // The finger that drilled does not go on to move the jig.
+    touch.id = null;
     keepContest();
   }
 }
@@ -512,7 +514,7 @@ function resize() {
   safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
   wide = W > H;
   iceY = safeT + (wide ? 104 : 54 + Math.max(96, H * 0.16));
-  holeX = wide ? safeL + (W - safeL - safeR) * 0.3 : W * 0.6;
+  holeX = wide ? Math.max(safeL + 210, safeL + (W - safeL - safeR) * 0.3) : W * 0.6;
   waterTop = iceY + 16;
   meterY = H - safeB - (wide ? 22 : 40);
   waterBot = meterY - (wide ? 44 : 56);
