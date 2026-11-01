@@ -11,10 +11,11 @@
 //   });
 //
 // The Halloween costumes below are added after the game's own (pass `halloween: false` to leave
-// them out), and come first in the picker around Halloween. Every outfit is a plain palette the
+// them out), and come first in the picker around Halloween. The Tylypahka costumes (#321: Harry,
+// Ron and Hermione in school robes) follow them (pass `tylypahka: false` to leave them out). Every outfit is a plain palette the
 // game's own drawing reads: `skin`, `hair`, `top`, `bottom`, `shoe`, `cape` (a colour or null) and
 // `head` (null, or a costume head that head() draws). A game reads what it needs and ignores the
-// rest; outfit.halloween is true for a costume.
+// rest; outfit.halloween is true for a Halloween costume, outfit.tylypahka for a Tylypahka one.
 //
 // The choice is saved per game on the phone (ai-pelit:_asut:<slug>), so every version of a game
 // shares it. AiPelitOutfits.current() is the outfit now; .get(id) is any outfit by id (for a
@@ -38,6 +39,19 @@
     { id: 'muumio', name: 'Muumio', emoji: '🩹', skin: '#e9dfc4', hair: '#e9dfc4', top: '#e2d6b6', bottom: '#d6c9a6', shoe: '#c4b690', cape: null, head: 'mummy' },
   ];
   HALLOWEEN.forEach(function (o) { o.halloween = true; });
+
+  // ---- The Tylypahka costumes (#321): a black school robe (the cape) over the house jumper ----
+  // `scarf`, `fur`, `tail`, `belly` and `leg` are for Orava's squirrel, whose fur takes each one's
+  // hair colour; head() draws the hair, glasses and scarf in the games with a person.
+  var TYLYPAHKA = [
+    { id: 'harry', name: 'Harry', emoji: '⚡', skin: '#f1c9a5', hair: '#1d1712', top: '#7f0909', bottom: '#26262c', shoe: '#141414', cape: '#18181e', scarf: '#9b1b1b', head: 'harry',
+      fur: '#2e2724', tail: '#241e1b', belly: '#5a4c44', leg: '#1d1816' },
+    { id: 'ron', name: 'Ron', emoji: '🐀', skin: '#f6d4bb', hair: '#d4611c', top: '#8a3b2a', bottom: '#26262c', shoe: '#141414', cape: '#18181e', scarf: '#9b1b1b', head: 'ron',
+      fur: '#d4611c', tail: '#c4501f', belly: '#f3e1c0', leg: '#a33e15' },
+    { id: 'hermione', name: 'Hermione', emoji: '📚', skin: '#efc39e', hair: '#6b3f1f', top: '#6e7480', bottom: '#26262c', shoe: '#141414', cape: '#18181e', scarf: '#9b1b1b', head: 'hermione',
+      fur: '#7a4a2a', tail: '#6b3f1f', belly: '#e8d2b4', leg: '#5c3519' },
+  ];
+  TYLYPAHKA.forEach(function (o) { o.tylypahka = true; });
 
   // Around Halloween (20 October to 2 November) the costumes come first.
   function season(d) {
@@ -120,10 +134,67 @@
       c.stroke(); c.restore();
       c.fillStyle = '#2a2018'; c.fillRect(r * 0.2, -r * 0.3, r * 0.8, r * 0.26);
       circle(r * 0.55, -r * 0.17, Math.max(1, r * 0.1), '#e8ff6a');
+    } else if (kind === 'harry' || kind === 'ron' || kind === 'hermione') {
+      wizard(c, kind, r, circle, tri);
     } else {
       circle(0, 0, r, '#f4c7a1');
     }
     ctx.restore();
+  }
+
+  // A Tylypahka head, drawn like the costume heads above: the house scarf at the neck, the hair
+  // behind and over the face, an eye, a mouth; Harry's round glasses and scar, Ron's freckles,
+  // Hermione's bushy hair down past the shoulders.
+  function wizard(c, kind, r, circle, tri) {
+    var skin = { harry: '#f1c9a5', ron: '#f6d4bb', hermione: '#efc39e' }[kind];
+    var hair = { harry: '#1d1712', ron: '#d4611c', hermione: '#6b3f1f' }[kind];
+    var i;
+    // The scarf: a red band with gold stripes round the neck, its end hanging at the back.
+    c.fillStyle = '#9b1b1b';
+    c.fillRect(-r * 0.6, r * 0.78, r * 1.15, r * 0.32);
+    c.fillRect(-r * 0.62, r * 0.85, r * 0.3, r * 0.95);
+    c.fillStyle = '#e8b730';
+    c.fillRect(-r * 0.6, r * 0.9, r * 1.15, r * 0.08);
+    c.fillRect(-r * 0.62, r * 1.3, r * 0.3, r * 0.1);
+    c.fillRect(-r * 0.62, r * 1.55, r * 0.3, r * 0.1);
+    if (kind === 'hermione') {
+      // Bushy hair behind the head, down past the neck.
+      var puffs = [[-0.55, -0.55, 0.6], [-0.75, 0, 0.62], [-0.65, 0.55, 0.58], [-0.2, 0.75, 0.5], [0, -0.8, 0.55], [0.45, -0.7, 0.45], [-0.95, 0.85, 0.42]];
+      for (i = 0; i < puffs.length; i++) circle(r * puffs[i][0], r * puffs[i][1], r * puffs[i][2], hair);
+    } else {
+      circle(-r * 0.3, -r * 0.2, r * 0.85, hair); // the back of the head
+    }
+    circle(r * 0.05, r * 0.02, r * 0.92, skin);
+    c.fillStyle = hair;
+    c.beginPath(); c.arc(0, 0, r * 1.02, Math.PI * 0.95, Math.PI * 1.75); c.lineTo(r * 0.1, -r * 0.35); c.closePath(); c.fill();
+    if (kind === 'harry') {
+      // Messy black tufts on top and a fringe over the forehead.
+      for (i = 0; i < 5; i++) {
+        var a = Math.PI * (1.05 + i * 0.17), x = Math.cos(a) * r * 0.95, y = Math.sin(a) * r * 0.95;
+        tri([x - r * 0.2, y + r * 0.1], [x + r * 0.2, y + r * 0.1], [x + Math.cos(a) * r * 0.35, y + Math.sin(a) * r * 0.35 - r * 0.05], hair);
+      }
+      tri([r * 0.05, -r * 0.8], [r * 0.6, -r * 0.75], [r * 0.25, -r * 0.4], hair);
+      tri([r * 0.45, -r * 0.8], [r * 0.85, -r * 0.55], [r * 0.7, -r * 0.42], hair);
+    } else if (kind === 'ron') {
+      // A longer red fringe, and hair down over the ear.
+      tri([r * 0.0, -r * 0.85], [r * 0.85, -r * 0.6], [r * 0.45, -r * 0.35], hair);
+      circle(-r * 0.5, r * 0.02, r * 0.42, hair);
+    } else {
+      tri([r * 0.0, -r * 0.9], [r * 0.9, -r * 0.55], [r * 0.5, -r * 0.3], hair);
+    }
+    circle(r * 0.55, -r * 0.05, Math.max(1, r * 0.11), '#2a1e14'); // the eye
+    c.strokeStyle = '#9a4a3a'; c.lineWidth = Math.max(1, r * 0.07);
+    c.beginPath(); c.moveTo(r * 0.45, r * 0.48); c.lineTo(r * 0.75, r * 0.45); c.stroke(); // the mouth
+    if (kind === 'harry') {
+      // The round glasses, their arm back to the ear, and the lightning scar.
+      c.strokeStyle = '#1a1a1a'; c.lineWidth = Math.max(1, r * 0.08);
+      c.beginPath(); c.arc(r * 0.55, -r * 0.05, r * 0.25, 0, 7); c.stroke();
+      c.beginPath(); c.moveTo(r * 0.3, -r * 0.08); c.lineTo(-r * 0.25, -r * 0.15); c.stroke();
+      c.strokeStyle = '#c0392b'; c.lineWidth = Math.max(1, r * 0.07);
+      c.beginPath(); c.moveTo(r * 0.42, -r * 0.62); c.lineTo(r * 0.3, -r * 0.48); c.lineTo(r * 0.44, -r * 0.46); c.lineTo(r * 0.32, -r * 0.32); c.stroke();
+    } else if (kind === 'ron') {
+      for (i = 0; i < 4; i++) circle(r * (0.3 + (i % 2) * 0.18 + i * 0.05), r * (0.2 + (i % 2) * 0.1), Math.max(0.6, r * 0.05), '#c47a4a');
+    }
   }
 
   // ---- The picker ----
@@ -147,8 +218,8 @@
       ';border-radius:12px;background:' + (o.halloween ? '#2b2140' : '#2a3358') + ';color:#fff;padding:4px 2px 6px;font:600 13px system-ui,sans-serif;touch-action:manipulation;min-width:0');
     b.className = 'asu' + (picked ? ' valittu' : '');
     b.setAttribute('data-asu', o.id);
-    // A low, wide screen gets smaller cards, so both rows fit without scrolling.
-    var cw = innerHeight < 500 ? 52 : 72, ch = innerHeight < 500 ? 58 : 80;
+    // A low, wide screen gets smaller cards, so every group fits without scrolling.
+    var cw = innerHeight < 500 ? 52 : 72, ch = innerHeight < 500 ? 50 : 80;
     var cv = el('canvas', 'width:' + cw + 'px;height:' + ch + 'px;display:block');
     var dpr = Math.min(window.devicePixelRatio || 1, 3);
     cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
@@ -169,12 +240,17 @@
 
   function fill(grid) {
     grid.textContent = '';
-    var now = current(), own = [], costumes = [];
-    outfits.forEach(function (o) { (o.halloween ? costumes : own).push(o); });
-    var groups = season() ? [['🎃 Halloween', costumes], ['Tavalliset', own]] : [['Tavalliset', own], ['🎃 Halloween', costumes]];
+    var now = current(), own = [], costumes = [], school = [];
+    outfits.forEach(function (o) { (o.halloween ? costumes : o.tylypahka ? school : own).push(o); });
+    var groups = season() ? [['🎃 Halloween', costumes], ['Tavalliset', own], ['⚡ Tylypahka', school]]
+      : [['Tavalliset', own], ['⚡ Tylypahka', school], ['🎃 Halloween', costumes]];
     groups.forEach(function (g) {
       if (!g[1].length) return;
-      grid.appendChild(el('div', 'grid-column:1/-1;font-weight:700;color:#cfd6ee;margin-top:4px', g[0]));
+      // On a low screen the group's name is a cell before its cards, not a row of its own (#321:
+      // a third group's row pushed the last cards off a sideways phone).
+      grid.appendChild(innerHeight < 500
+        ? el('div', 'display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:12px;color:#cfd6ee', g[0])
+        : el('div', 'grid-column:1/-1;font-weight:700;color:#cfd6ee;margin-top:4px', g[0]));
       g[1].forEach(function (o) { grid.appendChild(card(o, now && o.id === now.id, grid)); });
     });
   }
@@ -201,7 +277,7 @@
     box.appendChild(top);
     if (season() && innerHeight >= 500) box.appendChild(el('div', 'color:#ffb35c;font-size:13px', 'Hyvää Halloweenia! Pukeudu kurpitsaksi, noidaksi tai haamuksi.'));
     var low = innerHeight < 500;
-    var grid = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(' + (low ? 74 : 82) + 'px,1fr));gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
+    var grid = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(' + (low ? 64 : 82) + 'px,1fr));gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
     box.appendChild(grid);
     fill(grid);
     panel.onclick = function (e) { if (e.target === panel) close(); };
@@ -221,6 +297,7 @@
       opts = opts || {};
       outfits = (opts.outfits || []).slice();
       if (opts.halloween !== false) outfits = outfits.concat(HALLOWEEN);
+      if (opts.tylypahka !== false) outfits = outfits.concat(TYLYPAHKA);
       drawFn = opts.draw || null;
       changeFn = opts.change || null;
       return current();
@@ -232,6 +309,7 @@
     close: close,
     isOpen: function () { return !!panel; },
     halloween: HALLOWEEN,
+    tylypahka: TYLYPAHKA,
     season: season,
     head: head,
   };
