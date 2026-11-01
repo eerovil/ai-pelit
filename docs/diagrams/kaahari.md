@@ -1,6 +1,6 @@
 # Kaahari: one kart race
 
-How one race of Kaahari plays (v2, and v3 the same race played sideways too, #95: the track view widens, steering lower left, LIUKU and ESINE lower right, menus in two columns). The player drives a kart seen from behind it, three laps
+How one race of Kaahari plays (v2, and v3 the same race played sideways too, #95: the track view widens, steering lower left, LIUKU and ESINE lower right, menus in two columns; v4 the same race with recorded sounds, #216). The player drives a kart seen from behind it, three laps
 round one of three tracks: alone against five computer drivers, or in a room with 2–6 phones
 whose empty places computer drivers fill. The gas is always on: the player
 steers, slides through bends for a turbo, and picks up items and fruit on the way.
@@ -27,6 +27,7 @@ flowchart TD
   H --> C
   I --> C
   C --> M{Kolme kierrosta ajettu?}
+  C -.-> Z[Äänet: moottori vauhdin mukaan, tapahtumien äänet]
   M -- Ei --> C
   M -- Kyllä --> S{Yksin vai huoneessa?}
   S -- Yksin --> N{Ensimmäinen?}
@@ -37,7 +38,7 @@ flowchart TD
   N -- Ei --> P[Sija ja ajat, sama taso]
   O --> Q[Ratakohtainen ennätys]
   P --> Q
-  class A,B,C blue
+  class A,B,C,Z blue
   class D,J,L,M,N,S amber
   class R,U,V violet
   class E,F,G,K teal
@@ -47,7 +48,7 @@ flowchart TD
 
 ## Colours
 
-- **blue**: what the player sees and does
+- **blue**: what the player sees, hears and does
 - **amber**: a check that decides the path
 - **teal**: what helps the kart go faster
 - **violet**: the race in a room with friends
@@ -73,4 +74,5 @@ flowchart TD
 - **Kolme kierrosta ajettu?**: `k.prog` counts the distance along the track past the line; each full lap behind adds one, and the third finishes the kart (`fin`).
 - **Voitto: taso nousee, nopeammat kuskit**: `finishMe()` saves `taso`, `voitot` and `kisat`; a higher level makes the computer drivers faster (`cpuSkill()`) and gives them more turbos out of bends (`think()`).
 - **Sija ja ajat, sama taso**: `showResult()` lists the finishing order, every driver's time and the player's best lap; a driver still on the track gets the time it would finish in at its average speed so far.
+- **Äänet: moottori vauhdin mukaan, tapahtumien äänet**: v4 (`games/kaahari/v4/index.html`) loads the shared sound library `lib/aanet-2/` (#205). `engineOn()` starts the `kartti` loop and `engineSound()` sets its rate by the kart's speed each frame; until the file has loaded, the old oscillator engine hums instead. The countdown and each spark colour play `valinta`, a lap `onnistui`, the finish `voitto` or `tappio` (alone, with `aplodit`; in a room `aplodit` on the line and the place at the end), a spin `kitka`, the slide's hop `hyppy`, every turbo `nousu`, a crate or fruit `valinta`, a dropped TNT `naksu`, a thrown bomb `suhahdus`, a blast `rajahdys` (quieter farther off), the barrier `metalli`, a bump `osuma`. Each falls back to its old beep when it cannot play, and if `aanet.js` itself did not load, a silent stand-in for it keeps the game on its beeps; the bubble keeps its own beep, as the library has no sound for it.
 - **Ratakohtainen ennätys**: the fastest race on each track is saved in `ennatykset` and shown on its track button.

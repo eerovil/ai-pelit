@@ -4,11 +4,13 @@
 # time and took 9 of a 14-minute run. A Work agent proves its pull request's head with
 #   ~/agentdeck/.venv/bin/agentdeck job submit --verification --session-token <token> --cwd <checkout> -- scripts/host-tests.sh
 # and the deck merges only on that green run plus finished, green GitHub CI on the same head.
-# Their software WebGL is heavy on the CPU: two side by side, at low priority so the host's other
-# agents come first. Four at once took 2 min 4 s but failed a Hiihto v8 race on a busy host; two
-# passed every 3D test in 2 min 48 s (#123).
+# Their software WebGL was heavy on the CPU, so two ran side by side and four once failed a
+# Hiihto v8 race on a busy host (#123). Since #248 tests/conftest.py draws WebGL on the host's
+# graphics card: four side by side passed every 3D test three times in a row, in 2 min 7 s to
+# 2 min 32 s and about 5 min of processor time each. Still at low priority, so the host's other
+# agents come first.
 # Only the changed games' 3D tests run (#37, #116); exit code 5 is "no test was selected".
 set -e
 cd "$(dirname "$0")/.."
 git fetch -q origin main
-nice -n 10 python3 -m pytest -q -p no:cacheprovider -n 2 --dist loadfile -m alone --changed-since origin/main || [ $? -eq 5 ]
+nice -n 10 python3 -m pytest -q -p no:cacheprovider -n 4 --dist loadfile -m alone --changed-since origin/main || [ $? -eq 5 ]
