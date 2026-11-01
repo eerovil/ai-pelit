@@ -123,3 +123,20 @@ def test_with_no_library_the_game_still_plays(site, browser):
     page.wait_for_timeout(200)
     assert page.evaluate("G.mode") == "dive"
     assert page.errors == []
+
+
+def test_the_menu_is_silent_and_a_reload_brings_the_sound_back(site, browser):
+    page = open_game(site, browser)
+    page.wait_for_function("loops && loops.deep.playing()", timeout=15000)
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.wait_for_timeout(200)
+    assert page.evaluate("loops") is None, "the menu makes no loops"
+    page.click("#jatka")
+    page.wait_for_function("loops && loops.deep.playing() && loops.deep.vol > 0 && loops.engine.vol > 0", timeout=15000)
+    # Two sounds at once (the bear's shove and the cold alarm in one step) both play.
+    page.evaluate(SPY)
+    page.evaluate("G.hold = true; surface(); played.length = 0; G.s.m.warm = 32; G.warnT = 0;"
+                  " bear.state = 'walk'; bear.pos.set(walker.pos.x + 1, 0, walker.pos.z); step(1 / 60)")
+    assert page.evaluate("played") == ["tomahdys", "karhu", "halytys"]
+    assert page.errors == []
