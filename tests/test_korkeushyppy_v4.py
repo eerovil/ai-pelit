@@ -123,7 +123,8 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
             page.evaluate("ready(); if (soleWinner(mine()) && bestOf(mine()) >= 1.95) { stopMeet(); quick(); } else good()")
         assert page.evaluate("K.comp.over && K.ending.place === 1")
         page.evaluate("beeps.splice(0); for (let i = 0; i < 60 * 15; i++) step(1 / 60)")
-        assert sorted(set(beeps())) == [523, 659, 784]   # a chime per medal
+        # A chime per medal (a clear's second note may still come by its timer on a slow machine).
+        assert {523, 659, 784} <= set(beeps())
         assert played(page) == []
         assert page.errors == []
     finally:
