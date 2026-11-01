@@ -290,8 +290,8 @@ function hostFish(m, from) {
     pond.splice(pond.indexOf(f), 1);
     // The host counts the fish to that player itself, once, so it counts even if the phone drops
     // or reloads before it hears so (it takes its catch back from the host's list).
-    const b = net.board[from] || { g: 0, n: 0, big: null, sp: 0 };
-    net.board[from] = { g: b.g + f.g, n: b.n + 1, big: !b.big || f.g > b.big.g ? { s: f.sp, g: f.g } : b.big, sp: b.sp };
+    const b = net.board[from] || { g: 0, n: 0, big: null, sp: 0, fish: [] };
+    net.board[from] = { g: b.g + f.g, n: b.n + 1, big: !b.big || f.g > b.big.g ? { s: f.sp, g: f.g } : b.big, sp: b.sp, fish: (b.fish || []).concat([[f.id, f.sp, f.g]]) };
     R.send({ t: 'gone', round: net.round, id: m.id, by: from, sp: f.sp, g: f.g });
   }
 }
@@ -510,11 +510,28 @@ function land() {
 function credit(sp, g) {
   myG += g; myN++;
   if (!myBig || g > myBig.g) myBig = { s: sp, g };
-  // Saved the moment it is earned: the lifetime catch and the biggest fish ever.
-  caughtAll[sp] = (caughtAll[sp] || 0) + 1; save('kalat', caughtAll);
-  if (!biggest || g > biggest.g) { biggest = { s: sp, g }; save('suurin', biggest); }
+  tally(sp, g);
   keepContest();
   if (net.on) sendMe();
+}
+// Saved the moment it is earned: the lifetime catch and the biggest fish ever.
+function tally(sp, g) {
+  caughtAll[sp] = (caughtAll[sp] || 0) + 1; save('kalat', caughtAll);
+  if (!biggest || g > biggest.g) { biggest = { s: sp, g }; save('suurin', biggest); }
+}
+// A guest's fish the host accepted, by id, kept for the round so a reload counts none twice.
+function receipted(id) {
+  const r = load('kuitatut', null), ids = r && r.round === net.round ? r.ids : [];
+  if (ids.includes(id)) return true;
+  save('kuitatut', { round: net.round, ids: ids.concat(id) });
+  return false;
+}
+// The host's list is the guest's catch: its total, and a receipt for each fish it accepted, so
+// a phone that missed an answer still gets the fish into its lifetime records, once.
+function fromHost(own) {
+  if (!own) return;
+  if (own.g > myG) { myG = own.g; myN = own.n; myBig = own.big; }
+  if (!R.isHost) for (const q of own.fish || []) if (!receipted(q[0])) tally(SPECIES[q[1]] ? q[1] : 'ahven', +q[2] || 0);
 }
 function afterCatch() { landed = null; toJig(); jigGoal = lastDepth; }
 
@@ -618,7 +635,7 @@ function myEntry() { return { g: myG, n: myN, big: myBig, sp: spot.i }; }
 function sendMe() {
   if (!net.on) return;
   if (R.isHost) net.board[R.me] = myEntry();
-  else R.send({ t: 'me', round: net.round, ...myEntry() });
+  else R.send({ t: 'me', round: net.round, sp: spot.i });
 }
 function snapshot() {
   return { t: 's', round: net.round, left: Math.round(left * 10) / 10, b: net.board, away: net.away };
@@ -643,7 +660,7 @@ function finish(m) {
   net.board = m.b || {};
   const own = net.board[R.me];
   // A phone that missed the end (it reloaded) still has its catch in the host's list.
-  if (own && own.g > myG) { myG = own.g; myN = own.n; myBig = own.big; }
+  fromHost(own);
   // From the round's own players: a phone that reloaded after the end has no setup any more.
   const st = roomStandings(m.players || (net.setup ? net.setup.players : []), net.board), place = st.findIndex(s => s.me) + 1;
   if (R.once(m.round)) {
@@ -669,9 +686,9 @@ R.on('start', s => {
 R.on('message', (m, from) => {
   if (R.isHost) {
     if (m.t === 'me' && net.on && m.round === net.round && net.setup && net.setup.players.some(p => p.id === from)) {
-      const had = net.board[from] || { g: 0 };
-      // A catch only grows: a resend or a reloaded phone never takes fish off the list.
-      if (+m.g >= had.g) net.board[from] = { g: Math.max(0, +m.g || 0), n: Math.max(0, +m.n || 0), big: m.big || null, sp: +m.sp || 0 };
+      // A guest's catch is only what the host accepted (hostFish()); its own message says where it is.
+      const had = net.board[from] || { g: 0, n: 0, big: null, fish: [] };
+      net.board[from] = Object.assign({}, had, { sp: +m.sp || 0 });
     } else if ((m.t === 'claim' || m.t === 'free' || m.t === 'caught') && net.on && m.round === net.round && phase !== 'done') hostFish(m, from);
     return;
   }
@@ -685,15 +702,14 @@ R.on('message', (m, from) => {
     if (f) { lost(f); pond.splice(pond.indexOf(f), 1); sight(); }
     // The host says this phone's catch counts (it comes before any list that has it, in order).
     const p = net.pending[m.id];
-    if (p && m.by === R.me) { delete net.pending[m.id]; credit(p.sp, p.g); }
+    if (p && m.by === R.me) { delete net.pending[m.id]; if (!receipted(m.id)) credit(p.sp, p.g); }
   } else if (m.t === 'nocatch' && net.on && m.round === net.round) {
     if (net.pending[m.id]) { delete net.pending[m.id]; say('Kala oli jo toisen pilkissä', '#ffd166'); }
   } else if (m.t === 's' && net.on && m.round === net.round) {
     // The host's clock rules; a returning phone takes back the catch the host has for it.
     if (Math.abs(m.left - left) > 0.6) left = m.left;
     net.board = m.b || {}; net.away = m.away || [];
-    const own = net.board[R.me];
-    if (own && own.g > myG) { myG = own.g; myN = own.n; myBig = own.big; }
+    fromHost(net.board[R.me]);
   }
 });
 R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { freeClaims(id); R.send(net.setup, id); R.send(snapshot(), id); R.send(pondMsg(), id); } });

@@ -280,6 +280,16 @@ def test_a_reload_mid_contest_can_carry_it_on(site, context):
 
 # ---------- Playing with friends ----------
 
+def give(host, guest, *weights):
+    """The host accepts fish of these weights as caught by the guest's phone, as hostFish() does."""
+    who = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    for g in weights:
+        host.evaluate(f"""() => {{
+          const f = newFish(lake[0], 'ahven'); f.g = {g}; pond.push(f); net.claims[f.id] = {who};
+          hostFish({{ t: 'caught', round: net.round, id: f.id }}, {who});
+        }}""")
+
+
 @pytest.fixture
 def room(site, browser):
     site.build(ROOT / "games")
@@ -331,7 +341,7 @@ def test_friends_fish_the_same_lake_and_see_each_other_s_catch(room):
     assert lakes[0] == lakes[1] == lakes[2]
     assert len({p.evaluate("spot.i") for p in (host, guest, third)}) == 3
     # Aino lands a fish: the host's standings and Iida's show it.
-    guest.evaluate("myG = 840; myN = 2; sendMe()")
+    give(host, guest, 400, 440)
     host.wait_for_function("standings()[0].name === 'Aino' && standings()[0].g === 840", timeout=4000)
     third.wait_for_function("standings()[0].name === 'Aino'", timeout=4000)
     # The host's clock runs the contest: the others follow it.
@@ -343,8 +353,8 @@ def test_friends_fish_the_same_lake_and_see_each_other_s_catch(room):
 def test_the_host_ends_the_contest_and_every_phone_gets_its_place(room):
     host, [guest] = room("Eero", "Aino")
     host.evaluate("myG = 500; myN = 2")
-    guest.evaluate("myG = 1200; myN = 4; sendMe()")
-    host.wait_for_function("(net.board[Object.keys(net.board).find(k => k !== AiPelitRooms.me)] || {}).g === 1200", timeout=4000)
+    give(host, guest, 300, 300, 300, 300)
+    guest.wait_for_function("myG === 1200 && myN === 4", timeout=4000)
     host.evaluate("left = 0.2")
     guest.evaluate("left = 0.2")
     for p, res, saved in [(host, "2. sija · 0,50 kg", '{"kisat":1,"voitot":0}'), (guest, "Voitit! 🏆 1,20 kg", '{"kisat":1,"voitot":1}')]:
@@ -354,14 +364,19 @@ def test_the_host_ends_the_contest_and_every_phone_gets_its_place(room):
     assert host.errors == guest.errors == []
 
 
-def test_a_late_or_repeated_catch_message_never_takes_fish_off(room):
+def test_a_phone_s_own_report_never_changes_its_catch(room):
     host, [guest] = room("Eero", "Aino")
-    guest.evaluate("myG = 900; myN = 3; sendMe(); sendMe()")
-    host.wait_for_function("Object.values(net.board).some(b => b.g === 900)", timeout=4000)
-    # An older message arriving after the newer one, and one for another round, change nothing.
-    guest.evaluate("AiPelitRooms.send({ t: 'me', round: net.round, g: 400, n: 1, sp: 0 }); AiPelitRooms.send({ t: 'me', round: 'old', g: 5000, n: 9, sp: 0 })")
-    host.wait_for_timeout(500)
-    assert host.evaluate("Object.values(net.board).map(b => b.g).sort((a, b) => a - b)") == [0, 900]
+    give(host, guest, 900)
+    guest.wait_for_function("myG === 900", timeout=4000)
+    # A report of a bigger catch, a smaller one, or one for another round: the host's list stays.
+    guest.evaluate("""() => {
+      AiPelitRooms.send({ t: 'me', round: net.round, g: 99999, n: 50, sp: 3 });
+      AiPelitRooms.send({ t: 'me', round: net.round, g: 400, n: 1, sp: 3 });
+      AiPelitRooms.send({ t: 'me', round: 'old', g: 5000, n: 9, sp: 0 });
+    }""")
+    host.wait_for_timeout(600)
+    aino = guest.evaluate("AiPelitRooms.me")
+    assert host.evaluate(f"[net.board[{json.dumps(aino)}].g, net.board[{json.dumps(aino)}].n, net.board[{json.dumps(aino)}].sp]") == [900, 1, 3]
     assert host.errors == guest.errors == []
 
 
@@ -386,9 +401,9 @@ def test_a_paused_contest_takes_no_fishing_input(room):
 
 def test_a_guest_that_reloads_after_the_end_gets_its_real_place(room):
     host, [guest] = room("Eero", "Aino")
-    guest.evaluate("myG = 200; myN = 1; sendMe()")
+    give(host, guest, 200)
     host.evaluate("myG = 900; myN = 3")
-    host.wait_for_function("Object.values(net.board).some(b => b.g === 200)", timeout=4000)
+    guest.wait_for_function("myG === 200", timeout=4000)
     # Aino's phone is away while the host lets the contest run out without it.
     room.relay.drop(guest)
     host.wait_for_function("AiPelitRooms.waiting.length === 1", timeout=5000)
@@ -425,6 +440,9 @@ def test_friends_fish_one_shared_lake_of_fish(room):
         p.wait_for_function(f"!pond.some(f => f.id === {caught[0]})", timeout=4000)
     # It counts on her phone once the host has said it was hers.
     guest.wait_for_function(f"myG === {caught[1]} && myN === 1", timeout=4000)
+    # In her lifetime records once, though the host's lists after it carry its receipt too.
+    guest.wait_for_timeout(1200)
+    assert sum(json.loads(guest.evaluate("localStorage.getItem('ai-pelit:pilkki:kalat')")).values()) == 1
     assert guest.evaluate("pond.some(f => f.id === %d)" % caught[0]) is False
     host.wait_for_function("standings().find(s => s.name === 'Aino').g === %d" % caught[1], timeout=4000)
     assert host.errors == guest.errors == third.errors == []
@@ -475,6 +493,11 @@ def test_a_catch_the_host_accepted_counts_even_if_the_phone_misses_the_answer(ro
     host.wait_for_timeout(1200)
     assert host.evaluate("standings().find(s => s.name === 'Aino').g") == g
     assert guest.evaluate("[myG, myN]") == [g, 1]
+    # Its lifetime records have the fish too, once, however many host lists come after.
+    sp = host.evaluate(f"net.board[{json.dumps(aino)}].fish[0][1]")
+    guest.wait_for_timeout(1200)
+    assert json.loads(guest.evaluate("localStorage.getItem('ai-pelit:pilkki:kalat')")) == {sp: 1}
+    assert json.loads(guest.evaluate("localStorage.getItem('ai-pelit:pilkki:suurin')")) == {"s": sp, "g": g}
     assert host.errors == guest.errors == []
 
 
@@ -546,8 +569,8 @@ def test_a_fish_is_one_phone_s_at_a_time(room):
 
 def test_a_guest_that_reloads_mid_contest_keeps_its_catch(room):
     host, [guest] = room("Eero", "Aino")
-    guest.evaluate("myG = 650; myN = 3; sendMe()")
-    host.wait_for_function("Object.values(net.board).some(b => b.g === 650)", timeout=4000)
+    give(host, guest, 200, 200, 250)
+    guest.wait_for_function("myG === 650", timeout=4000)
     guest.reload()
     guest.evaluate(RUN)
     guest.wait_for_function("net.on && myG === 650 && myN === 3", timeout=8000)
