@@ -46,6 +46,11 @@ the version that taught it, so you can read the code that fixed it.
   own phone before calling a touch bug fixed.
 - **A frame gets no safe areas.** Inside an `<iframe>`, `env(safe-area-inset-*)` is 0; the page
   around it must hand them in (Ottelu v2 sets the frame's `#safe` padding).
+- **A pull-back fits on the screen.** A control the finger drags away from (a sling, a throw
+  pulled back) needs its whole range between the start point and the screen's edge, plus the
+  finger. Curling v1 put the stone 74 px above the bottom for a 190 px pull, so upright only the
+  weakest throws were possible; v2 places it `pull + 30` px above the edge (#293). Test it with a
+  drag that stays on the screen.
 - **Two thumbs, two corners.** Put the buttons a round uses most where thumbs rest: the lower
   corners in landscape, the lower edge in portrait. Leave the top-left for the "‹ Pelit" chip.
 - **Sound follows the game, not the finger.** Piano v5 plays each note when the song reaches it;
