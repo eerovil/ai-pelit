@@ -155,3 +155,15 @@ def test_every_leg_builds_its_world_in_3d(site, context):
       return out; }""")
     assert all(n > 5 for n in r), r
     assert page.errors == []
+
+
+def test_an_oncoming_truck_in_snow_brings_a_haze_not_a_white_flash(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(5); things = []; events = []; road.cams = []; road.nopass = [];
+      add('vastaan', { s: P.s + 40, lat: -LANE, v: -20, truck: true, len: 17, wid: 2.55, habit: 0 });
+      const seen = [];
+      for (let i = 0; i < 60 * 4 && mode === 'drive'; i++) { P.v = 60 / KMH; P.lat = LANE; P.vl = 0; step(1 / 60); seen.push(whiteout); }
+      const first = seen.findIndex(w => w > 0);
+      return { first, max: Math.max(...seen), jump: Math.max(...seen.slice(1).map((w, i) => w - seen[i])), end: seen[seen.length - 1] }; }""")
+    assert r["first"] >= 0 and r["max"] <= 0.5 and r["jump"] < 0.05 and r["end"] == 0, r
+    assert page.errors == []

@@ -54,8 +54,8 @@
     {
       "n": 8,
       "date": "2026-11-01",
-      "note": "Valonappi on vasemmassa alakulmassa, auto kiihtyy reippaammin, levähdysalueelle johtaa oma kaista merkkeineen, sivuteiden risteyksistä tulee autoja, risteyksissä on ohituskielto (yhtenäinen keltainen viiva) ja vaarallinen ohitus tulee vasta 130 metristä.",
-      "request": "Yö ajo. Valonappula vasemmalle puolelle. Kiihtyvyys tehokkaammaksi\n\nJa p paikka pitöä olla selkeämpi. Tie siihen ja merkkejä\n\nVälillä voisi olla risteyksiä mistä tulee autoja. Vaarallinen ohitus on hieman liian herkkä\n\nOhituskielto merkinnät risteyksien kohdalla",
+      "note": "Valonappi on vasemmassa alakulmassa, auto kiihtyy reippaammin, levähdysalueelle johtaa oma kaista merkkeineen, sivuteiden risteyksistä tulee autoja, risteyksissä on ohituskielto, vaarallinen ohitus tulee vasta 130 metristä ja vastaan tuleva rekka ei enää välähdä ruutua valkoiseksi.",
+      "request": "Yö ajo. Valonappula vasemmalle puolelle. Kiihtyvyys tehokkaammaksi\n\nJa p paikka pitöä olla selkeämpi. Tie siihen ja merkkejä\n\nVälillä voisi olla risteyksiä mistä tulee autoja. Vaarallinen ohitus on hieman liian herkkä\n\nOhituskielto merkinnät risteyksien kohdalla\n\nKun rekka tulee vastaan niin ruutu välähtää ikävästi",
       "issue": "eerovil/ai-pelit#306"
     }
   ]

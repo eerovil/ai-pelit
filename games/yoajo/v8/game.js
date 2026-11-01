@@ -100,7 +100,7 @@ let events = [];       // what has yet to happen, by place: { s, kind, ... }, so
 let mode = 'menu';     // 'menu', 'drive', 'pause', 'crash', 'done'
 let T = 0;             // seconds driven this leg
 let points = 0, tally = null, msgs = [], crashWhy = '', result = null;
-let flash = 0, whiteout = 0, shake = 0;
+let flash = 0, whiteout = 0, shake = 0, cloudIn = 0;
 
 function newLeg(n) {
   level = clamp(n || level, 1, maxLeg);
@@ -197,7 +197,7 @@ function newLeg(n) {
 
   P = { s: 6, lat: LANE, v: 60 / KMH, vl: 0, len: 4.5, wid: 1.8, high: false, brake: false, steer: 0,
     damage: 0, tired: 0, blink: 0, blinkT: 6, rest: 0, gap: [], highRun: 0, nudge: 0, overT: 0, unsafe: false };
-  things = []; T = 0; points = 0; msgs = []; crashWhy = ''; result = null; flash = whiteout = shake = 0;
+  things = []; T = 0; points = 0; msgs = []; crashWhy = ''; result = null; flash = whiteout = shake = cloudIn = 0;
   tally = { ohitukset: 0, valot: 0, haikaisyt: 0, sakot: 0, lahelta: 0, kuopat: 0, tauko: 0, pitkat: 0, pitkatP: 0, hurjastelu: 0 };
   input.left = input.right = false; input.steer = input.gas = input.brake = 0;
   mode = 'drive';
@@ -276,10 +276,15 @@ function step(dt) {
   else if (mode === 'crash' || mode === 'done') { if (P) { P.v = Math.max(0, P.v - 9 * dt); P.s += P.v * dt; } }
   for (const m of msgs) m.t += dt;
   msgs = msgs.filter(m => m.t < 2.2);
-  flash = Math.max(0, flash - dt * 2.5); whiteout = Math.max(0, whiteout - dt * 0.9); shake = Math.max(0, shake - dt * 3);
+  flash = Math.max(0, flash - dt * 2.5);
+  // v8 (#306 "Kun rekka tulee vastaan niin ruutu välähtää ikävästi"): the snow cloud thickens over a
+  // quarter of a second to a haze the road shows through, and thins over a second (v1–v7: the
+  // screen went 92 % white at once).
+  if (cloudIn > 0) { cloudIn -= dt; whiteout = Math.min(CLOUD, whiteout + dt * CLOUD * 4); } else whiteout = Math.max(0, whiteout - dt * 0.5); shake = Math.max(0, shake - dt * 3);
 }
 
 const PULL = 2.5;
+const CLOUD = 0.5;
 function drive(dt) {
   T += dt;
   const W = WEATHER[leg.weather], grip = W.grip, k = curveAt(P.s);
@@ -467,7 +472,7 @@ function meet(t, dt) {
     t.whoosh = true; if (typeof truckSound === 'function') truckSound(Math.abs(t.v - P.v));
   }
   // An oncoming truck in snow blows a cloud over the windscreen as it passes.
-  if (t.v < 0 && t.truck && !t.cloud && t.s < P.s + 6 && (leg.weather === 'lumi' || leg.weather === 'pyry')) { t.cloud = true; whiteout = 1; }
+  if (t.v < 0 && t.truck && !t.cloud && t.s < P.s + 6 && (leg.weather === 'lumi' || leg.weather === 'pyry')) { t.cloud = true; cloudIn = 0.25; }
   if (t.kind === 'takaa' && !t.honk && t.plan !== 'catch' && Math.abs(t.s - P.s) < 6) { t.honk = true; say('Hurjastelija ohitti!', false); }
   return false;
 }

@@ -561,8 +561,12 @@ function draw3d(now) {
   for (const [id, m] of V3.meshes) if (!seen.has(id)) { scene.remove(m); dispose(m); V3.meshes.delete(id); }
   if (near) {
     const op = worldAt(near.s - near.len / 2, near.lat, 0.8), ot = worldAt(near.s - 40, near.lat, 0);
-    other.position.set(...op); other.target.position.set(...ot); other.intensity = near.high ? 9 : 5; other.distance = near.high ? 120 : 60; other.decay = 0.6;
-  } else other.intensity = 0;
+    other.position.set(...op); other.target.position.set(...ot); other.distance = near.high ? 120 : 60; other.decay = 0.6;
+  }
+  // v8 (#306 "ruutu välähtää"): its light on the road comes up and goes down over a few tenths of a
+  // second (v1–v7: on and off at once, a flash over the whole road as a truck came within 220 m).
+  const dtv = Math.min(0.1, Math.max(0, time - (V3.lt || time))); V3.lt = time;
+  other.intensity += ((near ? (near.high ? 9 : 5) : 0) - other.intensity) * Math.min(1, dtv * 4);
 
   // Signs and cameras shine back when the beam reaches them.
   for (const sgn of V3.signs) { const u = sgn.userData, b = lit(u.s, u.lat, 2.6); u.mat.color.setScalar(0.07 + 0.93 * b); }
