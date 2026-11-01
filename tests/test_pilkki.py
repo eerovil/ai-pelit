@@ -396,6 +396,77 @@ def test_a_guest_that_reloads_after_the_end_gets_its_real_place(room):
     assert guest.errors == []
 
 
+def test_friends_fish_one_shared_lake_of_fish(room):
+    host, [guest, third] = room("Eero", "Aino", "Iida")
+    for p in (guest, third):
+        p.wait_for_function("pond.length > 50", timeout=5000)
+    ids = host.evaluate("pond.map(f => f.id).sort((a, b) => a - b).join()")
+    assert guest.evaluate("pond.map(f => f.id).sort((a, b) => a - b).join()") == ids
+    # The same fish in about the same place on every phone.
+    host.evaluate("window.at = Object.fromEntries(pond.map(f => [f.id, [f.lx, f.ly, f.sp, f.g]]))")
+    off = guest.evaluate("""(at) => pond.map(f => at[f.id] ? (at[f.id][2] === f.sp && at[f.id][3] === f.g ? Math.hypot(f.lx - at[f.id][0], f.ly - at[f.id][1]) : 99) : 99)""",
+                         host.evaluate("window.at"))
+    assert max(off) < 3
+    # Aino lands a fish: it is gone from every phone's lake, and the catch is hers.
+    caught = guest.evaluate("""() => {
+      const f = pond[0]; claim(f);
+      fight = { fish: f, L: 0, T: 0, over: 0, burst: 0, next: 9, t: 0, sway: 0 }; phase = 'fight';
+      land(); return [f.id, f.g];
+    }""")
+    for p in (host, third):
+        p.wait_for_function(f"!pond.some(f => f.id === {caught[0]})", timeout=4000)
+    assert guest.evaluate("[myG, pond.some(f => f.id === %d)]" % caught[0]) == [caught[1], False]
+    host.wait_for_function("standings().find(s => s.name === 'Aino').g === %d" % caught[1], timeout=4000)
+    assert host.errors == guest.errors == third.errors == []
+
+
+def test_a_guest_jigs_and_lands_a_shared_fish_by_playing(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.wait_for_function("pond.length > 50", timeout=5000)
+    # Aino drills and holds her jig at the depth of a fish in sight; the host's phone stays still.
+    host.evaluate("holes.push(spot.i); toJig()")
+    guest.evaluate("""() => {
+      holes.push(spot.i); toJig(); sight();
+      const f = fish[0] || pond[0];
+      f.lx = f.wx = spot.x + 0.5; f.ly = f.wy = spot.y; f.linger = 999; f.go = false; sight();
+      jigD = f.d; window.want = f.id;
+    }""")
+    phase, n = guest.evaluate(ON_BEAT, 14)
+    assert phase == "bite"
+    assert guest.evaluate("biter.id === want")
+    host.wait_for_function(f"net.claims[{guest.evaluate('want')}] === {json.dumps(guest.evaluate('AiPelitRooms.me'))}", timeout=4000)
+    guest.evaluate("strike()")
+    assert guest.evaluate(FIGHT) == "caught"
+    host.wait_for_function(f"!pond.some(f => f.id === {guest.evaluate('want')})", timeout=4000)
+    assert host.errors == guest.errors == []
+
+
+def test_a_fish_is_one_phone_s_at_a_time(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.wait_for_function("pond.length > 50", timeout=5000)
+    me, aino = host.evaluate("AiPelitRooms.me"), guest.evaluate("AiPelitRooms.me")
+    # The host's phone got this fish first: Aino's claim is turned down, and she lets it go.
+    x = host.evaluate("const f = pond[1]; net.claims[f.id] = AiPelitRooms.me; f.id")
+    guest.evaluate(f"const f = pond.find(q => q.id === {x}); f.look = true; claim(f)")
+    guest.wait_for_function(f"net.claims[{x}] === {json.dumps(me)} && !pond.find(q => q.id === {x}).look", timeout=4000)
+    assert host.evaluate(f"net.claims[{x}]") == me
+    # Aino claims another: the host's phone leaves it alone while she has it.
+    y = guest.evaluate("const f = pond[2]; f.look = true; claim(f); f.id")
+    host.wait_for_function(f"net.claims[{y}] === {json.dumps(aino)}", timeout=4000)
+    assert host.evaluate(f"taken(pond.find(f => f.id === {y}))") is True
+    # Scared off on her phone, it is free again and swims away on the host.
+    guest.evaluate(f"scare(pond.find(q => q.id === {y}), 3)")
+    host.wait_for_function(f"!net.claims[{y}] && pond.find(f => f.id === {y}).go", timeout=4000)
+    # A phone that reloads holds no fish any more.
+    z = guest.evaluate("const f = pond[3]; f.look = true; claim(f); f.id")
+    host.wait_for_function(f"net.claims[{z}] === {json.dumps(aino)}", timeout=4000)
+    guest.reload()
+    guest.evaluate(RUN)
+    host.wait_for_function(f"!net.claims[{z}]", timeout=8000)
+    guest.wait_for_function("net.on && pond.length > 50", timeout=8000)
+    assert host.errors == guest.errors == []
+
+
 def test_a_guest_that_reloads_mid_contest_keeps_its_catch(room):
     host, [guest] = room("Eero", "Aino")
     guest.evaluate("myG = 650; myN = 3; sendMe()")
