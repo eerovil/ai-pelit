@@ -34,7 +34,7 @@ flowchart TD
   S --> T{Plays a 3D version?}
   R --> T
   T -- No --> P[pytest -n 4 --dist loadfile -m 'not alone']
-  T -- Yes --> L[On bazzite: scripts/host-tests.sh, two side by side]
+  T -- Yes --> L[On bazzite: scripts/host-tests.sh, four side by side]
   L --> GP{Graphics card found?}
   GP -- Yes --> GN[WebGL on the NVIDIA card]
   GP -- No --> SW[WebGL in software, as before]
@@ -75,7 +75,7 @@ flowchart TD
 - **Does the change touch a version this file tests?**: a file's versions are the `_v<N>` in its name plus every `games/<slug>/v<N>` written in it (`versions_of_test_file()`). `test_areena.py` names `games/areena/v3`, so it runs for v3; `test_voimistelu_v4.py` builds its address from a parameter but its name gives v4.
 - **Is a changed version named by no test file?**: `versions_with_tests()`: a new version with no tests of its own runs every test file of its game, as before.
 - **Plays a 3D version?**: `is_3d()` in `tests/conftest.py`: a version the test file tests loads `lib/three` (Hiihto v7 on, Pallorata, Jään alla), or the file says `pytestmark = pytest.mark.alone` (`test_lib_three.py`). Such tests get the `alone` mark.
-- **On bazzite: scripts/host-tests.sh, two side by side**: `scripts/host-tests.sh`, run by each Work agent with `agentdeck job submit --verification` on the AgentDeck host, never in `.github/workflows/ci.yml` (#123). On GitHub's 4-core runner software WebGL beside other Chromiums dropped too many frames for the 3D games' timed races, so they ran one at a time and took 9 of 14 minutes. On bazzite two run side by side (`-n 2`, under `nice`): four failed a Hiihto v8 race on a busy host. Exit code 5 (nothing selected) counts as a pass.
+- **On bazzite: scripts/host-tests.sh, four side by side**: `scripts/host-tests.sh`, run by each Work agent with `agentdeck job submit --verification` on the AgentDeck host, never in `.github/workflows/ci.yml` (#123). On GitHub's 4-core runner software WebGL beside other Chromiums dropped too many frames for the 3D games' timed races, so they ran one at a time and took 9 of 14 minutes. On bazzite they first ran two side by side, since four in software failed a Hiihto v8 race on a busy host; drawn on the graphics card (#248), four (`-n 4`, under `nice`) passed every 3D test three times in a row. Exit code 5 (nothing selected) counts as a pass.
 - **pytest -n 4 --dist loadfile -m 'not alone'**: `pytest-xdist` in `requirements-dev.txt`; the step in `.github/workflows/ci.yml`. `loadfile` keeps a file's tests on one worker, so the per-file Chromium (`browser` fixture, scope `module`) still starts once per file.
 - **Worker 1: own Chromium**: each worker is its own Python process with its own Playwright and Chromium; each test's `site` fixture already serves on its own free port.
 - **GitHub CI result**: the `test` job in `.github/workflows/ci.yml`: server tests, the published-version check, the non-3D browser tests and the build.

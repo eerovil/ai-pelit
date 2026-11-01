@@ -269,7 +269,7 @@ sleeps while the page is hidden.
   GitHub CI runs them on four workers (`-n 4 --dist loadfile -m "not alone"`, pytest-xdist). The
   tests of 3D games (versions that load `lib/three`, marked `alone` by `tests/conftest.py`) never
   run in CI (#123): on GitHub's runner they had to run one at a time and took most of the run.
-  They run on the AgentDeck host, two side by side: prove each head you mark ready with
+  They run on the AgentDeck host, four side by side: prove each head you mark ready with
   `~/agentdeck/.venv/bin/agentdeck job submit --verification --session-token <token> --cwd <checkout> -- scripts/host-tests.sh`.
   On this host the tests' Chromium draws 3D on the graphics card, not in software on the
   processor (#248: `GPU_ARGS` in `tests/conftest.py`); a run with 3D tests ends with a
