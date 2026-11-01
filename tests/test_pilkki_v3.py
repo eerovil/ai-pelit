@@ -295,19 +295,30 @@ def test_the_lake_has_schools_lone_pike_and_burbot_and_one_giant(site, context):
     assert moving > 0.5
 
 
-def test_fish_keep_away_from_a_pike(site, context):
+def test_fish_keep_away_from_a_pike_and_a_hungry_pike_hunts(site, context):
     page = start(site, context)
     page.evaluate("rivals = []; run(() => true, 20)")
+    # A pike that has eaten: the fish next to it move a few metres off.
     page.evaluate("""() => {
       const f = pond.find(q => q.sp === 'sarki' || q.sp === 'ahven');
-      const p = newFish(lake.spots[0], 'hauki'); p.lx = p.wx = p.hx = f.lx + 2; p.ly = p.wy = p.hy = f.ly; p.linger = 999; p.go = false;
+      const p = newFish(lake.spots[0], 'hauki'); p.g = 3000; p.lx = p.wx = p.hx = f.lx + 1; p.ly = p.wy = p.hy = f.ly; p.linger = 999; p.go = false; p.full = 999;
       pond.push(p); window.pk = p; buildGrid();
-      window.close = pond.filter(q => q !== p && Math.hypot(q.lx - p.lx, q.ly - p.ly) < 5);
+      window.close = pond.filter(q => q !== p && Math.hypot(q.lx - p.lx, q.ly - p.ly) < 2.5);
       window.before = close.reduce((a, q) => a + Math.hypot(q.lx - p.lx, q.ly - p.ly), 0) / close.length;
     }""")
-    page.evaluate("pk.dart = 0; Math.random = () => 0.99; run(() => true, 3)")
-    after = page.evaluate("close.filter(q => pond.includes(q)).reduce((a, q) => a + Math.hypot(q.lx - pk.lx, q.ly - pk.ly), 0) / close.length")
-    assert after > page.evaluate("before") + 2
+    page.evaluate("run(() => true, 3)")
+    after = page.evaluate("close.reduce((a, q) => a + Math.hypot(q.lx - pk.lx, q.ly - pk.ly), 0) / close.length")
+    assert after > page.evaluate("before") + 1
+    # Hungry, it creeps up on a fish, darts, and in time eats some.
+    # (A small school of perch kept passing by it, so the test does not wait on chance.)
+    page.evaluate("""() => {
+      pk.full = 0;
+      for (let t = 0; t < 120 && !pk.eaten; t += 10) {
+        for (let i = 0; i < 12; i++) { const f = newFish(lake.spots[0], 'ahven'); f.g = 150; f.lx = f.gx = pk.lx + 6 + Math.random() * 3; f.ly = f.gy = pk.ly + Math.random() * 3; f.linger = 999; pond.push(f); }
+        run(() => !pk.eaten, 10);
+      }
+    }""")
+    assert page.evaluate("pk.eaten") >= 1 and page.evaluate("pk.full") > 0
 
 
 def test_a_caught_fish_is_gone_and_the_others_swim_between_spots(site, context):
@@ -315,7 +326,8 @@ def test_a_caught_fish_is_gone_and_the_others_swim_between_spots(site, context):
     page.evaluate("rivals = []; pond.forEach(f => f.was = f.tgt)")
     n = page.evaluate("pond.length")
     page.evaluate("run(() => true, 200)")
-    assert page.evaluate("pond.length") == n
+    # Only the pike took fish: every other fish is still there, many at another spot.
+    assert page.evaluate("pond.length + pond.reduce((a, f) => a + (f.eaten || 0), 0)") == n
     assert page.evaluate("pond.filter(f => f.tgt !== f.was).length") > n * 0.3
 
 

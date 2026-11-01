@@ -352,7 +352,8 @@ function steer(f, dt) {
     const dx = f.lx - q.lx, dy = f.ly - q.ly, d = Math.hypot(dx, dy) || 0.01;
     // A pike: kept a few metres off; one darting is fled from in earnest. A pike creeping up slowly
     // is hardly noticed, which is how it gets close.
-    const fear = q.sp === 'hauki' ? (q.dart > 0 ? 6 : q.prey ? 1.5 : 3) : 0;
+    // (A fish needs a moment to react to a dart: the first 0.3 s of it go unnoticed.)
+    const fear = q.sp === 'hauki' ? (q.dart > 0 ? (q.dart < 0.6 ? 6 : 0) : q.prey ? 1.5 : 3) : 0;
     if (fear && d < fear) { fx += dx / d * (fear - d) * 2; fy += dy / d * (fear - d) * 2; continue; }
     if (q.sp === 'hauki') continue;
     if (q.sp !== f.sp || d > 7) continue;
@@ -403,9 +404,9 @@ function hunt(p, dt) {
     p.dart -= dt;
     const q = pond.find(o => o.id === p.prey);
     if (!q) { p.dart = 0; return; }
-    const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01, st = 3.2 * dt;
+    const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01, st = 4.5 * dt;
     p.lx += (q.lx - p.lx) / d * Math.min(d, st); p.ly += (q.ly - p.ly) / d * Math.min(d, st); p.vx = Math.sign(q.lx - p.lx) || p.vx;
-    if (d < 0.45 && !p.struck) {
+    if (d < 0.6 && !p.struck) {
       p.struck = true;
       if (Math.random() < 0.35 && preyOk(p, q)) { pond.splice(pond.indexOf(q), 1); p.eaten = (p.eaten || 0) + 1; p.full = rnd(60, 150); p.dart = 0; p.prey = 0; }
     }
