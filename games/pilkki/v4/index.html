@@ -869,7 +869,7 @@ function land() {
   fight = null; phase = 'caught'; phaseT = 0; jigD = 0;
   landed = { sp: f.sp, g: f.g };
   S.play('loiskis', { vol: 0.7 });
-  S.play('onnistui', { vol: 0.5, delay: 0.25 });
+  S.play('onnistui', { vol: 0.3, delay: 0.25 });
   // A guest's fish counts once the host says it was this phone's to catch (credit()).
   if (net.on && !R.isHost) net.pending[f.id] = { sp: f.sp, g: f.g };
   else credit(f.sp, f.g);

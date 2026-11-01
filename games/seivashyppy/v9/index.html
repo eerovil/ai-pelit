@@ -364,7 +364,7 @@ function landed() {
       th.record = K.record(h);
       // A clearance gets a confirmation (#337: no crowd's applause), whether or not the mat's
       // thud played; v3's beep when it cannot play.
-      if (!S.play('onnistui', { delay: mat ? 0.2 : 0, vol: 0.5 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      if (!S.play('onnistui', { delay: mat ? 0.2 : 0, vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
     }
   }
 }

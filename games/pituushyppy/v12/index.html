@@ -340,7 +340,7 @@ function landed() {
     const sand = S.play('hiekka', { vol: a.mine ? 1 : 0.5 });
     if (a.mine) {
       a.record = K.record(a.mark);
-      if (sand) S.play('onnistui', { delay: 0.2, vol: 0.5 });
+      if (sand) S.play('onnistui', { delay: 0.2, vol: 0.3 });
       else {
         tone(120, 0.12, 'sawtooth', 0.05, 60);
         setTimeout(() => tone(880, 0.12, 'sine', 0.07), 160); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 280);

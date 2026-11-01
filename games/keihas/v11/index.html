@@ -321,7 +321,7 @@ function landed() {
     th.leads = K.comp && K.standings()[0] && th.mark > K.bestOf(K.standings()[0]);
     if (th.mine) {
       th.record = K.record(th.mark);
-      if (!S.play('onnistui', { delay: 0.2, vol: 0.5 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      if (!S.play('onnistui', { delay: 0.2, vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
     }
   }
 }

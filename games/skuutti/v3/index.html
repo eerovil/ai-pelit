@@ -536,7 +536,7 @@ function sound(k, q) {
   else if (k === 'launch') play('suhahdus', { vol: 0.7 }) || tone(300, 700, 0.12, 'triangle', 0.1);
   else if (k === 'swish') play('suhahdus', { vol: 0.45, rate: 1.35 }) || tone(900, 300, 0.12, 'triangle', 0.12);
   else if (k === 'land') play('lasku', { vol: 0.9 }) || tone(160, 60, 0.1, 'square', 0.12);
-  else if (k === 'trick') play('onnistui', { vol: 0.6, delay: 0.08 }) || [660, 880].forEach((f, i) => tone(f, f, 0.1, 'triangle', 0.15, i * 0.07));
+  else if (k === 'trick') play('onnistui', { vol: 0.3, delay: 0.08 }) || [660, 880].forEach((f, i) => tone(f, f, 0.1, 'triangle', 0.15, i * 0.07));
   else if (k === 'crash') play('rima', { vol: 0.9 }) || tone(180, 50, 0.4, 'square', 0.12);
   else if (k === 'win') play('voitto', { vol: 0.8, delay: 0.1 }) || [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.18, 0.1 + i * 0.1));
   else if (k === 'end') play('tappio', { vol: 0.7 }) || [523, 392].forEach((f, i) => tone(f, f, 0.2, 'triangle', 0.15, i * 0.12));

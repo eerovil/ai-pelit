@@ -386,7 +386,7 @@ function landed() {
     if (isNet()) K.send({ t: 'done', a: [f.d, f.v, f.archT, f.kickT] });
     if (th.res.ok) {
       th.record = K.record(th.bar);
-      if (!AU.play('onnistui', { delay: 0.25, vol: 0.5 })) {
+      if (!AU.play('onnistui', { delay: 0.25, vol: 0.3 })) {
         tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
       }
     }

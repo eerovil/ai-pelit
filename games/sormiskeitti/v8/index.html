@@ -76,7 +76,7 @@ function tap() {
   if (st === 'air' && !ollie && !bonk && airF < OLLIE_GRACE) {
     // Redo the flight so far as if the ollie had been at the lip.
     ollie = 1.3; ollieText = 'TÄYDELLINEN OLLIE!'; msgT = 90;
-    sfx('pop'); sfx('onnistui', { vol: 0.6, delay: 0.08 });
+    sfx('pop'); sfx('onnistui', { vol: 0.3, delay: 0.08 });
     const V = launchV * ollie;
     ay = LIP_Y + V * airF - G * airF * (airF - 1) / 2; avy = V - G * airF;
     return;
@@ -107,7 +107,7 @@ function tap() {
     else { ollie = 1; ollieText = 'Liian aikaisin…'; }
     msgT = 90;
     sfx('pop');
-    if (ollie >= 1.3) sfx('onnistui', { vol: 0.6, delay: 0.08 });
+    if (ollie >= 1.3) sfx('onnistui', { vol: 0.3, delay: 0.08 });
   }
 }
 addEventListener('pointerdown', e => { e.preventDefault(); tap(); }, { passive: false });

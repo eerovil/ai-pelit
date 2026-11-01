@@ -933,7 +933,7 @@ function flash() { const f = $('fade'); f.classList.add('on'); requestAnimationF
 // open). Footsteps and bubbles were silent before, so they have no beep.
 const A = window.AiPelitAanet || { load() {}, play: () => false, loop: () => ({ set() {}, stop() {} }) };
 const SOUND = {
-  pick: ['valinta', 0.7], story: ['onnistui', 0.6], tap: ['naksu', 0.7], bump: ['metalli', 0.8],
+  pick: ['valinta', 0.7], story: ['onnistui', 0.3], tap: ['naksu', 0.7], bump: ['metalli', 0.8],
   bear: ['tomahdys', 0.9], alarm: ['halytys', 0.4], ping: ['kaiku', 0.3], bubble: ['kupla', 0.7], snow: ['lumi', 0.45],
 };
 A.load([...Object.values(SOUND).map(v => v[0]), 'karhu', 'syvyys', 'sukellusvene', 'kuplat', 'tuuli']);

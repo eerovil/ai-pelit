@@ -661,8 +661,8 @@ function sound(k, v) {
   // v8 (#298): a well-timed push is a soft whoosh up, not v7's arcade power-up, which rang
   // over the mat's boing on every good bounce.
   else if (k === 'spring') ok = S.play('suhahdus', { vol: 0.25 + 0.15 * (v || 0), rate: 1.15 });
-  else if (k === 'trick') ok = S.play('onnistui', { vol: 0.6 });
-  else if (k === 'task') ok = S.play('onnistui', { vol: 0.9, rate: 1.19 });
+  else if (k === 'trick') ok = S.play('onnistui', { vol: 0.3 });
+  else if (k === 'task') ok = S.play('onnistui', { vol: 0.3, rate: 1.19 });
   else if (k === 'win') ok = S.play('voitto', { vol: 0.8, delay: 0.1 });
   else if (k === 'crash') ok = S.play('tomahdys');
   else if (k === 'fail') ok = S.play('tappio', { vol: 0.8, delay: 0.2 });

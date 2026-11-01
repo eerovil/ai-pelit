@@ -91,6 +91,20 @@ def test_a_version_on_aanet_4_loads_every_sound_it_plays_by_name():
         assert played <= loaded, f"{v.relative_to(ROOT)} plays {sorted(played - loaded)} without loading it"
 
 
+def test_a_version_on_aanet_4_plays_its_success_blip_quietly():
+    # #337: a good moment is a quiet short blip, about 0.3, wherever the game plays it.
+    for v in newest_versions():
+        code = "\n".join(p.read_text() for p in v.rglob("*") if p.suffix in (".html", ".js"))
+        if "lib/aanet-4/" not in code:
+            continue
+        levels = re.findall(r"'onnistui', \{[^}]*?\bvol: (\d+(?:\.\d+)?)", code)
+        levels += re.findall(r"'onnistui', (\d+(?:\.\d+)?)\b", code)
+        loud = [float(x) for x in levels if float(x) > 0.3]
+        assert not loud, f"{v.relative_to(ROOT)} plays onnistui at {loud}"
+        # A play of it with no volume given would be at full volume.
+        assert not re.search(r"'onnistui'\)", code), f"{v.relative_to(ROOT)} plays onnistui at full volume"
+
+
 def test_aanet_4_plays_the_loudest_sounds_quieter(site, context):
     page = open_demo(site, context, ["pilli", "tappio", "askel"], TAG4)
     assert page.evaluate("AiPelitAanet.level('pilli', 0.8)") == pytest.approx(0.28)

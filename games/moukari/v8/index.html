@@ -336,7 +336,7 @@ function press(k) {
     th.tapped[n] = true;
     say(Math.abs(off) < 0.035 ? 'Täydellinen!' : 'Hyvä!', '#7ee081');
     // v4: a perfect tap confirms, a good one blips.
-    if (Math.abs(off) < 0.035) S.play('onnistui', { vol: 0.5 }) || tone(880, 0.07, 'sine', 0.07);
+    if (Math.abs(off) < 0.035) S.play('onnistui', { vol: 0.3 }) || tone(880, 0.07, 'sine', 0.07);
     else S.play('valinta', { vol: 0.6 }) || tone(660, 0.07, 'sine', 0.07);
     return;
   }
@@ -373,7 +373,7 @@ function landed() {
     if (th.mine) {
       th.record = K.record(th.mark);
       // A good throw confirms (#337: no crowd's applause); v3's two-note beep when it cannot.
-      if (!S.play('onnistui', { delay: 0.2, vol: 0.5 })) {
+      if (!S.play('onnistui', { delay: 0.2, vol: 0.3 })) {
         tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
       }
     }

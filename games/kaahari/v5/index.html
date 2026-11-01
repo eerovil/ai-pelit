@@ -556,7 +556,7 @@ function tick(dt) {
         if (lap >= LAPS) {
           k.fin = race.t; race.finishers.push(k);
           if (k === me) { if (race.mode === 'net') netFinishMe(); else finishMe(); }
-        } else if (k === me) { say(lap === LAPS - 1 ? 'Viimeinen kierros!' : 'Kierros ' + (lap + 1) + '/' + LAPS); S.play('onnistui', { vol: 0.7 }) || beep(660, 0.12, 'square', 0.07, 990); }
+        } else if (k === me) { say(lap === LAPS - 1 ? 'Viimeinen kierros!' : 'Kierros ' + (lap + 1) + '/' + LAPS); S.play('onnistui', { vol: 0.3 }) || beep(660, 0.12, 'square', 0.07, 990); }
       }
     }
     collide();

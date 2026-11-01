@@ -457,7 +457,7 @@ function step(dt) {
 
 function go() {
   game.mode = 'ride';
-  sfx('onnistui', 0.8) || beep(880, 0.25, 'triangle', 0.1);
+  sfx('onnistui', 0.3) || beep(880, 0.25, 'triangle', 0.1);
   if (net) { net.phase = 'run'; net.clock = 0; }
 }
 

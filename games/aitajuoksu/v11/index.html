@@ -277,7 +277,7 @@ function move(r, dt, clock) {
     r.fin = Math.round((clock - (r.x - TRACK) / Math.max(r.v, 0.5)) * 100) / 100;
     if (race.firstFin === null) race.firstFin = clock;
     if (r === me) {
-      if (!S.play('onnistui', { vol: 0.7 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      if (!S.play('onnistui', { vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
     }
   }
 }
