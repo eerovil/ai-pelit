@@ -78,6 +78,8 @@ const KEY = 'ai-pelit:pilkki:';
 function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
 let level = load('taso', 1), best = load('ennatys', 0), biggest = load('suurin', null);
+// The level is saved from the start, so the high-score list shows it even before a first win.
+save('taso', level);
 let kisat = load('kisat', { pelatut: 0, voitot: 0 }), friends = load('kaverit', { kisat: 0, voitot: 0 }), caughtAll = load('kalat', {});
 
 const CONTEST = 300;           // seconds in a contest

@@ -198,6 +198,14 @@ def test_the_contest_ends_after_five_minutes_and_a_win_raises_the_level(site, co
     assert page.errors == []
 
 
+def test_a_new_player_s_first_lost_contest_sends_level_1_with_its_score(site, context):
+    page = start(site, context)
+    assert page.evaluate("localStorage.getItem('ai-pelit:pilkki:taso')") == "1"
+    page.evaluate("myG = 400; rivals[0].g = 900; left = 0.1; run(() => phase !== 'done', 2)")
+    assert page.locator("#result").inner_text() == "2. sija: 0,40 kg"
+    assert page.evaluate("AiPelitScores.games.pilkki.level()") == 1
+
+
 def test_the_computer_anglers_get_better_level_by_level(site, context):
     page = open_game(site, context)
     means = page.evaluate("""() => [1, 6].map(l => {
