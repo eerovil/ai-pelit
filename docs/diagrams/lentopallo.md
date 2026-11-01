@@ -3,7 +3,8 @@
 How a match and one rally of Lentopallo play. Beach volleyball seen from the side, rally scoring
 to 11 with a two-point lead. v1 is 1 vs 1 against the computer; v2 adds 2 vs 2 and playing with
 friends on 2–4 phones through the shared room library (see `moninpeli.md`); v3 makes the computer
-harder (it plays to the gaps). The ball is played
+harder (it plays to the gaps); v4 plays sideways; v5 swaps the beeps for recorded sounds from the
+shared library (`aanikirjasto.md`). The ball is played
 automatically when it touches a player's hands; what the touch does depends on what the player
 is doing at that moment.
 
