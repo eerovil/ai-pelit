@@ -249,3 +249,29 @@ def test_a_reload_mid_race_runs_the_race_again_and_keeps_the_points(site, contex
     assert me["marks"][0] == 15 and me["pts"][0] == 790 and me["marks"][1] > 10
     assert page.inner_text("#bTitle") == "Lopputulokset"
     assert page.errors == []
+
+
+@pytest.mark.parametrize("slug,name,mark", [("pituushyppy", "Pituushyppy", 6.5), ("korkeushyppy", "Korkeushyppy", 1.8),
+                                            ("seivashyppy", "Seiväshyppy", 4.2), ("moukari", "Moukarinheitto", 55)])
+def test_each_newer_field_event_plays_to_its_results_in_the_match(site, context, slug, name, mark):
+    page = open_game(site, context, saved={"lajit": [slug, "keihas"]})
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    assert page.evaluate("Ottelu.K.comp.throwers.length") == 8
+    for _ in range(3000):
+        if page.evaluate("!!Ottelu.K.ending"):
+            break
+        page.evaluate("play()")
+        page.wait_for_timeout(20)
+    # The event's final results in place of its medal ceremony.
+    drawn = page.evaluate("""() => { const K = Ottelu.K, x = document.getElementById('laji').contentDocument.getElementById('c').getContext('2d');
+      const said = []; const ft = x.fillText; x.fillText = function (s, ...a) { said.push(s); return ft.call(this, s, ...a); };
+      K.drawPodium(x, { left: 8, top: 44, w: 344, bottom: 730 }); x.fillText = ft; return said; }""")
+    assert "Lopputulokset" in drawn
+    page.wait_for_function("frameAt === -1 && !document.getElementById('board').classList.contains('hidden')", timeout=10000)
+    assert page.inner_text("#bTitle") == name + " · laji 1/2"
+    me = page.evaluate("M.rows.find(r => r.p === 'me')")
+    # A throw or a long jump is the set mark; over a bar, the last height cleared up to it.
+    assert (abs(me["marks"][0] - mark) < 1e-9 if slug in ("pituushyppy", "moukari") else 1 < me["marks"][0] <= mark + 1e-9) and me["pts"][0] == page.evaluate(f"LAJIT.{slug}.pts({me['marks'][0]})") > 0
+    assert len(page.evaluate("M.rows")) == 8
+    assert page.errors == []
