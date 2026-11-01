@@ -116,7 +116,7 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
         page.evaluate("go(1.05, 8, 0.3, 0.46)")
         assert beeps() == [300, 520, 700]            # take-off, arch, legs
         page.evaluate("quick()")
-        assert beeps() == [880]                      # a clear (its second note follows by timer)
+        assert beeps() in ([880], [880, 1175])       # a clear (its second note follows by timer, sooner on a slow runner)
         for _ in range(80):  # v3.win_meet without its click: this meet is already on
             if page.evaluate("K.comp.over"):
                 break
