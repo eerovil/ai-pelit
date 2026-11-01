@@ -650,3 +650,55 @@ def test_a_public_room_is_listed_for_the_game_and_joined_with_a_tap(phones):
     host.uncheck("#aipr-pub")
     watcher.wait_for_function("!document.querySelector('#aipr-rooms button')", timeout=8000)
     assert host.errors == stranger.errors == watcher.errors == other.errors == []
+
+
+def test_a_game_in_turns_waits_only_for_the_phone_on_turn(phones):
+    """turns() (#297): the round waits only for an away phone the game needs now, the host's button
+    skips its turn, a phone that leaves keeps its player, and it can come back to the round."""
+    TURNS = "window.turn = ''; AiPelitRooms.turns(id => id === turn); AiPelitRooms.on('skip', ids => demo.log.push(['skip', ids]))"
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    other = join(phones, "Iida", code)
+    for p in (host, guest, other):
+        p.evaluate(TURNS)
+    start(host, [guest, other])
+    aino = guest.evaluate("AiPelitRooms.me")
+    # Aino leaves the room mid-round: no one waits and the computer does not take her player.
+    guest.evaluate("AiPelitRooms.leave()")
+    host.wait_for_function(f"!AiPelitRooms.members.some(m => m.id === {json.dumps(aino)})")
+    held = host.evaluate("demo.clock")
+    host.wait_for_function(f"demo.clock > {held} + 2")
+    assert host.evaluate("[AiPelitRooms.paused, demo.bots, AiPelitRooms.isReleased(%s)]" % json.dumps(aino)) == [False, [], False]
+    # Her turn: every phone waits, and the host can skip it.
+    host.evaluate(f"turn = {json.dumps(aino)}")
+    host.wait_for_function("document.getElementById('aipr-pauseText').textContent === '⏸ Odotetaan: Aino'")
+    other.wait_for_function("document.getElementById('aipr-pauseText').textContent === '⏸ Odotetaan: Aino'")
+    assert host.inner_text("#aipr-goOn") == "Ohita vuoro"
+    host.click("#aipr-goOn")
+    host.wait_for_function(f"demo.log.some(l => l[0] === 'skip' && l[1][0] === {json.dumps(aino)})")
+    host.evaluate("turn = ''")
+    host.wait_for_function("!AiPelitRooms.paused")
+    other.wait_for_function("document.getElementById('aipr-pause').hidden")
+    # Her room screen offers the round back, and one tap takes her into it.
+    guest.click("#multi")
+    assert guest.inner_text("#aipr-again") == f"↩ Palaa kierrokseen {code}"
+    guest.click("#aipr-again")
+    guest.wait_for_function("demo.phase === 'play' && AiPelitRooms.inRoom && AiPelitRooms.players.length === 3")
+    # The round ends: nothing is left to come back to.
+    host.evaluate("end()")
+    guest.wait_for_function("demo.phase === 'room'")
+    guest.click("#aipr-back")
+    guest.click("#multi")
+    assert guest.locator("#aipr-again").is_hidden()
+    assert host.errors == guest.errors == other.errors == []
+
+
+def test_a_game_not_in_turns_never_offers_the_round_back(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    start(host, [guest])
+    guest.evaluate("AiPelitRooms.leave()")
+    host.wait_for_function("demo.bots.length === 1")
+    guest.click("#multi")
+    assert guest.locator("#aipr-again").is_hidden()
+    assert guest.evaluate("localStorage.getItem('ai-pelit:_huone:kesken')") is None

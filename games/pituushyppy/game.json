@@ -51,6 +51,13 @@
       "note": "Oikeat äänet: askeleet radalla, ponnistus laudalta, ilmavirran suhahdus, alastulo hiekkaan, yleisön aplodit johtoon nousevasta tai ennätyshypystä, ”ooh” yliastunnasta ja palkintojenjaossa oma sävel jokaiselle mitalille.",
       "request": "Olisiko mahdollista saada ääniefektejä. Miten vaikeaksi menee githubin kanssa vai pitäisikö ne olla media storagessa",
       "issue": "eerovil/ai-pelit#205"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-01",
+      "note": "Kavereiden kanssa kisa odottaa vain sitä, jonka vuoro on: muut voivat poistua ja palata kesken kisan (Palaa kierrokseen), poissaolijan vuoron voi ohittaa, ja vuoroaan odottavat seisovat katsomassa ja kannustavat.",
+      "request": "Moninpeli: anna poistua ja liittyä takaisin joissain peleissä, mm. yleisurheilu. Eli jos ei ole oma vuoro niin ei ole tarve pausettaa, ja ei ole tarvetta korvata botilla. Lisää vuoroaan odottavat pelaajat katsojiksi, ja he voivat kannustaa.",
+      "issue": "eerovil/ai-pelit#297"
     }
   ]
 }

@@ -30,6 +30,13 @@
       "note": "Piippausten tilalle oikeat äänet: askeleet, ponnistus, suhahdus riman yllä, putoava rima, tömähdys patjalle, yleisön ohhoo ja aplodit sekä mitalien kilinä.",
       "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): vuoro valinta, askeleet askel/askel2, ponnistus ponnistus + suhahdus, kaari suhahdus hiljaa, rima putoaa rima, onnistunut ylitys onnistui ja ennätyksestä aplodit, epäonnistuminen ohhoo, patjalle tomahdys, mitalit mitali.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v4 on jo varattu, käytä seuraavaa vapaata numeroa.",
       "issue": "eerovil/ai-pelit#220"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-01",
+      "note": "Kavereiden kanssa kisa odottaa vain sitä, jonka vuoro on: muut voivat poistua ja palata kesken kisan (Palaa kierrokseen), poissaolijan vuoron voi ohittaa, ja vuoroaan odottavat seisovat katsomassa ja kannustavat.",
+      "request": "Moninpeli: anna poistua ja liittyä takaisin joissain peleissä, mm. yleisurheilu. Eli jos ei ole oma vuoro niin ei ole tarve pausettaa, ja ei ole tarvetta korvata botilla. Lisää vuoroaan odottavat pelaajat katsojiksi, ja he voivat kannustaa.",
+      "issue": "eerovil/ai-pelit#297"
     }
   ]
 }

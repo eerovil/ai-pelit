@@ -27,7 +27,11 @@ flowchart TD
     L2 --> L3[Aloita kierros]
     L4[Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen]
     L5{Onko joku kierroksen puhelin poissa?}
-    L5 -- Kyllä --> L6[⏸ Odotetaan, isännällä Jatka ilman heitä]
+    L5 -- Kyllä --> L13{Vuoroissa pelattava peli?}
+    L13 -- Ei --> L6[⏸ Odotetaan, isännällä Jatka ilman heitä]
+    L13 -- Kyllä, ei hänen vuoronsa --> G2
+    L13 -- Kyllä, hänen vuoronsa --> L14[⏸ Odotetaan, isännällä Ohita vuoro]
+    L15[↩ Palaa kierrokseen KOOD]
     L7[Tallenna tulos kerran per kierros]
     L8{Väärä peli tai versio?}
     L8 -- Kyllä --> L9[Avaa oikean pelin version]
@@ -56,16 +60,18 @@ flowchart TD
   C1 --> L5
   L5 -- Ei --> G2
   L6 --> G7
+  L14 --> G2
+  L15 --> C1
   G7 --> G2
   G2 --> G5
   G5 --> L7
   L7 --> L2
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11,L12 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15 blue
   class C1,C2 violet
   class S1 green
-  class L5,L8 amber
-  class L6,G7 rose
+  class L5,L8,L13 amber
+  class L6,G7,L14 rose
 ```
 
 ## Colours
@@ -98,6 +104,9 @@ flowchart TD
 - **Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen**: `connect()` retries with a growing wait; the room this tab is in is kept in `sessionStorage` (`ai-pelit:_huone:nyt`). On every connection a guest says `hello`; the host sends a phone in the round `_start` again and fires `on('hello')`, so the game sends the round as it is. A host that comes back without its round (a reload) sends `_lobby`, and everyone goes back to the room. Kirkkis: `on('hello')` sends that phone `kr`.
 - **Onko joku kierroksen puhelin poissa?**: `waitingFor()`: a phone in the round with no connection, unless the computer took it; on a guest also the host, or its own connection. The host sends the names (`_pz`).
 - **⏸ Odotetaan, isännällä Jatka ilman heitä**: `renderPause()`: every phone shows who is being waited for; only the host has the button (`goOn()`).
+- **Vuoroissa pelattava peli?**: `needs`, set by the game with `AiPelitRooms.turns(id => …)` (#297; the athletics meets of `lib/yleisurheilu-5/`): true while the round needs that phone now, its turn. `waitingFor()` then names only those, so nothing stops while an away phone is not on turn, and a phone that leaves the room keeps its player (`onPeers()` releases no one).
+- **⏸ Odotetaan, isännällä Ohita vuoro**: the same pause, but the host's button reads "Ohita vuoro" and fires the game's `on('skip', ids)`; the meet records a missed attempt. The host looks at whom to wait for every 250 ms (`tellPause()` from `renderPause()`), since the turn changes with no room message.
+- **↩ Palaa kierrokseen KOOD**: in a game played in turns a guest in a round keeps it in `localStorage` (`ai-pelit:_huone:kesken`, `keepAway()`), so it survives closing the game; the first page of the room screen then offers one button back into it (`awayRound()`, same game and version, under 6 hours old). It is forgotten when the round ends for this phone, the host sends it back to the room or says it is not in the round, or the room is gone (`forgetAway()`).
 - **Tietokone ohjaa poissaolevaa**: the game's `on('continue', ids)`; `on('back', id)` when that phone returns. Someone who leaves the room for good is handed over the same way. Kirkkis: `botTakes()`; a hider walks to the nearest hiding place.
 - **Kierros päättyy: tulos kaikille, myös poissa olleille**: the host's `deliver(msg)` sends the end to every phone in the round and to no other. Each phone confirms it (`_got`); until then the host keeps it, and sends it again on that phone's `hello`, after that round's `_start` (so a reloaded page knows the round). A page that reloads just as the round ends, seen as connected before its hello, gets it that way. Then `endRound()`. Kirkkis: `end()` delivers `kfin`, the whole finished round and who seeks next.
 - **Tallenna tulos kerran per kierros**: the game saves only when `AiPelitRooms.once(round)` is true (kept per tab in `ai-pelit:_huone:kierros`), then `backToRoom(text)` shows the room with the result. Kirkkis: `guestEnd()`, into `ai-pelit:kirkkis:tilasto`, then `note('Seuraavaksi etsii …')`.
