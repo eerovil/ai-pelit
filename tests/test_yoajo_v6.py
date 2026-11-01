@@ -106,3 +106,42 @@ def test_the_engine_follows_the_speed_and_rain_falls_on_wet_legs(site, context):
     page.evaluate("preview(1); engineSound()")
     assert page.evaluate("[engine.vol, rain.vol]") == [0, 0]   # silent on the menu
     assert page.errors == []
+
+
+def test_two_trucks_at_once_and_an_overtaken_truck_each_whoosh_once(site, context):
+    page = open_game(site, context)
+    sound_on(page)
+    # Two oncoming trucks side by side in time: one whoosh each, never again for the same truck.
+    drive(page, """add('vastaan', { s: P.s + 12, lat: -LANE, v: -22, truck: true, len: 17, wid: 2.55 });
+      add('vastaan', { s: P.s + 14, lat: -LANE - 0.2, v: -22, truck: true, len: 17, wid: 2.55 })""", 1.5)
+    assert played(page).count("suhahdus") == 2
+    # A truck ahead in the player's lane, overtaken from the oncoming lane.
+    drive(page, "add('rekka', { s: P.s + 25, lat: LANE, v: 15, habit: 0 }); P.v = 28", 0)
+    page.evaluate("""() => { for (let i = 0; i < 60 * 4 && mode === 'drive'; i++) {
+      P.v = 28; P.lat = -LANE; for (const t of things) t.v = 15; step(1 / 60); } }""")
+    assert page.evaluate("mode") == "drive" and played(page).count("suhahdus") == 1
+    # An oncoming car (not a truck) makes no whoosh.
+    drive(page, "add('vastaan', { s: P.s + 12, lat: -LANE, v: -22 })", 1)
+    assert "suhahdus" not in played(page)
+    assert page.errors == []
+
+
+def test_pause_and_a_restart_after_a_crash_silence_and_bring_back_the_engine(site, context):
+    page = open_game(site, context)
+    sound_on(page)
+    page.wait_for_function("engine.playing() && rain.playing()", timeout=5000)
+    drive(page, "", 0.2, 2)
+    page.evaluate("act({ id: 'pause' }); engineSound()")
+    # Paused: the engine stops, the rain goes on.
+    assert page.evaluate("[mode, engine.vol, rain.vol > 0]") == ["pause", 0, True]
+    page.evaluate("act({ id: 'jatka' }); engineSound()")
+    assert page.evaluate("engine.vol") > 0
+    page.evaluate("crash('Törmäsit hirveen.'); engineSound()")
+    assert page.evaluate("[mode, engine.vol]") == ["crash", 0]
+    played(page)
+    # Yritä uudelleen: the same leg again, the engine on, and the next crash sounds the same.
+    page.evaluate("act({ id: 'uudelleen' }); P.v = 20; step(1 / 60); engineSound()")
+    assert page.evaluate("[mode, engine.vol > 0, engine.playing()]") == ["drive", True, True]
+    page.evaluate("crash('Ajoit ojaan.')")
+    assert played(page) == ["naksu", "kitka", "kolari", "lasi"]
+    assert page.errors == []
