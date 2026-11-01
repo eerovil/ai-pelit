@@ -20,6 +20,8 @@ v6 (#313) plays as v5, but a pad that does nothing right then is greyed out and 
 
 v7 (#311) adds the outfit picker ("👕 Asu" in the menu, `asut.md`): the player's vaulter wears the outfit in every pose, on the podium and on friends' phones, and the choice is one for every athletics event and Ottelu (`data-share="yleisurheilu"` in `games/seivashyppy/v7/index.html`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella]

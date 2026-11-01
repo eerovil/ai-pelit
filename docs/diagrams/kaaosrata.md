@@ -7,6 +7,8 @@ library (`lib/aanet-2/`), named in brackets below; a sound not loaded yet falls 
 level; in a room each phone runs its own player, and the phone that made the room (the host)
 moves the computer players and ends the race.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Juokse! tai Aloita kierros] --> B[3, 2, 1, MENE!]

@@ -12,6 +12,8 @@ library's `kisa.js`, see `yleisurheilu-kirjasto.md`.
 
 v3 (#297) plays as v2 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   M[Valikko: Mäkiviikolle!, Jatka tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]

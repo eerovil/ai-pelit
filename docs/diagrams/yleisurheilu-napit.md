@@ -6,6 +6,8 @@ and lights up when pressed; an "off" pad is greyed out and does not light up, so
 not think it works. Shot put, high jump and hammer already worked this way; this Work brings
 hurdles, long jump, javelin and pole vault in line.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   P[Pelaaja painaa nappia] --> Q{padOn: tekeekö nappi nyt jotain?}

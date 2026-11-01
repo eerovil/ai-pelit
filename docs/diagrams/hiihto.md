@@ -6,6 +6,8 @@ player picks a wax for the day's weather (a grip wax for classic, a glide wax fo
 skis to the finish. Slower skiers are overtaken from another lane, running into anyone is a fall,
 and times are kept apart for each style.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   Y{Yksin vai kavereiden kanssa?} -- Yksin --> S{Tyyli: perinteinen vai luistelu?}

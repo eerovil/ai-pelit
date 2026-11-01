@@ -6,6 +6,8 @@ given to the baby is dropped on the floor and must be washed. The level is won w
 full and lost when the baby's mood runs out. v3 (#232) plays recorded sounds from the shared
 library instead of beeps.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Aloita: taso ja tähdet puhelimesta] --> B[Ota lusikka kulhosta: lusikallinen sosetta]

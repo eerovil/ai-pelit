@@ -6,6 +6,8 @@ left and right to keep it on the track and roll it over stars; orange ramps thro
 in the track, cyan turbo strips speed it up, and purple blocks sliding across the track bump it
 aside. The sky turns from day to sunset to a starry night the further it gets. The round ends when the ball rolls off the edge or into a gap and falls. From v3 (#225) each of these sounds with a recorded sound from the shared library (`lib/aanet-2/`), and the rolling ball hums with its speed.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Valikko: pallo vierii lähtösuoralla, Aloita] --> B[Pallo vierii eteenpäin, vauhti kasvaa]

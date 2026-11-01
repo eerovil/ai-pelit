@@ -9,6 +9,8 @@ perfect ollie, because the green zone lasts only about 100 ms at full speed. Fro
 round sounds with recorded effects from the shared sound library (see `aanikirjasto.md`); each
 box that makes a sound names it.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   S[Avaa peli: taso ja ennätys puhelimesta] --> A

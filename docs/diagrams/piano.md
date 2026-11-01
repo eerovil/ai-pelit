@@ -14,6 +14,8 @@ as wide again, so a press a little early or late still counts. From v8 a "Ei hä
 makes a game one song with no hearts to lose: misses cost nothing, and when the song ends the
 menu shows the score and the hits, which go to neither the record nor the high-score list.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Valikko: jatka pisimmältä tasolta tai valitse aiempi] --> NF{Ei häviötä päällä?}

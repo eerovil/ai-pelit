@@ -14,6 +14,8 @@ hollows, a far background layer), lets the sonar tell of every new contact, open
 comes up, starts Aurora dark and empty (its power first, then the nomads moving in, then the pump from the nearest
 wreck, Saukko), and lets a fed player sleep through the autopilot's trip.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Valikko: Jatka tai Uusi peli] --> B[Aja SISUa: ohjain tai sormi merellä, runko kestää kaiken syvyyden]
