@@ -399,6 +399,7 @@
     muted: {}, // id -> true: not heard on this phone, while in this room
     stream: null, track: null, pressed: false, talking: false, ice: null, iceAt: 0, err: '', errAt: 0,
   };
+  var STUCK = 20e3;
   function vpeer(id) { return voice.peers[id] || (voice.peers[id] = { early: [], fails: 0, retryAt: 0 }); }
   function sendRtc(to, m) { m.t = '_rtc'; m.to = to; sendRaw(m); }
   // Says to a phone whether this one takes calls; r asks it to say the same back.
@@ -443,6 +444,14 @@
       var nocall = voice.on && !live(p) && !p.dialing;
       if (!p.greet || (nocall && Date.now() - (p.greetAt || 0) > 10e3)) { p.greet = true; p.greetAt = Date.now(); greet(m.id, true); }
       var pc = p.pc, broken = !pc || pc.sid !== p.sid || pc.connectionState === 'failed' || pc.connectionState === 'closed';
+      // A call not up within 20 s is made again (#333): its offer or answer may have been lost
+      // while a phone was away, and then neither phone ever hears of it failing.
+      if (pc && live(p)) pc.upAt = Date.now();
+      else if (pc && !broken && net.me < m.id && Date.now() - pc.upAt > STUCK) {
+        hang(m.id);
+        p.retryAt = Date.now() + Math.min(30e3, 1000 * Math.pow(2, p.fails++));
+        broken = true;
+      }
       if (voice.on && p.on && net.me < m.id && broken && !p.dialing && Date.now() >= p.retryAt) dial(m.id);
     });
     renderVoice();
@@ -450,7 +459,7 @@
 
   function newPc(id, p, c, servers) {
     var pc = new RTCPeerConnection({ iceServers: servers });
-    pc.c = c;
+    pc.c = c; pc.upAt = Date.now();
     p.pc = pc;
     pc.onicecandidate = function (e) { if (e.candidate && p.pc === pc) sendRtc(id, { k: 'ice', c: c, ice: e.candidate.toJSON() }); };
     pc.ontrack = function (e) { if (p.pc === pc) hear(id, p, e.streams && e.streams[0] || new MediaStream([e.track])); };

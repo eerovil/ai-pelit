@@ -356,3 +356,12 @@ def test_two_talking_with_the_sound_held_back_still_fit_and_a_tap_clears_the_hin
     host.wait_for_function("!document.getElementById('aipr-talk').textContent.includes('Napauta')")
     a.mouse.up()
     b.mouse.up()
+
+
+@pytest.mark.parametrize("kind", ["offer", "answer"])
+def test_a_call_whose_setup_was_lost_is_made_again(phones, kind):
+    phones.relay.lose_rtc[kind] = 1
+    host, code = make_room(phones)
+    a = join(phones, "Aino", code)
+    for p in (host, a):
+        p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=45000)
