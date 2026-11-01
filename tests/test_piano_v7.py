@@ -60,3 +60,37 @@ def test_the_taller_zone_fits_between_the_top_bar_and_the_keys(site, context, w,
         fits = page.evaluate(f"level = {lv}; startLevel();"
                              "[hitY - zonePx(GOOD) > topY, hitY + zonePx(GOOD) <= btnTop]")
         assert fits == [True, True], (w, h, lv)
+
+
+def test_two_notes_close_in_one_lane_both_count_with_late_presses(site, context):
+    # Both notes are in the wider zone at once: each press takes the older one, so neither is lost.
+    page = open_game(site, context)
+    hits = page.evaluate("""() => {
+      level = 1; startLevel(); state = 'play'; lives = 3;
+      const a = cur.notes[0], b = {...a, t: a.t + 0.15, hit: false, missed: false};
+      cur.notes = [a, b];
+      update(a.t + 0.2 - now); tap(a.lane);
+      update(0.1); tap(a.lane);
+      update(0.5);
+      return [a.hit, b.hit, lives];
+    }""")
+    assert hits == [True, True, 3]
+
+
+def test_real_early_taps_count_on_a_390_px_phone(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.goto(site.url + "games/piano/v7/")
+    page.click("#go")
+    lane_x, lane_w, btn = page.evaluate("[laneX, laneW, btnTop]")
+    for lane in range(4):
+        page.evaluate(f"""() => {{
+          const n = cur.notes.filter(m => m.lane === {lane})[0];
+          for (const m of cur.notes) {{ m.hit = m !== n; m.missed = false; }}
+          now = n.t - 0.2; window._n = n;  // early, so the running clock moves it into the zone, not out
+        }}""")
+        page.touchscreen.tap(lane_x + (lane + 0.5) * lane_w, (btn + 844) / 2)
+        assert page.evaluate("_n.hit") is True, lane
+    assert page.evaluate("lives") == 3
+    ctx.close()
