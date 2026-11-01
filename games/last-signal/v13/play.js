@@ -340,7 +340,7 @@ R.on('message', (m, from) => {
 // Host: a friend's phone is back (a reload): its person starts again in the control room, its haul lost.
 function letGo(id) {
   // v12: goods they took from the stores into their bag go back into the stores
-  for (const k of Object.keys(G.held)) if (G.held[k] === id) { if (k.startsWith('pack:')) unpackGood(k); delete G.held[k]; }
+  for (const k of Object.keys(G.held)) if (G.held[k] === id) { if (k.startsWith('pack:') || k.startsWith('tuore:')) unpackGood(k); delete G.held[k]; }
   const c = heldBy(id);
   if (c) dropCrate(c, c.hw || 'sub', c.x, c.y);  // v12: their crate falls where they were
   save();
@@ -389,14 +389,14 @@ function needs(dt) {
 function faint() {
   const s = G.s;
   s.day++; s.m.health = 35; s.m.food = Math.max(s.m.food, 25);
-  G.held = {}; s.pack = {}; dropAll(); if (net) { net.helm = null; stopSub(); }
+  G.held = {}; s.pack = {}; s.tuore = 0; dropAll(); if (net) { net.helm = null; stopSub(); }
   save();
   story('faint');
 }
 function breach() {
   const s = G.s;
   s.m.hull = 25; s.m.health = Math.max(10, s.m.health - 15);
-  G.held = {}; s.pack = {}; dropAll();  // every diver's haul is lost, and v12's crates in hand fall
+  G.held = {}; s.pack = {}; s.tuore = 0; dropAll();  // every diver's haul is lost, and v12's crates in hand fall
   if (net && net.helm && net.helm !== me()) net.helm = present(net.helm) ? net.helm : null;
   // v12 (#300): with no depth limit any more, the emergency ballast lifts SISU 40 m, clear of what it hit.
   sub.y = Math.max(10, sub.y - 40); sub.vx = sub.vy = 0;

@@ -361,7 +361,7 @@ function bank(who) {
     if (it && it.k === 'kala') { s.inv.kala = (s.inv.kala || 0) + 1; counts.kala = (counts.kala || 0) + 1; continue; }
     // v12: goods taken from the stores to trade and brought back go back where they were
     if (id.startsWith('pack:')) { unpackGood(id); continue; }
-    if (id.startsWith('tuore:')) { s.inv.ruoka++; counts.ruoka = (counts.ruoka || 0) + 1; continue; }  // v13: Aurora's greens
+    if (id.startsWith('tuore:')) { unpackGood(id); counts.ruoka = (counts.ruoka || 0) + 1; continue; }  // v13: Aurora's greens
     if (!it || s.got[id]) continue;
     s.got[id] = true;
     counts[it.k] = (counts[it.k] || 0) + 1;
@@ -565,6 +565,7 @@ function doAct(who, a, arg) {
       for (const id of Object.keys(G.held)) if (G.held[id] === who) {
         // v12: goods packed from the stores are lost with the rest
         if (id.startsWith('pack:')) { const k = id.split(':')[1]; s.pack[k] = Math.max(0, (s.pack[k] || 0) - 1); }
+        if (id.startsWith('tuore:')) s.tuore = Math.max(0, (s.tuore || 0) - 1);
         delete G.held[id];
       }
       const c = heldBy(who), [w, x, y] = Array.isArray(arg) ? arg : [];

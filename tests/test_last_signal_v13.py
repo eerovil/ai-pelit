@@ -790,3 +790,49 @@ def test_a_friend_brings_the_pump_and_the_host_s_aurora_is_green(site, browser):
     host.evaluate("act('greens')")
     assert "Huomenna" in toast(host)
     assert host.errors == [] and aino.errors == []
+
+
+def v12_save(crates, **over):
+    return {**V12, "crates": crates, **over}
+
+
+def test_a_v12_save_keeps_the_crates_the_player_moved_and_the_wrecks_lack_what_was_taken(site, browser):
+    # In v12 Polaris had 14 crates, one of them food: the player shelved it
+    # (it is on the shelf), moved a junk crate onto the sea floor beside the wreck, and used up a supply crate (gone).
+    untouched = [{"id": f"polaris:u{n}", "k": k, "n": 2, "w": "sea", "x": 2180, "y": 300}
+                 for n, k in enumerate(["romu"] * 4 + ["tarvike"] * 3 + ["laake"] * 2 + ["osa"] * 2)]
+    crates = untouched + [{"id": "polaris:5,4", "k": "ruoka", "n": 1, "w": "shelf", "slot": 0, "x": 0, "y": 0},
+                          {"id": "polaris:9,7", "k": "romu", "n": 0, "w": "sea", "x": 2240, "y": 200, "vy": 0, "f": 0}]
+    page = v4.open_game(site, browser)
+    page.evaluate(f"localStorage.setItem('{SAVE12}', {json.dumps(json.dumps(v12_save(crates)))}); menu()")
+    page.click("#jatka")
+    page.evaluate("G.hold = true; closeCard(); run(() => crateById('polaris:9,7').f, 60)")
+    got = page.evaluate("""(() => { const s = G.s, pol = s.crates.filter(c => c.id.startsWith('polaris:'));
+      const kinds = {}; for (const c of pol.filter(c => c.w === 'sea' && !('vy' in c && c.id === 'polaris:9,7'))) kinds[c.k] = (kinds[c.k] || 0) + 1;
+      const moved = s.crates.find(c => c.id === 'polaris:9,7');
+      return { shelf: s.crates.filter(c => c.w === 'shelf').map(c => c.id), moved: [moved.w, moved.x, Math.abs(moved.y - floorY(moved.x)) < 0.5],
+        all: pol.length, v13: CRATES0.filter(c => c.id.startsWith('polaris:')).length, food: kinds.ruoka || 0 }; })()""")
+    assert got["shelf"] == ["polaris:5,4"]
+    assert got["moved"] == ["sea", 2240, True]           # where the player left it, settled on the floor
+    # v12's 14, less the three taken (the shelved food, the moved junk, the used-up supplies): v13's crates less three,
+    # plus the shelved and the moved ones kept as they were.
+    assert got["all"] == got["v13"] - 3 + 2
+    assert got["food"] == page.evaluate("CRATES0.filter(c => c.id.startsWith('polaris:') && c.k === 'ruoka').length") - 1
+    assert page.errors == []
+
+
+def test_greens_not_yet_brought_home_go_into_the_stores_after_a_reload(site, browser):
+    page = game(site, browser, ingrid=True, pumppu=1)
+    page.evaluate("G.mode = 'ice'; act('greens'); G.mode = 'sub'; save()")
+    assert page.evaluate("[G.s.tuore, G.s.greens === G.s.day]") == [2, True]
+    food = page.evaluate("G.s.inv.ruoka")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.evaluate(v4.RUN)
+    page.click("#jatka")
+    page.evaluate("G.hold = true; closeCard()")
+    assert page.evaluate("[G.s.inv.ruoka, G.s.tuore]") == [food + 2, 0]
+    # brought home the normal way, they count once
+    page.evaluate("G.s.day++; G.mode = 'ice'; act('greens'); act('home')")
+    assert page.evaluate("[G.s.inv.ruoka, G.s.tuore]") == [food + 4, 0]
+    assert page.errors == []

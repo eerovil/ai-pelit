@@ -156,7 +156,9 @@ function use(k, n = 1) {
 // ---------- the bag ----------
 // Goods taken from the stores ('pack:<kind>:<n>') going back into them: brought home, or their carrier's phone gone.
 function unpackGood(id) {
-  const s = G.s, k = id.split(':')[1], key = INV[k] || k;
+  const s = G.s;
+  if (id.startsWith('tuore:')) { s.inv.ruoka = (s.inv.ruoka || 0) + 1; s.tuore = Math.max(0, (s.tuore || 0) - 1); return; }  // v13
+  const k = id.split(':')[1], key = INV[k] || k;
   s.inv[key] = (s.inv[key] || 0) + 1; s.pack[k] = Math.max(0, (s.pack[k] || 0) - 1);
 }
 // The small finds a person carries (`G.carry`, at most BAG); what is taken from the stores to trade is 'pack:<kind>:<n>'.
@@ -203,6 +205,7 @@ function trade(who) {
       if (!it || it.k !== k) continue;
       delete G.held[id]; gone.push(id); n--;
       if (id.startsWith('pack:')) s.pack[k] = Math.max(0, (s.pack[k] || 0) - 1);
+      else if (id.startsWith('tuore:')) s.tuore = Math.max(0, (s.tuore || 0) - 1);
       else { s.got[id] = true; if (it.site && it.site !== 'find' && it.site !== 'pack') s.flags[it.site] = true; }
     }
     const c = n && heldBy(who);
@@ -285,6 +288,7 @@ function auroraAct(who, a) {
     s.greens = s.day;
     const ids = [1, 2].map(n => 'tuore:' + s.day + ':' + n);
     for (const id of ids) G.held[id] = who;
+    s.tuore = (s.tuore || 0) + 2;  // held until brought home; a reload gives them to the stores (`load()`)
     save();
     return { gots: ids, say: '+ 🥬 2 annosta tuoretta ruokaa', snd: 'got' };
   }

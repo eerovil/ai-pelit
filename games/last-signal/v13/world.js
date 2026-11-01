@@ -365,6 +365,12 @@ const JUNK = ['KIRJOJA', 'ASTIOITA', 'KIVIÄ', 'TYHJÄ', 'SÄHKÖJOHTOA', 'PAPER
 // The same "random" for every phone: a number in [0, 1) from a crate's name.
 function hash(str) { let h = 2166136261; for (const ch of str) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; }
 const BOX_W = 0.9, BOX_H = 0.7;
+// v13: how many crates of each kind lay in each wreck in v12's world (its `CRATES0`), for moving a v12 save in.
+const V12_SEA = {"asema":{"osa":2,"ruoka":2,"romu":1},"kontti":{"ruoka":2},"polaris":{"romu":5,"tarvike":4,"laake":2,"ruoka":1,"osa":2},
+  "kontit":{"romu":2,"ruoka":1},"nordvik":{"romu":4,"tarvike":2,"laake":3,"ruoka":1,"osa":1},"syva":{"laake":3},
+  "saga":{"osa":3,"ruoka":4,"romu":3,"tarvike":2},"laskeutuja":{"osa":1,"ruoka":1},"rinne":{"osa":1,"tarvike":1,"laake":2},
+  "nordlys":{"osa":6,"ruoka":5,"laake":4,"romu":5,"tarvike":1},"majakka":{"osa":1},"aurora":{"osa":3,"ruoka":4,"romu":4,"tarvike":1},
+  "kestrel":{"romu":13,"laake":3,"osa":4,"tarvike":2,"ruoka":3}};
 // Every crate as the world first has it: [id, contents, how many, where, x, y] (`fresh()` copies it into the save).
 const CRATES0 = [];
 function crate0(id, ch, w, x, y) {
@@ -644,17 +650,37 @@ function load() {
         o.chart = ''; o.cave = ''; o.seed = true; o.w12 = 1;
       }
       if (!s.w13) {
-        // v13: the crates still lying where the world put them go where the new rooms have them (the pump among them);
-        // the ones moved by hand stay where they were, but for those left in v12's station on the shelf, now gone.
-        // Food and medicine lying loose became crates, so a night's find of them is a spare part.
-        const kept = (o.crates || []).filter(c => c.w !== 'sea' && !(c.w === 'ice' && c.x < 240));
-        o.crates = kept.concat(CRATES0.filter(c => !kept.some(k => k.id === c.id) && (c.w === 'sea' || c.id.startsWith('pinta:'))).map(c => ({ ...c })));
+        // v13: the wrecks' rooms are new, so the crates still lying where v12's world put them go where v13's has them.
+        // A crate the player moved (it has `vy` or `hw`, which only lifting and letting go give) stays where it is and
+        // settles there; one on the shelf, in SISU or on the ice stays too, but for those in v12's station on the
+        // shelf (gone: they move to Aurora's store). As many of each wreck's crates as the player took from it (moved,
+        // shelved or used up: v12's own crates there, `V12_SEA`, less those still untouched) are left out of its new
+        // ones, of the same contents where it has them. Food and medicine lying loose became crates, so a night's find
+        // of them is a spare part.
+        // (a save from v11 or older got v13's own crates just above: nothing to move)
+        const moved = c => !s.w12 || c.w !== 'sea' || 'vy' in c || 'hw' in c;
+        const kept = (o.crates || []).filter(c => moved(c) && !(c.w === 'ice' && c.x < 240)).map(c => c.w === 'sea' ? { ...c, f: 1 } : c);
+        const left = {};
+        for (const c of o.crates || []) if (!moved(c)) { const site = c.id.split(':')[0]; left[site] = left[site] || {}; left[site][c.k] = (left[site][c.k] || 0) + 1; }
+        const fresh13 = CRATES0.filter(c => !kept.some(k => k.id === c.id) && (c.w === 'sea' || c.id.startsWith('pinta:'))).map(c => ({ ...c }));
+        if (s.w12) for (const [site, kinds] of Object.entries(V12_SEA)) {
+          const take = [];
+          for (const [k, n] of Object.entries(kinds)) for (let m = 0; m < n - ((left[site] || {})[k] || 0); m++) take.push(k);
+          for (const k of take) {
+            const here = fresh13.filter(c => c.w === 'sea' && c.id.startsWith(site + ':') && c.k !== 'pumppu');  // the pump is new
+            const c = here.find(c => c.k === k) || here[here.length - 1];
+            if (c) fresh13.splice(fresh13.indexOf(c), 1);
+          }
+        }
+        o.crates = kept.concat(fresh13);
         o.finds = (o.finds || []).map(f => f.k === 'ruoka' || f.k === 'laake' ? { ...f, k: 'osa' } : f);
         o.w13 = 1;
       }
       // what was taken from the stores into a bag and lost with a reload goes back into the stores
       for (const [k, n] of Object.entries(o.pack || {})) o.inv[INV[k] || k] = (o.inv[INV[k] || k] || 0) + n;
       o.pack = {};
+      // v13: so do Aurora's greens taken that day and not yet brought home
+      o.inv.ruoka = (o.inv.ruoka || 0) + (o.tuore || 0); o.tuore = 0;
       return o; }
   } catch (e) {}
   return null;
