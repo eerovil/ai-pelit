@@ -163,7 +163,9 @@ high-score lists (#25), then play counts (#26).
     `data-voice-corner="left|top-left|top-right|bottom-left|bottom-right"` on its `rooms.js` tag,
     or leaves voice out with `data-voice="off"`. Each phone has "🎤 Puhe" on the room screen and a
     🔊/🔇 mute beside each name. In every room, public ones too, until a friends list exists
-    (Eero's choice).
+    (Eero's choice). The relay is free up to 1000 GB a month and Cloudflare has no cap, so the site
+    hands out relay credentials only under 800 GB this month (Eero's choice), as the host's hourly
+    `ai-pelit-turn.timer` (`scripts/turn_usage.py`) last told it, within three days.
   - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
   - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
     that plays the room in Playwright.

@@ -1,0 +1,11 @@
+# Every hour (#322); the site stops handing out relay credentials when the last check is three
+# days old, so a host that is off turns the relay off rather than letting it run unwatched.
+[Unit]
+Description=AI-pelit: check the voice relay's monthly use every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

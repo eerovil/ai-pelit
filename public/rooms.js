@@ -409,7 +409,7 @@
   function live(p) { return !!(p.pc && p.pc.connectionState === 'connected'); }
 
   function getIce() {
-    if (voice.ice && Date.now() - voice.iceAt < 3600e3) return Promise.resolve(voice.ice);
+    if (voice.ice && Date.now() - voice.iceAt < 1800e3) return Promise.resolve(voice.ice); // the site's last 2 h
     return fetch(ICE, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       voice.ice = d && Array.isArray(d.iceServers) ? d.iceServers : STUN;
       voice.iceAt = Date.now();

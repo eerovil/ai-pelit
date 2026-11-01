@@ -81,21 +81,26 @@ flowchart TD
     C3[Huone välittää yhteyden avausviestit _rtc kenelle tahansa]
     C4[GET /api/voice/ice: TURN-tunnukset]
     C5[TURN-välityspalvelin, jos suora yhteys ei onnistu]
+    C6{Tämän kuun käyttö alle 800 Gt?}
+    C7[Koneen tarkistus kerran tunnissa: käyttö Cloudflarelta]
   end
   L2 --> V1
   V1 --> V2
   V2 --> C3
   V2 --> C4
+  C7 --> C6
+  C4 --> C6
+  C6 -- Kyllä --> C5
   V2 -.-> C5
   G2 --> V3
   V4 --> V6
   V7 --> V6
   class G1,G2,G3,G4,G5,G6 teal
   class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15 blue
-  class C1,C2,C3,C4,C5 violet
+  class C1,C2,C3,C4,C5,C7 violet
   class V1,V2,V4,V5,V6,V7 blue
   class S1 green
-  class L5,L8,L13,V3 amber
+  class L5,L8,L13,V3,C6 amber
   class L6,G7,L14 rose
 ```
 
@@ -142,5 +147,7 @@ flowchart TD
 - **🔊 Nimi puhuu: muut kuulevat**: each call's sound plays through its own hidden `<audio>` (`hear()`; a tap anywhere starts one the phone held back); the speaker's name shows next to the chip while they hold theirs (`_rtc` `talk` on and off).
 - **🔇 Mykistä pelaaja pelaajalistassa**: a 🔊 button beside each other player who has voice on (`render()`); a tap makes it 🔇 and mutes that player on this phone for as long as it is in the room (`toggleMute()`).
 - **Huone välittää yhteyden avausviestit _rtc kenelle tahansa**: `rooms/worker.js` `webSocketMessage()`: a `_rtc` message from any phone goes only to the phone named in `to`, with `from` set, guest to guest too. Every other message is routed as before.
-- **GET /api/voice/ice: TURN-tunnukset**: `iceServers()` in `server/api.js`: asks Cloudflare's TURN service for credentials that last 4 hours, kept an hour (`TURN_KEY_ID`, `TURN_KEY_TOKEN` secrets, bound by `scripts/cloudflare_setup.py` from `~/.local/share/ai-pelit/turn.env`) and returns `iceServers`. Without them, or when Cloudflare does not answer, only Cloudflare's public STUN server. Refused to another site's pages. `getIce()` in `rooms.js` reads it once an hour.
+- **GET /api/voice/ice: TURN-tunnukset**: `iceServers()` in `server/api.js`: asks Cloudflare's TURN service for credentials that last 2 hours, kept half an hour (`TURN_KEY_ID`, `TURN_KEY_TOKEN` secrets, bound by `scripts/cloudflare_setup.py` from `~/.local/share/ai-pelit/turn.env`) and returns `iceServers`. Without them, or when Cloudflare does not answer, only Cloudflare's public STUN server. Refused to another site's pages. `getIce()` in `rooms.js` reads it every half hour.
 - **TURN-välityspalvelin, jos suora yhteys ei onnistu**: Cloudflare Realtime TURN passes the sound on when two phones cannot reach each other directly (some mobile networks). Nothing is recorded or kept.
+- **Tämän kuun käyttö alle 800 Gt?**: `underCap()` in `server/api.js`: the relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so credentials are handed out only while this month's row in `turn_usage` (migration 0007) is under `TURN_CAP` (800 GB, Eero's choice) and was written within 3 days. No: only STUN; calls then go only directly. Read at most every 10 minutes.
+- **Koneen tarkistus kerran tunnissa: käyttö Cloudflarelta**: `scripts/turn_usage.py`, run hourly from `origin/main` by `scripts/systemd/ai-pelit-turn.timer` on the AgentDeck host: the whole account's TURN bytes this month from Cloudflare's GraphQL (`callsTurnUsageAdaptiveGroups`), written with the admin key to `POST /api/admin/turn-usage`. A host that is off for 3 days turns the relay off.

@@ -18,6 +18,7 @@
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
 //   GET  /api/rooms                                          -> {rooms: [{code, game, v, n, max}]}, every game's (#203)
 //   GET  /api/voice/ice                                      -> {iceServers}, for voice in rooms (#322)
+//   POST /api/admin/turn-usage (X-Admin-Key) {month, bytes}   -> {ok}, the voice relay's use this month
 //   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
 //   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
 //   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
@@ -468,6 +469,11 @@ async function route(request, env) {
       return body ? adminFiled(env, body) : fail(400, 'bad body');
     }
   }
+  if (path === '/api/admin/turn-usage' && method === 'POST') {
+    if (!isAdmin(request, env)) return fail(403, 'admin key needed');
+    const body = await readBody(request);
+    return body ? turnUsage(env, body) : fail(400, 'bad body');
+  }
   if (path === '/api/admin/players') {
     if (!isAdmin(request, env)) return fail(403, 'admin key needed');
     if (method === 'GET') return adminPlayers(env);
@@ -504,17 +510,40 @@ function publicRooms(request, env) {
 // Cloudflare's public STUN server (it tells a phone its own address); with the TURN key bound
 // (TURN_KEY_ID, TURN_KEY_TOKEN, scripts/cloudflare_setup.py) also short-lived credentials for
 // Cloudflare's TURN relay, which passes the sound on when two phones cannot reach each other
-// directly. One set is kept for an hour per isolate, valid for four. Only for this site's pages.
+// directly. One set is kept for half an hour per isolate, valid for two. Only for this site's pages.
+//
+// The relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so the
+// credentials are handed out only while this month's use (turn_usage, written every hour by the
+// host's scripts/turn_usage.py) is under TURN_CAP and was checked within TURN_STALE (Eero's
+// choice). Past that, calls go only directly, which works on most networks; credentials already
+// out end within two hours.
 export const STUN = { urls: 'stun:stun.cloudflare.com:3478' };
-const TURN_TTL = 4 * 3600;
+export const TURN_CAP = 800e9;
+export const TURN_STALE = 3 * 86400e3;
+const TURN_TTL = 2 * 3600;
 let turnCache = null; // {at, servers}
-export function forgetTurn() { turnCache = null; }
+let capCache = null; // {at, ok}
+export function forgetTurn() { turnCache = null; capCache = null; }
+
+async function underCap(env) {
+  if (capCache && Date.now() - capCache.at < 600e3) return capCache.ok;
+  let ok = false;
+  try {
+    const month = new Date().toISOString().slice(0, 7);
+    const row = env.DB && await env.DB.prepare('SELECT bytes, checked_at FROM turn_usage WHERE month = ?').bind(month).first();
+    ok = !!row && row.bytes < TURN_CAP && Date.now() - Date.parse(row.checked_at) < TURN_STALE;
+  } catch (e) {
+    console.error(e);
+  }
+  capCache = { at: Date.now(), ok };
+  return ok;
+}
 
 async function iceServers(request, env) {
   if (request.method !== 'GET') return fail(405, 'GET only');
   if (request.headers.get('sec-fetch-site') === 'cross-site') return fail(403, 'this site only');
-  if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return json({ iceServers: [STUN] });
-  if (!turnCache || Date.now() - turnCache.at > 3600e3) {
+  if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN || !(await underCap(env))) return json({ iceServers: [STUN] });
+  if (!turnCache || Date.now() - turnCache.at > 1800e3) {
     try {
       const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
         method: 'POST',
@@ -529,6 +558,16 @@ async function iceServers(request, env) {
     }
   }
   return json({ iceServers: turnCache ? turnCache.servers : [STUN] });
+}
+
+// The host's hourly check says how much the voice relay was used this month (#322).
+async function turnUsage(env, body) {
+  const { month, bytes } = body;
+  if (!/^\d{4}-\d{2}$/.test(month || '') || !Number.isSafeInteger(bytes) || bytes < 0) return fail(400, 'bad usage');
+  await env.DB.prepare('INSERT INTO turn_usage (month, bytes, checked_at) VALUES (?, ?, ?) '
+    + 'ON CONFLICT (month) DO UPDATE SET bytes = excluded.bytes, checked_at = excluded.checked_at')
+    .bind(month, bytes, new Date().toISOString()).run();
+  return json({ ok: true });
 }
 
 export async function handle(request, env) {
