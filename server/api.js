@@ -17,6 +17,7 @@
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
 //   GET  /api/rooms                                          -> {rooms: [{code, game, v, n, max}]}, every game's (#203)
+//   GET  /api/voice/ice                                      -> {iceServers}, for voice in rooms (#322)
 //   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
 //   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
 //   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
@@ -499,7 +500,39 @@ function publicRooms(request, env) {
   return env.ROOMS.get(env.ROOMS.idFromName('lobby')).fetch(new Request(`https://rooms/lobby${q}`));
 }
 
+// Voice in rooms (#322): the servers a phone's voice call may use to reach another phone. Always
+// Cloudflare's public STUN server (it tells a phone its own address); with the TURN key bound
+// (TURN_KEY_ID, TURN_KEY_TOKEN, scripts/cloudflare_setup.py) also short-lived credentials for
+// Cloudflare's TURN relay, which passes the sound on when two phones cannot reach each other
+// directly. One set is kept for an hour per isolate, valid for four. Only for this site's pages.
+export const STUN = { urls: 'stun:stun.cloudflare.com:3478' };
+const TURN_TTL = 4 * 3600;
+let turnCache = null; // {at, servers}
+export function forgetTurn() { turnCache = null; }
+
+async function iceServers(request, env) {
+  if (request.method !== 'GET') return fail(405, 'GET only');
+  if (request.headers.get('sec-fetch-site') === 'cross-site') return fail(403, 'this site only');
+  if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return json({ iceServers: [STUN] });
+  if (!turnCache || Date.now() - turnCache.at > 3600e3) {
+    try {
+      const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${env.TURN_KEY_TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ttl: TURN_TTL }),
+      });
+      const got = res.ok ? await res.json() : null;
+      const list = got && [].concat(got.iceServers || []).filter((s) => s && s.urls);
+      if (list && list.length) turnCache = { at: Date.now(), servers: list };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return json({ iceServers: turnCache ? turnCache.servers : [STUN] });
+}
+
 export async function handle(request, env) {
+  if (/^\/api\/voice\/ice\/?$/.test(new URL(request.url).pathname)) return iceServers(request, env);
   if (/^\/api\/rooms\/?$/.test(new URL(request.url).pathname)) return publicRooms(request, env);
   const rooms = new URL(request.url).pathname.match(/^\/api\/rooms\/([^/]*)$/);
   if (rooms) return room(request, env, rooms[1].toUpperCase());

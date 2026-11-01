@@ -154,6 +154,16 @@ high-score lists (#25), then play counts (#26).
     (its turn): the round then waits only for an away phone on turn, a phone that leaves keeps its
     player, the host's button is "Ohita vuoro" (`on('skip', ids)`), and the room screen offers
     "Palaa kierrokseen" to a phone that left the round.
+  - Voice (#322): every room has push to talk, with nothing for a game to do. While a phone holds
+    the 🎤 chip `rooms.js` draws, the others in the room hear it; the sound goes straight between
+    the phones (WebRTC), the room passes on only the calls' setup (`_rtc`), and Cloudflare's TURN
+    relay (`GET /api/voice/ice`, the `TURN_KEY_*` secrets) helps where phones cannot reach each
+    other. Upright the chip sits on the right edge above the middle; on its side, in the top bar
+    right of the middle. A new version whose controls are there moves it with
+    `data-voice-corner="left|top-left|top-right|bottom-left|bottom-right"` on its `rooms.js` tag,
+    or leaves voice out with `data-voice="off"`. Each phone has "🎤 Puhe" on the room screen and a
+    🔊/🔇 mute beside each name. In every room, public ones too, until a friends list exists
+    (Eero's choice).
   - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
   - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
     that plays the room in Playwright.
