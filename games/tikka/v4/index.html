@@ -778,7 +778,8 @@ function tone(f0, f1, dur, type, vol, delay = 0) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
 }
-const S = AiPelitAanet;
+// If aanet.js itself failed to load, the game still plays with its beeps.
+const S = window.AiPelitAanet || { load() {}, play() { return false; } };
 S.load(['suhahdus', 'puu', 'virhe', 'yleiso', 'voitto']);
 function sound(k) {
   if (k === 'whoosh') S.play('suhahdus', { vol: 0.5, rate: 1.2 }) || tone(700, 300, 0.18, 'sine', 0.05);

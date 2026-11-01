@@ -89,6 +89,26 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
         ctx.close()
 
 
+def test_without_the_sound_script_it_still_starts_and_plays(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route("**/aanet.js", lambda route: route.abort())
+        old = v3.URL
+        v3.URL = URL
+        try:
+            page = v3.open_game(site, ctx)
+        finally:
+            v3.URL = old
+        assert page.evaluate("typeof AiPelitAanet") == "undefined"
+        page.click("#go")
+        for _ in range(3):
+            throw(page, 0, 0)
+        assert page.evaluate("players[0].score") == 30
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
 def test_v3_saves_are_read_as_they_are(site, context):
     page = open_game(site, context, {"mokki": 231, "ennatys": 412, "voitot": 3, "vapaa": "darts"})
     assert page.inner_text("#stats") == "Ennätykset: Mökkitikka 231 p · Pistekisa 412 p · Voittoja tietokoneesta 3"
