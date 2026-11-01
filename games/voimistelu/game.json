@@ -71,6 +71,13 @@
       "note": "Tangosta, josta päästi irti, saa kiinni vasta, kun on ollut hetken irti.",
       "request": "Lisätään sellainen että hahmo ei välittömästä ota kiinni samasta tangosta missä se oli. Pitää olla joku pieni hetki irti",
       "issue": "eerovil/ai-pelit#199"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-01",
+      "note": "Piippausten tilalle oikeat äänet: suhahdus irrotessa, lyönti tankoon tarttuessa, tömähdys alastulossa, aplodit pysäytyksestä ja voitto- tai tappiosävel lopuksi.",
+      "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): liike pisteytetty valinta nousevalla äänellä, irrotus ja kierre suhahdus, tankoon tarttuminen lyonti, alastulo tomahdys, kaatuminen tomahdys + ohhoo, pysäytetty alastulo aplodit, tulos riittää voitto, ei riitä tappio, jättikierto suhahdus hiljaa.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v11 on jo varattu, käytä seuraavaa vapaata numeroa.",
+      "issue": "eerovil/ai-pelit#233"
     }
   ]
 }

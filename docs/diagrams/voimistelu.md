@@ -7,7 +7,7 @@ finger tucks it to spin faster, and a sideways flick adds a half twist. Hands th
 open catch it again (a release move; from v4 the arms turn towards a bar within reach first), and v2 adds a low bar in front, as on the women's uneven bars, to fly to and from; otherwise the routine ends on the mat, where the landing is judged. The score is
 the Olympic one: D (the difficulty of each different element) plus E (10 less the deductions).
 
-From v9 (#199) the score levels stop at 12,0 (level 18, then straight on to 21), a catch never adds speed, and the routine's D shows all through it. From v8 (#158) the gymnast wears the outfit picked under "👕 Asu" at the top of the screen before the first touch and on the score board (`figure()` in `games/voimistelu/v8/index.html`; the picker is `asut.md`).
+From v11 (#233) the beeps are recorded sounds from the shared library (`aanikirjasto.md`). From v9 (#199) the score levels stop at 12,0 (level 18, then straight on to 21), a catch never adds speed, and the routine's D shows all through it. From v8 (#158) the gymnast wears the outfit picked under "👕 Asu" at the top of the screen before the first touch and on the score board (`figure()` in `games/voimistelu/v8/index.html`; the picker is `asut.md`).
 
 ```mermaid
 flowchart TD
@@ -37,6 +37,7 @@ flowchart TD
   K --> N[Pisteet D + E, tason tehtävä tarkistetaan]
   L --> N
   M --> N
+  N --> SO[Äänet: valinta, suhahdus, lyönti, tömähdys, ohhoo, aplodit, voitto tai tappio]
   N --> V{Mikä taso?}
   V -- 1–13 ja 21–32 --> W[Tehtävä: liike, yhdistelmä tai alastulo]
   V -- 14–18 ja 33– --> X[Pisteraja]
@@ -50,6 +51,7 @@ flowchart TD
   class F,R,T teal
   class D,H,I,K,N,O,Q,P2,Z,W,X,DD green
   class L,M rose
+  class SO violet
 ```
 
 ## Colours
@@ -59,6 +61,7 @@ flowchart TD
 - **teal**: the physics of the flight, and the camera
 - **green**: an element done, or a score kept
 - **rose**: a deduction
+- **violet**: what the player hears
 
 ## Boxes
 
@@ -85,3 +88,4 @@ flowchart TD
 - **Pisteraja**: `target(n)`: 10.8 + 0.3 per level from 14 (12.0 at 18, the last from v9; v7–v8 went on to 12.6 at 20); from 33 on it carries on from 12.9 by 0.2 a level, up to 15.5.
 - **Taso, paras ja suoritukset tallessa puhelimessa**: `taso`, `paras` and `suoritukset` under `ai-pelit:voimistelu:`.
 - **D-pisteet näkyvissä koko sarjan ajan**: v9 `drawHud()` shows `D <difficulty()>` above the elements so far, from the first swing to the landing; `difficulty()` counts each different element once, as `finish()` does.
+- **Äänet: valinta, suhahdus, lyönti, tömähdys, ohhoo, aplodit, voitto tai tappio**: v11 (`games/voimistelu/v11/index.html`, #233) loads `lib/aanet-2/aanet.js` and plays through `snd()`: each scored element `valinta`, higher with each one (`addElement()`); letting go and a half twist `suhahdus` (`release()`, `twist()`), each giant swing a quieter, lower one (`giant()`); a catch `lyonti` (`grab()`); a landing `tomahdys`, a fall adds `ohhoo`, a stuck landing `aplodit` (`land()`); the task done `voitto`, not done `tappio` (`finish()`). A sound whose file is not there falls back to v10's own beep or hiss; `tappio` and `ohhoo` have none, as v10 was silent there.
