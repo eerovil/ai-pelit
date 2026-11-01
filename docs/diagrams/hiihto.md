@@ -1,6 +1,6 @@
 # Hiihto: one race, from the style and wax to the finish
 
-How one race of Hiihto plays (v1–v9). From v7 the world is drawn in real 3D with three.js; the play is v6's. From v8 it also plays sideways, with the same rules. v9 makes the 3D finer. From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
+How one race of Hiihto plays (v1–v10). From v7 the world is drawn in real 3D with three.js; the play is v6's. From v8 it also plays sideways, with the same rules. v9 makes the 3D finer. v10 plays recorded sounds from the shared library. From v4, levels 3, 5, 7… cross a road on foot. Since v3 the player first picks a style: classic
 (perinteinen) or skating (luistelu); a race with friends skis the host's course and style. The
 player picks a wax for the day's weather (a grip wax for classic, a glide wax for skating), then
 skis to the finish. Slower skiers are overtaken from another lane, running into anyone is a fall,
@@ -23,6 +23,7 @@ flowchart TD
   K2 -- Ei --> F[Lähtö: 3, 2, 1, Hiihdä!]
   K3 --> F
   F --> D3[3D: kamera hiihtäjän takana, valot ja varjot]
+  F --> SND[Äänet: potkut lumessa, tuuli vauhdin mukaan, aplodit maalissa]
   D3 --> G{Millainen mäki?}
   G -- Tasainen tai loiva --> H[Napauta tahdissa: potku]
   G -- Jyrkkä ylämäki --> I[V-nappi päälle: V-käynti]
@@ -48,7 +49,7 @@ flowchart TD
   S2 -- Ei --> U[Sama taso uudestaan]
   T --> K4[Kavereiden kanssa: sijat, ensimmäinen maalissa voittaa]
   U --> K4
-  class A,F,D3 blue
+  class A,F,D3,SND blue
   class Y,S,B,G,K,K2,O,R,S2,TIE amber
   class C,P,T green
   class D,E,Q,U rose
@@ -59,7 +60,7 @@ flowchart TD
 
 ## Colours
 
-- **blue**: the start of a level, and how it is drawn
+- **blue**: the start of a level, and how it is drawn and heard
 - **amber**: a choice or check that decides the path
 - **teal**: the ways of moving, by the style and the shape of the trail
 - **violet**: overtaking, and the race with friends
@@ -72,6 +73,7 @@ flowchart TD
 - **Tyyli: perinteinen vai luistelu?**: `setStyle()` saves the pick in `ai-pelit:hiihto:tyyli`; v1 and v2 saves stay as they were and are classic. The opened levels (`taso`) are shared by both styles.
 - **Isäntä valitsee huoneessa radan ja tyylin**: `roomControls()` puts the level arrows and the two styles under the player list through `AiPelitRooms.extra()`; the others see who picks. At "Aloita kierros" `netStart()` sends everyone the host's level, style and a seed, so every phone has the same course and the same grannies and skaters to start with. A friend's own saved style is not changed.
 - **3D: kamera hiihtäjän takana, valot ja varjot**: `games/hiihto/v7/index.html` loads three.js from the shared `lib/three-r187/` (`import()` in the game's own script, so the rest of the game and its tests stay as v6's). `build3d()` lays the land, the trail's lanes and tracks, the road, the spruces (two instanced meshes: those beside the trail cast shadows, a forest further out does not), the banners and posts, once per course; `skiers3d()` poses a simple jointed skier (`makeRig()`, `pose()`) for everyone in sight from the same numbers v6 drew from; `render3d()` puts the camera 5 m behind and 2.5 m above the skier and moves the sun's shadow box with them. The menus, HUD, speech bubbles (`screenOf()`) and snowfall are still drawn on the 2D canvas over it. `tune()`: on a phone below 40 frames a second it draws fewer pixels, then drops shadows below 28. With no WebGL the game still plays and says the phone cannot draw 3D. v9 (`games/hiihto/v9/index.html`, on v8's sideways layout), picked by the owner in a prototype over flat v6 figures on cards: brighter, whiter light with the sun behind the camera and softer shadows; finer skiers (`makeExtra()`, `dress()`: bent elbows and knees, neck, mittens, boots, turned-up ski tips, pole baskets, hat brim; skiers more than 40 m ahead skip these); poses that blend into each other (`pose()`, `r.sm`), a stride that swings from leg to leg at each kick, knees that give, a skater's weight over the gliding ski; 3D spruces in v6's flat colours, unlit (`spruce()`); a groove cut into the classic tracks for each ski (`GROOVES`, `lifted()`); and `tune()` steps down only below 27 frames a second, so a screen held at 30 does not blur (v7 and v8 stepped down below 40).
+- **Äänet: potkut lumessa, tuuli vauhdin mukaan, aplodit maalissa**: `games/hiihto/v10/index.html` (#213) loads `lib/aanet-2/aanet.js` and plays its recorded sounds through `SFX` (`AiPelitAanet`): `valinta` for a wax and the start (`chooseWax()`, `startSound()`), `naksu` for a style switch (`setStyle()`) and the bindings opening and closing at the road (`roadFx()`, also after the last knock), `lumi` for each kick or push (`swish()`), `askel` for steps on the road, `puu` for knocking snow out of the bindings, `tomahdys` for a fall (`thud()`), `voitto` or `tappio` and then `aplodit` at the finish (`finish()`). The glide is the `tuuli` loop, quiet and rising with the speed, silent off the race, fallen or on foot (`glideSound()`, each frame). Each sound falls back to v9's own beep when it cannot play; the V button keeps its beep.
 - **Taso ja keli: lämpötila ja lumi**: `weatherFor()`: levels 1-10 have set temperatures (`TEMPS`), later ones a random one from −18 to +3 °C. `buildCourse()` makes the course: 500 m at level 1, 100 m more each level, at most 1500 m; the second hill is always steep. The time limit is set for the style (`idealTime()` skis it with `botStep()`).
 - **Valitse voide**: classic shows four grip waxes (`WAXES`), skating four glide waxes (`GLIDES`), each with its temperature range.
 - **Lipsuu mäissä**: `waxFit()`: a grip wax made for colder weather loses 14 % of its grip per degree above its range (at least 35 % left), so kicks slip on climbs that a right wax holds.
