@@ -117,3 +117,27 @@ test_the_final_whistle_ends_the_match_and_saves_it = v1.test_the_final_whistle_e
 test_the_computer_plays_a_whole_match_on_its_own = v1.test_the_computer_plays_a_whole_match_on_its_own
 test_two_phones_play_against_each_other_with_computer_teammates = v1.test_two_phones_play_against_each_other_with_computer_teammates
 test_a_guest_that_reloads_mid_match_gets_its_player_back = v1.test_a_guest_that_reloads_mid_match_gets_its_player_back
+
+
+def test_a_guest_hears_the_hosts_save_tackle_and_post(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.evaluate(SPY)
+    guest.click("#c", position={"x": 180, "y": 300})  # the tap that turns sound on
+    guest.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
+    guest.wait_for_function("AiPelitAanet.play('osuma', { vol: 0 })", timeout=5000)
+    host.evaluate("state = 'play'; owner = null; for (const k of ctrls) k.switchT = 99")
+    guest.wait_for_function("state === 'play'")
+    guest.evaluate("heard.splice(0)")
+    # A keeper's save shows as the host's text: the guest hears it once.
+    host.evaluate("say(0, 21, 'Torjunta!', '#fff')")
+    guest.wait_for_function("heard.some(h => h[0] === 'ohhoo')", timeout=3000)
+    guest.wait_for_timeout(300)
+    assert played(guest) == ["osuma", "ohhoo"]
+    # A lunge starting on the host is a tackle on the guest.
+    host.evaluate("players[1].lunge = 0.28")
+    guest.wait_for_function("heard.some(h => h[0] === 'suhahdus')", timeout=3000)
+    # A loose ball turned back beside the goal mouth: the post (nobody may take it on the way).
+    guest.evaluate("heard.splice(0)")
+    host.evaluate("for (const p of players) { p.x = (p.slot - 1) * 5; p.y = p.t ? 6 : -6; p.vx = p.vy = 0; p.cd = 5; } owner = null; Object.assign(ball, { x: GOAL / 2, y: LEN / 2 - 4, z: 0, vx: 0, vy: 14, vz: 0, from: null, fromT: 0, shot: false })")
+    guest.wait_for_function("heard.some(h => h[0] === 'metalli')", timeout=3000)
+    assert host.errors == guest.errors == []
