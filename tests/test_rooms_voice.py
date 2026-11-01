@@ -365,3 +365,19 @@ def test_a_call_whose_setup_was_lost_is_made_again(phones, kind):
     a = join(phones, "Aino", code)
     for p in (host, a):
         p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=45000)
+
+
+def test_lost_setups_heal_for_every_pair_and_a_working_call_is_kept(phones):
+    # Two calls lose their offer at once in a room of three; both are made again.
+    phones.relay.lose_rtc["offer"] = 2
+    host, code = make_room(phones)
+    a = join(phones, "Aino", code)
+    b = join(phones, "Iida", code)
+    for p in (host, a, b):
+        p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=50000)
+    # A call that is up is never made again: the same calls 25 s later, past the 20 s limit.
+    count = [p.evaluate("window.__pcs.length") for p in (host, a, b)]
+    host.wait_for_timeout(25000)
+    assert [p.evaluate("window.__pcs.length") for p in (host, a, b)] == count
+    for p in (host, a, b):
+        assert p.evaluate("AiPelitRooms.voice.calls") == 2
