@@ -18,6 +18,8 @@ From v8 (#308) the jump button is where the other athletics games have it (Pituu
 
 From v9 (#313) a pad that does nothing right then is greyed out and does not light up when pressed (v8 flashed every pad at every tap). The feet are on at the start (a step there is a false start) and while running on the ground; off while the whistle blows, over a hurdle, stumbling and past the line. The jump is on only running on the ground, and never in a race without hurdles, where it now does nothing (v8 hopped). A runner with a red card has every pad off, the jump too (v8 let them jump after the gun). `padOn()` in `games/aitajuoksu/v9/index.html`; see `yleisurheilu-napit.md`.
 
+v10 (#311) plays as v9 with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/aitajuoksu/v10/index.html`, `asut.md`).
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]

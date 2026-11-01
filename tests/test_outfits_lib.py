@@ -156,3 +156,59 @@ def test_turning_the_phone_with_the_picker_open_keeps_it_and_the_choice(lib_page
     assert page.locator("#ai-pelit-asut canvas").first.bounding_box()["height"] == 80
     assert page.locator("#ai-pelit-asut").count() == 1
     assert errors == []
+
+
+SHARED_PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<body><script src="../outfits.js" data-game="%s" data-share="yleisurheilu"></script>
+<script>AiPelitOutfits.setup({ outfits: AiPelitOutfits.yleisurheilu, draw: function () {} });</script></body>"""
+
+
+def shared_page(site, browser, slug, store):
+    (site.root / slug).mkdir(exist_ok=True)
+    (site.root / slug / "index.html").write_text(SHARED_PAGE % slug)
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    for k, v in store.items():
+        ctx.add_init_script(f"localStorage.setItem('{k}', '\"{v}\"')")
+    page = ctx.new_page()
+    page.goto(site.url + slug + "/")
+    return page
+
+
+def test_a_shared_choice_is_one_for_the_whole_group(site, browser):
+    # #311: picked in one athletics event, worn in another; its own older choice only until then.
+    site.build()
+    page = shared_page(site, browser, "laji-a", {"ai-pelit:_asut:laji-a": "kulta"})
+    assert page.evaluate("AiPelitOutfits.current().id") == "kulta"
+    assert page.evaluate("AiPelitOutfits.list().filter(o => !o.halloween && !o.tylypahka).map(o => o.id)") \
+        == ["perus", "suomi", "musta", "punainen", "vihrea", "kulta", "neon"]
+    page.evaluate("AiPelitOutfits.open()")
+    page.click("[data-asu=noita]")
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:yleisurheilu')") == '"noita"'
+    # Also under the game's own key, which its older versions read.
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:laji-a')") == '"noita"'
+    other = shared_page(site, browser, "laji-b", {"ai-pelit:_asut:yleisurheilu": "noita", "ai-pelit:_asut:laji-b": "suomi"})
+    assert other.evaluate("AiPelitOutfits.current().id") == "noita"
+    page.context.close()
+    other.context.close()
+
+
+def test_without_data_share_the_choice_stays_the_games_own(lib_page):
+    page, errors = lib_page
+    page.evaluate("AiPelitOutfits.open()")
+    page.click("[data-asu=sini]")
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:yleisurheilu')") is None
+    assert errors == []
+
+
+def test_a_group_takes_over_the_first_earlier_choice_in_its_fixed_order(site, browser):
+    # Review of #315: whichever game opens first, Keihäs's earlier choice wins over Kuula's.
+    site.build()
+    store = {"ai-pelit:_asut:kuula": "kulta", "ai-pelit:_asut:keihas": "noita", "ai-pelit:_asut:laji-c": "suomi"}
+    page = shared_page(site, browser, "laji-c", store)
+    assert page.evaluate("AiPelitOutfits.current().id") == "noita"
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:yleisurheilu')") == '"noita"'
+    page.context.close()
+    # An unknown id in the first is skipped.
+    page = shared_page(site, browser, "laji-d", {"ai-pelit:_asut:keihas": "ei-ole", "ai-pelit:_asut:kuula": "kulta"})
+    assert page.evaluate("AiPelitOutfits.current().id") == "kulta"
+    page.context.close()

@@ -16,6 +16,13 @@
       "note": "Kavereiden kanssa kisa odottaa vain sitä, jonka vuoro on: muut voivat poistua ja palata kesken kisan (Palaa kierrokseen), poissaolijan vuoron voi ohittaa, ja vuoroaan odottavat seisovat katsomassa ja kannustavat.",
       "request": "Moninpeli: anna poistua ja liittyä takaisin joissain peleissä, mm. yleisurheilu. Eli jos ei ole oma vuoro niin ei ole tarve pausettaa, ja ei ole tarvetta korvata botilla. Lisää vuoroaan odottavat pelaajat katsojiksi, ja he voivat kannustaa.",
       "issue": "eerovil/ai-pelit#297"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-01",
+      "note": "Sama asu kaikissa yleisurheilulajeissa ja Ottelussa, ja asuja on nyt seitsemän.",
+      "request": "Puvut voisi toimia kaikissa ottelu peleissä ainakin. Onko puvuille jo oma shared lib",
+      "issue": "eerovil/ai-pelit#311"
     }
   ]
 }

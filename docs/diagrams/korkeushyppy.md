@@ -15,6 +15,8 @@ From v4 (#220) the jump sounds like one: the beeps are recorded sounds from the 
 
 v5 (#297) plays as v4 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
 
+v6 (#311) adds the outfit picker ("👕 Asu" in the menu, `asut.md`): the player's jumper wears the outfit in every pose, on the podium and on friends' phones, and the choice is one for every athletics event and Ottelu (`data-share="yleisurheilu"` in `games/korkeushyppy/v6/index.html`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys, riman korkeudet]
