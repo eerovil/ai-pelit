@@ -46,17 +46,18 @@ function restBelow(c, max) {
 // The crates that stood on one that was lifted fall now, as the ones beside it check again.
 function wake(w, x) { for (const c of G.s.crates) if (c.w === w && Math.abs(c.x - x) < BOX_W * 1.4) c.f = 1; }
 // Where `who`'s hands are: [place, x, y]. This phone's own person from its own state; a friend from what their phone says.
+// (The middle of the crate in their arms: under a swimmer, at a walker's waist.)
 function handsOf(who) {
   if (who === me()) {
     if (G.mode === 'dive') return ['sea', diver.x + diver.dir * 0.75, diver.y + 0.55];
-    if (G.mode === 'ice') return ['ice', walker.x + walker.dir * 0.6, walker.y - 0.45];
-    return ['sub', crew.x + crew.dir * 0.55, crew.y - 0.5];
+    if (G.mode === 'ice') return ['ice', walker.x + walker.dir * 0.6, walker.y - 1.0];
+    return ['sub', crew.x + crew.dir * 0.55, crew.y - 0.95];
   }
   const o = net && net.others[who];
   if (!o) return null;
   if (o.mode === 'dive') return ['sea', o.x + o.dir * 0.75, o.y + 0.55];
-  if (o.mode === 'ice') return ['ice', o.x + o.dir * 0.6, o.y - 0.45];
-  return ['sub', o.x + o.dir * 0.55, o.y - 0.5];
+  if (o.mode === 'ice') return ['ice', o.x + o.dir * 0.6, o.y - 1.0];
+  return ['sub', o.x + o.dir * 0.55, o.y - 0.95];
 }
 // Every frame on the host (or alone): held crates follow their holder, the others fall until they land.
 function stepCrates(dt) {
@@ -110,9 +111,9 @@ function nearCrate() {
 // Where a crate let go of goes: in front of the person, from the height of their hands.
 function dropSpot() {
   if (G.mode === 'dive') return ['sea', diver.x + diver.dir * 0.75, diver.y + 0.2];
-  if (G.mode === 'ice') return ['ice', walker.x + walker.dir * 0.8, walker.y - 0.8];
+  if (G.mode === 'ice') return ['ice', walker.x + walker.dir * 0.6, walker.y - 1.35];
   const [a, b] = DECK_X[crew.y > 1 ? 1 : 0];
-  return ['sub', Math.max(a - 2.4, Math.min(b + 2.4, crew.x + crew.dir * 0.8)), crew.y - 0.9];
+  return ['sub', Math.max(a - 2.4, Math.min(b + 2.4, crew.x + crew.dir * 0.8)), crew.y - 1.3];
 }
 // SISU's storage shelf (in the stores, lower deck): four crates a row, two rows. A crate on it is out of the way.
 const SHELF = [[-0.3, LOW], [0.65, LOW], [1.6, LOW], [2.55, LOW], [-0.3, 1.2], [0.65, 1.2], [1.6, 1.2], [2.55, 1.2]];

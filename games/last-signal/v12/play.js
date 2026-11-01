@@ -107,9 +107,11 @@ function stepIce(dt) {
     } else {
       const vx = w.to != null ? Math.sign(w.to - w.x) * Math.min(WALK, Math.abs(w.to - w.x) / dt) : input.x * WALK;
       let nx = w.x + vx * dt;
-      // the buildings' walls: A-3's far wall, the weather station's far wall, and upstairs both walls
-      if (b && b.id === 'asema') nx = Math.max(b.x0 + 0.6, nx);
-      if (b && b.id === 'saa') nx = Math.min(b.x1 - 0.6, w.fl ? Math.max(b.x0 + 0.6, nx) : nx);
+      // the buildings' walls: from inside, the wall without the door (upstairs both walls); from outside, that wall
+      if (b && (b.door !== 'x0' || w.fl)) nx = Math.max(b.x0 + 0.6, nx);
+      if (b && (b.door !== 'x1' || w.fl)) nx = Math.min(b.x1 - 0.6, nx);
+      const nb = !b && bldAt(nx);
+      if (nb) nx = nb.door === 'x1' && nx < nb.x1 - 0.3 && w.x <= nb.x0 ? nb.x0 - 0.3 : nb.door === 'x0' && w.x >= nb.x1 ? nb.x1 + 0.3 : nx;
       nx = Math.max(36, Math.min(WORLD_W - 10, nx));
       const g = groundAt(nx, bldAt(nx) === b ? w.fl : 0);
       if (g == null) {

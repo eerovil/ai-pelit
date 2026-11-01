@@ -21,7 +21,6 @@ const TANK_MAX = 260;
 const HOSE = [0, 80, 120, 180, 260];
 const LAMP = [0, 1, 1.45, 1.9];
 const COST = { tank: [0, 0, 2, 3, 4], hose: [0, 0, 2, 3, 4], lamp: [0, 0, 2, 4] };
-const COLD = 600;
 const DIVER_SPEED = 4.4, SUB_SPEED = 16;
 const WALK = 4.2, CLIMB = 2.6;      // the person inside SISU (v3), in m/s
 // v12 (#300): the sonar hears 300 m round SISU and a ping names what is within 150 m (v11: 1000 m and 450 m).
@@ -51,15 +50,16 @@ const SROOMS = [
 const WARM = 60, WARMUP = 35;
 // v12 (#300): the abandoned weather station east of the iceberg, by the fifth opening: two floors joined by a ladder,
 // its door on the west side. `floors` are where the feet stand on each; `fl` in a room is its floor.
-const SAA = { id: 'saa', name: 'Sääasema', x0: 6278, x1: 6318, floors: [-1.1, -4.6], roof: -8.1, ladder: 6290,
+const SAA = { id: 'saa', name: 'Sääasema', x0: 6278, x1: 6318, floors: [-1.1, -4.6], roof: -8.1, ladder: 6290, door: 'x0',
   rooms: [
     { id: 'aeteinen', name: 'Eteinen', x0: 6278, x1: 6286, fl: 0 },
     { id: 'avarasto', name: 'Varasto', x0: 6286, x1: 6302, fl: 0 },
     { id: 'akone', name: 'Generaattori', x0: 6302, x1: 6318, fl: 0 },
     { id: 'aradio', name: 'Sääkoppi', x0: 6278, x1: 6296, fl: 1 },
     { id: 'amakuu', name: 'Makuuhuone', x0: 6296, x1: 6318, fl: 1 }] };
-// v12: both buildings on the ice the same way: A-3's one floor stands at its skids (the feet at -2.8).
-const BLDS = [{ id: 'asema', name: 'A-3', x0: STATION.x0, x1: STATION.x1, floors: [STATION.floor - 0.3], roof: STATION.roof,
+// v12: both buildings on the ice the same way: A-3's one floor stands at its skids (the feet at -2.8). `door`: the wall
+// with the door; the other wall is walked into only from inside.
+const BLDS = [{ id: 'asema', name: 'A-3', x0: STATION.x0, x1: STATION.x1, floors: [STATION.floor - 0.3], roof: STATION.roof, door: 'x1',
   rooms: SROOMS.map(r => ({ ...r, fl: 0 })) }, SAA];
 function bldAt(x) { return BLDS.find(b => x > b.x0 && x < b.x1) || null; }
 function inStation(x) { return !!bldAt(x); }
@@ -384,7 +384,7 @@ const ICE_ITEMS = [
   { id: 'saa:o', k: 'osa', x: 6309, y: -1.4, site: 'saa' },
 ];
 // v12: the crates on the ice, in A-3's store and the weather station's, standing on their floors.
-for (const [id, ch, x, y] of [['pinta:c1', 'P', 126, -2.8], ['pinta:c2', 'F', 128, -2.8], ['pinta:c3', 'U', 127, -3.5], ['pinta:c4', 'J', 137, -2.8],
+for (const [id, ch, x, y] of [['pinta:c1', 'P', 126, -2.8], ['pinta:c2', 'F', 128, -2.8], ['pinta:c3', 'U', 126.4, -3.5], ['pinta:c4', 'J', 137, -2.8],
   ['saa:c1', 'U', 6292, -1.1], ['saa:c2', 'F', 6295, -1.1], ['saa:c3', 'J', 6298, -1.1], ['saa:c4', 'M', 6298, -1.8], ['saa:c5', 'B', 6312, -1.1]])
   crate0(id, ch, 'ice', x, y);
 // The lab (v8, #151): each sample, once studied in SISU's lab, tells a little of what happened and helps for good.
@@ -488,7 +488,7 @@ const LOGS = {
     { t: 'Kaikkea ei voi viedä. Etsi ne, joita tarvitset.', c: 'msg' }] },
 };
 // The deep sea (v2): glowing fish swim slow loops (x, y, reach across, reach up and down, speed) and bump into the
-// diver or SISU; hot vents stand on the deep plain, solid chimneys whose warm water keeps the cold away.
+// diver or SISU; hot vents stand on the deep plain as solid chimneys.
 const FISH = [[3300, 742, 22, 6, 0.3], [3600, 860, 28, 8, 0.25], [3810, 1075, 16, 8, 0.35], [4080, 1300, 36, 10, 0.22],
   [4300, 1288, 30, 10, 0.28], [4425, 1262, 18, 8, 0.32]].map(([x, ...r]) => [WX(x), ...r]);
 const VENTS = [[4062, 12], [4112, 8], [4232, 14], [4318, 10]].map(([x, h]) => [WX(x), h]);
@@ -497,7 +497,6 @@ function fishAt(n, t) {
   const [x, y, rx, ry, sp] = FISH[n];
   return { x: x + Math.sin(t * sp + n * 2) * rx, y: y + Math.sin(t * sp * 1.7 + n) * ry, dir: Math.cos(t * sp + n * 2) >= 0 ? 1 : -1 };
 }
-function nearVent(x, y, r) { return VENTS.some(([vx, h]) => Math.hypot(x - vx, y - (floorY(vx) - h)) < r); }
 // Schools of small fish (v8, #151) in the shallow bay and the wreck field: (x, y, reach across, reach up and down,
 // how many). They come back each night; a speared one is a fish carried home and cooked in the galley.
 const SCHOOLS = [[372, 40, 22, 6, 7], [530, 78, 26, 8, 6], [760, 96, 20, 6, 7], [1230, 205, 22, 8, 7], [1640, 214, 18, 6, 6]].map(([x, ...r]) => [WX(x), ...r]);
