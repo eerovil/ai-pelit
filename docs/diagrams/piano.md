@@ -25,12 +25,12 @@ flowchart TD
   C --> D{Onko tämän kaistan nuotti viivalla?}
   D -- Aivan kohdalla --> E[Nappiin!: 100 p x putki-kerroin]
   D -- Melkein --> F[Hyvä: 50 p x putki-kerroin]
-  D -- Ei --> G[Ohi!: putki katkeaa, sydän menee]
+  D -- Ei --> G[Ohi!: putki katkeaa, sydän menee, ei Ei häviötä -pelissä]
   B --> H[Nuotti soi tahdillaan]
   E --> K
   F --> K
   B --> I[Nuotti putoaa viivan ohi]
-  I --> J[Ohi meni!: putki katkeaa, sydän menee]
+  I --> J[Ohi meni!: putki katkeaa, sydän menee, ei Ei häviötä -pelissä]
   K{Kappale lopussa?}
   K -- Ei --> B
   K -- Kyllä --> KS{Ei häviötä -peli?}
@@ -60,7 +60,7 @@ flowchart TD
 - **amber**: a check that decides the path
 - **teal**: a hit and its points, and the tune's notes
 - **green**: a finished song: the score is kept (v2) and a faster song starts
-- **rose**: a miss that costs a heart
+- **rose**: a miss that costs a heart (in a no-fail game, from v8, it costs none)
 - **violet**: the end of the game and what is saved
 
 ## Boxes
