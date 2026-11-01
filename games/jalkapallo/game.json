@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: 3 vs 3 ylhäältä kuvattuna, juoksutatikku, syöttö, laukaus ja taklaus; yksin tietokonetta vastaan tai 2–6 puhelinta kahdessa joukkueessa.",
       "request": "Jalkapallopeli. Multiplayer tai tekoäly",
       "issue": "eerovil/ai-pelit#108"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-01",
+      "note": "Oikeat äänet: pilli aloitukseen ja maaliin, loppuvihellys, potkut, verkko ja yleisö, taklauksen suhahdus, laidan ja tolpan kolahdukset sekä torjunnan ohhoo.",
+      "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): aloitus ja maali pilli, loppuvihellys pilli2, potku ja syöttö potku, maali verkko + yleiso, taklaus suhahdus, laita puu, torjunta osuma + ohhoo, tolppa metalli.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v2 on jo varattu, käytä seuraavaa vapaata numeroa.",
+      "issue": "eerovil/ai-pelit#215"
     }
   ]
 }
