@@ -576,6 +576,11 @@ def test_the_store_camp_and_workshop_cards_fit(site, browser, w, h):
     assert page.evaluate(v4.OVERFLOW) == []
     page.evaluate("closeCard(); G.mode = 'ice'; walker.x = CAMP.elder; campCard()")
     assert page.evaluate(v4.OVERFLOW) == []
+    # v13: Ingrid's card, before and after the pump
+    page.evaluate("closeCard(); G.s.flags.ingrid = true; const c = G.s.crates.find(c => c.k === 'pumppu'); c.w = 'held'; c.by = 'me'; auroraCard('talk')")
+    assert page.evaluate(v4.OVERFLOW) == []
+    page.evaluate("closeCard(); act('pump')")
+    assert page.evaluate(v4.OVERFLOW) == []
     assert page.errors == []
 
 
@@ -754,3 +759,34 @@ def test_a_v12_save_comes_into_v13_under_its_own_key(site, browser):
     assert page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE12}')).w13") is None
     assert page.evaluate(f"JSON.parse(localStorage.getItem('{SAVE13}')).w13") == 1
     assert page.errors == []
+
+
+def test_a_reload_in_aurora_with_the_pump_in_hand_leaves_it_on_that_floor(site, browser):
+    page = game(site, browser)
+    surface_at(page, 0)
+    page.evaluate("openHome(); closeCard(); walkTo(LADDER, -4); run(() => crew.to, 20); goIce(); closeCard(); run(() => walker.climbing || walker.rise, 8)")
+    climb_to(page, 268, 1)
+    page.evaluate("const c = G.s.crates.find(c => c.k === 'pumppu'); c.w = 'held'; c.by = 'me'; run(() => true, 0.3); save()")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.evaluate(v4.RUN)
+    page.click("#jatka")
+    page.evaluate("G.hold = true; closeCard(); run(() => true, 3)")
+    c = page.evaluate("(() => { const c = G.s.crates.find(c => c.k === 'pumppu'); return [c.w, Math.abs(c.y - AUR.floors[1]) < 0.05, c.x > AUR.x0 && c.x < AUR.x1]; })()")
+    assert c == ["ice", True, True]
+    assert page.errors == []
+
+
+def test_a_friend_brings_the_pump_and_the_host_s_aurora_is_green(site, browser):
+    host, aino = v5.room(site, browser, names=("Eero", "Aino"))
+    v5.close_cards(host, aino)
+    host.evaluate("const c = G.s.crates.find(c => c.k === 'pumppu'); c.w = 'held'; c.by = Object.keys(net.others)[0]; G.s.flags.ingrid = true; save()")
+    aino.wait_for_function("G.s.flags.ingrid && !!myCrate()")
+    aino.evaluate("act('pump')")
+    host.wait_for_function("G.s.flags.pumppu && !G.s.crates.some(c => c.k === 'pumppu')")
+    aino.wait_for_function("G.s.flags.pumppu")
+    aino.evaluate("act('greens')")
+    host.wait_for_function("Object.keys(G.held).filter(id => id.startsWith('tuore:')).length === 2")
+    host.evaluate("act('greens')")
+    assert "Huomenna" in toast(host)
+    assert host.errors == [] and aino.errors == []
