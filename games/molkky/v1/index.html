@@ -289,7 +289,14 @@ function simulate(pins, aim) {
 // ---------- The computer's throw ----------
 // It tries throws at each pin and into the bunch, keeps the one that leaves it best placed (exactly
 // 50 above all, never over it), and throws it with an error that shrinks as the levels go up.
-function aimAt(px, py, d, st) { return { x: px * (d - Y0) / (py - Y0), d, st }; }
+function aimAt(px, py, d, st) { return clampAim({ x: px * (d - Y0) / (py - Y0), d, st }); }
+// Every throw lands within the hand's reach: 1.5–5.5 m out, at most 4 m to the side. A target
+// further off keeps its direction, so the kalikka can still slide on to it. The computer's tries
+// go through this too, so it plans only throws it can make.
+function clampAim(a) {
+  const d = Math.max(D_MIN, Math.min(D_MAX, +a.d || LINE)), sl = (+a.x || 0) / ((+a.d || LINE) - Y0);
+  return { x: Math.max(-4, Math.min(4, sl * (d - Y0))), d, st: a.st ? 1 : 0 };
+}
 function throwValue(sc, misses, pts) {
   const s = sc + pts;
   if (s === GOAL) return 1000;
@@ -376,7 +383,7 @@ function keepGame() {
 // Let go of the kalikka: the host (or the phone alone) runs it.
 function doThrow(a, exact) {
   if (phase !== 'aim') return;
-  a = { x: Math.max(-4, Math.min(4, +a.x || 0)), d: Math.max(D_MIN, Math.min(D_MAX, +a.d || LINE)), st: a.st ? 1 : 0 };
+  a = clampAim(a);
   aim = a; aimShown = true;
   launch(world, exact ? a : shaken(a));
   world.ev = { hit: 0, fall: 0, land: 0 };

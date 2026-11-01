@@ -159,6 +159,26 @@ def test_the_computer_takes_exactly_what_it_needs(site, context):
     assert page.evaluate("pointsOf(simulate(setUp(), cpuPlan(setUp(), 0, 0)).pins)") >= 5
 
 
+def test_late_in_the_game_the_computer_plans_only_throws_it_can_make(site, context):
+    page = start(site, context, first=1)
+    # The pins have spread far: most stand past the longest throw (5.5 m) and one far to the side.
+    res = page.evaluate("""() => {
+      world.pins = setUp().map((p, i) => pin(p.n, -0.9 + (i % 6) * 0.36, i < 6 ? 6.3 : 7.0));
+      world.pins[11].x = 4.6; world.pins[11].y = 4.2;
+      score[1] = 40;
+      const plan = cpuPlan(world.pins, 40, 0), predicted = pointsOf(simulate(world.pins, plan).pins);
+      // The computer throws exactly its plan: no level error, no shaking hand.
+      skillOf = () => ({ ex: 0, ew: 0 }); shaken = a => a; cpuPlan = () => plan;
+      toAim();
+      run(() => phase !== 'show', 30);
+      return { plan, predicted, thrown: msg.pts, landed: aim };
+    }""")
+    assert res["plan"]["d"] <= page.evaluate("D_MAX") and abs(res["plan"]["x"]) <= 4
+    assert res["predicted"] > 0
+    assert res["thrown"] == res["predicted"]
+    assert res["landed"]["d"] == res["plan"]["d"] and res["landed"]["x"] == res["plan"]["x"]
+
+
 def test_a_whole_game_ends_saves_and_raises_the_level_on_a_win(site, context):
     page = start(site, context)
     # The phone throws at the nearest pin each time; the computer throws far too short.
