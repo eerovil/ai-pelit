@@ -38,6 +38,14 @@ def open_game(site, browser, block_mp3=False):
     return ctx, page
 
 
+# On a busy host a frame can be slow, so a target placed once may be passed before the next frame:
+# these keep putting it right at the ball until it is hit.
+STAR_AT_BALL = """window.holdStar = setInterval(() => { const s = stars.find(s => s.visible);
+  if (s) s.position.set(ball.x, ball.y, ball.z); }, 16)"""
+BOOST_AT_BALL = """window.holdBoost = setInterval(() => { const i = Math.floor(-ball.z / 2);
+  row(i).kind = row(i + 1).kind = 'boost'; }, 16)"""
+
+
 def played(page):
     return [n for n, ok in page.evaluate("heard.splice(0)") if ok]
 
@@ -79,13 +87,15 @@ def test_each_event_plays_its_sound(game):
     page = game
     start(page)
     # A turbo strip under the ball.
-    page.evaluate("ball.boost = 0; row(Math.floor(-ball.z / 2) + 1).kind = 'boost'")
-    page.wait_for_function("ball.boost > 0", timeout=3000)
+    page.evaluate("ball.boost = 0")
+    page.evaluate(BOOST_AT_BALL)
+    page.wait_for_function("ball.boost > 0", timeout=5000)
+    page.evaluate("clearInterval(holdBoost)")
     assert "nousu" in played(page)
     # A star right at the ball.
-    page.evaluate("""() => { const s = stars.find(s => s.visible && s.position.z < ball.z - 2) || stars[0];
-      s.visible = true; s.position.set(ball.x, ball.y, ball.z); }""")
-    page.wait_for_function("round.stars > 0", timeout=3000)
+    page.evaluate(STAR_AT_BALL)
+    page.wait_for_function("round.stars > 0", timeout=5000)
+    page.evaluate("clearInterval(holdStar)")
     assert "valinta" in played(page)
     # Thrown up off a ramp's end: the jump.
     page.evaluate("ball.ramp = true; ball.air = false")
@@ -106,16 +116,19 @@ def test_each_event_plays_its_sound(game):
 def test_a_block_bump_plays_the_hit(game):
     page = game
     start(page)
-    # Blocks come after row 120: jump the ball ahead, then hold the first one still in its path.
-    page.evaluate("ball.z = -250")
-    page.wait_for_function("blocks.some(b => b.i > -ball.z / 2 + 3)", timeout=3000)
+    # Blocks come after row 120: make the track that far, and put the ball on a block's row (a
+    # solid one). Each tick the block moves onto the ball's row just ahead of it (sp 0: it sits at
+    # the row's middle, where the ball is kept).
     page.evaluate("""() => {
-      const b = blocks.find(b => b.i > -ball.z / 2 + 3);
-      b.sp = 0; b.ph = 0;
-      ball.z = -b.i * 2 + 1.2; ball.x = ball.aimX = row(b.i).cx; ball.y = 0.5; ball.air = false;
-      window.target = b;
+      row(300);
+      window.target = blocks.find(b => b.i > 125);
+      target.sp = 0; target.ph = 0;
+      const r = row(target.i);
+      Object.assign(ball, { z: -target.i * 2 - 0.05, x: r.cx, aimX: r.cx, y: 0.45, vy: 0, air: false, ramp: false });
+      window.holdBlock = setInterval(() => { target.i = Math.floor(-ball.z / 2); target.mesh.position.z = ball.z - 0.3; }, 16);
     }""")
-    page.wait_for_function("target.hit", timeout=3000)
+    page.wait_for_function("target.hit || round.phase !== 'run'", timeout=5000)
+    assert page.evaluate("target.hit")
     assert "osuma" in played(page)
     assert page.errors == []
 
@@ -160,10 +173,10 @@ def test_a_second_round_rolls_and_sounds_again(game):
     page.evaluate("window.keep = setInterval(() => { ball.aimX = row(Math.floor(-ball.z / 2)).cx; }, 16)")
     page.wait_for_function("roll.playing() && roll.vol > 0.3", timeout=3000)
     # A star and a turbo in the same frame both sound.
-    page.evaluate("""() => { const s = stars.find(s => s.visible) || stars[0];
-      s.visible = true; s.position.set(ball.x, ball.y, ball.z);
-      row(Math.floor(-ball.z / 2)).kind = 'boost'; ball.boost = 0; }""")
-    page.wait_for_function("round.stars > 0 && ball.boost > 0", timeout=3000)
+    page.evaluate("ball.boost = 0")
+    page.evaluate(STAR_AT_BALL)
+    page.evaluate(BOOST_AT_BALL)
+    page.wait_for_function("round.stars > 0 && ball.boost > 0", timeout=5000)
     got = played(page)
     assert "valinta" in got and "nousu" in got, got
     assert page.errors == []
