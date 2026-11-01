@@ -506,6 +506,10 @@
     // yet reads every 30 s, so the first request shows there too; with friends, the "now playing"
     // message every 30 s brings requests already.
     if (friends) {
+      // Requests show on the front page and the friends page themselves; on a game's or a
+      // group's page they come as kaverit.js's banner.
+      friends.quietRequests = !m || m[1] === 'kaverit';
+      friends.drawBanner();
       if (m && m[1] === 'kaverit') friends.watch(true);
       else friends.watch(!m && !!friends.name(), 30e3, true);
     }
@@ -541,7 +545,8 @@
   function drawPlaying() {
     var box = view.querySelector('.friends-playing');
     if (!box || !friends) return;
-    var st = friends.state, now = st ? st.friends.filter(function (f) { return f.now; }) : [];
+    // Playing a game, not only browsing the shelf ("Selaa pelejä" shows on the friends page).
+    var st = friends.state, now = st ? st.friends.filter(function (f) { return f.now && f.game; }) : [];
     var asks = st ? st.requests : [];
     box.hidden = !now.length && !asks.length;
     box.replaceChildren.apply(box, [
@@ -601,7 +606,7 @@
     if (location.hash === '#/kaverit') renderFriends(); else drawPlaying();
   }
   if (friends) {
-    friends.quietRequests = true;
+    friends.quietRequests = true; // until render() knows the page
     friends.on(function () {
       if (!catalog) return;
       if (location.hash === '#/kaverit') {

@@ -179,7 +179,9 @@
     'border-radius:14px;background:#2b2140;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 15px/1.3 system-ui,sans-serif;touch-action:manipulation}' +
     '#aipk p{margin:0;flex:1 1 100%}#aipk b{color:#ffd166}' +
     '#aipk button{font:800 15px system-ui,sans-serif;padding:8px 14px;border:0;border-radius:10px;background:#4f9a3a;color:#fff}' +
-    '#aipk button.no{background:rgba(255,255,255,.16)}#aipk .sp{flex:1}';
+    '#aipk button.no{background:rgba(255,255,255,.16)}#aipk .sp{flex:1}' +
+    // On the shelf the top holds its links ("‹ Kaikki pelit"), so the banner sits at the bottom.
+    '#aipk.low{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}';
   var banner = null, dismissed = {}, busy = false;
   function roomScreenShowing() { var r = document.getElementById('aipr'); return !!(r && !r.hidden); }
   function drawBanner() {
@@ -197,6 +199,7 @@
     }
     banner = document.createElement('div');
     banner.id = 'aipk'; banner.setAttribute('data-k', key); banner.setAttribute('role', 'alert');
+    if (!here) banner.className = 'low';
     var p = document.createElement('p'), who = document.createElement('b');
     who.textContent = (inv || req).name;
     p.appendChild(who);

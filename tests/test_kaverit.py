@@ -393,3 +393,35 @@ def test_a_first_request_shows_on_an_open_shelf_with_no_friends(phones):
     shelf.locator(".friends-playing .friend.ask button", has_text="Hyväksy").click()
     shelf.wait_for_function("!document.querySelector('.friends-playing .friend.ask')")
     assert phones.api.friends == {frozenset((A, B))}
+
+
+def test_friends_only_browsing_the_shelf_are_not_listed_as_playing(phones):
+    c = "c" * 32
+    phones.api.names.update({A: "Aino", B: "Bertta", c: "Ceci"})
+    phones.api.friends.update({frozenset((A, B)), frozenset((A, c))})
+    phones.api.presence[B] = (None, None, now_iso(5))
+    phones.api.presence[c] = (None, None, now_iso(5))
+    shelf = phones("Aino", None, player=A)
+    shelf.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state && AiPelitKaverit.state.friends.length === 2")
+    shelf.wait_for_timeout(300)
+    assert shelf.locator(".friends-playing").is_hidden()
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friend")
+    assert shelf.locator(".friend .meta").all_inner_texts() == ["Selaa pelejä", "Selaa pelejä"]
+
+
+def test_a_request_on_a_games_page_comes_as_a_banner(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta", "c" * 32: "Ceci"})
+    phones.api.friends.add(frozenset((A, B)))
+    shelf = phones("Aino", None, player=A)
+    shelf.wait_for_selector('.card[data-slug="huonetesti"]')
+    shelf.click('.card[data-slug="huonetesti"] .card-main')
+    shelf.wait_for_selector(".game-head")
+    # Ceci asks while Aino reads a game's page; her next "now playing" brings it as a banner.
+    phones.api.requests.add(("c" * 32, pid_of(A)))
+    shelf.wait_for_selector("#aipk", timeout=40_000)
+    assert shelf.locator("#aipk p").inner_text() == "Ceci haluaa kaveriksi"
+    # Back on the front page the request shows in the page, not as a banner.
+    shelf.click(".back")
+    shelf.wait_for_selector(".friends-playing:not([hidden]) .friend.ask")
+    assert shelf.locator("#aipk").count() == 0
