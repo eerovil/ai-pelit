@@ -129,3 +129,28 @@ def test_a_friends_phone_plays_the_same_sounds_from_the_hosts_state(site, contex
     page.evaluate("net.done = false; finishOnline({ w: R.me })")
     assert played(page) == ["voitto"]
     assert page.errors == []
+
+
+def test_the_opponents_sword_on_the_player_is_a_big_hit(site, context):
+    """Alone, the player takes 30 % less: a 16 from the sword becomes 11, still a sword hit."""
+    page = open_game(site, context)
+    start_fight(page)
+    page.evaluate("stateT = 0.001; step(0.01); heard.splice(0); me.dash = 0; const hp = me.hp; damage(me, 16, foe.x, foe.y, 0); window.lost = hp - me.hp")
+    assert page.evaluate("lost") == 11
+    assert played(page) == ["potku"]
+    assert page.errors == []
+
+
+def test_the_crowd_still_shouts_when_only_the_thud_is_missing(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route("**/tomahdys.mp3", lambda route: route.abort())
+        page = open_game(site, ctx)
+        page.click("#go")
+        page.wait_for_function("AiPelitAanet.ready('yleiso')", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('gongi', { vol: 0 })", timeout=5000)
+        page.evaluate("stateT = 0.001; step(0.01); heard.splice(0); foe.hp = 1; damage(foe, 18, me.x, me.y, 0)")
+        assert played(page) == ["potku", "yleiso"]
+        assert page.errors == []
+    finally:
+        ctx.close()

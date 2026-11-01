@@ -126,8 +126,8 @@ const sfx = {
   shot: () => S.play('suhahdus', { vol: 0.45, rate: 1.6 }) || tone(900, 0.07, 'square', 0.04, 400),
   dash: () => S.play('suhahdus', { vol: 0.25, rate: 0.8 }) || tone(500, 0.12, 'triangle', 0.05, 900),
   // Sword hits (16-20) are the big ones, arrows (8-10) the light ones.
-  hit: n => S.play(n > 12 ? 'potku' : 'osuma', { vol: n > 12 ? 0.9 : 0.7 }) || tone(n > 12 ? 140 : 220, 0.12, 'sawtooth', 0.09, 70),
-  ko: () => { if (S.play('tomahdys')) S.play('yleiso', { vol: 0.6, delay: 0.25 }); else tone(110, 0.6, 'triangle', 0.12, 40); },
+  hit: big => S.play(big ? 'potku' : 'osuma', { vol: big ? 0.9 : 0.7 }) || tone(big ? 140 : 220, 0.12, 'sawtooth', 0.09, 70),
+  ko: () => { S.play('tomahdys') || tone(110, 0.6, 'triangle', 0.12, 40); S.play('yleiso', { vol: 0.6, delay: 0.25 }); },
   end: won => S.play(won ? 'voitto' : 'tappio', { vol: 0.8 }),
 };
 function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
@@ -172,6 +172,8 @@ function clear(ax, ay, bx, by) {
 
 function damage(t, n, fromX, fromY, push) {
   if (t.dash > 0) { texts.push({ x: t.x, y: t.y - 26, s: 'Väisti!', c: '#cfe8ff', t: 0.8 }); return; }
+  // Sword or arrow, decided before the player's hits are made lighter.
+  const big = n > 12;
   // The opponent's hits hurt the player less than the player's hurt it.
   if (!t.ai && !net) n = Math.max(1, Math.round(n * 0.7));
   t.hp = Math.max(0, t.hp - n); t.flash = 0.18;
@@ -179,7 +181,7 @@ function damage(t, n, fromX, fromY, push) {
   t.kx += dx / d * push; t.ky += dy / d * push;
   texts.push({ x: t.x, y: t.y - 26, s: '-' + n, c: t.ai ? '#ffe08a' : '#ff8a80', t: 0.8 });
   shake = Math.max(shake, n > 12 ? 7 : 4);
-  sfx.hit(n);
+  sfx.hit(big);
   if (t.hp <= 0 && state === 'fight') { state = 'ko'; stateT = 1.6; slow = 0.3; sfx.ko(); }
 }
 
@@ -474,7 +476,7 @@ function unpack(f, a) {
   if (f.hp < was.hp) {
     const n = Math.round(was.hp - f.hp);
     texts.push({ x: f.tx, y: f.ty - 26, s: '-' + n, c: f === foe ? '#ffe08a' : '#ff8a80', t: 0.8 });
-    shake = Math.max(shake, n > 12 ? 7 : 4); sfx.hit(n);
+    shake = Math.max(shake, n > 12 ? 7 : 4); sfx.hit(n > 12);
   }
   if (f.swing > 0 && was.swing <= 0) sfx.swing();
   if (f.shot > was.shot + 0.05) sfx.shot();
