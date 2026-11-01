@@ -255,7 +255,8 @@ function stockPond(saved) {
     pond = saved.fish.map(q => {
       const s = lake.spots[q[5]] || lake.spots[0], f = newFish(s, SP[q[0]] || 'ahven');
       Object.assign(f, { g: q[1], lx: q[2], ly: q[3], d: q[4], tgt: s.i, linger: q[6], hf: q[7], go: !!q[8], gx: q[9], gy: q[10], stamp: q[11] || 0, giant: !!q[12] });
-      if (f.hx !== undefined) { f.hx = f.lx; f.hy = f.ly; }
+      if (f.hx !== undefined) { f.hx = q[13] !== null && q[13] !== undefined ? q[13] : f.lx; f.hy = q[14] !== null && q[14] !== undefined ? q[14] : f.ly; }
+      f.full = q[15] || 0; f.eaten = q[16] || 0;
       if (f.go && !schooling(f.sp)) { f.wx = s.x; f.wy = s.y; }
       return f;
     });
@@ -296,7 +297,9 @@ function stockPond(saved) {
 }
 const r1 = v => Math.round(v * 10) / 10;
 const pondSave = () => ({
-  fish: pond.map(f => [SP.indexOf(f.sp), f.g, r1(f.lx), r1(f.ly), r1(f.d), f.tgt, Math.round(f.linger), Math.round(f.hf * 100) / 100, f.go ? 1 : 0, r1(f.gx || 0), r1(f.gy || 0), f.stamp || 0, f.giant ? 1 : 0]),
+  fish: pond.map(f => [SP.indexOf(f.sp), f.g, r1(f.lx), r1(f.ly), r1(f.d), f.tgt, Math.round(f.linger), Math.round(f.hf * 100) / 100, f.go ? 1 : 0, r1(f.gx || 0), r1(f.gy || 0), f.stamp || 0, f.giant ? 1 : 0,
+    // A pike's home area, and whether it has eaten (it then hunts no more), survive a reload.
+    f.hx !== undefined ? r1(f.hx) : null, f.hx !== undefined ? r1(f.hy) : null, Math.round(f.full || 0), f.eaten || 0]),
 });
 // Off somewhere else: a schooling fish to another spot that suits its kind (a zander only where it
 // is deep), a pike about its home area, a burbot to another spot.
@@ -319,8 +322,8 @@ function travel(o, dt, pace) {
   if (dist < 0.3) { o.go = false; wander(o, s); }
   if (!o.go && (o.linger -= dt) <= 0) leave(o);
 }
-// The fish near each other, found through a grid of 6 m squares.
-const CELL = 6, grid = new Map();
+// The fish near each other, found through a grid of 8 m squares.
+const CELL = 8, grid = new Map();
 const cellOf = (px, py) => Math.floor(px / CELL) * 4096 + Math.floor(py / CELL);
 function buildGrid() {
   grid.clear();
@@ -328,8 +331,9 @@ function buildGrid() {
 }
 function near(f, r, out) {
   out.length = 0;
-  const cx = Math.floor(f.lx / CELL), cy = Math.floor(f.ly / CELL);
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+  // As many squares round as the distance needs.
+  const cx = Math.floor(f.lx / CELL), cy = Math.floor(f.ly / CELL), k = Math.ceil(r / CELL);
+  for (let i = -k; i <= k; i++) for (let j = -k; j <= k; j++) {
     const a = grid.get((cx + i) * 4096 + cy + j);
     if (a) for (const q of a) if (q !== f && Math.abs(q.lx - f.lx) < r && Math.abs(q.ly - f.ly) < r) out.push(q);
   }

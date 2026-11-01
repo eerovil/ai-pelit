@@ -322,6 +322,35 @@ def test_fish_keep_away_from_a_pike_and_a_hungry_pike_hunts(site, context):
     assert page.evaluate("pk.eaten") >= 1 and page.evaluate("pk.full") > 0
 
 
+def test_fish_up_to_the_search_distance_are_found(site, context):
+    page = start(site, context)
+    found = page.evaluate("""() => {
+      pond = []; rivals = [];
+      const p = newFish(lake.spots[0], 'hauki'); p.lx = 100.1; p.ly = 80.1; pond.push(p);
+      const ids = [];
+      for (const d of [12, 13, 13.9]) { const f = newFish(lake.spots[0], 'ahven'); f.lx = p.lx + d; f.ly = p.ly; pond.push(f); ids.push(f.id); }
+      buildGrid();
+      const got = near(p, 14, []).map(f => f.id);
+      return ids.every(id => got.includes(id));
+    }""")
+    assert found is True
+
+
+def test_a_pike_that_has_eaten_still_hunts_no_more_after_a_reload(site, context):
+    page = start(site, context)
+    page.evaluate("""() => {
+      rivals = [];
+      const p = pond.find(f => f.sp === 'hauki' && !f.giant); p.full = 600; p.eaten = 1; p.hx = p.lx + 3; p.hy = p.ly - 2;
+      window.saved = [p.id, r1(p.hx), r1(p.hy)]; keepContest();
+    }""")
+    pid, hx, hy = page.evaluate("saved")
+    page.reload()
+    page.evaluate(RUN)
+    page.click("#resume")
+    pk = page.evaluate(f"(() => {{ const p = pond.find(f => f.sp === 'hauki' && f.eaten === 1); return p && [p.full > 500, p.eaten, p.hx, p.hy]; }})()")
+    assert pk == [True, 1, hx, hy]
+
+
 def test_a_caught_fish_is_gone_and_the_others_swim_between_spots(site, context):
     page = start(site, context)
     page.evaluate("rivals = []; pond.forEach(f => f.was = f.tgt)")
