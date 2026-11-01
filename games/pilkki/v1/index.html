@@ -132,6 +132,16 @@ function makeLake(seed) {
     const depth = Math.round((1.6 + (1 - out) * 9 + r() * 2) * 10) / 10;
     list.push({ i, mx, my, depth });
   }
+  // Push places apart so each one is its own target on the map, and keep them on the lake.
+  for (let k = 0; k < 40; k++) for (const p of list) for (const q of list) {
+    if (p === q) continue;
+    const dx = q.mx - p.mx, dy = q.my - p.my, d = Math.hypot(dx, dy) || 0.001;
+    if (d < 0.17) { const m = (0.17 - d) / 2 / d; p.mx -= dx * m; p.my -= dy * m; q.mx += dx * m; q.my += dy * m; }
+    for (const s of [p, q]) {
+      const ex = (s.mx - 0.5) / 0.44, ey = (s.my - 0.5) / 0.4, e = Math.hypot(ex, ey);
+      if (e > 1) { s.mx = 0.5 + ex / e * 0.44; s.my = 0.5 + ey / e * 0.4; }
+    }
+  }
   return list;
 }
 
@@ -520,8 +530,8 @@ function resize() {
   waterBot = meterY - (wide ? 44 : 56);
   mPx = Math.min(46, (wide ? W * 0.5 : W) / 9.5);
   moveBtn = { x: safeL + 8, y: iceY - 46, w: 124, h: 38 };
-  const mw = Math.min(W - safeL - safeR - 24, wide ? 460 : 400), mh = Math.min(H - safeT - safeB - 120, mw * 0.72);
-  mapBox = { x: (W - mw) / 2, y: safeT + 64 + Math.max(0, (H - safeT - safeB - 120 - mh) / 2), w: mw, h: mh };
+  const mw = Math.min(W - safeL - safeR - 24, wide ? 460 : 400), mh = Math.min(H - safeT - safeB - 140, mw * 0.72);
+  mapBox = { x: (W - mw) / 2, y: safeT + 56 + Math.max(0, (H - safeT - safeB - 140 - mh) / 2), w: mw, h: mh };
 }
 addEventListener('resize', resize); addEventListener('orientationchange', resize); document.addEventListener('fullscreenchange', resize);
 resize();
@@ -545,7 +555,9 @@ c.addEventListener('pointerdown', e => {
   pressed.add(e.pointerId); holding = pressed.size;
   if (!playing()) return;
   if (mapOpen) {
-    const s = lake.find(q => { const [sx, sy] = spotXY(q); return Math.hypot(ex - sx, ey - sy) < 26; });
+    // The nearest place to the finger, if it is near one.
+    let s = null, sd = 30;
+    for (const q of lake) { const [sx, sy] = spotXY(q), d = Math.hypot(ex - sx, ey - sy); if (d < sd) { s = q; sd = d; } }
     if (s) moveTo(s); else mapOpen = false;
     return;
   }
@@ -842,6 +854,7 @@ function drawMap() {
   x.font = '600 12px system-ui'; x.fillStyle = '#c4d8ea';
   x.fillText('Keltainen: sinä · sininen: oma reikä · punainen: muut', W / 2, b.y + b.h + 22, W - 20);
   x.fillText('Matalassa ahvenet ja hauet, syvällä kuhat ja mateet', W / 2, b.y + b.h + 40, W - 20);
+  x.fillStyle = '#fff'; x.fillText('Napauta muualle, niin jäät tähän', W / 2, b.y + b.h + 60, W - 20);
 }
 function draw() {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);

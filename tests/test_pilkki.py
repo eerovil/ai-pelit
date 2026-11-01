@@ -325,7 +325,7 @@ def test_the_menu_and_the_game_fit_the_screen(site, browser, size):
     page.click("#go")
     ok = page.evaluate("""() => moveBtn.x >= 0 && moveBtn.y > 40 && moveBtn.x + moveBtn.w < holeX - 60
       && waterBot - waterTop > 120 && meterY < H && holeX > 0 && holeX < W
-      && mapBox.x >= 0 && mapBox.x + mapBox.w <= W && mapBox.y + mapBox.h + 44 <= H""")
+      && mapBox.x >= 0 && mapBox.x + mapBox.w <= W && mapBox.y + mapBox.h + 64 <= H""")
     assert ok is True
     ctx.close()
 
