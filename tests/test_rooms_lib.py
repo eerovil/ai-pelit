@@ -38,6 +38,7 @@ class Relay:
         self.rooms = {}
         self.blocked = set()  # ids whose phone has no connection
         self.slow = {}  # id -> its held hellos, for a phone whose hello is late
+        self.old = False  # the room from before voice (#322): `_rtc` is routed like any message
 
     def attach(self, page):
         page.route_web_socket(re.compile(r".*/api/rooms/.*"), self.connect)
@@ -93,7 +94,7 @@ class Relay:
             if me == room["host"]:
                 room["listed"] = msg.get("on") is True
             return
-        if msg.get("t") == "_rtc":
+        if msg.get("t") == "_rtc" and not self.old:
             msg["from"] = me
             ws = room["socks"].get(msg.get("to"))
             if ws and msg.get("to") != me:

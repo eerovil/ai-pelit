@@ -183,3 +183,18 @@ def test_a_version_may_leave_voice_out(phones):
         assert p.evaluate("AiPelitRooms.voice") == {"on": False, "talking": False, "speakers": [], "calls": 0}
         assert p.locator("#aipr-mic").count() == 0
         assert not p.locator("#aipr-voiceRow").is_visible()
+
+
+def test_two_phones_talk_on_a_room_from_before_voice(phones):
+    # Until the new room is deployed, the room passes the host's `_rtc` on without `from`, and a
+    # guest's only to the host: two phones still talk.
+    phones.relay.old = True
+    host, code = make_room(phones)
+    a = join(phones, "Aino", code)
+    for p in (host, a):
+        p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=15000)
+    before = heard(a)
+    hold(host)
+    a.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Eero'")
+    a.wait_for_function(f"window.__heard().then(n => n > {before} + 2000)", polling=200)
+    host.mouse.up()

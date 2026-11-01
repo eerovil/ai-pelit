@@ -509,7 +509,9 @@
   }
 
   function onRtc(m) {
-    var id = m.from;
+    // A room from before voice passes the host's messages on without `from`: on a guest, a message
+    // that names no sender is the host's.
+    var id = m.from || (net.host ? '' : net.hostId);
     if (!RTC || !net.on || typeof id !== 'string' || id === net.me) return;
     var p = vpeer(id);
     if (m.k === 'hi') {
