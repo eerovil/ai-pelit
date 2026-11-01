@@ -8,7 +8,8 @@ air or hull sends the player back to safety, never ends the story. Chapter 2 (v3
 surfaces through an opening in the ice at the northern shore, the player walks the ice in a storm,
 finds Aino's camp and the five who left it, and ferries all twelve to the station, four a trip.
 Chapter 3 (v4) opens the ancient ruins in the deep canyon: the diver carries crystals to stone
-sockets that open the doors, reads the murals, and wakes the Heart.
+sockets that open the doors, reads the murals, and wakes the Heart. v5 (#214) plays recorded sounds
+from the shared library instead of beeps, with the sea, SISU's engine, bubbles and the wind behind.
 
 ```mermaid
 flowchart TD
@@ -65,6 +66,7 @@ flowchart TD
   AL --> AM{Kolme valoa palaa?}
   AM -- Ei --> AJ
   AM -- Kyllä --> AN[Sydän herää: luku 3 päättyy]
+  C -.-> AO[Äänet: syvyys, moottori, kuplat, tuuli ja tapahtumien äänet]
   class A,B,C blue
   class D,K,N,S,T amber
   class E,F,G,M,R teal
@@ -78,6 +80,7 @@ flowchart TD
   class Z,AB green
   class AA,AD rose
   class I,J,L rose
+  class AO blue
 ```
 
 ## Colours
@@ -126,3 +129,4 @@ flowchart TD
 - **Jalusta syttyy, sen ovi aukeaa**: a crystal on socket 1, 2 or 3 sets `G.s.lit`, and its door (`SOCKET_DOOR`: a, b, c) stops being a wall in `isWall()`. Any crystal fits any socket.
 - **Kolme valoa palaa?**: `litCount()`.
 - **Sydän herää: luku 3 päättyy**: touching the Heart (`H`) with three lights lit sets `flags.heart`, writes `ai-pelit:jaan-alla:luku3` and shows `heartPanel()` with the chapter 4 teaser.
+- **Äänet: syvyys, moottori, kuplat, tuuli ja tapahtumien äänet**: `games/jaan-alla/v5/index.html` (#214) loads `lib/aanet-2/aanet.js`. `sfx(kind)` plays the library sound for each kind (`SOUND`: pick valinta, story onnistui, tap naksu, bump metalli, bear tomahdys then karhu, alarm halytys, ping kaiku, bubble kupla, snow lumi) and falls back to the old beep when the library cannot play; bubbles and snow steps were silent before and stay so. The sonar pings every 9 s while driving SISU (`G.pingT` in `stepSub()`), a bubble sounds when the diver goes out or comes back (`enterSite()`, `leaveSite()`), and the walker steps in the snow every 0.9 m (`stepIce()`). `ambience()`, called each frame, makes the four loops on the first frame of play and sets them by mode: syvyys under water, sukellusvene by SISU's speed (louder and faster), kuplat while diving, tuuli on the ice growing with `storm()`; all silent in the menu.
