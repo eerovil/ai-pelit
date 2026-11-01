@@ -8,6 +8,8 @@ every trick is done before three hearts run out.
 
 From v6 (#158) the jumper wears the outfit picked under "👕 Asu" in the menu (`figure()` in `games/trampoliini/v6/index.html`; the picker is `asut.md`).
 
+From v7 (#231) the beeps are recorded sounds from the shared library `lib/aanet-2/` (`sound()` in `games/trampoliini/v7/index.html`, see `aanikirjasto.md`): a thud for the push, a spring creak on the mat under 7 m/s and a cartoon boing above it, a power-up for a well-timed push, a confirmation for a trick (higher for a listed one), a thud and the crowd's "ooh" for a fall, and a win or loss tune at the end; each falls back to its v6 beep while its file is not there (`beep()`).
+
 ```mermaid
 flowchart TD
   A[Taso: trampoliini ja temppulista] --> B[Matolla: napauta, v2: päästä irti, pohjalla]
