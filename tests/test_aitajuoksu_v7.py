@@ -3,6 +3,7 @@
 import json
 
 import test_aitajuoksu_v5 as v5
+from test_rooms_lib import Relay
 
 URL = "games/aitajuoksu/v7/"
 
@@ -111,3 +112,59 @@ def test_v6_saves_are_read_as_they_are(site, browser):
     page.goto(site.url + URL)
     assert page.inner_text("#stats") == "Juoksut 5 · Voitot 3 · Ennätys 14,20 s"
     assert page.errors == []
+
+
+def test_a_second_race_sounds_again(site, browser):
+    page = open_game(site, browser)
+    ready(page)
+    page.evaluate("race.cdT = race.gunAt")
+    page.wait_for_function("race.phase === 'run'", timeout=3000)
+    page.evaluate("Object.assign(me, { x: TRACK - 0.2, v: 9, down: 1023 })")
+    page.wait_for_function("!race && !document.getElementById('menu').classList.contains('hidden')", timeout=15000)
+    page.evaluate("heard.splice(0); soloRace(); race.cdT = race.gunAt")
+    page.wait_for_function("race.phase === 'run'", timeout=3000)
+    page.evaluate("step(me, 1); jump(me)")
+    assert played(page) == ["lahto", "askel", "ponnistus", "suhahdus"]
+    assert page.errors == []
+
+
+def test_in_a_room_each_phone_hears_the_gun_and_only_its_own_runner(site, browser):
+    v5.build(site)
+    relay = Relay()
+    pages = []
+    for name in ["Eero", "Aino"]:
+        page = open_game(site, browser, name=name)
+        relay.attach(page)
+        page.reload()
+        page.evaluate(SPY)
+        pages.append(page)
+    host, guest = pages
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", code)
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    for p in pages:
+        p.wait_for_function(f"{json.dumps(NAMES)}.every(AiPelitAanet.ready)", timeout=10000)
+        p.wait_for_function("AiPelitAanet.play('askel', { vol: 0 })", timeout=5000)
+    host.click("#aipr-start")
+    for p in pages:
+        p.wait_for_function("race && race.mode === 'net'", timeout=6000)
+        p.evaluate("heard.splice(0)")
+    host.evaluate("race.gunAt = 0.05")
+    for p in pages:
+        p.wait_for_function("race.phase === 'run'", timeout=4000)
+    for p in pages:
+        assert played(p) == ["lahto"]
+    # The host runs and jumps; the guest hears none of it, only its own step.
+    host.evaluate("step(me, 1); jump(me)")
+    guest.wait_for_function("race.runners.find(r => r !== me).y > 0", timeout=4000)
+    guest.evaluate("step(me, 2)")
+    assert played(host) == ["askel", "ponnistus", "suhahdus"]
+    assert played(guest) == ["askel2"]
+    assert host.errors == guest.errors == []
+    for p in pages:
+        p.context.close()
