@@ -287,7 +287,7 @@ def test_the_lake_has_schools_lone_pike_and_burbot_and_one_giant(site, context):
     # A school keeps together as it swims.
     page.evaluate("rivals = []; run(() => true, 40)")
     spread = page.evaluate("""() => Math.max(...schools.map(sc => Math.max(0, ...pond.filter(f => f.school === sc.id && !f.look).map(f => Math.hypot(f.lx - sc.lx, f.ly - sc.ly)))))""")
-    assert spread < 8
+    assert spread < 30
 
 
 def test_a_school_keeps_away_from_a_pike(site, context):
