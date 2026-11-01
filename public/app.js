@@ -646,8 +646,7 @@
     view.replaceChildren.apply(view, parts);
   }
   function answered(r) {
-    friendsNote = r.ok ? '' : r.status === 403 ? 'Valitse ensin nimimerkki (ylläpitäjä ei hyväksynyt edellistä).'
-      : r.status === 409 ? 'Kavereita on jo niin monta kuin mahtuu.' : 'Ei yhteyttä. Yritä uudelleen.';
+    friendsNote = friends.friendError(r);
     if (location.hash === '#/kaverit') renderFriends(); else drawPlaying();
   }
   if (friends) {
