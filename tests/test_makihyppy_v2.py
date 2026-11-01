@@ -109,3 +109,47 @@ def test_the_computer_is_neither_trivial_nor_unbeatable(site, context):
     assert strong9 >= 1         # ...but a clean jumper can win it
     assert lazy1 == 0           # lazy play never wins, even at level 1
     assert page.errors == []
+
+
+def queued(page):
+    return page.evaluate("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono') || '{}')).join()")
+
+
+def test_the_weeks_record_and_list_are_its_own_and_v1_keeps_its_meets(site, context):
+    page = open_game(site, context, {"ennatys": 231.4})
+    # The menu's list is the week's from the start: a score sent from the menu would go on it.
+    page.wait_for_function("window.AiPelitScores")
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:kysytty', 'true'); AiPelitScores.submit(1)")
+    assert queued(page) == "makihyppy|viikko"
+    page.click("#go")
+    page.evaluate("while (!K.ending) strong()")
+    week = page.evaluate("K.ending.res.find(r => r.p === 'me').best")
+    assert "makihyppy|viikko" in queued(page) and "makihyppy|main" not in queued(page)
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:makihyppy:viikko-ennatys'))") == week
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:makihyppy:ennatys'))") == 231.4
+    page.evaluate("K.ending.t = 99; K.skip(); step(0.01)")
+    assert "Paras viikko " + f"{week:.1f}".replace(".", ",") + " p" in page.inner_text("#stats")
+    # v1 still shows its own best meet of two jumps.
+    page.goto(site.url + "games/makihyppy/v1/")
+    assert "Paras kisa 231,4 p" in page.inner_text("#stats")
+    assert page.errors == []
+
+
+def test_a_guests_week_goes_on_the_weeks_list(site, browser):
+    relay, pages = v1.room(site, browser, ["Eero", "Aino"])
+    host, aino = pages
+    for _ in range(40):
+        if host.evaluate("K.comp === null || K.comp.over"):
+            break
+        p = v1.jumper_page(pages)
+        p.wait_for_function("th && th.mine && (th.phase === 'wait' || th.phase === 'ready')", timeout=8000)
+        n = host.evaluate("K.comp.seq")
+        p.evaluate("fair()")
+        host.wait_for_function(f"K.comp.seq > {n} || K.comp.over", timeout=5000)
+    for p in pages:
+        p.wait_for_function("K.ending !== null", timeout=10000)
+        assert p.evaluate("K.ending.res.find(r => r.p === AiPelitRooms.me).marks.filter(m => m).length") >= 4
+        assert "makihyppy|viikko" in queued(p) and "makihyppy|main" not in queued(p)
+        assert p.errors == []
+    for p in pages:
+        p.context.close()

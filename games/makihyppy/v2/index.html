@@ -413,6 +413,19 @@ const K = AiPelitKisa.meet({
   },
 });
 const thrower = id => K.thrower(id);
+// A week (v2, #283), or a meet saved by v1 going on as its one hill. A guest's meet before the
+// host's arrives has no jumpers yet: a v2 room is always a week.
+const isWeek = () => !K.comp || !K.comp.throwers.length || K.F.hills(K.comp) > 1;
+// The week's best total is its own record ('viikko-ennatys'): 'ennatys' stays the best one-hill
+// meet, as v1 shows it.
+const meetRecord = K.record;
+K.weekBest = K.load('viikko-ennatys', null);
+K.record = mark => {
+  if (!isWeek()) return meetRecord(mark);
+  if (!(mark > 0) || (K.weekBest !== null && mark <= K.weekBest)) return false;
+  K.weekBest = mark; K.save('viikko-ennatys', mark);
+  return true;
+};
 
 // The computer jumps around its skill and with the wind; now and then one lands badly or falls.
 function cpuMark(t, comp) {
@@ -424,6 +437,7 @@ function cpuMark(t, comp) {
 }
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {
+  scoreList();
   th = { seq, id: t.id, mine, phase: 'wait', t: 0, it: 0, s: 0, v: 0, x: inrun[0][0], y: inrun[0][1], vx: 0, vy: 0,
     tau: undefined, spring: null, ft: 0, pos: 0, posSum: 0, posN: 0, inp: 0, fallen: false, tele: null,
     wind: windFor(seq), gseed: (seq * 0.618 + ((K.comp && K.comp.seed) || 1) * 0.001) % 1,
@@ -1126,17 +1140,20 @@ function showMenu(result, cls) {
   r.textContent = result || ''; r.className = cls || '';
   document.getElementById('foe').textContent = 'Taso ' + K.level + ': ' + FOES[(K.level - 1) % FOES.length] + ' ja 10 muuta';
   const pisin = K.load('pisin', 0);
-  document.getElementById('stats').textContent = 'Kisat ' + K.comps + ' · Voitot ' + K.wins + (pisin > 0 ? ' · Pisin ' + fmtM(pisin) : '') + (K.best !== null ? ' · Paras kisa ' + fmtP(K.best) : '');
+  document.getElementById('stats').textContent = 'Kisat ' + K.comps + ' · Voitot ' + K.wins + (pisin > 0 ? ' · Pisin ' + fmtM(pisin) : '') + (K.weekBest !== null ? ' · Paras viikko ' + fmtP(K.weekBest) : '');
   const kept = K.kept(), cont = document.getElementById('cont');
   cont.classList.toggle('hidden', !kept);
   if (kept) cont.textContent = 'Jatka mäkiviikkoa (' + roundText(kept) + ')';
   menu.classList.remove('hidden');
 }
 function soloComp(saved) { K.solo(saved); menu.classList.add('hidden'); scoreList(); }
+// The high-score list: the week's from the start (the menu's 🏆 too), v1's for a meet saved by v1.
+// Set again at each turn, so a guest's list follows the host's meet once it arrives.
 function scoreList() {
-  if (!window.AiPelitScores || !K.comp) return;
-  if (K.F.hills(K.comp) > 1) AiPelitScores.board('viikko', 'Mäkiviikko'); else AiPelitScores.board('main', '');
+  if (!window.AiPelitScores) return;
+  if (isWeek()) AiPelitScores.board('viikko', 'Mäkiviikko'); else AiPelitScores.board('main', '');
 }
+addEventListener('load', scoreList);
 document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });
 document.getElementById('cont').addEventListener('click', () => {
   unlock();
