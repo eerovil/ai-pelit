@@ -144,3 +144,20 @@ def test_two_loops_at_once_and_sound_sleeps_while_the_page_is_hidden(site, conte
     }""")
     assert states == [False, True]
     assert page.errors == []
+
+
+def test_muting_silences_running_loops_and_unmuting_starts_the_waiting_ones(site, context):
+    page = open_demo(site, context, ["tuuli", "sade"], TAG2)
+    page.wait_for_function("AiPelitAanet.ready('tuuli') && AiPelitAanet.ready('sade')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.evaluate("window.wind = AiPelitAanet.loop('tuuli', { vol: 0.6 })")
+    page.wait_for_function("wind.playing()", timeout=5000)
+    # Muted, a loop the game never set()s again goes quiet anyway; one made now waits.
+    page.evaluate("AiPelitAanet.muted = true; window.rain = AiPelitAanet.loop('sade', { vol: 0.4 })")
+    page.wait_for_function("wind.gain.gain.value < 0.01", timeout=3000)
+    assert page.evaluate("rain.playing()") is False
+    assert page.evaluate("AiPelitAanet.play('tuuli')") is False
+    page.evaluate("AiPelitAanet.muted = false")
+    page.wait_for_function("rain.playing() && wind.gain.gain.value > 0.55 && rain.gain.gain.value > 0.35", timeout=3000)
+    assert page.evaluate("AiPelitAanet.muted") is False
+    assert page.errors == []

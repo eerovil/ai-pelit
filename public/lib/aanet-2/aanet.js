@@ -104,6 +104,7 @@
   var bufs = {};    // name -> decoded AudioBuffer
   var asked = {};   // name -> decoding started
   var loops = [];   // the loops running or waiting for their sound
+  var muted = false;
 
   function context() {
     if (ac) return ac;
@@ -161,7 +162,7 @@
     this.start();
   }
   Loop.prototype.start = function () {
-    if (this.src || this.stopped || api.muted || !ac || ac.state !== 'running' || !bufs[this.name]) return;
+    if (this.src || this.stopped || muted || !ac || ac.state !== 'running' || !bufs[this.name]) return;
     try {
       var b = bufs[this.name], src = ac.createBufferSource(), g = ac.createGain();
       src.buffer = b;
@@ -185,7 +186,7 @@
       try {
         // A short glide, so a value set each frame does not crackle.
         var t = ac.currentTime;
-        this.gain.gain.setTargetAtTime(api.muted ? 0 : this.vol, t, 0.03);
+        this.gain.gain.setTargetAtTime(muted ? 0 : this.vol, t, 0.03);
         this.src.playbackRate.setTargetAtTime(this.rate, t, 0.03);
       } catch (e) {}
     } else this.start();
@@ -205,17 +206,19 @@
   // A loop must not go on with the phone in the pocket: sound sleeps while the page is hidden.
   document.addEventListener('visibilitychange', function () {
     if (!ac) return;
-    try { if (document.hidden) ac.suspend(); else ac.resume(); } catch (e) {}
+    try {
+      if (document.hidden) ac.suspend();
+      else { var r = ac.resume(); if (r && r.then) r.then(wake, function () {}); }
+    } catch (e) {}
   });
 
   var api = {
-    muted: false,
     load: load,
     unlock: unlock,
     // Whether the sound is loaded and decoded, so that play() can play it.
     ready: function (name) { return !!bufs[name]; },
     play: function (name, opts) {
-      if (api.muted || !ac || ac.state !== 'running' || !bufs[name]) return false;
+      if (muted || !ac || ac.state !== 'running' || !bufs[name]) return false;
       try {
         var src = ac.createBufferSource(), g = ac.createGain(), o = opts || {};
         src.buffer = bufs[name];
@@ -236,5 +239,16 @@
     names: function () { return Object.keys(SOUNDS); },
     file: function (name) { return SOUNDS[name]; },
   };
+  // Muting silences the loops that run, at once; unmuting gives them back their volume and starts
+  // the ones made while muted.
+  Object.defineProperty(api, 'muted', {
+    enumerable: true,
+    get: function () { return muted; },
+    set: function (m) {
+      muted = !!m;
+      loops.forEach(function (l) { if (l.src) l.set({}); });
+      if (!muted) wake();
+    },
+  });
   window.AiPelitAanet = api;
 })();
