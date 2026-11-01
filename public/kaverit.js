@@ -11,7 +11,9 @@
 // network nothing shows, and no game waits for it.
 //
 //   AiPelitKaverit.state       {pid, friends, requests, asked, invites} or null before the first answer
-//   .refresh()                 reads it now; .watch(on) reads it every 10 s while on (a room screen)
+//   .refresh()                 reads it now; .watch(on) reads it every 10 s while on (a room screen);
+//                              .watch(on, ms, lonely) every ms, and with lonely only while this
+//                              phone has no friends (with friends, the 30 s "now playing" brings it)
 //   .on(fn)                    fn() after every change
 //   .status(pid)               'me', 'friend', 'asked', 'asks' (they asked this phone) or ''
 //   .ask(pid) .answer(pid, yes) .remove(pid) .invite(pid, {game, version, room}) -> Promise of {ok, status}
@@ -113,14 +115,14 @@
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') ping(); else clearTimeout(pingTimer); });
 
   var watchTimer = 0, watching = false;
-  function watch(on) {
+  function watch(on, ms, lonely) {
     clearTimeout(watchTimer);
     watching = !!on;
     if (!watching) return;
     (function tick() {
       if (!watching) return;
-      if (document.visibilityState !== 'hidden') refresh();
-      watchTimer = setTimeout(tick, WATCH_MS);
+      if (document.visibilityState !== 'hidden' && !(lonely && load(ON, false))) refresh();
+      watchTimer = setTimeout(tick, ms || WATCH_MS);
     })();
   }
 

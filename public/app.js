@@ -502,7 +502,13 @@
     if (!catalog) return;
     var m = location.hash.match(/^#\/([a-z0-9-]+)/);
     var group = m && findGroup(m[1]);
-    if (friends) friends.watch(!!m && m[1] === 'kaverit');
+    // The friends page reads every 10 s. The front page of a phone with a nickname but no friends
+    // yet reads every 30 s, so the first request shows there too; with friends, the "now playing"
+    // message every 30 s brings requests already.
+    if (friends) {
+      if (m && m[1] === 'kaverit') friends.watch(true);
+      else friends.watch(!m && !!friends.name(), 30e3, true);
+    }
     if (m && m[1] === 'kaverit' && friends) renderFriends();
     else if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
   }
@@ -603,7 +609,8 @@
         if (!document.activeElement || !document.activeElement.classList.contains('friends-name')) renderFriends();
       } else drawPlaying();
     });
-    friends.refresh();
+    // Only a phone with a nickname can have friends or requests: no request for the others.
+    if (friends.name()) friends.refresh();
   }
 
   // Network first, every time the shelf is opened or comes back on screen, so a new

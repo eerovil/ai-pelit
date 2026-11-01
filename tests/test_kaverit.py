@@ -375,3 +375,21 @@ def test_the_very_first_join_carries_the_friend_id(phones):
         first.setdefault(name, fid)
     assert first == {"Aino": pid_of(A), "Bertta": pid_of(B), "Ceci": pid_of(c)}
     assert host.locator("#aipr-members button.fr").count() == 2
+
+
+def test_a_first_request_shows_on_an_open_shelf_with_no_friends(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    shelf = phones("Bertta", None, player=B, width=390, height=844)
+    shelf.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
+    shelf.wait_for_timeout(300)
+    assert shelf.locator(".friends-playing").is_hidden()
+    # Aino asks while Bertta's shelf is open; it shows within the front page's 30 s read, with
+    # no "now playing" sent by a phone with no friends.
+    phones.api.requests.add((A, pid_of(B)))
+    shelf.wait_for_selector(".friends-playing:not([hidden]) .friend.ask", timeout=40_000)
+    assert "Aino" in shelf.locator(".friends-playing").inner_text()
+    assert [c for c in phones.api.calls if c[1] == "presence"] == []
+    assert shelf.locator("#aipk").count() == 0  # on the shelf a request shows on the page
+    shelf.locator(".friends-playing .friend.ask button", has_text="Hyväksy").click()
+    shelf.wait_for_function("!document.querySelector('.friends-playing .friend.ask')")
+    assert phones.api.friends == {frozenset((A, B))}
