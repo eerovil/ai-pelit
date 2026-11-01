@@ -29,6 +29,35 @@
       if (!sent) fetch(shelf + 'api/plays', { method: 'POST', body: body, headers: { 'content-type': 'application/json' }, keepalive: true }).catch(function () {});
     } catch (e) {}
   }
+  // Playing right now (#325): while this page is on screen it says so every 45 seconds, and says it
+  // left when it is hidden, so the shelf can show how many play each game now. The id is random
+  // per page open, kept only in this page. A game inside another game's frame (Ottelu's events)
+  // is not counted apart: the page the player opened is.
+  var framed = true;
+  try { framed = window.top !== window.self; } catch (e) {}
+  if (slug && !framed && /^https?:$/.test(location.protocol)) {
+    var pageId = '';
+    while (pageId.length < 16) pageId += Math.random().toString(36).slice(2);
+    pageId = pageId.slice(0, 16);
+    var beat = 0;
+    var tell = function (gone) {
+      try {
+        var msg = JSON.stringify(gone ? { id: pageId, gone: true } : { id: pageId, game: slug });
+        var told = navigator.sendBeacon && navigator.sendBeacon(shelf + 'api/playing', new Blob([msg], { type: 'application/json' }));
+        if (!told) fetch(shelf + 'api/playing', { method: 'POST', body: msg, headers: { 'content-type': 'application/json' }, keepalive: true }).catch(function () {});
+      } catch (e) {}
+    };
+    var onScreen = function () {
+      clearInterval(beat);
+      if (document.visibilityState === 'hidden') { tell(true); return; }
+      tell(false);
+      beat = setInterval(function () { tell(false); }, 45000);
+    };
+    document.addEventListener('visibilitychange', onScreen);
+    window.addEventListener('pagehide', function () { clearInterval(beat); tell(true); });
+    window.addEventListener('pageshow', function (e) { if (e.persisted) onScreen(); });
+    onScreen();
+  }
   var a = document.createElement('a');
   a.href = shelf + (slug ? '#/' + slug : '');
   a.textContent = '‹ Pelit';

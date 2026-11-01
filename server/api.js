@@ -12,6 +12,8 @@
 //   POST /api/admin/players    (X-Admin-Key) {id, name, status} -> {name, status}
 //   POST /api/plays            {game, version}               -> {ok}
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
+//   POST /api/playing          {id, game} | {id, gone: true} -> {ok}, a game page still open (#325)
+//   GET  /api/playing                                        -> {games: {<slug>: open now}}
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
 //   GET  /api/rooms                                          -> {rooms: [{code, game, v, n, max}]}, every game's (#203)
@@ -283,6 +285,43 @@ async function playTotals(env) {
   return json({ games });
 }
 
+// Who is playing right now (#325): an open game page (back.js) says it is still there every
+// PLAYING_BEAT and when it comes back on screen, and says it is gone when it is hidden. A page
+// counts while it was heard from in the last PLAYING_NOW, so one that closed without a word
+// (no network, the phone died) drops off within it. The id is random per page open.
+export const PLAYING_NOW = 100e3;
+const PLAYING_KEEP = 10 * 60e3;
+const PAGE_ID = /^[a-z0-9]{8,40}$/;
+
+async function stillPlaying(env, url, body) {
+  const id = String(body.id || '');
+  if (!PAGE_ID.test(id)) return fail(400, 'bad id');
+  const t = Date.now();
+  if (body.gone) {
+    await env.DB.prepare('DELETE FROM playing WHERE id = ?').bind(id).run();
+    return json({ ok: true });
+  }
+  const game = String(body.game || '');
+  if (!SLUG.test(game)) return fail(400, 'bad game');
+  const known = await knownVersions(env, url);
+  if (!known) return fail(503, 'no catalog');
+  if (known !== 'any' && !known.has(game)) return fail(404, 'no such game');
+  await env.DB.prepare(
+    `INSERT INTO playing (id, game, seen) VALUES (?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET game = excluded.game, seen = excluded.seen`
+  ).bind(id, game, t).run();
+  await env.DB.prepare('DELETE FROM playing WHERE seen < ?').bind(t - PLAYING_KEEP).run();
+  return json({ ok: true });
+}
+
+async function playingNow(env) {
+  const { results } = await env.DB.prepare('SELECT game, COUNT(*) AS n FROM playing WHERE seen >= ? GROUP BY game')
+    .bind(Date.now() - PLAYING_NOW).all();
+  const games = {};
+  for (const r of results) games[r.game] = r.n;
+  return json({ games });
+}
+
 function isAdmin(request, env) {
   const key = request.headers.get('x-admin-key') || '';
   return !!env.ADMIN_KEY && key === env.ADMIN_KEY;
@@ -410,6 +449,11 @@ async function route(request, env) {
   if (path === '/api/plays' && method === 'POST') {
     const body = await readBody(request);
     return body ? addPlay(env, url, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/playing' && method === 'GET') return playingNow(env);
+  if (path === '/api/playing' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? stillPlaying(env, url, body) : fail(400, 'bad body');
   }
   if (path === '/api/feedback' && method === 'POST') {
     const body = await readBody(request);

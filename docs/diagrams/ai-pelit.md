@@ -25,6 +25,11 @@ flowchart TD
     D -. avaus .-> P[POST /api/plays: +1 pelille, versiolle ja päivälle]
     P --> Q[Hyllyllä: pelattu N kertaa]
     Q --> B
+    D -. ruudulla, 45 s välein .-> W[POST /api/playing: sivu on yhä auki]
+    D -. piiloon tai suljettu .-> X[POST /api/playing: sivu lähti]
+    W --> Y[Hyllyllä: ● N pelaa nyt]
+    X --> Y
+    Y --> B
   end
   subgraph Uusi peli tai versio AgentDeckissä
     H[AgentDeck: uusi Work ai-pelit-repoon] --> L[Agentti aloittaa Workin]
@@ -35,9 +40,9 @@ flowchart TD
     N --> O[Cloudflare Pages julkaisee]
     O --> B
   end
-  class A,B,C,D,Q,R blue
+  class A,B,C,D,Q,R,Y blue
   class E,J amber
-  class F,G,P teal
+  class F,G,P,W,X teal
   class H violet
   class L,M,T,N rose
   class U amber
@@ -62,6 +67,9 @@ flowchart TD
 - **Pelaa versiota koko ruudulla**: opens `/games/<slug>/v<N>/index.html` directly (not in an iframe) with the "‹ Pelit" chip from `public/back.js`. Back always goes up, never into a game (#68): the history is always shelf → game's page → game, so the phone's own back and the "‹ Pelit" / "‹ Kaikki pelit" links and the header's "AI-pelit" each go one step up. `public/app.js` adds the game's page under a game opened with ▶ on the shelf and marks the game in sessionStorage (`ai-pelit:_ylos`); `back.js` then steps back to that page from the chip. A room code for another game first turns the page below into that game's page (see `moninpeli.md`). A Ctrl-, Cmd- or Shift-click still opens a link in a new tab. A game opened any other way (a link, a room code) has no page below, so the chip takes its place in the history instead of adding one, and so does "‹ Kaikki pelit" on a game page opened from a link. The installed app opens full screen (`"display": "fullscreen"` in the manifest, no phone status or navigation bar); in a browser tab, or an app installed before that, `back.js` asks for full screen on the first tap in a game.
 - **POST /api/plays: +1 pelille, versiolle ja päivälle**: `public/back.js` sends one anonymous count each time a version page opens (`sendBeacon`, lost when offline), except a page a game reloads itself to go on, marked `ai-pelit:_jatkuu` in sessionStorage (Ottelu v3 between events, #168); `addPlay()` in `server/api.js` adds it to the `plays` table (`migrations/0004_plays.sql`: game, version, UTC day, count, nothing per phone), only for a game and version in `catalog.json`, and none while no catalog has been read (#26).
 - **Hyllyllä: pelattu N kertaa**: `public/app.js` `loadPlays()` reads `GET /api/plays` (all-time total per game) and adds it to each game card; under Suosituimmat, new counts that change the order redraw the cards in the new order (#279); the last totals are kept in `localStorage` (`ai-pelit:_pelikerrat:yhteensa`), so they show offline too.
+- **POST /api/playing: sivu on yhä auki**: who is playing right now (#325). `public/back.js` gives each open game page a random id, kept only in that page, and while the page shows sends `{id, game}` at once and every 45 seconds (`sendBeacon`); a game in another game's frame (Ottelu's events) is not counted apart. `stillPlaying()` in `server/api.js` keeps one row per page in the `playing` table (`migrations/0007_playing.sql`: id, game, last heard), only for a game in `catalog.json`, and deletes rows older than 10 minutes. Nothing tells one phone from another.
+- **POST /api/playing: sivu lähti**: when the page is hidden (another app, the screen off) or left, `back.js` sends `{id, gone: true}` and the row is deleted, so the number drops at once; it says it is back when it shows again. A page that went without a word (no network) stops counting 100 seconds after it was last heard from (`PLAYING_NOW`).
+- **Hyllyllä: ● N pelaa nyt**: `loadPlaying()` in `public/app.js` reads `GET /api/playing` (open pages heard from in the last 100 seconds, per game) with the shelf, a group's page or a game's page, then every 20 seconds while it shows, and on coming back to it. Only the number, after a green dot, at the end of the card's version line (Eero: "Vain nro"); a group's card adds its games together; nothing shows while nobody plays. Not kept on the phone: offline nothing shows.
 - **Service worker antaa välimuistista**: `public/sw.js`: the shell (with the shared `back.js`, `scores.js`, `rooms.js` and `outfits.js`, see `asut.md`) and `catalog.json` network-first, version folders cache-first once played. Shared libraries under `lib/` (three.js, see `3d-kirjasto.md`) are cache-first too, in their own cache `ai-pelit-lib` that outlives builds. Every game's picture (`thumbs/`) is cached when a new worker installs, in its own cache that outlives builds, so the whole shelf shows offline (#33). The shelf is cached as `./` only, because Pages redirects `index.html` to `./`; `public/404.html` answers missing files so Pages never sends the shelf in their place. `/api/` (the high-score lists, see `tuloslistat.md`) always goes to the network.
 - **AgentDeck: uusi Work ai-pelit-repoon**: Eero writes "Uusi peli: …" or "<peli> v<N>: …" straight in AgentDeck; the app no longer shows that text to copy (#33).
 - **Agentti kirjoittaa games/slug/vN/ ja game.json**: a new version is always a new folder; old version folders are never edited. The one exception is a version Eero withdraws (`WITHDRAWN` in `scripts/check_immutable.py`): it is deleted whole, and its number is never used again, so `scripts/build.py` lets the numbering skip it.
