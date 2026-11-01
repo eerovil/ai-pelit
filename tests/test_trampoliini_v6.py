@@ -43,7 +43,7 @@ def test_picking_a_costume_dresses_the_jumper_and_is_kept(tramp_site, browser):
     assert page.locator("#asu").inner_text() == "👕 Asu: Perus"
     page.click("#asu")
     cards = page.locator("#ai-pelit-asut .asu")
-    assert cards.count() == 10   # four everyday outfits and six costumes
+    assert cards.count() == 13   # four everyday outfits, six Halloween costumes, three Tylypahka (#321)
     page.click("[data-asu=vampyyri]")
     assert page.locator("[data-asu=vampyyri]").get_attribute("class") == "asu valittu"
     page.click("#ai-pelit-asut-valmis")
