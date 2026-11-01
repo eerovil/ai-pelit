@@ -328,9 +328,11 @@ R.on('message', (m, from) => {
 });
 // Host: a friend's phone is back (a reload): its person starts again in the control room, its haul lost.
 function letGo(id) {
-  for (const k of Object.keys(G.held)) if (G.held[k] === id) delete G.held[k];
+  // v12: goods they took from the stores into their bag go back into the stores
+  for (const k of Object.keys(G.held)) if (G.held[k] === id) { if (k.startsWith('pack:')) unpackGood(k); delete G.held[k]; }
   const c = heldBy(id);
   if (c) dropCrate(c, c.hw || 'sub', c.x, c.y);  // v12: their crate falls where they were
+  save();
   if (net.helm === id) { net.helm = null; stopSub(); }
 }
 // Host: nobody drives now, so SISU stays where its driver left it, still (else its last speed would keep the airlock shut).

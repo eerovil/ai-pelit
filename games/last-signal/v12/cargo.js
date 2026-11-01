@@ -147,6 +147,11 @@ function use(k, n = 1) {
 }
 
 // ---------- the bag ----------
+// Goods taken from the stores ('pack:<kind>:<n>') going back into them: brought home, or their carrier's phone gone.
+function unpackGood(id) {
+  const s = G.s, k = id.split(':')[1], key = INV[k] || k;
+  s.inv[key] = (s.inv[key] || 0) + 1; s.pack[k] = Math.max(0, (s.pack[k] || 0) - 1);
+}
 // The small finds a person carries (`G.carry`, at most BAG); what is taken from the stores to trade is 'pack:<kind>:<n>'.
 function bagFull() { return G.carry.length >= BAG; }
 function heldCount(who) { return Object.values(G.held).filter(w => w === who).length; }

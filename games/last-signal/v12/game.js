@@ -358,7 +358,7 @@ function bank(who) {
     const it = itemById(id);
     if (it && it.k === 'kala') { s.inv.kala = (s.inv.kala || 0) + 1; counts.kala = (counts.kala || 0) + 1; continue; }
     // v12: goods taken from the stores to trade and brought back go back where they were
-    if (id.startsWith('pack:')) { s.inv[INV[it.k] || it.k] = (s.inv[INV[it.k] || it.k] || 0) + 1; s.pack[it.k] = Math.max(0, (s.pack[it.k] || 0) - 1); continue; }
+    if (id.startsWith('pack:')) { unpackGood(id); continue; }
     if (!it || s.got[id]) continue;
     s.got[id] = true;
     counts[it.k] = (counts[it.k] || 0) + 1;

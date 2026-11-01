@@ -121,5 +121,5 @@ flowchart TD
 - **Tornin kautta sisään: reppu varastoon, laatikko mukana**: `climbIn()` / `endIce(false)`: up the tower's outside ladder, in at the hatch, down the inside ladder; a crate carried from the ice comes in with the person.
 - **Radio: vahvistin ja antenni?**: the control room's radio (`radio()` in `chart.js`, `act('radio')`).
 - **Luku 2: rinteen kohteet lokien vihjeistä**: `goalText()` walks Saga → the lander → Nordlys's chart room → the beacon, each found from the last one's log; no hull steps since v12.
-- **👥 Kaverit: huone, 2–4 puhelinta, peli on tekijän**: `rooms.js`; the host keeps the game, crates and their physics; every change goes through `act()` / `doAct()` (v12: `lift`, `drop`, `shelf`, `unshelf`, `pack`, `trade`).
+- **👥 Kaverit: huone, 2–4 puhelinta, peli on tekijän**: `rooms.js`; the host keeps the game, crates and their physics; every change goes through `act()` / `doAct()` (v12: `lift`, `drop`, `shelf`, `unshelf`, `pack`, `trade`). A friend whose phone reloads or leaves (`letGo()`) drops their crate where they were, and goods they packed go back into the stores (`unpackGood()`).
 - **Pyörryt: uusi päivä, kunto 35**: `faint()`; packed goods are lost, crates in hands fall.

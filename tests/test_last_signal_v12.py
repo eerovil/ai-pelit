@@ -508,6 +508,26 @@ def test_a_friend_lifts_a_crate_and_shelves_it_in_the_host_s_sisu(site, browser)
     assert host.errors == [] and aino.errors == []
 
 
+@pytest.mark.parametrize("how", ["reload", "continue"])
+def test_goods_a_friend_packed_go_back_to_the_stores_when_their_phone_leaves(site, browser, how):
+    host, aino = v5.room(site, browser, names=("Eero", "Aino"))
+    v5.close_cards(host, aino)
+    before = host.evaluate("stock('ruoka')")
+    v5.stand(aino, "varasto")
+    aino.evaluate("act('pack', 'ruoka')")
+    host.wait_for_function(f"stock('ruoka') === {before - 1} && G.s.pack.ruoka === 1")
+    aino.wait_for_function("G.carry.length === 1")
+    if how == "reload":
+        aino.reload()  # back in the room: the host's R.on('hello') lets go of what they held
+        host.wait_for_function(f"stock('ruoka') === {before} && !G.s.pack.ruoka", timeout=15000)
+    else:
+        host.evaluate("const id = Object.keys(net.others)[0]; letGo(id); delete net.others[id]")  # what R.on('continue') does
+        assert host.evaluate(f"[stock('ruoka') === {before}, G.s.pack.ruoka]") == [True, 0]
+    assert host.evaluate("Object.keys(G.held).length") == 0
+    assert host.evaluate(f"JSON.parse(localStorage.getItem('{SAVE12}')).pack.ruoka") == 0
+    assert host.errors == []
+
+
 def test_two_people_reaching_for_one_crate_the_first_gets_it(site, browser):
     host, aino = v5.room(site, browser, names=("Eero", "Aino"))
     v5.close_cards(host, aino)
