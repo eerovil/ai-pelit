@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: kivi heitetään vetämällä taakse, kierre kaartaa ja ruudun hankaaminen harjaa; kolme päätä tietokonetta tai 2–4 kaverin puhelinta vastaan.",
       "request": "curling",
       "issue": "eerovil/ai-pelit#243"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-01",
+      "note": "Pystyssä kivi on ylempänä, joten täysi veto mahtuu ruudulle: pesään heitto ja poistolyönti onnistuvat nyt myös pystyasennossa.",
+      "request": "Pystyasennossa kiven saa vedettyä vain noin 74 px alaspäin ennen kuin sormi osuu ruudun alareunaan, vaikka täysi veto on noin 190–200 px. Siksi pystyssä voi heittää vain vartijoita: pesään heitto (~82–124 px) ja poistolyönti (~144 px →) eivät onnistu. Sivuttain veto mahtuu.\n\nKorjaus: siirrä pystyasennossa heittoalue (kivi ja Kaarre-napit) noin ruudun keskelle, niin että täysi veto mahtuu kiven alle ruudulle; pesä näkyy edelleen yläosassa. Testi, joka vetää vain ruudun sisällä (ei ohi reunan) ja saa aikaan sekä pesään heiton että poistolyönnin pystyssä 360 × 740 ja 390 × 844 -ruudulla.\n\nTuli esiin #243:n jälkeen (Curling v1, PR #260).",
+      "issue": "eerovil/ai-pelit#293"
     }
   ]
 }
