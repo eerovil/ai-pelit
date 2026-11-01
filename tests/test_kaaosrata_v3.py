@@ -126,3 +126,19 @@ def test_v2_saves_are_read_as_they_are(site, context):
     assert "Taso 3" in page.inner_text("#foe")
     assert "Ennätys" in page.inner_text("#stats")
     assert page.errors == []
+
+
+def test_only_this_phones_runner_sounds_and_a_new_race_starts_quiet(site, context):
+    page = open_game(site, context)
+    running(page)
+    put(page, x=0, y=2)
+    # A computer runner jumping and then falling into a gap, at the same time as nothing else.
+    page.evaluate("const o = race.runners[1]; Object.assign(o, { kind: 'cpu', x: -1.7, y: 40, z: 0, vx: 0, vy: 0, fall: 0, cp: 1 }); o.ai.skill = 0; jump(o)")
+    page.wait_for_function("race.runners[1].fall > 0", timeout=2000)
+    assert heard(page) == []
+    # A new race forgets where the balls were: no whoosh before the player is anywhere near.
+    page.evaluate("soloRace(); heard.splice(0)")
+    assert page.evaluate("swing.length") == 0
+    page.wait_for_function("race.phase === 'run'", timeout=6000)
+    assert "suhahdus" not in heard(page)
+    assert page.errors == []
