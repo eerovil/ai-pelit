@@ -219,6 +219,36 @@
     // On the shelf the top holds its links ("‹ Kaikki pelit"), so the banner sits at the bottom.
     '#aipk.low{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}';
   var banner = null, dismissed = {}, busy = false;
+  // Opens the invited game's room so that back still goes up (#68): game → its page → the shelf,
+  // never back into the game this phone was playing. The same handoff as rooms.js uses when a
+  // room code belongs to another game.
+  function openInvite(slug, path) {
+    var to = new URL(path, ROOT);
+    if (!here) {
+      // On the shelf: as a tap on a game link there (app.js puts the game's page below it).
+      var a = document.createElement('a');
+      a.setAttribute('href', path);
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
+    var up = history.state && history.state.aiPelitUp;
+    try {
+      // Another version of this game: the same page stays below, and back.js marks it.
+      if (up && slug === here[1]) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
+      // Another game: back to this game's page, which app.js turns into that game's page before
+      // it opens the game over it.
+      if (up && slug !== here[1]) {
+        sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + here[1], page: '#/' + slug, game: to.href }));
+        history.back();
+        return;
+      }
+    } catch (e) {}
+    // Nothing of ours below: the invited game takes this page's place.
+    location.replace(to.href);
+  }
   function roomScreenShowing() { var r = document.getElementById('aipr'); return !!(r && !r.hidden); }
   function drawBanner() {
     if (!document.body) return;
@@ -253,8 +283,8 @@
       busy = true;
       if (inv) {
         dismissed['i' + inv.id] = true;
-        var url = new URL('games/' + inv.game + '/v' + inv.version + '/?huone=' + inv.room, ROOT).href;
-        call('POST', 'invites/' + inv.id + '/answer', { player: playerId() }).then(function () { busy = false; location.assign(url); });
+        var url = 'games/' + inv.game + '/v' + inv.version + '/?huone=' + inv.room;
+        call('POST', 'invites/' + inv.id + '/answer', { player: playerId() }).then(function () { busy = false; openInvite(inv.game, url); });
       } else {
         dismissed['r' + req.pid] = true;
         answer(req.pid, true).then(function () { busy = false; drawBanner(); });

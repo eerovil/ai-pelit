@@ -288,6 +288,48 @@ def test_an_invite_reaches_a_friend_in_another_game_and_joins_the_room(phones):
     assert phones.api.invites == []
     host.locator("#aipr-invClose").click()
     assert host.locator("#aipr-inv").is_hidden()
+    # Back goes up from the invited game, never into the game Bertta was playing: the chip to the
+    # invited game's page, then the phone's back to the shelf.
+    bertta.wait_for_function("AiPelitRooms.inRoom")
+    bertta.click("#ai-pelit-back")
+    bertta.wait_for_url(re.compile(r".*/#/huonetesti$"))
+    bertta.go_back()
+    bertta.wait_for_timeout(500)
+    assert "/games/" not in bertta.url
+
+
+def test_an_invite_into_another_game_opened_from_the_shelf_keeps_the_way_up(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    # Bertta opens Toinen peli from the shelf: shelf → its page → the game.
+    bertta = phones("Bertta", None, player=B)
+    bertta.evaluate("localStorage.setItem('ai-pelit:_kaverit:on', 'true')")
+    bertta.reload()
+    bertta.wait_for_selector('.card[data-slug="toinen"]')
+    bertta.click('.card[data-slug="toinen"] .button.play')
+    bertta.wait_for_url(re.compile(r".*/games/toinen/v1/$"))
+    bertta.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
+    host = phones("Aino", player=A)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    host.locator("#aipr-friends button", has_text="Kutsu kaveri").click()
+    host.locator("#aipr-invList li", has_text="Bertta").locator("button").click()
+    host.wait_for_function("document.querySelector('#aipr-invList button').textContent === 'Kutsuttu ✓'")
+    bertta.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    bertta.wait_for_selector("#aipk")
+    bertta.locator("#aipk button", has_text="Liity").click()
+    bertta.wait_for_url(re.compile(r".*/games/huonetesti/v1/.*"))
+    host.wait_for_function("AiPelitRooms.members.length === 2")
+    # The phone's back: the invited game's page, then the shelf; Toinen peli never comes back.
+    bertta.go_back()
+    bertta.wait_for_url(re.compile(r".*/#/huonetesti$"))
+    bertta.go_back()
+    bertta.wait_for_url(re.compile(r".*/(#/?)?$"))
+    assert "toinen" not in bertta.url
+    # And the chip, after opening the game again from its page, goes to the same page.
+    bertta.go_forward()
+    bertta.wait_for_url(re.compile(r".*/#/huonetesti$"))
 
 
 def test_the_room_screen_with_friends_fits_a_phone_both_ways(phones):
