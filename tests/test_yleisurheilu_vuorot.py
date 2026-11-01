@@ -134,9 +134,12 @@ def test_friends_not_on_turn_stand_by_and_cheer(site, browser, path):
     assert names == sorted(p.evaluate("AiPelitRooms.name()") for p in fans)
     jumper.wait_for_timeout(300)
     assert not jumper.locator("#kisa-cheer").is_visible()
-    fan = fans[-1]
+    fan = next(p for p in fans if p is not host)  # a guest: its cheer goes through the host
     fan.wait_for_selector("#kisa-cheer", state="visible", timeout=5000)
     assert fan.inner_text("#kisa-cheer") == "📣 Kannusta"
+    # Each phone counts the crowd sounds it plays.
+    for p in pages:
+        p.evaluate("window.yleisoHeard = 0; const play = AiPelitAanet.play; AiPelitAanet.play = (n, o) => { if (n === 'yleiso') yleisoHeard++; return play(n, o); }")
     fan.click("#kisa-cheer")
     tid = fan.evaluate("K.mine().id")
     name = host.evaluate("K.current().name")
@@ -144,6 +147,9 @@ def test_friends_not_on_turn_stand_by_and_cheer(site, browser, path):
         p.wait_for_function(f"K.cheers[{json.dumps(tid)}]", timeout=5000)
         text = p.evaluate(f"K.cheers[{json.dumps(tid)}].text")
         assert name in text and text.endswith("!")
+    # One tap is one crowd sound on every phone, the tapping guest's own too (not again on the echo).
+    fan.wait_for_timeout(500)
+    assert [p.evaluate("yleisoHeard") for p in pages] == [1, 1, 1]
     # Both spectators cheer at the same moment: every phone shows both.
     tids = [p.evaluate("K.mine().id") for p in fans]
     for p in fans:

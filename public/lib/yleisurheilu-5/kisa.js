@@ -517,7 +517,8 @@
         }
         if (m.t === 'c') { K.comp = Object.assign(m.c, { room: c.room }); follow(); }
         else if (m.t === 'end') end(m.res);
-        else if (m.t === 'cheer') cheered(m.id, m.w);
+        // Its own cheer this phone showed at the tap: the host's echo of it is not played again.
+        else if (m.t === 'cheer' && !(K.mine() && K.mine().id === m.id)) cheered(m.id, m.w);
         else if (live) o.watch(m);
       });
       // The meet needs a phone only for its own turn (#297): rooms.js waits for no one else.
