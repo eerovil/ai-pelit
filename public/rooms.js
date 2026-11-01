@@ -626,6 +626,7 @@
     el.start.textContent = net.played ? 'Uusi kierros' : 'Aloita kierros';
   }
   // ---- Friends on the room screen (#324) ----
+  var INVITE_MS = 10 * 60e3;
   var inviting = false, invited = {}, askName = '', askRow = null, friendNote = '', friendsSig = '';
   function friendButton(m) {
     var F = friendsLib();
@@ -649,6 +650,13 @@
     });
     return b;
   }
+  // A phone that took a nickname in the room joins again on a new connection, so the room
+  // learns its friend id (and nickname) and the others get "➕ Kaveriksi" for it. The room keeps
+  // only the newest connection of a phone; the old one's close is ignored (net.ws has moved on).
+  function rejoinWithFid() {
+    findFid();
+    (fidWait || Promise.resolve()).then(function () { if (net.on && net.ws && myFid) { net.ws = null; connect(); } });
+  }
   function friendResult(r) {
     friendNote = r.ok ? '' : r.status === 403 ? 'Nimimerkkiäsi ei hyväksytty: valitse toinen.'
       : r.status === 409 ? 'Kavereita on jo niin monta kuin mahtuu.'
@@ -660,7 +668,7 @@
     el.inv.hidden = !(inviting && F && F.state);
     var st = F && net.on ? F.state : null;
     // Drawn again only when something in it changed, so a half-typed nickname keeps its focus.
-    var sig = JSON.stringify([!!F && net.on, F && F.titles, askName, friendNote, st && st.requests, st && st.friends.length, inviting && st && st.friends, invited, net.code,
+    var sig = JSON.stringify([!!F && net.on, F && F.titles, askName, friendNote, st && st.requests, st && st.friends.length, inviting && st && st.friends, invitesNow(), net.code,
       net.members.map(function (m) { return m.fid || ''; })]);
     if (sig === friendsSig) return;
     friendsSig = sig;
@@ -679,7 +687,7 @@
           if (!cleanName(input.value)) return;
           var pid = askName;
           ok.disabled = true;
-          F.setName(input.value).then(function () { askName = ''; askRow = null; findFid(); return F.ask(pid); }).then(friendResult);
+          F.setName(input.value).then(function () { askName = ''; askRow = null; rejoinWithFid(); return F.ask(pid); }).then(friendResult);
         });
         askRow.appendChild(input); askRow.appendChild(ok);
       }
@@ -707,6 +715,14 @@
     }
     if (inviting) renderInvites(F, st);
   }
+  function invitesNow() {
+    var out = {};
+    Object.keys(invited).forEach(function (k) {
+      var at = invited[k];
+      out[k] = typeof at === 'number' ? Date.now() - at < INVITE_MS : at;
+    });
+    return out;
+  }
   function renderInvites(F, st) {
     var here = {};
     net.members.forEach(function (m) { if (m.fid) here[m.fid] = true; });
@@ -716,12 +732,14 @@
       var li = document.createElement('li'), d = document.createElement('div'), b = document.createElement('button');
       d.textContent = f.name;
       var small = document.createElement('small'); small.textContent = F.doing(f); d.appendChild(small);
-      var key = net.code + f.pid;
-      b.textContent = invited[key] === 1 ? 'Kutsuttu ✓' : invited[key] === 2 ? 'Ei onnistunut' : 'Kutsu';
-      b.disabled = invited[key] === 1;
+      var key = net.code + f.pid, at = invited[key];
+      // An invite lives 10 minutes on the server; after that the friend may be invited again.
+      var live = at === 'sending' || (typeof at === 'number' && Date.now() - at < INVITE_MS);
+      b.textContent = at === 'sending' ? 'Kutsutaan…' : live ? 'Kutsuttu ✓' : at === 'failed' ? 'Ei onnistunut' : 'Kutsu';
+      b.disabled = live;
       b.addEventListener('click', function () {
-        invited[key] = 1; render();
-        F.invite(f.pid, { game: GAME, version: VERSION, room: net.code }).then(function (r) { invited[key] = r.ok ? 1 : 2; render(); });
+        invited[key] = 'sending'; render();
+        F.invite(f.pid, { game: GAME, version: VERSION, room: net.code }).then(function (r) { invited[key] = r.ok ? Date.now() : 'failed'; render(); });
       });
       li.appendChild(d); li.appendChild(b);
       el.invList.appendChild(li);

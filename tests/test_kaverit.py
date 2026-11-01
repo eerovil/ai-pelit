@@ -160,7 +160,7 @@ def phones(site, browser):
     relay, api, contexts = RelayWithFids(), FriendsApi(), []
 
 
-    def phone(name, path="huonetesti/v1/", player=None, width=360, height=740):
+    def phone(name, path="huonetesti/v1/", player=None, width=360, height=740, clock=False):
         ctx = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
         script = ""
@@ -175,6 +175,8 @@ def phones(site, browser):
         page.errors = []
         page.on("pageerror", lambda e: page.errors.append(str(e)))
         relay.attach(page)
+        if clock:
+            page.clock.install()
         page.goto(f"{site.url}{'games/' + path if path is not None else ''}")
         return page
 
@@ -243,6 +245,12 @@ def test_no_nickname_asks_for_one_first(phones):
     host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")
     assert phones.api.names[A] == "Aino"
     assert (A, pid_of(B)) in phones.api.requests
+    # The host joined again with its friend id and nickname: Bertta now sees Aino, with a way to
+    # answer, and the round's room stayed the same.
+    guest.wait_for_function(f"AiPelitRooms.members.some(m => m.fid === '{pid_of(A)}' && m.name === 'Aino' && m.on)")
+    assert host.evaluate("[AiPelitRooms.inRoom, AiPelitRooms.code, AiPelitRooms.isHost]") == [True, code, True]
+    guest.wait_for_selector("#aipr-members .frs", timeout=15_000)
+    assert guest.locator("#aipr-members li", has_text="Aino").locator(".frs").inner_text() == "Pyytää kaveriksi"
 
 
 def test_an_invite_reaches_a_friend_in_another_game_and_joins_the_room(phones):
@@ -425,3 +433,25 @@ def test_a_request_on_a_games_page_comes_as_a_banner(phones):
     shelf.click(".back")
     shelf.wait_for_selector(".friends-playing:not([hidden]) .friend.ask")
     assert shelf.locator("#aipk").count() == 0
+
+
+def test_an_old_invite_can_be_sent_again_while_the_room_is_open(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    host = phones("Aino", player=A, clock=True)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    host.locator("#aipr-friends button", has_text="Kutsu kaveri").click()
+    button = host.locator("#aipr-invList li", has_text="Bertta").locator("button")
+    button.click()
+    host.wait_for_function("document.querySelector('#aipr-invList button').textContent === 'Kutsuttu ✓'")
+    assert button.is_disabled()
+    # Ten minutes later the server has dropped the unanswered invite: it may be sent again.
+    host.clock.fast_forward(10 * 60_000 + 1000)
+    host.locator("#aipr-invClose").click()
+    host.locator("#aipr-friends button", has_text="Kutsu kaveri").click()
+    host.wait_for_function("document.querySelector('#aipr-invList button').textContent === 'Kutsu'")
+    button.click()
+    host.wait_for_function("document.querySelector('#aipr-invList button').textContent === 'Kutsuttu ✓'")
+    assert len([c for c in phones.api.calls if c[1] == "invites"]) == 2

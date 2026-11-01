@@ -408,7 +408,9 @@ async function friendState(env, id) {
      ORDER BY p.name COLLATE NOCASE`
   ).bind(id, id, id).all();
   const friends = rows.map((r) => ({ pid: r.pid, name: r.name, game: r.game, version: r.version, at: r.at, now: !!r.at && r.at > since }));
-  friends.sort((x, y) => y.now - x.now);
+  // Playing a game first, then browsing the shelf, then the rest; by name within each.
+  const rank = (f) => (f.now ? (f.game ? 0 : 1) : 2);
+  friends.sort((x, y) => rank(x) - rank(y));
   const { results: asking } = await env.DB.prepare(
     `SELECT p.pid, p.name FROM friend_requests r JOIN players p ON p.id = r.sender
      WHERE r.receiver = ? AND r.declined = 0 AND p.status != 'rejected' AND p.pid IS NOT NULL ORDER BY r.at DESC`

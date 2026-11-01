@@ -203,3 +203,16 @@ test('the hourly limits count what was sent, also after it was accepted, answere
   }
   assert.equal((await inv()).status, 429);
 });
+
+test('the friend list: playing a game first, then browsing the shelf, then the rest', async () => {
+  const { player, ask, answer, call, state, env } = setup();
+  const D = 'd'.repeat(32), E = 'e'.repeat(32);
+  await player(A, 'Aino'); await player(B, 'Bertta'); await player(C, 'Ceci'); await player(D, 'Daniel'); await player(E, 'Eeva');
+  for (const id of [B, C, D, E]) { await ask(id, PA); await answer(A, await pidOf(id), true); }
+  await call('POST', '/api/presence', { player: B }); // browsing the shelf
+  await call('POST', '/api/presence', { player: E, game: 'pilkki', version: 2 });
+  await call('POST', '/api/presence', { player: D, game: 'pilkki', version: 2 });
+  await call('POST', '/api/presence', { player: C });
+  env.DB.raw.prepare('UPDATE presence SET at = ? WHERE player = ?').run(new Date(Date.now() - PLAYING_FOR - 1000).toISOString(), C);
+  assert.deepEqual((await state(A)).friends.map((f) => f.name), ['Daniel', 'Eeva', 'Bertta', 'Ceci']);
+});
