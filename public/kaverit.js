@@ -224,6 +224,9 @@
   // room code belongs to another game.
   function openInvite(slug, path) {
     var to = new URL(path, ROOT);
+    // Leave the room this phone is in first, as "Poistu huoneesta" does: the others see it go
+    // (a host's room closes), and the tab no longer rejoins it (rooms.js leave()).
+    try { if (window.AiPelitRooms && AiPelitRooms.inRoom) AiPelitRooms.leave(); } catch (e) {}
     if (!here) {
       // On the shelf: as a tap on a game link there (app.js puts the game's page below it).
       var a = document.createElement('a');

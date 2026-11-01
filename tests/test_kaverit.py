@@ -593,3 +593,36 @@ def test_a_name_rejected_while_in_the_room_offers_a_new_one_then_asks(phones):
     host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")
     assert (A, pid_of(B)) in phones.api.requests
     guest.wait_for_function(f"AiPelitRooms.members.some(m => m.fid === '{pid_of(A)}' && m.name === 'Aino2')")
+
+
+def test_joining_by_an_invite_leaves_the_room_the_phone_was_in(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    c = "c" * 32
+    # Ceci hosts a room in Toinen peli, and Bertta is in it.
+    ceci = phones("Ceci", "toinen/v1/", player=c)
+    ceci.click("#multi")
+    ceci.click("#aipr-create")
+    ceci.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    old = ceci.evaluate("AiPelitRooms.code")
+    bertta = phones("Bertta", f"toinen/v1/?huone={old}", player=B)
+    bertta.evaluate("localStorage.setItem('ai-pelit:_kaverit:on', 'true')")
+    ceci.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    # Aino invites Bertta into her room in Huonetesti.
+    host = phones("Aino", player=A)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    host.locator("#aipr-friends button", has_text="Kutsu kaveri").click()
+    host.locator("#aipr-invList li", has_text="Bertta").locator("button").click()
+    host.wait_for_function("document.querySelector('#aipr-invList button').textContent === 'Kutsuttu ✓'")
+    bertta.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    bertta.wait_for_selector("#aipk")
+    bertta.locator("#aipk button", has_text="Liity").click()
+    bertta.wait_for_url(re.compile(r".*/games/huonetesti/v1/.*"))
+    host.wait_for_function("AiPelitRooms.members.length === 2")
+    # Ceci's room saw her leave for good, not drop off.
+    ceci.wait_for_function("AiPelitRooms.members.length === 1")
+    # The tab now keeps the new room, not Ceci's, so opening Toinen peli again does not rejoin it.
+    here = json.loads(bertta.evaluate("sessionStorage.getItem('ai-pelit:_huone:nyt')"))
+    assert here["game"] == "huonetesti" and here["code"] != old
