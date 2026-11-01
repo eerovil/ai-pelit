@@ -5,7 +5,8 @@ throws it, the hand's speed sets the height and where the finger first touched t
 flies as a real rigid box, in all three directions and turning about all three axes: an end-over-end flip turns into a twist by itself (the middle axis
 is unstable), a spin about the long axis stays steady. The player moves the hand under it, sideways and up or down, while
 the arm reaches forward or back by itself; a catch screen up passes the level, and more turns or the
-top end away earn the level's optional extra challenge.
+top end away earn the level's optional extra challenge. From v6 each moment plays a recorded sound from the shared
+library (violet), or the game's own beep when it cannot.
 
 ```mermaid
 flowchart TD
@@ -25,6 +26,13 @@ flowchart TD
   J --> A
   L --> A
   M --> A
+  B -.-> sB([suhahdus])
+  F -. ohi .-> sF([suhahdus hiljaa])
+  G -.-> sG([tömähdys + lasi])
+  H -.-> sH([osuma])
+  J -.-> sJ([tappio])
+  L -.-> sL([voitto])
+  class sB,sF,sG,sH,sJ,sL violet
   class A,B,E blue
   class F,I,K amber
   class C,D,H teal
@@ -39,6 +47,7 @@ flowchart TD
 - **teal**: the physics of the throw and the landing
 - **green**: a pass, saved on the phone
 - **rose**: a fail; the same level again
+- **violet**: the sound it plays (v6)
 
 ## Boxes
 
@@ -52,3 +61,9 @@ flowchart TD
 - **Lisähaaste: kierrokset ja yläpää poispäin?**: `spec()`: optional, never needed to pass. Level 2 asks one turn; level 3 also the top end pointing away; then more turns. A turn is two times the screen changes from up to down.
 - **KOPPI! Taso nousee**: `finish()` saves `taso`, `paras` and `kopit` under `ai-pelit:puhelinkoppi:`.
 - **Tähti ⭐**: a met extra challenge adds to `haasteet`, shown as ⭐ in the corner.
+- **suhahdus**: from v6 (`games/puhelinkoppi/v6/index.html`), `sound()` plays the recorded sounds of `public/lib/aanet-2/` (#226): `launch()` whooshes. Each sound falls back to v5's own Web Audio beep when `AiPelitAanet.play()` returns false (offline on the first open, before the first tap).
+- **suhahdus hiljaa**: the phone passing the hand plays the same whoosh, quieter and lower.
+- **tömähdys + lasi**: the phone hits the floor: a thud, and glass breaking a moment after.
+- **osuma**: `caught()`: the phone lands in the palm, on either side.
+- **tappio**: a catch screen down.
+- **voitto**: a catch screen up.
