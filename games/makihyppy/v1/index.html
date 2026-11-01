@@ -893,7 +893,9 @@ function drawHud() {
   x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
   x.fillText('Kierros ' + Math.min(comp.round, K.F.ROUNDS) + '/' + K.F.ROUNDS, 20, top + 24);
   x.textAlign = 'right'; x.font = '700 14px system-ui';
-  if (me) x.fillText(me.marks.length ? fmtP(K.F.sum(me)) + ' · ' + K.placeOf(me) + '.' : 'Ei hyppyä vielä', W - 20, top + 24);
+  // Just landed, the jump counts in the panel at once, before the meet records it.
+  const fresh = th && th.mine && th.phase === 'land' && th.res && !th.sent ? th.res.p : 0;
+  if (me) x.fillText(me.marks.length || fresh ? fmtP(r1(K.F.sum(me) + fresh)) + (fresh ? '' : ' · ' + K.placeOf(me) + '.') : 'Ei hyppyä vielä', W - 20, top + 24);
   const a = th, t = a && thrower(a.id);
   if (!a) return;
   if (a.phase === 'fly' && !a.fallen && (a.mine || isNet())) {
@@ -943,7 +945,7 @@ function drawHud() {
 function drawResult(a) {
   // On its side the result takes the score panel's place, so the jumper stays in view under it.
   const r = a.res, W = Math.min(SW - 24, 340), x0 = (SW - W) / 2, y0 = land ? hudTop : hudTop + 76, h = 132;
-  x.fillStyle = 'rgba(10,20,40,.95)'; rr(x0, y0, W, h, 14); x.fill();
+  x.fillStyle = '#0d1a2e'; rr(x0, y0, W, h, 14); x.fill();
   x.textAlign = 'center'; x.font = '900 32px system-ui'; x.fillStyle = '#fff';
   x.fillText(fmtM(r.d), SW / 2, y0 + 38);
   const lt = LAND_TEXT[r.landing] || ['', '#fff'];
