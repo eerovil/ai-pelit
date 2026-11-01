@@ -1,0 +1,124 @@
+"""Korkeushyppy v4: recorded sounds from the shared library public/lib/aanet-2/ (#220)."""
+
+import json
+
+from conftest import ROOT
+
+import test_korkeushyppy_v2 as v2
+import test_korkeushyppy_v3 as v3
+
+URL = "games/korkeushyppy/v4/"
+
+# Every AiPelitAanet.play() call, with whether it played, in window.heard.
+SPY = """() => {
+  window.heard = [];
+  const real = AiPelitAanet.play;
+  AiPelitAanet.play = (name, o) => { const ok = real(name, o); heard.push([name, ok]); return ok; };
+}"""
+
+ALL = ["valinta", "askel", "askel2", "ponnistus", "suhahdus", "rima", "onnistui", "aplodit", "ohhoo", "tomahdys", "mitali"]
+
+
+def open_game(site, context, saved=None):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.add_init_script(v2.SEEDED % 1)
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi'))")
+    for k, v in (saved or {}).items():
+        page.add_init_script(f"localStorage.setItem('ai-pelit:korkeushyppy:{k}', {json.dumps(json.dumps(v))})")
+    page.goto(site.url + URL)
+    page.evaluate(v2.HELPERS)
+    page.evaluate(SPY)
+    return page
+
+
+def start(page):
+    """Start a meet with sound on and every file decoded, at this phone's first run-up."""
+    page.click("#go")
+    page.wait_for_function(f"{json.dumps(ALL)}.every(AiPelitAanet.ready)", timeout=10000)
+    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+    page.evaluate("heard.splice(0)")
+
+
+def played(page):
+    return [n for n, ok in page.evaluate("heard.splice(0)") if ok]
+
+
+def test_a_clear_sounds_from_the_turn_to_the_mat(site, context):
+    # A record far above, so the clear is not one: the crowd does not clap.
+    page = open_game(site, context, {"ennatys": 2.9})
+    start(page)
+    page.evaluate("th.t = 99; step(0.001)")
+    assert played(page) == ["valinta"]
+    page.evaluate("press(1); press(2)")
+    assert played(page) == ["askel", "askel2"]
+    page.evaluate("go(1.05, 8, 0.3, 0.46)")
+    assert played(page) == ["ponnistus", "suhahdus", "suhahdus", "suhahdus"]
+    page.evaluate("quick()")
+    assert played(page) == ["tomahdys", "onnistui"]
+    assert page.errors == []
+
+
+def test_a_record_gets_applause(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("go(1.05, 8, 0.3, 0.46); heard.splice(0); quick()")
+    assert played(page) == ["tomahdys", "aplodit"]
+    assert page.errors == []
+
+
+def test_a_knocked_bar_clatters_and_the_crowd_goes_ooh(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("go(1.05, 8, null, null); heard.splice(0); quick()")
+    assert played(page) == ["rima", "tomahdys", "ohhoo"]
+    assert page.errors == []
+
+
+def test_running_past_the_bar_goes_ooh(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("ready(); th.phase = 'run'; th.v = 6; th.x = RUN_PAST - 0.01; heard.splice(0); step(1 / 60)")
+    assert played(page) == ["ohhoo"]
+    assert page.errors == []
+
+
+def test_the_medals_ring_on_the_podium(site, context):
+    page = open_game(site, context)
+    v3.win_meet(page)
+    page.wait_for_function(f"{json.dumps(ALL)}.every(AiPelitAanet.ready)", timeout=10000)
+    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+    page.evaluate("K.ending.t = 0; heard.splice(0); for (let i = 0; i < 60 * 15; i++) step(1 / 60)")
+    got = played(page)
+    assert got.count("mitali") == 3 and "aplodit" in got, got
+    assert page.errors == []
+
+
+def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route("**/*.mp3", lambda route: route.abort())
+        page = open_game(site, ctx)
+        v3.win_meet(page)
+        page.evaluate("for (let i = 0; i < 60 * 15; i++) step(1 / 60)")
+        assert played(page) == []
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_v3_saves_are_read_as_they_are(site, context):
+    page = open_game(site, context, {"kisat": 5, "voitot": 3, "ennatys": 2.04})
+    assert page.inner_text("#stats") == "Kisat 5 · Voitot 3 · Ennätys 2,04 m"
+    assert page.errors == []
+
+
+def test_the_podium_still_stays_until_a_tap(site, context):
+    old = v3.URL
+    v3.URL = URL
+    try:
+        v3.test_the_medals_are_hung_and_the_podium_stays_until_a_tap(site, context)
+    finally:
+        v3.URL = old
