@@ -1,6 +1,6 @@
 # Last Signal: sukellusvene, sonar ja sukellukset
 
-How a day in Last Signal plays (v1 #125, v2 #129, v3 #132, v5 #138, v6 #143, v7 #145, v8 #151, v9 #160, v10 #196). The player drives the submarine SISU through a side view
+How a day in Last Signal plays (v1 #125, v2 #129, v3 #132, v5 #138, v6 #143, v7 #145, v8 #151, v9 #160, v10 #196, v11 #221). The player drives the submarine SISU through a side view
 of an arctic sea (glacier bay, wreck field, iceberg caves), listens with the sonar, stops, swims out, and brings finds
 home: in the tank gear with limited air down to 260 m, or (v7) in the hose suit, as deep as SISU but only as far
 as its hose reaches. Inside SISU (v3) they walk as a person between rooms on two decks: they eat in the
@@ -13,12 +13,13 @@ comes up only in a few openings, and the person climbs out through the tower to 
 Since v8 the sea and the engines sound, a harpoon takes fish from schools for food, the ladder goes on up inside the
 tower to its hatch, and a lab studies the samples found for a lasting help. Since v9 the navigation room has a chart of
 the sea as far as it is explored, with an autopilot that drives SISU to a known place while everyone moves about inside,
-and the iceberg's caves are a dark maze that a lamp maps as it goes.
+and the iceberg's caves are a dark maze that a lamp maps as it goes. Since v11 the sounds are recorded ones from the
+shared library `lib/aanet-2`.
 
 ```mermaid
 flowchart TD
   A[Valikko: Jatka tai Uusi peli] --> B[Aja SISUa: ohjain, syvyys / runkoraja]
-  A --> AU[🔊 Meri ja moottorit soivat ensimmäisestä napautuksesta]
+  A --> AU[🔊 Meri, moottori, humina ja tuuli: oikeat äänet ensimmäisestä napautuksesta]
   A --> MP[👥 Kaverit: huone, 2–4 puhelinta]
   MP --> MH[Huoneen tekijä: oma tallennus, aloittaa ruorista]
   MP --> MG[Kaveri: oma ihminen ohjaamossa, ei tallenna]
@@ -154,7 +155,7 @@ flowchart TD
 ## Boxes
 
 - **Aja SISUa: ohjain, syvyys / runkoraja**: `stepSub()` in `games/last-signal/v10/play.js` (v9 and v10 are split into files, #161; v8 down to v1 in their own folders) turns the stick (`input`, or since v9 the autopilot's `steer`) into speed, bumps off the sea floor (`floorY()`), the glacier, the ice shelf, the iceberg (`inBerg()`), the hot vents (`VENTS`) and the wrecks (`solid(…, true)`); a hard bump costs hull (`bump()`). Below 300 m `subBoost()` speeds SISU up (up to 2.2×) so the long slope does not drag. The HUD shows depth against the hull's rating (`RATING`: 160, 260, 380, 620, 1000, 1450 m); within 25 m of it "Runko natisee". Saved every 4 s.
-- **🔊 Meri ja moottorit soivat ensimmäisestä napautuksesta**: v8's `audio()` builds `soundscape()` on the first tap: Web Audio only, no sound files. Filtered noise is the sea (darker the deeper) and the wind on the ice; a low sawtooth and triangle are the engines, a band of noise the propeller, a sine the reactor's hum inside. `mix()` says how loud each is for where this phone's person is (helm, dive, inside, ice) and SISU's speed; `soundStep()` eases them there every frame and now and then plays a far whale, the ice creaking overhead or clicks in the deep. A hidden page suspends the sound.
+- **🔊 Meri, moottori, humina ja tuuli: oikeat äänet ensimmäisestä napautuksesta**: since v11 (#221) `games/last-signal/v11/game.js` loads the shared library `lib/aanet-2/aanet.js` (`SFX`) and on the first tap `soundscape()` starts four recorded loops: `syvyys` (the deep sea, slower the deeper), `sukellusvene` (SISU's engine, faster with speed), `humina` (the reactor inside) and `tuuli` (the wind on the ice). `mix()` says how loud each is for where this phone's person is (helm, dive, inside, ice) and SISU's speed, as in v8; `soundStep()` sets the loops there every frame and now and then plays a far whale or clicks in the deep (own beeps) or the ice creaking overhead (`jaa`). Every other sound goes through `sfx(name, vol, …beep)`: the library's sound, or the old beep when it did not play (not loaded yet, offline on the very first open). The sonar is `kaiku`, bumps and hatches `metalli`, eating `onnistui`, upgrades `nousu`, finds `valinta`, a refusal `virhe`, a dive `loiskis` and `kuplat`, a harpooned fish `osuma`, the hull's creak `narina`, warnings `halytys`, an air pocket `kuplat`, the suit `naksu`, steps on the ice `lumi`, SISU hitting the ice above `jaa`. The end tunes, the harpoon's shot, a spear in a wall, a fish bumping the diver and the sonar's contact echoes stay own beeps. Up to v10 (v8 on) everything was Web Audio made in the game. A hidden page suspends the sound.
 - **📡 Ping: kaiku piirtää pohjan, kohteet nimetään**: `doPing()` sends a ring out to 450 m; contacts inside it become known (`G.s.known`) and `drawSonar()` draws the floor, the iceberg's outline (since v9 not its caves) and the wrecks in sonar green for a moment; since v9 the echo also draws the sea round SISU onto the chart (`chartSee()`). Since v7 a crack in the iceberg's east side (`BERG_EAST`, contact "RAILO JÄÄSSÄ") leads to the cache K-7 within the first hose's reach, and chapter 1's goal points there. Contacts up to 1000 m show at the screen's edge as "TUNTEMATON KONTAKTI, 640 m" until pinged; the current goal's contact is yellow (`goalNow().target`).
 - **Paine: runko kärsii**: `pressure()`: below the rating the hull loses 4 % a second and "PAINE! Nouse ylemmäs" shows. Since v4 this goes on during a dive and inside SISU too ("PAINE! SISU on liian syvällä"), and the game saves every 4 s in all three, so a reload keeps the damage; v3 and earlier spared the hull once the player left the helm.
 - **Hätänousu turvasyvyyteen, runko 25 %**: `breach()` ends a dive or a walk inside (the haul is lost) and lifts SISU to 40 m above the hull's rating (v1 lifted it to the surface, a long way back from the deep sea); the hull is never fatal.
