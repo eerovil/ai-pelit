@@ -102,7 +102,7 @@ def test_turning_the_phone_mid_leg_moves_the_dial_and_keeps_the_leg(site, contex
     side = page.evaluate("draw(), [speedoBox(), mode, P.s, thumbTop()]")
     assert side[1] == "drive" and side[2] == 900
     assert side[0]["cx"] == 370 and side[0]["r"] < up["r"] and side[3] > side[0]["cy"] + side[0]["r"]
-    # A retry after a crash draws the dial again from the start.
+    # A retry after a crash starts the leg afresh, at 60 as every leg.
     page.evaluate("crash('Kolari!'); newLeg(1); draw()")
-    assert page.evaluate("[mode, Math.round(P.v * KMH)]") == ["drive", 0]
+    assert page.evaluate("[mode, Math.round(P.v * KMH)]") == ["drive", 60]
     assert page.errors == []
