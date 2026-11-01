@@ -51,6 +51,13 @@
       "note": "Oikeat äänet: lähtölaukaus, varaslähdön pilli, askeleet, ponnistus, kaatuvan aidan kolina, maaliintulo ja ennätyksestä aplodit.",
       "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): varaslähtö pilli, lähtölaukaus lahto, askeleet askel/askel2, hyppy ponnistus + suhahdus, kaatuva aita rima, maali onnistui ja ennätyksestä aplodit.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v7 on jo varattu, käytä seuraavaa vapaata numeroa.",
       "issue": "eerovil/ai-pelit#211"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-01",
+      "note": "Hyppynappi on nyt jalkojen yläpuolella oma palkkinsa kuten Pituushypyssä, ja välissä on rako, joten jalkoja rummuttaessa ei hypätä vahingossa.",
+      "request": "Juoksukisassa on vielä hyppynappi eri kohdassa",
+      "issue": "eerovil/ai-pelit#308"
     }
   ]
 }
