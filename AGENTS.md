@@ -296,6 +296,11 @@ sleeps while the page is hidden.
   goes in the next `aanet-<N+1>/`, a copy of the folder with the new files, used by the next
   versions. A game's music and its own tunes (Piano's notes) stay its own.
 - `sw.js` keeps the files after their first use, so the game sounds the same offline.
+- The player's game volume (#336) is `back.js`'s 🔊 chip beside "‹ Pelit", one setting for every
+  game: it puts a gain between each audio context and the speaker by patching `AudioNode`'s
+  `connect`. So connect nothing to `ctx.destination` before `back.js` has run (make the context
+  and its nodes on the first tap, as every game does); a game needs no volume control of its own.
+  The friends' voice in a room is not touched.
 
 ## Before you mark the pull request ready
 
