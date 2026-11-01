@@ -14,6 +14,11 @@ Safe to run again; run it after adding a file to migrations/, before that change
   CI deploys it on every merge after that), or this step is skipped with a note.
 - Makes the `ADMIN_KEY` secret (the nickname admin's key) when it is missing, and saves it on
   this host in ~/.local/share/ai-pelit/admin-key (mode 600). It is never printed.
+- Binds the voice relay's key (#322) as the `TURN_KEY_ID` and `TURN_KEY_TOKEN` secrets, from
+  ~/.local/share/ai-pelit/turn.env (two lines, `TURN_KEY_ID=…` and `TURN_KEY_TOKEN=…`). When the
+  file is missing it makes a Cloudflare Realtime TURN key and saves it there, if the API token
+  may (permission "Calls Write"); otherwise it says how to make one by hand, and voice in rooms
+  works without the relay (phones connect directly, which some mobile networks block).
 
 The bindings live on the Pages project rather than in a wrangler.toml, so CI's deploy token
 needs no D1 permission: `wrangler pages deploy` keeps the project's bindings.
@@ -31,6 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROJECT = "ai-pelit"
 DATABASES = {"production": "ai-pelit", "preview": "ai-pelit-preview"}
 KEY_FILE = Path.home() / ".local/share/ai-pelit/admin-key"
+TURN_FILE = Path.home() / ".local/share/ai-pelit/turn.env"
 ROOMS_SCRIPT, ROOMS_CLASS = "ai-pelit-rooms", "Room"
 
 
@@ -91,6 +97,32 @@ def admin_key() -> str:
     return key
 
 
+def turn_key() -> dict | None:
+    if not TURN_FILE.is_file():
+        url = f"https://api.cloudflare.com/client/v4/accounts/{os.environ['CLOUDFLARE_ACCOUNT_ID']}/calls/turn_keys"
+        req = urllib.request.Request(url, data=json.dumps({"name": PROJECT}).encode(), method="POST", headers={
+            "Authorization": f"Bearer {os.environ['CLOUDFLARE_API_TOKEN']}",
+            "Content-Type": "application/json",
+        })
+        try:
+            with urllib.request.urlopen(req) as r:
+                made = json.load(r)["result"]
+        except urllib.error.HTTPError as e:
+            print(f"  no TURN key ({e.code}): the token may not make one. Make one in the Cloudflare dashboard"
+                  f" (Realtime > TURN Server > Create) and write its id and token into {TURN_FILE}"
+                  " as TURN_KEY_ID=… and TURN_KEY_TOKEN=…, then run this again")
+            return None
+        TURN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        TURN_FILE.touch(mode=0o600)
+        TURN_FILE.write_text(f"TURN_KEY_ID={made['uid']}\nTURN_KEY_TOKEN={made['key']}\n")
+        print(f"  made a TURN key, saved in {TURN_FILE}")
+    pairs = dict(line.split("=", 1) for line in TURN_FILE.read_text().split() if "=" in line)
+    if not pairs.get("TURN_KEY_ID") or not pairs.get("TURN_KEY_TOKEN"):
+        print(f"  {TURN_FILE} needs TURN_KEY_ID=… and TURN_KEY_TOKEN=…")
+        return None
+    return {k: {"type": "secret_text", "value": pairs[k]} for k in ("TURN_KEY_ID", "TURN_KEY_TOKEN")}
+
+
 def main() -> int:
     for var in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"):
         if not os.environ.get(var):
@@ -98,18 +130,19 @@ def main() -> int:
     configs = {}
     key = admin_key()
     rooms = rooms_namespace()
+    turn = turn_key()
     for env, name in DATABASES.items():
         db = database(name)
         print(f"{name}: {db}")
         migrate(db, name)
         configs[env] = {
             "d1_databases": {"DB": {"id": db}},
-            "env_vars": {"ADMIN_KEY": {"type": "secret_text", "value": key}},
+            "env_vars": {"ADMIN_KEY": {"type": "secret_text", "value": key}, **(turn or {})},
         }
         if rooms:
             configs[env]["durable_object_namespaces"] = {"ROOMS": {"namespace_id": rooms}}
     api("PATCH", f"/pages/projects/{PROJECT}", {"deployment_configs": configs})
-    bound = "DB, ADMIN_KEY and ROOMS" if rooms else "DB and ADMIN_KEY"
+    bound = "DB, ADMIN_KEY" + (", TURN_KEY_*" if turn else "") + (" and ROOMS" if rooms else "")
     print(f"pages project {PROJECT}: {bound} bound (they apply from the next deploy)")
     return 0
 
