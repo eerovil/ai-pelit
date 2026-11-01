@@ -79,9 +79,9 @@ def test_an_away_friend_stops_the_meet_only_on_their_own_turn(site, browser, pat
     play(host, ids, lambda pid: pid != me_aino)
     ctx = aino.context
     relay.drop(aino)  # the page's socket goes as the game is closed
+    host.wait_for_function(f"!AiPelitRooms.members.find(m => m.id === {json.dumps(me_aino)}).on")
     aino.close()
     relay.blocked.discard(me_aino)
-    host.wait_for_function(f"!AiPelitRooms.members.find(m => m.id === {json.dumps(me_aino)}).on")
     # The others play on: nothing waits for her while it is not her turn.
     assert host.evaluate("AiPelitRooms.paused") is False
     del ids[me_aino]

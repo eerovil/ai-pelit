@@ -89,8 +89,9 @@ def test_the_same_foot_twice_adds_nothing_but_does_not_slow(site, context):
     page.evaluate("ready(); for (let i = 0; i < 24; i++) { press(i % 2 + 1); step(1 / 8); }")
     v = page.evaluate("th.v")
     assert 7.5 <= v <= 9
-    page.evaluate("press(th.foot)")
-    assert page.evaluate("th.v") == v
+    # Before and after in one evaluate: between two, a frame may slow the runner a little (#297).
+    before, after = page.evaluate("[th.v, (press(th.foot), th.v)]")
+    assert after == before
     assert page.errors == []
 
 
