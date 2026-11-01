@@ -999,15 +999,15 @@ function drawTags() {
     const mx = down ? p.x + p.dx * PH / 2 : p.x, my = down ? p.y + p.dy * PH / 2 : p.y;
     const [sx, sy, sz] = toScreen(mx, my, down ? PR * 2 : PH + 0.02);
     if (sz > 1) continue;
-    const [, sy2] = toScreen(mx, my, down ? PR * 4 : PH + 0.08);
-    const small = Math.abs(sy - sy2) < 9;
+    // A pin drawn under about 35 px tall is too small to read its number on the wood.
+    const small = !down && Math.abs(sy - toScreen(p.x, p.y, 0)[1]) < 35;
     if (phase === 'show' && down && !raised) {
       ctx.fillStyle = '#2f8f3a'; ctx.beginPath(); ctx.arc(sx, sy - 14, 11, 0, 7); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.font = '900 12px system-ui'; ctx.fillText(String(p.n), sx, sy - 13.5);
     } else if (small && (phase === 'aim' || p.s === 'up')) {
-      ctx.font = '800 11px system-ui'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.6)';
-      ctx.strokeText(String(p.n), sx, sy - 8); ctx.fillStyle = '#fff'; ctx.fillText(String(p.n), sx, sy - 8);
+      ctx.font = '800 13px system-ui'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+      ctx.strokeText(String(p.n), sx, sy - 9); ctx.fillStyle = '#fff'; ctx.fillText(String(p.n), sx, sy - 9);
     }
   }
   ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
