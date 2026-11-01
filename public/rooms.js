@@ -907,6 +907,8 @@
     el.rooms.textContent = '';
     openRooms.forEach(function (r) {
       if (!r || !/^[A-Z]{4}$/.test(r.code)) return;
+      // A room on an older version would only say so when joined (#346): leave it off the list.
+      if (Number(r.v) < VERSION) return;
       var b = document.createElement('button');
       b.textContent = r.code + ' · ' + r.n + '/' + r.max + ' pelaajaa';
       b.addEventListener('click', function () { takeName(); enter(r.code, false); });

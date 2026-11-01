@@ -205,8 +205,9 @@
   function roomRow(r) {
     var game = catalog.games.filter(function (g) { return g.slug === r.game; })[0];
     if (!game || !/^[A-Z]{4}$/.test(r.code)) return null;
-    // A version the shelf does not have (withdrawn, or not yet on this phone's catalog) is skipped.
-    if (!game.versions.some(function (v) { return v.n === r.v; })) return null;
+    // Only a room on the game's newest version (#346): an older one's host has an old copy, and its
+    // address leads to the newest, which says so. One newer than this phone's catalog waits too.
+    if (r.v !== latest(game).n) return null;
     return el('li', { class: 'room', 'data-code': r.code }, [
       thumb(game, 'thumb small', 36, 48),
       el('div', {}, [

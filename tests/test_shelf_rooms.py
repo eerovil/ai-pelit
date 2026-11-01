@@ -12,14 +12,15 @@ def answer_rooms(context, rooms):
         status=200, content_type="application/json", body=json.dumps({"rooms": rooms})))
 
 
-def test_the_shelf_lists_open_rooms_and_a_tap_joins_in_the_rooms_version(site, context):
+def test_the_shelf_lists_open_rooms_on_the_newest_version_and_a_tap_joins(site, context):
     make_game(site.games, "pallo", [game_page("v1"), game_page("v2")], title="Pallo")
     make_game(site.games, "hyppy", [game_page("v1")], title="Hyppy", group="yleisurheilu")
     site.build()
     answer_rooms(context, [
         {"code": "KISA", "game": "hyppy", "v": 1, "n": 2, "max": 8},
-        {"code": "PELI", "game": "pallo", "v": 1, "n": 1, "max": 5},
-        {"code": "VANH", "game": "pallo", "v": 4, "n": 1, "max": 5},  # a version the shelf lacks
+        {"code": "PELI", "game": "pallo", "v": 2, "n": 1, "max": 5},
+        {"code": "VANH", "game": "pallo", "v": 1, "n": 1, "max": 5},  # an older version (#346): its host has an old copy
+        {"code": "UUSI", "game": "pallo", "v": 4, "n": 1, "max": 5},  # a version the shelf lacks
         {"code": "MUUT", "game": "eiole", "v": 1, "n": 1, "max": 5},  # a game the shelf lacks
     ])
     page = context.new_page()
@@ -31,9 +32,9 @@ def test_the_shelf_lists_open_rooms_and_a_tap_joins_in_the_rooms_version(site, c
     assert "Pallo" in page.locator('.room[data-code="PELI"]').text_content()
     assert "1/5 pelaajaa" in page.locator('.room[data-code="PELI"]').text_content()
     assert page.evaluate("document.documentElement.scrollWidth") <= 360
-    # A tap opens the room's own version with its code; back goes to the game's page, then the shelf.
+    # A tap opens the game with the room's code; back goes to the game's page, then the shelf.
     page.click('.room[data-code="PELI"] a')
-    page.wait_for_url("**/games/pallo/v1/?huone=PELI")
+    page.wait_for_url("**/games/pallo/v2/?huone=PELI")
     page.go_back()
     page.wait_for_url(f"{site.url}#/pallo")
     page.go_back()
