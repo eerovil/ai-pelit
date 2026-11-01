@@ -3,6 +3,8 @@ first, the catalog's order) or A–Ö, picked in the header and kept on the phon
 
 import json
 
+import pytest
+
 from conftest import game_page, make_game
 
 
@@ -67,10 +69,31 @@ def test_the_most_played_order_follows_new_counts(site, context):
     assert cards(page) == ["orava", "zorro", "ankka", "yleisurheilu"]
 
 
-def test_the_menu_fits_the_header_on_a_small_phone(site, context):
+def test_new_counts_leave_another_chosen_order_alone(site, context):
+    # Counts arriving after the player picked A–Ö (or Päivitetyt) must not reorder the cards.
+    totals = {}
+    page = shelf(site, context, totals)
+    page.select_option(".top select.sort", "a-o")
+    totals.update({"zorro": 50, "orava": 9})
+    page.reload()
+    page.wait_for_selector('.card[data-slug="zorro"] .plays:text("pelattu 50 kertaa")')
+    assert cards(page) == ["ankka", "orava", "yleisurheilu", "zorro"]
+    # A game's page shows no menu; back on the shelf it is there with the same choice.
+    page.click('.card[data-slug="orava"] .card-main')
+    page.wait_for_selector(".version")
+    assert page.locator(".top select.sort").count() == 0
+    page.go_back()
+    page.wait_for_selector(".top select.sort")
+    assert page.locator(".top select.sort").input_value() == "a-o"
+
+
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844), (740, 360)])
+def test_the_menu_fits_the_header_on_a_phone(site, context, width, height):
     page = shelf(site, context, {})
-    page.set_viewport_size({"width": 360, "height": 740})
-    assert page.evaluate("document.documentElement.scrollWidth") <= 360
+    page.set_viewport_size({"width": width, "height": height})
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
     box = page.locator(".top select.sort").bounding_box()
     brand = page.locator(".top .brand").bounding_box()
-    assert box["x"] > brand["x"] + brand["width"] and box["x"] + box["width"] <= 360
+    assert box["x"] > brand["x"] + brand["width"] and box["x"] + box["width"] <= width
+    # On the brand's line, so the shelf is no taller.
+    assert box["y"] < brand["y"] + brand["height"]
