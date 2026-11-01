@@ -65,6 +65,11 @@ def two_phones(site, browser):
         ctx.close()
 
 
+def members(page):
+    """The room screen's player list, without each friend's 🔊 mute button (voice, #322)."""
+    return [t.replace("🔊", "").strip() for t in page.locator("#aipr-members li").all_inner_texts()]
+
+
 def test_v3_two_phones_fight_each_other_online(two_phones):
     host = two_phones("Eero")
     host.click("#aipr-create")
@@ -75,7 +80,7 @@ def test_v3_two_phones_fight_each_other_online(two_phones):
     guest.click("#aipr-joinBtn")
     host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
     host.wait_for_timeout(200)
-    assert host.locator("#aipr-members li").all_inner_texts() == ["👑 Eero (sinä)", "Aino"]
+    assert members(host) == ["👑 Eero (sinä)", "Aino"]
     host.click("#aipr-start")
     for p in (host, guest):
         p.wait_for_function("net && state === 'fight'", timeout=8000)
@@ -143,7 +148,7 @@ def open_fight(two_phones, guest_room_name=None):
 
 def test_v3_a_name_changed_on_the_room_screen_is_the_fighters_name(two_phones):
     host, guest = open_fight(two_phones, "Aino K")
-    assert host.locator("#aipr-members li").all_inner_texts() == ["👑 Eero (sinä)", "Aino K"]
+    assert members(host) == ["👑 Eero (sinä)", "Aino K"]
     assert host.evaluate("[me.name, foe.name]") == ["Eero", "Aino K"]
     assert guest.evaluate("[me.name, foe.name]") == ["Aino K", "Eero"]
     host.wait_for_timeout(500)
