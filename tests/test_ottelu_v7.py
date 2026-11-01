@@ -10,7 +10,7 @@ import test_ottelu as v1
 import test_ottelu_v4 as v4
 import test_ottelu_v5 as v5
 import test_ottelu_v6 as v6
-from conftest import turn
+from conftest import ROOT, turn
 from test_ottelu_v4 import in_frame, open_game
 # v7 plays as v6 does: a few of v6's tests run on v7 too.
 from test_ottelu_v6 import test_every_event_plays_its_newest_version  # noqa: F401
@@ -107,3 +107,36 @@ def test_a_kept_match_with_the_outfit_button_fits_a_short_phone(site, context):
         b = page.locator(s).bounding_box()
         assert b["y"] >= 0 and b["y"] + b["height"] <= 640, s
     assert page.errors == []
+
+
+GAMES = {"ottelu": "games/ottelu/v7/", "keihas": "games/keihas/v8/", "kuula": "games/kuula/v3/",
+         "aitajuoksu": "games/aitajuoksu/v9/", "pituushyppy": "games/pituushyppy/v9/",
+         "korkeushyppy": "games/korkeushyppy/v6/", "seivashyppy": "games/seivashyppy/v6/", "moukari": "games/moukari/v6/"}
+
+
+@pytest.mark.parametrize("order", [
+    ["kuula", "ottelu", "pituushyppy", "keihas", "aitajuoksu", "moukari"],
+    ["ottelu", "aitajuoksu", "kuula", "korkeushyppy", "keihas", "seivashyppy"],
+])
+def test_choices_made_before_in_different_games_become_one_whichever_opens_first(site, browser, order):
+    # Review of #315: a phone with Noita in Keihäs and Kulta in Kuula (and Neon in Aitajuoksu)
+    # showed three outfits. The first game opened takes Keihäs's (the fixed order), and every
+    # game shows it, with no pick in between.
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+    ctx.add_init_script("""if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1');
+      if (!localStorage.getItem('seeded')) { localStorage.setItem('seeded', '1');
+        localStorage.setItem('ai-pelit:_asut:keihas', '"noita"');
+        localStorage.setItem('ai-pelit:_asut:kuula', '"kulta"');
+        localStorage.setItem('ai-pelit:_asut:aitajuoksu', '"neon"'); } }""")
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    for slug in order:
+        page.goto(site.url + GAMES[slug])
+        assert page.text_content("#asu") == "👕 Asu: Noita", slug
+    assert page.evaluate(f"localStorage.getItem('{SHARED}')") == '"noita"'
+    # The older versions' own keys are left as they were until the next pick.
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:kuula')") == '"kulta"'
+    assert errors == []
+    ctx.close()

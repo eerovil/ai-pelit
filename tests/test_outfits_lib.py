@@ -128,3 +128,17 @@ def test_without_data_share_the_choice_stays_the_games_own(lib_page):
     page.click("[data-asu=sini]")
     assert page.evaluate("localStorage.getItem('ai-pelit:_asut:yleisurheilu')") is None
     assert errors == []
+
+
+def test_a_group_takes_over_the_first_earlier_choice_in_its_fixed_order(site, browser):
+    # Review of #315: whichever game opens first, Keihäs's earlier choice wins over Kuula's.
+    site.build()
+    store = {"ai-pelit:_asut:kuula": "kulta", "ai-pelit:_asut:keihas": "noita", "ai-pelit:_asut:laji-c": "suomi"}
+    page = shared_page(site, browser, "laji-c", store)
+    assert page.evaluate("AiPelitOutfits.current().id") == "noita"
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:yleisurheilu')") == '"noita"'
+    page.context.close()
+    # An unknown id in the first is skipped.
+    page = shared_page(site, browser, "laji-d", {"ai-pelit:_asut:keihas": "ei-ole", "ai-pelit:_asut:kuula": "kulta"})
+    assert page.evaluate("AiPelitOutfits.current().id") == "kulta"
+    page.context.close()

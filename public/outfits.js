@@ -22,8 +22,10 @@
 //
 // Shared choice (#311): with data-share="<group>" on the script tag, the choice is one for every
 // game of that group (ai-pelit:_asut:<group>), so the athletics events and Ottelu wear the same
-// outfit. Until something is picked in any of them, a game's own earlier choice is read. A pick
-// is saved to both keys, so the game's older versions (which read only their own) follow it too.
+// outfit. The first time a phone opens one of them, the choice made before in one game of the
+// group (an older version, its own key) becomes the group's: the first found in SHARED_FROM's
+// fixed order, so every game shows the same one, whichever is opened first. A pick is saved to
+// both keys, so the game's older versions (which read only their own) follow it too.
 // AiPelitOutfits.yleisurheilu is the athletics events' common everyday set: pass it as `outfits`,
 // so an id picked in one event is found in every other.
 // Later versions load this same file, so it must stay compatible with every version that uses it.
@@ -34,6 +36,17 @@
   var SHARE = (script && script.getAttribute('data-share')) || '';
   var OWN = 'ai-pelit:_asut:' + GAME;
   var KEY = SHARE ? 'ai-pelit:_asut:' + SHARE : OWN;
+  // The games whose own earlier choice a group takes over, in order (#311): those that had
+  // outfits before the group shared one, the longest-dressed first.
+  var SHARED_FROM = { yleisurheilu: ['keihas', 'aitajuoksu', 'kuula'] };
+  function adopt() {
+    if (!SHARE || load(KEY, null) !== null) return;
+    var from = (SHARED_FROM[SHARE] || []).concat([GAME]);
+    for (var i = 0; i < from.length; i++) {
+      var o = byId(load('ai-pelit:_asut:' + from[i], ''));
+      if (o) { save(KEY, o.id); return; }
+    }
+  }
   function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
@@ -74,7 +87,7 @@
     for (var i = 0; i < outfits.length; i++) if (outfits[i].id === id) return outfits[i];
     return null;
   }
-  function current() { return byId(load(KEY, '')) || (SHARE && byId(load(OWN, ''))) || outfits[0] || null; }
+  function current() { return byId(load(KEY, '')) || outfits[0] || null; }
 
   // ---- Costume heads: drawn at (x, y), radius r, the face towards +x (or -x when face < 0) ----
   function head(ctx, kind, x, y, r, face) {
@@ -247,6 +260,7 @@
       if (opts.halloween !== false) outfits = outfits.concat(HALLOWEEN);
       drawFn = opts.draw || null;
       changeFn = opts.change || null;
+      adopt();
       return current();
     },
     current: current,
