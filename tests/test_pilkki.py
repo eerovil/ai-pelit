@@ -220,7 +220,8 @@ def test_a_reload_mid_contest_can_carry_it_on(site, context):
     assert page.locator("#resume").is_visible()
     assert "3:20" in page.locator("#resume").inner_text()
     page.click("#resume")
-    assert page.evaluate("[phase, myG, myN, left]") == ["jig", 700, 3, 200]
+    # The game's own frames keep the clock running while the test looks.
+    assert page.evaluate("[phase, myG, myN, left > 199 && left <= 200]") == ["jig", 700, 3, True]
 
 
 # ---------- Playing with friends ----------
