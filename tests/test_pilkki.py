@@ -300,6 +300,17 @@ def test_the_host_ends_the_contest_and_every_phone_gets_its_place(room):
     assert host.errors == guest.errors == []
 
 
+def test_a_late_or_repeated_catch_message_never_takes_fish_off(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.evaluate("myG = 900; myN = 3; sendMe(); sendMe()")
+    host.wait_for_function("Object.values(net.board).some(b => b.g === 900)", timeout=4000)
+    # An older message arriving after the newer one, and one for another round, change nothing.
+    guest.evaluate("AiPelitRooms.send({ t: 'me', round: net.round, g: 400, n: 1, sp: 0 }); AiPelitRooms.send({ t: 'me', round: 'old', g: 5000, n: 9, sp: 0 })")
+    host.wait_for_timeout(500)
+    assert host.evaluate("Object.values(net.board).map(b => b.g).sort((a, b) => a - b)") == [0, 900]
+    assert host.errors == guest.errors == []
+
+
 def test_a_guest_that_reloads_mid_contest_keeps_its_catch(room):
     host, [guest] = room("Eero", "Aino")
     guest.evaluate("myG = 650; myN = 3; sendMe()")
