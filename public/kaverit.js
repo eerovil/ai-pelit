@@ -17,7 +17,13 @@
 //   .on(fn)                    fn() after every change
 //   .status(pid)               'me', 'friend', 'asked', 'asks' (they asked this phone) or ''
 //   .ask(pid) .answer(pid, yes) .remove(pid) .invite(pid, {game, version, room}) -> Promise of {ok, status}
-//   .name() .setName(name)     the phone's nickname ('' when none)
+//   .name()                    the phone's nickname ('' when none)
+//   .setName(name)             -> Promise of {ok, status}: kept only once the server took it (or
+//                              there was no network, when it is sent later); a name taken by
+//                              another phone (409) or refused for now (429) leaves the old one
+//   .nameError(r, name)        what went wrong, in Finnish, for a setName answer
+//   .nameNote()                what is wrong with the kept nickname ('' when nothing): taken,
+//                              rejected by the admin, or not yet sent
 //   .doing(friend)             "Pelaa: Pilkkiminen", "Selaa pelejä", "Nähty 5 min sitten"…
 (function () {
   'use strict';
@@ -54,22 +60,46 @@
   }
 
   // Tells the server this phone's nickname, as scores.js does (same keys, so it is told once).
-  function register() {
+  function registerName() {
     var n = name();
-    if (!n) return Promise.resolve(false);
-    if (load(K + 'lahetetty', '') === n) return Promise.resolve(true);
+    if (!n) return Promise.resolve({ ok: false, status: 400 });
+    if (load(K + 'lahetetty', '') === n) return Promise.resolve({ ok: true, status: 200 });
     return call('POST', 'players', { id: playerId(), name: n }).then(function (r) {
-      if (r.status === 200) { save(K + 'lahetetty', n); save(K + 'tila', r.body.status); return true; }
+      if (r.status === 200) { save(K + 'lahetetty', n); save(K + 'tila', r.body.status); return { ok: true, status: 200 }; }
       if (r.status === 409) save(K + 'tila', 'taken');
       if (r.status === 429) save(K + 'tila', 'busy');
-      return false;
+      return { ok: false, status: r.status };
     });
   }
+  function register() { return registerName().then(function (r) { return r.ok; }); }
   function setName(n) {
     n = String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
-    if (!n) return Promise.resolve(false);
+    if (!n) return Promise.resolve({ ok: false, status: 400 });
+    var before = { nimi: load(K + 'nimi', null), tila: load(K + 'tila', null) };
     save(K + 'nimi', n); save(K + 'tila', 'pending');
-    return register();
+    return registerName().then(function (r) {
+      // Taken by another phone, or too many new names for now: the old name stays.
+      if (r.status === 409 || r.status === 429) {
+        ['nimi', 'tila'].forEach(function (k) {
+          if (before[k] === null) { try { localStorage.removeItem(K + k); } catch (e) {} } else save(K + k, before[k]);
+        });
+      }
+      return r;
+    });
+  }
+  function nameError(r, n) {
+    if (r.ok) return '';
+    if (r.status === 409) return 'Nimimerkki ' + n + ' on jo käytössä. Valitse toinen.';
+    if (r.status === 429) return 'Uusia nimimerkkejä tulee juuri nyt liikaa. Yritä myöhemmin.';
+    if (r.status === 0) return 'Ei yhteyttä. Nimimerkki lähetetään, kun verkko toimii.';
+    return 'Nimimerkkiä ei saatu tallennettua. Yritä uudelleen.';
+  }
+  function nameNote() {
+    var n = name(), t = load(K + 'tila', '');
+    if (!n) return '';
+    if (t === 'taken') return 'Nimimerkkiä ' + n + ' käyttää jo joku muu. Valitse toinen.';
+    if (t === 'rejected') return 'Nimimerkkiä ' + n + ' ei hyväksytty. Valitse toinen.';
+    return '';
   }
 
   // ---- The state, and who hears about it ----
@@ -238,6 +268,8 @@
     id: playerId,
     name: name,
     setName: setName,
+    nameError: nameError,
+    nameNote: nameNote,
     refresh: refresh,
     watch: watch,
     on: function (fn) { listeners.push(fn); },

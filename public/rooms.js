@@ -1028,7 +1028,14 @@
           if (!cleanName(input.value)) return;
           var pid = askName;
           ok.disabled = true;
-          F.setName(input.value).then(function () { askName = ''; askRow = null; rejoinWithFid(); return F.ask(pid); }).then(friendResult);
+          var v = cleanName(input.value);
+          // Only once the server took the name: then join again with the friend id, and ask.
+          F.setName(v).then(function (r) {
+            if (!r.ok) { ok.disabled = false; friendNote = F.nameError(r, v); render(); return; }
+            askName = ''; askRow = null; friendNote = '';
+            rejoinWithFid();
+            return F.ask(pid).then(friendResult);
+          });
         });
         askRow.appendChild(input); askRow.appendChild(ok);
       }

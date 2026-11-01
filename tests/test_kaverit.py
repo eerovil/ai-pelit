@@ -37,6 +37,7 @@ class FriendsApi:
         self.invites = []  # dicts
         self.next_invite = 1
         self.calls = []
+        self.taken = set()  # nicknames another phone owns: POST /api/players answers 409
 
     def attach(self, context):
         context.route(re.compile(r".*/api/(players|friends|presence|invites)(\b.*)?$"), self.answer)
@@ -74,6 +75,8 @@ class FriendsApi:
             route.fulfill(status=status, content_type="application/json", body=json.dumps(data if data is not None else {"ok": True}))
 
         if path == "players" and req.method == "POST":
+            if body["name"].lower() in self.taken:
+                return ok({"error": "name taken"}, 409)
             self.names[body["id"]] = body["name"]
             return ok({"name": body["name"], "status": "pending"})
         if path == "friends" and req.method == "GET":
@@ -455,3 +458,49 @@ def test_an_old_invite_can_be_sent_again_while_the_room_is_open(phones):
     button.click()
     host.wait_for_function("document.querySelector('#aipr-invList button').textContent === 'Kutsuttu ✓'")
     assert len([c for c in phones.api.calls if c[1] == "invites"]) == 2
+
+
+def test_a_taken_nickname_on_the_friends_page_keeps_the_field(phones):
+    phones.api.taken.add("aino")
+    shelf = phones(None, None, player=A)
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.fill(".friends-name", "Aino")
+    shelf.locator(".friends-form button").click()
+    shelf.wait_for_selector(".friends-name-error")
+    assert shelf.locator(".friends-name-error").inner_text() == "Nimimerkki Aino on jo käytössä. Valitse toinen."
+    assert shelf.locator(".friends-name").is_visible()
+    assert shelf.evaluate("localStorage.getItem('ai-pelit:_pelaaja:nimi')") is None
+    shelf.fill(".friends-name", "Aino2")
+    shelf.locator(".friends-form button").click()
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino2"
+    assert shelf.locator(".friends-name-error").count() == 0
+
+
+def test_a_taken_nickname_in_the_room_asks_again_and_sends_nothing(phones):
+    phones.api.taken.add("aino")
+    host = phones(None, player=A)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    guest = phones("Bertta", player=B)
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", code)
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.length === 2")
+    joins = len(phones.relay.joins)
+    host.locator("#aipr-members button.fr").click()
+    host.fill("#aipr-friends .ask input", "Aino")
+    host.locator("#aipr-friends .ask button").click()
+    host.wait_for_function("[...document.querySelectorAll('#aipr-friends .small')].some(p => p.textContent === 'Nimimerkki Aino on jo käytössä. Valitse toinen.')")
+    # No request, no new join, the field is still there and ready.
+    assert [c for c in phones.api.calls if c[1] == "friends/requests"] == []
+    assert len(phones.relay.joins) == joins
+    assert host.locator("#aipr-friends .ask button").is_enabled()
+    host.fill("#aipr-friends .ask input", "Aino2")
+    host.locator("#aipr-friends .ask button").click()
+    host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")
+    assert (A, pid_of(B)) in phones.api.requests
+    guest.wait_for_function(f"AiPelitRooms.members.some(m => m.fid === '{pid_of(A)}' && m.name === 'Aino2')")

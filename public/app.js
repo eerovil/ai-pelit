@@ -596,7 +596,7 @@
       })) : null,
     ].filter(Boolean));
   }
-  var friendsNote = '';
+  var friendsNote = '', nameError = '';
   function renderFriends() {
     document.title = 'Kaverit · AI-pelit';
     showSortPicker(false);
@@ -604,16 +604,24 @@
       el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('h1', { text: '👫 Kaverit' }),
     ];
-    if (!friends.name()) {
+    // The nickname field while there is none, or the kept one is taken or rejected; it stays
+    // until the server takes a name.
+    var problem = friends.nameNote();
+    if (!friends.name() || problem || nameError) {
       var input = el('input', { class: 'friends-name', maxlength: '16', placeholder: 'Nimimerkki', 'aria-label': 'Nimimerkki' });
       var save = el('button', { type: 'button', class: 'button', text: 'Tallenna' });
       save.addEventListener('click', function () {
-        if (!input.value.trim()) return;
+        var v = input.value.trim();
+        if (!v) return;
         save.disabled = true;
-        friends.setName(input.value).then(function () { return friends.refresh(); }).then(renderFriends, renderFriends);
+        friends.setName(v).then(function (r) {
+          nameError = friends.nameError(r, v);
+          return friends.refresh();
+        }).then(renderFriends, renderFriends);
       });
-      parts.push(el('p', { class: 'muted', text: 'Valitse nimimerkki, niin kaverit tunnistavat sinut.' }),
+      parts.push(el('p', { class: 'muted', text: problem || 'Valitse nimimerkki, niin kaverit tunnistavat sinut.' }),
         el('div', { class: 'friends-form' }, [input, save]));
+      if (nameError) parts.push(el('p', { class: 'friends-note friends-name-error', role: 'status', text: nameError }));
     }
     parts.push(el('p', { class: 'muted', text: 'Kaveriksi pääsee pelihuoneessa: napauta ➕ Kaveriksi toisen pelaajan nimen vieressä, ja hän hyväksyy. Kaverit näkevät, mitä pelaat, ja voivat kutsua sinut huoneeseensa.' }));
     if (friendsNote) parts.push(el('p', { class: 'friends-note', role: 'status', text: friendsNote }));
