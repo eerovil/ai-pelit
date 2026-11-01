@@ -99,6 +99,8 @@
       level: function () { return saved('vuoristorata', 'taso') - 1; },
       levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' ajettu'; },
     },
+    // Biggest catch in a five-minute contest, grams; level: 'taso', the level the player is on.
+    pilkki: { order: 'high', score: function (s) { return fixed(s / 1000, 2) + ' kg'; }, level: function () { return saved('pilkki', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
