@@ -161,8 +161,8 @@ const newest = fetch('../../../catalog.json', { cache: 'no-cache' }).then(r => r
     if (ns.length) NEWEST[g.slug] = Math.max(...ns);
   });
 }).catch(() => {});
-// A new match waits for the catalog, so a slow connection never starts it on an older version
-// than the shelf has; at most CATALOG_WAIT ms, then the versions known by then. Offline the
+// A new match waits for the catalog, so one that answers within CATALOG_WAIT ms is used; a
+// slower one starts the match on the versions known by then (LAJIT's), and the match keeps them. Offline the
 // fetch fails at once (or the service worker answers it), so nothing waits.
 const CATALOG_WAIT = 5000;
 let catalogDone = false;
