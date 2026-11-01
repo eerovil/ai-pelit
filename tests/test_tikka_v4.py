@@ -1,5 +1,6 @@
 """Tikanheitto v4: recorded sounds from the shared library public/lib/aanet-2/ (#230)."""
 
+import test_tikka_v2 as v2
 import test_tikka_v3 as v3
 
 URL = "games/tikka/v4/"
@@ -94,3 +95,33 @@ def test_v3_saves_are_read_as_they_are(site, context):
     page.click("#frees button[data-b=darts]")
     assert page.evaluate("freeBoard") == "darts"
     assert page.errors == []
+
+
+def test_a_friends_phone_in_a_room_hears_the_hits_the_misses_and_the_crowd(site, browser):
+    old = v2.URL
+    v2.URL = URL
+    try:
+        relay, pages = v2.room(site, browser, ["Eero", "Aino"])
+    finally:
+        v2.URL = old
+    host, aino = pages
+    v2.start(pages)
+    for p in pages:
+        p.evaluate(SPY.replace("heard.push([name, ok])", "heard.push([name, ok, (o || {}).vol])"))
+        p.wait_for_function(f"{NAMES}.every(AiPelitAanet.ready)", timeout=10000)
+        p.wait_for_function("AiPelitAanet.play('puu', { vol: 0 })", timeout=5000)
+        p.evaluate("heard.splice(0)")
+    # The host throws three tens: Aino's phone hears each dart and then the crowd for the 30.
+    v2.throw_turn(host, 0, 0, host)
+    aino.wait_for_function("cur === 1 && mine() && heard.some(h => h[0] === 'yleiso')", timeout=8000)
+    got = [(n, v) for n, ok, v in aino.evaluate("heard.splice(0)") if ok]
+    assert [n for n, _ in got].count("puu") == 3 and ("yleiso", 0.7) in got, got
+    assert all(v == 1 or v is None for n, v in got if n == "puu"), got
+    # Aino misses the board: her own phone plays the quiet knock, not the hit.
+    aino.wait_for_function("!banner && !flying && dartsLeft === 3", timeout=8000)
+    aino.evaluate("release(0, 300)")
+    aino.wait_for_function("heard.some(h => h[0] === 'puu')", timeout=5000)
+    assert [(n, v) for n, ok, v in aino.evaluate("heard.splice(0)") if ok and n == "puu"] == [("puu", 0.25)]
+    for p in pages:
+        assert p.errors == []
+        p.context.close()
