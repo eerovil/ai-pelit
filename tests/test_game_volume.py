@@ -136,3 +136,67 @@ def test_a_change_in_another_tab_shows_at_once_and_the_panel_fits_a_390px_phone(
         assert other.inner_text("#ai-pelit-aani") == "🔉"
     finally:
         ctx.close()
+
+
+def test_unmute_at_zero_gives_the_sound_back_with_one_tap(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/pomppu/v1/")
+    page.tap("#ai-pelit-aani")
+    page.locator("#ai-pelit-aani-liuku").fill("0")
+    assert page.inner_text("#ai-pelit-aani") == "🔇"
+    assert page.inner_text("#ai-pelit-aani-mykista") == "🔊 Äänet päälle"
+    page.tap("#ai-pelit-aani-mykista")
+    assert page.inner_text("#ai-pelit-aani-luku") == "50 %"
+    assert page.inner_text("#ai-pelit-aani") == "🔊"
+    assert page.inner_text("#ai-pelit-aani-mykista") == "🔇 Mykistä"
+
+
+def test_the_sound_chip_is_inside_the_back_chips_box_in_every_corner(site, browser):
+    # Orava v2–v4 lay their sideways HUD out from #ai-pelit-back's right edge: 🔊 must be inside it.
+    corners = ["", ' data-corner="bottom-left"', ' data-corner="top-right"']
+    make_game(site.games, "pomppu", [game_page(f"v{i}").replace('back.js"', 'back.js"' + c) for i, c in enumerate(corners, 1)])
+    site.build()
+    for size in ({"width": 360, "height": 740}, {"width": 740, "height": 360}):
+        ctx = browser.new_context(viewport=size, is_mobile=True, has_touch=True)
+        try:
+            page = ctx.new_page()
+            for n in range(1, len(corners) + 1):
+                page.goto(f"{site.url}games/pomppu/v{n}/")
+                page.wait_for_selector("#ai-pelit-aani")
+                back, sound = page.locator("#ai-pelit-back").bounding_box(), page.locator("#ai-pelit-aani").bounding_box()
+                assert back["x"] <= sound["x"] and sound["x"] + sound["width"] <= back["x"] + back["width"] + 0.5, (size, n)
+                assert back["y"] <= sound["y"] + 0.5 and sound["y"] + sound["height"] <= back["y"] + back["height"] + 0.5, (size, n)
+                # A tap on the text still goes back; a tap on 🔊 opens the setting.
+                assert page.evaluate("""() => { const b = document.getElementById('ai-pelit-back').getBoundingClientRect();
+                    const s = document.getElementById('ai-pelit-aani').getBoundingClientRect();
+                    const textX = s.left > b.left + 1 ? b.left + 14 : b.right - 14;
+                    return [document.elementFromPoint(textX, b.top + b.height / 2).id,
+                            document.elementFromPoint(s.left + s.width / 2, s.top + s.height / 2).id].join(); }""") == "ai-pelit-back,ai-pelit-aani"
+        finally:
+            ctx.close()
+
+
+def test_removed_frames_let_their_sound_go(site, context):
+    # Ottelu makes a new frame for each event and removes the old one.
+    script = """window.nextEvent = () => new Promise(done => {
+      document.querySelectorAll('iframe').forEach(f => f.remove());
+      const f = document.createElement('iframe');
+      f.srcdoc = '<body>laji</body>';
+      f.onload = () => { const c = new f.contentWindow.AudioContext(); c.createOscillator().connect(c.destination); setTimeout(done, 0); };
+      document.body.appendChild(f);
+    });"""
+    make_game(site.games, "ottelu", [game_page("v1", script=script)])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/ottelu/v1/")
+    page.wait_for_selector("#ai-pelit-aani")
+    for _ in range(4):
+        page.evaluate("nextEvent()")
+        page.wait_for_timeout(50)
+        assert page.evaluate("AiPelitAani.contexts") == 1
+    # The last event still follows the setting.
+    page.tap("#ai-pelit-aani")
+    page.tap("#ai-pelit-aani-mykista")
+    assert page.frames[1].evaluate("AudioNode.prototype.__aiPelitAani") is True
