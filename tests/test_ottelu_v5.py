@@ -97,21 +97,31 @@ def test_alone_the_podium_shows_only_at_the_end_of_the_match(site, context):
 
 
 def test_with_friends_every_phone_sees_the_podium_at_the_end(site, browser):
-    relay, pages = room(site, browser, ["Eero", "Aino"], ["kuula", "keihas"])
-    host, aino = pages
+    names = ["Eero", "Aino", "Ville"]
+    relay, pages = room(site, browser, names, ["kuula", "keihas"])
+    host = pages[0]
     v1.play_event(pages)
     assert not any(podium_up(p) for p in pages)
     host.click("#next")
     for p in pages:
         p.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && M.at === 1", timeout=10000)
     play_to_podium(pages)
-    for p, name in zip(pages, ["Eero", "Aino"]):
+    # Every phone stands the same match standings on its podium, its own player among them.
+    order = host.evaluate("standings().map(r => r.id + ':' + total(r)).join()")
+    for p, name in zip(pages, names):
+        assert p.evaluate("cer.K.ending.res.map(r => r.id + ':' + r.best).join()") == order
         me = p.evaluate("cer.K.ending.res.find(r => r.p === AiPelitRooms.me)")
         assert me["name"] == name and me["best"] == p.evaluate("total(mine())")
+        assert p.evaluate("cer.K.ending.place") == me["place"]
+    # Each phone leaves the ceremony on its own taps, for the final standings and the room.
     for p in pages:
         p.evaluate("window.leavePodium = true; play()")
+        assert not podium_up(p)
         assert p.inner_text("#bTitle") == "Lopputulokset"
         assert p.inner_text("#next") == "Takaisin huoneeseen"
+    host.click("#next")
+    assert host.is_hidden("#board")
+    for p in pages:
         assert p.errors == []
         p.context.close()
 
