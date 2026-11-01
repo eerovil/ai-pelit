@@ -304,7 +304,7 @@ Object.defineProperty(HTMLMediaElement.prototype, 'paused', { get() { return tru
 """
 
 
-@pytest.mark.parametrize("width,height", [(360, 740), (320, 640), (740, 360), (640, 360)])
+@pytest.mark.parametrize("width,height", [(390, 844), (360, 740), (320, 640), (740, 360), (640, 360)])
 def test_the_tap_to_hear_hint_shows_whole_on_a_narrow_phone(phones, width, height):
     # #333: "🔊 Aino – napauta ruutua" was cut to "napauta ru…" at 360 px wide.
     host = phones("Eero", width=width, height=height, init=HOLD_SOUND)
@@ -326,3 +326,33 @@ def test_the_tap_to_hear_hint_shows_whole_on_a_narrow_phone(phones, width, heigh
     assert box["x"] + box["width"] <= mic["x"] or box["y"] >= mic["y"] + mic["height"]
     host.screenshot(path=f"/var/tmp/issue333-{width}x{height}.png")
     a.mouse.up()
+
+
+@pytest.mark.parametrize("width,height", [(360, 740), (740, 360)])
+def test_two_talking_with_the_sound_held_back_still_fit_and_a_tap_clears_the_hint(phones, width, height):
+    # Two names and the hint: the bubble wraps rather than cuts. A tap plays the sound and the hint goes.
+    unblock = "window.__held = true; const p0 = HTMLMediaElement.prototype.play;" \
+        "HTMLMediaElement.prototype.play = function () { return window.__held ? Promise.reject(new DOMException('no', 'NotAllowedError')) : p0.call(this); };" \
+        "const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'paused');" \
+        "Object.defineProperty(HTMLMediaElement.prototype, 'paused', { get() { return window.__held || d.get.call(this); } });"
+    host = phones("Eero", width=width, height=height, init=unblock)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.code")
+    code = host.evaluate("AiPelitRooms.code")
+    a = join(phones, "Aino", code)
+    b = join(phones, "Iida-Maria Koskinen", code)
+    for p in (host, a, b):
+        p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=15000)
+    hold(a)
+    hold(b)
+    host.wait_for_function("/^🔊 .+, .+\\nNapauta ruutua$/.test(document.getElementById('aipr-talk').textContent)")
+    assert host.evaluate("(e => e.scrollWidth <= e.clientWidth && e.scrollHeight <= e.clientHeight)(document.getElementById('aipr-talk'))")
+    box = host.locator("#aipr-talk").bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= width
+    assert box["y"] >= 0 and box["y"] + box["height"] <= height
+    host.evaluate("window.__held = false")
+    host.mouse.click(5, height - 5)
+    host.wait_for_function("!document.getElementById('aipr-talk').textContent.includes('Napauta')")
+    a.mouse.up()
+    b.mouse.up()
