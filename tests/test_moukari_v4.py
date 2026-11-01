@@ -26,9 +26,9 @@ def open_game(site, context):
     return page
 
 
-def ready(page):
+def ready(page, missing=()):
     page.click("#go")
-    page.wait_for_function(f"{NAMES}.every(AiPelitAanet.ready)", timeout=10000)
+    page.wait_for_function(f"{[n for n in NAMES if n not in missing]}.every(AiPelitAanet.ready)", timeout=10000)
     page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
     page.evaluate("heard.splice(0)")
 
@@ -81,13 +81,63 @@ def test_into_the_cage_it_clangs_and_drops(site, context):
     assert page.errors == []
 
 
-def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
+# Every tone() call's frequency, in window.beeps (the game's own Web Audio beep).
+TONES = """() => {
+  window.beeps = [];
+  const real = tone;
+  tone = (f, ...rest) => { beeps.push(f); return real(f, ...rest); };
+}"""
+
+
+def offline_page(site, browser, blocked):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    ctx.route("**/*.mp3", lambda route: route.abort() if route.request.url.rsplit("/", 1)[-1] in blocked else route.continue_())
+    page = open_game(site, ctx)
+    page.evaluate(TONES)
+    return ctx, page
+
+
+def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
+    ctx, page = offline_page(site, browser, {n + ".mp3" for n in NAMES})
     try:
-        ctx.route("**/*.mp3", lambda route: route.abort())
-        page = open_game(site, ctx)
-        v3.win_meet(page)
+        page.click("#go")
+        page.evaluate("th.t = 99; step(0.001)")
+        assert page.evaluate("beeps.splice(0)") == [660]   # the turn
+        page.evaluate("press(1); tapAt(1, 0); tapAt(2, 0.05); tapAt(3, 0); letGo(0); quick()")
+        # The swings start, a perfect and a good tap, the release, and the throw's two-note beep.
+        got = page.evaluate("new Promise(r => setTimeout(() => r(beeps.splice(0)), 300))")
+        assert 110 in got   # the low-point beat, always the game's own
+        got = [f for f in got if f != 110]
+        assert got[:3] == [220, 880, 660] and 520 in got and got[-2:] == [880, 1175], got
+        # The rest of the meet, to the podium, plays with no sound file and no error.
+        for _ in range(5):
+            page.evaluate("spin(4, 0.01, 0); quick()")
+        assert page.evaluate("K.comp.over && K.ending !== null")
         assert played(page) == []
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_with_only_some_files_each_sound_falls_back_on_its_own(site, browser):
+    # The thud is missing: the crowd still claps.
+    ctx, page = offline_page(site, browser, {"tomahdys.mp3"})
+    try:
+        ready(page, missing=["tomahdys"])
+        page.evaluate("th.t = 99; step(0.001); press(1); tapAt(1, 0); tapAt(2, 0); tapAt(3, 0); letGo(0); heard.splice(0); beeps.splice(0); quick()")
+        assert played(page) == ["aplodit"]
+        assert 1175 not in page.evaluate("new Promise(r => setTimeout(() => r(beeps.splice(0)), 300))")
+    finally:
+        ctx.close()
+    # The thud is there but the applause is not: the old two-note beep plays instead.
+    ctx, page = offline_page(site, browser, {"aplodit.mp3"})
+    try:
+        page.click("#go")
+        page.wait_for_function("AiPelitAanet.ready('tomahdys')", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+        page.evaluate("th.t = 99; step(0.001); press(1); tapAt(1, 0); tapAt(2, 0); tapAt(3, 0); letGo(0); heard.splice(0); beeps.splice(0); quick()")
+        assert played(page) == ["tomahdys"]
+        assert page.evaluate("new Promise(r => setTimeout(() => r(beeps.splice(0)), 300))")[-2:] == [880, 1175]
         assert page.errors == []
     finally:
         ctx.close()

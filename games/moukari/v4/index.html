@@ -355,14 +355,17 @@ function throwNow(ang, v) {
 function landed() {
   th.phase = 'land'; th.t = 0;
   // v4: every hammer lands with a thud, a friend's quieter (one stopped by the cage too).
-  const thud = S.play('tomahdys', { vol: th.mine ? 1 : 0.5 });
+  S.play('tomahdys', { vol: th.mine ? 1 : 0.5 });
   if (th.mark >= 0) {
     th.leads = K.comp && K.standings()[0] && th.mark > K.bestOf(K.standings()[0]);
     if (th.mine) {
       th.record = K.record(th.mark);
       // The crowd claps a new lead or the player's own record; any other good throw confirms.
-      if (thud) S.play(th.leads || th.record ? 'aplodit' : 'onnistui', { delay: 0.2, vol: th.leads || th.record ? 0.8 : 0.5 });
-      else { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      // Each sound stands on its own: the old two-note beep plays only when this one cannot.
+      const cheer = th.leads || th.record;
+      if (!S.play(cheer ? 'aplodit' : 'onnistui', { delay: 0.2, vol: cheer ? 0.8 : 0.5 })) {
+        tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
+      }
     }
   } else if (th.mine) S.play('ohhoo', { vol: 0.8, delay: 0.2 }) || tone(160, 0.3, 'sawtooth', 0.08, 70);
 }
