@@ -24,7 +24,8 @@
 // {t: '_list', on} (not passed on to anyone): on while the room is public and waits between rounds.
 // The room is listed only while that is on, the host is connected and there is space. The list is
 // one more object of this same class, named LOBBY (no room code can be that name); each room tells
-// it its state, and phones read it with GET /api/rooms?game=<slug> (server/api.js). A listing not
+// it its state, and phones read it with GET /api/rooms?game=<slug> (server/api.js), or every game's
+// with GET /api/rooms, which the shelf's front page shows (#203). A listing not
 // refreshed for LISTED_FOR is dropped, so a room that vanished without saying so leaves the list.
 
 const CODE = /^[A-Z]{4}$/;
@@ -37,6 +38,7 @@ const MSG_MAX = 16000;
 export const LOBBY = 'lobby'; // the name of the object that keeps the list of public rooms
 export const LISTED_FOR = 3 * 60e3; // the host refreshes its listing every minute (public/rooms.js)
 const LISTED_MOST = 10;
+const LISTED_ALL = 30; // the shelf's list of every game's public rooms (#203)
 
 // A phone's public id: the first 32 hex digits of SHA-256 of its secret key.
 export async function publicId(key) {
@@ -215,7 +217,8 @@ export class Room {
   }
 
   // The list of public rooms (only in the LOBBY object): POST {code, entry} from a room puts it on
-  // the list or (entry null) takes it off; GET ?game= reads one game's rooms, newest first.
+  // the list or (entry null) takes it off; GET ?game= reads one game's rooms, newest first, and
+  // GET with no game every game's, each naming its game.
   async lobby(request, url) {
     const now = Date.now();
     const list = ((await this.ctx.storage.get('lobby')) || []).filter((r) => now - r.at < LISTED_FOR);
@@ -231,9 +234,11 @@ export class Room {
       await this.ctx.storage.put('lobby', list.slice(0, 200));
       return new Response(null, { status: 204 });
     }
-    const game = url.searchParams.get('game') || '';
-    const rooms = list.filter((r) => r.game === game).slice(0, LISTED_MOST)
-      .map((r) => ({ code: r.code, v: r.v, n: r.n, max: r.max }));
+    const game = url.searchParams.get('game');
+    const rooms = game === null
+      ? list.slice(0, LISTED_ALL).map((r) => ({ code: r.code, game: r.game, v: r.v, n: r.n, max: r.max }))
+      : list.filter((r) => r.game === game).slice(0, LISTED_MOST)
+        .map((r) => ({ code: r.code, v: r.v, n: r.n, max: r.max }));
     return new Response(JSON.stringify({ rooms }), {
       headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     });

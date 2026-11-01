@@ -14,6 +14,7 @@
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
+//   GET  /api/rooms                                          -> {rooms: [{code, game, v, n, max}]}, every game's (#203)
 //   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
 //   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
 //   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
@@ -439,15 +440,16 @@ function room(request, env, code) {
   return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(request);
 }
 
-// The public rooms of one game (#50), from the one object that keeps the list (rooms/worker.js).
-// Only this GET reaches it from outside; the rooms themselves tell it what is listed.
+// The public rooms of one game (#50), or with no game every game's (the shelf, #203), from the one
+// object that keeps the list (rooms/worker.js). Only this GET reaches it from outside; the rooms
+// themselves tell it what is listed.
 function publicRooms(request, env) {
   if (!env.ROOMS) return fail(503, 'no rooms');
   if (request.method !== 'GET') return fail(405, 'GET only');
-  const game = new URL(request.url).searchParams.get('game') || '';
-  if (!/^[a-z0-9-]{1,40}$/.test(game)) return fail(400, 'bad game');
-  const q = new URLSearchParams({ game });
-  return env.ROOMS.get(env.ROOMS.idFromName('lobby')).fetch(new Request(`https://rooms/lobby?${q}`));
+  const game = new URL(request.url).searchParams.get('game');
+  if (game !== null && !/^[a-z0-9-]{1,40}$/.test(game)) return fail(400, 'bad game');
+  const q = game === null ? '' : `?${new URLSearchParams({ game })}`;
+  return env.ROOMS.get(env.ROOMS.idFromName('lobby')).fetch(new Request(`https://rooms/lobby${q}`));
 }
 
 export async function handle(request, env) {
