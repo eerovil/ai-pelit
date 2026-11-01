@@ -154,13 +154,50 @@ def test_v3_saves_are_read_as_they_are(site, context):
     assert page.errors == []
 
 
-def test_a_whole_meet_alone_still_ends_on_the_podium(site, context):
+def ceremony(page):
+    """Wins a meet, runs the medal ceremony through, and returns the sounds and beeps it made."""
+    for _ in range(6):   # the meet ready() started: six winning throws
+        page.evaluate("spin(4, 0.01, 0); quick()")
+    assert page.evaluate("K.comp.over && K.ending.at === 0")
+    page.evaluate("heard.splice(0); beeps.splice(0); for (let i = 0; i < 10 * 60; i++) step(1 / 60)")
+    beeps = page.evaluate("new Promise(r => setTimeout(() => r(beeps.splice(0)), 300))")
+    return played(page), beeps
+
+
+def test_a_whole_meet_alone_ends_on_the_podium_with_the_medal_sounds(site, context):
     page = open_game(site, context)
-    v3.win_meet(page)
-    page.evaluate("for (let i = 0; i < 10 * 60; i++) step(1 / 60)")
+    ready(page)
+    page.evaluate(TONES)
+    got, beeps = ceremony(page)
+    # Bronze, silver, gold: a steel-drum run each, and applause for the gold.
+    assert got == ["mitali", "mitali", "mitali", "aplodit"], got
+    assert not {523, 659, 784, 1047} & set(beeps), beeps
     v3.tap(page)
     assert page.inner_text("#result").startswith("🥇 Voitit kisan!")
     assert page.errors == []
+
+
+def test_each_medal_sound_falls_back_on_its_own(site, browser):
+    # No steel drum: v3's three chimes, and the crowd still claps the gold.
+    ctx, page = offline_page(site, browser, {"mitali.mp3"})
+    try:
+        ready(page, missing=["mitali"])
+        got, beeps = ceremony(page)
+        assert got == ["aplodit"], got
+        assert [f for f in beeps if f in (523, 659, 784, 1047)] == [523, 659, 784], beeps   # bronze first
+        assert page.errors == []
+    finally:
+        ctx.close()
+    # No applause: the steel drums, and v3's high note for the gold.
+    ctx, page = offline_page(site, browser, {"aplodit.mp3"})
+    try:
+        ready(page, missing=["aplodit"])
+        got, beeps = ceremony(page)
+        assert got == ["mitali", "mitali", "mitali"], got
+        assert [f for f in beeps if f in (523, 659, 784, 1047)] == [1047], beeps
+        assert page.errors == []
+    finally:
+        ctx.close()
 
 
 def test_with_friends_a_meet_still_plays_through(site, browser):

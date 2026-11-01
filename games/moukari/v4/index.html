@@ -221,9 +221,10 @@ const K = AiPelitKisa.meet({
   // v3 (#176): the medal ceremony at the end, the throwers in their own kit, a chime per medal.
   look: () => ({ skin: '#c98a62', bottom: '#222', shoe: '#fff', hair: '#7a4a2c' }),
   chime: i => {
-    // v4: a steel-drum run per medal, higher for a better one, and applause for the gold.
-    if (S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 })) { if (i === 0) S.play('aplodit', { delay: 0.6, vol: 0.7 }); return; }
-    tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06); if (i === 0) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140);
+    // v4: a steel-drum run per medal, higher for a better one, and applause for the gold. Each
+    // stands on its own: v3's chime, or its high note for the gold, plays only when its sound cannot.
+    S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 }) || tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06);
+    if (i === 0 && !S.play('aplodit', { delay: 0.6, vol: 0.7 })) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140);
   },
 });
 const thrower = id => K.thrower(id);
