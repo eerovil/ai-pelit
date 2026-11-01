@@ -102,3 +102,16 @@ def test_without_the_library_it_still_plays_with_its_own_beeps(site, context):
     r = page.evaluate(AIR, [["up", "down"], 0.2])
     assert r["lastLand"]["clean"] and r["points"] > 300
     assert page.errors == []
+
+
+def test_after_a_run_ends_the_next_run_rolls_again_and_the_end_tune_plays_once(site, context):
+    page = begin(site, context)
+    page.evaluate("P.s = 0; P.v = 5; wheelSound()")
+    page.wait_for_function("wheels.playing()", timeout=5000)
+    # The run ends while rolling: the wheels go quiet, one tune, nothing more on later steps.
+    page.evaluate("points = 0; timeLeft = 0.01; step(1 / 60); for (let i = 0; i < 30; i++) step(1 / 60); wheelSound()")
+    assert played(page) == ["tappio"]
+    assert page.evaluate("wheels.vol") == 0
+    # Again: the same loop rolls once more, it is not started twice.
+    page.evaluate("const w = wheels; startRun(); P.s = 0; P.v = 5; wheelSound(); window.same = w === wheels")
+    assert page.evaluate("[same, wheels.vol > 0]") == [True, True]
