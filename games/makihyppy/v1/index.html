@@ -475,7 +475,20 @@ function timeToLand(a) {
   for (let t = 0; t < 6; t += 1 / 60) { flyStep(f, 1 / 60, carry, a.wind || 0); if (f.y <= hillY(f.x)) return t; }
   return 6;
 }
-const nearSnow = a => a.ft > 0.6 && !a.fallen && timeToLand(a) < TELE_SHOW;
+// The action's cue for this phone's jumper: 'now' (green) only inside the window that is judged
+// good, the take-off's last GOOD seconds or the telemark's TELE; 'soon' (yellow) just before it.
+function cue(a) {
+  if (!a || !a.mine) return null;
+  if (a.phase === 'inrun' && a.tau === undefined) {
+    const t = (IN - a.s) / Math.max(1, a.v);
+    return t <= GOOD ? 'now' : t < 0.9 ? 'soon' : null;
+  }
+  if (a.phase === 'fly' && a.tele === null && !a.fallen && a.ft > 0.6) {
+    const t = timeToLand(a);
+    return t <= TELE[1] ? (t >= TELE[0] ? 'now' : null) : t < TELE_SHOW ? 'soon' : null;
+  }
+  return null;
+}
 // A tap: the bar, the take-off, or the telemark, by where the jump is.
 function action() {
   unlock();
@@ -934,11 +947,13 @@ function drawHud() {
   } else if (a.phase === 'inrun') {
     const tau = (IN - a.s) / Math.max(1, a.v);
     if (a.tau !== undefined) small(a.tau <= GOOD ? 'Hyvä ponnistus!' : 'Vähän aikaisin', a.tau <= GOOD ? '#7ee081' : '#ffd166');
+    else if (tau <= GOOD) small('Ponnista nyt!', '#7ee081');
     else if (tau < 1.2) small('Ponnista vihreällä!', '#ffd166');
   } else if (a.phase === 'fly') {
     if (a.fallen) small('Kaatuu!', '#ff6b5e');
     else if (a.tele !== null) small(a.ft - a.tele > TELE[1] ? 'Liian aikaisin…' : 'Telemark!', a.ft - a.tele > TELE[1] ? '#ffd166' : '#7ee081');
-    else if (nearSnow(a)) small('Napauta: telemark!', '#ffd166');
+    else if (cue(a) === 'now') small('Napauta: telemark!', '#7ee081');
+    else if (cue(a) === 'soon') small('Telemark kohta…', '#ffd166');
     else if (a.ft < 1.5 && a.spring && KIND_TEXT[a.spring.kind]) small(KIND_TEXT[a.spring.kind], '#ffd166');
     else if (Math.abs(a.pos) > 0.4) small(a.pos > 0 ? 'Liian edessä: Taakse!' : 'Liian takana: Eteen!', '#ffd166');
   }
@@ -1010,12 +1025,12 @@ function drawControls() {
   const a = th, mine = a && a.mine;
   const act = mine && (a.phase === 'ready' || a.phase === 'inrun' || (a.phase === 'fly' && a.tele === null && !a.fallen) || (a.phase === 'wait' && !isNet()));
   const air = mine && a.phase === 'fly' && !a.fallen;
-  const hot = mine && ((a.phase === 'inrun' && a.tau === undefined && (IN - a.s) / Math.max(1, a.v) < 0.9) || (a.phase === 'fly' && a.tele === null && nearSnow(a)));
+  const cueNow = cue(a), hot = cueNow === 'now', soon = cueNow === 'soon';
   for (const b of pads()) {
     let fill, ink;
     if (b.k === 3) {
-      // In the air the telemark waits, dim, until the snow is near; then it lights up green.
-      const wait = air && !hot;
+      // Green only in the window judged good; in the air the telemark waits dim, then yellow just before it.
+      const wait = air && !hot && !soon;
       fill = !act ? '#22385a' : flash[3] > 0 ? '#ffe08a' : hot ? '#7ee081' : wait ? '#3a5a86' : '#ffb703';
       ink = !act ? '#6f86a6' : hot ? '#123b14' : wait ? '#c9d8ea' : '#2a1a05';
     } else {

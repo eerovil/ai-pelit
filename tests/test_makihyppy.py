@@ -114,6 +114,26 @@ def test_the_take_off_is_generous_in_time(site, context):
     assert page.errors == []
 
 
+def test_the_action_is_green_only_when_a_tap_is_judged_good(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.evaluate("th.t = 99; step(0.001); action()")
+    # On the in-run: 0.5 s before the edge is yellow (a tap there is early), the last GOOD green.
+    page.evaluate("while ((IN - th.s) / th.v > 0.5) step(1 / 120)")
+    assert page.evaluate("[cue(th), springOf((IN - th.s) / th.v).kind]") == ["soon", "early"]
+    page.evaluate("while ((IN - th.s) / th.v > GOOD) step(1 / 120)")
+    assert page.evaluate("[cue(th), springOf((IN - th.s) / th.v).kind]") == ["now", "good"]
+    # In the air: about 1 s before the snow is yellow (a telemark there is early), within 0.6 s green.
+    page.evaluate("action(); while (th.phase !== 'fly') step(1 / 120); th.inp = 0")
+    page.evaluate("while (th.phase === 'fly' && (th.ft < 0.6 || timeToLand(th) > 1.0)) { th.pos = 0; step(1 / 120); }")
+    assert page.evaluate("cue(th)") == "soon"
+    page.evaluate("while (th.phase === 'fly' && timeToLand(th) > 0.5) { th.pos = 0; step(1 / 120); }")
+    assert page.evaluate("cue(th)") == "now"
+    page.evaluate("action(); while (th.phase === 'fly') { th.pos = 0; step(1 / 120); }")
+    assert page.evaluate("th.res.landing") == "tele"
+    assert page.errors == []
+
+
 def test_the_telemark_is_judged_by_time_before_the_snow(site, context):
     page = open_game(site, context)
     page.click("#go")
