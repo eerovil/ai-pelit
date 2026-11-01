@@ -7,6 +7,8 @@ for, jigged in rhythm, struck and reeled in, and the biggest total catch wins. A
 anglers fish the same lake; with friends, 2–8 phones fish it each on its own phone through the
 shared room library (see `moninpeli.md`).
 
+v4 (#337, `aanet-4`) has no crowd: every catch, a big fish too, is the quiet `onnistui` blip at 0.3; the whistles are quieter.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}

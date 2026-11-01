@@ -13,6 +13,8 @@ adds two more games, plain hide and seek (Piilosta) and tag (Hippa), a sprint, t
 10 m), a wider view and blurry side vision. v8 (#219) plays recorded sounds from the shared library
 `lib/aanet-2/` instead of beeps; the play is v7's.
 
+v9 (#337) loads `aanet-4`, which plays the loudest sounds (the winning tune) quieter; nothing else changed.
+
 ```mermaid
 flowchart TD
   L0[Valitse leikki: Kirkkis, Piilosta tai Hippa] --> K0

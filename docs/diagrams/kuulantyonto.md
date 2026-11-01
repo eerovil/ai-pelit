@@ -13,6 +13,8 @@ v3 (#311) plays as before with the athletics events' common outfit set and one c
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v5 (#337, `aanet-4`) has no crowd: a good put (a lead or a record too) is the quiet `onnistui` blip at 0.3, a foul only its error buzz or nothing (over the board), the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa, kaverit tai asu] --> K[Kisa: 12 työntäjää, arvottu järjestys]
@@ -76,7 +78,7 @@ flowchart TD
 - **Päästä irti: kuula lähtee**: `release()` and `letGo()`: the put goes at the angle reached, from the hand 2.1 m up over the front foot (`REL_H`, `REACH`). A steeper push is weaker (`relSpeed()`), so the best angle is about 37°. In a room the put goes to every phone rounded (`rel`), and each flies the same shot with `throwNow()`.
 - **Sektoriin?**: `flight()`: the landing is measured from the circle's centre; outside 17.46° of the middle it is "Sektorin ulkopuolelle". A small map from above in the corner (`drawSector()`) shows where it came down, which the side view cannot.
 - **Kaverin työntö näkyy, sama kuula lentää**: the putter's phone sends where it is twelve times a second (`p`: the phase, the time, the way across, the angle) and the put (`rel`); a foul goes as `rel` with its reason.
-- **Tulos metreinä renkaan sisäreunasta, ennätys talteen**: `flight()` and `landed()`: the mark is the distance from the centre less 1.0675 m, down to the centimetre, as World Athletics measures it. A new record is saved at once (`ennatys`). The shot thuds down (`tomahdys`); the crowd claps a new lead or record (`aplodit`), a foul gets an "ooh" (`ohhoo`); sounds from `public/lib/aanet-2/`.
+- **Tulos metreinä renkaan sisäreunasta, ennätys talteen**: `flight()` and `landed()`: the mark is the distance from the centre less 1.0675 m, down to the centimetre, as World Athletics measures it. A new record is saved at once (`ennatys`). The shot thuds down (`tomahdys`); the crowd claps a new lead or record (`aplodit`), a foul gets an "ooh" (`ohhoo`); sounds from `public/lib/aanet-2/`. From v5 (#337) every good put, a lead or a record too, is `onnistui` at 0.3, with no `aplodit`; a foul has no `ohhoo`.
 - **8 parasta jatkaa, viimeisestä alkaen**: the library's rounds format after round 3.
 - **Palkintojenjako ja lopputulokset**: `K.drawPodium()` at the end of `draw()`: the top three on the podium in their outfits, a steel-drum run per medal (`mitali`), until a tap.
 - **Ennätys, tuloslista, voitosta seuraava taso**: the library saves `kisat`, and alone a win adds `voitot` and the next level; the meet's best put goes to the high-score list with `AiPelitScores.submit()` (`kuula` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`).

@@ -11,6 +11,8 @@ From v11 (#233) the beeps are recorded sounds from the shared library (`aanikirj
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v12 (#337, `aanet-4`) has no crowd: a stuck landing is the thud and the quiet `onnistui` blip at 0.3, a fall only its thud.
+
 ```mermaid
 flowchart TD
   A[Roikkuu tangossa, pieni heilahdus] --> B[Sormi alhaalla: vartalo vetäytyy, heilahdus kasvaa]
@@ -39,7 +41,7 @@ flowchart TD
   K --> N[Pisteet D + E, tason tehtävä tarkistetaan]
   L --> N
   M --> N
-  N --> SO[Äänet: valinta, suhahdus, lyönti, tömähdys, ohhoo, aplodit, voitto tai tappio]
+  N --> SO[Äänet: valinta, suhahdus, lyönti, tömähdys, hiljainen kilahdus, voitto tai tappio]
   N --> V{Mikä taso?}
   V -- 1–13 ja 21–32 --> W[Tehtävä: liike, yhdistelmä tai alastulo]
   V -- 14–18 ja 33– --> X[Pisteraja]
@@ -90,4 +92,4 @@ flowchart TD
 - **Pisteraja**: `target(n)`: 10.8 + 0.3 per level from 14 (12.0 at 18, the last from v9; v7–v8 went on to 12.6 at 20); from 33 on it carries on from 12.9 by 0.2 a level, up to 15.5.
 - **Taso, paras ja suoritukset tallessa puhelimessa**: `taso`, `paras` and `suoritukset` under `ai-pelit:voimistelu:`.
 - **D-pisteet näkyvissä koko sarjan ajan**: v9 `drawHud()` shows `D <difficulty()>` above the elements so far, from the first swing to the landing; `difficulty()` counts each different element once, as `finish()` does.
-- **Äänet: valinta, suhahdus, lyönti, tömähdys, ohhoo, aplodit, voitto tai tappio**: v11 (`games/voimistelu/v11/index.html`, #233) loads `lib/aanet-2/aanet.js` and plays through `snd()`: each scored element `valinta`, higher with each one (`addElement()`); letting go and a half twist `suhahdus` (`release()`, `twist()`), each giant swing a quieter, lower one (`giant()`); a catch `lyonti` (`grab()`); a landing `tomahdys`, a fall adds `ohhoo`, a stuck landing `aplodit` (`land()`); the task done `voitto`, not done `tappio` (`finish()`). A sound whose file is not there falls back to v10's own beep or hiss; `tappio` and `ohhoo` have none, as v10 was silent there.
+- **Äänet: valinta, suhahdus, lyönti, tömähdys, hiljainen kilahdus, voitto tai tappio**: from v12 (#337) a stuck landing is `onnistui` at 0.3 instead of `aplodit`, and a fall has no `ohhoo`. Before it: v11 (`games/voimistelu/v11/index.html`, #233) loads `lib/aanet-2/aanet.js` and plays through `snd()`: each scored element `valinta`, higher with each one (`addElement()`); letting go and a half twist `suhahdus` (`release()`, `twist()`), each giant swing a quieter, lower one (`giant()`); a catch `lyonti` (`grab()`); a landing `tomahdys`, a fall adds `ohhoo`, a stuck landing `aplodit` (`land()`); the task done `voitto`, not done `tappio` (`finish()`). A sound whose file is not there falls back to v10's own beep or hiss; `tappio` and `ohhoo` have none, as v10 was silent there.

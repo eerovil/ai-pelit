@@ -19,6 +19,8 @@ v6 (#311) adds the outfit picker ("👕 Asu" in the menu, `asut.md`): the player
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v8 (#337, `aanet-4`) has no crowd: a clearance (a record too) is the quiet `onnistui` blip at 0.3, a failure only the bar's clatter, the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys, riman korkeudet]
@@ -43,9 +45,9 @@ flowchart TD
   C -- Kyllä --> O[O: yli, ennätys talteen]
   C --> MAT[Tömähdys patjalle]
   O --> SO{Uusi ennätys?}
-  SO -- Kyllä --> AP[Aplodit]
+  SO -- Kyllä --> AP[Hiljainen kilahdus]
   SO -- Ei --> KL[Kilahdus]
-  X --> OH[Yleisö: ohhoo]
+  X --> OH[Vain riman kolahdus]
   WT --> O
   WT --> X
   O --> NX{Kolme peräkkäistä X tai kaikki ulos?}
@@ -95,9 +97,9 @@ flowchart TD
 - **O: yli, ennätys talteen**: `landed()`: a new record is saved at once (`ennatys`). The jumper's phone reports the attempt (`res`: O, X, - or S); the host records it once (`seq`) and sends the meet to everyone (`c`).
 - **Tömähdys patjalle**: v4: `landed()` plays `tomahdys` on every phone, softer for someone else's jump, and once: a watching phone that landed its own copy of the jump before the jumper's `done` arrives takes the result from `done` with no second thud and keeps its landing time.
 - **Uusi ennätys?**: v4: `landed()` asks `K.record(th.bar)` for a cleared height on this phone; no record yet counts as a new one.
-- **Aplodit**: v4: `aplodit` 0.25 s after landing. When it cannot play, v3's two-note beep.
+- **Hiljainen kilahdus**: from v8 (#337) `onnistui` at 0.3 for every clearance, a record too, with no applause. Before it, v4: `aplodit` 0.25 s after landing. When it cannot play, v3's two-note beep.
 - **Kilahdus**: v4: `onnistui` 0.25 s after landing, or v3's two-note beep.
-- **Yleisö: ohhoo**: v4: `ohhoo` on the jumper's phone for a failed jump (after the bar's `rima` clatter, which every phone hears when the bar falls, in `step()` and on another phone's `done`) and for running past the bar (`outcome()`, or v3's falling beep).
+- **Vain riman kolahdus**: from v8 (#337) a failed jump plays only the bar's `rima` clatter, no crowd's "ooh". Before it, v4: `ohhoo` on the jumper's phone for a failed jump (after the bar's `rima` clatter, which every phone hears when the bar falls, in `step()` and on another phone's `done`) and for running past the bar (`outcome()`, or v3's falling beep).
 - **Kolme peräkkäistä X tai kaikki ulos?**: `mark()` and `advance()`: three failures in a row put a jumper out; the meet ends when no one is left in. With no player on a phone left in, the computer jumps the rest at once.
 - **Viimeisenä jäljellä: johtaja voi lopettaa, muuten jatkaa**: the last one in, with everyone else out, goes on jumping the next heights. Only when they also lead the standings (`soleWinner()`: best height, then countback, `placeOf() === 1`) does the turn say "Voitit! Jatka?" and offer "🏁 Lopeta" (`stopMeet()`, 'S'), which ends their meet there. Behind a jumper already out (a worse countback, or a height passed that the other cleared) it says "Viimeisenä jäljellä" and offers only the pass, so they can still try to win.
 - **Palkintojenjako; Lopputulokset: paras korkeus, sitten pudotukset**: `over()` and `netEnd()` (v2: the library's `over()`, `end()` and `K.step()`): the standings with 🥇🥈🥉 and each jumper's failures at their best height and in all up to it (the countback), shown for a few seconds. From v3 (#176) the end is the medal ceremony, `K.drawPodium()` at the end of `draw()` over the whole screen: the top three on the podium in the game's kit (`look`), an official hangs their medals with a chime each (`chime`; from v4 the `mitali` sound, a little lower for each better place, and applause with the gold), and the final standings under it. Medals go by place (`yleisurheilu-4`): a full countback tie shares the place and the medal: in the standings, and on the podium, where everyone placed 1st–3rd stands on their place's block, a shared place side by side.

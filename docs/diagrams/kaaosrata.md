@@ -9,6 +9,8 @@ moves the computer players and ends the race.
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v4 (#337, `aanet-4`) has no crowd: a fall plays only the (quieter) falling whistle, no "ooh".
+
 ```mermaid
 flowchart TD
   A[Juokse! tai Aloita kierros] --> B[3, 2, 1, MENE!]
@@ -60,7 +62,7 @@ flowchart TD
 - **Seinä työntää mukanaan**: a wall moving into the player pushes it along, off the edge if it does not get out of the way.
 - **Tönäisy: molemmat kimpoavat**: `bumps()` pushes apart every player moved on this phone, harder the faster they met (v3: `osuma`, louder the harder); a player moved on another phone gets its own push there. A player who has finished passes through everyone, so it cannot change a result still being raced.
 - **Lattiaa jalkojen alla?**: `groundAt()`: the floors, the stepping stones, the sliding platform and the three spinning discs; over nothing for 0.1 s means falling.
-- **Putoat, takaisin viime välietapille**: `respawn()` after 1.1 s at the last of the checkpoints (`CPS`, the green dashed lines) the player has stood past. v3: `putoaminen` as the player falls, the crowd's `ohhoo` just after; `valinta`, a little higher, on passing a checkpoint.
+- **Putoat, takaisin viime välietapille**: `respawn()` after 1.1 s at the last of the checkpoints (`CPS`, the green dashed lines) the player has stood past. v3: `putoaminen` as the player falls, the crowd's `ohhoo` just after; `valinta`, a little higher, on passing a checkpoint. From v4 (#337) the fall is `putoaminen` only, no `ohhoo`.
 - **Aika maalissa**: `move()` sets `fin` when the player crosses 140 m, to 1/100 s (v3: `voitto`). From then on the player stands still where it crossed (`tick()` skips it on every phone, and it bumps nobody) until the race ends.
 - **Taso nousee, taitavammat vastustajat**: only first place with a time wins (`won` in `finish()`): at the 150 s limit the one who got furthest heads the standings but has not won, alone or in a room. `finish()` saves `ai-pelit:kaaosrata:taso`, `voitot`, `kisat` and `ennatys`; higher levels make the computer players faster and surer in their jumps (`think()`).
 - **Isäntä odottaa kaikki ihmiset maaliin, enintään 30 s ensimmäisen jälkeen**: `over()` and `hostTick()`: each guest runs its own player and sends it to the host 12 times a second (`p`); the host sends everyone back (`s`), with the race clock that moves every obstacle, and runs the computer for a phone that is away (`on('continue')`). The race also ends at 150 s.

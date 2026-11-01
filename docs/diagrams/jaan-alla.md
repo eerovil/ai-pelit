@@ -13,6 +13,8 @@ from the shared library instead of beeps, with the sea, SISU's engine, bubbles a
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v6 (#337, `aanet-4`): the bear's growl plays quieter, and a story step is the quiet `onnistui` blip at 0.3.
+
 ```mermaid
 flowchart TD
   A[Valikko: Jatka tai Uusi peli] --> B[Tarina: SISU lähetetään Aurora-asemalle]

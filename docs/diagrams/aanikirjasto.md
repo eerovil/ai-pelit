@@ -34,7 +34,7 @@ flowchart TD
   ok -- Kyllä --> loud --> soi
   ok -- Ei --> hiljaa
   load --> loop --> set
-  set -- ääni purettu ja päällä --> soi
+  set -- ääni purettu ja päällä --> loud
   hiljaa -. play palauttaa false .-> beep
   load --> sw --> files
   js --> load

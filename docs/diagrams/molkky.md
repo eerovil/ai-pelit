@@ -6,6 +6,8 @@ One pin down scores its number, several score how many fell; exactly 50 wins, ov
 and three misses in a row put a player out. Alone the computer is the other player; with friends,
 2–6 phones each throw in turn through the shared room library (see `moninpeli.md`).
 
+v3 (#337, `aanet-4`) has no crowd: a win is the quiet `onnistui` blip at 0.3, a big throw of your own a blip at 0.25, going over 50 or out silent (no applause, no "ooh").
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}

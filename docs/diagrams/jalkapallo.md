@@ -8,6 +8,8 @@ pitch turns to run across the screen (see `landscape.md`). From v2 (#215) the ma
 recorded effects from the shared sound library (see `aanikirjasto.md`); each falls back to v1's
 beep when nothing played. Each box below names its sound.
 
+v3 (#337, `aanet-4`) has no crowd: a goal is the whistle, the net and the quiet `onnistui` blip at 0.3; a keeper's save is the hit only; the whistles are quieter.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}
@@ -74,9 +76,9 @@ flowchart TD
 - **Laukaise: pidä pohjassa, laukaus kovenee; maalia kohti osuu tolppien väliin**: holding the button 0.8 s gives full power (a ring round the button shows it); `shoot()` pulls a shot aimed within about 40° of the goal inside the posts, then adds a small error.
 - **Lähin vaihtuu ohjattavaksi; napit taklaavat**: without the ball either button is `tackle()`: a short lunge. Sound: `suhahdus` (`tackleSound()`); a guest hears it when a player's lunge starts in the snapshot.
 - **Osuuko taklaus palloon?**: `contest()`: a lunge that reaches the ball takes it and stuns the owner a moment; a foe merely touching the ball takes it now and then.
-- **Torjunta: kiinni tai pallo kimpoaa**: `pickUp()`: a keeper in its box reaches further, and holds a hard shot by its level's `save` chance; otherwise it parries. Sound (`saveSound()`): `osuma`, and from a keeper the crowd's `ohhoo`; a guest hears it when the host's "Torjunta!" or "Blokki!" text first shows. The computer's keeper stands between the ball and the goal and dives to a shot after its reaction time, guessing the line a little wrong (`cpuThink()`); it throws the ball to its most open teammate after 0.9 s.
+- **Torjunta: kiinni tai pallo kimpoaa**: `pickUp()`: a keeper in its box reaches further, and holds a hard shot by its level's `save` chance; otherwise it parries. Sound (`saveSound()`): `osuma`, and from a keeper the crowd's `ohhoo`; a guest hears it when the host's "Torjunta!" or "Blokki!" text first shows. The computer's keeper stands between the ball and the goal and dives to a shot after its reaction time, guessing the line a little wrong (`cpuThink()`); it throws the ball to its most open teammate after 0.9 s. From v3 (#337) a keeper's save is `osuma` only, no `ohhoo`.
 - **Blokki: pallo kimpoaa**: a field player in the way of a hard shot blocks it; a softer ball is simply taken. Sound: `osuma`.
-- **MAALI!**: `goal()`: across the line between the posts and under the bar (2.2 m). The scorer's name, or "Sinä teit maalin!" on the phone that steered them. Sound: `pilli`, `verkko`, then `yleiso` (`whistle()`, `cheer()`); the net and the crowd play each on their own, and without the crowd v1's six-note cheer stands in.
+- **MAALI!**: `goal()`: across the line between the posts and under the bar (2.2 m). The scorer's name, or "Sinä teit maalin!" on the phone that steered them. Sound: `pilli`, `verkko`, then `yleiso` (`whistle()`, `cheer()`); the net and the crowd play each on their own, and without the crowd v1's six-note cheer stands in. From v3 (#337) the goal is `pilli`, `verkko`, then `onnistui` at 0.3 instead of `yleiso`; without it, one soft tone.
 - **Pallo pomppaa laidasta**: the pitch has boards all round, so the ball never goes out. Sound: `puu` off the boards, louder the harder it hits (`boardSound()`); `metalli` off a post or just over the bar (`postSound()`). A guest hears them when a loose ball turns back near the boards in the snapshot.
 - **Loppuvihellys**: `clock` runs only while the ball is in play. Sound: `pilli2`.
 - **Kumpi teki enemmän maaleja?**: `endMatch()` saves `ai-pelit:jalkapallo:taso`, `voitot`, `tasapelit` and `haviot`; a win raises the level, which makes the opponents quicker, quicker to react, surer in their aim and their keeper safer.
