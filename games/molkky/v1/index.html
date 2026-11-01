@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Mölkky</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#7fb069;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* Fixed boxes, not 100dvh (rule 4, #181). The 3D yard is under the game's own canvas, which
+     draws the score, the pad and the messages and takes every touch. */
+  canvas{position:fixed;top:0;left:0;right:0;bottom:0;display:block;width:100%;height:100%;touch-action:none}
+  #g{pointer-events:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(32,58,28,.86);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:42px;letter-spacing:1px;color:#fff;text-shadow:0 3px 0 #6b3f1d}
+  #result{margin:0;font-size:26px;font-weight:800}
+  #result.win{color:#9be38f}#result.lose{color:#ff8a7a}
+  #foe{margin:4px 0 0;font-size:17px;color:#ffe0a8}
+  .go{font:800 20px system-ui,sans-serif;padding:13px 22px;border:0;border-radius:16px;background:#ffd166;color:#2a1a05;box-shadow:0 4px 0 #9a6b12}
+  #resume{background:#9be38f;box-shadow:0 4px 0 #2f7a3a}
+  .go[hidden]{display:none}
+  .go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a6b12}
+  #multi{font:700 17px system-ui,sans-serif;padding:11px 18px;border:2px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166}
+  #stats{margin:0;font-size:14px;color:#d4e6c8}
+  .help{margin:6px 0 0;font-size:13px;line-height:1.45;color:#cfe1c2;max-width:330px}
+  .help.short{display:none}
+  #no3d{position:fixed;left:16px;right:16px;top:40%;margin:0;text-align:center;font-size:18px;display:none;text-shadow:0 2px 4px #000}
+  /* Sideways (#95): two columns, so the whole menu fits a 360 px tall screen without scrolling. */
+  @media (orientation:landscape) and (max-height:520px){
+    #menu{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:repeat(5,auto);align-content:center;justify-items:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu h1{grid-column:1;grid-row:1;font-size:34px}
+    #result{grid-column:1;grid-row:2;font-size:22px}
+    #foe{grid-column:1;grid-row:3;margin:0}
+    #stats{grid-column:1;grid-row:4}
+    .help.short{display:block;grid-column:1;grid-row:5;margin:0;max-width:330px}
+    .help.long{display:none}
+    #resume{grid-column:2;grid-row:1;align-self:end}
+    #go{grid-column:2;grid-row:2/4;align-self:center}
+    #multi{grid-column:2;grid-row:4/6;align-self:start}
+  }
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<p id="no3d">Tämä puhelin ei osaa piirtää 3D-kuvaa, joten Mölkky ei toimi tällä puhelimella.</p>
+<div id="menu">
+  <h1>🪵 Mölkky</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button class="go" id="resume" hidden>Jatka peliä</button>
+  <button class="go" id="go">Pelaa yksin</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help long">Heitä kalikka keiloihin: vedä kalikkaa alas ja päästä irti, pitkä veto heittää pidemmälle. Napauta nurmea tai keilaa, niin tähtäät sinne.<br>
+    Yksi kaatunut keila antaa numeronsa verran pisteitä, monta kaatunutta niiden määrän verran. Pystyheitto osuu yhteen keilaan, vaakaheitto kaataa monta.<br>
+    Tasan <b>50</b> voittaa, yli menevä putoaa 25:een. Kolme hutia peräkkäin, ja putoat pelistä.</p>
+  <p class="help short">Vedä kalikkaa alas ja päästä irti, napauta tähdätäksesi. Yksi keila antaa numeronsa, monta niiden määrän. Tasan 50 voittaa, yli putoaa 25:een.</p>
+</div>
+<script src="../../../rooms.js" data-game="molkky" data-min="2" data-max="6"></script>
+<script src="../../../lib/aanet-2/aanet.js"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), ctx = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+const S = window.AiPelitAanet;
+S.load(['puu', 'suhahdus', 'ruoho', 'aplodit', 'ohhoo', 'voitto', 'tappio', 'valinta', 'virhe']);
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:molkky:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), losses = load('haviot', 0);
+let friends = load('kaverit', { voitot: 0, haviot: 0 });
+
+const FOES = ['Mökkinaapuri', 'Kesävieras', 'Mummo', 'Saunaseura', 'Kalikkamestari', 'Mölkkykuningas'];
+function foeName(l) { return l <= FOES.length ? FOES[l - 1] : FOES[FOES.length - 1] + ' ' + (l - FOES.length + 1); }
+
+// ---------- The yard ----------
+// World in metres, seen from above: x across (right is +), y from the throwing line towards the
+// pins, z up. The pins and the kalikka are their real size: a pin 15 cm tall and 5.8 cm thick,
+// the kalikka 22.5 cm long, the pins set up 3.5 m from the line.
+const G = 9.8, PR = 0.029, PH = 0.15, KR = 0.029, KL = 0.225, LINE = 3.5, GAP = 2 * PR + 0.004;
+const M_K = 0.35, M_P = 0.12;  // kg: the kalikka is about three pins
+const TOPPLE = 0.4;            // m/s a push must give a standing pin to knock it over
+const LEAN_PUSH = 0.7;         // ... and a falling pin's top, or the other only gets shoved aside
+const LEAN_SLOW = 0.2;         // slower than this, the falling pin stays leaning on the other
+const CHAIN = 0.65;            // how much of that push a pin knocked over by another one keeps
+const SCATTER = 0.6;           // how much of a push a pin keeps as its slide
+const ROLL = 0.8;              // m/s² a pin lying on its side slows
+const BOUNCE = 0.3;            // how much of its fall a pin keeps as a roll on
+const DT = 1 / 240;            // the world always steps this much, in the game and in the computer's tries
+const GOAL = 50, BACK_TO = 25, MISSES = 3, ROOM_LEVEL = 4;
+const D_MIN = 1.5, D_MAX = 5.5; // how far a throw can land
+const Y0 = 0.2, Z0 = 0.35;     // where the hand lets go
+// The pins' first places, front row first: [number, across in pin widths, row].
+const FORM = [[1, -0.5, 0], [2, 0.5, 0], [3, -1, 1], [10, 0, 1], [4, 1, 1], [5, -1.5, 2], [11, -0.5, 2], [12, 0.5, 2], [6, 1.5, 2], [7, -1, 3], [9, 0, 3], [8, 1, 3]];
+
+// A pin: its base on the ground, its slide, and how it stands: up, fall (tipping over at angle a,
+// turning at w, towards dx,dy), lean (stopped against pin `on`) or down. Only down pins count.
+function pin(n, px, py) { return { n, x: px, y: py, vx: 0, vy: 0, s: 'up', a: 0, w: 0, dx: 0, dy: 1, on: -1, hit: [], wob: 0 }; }
+function setUp() { return FORM.map(([n, cx, row]) => pin(n, cx * GAP, LINE + row * GAP * 0.866)); }
+function newWorld(pins) { return { pins, k: null, ev: { hit: 0, fall: 0, land: 0 }, t: 0 }; }
+const flightTime = d => 0.38 + 0.09 * d;
+
+// The throw: aim.x is where across it lands, aim.d how far, aim.st 0 upright (the stick along its
+// way: it hits one pin) or 1 crosswise (across its way: it knocks many). It always lands where aimed.
+function launch(w, aim) {
+  const T = flightTime(aim.d), hx = aim.x, hy = aim.d - Y0, head = Math.atan2(hy, hx);
+  w.k = { x: 0, y: Y0, z: Z0, vx: hx / T, vy: hy / T, vz: (0.5 * G * T * T - Z0 + KR) / T, air: true, st: aim.st ? 1 : 0,
+    yaw: aim.st ? head + Math.PI / 2 : head, spin: 0, rest: false };
+  w.t = 0;
+}
+function step(w, dt) {
+  const k = w.k;
+  w.t += dt;
+  if (k && !k.rest) {
+    if (k.air) {
+      k.vz -= G * dt; k.x += k.vx * dt; k.y += k.vy * dt; k.z += k.vz * dt; k.spin += (k.st ? 9 : 7) * dt;
+      if (k.z <= KR) {
+        // On the grass it keeps some of its speed: rolling crosswise more than tumbling upright.
+        k.z = KR; k.vz = 0; k.air = false; w.ev.land++;
+        const keep = k.st ? 0.55 : 0.4; k.vx *= keep; k.vy *= keep;
+      }
+    } else {
+      const v = Math.hypot(k.vx, k.vy), nv = Math.max(0, v - (k.st ? 2.4 : 4.2) * dt);
+      if (nv < 0.02 || k.y > 14 || Math.abs(k.x) > 8) { k.vx = k.vy = 0; k.rest = true; }
+      else { k.vx *= nv / v; k.vy *= nv / v; }
+      k.x += k.vx * dt; k.y += k.vy * dt;
+      if (k.st) k.spin += nv / KR * dt;
+    }
+    if (!k.rest && k.z < PH + KR) stickHits(w, k);
+  }
+  for (const p of w.pins) pinStep(w, p, dt);
+  pinPairs(w);
+}
+// The kalikka against the pins: a stick 22.5 cm long seen from above, touching what is under the
+// pins' height.
+function stickHits(w, k) {
+  const hl = KL / 2 - KR, cx = Math.cos(k.yaw), cy = Math.sin(k.yaw);
+  for (const p of w.pins) {
+    if (p.s === 'down') continue;
+    const rx = p.x - k.x, ry = p.y - k.y, t = Math.max(-hl, Math.min(hl, rx * cx + ry * cy));
+    const qx = rx - t * cx, qy = ry - t * cy, d = Math.hypot(qx, qy);
+    if (d >= KR + PR || d === 0) continue;
+    const nx = qx / d, ny = qy / d, push = KR + PR - d;
+    p.x += nx * push * 0.7; p.y += ny * push * 0.7; k.x -= nx * push * 0.3; k.y -= ny * push * 0.3;
+    const vn = (k.vx - p.vx) * nx + (k.vy - p.vy) * ny;
+    if (vn <= 0) continue;
+    const j = 1.45 * vn / (1 / M_K + 1 / M_P);
+    k.vx -= j / M_K * nx; k.vy -= j / M_K * ny;
+    if (k.air) k.vz = Math.min(k.vz, 0) * 0.5;
+    knock(w, p, nx, ny, j / M_P);
+  }
+}
+// A push of v m/s on a pin: hard enough, a standing pin tips over that way; a light one only
+// slides and wobbles it.
+function knock(w, p, nx, ny, v) {
+  w.ev.hit++;
+  p.vx += nx * v * SCATTER; p.vy += ny * v * SCATTER;
+  if (p.s === 'up' && v > TOPPLE) topple(p, nx, ny, v);
+  else if (p.s === 'lean') { p.s = 'fall'; p.on = -1; p.w = Math.max(p.w, 2 + v * 5); }
+  else if (p.s === 'up') p.wob = Math.min(1, p.wob + v * 2);
+}
+function topple(p, nx, ny, v) {
+  const d = Math.hypot(nx, ny) || 1;
+  p.s = 'fall'; p.dx = nx / d; p.dy = ny / d; p.w = Math.min(14, 2 + v * 7); p.hit = []; p.on = -1;
+}
+// Whether pin p, tipping over, touches standing pin q yet: q is ahead of it in its way, near
+// enough across, and the tipping pin's top has come that far.
+function reach(p, q) {
+  const rx = q.x - p.x, ry = q.y - p.y, along = rx * p.dx + ry * p.dy, lat = Math.abs(rx * p.dy - ry * p.dx);
+  if (along <= 0 || lat >= 2 * PR || along > PH + 2 * PR) return 0;
+  return PH * Math.sin(p.a) >= along - 2 * PR ? along : 0;
+}
+function pinStep(w, p, dt) {
+  const v = Math.hypot(p.vx, p.vy);
+  if (v > 0) {
+    // A pin lying on its side rolls on further than one sliding on its base.
+    const nv = Math.max(0, v - (p.s === 'up' ? 4 : p.s === 'down' ? ROLL : 2.5) * dt);
+    p.vx *= nv / v; p.vy *= nv / v;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+  p.wob = Math.max(0, p.wob - dt * 2);
+  if (p.s === 'lean') {
+    // The pin it leans on fell or slid away: it goes on falling.
+    const q = w.pins[p.on];
+    if (!q || q.s !== 'up' || !reach(p, q)) { p.s = 'fall'; p.w = 0.5; p.hit = p.hit.filter(i => i !== p.on); p.on = -1; }
+  }
+  if (p.s !== 'fall') return;
+  // A pin tipping over on its edge: gravity turns it faster the further it leans (3g / 2h).
+  p.w += 3 * G / (2 * PH) * Math.sin(Math.max(p.a, 0.05)) * dt;
+  p.a += p.w * dt;
+  if (p.a >= Math.PI / 2) {
+    // It hits the grass and bounces on a little the way it fell.
+    p.a = Math.PI / 2; p.s = 'down'; w.ev.fall++;
+    p.vx += p.dx * p.w * PH * BOUNCE; p.vy += p.dy * p.w * PH * BOUNCE; p.w = 0;
+    return;
+  }
+  for (let i = 0; i < w.pins.length; i++) {
+    const q = w.pins[i];
+    if (q === p || q.s !== 'up' || p.hit.includes(i)) continue;
+    const along = reach(p, q);
+    if (!along) continue;
+    p.hit.push(i);
+    w.ev.hit++;
+    // Its top hits the other pin high up, at the speed it turns, plus its own slide.
+    // A glancing touch passes on less than a full one.
+    const ux = q.x - p.x, uy = q.y - p.y, ud = Math.hypot(ux, uy) || 1;
+    const full = 1 - 0.5 * ((ux * p.dy - uy * p.dx) / (2 * PR)) ** 2;
+    const sp = (p.w * PH * 0.6 + Math.max(0, ((p.vx - q.vx) * ux + (p.vy - q.vy) * uy) / ud)) * full;
+    if (sp > LEAN_PUSH) {
+      topple(q, ux / ud + p.dx, uy / ud + p.dy, sp * CHAIN);
+      q.vx += ux / ud * sp * 0.15; q.vy += uy / ud * sp * 0.15;
+      p.w *= 0.6;
+    } else if (sp > LEAN_SLOW) {
+      // Not hard enough to knock it over: it shoves the other aside and falls on.
+      q.vx += ux / ud * sp * 0.5; q.vy += uy / ud * sp * 0.5; q.wob = Math.min(1, q.wob + sp);
+      p.w *= 0.4;
+    } else {
+      // Too slow even for that: it stays leaning on it, and does not count.
+      q.wob = Math.min(1, q.wob + sp);
+      p.s = 'lean'; p.on = i; p.w = 0; p.a = Math.asin(Math.min(1, Math.max(0, (along - 2 * PR) / PH)));
+      return;
+    }
+  }
+}
+// Pins sliding into each other: their bases bump, a hard bump knocks a standing one over.
+function pinPairs(w) {
+  const ps = w.pins;
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+    const a = ps[i], b = ps[j];
+    if (a.s === 'down' || b.s === 'down') continue;
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d >= 2 * PR || d === 0) continue;
+    const nx = dx / d, ny = dy / d, push = (2 * PR - d) / 2;
+    a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+    const vn = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+    if (vn <= 0) continue;
+    const jv = vn * 1.3 / 2;
+    a.vx -= jv * nx; a.vy -= jv * ny; b.vx += jv * nx; b.vy += jv * ny;
+    if (b.s === 'up' && jv > TOPPLE * 1.5) topple(b, nx, ny, jv);
+    if (a.s === 'up' && jv > TOPPLE * 1.5) topple(a, -nx, -ny, jv);
+  }
+}
+function still(w) {
+  if (w.k && !w.k.rest) return false;
+  return w.pins.every(p => p.s !== 'fall' && Math.hypot(p.vx, p.vy) < 0.01);
+}
+const fallen = pins => pins.filter(p => p.s === 'down');
+// The rule: one pin down scores its number, several score how many fell.
+function pointsOf(pins) { const f = fallen(pins); return f.length === 1 ? f[0].n : f.length; }
+// After the throw every pin is stood up where it lies: a fallen one on its middle.
+function raise(pins) {
+  for (const p of pins) {
+    if (p.s === 'down') { p.x += p.dx * PH / 2; p.y += p.dy * PH / 2; }
+    Object.assign(p, { s: 'up', a: 0, w: 0, vx: 0, vy: 0, on: -1, hit: [], wob: 0 });
+    p.y = Math.max(1.2, Math.min(13, p.y)); p.x = Math.max(-6, Math.min(6, p.x));
+  }
+  // Two stood up on the same spot are set a little apart.
+  for (let it = 0; it < 40; it++) {
+    let moved = false;
+    for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
+      const a = pins[i], b = pins[j];
+      let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d >= GAP - 1e-6) continue;
+      if (d < 1e-6) { dx = Math.cos(i + j); dy = Math.sin(i + j); d = 1; }
+      const push = (GAP - Math.hypot(b.x - a.x, b.y - a.y)) / 2 + 1e-4;
+      a.x -= dx / d * push; a.y -= dy / d * push; b.x += dx / d * push; b.y += dy / d * push;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+}
+// Throws in the computer's head: the same world, stepped until everything stops.
+function clonePins(pins) { return pins.map(p => ({ ...p, hit: p.hit.slice() })); }
+function simulate(pins, aim) {
+  const w = newWorld(clonePins(pins));
+  launch(w, aim);
+  for (let i = 0; i < 8 / DT; i++) { step(w, DT); if (i > 30 && still(w)) break; }
+  return w;
+}
+
+// ---------- The computer's throw ----------
+// It tries throws at each pin and into the bunch, keeps the one that leaves it best placed (exactly
+// 50 above all, never over it), and throws it with an error that shrinks as the levels go up.
+function aimAt(px, py, d, st) { return { x: px * (d - Y0) / (py - Y0), d, st }; }
+function throwValue(sc, misses, pts) {
+  const s = sc + pts;
+  if (s === GOAL) return 1000;
+  if (s > GOAL) return BACK_TO - sc - 30;
+  if (!pts) return misses >= MISSES - 1 ? -500 : -10;
+  // Short of 50 by at most 12, one pin can win it next time.
+  return s + (GOAL - s <= 12 ? 4 : 0);
+}
+function cpuPlan(pins, sc, misses) {
+  const tries = [];
+  const up = pins.filter(p => p.s === 'up');
+  for (const p of up) for (const back of [0.45, 0.25, 0.08]) {
+    for (const off of [-0.02, 0, 0.02]) tries.push(aimAt(p.x + off, p.y, p.y - back, 0));
+    tries.push(aimAt(p.x, p.y, p.y - back, 1));
+  }
+  // Into the middle of the bunch, crosswise: many pins.
+  const mx = up.reduce((s, p) => s + p.x, 0) / (up.length || 1), my = Math.min(...up.map(p => p.y));
+  for (const back of [0.6, 0.3]) tries.push(aimAt(mx, my, my - back, 1));
+  let best = tries[0], bv = -Infinity;
+  for (const a of tries) {
+    const v = throwValue(sc, misses, pointsOf(simulate(pins, a).pins));
+    if (v > bv) { bv = v; best = a; }
+  }
+  return best;
+}
+function skillOf(l) { l = Math.min(l, 10) - 1; return { ex: Math.max(0.01, 0.06 - 0.0055 * l), ew: Math.max(0.03, 0.2 - 0.019 * l) }; }
+const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 0.5;
+// Everyone's hand shakes a little.
+function shaken(a) { const k = a.d / LINE; return { x: a.x + gauss() * 0.01 * k, d: a.d * (1 + gauss() * 0.015), st: a.st }; }
+
+// ---------- The game ----------
+// phase: menu, aim (someone is aiming), fly (the kalikka and the pins moving), show (the throw's
+// points), done, room (waiting in a room), wait (a guest waiting for the host).
+let phase = 'menu', phaseT = 0, world = newWorld(setUp()), players = [], score = [], misses = [], outs = [], turn = 0, throwN = 0;
+let aim = { x: 0, d: LINE - 0.3, st: 0 }, aimShown = false, slope = 0, myStyle = 0, cpu = null, msg = null, raised = false, winner = -1, recorded = null;
+let net = { on: false, round: '', sendT: 0, setup: null, away: [], th: '' };
+const myId = () => net.on ? R.me : 'me';
+// Who throws now: alone 'me' or 'cpu'; in a room each phone in turn, and the computer for a
+// phone that was let go.
+function thrower() {
+  if (!net.on) return players[turn] ? players[turn].id : '';
+  if (!R.isHost) return net.th;
+  const p = players[turn];
+  return !p ? '' : net.away.includes(p.id) ? 'cpu' : p.id;
+}
+const myTurn = () => phase === 'aim' && thrower() === myId();
+const nameOf = i => !players[i] ? '' : players[i].id === myId() ? 'Sinä' : players[i].name;
+const meIndex = () => players.findIndex(p => p.id === myId());
+
+function newGame(resume) {
+  recorded = null;
+  net = { on: false, round: '', sendT: 0, setup: null, away: [], th: '' };
+  menu.classList.add('hidden');
+  const lv = resume ? resume.lv : level;
+  players = [{ id: 'me', name: 'Sinä' }, { id: 'cpu', name: foeName(lv), cpu: true }];
+  if (resume) {
+    world = newWorld(resume.pins.map((q, i) => pin(FORM[i][0], q[0], q[1])));
+    score = resume.sc.slice(); misses = resume.mi.slice(); outs = resume.ou.slice(); turn = resume.tu; throwN = resume.n;
+  } else {
+    world = newWorld(setUp());
+    score = [0, 0]; misses = [0, 0]; outs = [false, false]; throwN = 0;
+    turn = Math.random() < 0.5 ? 0 : 1;
+  }
+  winner = -1;
+  toAim();
+  camSnap();
+}
+function toAim() {
+  phase = 'aim'; phaseT = 0; cpu = null; aimShown = false; msg = null; raised = false;
+  world.k = null;
+  // The aim starts at the middle of the pins.
+  const up = world.pins;
+  const mx = up.reduce((s, p) => s + p.x, 0) / up.length, my = up.reduce((s, p) => s + p.y, 0) / up.length;
+  slope = mx / (my - Y0);
+  aim = { x: slope * (LINE - 0.3 - Y0), d: LINE - 0.3, st: myStyle };
+  drag.id = null;
+  keepGame();
+}
+// The game alone is saved before every throw, so a reload or a trip to the shelf does not lose it.
+function keepGame() {
+  if (net.on || phase !== 'aim') return;
+  save('peli', { pins: world.pins.map(p => [r3(p.x), r3(p.y)]), sc: score, mi: misses, ou: outs, tu: turn, n: throwN, lv: recorded ? recorded.lv : level });
+}
+// Let go of the kalikka: the host (or the phone alone) runs it.
+function doThrow(a, exact) {
+  if (phase !== 'aim') return;
+  a = { x: Math.max(-4, Math.min(4, +a.x || 0)), d: Math.max(D_MIN, Math.min(D_MAX, +a.d || LINE)), st: a.st ? 1 : 0 };
+  aim = a; aimShown = true;
+  launch(world, exact ? a : shaken(a));
+  world.ev = { hit: 0, fall: 0, land: 0 };
+  phase = 'fly'; phaseT = 0;
+  S.play('suhahdus', { vol: 0.35, rate: 0.9 });
+}
+let heard = { hit: 0, fall: 0, land: 0 };
+function fly(dt) {
+  for (let n = Math.round(dt / DT); n > 0; n--) step(world, DT);
+  sounds(world.ev);
+  if ((still(world) && phaseT > 0.5) || phaseT > 9) scoreThrow();
+}
+function sounds(ev) {
+  if (ev.land > heard.land) S.play('ruoho', { vol: 0.7, rate: 0.8 }) || tone(140, 0.08);
+  if (ev.hit > heard.hit) S.play('puu', { vol: Math.min(1, 0.4 + (ev.hit - heard.hit) * 0.15), rate: 0.95 + Math.random() * 0.2 }) || tone(420, 0.06);
+  if (ev.fall > heard.fall) S.play('puu', { vol: 0.35, rate: 0.7, delay: 0.02 }) || tone(260, 0.05);
+  heard = { ...ev };
+}
+// The rules on the throw's points: exactly 50 wins, over it drops to 25, three misses in a row and
+// the player is out; the last one left in wins.
+function rules(i, pts) {
+  const m = { i, pts, n: fallen(world.pins).length, over: false, out: false, win: false };
+  if (pts === 0) { misses[i]++; if (misses[i] >= MISSES) { outs[i] = true; m.out = true; } }
+  else misses[i] = 0;
+  score[i] += pts;
+  if (score[i] > GOAL) { score[i] = BACK_TO; m.over = true; }
+  if (score[i] === GOAL) { winner = i; m.win = true; }
+  const left = players.map((_, j) => j).filter(j => !outs[j]);
+  if (winner < 0 && left.length === 1) winner = left[0];
+  return m;
+}
+function scoreThrow() {
+  const pts = pointsOf(world.pins);
+  msg = rules(turn, pts);
+  phase = 'show'; phaseT = 0; raised = false;
+  const mine = turn === meIndex();
+  if (msg.win) S.play('aplodit', { vol: 0.7 });
+  else if (msg.over || msg.out) S.play('ohhoo', { vol: 0.6 });
+  else if (!pts) S.play('virhe', { vol: 0.25 });
+  else if (mine && pts >= 6) S.play('aplodit', { vol: 0.35 });
+  if (!net.on) {
+    if (winner >= 0) record();
+    else { const keep = clonePins(world.pins); raise(keep); save('peli', { pins: keep.map(p => [r3(p.x), r3(p.y)]), sc: score, mi: misses, ou: outs, tu: nextTurn(), n: throwN + 1, lv: level }); }
+  }
+}
+function nextTurn() {
+  for (let k = 1; k <= players.length; k++) { const j = (turn + k) % players.length; if (!outs[j]) return j; }
+  return turn;
+}
+// The throw's points stay on the screen a moment; then the pins are stood up and the next throws.
+function show(dt) {
+  if (phaseT > 1.5 && !raised) standUp();
+  if (phaseT > 2.6) next();
+}
+function standUp() { if (raised) return; raised = true; raise(world.pins); world.k = null; S.play('puu', { vol: 0.25, rate: 1.3 }); }
+function next() {
+  standUp();
+  if (winner >= 0) { if (net.on) hostEnd(); else endGame(); return; }
+  turn = nextTurn(); throwN++;
+  toAim();
+}
+function record() {
+  save('peli', null);
+  recorded = { lv: level };
+  if (winner === 0) { wins++; level++; } else losses++;
+  save('taso', level); save('voitot', wins); save('haviot', losses);
+}
+function endGame() {
+  phase = 'done';
+  if (!recorded) record();
+  recorded = null;
+  const won = winner === 0, a = score[0], b = score[1];
+  S.play(won ? 'voitto' : 'tappio', { vol: 0.6 });
+  showMenu(won ? 'Voitit ' + a + '–' + b + '! 🏆' : 'Hävisit ' + a + '–' + b, won ? 'win' : 'lose');
+}
+// The computer aims: a moment to look, the aim moving to its spot, then the throw.
+function cpuTurn(dt) {
+  if (!cpu) {
+    if (phaseT < 0.6) return;
+    const plan = cpuPlan(world.pins, score[turn], misses[turn]);
+    const k = skillOf(net.on ? ROOM_LEVEL : level);
+    cpu = { plan, go: { x: plan.x + gauss() * k.ex * plan.d / LINE, d: plan.d + gauss() * k.ew, st: plan.st }, t: 0 };
+    aim = { x: 0, d: LINE - 0.4, st: plan.st }; aimShown = true;
+    return;
+  }
+  cpu.t += dt;
+  const q = Math.min(1, dt * 3);
+  aim.x += (cpu.plan.x - aim.x) * q; aim.d += (cpu.plan.d - aim.d) * q; aim.st = cpu.plan.st;
+  if (cpu.t > 1.5) doThrow(cpu.go);
+}
+
+function update(dt) {
+  phaseT += dt;
+  if (phase === 'menu' || phase === 'done' || phase === 'room' || phase === 'wait') return;
+  if (net.on && R.paused) return;
+  if (net.on && !R.isHost) { guestUpdate(dt); return; }
+  if (phase === 'aim' && thrower() === 'cpu') cpuTurn(dt);
+  else if (phase === 'fly') fly(dt);
+  else if (phase === 'show') show(dt);
+  if (net.on && (net.sendT -= dt) <= 0) { net.sendT = phase === 'fly' ? 0.04 : 0.12; R.send(snapshot()); }
+}
+
+// ---------- Playing in a room (rooms.js) ----------
+// The phone that made the room (the host) runs the game: the turns, the physics and the
+// computer's throws. Each phone is its own player, throwing in the room's order; the thrower's
+// phone sends its aim while it drags and the throw when it lets go.
+function setupFor(round, list) {
+  return { t: 'setup', round, pl: list.map(p => ({ id: p.id, name: p.name })), first: Math.floor(Math.random() * list.length) };
+}
+function applySetup(s) {
+  net = { on: true, round: s.round, sendT: 0, setup: s, away: [], th: '' };
+  players = s.pl.map(p => ({ id: p.id, name: p.name }));
+  score = players.map(() => 0); misses = players.map(() => 0); outs = players.map(() => false);
+  turn = s.first || 0; throwN = 0; winner = -1;
+  world = newWorld(setUp());
+}
+const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;
+const STATES = ['up', 'fall', 'lean', 'down'];
+function snapshot() {
+  const k = world.k;
+  return { t: 's', round: net.round, ph: phase, pt: r2(phaseT), tu: turn, n: throwN, th: thrower(), sc: score, mi: misses, ou: outs, wn: winner,
+    p: world.pins.map(p => [r3(p.x), r3(p.y), STATES.indexOf(p.s), r2(p.a), r2(Math.atan2(p.dy, p.dx)), r2(p.wob)]),
+    k: k ? [r3(k.x), r3(k.y), r3(k.z), r2(k.vx), r2(k.vy), r2(k.vz), r2(k.yaw), r2(k.spin), k.st, k.air ? 1 : 0, k.rest ? 1 : 0] : 0,
+    a: [r3(aim.x), r2(aim.d), aim.st, aimShown ? 1 : 0], m: msg, rz: raised ? 1 : 0, ev: world.ev };
+}
+function applySnapshot(s) {
+  const was = phase, wasN = throwN;
+  phase = s.ph; phaseT = s.pt; turn = s.tu; throwN = s.n; net.th = s.th; score = s.sc; misses = s.mi; outs = s.ou; winner = s.wn; msg = s.m; raised = !!s.rz;
+  if (phase !== was || throwN !== wasN) {
+    if (phase === 'aim') { drag.id = null; if (s.th === R.me) { aim = { x: s.a[0], d: s.a[1], st: myStyle }; slope = s.a[0] / (s.a[1] - Y0); } heard = { hit: 0, fall: 0, land: 0 }; }
+    if (phase === 'fly' && was !== 'fly') { S.play('suhahdus', { vol: 0.35, rate: 0.9 }); heard = { hit: 0, fall: 0, land: 0 }; }
+    if (phase === 'show' && msg) { if (msg.win) S.play('aplodit', { vol: 0.7 }); else if (msg.over || msg.out) S.play('ohhoo', { vol: 0.6 }); }
+  }
+  // Keep the pins' drawn places, and move them towards where the host says they are.
+  s.p.forEach((q, i) => {
+    const p = world.pins[i];
+    p.tx = q[0]; p.ty = q[1]; p.s = STATES[q[2]]; p.ta = q[3]; p.dx = Math.cos(q[4]); p.dy = Math.sin(q[4]); p.wob = q[5];
+    if (phase !== 'fly') { p.x = p.tx; p.y = p.ty; p.a = p.ta; }
+  });
+  if (s.k) {
+    const q = s.k, k = world.k || (world.k = {});
+    Object.assign(k, { x: q[0], y: q[1], z: q[2], vx: q[3], vy: q[4], vz: q[5], yaw: q[6], spin: q[7], st: q[8], air: !!q[9], rest: !!q[10] });
+  } else world.k = null;
+  if (phase === 'fly') sounds(s.ev);
+  // The thrower's own aim stays its own while it drags.
+  if (!(s.th === R.me && phase === 'aim')) { aim = { x: s.a[0], d: s.a[1], st: s.a[2] }; aimShown = !!s.a[3]; }
+}
+function guestUpdate(dt) {
+  const q = Math.min(1, dt * 25);
+  for (const p of world.pins) {
+    if (p.tx === undefined) continue;
+    p.x += (p.tx - p.x) * q; p.y += (p.ty - p.y) * q; p.a += (p.ta - p.a) * q;
+  }
+  const k = world.k;
+  if (k && !k.rest) {
+    k.x += k.vx * dt; k.y += k.vy * dt;
+    if (k.air) { k.vz -= G * dt; k.z = Math.max(KR, k.z + k.vz * dt); }
+  }
+  if ((net.sendT -= dt) <= 0) {
+    net.sendT = 0.1;
+    if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st });
+  }
+}
+function hostEnd() {
+  // The end names the winner, so a phone that missed the game still knows its result.
+  const m = { t: 'end', round: net.round, win: players[winner] ? players[winner].id : '', wname: players[winner] ? players[winner].name : '', sc: score.slice(), ids: players.map(p => p.id) };
+  R.deliver(m);
+  R.endRound();
+  finish(m);
+}
+function finish(m) {
+  phase = 'done';
+  const won = m.win === R.me;
+  if (R.once(m.round)) {
+    if (won) friends.voitot++; else friends.haviot++;
+    save('kaverit', friends);
+  }
+  S.play(won ? 'voitto' : 'tappio', { vol: 0.6 });
+  R.backToRoom(won ? 'Voitit! 🏆' : m.wname + ' voitti', won ? 'win' : 'lose');
+}
+
+R.on('start', s => {
+  menu.classList.add('hidden');
+  if (s.over) { net.round = s.round; phase = 'room'; return; }
+  // A guest waits for the host's setup; the same round again (a reconnect) carries on as it is.
+  if (!R.isHost) { if (s.round !== net.round) { phase = 'wait'; } return; }
+  const setup = setupFor(s.round, s.players);
+  R.send(setup);
+  applySetup(setup);
+  toAim();
+  camSnap();
+});
+R.on('message', (m, from) => {
+  if (R.isHost) {
+    if (m.round !== net.round || !net.setup) return;
+    if ((m.t === 'aim' || m.t === 'throw') && phase === 'aim' && m.n === throwN && thrower() === from) {
+      if (m.t === 'throw') doThrow(m);
+      else { aim = { x: +m.x || 0, d: +m.d || LINE, st: m.st ? 1 : 0 }; aimShown = true; }
+    }
+    return;
+  }
+  // Only the phones in the game hear its end (rooms.js deliver()).
+  if (m.t === 'end') { finish(m); return; }
+  if (m.t === 'setup') {
+    if (net.round === m.round && net.setup) return;
+    applySetup(m);
+    phase = 'wait';
+    menu.classList.add('hidden');
+    camSnap();
+  } else if (m.t === 's' && m.round === net.round && net.setup) applySnapshot(m);
+});
+// A phone that comes back gets the game as it is: the players, then the running stream.
+R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
+// The computer throws for a phone let go with "Jatka ilman heitä", and gives its turns back.
+R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') cpu = null; });
+R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; } });
+R.on('lobby', () => { phase = 'room'; });
+R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
+R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });
+
+// ---------- Screen ----------
+let box = { left: 0, top: 0, width: 0, height: 0 }, W = 0, H = 0, DPR = 1, safeT = 0, safeB = 0, safeL = 0, safeR = 0;
+let wide = false, pad = null, styleBtns = [], hud = { x: 0, y: 0, w: 0 };
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  // Sized from the canvas's own box, which every touch is read against too (Hiihto v5).
+  box = c.getBoundingClientRect();
+  W = box.width || innerWidth; H = box.height || innerHeight;
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  wide = W > H;
+  if (wide) {
+    // Sideways the kalikka is under the left thumb, the throw buttons under the right one.
+    const px = safeL + Math.min(120, W * 0.16), py = Math.round(H * 0.36);
+    pad = { x: px, y: py, pull: Math.min(150, H - safeB - 12 - py), side: 110 };
+    const bx = W - safeR - 122;
+    styleBtns = [{ s: 0, x: bx, y: H - safeB - 100, w: 112, h: 40 }, { s: 1, x: bx, y: H - safeB - 52, w: 112, h: 40 }];
+    hud = { x: safeL + 96, y: safeT + 6, w: W - safeL - safeR - 96 - 12 };
+  } else {
+    // Upright the kalikka waits under the pins, with room below it for the pull, and the throw
+    // buttons in the lower corners.
+    const py = Math.round(H * 0.6);
+    pad = { x: W / 2, y: py, pull: Math.min(220, H - safeB - 16 - py), side: 120 };
+    const bw = Math.min(104, W * 0.28);
+    styleBtns = [{ s: 0, x: 10, y: H - safeB - 58, w: bw, h: 44 }, { s: 1, x: W - 10 - bw, y: H - safeB - 58, w: bw, h: 44 }];
+    hud = { x: 8, y: safeT + 44, w: W - 16 };
+  }
+  if (V3) sizeGL();
+}
+
+addEventListener('resize', resize); addEventListener('orientationchange', resize); document.addEventListener('fullscreenchange', resize);
+function fitCheck() { const r = c.getBoundingClientRect(); if (Math.abs(r.width - W) > 0.5 || Math.abs(r.height - H) > 0.5) resize(); }
+// The score board: a box per player, three to a row upright, six sideways.
+function hudRows() { const per = wide ? Math.min(players.length, 6) : Math.min(players.length, 3); return { per, rows: Math.ceil(players.length / per) || 1 }; }
+const hudBottom = () => hud.y + hudRows().rows * 42;
+
+// ---------- Touch ----------
+// The thrower drags the kalikka down from the pad and lets go: the length is how far it goes,
+// sideways fine-tunes the aim. A tap on the yard aims there.
+const drag = { id: null, ox: 0, oy: 0, cx: 0, cy: 0 };
+const at = e => [e.clientX - box.left, e.clientY - box.top];
+const inBtn = (b, px, py) => px >= b.x - 6 && px <= b.x + b.w + 6 && py >= b.y - 6 && py <= b.y + b.h + 6;
+function dragAim() {
+  const back = drag.cy - drag.oy, side = drag.cx - drag.ox;
+  const f = Math.max(0, Math.min(1, back / pad.pull)), d = D_MIN + (D_MAX - D_MIN) * f;
+  // Pulled left, it goes right, like a slingshot.
+  const sl = slope - side / pad.side * 0.12;
+  return { pull: back, d, x: sl * (d - Y0), sl };
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  S.play('valinta', { vol: 0 });
+  if (phase === 'show' && (!net.on || R.isHost) && phaseT > 0.6) { next(); return; }
+  if (!myTurn()) return;
+  const [ex, ey] = at(e);
+  for (const b of styleBtns) if (inBtn(b, ex, ey)) { aim.st = myStyle = b.s; S.play('valinta', { vol: 0.4 }); return; }
+  if (drag.id === null && Math.hypot(ex - pad.x, ey - pad.y) < 80) {
+    drag.id = e.pointerId; drag.ox = drag.cx = ex; drag.oy = drag.cy = ey;
+    try { c.setPointerCapture(e.pointerId); } catch (er) {}
+    return;
+  }
+  // A tap on a pin or the yard: aim at it, landing a little short of it.
+  const g = pinAt(ex, ey) || groundAt(ex, ey);
+  if (g && g[1] > Y0 + 0.5) {
+    slope = g[0] / (g[1] - Y0);
+    aim.d = Math.max(D_MIN, Math.min(D_MAX, g[1] - 0.25)); aim.x = slope * (aim.d - Y0); aimShown = true;
+    S.play('valinta', { vol: 0.3 });
+    if (net.on && !R.isHost) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st });
+  }
+});
+c.addEventListener('pointermove', e => {
+  if (e.pointerId !== drag.id) return;
+  [drag.cx, drag.cy] = at(e);
+  const a = dragAim();
+  aim.x = a.x; aim.d = a.d; aimShown = a.pull > 14;
+});
+function up(e) {
+  if (e.pointerId !== drag.id) return;
+  drag.id = null;
+  const a = dragAim();
+  // A short pull lets go of nothing: the aim waits for a real throw.
+  if (a.pull < 14 || !myTurn()) return;
+  aim.x = a.x; aim.d = a.d; slope = a.sl;
+  if (net.on && !R.isHost) { R.send({ t: 'throw', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st }); return; }
+  doThrow(aim);
+}
+c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+
+// ---------- Sound ----------
+let ac = null;
+function tone(f, d, vol = 0.08) {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; } }
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(f, t);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+
+// ---------- The yard in 3D (three.js) ----------
+// three.js draws the lawn, the pins and the kalikka on the canvas under the game's own, which
+// draws the score, the pad and the messages. A world metre x is three's X, y is −Z, z is Y.
+const gl = document.getElementById('g');
+let THREE = null, V3 = null, no3d = false;
+import('../../../lib/three-r187/three.module.js').then(m => {
+  THREE = m;
+  try { init3d(); } catch (e) { no3d = true; }
+  if (no3d) document.getElementById('no3d').style.display = 'block';
+}, () => { no3d = true; document.getElementById('no3d').style.display = 'block'; });
+
+function tex(w, h, paint) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  paint(cv.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+// Birch wood with a little grain, the pin's number three times round its side.
+function pinSide(n) {
+  return tex(256, 128, (g, w, h) => {
+    g.fillStyle = '#ecd29c'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(150,105,50,' + (0.05 + (i * 37 % 10) / 100) + ')'; g.fillRect(0, (i * 53) % h, w, 1 + i % 2); }
+    g.fillStyle = '#4a2a10'; g.font = '900 ' + (n > 9 ? 62 : 74) + 'px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let k = 0; k < 3; k++) g.fillText(String(n), (k + 0.5) * w / 3, h * 0.36);
+  });
+}
+function pinTop(n) {
+  return tex(128, 128, (g, w, h) => {
+    g.fillStyle = '#f2dcae'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#4a2a10'; g.font = '900 ' + (n > 9 ? 64 : 80) + 'px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(n), w / 2, h / 2 + 4);
+  });
+}
+function init3d() {
+  const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  const SKY = 0xbfe0f5;
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 22, 70);
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 200);
+  const hemi = new THREE.HemisphereLight(0xeaf6ff, 0x5b7a3a, 1.35);
+  const sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
+  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 30 });
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.01;
+  scene.add(hemi, sun, sun.target);
+  const lam = o => new THREE.MeshLambertMaterial(o);
+
+  // The lawn, mown in stripes.
+  const grass = tex(256, 256, (g, w, h) => {
+    g.fillStyle = '#6fa64e'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#74ab52'; g.fillRect(0, 0, w / 2, h);
+    for (let i = 0; i < 1400; i++) { g.fillStyle = (i % 3 ? 'rgba(40,90,20,.18)' : 'rgba(190,230,140,.16)'); g.fillRect((i * 97) % w, (i * 61 + (i >> 3)) % h, 1, 3); }
+  });
+  grass.wrapS = grass.wrapT = THREE.RepeatWrapping; grass.repeat.set(60, 60);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), lam({ map: grass }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(0, 0, -20); ground.receiveShadow = true;
+  scene.add(ground);
+  // The throwing line: a rope on the grass.
+  const rope = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.012, 0.02), lam({ color: 0xf3ead8 }));
+  rope.position.set(0, 0.006, 0); scene.add(rope);
+
+  // The cottage behind the pins: red walls, white corners, a dark roof, a window and a door.
+  const cottage = new THREE.Group();
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(5, 2.6, 3.6), lam({ color: 0xa8322a }));
+  wall.position.y = 1.3; cottage.add(wall);
+  for (const sx of [-2.5, 2.5]) for (const sz of [-1.8, 1.8]) {
+    const corner = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.62, 0.14), lam({ color: 0xffffff }));
+    corner.position.set(sx, 1.3, sz); cottage.add(corner);
+  }
+  for (const side of [-1, 1]) {
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.12, 2.3), lam({ color: 0x3a3a40 }));
+    roof.position.set(0, 3.15, side * 0.95); roof.rotation.x = side * 0.62; cottage.add(roof);
+  }
+  const gable = new THREE.Shape(); gable.moveTo(-1.8, 0); gable.lineTo(1.8, 0); gable.lineTo(0, 1.25); gable.closePath();
+  for (const sx of [-2.5, 2.5]) {
+    const gm = new THREE.Mesh(new THREE.ShapeGeometry(gable), lam({ color: 0xa8322a, side: THREE.DoubleSide }));
+    gm.rotation.y = Math.PI / 2; gm.position.set(sx, 2.6, 0); cottage.add(gm);
+  }
+  const winM = lam({ color: 0x2b4a6b }), frameM = lam({ color: 0xffffff });
+  for (const wx of [-1.3, 1.2]) {
+    const fr = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.85, 0.05), frameM); fr.position.set(wx, 1.5, 1.81); cottage.add(fr);
+    const gls = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.65, 0.06), winM); gls.position.set(wx, 1.5, 1.82); cottage.add(gls);
+  }
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.85, 0.06), lam({ color: 0x6b3f1d })); door.position.set(0, 0.93, 1.82); cottage.add(door);
+  const step1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 0.6), lam({ color: 0x8a6a48 })); step1.position.set(0, 0.1, 2.1); cottage.add(step1);
+  cottage.position.set(-4.6, 0, -13); cottage.rotation.y = 0.2;
+  cottage.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
+  scene.add(cottage);
+
+  // Spruces and birches round the yard, a glimpse of the lake between them.
+  const spruceGeo = new THREE.ConeGeometry(1, 1, 8), trunkGeo = new THREE.CylinderGeometry(1, 1, 1, 6);
+  const spruceM = lam({ color: 0x2c5a34 }), trunkM = lam({ color: 0x5a3d24 }), birchM = lam({ color: 0xf2f0ea }), leafM = lam({ color: 0x86b84c });
+  const leafGeo = new THREE.SphereGeometry(1, 10, 8);
+  const trees = [[-7, -12, 1], [-9, -17, 1.2], [5.5, -12, 1.1], [7, -18, 1.3], [2.6, -8.5, 0.8], [-12, -8, 1], [3.5, -22, 1.2], [-5, -22, 1.4], [12, -15, 1.2], [-14, -16, 1.1], [10, -9, 0.9]];
+  trees.forEach(([tx, tz, s], i) => {
+    if (i % 3 === 2) {
+      const tr = new THREE.Mesh(trunkGeo, birchM); tr.scale.set(0.12 * s, 3.4 * s, 0.12 * s); tr.position.set(tx, 1.7 * s, tz); scene.add(tr);
+      for (let k = 0; k < 3; k++) { const lf = new THREE.Mesh(leafGeo, leafM); lf.scale.setScalar(1.1 * s); lf.position.set(tx + (k - 1) * 0.7 * s, (3.4 + (k % 2) * 0.6) * s, tz + (k % 2) * 0.4); scene.add(lf); }
+    } else {
+      const tr = new THREE.Mesh(trunkGeo, trunkM); tr.scale.set(0.16 * s, 1.2 * s, 0.16 * s); tr.position.set(tx, 0.6 * s, tz); scene.add(tr);
+      for (let k = 0; k < 3; k++) { const cn = new THREE.Mesh(spruceGeo, spruceM); cn.scale.set((1.6 - k * 0.4) * s, 2.2 * s, (1.6 - k * 0.4) * s); cn.position.set(tx, (1.6 + k * 1.3) * s, tz); scene.add(cn); }
+    }
+  });
+  const lake = new THREE.Mesh(new THREE.PlaneGeometry(40, 12), lam({ color: 0x4f86b8 }));
+  lake.rotation.x = -Math.PI / 2; lake.position.set(4, 0.01, -36); scene.add(lake);
+  const far = new THREE.Mesh(new THREE.BoxGeometry(80, 4, 3), lam({ color: 0x3d6b45 }));
+  far.position.set(0, 1.5, -44); scene.add(far);
+
+  // The pins, each turning on its base: the group stands on the base, the mesh above it.
+  const pinGeo = new THREE.CylinderGeometry(PR, PR, PH, 20);
+  const bottom = lam({ color: 0xd9bd86 });
+  const pinMeshes = world.pins.map(p => {
+    const grp = new THREE.Group();
+    const mesh = new THREE.Mesh(pinGeo, [lam({ map: pinSide(p.n) }), lam({ map: pinTop(p.n) }), bottom]);
+    // The numbers face the throwing line.
+    mesh.position.y = PH / 2; mesh.rotation.y = Math.PI / 2; mesh.castShadow = true;
+    grp.add(mesh); scene.add(grp);
+    return grp;
+  });
+  // The kalikka: darker wood with a black ring at each end, so its spin shows.
+  const stickTex = tex(256, 64, (g, w, h) => {
+    g.fillStyle = '#c99a5b'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 12; i++) { g.fillStyle = 'rgba(110,70,30,.18)'; g.fillRect(0, (i * 23) % h, w, 2); }
+    g.fillStyle = '#222'; g.fillRect(0, 0, w, 6); g.fillRect(0, h - 6, w, 6);
+    g.fillStyle = '#7a1f1f'; g.fillRect(0, h * 0.45, w, h * 0.1);
+  });
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(KR, KR, KL, 20), lam({ map: stickTex }));
+  stick.castShadow = true; stick.visible = false; scene.add(stick);
+  // Where the throw lands: a ring on the grass, and a dashed line to it.
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.095, 32), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.004; scene.add(ring);
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
+  const aimLine = new THREE.Line(lineGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.12, gapSize: 0.1, transparent: true, opacity: 0.7 }));
+  aimLine.position.y = 0.006; scene.add(aimLine);
+  V3 = { renderer, scene, camera, sun, pinMeshes, stick, ring, aimLine, ray: new THREE.Raycaster(), plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    v: new THREE.Vector3(), q: new THREE.Quaternion(), axis: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), look: new THREE.Vector3(), w: 0, h: 0 };
+  sizeGL();
+  camSnap();
+}
+function sizeGL() {
+  const w = gl.clientWidth || W, h = gl.clientHeight || H;
+  V3.renderer.setSize(w, h, false);
+  V3.w = w; V3.h = h;
+  V3.camera.aspect = w / h;
+  V3.shift = null;
+}
+// The pins sit in the middle of the space between the score board and the pad.
+function viewShift() {
+  const top = hudBottom() + 80, bot = wide ? H - 10 : pad.y - 40, shift = Math.round((H - top - bot) / 2);
+  if (shift === V3.shift) return;
+  V3.shift = shift;
+  V3.camera.setViewOffset(V3.w, V3.h, 0, shift, V3.w, V3.h);
+  V3.camera.updateProjectionMatrix();
+}
+// The camera stands behind the line, where the thrower is, and zooms so the pins fill the view.
+const cam = { x: 0, y: -1, z: 1, lx: 0, ly: LINE, lz: 0, fov: 20 };
+const CAM_BACK = 0.9, CAM_UP = 1.2;
+function camGoal() {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of world.pins) {
+    const ex = p.s === 'down' ? p.dx * PH : 0, ey = p.s === 'down' ? p.dy * PH : 0;
+    x0 = Math.min(x0, p.x, p.x + ex); x1 = Math.max(x1, p.x, p.x + ex); y0 = Math.min(y0, p.y, p.y + ey); y1 = Math.max(y1, p.y, p.y + ey);
+  }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, span = Math.max(0.75, x1 - x0 + 0.45);
+  const aspect = V3 ? V3.camera.aspect : W / H || 0.5, dist = Math.hypot(cx * 0.5, cy + CAM_BACK);
+  // Upright the pins' width decides; sideways their depth and height.
+  const hf = Math.atan(span / 2 / dist), vf = Math.max(Math.atan((y1 - y0 + 0.5) * 0.45 / dist), Math.atan(Math.tan(hf) / aspect));
+  return { x: cx * 0.5, y: -CAM_BACK, z: CAM_UP, lx: cx, ly: cy + 0.05, lz: 0.04, fov: Math.max(12, Math.min(48, vf * 2 * 180 / Math.PI)) };
+}
+function camSnap() { if (!world) return; Object.assign(cam, camGoal()); }
+function follow(dt) {
+  const g = camGoal(), q = Math.min(1, dt * 2.5);
+  for (const k in g) cam[k] += (g[k] - cam[k]) * q;
+}
+// A screen point to the grass under it, or null.
+function groundAt(sx, sy) {
+  if (!V3) return null;
+  V3.v.set(sx / W * 2 - 1, -(sy / H) * 2 + 1, 0.5);
+  V3.ray.setFromCamera(V3.v, V3.camera);
+  const hit = V3.ray.ray.intersectPlane(V3.plane, new THREE.Vector3());
+  return hit ? [hit.x, -hit.z] : null;
+}
+// The standing pin under a finger, or null.
+function pinAt(sx, sy) {
+  if (!V3) return null;
+  let best = null, bd = 30;
+  for (const p of world.pins) {
+    if (p.s !== 'up') continue;
+    const [px, py] = toScreen(p.x, p.y, PH / 2), d = Math.hypot(px - sx, py - sy);
+    if (d < bd) { bd = d; best = [p.x, p.y]; }
+  }
+  return best;
+}
+// A world point to the screen.
+function toScreen(wx, wy, wz) {
+  V3.v.set(wx, wz, -wy).project(V3.camera);
+  return [(V3.v.x + 1) / 2 * W, (1 - V3.v.y) / 2 * H, V3.v.z];
+}
+function draw3d() {
+  if (!V3) return;
+  const { camera, pinMeshes, stick, ring, aimLine } = V3;
+  viewShift();
+  camera.position.set(cam.x, cam.z, -cam.y);
+  if (Math.abs(camera.fov - cam.fov) > 0.01) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
+  V3.look.set(cam.lx, cam.lz, -cam.ly); camera.lookAt(V3.look);
+  V3.sun.position.set(cam.lx + 3, 8, -cam.ly + 4); V3.sun.target.position.set(cam.lx, 0, -cam.ly);
+  const now = performance.now() / 1000;
+  world.pins.forEach((p, i) => {
+    const g = pinMeshes[i];
+    g.position.set(p.x, 0, -p.y);
+    // Tipped towards dx,dy by a: turned about the line across that way. A wobble rocks it a little.
+    const a = p.a + Math.sin(now * 26 + i) * p.wob * 0.12;
+    V3.axis.set(p.dx, 0, -p.dy).cross(V3.up).negate().normalize();
+    if (V3.axis.lengthSq() < 0.5) V3.axis.set(1, 0, 0);
+    g.quaternion.setFromAxisAngle(V3.axis, a);
+  });
+  const k = world.k;
+  stick.visible = !!k && phase !== 'aim';
+  if (stick.visible) {
+    stick.position.set(k.x, k.z, -k.y);
+    // Upright it tumbles end over end along its way; crosswise it rolls on its long side.
+    const hx = Math.cos(k.yaw), hy = Math.sin(k.yaw);
+    if (k.st) {
+      stick.quaternion.setFromUnitVectors(V3.up, V3.v.set(hx, 0, -hy));
+      V3.q.setFromAxisAngle(V3.v, k.spin); stick.quaternion.premultiply(V3.q);
+    } else {
+      const t = k.air ? k.spin : 0;
+      stick.quaternion.setFromUnitVectors(V3.up, V3.v.set(hx * Math.cos(t), Math.sin(t), -hy * Math.cos(t)).normalize());
+    }
+  }
+  const showAim = phase === 'aim' && aimShown;
+  ring.visible = aimLine.visible = showAim;
+  if (showAim) {
+    ring.position.set(aim.x, 0.004, -aim.d);
+    const pos = aimLine.geometry.attributes.position;
+    pos.setXYZ(0, 0, 0, -Y0); pos.setXYZ(1, aim.x, 0, -aim.d); pos.needsUpdate = true;
+    aimLine.computeLineDistances();
+  }
+  V3.renderer.render(V3.scene, camera);
+}
+
+// ---------- Drawing the HUD ----------
+function rr(px, py, w, h, r) { ctx.beginPath(); ctx.roundRect(px, py, w, h, r); }
+function outlined(s, size, col, px, py, maxW) {
+  ctx.font = '900 ' + size + 'px system-ui'; ctx.lineWidth = Math.max(3, size / 5); ctx.strokeStyle = 'rgba(0,0,0,.55)';
+  ctx.strokeText(s, px, py, maxW); ctx.fillStyle = col; ctx.fillText(s, px, py, maxW);
+}
+function drawHud() {
+  // A box per player: the name, the points, and a red cross for each miss in a row.
+  const { per } = hudRows(), gap = 6, bw = (hud.w - gap * (per - 1)) / per, bh = 36;
+  players.forEach((p, i) => {
+    const bx = hud.x + (i % per) * (bw + gap), by = hud.y + Math.floor(i / per) * (bh + gap);
+    const now = i === turn && (phase === 'aim' || phase === 'fly' || phase === 'show'), mine = p.id === myId();
+    ctx.globalAlpha = outs[i] ? 0.5 : 1;
+    ctx.fillStyle = now ? 'rgba(255,209,102,.95)' : 'rgba(30,48,24,.82)'; rr(bx, by, bw, bh, 10); ctx.fill();
+    if (mine && !now) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.font = '700 12px system-ui'; ctx.fillStyle = now ? '#2a1a05' : '#e8f2df';
+    ctx.fillText(nameOf(i), bx + 8, by + 12, bw - 52);
+    if (outs[i]) { ctx.fillStyle = now ? '#7a1f1f' : '#ff8a7a'; ctx.fillText('pois pelistä', bx + 8, by + 26, bw - 52); }
+    else for (let m = 0; m < misses[i]; m++) { ctx.fillStyle = '#e5383b'; ctx.font = '900 12px system-ui'; ctx.fillText('✕', bx + 8 + m * 13, by + 26); }
+    ctx.textAlign = 'right'; ctx.font = '900 22px system-ui'; ctx.fillStyle = now ? '#2a1a05' : '#fff';
+    ctx.fillText(String(score[i]), bx + bw - 8, by + bh / 2 + 1);
+    ctx.globalAlpha = 1;
+  });
+  ctx.textBaseline = 'alphabetic';
+}
+function drawBanner() {
+  ctx.textAlign = 'center';
+  const cy = hudBottom() + 20;
+  if (phase === 'aim') {
+    const mine = myTurn(), need = GOAL - score[turn];
+    outlined(mine ? 'Sinun heittosi' : nameOf(turn) + ' heittää', 19, mine ? '#ffd166' : '#fff', W / 2, cy, W - 24);
+    outlined((mine ? 'Tarvitset ' : 'Tarvitsee ') + need + (misses[turn] === MISSES - 1 ? ' · kaksi hutia jo!' : ''), 13, '#fff', W / 2, cy + 19, W - 24);
+  } else if (phase === 'show' && msg) {
+    // The throw's points in the middle of the screen.
+    const my = cy + 14;
+    ctx.fillStyle = 'rgba(30,48,24,.6)'; ctx.fillRect(0, my - 40, W, msg.over || msg.out || msg.win ? 84 : 62);
+    const who = nameOf(msg.i), big = msg.pts ? '+' + msg.pts : 'Huti';
+    outlined(big, 36, msg.pts ? '#9be38f' : '#ff8a7a', W / 2, my, W - 24);
+    const why = msg.pts ? (msg.n === 1 ? 'Keila ' + msg.pts : msg.n + ' keilaa') : (outs[msg.i] ? '' : 'Ei kaatunut keilaa');
+    outlined(who + (why ? ' · ' + why : ''), 13, '#fff', W / 2, my + 18, W - 24);
+    if (msg.win) outlined('Tasan 50! 🏆', 18, '#ffd166', W / 2, my + 38, W - 24);
+    else if (msg.over) outlined('Yli 50: takaisin 25 pisteeseen', 16, '#ffd166', W / 2, my + 38, W - 24);
+    else if (msg.out) outlined('Kolmas huti peräkkäin: pois pelistä', 16, '#ffd166', W / 2, my + 38, W - 24);
+    if ((!net.on || R.isHost) && phaseT > 0.6) outlined('Napauta jatkaaksesi', 12, '#fff', W / 2, my + (msg.over || msg.out || msg.win ? 60 : 38) + 0, W - 24);
+  } else if (phase === 'wait') outlined('Odotetaan…', 18, '#fff', W / 2, cy, W - 24);
+  ctx.textAlign = 'left';
+}
+// The fallen pins' numbers over them while the points show; the numbers of far-off pins, which
+// are too small to read on the wood, always.
+function drawTags() {
+  if (!V3) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const p of world.pins) {
+    const down = p.s === 'down';
+    const mx = down ? p.x + p.dx * PH / 2 : p.x, my = down ? p.y + p.dy * PH / 2 : p.y;
+    const [sx, sy, sz] = toScreen(mx, my, down ? PR * 2 : PH + 0.02);
+    if (sz > 1) continue;
+    const [, sy2] = toScreen(mx, my, down ? PR * 4 : PH + 0.08);
+    const small = Math.abs(sy - sy2) < 9;
+    if (phase === 'show' && down && !raised) {
+      ctx.fillStyle = '#2f8f3a'; ctx.beginPath(); ctx.arc(sx, sy - 14, 11, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = '900 12px system-ui'; ctx.fillText(String(p.n), sx, sy - 13.5);
+    } else if (small && (phase === 'aim' || p.s === 'up')) {
+      ctx.font = '800 11px system-ui'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+      ctx.strokeText(String(p.n), sx, sy - 8); ctx.fillStyle = '#fff'; ctx.fillText(String(p.n), sx, sy - 8);
+    }
+  }
+  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+}
+function drawStick(px, py, st, len) {
+  // The kalikka as it will fly: upright (along its way) or crosswise.
+  ctx.save(); ctx.translate(px, py); if (st) ctx.rotate(Math.PI / 2);
+  const w = len * 0.26;
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; rr(-w / 2 + 2, -len / 2 + 4, w, len, w / 2); ctx.fill();
+  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0); g.addColorStop(0, '#a87a42'); g.addColorStop(0.5, '#dcae6e'); g.addColorStop(1, '#9a6c36');
+  ctx.fillStyle = g; rr(-w / 2, -len / 2, w, len, w / 2); ctx.fill();
+  ctx.fillStyle = '#222'; ctx.fillRect(-w / 2, -len / 2 + 3, w, 3); ctx.fillRect(-w / 2, len / 2 - 6, w, 3);
+  ctx.fillStyle = '#7a1f1f'; ctx.fillRect(-w / 2, -2, w, 4);
+  ctx.restore();
+}
+function drawPad() {
+  if (!myTurn()) return;
+  const gr = wide ? ctx.createLinearGradient(0, 0, pad.x + 130, 0) : ctx.createLinearGradient(0, H, 0, pad.y - 60);
+  gr.addColorStop(0, 'rgba(30,48,24,.7)'); gr.addColorStop(1, 'rgba(30,48,24,0)');
+  ctx.fillStyle = gr;
+  if (wide) ctx.fillRect(0, 0, pad.x + 130, H); else ctx.fillRect(0, pad.y - 60, W, H - pad.y + 60);
+  let sx = pad.x, sy = pad.y;
+  if (drag.id !== null) { sx = drag.cx; sy = drag.cy; ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(pad.x, pad.y); ctx.lineTo(sx, sy); ctx.stroke(); }
+  drawStick(sx, sy, aim.st, 58);
+  ctx.textAlign = 'center'; ctx.font = '700 13px system-ui'; ctx.fillStyle = 'rgba(255,255,255,.9)';
+  if (drag.id === null) {
+    ctx.fillText('Vedä alas', pad.x, pad.y + 46);
+    ctx.fillText('ja päästä irti', pad.x, pad.y + 62);
+  } else {
+    // How far it will land: the pins first stood at 3,5 m.
+    outlined(aim.d.toFixed(1).replace('.', ',') + ' m', 18, '#fff', wide ? pad.x + 80 : pad.x + 80, wide ? pad.y : pad.y + 6, 120);
+  }
+  for (const b of styleBtns) {
+    const on = aim.st === b.s;
+    ctx.fillStyle = on ? '#ffd166' : 'rgba(255,255,255,.18)'; ctx.strokeStyle = on ? '#9a6b12' : 'rgba(255,255,255,.5)'; ctx.lineWidth = 2;
+    rr(b.x, b.y, b.w, b.h, 12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = on ? '#2a1a05' : '#fff'; ctx.font = '800 15px system-ui'; ctx.textBaseline = 'middle';
+    ctx.fillText(b.s ? '▬ Vaaka' : '▮ Pysty', b.x + b.w / 2, b.y + b.h / 2 + 1); ctx.textBaseline = 'alphabetic';
+  }
+}
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  draw3d();
+  if (phase === 'menu' || phase === 'room') return;
+  drawTags(); drawHud(); drawBanner(); drawPad();
+}
+
+let prev = 0, acc = 0;
+function loop(t) {
+  fitCheck();
+  const dt = Math.min(0.05, (t - prev) / 1000 || 0); prev = t;
+  // Whole steps of the world, the same size as the computer's tries.
+  acc += dt;
+  const n = Math.floor(acc / DT); acc -= n * DT;
+  if (n) update(n * DT);
+  follow(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + level + ': vastassa ' + foeName(level);
+  const f = friends.voitot + friends.haviot;
+  document.getElementById('stats').textContent = 'Voitot ' + wins + ' · Häviöt ' + losses + (f ? ' · Kavereita vastaan ' + friends.voitot + '–' + friends.haviot : '');
+  // A game left unfinished can be carried on.
+  const m = load('peli', null), res = document.getElementById('resume');
+  res.hidden = !(m && m.lv === level && m.pins);
+  if (!res.hidden) res.textContent = 'Jatka peliä ' + m.sc[0] + '–' + m.sc[1];
+  menu.classList.remove('hidden');
+}
+function roomNote() {
+  if (R.inRoom) R.note('Jokainen puhelin on oma pelaajansa, ja heittovuoro kiertää huoneen järjestyksessä. Tasan 50 voittaa.');
+}
+document.getElementById('go').addEventListener('click', () => { S.play('valinta', { vol: 0.4 }); save('peli', null); newGame(); });
+document.getElementById('resume').addEventListener('click', () => { S.play('valinta', { vol: 0.4 }); newGame(load('peli', null)); });
+document.getElementById('multi').addEventListener('click', () => { R.open(); roomNote(); });
+R.on('peers', roomNote);
+resize();
+showMenu();
+requestAnimationFrame(loop);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
