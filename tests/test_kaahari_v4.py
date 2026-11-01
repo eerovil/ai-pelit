@@ -105,3 +105,46 @@ def test_v3_saves_are_read_as_they_are(site, context):
     assert page.inner_text("#stats") == "Taso 4 · Voitot 3 / 7 kisaa"
     assert page.evaluate("trackNo") == 2
     assert page.errors == []
+
+
+def test_a_lost_race_plays_the_losing_tune_and_a_second_race_has_its_engine_again(site, context):
+    page = open_game(site, context)
+    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
+    page.click("#go")
+    page.evaluate("race.cdT = 3")
+    page.wait_for_function("race.phase === 'run' && kart && kart.playing()", timeout=6000)
+    # Another kart in first: this one ends second.
+    page.evaluate("const o = race.karts[1]; o.fin = 1; race.finishers.push(o); heard.splice(0)")
+    finish(page)
+    page.wait_for_function("race.phase === 'over'", timeout=6000)
+    got = played(page)
+    assert "tappio" in got and "voitto" not in got and got[got.index("tappio") + 1] == "aplodit", got
+    assert page.evaluate("kart") is None
+    page.click("#go")
+    page.wait_for_function("race.phase === 'run' && kart && kart.playing()", timeout=6000)
+    assert page.errors == []
+
+
+def test_in_a_room_the_line_claps_then_each_phone_hears_its_own_place(site, browser):
+    import test_kaahari_v2 as v2
+    site.build(ROOT / "games")
+    old = v2.URL
+    v2.URL = URL
+    try:
+        host, guest = v2.room_of_two(site, browser)
+    finally:
+        v2.URL = old
+    for p in (host, guest):
+        p.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
+        p.evaluate(SPY)
+    finish(guest)
+    guest.wait_for_function("me.fin !== null", timeout=3000)
+    assert "aplodit" in played(guest)
+    host.wait_for_function("race.karts[1].fin !== null", timeout=3000)
+    finish(host)
+    for p in (host, guest):
+        p.wait_for_function("(!race || race.phase === 'over') && document.getElementById('aipr-result').textContent !== ''", timeout=10000)
+    assert "voitto" in played(guest)
+    got = played(host)
+    assert "tappio" in got and "voitto" not in got, got
+    assert host.errors == [] and guest.errors == []
