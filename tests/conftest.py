@@ -2,6 +2,7 @@ import base64
 import functools
 import http.server
 import json
+import os
 import re
 import subprocess
 import sys
@@ -197,8 +198,33 @@ def pytest_collection_modifyitems(config, items):
         items[:] = keep
 
 
+def webgl_renderer() -> str:
+    """The WebGL renderer the tests' Chromium gets: the graphics card, or SwiftShader (software)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        b = p.chromium.launch(args=GPU_ARGS)
+        try:
+            return b.new_page().evaluate("""() => {
+                const g = document.createElement('canvas').getContext('webgl');
+                if (!g) return 'none';
+                const e = g.getExtension('WEBGL_debug_renderer_info');
+                return g.getParameter(e ? e.UNMASKED_RENDERER_WEBGL : g.RENDERER);
+            }""")
+        finally:
+            b.close()
+
+
 def pytest_terminal_summary(terminalreporter, config):
-    # A summary line, not a report header: `pytest -q`, as CI runs it, leaves the header out.
+    # Summary lines, not a report header: `pytest -q`, as CI and host-tests.sh run it, leaves the
+    # header out.
+    # After a run with 3D tests, name the renderer they drew with, so a silent fall back to
+    # software WebGL (no card, a driver update) shows (#248).
+    if GPU_ARGS and any("alone" in r.keywords for k in ("passed", "failed") for r in terminalreporter.stats.get(k, [])):
+        try:
+            terminalreporter.write_line(f"WebGL: {webgl_renderer()}")
+        except Exception as e:  # never fail a run over this line
+            terminalreporter.write_line(f"WebGL: unknown ({e.__class__.__name__})")
     if not config.getoption("--changed-since"):
         return
     changes = config.stash[CHANGES]
@@ -293,12 +319,20 @@ def _playwright():
         yield p
 
 
+# Chromium draws WebGL through Vulkan already, but headless it picks SwiftShader, software on the
+# processor. These flags let it pick the graphics card (#248): on the AgentDeck host's GTX 1660
+# SUPER three 3D test files took 1 min 12 s of processor time instead of 20 min 52 s. With no card
+# it still gets SwiftShader. Off in GitHub CI, whose runner has no card and runs no 3D tests.
+GPU_ARGS = [] if os.environ.get("CI") else [
+    "--use-angle=vulkan", "--enable-features=Vulkan", "--enable-gpu", "--ignore-gpu-blocklist"]
+
+
 # A fresh Chromium for each test file (#95). With one browser for the whole run, the 3D games'
 # WebGL pages (Hiihto from v7, Pallorata) slowed it down for every file after them on CI, until
 # their rounds timed out.
 @pytest.fixture(scope="module")
 def browser(_playwright):
-    b = _playwright.chromium.launch()
+    b = _playwright.chromium.launch(args=GPU_ARGS)
     yield b
     b.close()
 
