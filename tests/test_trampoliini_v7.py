@@ -105,3 +105,28 @@ def test_v6_saves_are_read_as_they_are(tramp_site, browser):
     assert page.evaluate("[level, best, outfit.id]") == [3, 456, "noita"]
     assert errors == []
     ctx.close()
+
+
+def test_the_last_fall_thuds_then_the_loss_tune_plays(tramp_site, browser):
+    # Through the round's own steps: the fall, the jumper lying down, then the go ends.
+    ctx, page, errors = open_game(browser, tramp_site)
+    ready(page)
+    page.evaluate("hearts = 1; crash('Kaaduit')")
+    assert played(page) == ["tomahdys", "ohhoo"]
+    page.wait_for_function("phase === 'over'", timeout=5000)
+    assert played(page) == ["tappio"]
+    assert page.evaluate("beeps") == []
+    assert errors == []
+    ctx.close()
+
+
+def test_after_a_reload_mid_round_the_sounds_still_play(tramp_site, browser):
+    ctx, page, errors = open_game(browser, tramp_site)
+    ready(page)
+    page.reload()
+    page.evaluate(SPY)
+    ready(page)
+    page.evaluate("step = () => {}; sound('boing', 9); sound('trick')")
+    assert played(page) == ["boing", "onnistui"]
+    assert errors == []
+    ctx.close()
