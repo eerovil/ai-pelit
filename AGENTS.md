@@ -273,6 +273,10 @@ model.
   the deck merges only when both are green on the same head. A merge to `main` deploys at once
   (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
   the site. `main` runs no browser tests; they already passed on the pull request's head.
+  To check it is live, ask the site itself, not a deployment wake-on (the deck saw no deploy for
+  #207): `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
+  and the game's versions in `catalog.json`. A 404 right after the merge is the deploy still
+  running: look again a minute later before calling it not live (#205).
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
 - `games/<slug>/thumb.webp` shows the current version mid-play.
