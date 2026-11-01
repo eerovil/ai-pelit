@@ -40,6 +40,7 @@ class Relay:
         self.slow = {}  # id -> its held hellos, for a phone whose hello is late
         self.old = False  # the room from before voice (#322): `_rtc` is routed like any message
         self.lose_hi = 0  # this many voice greetings (`_rtc` hi) are lost on the way
+        self.lose_rtc = {}  # voice call setup kind (offer, answer) -> how many are lost on the way
 
     def attach(self, page):
         page.route_web_socket(re.compile(r".*/api/rooms/.*"), self.connect)
@@ -97,6 +98,9 @@ class Relay:
             return
         if msg.get("t") == "_rtc" and msg.get("k") == "hi" and self.lose_hi > 0:
             self.lose_hi -= 1
+            return
+        if msg.get("t") == "_rtc" and self.lose_rtc.get(msg.get("k"), 0) > 0:
+            self.lose_rtc[msg["k"]] -= 1
             return
         if msg.get("t") == "_rtc" and not self.old:
             msg["from"] = me
