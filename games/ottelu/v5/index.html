@@ -209,6 +209,31 @@ function patch(A) {
     };
     return F;
   };
+  // v5 (#294, Eero's choice): the high jump and the pole vault go faster in a match with twice
+  // the bar's steps, every second height of the event's own. korkeus.js adds `heights` to the
+  // library after this patch, so it is wrapped as it is set. The computer's plan is made on the
+  // event's own heights and then moved onto the kept ones: it starts at the first kept height at
+  // or over its own, and passes only the kept heights it would have passed.
+  let heights;
+  Object.defineProperty(A, 'heights', {
+    configurable: true,
+    get: () => heights,
+    set: f => {
+      heights = o => {
+        const F = f(o), setup = F.setup;
+        F.setup = c => {
+          setup(c);
+          const all = c.heights, keep = all.filter((h, i) => i % 2 === 0), at = h => keep.indexOf(h);
+          c.heights = keep;
+          c.throwers.forEach(t => {
+            if (t.first !== undefined) { const i = keep.findIndex(h => h >= all[t.first] - 1e-9); t.first = i < 0 ? keep.length - 1 : i; }
+            if (t.skip) t.skip = t.skip.map(i => at(all[i])).filter(i => i >= 0);
+          });
+        };
+        return F;
+      };
+    },
+  });
   A.meet = o => {
     const K = meet(Object.assign({}, o, { slug: 'ottelu:' + o.slug, foes: FOES, field: FIELD, menu: () => {}, chime: null }));
     const step = K.step;

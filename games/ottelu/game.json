@@ -34,8 +34,8 @@
     {
       "n": 5,
       "date": "2026-11-01",
-      "note": "Kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa; napautus vie lopputuloksiin, ja vasta sitten kysytään nimimerkkiä tuloslistalle.",
-      "request": "Ottelun lopussa palkintojenjako: kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa (yleisurheilukirjaston oma palkintojenjako), ja napautus vie lopputuloksiin. Lajien välissä ei palkintojenjakoa, kuten v4:ssä.",
+      "note": "Kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa, ja napautus vie lopputuloksiin; korkeus- ja seiväshypyssä rima nousee kaksi kertaa isommin askelin, joten ne menevät nopeammin.",
+      "request": "Ottelun lopussa palkintojenjako: kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa (yleisurheilukirjaston oma palkintojenjako), ja napautus vie lopputuloksiin. Lajien välissä ei palkintojenjakoa, kuten v4:ssä. Lisäksi (Eero, chatissa): korkeuslajit nopeammiksi isommilla riman nostoilla.",
       "issue": "eerovil/ai-pelit#294"
     }
   ]

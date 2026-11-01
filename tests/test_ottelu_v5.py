@@ -1,21 +1,24 @@
 """Ottelu v5: the medal ceremony only when the whole match ends (#294).
 
-Between events the points table shows as in v4; after the last event the top three by the match's
+Between events the points table shows as in v4, and the high jump and pole vault bars rise in twice
+the events' own steps; after the last event the top three by the match's
 points stand on the podium (the shared athletics library's ceremony), and a tap leaves it for the
 final standings. The high score is sent only then, so the nickname question opens after the podium.
 """
+
+import json
 
 import pytest
 
 import test_ottelu as v1
 import test_ottelu_v4 as v4
-from test_ottelu_v4 import finish_event, open_game, room
+from test_ottelu_v4 import finish_event, in_frame, open_game, room
 # v5 plays as v4 up to the end of the match: v4's tests that play a match to its end run on v5
 # too, their play() also tapping the ceremony away.
 from test_ottelu_v4 import (  # noqa: F401
     test_a_match_alone_with_the_hurdles_and_the_shot_put, test_a_reload_mid_race_runs_the_race_again_and_keeps_the_points,
     test_all_seven_events_can_be_picked, test_an_event_ends_on_its_results_not_a_podium, test_the_menu_and_the_board_fit,
-    test_two_phones_run_the_hurdles_and_see_the_same_points)
+    test_each_newer_field_event_plays_to_its_results_in_the_match, test_two_phones_run_the_hurdles_and_see_the_same_points)
 
 URL = "games/ottelu/v5/"
 # play() also leaves the ceremony: to its end, then the tap that goes on.
@@ -110,3 +113,17 @@ def test_with_friends_every_phone_sees_the_podium_at_the_end(site, browser):
         assert p.inner_text("#next") == "Takaisin huoneeseen"
         assert p.errors == []
         p.context.close()
+
+
+@pytest.mark.parametrize("slug", ["korkeushyppy", "seivashyppy"])
+def test_the_bar_rises_in_twice_the_events_steps(site, context, slug):
+    page = open_game(site, context, saved={"lajit": [slug, "keihas"]})
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && Ottelu.K.comp.heights.length", timeout=10000)
+    own = json.loads(in_frame(page, "JSON.stringify(heightsFor(K.comp.level))"))
+    kept = json.loads(in_frame(page, "JSON.stringify(K.comp.heights)"))
+    assert kept == own[::2] and len(kept) < len(own)
+    # The computer's plan moved onto the kept heights.
+    for first, skip in json.loads(in_frame(page, "JSON.stringify(K.comp.throwers.filter(t => t.p === null).map(t => [t.first, t.skip || []]))")):
+        assert 0 <= first < len(kept) and all(0 <= i < len(kept) for i in skip)
+    assert page.errors == []
