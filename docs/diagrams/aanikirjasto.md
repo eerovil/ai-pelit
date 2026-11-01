@@ -1,0 +1,58 @@
+# Äänikirjasto
+
+The shared sound-effect library (#205): recorded CC0 sounds in one never-changing folder under
+`public/lib/`, played through one small script any new game version loads. The phone's offline
+cache keeps the files after first use, and a game without sound still plays the same.
+
+```mermaid
+flowchart TD
+  subgraph Kirjasto["public/lib/aanet-1/ (ei muutu koskaan)"]
+    files["mp3-tiedostot: hyppy, tömähdys, aplodit…"]
+    lista["SOURCE: mistä kukin ääni on, CC0"]
+    js["aanet.js: AiPelitAanet"]
+  end
+  subgraph Peli["Pelin uusi versio, esim. Pituushyppy v7"]
+    tag["script src=lib/aanet-1/aanet.js"]
+    load["AiPelitAanet.load([...nimet])"]
+    tap{"Ensimmäinen napautus?"}
+    play["AiPelitAanet.play(nimi)"]
+    beep["Pelin oma piippaus"]
+  end
+  sw["sw.js: tallentaa lib-tiedostot ensimmäisellä käytöllä"]
+  ok{"Ääni ladattu ja purettu?"}
+  soi["Ääni soi"]
+  hiljaa["Hiljaa, peli jatkuu"]
+  tag --> load --> tap
+  tap -- Kyllä --> play --> ok
+  tap -- Ei --> hiljaa
+  ok -- Kyllä --> soi
+  ok -- Ei --> hiljaa
+  hiljaa -. play palauttaa false .-> beep
+  load --> sw --> files
+  js --> load
+  class files,lista,js teal
+  class tag,load,play blue
+  class tap,ok amber
+  class sw violet
+  class soi,hiljaa,beep green
+```
+
+## Colours
+
+- **teal**: the shared library folder
+- **blue**: what the game version does
+- **amber**: a check that decides the path
+- **violet**: the phone's offline cache
+- **green**: what the player hears
+
+## Boxes
+
+- **mp3-tiedostot: hyppy, tömähdys, aplodit…**: short mono MP3 effects in `public/lib/aanet-1/`, named in Finnish, each listed in `SOUNDS` at the top of `aanet.js`. A new sound goes in `aanet-2/`; `scripts/check_immutable.py` already refuses an edit to a published `public/lib/` file.
+- **SOURCE: mistä kukin ääni on, CC0**: one line per file: its source pack and URL, CC0. Only CC0 sounds, so no credit is owed and the repository stays public.
+- **aanet.js: AiPelitAanet**: `public/lib/aanet-1/aanet.js`: `load(names)`, `unlock()`, `play(name, {vol, rate, delay})` (true when it played), `ready(name)`, `muted`, `names()`. It keeps its own `AudioContext`, fetches and decodes each named file once, and never throws.
+- **AiPelitAanet.load([...nimet])**: called once at start-up; fetches only the sounds this game uses, so the phone downloads a few tens of KB, not the whole library.
+- **Ensimmäinen napautus?**: browsers only allow sound after a tap; the library unlocks itself on the first `pointerdown`.
+- **sw.js: tallentaa lib-tiedostot ensimmäisellä käytöllä**: `public/sw.js` already caches anything under `lib/` on first use (`cachedFile`), so the sounds play offline after the game has been opened once online. No change to `sw.js`.
+- **Hiljaa, peli jatkuu**: a file that failed to load or decode (offline on the first open, an old browser), a name the game did not load, before the first tap or `muted`: nothing plays and `play()` returns false.
+- **Pelin oma piippaus**: a game may fall back to its own Web Audio beep when `play()` returns false: `S.play('hiekka') || tone(…)` in Pituushyppy v7.
+- **Pelin uusi versio, esim. Pituushyppy v7**: `games/pituushyppy/v7/index.html` loads askel, askel2, ponnistus, suhahdus, hiekka, aplodit, ohhoo, onnistui, valinta and mitali; its `press()`, `jumpNow()`, `legs()`, `landed()`, `outcome()` and the meet's `chime` play them.

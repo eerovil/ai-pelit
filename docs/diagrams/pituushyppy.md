@@ -1,7 +1,7 @@
 # Pituushyppy: one jump and one meet
 
 How Pituushyppy plays (v1; v2 plays the same, with the meet, the results board, the saves and the
-room handling from the shared athletics library, see `yleisurheilu-kirjasto.md`; v3 plays as v2, with the run-up's legs running forwards, #170; v4 plays as v3, with the jump bar higher and the gap under it the feet's, #177; v5 plays as v4 and ends the meet with the medal ceremony from `yleisurheilu-2`, #176; v6 plays as v5 and the podium stays until a tap, `yleisurheilu-3`, #176). A meet has twelve jumpers: the player and eleven computer jumpers
+room handling from the shared athletics library, see `yleisurheilu-kirjasto.md`; v3 plays as v2, with the run-up's legs running forwards, #170; v4 plays as v3, with the jump bar higher and the gap under it the feet's, #177; v5 plays as v4 and ends the meet with the medal ceremony from `yleisurheilu-2`, #176; v6 plays as v5 and the podium stays until a tap, `yleisurheilu-3`, #176; v7 plays as v6 with recorded sounds from `lib/aanet-1/`, #205: footsteps, the board, a whoosh, the sand, applause for a new lead or record, an "ooh" for a foul and a steel-drum run per medal, see `aanikirjasto.md`). A meet has twelve jumpers: the player and eleven computer jumpers
 alone, or 2–8 phones in a room with the computer filling the rest. Everyone jumps three times in a
 drawn order; the best eight jump three more, the last in the standings first. On their turn the
 player takes a run-up by tapping the left and right foot in turn, holds "Hyppää" from the check

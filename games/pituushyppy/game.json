@@ -44,6 +44,13 @@
       "note": "Palkintokoroke jää näkyviin, kunnes napautat sen pois – myös kavereiden kanssa – eikä katoa enää itsestään.",
       "request": "Podium saisi jäädä siihen kunnes poistuu. Nyt taitaa automaattisesti kadota. Tämä kaikkiin kisoihin",
       "issue": "eerovil/ai-pelit#176"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-01",
+      "note": "Oikeat äänet: askeleet radalla, ponnistus laudalta, ilmavirran suhahdus, alastulo hiekkaan, yleisön aplodit johtoon nousevasta tai ennätyshypystä, ”ooh” yliastunnasta ja palkintojenjaossa oma sävel jokaiselle mitalille.",
+      "request": "Olisiko mahdollista saada ääniefektejä. Miten vaikeaksi menee githubin kanssa vai pitäisikö ne olla media storagessa",
+      "issue": "eerovil/ai-pelit#205"
     }
   ]
 }
