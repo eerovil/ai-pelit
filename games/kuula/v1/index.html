@@ -116,7 +116,7 @@ const foot = k => -hip(k, TECH[k].T + TECH[k].win);
 // off the middle it goes. Early is pushing before the legs are set: weaker, and wide from the spin.
 function pushSpeed(k, off) {
   const T = TECH[k], q = off / T.win;
-  return q >= -1 ? T.v * (1 - 0.06 * q * q) : T.v * Math.max(0.6, 0.94 - 2.2 * (-off - T.win));
+  return q >= -1 ? T.v * (1 - 0.03 * q * q) : T.v * Math.max(0.6, 0.94 - 2.2 * (-off - T.win));
 }
 const pushDev = (k, off) => clamp(off / TECH[k].win * TECH[k].dev, -40, 40);
 // A steeper push is a weaker one (the arm pushes hardest level with the shoulder), so the best
