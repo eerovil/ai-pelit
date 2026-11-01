@@ -232,21 +232,25 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 
 ## Sound effects
 
-Recorded sounds (#205) are a shared library like three.js: `public/lib/aanet-1/`, short mono
-MP3s with `aanet.js` beside them. A version loads it with a classic
-`<script src="../../../lib/aanet-1/aanet.js"></script>` before its own script, names the sounds
+Recorded sounds (#205) are a shared library like three.js: the newest `public/lib/aanet-<N>/`
+(now `aanet-2/`, 71 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
+a classic `<script src="../../../lib/aanet-2/aanet.js"></script>` before its own script, names the sounds
 it uses once (`AiPelitAanet.load(['askel', 'hiekka'])`, so the phone downloads only those) and
 plays them by name: `AiPelitAanet.play('hiekka', { vol, rate, delay })`. The names and what each
 sound is are listed at the top of `aanet.js`. Sound starts only after the first tap, and `play()`
 returns false when nothing played (not loaded yet, offline on the very first open, muted), so a
 game may fall back to its own Web Audio beep: `S.play('hiekka') || tone(…)`. Pituushyppy v7 is the
-model.
+model. A sound that goes on (an engine, wind, wheels rolling; marked LOOP in the list) is
+`const m = AiPelitAanet.loop('moottori', { vol })`, then `m.set({ rate, vol })` each frame to
+follow the speed, and `m.stop()` when the round ends; it starts by itself once sound is on. Sound
+sleeps while the page is hidden.
 
 - Only CC0 sounds (no credit owed, the repository is public), each named with its source in the
   folder's `SOURCE`; Kenney.nl's packs and CC0-only pages on OpenGameArt.org have most of what a
   game needs. Keep a file under about 60 KB (`tests/test_lib_aanet.py` checks it).
 - The folder never changes once published (`scripts/check_immutable.py`): a new or better sound
-  goes in a new `aanet-2/`, a copy of the folder with the new files, used by the next versions.
+  goes in the next `aanet-<N+1>/`, a copy of the folder with the new files, used by the next
+  versions. A game's music and its own tunes (Piano's notes) stay its own.
 - `sw.js` keeps the files after their first use, so the game sounds the same offline.
 
 ## Before you mark the pull request ready

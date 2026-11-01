@@ -1,36 +1,48 @@
-"""The shared sound effects in public/lib/aanet-1/ (#205), on a test-only game."""
+"""The shared sound effects in public/lib/aanet-1/ and aanet-2/ (#205), on a test-only game."""
 
 import re
 from pathlib import Path
+
+import pytest
 
 from conftest import ROOT, game_page, make_game, wait_for_worker
 
 LIB = ROOT / "public" / "lib" / "aanet-1"
 TAG = '<script src="../../../lib/aanet-1/aanet.js"></script>'
+TAG2 = TAG.replace("aanet-1", "aanet-2")
 
 
-def sounds():
+def sounds(lib=LIB):
     """The name -> file list at the top of aanet.js."""
-    text = (LIB / "aanet.js").read_text()
+    text = (lib / "aanet.js").read_text()
     return dict(re.findall(r"^\s+(\w+): '([\w-]+\.mp3)',", text, re.M))
 
 
-def test_every_sound_is_there_small_and_its_source_named():
-    listed = sounds()
+@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2"])
+def test_every_sound_is_there_small_and_its_source_named(folder):
+    lib = LIB.parent / folder
+    listed = sounds(lib)
     assert len(listed) >= 20
-    source = (LIB / "SOURCE").read_text()
-    assert "CC0" in (LIB / "LICENSE").read_text()
+    source = (lib / "SOURCE").read_text()
+    assert "CC0" in (lib / "LICENSE").read_text()
     for name, file in listed.items():
-        path = LIB / file
+        path = lib / file
         assert path.is_file(), file
         assert path.stat().st_size < 60_000, file
         assert re.search(rf"^{re.escape(file)}\s", source, re.M), f"{file} is not in SOURCE"
     # No file is left out of the list either.
-    assert {p.name for p in LIB.glob("*.mp3")} == set(listed.values())
+    assert {p.name for p in lib.glob("*.mp3")} == set(listed.values())
 
 
-def open_demo(site, context, names):
-    make_game(site.games, "aanidemo", [game_page("Äänet", TAG, f"AiPelitAanet.load({names!r});")])
+def test_aanet_2_keeps_every_sound_of_aanet_1_as_it_is():
+    one, two = sounds(LIB), sounds(LIB.parent / "aanet-2")
+    for name, file in one.items():
+        assert two[name] == file
+        assert (LIB / file).read_bytes() == (LIB.parent / "aanet-2" / file).read_bytes()
+
+
+def open_demo(site, context, names, tag=TAG):
+    make_game(site.games, "aanidemo", [game_page("Äänet", tag, f"AiPelitAanet.load({names!r});")])
     site.build()
     page = context.new_page()
     page.errors = []
@@ -91,3 +103,61 @@ def test_a_missing_file_is_silent(site, browser):
         assert errors == []
     finally:
         ctx.close()
+
+
+def test_a_loop_waits_for_its_sound_follows_set_and_stops(site, context):
+    page = open_demo(site, context, ["moottori", "pilli"], TAG2)
+    page.evaluate("window.engine = AiPelitAanet.loop('moottori', { vol: 0.2 }); window.none = AiPelitAanet.loop('ei-ole')")
+    # Before a tap it waits, and set() is kept for when it starts.
+    assert page.evaluate("engine.playing()") is False
+    page.evaluate("engine.set({ rate: 1.5, vol: 0.4 })")
+    page.wait_for_function("AiPelitAanet.ready('moottori')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.wait_for_function("engine.playing()", timeout=5000)
+    assert page.evaluate("[engine.rate, engine.vol]") == [1.5, 0.4]
+    assert page.evaluate("AiPelitAanet.play('pilli')") is True
+    page.evaluate("engine.set({ rate: 0.7 }); engine.stop(); engine.set({ vol: 1 })")
+    assert page.evaluate("engine.playing()") is False
+    assert page.evaluate("none.set({ rate: 2 }).playing()") is False
+    assert page.errors == []
+
+
+def test_two_loops_at_once_and_sound_sleeps_while_the_page_is_hidden(site, context):
+    page = open_demo(site, context, ["tuuli", "sade"], TAG2)
+    page.wait_for_function("AiPelitAanet.ready('tuuli') && AiPelitAanet.ready('sade')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.evaluate("window.a = AiPelitAanet.loop('tuuli'); window.b = AiPelitAanet.loop('sade', { vol: 0.3 })")
+    page.wait_for_function("a.playing() && b.playing()", timeout=5000)
+    # Stopping one leaves the other.
+    page.evaluate("a.stop()")
+    assert page.evaluate("[a.playing(), b.playing()]") == [False, True]
+    # The page hidden (the phone locked, another app): the sound context sleeps, and wakes again.
+    states = page.evaluate("""async () => {
+      const wait = () => new Promise(r => setTimeout(r, 200));
+      const hide = h => { Object.defineProperty(document, 'hidden', { value: h, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); };
+      const seen = [];
+      const probe = AiPelitAanet.loop('sade', { vol: 0 });
+      hide(true); await wait(); seen.push(AiPelitAanet.play('sade', { vol: 0 }));
+      hide(false); await wait(); seen.push(AiPelitAanet.play('sade', { vol: 0 }));
+      probe.stop();
+      return seen;
+    }""")
+    assert states == [False, True]
+    assert page.errors == []
+
+
+def test_muting_silences_running_loops_and_unmuting_starts_the_waiting_ones(site, context):
+    page = open_demo(site, context, ["tuuli", "sade"], TAG2)
+    page.wait_for_function("AiPelitAanet.ready('tuuli') && AiPelitAanet.ready('sade')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.evaluate("window.wind = AiPelitAanet.loop('tuuli', { vol: 0.6 })")
+    page.wait_for_function("wind.playing()", timeout=5000)
+    # Muted, a loop the game never set()s again goes quiet anyway; one made now waits.
+    page.evaluate("AiPelitAanet.muted = true; window.rain = AiPelitAanet.loop('sade', { vol: 0.4 })")
+    page.wait_for_function("wind.gain.gain.value < 0.01", timeout=3000)
+    assert page.evaluate("rain.playing()") is False
+    assert page.evaluate("AiPelitAanet.play('tuuli')") is False
+    page.evaluate("AiPelitAanet.muted = false")
+    page.wait_for_function("rain.playing() && wind.gain.gain.value > 0.55 && rain.gain.gain.value > 0.35", timeout=3000)
+    assert page.evaluate("AiPelitAanet.muted") is False
+    assert page.errors == []
