@@ -47,8 +47,8 @@ def phones(site, browser):
     relay = Relay()
     contexts = []
 
-    def phone(name, path="huonetesti/v2/", no_mic=False):
-        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+    def phone(name, path="huonetesti/v2/", no_mic=False, width=360, height=740):
+        ctx = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
         ctx.grant_permissions(["microphone"])
         ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify({name!r}))")
@@ -214,3 +214,37 @@ def test_lost_greetings_heal_by_themselves(phones):
     assert host.evaluate("AiPelitRooms.voice.calls") == 0
     for p in (host, a):
         p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=20000)
+
+
+def test_two_talking_at_once_are_both_heard(phones):
+    host, a, b = room_of_three(phones)
+    hold(a)
+    hold(b)
+    host.wait_for_function("AiPelitRooms.voice.speakers.slice().sort().join() === 'Aino,Iida'")
+    assert host.locator("#aipr-talk").inner_text() in ("🔊 Aino, Iida", "🔊 Iida, Aino")
+    a.mouse.up()
+    host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Iida'")
+    b.mouse.up()
+    host.wait_for_function("document.getElementById('aipr-talk').hidden")
+
+
+@pytest.mark.parametrize("width,height", [(390, 844), (360, 640)])
+def test_the_chip_and_label_fit_a_phone(phones, width, height):
+    host = phones("Eero", width=width, height=height)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.code")
+    code = host.evaluate("AiPelitRooms.code")
+    a = join(phones, "Aino", code)
+    for p in (host, a):
+        p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=15000)
+    hold(a)
+    host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
+    for part in ("#aipr-mic", "#aipr-talk"):
+        box = host.locator(part).bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= width, part
+        assert box["y"] >= 0 and box["y"] + box["height"] <= height, part
+    # The room screen still fits without scrolling, with the voice switch.
+    assert host.evaluate("document.getElementById('aipr').scrollHeight") <= height
+    assert host.locator("#aipr-voice").is_visible()
+    a.mouse.up()

@@ -3,7 +3,8 @@
 -- (scripts/turn_usage.py) asks Cloudflare and writes it here; /api/voice/ice hands out relay
 -- credentials only while the month's bytes are under the cap and the check is recent.
 -- `month` is 'YYYY-MM' (UTC), `checked_at` an ISO time.
-CREATE TABLE turn_usage (
+-- IF NOT EXISTS: it was first applied as 0007_turn_usage.sql, before 0007_playing.sql took the number.
+CREATE TABLE IF NOT EXISTS turn_usage (
   month TEXT PRIMARY KEY,
   bytes INTEGER NOT NULL,
   checked_at TEXT NOT NULL
