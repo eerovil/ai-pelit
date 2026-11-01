@@ -4,7 +4,7 @@ How one round of Pallorata plays (v1, #102). A striped ball rolls along a narrow
 tiles high above the clouds, drawn in 3D with the shared three.js. The player drags a finger
 left and right to keep it on the track and roll it over stars; orange ramps throw it over gaps
 in the track, cyan turbo strips speed it up, and purple blocks sliding across the track bump it
-aside. The sky turns from day to sunset to a starry night the further it gets. The round ends when the ball rolls off the edge or into a gap and falls.
+aside. The sky turns from day to sunset to a starry night the further it gets. The round ends when the ball rolls off the edge or into a gap and falls. From v3 (#225) each of these sounds with a recorded sound from the shared library (`lib/aanet-2/`), and the rolling ball hums with its speed.
 
 ```mermaid
 flowchart TD
@@ -25,6 +25,10 @@ flowchart TD
   V --> B
   B --> Z[300 m: Auringonlasku, 700 m: Tähtiyö]
   F[Tähti kerätty, kilahdus]
+  AU[Äänet: hyppy, nousu, valinta, osuma, tömähdys, putoaminen; vieriminen vauhdin mukaan]
+  B -.-> AU
+  N -.-> AU
+  G -.-> AU
   F --> B
   D -- Ei, reunan yli tai aukkoon --> G[Pallo putoaa pilviin]
   G --> H[Putosit!: metrit + 10 × tähdet = pisteet]
@@ -44,13 +48,14 @@ flowchart TD
   class G,H rose
   class K,L blue
   class R teal
+  class AU green
 ```
 
 ## Colours
 
 - **blue**: what the player sees and does
 - **amber**: a check that decides the path
-- **green**: a star or a record won
+- **green**: a star or a record won, and the sounds the player hears
 - **rose**: the fall that ends the round
 - **teal**: how the track is made, and the jump
 
@@ -71,3 +76,4 @@ flowchart TD
 - **Pallo putoaa pilviin**: off the track the ball keeps flying forward and falls under gravity; the distance stops counting where it left the track (`round.endZ`); after 1.3 s `over()` ends the round.
 - **Putosit!: metrit + 10 × tähdet = pisteet**: `over()` shows the distance, the stars and the points, and counts the round in `ai-pelit:pallorata:pelit`.
 - **Uusi ennätys talteen**: a better score is saved in `ai-pelit:pallorata:ennatys` on the phone.
+- **Äänet: hyppy, nousu, valinta, osuma, tömähdys, putoaminen; vieriminen vauhdin mukaan**: `games/pallorata/v3/index.html` loads `lib/aanet-2/aanet.js`; `sound()` plays `SOUNDS` (jump → hyppy, turbo → nousu, star → valinta, block → osuma, landing → tomahdys, fall → putoaminen) and falls back to v2's own beeps when a sound cannot play (no beep for the landing, new in v3). `start()` makes a new `rullaus` loop for each round; `rollSound()` runs each frame, raising its volume and rate with `ball.v`, silencing it in the air, and stopping it for good (`roll.stop()`) once the ball leaves the track.

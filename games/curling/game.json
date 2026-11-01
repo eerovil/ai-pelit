@@ -1,0 +1,13 @@
+{
+  "title": "Curling",
+  "description": "Liu'uta kivet pesään ylhäältä katsottuna: tähtää, valitse kierre ja harjaa. Tietokonetta tai kavereita vastaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-01",
+      "note": "Ensimmäinen versio: kivi heitetään vetämällä taakse, kierre kaartaa ja ruudun hankaaminen harjaa; kolme päätä tietokonetta tai 2–4 kaverin puhelinta vastaan.",
+      "request": "curling",
+      "issue": "eerovil/ai-pelit#243"
+    }
+  ]
+}
