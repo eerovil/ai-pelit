@@ -43,6 +43,13 @@
       "note": "Peliä voi pelata myös vaakatasossa: kaistat ja napit levenevät koko näytön levyisiksi, pisteet, taso ja sydämet ovat yhdellä rivillä ylhäällä, ja valikko mahtuu ruutuun ilman vierittämistä.",
       "request": "Add landscape to all games where it's possible",
       "issue": "eerovil/ai-pelit#95"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-01",
+      "note": "Osuma-alue on puolitoista kertaa leveämpi: painallus saa olla aiempaa enemmän etuajassa tai myöhässä, ja \"Nappiin!\" tulee myös hieman väljemmin.",
+      "request": "Pianopeli, isompi hit box",
+      "issue": "eerovil/ai-pelit#316"
     }
   ]
 }
