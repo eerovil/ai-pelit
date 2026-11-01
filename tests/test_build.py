@@ -17,6 +17,16 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
     assert [v["n"] for v in catalog["games"][0]["versions"]] == [1, 2]
 
 
+def test_a_version_kept_out_of_ottelu_says_so_in_the_catalog(tmp_path):
+    # #303: Ottelu plays each event's newest version, except one whose game.json entry says not to.
+    make_game(tmp_path, "kuula", [game_page("a"), game_page("b")])
+    meta = json.loads((tmp_path / "kuula" / "game.json").read_text())
+    meta["versions"][1]["ottelu"] = False
+    (tmp_path / "kuula" / "game.json").write_text(json.dumps(meta))
+    versions = build.build_catalog(tmp_path)["games"][0]["versions"]
+    assert ["ottelu" in v for v in versions] == [False, True] and versions[1]["ottelu"] is False
+
+
 def test_versions_of_the_same_day_go_by_their_merge_time(tmp_path):
     # #279: 28 games updated on one day sat in reverse alphabetical order under Päivitetyt.
     games = tmp_path / "games"

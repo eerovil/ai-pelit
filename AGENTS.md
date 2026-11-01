@@ -35,9 +35,15 @@ player sees is Finnish unless the request says otherwise.
 - A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
   own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
   group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
-- Ottelu (#168), the athletics match, plays published versions of the field events in a frame,
-  unchanged (`LAJIT` in its newest `games/ottelu/v<N>/index.html`): a version it names is never withdrawn
-  without a new Ottelu version first. A newer event version joins the match in a new Ottelu version. Alone, each next event loads in a
+- Ottelu (#168), the athletics match, plays published versions of its events (`LAJIT` in its newest
+  `games/ottelu/v<N>/index.html`) in a frame, unchanged. From v6 (#303, Eero's choice) it plays each
+  event's newest version by itself, read from `catalog.json`, so a new event version joins the match
+  with no new Ottelu version, and `tests/test_ottelu_v6.py` runs on that version's pull request too.
+  A new event version must still play in the match: keep `kisa.js`'s options and the race's
+  functions that Ottelu's `laji.js` and `aita.js` change, or, when it cannot, add `"ottelu": false`
+  to its `game.json` entry and make a new Ottelu version for it. A version `LAJIT` names (its
+  fallback when the catalog cannot be read) is never withdrawn without a new Ottelu version first.
+  Alone, each next event loads in a
   fresh page: a second frame in the same page took no taps on Eero's phone (see docs/making-games.md).
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
@@ -93,7 +99,8 @@ request, with the version that taught it (#181, Eero's choice).
    it. Never touch another game's keys.
 6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (1, 2, 3… in order),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
-   (the issue text) and `issue` (`eerovil/ai-pelit#<n>`).
+   (the issue text) and `issue` (`eerovil/ai-pelit#<n>`); an Ottelu event's version may add
+   `"ottelu": false` (see "What a request means").
 
 ## Online extras
 

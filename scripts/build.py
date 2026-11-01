@@ -123,7 +123,9 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path =
         # A new picture gets a new name, so no phone keeps showing an old one from its cache.
         "thumb": f"thumbs/{slug}-{hashlib.sha256(thumb.read_bytes()).hexdigest()[:8]}.webp",
         "versions": [
-            {"n": v["n"], "date": v["date"], "note": v["note"], "issue": v.get("issue")}
+            # "ottelu": false keeps an event version out of Ottelu, which plays each event's newest (#303).
+            {"n": v["n"], "date": v["date"], "note": v["note"], "issue": v.get("issue"),
+             **({"ottelu": False} if v.get("ottelu") is False else {})}
             for v in versions
         ],
     }
