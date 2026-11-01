@@ -90,17 +90,85 @@
     ]);
   }
 
+  // The shelf's order (#279): most played first (the default), newest version first (the
+  // catalog's own order, scripts/build.py), or by name. The choice is kept on the phone.
+  var SORTS = [['suosituimmat', 'Suosituimmat'], ['paivitetyt', 'Päivitetyt'], ['a-o', 'A–Ö']];
+  var SORT_KEY = 'ai-pelit:_hylly:jarjestys';
+  var sortBy = SORTS[0][0];
+  try {
+    var savedSort = localStorage.getItem(SORT_KEY);
+    if (SORTS.some(function (s) { return s[0] === savedSort; })) sortBy = savedSort;
+  } catch (e) {}
+
+  function playCount(slug) {
+    return findGroup(slug)
+      ? members(slug).reduce(function (sum, g) { return sum + (plays[g.slug] || 0); }, 0)
+      : plays[slug] || 0;
+  }
+
+  // Shelf items (a game, or a group where its newest game would be) in the chosen order. Ties
+  // keep the catalog's order, newest first.
+  function sorted(items) {
+    var at = {};
+    catalog.games.forEach(function (g, i) {
+      if (!(g.slug in at)) at[g.slug] = i;
+      if (g.group && !(g.group in at)) at[g.group] = i;
+    });
+    return items.slice().sort(function (a, b) {
+      if (sortBy === 'suosituimmat') {
+        var d = playCount(b.slug) - playCount(a.slug);
+        if (d) return d;
+      } else if (sortBy === 'a-o') {
+        var c = a.title.localeCompare(b.title, 'fi');
+        if (c) return c;
+      }
+      return at[a.slug] - at[b.slug];
+    });
+  }
+
+  function shelfItems() {
+    var items = [], shown = {};
+    catalog.games.forEach(function (game) {
+      var group = game.group && findGroup(game.group);
+      if (!group) { items.push(game); return; }
+      if (shown[group.slug]) return;
+      shown[group.slug] = true;
+      items.push(group);
+    });
+    return items;
+  }
+
+  function fillShelf(list) {
+    list.replaceChildren.apply(list, sorted(shelfItems()).map(function (item) {
+      return findGroup(item.slug) ? groupCard(item) : gameCard(item);
+    }));
+  }
+
+  // A small menu in the header, on the shelf only, so the shelf gets no taller.
+  function sortPicker() {
+    var select = el('select', { class: 'sort', 'aria-label': 'Järjestys' });
+    SORTS.forEach(function (s) { select.appendChild(el('option', { value: s[0], text: s[1] })); });
+    select.value = sortBy;
+    select.addEventListener('change', function () {
+      sortBy = select.value;
+      try { localStorage.setItem(SORT_KEY, sortBy); } catch (e) {}
+      var list = view.querySelector('.cards');
+      if (list) fillShelf(list);
+    });
+    return select;
+  }
+
+  function showSortPicker(on) {
+    var old = document.querySelector('.top .sort');
+    if (old) old.remove();
+    if (on) statusEl.parentNode.insertBefore(sortPicker(), statusEl);
+  }
+
   function renderShelf() {
     document.title = 'AI-pelit';
     var list = el('ul', { class: 'cards' });
-    var shown = {};
-    catalog.games.forEach(function (game) {
-      var group = game.group && findGroup(game.group);
-      if (!group) { list.appendChild(gameCard(game)); return; }
-      if (shown[group.slug]) return;
-      shown[group.slug] = true;
-      list.appendChild(groupCard(group));
-    });
+    fillShelf(list);
+    showSortPicker(catalog.games.length > 1);
     var rooms = el('section', { class: 'open-rooms', hidden: '' });
     view.replaceChildren(rooms, catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
     showRooms(rooms);
@@ -111,11 +179,12 @@
 
   function renderGroup(group) {
     document.title = group.title + ' · AI-pelit';
+    showSortPicker(false);
     view.replaceChildren(
       el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('h1', { text: group.title }),
       el('p', { class: 'group-desc', text: group.description }),
-      el('ul', { class: 'cards' }, members(group.slug).map(gameCard))
+      el('ul', { class: 'cards' }, sorted(members(group.slug)).map(gameCard))
     );
     loadPlays();
     loadTops();
@@ -342,9 +411,7 @@
 
   function playsText(slug) {
     // A group's card counts all its games together.
-    var n = catalog && findGroup(slug)
-      ? members(slug).reduce(function (sum, g) { return sum + (plays[g.slug] || 0); }, 0)
-      : plays[slug];
+    var n = catalog ? playCount(slug) : plays[slug];
     if (!n) return '';
     return ' · pelattu ' + n + (n === 1 ? ' kerran' : ' kertaa');
   }
@@ -354,8 +421,21 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (b) {
         if (!b || !b.games) return;
+        var changed = JSON.stringify(b.games) !== JSON.stringify(plays);
         plays = b.games;
         try { localStorage.setItem(PLAYS_KEY, JSON.stringify(plays)); } catch (e) {}
+        // New counts can change the most-played order: the shelf follows them.
+        var list = view.querySelector('.cards');
+        if (changed && sortBy === 'suosituimmat' && list) {
+          var before = Array.prototype.map.call(list.children, function (c) { return c.getAttribute('data-slug'); }).join();
+          var group = location.hash.match(/^#\/([a-z0-9-]+)/);
+          var items = group ? members(group[1]) : shelfItems();
+          if (sorted(items).map(function (i) { return i.slug; }).join() !== before) {
+            if (group) list.replaceChildren.apply(list, sorted(items).map(gameCard));
+            else fillShelf(list);
+            return;
+          }
+        }
         Array.prototype.forEach.call(view.querySelectorAll('.card[data-slug] .plays'), function (span) {
           span.textContent = playsText(span.closest('.card').getAttribute('data-slug'));
         });
@@ -380,6 +460,7 @@
 
   function renderGame(slug) {
     var game = catalog.games.filter(function (g) { return g.slug === slug; })[0];
+    showSortPicker(false);
     if (!game) {
       view.replaceChildren(el('p', { text: 'Peliä ei löytynyt.' }), el('a', { href: '#/', text: '‹ Kaikki pelit' }));
       return;
