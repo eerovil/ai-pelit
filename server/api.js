@@ -411,7 +411,7 @@ async function friendState(env, id) {
   friends.sort((x, y) => y.now - x.now);
   const { results: asking } = await env.DB.prepare(
     `SELECT p.pid, p.name FROM friend_requests r JOIN players p ON p.id = r.sender
-     WHERE r.receiver = ? AND p.status != 'rejected' AND p.pid IS NOT NULL ORDER BY r.at DESC`
+     WHERE r.receiver = ? AND r.declined = 0 AND p.status != 'rejected' AND p.pid IS NOT NULL ORDER BY r.at DESC`
   ).bind(pid).all();
   const { results: asked } = await env.DB.prepare('SELECT receiver FROM friend_requests WHERE sender = ?').bind(id).all();
   const { results: invites } = await env.DB.prepare(
@@ -506,7 +506,8 @@ async function answerFriend(env, body) {
     if ((await friendCount(env, player)) >= FRIENDS_MAX || (await friendCount(env, other.id)) >= FRIENDS_MAX) return fail(409, 'too many friends');
     await befriend(env, player, other.id);
   } else {
-    await env.DB.prepare('DELETE FROM friend_requests WHERE sender = ? AND receiver = ?').bind(other.id, pid).run();
+    // Kept until it is old, so the asking phone still sees "Pyydetty" and never a "no".
+    await env.DB.prepare('UPDATE friend_requests SET declined = 1 WHERE sender = ? AND receiver = ?').bind(other.id, pid).run();
   }
   return json({ ok: true });
 }

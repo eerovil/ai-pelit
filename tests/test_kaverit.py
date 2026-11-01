@@ -31,6 +31,7 @@ class FriendsApi:
     def __init__(self):
         self.names = {}  # player id -> nickname
         self.requests = set()  # (sender id, receiver pid)
+        self.declined = set()  # requests declined: still "asked" for the sender, unseen by the receiver
         self.friends = set()  # frozenset of two player ids
         self.presence = {}  # player id -> (game, version, at)
         self.invites = []  # dicts
@@ -56,7 +57,8 @@ class FriendsApi:
         return {
             "pid": mine,
             "friends": friends,
-            "requests": [{"pid": pid_of(s), "name": self.names[s]} for s, r in self.requests if r == mine and s in self.names],
+            "requests": [{"pid": pid_of(s), "name": self.names[s]} for s, r in self.requests
+                         if r == mine and s in self.names and (s, r) not in self.declined],
             "asked": [r for s, r in self.requests if s == me],
             "invites": [{k: i[k] for k in ("id", "from", "name", "game", "version", "room")} for i in self.invites if i["to"] == me],
         }
@@ -99,9 +101,11 @@ class FriendsApi:
                 return ok({"error": "no such request"}, 404)
             if body.get("yes") and me not in self.names:
                 return ok({"error": "nickname needed"}, 403)
-            self.requests.discard((other, pid_of(me)))
             if body.get("yes"):
+                self.requests.discard((other, pid_of(me)))
                 self.friends.add(frozenset((me, other)))
+            else:
+                self.declined.add((other, pid_of(me)))
             return ok()
         if path == "friends" and req.method == "DELETE":
             other = self.by_pid(body["pid"])
@@ -273,7 +277,7 @@ def test_the_room_screen_with_friends_fits_a_phone_both_ways(phones):
     phones.api.requests.add((B, pid_of(A)))
     phones.api.friends.add(frozenset((A, "c" * 32)))
     phones.api.names["c" * 32] = "Ceci"
-    for size in ({"width": 360, "height": 740}, {"width": 740, "height": 360}):
+    for size in ({"width": 360, "height": 740}, {"width": 390, "height": 844}, {"width": 740, "height": 360}):
         host = phones("Aino", player=A, **size)
         host.click("#multi")
         host.click("#aipr-create")
@@ -313,3 +317,34 @@ def test_no_friends_no_network_traffic_in_a_game(phones):
     assert [c for c in phones.api.calls if c[1] == "presence"] == []
     assert page.locator("#aipk").count() == 0
     assert page.errors == []
+
+
+def test_a_reload_keeps_the_friend_id_and_a_declined_request_stays_quiet(phones):
+    host, guest, code = room_of_two(phones)
+    # Bertta reloads in the room: she comes back with her friend id, and Aino's ➕ is still there.
+    guest.reload()
+    guest.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 2")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on && m.fid).length === 2")
+    host.locator("#aipr-members button.fr").click()
+    guest.wait_for_selector("#aipr-friends .ask", timeout=15_000)
+    guest.locator("#aipr-friends .ask button", has_text="Ei").click()
+    guest.wait_for_function("!document.querySelector('#aipr-friends .ask')")
+    # Aino is not told: her row for Bertta still says "Pyydetty", and Bertta's shows ➕ again.
+    host.wait_for_timeout(11_000)
+    assert host.locator("#aipr-members .frs").inner_text() == "Pyydetty"
+    assert guest.locator("#aipr-members button.fr").inner_text() == "➕ Kaveriksi"
+    assert phones.api.friends == set()
+
+
+def test_the_shelf_shows_a_friend_start_playing_without_a_reload(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    shelf = phones("Aino", None, player=A, width=390, height=844)
+    shelf.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
+    shelf.wait_for_timeout(300)
+    assert shelf.locator(".friends-playing").is_hidden()
+    # Bertta opens a game; the shelf's next 30 s check shows her playing.
+    phones.api.presence[B] = ("huonetesti", 1, now_iso())
+    shelf.wait_for_selector(".friends-playing:not([hidden]) .friend", timeout=40_000)
+    assert "Pelaa: Huonetesti" in shelf.locator(".friends-playing").inner_text()
+    assert shelf.evaluate("document.documentElement.scrollWidth") <= 390

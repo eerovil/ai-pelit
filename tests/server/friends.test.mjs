@@ -55,11 +55,15 @@ test('one asks, the other accepts, and both are friends; or declines and nothing
   // Removed both ways.
   await call('DELETE', '/api/friends', { player: B, pid: PA });
   assert.deepEqual([(await state(A)).friends, (await state(B)).friends], [[], []]);
-  // Declined: the request goes, and no friendship.
+  // Declined: Bertta no longer sees it, and Aino still sees only "asked", even when she asks again.
   await ask(A, PB);
   await answer(B, PA, false);
-  assert.deepEqual([(await state(A)).asked, (await state(B)).requests, (await state(B)).friends], [[], [], []]);
-  assert.equal((await answer(B, PA, true)).status, 404);
+  assert.deepEqual([(await state(A)).asked, (await state(B)).requests, (await state(B)).friends], [[PB], [], []]);
+  assert.deepEqual((await ask(A, PB)).body, { ok: true, friends: false });
+  assert.deepEqual((await state(B)).requests, []);
+  // If Bertta changes her mind and asks Aino herself, they are friends at once.
+  assert.deepEqual((await ask(B, PA)).body, { ok: true, friends: true });
+  assert.deepEqual([(await state(A)).asked, (await state(A)).friends.map((f) => f.name)], [[], ['Bertta']]);
 });
 
 test('two phones asking each other are friends at once', async () => {
@@ -147,4 +151,26 @@ test('invites go only to a friend, one per pair, and go away when answered or ol
   await inv(A, PB);
   env.DB.raw.prepare('UPDATE invites SET at = ?').run(new Date(Date.now() - 11 * 60e3).toISOString());
   assert.deepEqual((await state(B)).invites, []);
+});
+
+test('a declined request goes away after a week, and can then be asked again', async () => {
+  const { player, state, ask, answer, env } = setup();
+  await player(A, 'Aino'); await player(B, 'Bertta');
+  await ask(A, PB); await answer(B, PA, false);
+  env.DB.raw.prepare('UPDATE friend_requests SET at = ?').run(new Date(Date.now() - 8 * 864e5).toISOString());
+  assert.deepEqual((await state(A)).asked, []);
+  await ask(A, PB);
+  assert.deepEqual((await state(B)).requests, [{ pid: PA, name: 'Aino' }]);
+});
+
+test('accepting twice at once, or answering a request already answered, is harmless', async () => {
+  const { player, state, ask, answer } = setup();
+  await player(A, 'Aino'); await player(B, 'Bertta');
+  await ask(A, PB);
+  const both = await Promise.all([answer(B, PA, true), answer(B, PA, true)]);
+  assert.ok(both.some((r) => r.status === 200));
+  assert.ok(both.every((r) => r.status === 200 || r.status === 404));
+  assert.deepEqual((await state(A)).friends.map((f) => f.name), ['Bertta']);
+  assert.equal((await answer(B, PA, false)).status, 404);
+  assert.deepEqual((await state(A)).friends.map((f) => f.name), ['Bertta']);
 });

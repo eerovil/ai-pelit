@@ -42,7 +42,7 @@ flowchart TD
   H1 --> S2
   B2 --> S2
   S2 -- Kyllä --> S3
-  S2 -- Ei --> S9[Pyyntö poistuu]
+  S2 -- Ei --> S9[Pyyntö piiloon: kysyjä näkee yhä Pyydetty]
   H8 --> S3
   B1 --> S4
   S3 --> H1
@@ -76,3 +76,4 @@ flowchart TD
 - **Missä kukin on nyt**: the `presence` table; a row older than 90 s means the friend is not playing now, its time shows as "nähty … sitten".
 - **📨 Kutsu kaveri**: a button on the room screen, shown on a phone with friends; it lists them, playing ones first, and sends `POST /api/invites`.
 - **Banneri: kaveripyyntö tai kutsu**: drawn by `public/back.js` in a game and by `public/app.js` on the shelf, from the requests and invites in the presence answer.
+- **Pyyntö piiloon: kysyjä näkee yhä Pyydetty**: "Ei" marks the request declined (`migrations/0008_friend_request_declined.sql`); the asked phone no longer sees it, and the asking phone keeps "Pyydetty" until it is a week old, so a "no" is never shown.
