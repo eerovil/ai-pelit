@@ -56,7 +56,7 @@ def picking_saves_for_every_event(site, context, url, slug):
 
 
 def wears_what_another_event_picked(site, context, url, slug):
-    # Picked in Keihäs v8 (or Ottelu): worn here too, over this game's own older choice.
+    # Picked in Keihäs v9 (or Ottelu): worn here too, over this game's own older choice.
     page = open_game(site, context, url, {SHARED: "suomi", f"ai-pelit:_asut:{slug}": "luuranko"})
     assert page.text_content("#asu") == "👕 Asu: Sinivalkoinen"
     page.context.close()

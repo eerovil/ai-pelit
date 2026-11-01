@@ -71,7 +71,7 @@
 <script src="../../../rooms.js" data-game="keihas" data-min="2" data-max="8"></script>
 <script src="../../../lib/yleisurheilu-5/kisa.js"></script>
 <script src="../../../lib/aanet-2/aanet.js"></script>
-<script src="../../../outfits.js" data-game="keihas" data-share="yleisurheilu"></script>
+<script src="../../../outfits.js" data-game="keihas"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -265,7 +265,7 @@ const r2 = n => Math.round(n * 100) / 100;
 function press(k) {
   unlock();
   if (!th || !th.mine) return;
-  flash[k] = 0.09;
+  if (padOn(k)) flash[k] = 0.09;  // v8 (#313): a pad that does nothing now does not light up
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
   if (th.phase !== 'ready' && th.phase !== 'run') return;
   if (th.phase === 'ready') { th.phase = 'run'; th.t = 0; }
@@ -280,7 +280,7 @@ let aimPtr = null;
 function startAim(ptr) {
   unlock();
   if (!th || !th.mine) return;
-  flash[3] = 0.09;
+  if (padOn(3)) flash[3] = 0.09;
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
   if (th.phase !== 'ready' && th.phase !== 'run') return;
   th.phase = 'aim'; th.aimT = 0; th.ang = AIM0; aimPtr = ptr; th.idle = 0;
@@ -581,12 +581,13 @@ function drawAthlete(a, px, base, s, col, name, o = null, x = window.x2d) {
 }
 // v2 (#158): outfits. Everyone without one (the computer, a phone on v1) runs in v1's look, a
 // shirt in their own colour. 'perus' is that look too, in the shirt colour the meet gave them.
-// v8 (#311): the athletics events' common set, and one choice for all of them (outfits.js
-// data-share), so the outfit picked here is worn in every event and in Ottelu.
-const OUTFITS = AiPelitOutfits.yleisurheilu;
+const OUTFITS = [
+  { id: 'perus', name: 'Perus', skin: '#c98a62', hair: 'rgba(0,0,0,.25)', top: null, bottom: '#1b1b2f', shoe: '#fff' },
+  { id: 'suomi', name: 'Sinivalkoinen', skin: '#e8b48f', hair: '#e2c27a', top: '#f4f6fa', bottom: '#1f4fa8', shoe: '#1f4fa8' },
+  { id: 'musta', name: 'Musta', skin: '#8d5a3b', hair: '#111', top: '#1e1e22', bottom: '#1e1e22', shoe: '#f2c230' },
+  { id: 'vihrea', name: 'Vihreä', skin: '#f0c5a0', hair: '#9a4a22', top: '#27a35a', bottom: '#f4f6fa', shoe: '#27a35a' },
+];
 function plain(col) { return Object.assign({}, OUTFITS[0], { top: col }); }
-// How an athlete with outfit id looks, its shirt col when it wears none or 'perus'.
-function kit(id, col) { return looks({ fit: id, col }) || plain(col); }
 function looks(t) {
   if (!t || !t.fit) return null;
   const o = AiPelitOutfits.get(t.fit);
@@ -714,16 +715,24 @@ function pads() {
   return [{ k: 3, x: 6, y, w: W - 12, h: th3 },
     { k: 1, x: 6, y: fy, w: W / 2 - 9, h: fh }, { k: 2, x: W / 2 + 3, y: fy, w: W / 2 - 9, h: fh }];
 }
+// v8 (#313): whether pad k does something now. The feet run only before the throw is pressed:
+// while aiming a step adds no speed, so they show greyed out (v7 flashed them).
+function padOn(k) {
+  if (!th || !th.mine) return false;
+  if (k === 3) return th.phase === 'ready' || th.phase === 'run' || th.phase === 'aim';
+  return th.phase === 'ready' || th.phase === 'run';
+}
 function drawControls() {
   if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
   const live = th && th.mine && (th.phase === 'ready' || th.phase === 'run' || th.phase === 'aim');
   const next = th && th.foot === 1 ? 2 : 1;
   for (const b of pads()) {
+    const on = padOn(b.k);
     const held = b.k === 3 && live && th.phase === 'aim';
-    const glow = b.k !== 3 && live && th.phase !== 'aim' && b.k === next;
-    x.fillStyle = !live ? '#22385a' : flash[b.k] > 0 || held ? '#ffe08a' : b.k === 3 ? '#ffb703' : glow ? '#4f7fc4' : '#2c4a75';
+    const glow = b.k !== 3 && on && b.k === next;
+    x.fillStyle = !on ? '#22385a' : flash[b.k] > 0 || held ? '#ffe08a' : b.k === 3 ? '#ffb703' : glow ? '#4f7fc4' : '#2c4a75';
     rr(b.x, b.y, b.w, b.h, 18); x.fill();
-    x.fillStyle = !live ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    x.fillStyle = !on ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
     const label = b.k === 1 ? 'Vasen' : b.k === 2 ? 'Oikea' : held ? 'Päästä irti!' : 'Heitä';
     if (b.k === 3 && b.w > b.h * 2) {
       // The wide throw bar: icon and word on one line.

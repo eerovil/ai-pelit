@@ -43,6 +43,20 @@
       "note": "Peliä voi pelata myös vaakatasossa: kaistat ja napit levenevät koko näytön levyisiksi, pisteet, taso ja sydämet ovat yhdellä rivillä ylhäällä, ja valikko mahtuu ruutuun ilman vierittämistä.",
       "request": "Add landscape to all games where it's possible",
       "issue": "eerovil/ai-pelit#95"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-01",
+      "note": "Osuma-alue on puolitoista kertaa leveämpi: painallus saa olla aiempaa enemmän etuajassa tai myöhässä, ja \"Nappiin!\" tulee myös hieman väljemmin.",
+      "request": "Pianopeli, isompi hit box",
+      "issue": "eerovil/ai-pelit#316"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-01",
+      "note": "Valikossa on Ei häviötä -kytkin: silloin soitat yhden kappaleen loppuun ilman sydämiä, ja tulos näytetään mutta ei mene ennätykseksi eikä tuloslistalle.",
+      "request": "Piano: lisää no fail moodi",
+      "issue": "eerovil/ai-pelit#318"
     }
   ]
 }

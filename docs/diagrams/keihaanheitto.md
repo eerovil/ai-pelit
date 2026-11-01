@@ -20,7 +20,9 @@ From v2 (#158) the player's athlete wears the outfit picked under "👕 Asu" in 
 
 v7 (#297) plays as v6 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
 
-v8 (#311) plays as before with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/keihas/v8/index.html`, `asut.md`).
+v8 (#313) plays as v7, but a pad that does nothing right then is greyed out and does not light up when pressed: while "Heitä" is held the feet add no speed, so they show grey (v7 flashed them). `padOn()` in `games/keihas/v8/index.html` says which pads are on, and both `drawControls()` and the presses read it; see `yleisurheilu-napit.md`.
+
+v9 (#311) plays as v8 with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/keihas/v9/index.html`, `asut.md`).
 
 ```mermaid
 flowchart TD

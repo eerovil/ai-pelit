@@ -162,12 +162,12 @@ const secs = m => m === null || m === undefined ? '–' : m.toFixed(2).replace('
 // game.json entry says `"ottelu": false` is left out. `v` is the newest when v7 was made, played
 // when the catalog cannot be read; a match keeps the versions it started with (M.v).
 const LAJIT = {
-  aitajuoksu: { v: 9, name: '100 m aidat', pts: track(9.23076, 26.7, 1.835), fmt: secs, adapter: 'aita.js' },
-  pituushyppy: { v: 9, name: 'Pituushyppy', pts: m => table(0.14354, 220, 1.40)(Math.round(m * 100)) },
+  aitajuoksu: { v: 10, name: '100 m aidat', pts: track(9.23076, 26.7, 1.835), fmt: secs, adapter: 'aita.js' },
+  pituushyppy: { v: 10, name: 'Pituushyppy', pts: m => table(0.14354, 220, 1.40)(Math.round(m * 100)) },
   kuula: { v: 3, name: 'Kuulantyöntö', pts: table(51.39, 1.5, 1.05) },
   korkeushyppy: { v: 6, name: 'Korkeushyppy', pts: m => table(0.8465, 75, 1.42)(Math.round(m * 100)) },
-  seivashyppy: { v: 6, name: 'Seiväshyppy', pts: m => table(0.2797, 100, 1.35)(Math.round(m * 100)) },
-  keihas: { v: 8, name: 'Keihäänheitto', pts: table(10.14, 7, 1.08) },
+  seivashyppy: { v: 7, name: 'Seiväshyppy', pts: m => table(0.2797, 100, 1.35)(Math.round(m * 100)) },
+  keihas: { v: 9, name: 'Keihäänheitto', pts: table(10.14, 7, 1.08) },
   moukari: { v: 6, name: 'Moukarinheitto', pts: table(13.0449, 7, 1.05) },
 };
 // The versions v4 and v5 played: a match saved by v5 goes on with them.

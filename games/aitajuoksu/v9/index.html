@@ -73,7 +73,7 @@
     Hyppää aidan yli ylänapista juuri ennen aitaa. Varaslähdöstä keltainen kortti, toisesta punainen ja ulos.</p>
 </div>
 <script src="../../../rooms.js" data-game="aitajuoksu" data-min="2" data-max="6"></script>
-<script src="../../../outfits.js" data-game="aitajuoksu" data-share="yleisurheilu"></script>
+<script src="../../../outfits.js" data-game="aitajuoksu"></script>
 <script src="../../../lib/aanet-2/aanet.js"></script>
 <script>
 'use strict';
@@ -564,9 +564,12 @@ function drawRunner(r, px, base) {
 }
 // v5 (#158): outfits. The player's own kit, or a friend's in a room; the computer's runners keep
 // v4's look (the lane's shirt colour), which is the 'perus' kit with its shirt left to the lane.
-// v9 (#311): the athletics events' common set, and one choice for all of them (outfits.js
-// data-share), so the outfit picked here is worn in every event and in Ottelu.
-const OUTFITS = AiPelitOutfits.yleisurheilu;
+const OUTFITS = [
+  { id: 'perus', name: 'Perus', skin: '#c98a62', hair: null, top: null, bottom: '#1b1b2f', shoe: '#ffffff' },
+  { id: 'suomi', name: 'Suomi', skin: '#f0c4a0', hair: '#e2c15a', top: '#ffffff', bottom: '#003580', shoe: '#003580', stripe: '#003580' },
+  { id: 'neon', name: 'Neon', skin: '#8d5a3b', hair: '#161616', top: '#1a1a1a', bottom: '#1a1a1a', shoe: '#c8ff2e', stripe: '#c8ff2e' },
+  { id: 'kulta', name: 'Kulta', skin: '#e0a98a', hair: '#6b3e26', top: '#e3b23c', bottom: '#f4f1e8', shoe: '#e3b23c' },
+];
 let outfit = AiPelitOutfits.setup({
   outfits: OUTFITS,
   draw(g, o, w, h) {
@@ -751,15 +754,27 @@ function pads() {
   return [{ k: 3, x: 6, y, w: W - 12, h: th3 },
     { k: 1, x: 6, y: fy, w: W / 2 - 9, h: fh }, { k: 2, x: W / 2 + 3, y: fy, w: W / 2 - 9, h: fh }];
 }
+// v9 (#313): whether pad k does something now, as step() and jump() decide. The feet: at the
+// start (a step there is a false start) and while running on the ground; not while the whistle
+// blows, in the air over a hurdle, stumbling or past the line. The jump: only running on the
+// ground, and never in a race with no hurdles. Neither for a runner with a red card. Off, a pad shows greyed out and does not flash
+// (v8 flashed every pad at every tap, and greyed out only the jump with no hurdles).
+function padOn(k) {
+  if (!race || !me || race.phase === 'done') return false;
+  const running = race.phase === 'run' && me.fin === null && me.y <= 0 && me.stum <= 0;
+  if (me.card >= 2) return false;  // a red card is out of the race: no step, no jump
+  if (k === 3) return race.hurdles && running && me.vy <= 0;
+  return race.phase === 'cd' || running;
+}
 function drawControls() {
   if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
   const next = me && me.foot === 1 ? 2 : 1;
   for (const b of pads()) {
-    const glow = b.k !== 3 && race && race.phase === 'run' && me && me.fin === null && b.k === next;
-    const flat = b.k === 3 && race && !race.hurdles; // nothing to jump: the jump pad steps back
-    x.fillStyle = flash[b.k] > 0 ? '#ffe08a' : flat ? '#22385a' : b.k === 3 ? '#ffb703' : glow ? '#4f7fc4' : '#2c4a75';
+    const on = padOn(b.k);
+    const glow = b.k !== 3 && on && race.phase === 'run' && b.k === next;
+    x.fillStyle = !on ? '#22385a' : flash[b.k] > 0 ? '#ffe08a' : b.k === 3 ? '#ffb703' : glow ? '#4f7fc4' : '#2c4a75';
     rr(b.x, b.y, b.w, b.h, 18); x.fill();
-    x.fillStyle = flat ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    x.fillStyle = !on ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
     if (b.k === 3 && b.w > b.h * 2) {
       // v8: the wide jump bar: icon and word on one line.
       x.font = '900 22px system-ui'; x.fillText('⤒ Hyppää', b.x + b.w / 2, b.y + b.h / 2 + 8);
@@ -792,6 +807,7 @@ function drawResults() {
 function press(k) {
   unlock();
   if (!race || !me || race.phase === 'done') return;
+  if (!padOn(k)) return;  // v9: an idle pad does nothing and does not flash
   flash[k] = 0.09;
   if (k === 3) jump(me); else step(me, k);
 }

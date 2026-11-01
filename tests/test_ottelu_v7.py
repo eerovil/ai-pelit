@@ -109,9 +109,9 @@ def test_a_kept_match_with_the_outfit_button_fits_a_short_phone(site, context):
     assert page.errors == []
 
 
-GAMES = {"ottelu": "games/ottelu/v7/", "keihas": "games/keihas/v8/", "kuula": "games/kuula/v3/",
-         "aitajuoksu": "games/aitajuoksu/v9/", "pituushyppy": "games/pituushyppy/v9/",
-         "korkeushyppy": "games/korkeushyppy/v6/", "seivashyppy": "games/seivashyppy/v6/", "moukari": "games/moukari/v6/"}
+GAMES = {"ottelu": "games/ottelu/v7/", "keihas": "games/keihas/v9/", "kuula": "games/kuula/v3/",
+         "aitajuoksu": "games/aitajuoksu/v10/", "pituushyppy": "games/pituushyppy/v10/",
+         "korkeushyppy": "games/korkeushyppy/v6/", "seivashyppy": "games/seivashyppy/v7/", "moukari": "games/moukari/v6/"}
 
 
 @pytest.mark.parametrize("order", [

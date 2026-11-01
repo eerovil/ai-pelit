@@ -23,8 +23,6 @@
   #cont.hidden{display:none}
   #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
   #multi:active{box-shadow:0 1px 0 #3a7894}
-  #asu{font-size:16px;padding:9px 18px;background:#3d5a80;color:#fff;box-shadow:0 3px 0 #24364f}
-  #asu:active{box-shadow:0 1px 0 #24364f}
   #stats{margin:0;font-size:14px;color:#b9cfe0}
   .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
   .help.side{display:none}
@@ -40,11 +38,10 @@
     #stats{grid-row:4}
     .help{grid-row:5}
     #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
-    #go,#cont,#multi,#asu{grid-column:2;justify-self:stretch}
+    #go,#cont,#multi{grid-column:2;justify-self:stretch}
     #go{grid-row:1 / span 2;align-self:center}
     #cont{grid-row:3;align-self:center}
-    #multi{grid-row:4;align-self:start;padding:12px 14px;white-space:nowrap}
-    #asu{grid-row:5;align-self:start}
+    #multi{grid-row:4 / span 2;align-self:start;padding:12px 14px;white-space:nowrap}
     .help{margin:0;display:none}
     .help.side{display:block}
   }
@@ -60,7 +57,6 @@
   <button id="go">Kisaan!</button>
   <button id="cont" class="hidden">Jatka kisaa</button>
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
-  <button id="asu">👕 Asu</button>
   <p id="stats"></p>
   <p class="help">Ota vauhtia painamalla vasenta ja oikeaa jalkaa vuorotellen. Paina Istuta, kun olet
     vihreällä alueella, ja pidä pohjassa: jalat nousevat. Päästä irti, kun seiväs on suorassa.
@@ -71,12 +67,10 @@
 <script src="../../../rooms.js" data-game="seivashyppy" data-min="2" data-max="8"></script>
 <script src="../../../lib/yleisurheilu-5/kisa.js"></script>
 <script src="../../../lib/yleisurheilu-5/korkeus.js"></script>
-<script src="../../../outfits.js" data-game="seivashyppy" data-share="yleisurheilu"></script>
 <script src="../../../lib/aanet-2/aanet.js"></script>
 <script>
 'use strict';
-const c = document.getElementById('c');
-let x = c.getContext('2d');
+const c = document.getElementById('c'), x = c.getContext('2d');
 const menu = document.getElementById('menu');
 const R = window.AiPelitRooms;
 
@@ -186,9 +180,9 @@ const K = AiPelitKisa.meet({
   spread: [0.3, 0.2, 0.1, 0.05, 0, -0.1, -0.15, -0.2, -0.3, -0.4, -0.5], jitter: 0.16,
   cpu: cpuTry, turn: newTurn, clear: () => { th = null; }, menu: showMenu, fmt,
   live: ['p', 'pl', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä tulosta',
-  fit: () => outfit.id, started: () => menu.classList.add('hidden'),
-  // v3 (#176): the medal ceremony at the end, a chime per medal; v6 (#311): in their outfits.
-  look: r => kit(r.fit, r.col),
+  started: () => menu.classList.add('hidden'),
+  // v3 (#176): the medal ceremony at the end, the jumpers in their own kit, a chime per medal.
+  look: () => ({ skin: '#c98a62', bottom: '#1b1b2f', shoe: '#fff', hair: '#3a2616' }),
   chime: i => {
     // v4: a steel-drum run per medal, higher for a better one, and applause for the gold.
     if (S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 })) { if (i === 0) S.play('aplodit', { delay: 0.6, vol: 0.7 }); return; }
@@ -289,7 +283,7 @@ const r2 = n => Math.round(n * 100) / 100;
 function press(k) {
   unlock();
   if (!th || !th.mine) return;
-  flash[k] = 0.09;
+  if (padOn(k)) flash[k] = 0.09;  // v6 (#313): a pad that does nothing now does not light up
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
   if (th.phase !== 'ready' && th.phase !== 'run') return;
   if (th.phase === 'ready') { th.phase = 'run'; th.t = 0; }
@@ -304,7 +298,7 @@ let holdPtr = null;
 function hold(ptr) {
   unlock();
   if (!th || !th.mine) return;
-  flash[3] = 0.09;
+  if (padOn(3)) flash[3] = 0.09;
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
   if (th.phase === 'pole') { th.held = true; holdPtr = ptr; return; }
   // Standing at the start, or still well short of the green zone, a press is a stray tap (skipping
@@ -494,10 +488,10 @@ function drawScene(dt) {
   drawPit(sx, sy, s);
   // The vaulter.
   if (th) {
-    const t = thrower(th.id), look = kit(t && t.fit, t ? t.col : COLORS[0]), name = t ? (th.mine ? 'Sinä' : t.name) : '';
-    if (th.phase === 'pole') drawOnPole(th, sx, sy, s, look);
-    else if ((th.phase === 'fly' || th.phase === 'land') && th.fly) drawFlying(th, sx, sy, s, look);
-    else drawRunner(th, sx(th.x), groundY, s, look, name);
+    const t = thrower(th.id), col = t ? t.col : COLORS[0], name = t ? (th.mine ? 'Sinä' : t.name) : '';
+    if (th.phase === 'pole') drawOnPole(th, sx, sy, s, col);
+    else if ((th.phase === 'fly' || th.phase === 'land') && th.fly) drawFlying(th, sx, sy, s, col);
+    else drawRunner(th, sx(th.x), groundY, s, col, name);
   }
   // v5 (#297): with friends, the others stand by and cheer.
   K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 16, h: 34 });
@@ -540,48 +534,23 @@ function drawPole(x0, y0, x1, y1, bend, s) {
   x.beginPath(); x.moveTo(x0, y0); x.quadraticCurveTo(cx, cy, x1, y1); x.stroke();
 }
 // A body by its shoulders and an angle (0 head up, π head down), the legs bent by tuck (0 straight).
-function drawBody(shX, shY, ang, tuck, s, o, arms) {
+function drawBody(shX, shY, ang, tuck, s, col, arms) {
   const lw = Math.max(2.5, 0.11 * s), dir = [Math.sin(ang), Math.cos(ang)];  // from shoulders to hips, in screen terms
   const hipX = shX - dir[0] * 0.55 * s, hipY = shY + dir[1] * 0.55 * s;
   const knee = [hipX - Math.sin(ang - tuck) * 0.46 * s, hipY + Math.cos(ang - tuck) * 0.46 * s];
   const foot = [knee[0] - Math.sin(ang + tuck * 0.4) * 0.46 * s, knee[1] + Math.cos(ang + tuck * 0.4) * 0.46 * s];
   x.lineCap = 'round'; x.lineJoin = 'round';
-  const legSkin = o.halloween ? o.bottom : o.skin;
-  const line = (pts, c2, w) => {
-    x.strokeStyle = c2; x.lineWidth = w; x.beginPath(); x.moveTo(...pts[0]); pts.slice(1).forEach(q => x.lineTo(...q)); x.stroke();
-    // A skeleton's bones, pale along each dark limb.
-    if (o.bones && c2 !== o.skin) { x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.3); x.stroke(); }
-  };
-  // A cape trails from the shoulders, down past the hips.
-  if (o.cape) {
-    x.fillStyle = o.cape; x.beginPath(); x.moveTo(shX, shY);
-    x.lineTo(hipX - 0.3 * s, hipY + 0.25 * s); x.lineTo(hipX, hipY); x.closePath(); x.fill();
-  }
-  const fa = [hipX, hipY], fk = [knee[0] - 0.05 * s, knee[1]], ff = [foot[0] - 0.05 * s, foot[1]];
-  line([fa, fk, ff], shade(legSkin, 0.84), lw);
-  x.fillStyle = o.farShoe || shade(o.shoe, 0.6); x.beginPath(); x.arc(ff[0], ff[1], Math.max(2, 0.06 * s), 0, 7); x.fill();
-  x.strokeStyle = o.top; x.lineWidth = lw * 2.1;
+  x.strokeStyle = '#a86f4c'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(knee[0] - 0.05 * s, knee[1]); x.lineTo(foot[0] - 0.05 * s, foot[1]); x.stroke();
+  x.strokeStyle = col; x.lineWidth = lw * 2.1;
   x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(shX, shY); x.stroke();
-  if (o.bones) {
-    // A skeleton's ribs and spine, pale on the dark suit.
-    x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.35);
-    const nx = dir[1] * lw * 0.9, ny = dir[0] * lw * 0.9;
-    x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(shX, shY);
-    [0.45, 0.62, 0.79].forEach(k => { const rx = hipX + (shX - hipX) * k, ry = hipY + (shY - hipY) * k; x.moveTo(rx - nx, ry - ny); x.lineTo(rx + nx, ry + ny); });
-    x.stroke();
-  }
-  line([[hipX, hipY], knee, foot], legSkin, lw);
-  x.fillStyle = o.shoe; x.beginPath(); x.arc(foot[0], foot[1], Math.max(2, 0.06 * s), 0, 7); x.fill();
-  x.strokeStyle = o.bottom; x.lineWidth = lw * 1.6;
+  x.strokeStyle = '#c98a62'; x.lineWidth = lw;
+  x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(knee[0], knee[1]); x.lineTo(foot[0], foot[1]); x.stroke();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
   x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(hipX + (knee[0] - hipX) * 0.35, hipY + (knee[1] - hipY) * 0.35); x.stroke();
-  if (arms) line([[shX, shY], arms], o.skin, lw);
+  if (arms) { x.strokeStyle = '#c98a62'; x.lineWidth = lw; x.beginPath(); x.moveTo(shX, shY); x.lineTo(arms[0], arms[1]); x.stroke(); }
   const hx = shX + dir[0] * 0.18 * s, hy = shY - dir[1] * 0.18 * s;
-  // A costume's head turns with the body, so the witch's hat points away from it upside down too.
-  if (o.head) { x.save(); x.translate(hx, hy); x.rotate(ang); AiPelitOutfits.head(x, o.head, 0, 0, 0.13 * s, 1); x.restore(); }
-  else {
-    x.fillStyle = o.skin; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
-    if (o.hair) { x.fillStyle = o.hair; x.beginPath(); x.arc(hx, hy, 0.13 * s, Math.PI * 0.9 + ang, Math.PI * 1.9 + ang); x.fill(); }
-  }
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
   return [hipX, hipY];
 }
 // Where the vaulter is on the pole tau s after the plant (metres): the hips rise as the run lifts them;
@@ -593,13 +562,13 @@ function posePole(a, tau) {
   const bend = 0.9 * Math.min(1, a.v / 9) * Math.sin(Math.PI * u);
   return { hip: [handX - 0.55 * Math.sin(body) * 0.3, hy], hand: [handX, Math.max(1.6, handY)], body, bend };
 }
-function drawOnPole(a, sx, sy, s, o) {
+function drawOnPole(a, sx, sy, s, col) {
   const p = posePole(a, a.tau);
   drawPole(sx(0), sy(-0.15), sx(p.hand[0]), sy(p.hand[1]), p.bend, s);
   const shX = sx(p.hand[0]) + Math.sin(p.body) * 0.1 * s, shY = sy(p.hand[1]) + (Math.cos(p.body) > 0 ? 0.22 : -0.1) * s;
-  drawBody(shX, shY, p.body, 0.3 + 0.9 * a.sw * (1 - Math.min(1, a.tau / T_POLE)), s, o, [sx(p.hand[0]), sy(p.hand[1])]);
+  drawBody(shX, shY, p.body, 0.3 + 0.9 * a.sw * (1 - Math.min(1, a.tau / T_POLE)), s, col, [sx(p.hand[0]), sy(p.hand[1])]);
 }
-function drawFlying(a, sx, sy, s, o) {
+function drawFlying(a, sx, sy, s, col) {
   const f = a.fly;
   // The pole, let go, falls back behind the box.
   const k = Math.min(1, f.pt / 0.8);
@@ -607,38 +576,10 @@ function drawFlying(a, sx, sy, s, o) {
   // Over the bar face down-ish, then onto the back on the mat.
   const ang = f.down ? Math.PI * 1.5 : f.b0 + (Math.PI * 1.5 - f.b0) * f.rot;
   const shX = sx(f.hx) + Math.sin(ang) * 0.55 * s, shY = sy(f.hy) - Math.cos(ang) * 0.55 * s;
-  drawBody(shX, shY, ang, f.down ? 0.8 : 0.2, s, o);
+  drawBody(shX, shY, ang, f.down ? 0.8 : 0.2, s, col);
 }
-// v6 (#311): outfits, one choice for every athletics event (outfits.js data-share). Everyone
-// without one (the computer, a friend on an older version) wears v5's kit in the shirt colour the
-// meet gave them; so does 'perus'.
-const PLAIN = { skin: '#c98a62', hair: 'rgba(0,0,0,.25)', bottom: '#1b1b2f', shoe: '#fff', farShoe: '#222', cape: null, head: null };
-function kit(id, col) {
-  const o = id ? AiPelitOutfits.get(id) : null;
-  return !o || !o.top ? Object.assign({}, PLAIN, { top: col }) : o;
-}
-function shade(hex, k) {
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
-  const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v * k)));
-  return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1);
-}
-let outfit = AiPelitOutfits.setup({
-  outfits: AiPelitOutfits.yleisurheilu,
-  draw(g, o, w, h) {
-    // Standing at the end of the run, the pole held up behind.
-    const keep = x; x = g;
-    try { drawRunner({ v: 0, ph: 0, x: TAKEOFF, phase: 'land', mine: false }, w * 0.45, h * 0.94, h * 0.44, kit(o.id, COLORS[0]), ''); }
-    finally { x = keep; }
-  },
-  change(o) {
-    outfit = o; showAsu();
-    // The kept solo meet wears it too; a room's host is told when the next round starts.
-    if (K.comp && !isNet()) K.comp.throwers.forEach(t => { if (t.p === 'me') t.fit = o.id; });
-  },
-});
-function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
 // A vaulter running to the right with the pole, its tip lowering as the box comes near.
-function drawRunner(a, px, base, s, o, name) {
+function drawRunner(a, px, base, s, col, name) {
   if (px < -80 || px > SW + 80) return;
   const lw = Math.max(2.5, 0.11 * s);
   const moving = a.v > 0.3, stopped = a.phase === 'land' || a.phase === 'done';
@@ -661,49 +602,31 @@ function drawRunner(a, px, base, s, o, name) {
     x.beginPath(); x.moveTo(ox, oy); x.lineTo(k[0], k[1]); x.lineTo(e[0], e[1]); x.stroke();
     return e;
   };
-  const bone = c2 => { if (o.bones && c2 !== o.skin) { x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.3); x.stroke(); } };
   x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(px, base, 0.35 * s, 0.06 * s, 0, 0, 7); x.fill();
-  // A cape flies back from the shoulders, further the more the runner leans.
-  if (o.cape) {
-    const fl = 0.45 + Math.max(0, lean) * 0.4;
-    x.fillStyle = o.cape; x.beginPath(); x.moveTo(neckX, neckY);
-    x.lineTo(neckX - (0.2 + fl) * s, neckY + (0.75 - fl * 0.5) * s); x.lineTo(hipX - 0.12 * s, hipY + 0.05 * s); x.closePath(); x.fill();
-  }
-  const legSkin = o.halloween ? o.bottom : o.skin;
-  const back = limb(neckX, neckY + 0.05 * s, [Math.PI * 0.75, Math.PI * 0.45], 0.3 * s, shade(o.skin, 0.84)); bone(shade(o.skin, 0.84));
-  const far = limb(hipX, hipY, legs[1], L, shade(legSkin, 0.84)); bone(shade(legSkin, 0.84));
-  x.fillStyle = o.farShoe || shade(o.shoe, 0.6); x.beginPath(); x.ellipse(far[0] + 0.06 * s, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
-  x.strokeStyle = o.top; x.lineWidth = lw * 2.1;
+  const back = limb(neckX, neckY + 0.05 * s, [Math.PI * 0.75, Math.PI * 0.45], 0.3 * s, '#a86f4c');
+  const far = limb(hipX, hipY, legs[1], L, '#a86f4c');
+  x.fillStyle = '#222'; x.beginPath(); x.ellipse(far[0] + 0.06 * s, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = col; x.lineWidth = lw * 2.1;
   x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(neckX, neckY); x.stroke();
-  if (o.bones) {
-    // A skeleton's ribs and spine, pale on the dark suit.
-    x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.35);
-    x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(neckX, neckY);
-    [0.45, 0.62, 0.79].forEach(k => { const rx = hipX + (neckX - hipX) * k, ry = hipY + (neckY - hipY) * k; x.moveTo(rx - lw * 0.9, ry); x.lineTo(rx + lw * 0.9, ry); });
-    x.stroke();
-  }
-  const near = limb(hipX, hipY, legs[0], L, legSkin); bone(legSkin);
-  x.fillStyle = o.shoe; x.beginPath(); x.ellipse(near[0] + 0.06 * s, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
-  x.strokeStyle = o.bottom; x.lineWidth = lw * 1.6;
+  const near = limb(hipX, hipY, legs[0], L, '#c98a62');
+  x.fillStyle = '#fff'; x.beginPath(); x.ellipse(near[0] + 0.06 * s, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); x.fill();
+  x.strokeStyle = '#1b1b2f'; x.lineWidth = lw * 1.6;
   x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); x.stroke();
-  const hand = limb(neckX, neckY + 0.05 * s, [Math.PI * 0.35, Math.PI * 0.62], 0.3 * s, o.skin); bone(o.skin);
+  const hand = limb(neckX, neckY + 0.05 * s, [Math.PI * 0.35, Math.PI * 0.62], 0.3 * s, '#c98a62');
   // The pole: carried high at the start of the run, lowered to the box near the take-off.
   const near2box = Math.max(0, Math.min(1, (a.x - (TAKEOFF - 12)) / 12));
   const pa = (stopped ? 0.2 : 0.8 - 0.6 * near2box);
   const tipX = back[0] + Math.cos(pa) * PL * 0.8 * s, tipY = back[1] - Math.sin(pa) * PL * 0.8 * s;
   const endX = back[0] - Math.cos(pa) * PL * 0.2 * s, endY = back[1] + Math.sin(pa) * PL * 0.2 * s;
   drawPole(tipX, tipY, endX, endY, 0, s);
-  x.fillStyle = o.skin; x.beginPath(); x.arc(hand[0], hand[1], 0.05 * s, 0, 7); x.fill();
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hand[0], hand[1], 0.05 * s, 0, 7); x.fill();
   const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
-  if (o.head) AiPelitOutfits.head(x, o.head, hx, hy, 0.13 * s, 1);
-  else {
-    x.fillStyle = o.skin; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
-    x.fillStyle = o.hair || 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
-  }
+  x.fillStyle = '#c98a62'; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
   if (s > 18 && name) {
     x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
     x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
-    const lab = a.mine ? '▼ Sinä' : name, ly = hy - 0.62 * s - (o.head === 'witch' ? 0.2 * s : 0);
+    const lab = a.mine ? '▼ Sinä' : name, ly = hy - 0.62 * s;
     x.strokeText(lab, hx, ly); x.fillStyle = a.mine ? '#ffd166' : '#fff'; x.fillText(lab, hx, ly);
   }
 }
@@ -795,17 +718,26 @@ function pads() {
   return [{ k: 3, x: 6, y, w: W - 12, h: th3 },
     { k: 1, x: 6, y: fy, w: W / 2 - 9, h: fh }, { k: 2, x: W / 2 + 3, y: fy, w: W / 2 - 9, h: fh }];
 }
+// v6 (#313): whether pad k does something now, as press() and hold() decide. The feet run only up
+// to the plant; the plant pad wakes once the run nears the box (PLANT_FROM), as Korkeushyppy's jump
+// does, and stays on while on the pole. Off, a pad shows greyed out and does not flash.
+function padOn(k) {
+  if (!th || !th.mine) return false;
+  if (k === 3) return th.phase === 'pole' || (th.phase === 'run' && th.x >= PLANT_FROM);
+  return th.phase === 'ready' || th.phase === 'run';
+}
 function drawControls() {
   if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
   const live = th && th.mine && (th.phase === 'ready' || th.phase === 'run' || th.phase === 'pole');
   const pole = live && th.phase === 'pole', next = th && th.foot === 1 ? 2 : 1;
   const inZone = live && !pole && Math.abs(th.x - TAKEOFF) <= PLANT_OK;
   for (const b of pads()) {
+    const on = padOn(b.k);
     const held = b.k === 3 && pole && th.held;
-    const glow = b.k !== 3 && live && !pole && b.k === next;
-    x.fillStyle = !live ? '#22385a' : flash[b.k] > 0 || held ? '#ffe08a' : b.k === 3 ? (inZone ? '#7ee081' : '#ffb703') : glow ? '#4f7fc4' : '#2c4a75';
+    const glow = b.k !== 3 && on && b.k === next;
+    x.fillStyle = !on ? '#22385a' : flash[b.k] > 0 || held ? '#ffe08a' : b.k === 3 ? (inZone ? '#7ee081' : '#ffb703') : glow ? '#4f7fc4' : '#2c4a75';
     rr(b.x, b.y, b.w, b.h, 18); x.fill();
-    x.fillStyle = !live ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    x.fillStyle = !on ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
     const lab = b.k === 1 ? 'Vasen' : b.k === 2 ? 'Oikea' : !pole ? 'Istuta' : Math.abs(th.tau - T_POLE) <= PUSH_W * 0.6 ? 'Päästä irti!' : 'Pidä pohjassa';
     const icon = b.k === 3 ? (pole ? '⤴' : '⟋') : '👟';
     if (b.k === 3 && b.w > b.h * 2) {
@@ -887,12 +819,7 @@ function keptMeet() {
   return { mode: 'solo', level: k.level, heights, hi: k.hi, att: (now.rec[k.hi] || '').length + 1, turn: k.order.indexOf(k.q[0]),
     order: k.order, throwers, seq: k.seq, recent: k.recent || [] };
 }
-function soloComp(saved) {
-  // A kept meet, or an outfit changed since, wears the outfit picked now.
-  if (saved) saved.throwers.forEach(t => { if (t.p === 'me') t.fit = outfit.id; });
-  K.solo(saved);
-  menu.classList.add('hidden');
-}
+function soloComp(saved) { K.solo(saved); menu.classList.add('hidden'); }
 document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });
 document.getElementById('cont').addEventListener('click', () => {
   unlock();
@@ -900,8 +827,6 @@ document.getElementById('cont').addEventListener('click', () => {
   if (kept) soloComp(kept); else showMenu();
 });
 document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
-document.getElementById('asu').addEventListener('click', () => AiPelitOutfits.open());
-showAsu();
 resize();
 showMenu();
 requestAnimationFrame(frame);
