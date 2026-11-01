@@ -217,11 +217,11 @@ const inSight = (f, s) => Math.abs(f.lx - s.x) < VIEW_X && Math.abs(f.ly - s.y) 
 // school: how many start together; gap: the space a fish keeps from its neighbours, in metres;
 // pace: its cruising speed, m/s; stay: seconds at a spot before heading on.
 const HABITS = {
-  ahven: { school: [15, 50], gap: 1.2, pace: 0.45, stay: [10, 40] },
-  sarki: { school: [25, 80], gap: 1.4, pace: 0.45, stay: [10, 40] },
-  lahna: { school: [8, 25], gap: 1.4, pace: 0.35, stay: [20, 60] },
-  kiiski: { school: [5, 15], gap: 0.8, pace: 0.25, stay: [30, 90] },
-  kuha: { school: [3, 8], gap: 2.5, pace: 0.4, stay: [20, 60] },
+  ahven: { school: [15, 50], gap: 2.6, pace: 0.45, stay: [10, 40] },
+  sarki: { school: [25, 80], gap: 3, pace: 0.45, stay: [10, 40] },
+  lahna: { school: [8, 25], gap: 3, pace: 0.35, stay: [20, 60] },
+  kiiski: { school: [5, 15], gap: 1.6, pace: 0.25, stay: [30, 90] },
+  kuha: { school: [3, 8], gap: 4.5, pace: 0.4, stay: [20, 60] },
   made: { pace: 0.12, stay: [60, 180] },
   hauki: { pace: 0.1, stay: [60, 200], home: 25 },
 };
@@ -276,9 +276,9 @@ function stockPond(saved) {
       }
     }
   }
-  // Pike, each in its own home area in the shallows near the shore; burbot on deep bottoms.
+  // Pike, each in its own home area by a shallow spot where fish come by; burbot on deep bottoms.
   for (let i = 0; i < PIKE; i++) {
-    const a = Math.random() * Math.PI * 2, e = rnd(0.6, 0.88), px = LAKE_W / 2 + Math.cos(a) * LAKE_W / 2 * e, py = LAKE_H / 2 + Math.sin(a) * LAKE_H / 2 * e;
+    const s0 = pickSpot('hauki', -1), [px, py] = onIce(s0.x + rnd(-15, 15), s0.y + rnd(-10, 10));
     const f = newFish({ x: px, y: py, i: 0, depth: depthAt(px, py) }, 'hauki');
     f.tgt = lake.spots.reduce((b, q) => Math.hypot(q.x - px, q.y - py) < Math.hypot(b.x - px, b.y - py) ? q : b).i;
     pond.push(f);
@@ -348,17 +348,22 @@ function steer(f, dt) {
   }
   // The neighbours: apart, alongside, together. A pike near: away from it, fast.
   let n = 0, cx = 0, cy = 0, ax = 0, ay = 0, sx = 0, sy = 0, fx = 0, fy = 0;
-  for (const q of near(f, 6, nb)) {
+  for (const q of near(f, 8, nb)) {
     const dx = f.lx - q.lx, dy = f.ly - q.ly, d = Math.hypot(dx, dy) || 0.01;
-    if (q.sp === 'hauki' && d < 7) { fx += dx / d * (7 - d); fy += dy / d * (7 - d); continue; }
-    if (q.sp !== f.sp || d > 5) continue;
+    // A pike: kept a few metres off; one darting is fled from in earnest. A pike creeping up slowly
+    // is hardly noticed, which is how it gets close.
+    const fear = q.sp === 'hauki' ? (q.dart > 0 ? 6 : q.prey ? 1.5 : 3) : 0;
+    if (fear && d < fear) { fx += dx / d * (fear - d) * 2; fy += dy / d * (fear - d) * 2; continue; }
+    if (q.sp === 'hauki') continue;
+    if (q.sp !== f.sp || d > 7) continue;
     if (n >= 14) continue;
     n++; cx += q.lx; cy += q.ly; ax += q.mx || 0; ay += q.my || 0;
     if (d < h.gap) { sx += dx / d * (h.gap - d); sy += dy / d * (h.gap - d); }
     // A newer plan nearby is taken up on the way, so the school keeps together.
     if (q.stamp > f.stamp && Math.random() < dt * 0.5) { f.gx = q.gx; f.gy = q.gy; f.tgt = q.tgt; f.stamp = q.stamp; f.go = q.go; }
   }
-  if (n) { dvx += (cx / n - f.lx) * 0.12 + (ax / n) * 0.6; dvy += (cy / n - f.ly) * 0.12 + (ay / n) * 0.6; }
+  // Only a gentle pull together: a school is loose, the fish a few lengths apart.
+  if (n) { dvx += (cx / n - f.lx) * 0.04 + (ax / n) * 0.6; dvy += (cy / n - f.ly) * 0.04 + (ay / n) * 0.6; }
   dvx += sx * 0.9 + Math.sin(playT * 0.6 + f.id * 2.1) * 0.08; dvy += sy * 0.9 + Math.cos(playT * 0.5 + f.id * 1.7) * 0.08;
   if (fx || fy) { f.flee = 2; dvx += fx * 0.6; dvy += fy * 0.6; }
   // Turn towards it gradually, no faster than the fish can swim.
@@ -381,16 +386,52 @@ function swim(f, dt) {
   } else {
     travel(f, dt, HABITS[f.sp].pace);
     f.flee = Math.max(0, (f.flee || 0) - dt);
-    // A pike in wait darts at a fish passing close.
-    if (f.sp === 'hauki') {
-      if (f.dart > 0) { f.dart -= dt; const d = Math.hypot(f.px - f.lx, f.py - f.ly) || 1, st = 2.6 * dt; f.lx += (f.px - f.lx) / d * Math.min(d, st); f.ly += (f.py - f.ly) / d * Math.min(d, st); }
-      else if (Math.random() < dt * 0.2) { const q = near(f, 5, nb).find(o => o.sp !== 'hauki'); if (q) { f.dart = 0.8; f.px = q.lx; f.py = q.ly; } }
-    }
+    if (f.sp === 'hauki') hunt(f, dt);
   }
   f.d += (homeAt(f) - f.d) * Math.min(1, dt * 0.4);
 }
 // The grid is rebuilt as often as the fish steer (five times a second): enough, and cheap on a phone.
 let gridT = 0;
+// A pike hunts (on the host only): when it is hungry and a fish comes within 14 m, it creeps up
+// on it, then darts the last few metres. About one dart in three takes the fish, which is then
+// gone from the lake; a pike that has eaten rests a minute or two. A miss sends it back to wait.
+// It never takes a fish an angler is working, and keeps near its home area.
+const preyOk = (p, q) => q.sp !== 'hauki' && q.g < p.g * 0.35 && !q.look && q !== biter && !(fight && q === fight.fish) && !taken(q);
+function hunt(p, dt) {
+  p.full = Math.max(0, (p.full || 0) - dt);
+  if (p.dart > 0) {
+    p.dart -= dt;
+    const q = pond.find(o => o.id === p.prey);
+    if (!q) { p.dart = 0; return; }
+    const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01, st = 3.2 * dt;
+    p.lx += (q.lx - p.lx) / d * Math.min(d, st); p.ly += (q.ly - p.ly) / d * Math.min(d, st); p.vx = Math.sign(q.lx - p.lx) || p.vx;
+    if (d < 0.45 && !p.struck) {
+      p.struck = true;
+      if (Math.random() < 0.35 && preyOk(p, q)) { pond.splice(pond.indexOf(q), 1); p.eaten = (p.eaten || 0) + 1; p.full = rnd(60, 150); p.dart = 0; p.prey = 0; }
+    }
+    if (p.dart <= 0) { p.rest = rnd(4, 9); p.prey = 0; }
+    return;
+  }
+  p.rest = Math.max(0, (p.rest || 0) - dt);
+  if (p.full > 0 || p.rest > 0 || p.look) { p.prey = 0; return; }
+  const far = p.hx !== undefined && Math.hypot(p.lx - p.hx, p.ly - p.hy) > HABITS.hauki.home * 1.5;
+  let q = p.prey ? pond.find(o => o.id === p.prey) : null;
+  if (!q || far || !preyOk(p, q) || Math.hypot(q.lx - p.lx, q.ly - p.ly) > 16) {
+    q = null; p.prey = 0;
+    if (far || (p.lookT = (p.lookT || 0) - dt) > 0) return;
+    p.lookT = 0.5;
+    let bd = 14;
+    for (const o of near(p, 14, nb)) { const d = Math.hypot(o.lx - p.lx, o.ly - p.ly); if (d < bd && preyOk(p, o)) { bd = d; q = o; } }
+    if (!q) return;
+    p.prey = q.id;
+  }
+  // Creep up on it slowly, then dart.
+  const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01;
+  if (d < 2.5) { p.dart = 0.9; p.struck = false; return; }
+  const st = 0.5 * dt;
+  p.lx += (q.lx - p.lx) / d * st; p.ly += (q.ly - p.ly) / d * st; p.vx = Math.sign(q.lx - p.lx) || p.vx;
+  p.wx = p.lx; p.wy = p.ly;
+}
 function stepPond(dt, guest) { if (!guest && (gridT -= dt) <= 0) { gridT = 0.2; buildGrid(); } }
 
 // ---------- Shared fish in a room ----------
@@ -1487,7 +1528,13 @@ function drawIce() {
       x.beginPath(); x.arc(px, py, Math.max(2.5, (0.25 + 0.5 * Math.cbrt(f.g / 1000)) * icePx), 0, 7); x.fill();
       x.globalAlpha = 1;
       // A pike or a burbot, alone, marked with its letter.
-      if (!schooling(f.sp)) { x.font = '800 11px system-ui'; x.textAlign = 'center'; x.fillStyle = '#1d3555'; x.fillText(f.sp === 'hauki' ? 'H' : 'M', px, py - 7); }
+      if (!schooling(f.sp)) {
+        x.font = '800 11px system-ui'; x.textAlign = 'center'; x.fillStyle = f.prey ? '#e5383b' : '#1d3555';
+        x.fillText((f.sp === 'hauki' ? 'H' : 'M') + (f.eaten ? f.eaten : ''), px, py - 7);
+        // A hunting pike: a line to the fish it is after.
+        const q = f.prey && pond.find(o => o.id === f.prey);
+        if (q) { const [qx, qy] = iceXY(q.lx, q.ly); x.strokeStyle = 'rgba(229,56,59,.7)'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(px, py); x.lineTo(qx, qy); x.stroke(); }
+      }
       if (f.giant) { x.strokeStyle = '#e5383b'; x.lineWidth = 2; x.beginPath(); x.arc(px, py, 10, 0, 7); x.stroke(); }
     }
     x.font = '700 11px system-ui'; x.textAlign = 'left'; x.fillStyle = '#e5383b'; x.fillText('DEBUG: kalat näkyvät', safeL + 10, baitBtn.y + baitBtn.h + 16);
