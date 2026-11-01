@@ -98,6 +98,21 @@ test('the host speaks to all or to one; the others speak only to the host', asyn
   await room.webSocketMessage(a.server, 'x'.repeat(20000));
 });
 
+test('a voice call\'s setup (_rtc) goes from anyone to the one phone named, guest to guest too (#322)', async () => {
+  const { room, join } = setup();
+  const h = await join(H, 'Eero', true), a = await join(A, 'Aino'), b = await join(B, 'Iida');
+  await room.webSocketMessage(a.server, JSON.stringify({ t: '_rtc', to: B, k: 'offer', from: H }));
+  assert.deepEqual(b.server.last('_rtc'), { t: '_rtc', to: B, k: 'offer', from: A }); // `from` cannot be faked
+  assert.equal(h.server.last('_rtc'), undefined);
+  await room.webSocketMessage(h.server, JSON.stringify({ t: '_rtc', to: A, k: 'hi' }));
+  assert.deepEqual(a.server.last('_rtc'), { t: '_rtc', to: A, k: 'hi', from: H });
+  assert.equal(b.server.sent.filter((m) => m.t === '_rtc').length, 1);
+  // With no one named, or naming itself, it goes nowhere.
+  await room.webSocketMessage(b.server, JSON.stringify({ t: '_rtc', k: 'hi' }));
+  await room.webSocketMessage(b.server, JSON.stringify({ t: '_rtc', to: B, k: 'hi' }));
+  for (const p of [h, a, b]) assert.equal(p.server.sent.filter((m) => m.t === '_rtc' && m.from === B).length, 0);
+});
+
 test('a room takes five phones; one that drops off keeps its place and can come back', async () => {
   const { room, join } = setup();
   const h = await join(H, 'Eero', true);

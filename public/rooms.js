@@ -22,6 +22,15 @@
 // the turn ('skip'), and the phone remembers the round so its room screen offers
 // "Palaa kierrokseen".
 //
+// Voice (#322): in a room, every phone has a 🎤 chip; while it is held, the others in the room hear
+// that phone. The sound goes straight between the phones (WebRTC), each phone connected to each
+// other one; the room only passes on the calls' setup (`_rtc` messages, to one phone each), and
+// Cloudflare's TURN relay (GET /api/voice/ice) passes the sound on when two phones cannot reach
+// each other directly. Each phone may switch voice off on the room screen, and mute a player.
+// A version may move the chip with data-voice-corner="left|top-left|top-right|bottom-left|
+// bottom-right" (default: the right edge, a little above the middle) or leave voice out with
+// data-voice="off". Without a microphone, permission or connection the game plays the same.
+//
 // Friends (#324): a phone with a nickname joins with its friend id (`fid`, a hash of its secret
 // player id), and the room passes it on in `peers`. With public/kaverit.js on the page (back.js
 // loads it), the room screen shows "➕ Kaveriksi" beside each other player who has one, the
@@ -170,6 +179,7 @@
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
     net.result = ''; net.resultClass = ''; net.note = ''; lastPz = ''; net.rejoin = false;
+    voiceReset();
     show(true);
     connect();
   }
@@ -187,6 +197,7 @@
     if (ws) try { ws.close(1000, 'Poistui'); } catch (e) { /* gone */ }
     ssave(HERE, null);
     net.round = null; net.pz = [];
+    voiceReset();
     update();
     fire('leave', why || '');
     if (why) { net.error = why; show(true); } else { show(false); fire('menu'); }
@@ -197,7 +208,8 @@
     // which sends the round back if this phone is in it (after a reload or a dropped connection).
     // Until the host answers, a guest does not know whether it is in the round, so it hears none
     // of the game's messages: a phone that is not in the round never sees the round's messages.
-    if (m.t === 'you') { net.me = m.id; if (net.host) net.hostId = m.id; else { net.listening = false; sendRaw({ t: 'hello' }); } return; }
+    if (m.t === '_rtc') return onRtc(m);
+    if (m.t === 'you') { net.me = m.id; voiceAgain(); if (net.host) net.hostId = m.id; else { net.listening = false; sendRaw({ t: 'hello' }); } return; }
     if (m.t === 'peers') return onPeers(m);
     if (net.host) {
       if (m.t === 'hello') return onHello(m.from);
@@ -386,6 +398,7 @@
   }
   function update() {
     if (net.host && net.on) { tellPause(); tellList(); }
+    voiceSync();
     render();
   }
   // The host tells the others whom the round waits for, when that changes. In a game played in
@@ -403,6 +416,304 @@
     ids.forEach(function (id) { net.released[id] = true; });
     if (ids.length) fire('continue', ids);
     update();
+  }
+
+
+  // ---- Voice (#322) ----
+  var VOICE_KEY = 'ai-pelit:_huone:puhe'; // false: this phone has switched voice off
+  var VOICE_AT = script.getAttribute('data-voice-corner') || 'right';
+  var ICE = new URL('api/voice/ice', script.src);
+  var STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }];
+  var RTC = script.getAttribute('data-voice') !== 'off' && !!(window.RTCPeerConnection && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  var voice = {
+    on: RTC && load(VOICE_KEY, true) !== false,
+    sid: hex(6), // this page's own: a phone that reloaded is called again
+    peers: {}, // id -> {greet, on, sid, pc, early, audio, talking, talkAt, fails, retryAt}
+    muted: {}, // id -> true: not heard on this phone, while in this room
+    stream: null, track: null, pressed: false, talking: false, ice: null, iceAt: 0, err: '', errAt: 0,
+  };
+  function vpeer(id) { return voice.peers[id] || (voice.peers[id] = { early: [], fails: 0, retryAt: 0 }); }
+  function sendRtc(to, m) { m.t = '_rtc'; m.to = to; sendRaw(m); }
+  // Says to a phone whether this one takes calls; r asks it to say the same back.
+  function greet(id, r) { sendRtc(id, { k: 'hi', on: voice.on, sid: voice.sid, r: r }); }
+  function others() { return net.members.filter(function (m) { return m.on && m.id !== net.me; }); }
+  function sender(pc) { var t = pc.getTransceivers()[0]; return t ? t.sender : null; }
+  function eachPc(fn) { Object.keys(voice.peers).forEach(function (id) { var p = voice.peers[id]; if (p.pc) try { fn(p.pc, id, p); } catch (e) {} }); }
+  function live(p) { return !!(p.pc && p.pc.connectionState === 'connected'); }
+
+  function getIce() {
+    if (voice.ice && Date.now() - voice.iceAt < 1800e3) return Promise.resolve(voice.ice); // the site's last 2 h
+    return fetch(ICE, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      voice.ice = d && Array.isArray(d.iceServers) ? d.iceServers : STUN;
+      voice.iceAt = Date.now();
+      return voice.ice;
+    }).catch(function () { return STUN; });
+  }
+
+  // After this phone's own connection came back: everyone is greeted again.
+  function voiceAgain() { Object.keys(voice.peers).forEach(function (id) { voice.peers[id].greet = false; }); }
+  function voiceReset() {
+    release();
+    Object.keys(voice.peers).forEach(function (id) { hang(id); });
+    voice.peers = {}; voice.muted = {};
+    renderVoice();
+  }
+
+  // Greets the phones that came (back), hangs up on those that left the room, and calls those this
+  // phone should call: the one with the smaller id calls, when both take calls.
+  function voiceSync() {
+    if (!RTC || !net.on || !net.me || !net.connected) return renderVoice();
+    var here = {};
+    net.members.forEach(function (m) { if (m.id !== net.me) here[m.id] = m.on; });
+    Object.keys(voice.peers).forEach(function (id) {
+      if (!(id in here)) { hang(id); delete voice.peers[id]; }
+      else if (!here[id]) voice.peers[id].greet = false; // greeted again once back
+    });
+    others().forEach(function (m) {
+      var p = vpeer(m.id);
+      // Greeted when it comes (back), and again while no call is up with it: a lost message or a
+      // call made in the middle of a reconnect heals by itself.
+      var nocall = voice.on && !live(p) && !p.dialing;
+      if (!p.greet || (nocall && Date.now() - (p.greetAt || 0) > 10e3)) { p.greet = true; p.greetAt = Date.now(); greet(m.id, true); }
+      var pc = p.pc, broken = !pc || pc.sid !== p.sid || pc.connectionState === 'failed' || pc.connectionState === 'closed';
+      if (voice.on && p.on && net.me < m.id && broken && !p.dialing && Date.now() >= p.retryAt) dial(m.id);
+    });
+    renderVoice();
+  }
+
+  function newPc(id, p, c, servers) {
+    var pc = new RTCPeerConnection({ iceServers: servers });
+    pc.c = c;
+    p.pc = pc;
+    pc.onicecandidate = function (e) { if (e.candidate && p.pc === pc) sendRtc(id, { k: 'ice', c: c, ice: e.candidate.toJSON() }); };
+    pc.ontrack = function (e) { if (p.pc === pc) hear(id, p, e.streams && e.streams[0] || new MediaStream([e.track])); };
+    pc.onconnectionstatechange = function () {
+      if (p.pc !== pc) return;
+      if (pc.connectionState === 'connected') p.fails = 0;
+      if (pc.connectionState === 'failed') {
+        // Try again later, waiting longer each time (a network that lets no call through).
+        hang(id);
+        p.retryAt = Date.now() + Math.min(30e3, 1000 * Math.pow(2, p.fails++));
+        setTimeout(voiceSync, Math.min(30e3, 1000 * Math.pow(2, p.fails - 1)) + 50);
+      }
+      renderVoice();
+    };
+    return pc;
+  }
+  function flushIce(p, pc) {
+    var early = p.early; p.early = [];
+    early.forEach(function (e) { if (e.c === pc.c) pc.addIceCandidate(e.ice).catch(function () {}); });
+  }
+  function dial(id) {
+    var p = vpeer(id);
+    p.dialing = true;
+    getIce().then(function (servers) {
+      p.dialing = false;
+      if (!voice.on || !net.on || !p.on || voice.peers[id] !== p) return; // it left meanwhile
+      hang(id);
+      var pc = newPc(id, p, hex(4), servers);
+      pc.sid = p.sid;
+      pc.addTransceiver(voice.talking && voice.track ? voice.track : 'audio', { direction: 'sendrecv' });
+      pc.createOffer().then(function (o) { return pc.setLocalDescription(o); }).then(function () {
+        if (p.pc === pc) sendRtc(id, { k: 'offer', c: pc.c, sdp: pc.localDescription.sdp });
+      }).catch(function () { if (p.pc === pc) hang(id); });
+    });
+  }
+  function pickUp(id, m) {
+    var p = vpeer(id);
+    if (!voice.on || typeof m.sdp !== 'string' || (p.pc && p.pc.c === m.c)) return;
+    getIce().then(function (servers) {
+      if (!voice.on || !net.on || voice.peers[id] !== p) return;
+      // Candidates for this offer that came while the servers were read wait through the reset,
+      // and are added once the offer is in (flushIce()).
+      var early = p.early.filter(function (e) { return e.c === m.c; });
+      hang(id);
+      p.early = early;
+      var pc = newPc(id, p, m.c, servers);
+      pc.setRemoteDescription({ type: 'offer', sdp: m.sdp }).then(function () {
+        var t = pc.getTransceivers()[0];
+        if (t) { t.direction = 'sendrecv'; if (voice.talking && voice.track) t.sender.replaceTrack(voice.track); }
+        flushIce(p, pc);
+        return pc.createAnswer();
+      }).then(function (a) { return pc.setLocalDescription(a); }).then(function () {
+        if (p.pc === pc) sendRtc(id, { k: 'answer', c: pc.c, sdp: pc.localDescription.sdp });
+      }).catch(function () { if (p.pc === pc) hang(id); });
+    });
+  }
+  function hang(id) {
+    var p = voice.peers[id];
+    if (!p) return;
+    if (p.pc) { try { p.pc.close(); } catch (e) {} p.pc = null; }
+    if (p.audio) { p.audio.srcObject = null; p.audio.remove(); p.audio = null; }
+    p.talking = false; p.early = [];
+  }
+
+  function onRtc(m) {
+    // A room from before voice passes the host's messages on without `from`: on a guest, a message
+    // that names no sender is the host's.
+    var id = m.from || (net.host ? '' : net.hostId);
+    if (!RTC || !net.on || typeof id !== 'string' || id === net.me) return;
+    var p = vpeer(id);
+    if (m.k === 'hi') {
+      var was = p.on;
+      p.on = m.on === true; p.sid = String(m.sid || '');
+      if (m.r) greet(id, false);
+      if (!p.on && was) hang(id);
+      voiceSync();
+      return render(); // the mute button beside the name
+
+    }
+    if (m.k === 'offer') return pickUp(id, m);
+    if (m.k === 'answer') {
+      var pc = p.pc;
+      if (pc && pc.c === m.c && pc.signalingState === 'have-local-offer' && typeof m.sdp === 'string')
+        pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).then(function () { flushIce(p, pc); }).catch(function () {});
+      return;
+    }
+    if (m.k === 'ice' && m.ice) {
+      if (p.pc && p.pc.c === m.c && p.pc.remoteDescription) p.pc.addIceCandidate(m.ice).catch(function () {});
+      else if (p.early.length < 60) p.early.push({ c: m.c, ice: m.ice });
+      return;
+    }
+    if (m.k === 'talk') { p.talking = m.on === true; p.talkAt = Date.now(); renderVoice(); }
+  }
+
+  // Another phone's sound: its own hidden player, silent while muted here.
+  function hear(id, p, stream) {
+    if (!p.audio) {
+      p.audio = document.createElement('audio');
+      p.audio.autoplay = true; p.audio.setAttribute('playsinline', '');
+      p.audio.style.display = 'none';
+      document.body.appendChild(p.audio);
+    }
+    p.audio.srcObject = stream;
+    p.audio.muted = !!voice.muted[id];
+    p.audio.play().catch(function () {});
+  }
+  // A phone may block sound that starts by itself: the next tap anywhere starts it. Coming back
+  // from another app, Android has paused it: it starts again.
+  function replay() {
+    Object.keys(voice.peers).forEach(function (id) { var a = voice.peers[id].audio; if (a && a.paused) a.play().catch(function () {}); });
+  }
+  document.addEventListener('pointerdown', replay, true);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) replay(); });
+
+  // ---- Push to talk ----
+  function press() {
+    if (voice.pressed || !voice.on || !net.on) return;
+    // Nobody to hear it yet: the microphone stays off (and is not even asked for).
+    if (!Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); })) {
+      voice.err = 'Kukaan ei kuule vielä.'; voice.errAt = Date.now();
+      return renderVoice();
+    }
+    voice.pressed = true; voice.pressAt = Date.now(); voice.err = ''; voice.errAt = 0;
+    renderVoice();
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }).then(function (s) {
+      if (voice.stream) voice.stream.getTracks().forEach(function (t) { t.stop(); });
+      voice.stream = s; voice.track = s.getAudioTracks()[0] || null;
+      if (!voice.pressed || !voice.track) return dropMic();
+      voice.talking = true;
+      eachPc(function (pc) { var sn = sender(pc); if (sn) sn.replaceTrack(voice.track); });
+      tellTalk(true);
+      renderVoice();
+    }).catch(function () {
+      voice.pressed = false;
+      voice.err = 'Mikrofoni ei ole sallittu.'; voice.errAt = Date.now();
+      renderVoice();
+    });
+  }
+  function release() {
+    if (!voice.pressed) return;
+    voice.pressed = false;
+    // A quick tap: say how the chip works.
+    if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
+    if (voice.talking) { voice.talking = false; tellTalk(false); }
+    dropMic();
+    renderVoice();
+  }
+  // The microphone is stopped between presses, so the phone's microphone light goes off.
+  function dropMic() {
+    eachPc(function (pc) { var sn = sender(pc); if (sn) sn.replaceTrack(null); });
+    if (voice.stream) voice.stream.getTracks().forEach(function (t) { t.stop(); });
+    voice.stream = null; voice.track = null;
+  }
+  function tellTalk(on) { eachPc(function (pc, id) { sendRtc(id, { k: 'talk', on: on }); }); }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) release(); });
+
+  function setVoice(on) {
+    if (!RTC || on === voice.on) return;
+    voice.on = on;
+    save(VOICE_KEY, on);
+    if (!on) { release(); Object.keys(voice.peers).forEach(function (id) { hang(id); }); }
+    if (net.on && net.connected) others().forEach(function (m) { greet(m.id, false); });
+    voiceSync();
+    render();
+  }
+  function toggleMute(id) {
+    if (voice.muted[id]) delete voice.muted[id]; else voice.muted[id] = true;
+    var p = voice.peers[id];
+    if (p && p.audio) p.audio.muted = !!voice.muted[id];
+    render();
+  }
+  function speakers() {
+    return net.members.filter(function (m) {
+      var p = voice.peers[m.id];
+      return p && p.talking && live(p) && !voice.muted[m.id] && Date.now() - p.talkAt < 60e3;
+    }).map(function (m) { return m.name; });
+  }
+
+  // The chip and, beside it, who is talking.
+  var vel = null, vShown = '';
+  function voiceUI() {
+    if (vel) return;
+    build();
+    var side = /left/.test(VOICE_AT) ? 'left' : 'right';
+    var vert = /^top/.test(VOICE_AT) ? 'top' : /^bottom/.test(VOICE_AT) ? 'bottom' : 'mid';
+    var chip = document.createElement('button'), bubble = document.createElement('div');
+    chip.id = 'aipr-mic'; chip.type = 'button'; chip.textContent = '🎤'; chip.hidden = true;
+    chip.setAttribute('aria-label', 'Pidä pohjassa ja puhu');
+    bubble.id = 'aipr-talk'; bubble.hidden = true;
+    var edge = 'calc(env(safe-area-inset-' + side + ',0px) + 8px)';
+    chip.style[side] = edge;
+    bubble.style[side] = 'calc(env(safe-area-inset-' + side + ',0px) + 68px)';
+    if (vert === 'mid') { chip.style.top = '38%'; bubble.style.top = 'calc(38% + 12px)'; }
+    if (vert === 'top') { chip.style.top = 'calc(env(safe-area-inset-top,0px) + 56px)'; bubble.style.top = 'calc(env(safe-area-inset-top,0px) + 68px)'; }
+    if (vert === 'bottom') { chip.style.bottom = 'calc(env(safe-area-inset-bottom,0px) + 72px)'; bubble.style.bottom = 'calc(env(safe-area-inset-bottom,0px) + 84px)'; }
+    document.body.appendChild(chip);
+    document.body.appendChild(bubble);
+    shield(chip);
+    chip.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      try { chip.setPointerCapture(e.pointerId); } catch (err) {}
+      press();
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) { chip.addEventListener(type, release); });
+    chip.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    vel = { chip: chip, bubble: bubble };
+  }
+  function renderVoice() {
+    if (!RTC) return;
+    var on = net.on && voice.on;
+    if (!on && !vel) return;
+    voiceUI();
+    var calls = Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); });
+    var cls = voice.talking ? 'live' : voice.pressed ? 'wait' : calls ? '' : 'none';
+    var text = voice.err && Date.now() - voice.errAt < 3000 ? voice.err : '';
+    if (!text && on) {
+      var who = speakers();
+      // The phone held the sound back (no tap on this page yet): a tap anywhere lets it play.
+      var held = Object.keys(voice.peers).some(function (id) { var a = voice.peers[id].audio; return a && a.paused && voice.peers[id].talking; });
+      if (who.length) text = '🔊 ' + who.join(', ') + (held ? ' – napauta ruutua' : '');
+    }
+    var k = on + cls + text;
+    if (k === vShown) return;
+    vShown = k;
+    vel.chip.hidden = !on;
+    var mid = /^(right|left)$/.test(VOICE_AT) ? 'mid' : '';
+    vel.chip.className = cls + (mid ? ' ' + mid : '');
+    vel.bubble.className = mid;
+    vel.bubble.hidden = !text;
+    vel.bubble.textContent = text;
   }
 
   // ---- The screen ----
@@ -438,6 +749,7 @@
     '#aipr-rooms button{font-size:16px;padding:8px 16px;background:#3f8ad8;box-shadow:0 4px 0 #2a5f99}',
     '#aipr #aipr-again{background:#3f8ad8;box-shadow:0 4px 0 #2a5f99;margin-bottom:6px}',
     '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
+    '#aipr .sws{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px}',
     '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
     // A phone on its side (#95): the room in two columns, the code and QR left and everything to
     // tap right, so "Aloita kierros" shows without scrolling even with a full room.
@@ -454,10 +766,24 @@
       '#aipr li{font-size:15px;padding:2px 8px}' +
       '#aipr button.plain{padding:2px 6px}' +
     '}',
+    '#aipr-mic{position:fixed;z-index:2147483642;width:52px;height:52px;padding:0;border:0;border-radius:50%;background:rgba(40,30,50,.75);color:#fff;font-size:24px;line-height:52px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.35);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}',
+    '#aipr-mic[hidden],#aipr-talk[hidden]{display:none}',
+    '#aipr-mic.none{opacity:.45}',
+    '#aipr-mic.wait{background:#e0a526}',
+    '#aipr-mic.live{background:#d33b2c;transform:scale(1.15)}',
+    '#aipr-talk{position:fixed;z-index:2147483642;max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 12px;border-radius:14px;background:rgba(40,30,50,.85);color:#fff;font:700 15px/1.3 system-ui,sans-serif;pointer-events:none}',
+    // On its side the athletics events' action buttons fill both edges: the chip goes to the top
+    // bar instead, right of the middle, where the games' scores are not.
+    '@media (orientation:landscape) and (max-height:500px){' +
+      '#aipr-mic.mid{top:calc(env(safe-area-inset-top,0px) + 4px)!important;left:calc(50% + 120px)!important;right:auto!important;width:44px;height:44px;line-height:44px;font-size:20px}' +
+      '#aipr-talk.mid{top:calc(env(safe-area-inset-top,0px) + 54px)!important;left:auto!important;right:calc(50% - 164px)!important}' +
+    '}',
+    '#aipr li button.mute{margin-left:auto;padding:0 2px;background:none;box-shadow:none;font-size:18px;line-height:1}',
     // Friends (#324): a small button on each player's row, the requests above the list, and the
     // invite list over the whole room screen.
     '#aipr li .fr{margin-left:auto;font:800 13px system-ui,sans-serif;padding:4px 9px;border-radius:9px;background:#3f8ad8;box-shadow:0 2px 0 #2a5f99;white-space:nowrap}',
     '#aipr li .fr.ok{background:#4f9a3a;box-shadow:0 2px 0 #2f6a22}',
+    '#aipr li .fr+button.mute,#aipr li .frs+button.mute{margin-left:6px}',
     '#aipr li .frs{margin-left:auto;font-size:13px;font-weight:700;color:#8a7658;white-space:nowrap}',
     '#aipr-friends{display:flex;flex-direction:column;align-items:center;gap:6px}',
     '#aipr-friends:empty{display:none}',
@@ -497,7 +823,8 @@
       '<div id="aipr-friends"></div>' +
       '<p id="aipr-info"></p>' +
       '<div id="aipr-extra"></div>' +
-      '<label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
+      '<div class="sws"><label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
+      '<label class="sw" id="aipr-voiceRow" hidden><input type="checkbox" id="aipr-voice">🎤 Puhe</label></div>' +
       '<button id="aipr-start" hidden>Aloita kierros</button>' +
     '</div>' +
     '<p id="aipr-err"></p>' +
@@ -523,7 +850,7 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'room', 'result', 'code', 'qr', 'members', 'friends', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
+    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'qr', 'members', 'friends', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
@@ -534,6 +861,7 @@
     el.pub.addEventListener('change', function () { net.pub = el.pub.checked; if (net.joined) keepHere(); tellList(); render(); });
     el.back.addEventListener('click', function () { if (net.on) leave(); else { show(false); fire('menu'); } });
     el.goOn.addEventListener('click', goOn);
+    el.voice.addEventListener('change', function () { setVoice(el.voice.checked); });
     el.invClose.addEventListener('click', function () { inviting = false; render(); });
   }
   function takeName() {
@@ -586,6 +914,7 @@
   function joinLink() { return location.origin + location.pathname + '?huone=' + net.code; }
 
   function render() {
+    renderVoice();
     if (!root) return;
     hookFriends();
     renderPause();
@@ -607,6 +936,16 @@
       if (!m.on) li.className = 'off';
       var fb = friendButton(m);
       if (fb) li.appendChild(fb);
+      // A player whose voice this phone can hear: a tap mutes them here (#322).
+      var vp = voice.peers[m.id];
+      if (voice.on && vp && vp.on && m.id !== net.me) {
+        var mute = document.createElement('button');
+        mute.className = 'mute'; mute.type = 'button';
+        mute.textContent = voice.muted[m.id] ? '🔇' : '🔊';
+        mute.setAttribute('aria-label', voice.muted[m.id] ? 'Kuuntele' : 'Mykistä');
+        mute.addEventListener('click', function () { toggleMute(m.id); });
+        li.appendChild(mute);
+      }
       el.members.appendChild(li);
     });
     renderFriends();
@@ -621,6 +960,8 @@
     el.info.textContent = info;
     el.pubRow.hidden = !net.host;
     el.pub.checked = net.pub;
+    el.voiceRow.hidden = !RTC;
+    el.voice.checked = voice.on;
     el.start.hidden = !net.host;
     el.start.disabled = online < MIN || !net.connected;
     el.start.textContent = net.played ? 'Uusi kierros' : 'Aloita kierros';
@@ -954,6 +1295,12 @@
     turns: function (fn) { needs = typeof fn === 'function' ? fn : null; },
     // Host: the players the computer moves now (let go with "Jatka ilman heitä", or left the room).
     isReleased: function (id) { return !!net.released[id]; },
+    // Voice (#322): whether it is on on this phone, this phone talking, who is heard now, and how
+    // many phones a call is up with.
+    get voice() {
+      return { on: RTC && voice.on, talking: voice.talking, speakers: speakers(),
+        calls: Object.keys(voice.peers).filter(function (id) { return live(voice.peers[id]); }).length };
+    },
     name: myName,
     game: GAME, version: VERSION, min: MIN, max: MAX,
   };
@@ -970,6 +1317,7 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(autoJoin); });
   else setTimeout(autoJoin);
-  setInterval(renderPause, 250);
+  setInterval(function () { renderPause(); renderVoice(); }, 250);
+  setInterval(voiceSync, 3000);
   setInterval(function () { readList(); tellList(); }, 5000);
 })();

@@ -10,6 +10,7 @@ does not play in the match fails its own pull request.
 """
 
 import json
+import re
 import shutil
 
 import pytest
@@ -215,7 +216,10 @@ def test_the_newest_event_pages_are_fetched_ahead_for_offline_play(site, context
     page.wait_for_timeout(2500)
     for slug in EVENTS:
         assert any(u.endswith(f"/games/{slug}/v{newest(slug)}/") for u in urls), slug
-    assert any(u.endswith("/lib/yleisurheilu-5/korkeus.js") for u in urls)
+    # The bar-height format of the newest Korkeushyppy, from whichever library folder it loads.
+    page_html = (ROOT / "games" / "korkeushyppy" / f"v{newest('korkeushyppy')}" / "index.html").read_text()
+    lib = re.search(r"lib/(yleisurheilu-\d+)/korkeus\.js", page_html).group(1)
+    assert any(u.endswith(f"/lib/{lib}/korkeus.js") for u in urls)
 
 
 

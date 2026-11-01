@@ -35,7 +35,7 @@ def test_picking_an_outfit_saves_it_and_the_thrower_wears_it(site, context):
     page = open_game(site, context)
     assert page.text_content("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    assert page.locator("#ai-pelit-asut .asu").count() == 10
+    assert page.locator("#ai-pelit-asut .asu").count() == 13  # 4 own, 6 Halloween, 3 Tylypahka (#321)
     page.click("[data-asu=noita]")
     page.click("#ai-pelit-asut-valmis")
     assert page.locator("#ai-pelit-asut").count() == 0

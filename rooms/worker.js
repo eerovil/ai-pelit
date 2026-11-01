@@ -28,6 +28,10 @@
 // with GET /api/rooms, which the shelf's front page shows (#203). A listing not
 // refreshed for LISTED_FOR is dropped, so a room that vanished without saying so leaves the list.
 //
+// Voice (#322): a {t: '_rtc', to} message, the setup of a voice call between two phones, goes from
+// any phone, a guest too, to the one phone named in `to`, with `from` set to the sender. The sound
+// itself goes between the phones, never through the room.
+//
 // Friends (#324): a phone with a nickname joins with `fid`, its public friend id (a hash of its
 // secret player id, server/api.js pidOf), and the room sends it with that member in `peers`, so
 // the others can ask it to be their friend. A join without it is as before.
@@ -158,6 +162,13 @@ export class Room {
       return;
     }
     const open = this.open();
+    if (msg.t === '_rtc') { // a voice call's setup: to the one phone named, from anyone (#322)
+      if (typeof msg.to !== 'string' || msg.to === me.id) return;
+      msg.from = me.id;
+      const text = JSON.stringify(msg);
+      for (const o of open) if (o.id === msg.to) send(o.ws, text);
+      return;
+    }
     if (me.host) {
       for (const o of open) if (o.id !== me.id && (!msg.to || o.id === msg.to)) send(o.ws, data);
     } else {

@@ -8,6 +8,8 @@ saving a round's result once. A game writes only its own part; where a box is a 
 Kirkkis v3 (`games/kirkkis/v3/index.html`, #57), whose messages are `kr`, `ks`, `kme` and `kfin`;
 v4 (#67) sends the same, with the seek clock during a recount (`sl`) and a "Kaikki pelastettu!" event.
 Kirkkis v2 (#27) keeps its own copy of the whole flow, from before the library.
+Voice (#322): while someone holds the 🎤 chip, the others in the room hear them; the sound goes
+straight between the phones, and the room only passes on the call's setup messages.
 
 ```mermaid
 flowchart TD
@@ -68,11 +70,39 @@ flowchart TD
   G2 --> G5
   G5 --> L7
   L7 --> L2
+  subgraph Puhe[Puhe: rooms.js, kaikissa huoneissa]
+    V1[🎤 Puhe-kytkin huoneruudussa, oletuksena päällä]
+    V2[Puhelinyhteys jokaiseen huoneen puhelimeen]
+    V3{Pitääkö pelaaja 🎤-nappia pohjassa?}
+    V3 -- Kyllä --> V4[Mikrofoni päälle, ääni muille]
+    V3 -- Ei --> V5[Mikrofoni kiinni]
+    V6[🔊 Nimi puhuu: muut kuulevat]
+    V7[🔇 Mykistä pelaaja pelaajalistassa]
+  end
+  subgraph CfPuhe[Cloudflare: puhe]
+    C3[Huone välittää yhteyden avausviestit _rtc kenelle tahansa]
+    C4[GET /api/voice/ice: TURN-tunnukset]
+    C5[TURN-välityspalvelin, jos suora yhteys ei onnistu]
+    C6{Tämän kuun käyttö alle 800 Gt?}
+    C7[Koneen tarkistus kerran tunnissa: käyttö Cloudflarelta]
+  end
+  L2 --> V1
+  V1 --> V2
+  V2 --> C3
+  V2 --> C4
+  C7 --> C6
+  C4 --> C6
+  C6 -- Kyllä --> C5
+  V2 -.-> C5
+  G2 --> V3
+  V4 --> V6
+  V7 --> V6
   class G1,G2,G3,G4,G5,G6 teal
   class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16 blue
-  class C1,C2 violet
+  class C1,C2,C3,C4,C5,C7 violet
+  class V1,V2,V4,V5,V6,V7 blue
   class S1 green
-  class L5,L8,L13 amber
+  class L5,L8,L13,V3,C6 amber
   class L6,G7,L14 rose
 ```
 
@@ -112,4 +142,15 @@ flowchart TD
 - **Tietokone ohjaa poissaolevaa**: the game's `on('continue', ids)`; `on('back', id)` when that phone returns. Someone who leaves the room for good is handed over the same way. Kirkkis: `botTakes()`; a hider walks to the nearest hiding place.
 - **Kierros päättyy: tulos kaikille, myös poissa olleille**: the host's `deliver(msg)` sends the end to every phone in the round and to no other. Each phone confirms it (`_got`); until then the host keeps it, and sends it again on that phone's `hello`, after that round's `_start` (so a reloaded page knows the round). A page that reloads just as the round ends, seen as connected before its hello, gets it that way. Then `endRound()`. Kirkkis: `end()` delivers `kfin`, the whole finished round and who seeks next.
 - **Tallenna tulos kerran per kierros**: the game saves only when `AiPelitRooms.once(round)` is true (kept per tab in `ai-pelit:_huone:kierros`), then `backToRoom(text)` shows the room with the result. Kirkkis: `guestEnd()`, into `ai-pelit:kirkkis:tilasto`, then `note('Seuraavaksi etsii …')`.
+- **🎤 Puhe-kytkin huoneruudussa, oletuksena päällä**: "🎤 Puhe" on the room screen (#322), beside 🌍 Julkinen, kept in `ai-pelit:_huone:puhe` (`setVoice()`). Off: no 🎤 chip, no calls, and the other phones are told so (`hi`, `on: false`). Shown in every room, public ones too (Eero's choice, until a friends list exists).
+- **Puhelinyhteys jokaiseen huoneen puhelimeen**: `voiceSync()` in `public/rooms.js`: each phone greets each other connected one (`_rtc` `hi`, with its voice switch and a page id `sid`), and the one with the smaller id calls (`dial()`, answered in `pickUp()`): one audio-only `RTCPeerConnection` per pair, at most 7 per phone. Offers, answers and ICE candidates go as `_rtc` messages; candidates that come before their offer is in (while the servers are read) wait in `p.early` and are added after it (`flushIce()`). A phone that reloaded (new `sid`) is called again; a failed call is tried again after 1, 2, 4… up to 30 seconds. A failure leaves the game as it is.
+- **Pitääkö pelaaja 🎤-nappia pohjassa?**: the 🎤 chip (`voiceUI()`, `renderVoice()`), over the game and the room screen while this phone is in a room: upright on the right edge at 38 % height, on its side in the top bar right of the middle (the athletics events' buttons fill both edges). A version may move it with `data-voice-corner` or leave voice out with `data-voice="off"` on its `rooms.js` tag. Push to talk (`press()`, `release()`): pointerdown starts; pointerup, pointercancel or the page going hidden stops. Faded while no call is up, and then a press only says "Kukaan ei kuule vielä." (the microphone is not asked for); amber while the microphone opens, red while live. A quick tap says "Pidä pohjassa ja puhu."
+- **Mikrofoni päälle, ääni muille**: `getUserMedia({audio: {echoCancellation, noiseSuppression}})` on each press (the first asks for permission), its track put on every connection with `replaceTrack()`; on release the track is stopped, so the phone's microphone light is off between presses.
+- **🔊 Nimi puhuu: muut kuulevat**: each call's sound plays through its own hidden `<audio>` (`hear()`; a tap anywhere starts one the phone held back); the speaker's name shows next to the chip while they hold theirs (`_rtc` `talk` on and off).
+- **🔇 Mykistä pelaaja pelaajalistassa**: a 🔊 button beside each other player who has voice on (`render()`); a tap makes it 🔇 and mutes that player on this phone for as long as it is in the room (`toggleMute()`).
+- **Huone välittää yhteyden avausviestit _rtc kenelle tahansa**: `rooms/worker.js` `webSocketMessage()`: a `_rtc` message from any phone goes only to the phone named in `to`, with `from` set, guest to guest too. Every other message is routed as before.
+- **GET /api/voice/ice: TURN-tunnukset**: `iceServers()` in `server/api.js`: asks Cloudflare's TURN service for credentials that last 2 hours, kept half an hour (`TURN_KEY_ID`, `TURN_KEY_TOKEN` secrets, bound by `scripts/cloudflare_setup.py` from `~/.local/share/ai-pelit/turn.env`) and returns `iceServers`. Without them, or when Cloudflare does not answer, only Cloudflare's public STUN server. Relay credentials only to a request the browser marks same-origin (`Sec-Fetch-Site`); another site's is refused, an unmarked one gets STUN alone. `getIce()` in `rooms.js` reads it every half hour.
+- **TURN-välityspalvelin, jos suora yhteys ei onnistu**: Cloudflare Realtime TURN passes the sound on when two phones cannot reach each other directly (some mobile networks). Nothing is recorded or kept.
+- **Tämän kuun käyttö alle 800 Gt?**: `underCap()` in `server/api.js`: the relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so credentials are handed out only while this month's row in `turn_usage` (migration 0008) is under `TURN_CAP` (800 GB, Eero's choice) and was written within 3 days. No: only STUN; calls then go only directly. Read at most every 10 minutes.
+- **Koneen tarkistus kerran tunnissa: käyttö Cloudflarelta**: `scripts/turn_usage.py`, run hourly from `origin/main` by `scripts/systemd/ai-pelit-turn.timer` on the AgentDeck host: the whole account's TURN bytes this month from Cloudflare's GraphQL (`callsTurnUsageAdaptiveGroups`), written with the admin key to `POST /api/admin/turn-usage`. A host that is off for 3 days turns the relay off.
 - **➕ Kaveriksi ja 📨 Kutsu kaveri**: friends in the room (#324), drawn by `friendButton()` and `renderFriends()` in `public/rooms.js` once `public/kaverit.js` is on the page: "➕ Kaveriksi" beside each other player with a `fid`, the requests to this phone with Hyväksy / Ei under the list (read every 10 s while the room screen shows), and "📨 Kutsu kaveri", a list of friends that sends an invite to this room. See `kaverit.md`.

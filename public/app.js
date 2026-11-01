@@ -43,6 +43,7 @@
     return el('p', { class: 'muted meta' }, [
       document.createTextNode('v' + v.n + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
       el('span', { class: 'plays', text: playsText(game.slug) }),
+      nowBadge(game.slug),
     ]);
   }
 
@@ -83,6 +84,7 @@
           el('p', { class: 'muted meta' }, [
             document.createTextNode(games.length + ' peliä'),
             el('span', { class: 'plays', text: playsText(group.slug) }),
+            nowBadge(group.slug),
           ]),
         ]),
       ]),
@@ -176,6 +178,7 @@
     showRooms(rooms);
     showWaitingNames();
     loadPlays();
+    loadPlaying();
     loadTops();
   }
 
@@ -189,6 +192,7 @@
       el('ul', { class: 'cards' }, sorted(members(group.slug)).map(gameCard))
     );
     loadPlays();
+    loadPlaying();
     loadTops();
   }
 
@@ -445,6 +449,38 @@
       .catch(function () {});
   }
 
+  // Playing right now (#325): how many have each game open on screen at this moment, only the
+  // number, beside the play count. back.js tells the server while a game page shows; read here
+  // with the page and again every 20 seconds while it shows. Not kept on the phone: an old
+  // number would be wrong, so offline nothing shows.
+  var playing = {}, playingTimer = 0;
+  function nowCount(slug) {
+    if (catalog && findGroup(slug)) return members(slug).reduce(function (sum, g) { return sum + (playing[g.slug] || 0); }, 0);
+    return playing[slug] || 0;
+  }
+  function nowBadge(slug) {
+    var n = nowCount(slug);
+    var badge = el('span', { class: 'now', 'data-now': slug, text: n ? '● ' + n : '' });
+    if (n) badge.setAttribute('aria-label', n + ' pelaa nyt');
+    return badge;
+  }
+  function loadPlaying() {
+    clearTimeout(playingTimer);
+    if (!window.fetch) return;
+    fetch('api/playing', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) { playing = b && b.games && typeof b.games === 'object' ? b.games : {}; })
+      .catch(function () { playing = {}; })
+      .then(function () {
+        var badges = view.querySelectorAll('[data-now]');
+        Array.prototype.forEach.call(badges, function (old) { old.replaceWith(nowBadge(old.getAttribute('data-now'))); });
+        if (!badges.length) return;
+        playingTimer = setTimeout(function () {
+          if (document.visibilityState === 'visible') loadPlaying();
+        }, 20000);
+      });
+  }
+
   // On the admin's phone only (it holds the key yllapito/ saved): how many nicknames wait.
   function showWaitingNames() {
     var key = null;
@@ -496,6 +532,7 @@
       el('h2', { text: 'Versiot' }),
       versions,
     ].filter(Boolean));
+    loadPlaying();
   }
 
   function render() {
@@ -524,7 +561,7 @@
   function gameOf(slug) { return catalog.games.filter(function (g) { return g.slug === slug; })[0]; }
   function friendRow(f, extra) {
     var game = f.now && f.game && gameOf(f.game);
-    return el('li', { class: 'friend' + (f.now ? ' now' : ''), 'data-pid': f.pid }, [
+    return el('li', { class: 'friend' + (f.now && f.game ? ' in-game' : ''), 'data-pid': f.pid }, [
       game ? thumb(game, 'thumb small', 36, 48) : el('span', { class: 'friend-face', text: '👤' }),
       el('div', {}, [el('h3', { text: f.name }), el('p', { class: 'muted meta', text: friends.doing(f) })]),
       extra,
@@ -734,6 +771,7 @@
     // The open rooms change by the minute: read them again on coming back to the shelf.
     var rooms = view.querySelector('.open-rooms');
     if (rooms) showRooms(rooms);
+    loadPlaying();
     if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); });
   });
 

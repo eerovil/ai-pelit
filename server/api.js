@@ -12,9 +12,13 @@
 //   POST /api/admin/players    (X-Admin-Key) {id, name, status} -> {name, status}
 //   POST /api/plays            {game, version}               -> {ok}
 //   GET  /api/plays                                          -> {games: {<slug>: total}}
+//   POST /api/playing          {id, game} | {id, gone: true} -> {ok}, a game page still open (#325)
+//   GET  /api/playing                                        -> {games: {<slug>: open now}}
 //   GET  /api/rooms/<CODE>     (WebSocket)                   -> a live game room (#27, rooms/worker.js)
 //   GET  /api/rooms?game=                                    -> {rooms: [{code, v, n, max}]}, public rooms (#50)
 //   GET  /api/rooms                                          -> {rooms: [{code, game, v, n, max}]}, every game's (#203)
+//   GET  /api/voice/ice                                      -> {iceServers}, for voice in rooms (#322)
+//   POST /api/admin/turn-usage (X-Admin-Key) {month, bytes}   -> {ok}, the voice relay's use this month
 //   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
 //   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
 //   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
@@ -285,6 +289,43 @@ async function addPlay(env, url, body) {
 
 async function playTotals(env) {
   const { results } = await env.DB.prepare('SELECT game, SUM(n) AS n FROM plays GROUP BY game').all();
+  const games = {};
+  for (const r of results) games[r.game] = r.n;
+  return json({ games });
+}
+
+// Who is playing right now (#325): an open game page (back.js) says it is still there every
+// PLAYING_BEAT and when it comes back on screen, and says it is gone when it is hidden. A page
+// counts while it was heard from in the last PLAYING_NOW, so one that closed without a word
+// (no network, the phone died) drops off within it. The id is random per page open.
+export const PLAYING_NOW = 100e3;
+const PLAYING_KEEP = 10 * 60e3;
+const PAGE_ID = /^[a-z0-9]{8,40}$/;
+
+async function stillPlaying(env, url, body) {
+  const id = String(body.id || '');
+  if (!PAGE_ID.test(id)) return fail(400, 'bad id');
+  const t = Date.now();
+  if (body.gone) {
+    await env.DB.prepare('DELETE FROM playing WHERE id = ?').bind(id).run();
+    return json({ ok: true });
+  }
+  const game = String(body.game || '');
+  if (!SLUG.test(game)) return fail(400, 'bad game');
+  const known = await knownVersions(env, url);
+  if (!known) return fail(503, 'no catalog');
+  if (known !== 'any' && !known.has(game)) return fail(404, 'no such game');
+  await env.DB.prepare(
+    `INSERT INTO playing (id, game, seen) VALUES (?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET game = excluded.game, seen = excluded.seen`
+  ).bind(id, game, t).run();
+  await env.DB.prepare('DELETE FROM playing WHERE seen < ?').bind(t - PLAYING_KEEP).run();
+  return json({ ok: true });
+}
+
+async function playingNow(env) {
+  const { results } = await env.DB.prepare('SELECT game, COUNT(*) AS n FROM playing WHERE seen >= ? GROUP BY game')
+    .bind(Date.now() - PLAYING_NOW).all();
   const games = {};
   for (const r of results) games[r.game] = r.n;
   return json({ games });
@@ -632,6 +673,11 @@ async function route(request, env) {
     const body = await readBody(request);
     return body ? addPlay(env, url, body) : fail(400, 'bad body');
   }
+  if (path === '/api/playing' && method === 'GET') return playingNow(env);
+  if (path === '/api/playing' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? stillPlaying(env, url, body) : fail(400, 'bad body');
+  }
   if (path === '/api/feedback' && method === 'POST') {
     const body = await readBody(request);
     return body ? addFeedback(env, url, body) : fail(400, 'bad body');
@@ -670,6 +716,11 @@ async function route(request, env) {
       return body ? adminFiled(env, body) : fail(400, 'bad body');
     }
   }
+  if (path === '/api/admin/turn-usage' && method === 'POST') {
+    if (!isAdmin(request, env)) return fail(403, 'admin key needed');
+    const body = await readBody(request);
+    return body ? turnUsage(env, body) : fail(400, 'bad body');
+  }
   if (path === '/api/admin/players') {
     if (!isAdmin(request, env)) return fail(403, 'admin key needed');
     if (method === 'GET') return adminPlayers(env);
@@ -702,7 +753,75 @@ function publicRooms(request, env) {
   return env.ROOMS.get(env.ROOMS.idFromName('lobby')).fetch(new Request(`https://rooms/lobby${q}`));
 }
 
+// Voice in rooms (#322): the servers a phone's voice call may use to reach another phone. Always
+// Cloudflare's public STUN server (it tells a phone its own address); with the TURN key bound
+// (TURN_KEY_ID, TURN_KEY_TOKEN, scripts/cloudflare_setup.py) also short-lived credentials for
+// Cloudflare's TURN relay, which passes the sound on when two phones cannot reach each other
+// directly. One set is kept for half an hour per isolate, valid for two. Only for this site's own
+// pages: the relay credentials go only to a request the browser marks same-origin (Fetch
+// Metadata); any other, or one with no such mark, gets STUN alone.
+//
+// The relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so the
+// credentials are handed out only while this month's use (turn_usage, written every hour by the
+// host's scripts/turn_usage.py) is under TURN_CAP and was checked within TURN_STALE (Eero's
+// choice). Past that, calls go only directly, which works on most networks; credentials already
+// out end within two hours.
+export const STUN = { urls: 'stun:stun.cloudflare.com:3478' };
+export const TURN_CAP = 800e9;
+export const TURN_STALE = 3 * 86400e3;
+const TURN_TTL = 2 * 3600;
+let turnCache = null; // {at, servers}
+let capCache = null; // {at, ok}
+export function forgetTurn() { turnCache = null; capCache = null; }
+
+async function underCap(env) {
+  if (capCache && Date.now() - capCache.at < 600e3) return capCache.ok;
+  let ok = false;
+  try {
+    const month = new Date().toISOString().slice(0, 7);
+    const row = env.DB && await env.DB.prepare('SELECT bytes, checked_at FROM turn_usage WHERE month = ?').bind(month).first();
+    ok = !!row && row.bytes < TURN_CAP && Date.now() - Date.parse(row.checked_at) < TURN_STALE;
+  } catch (e) {
+    console.error(e);
+  }
+  capCache = { at: Date.now(), ok };
+  return ok;
+}
+
+async function iceServers(request, env) {
+  if (request.method !== 'GET') return fail(405, 'GET only');
+  const site = request.headers.get('sec-fetch-site');
+  if (site === 'cross-site') return fail(403, 'this site only');
+  if (site !== 'same-origin' || !env.TURN_KEY_ID || !env.TURN_KEY_TOKEN || !(await underCap(env))) return json({ iceServers: [STUN] });
+  if (!turnCache || Date.now() - turnCache.at > 1800e3) {
+    try {
+      const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${env.TURN_KEY_TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ttl: TURN_TTL }),
+      });
+      const got = res.ok ? await res.json() : null;
+      const list = got && [].concat(got.iceServers || []).filter((s) => s && s.urls);
+      if (list && list.length) turnCache = { at: Date.now(), servers: list };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return json({ iceServers: turnCache ? turnCache.servers : [STUN] });
+}
+
+// The host's hourly check says how much the voice relay was used this month (#322).
+async function turnUsage(env, body) {
+  const { month, bytes } = body;
+  if (!/^\d{4}-\d{2}$/.test(month || '') || !Number.isSafeInteger(bytes) || bytes < 0) return fail(400, 'bad usage');
+  await env.DB.prepare('INSERT INTO turn_usage (month, bytes, checked_at) VALUES (?, ?, ?) '
+    + 'ON CONFLICT (month) DO UPDATE SET bytes = excluded.bytes, checked_at = excluded.checked_at')
+    .bind(month, bytes, new Date().toISOString()).run();
+  return json({ ok: true });
+}
+
 export async function handle(request, env) {
+  if (/^\/api\/voice\/ice\/?$/.test(new URL(request.url).pathname)) return iceServers(request, env);
   if (/^\/api\/rooms\/?$/.test(new URL(request.url).pathname)) return publicRooms(request, env);
   const rooms = new URL(request.url).pathname.match(/^\/api\/rooms\/([^/]*)$/);
   if (rooms) return room(request, env, rooms[1].toUpperCase());

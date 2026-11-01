@@ -1,0 +1,16 @@
+# Tells the site the voice relay's use this month, for its cap (#322): scripts/turn_usage.py.
+# Installed on the AgentDeck host (1.11.2026, #322) with
+#   cp scripts/systemd/ai-pelit-turn.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now ai-pelit-turn.timer
+[Unit]
+Description=AI-pelit: write the voice relay's monthly use to the site
+After=network-online.target
+
+[Service]
+Type=oneshot
+# The script as it is on origin/main, never the checkout's working tree: the main checkout may
+# stand on any branch.
+WorkingDirectory=/var/tmp
+EnvironmentFile=%h/.local/share/ruokalista/cloudflare.env
+ExecStart=/bin/sh -c 'git -C %h/ai-pelit fetch -q origin main && git -C %h/ai-pelit show origin/main:scripts/turn_usage.py | python3 -I -'
+TimeoutStartSec=120
