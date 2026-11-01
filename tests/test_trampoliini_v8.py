@@ -87,3 +87,18 @@ def test_v7_saves_are_read_as_they_are(tramp_site, browser):
     assert page.evaluate("[level, best, outfit.id]") == [3, 456, "noita"]
     assert errors == []
     ctx.close()
+
+
+def test_after_a_reload_a_push_and_a_landing_still_sound(tramp_site, browser):
+    # A reload mid-round, then the landing's boing and the push's whoosh close together.
+    ctx, page, errors = open_game(browser, tramp_site)
+    page.reload()
+    page.evaluate(SPY)
+    page.click("#go")
+    page.wait_for_function(f"{NAMES!r}.every(AiPelitAanet.ready)", timeout=10000)
+    page.wait_for_function("AiPelitAanet.play('onnistui', { vol: 0 })", timeout=5000)
+    page.evaluate("heard.splice(0); step = () => {}; sound('boing', 9); "
+                  "phase = 'mat'; J.vin = 9; J.pumpT = CONTACT / 2; takeoff()")
+    assert [n for n, ok, _ in page.evaluate("heard") if ok] == ["boing", "suhahdus"]
+    assert errors == []
+    ctx.close()
