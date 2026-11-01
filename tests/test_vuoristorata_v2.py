@@ -102,7 +102,7 @@ def test_a_bolt_a_crash_and_the_finish(site, browser):
         assert "nousu" in played(page)
         page.evaluate("crash('side')")
         assert played(page) == ["kolari"]
-        assert page.evaluate("rumble.vol") == 0
+        assert page.evaluate("rumble === null && chainL === null")
         page.wait_for_function("game.mode === 'ride'", timeout=8000)
         page.evaluate("auto = true; game.car.s = game.track.finish - 30; game.car.check = game.car.s")
         page.wait_for_function("game.mode === 'done'", timeout=20000)
@@ -121,7 +121,7 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
         page.evaluate("auto = true; game.car.s = game.track.finish - 30; game.car.check = game.car.s")
         page.wait_for_function("game.mode === 'done'", timeout=20000)
         assert played(page) == []
-        assert page.evaluate("rumble.playing()") is False
+        assert page.evaluate("!rumble?.playing()") is True
         assert page.errors == []
     finally:
         ctx.close()
@@ -156,8 +156,12 @@ def test_two_at_once_a_restart_and_back_to_the_menu(site, browser):
             game.car.s = o.s; game.car.v = 10; sound(game.car); }""")
         assert played(page) == ["kirkuna"]
         # A new ride after the menu starts quiet and counts down again.
-        page.evaluate("quiet(); game.mode = 'menu'")
-        assert page.evaluate("[rumble.vol, chainL.vol]") == [0, 0]
+        # Back to the menu the way the player goes: the loops are stopped, not left running silent.
+        loops = page.evaluate("window.oldLoops = [rumble, chainL]; [rumble.playing(), chainL.playing()]")
+        assert loops == [True, True]
+        page.evaluate("document.getElementById('valikkoon').click()")
+        assert page.evaluate("game.mode") == "menu"
+        assert page.evaluate("rumble === null && chainL === null && oldLoops.every(l => !l.playing())")
         page.evaluate("startRide()")
         assert played(page) == ["valinta"]
         assert page.errors == []

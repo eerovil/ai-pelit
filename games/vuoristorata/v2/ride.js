@@ -581,7 +581,7 @@ function noise(len) {
 }
 // The wheels' rumble rises with the speed; the chain clanks on the lift; the riders scream at the
 // top of each drop; the brakes hiss when pressed; a whine warns of a limit.
-// The rumble and the chain are the library's loops, kept running and turned up or down. Until a
+// The rumble and the chain are the library's loops, turned up or down while riding. Until a
 // recorded sound plays, v1's own sawtooth hum and square-wave clacks stand in for it.
 let clackT = 0, rumble = null, chainL = null, lastPiece = -1, braking = false;
 function sound(car) {
@@ -613,7 +613,8 @@ function sound(car) {
 }
 function quiet() {
   if (hum && ac) { hum.g.gain.setTargetAtTime(0, ac.currentTime, 0.05); hum.wg.gain.setTargetAtTime(0, ac.currentTime, 0.05); }
-  rumble?.set({ vol: 0 }); chainL?.set({ vol: 0 });
+  // The loops end with the ride (a crash, the finish, the menu); sound() makes new ones when it rolls on.
+  rumble?.stop(); chainL?.stop(); rumble = chainL = null;
   braking = false;
 }
 
