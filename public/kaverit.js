@@ -22,6 +22,7 @@
 //                              there was no network, when it is sent later); a name taken by
 //                              another phone (409) or refused for now (429) leaves the old one
 //   .nameError(r, name)        what went wrong, in Finnish, for a setName answer
+//   .friendError(r)            the same for ask(), answer(), remove() and invite()
 //   .nameNote()                what is wrong with the kept nickname ('' when nothing): taken,
 //                              rejected by the admin, or not yet sent
 //   .doing(friend)             "Pelaa: Pilkkiminen", "Selaa pelejä", "Nähty 5 min sitten"…
@@ -164,16 +165,28 @@
   // ---- Asking, answering, inviting ----
   // A 403 means the nickname is not (or no longer) usable: the refresh brings the server's word.
   function after(r) { return refresh().then(function () { return { ok: r.ok, status: r.status }; }); }
-  function ask(pid) {
-    return register().then(function (ok) {
-      if (!ok) return { ok: false, status: 403 };
-      return call('POST', 'friends/requests', { player: playerId(), to: pid }).then(after);
+  // The nickname is sent first; when the server does not take it, the answer says why
+  // (`name: true` with its status: 409 taken, 429 too many new names for now, 0 no network).
+  function nameFirst(go) {
+    return registerName().then(function (r) {
+      return r.ok ? go() : { ok: false, status: r.status, name: true };
     });
+  }
+  function ask(pid) {
+    return nameFirst(function () { return call('POST', 'friends/requests', { player: playerId(), to: pid }).then(after); });
   }
   function answer(pid, yes) {
     var go = function () { return call('POST', 'friends/requests/answer', { player: playerId(), from: pid, yes: !!yes }).then(after); };
-    if (!yes) return go();
-    return register().then(function (ok) { return ok ? go() : { ok: false, status: 403 }; });
+    return yes ? nameFirst(go) : go();
+  }
+  // What went wrong with ask(), answer(), remove() or invite(), in Finnish ('' when nothing).
+  function friendError(r) {
+    if (r.ok) return '';
+    if (r.name) return nameError(r, name());
+    if (r.status === 403) return 'Nimimerkkiäsi ei hyväksytty: valitse toinen.';
+    if (r.status === 409) return 'Kavereita on jo niin monta kuin mahtuu.';
+    if (r.status === 429) return 'Liian monta pyyntöä. Yritä myöhemmin.';
+    return 'Ei yhteyttä. Yritä uudelleen.';
   }
   function remove(pid) { return call('DELETE', 'friends', { player: playerId(), pid: pid }).then(after); }
   function invite(pid, where) {
@@ -308,6 +321,7 @@
     name: name,
     setName: setName,
     nameError: nameError,
+    friendError: friendError,
     nameNote: nameNote,
     refresh: refresh,
     watch: watch,
