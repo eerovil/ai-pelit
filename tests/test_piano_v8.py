@@ -78,3 +78,49 @@ def test_the_menu_fits_with_the_switch(site, context, w, h):
     box = page.locator("#nofail").bounding_box()
     assert box["y"] >= 0 and box["y"] + box["height"] <= h
     assert page.evaluate("document.getElementById('menu').scrollHeight <= innerHeight")
+
+
+def test_a_normal_game_after_a_no_fail_one_has_hearts_again(site, context):
+    page = open_menu(site, context)
+    page.click("#nofail")
+    page.click("#go")
+    page.evaluate(FINISH, 2)
+    page.click("#nofail")  # off again
+    page.click("#prev")
+    page.click("#go")
+    assert page.evaluate("[safe, lives, level]") == [False, 3, 1]
+    page.evaluate("tap(0)")
+    assert page.evaluate("lives") == 2
+
+
+def test_a_reload_mid_song_keeps_the_switch_and_the_level(site, context):
+    page = open_menu(site, context, saves={"taso": 2})
+    page.click("#nofail")
+    page.click("#go")
+    page.evaluate("update(cur.notes[3].t - now)")
+    page.reload()
+    assert page.is_visible("#menu")
+    assert page.inner_text("#nofail") == "🛡️ Ei häviötä: päällä"
+    assert page.inner_text("#go") == "Jatka tasolta 2"
+    assert page.evaluate("[best, topLevel]") == [0, 2]
+
+
+def test_real_taps_on_a_390_px_phone_cost_nothing_in_no_fail(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.goto(site.url + "games/piano/v8/")
+    page.tap("#nofail")
+    page.tap("#go")
+    lane_x, lane_w, btn = page.evaluate("[laneX, laneW, btnTop]")
+    for _ in range(5):  # five stray taps with no note near: more than three hearts
+        page.touchscreen.tap(lane_x + 0.5 * lane_w, (btn + 844) / 2)
+    assert page.evaluate("[state, safe, lives]") == ["play", True, 3]
+    page.evaluate("""() => {
+      const n = cur.notes[0];
+      for (const m of cur.notes) { m.hit = m !== n; m.missed = false; }
+      now = n.t - 0.2; window._n = n;
+    }""")
+    page.touchscreen.tap(lane_x + (page.evaluate("_n.lane") + 0.5) * lane_w, (btn + 844) / 2)
+    assert page.evaluate("_n.hit") is True
+    ctx.close()
