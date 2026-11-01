@@ -16,6 +16,8 @@ From v7 (#211) the race sounds like one: the beeps are recorded sounds from the 
 
 From v8 (#308) the jump button is where the other athletics games have it (Pituushyppy v4, #177): upright, a bar across the screen above the two feet with a gap between, not between the feet; on its side the top of each edge column, with the same 44 px gap above the foot. A touch in the gap, or on the jump's lowest 12 px, is a step, so a thumb drumming the feet does not jump by mistake (`pads()` and `padAt()` in `games/aitajuoksu/v8/index.html`).
 
+v9 (#311) plays as before with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/aitajuoksu/v9/index.html`, `asut.md`).
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]
