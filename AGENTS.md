@@ -146,6 +146,13 @@ high-score lists (#25), then play counts (#26).
   - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
   - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
     that plays the room in Playwright.
+  - Rare network races are the agent's to fix (#284, Eero's choice): a problem that only shows if
+    a phone drops, reconnects or reloads in the instant between two messages (Pilkkiminen #271: a
+    landed fish lost before the host's reply arrived). When the fix is small (a few lines and a
+    test), make it without asking Eero; a reviewer finding of this kind is settled the same way.
+    Ask Eero only when the fix is not small (for example, it reworks how the game keeps score or
+    turns): say what the fix would change, and offer leaving it as a known limit in the pull
+    request body.
   - The room is `/api/rooms/<CODE>`, a WebSocket to one Durable Object per 4-letter code in the
     `ai-pelit-rooms` Worker (`rooms/`), bound to the Pages project as `ROOMS`. It only relays, and
     keeps the host's `game`, `v` and `max` (2–8). CI deploys `rooms/` before the site; a change to

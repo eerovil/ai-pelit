@@ -62,6 +62,7 @@ the version that taught it, so you can read the code that fixed it.
   weaker opponent); Lentopallo v3 harder, because standing still and sending every ball back won
   half the points. Try the laziest way to play and the most reckless; neither should win easily.
   A computer player gets a small, random error and a reaction time, not perfect play.
+- **The field stays playable for a whole game.** Mölkky v1: pins knocked over slid and rolled so far that late in a game every one stood past the longest throw, or off the screen to the sides. Play a whole game of computer throws in a test and check the targets stay within reach and in view (Mölkky v2).
 - **Start easy and grow.** The first round teaches the game. New things arrive in later levels
   (Orava: the marten from level 2, the hawk from level 3; Hiihto: a road crossing on levels 3, 5, 7).
 

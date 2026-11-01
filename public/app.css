@@ -65,3 +65,6 @@ p { margin: 0 0 6px; }
 .room > div { flex: 1; min-width: 0; }
 .room h3 { margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .thumb.small { width: 36px; height: 48px; border-radius: 6px; }
+/* The shelf's order (#279): a small menu in the header, beside the name. */
+.top .sort { margin-left: auto; background: var(--card); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 6px 8px; font: 14px system-ui, sans-serif; }
+.top .sort + .status { margin-left: 10px; }

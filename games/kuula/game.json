@@ -1,0 +1,14 @@
+{
+  "title": "Kuulantyöntö",
+  "description": "Liu'u tai pyörähdä ympyrän poikki, työnnä oikeaan aikaan ja kulmaan, älä astu renkaan yli: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "group": "yleisurheilu",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-01",
+      "note": "Ensimmäinen versio: liuku tai pyörähdys ympyrän poikki, työntö vihreällä hetkellä ja kulma pitämällä Työnnä-nappia, liian myöhään yli renkaan ja pyörähdyksestä aikainen työntö sektorin ohi; kuuden kierroksen arvokisa, jossa kahdeksan parasta jatkaa, yksin tai 2–8 kaverin kanssa.",
+      "request": "Uusi yleisurheilulaji yleisurheilun ryhmään: kuulantyöntö. Ota liuku- tai pyörähdysvauhtia ympyrässä, työnnä kuula oikeaan aikaan ja oikeassa kulmassa, äläkä astu renkaan yli. Arvokisa tietokonetta vastaan tai kavereiden kanssa, kuten muissakin heittolajeissa.\n\nIdeoista #246.",
+      "issue": "eerovil/ai-pelit#268"
+    }
+  ]
+}

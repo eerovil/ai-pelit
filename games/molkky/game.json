@@ -1,0 +1,20 @@
+{
+  "title": "Mölkky",
+  "description": "Heitä kalikkaa mökin pihalla ja kaada numeroituja keiloja tasan 50 pisteeseen. Tietokonetta tai kavereita vastaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-01",
+      "note": "Ensimmäinen versio: kalikka heitetään vetämällä alas, pysty- tai vaakaheittona; tasan 50 voittaa, yli menevä putoaa 25:een ja kolme hutia peräkkäin pudottaa pelistä. Tietokonetta tai 2–6 kaverin puhelinta vastaan.",
+      "request": "Uusi peli: mölkky. Heitä kalikkaa mökin pihalla ja kaada keiloja: yksi kaatunut keila antaa sen numeron verran pisteitä, useampi kaatunut niiden määrän verran. Tavoite on päästä tasan 50 pisteeseen, yli menevä putoaa 25:een. Vuoropeli tietokonetta vastaan tai kavereiden kanssa.\n\nIdeoista #246.",
+      "issue": "eerovil/ai-pelit#270"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-01",
+      "note": "Keilat eivät enää vieri liian kauas, kalikan voi heittää pidemmälle ja kuva näyttää aina kaikki keilat, myös sivuille vierineet.",
+      "request": "Tilanne päätyy tähän, kaikki keilat ovat liian kaukana osumiseen. Ja jos keilat menee osa oikealle ja osa vasemmalle niin ruudun ulkopuolelle jääviä ei voi edes yrittää",
+      "issue": "eerovil/ai-pelit#270"
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -128,10 +129,29 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path =
     }
 
 
+def merged_at(version_dir: Path) -> float:
+    """When the version folder came to git: its last commit's time, which is its merge, since a
+    published folder never changes (rule 1). A folder not yet committed (an agent's local build)
+    counts as now. Outside git, or in a shallow clone, every folder ties and the slug decides."""
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%ct", "--", version_dir.name],
+            cwd=version_dir.parent, capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0.0
+    if out.returncode:
+        return 0.0
+    return float(out.stdout.strip() or "inf")
+
+
 def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     games = [load_game(d, lib_dir=lib_dir) for d in sorted(games_dir.iterdir()) if d.is_dir()]
-    # Newest version first, so a fresh game or version is at the top of the shelf.
-    games.sort(key=lambda g: (g["versions"][-1]["date"], g["slug"]), reverse=True)
+    # Newest version first, so a fresh game or version is at the top of the shelf (and under
+    # Päivitetyt, #279). Versions merged on the same day go by their merge time: by slug alone,
+    # 28 games updated on one day sat in reverse alphabetical order, today's new ones low.
+    when = {g["slug"]: merged_at(games_dir / g["slug"] / f"v{g['versions'][-1]['n']}") for g in games}
+    games.sort(key=lambda g: (g["versions"][-1]["date"], when[g["slug"]], g["slug"]), reverse=True)
     taken = {g["slug"] for g in games} & set(GROUPS)
     if taken:
         raise GameError(f"{', '.join(sorted(taken))}: a game's slug is a group's address (GROUPS in scripts/build.py)")
