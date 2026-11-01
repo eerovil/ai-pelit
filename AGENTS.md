@@ -339,6 +339,13 @@ sleeps while the page is hidden.
   #207): `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
   and the game's versions in `catalog.json`. A 404 right after the merge is the deploy still
   running: look again a minute later before calling it not live (#205).
+- GitHub runs no pull-request CI while the pull request conflicts with `main` (#346): the push
+  starts no run, so a wake-on for the `test` check never fires, and closing and reopening does not
+  help. When no run appears for a pushed head, read `gh pr view <n> --json
+  mergeable,mergeStateStatus` once. If it says `CONFLICTING` or `DIRTY`, merge `origin/main` into
+  the branch (never rebase pushed commits), fix the conflict, push, and register the wake-on again
+  for the new head. `main` moves often here (many Works at once), so on a long-running pull
+  request merge `origin/main` before each push.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
   For a 3D game, launch Chromium with `tests/conftest.py`'s `GPU_ARGS`, so it draws on the card.
