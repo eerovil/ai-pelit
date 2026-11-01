@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pilkkiminen</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#cfe0ee;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (rule 4, #181). */
+  canvas{position:fixed;top:0;left:0;right:0;bottom:0;display:block;width:100%;height:100%;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;padding:calc(env(safe-area-inset-top,0px) + 48px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);box-sizing:border-box;background:rgba(16,40,64,.9);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:38px;letter-spacing:.5px;color:#fff;text-shadow:0 3px 0 #1d4f8a}
+  #result{margin:0;font-size:24px;font-weight:800}
+  #result:empty,#board:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ffd166}
+  #board{margin:0;padding:0;list-style:none;font-size:15px;line-height:1.5;color:#e4eef7;min-width:220px}
+  #board li{display:flex;justify-content:space-between;gap:16px}
+  #board li.me{color:#ffd166;font-weight:800}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffd0a8}
+  .go{font:800 20px system-ui,sans-serif;padding:13px 22px;border:0;border-radius:16px;background:#ffd166;color:#2a1a05;box-shadow:0 4px 0 #9a6b12}
+  #resume{background:#7ee081;box-shadow:0 4px 0 #2f7a3a}
+  .go[hidden]{display:none}
+  .go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a6b12}
+  #multi{font:700 17px system-ui,sans-serif;padding:11px 18px;border:2px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166}
+  #stats{margin:0;font-size:14px;line-height:1.4;color:#c4d8ea;max-width:330px}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#b8cde0;max-width:330px}
+  .help.short{display:none}
+  /* Sideways (#95): two columns, so the whole menu fits a 360 px tall screen without scrolling. */
+  @media (orientation:landscape) and (max-height:520px){
+    #menu{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:repeat(6,auto);align-content:center;justify-items:center;column-gap:28px;row-gap:7px;
+      padding:calc(env(safe-area-inset-top,0px) + 10px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 10px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu h1{grid-column:1;grid-row:1;font-size:32px}
+    #result{grid-column:1;grid-row:2;font-size:20px}
+    #board{grid-column:1;grid-row:3;font-size:14px;line-height:1.35}
+    #foe{grid-column:1;grid-row:4;margin:0}
+    #stats{grid-column:1;grid-row:5}
+    .help.short{display:block;grid-column:1;grid-row:6;margin:0}
+    .help.long{display:none}
+    #resume{grid-column:2;grid-row:1/3;align-self:end}
+    #go{grid-column:2;grid-row:3/5;align-self:center}
+    #multi{grid-column:2;grid-row:5/7;align-self:start}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🎣 Pilkkiminen</h1>
+  <p id="result"></p>
+  <ol id="board"></ol>
+  <p id="foe"></p>
+  <button class="go" id="resume" hidden>Jatka kisaa</button>
+  <button class="go" id="go">Aloita pilkkikisa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help long">Viiden minuutin pilkkikisa: suurin saalis voittaa.
+    <b>Pyöritä sormella</b> ympyrää, niin kaira tekee reiän. <b>Vedä alas</b>, niin pilkki laskeutuu kalojen luo.
+    <b>Napauta rytmissä</b>, kun pallo osuu reunaan, kunnes kala tarttuu. Tärpätessä napauta, sitten <b>pidä sormi ruudulla</b> ja kelaa,
+    mutta päästä irti, kun siima kiristyy punaiselle, ettei se katkea.</p>
+  <p class="help short">Pyöritä sormella: kairaa. Vedä alas: laske pilkki. Napauta rytmissä, kunnes kala tarttuu. Pidä sormi ruudulla: kelaa, mutta päästä irti, kun siima kiristyy.</p>
+</div>
+<script src="../../../rooms.js" data-game="pilkki" data-min="2" data-max="8"></script>
+<script src="../../../lib/aanet-2/aanet.js"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+const S = window.AiPelitAanet;
+S.load(['narina', 'jaa', 'loiskis', 'kupla', 'naksu', 'osuma', 'virhe', 'onnistui', 'valinta', 'voitto', 'tappio', 'aplodit', 'pilli', 'pilli2', 'tuuli', 'lumi']);
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:pilkki:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), best = load('ennatys', 0), biggest = load('suurin', null);
+let kisat = load('kisat', { pelatut: 0, voitot: 0 }), friends = load('kaverit', { kisat: 0, voitot: 0 }), caughtAll = load('kalat', {});
+
+const CONTEST = 300;           // seconds in a contest
+const DT = 1 / 60;             // the world always steps this much
+const ICE = 0.5;               // metres of ice
+const TURNS = 6;               // turns of the auger to get through it
+const WIN = 0.17;              // seconds a twitch may be off the beat and still count
+
+// ---------- The fish ----------
+// Real fish of a Finnish lake in winter. tempo: the twitching pace (seconds a beat) that fish
+// likes; w: its weight range in grams; p: how common it is; d: the depths it keeps to, or bottom.
+const SPECIES = {
+  ahven: { name: 'Ahven', col: '#71903b', belly: '#d8d48a', fin: '#d8572f', tempo: 0.55, w: [40, 480], p: 6, d: [0.8, 8], stripes: true },
+  sarki: { name: 'Särki', col: '#8f9fac', belly: '#e3e8ec', fin: '#c8463a', tempo: 0.8, w: [40, 380], p: 4, d: [0.5, 4] },
+  kiiski: { name: 'Kiiski', col: '#8b7b4b', belly: '#cfc49a', fin: '#9c8a5a', tempo: 0.65, w: [15, 80], p: 3, bottom: true },
+  lahna: { name: 'Lahna', col: '#a58d5a', belly: '#d9c9a0', fin: '#6d5a3a', tempo: 1.0, w: [300, 2600], p: 1.5, d: [3, 12], bottom: true, min: 3 },
+  kuha: { name: 'Kuha', col: '#7b8c84', belly: '#d7dfd8', fin: '#5d6b63', tempo: 1.1, w: [400, 4200], p: 1.2, d: [5, 12], min: 5, stripes: true },
+  made: { name: 'Made', col: '#5d583a', belly: '#9d9670', fin: '#4a4630', tempo: 1.2, w: [300, 2200], p: 1, bottom: true, min: 4 },
+  hauki: { name: 'Hauki', col: '#58783a', belly: '#d6d8a8', fin: '#8a6a2a', tempo: 0.7, w: [800, 6500], p: 0.5, d: [0.5, 4], long: true },
+};
+const SP = Object.keys(SPECIES);
+const rnd = (a, b) => a + Math.random() * (b - a);
+function pickSpecies(depth, r = Math.random) {
+  const ok = SP.filter(k => (SPECIES[k].min || 0) <= depth);
+  let sum = 0; for (const k of ok) sum += SPECIES[k].p;
+  let v = r() * sum;
+  for (const k of ok) { v -= SPECIES[k].p; if (v <= 0) return k; }
+  return ok[0];
+}
+function weighOf(sp, r = Math.random) { const [a, b] = SPECIES[sp].w; return Math.round(a + (b - a) * Math.pow(r(), 2.4)); }
+function newFish(spot, sp) {
+  sp = sp || pickSpecies(spot.depth);
+  const s = SPECIES[sp], D = spot.depth;
+  const home = s.bottom ? D - rnd(0.15, 0.5) : Math.min(D - 0.3, rnd(s.d[0], Math.min(s.d[1], D)));
+  return { sp, g: weighOf(sp), x: rnd(-4, 4), d: home, home, vx: rnd(0.2, 0.5) * (Math.random() < 0.5 ? -1 : 1), int: 0, flee: 0, look: false };
+}
+const kg = g => (g / 1000).toFixed(2).replace('.', ',') + ' kg';
+const weightText = g => g < 1000 ? g + ' g' : kg(g);
+
+// ---------- The lake ----------
+// Twelve places on the same lake, the same for every phone of a contest (from its seed): near the
+// shore it is shallow, out in the middle deep. Each place has its own fish, and new ones come
+// slowly, so a fished-out hole is worth leaving.
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const SPOTS = 12;
+function makeLake(seed) {
+  const r = rng(seed), list = [];
+  for (let i = 0; i < SPOTS; i++) {
+    // Spread round the lake: a ring of shallows and a deeper middle.
+    const a = i / SPOTS * Math.PI * 2 + r() * 0.4, out = i % 3 === 0 ? 0.15 + r() * 0.25 : 0.5 + r() * 0.4;
+    const mx = 0.5 + Math.cos(a) * out * 0.44, my = 0.5 + Math.sin(a) * out * 0.4;
+    const depth = Math.round((1.6 + (1 - out) * 9 + r() * 2) * 10) / 10;
+    list.push({ i, mx, my, depth });
+  }
+  return list;
+}
+
+// ---------- The contest ----------
+// phase: menu, drill, walk, jig (the jig in the water), bite (a fish took it), fight, caught,
+// snap (the line broke), done, room (waiting in a room), wait (waiting for the host).
+let phase = 'menu', phaseT = 0, left = CONTEST, seed = 1, lake = makeLake(1), spot = lake[0], holes = [];
+let fish = [], spawnT = 0, jigD = 0, jigGoal = null, jigKick = 0, lastDepth = 2, drill = 0, walkTo = null, walkT = 0;
+let beat = 0, lastTwitch = -9, playT = 0, target = null, biter = null, fight = null, landed = null;
+let myG = 0, myN = 0, myBig = null, rivals = [], texts = [], mapOpen = false, hookedOnce = false;
+let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, away: [], closing: 0 };
+const playing = () => ['drill', 'walk', 'jig', 'bite', 'fight', 'caught', 'snap'].includes(phase);
+
+const RIVALS = ['Pilkki-Pekka', 'Ahven-Aili', 'Kaira-Kalle'];
+// The computer's anglers: a catch that grows the more the levels go up.
+function rivalRate(l) { l = Math.min(l, 12) - 1; return { perMin: 1.2 + 0.25 * l, big: 0.3 + 0.05 * l }; }
+
+function newContest(resume) {
+  net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, away: [], closing: 0 };
+  menu.classList.add('hidden');
+  seed = resume ? resume.seed : Math.floor(Math.random() * 1e9);
+  lake = makeLake(seed);
+  if (resume) {
+    left = resume.left; myG = resume.g; myN = resume.n; myBig = resume.big; holes = resume.holes.slice();
+    rivals = resume.riv.map((q, i) => ({ name: RIVALS[i], g: q[0], n: q[1], spot: q[2] }));
+    goTo(lake[resume.spot], true);
+  } else {
+    left = CONTEST; myG = 0; myN = 0; myBig = null; holes = [];
+    const order = lake.slice().sort((a, b) => a.depth - b.depth);
+    rivals = RIVALS.map((name, i) => ({ name, g: 0, n: 0, spot: order[(i * 4 + 1) % SPOTS].i }));
+    goTo(order[6], true);
+    S.play('pilli', { vol: 0.5 });
+  }
+  hookedOnce = false;
+}
+// Arrive at a place: a hole already drilled is ready, a new one is drilled first.
+function goTo(s, now) {
+  spot = s; fish = []; spawnT = 0; target = biter = fight = landed = null; mapOpen = false;
+  const n = 6 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < n; i++) fish.push(newFish(spot));
+  spot.start = n;
+  jigD = 0; jigGoal = null;
+  if (!now) { phase = 'walk'; walkT = 1.2 + Math.hypot(walkTo.mx - walkTo.from.mx, walkTo.my - walkTo.from.my) * 4; phaseT = 0; return; }
+  if (holes.includes(spot.i)) toJig(); else { phase = 'drill'; drill = 0; phaseT = 0; }
+}
+function toJig() { phase = 'jig'; phaseT = 0; biter = fight = null; }
+function moveTo(s) {
+  if (!['jig', 'drill'].includes(phase) || s === spot) { mapOpen = false; return; }
+  walkTo = { to: s, from: spot };
+  S.play('lumi', { vol: 0.5 });
+  goTo(s, false);
+}
+// The contest alone is kept every couple of seconds, so a reload or a trip to the shelf does not lose it.
+function keepContest() {
+  if (net.on || !playing()) return;
+  save('kisa', { left: Math.round(left), g: myG, n: myN, big: myBig, holes, spot: spot.i, seed, lv: level, riv: rivals.map(r => [r.g, r.n, r.spot]) });
+}
+
+function update(dt) {
+  tick(dt);
+  if (!playing()) return;
+  if (net.on && R.paused) return;
+  phaseT += dt; playT += dt;
+  // The clock: alone it is this phone's; in a room the host's, the others follow what it sends.
+  left = Math.max(0, left - dt);
+  if (left <= 0) { timeUp(); return; }
+  if (!net.on) cpuAnglers(dt);
+  world(dt);
+  if (phase === 'walk') { if (phaseT >= walkT) goTo(walkTo.to, true); }
+  else if (phase === 'bite') { if (phaseT > 0.95) { say('Kala karkasi', '#ffd166'); biter.int = 0; biter.flee = 4; biter = null; toJig(); } }
+  else if (phase === 'fight') fightStep(dt);
+  else if (phase === 'caught') { if (phaseT > 2) afterCatch(); }
+  else if (phase === 'snap') { if (phaseT > 2.6) { toJig(); jigGoal = lastDepth; } }
+  if ((keepT -= dt) <= 0) { keepT = 2; keepContest(); }
+  if (net.on) netStep(dt);
+}
+let keepT = 2;
+
+function tick(dt) {
+  for (const t of texts) t.t -= dt;
+  texts = texts.filter(t => t.t > 0);
+  jigKick = Math.max(0, jigKick - dt * 5);
+}
+function say(s, col) { texts.push({ s, c: col, t: 1.1 }); }
+
+// The fish swim about; the ones near the jig look at it, and the twitching makes them want it.
+function world(dt) {
+  if (phase === 'walk' || phase === 'drill') return;
+  if (jigGoal !== null && phase === 'jig') {
+    const st = 2.6 * dt;
+    if (Math.abs(jigGoal - jigD) <= st) { jigD = jigGoal; jigGoal = null; } else jigD += Math.sign(jigGoal - jigD) * st;
+  }
+  // Fresh fish come by now and then, up to what the place had.
+  if ((spawnT += dt) > 35 && fish.length < spot.start) { spawnT = 0; const f = newFish(spot); f.x = Math.random() < 0.5 ? -5 : 5; fish.push(f); }
+  beat += dt / period();
+  const P = period(), since = playT - lastTwitch;
+  target = null;
+  for (const f of fish) {
+    if (f === biter || (fight && f === fight.fish)) continue;
+    f.flee = Math.max(0, f.flee - dt);
+    f.look = phase === 'jig' && f.flee <= 0 && jigD > 0.3 && Math.abs(f.d - jigD) < 1.6 && Math.abs(f.x) < 3;
+    if (f.look) {
+      // It comes to the jig, and stays interested only while the jig keeps moving.
+      const gx = f.x < 0 ? -0.28 : 0.28;
+      f.x += Math.max(-0.7 * dt, Math.min(0.7 * dt, gx - f.x));
+      f.d += Math.max(-0.5 * dt, Math.min(0.5 * dt, jigD - f.d));
+      f.int = Math.max(0, f.int - (since > 2.3 * P ? 0.22 : 0.03) * dt);
+      if (!target || f.int > target.int || (f.int === target.int && Math.abs(f.d - jigD) < Math.abs(target.d - jigD))) target = f;
+    } else {
+      f.int = Math.max(0, f.int - 0.3 * dt);
+      const sp = f.flee > 0 ? 2.2 : 1;
+      f.x += f.vx * sp * dt;
+      if (Math.abs(f.x) > 4.6) { f.vx = -Math.sign(f.x) * Math.abs(f.vx); f.x = Math.sign(f.x) * 4.6; }
+      f.d += (f.home - f.d) * Math.min(1, dt * 0.5);
+    }
+  }
+  if (phase === 'jig' && target && target.int >= 0.96) bite(target);
+}
+// The beat follows the fish the jig is working on, or a middle pace while none looks.
+function period() { return target ? SPECIES[target.sp].tempo : 0.75; }
+function twitch() {
+  if (phase !== 'jig' || jigD < 0.3) return;
+  const P = period(), fr = beat - Math.floor(beat), err = Math.min(fr, 1 - fr) * P, since = playT - lastTwitch;
+  lastTwitch = playT; jigKick = 1;
+  S.play('kupla', { vol: 0.25, rate: 0.9 + Math.random() * 0.3 });
+  const lookers = fish.filter(f => f.look);
+  if (since < 0.5 * P) {
+    // Twitching in a frenzy frightens the fish off.
+    for (const f of lookers) { f.int -= 0.25; if (f.int < 0) { f.int = 0; f.flee = 3; } }
+    say('Liian nopeasti!', '#ff8a6b');
+    return 'fast';
+  }
+  if (err <= WIN) {
+    for (const f of lookers) {
+      const match = Math.max(0, 1 - Math.abs(SPECIES[f.sp].tempo - P) / 0.35);
+      f.int = Math.min(1, f.int + 0.24 * match * (1 - 0.4 * err / WIN));
+    }
+    if (lookers.length) say('Hyvä!', '#7ee081');
+    return 'good';
+  }
+  for (const f of lookers) f.int = Math.max(0, f.int - 0.1);
+  if (lookers.length) say(fr < 0.5 ? 'Myöhässä' : 'Liian aikaisin', '#ffd166');
+  return 'off';
+}
+function bite(f) {
+  phase = 'bite'; phaseT = 0; biter = f; f.x = 0.15; f.d = jigD;
+  S.play('osuma', { vol: 0.7 });
+}
+// The strike: a tap while the fish has the jig hooks it.
+function strike() {
+  if (phase !== 'bite') return;
+  const f = biter;
+  fight = { fish: f, L: jigD, T: 0.2, over: 0, burst: 0, next: rnd(1.2, 2.4), t: 0, sway: 0 };
+  lastDepth = jigD;
+  phase = 'fight'; phaseT = 0; biter = null; hookedOnce = true;
+  S.play('naksu', { vol: 0.6, rate: 0.8 });
+}
+// Reeling: holding the finger down winds the line in, but pulls it tighter; letting go gives
+// the fish line. Held too tight for a moment, the line breaks.
+let holding = 0, reelT = 0;
+function pullOf(g, t) { return (0.14 + 0.52 * Math.sqrt(Math.min(g, 6000) / 6000)) * Math.max(0.55, 1 - 0.035 * t); }
+function fightStep(dt) {
+  const f = fight, g = f.fish.g;
+  f.t += dt;
+  if ((f.next -= dt) <= 0) { f.burst = rnd(0.6, 1.1); f.next = rnd(1.4, 3.4) - Math.min(1, g / 3000); }
+  f.burst = Math.max(0, f.burst - dt);
+  const pull = pullOf(g, f.t) * (f.burst > 0 ? 1.7 : 1);
+  const on = holding > 0;
+  const goal = on ? pull + 0.32 : pull * 0.45;
+  f.T += (goal - f.T) * Math.min(1, dt * 7);
+  if (on) f.L -= 1.25 * (1 - Math.min(0.9, pull * 0.9)) * dt;
+  else f.L = Math.min(spot.depth - 0.1, f.L + pull * 0.9 * dt);
+  if (on && (reelT -= dt) <= 0) { reelT = 0.11; S.play('naksu', { vol: 0.18, rate: 1.6 }); }
+  if (f.T > 1) f.over += dt; else f.over = Math.max(0, f.over - dt * 2);
+  f.sway += dt * (f.burst > 0 ? 9 : 4);
+  f.fish.x = Math.sin(f.sway) * (f.burst > 0 ? 0.45 : 0.2); f.fish.d = Math.max(0, f.L);
+  jigD = Math.max(0, f.L);
+  if (f.over > 0.4) snap();
+  else if (f.L <= 0) land();
+}
+function snap() {
+  const f = fight.fish;
+  f.flee = 5; f.int = 0; f.vx = 1.4 * (Math.random() < 0.5 ? -1 : 1);
+  fight = null; phase = 'snap'; phaseT = 0; jigD = 0;
+  S.play('virhe', { vol: 0.6 });
+}
+function land() {
+  const f = fight.fish;
+  fish = fish.filter(q => q !== f);
+  fight = null; phase = 'caught'; phaseT = 0; jigD = 0;
+  landed = { sp: f.sp, g: f.g };
+  myG += f.g; myN++;
+  if (!myBig || f.g > myBig.g) myBig = { s: f.sp, g: f.g };
+  // Saved the moment it is earned: the lifetime catch and the biggest fish ever.
+  caughtAll[f.sp] = (caughtAll[f.sp] || 0) + 1; save('kalat', caughtAll);
+  if (!biggest || f.g > biggest.g) { biggest = { s: f.sp, g: f.g }; save('suurin', biggest); }
+  S.play('loiskis', { vol: 0.7 });
+  S.play(f.g >= 1000 ? 'aplodit' : 'onnistui', { vol: 0.5, delay: 0.25 });
+  keepContest();
+  if (net.on) sendMe();
+}
+function afterCatch() { landed = null; toJig(); jigGoal = lastDepth; }
+
+// The auger: the finger goes round it, each turn takes it deeper into the ice.
+function turnAuger(da) {
+  if (phase !== 'drill') return;
+  const before = drill;
+  drill = Math.min(1, drill + Math.abs(da) / (TURNS * Math.PI * 2));
+  if (Math.floor(before * TURNS * 2) !== Math.floor(drill * TURNS * 2)) S.play('narina', { vol: 0.35, rate: 1.2 + Math.random() * 0.3 });
+  if (drill >= 1) {
+    holes.push(spot.i);
+    S.play('jaa', { vol: 0.6 }); S.play('loiskis', { vol: 0.35, delay: 0.15 });
+    say('Reikä on valmis!', '#7ee081');
+    toJig();
+    keepContest();
+  }
+}
+
+// The computer's anglers alone: now and then one lands a fish of its place.
+function cpuAnglers(dt) {
+  const k = rivalRate(level);
+  for (const r of rivals) {
+    if (Math.random() < k.perMin / 60 * dt) {
+      const d = lake[r.spot].depth, sp = pickSpecies(d);
+      r.g += Math.round(weighOf(sp) * k.big); r.n++;
+    }
+    if (Math.random() < dt / 70) r.spot = Math.floor(Math.random() * SPOTS);
+  }
+}
+
+// The standings: name, catch, fish, and whether it is this phone.
+function standings() {
+  let list;
+  if (!net.on) list = [{ name: 'Sinä', g: myG, n: myN, me: true }, ...rivals.map(r => ({ name: r.name, g: r.g, n: r.n }))];
+  else {
+    list = (net.setup ? net.setup.players : []).map(p => {
+      const b = net.board[p.id] || { g: 0, n: 0 };
+      return p.id === R.me ? { name: p.name, g: myG, n: myN, me: true, id: p.id } : { name: p.name, g: b.g, n: b.n, id: p.id, away: net.away.includes(p.id) };
+    });
+  }
+  return list.sort((a, b) => b.g - a.g || b.n - a.n);
+}
+
+function timeUp() {
+  left = 0;
+  if (fight || biter) { say('Aika loppui!', '#fff'); fight = biter = null; }
+  if (!net.on) { endContest(); return; }
+  sendMe();
+  if (!R.isHost) { phase = 'wait'; phaseT = 0; return; }
+  // The host waits a moment for the last catches to arrive, then ends the contest.
+  phase = 'wait'; phaseT = 0; net.closing = 1.2;
+}
+function endContest() {
+  phase = 'done';
+  save('kisa', null);
+  const st = standings(), place = st.findIndex(s => s.me) + 1;
+  kisat.pelatut++;
+  if (place === 1 && myG > 0) { kisat.voitot++; level++; save('taso', level); }
+  save('kisat', kisat);
+  record();
+  S.play('pilli2', { vol: 0.5 });
+  S.play(place === 1 && myG > 0 ? 'voitto' : 'tappio', { vol: 0.6, delay: 0.6 });
+  showMenu(place === 1 && myG > 0 ? 'Voitit kisan! 🏆 ' + kg(myG) : place + '. sija: ' + kg(myG), place === 1 && myG > 0 ? 'win' : 'lose', st);
+}
+// The best catch on this phone, and on the high-score list.
+function record() {
+  if (myG > best) { best = myG; save('ennatys', best); }
+  if (myG > 0 && window.AiPelitScores) AiPelitScores.submit(myG);
+}
+
+// ---------- Playing in a room (rooms.js) ----------
+// Everybody fishes the same lake (the host's seed), each on its own phone, so a twitch never
+// waits for the network. Each phone sends its catch to the host; the host keeps the clock and the
+// standings and sends them to all, and ends the contest for everyone when the time is up.
+function setupFor(round, list) {
+  const players = list.map(p => ({ id: p.id, name: p.name }));
+  return { t: 'setup', round, seed: Math.floor(Math.random() * 1e9), players, spots: players.map((_, i) => (i * 5 + 2) % SPOTS) };
+}
+function applySetup(s) {
+  net = { on: true, round: s.round, setup: s, board: {}, sendT: 0, meT: 0, away: [], closing: 0 };
+  seed = s.seed; lake = makeLake(seed); holes = []; left = CONTEST;
+  myG = 0; myN = 0; myBig = null; rivals = [];
+  const i = Math.max(0, s.players.findIndex(p => p.id === R.me));
+  goTo(lake[s.spots[i] || 0], true);
+  menu.classList.add('hidden');
+}
+function myEntry() { return { g: myG, n: myN, big: myBig, sp: spot.i }; }
+function sendMe() {
+  if (!net.on) return;
+  if (R.isHost) net.board[R.me] = myEntry();
+  else R.send({ t: 'me', round: net.round, ...myEntry() });
+}
+function snapshot() {
+  return { t: 's', round: net.round, left: Math.round(left * 10) / 10, b: net.board, away: net.away };
+}
+function netStep(dt) {
+  if ((net.meT -= dt) <= 0) { net.meT = 1; sendMe(); }
+  if (R.isHost && (net.sendT -= dt) <= 0) { net.sendT = 0.5; net.board[R.me] = myEntry(); R.send(snapshot()); }
+}
+// The host, after the time is up: a moment for late catches, then everyone's result.
+function closing(dt) {
+  if (!net.on || !R.isHost || phase !== 'wait' || net.closing <= 0) return;
+  if ((net.closing -= dt) > 0) return;
+  net.board[R.me] = myEntry();
+  const m = { t: 'end', round: net.round, b: net.board, players: net.setup.players };
+  R.deliver(m);
+  R.endRound();
+  finish(m);
+}
+function finish(m) {
+  phase = 'done';
+  net.board = m.b || {};
+  const own = net.board[R.me];
+  // A phone that missed the end (it reloaded) still has its catch in the host's list.
+  if (own && own.g > myG) { myG = own.g; myN = own.n; myBig = own.big; }
+  const st = standings(), place = st.findIndex(s => s.me) + 1;
+  if (R.once(m.round)) {
+    friends.kisat++;
+    if (place === 1 && myG > 0) friends.voitot++;
+    save('kaverit', friends);
+    record();
+  }
+  S.play(place === 1 && myG > 0 ? 'voitto' : 'tappio', { vol: 0.6 });
+  const top = st.slice(0, 3).map((s, i) => (i + 1) + '. ' + s.name + ' ' + kg(s.g)).join(' · ');
+  R.backToRoom((place === 1 && myG > 0 ? 'Voitit! 🏆 ' : place + '. sija · ') + kg(myG) + ' · ' + top, place === 1 && myG > 0 ? 'win' : 'lose');
+}
+
+R.on('start', s => {
+  menu.classList.add('hidden');
+  if (s.over) { net.round = s.round; phase = 'room'; return; }
+  if (!R.isHost) { if (s.round !== net.round) { phase = 'wait'; net.on = false; } return; }
+  const setup = setupFor(s.round, s.players);
+  R.send(setup);
+  applySetup(setup);
+  S.play('pilli', { vol: 0.5 });
+});
+R.on('message', (m, from) => {
+  if (R.isHost) {
+    if (m.t === 'me' && net.on && m.round === net.round && net.setup && net.setup.players.some(p => p.id === from)) {
+      const had = net.board[from] || { g: 0 };
+      // A catch only grows: a resend or a reloaded phone never takes fish off the list.
+      if (+m.g >= had.g) net.board[from] = { g: Math.max(0, +m.g || 0), n: Math.max(0, +m.n || 0), big: m.big || null, sp: +m.sp || 0 };
+    }
+    return;
+  }
+  if (m.t === 'end') { finish(m); return; }
+  if (m.t === 'setup') {
+    if (net.on && net.round === m.round) return;
+    applySetup(m);
+  } else if (m.t === 's' && net.on && m.round === net.round) {
+    // The host's clock rules; a returning phone takes back the catch the host has for it.
+    if (Math.abs(m.left - left) > 0.6) left = m.left;
+    net.board = m.b || {}; net.away = m.away || [];
+    const own = net.board[R.me];
+    if (own && own.g > myG) { myG = own.g; myN = own.n; myBig = own.big; }
+  }
+});
+R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
+// A phone that is away keeps its catch so far; nobody fishes for it.
+R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); });
+R.on('back', id => { net.away = net.away.filter(q => q !== id); });
+R.on('lobby', () => { phase = 'room'; });
+R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
+R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });
+
+// ---------- Screen ----------
+// A side view: the angler on the ice, the hole, and the water under it down to the bottom.
+let box = { left: 0, top: 0, width: 0, height: 0 }, W = 0, H = 0, DPR = 1, safeT = 0, safeB = 0, safeL = 0, safeR = 0;
+let wide = false, iceY = 0, holeX = 0, waterTop = 0, waterBot = 0, mPx = 40, moveBtn = null, meterY = 0, mapBox = null;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  // Sized from the canvas's own box, which every touch is read against too (Hiihto v5).
+  box = c.getBoundingClientRect();
+  W = box.width || innerWidth; H = box.height || innerHeight;
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  wide = W > H;
+  iceY = safeT + (wide ? 104 : 54 + Math.max(96, H * 0.16));
+  holeX = wide ? safeL + (W - safeL - safeR) * 0.3 : W * 0.6;
+  waterTop = iceY + 16;
+  meterY = H - safeB - (wide ? 22 : 40);
+  waterBot = meterY - (wide ? 44 : 56);
+  mPx = Math.min(46, (wide ? W * 0.5 : W) / 9.5);
+  moveBtn = { x: safeL + 8, y: iceY - 46, w: 124, h: 38 };
+  const mw = Math.min(W - safeL - safeR - 24, wide ? 460 : 400), mh = Math.min(H - safeT - safeB - 120, mw * 0.72);
+  mapBox = { x: (W - mw) / 2, y: safeT + 64 + Math.max(0, (H - safeT - safeB - 120 - mh) / 2), w: mw, h: mh };
+}
+addEventListener('resize', resize); addEventListener('orientationchange', resize); document.addEventListener('fullscreenchange', resize);
+resize();
+function fitCheck() { const r = c.getBoundingClientRect(); if (Math.abs(r.width - W) > 0.5 || Math.abs(r.height - H) > 0.5) resize(); }
+const depthY = d => waterTop + Math.max(0, d) / spot.depth * (waterBot - waterTop);
+const fishX = fx => holeX + fx * mPx;
+const spotXY = s => [mapBox.x + s.mx * mapBox.w, mapBox.y + s.my * mapBox.h];
+
+// ---------- Touch ----------
+// Drilling: the finger goes round the auger. In the water: a tap twitches the jig, a drag up or
+// down moves it. Fighting: a finger held anywhere reels.
+const touch = { id: null, sx: 0, sy: 0, lx: 0, ly: 0, d0: 0, drag: false, a: null };
+const pressed = new Set();
+const at = e => [e.clientX - box.left, e.clientY - box.top];
+const inBtn = (b, px, py) => b && px >= b.x - 6 && px <= b.x + b.w + 6 && py >= b.y - 6 && py <= b.y + b.h + 6;
+const augerC = () => [holeX, iceY - 58];
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  S.play('valinta', { vol: 0 });
+  const [ex, ey] = at(e);
+  pressed.add(e.pointerId); holding = pressed.size;
+  if (!playing()) return;
+  if (mapOpen) {
+    const s = lake.find(q => { const [sx, sy] = spotXY(q); return Math.hypot(ex - sx, ey - sy) < 26; });
+    if (s) moveTo(s); else mapOpen = false;
+    return;
+  }
+  if ((phase === 'jig' || phase === 'drill') && inBtn(moveBtn, ex, ey)) { mapOpen = true; S.play('valinta', { vol: 0.4 }); return; }
+  if (phase === 'bite') { strike(); return; }
+  if (phase === 'caught' && phaseT > 0.5) { afterCatch(); return; }
+  if (touch.id !== null) return;
+  touch.id = e.pointerId; touch.sx = touch.lx = ex; touch.sy = touch.ly = ey; touch.d0 = jigD; touch.drag = false;
+  const [ax, ay] = augerC();
+  touch.a = Math.atan2(ey - ay, ex - ax);
+  try { c.setPointerCapture(e.pointerId); } catch (er) {}
+  if (phase === 'jig') twitch();
+});
+c.addEventListener('pointermove', e => {
+  if (e.pointerId !== touch.id) return;
+  const [ex, ey] = at(e);
+  if (phase === 'drill') {
+    const [ax, ay] = augerC();
+    if (Math.hypot(ex - ax, ey - ay) > 22) {
+      const a = Math.atan2(ey - ay, ex - ax);
+      let da = a - touch.a;
+      if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2;
+      touch.a = a;
+      // A jump across the middle is not a turn.
+      if (Math.abs(da) < 1.2) turnAuger(da);
+    }
+  } else if (phase === 'jig') {
+    if (!touch.drag && Math.abs(ey - touch.sy) > 14) { touch.drag = true; jigGoal = null; }
+    if (touch.drag) {
+      jigD = Math.max(0, Math.min(spot.depth - 0.1, touch.d0 + (ey - touch.sy) / (waterBot - waterTop) * spot.depth * 1.3));
+      lastDepth = jigD;
+    }
+  }
+  touch.lx = ex; touch.ly = ey;
+});
+function up(e) {
+  pressed.delete(e.pointerId); holding = pressed.size;
+  if (e.pointerId === touch.id) touch.id = null;
+}
+c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+
+// ---------- Sound ----------
+const wind = S.loop('tuuli', { vol: 0 });
+function sound() { wind.set({ vol: playing() ? 0.12 : 0, rate: 0.9 }); }
+
+// ---------- Drawing ----------
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function drawScene() {
+  // Sky, the far shore with its spruces, the snow on the ice.
+  const g = x.createLinearGradient(0, 0, 0, iceY);
+  g.addColorStop(0, '#7fa9d1'); g.addColorStop(1, '#dbe8f3');
+  x.fillStyle = g; x.fillRect(0, 0, W, iceY);
+  x.fillStyle = '#4b6a5a';
+  for (let i = -1; i < W / 18 + 1; i++) {
+    const tx = i * 18 + ((i * 37) % 11), th = 14 + ((i * 53) % 13);
+    x.beginPath(); x.moveTo(tx - 7, iceY - 8); x.lineTo(tx, iceY - 8 - th); x.lineTo(tx + 7, iceY - 8); x.fill();
+  }
+  x.fillStyle = '#f4f8fb'; x.fillRect(0, iceY - 9, W, 9);
+  // The ice, cut through.
+  x.fillStyle = '#bcd6e6'; x.fillRect(0, iceY, W, waterTop - iceY);
+  x.fillStyle = 'rgba(255,255,255,.5)'; x.fillRect(0, iceY, W, 3);
+  // The water, darker as it goes down, and the bottom.
+  const wg = x.createLinearGradient(0, waterTop, 0, H);
+  wg.addColorStop(0, '#2f6f8f'); wg.addColorStop(1, '#0d2c3d');
+  x.fillStyle = wg; x.fillRect(0, waterTop, W, H - waterTop);
+  const by = depthY(spot.depth);
+  x.fillStyle = '#4a3f2c';
+  x.beginPath(); x.moveTo(0, H);
+  for (let px = 0; px <= W; px += 20) x.lineTo(px, by + Math.sin(px * 0.031 + spot.i) * 5 + 4);
+  x.lineTo(W, H); x.fill();
+  // Weeds on a shallow bottom.
+  if (spot.depth < 5) {
+    x.strokeStyle = '#3d6b3a'; x.lineWidth = 3; x.lineCap = 'round';
+    for (let i = 0; i < 9; i++) { const wx = (i * 97 + spot.i * 41) % W, sw = Math.sin(performance.now() / 900 + i) * 4; x.beginPath(); x.moveTo(wx, by + 6); x.quadraticCurveTo(wx + sw, by - 14, wx + sw * 1.5, by - 26 - (i % 3) * 8); x.stroke(); }
+    x.lineCap = 'butt';
+  }
+  // The depth scale on the left.
+  x.font = '600 11px system-ui'; x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.45)';
+  const stepM = (waterBot - waterTop) / spot.depth < 24 ? 2 : 1;
+  for (let d = stepM; d < spot.depth - 0.7; d += stepM) { const yy = depthY(d); x.fillRect(safeL + 4, yy, 8, 1); x.fillText(d + ' m', safeL + 15, yy + 4); }
+  x.fillStyle = 'rgba(255,255,255,.7)'; x.fillText('Pohja ' + String(spot.depth).replace('.', ',') + ' m', safeL + 15, by - 8);
+}
+function drawHole() {
+  const hw = 15;
+  // The hole through the ice, with the slush round it.
+  x.fillStyle = '#1c4a63'; x.fillRect(holeX - hw, iceY - 2, hw * 2, waterTop - iceY + 2);
+  if (holes.includes(spot.i) || phase === 'drill' && drill > 0) {
+    x.fillStyle = '#e8eef3'; x.beginPath(); x.ellipse(holeX - hw - 8, iceY - 2, 11, 4, 0, 0, 7); x.ellipse(holeX + hw + 8, iceY - 2, 11, 4, 0, 0, 7); x.fill();
+  }
+  if (phase === 'drill' && drill < 1) {
+    // Still ice: only as deep as the auger has gone.
+    x.fillStyle = '#bcd6e6'; x.fillRect(holeX - hw, iceY - 2 + drill * (waterTop - iceY), hw * 2, (1 - drill) * (waterTop - iceY) + 2);
+    if (drill === 0) { x.fillStyle = '#f4f8fb'; x.fillRect(holeX - hw, iceY - 9, hw * 2, 9); }
+  }
+}
+function drawAngler() {
+  // Sitting on a bucket beside the hole, a short ice rod over it.
+  const bx = holeX - 50, by = iceY - 9;
+  x.fillStyle = '#c94a3a'; rr(bx - 13, by - 24, 26, 24, 4); x.fill();
+  x.fillStyle = '#a53528'; x.fillRect(bx - 14, by - 25, 28, 4);
+  // Legs to the side of the hole, body, head with a woolly hat.
+  x.strokeStyle = '#2b3a52'; x.lineWidth = 8; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(bx + 2, by - 26); x.lineTo(bx + 20, by - 22); x.lineTo(bx + 22, by - 2); x.stroke();
+  x.fillStyle = '#2f5d8a'; rr(bx - 11, by - 62, 22, 38, 8); x.fill();
+  x.fillStyle = '#f0c8a0'; x.beginPath(); x.arc(bx + 1, by - 72, 10, 0, 7); x.fill();
+  x.fillStyle = '#e04848'; x.beginPath(); x.arc(bx + 1, by - 74, 10.5, Math.PI, 0); x.fill();
+  x.beginPath(); x.arc(bx + 1, by - 86, 4, 0, 7); x.fill();
+  // The rod, its tip flicking up with each twitch and bending with a fish on.
+  const pull = fight ? Math.min(1.2, fight.T) : phase === 'bite' ? 0.5 + Math.sin(phaseT * 30) * 0.3 : 0;
+  const tip = rodTip(), hx = bx + 10, hy = by - 44;
+  x.strokeStyle = '#2f5d8a'; x.lineWidth = 6; x.beginPath(); x.moveTo(bx + 4, by - 52); x.lineTo(hx, hy); x.stroke();
+  x.strokeStyle = '#222'; x.lineWidth = 3; x.beginPath(); x.moveTo(hx - 4, hy + 2);
+  x.quadraticCurveTo((hx + tip[0]) / 2, (hy + tip[1]) / 2 - 6 + pull * 10, tip[0], tip[1]); x.stroke();
+  x.fillStyle = '#e8b04a'; x.beginPath(); x.arc(hx - 2, hy + 4, 5, 0, 7); x.fill();
+  x.lineCap = 'butt';
+}
+function rodTip() {
+  const pull = fight ? Math.min(1.2, fight.T) : phase === 'bite' ? 0.5 + Math.sin(phaseT * 30) * 0.3 : 0;
+  return [holeX - 2, iceY - 46 - jigKick * 10 + pull * 18];
+}
+function drawLine() {
+  if (!['jig', 'bite', 'fight', 'caught'].includes(phase)) return;
+  const [tx, ty] = rodTip(), jy = depthY(jigD) - jigKick * 8, jx = holeX + (fight ? fight.fish.x * mPx * 0.5 : 0);
+  x.strokeStyle = fight && fight.T > 0.9 ? 'rgba(255,120,100,.9)' : 'rgba(255,255,255,.75)'; x.lineWidth = 1.2;
+  x.beginPath(); x.moveTo(tx, ty); x.lineTo(holeX, iceY); x.lineTo(jx, jy); x.stroke();
+  // The jig: a little shiny fish of metal with a hook.
+  if (phase !== 'caught') {
+    x.save(); x.translate(jx, jy + 6); x.rotate(Math.sin(playT * 3) * 0.15 + jigKick * 0.5);
+    x.fillStyle = '#e6e9ec'; x.beginPath(); x.ellipse(0, 0, 3.5, 8, 0, 0, 7); x.fill();
+    x.fillStyle = '#d33'; x.fillRect(-3, -3, 6, 2);
+    x.strokeStyle = '#ccc'; x.lineWidth = 1.2; x.beginPath(); x.arc(0, 11, 3, 0, Math.PI); x.stroke();
+    x.restore();
+  }
+}
+function drawFish(f, px, py, scale = 1, dir = 1, alpha = 1) {
+  const s = SPECIES[f.sp], L = (16 + 30 * Math.cbrt(f.g / 1000)) * scale * Math.min(1.25, mPx / 38), h = L * (s.long ? 0.22 : f.sp === 'lahna' ? 0.45 : 0.32);
+  x.save(); x.translate(px, py); x.scale(dir, 1); x.globalAlpha = alpha;
+  x.fillStyle = s.fin; x.beginPath(); x.moveTo(-L * 0.42, 0); x.lineTo(-L * 0.62, -h * 0.6); x.lineTo(-L * 0.62, h * 0.6); x.fill();
+  x.fillStyle = s.col; x.beginPath(); x.ellipse(0, 0, L / 2, h / 2, 0, 0, 7); x.fill();
+  x.fillStyle = s.belly; x.beginPath(); x.ellipse(L * 0.04, h * 0.18, L * 0.38, h * 0.22, 0, 0, 7); x.fill();
+  if (s.stripes) { x.fillStyle = 'rgba(30,40,20,.45)'; for (let i = -1; i <= 2; i++) x.fillRect(i * L * 0.12 - L * 0.04, -h * 0.45, L * 0.05, h * 0.6); }
+  x.fillStyle = s.fin; x.beginPath(); x.moveTo(-L * 0.05, -h * 0.45); x.lineTo(L * 0.12, -h * 0.75); x.lineTo(L * 0.2, -h * 0.4); x.fill();
+  x.fillStyle = '#111'; x.beginPath(); x.arc(L * 0.36, -h * 0.08, Math.max(1.4, L * 0.03), 0, 7); x.fill();
+  x.restore();
+}
+function drawWater() {
+  if (phase === 'drill' || phase === 'walk') return;
+  for (const f of fish) {
+    if (fight && f === fight.fish) continue;
+    const dir = f.look ? (f.x < 0 ? 1 : -1) : Math.sign(f.vx) || 1;
+    // Seen dimly; the ones looking at the jig a little clearer.
+    drawFish(f, fishX(f.x), depthY(f.d), 1, dir, f.look ? 0.55 + f.int * 0.4 : 0.38);
+    if (f.look && f.int > 0.05) {
+      const px = fishX(f.x), py = depthY(f.d) - 16;
+      x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(px - 15, py, 30, 4);
+      x.fillStyle = f.int > 0.7 ? '#7ee081' : '#ffd166'; x.fillRect(px - 15, py, 30 * f.int, 4);
+    }
+  }
+  if (fight) drawFish(fight.fish, holeX + fight.fish.x * mPx * 0.5, depthY(fight.L) + 14, 1, Math.cos(fight.sway) > 0 ? 1 : -1, 1);
+  // Bubbles at the jig when it twitches.
+  if (jigKick > 0.5 && phase === 'jig') { x.fillStyle = 'rgba(255,255,255,.5)'; for (let i = 0; i < 3; i++) { x.beginPath(); x.arc(holeX + (i - 1) * 6, depthY(jigD) - 10 - i * 7 * (1 - jigKick), 2, 0, 7); x.fill(); } }
+}
+function drawAuger() {
+  if (phase !== 'drill') return;
+  const [ax, ay] = augerC(), a = touchAngle(), sink = drill * (waterTop - iceY);
+  // The shaft standing in the hole, the crank going round with the finger.
+  x.strokeStyle = '#8a929a'; x.lineWidth = 5; x.beginPath(); x.moveTo(holeX, ay - 8); x.lineTo(holeX, iceY + sink); x.stroke();
+  const hx = ax + Math.cos(a) * 26, hy = ay + Math.sin(a) * 9;
+  x.strokeStyle = '#c33'; x.lineWidth = 5; x.beginPath(); x.moveTo(holeX, ay); x.lineTo(hx, hy); x.stroke();
+  x.fillStyle = '#222'; x.beginPath(); x.arc(hx, hy, 6, 0, 7); x.fill();
+  // A ring the finger goes round, and how far through the ice.
+  x.strokeStyle = 'rgba(255,255,255,.65)'; x.lineWidth = 2; x.setLineDash([6, 6]);
+  x.beginPath(); x.arc(ax, ay, 46, 0, 7); x.stroke(); x.setLineDash([]);
+  const bw = 140, bxx = W / 2 - bw / 2, byy = meterY - 4;
+  x.fillStyle = 'rgba(0,0,0,.4)'; rr(bxx, byy, bw, 12, 6); x.fill();
+  x.fillStyle = '#9fd3ff'; rr(bxx, byy, bw * drill, 12, 6); x.fill();
+}
+let augA = 0;
+function touchAngle() { if (touch.id !== null && phase === 'drill') augA = touch.a; return augA; }
+// The metronome: a ball going from side to side; a twitch counts when it touches a side.
+function drawMeter() {
+  const w = Math.min(250, W - 80), X = W / 2 - w / 2, y = meterY;
+  if (phase === 'jig' && jigD >= 0.3) {
+    const P = period(), zone = WIN / P * w * 0.5;
+    x.fillStyle = 'rgba(0,0,0,.45)'; rr(X - 14, y - 12, w + 28, 24, 12); x.fill();
+    x.fillStyle = target ? 'rgba(126,224,129,.55)' : 'rgba(255,255,255,.25)';
+    rr(X - 12, y - 10, zone + 12, 20, 10); x.fill(); rr(X + w - zone, y - 10, zone + 12, 20, 10); x.fill();
+    const ph = beat % 2, pos = ph < 1 ? ph : 2 - ph;
+    x.fillStyle = '#ffd166'; x.beginPath(); x.arc(X + pos * w, y, 9, 0, 7); x.fill();
+  } else if (phase === 'fight') {
+    // The line's tension: green is safe, red breaks it.
+    const T = Math.min(1.2, fight.T) / 1.2;
+    x.fillStyle = 'rgba(0,0,0,.45)'; rr(X - 4, y - 12, w + 8, 24, 12); x.fill();
+    const gr = x.createLinearGradient(X, 0, X + w, 0);
+    gr.addColorStop(0, '#5fc46a'); gr.addColorStop(0.6, '#e8d04a'); gr.addColorStop(0.8, '#e5383b'); gr.addColorStop(1, '#9a1010');
+    x.fillStyle = gr; rr(X, y - 8, w * T, 16, 8); x.fill();
+    x.fillStyle = '#fff'; x.fillRect(X + w / 1.2 - 1, y - 14, 3, 28);
+  }
+}
+function drawHud() {
+  // The clock and the catch in the middle, out of the corner chips' way.
+  // Sideways it sits right of the angler.
+  const w = Math.max(140, Math.min(220, W - 210)), X = wide ? Math.max(holeX + 70, (W - w) / 2) : (W - w) / 2, y = safeT + 6;
+  x.fillStyle = 'rgba(16,40,64,.85)'; rr(X, y, w, 44, 12); x.fill();
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  const m = Math.floor(Math.ceil(left) / 60), s = Math.ceil(left) % 60;
+  x.font = '900 21px system-ui'; x.fillStyle = left < 30 ? '#ff8a6b' : '#fff';
+  x.fillText(m + ':' + (s < 10 ? '0' : '') + s, X + w / 2, y + 15);
+  x.font = '700 12px system-ui'; x.fillStyle = '#ffd166';
+  x.fillText('Saalis ' + kg(myG) + ' · ' + myN + (myN === 1 ? ' kala' : ' kalaa'), X + w / 2, y + 34, w - 10);
+  x.textBaseline = 'alphabetic';
+  // The standings, top right under the chip.
+  const st = standings(), rows = st.length > 4 ? st.slice(0, 3).concat(st.slice(3).filter(q => q.me)).slice(0, 4) : st;
+  const pw = 138, px = W - safeR - pw - 6, py = safeT + 56;
+  x.fillStyle = 'rgba(16,40,64,.6)'; rr(px, py, pw, 8 + rows.length * 17, 9); x.fill();
+  x.font = '700 12px system-ui';
+  rows.forEach((q, i) => {
+    const yy = py + 17 + i * 17, n = st.indexOf(q) + 1;
+    x.textAlign = 'left'; x.fillStyle = q.me ? '#ffd166' : q.away ? 'rgba(255,255,255,.5)' : '#e4eef7';
+    x.fillText(n + '. ' + q.name, px + 7, yy, pw - 62);
+    x.textAlign = 'right'; x.fillText(kg(q.g), px + pw - 7, yy);
+  });
+  if (phase === 'jig' || phase === 'drill') {
+    const b = moveBtn;
+    x.fillStyle = 'rgba(16,40,64,.75)'; rr(b.x, b.y, b.w, b.h, 12); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 1.5; x.stroke();
+    x.fillStyle = '#fff'; x.font = '800 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('🚶 Uusi paikka', b.x + b.w / 2, b.y + b.h / 2 + 1); x.textBaseline = 'alphabetic';
+  }
+}
+function hint() {
+  if (phase === 'drill') return 'Pyöritä sormella ympyrää: kairaa reikä';
+  if (phase === 'walk') return 'Kävellään uudelle paikalle…';
+  if (phase === 'jig') return jigD < 0.3 ? 'Vedä alas: laske pilkki' : target ? 'Napauta, kun pallo osuu reunaan' : 'Vedä ylös tai alas: etsi kaloja';
+  if (phase === 'bite') return 'Tärppi! Napauta!';
+  if (phase === 'fight') return fight.T > 0.85 ? 'Päästä irti, siima kiristyy!' : 'Pidä sormi ruudulla: kelaa';
+  if (phase === 'snap') return 'Siima katkesi! Solmitaan uusi pilkki…';
+  if (phase === 'wait') return net.on ? 'Aika loppui! Odotetaan tuloksia…' : 'Odotetaan…';
+  return '';
+}
+function drawMessages() {
+  x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.55)';
+  const h = hint();
+  if (h) {
+    const big = phase === 'bite', yy = meterY - (wide ? 24 : 30);
+    x.font = (big ? '900 26px' : '800 15px') + ' system-ui';
+    x.strokeText(h, W / 2, yy, W - 20); x.fillStyle = big ? '#ffd166' : '#fff'; x.fillText(h, W / 2, yy, W - 20);
+  }
+  texts.forEach((t, i) => {
+    x.globalAlpha = Math.min(1, t.t * 2); x.font = '800 16px system-ui';
+    const yy = depthY(Math.max(0.3, jigD)) - 26 - (1.1 - t.t) * 26 - i * 18, tx = Math.min(W - 70, holeX + 70);
+    x.strokeText(t.s, tx, yy); x.fillStyle = t.c; x.fillText(t.s, tx, yy);
+    x.globalAlpha = 1;
+  });
+  if (phase === 'jig' && jigD >= 0.3) {
+    x.font = '700 12px system-ui'; x.fillStyle = '#fff'; x.textAlign = 'left';
+    x.fillText(jigD.toFixed(1).replace('.', ',') + ' m', holeX + 12, depthY(jigD) + 10);
+  }
+}
+function drawCatch() {
+  if (phase !== 'caught' || !landed) return;
+  const w = Math.min(280, W - 40), h = 150, X = (W - w) / 2, Y = Math.max(safeT + 60, (H - h) / 2 - 20);
+  x.fillStyle = 'rgba(16,40,64,.9)'; rr(X, Y, w, h, 16); x.fill();
+  // Drawn big, but never wider than the card.
+  const L = (16 + 30 * Math.cbrt(landed.g / 1000)) * Math.min(1.25, mPx / 38);
+  drawFish(landed, W / 2, Y + 52, Math.min(2.4, (w - 70) / L), 1, 1);
+  x.textAlign = 'center'; x.font = '900 22px system-ui'; x.fillStyle = '#fff';
+  x.fillText(SPECIES[landed.sp].name + ' ' + weightText(landed.g), W / 2, Y + 108);
+  x.font = '700 13px system-ui'; x.fillStyle = '#ffd166';
+  x.fillText(myBig && myBig.g === landed.g && myN > 1 ? 'Kisan suurin kala!' : 'Saalis nyt ' + kg(myG), W / 2, Y + 132);
+}
+function drawMap() {
+  if (!mapOpen) return;
+  x.fillStyle = 'rgba(10,26,42,.82)'; x.fillRect(0, 0, W, H);
+  const b = mapBox;
+  x.fillStyle = '#e9f1f7'; x.beginPath(); x.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, 7); x.fill();
+  x.fillStyle = '#c4dbea'; x.beginPath(); x.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w * 0.24, b.h * 0.22, 0, 0, 7); x.fill();
+  x.textAlign = 'center'; x.font = '800 17px system-ui'; x.fillStyle = '#fff';
+  x.fillText('Napauta uutta paikkaa järvellä', W / 2, b.y - 14);
+  // Who is where: the others' figures by their places.
+  const at = {};
+  if (net.on) for (const id in net.board) if (id !== R.me) { const q = net.board[id]; (at[q.sp] = at[q.sp] || []).push(id); }
+  if (!net.on) rivals.forEach(r => (at[r.spot] = at[r.spot] || []).push(r.name));
+  for (const s of lake) {
+    const [sx, sy] = spotXY(s), mine = s === spot;
+    x.fillStyle = mine ? '#ffd166' : holes.includes(s.i) ? '#2f6f8f' : '#fff';
+    x.strokeStyle = '#2f5d8a'; x.lineWidth = 2;
+    x.beginPath(); x.arc(sx, sy, 17, 0, 7); x.fill(); x.stroke();
+    x.font = '800 11px system-ui'; x.fillStyle = mine ? '#2a1a05' : holes.includes(s.i) ? '#fff' : '#1d3555'; x.textBaseline = 'middle';
+    x.fillText(String(s.depth).replace('.', ',') + ' m', sx, sy + 1);
+    x.textBaseline = 'alphabetic';
+    (at[s.i] || []).forEach((_, k) => { x.fillStyle = '#e5383b'; x.beginPath(); x.arc(sx + 15 - k * 7, sy - 15, 4, 0, 7); x.fill(); });
+  }
+  x.font = '600 12px system-ui'; x.fillStyle = '#c4d8ea';
+  x.fillText('Keltainen: sinä · sininen: oma reikä · punainen: muut', W / 2, b.y + b.h + 22, W - 20);
+  x.fillText('Matalassa ahvenet ja hauet, syvällä kuhat ja mateet', W / 2, b.y + b.h + 40, W - 20);
+}
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawScene();
+  if (phase === 'menu' || phase === 'room') return;
+  drawWater(); drawHole(); drawAngler(); drawAuger(); drawLine();
+  if (phase === 'walk') { x.fillStyle = 'rgba(230,240,248,' + Math.max(0, 1 - Math.abs(phaseT / walkT - 0.5) * 2) + ')'; x.fillRect(0, 0, W, H); }
+  drawMeter(); drawHud(); drawMessages(); drawCatch(); drawMap();
+}
+
+let prev = 0, acc = 0;
+function loop(t) {
+  fitCheck();
+  const dt = Math.min(0.1, (t - prev) / 1000 || 0); prev = t;
+  acc += dt;
+  const n = Math.floor(acc / DT); acc -= n * DT;
+  for (let i = 0; i < n; i++) { update(DT); closing(DT); }
+  draw();
+  sound();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Menu ----------
+function showMenu(result, cls, st) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  const b = document.getElementById('board');
+  b.innerHTML = '';
+  for (const q of st || []) {
+    const li = document.createElement('li'), a = document.createElement('span'), z = document.createElement('span');
+    a.textContent = q.name + (q.n ? ' (' + q.n + ')' : ''); z.textContent = kg(q.g);
+    li.append(a, z); if (q.me) li.className = 'me'; b.append(li);
+  }
+  document.getElementById('foe').textContent = 'Taso ' + level + ': vastassa ' + RIVALS.join(', ');
+  const n = Object.values(caughtAll).reduce((a, v) => a + v, 0);
+  document.getElementById('stats').textContent = (best ? 'Paras saalis ' + kg(best) : 'Ei vielä saalista') +
+    (biggest ? ' · Suurin kala: ' + SPECIES[biggest.s].name.toLowerCase() + ' ' + weightText(biggest.g) : '') +
+    (n ? ' · Kaloja kaikkiaan ' + n : '') + (friends.kisat ? ' · Kavereiden kanssa ' + friends.voitot + '/' + friends.kisat + ' voittoa' : '');
+  // A contest left unfinished can be carried on.
+  const k = load('kisa', null), res = document.getElementById('resume');
+  res.hidden = !(k && k.lv === level && k.left > 0);
+  if (!res.hidden) { const m = Math.floor(k.left / 60), s = k.left % 60; res.textContent = 'Jatka kisaa (' + m + ':' + (s < 10 ? '0' : '') + s + ' jäljellä)'; }
+  menu.classList.remove('hidden');
+}
+function roomNote() {
+  if (R.inRoom) R.note('Kaikki pilkkivät samalla järvellä, kukin omalla puhelimellaan. Viisi minuuttia: suurin saalis voittaa.');
+}
+document.getElementById('go').addEventListener('click', () => { S.play('valinta', { vol: 0.4 }); save('kisa', null); newContest(); });
+document.getElementById('resume').addEventListener('click', () => { S.play('valinta', { vol: 0.4 }); newContest(load('kisa', null)); });
+document.getElementById('multi').addEventListener('click', () => { R.open(); roomNote(); });
+R.on('peers', roomNote);
+showMenu();
+requestAnimationFrame(loop);
+</script>
+<script src="../../../scores.js" data-game="pilkki" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
