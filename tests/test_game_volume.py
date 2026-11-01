@@ -14,13 +14,15 @@ SPY = """(() => {
   };
 })()"""
 
-# A game that makes its context and its own master gain as the page loads, before back.js, and
-# plays a beep on each tap.
+# A game that makes its context as the page loads, before back.js, and connects its master gain
+# on the first sound, as every published game does (none connects to the speaker before back.js).
 GAME = """
 const ac = new AudioContext();
-const master = ac.createGain();
-master.connect(ac.destination);
-window.beep = () => { const o = ac.createOscillator(); o.connect(master); o.start(); o.stop(ac.currentTime + 0.05); };
+let master = null;
+window.beep = () => {
+  if (!master) { master = ac.createGain(); master.connect(ac.destination); }
+  const o = ac.createOscillator(); o.connect(master); o.start(); o.stop(ac.currentTime + 0.05);
+};
 window.taps = 0;
 addEventListener('pointerdown', () => { taps++; });
 """
@@ -74,19 +76,19 @@ def test_every_sound_of_the_game_goes_through_the_volume(site, context):
     page.evaluate("localStorage.setItem('ai-pelit:_aani:voimakkuus', '50')")
     page.reload()
     page.wait_for_selector("#ai-pelit-aani")
-    # The game's master gain, connected before back.js, is the one node on the speaker until a
-    # sound plays; from then on everything goes through the volume, 50 % heard as 0.25.
+    # The game's master gain and a node connected straight to the speaker both go through the
+    # volume, 50 % heard as 0.25.
     page.evaluate("beep()")
     page.evaluate("""() => { const o = ac.createOscillator(); o.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.05);
         o.disconnect(ac.destination); }""")
-    assert speaker_gains(page) == [1, 0.25]
+    assert speaker_gains(page) == [0.25]
     # A new context made after the page loaded, as the sound library does on the first tap.
     page.evaluate("""() => { const c = new AudioContext(); const g = c.createGain(); g.connect(c.destination); }""")
-    assert speaker_gains(page) == [1, 0.25, 0.25]
+    assert speaker_gains(page) == [0.25, 0.25]
     # Muting sets every volume gain to 0.
     page.tap("#ai-pelit-aani")
     page.tap("#ai-pelit-aani-mykista")
-    assert speaker_gains(page) == [1, 0, 0]
+    assert speaker_gains(page) == [0, 0]
     # A context drawn offline (no speaker) is left as it is.
     assert page.evaluate("""() => { const c = new OfflineAudioContext(1, 128, 44100); const o = c.createOscillator();
         return o.connect(c.destination) === c.destination; }""")
@@ -107,3 +109,30 @@ def test_a_frame_without_back_js_follows_the_page_around_it(site, context):
     inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani")
     inner.evaluate("() => { const c = new AudioContext(); c.createOscillator().connect(c.destination); }")
     assert speaker_gains(inner) == [0.04]
+
+
+def test_a_change_in_another_tab_shows_at_once_and_the_panel_fits_a_390px_phone(site, browser):
+    make_game(site.games, "pomppu", [game_page("v1", script=GAME)])
+    site.build()
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    ctx.add_init_script(SPY)
+    try:
+        page, other = ctx.new_page(), ctx.new_page()
+        for p in (page, other):
+            p.goto(f"{site.url}games/pomppu/v1/")
+            p.wait_for_selector("#ai-pelit-aani")
+        page.evaluate("beep()")
+        other.tap("#ai-pelit-aani")
+        other.locator("#ai-pelit-aani-liuku").fill("20")
+        # The first page hears of it through the storage event: its chip and its sound follow.
+        page.wait_for_function("document.getElementById('ai-pelit-aani').textContent === '🔉'")
+        assert speaker_gains(page) == [0.04]
+        # The panel is whole on screen.
+        box = other.locator("#ai-pelit-aani-paneeli").bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= 390 and box["y"] + box["height"] <= 844
+        # A restart keeps it.
+        other.reload()
+        other.wait_for_selector("#ai-pelit-aani")
+        assert other.inner_text("#ai-pelit-aani") == "🔉"
+    finally:
+        ctx.close()
