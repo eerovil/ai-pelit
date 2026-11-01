@@ -145,3 +145,25 @@ def test_v2_saves_are_read_as_they_are(game):
     page.wait_for_function("round.phase === 'over'", timeout=5000)
     assert page.evaluate("localStorage.getItem('ai-pelit:pallorata:pelit')") == "8"
     assert page.errors == []
+
+
+def test_a_second_round_rolls_and_sounds_again(game):
+    page = game
+    start(page)
+    page.wait_for_function("roll.vol > 0.3", timeout=3000)
+    page.evaluate("clearInterval(keep); ball.aimX = 50")
+    page.wait_for_function("round.phase === 'over'", timeout=5000)
+    page.wait_for_function("roll.vol === 0", timeout=1000)
+    played(page)
+    page.click("#uudestaan")
+    page.wait_for_function("round.phase === 'run'", timeout=2000)
+    page.evaluate("window.keep = setInterval(() => { ball.aimX = row(Math.floor(-ball.z / 2)).cx; }, 16)")
+    page.wait_for_function("roll.playing() && roll.vol > 0.3", timeout=3000)
+    # A star and a turbo in the same frame both sound.
+    page.evaluate("""() => { const s = stars.find(s => s.visible) || stars[0];
+      s.visible = true; s.position.set(ball.x, ball.y, ball.z);
+      row(Math.floor(-ball.z / 2)).kind = 'boost'; ball.boost = 0; }""")
+    page.wait_for_function("round.stars > 0 && ball.boost > 0", timeout=3000)
+    got = played(page)
+    assert "valinta" in got and "nousu" in got, got
+    assert page.errors == []
