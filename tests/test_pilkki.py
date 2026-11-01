@@ -376,7 +376,8 @@ def test_a_phone_s_own_report_never_changes_its_catch(room):
     }""")
     host.wait_for_timeout(600)
     aino = guest.evaluate("AiPelitRooms.me")
-    assert host.evaluate(f"[net.board[{json.dumps(aino)}].g, net.board[{json.dumps(aino)}].n, net.board[{json.dumps(aino)}].sp]") == [900, 1, 3]
+    # (Where it fishes is taken from it: its own message every second puts back its real place.)
+    assert host.evaluate(f"[net.board[{json.dumps(aino)}].g, net.board[{json.dumps(aino)}].n]") == [900, 1]
     assert host.errors == guest.errors == []
 
 
