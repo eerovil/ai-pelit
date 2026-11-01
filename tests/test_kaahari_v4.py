@@ -1,0 +1,107 @@
+"""Kaahari v4: recorded sounds from the shared library public/lib/aanet-2/ (#216)."""
+
+from conftest import ROOT
+
+URL = "games/kaahari/v4/"
+SOUNDS = ['kartti', 'valinta', 'onnistui', 'voitto', 'tappio', 'kitka', 'hyppy', 'nousu', 'naksu',
+          'suhahdus', 'rajahdys', 'metalli', 'osuma', 'aplodit']
+
+# Every AiPelitAanet.play() call, with whether it played, in window.heard.
+SPY = """() => {
+  window.heard = [];
+  const real = AiPelitAanet.play;
+  AiPelitAanet.play = (name, o) => { const ok = real(name, o); heard.push([name, ok]); return ok; };
+}"""
+
+
+def open_game(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.evaluate(SPY)
+    return page
+
+
+def played(page):
+    return [n for n, ok in page.evaluate("heard.splice(0)") if ok]
+
+
+def finish(page):
+    page.evaluate("""() => {
+        const p = at(T, T.L - 25, 0);
+        Object.assign(me, { x: p.x, y: p.y, a: p.a, idx: p.i, s: T.L - 25, prog: 3 * T.L - 25, lap: 2, v: 150 });
+    }""")
+
+
+def test_a_race_sounds_from_the_countdown_to_the_finish(site, context):
+    page = open_game(site, context)
+    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
+    page.click("#go")
+    page.wait_for_function("race.phase === 'run'", timeout=6000)
+    assert played(page) == ["valinta", "valinta", "valinta"]
+    # The kart's engine is the recorded loop, faster as the kart speeds up.
+    page.wait_for_function("me.v > 100 && kart && kart.playing()", timeout=3000)
+    assert page.evaluate("kart.rate > 1")
+    page.evaluate("heard.splice(0)")
+    page.evaluate("""() => {
+        for (const it of ['turbo', 'tnt', 'pommi']) { me.item = it; useItem(); }
+        me.shield = 0; hit(me);
+    }""")
+    assert played(page)[:4] == ["nousu", "naksu", "suhahdus", "kitka"]
+    # A bomb going off near the kart.
+    assert page.evaluate("heard.splice(0); boom({ x: me.x + 50, y: me.y }); heard.splice(0)") == [["rajahdys", True]]
+    page.evaluate("me.spin = 0; heard.splice(0)")
+    finish(page)
+    page.wait_for_function("race.phase === 'over'", timeout=6000)
+    got = played(page)
+    assert "voitto" in got and got[got.index("voitto") + 1] == "aplodit", got
+    assert page.evaluate("kart") is None
+    assert page.errors == []
+
+
+def test_a_slide_hops_then_each_spark_colour_and_the_turbo_sound(site, context):
+    page = open_game(site, context)
+    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
+    page.click("#go")
+    page.evaluate("race.cdT = 3")
+    page.wait_for_function("race.phase === 'run' && me.v > 100", timeout=6000)
+    page.evaluate("heard.splice(0); input.drift = true; input.right = true")
+    page.wait_for_function("me.drift === 1", timeout=1000)
+    page.evaluate("input.right = false")
+    page.wait_for_function("me.dTime > 1.5", timeout=3000)
+    page.evaluate("input.drift = false")
+    page.wait_for_timeout(50)
+    got = played(page)
+    assert "hyppy" in got and got.count("valinta") >= 2 and "nousu" in got, got
+    assert page.errors == []
+
+
+def test_without_the_sound_files_it_still_races_with_its_beeps(site, browser):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
+                              service_workers="block")
+    try:
+        ctx.route("**/*.mp3", lambda route: route.abort())
+        page = open_game(site, ctx)
+        page.click("#go")
+        page.wait_for_function("race.phase === 'run'", timeout=6000)
+        assert page.evaluate("!kart.playing() && eng !== null")
+        finish(page)
+        page.wait_for_function("race.phase === 'over'", timeout=6000)
+        assert played(page) == []
+        assert page.inner_text("#result") == "🏆 Voitit kisan!"
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_v3_saves_are_read_as_they_are(site, context):
+    page = open_game(site, context)
+    page.evaluate("""() => {
+      for (const [k, v] of [['taso', 4], ['voitot', 3], ['kisat', 7], ['rata', 2]]) localStorage.setItem('ai-pelit:kaahari:' + k, JSON.stringify(v));
+    }""")
+    page.goto(site.url + URL)
+    assert page.inner_text("#stats") == "Taso 4 · Voitot 3 / 7 kisaa"
+    assert page.evaluate("trackNo") == 2
+    assert page.errors == []
