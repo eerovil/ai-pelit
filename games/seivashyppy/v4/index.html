@@ -352,8 +352,9 @@ function landed() {
     if (th.mine) {
       th.record = K.record(h);
       // A new lead or record gets the crowd's applause, any other clearance a confirmation.
-      if (mat) S.play(th.leads || th.record ? 'aplodit' : 'onnistui', { delay: 0.2, vol: th.leads || th.record ? 0.8 : 0.5 });
-      else if (!S.play('onnistui', { vol: 0.5 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      // Chosen whether or not the mat's thud played; v3's beep when the chosen one cannot play.
+      const big = th.leads || th.record;
+      if (!S.play(big ? 'aplodit' : 'onnistui', { delay: mat ? 0.2 : 0, vol: big ? 0.8 : 0.5 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
     }
   } else if (th.mine) S.play('ohhoo', { vol: 0.8, delay: 0.15 }) || tone(160, 0.3, 'sawtooth', 0.08, 70);
 }

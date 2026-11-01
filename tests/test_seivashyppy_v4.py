@@ -84,13 +84,72 @@ def test_the_medals_ring_and_the_podium_stays_until_a_tap(site, context):
     assert page.errors == []
 
 
-def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
+# Every tone() call (the game's own beep), by its first frequency, in window.beeps.
+BEEPS = """() => {
+  window.beeps = [];
+  const real = window.tone;
+  window.tone = (f, ...r) => { beeps.push(f); return real(f, ...r); };
+}"""
+
+
+def blocked_page(site, browser, pattern):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    ctx.route(pattern, lambda route: route.abort())
+    page = open_game(site, ctx)
+    page.evaluate(BEEPS)
+    return ctx, page
+
+
+def beeps(page):
+    return page.evaluate("beeps.splice(0)")
+
+
+def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
+    ctx, page = blocked_page(site, browser, "**/*.mp3")
     try:
-        ctx.route("**/*.mp3", lambda route: route.abort())
-        page = open_game(site, ctx)
-        v3.win_meet(page)
+        page.click("#go")
+        page.evaluate("ready(); heard.splice(0); beeps.splice(0)")
+        # A clearance: v3's plant, push-off and two-note chime.
+        page.evaluate("go(9.2); run(() => th.phase === 'fly', 6)")
+        assert page.evaluate("th.res") == "O"
+        page.evaluate("th.t = 99; step(0.001)")
+        b = beeps(page)
+        assert 140 in b and 520 in b and 880 in b, b
+        # A failure: the low buzz.
+        page.evaluate("run(() => !th || !th.mine || th.phase !== 'ready', 30); ready(); beeps.splice(0); fail()")
+        assert 160 in beeps(page)
         assert played(page) == []
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_a_clearance_beeps_when_only_its_own_sound_is_missing(site, browser):
+    # The mat's thud loads, the crowd and the confirmation do not: v3's chime still plays.
+    ctx, page = blocked_page(site, browser, "**/{aplodit,onnistui}.mp3")
+    try:
+        page.click("#go")
+        page.wait_for_function("AiPelitAanet.ready('tomahdys')", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+        page.evaluate("ready(); heard.splice(0); beeps.splice(0); go(9.2); quick()")
+        assert "tomahdys" in played(page)
+        assert 880 in beeps(page)
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_a_record_gets_applause_even_when_the_thud_is_missing(site, browser):
+    ctx, page = blocked_page(site, browser, "**/tomahdys.mp3")
+    try:
+        page.click("#go")
+        page.wait_for_function("AiPelitAanet.ready('aplodit')", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+        # The player's first clearance is a new record.
+        page.evaluate("ready(); heard.splice(0); beeps.splice(0); go(9.2); quick()")
+        got = played(page)
+        assert "tomahdys" not in got and got[-1] == "aplodit", got
+        assert 880 not in beeps(page)
         assert page.errors == []
     finally:
         ctx.close()
