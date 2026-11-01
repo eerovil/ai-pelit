@@ -154,8 +154,10 @@ function whistle(long) {
 function kickSound(hard) {
   S.play('potku', { vol: hard ? 1 : 0.6, rate: hard ? 0.9 : 1.1 }) || tone(hard ? 140 : 220, hard ? 0.12 : 0.07, 'triangle', hard ? 0.12 : 0.08, hard ? 70 : 0);
 }
+// The net and the crowd each play on their own; without the crowd, v1's cheer.
 function cheer() {
-  if (S.play('verkko')) { S.play('yleiso', { delay: 0.15, vol: 0.8 }); return; }
+  S.play('verkko');
+  if (S.play('yleiso', { delay: 0.15, vol: 0.8 })) return;
   for (let i = 0; i < 6; i++) setTimeout(() => tone(500 + Math.random() * 500, 0.15, 'sawtooth', 0.02), i * 60);
 }
 function tackleSound() { S.play('suhahdus', { vol: 0.6, rate: 1.2 }) || tone(260, 0.06, 'triangle', 0.04, 180); }

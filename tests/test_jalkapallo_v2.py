@@ -141,3 +141,23 @@ def test_a_guest_hears_the_hosts_save_tackle_and_post(room):
     host.evaluate("for (const p of players) { p.x = (p.slot - 1) * 5; p.y = p.t ? 6 : -6; p.vx = p.vy = 0; p.cd = 5; } owner = null; Object.assign(ball, { x: GOAL / 2, y: LEN / 2 - 4, z: 0, vx: 0, vy: 14, vz: 0, from: null, fromT: 0, shot: false })")
     guest.wait_for_function("heard.some(h => h[0] === 'metalli')", timeout=3000)
     assert host.errors == guest.errors == []
+
+
+@pytest.mark.parametrize("missing,heard", [("verkko", ["yleiso"]), ("yleiso", ["verkko"])])
+def test_a_goal_without_one_of_its_two_sounds_plays_the_other(site, browser, missing, heard):
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route(f"**/{missing}.mp3", lambda route: route.abort())
+        page = start(site, ctx, ready=False)
+        here = [n for n in SOUNDS if n != missing]
+        page.wait_for_function(f"{here}.every(AiPelitAanet.ready)", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('osuma', { vol: 0 })", timeout=5000)
+        page.evaluate("() => { window.beeps = 0; const t = tone; tone = (...a) => { beeps++; t(...a); }; heard.splice(0); }")
+        page.evaluate("cheer()")
+        assert played(page) == heard
+        # Without the crowd, v1's six-note cheer stands in for it.
+        page.wait_for_timeout(500)
+        assert page.evaluate("beeps") == (6 if missing == "yleiso" else 0)
+        assert page.errors == []
+    finally:
+        ctx.close()
