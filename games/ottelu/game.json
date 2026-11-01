@@ -37,6 +37,13 @@
       "note": "Kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa, ja napautus vie lopputuloksiin; korkeus- ja seiväshypyssä rima nousee kaksi kertaa isommin askelin, joten ne menevät nopeammin.",
       "request": "Ottelun lopussa palkintojenjako: kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa (yleisurheilukirjaston oma palkintojenjako), ja napautus vie lopputuloksiin. Lajien välissä ei palkintojenjakoa, kuten v4:ssä. Lisäksi (Eero, chatissa): korkeuslajit nopeammiksi isommilla riman nostoilla.",
       "issue": "eerovil/ai-pelit#294"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-01",
+      "note": "Ottelu pelaa nyt aina jokaisen lajin uusinta versiota, joten kavereiden kanssa vuoroaan odottavat seisovat katsomassa ja voivat kannustaa 📣, ja kenttälajissa odotetaan vain vuorossa olevaa puhelinta.",
+      "request": "Ottelun pitäisi käyttää automaattisesti lajien uusimpia versioita, ettei jokaisen lajipäivityksen jälkeen tarvitse erikseen tehdä uutta Ottelu-versiota. Nyt Ottelu soittaa vanhoja lajiversioita. Esim. #297 / PR #301 toi katsojat ja \"📣 Kannusta\"-napin uusiin versioihin (Pituushyppy v8, Keihäänheitto v7, Kuulantyöntö v2, Moukarinheitto v5, Korkeushyppy v5, Seiväshyppy v5, Mäkihyppy v3), mutta Ottelussa niitä ei näy. Toive (Eero): Ottelu ottaa jatkossa itsestään lajien uusimmat versiot. Nyt heti: Ottelu käyttämään uusimpia versioita, joissa on katsojat ja kannustus.",
+      "issue": "eerovil/ai-pelit#303"
     }
   ]
 }
