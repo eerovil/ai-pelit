@@ -1,4 +1,4 @@
-"""The shared sound effects in public/lib/aanet-1/, aanet-2/ (#205) and aanet-3/ (#330), on a test-only game."""
+"""The shared sound effects in public/lib/aanet-1/, aanet-2/ (#205), aanet-3/ (#330) and aanet-4/ (#337), on a test-only game."""
 
 import re
 from pathlib import Path
@@ -10,6 +10,8 @@ from conftest import ROOT, game_page, make_game, wait_for_worker
 LIB = ROOT / "public" / "lib" / "aanet-1"
 TAG = '<script src="../../../lib/aanet-1/aanet.js"></script>'
 TAG2 = TAG.replace("aanet-1", "aanet-2")
+TAG4 = TAG.replace("aanet-1", "aanet-4")
+CROWD = {"aplodit", "yleiso", "ohhoo", "jee"}
 
 
 def sounds(lib=LIB):
@@ -18,7 +20,7 @@ def sounds(lib=LIB):
     return dict(re.findall(r"^\s+(\w+): '([\w-]+\.mp3)',", text, re.M))
 
 
-@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2", "aanet-3"])
+@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2", "aanet-3", "aanet-4"])
 def test_every_sound_is_there_small_and_its_source_named(folder):
     lib = LIB.parent / folder
     listed = sounds(lib)
@@ -45,6 +47,63 @@ def test_each_folder_keeps_every_sound_of_the_one_before_as_it_is(old, new):
     if new == "aanet-3":
         code = lambda p: [l for l in (p / "aanet.js").read_text().splitlines() if not l.strip().startswith("//") and "mp3'" not in l]
         assert code(a) == code(b)
+
+
+def test_aanet_4_is_aanet_3_without_the_crowd_sounds():
+    a, b = LIB.parent / "aanet-3", LIB.parent / "aanet-4"
+    three, four = sounds(a), sounds(b)
+    assert set(three) - set(four) == CROWD
+    assert set(four) <= set(three)
+    for name, file in four.items():
+        assert three[name] == file
+        assert (a / file).read_bytes() == (b / file).read_bytes()
+    assert not any(re.match(rf"{c}\.mp3", line) for c in CROWD for line in (b / "SOURCE").read_text().splitlines())
+
+
+def newest_versions():
+    for game in sorted((ROOT / "games").iterdir()):
+        versions = [d for d in game.glob("v*") if d.name[1:].isdigit()]
+        if versions:
+            yield max(versions, key=lambda d: int(d.name[1:]))
+
+
+def test_no_game_plays_a_crowd_or_loads_an_older_library_for_one():
+    # #337 (Eero's choice): no applause, shouting crowd, crowd's "ooh" or cheer in any game's newest
+    # version, and a field event's "📣 Kannusta" is its own quiet sound, not kisa.js's "jee!".
+    for v in newest_versions():
+        code = "\n".join(p.read_text() for p in v.rglob("*") if p.suffix in (".html", ".js"))
+        found = set(re.findall(r"'(\w+)'", code)) & CROWD
+        assert not found, f"{v.relative_to(ROOT)} plays {sorted(found)}"
+        if "lib/yleisurheilu-" in code and "AiPelitKisa.meet(" in code:
+            assert "cheerSound:" in code, f"{v.relative_to(ROOT)} cheers with kisa.js's own sound"
+
+
+def test_a_version_on_aanet_4_loads_every_sound_it_plays_by_name():
+    # A sound the game did not load never plays (#337: the quiet blip that took the crowd's place
+    # was first left out of some games' lists).
+    for v in newest_versions():
+        code = "\n".join(p.read_text() for p in v.rglob("*") if p.suffix in (".html", ".js"))
+        lists = re.findall(r"\.load\(\[([^\]]*)\]", code)
+        if "lib/aanet-4/" not in code or not any("'" in l for l in lists):
+            continue
+        loaded = {n for l in lists for n in re.findall(r"'(\w+)'", l)}
+        played = set(re.findall(r"\b(?:play|snd)\('(\w+)'", code)) & set(sounds(LIB.parent / "aanet-4"))
+        assert played <= loaded, f"{v.relative_to(ROOT)} plays {sorted(played - loaded)} without loading it"
+
+
+def test_aanet_4_plays_the_loudest_sounds_quieter(site, context):
+    page = open_demo(site, context, ["pilli", "tappio", "askel"], TAG4)
+    assert page.evaluate("AiPelitAanet.level('pilli', 0.8)") == pytest.approx(0.28)
+    assert page.evaluate("AiPelitAanet.level('pilli')") == pytest.approx(0.35)
+    # The losing tune and the ordinary sounds play as loud as the game asks.
+    assert page.evaluate("[AiPelitAanet.level('tappio', 0.8), AiPelitAanet.level('askel')]") == [0.8, 1]
+    assert not CROWD & set(page.evaluate("AiPelitAanet.names()"))
+    page.wait_for_function("AiPelitAanet.ready('pilli')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.wait_for_function("AiPelitAanet.play('pilli', { vol: 0.8 }) === true", timeout=5000)
+    page.evaluate("window.w = AiPelitAanet.loop('pilli', { vol: 0.6 })")
+    page.wait_for_function("w.playing() && Math.abs(w.gain.gain.value - 0.21) < 0.01", timeout=3000)
+    assert page.errors == []
 
 
 def open_demo(site, context, names, tag=TAG):

@@ -30,6 +30,13 @@
       "note": "Kannustuksen ääni on nyt lyhyt ”jee!” muutamalta ihmiseltä eikä pitkä väkijoukon huuto.",
       "request": "Cheer ääni on karsea",
       "issue": "eerovil/ai-pelit#330"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-01",
+      "note": "Yleisön huudot, aplodit ja ”ooh”-äänet on poistettu, ja kovimmat äänet soivat hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }

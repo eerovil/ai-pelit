@@ -57,6 +57,13 @@
       "note": "Valonappi on vasemmassa alakulmassa, auto kiihtyy reippaammin, levähdysalueelle johtaa oma kaista merkkeineen, sivuteiden risteyksistä tulee autoja, risteyksissä on ohituskielto, vaarallinen ohitus tulee vasta 130 metristä ja vastaan tuleva rekka ei enää välähdä ruutua valkoiseksi.",
       "request": "Yö ajo. Valonappula vasemmalle puolelle. Kiihtyvyys tehokkaammaksi\n\nJa p paikka pitöä olla selkeämpi. Tie siihen ja merkkejä\n\nVälillä voisi olla risteyksiä mistä tulee autoja. Vaarallinen ohitus on hieman liian herkkä\n\nOhituskielto merkinnät risteyksien kohdalla\n\nKun rekka tulee vastaan niin ruutu välähtää ikävästi",
       "issue": "eerovil/ai-pelit#306"
+    },
+    {
+      "n": 9,
+      "date": "2026-11-01",
+      "note": "Kovimmat äänet soivat nyt hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }

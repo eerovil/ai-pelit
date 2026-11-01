@@ -15,6 +15,13 @@
       "note": "Keilat eivät enää vieri liian kauas, kalikan voi heittää pidemmälle ja kuva näyttää aina kaikki keilat, myös sivuille vierineet.",
       "request": "Tilanne päätyy tähän, kaikki keilat ovat liian kaukana osumiseen. Ja jos keilat menee osa oikealle ja osa vasemmalle niin ruudun ulkopuolelle jääviä ei voi edes yrittää",
       "issue": "eerovil/ai-pelit#270"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-01",
+      "note": "Yleisön huudot, aplodit ja ”ooh”-äänet on poistettu, ja kovimmat äänet soivat hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }

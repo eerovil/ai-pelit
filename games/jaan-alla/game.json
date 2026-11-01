@@ -36,6 +36,13 @@
       "note": "Oikeat äänet: kaikuluotain, sukellusveneen moottori, kuplat, lumiaskeleet, tuuli jäällä, hälytykset ja jääkarhun murina piippausten tilalla.",
       "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): poiminta ja ruoka valinta, tarina onnistui, napautus naksu, rungon kolahdus metalli, karhun tönäisy tomahdys + karhu, varoitukset halytys, kaikuluotain kaiku, sukellus kuplat ja kupla, lumessa kävely lumi; taustalle silmukat syvyys (veden alla), sukellusvene (moottori nopeuden mukaan) ja tuuli (jäällä).\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v5 on jo varattu, käytä seuraavaa vapaata numeroa.",
       "issue": "eerovil/ai-pelit#214"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-01",
+      "note": "Kovimmat äänet soivat nyt hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }

@@ -57,6 +57,13 @@
       "note": "Onnistunut ponnistus ei enää soita kovaa pelikonepiippausta, vaan siitä kuuluu pehmeä suhahdus ylöspäin.",
       "request": "Tramppapeli, ihan hirveä ääni kun onnistuu ponnistus. Katso ettei muissakaan ole tuota",
       "issue": "eerovil/ai-pelit#298"
+    },
+    {
+      "n": 9,
+      "date": "2026-11-01",
+      "note": "Yleisön huudot, aplodit ja ”ooh”-äänet on poistettu, ja kovimmat äänet soivat hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }
