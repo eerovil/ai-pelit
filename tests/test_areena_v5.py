@@ -93,3 +93,39 @@ def test_v4_saves_are_read_as_they_are(site, context):
     assert "(taso 4)" in page.inner_text("#foe")
     assert page.input_value("#name") == "Testi"
     assert page.errors == []
+
+
+def test_the_next_fight_starts_with_the_gong_again(site, context):
+    page = open_game(site, context)
+    start_fight(page)
+    page.evaluate("stateT = 0.001; step(0.01); foe.hp = 1; damage(foe, 18, me.x, me.y, 0); stateT = 0.001; step(0.01)")
+    assert played(page)[-1] == "voitto"
+    page.click("#go")
+    page.evaluate("stateT = 0.001; step(0.01)")
+    assert played(page) == ["gongi"]
+    assert page.errors == []
+
+
+def test_a_friends_phone_plays_the_same_sounds_from_the_hosts_state(site, context):
+    """The friend's phone only sees the host's numbers; the sounds come from what changed in them."""
+    page = open_game(site, context)
+    start_fight(page)
+    # Play the friend's side: a state message as the host sends it, then the next ones.
+    page.evaluate("""() => {
+      net = { host: false, fresh: true, round: 1 };
+      window.msg = (st, a, b) => guestState({ t: 's', round: 1, st, T: 1, a, b, ar: [] });
+      window.base = () => pack(foe);
+      window.mine = () => pack(me);
+      msg('count', base(), mine()); heard.splice(0);
+    }""")
+    page.evaluate("msg('fight', base(), mine())")
+    assert played(page) == ["gongi"]
+    # The host's own fighter (a) swings and the friend's (b) loses 9: a whoosh and a light hit.
+    page.evaluate("const a = base(), b = mine(); a[5] = 0.3; b[2] = me.hp - 9; msg('fight', a, b)")
+    assert played(page) == ["suhahdus", "osuma"]
+    # Both at once in one message: a sword hit on the host's fighter and the knockout.
+    page.evaluate("const a = base(); a[2] = 0; a[5] = 0; msg('ko', a, mine())")
+    assert played(page) == ["potku", "tomahdys", "yleiso"]
+    page.evaluate("net.done = false; finishOnline({ w: R.me })")
+    assert played(page) == ["voitto"]
+    assert page.errors == []
