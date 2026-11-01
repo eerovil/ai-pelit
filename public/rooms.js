@@ -550,10 +550,13 @@
     p.audio.muted = !!voice.muted[id];
     p.audio.play().catch(function () {});
   }
-  // A phone may block sound that starts by itself: the next tap anywhere starts it.
-  document.addEventListener('pointerdown', function () {
+  // A phone may block sound that starts by itself: the next tap anywhere starts it. Coming back
+  // from another app, Android has paused it: it starts again.
+  function replay() {
     Object.keys(voice.peers).forEach(function (id) { var a = voice.peers[id].audio; if (a && a.paused) a.play().catch(function () {}); });
-  }, true);
+  }
+  document.addEventListener('pointerdown', replay, true);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) replay(); });
 
   // ---- Push to talk ----
   function press() {
