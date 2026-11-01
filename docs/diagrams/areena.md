@@ -4,6 +4,8 @@ How one Areena fight plays (v1, v2 which is easier, v3 which adds a fight agains
 with a sword, a bow and a dodge. The opponent switches between close and ranged fighting,
 dodges arrows and swings, and gets quicker, tougher and smarter with every level the player wins.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Valikko: anna hahmolle nimi] --> B[Taisteluun! 3-2-1]

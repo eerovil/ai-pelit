@@ -150,14 +150,17 @@ def test_the_menu_adds_nothing_to_the_corner_fits_every_corner_and_goes_up(site,
     # Jään alla v2 and Orava v2–v4 lay their sideways HUD out right beside the chip, so the chip
     # stays as it was: only "‹ Pelit". Its menu goes back up and shows whole in every corner.
     corners = ["", ' data-corner="bottom-left"', ' data-corner="top-right"']
-    make_game(site.games, "pomppu", [game_page(f"v{i}").replace('back.js"', 'back.js"' + c) for i, c in enumerate(corners, 1)])
+    # One game per corner: only each game's newest version is on the site (#346).
+    slugs = ["kulma", "nurkka", "pomppu"]
+    for slug, c in zip(slugs, corners):
+        make_game(site.games, slug, [game_page("v1").replace('back.js"', 'back.js"' + c)])
     site.build()
     for size in ({"width": 360, "height": 740}, {"width": 740, "height": 360}):
         ctx = browser.new_context(viewport=size, is_mobile=True, has_touch=True)
         try:
             page = ctx.new_page()
-            for n in range(1, len(corners) + 1):
-                page.goto(f"{site.url}games/pomppu/v{n}/")
+            for n, slug in enumerate(slugs, 1):
+                page.goto(f"{site.url}games/{slug}/v1/")
                 page.wait_for_selector("#ai-pelit-back")
                 assert page.inner_text("#ai-pelit-kulma") == "‹ Pelit"
                 assert page.evaluate("document.getElementById('ai-pelit-back').getBoundingClientRect().width") < 70

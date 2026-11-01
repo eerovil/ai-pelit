@@ -1,6 +1,9 @@
 """Kaahari v4: recorded sounds from the shared library public/lib/aanet-2/ (#216)."""
 
+import json
+
 from conftest import ROOT
+from test_rooms_lib import Relay
 
 URL = "games/kaahari/v4/"
 SOUNDS = ['kartti', 'valinta', 'onnistui', 'voitto', 'tappio', 'kitka', 'hyppy', 'nousu', 'naksu',
@@ -125,15 +128,38 @@ def test_a_lost_race_plays_the_losing_tune_and_a_second_race_has_its_engine_agai
     assert page.errors == []
 
 
+def room_of_two(site, browser):
+    """Eero's phone makes a room, Aino's joins it, and the race is on."""
+    relay = Relay()
+    pages = []
+    for name in ["Eero", "Aino"]:
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        pages.append(page)
+    host, guest = pages
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", code)
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    assert guest.inner_text("#aipr-extra") == "Huoneen tekijä valitsee radan."
+    host.click("#aipr-start")
+    for p in pages:
+        p.wait_for_function("race && race.mode === 'net' && race.phase === 'run'", timeout=8000)
+    return host, guest
+
+
 def test_in_a_room_the_line_claps_then_each_phone_hears_its_own_place(site, browser):
-    import test_kaahari_v2 as v2
     site.build(ROOT / "games")
-    old = v2.URL
-    v2.URL = URL
-    try:
-        host, guest = v2.room_of_two(site, browser)
-    finally:
-        v2.URL = old
+    host, guest = room_of_two(site, browser)
     for p in (host, guest):
         p.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
         p.evaluate(SPY)

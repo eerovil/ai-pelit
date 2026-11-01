@@ -1,10 +1,12 @@
 """Vuoristorata v2 (#234): recorded sounds from the shared library public/lib/aanet-2/."""
 
 import json
+import shutil
 
-import test_vuoristorata as v1
+from conftest import ROOT
 
 URL = "games/vuoristorata/v2/"
+KEY = "ai-pelit:vuoristorata:"
 NAMES = ["valinta", "onnistui", "rullaus", "ketju", "nousu", "voitto", "kolari", "kirkuna", "jarru"]
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -15,14 +17,20 @@ SPY = """() => {
 }"""
 
 
+def build(site):
+    # Only this game is built: other games' half-made versions cannot break the build.
+    shutil.copytree(ROOT / "games" / "vuoristorata", site.games / "vuoristorata")
+    site.build()
+
+
 def open_page(site, browser, saves=None, no_sound_files=False):
-    v1.build(site)
+    build(site)
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
                               service_workers="block")
     if no_sound_files:
         ctx.route("**/*.mp3", lambda route: route.abort())
     for k, v in (saves or {}).items():
-        ctx.add_init_script(f"localStorage.setItem({json.dumps(v1.KEY + k)}, {json.dumps(json.dumps(v))})")
+        ctx.add_init_script(f"localStorage.setItem({json.dumps(KEY + k)}, {json.dumps(json.dumps(v))})")
     page = ctx.new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))

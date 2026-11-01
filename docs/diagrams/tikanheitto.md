@@ -8,6 +8,8 @@ rounds of three darts), and friends can play together, one phone each, in a room
 no end, until the player taps Lopeta. v4 plays recorded sounds from the shared library
 (`lib/aanet-2/`) instead of beeps.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501] --> R{Yksin vai huoneessa?}

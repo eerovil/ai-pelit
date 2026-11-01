@@ -44,10 +44,10 @@ def test_every_real_version_loads_without_errors(site, context, changed_games_on
         # The shelf draws its cards after fetching catalog.json: wait for the card, a busy runner
         # can take longer than the page's load event (#123).
         page.wait_for_selector(f'.card[data-slug="{game["slug"]}"]', state="visible")
-        for v in game["versions"]:
-            page.goto(f'{site.url}games/{game["slug"]}/v{v["n"]}/')
-            page.wait_for_selector("#ai-pelit-back")
-            page.wait_for_timeout(300)
+        # Only the newest version is on the site (#346).
+        page.goto(f'{site.url}games/{game["slug"]}/v{game["versions"][-1]["n"]}/')
+        page.wait_for_selector("#ai-pelit-back")
+        page.wait_for_timeout(300)
     assert found == []
 
 
@@ -64,11 +64,15 @@ def test_shelf_game_page_and_back_chip(site, context):
     page.wait_for_selector(".version")
     assert page.locator(".version").count() == 2
     assert page.locator(".version").first.get_attribute("data-n") == "2"
+    # The older version is history only: its note shows, but only the newest plays (#346).
+    assert page.locator('.version[data-n="1"] a').count() == 0
+    assert page.locator('.version[data-n="1"]').inner_text().endswith("Versio 1")
+    assert "versiota" not in page.locator(".meta").inner_text()
     # The game's picture shows at the top; the copy-text box is gone (#33).
     page.wait_for_function("document.querySelector('img.thumb.big')?.naturalWidth > 0")
     assert page.locator("textarea").count() == 0
-    page.click('.version[data-n="1"] a')
-    page.wait_for_url("**/games/pomppu/v1/")
+    page.click('.version[data-n="2"] a')
+    page.wait_for_url("**/games/pomppu/v2/")
     page.click("#ai-pelit-back")
     page.click("#ai-pelit-takaisin")
     page.wait_for_selector("h1")
@@ -83,8 +87,8 @@ def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, cont
     page = context.new_page()
     page.goto(site.url)
     page.click('.card[data-slug="pomppu"] .card-main')
-    page.click('.version[data-n="1"] a')
-    page.wait_for_url("**/games/pomppu/v1/")
+    page.click('.version[data-n="2"] a')
+    page.wait_for_url("**/games/pomppu/v2/")
     # A reload in the game (the phone woke it, or the app restarted) still knows its page is below.
     page.reload()
     page.wait_for_selector("#ai-pelit-back")
@@ -93,7 +97,7 @@ def test_back_from_a_game_goes_up_to_its_page_then_the_shelf_then_out(site, cont
     page.wait_for_url(f"{site.url}#/pomppu")
     assert page.locator("h1").inner_text() == "Pomppu"
     page.go_forward()
-    page.wait_for_url("**/games/pomppu/v1/")
+    page.wait_for_url("**/games/pomppu/v2/")
     page.go_back()
     page.wait_for_url(f"{site.url}#/pomppu")
     page.go_back()
@@ -419,21 +423,51 @@ def test_every_game_picture_shows_offline_also_after_an_update(site, context):
         context.set_offline(False)
 
 
-def test_a_new_version_keeps_the_save_and_an_update_does_not_touch_it(site, context):
-    make_game(site.games, "tallennus", [game_page("v1", script=SAVE_V1), game_page("v2", script=SAVE_V2)])
+def test_a_new_version_keeps_the_save_and_the_old_ones_files_go(site, context):
+    make_game(site.games, "tallennus", [game_page("v1", script=SAVE_V1)])
     site.build()
     page = context.new_page()
     page.goto(site.url)
     wait_for_worker(page)
     page.goto(f"{site.url}games/tallennus/v1/")
     assert page.title() == "tallennettu"
+    assert page.evaluate("caches.open('ai-pelit-games').then(c => c.keys()).then(k => k.map(r => new URL(r.url).pathname))") \
+        == ["/games/tallennus/v1/"]
 
-    make_game(site.games, "uusi", [game_page("uusi")])
+    # v2 moves v1's folder away (#346): the new worker drops v1's cached files, the save stays.
+    make_game(site.games, "tallennus", [game_page("v1", script=SAVE_V1), game_page("v2", script=SAVE_V2)])
     site.build()
     page.goto(site.url)
-    page.wait_for_selector('.card[data-slug="uusi"]', timeout=10000)
+    page.wait_for_function("caches.open('ai-pelit-games').then(c => c.keys()).then(k => k.length === 0)", timeout=10000)
     page.goto(f"{site.url}games/tallennus/v2/")
     assert page.title() == "paras 7"
+
+
+def test_an_old_shortcut_opens_the_newest_offline(site, context):
+    # #346: a home-screen shortcut to v1, after v2 came and v1's files were dropped from the cache.
+    make_game(site.games, "pikakuvake", [game_page("v1")])
+    site.build()
+    page = context.new_page()
+    page.goto(site.url)
+    wait_for_worker(page)
+    page.goto(f"{site.url}games/pikakuvake/v1/")
+    make_game(site.games, "pikakuvake", [game_page("v1"), game_page("v2")])
+    site.build()
+    page.goto(site.url)
+    page.wait_for_function("caches.keys().then(k => Promise.all(k.filter(n => n.startsWith('ai-pelit-shell-'))"
+                           ".map(n => caches.open(n).then(c => c.match('catalog.json')).then(r => r.json()))))"
+                           ".then(cs => cs.length === 1 && cs[0].games[0].versions.length === 2)", timeout=10000)
+    page.goto(f"{site.url}games/pikakuvake/v2/")
+    assert page.title() == "v2"
+    context.set_offline(True)
+    try:
+        page.goto(f"{site.url}games/pikakuvake/v1/?huone=ABCD")
+        assert page.url == f"{site.url}games/pikakuvake/v2/?huone=ABCD"
+        assert page.title() == "v2"
+        page.goto(f"{site.url}games/pikakuvake/v1/index.html")
+        assert page.url == f"{site.url}games/pikakuvake/v2/"
+    finally:
+        context.set_offline(False)
 
 
 @pytest.mark.parametrize("width", [360])

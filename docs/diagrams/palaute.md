@@ -12,7 +12,7 @@ flowchart TD
     B -- Ei nimeä tai hylätty --> C[Valitse nimimerkki]
     C --> D[Odottaa ylläpitäjän hyväksyntää]
     B -- Odottaa --> D
-    B -- Kyllä --> E[Versio ja palaute, Lähetä]
+    B -- Kyllä --> E[Palaute, Lähetä]
   end
   subgraph Cloudflare Pages Functions
     E --> F[POST /api/feedback]
@@ -49,10 +49,10 @@ flowchart TD
 
 ## Boxes
 
-- **Pelin sivu: 💬 Anna palautetta**: `feedbackSection()` in `public/app.js`, between the scores and the versions on every game's page; one button that opens the box, so the page is no longer than before. Styles in `public/app.css` (`.feedback`).
+- **Pelin sivu: 💬 Anna palautetta**: `feedbackSection()` in `public/app.js`, between the scores and the version history on every game's page; one button that opens the box, so the page is no longer than before. Styles in `public/app.css` (`.feedback`).
 - **Nimimerkki hyväksytty?**: `AiPelitScores.me()` in `public/scores.js` sends a waiting name first, then asks `GET /api/players/<id>` for the admin's word. The nickname is the phone's one name, the same as on the high-score lists (`tuloslistat.md`).
 - **Valitse nimimerkki**: `AiPelitScores.setName()`: saves the name as the list's own name field does and sends it; a rejected or taken name is asked again.
-- **Versio ja palaute, Lähetä**: the newest version first in the picker; up to 1000 characters. Offline or refused, the text stays in the box to send again; if the name was rejected meanwhile, it is kept for the tab (sessionStorage `ai-pelit:_palaute:<slug>`) and back in the box once a new name is approved.
+- **Palaute, Lähetä**: always about the game's newest version, the only one played (#346; before, a picker named the version); up to 1000 characters. Offline or refused, the text stays in the box to send again; if the name was rejected meanwhile, it is kept for the tab (sessionStorage `ai-pelit:_palaute:<slug>`) and back in the box once a new name is approved.
 - **POST /api/feedback**: `addFeedback()` in `server/api.js`: only a real game and version from `catalog.json`, and only a player whose current name is `approved` (403 otherwise; a changed name waits again).
 - **Hyväksytty nimi ja alle 10 tänään?**: `FEEDBACK_PER_DAY` per player in 24 hours (429), counted in the same statement as the insert so posts at once cannot pass it, `FEEDBACK_MAX` characters (`cleanText()` keeps line breaks).
 - **feedback-taulu**: `migrations/0006_feedback.sql`: the name as it was when written, the game and version, the text, and `issue`, the "Palautteet" issue it was filed in (NULL until then). No route shows it to players.

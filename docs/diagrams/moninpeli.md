@@ -11,6 +11,8 @@ Kirkkis v2 (#27) keeps its own copy of the whole flow, from before the library.
 Voice (#322): while someone holds the 🎤 chip, the others in the room hear them; the sound goes
 straight between the phones, and the room only passes on the call's setup messages.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   subgraph Peli[Pelin oma koodi]
@@ -37,7 +39,9 @@ flowchart TD
     L16[➕ Kaveriksi ja 📨 Kutsu kaveri]
     L7[Tallenna tulos kerran per kierros]
     L8{Väärä peli tai versio?}
-    L8 -- Kyllä --> L9[Avaa oikean pelin version]
+    L8 -- Kyllä --> L17{Saman pelin vanhempi versio?}
+    L17 -- Ei --> L9[Avaa oikean pelin version]
+    L17 -- Kyllä --> L18[Huone on pelin vanhemmassa versiossa]
   end
   subgraph Cloudflare
     C1[Huone: välittää viestit, muistaa pelin ja version]
@@ -98,11 +102,11 @@ flowchart TD
   V4 --> V6
   V7 --> V6
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18 blue
   class C1,C2,C3,C4,C5,C7 violet
   class V1,V2,V4,V5,V6,V7 blue
   class S1 green
-  class L5,L8,L13,V3,C6 amber
+  class L5,L8,L13,L17,V3,C6 amber
   class L6,G7,L14 rose
 ```
 
@@ -119,8 +123,8 @@ flowchart TD
 
 - **👥 Pelaa kavereiden kanssa**: the game's own menu button; it calls `AiPelitRooms.open()`. The game loads `<script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5">` before its own script.
 - **Huoneruutu: Luo huone tai Liity koodilla**: `public/rooms.js` `build()` and `render()`, in Finnish, the same in every game. A new room gets a random 4-letter code (no I, O, Q, W, X, Z); a code in use gets another. The name is the phone's one nickname (`ai-pelit:_pelaaja:nimi`, shared with the high-score lists), or an animal name kept in `ai-pelit:_huone:nimi`.
-- **Avoimet huoneet: liity napautuksella**: `readList()` and `renderList()` on the first page of the room screen (#50): this game's public rooms from `GET /api/rooms?game=<slug>`, read on opening and every 5 seconds, as buttons "KOOD · 2/5 pelaajaa" (no names). A tap joins like a typed code, so a room of another version opens that version. Hidden until the first answer, so with no connection nothing shows.
-- **Etusivun avoimet huoneet: kaikki pelit, Liity**: `showRooms()` in `public/app.js` (#203): at the top of the shelf's front page, every game's public rooms from `GET /api/rooms` (no `game`: up to 30, newest first, each naming its game), read when the shelf shows, every 10 seconds while it is on screen and on coming back to it. Each row is the game's picture and name, "v<N> · koodi KOOD · 2/5 pelaajaa" and "Liity", a link to `games/<slug>/v<v>/?huone=<KOOD>`, which joins that room in the room's own version; back from it goes to the game's page, then the shelf. A game or version the shelf does not have is left out; with no rooms, or when a read gets no answer (also after an earlier one did), the whole section is hidden.
+- **Avoimet huoneet: liity napautuksella**: `readList()` and `renderList()` on the first page of the room screen (#50): this game's public rooms from `GET /api/rooms?game=<slug>`, read on opening and every 5 seconds, as buttons "KOOD · 2/5 pelaajaa" (no names). A tap joins like a typed code, so a room of a newer version opens that version; a room on an older version is left off (#346). Hidden until the first answer, so with no connection nothing shows.
+- **Etusivun avoimet huoneet: kaikki pelit, Liity**: `showRooms()` in `public/app.js` (#203): at the top of the shelf's front page, every game's public rooms from `GET /api/rooms` (no `game`: up to 30, newest first, each naming its game), read when the shelf shows, every 10 seconds while it is on screen and on coming back to it. Each row is the game's picture and name, "v<N> · koodi KOOD · 2/5 pelaajaa" and "Liity", a link to `games/<slug>/v<v>/?huone=<KOOD>`, which joins that room in the room's own version; back from it goes to the game's page, then the shelf. A room on any but the game's newest version is left out (#346: an older one's host has an old copy), and so is a game the shelf does not have; with no rooms, or when a read gets no answer (also after an earlier one did), the whole section is hidden.
 - **🌍 Julkinen-kytkin isännällä**: the host's checkbox in the room (`net.pub`, off for a new room, kept over a reload in `ai-pelit:_huone:nyt`). `tellList()` sends the room `{t: '_list', on}`: on while public, no round runs and the room screen shows on the host (not during the game's own end screen), and again every minute while on.
 - **Julkisten huoneiden lista**: one more object of the `Room` class, named `lobby` (`lobby()` in `rooms/worker.js`). Each room's `tell()` puts itself on it while the host's `_list` is on, the host is connected, a game is named and there is space, and takes itself off otherwise. Newest first, at most 10 per game; a listing not refreshed for 3 minutes is dropped. Only `GET /api/rooms?game=` and, for the shelf, `GET /api/rooms` reach it from outside (`publicRooms()` in `server/api.js`).
 - **Koodi ja QR-koodi, pelaajalista**: the code, a QR code of `<version>/?huone=<KOODI>` drawn in the page (`qrMatrix()`), and who is in, the host with 👑, someone without a connection greyed out. A QR link joins at once; `rooms.js` then clears `?huone=` from the address and keeps the page's history state, so the "‹ Pelit" chip still knows where up is (#68). On a phone on its side (#95) the room screen is two columns, the code and QR left and the players (in two columns), the game's own choices, 🌍 Julkinen and "Aloita kierros" right, so a full room of 8 fits 740 × 360 without scrolling; a CSS `@media (orientation:landscape) and (max-height:500px)` block in `rooms.js`, so upright nothing changes.
@@ -132,7 +136,9 @@ flowchart TD
 - **Piirtää pelin oman pelaajan silmin**: the game's drawing, from this phone's player. Kirkkis: `draw()` with the fog cut by that player's field of view.
 - **Huone: välittää viestit, muistaa pelin ja version**: `rooms/worker.js` `Room`, in the `ai-pelit-rooms` Worker, at `/api/rooms/<KOODI>` through `server/api.js` (`ROOMS` binding). Each phone connects with a secret key and is known by a hash of it, so nobody can take another phone's place. The host's messages go to all (or `to`), the others' to the host with `from`; `peers` says who is in and connected. It keeps the host's `game`, `v` and `max` (2–8, default 5) and sends `game` and `v` in `peers`. A phone with a nickname joins with `fid`, its friend id (#324), which the room keeps and sends with that member in `peers`. An empty room is forgotten after 6 hours.
 - **Väärä peli tai versio?**: `onPeers()` on a guest's first `peers`: the room's `game` and `v` against the page's own. A room that names no game (made by Kirkkis v2, from before the library) is left at once with "Huone on toisessa pelissä."
-- **Avaa oikean pelin version**: the guest moves to `../../<game>/v<v>/?huone=<KOODI>`, which joins the room there. Back still goes up (#68): a game opened from the shelf has its page below it, so another version takes the game's place over that same page; another game steps back to the page, which `public/app.js` (`openFromRoom()`) turns into the new game's page once it has loaded, before opening the game over it. When the new game sits under another parent than the old one (a shelf group, #153), `openFromRoom()` first makes the history below its own: from a shelf game into a grouped one it puts the group's page between, from a grouped game into one outside the group it steps back to the group's page and turns that into the new game's page over the shelf; the room screen steps back only once, however many room updates arrive meanwhile. A game opened any other way is simply replaced.
+- **Saman pelin vanhempi versio?**: only each game's newest version is kept (#346), and the site sends an older version's address on to the newest, so a guest moving to a room's older version would come straight back and go round. `onPeers()` compares the room's `v` with the page's own `VERSION`.
+- **Huone on pelin vanhemmassa versiossa**: the guest leaves the room with "Huone on pelin vanhemmassa versiossa. Pyydä huoneen tekijää avaamaan peli hyllyltä uudelleen." The host's phone still had an old copy; opened from the shelf it gets the newest (and `public/sw.js` drops the old copy with the next worker).
+- **Avaa oikean pelin version**: another game, or a newer version of this one: the guest moves to `../../<game>/v<v>/?huone=<KOODI>`, which joins the room there. Back still goes up (#68): a game opened from the shelf has its page below it, so another version takes the game's place over that same page; another game steps back to the page, which `public/app.js` (`openFromRoom()`) turns into the new game's page once it has loaded, before opening the game over it. When the new game sits under another parent than the old one (a shelf group, #153), `openFromRoom()` first makes the history below its own: from a shelf game into a grouped one it puts the group's page between, from a grouped game into one outside the group it steps back to the group's page and turns that into the new game's page over the shelf; the room screen steps back only once, however many room updates arrive meanwhile. A game opened any other way is simply replaced.
 - **Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen**: `connect()` retries with a growing wait; the room this tab is in is kept in `sessionStorage` (`ai-pelit:_huone:nyt`). On every connection a guest says `hello`; the host sends a phone in the round `_start` again and fires `on('hello')`, so the game sends the round as it is. A host that comes back without its round (a reload) sends `_lobby`, and everyone goes back to the room. Kirkkis: `on('hello')` sends that phone `kr`.
 - **Onko joku kierroksen puhelin poissa?**: `waitingFor()`: a phone in the round with no connection, unless the computer took it; on a guest also the host, or its own connection. The host sends the names (`_pz`).
 - **⏸ Odotetaan, isännällä Jatka ilman heitä**: `renderPause()`: every phone shows who is being waited for; only the host has the button (`goOn()`).

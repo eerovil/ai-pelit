@@ -20,6 +20,8 @@ From v9 (#313) a pad that does nothing right then is greyed out and does not lig
 
 v10 (#311) plays as v9 with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/aitajuoksu/v10/index.html`, `asut.md`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]

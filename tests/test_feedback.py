@@ -59,17 +59,17 @@ def shelf(site, context, name=None):
     return page
 
 
-def test_an_approved_player_sends_feedback_on_a_version(site, context, fake):
+def test_an_approved_player_sends_feedback_on_the_newest_version(site, context, fake):
     fake.players = {ME: {"name": "Aino", "status": "approved"}}
     page = shelf(site, context, "Aino")
     page.wait_for_selector(".feedback-text")
     assert "Nimimerkillä Aino" in page.locator(".feedback").inner_text()
-    assert page.locator(".feedback-version").input_value() == "2"
-    page.select_option(".feedback-version", "1")
+    # Only the newest version is played (#346), so there is no version to pick.
+    assert page.locator(".feedback-version").count() == 0
     page.fill(".feedback-text", "Hyppy on liian korkea\nja kissa liian nopea")
     page.click(".feedback button:has-text('Lähetä')")
     page.wait_for_selector(".feedback-note:text('Kiitos, Aino! Palaute meni perille.')")
-    assert fake.feedback == [{"player": ME, "game": "kissa", "version": 1, "text": "Hyppy on liian korkea\nja kissa liian nopea"}]
+    assert fake.feedback == [{"player": ME, "game": "kissa", "version": 2, "text": "Hyppy on liian korkea\nja kissa liian nopea"}]
     assert page.locator(".feedback-text").input_value() == ""
 
     # Too much today, or no network: said plainly, and the text stays to send again.

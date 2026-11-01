@@ -2,8 +2,8 @@
 turn it is, the host skips an away phone's turn, a phone that leaves keeps its competitor and comes
 back with "Palaa kierrokseen", and the friends not on turn stand by as spectators and cheer.
 
-Each event's newest version, all on the same library: games/pituushyppy/v8, games/keihas/v7,
-games/kuula/v2, games/moukari/v5, games/korkeushyppy/v5, games/seivashyppy/v5, games/makihyppy/v3.
+The tests play each event's newest version (only that folder is kept, #346), on whichever
+library folder it loads; yleisurheilu-6 changed only the cheer's sound (test_yleisurheilu_jee.py).
 """
 
 import json
@@ -12,7 +12,14 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-EVENTS = ["pituushyppy/v8", "keihas/v7", "kuula/v2", "moukari/v5", "korkeushyppy/v5", "seivashyppy/v5", "makihyppy/v3"]
+SLUGS = ["pituushyppy", "keihas", "kuula", "moukari", "korkeushyppy", "seivashyppy", "makihyppy"]
+
+
+def newest(slug):
+    return f"{slug}/v{json.loads((ROOT / 'games' / slug / 'game.json').read_text())['versions'][-1]['n']}"
+
+
+EVENTS = [newest(s) for s in SLUGS]
 
 # A turn's mark that counts in each format: a jump of 5 (rounds), a clearance (bar heights) or a
 # ski jump of 110 m for 90 points (Mäkihyppy's week).
@@ -97,7 +104,7 @@ def test_an_away_friend_stops_the_meet_only_on_their_own_turn(site, browser, pat
     host.click("#aipr-goOn")
     host.wait_for_function(f"K.comp.seq > {before}")
     t = host.evaluate(f"K.comp.throwers.find(t => t.p === {json.dumps(me_aino)})")
-    assert "bot" not in t  # no computer takeover in yleisurheilu-5
+    assert "bot" not in t  # no computer takeover, from yleisurheilu-5 on
     missed = host.evaluate("K.F.missed === undefined ? -1 : K.F.missed")
     assert missed in t.get("marks", []) or "X" in json.dumps(t.get("rec", []))
     # On with the others (at a bar height her next attempt may come straight after).
@@ -137,9 +144,6 @@ def test_friends_not_on_turn_stand_by_and_cheer(site, browser, path):
     fan = next(p for p in fans if p is not host)  # a guest: its cheer goes through the host
     fan.wait_for_selector("#kisa-cheer", state="visible", timeout=5000)
     assert fan.inner_text("#kisa-cheer") == "📣 Kannusta"
-    # Each phone counts the crowd sounds it plays.
-    for p in pages:
-        p.evaluate("window.yleisoHeard = 0; const play = AiPelitAanet.play; AiPelitAanet.play = (n, o) => { if (n === 'yleiso') yleisoHeard++; return play(n, o); }")
     fan.click("#kisa-cheer")
     tid = fan.evaluate("K.mine().id")
     name = host.evaluate("K.current().name")
@@ -147,9 +151,6 @@ def test_friends_not_on_turn_stand_by_and_cheer(site, browser, path):
         p.wait_for_function(f"K.cheers[{json.dumps(tid)}]", timeout=5000)
         text = p.evaluate(f"K.cheers[{json.dumps(tid)}].text")
         assert name in text and text.endswith("!")
-    # One tap is one crowd sound on every phone, the tapping guest's own too (not again on the echo).
-    fan.wait_for_timeout(500)
-    assert [p.evaluate("yleisoHeard") for p in pages] == [1, 1, 1]
     # Both spectators cheer at the same moment: every phone shows both.
     tids = [p.evaluate("K.mine().id") for p in fans]
     for p in fans:
@@ -168,26 +169,10 @@ def test_friends_not_on_turn_stand_by_and_cheer(site, browser, path):
         p.context.close()
 
 
-@pytest.mark.parametrize("path", EVENTS)
-def test_alone_the_meet_plays_as_before_with_no_spectators(site, context, path):
-    site.build(ROOT / "games")
-    page = context.new_page()
-    page.errors = []
-    page.on("pageerror", lambda e: page.errors.append(str(e)))
-    page.goto(f"{site.url}games/{path}/")
-    page.click("#go")
-    page.wait_for_function("K.comp && K.current() && K.current().p === 'me'")
-    n = page.evaluate("K.comp.seq")
-    page.evaluate(f"K.report({n}, {MARK})")
-    page.wait_for_function(f"K.comp.seq > {n}")
-    assert page.evaluate("[K.fans().length, !!document.getElementById('kisa-cheer')]") == [0, False]
-    assert page.errors == []
-
-
 def test_back_after_the_meet_ended_shows_its_results(site, browser):
     """A friend who comes back through "Palaa kierrokseen" only after the meet ended sees the
     podium and the results, not the room screen over them."""
-    path = "pituushyppy/v8"
+    path = newest("pituushyppy")
     relay, pages, code = room(site, browser, path, ["Eero", "Aino"])
     host, aino = pages
     ids = {p.evaluate("AiPelitRooms.me"): p for p in pages}

@@ -1,7 +1,9 @@
 """Tikanheitto v4: recorded sounds from the shared library public/lib/aanet-2/ (#230)."""
 
-import test_tikka_v2 as v2
-import test_tikka_v3 as v3
+import json
+
+from conftest import ROOT
+from test_rooms_lib import Relay
 
 URL = "games/tikka/v4/"
 NAMES = "['suhahdus', 'puu', 'virhe', 'yleiso', 'voitto']"
@@ -14,13 +16,27 @@ SPY = """() => {
 }"""
 
 
+# Steps the game by hand, 1/60 s at a time, until cond() is false or max seconds pass.
+RUN = "() => { window.run = (cond, max = 10) => { for (let t = 0; t < max && cond(); t += 1 / 60) step(1 / 60); }; }"
+
+
+def open_plain(site, context, saved=None):
+    """The game with its saves set and run() defined, without the sound spy."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    for k, v in (saved or {}).items():
+        page.evaluate(f"localStorage.setItem('ai-pelit:tikka:{k}', '{v}')")
+    if saved:
+        page.goto(site.url + URL)
+    page.evaluate(RUN)
+    return page
+
+
 def open_game(site, context, saved=None):
-    old = v3.URL
-    v3.URL = URL
-    try:
-        page = v3.open_game(site, context, saved)
-    finally:
-        v3.URL = old
+    page = open_plain(site, context, saved)
     page.evaluate(SPY)
     return page
 
@@ -37,6 +53,49 @@ def played(page):
 
 def throw(page, mx, my):
     page.evaluate(f"throwAt({mx}, {my}); run(() => flying !== null, 2)")
+
+
+# ---- With friends ----
+
+def room(site, browser, names):
+    """The first phone makes a room, the others join it, and the game starts."""
+    site.build(ROOT / "games")
+    relay = Relay()
+    pages = []
+    for name in names:
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        pages.append(page)
+    host = pages[0]
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    for guest in pages[1:]:
+        guest.click("#multi")
+        guest.fill("#aipr-codeIn", code)
+        guest.click("#aipr-joinBtn")
+    host.wait_for_function(f"AiPelitRooms.members.filter(m => m.on).length === {len(names)}")
+    return relay, pages
+
+
+def start(pages):
+    pages[0].click("#aipr-start")
+    for p in pages:
+        p.wait_for_function("phase === 'play' && players.length > 1", timeout=8000)
+
+
+def throw_turn(page, mx, my, host):
+    """The phone whose turn it is throws its three darts at (mx, my) mm, waiting for each to land."""
+    page.wait_for_function("mine() && !banner && !flying && dartsLeft === 3", timeout=8000)
+    for k in range(3):
+        page.evaluate(f"release({mx}, {my})")
+        host.wait_for_function(f"dartsLeft === {2 - k} && !flying", timeout=5000)
 
 
 def test_a_throw_whooshes_and_hits_wood_and_a_full_turn_gets_the_crowd(site, context):
@@ -93,12 +152,7 @@ def test_without_the_sound_script_it_still_starts_and_plays(site, browser):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
     try:
         ctx.route("**/aanet.js", lambda route: route.abort())
-        old = v3.URL
-        v3.URL = URL
-        try:
-            page = v3.open_game(site, ctx)
-        finally:
-            v3.URL = old
+        page = open_plain(site, ctx)
         assert page.evaluate("typeof AiPelitAanet") == "undefined"
         page.click("#go")
         for _ in range(3):
@@ -118,21 +172,22 @@ def test_v3_saves_are_read_as_they_are(site, context):
 
 
 def test_a_friends_phone_in_a_room_hears_the_hits_the_misses_and_the_crowd(site, browser):
-    old = v2.URL
-    v2.URL = URL
-    try:
-        relay, pages = v2.room(site, browser, ["Eero", "Aino"])
-    finally:
-        v2.URL = old
+    relay, pages = room(site, browser, ["Eero", "Aino"])
     host, aino = pages
-    v2.start(pages)
+    start(pages)
     for p in pages:
         p.evaluate(SPY.replace("heard.push([name, ok])", "heard.push([name, ok, (o || {}).vol])"))
         p.wait_for_function(f"{NAMES}.every(AiPelitAanet.ready)", timeout=10000)
         p.wait_for_function("AiPelitAanet.play('puu', { vol: 0 })", timeout=5000)
         p.evaluate("heard.splice(0)")
     # The host throws three tens: Aino's phone hears each dart and then the crowd for the 30.
-    v2.throw_turn(host, 0, 0, host)
+    # Each dart lands on Aino's phone before the next one goes: a dart thrown while the one before
+    # is still flying there skips that one's hit (seen in CI once every test of the game ran, #346).
+    host.wait_for_function("mine() && !banner && !flying && dartsLeft === 3", timeout=8000)
+    for k in range(3):
+        host.evaluate("release(0, 0)")
+        host.wait_for_function(f"dartsLeft === {2 - k} && !flying", timeout=5000)
+        aino.wait_for_function(f"heard.filter(h => h[0] === 'puu').length === {k + 1} && !flying", timeout=5000)
     aino.wait_for_function("cur === 1 && mine() && heard.some(h => h[0] === 'yleiso')", timeout=8000)
     got = [(n, v) for n, ok, v in aino.evaluate("heard.splice(0)") if ok]
     assert [n for n, _ in got].count("puu") == 3 and ("yleiso", 0.7) in got, got

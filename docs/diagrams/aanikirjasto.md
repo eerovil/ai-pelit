@@ -4,6 +4,8 @@ The shared sound-effect library (#205): recorded CC0 sounds in one never-changin
 `public/lib/`, played through one small script any new game version loads. The phone's offline
 cache keeps the files after first use, and a game without sound still plays the same.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   subgraph Kirjasto["public/lib/aanet-1/, aanet-2/, aanet-3/ (eivät muutu koskaan)"]

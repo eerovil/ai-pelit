@@ -3,7 +3,6 @@
 import pytest
 
 from conftest import ROOT
-from test_sormiskeitti import PLAY, saved
 
 URL = "games/sormiskeitti/v7/"
 SOUNDS = ['pop', 'lasku', 'puu', 'onnistui', 'voitto', 'tappio', 'rullaus']
@@ -13,6 +12,19 @@ SPY = """() => {
   window.heard = [];
   const real = AiPelitAanet.play;
   AiPelitAanet.play = (name, o) => { const ok = real(name, o); heard.push([name, ok]); return ok; };
+}"""
+
+# Plays one round synchronously through the game's own step(), so the result does not hang on
+# frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
+PLAY = """([push, trick]) => {
+  reset(); tap();
+  for (let f = 1; f < 5000 && st !== 'end'; f++) {
+    if (st === 'roll' && s < L && f % push === 0) tap();
+    if (trick && st === 'roll' && s > L && !ollie && theta() > 1.43) tap();
+    if (trick && st === 'air' && !letGo && Math.abs(avy) <= 0.6) tap();
+    step();
+  }
+  return { won, level, best };
 }"""
 
 # One round through step(), like PLAY, but the ollie is tapped at a chosen angle and there is no
@@ -43,6 +55,10 @@ def start(site, context, ready=True):
         page.wait_for_function("AiPelitAanet.play('pop', { vol: 0 })", timeout=5000)
     page.evaluate("heard.splice(0)")
     return page
+
+
+def saved(page):
+    return page.evaluate("({ level, best })")
 
 
 def played(page):

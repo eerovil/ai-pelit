@@ -1,9 +1,14 @@
-"""Jalkapallo v2: recorded sounds from the shared library public/lib/aanet-2/ (#215)."""
+"""Jalkapallo v2: recorded sounds from the shared library public/lib/aanet-2/ (#215).
+
+Each phone is its own Chromium context; the room relay is `Relay` from test_rooms_lib.
+"""
+
+import json
 
 import pytest
 
-import test_jalkapallo as v1
-from test_jalkapallo import STILL, room  # noqa: F401  (room is a fixture)
+from conftest import ROOT
+from test_rooms_lib import Relay
 
 URL = "games/jalkapallo/v2/"
 SOUNDS = ['pilli', 'pilli2', 'potku', 'verkko', 'yleiso', 'suhahdus', 'puu', 'osuma', 'ohhoo', 'metalli']
@@ -15,17 +20,32 @@ SPY = """() => {
   AiPelitAanet.play = (name, o) => { const ok = real(name, o); heard.push([name, ok]); return ok; };
 }"""
 
+# Steps the match by hand, 1/60 s at a time, while cond() holds, at most max seconds.
+RUN = "() => { window.run = (cond, max = 5) => { for (let t = 0; t < max && cond(); t += 1 / 60) update(1 / 60); }; }"
 
-@pytest.fixture(autouse=True)
-def v2_url():
-    old = v1.URL
-    v1.URL = URL
-    yield
-    v1.URL = old
+# Play on, with nobody moving unless a test moves them: the computer's players are steered by a
+# phone that is never there.
+STILL = """() => {
+  state = 'play'; owner = null;
+  ctrls[0].fixed = 0; ctrls[0].p = players[0];
+  for (const p of players.slice(1)) { ctrls.push({ id: 'x' + players.indexOf(p), t: p.t, fixed: players.indexOf(p), p, input: newInput() }); }
+  for (const p of players) { p.vx = p.vy = 0; p.x = (players.indexOf(p) - 2.5) * 4; p.y = p.t ? 10 : -10; }
+}"""
+
+
+def open_game(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.evaluate(RUN)
+    page.click("#go")
+    return page
 
 
 def start(site, context, ready=True):
-    page = v1.start(site, context)
+    page = open_game(site, context)
     page.evaluate(SPY)
     if ready:
         page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
@@ -110,13 +130,147 @@ def test_v1_saves_are_read_as_they_are(site, context):
 
 
 # v1's play, unchanged in v2.
-test_a_shot_at_an_empty_goal_scores_and_the_other_team_kicks_off = v1.test_a_shot_at_an_empty_goal_scores_and_the_other_team_kicks_off
-test_the_keeper_holds_a_soft_shot = v1.test_the_keeper_holds_a_soft_shot
-test_a_tackle_takes_the_ball = v1.test_a_tackle_takes_the_ball
-test_the_final_whistle_ends_the_match_and_saves_it = v1.test_the_final_whistle_ends_the_match_and_saves_it
-test_the_computer_plays_a_whole_match_on_its_own = v1.test_the_computer_plays_a_whole_match_on_its_own
-test_two_phones_play_against_each_other_with_computer_teammates = v1.test_two_phones_play_against_each_other_with_computer_teammates
-test_a_guest_that_reloads_mid_match_gets_its_player_back = v1.test_a_guest_that_reloads_mid_match_gets_its_player_back
+def test_a_shot_at_an_empty_goal_scores_and_the_other_team_kicks_off(site, context):
+    page = open_game(site, context)
+    page.evaluate(STILL)
+    page.evaluate("players[5].x = 12; players[0].x = 1; players[0].y = 12; players[0].fx = 0; players[0].fy = 1; take(players[0])")
+    page.evaluate("ctrls[0].input.x = 0.1; ctrls[0].input.y = 1; press(ctrls[0], 'shootDown'); shootUp(ctrls[0], 0.4)")
+    page.evaluate("run(() => state === 'play', 3)")
+    assert page.evaluate("[state, score.join('-'), msg.by]") == ["goal", "1-0", "me"]
+    page.evaluate("run(() => state === 'goal', 4)")
+    assert page.evaluate("[state, owner.t]") == ["kickoff", 1]
+
+
+def test_the_keeper_holds_a_soft_shot(site, context):
+    page = open_game(site, context)
+    page.evaluate(STILL)
+    page.evaluate("const k = players[5]; k.x = 0; k.y = 21.5; players[0].x = 0; players[0].y = 12; players[0].fx = 0; players[0].fy = 1; take(players[0])")
+    page.evaluate("ctrls[5].input.x = 0; shoot(players[0], 0, 1, 0)")
+    page.evaluate("run(() => owner === null && state === 'play', 2)")
+    assert page.evaluate("[players.indexOf(owner), score.join('-')]") == [5, "0-0"]
+
+
+def test_a_tackle_takes_the_ball(site, context):
+    page = open_game(site, context)
+    page.evaluate(STILL)
+    page.evaluate("players[3].x = 0; players[3].y = 0; players[3].fy = -1; take(players[3]); players[0].x = 0; players[0].y = -2.2; players[0].fx = 0; players[0].fy = 1")
+    page.evaluate("stepBall(1 / 60, true); press(ctrls[0], 'pass')")
+    assert page.evaluate("players[0].lunge > 0")
+    page.evaluate("ctrls[0].input.y = 1; run(() => owner !== players[0], 0.4)")
+    assert page.evaluate("players.indexOf(owner)") == 0
+    assert page.evaluate("players[3].stun > 0")
+
+
+def test_the_final_whistle_ends_the_match_and_saves_it(site, context):
+    page = open_game(site, context)
+    page.evaluate("state = 'play'; score = [2, 1]; clock = 0.01")
+    page.evaluate("run(() => state !== 'done', 4)")
+    assert page.inner_text("#result") == "Voitit 2–1! 🏆"
+    assert page.evaluate("[load('taso', 0), load('voitot', 0)]") == [2, 1]
+    assert "Taso 2" in page.inner_text("#foe")
+    page.click("#go")
+    page.evaluate("state = 'play'; score = [1, 1]; clock = 0.01")
+    page.evaluate("run(() => state !== 'done', 4)")
+    assert page.inner_text("#result") == "Tasapeli 1–1"
+    assert "Tasapelit 1" in page.inner_text("#stats")
+
+
+def test_the_computer_plays_a_whole_match_on_its_own(site, context):
+    page = open_game(site, context)
+    kicks = page.evaluate("ctrls = []; level = 4; run(() => state !== 'done', 200); players.reduce((n, p) => n + p.kicks, 0)")
+    assert page.evaluate("state") == "done"
+    assert kicks > 20
+    assert page.errors == []
+
+
+def test_two_phones_play_against_each_other_with_computer_teammates(room):
+    host, [guest] = room("Eero", "Aino")
+    # A phone alone on its team owns no player: it steers whichever one is nearest the ball.
+    assert host.evaluate("players.map(p => [p.t, p.name, p.id ? 'phone' : 'cpu'])") == [
+        [0, "Ville", "cpu"], [0, "Aino", "cpu"], [0, "Onni", "cpu"],
+        [1, "Kurki", "cpu"], [1, "Sammal", "cpu"], [1, "Kettu", "cpu"]]
+    assert host.evaluate("ctrls.map(k => [k.t, k.fixed])") == [[0, -1], [1, -1]]
+    # Each phone sees its own team attacking up the screen: the guest's pitch is turned round.
+    assert host.evaluate("view") == 1 and guest.evaluate("[view, myTeam]") == [-1, 1]
+    # The guest's joystick up the screen runs its player towards the host's goal (down the world).
+    host.evaluate("state = 'play'; owner = null; ball.x = 0; ball.y = 0; for (const p of players) { p.x = (p.slot - 1) * 5; p.y = p.t ? 6 : -6; } ctrls[1].switchT = 99")
+    guest.wait_for_function("myPlayer() !== null")
+    start = host.evaluate("ctrls[1].p.y")
+    guest.evaluate("input.jx = 0; input.jy = view")  # what setStick() makes of a thumb pushed up
+    host.wait_for_function(f"ctrls[1].p.y < {start} - 1.5", timeout=3000)
+    guest.evaluate("input.jy = 0")
+    # The guest's player shows on the guest's own phone with its yellow ring.
+    guest.wait_for_function("myPlayer() && myPlayer().t === 1")
+    # The guest's pass button reaches the host: with the ball, its player passes.
+    host.evaluate("const p = ctrls[1].p; ball.x = p.x; ball.y = p.y; take(p); ctrls[1].switchT = 5")
+    guest.wait_for_function("owner && owner === myPlayer()")
+    kicks = host.evaluate("ctrls[1].p.kicks")
+    guest.evaluate("act('pass')")
+    host.wait_for_function(f"players.filter(p => p.t === 1).reduce((n, p) => n + p.kicks, 0) > {kicks}", timeout=3000)
+    # The match ends on the host; both phones hear it once and go back to the room.
+    host.evaluate("score = [1, 3]; state = 'full'; pauseT = 0")
+    for p, res, saved in [(host, "Häviö 1–3", '{"voitot":0,"haviot":1,"tasapelit":0}'), (guest, "Voitto 3–1! 🏆", '{"voitot":1,"haviot":0,"tasapelit":0}')]:
+        p.wait_for_function("state === 'done' && document.querySelector('#aipr-result') && document.querySelector('#aipr-result').innerText.length > 0")
+        assert p.locator("#aipr-result").inner_text() == res
+        assert p.evaluate("localStorage.getItem('ai-pelit:jalkapallo:kaverit')") == saved
+    assert host.errors == guest.errors == []
+
+
+def test_a_guest_that_reloads_mid_match_gets_its_player_back(room):
+    host, [guest] = room("Eero", "Aino")
+    host.evaluate("state = 'play'; score = [1, 0]")
+    guest.reload()
+    guest.wait_for_function("players.length === 6 && myTeam === 1 && score[0] === 1", timeout=8000)
+    guest.wait_for_function("myPlayer() && myPlayer().t === 1", timeout=4000)
+    # Its joystick moves its player on the host again.
+    host.evaluate("ctrls[1].switchT = 99")
+    start = host.evaluate("ctrls[1].p.y")
+    guest.evaluate("input.jx = 0; input.jy = -1")
+    host.wait_for_function(f"ctrls[1].p.y < {start} - 1", timeout=3000)
+    assert host.errors == guest.errors == []
+
+
+@pytest.fixture
+def room(site, browser):
+    site.build(ROOT / "games")
+    relay = Relay()
+    contexts = []
+
+    def phone(name):
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        contexts.append(ctx)
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        return page
+
+    def play(*names):
+        host = phone(names[0])
+        host.click("#multi")
+        host.click("#aipr-create")
+        host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+        code = host.evaluate("AiPelitRooms.code")
+        guests = []
+        for n in names[1:]:
+            g = phone(n)
+            g.click("#multi")
+            g.fill("#aipr-codeIn", code)
+            g.click("#aipr-joinBtn")
+            g.wait_for_function("AiPelitRooms.inRoom")
+            guests.append(g)
+        host.wait_for_function(f"AiPelitRooms.members.filter(m => m.on).length === {len(names)}")
+        host.click("#aipr-start")
+        for p in [host, *guests]:
+            p.wait_for_function("players.length === 6 && (state === 'kickoff' || state === 'play')")
+        return host, guests
+
+    play.relay = relay
+    yield play
+    for ctx in contexts:
+        ctx.close()
 
 
 def test_a_guest_hears_the_hosts_save_tackle_and_post(room):

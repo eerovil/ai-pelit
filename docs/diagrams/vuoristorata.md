@@ -8,6 +8,8 @@ flies off; signs before each such place give the speed. With friends, every phon
 host's level at once and the first to the finish wins. From v2 (#234) the ride sounds with
 recorded sounds from the shared library (see `aanikirjasto.md`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Valikko: taso, paras aika, Aja!] --> B[Rata rakennetaan tasosta: nousu, pudotus, mäet, mutkat, silmukat, kierteet]

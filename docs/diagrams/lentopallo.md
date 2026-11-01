@@ -8,6 +8,8 @@ shared library (`aanikirjasto.md`). The ball is played
 automatically when it touches a player's hands; what the touch does depends on what the player
 is doing at that moment.
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}
