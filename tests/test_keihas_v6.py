@@ -64,6 +64,32 @@ def test_over_the_line_the_crowd_goes_ooh(site, context):
     assert page.errors == []
 
 
+def test_a_flat_throw_thuds_and_the_crowd_goes_ooh(site, context):
+    page = open_game(site, context)
+    ready(page)
+    # Held long enough to throw, but let go at 6°: the tip does not land first.
+    page.evaluate("th.t = 99; step(0.001); th.phase = 'run'; th.v = 9; th.x = -3.5; startAim(1); th.aimT = 0.5; th.ang = 6; release(); heard.splice(0)")
+    assert page.evaluate("th.mark") == -1
+    page.evaluate("quick()")
+    assert played(page) == ["tomahdys", "ohhoo"]
+    assert page.errors == []
+
+
+def test_a_friends_throw_thuds_quieter_and_gets_no_applause(site, context):
+    # Another phone's thrower: this phone draws the javelin landing but claps nothing.
+    page = open_game(site, context)
+    ready(page)
+    page.evaluate("""() => {
+      window.vols = [];
+      const spy = AiPelitAanet.play;
+      AiPelitAanet.play = (name, o) => { vols.push([name, o && o.vol]); return spy(name, o); };
+      go(9, 36, -3.5); th.mine = false; heard.splice(0); vols.length = 0; th.jav.acc = 30; step(0.001);
+    }""")
+    assert played(page) == ["tomahdys"]
+    assert page.evaluate("vols") == [["tomahdys", 0.45]]
+    assert page.errors == []
+
+
 def test_the_medals_ring_and_the_gold_gets_applause(site, context):
     page = open_game(site, context)
     ready(page)
