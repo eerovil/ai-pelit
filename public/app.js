@@ -172,7 +172,9 @@
     fillShelf(list);
     showSortPicker(catalog.games.length > 1);
     var rooms = el('section', { class: 'open-rooms', hidden: '' });
-    view.replaceChildren(rooms, catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
+    var playing = el('section', { class: 'friends-playing', hidden: '' });
+    view.replaceChildren(playing, rooms, catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
+    drawPlaying();
     showRooms(rooms);
     showWaitingNames();
     loadPlays();
@@ -537,7 +539,127 @@
     if (!catalog) return;
     var m = location.hash.match(/^#\/([a-z0-9-]+)/);
     var group = m && findGroup(m[1]);
-    if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
+    // The friends page reads every 10 s. The front page of a phone with a nickname but no friends
+    // yet reads every 30 s, so the first request shows there too; with friends, the "now playing"
+    // message every 30 s brings requests already.
+    if (friends) {
+      // Requests show on the front page and the friends page themselves; on a game's or a
+      // group's page they come as kaverit.js's banner.
+      friends.quietRequests = !m || m[1] === 'kaverit';
+      friends.drawBanner();
+      if (m && m[1] === 'kaverit') friends.watch(true);
+      else friends.watch(!m && !!friends.name(), 30e3, true);
+    }
+    if (m && m[1] === 'kaverit' && friends) renderFriends();
+    else if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
+  }
+
+  // Friends (#324), from public/kaverit.js: the friends page (#/kaverit), and on the shelf's
+  // front page the friends playing right now. Friends are made in a game room; this page shows
+  // them, the requests waiting for this phone, and removes a friend.
+  var friends = window.AiPelitKaverit || null;
+  function gameOf(slug) { return catalog.games.filter(function (g) { return g.slug === slug; })[0]; }
+  function friendRow(f, extra) {
+    var game = f.now && f.game && gameOf(f.game);
+    return el('li', { class: 'friend' + (f.now && f.game ? ' in-game' : ''), 'data-pid': f.pid }, [
+      game ? thumb(game, 'thumb small', 36, 48) : el('span', { class: 'friend-face', text: '👤' }),
+      el('div', {}, [el('h3', { text: f.name }), el('p', { class: 'muted meta', text: friends.doing(f) })]),
+      extra,
+    ]);
+  }
+  function requestRow(q) {
+    var yes = el('button', { type: 'button', class: 'button', text: 'Hyväksy' });
+    var no = el('button', { type: 'button', class: 'secondary', text: 'Ei' });
+    yes.addEventListener('click', function () { yes.disabled = no.disabled = true; friends.answer(q.pid, true).then(answered); });
+    no.addEventListener('click', function () { yes.disabled = no.disabled = true; friends.answer(q.pid, false).then(answered); });
+    return el('li', { class: 'friend ask', 'data-pid': q.pid }, [
+      el('span', { class: 'friend-face', text: '👋' }),
+      el('div', {}, [el('h3', { text: q.name }), el('p', { class: 'muted meta', text: 'haluaa kaveriksi' })]),
+      el('div', { class: 'friend-buttons' }, [no, yes]),
+    ]);
+  }
+  // The front page: requests waiting for this phone, and the friends playing right now.
+  function drawPlaying() {
+    var box = view.querySelector('.friends-playing');
+    if (!box || !friends) return;
+    // Playing a game, not only browsing the shelf ("Selaa pelejä" shows on the friends page).
+    var st = friends.state, now = st ? st.friends.filter(function (f) { return f.now && f.game; }) : [];
+    var asks = st ? st.requests : [];
+    box.hidden = !now.length && !asks.length;
+    box.replaceChildren.apply(box, [
+      asks.length ? el('h2', { text: 'Kaveripyynnöt' }) : null,
+      asks.length ? el('ul', { class: 'friends' }, asks.map(requestRow)) : null,
+      now.length ? el('h2', { text: 'Kaverit pelaamassa' }) : null,
+      now.length ? el('ul', { class: 'friends' }, now.map(function (f) {
+        var game = f.game && gameOf(f.game);
+        return friendRow(f, game ? el('a', { class: 'button secondary', href: '#/' + game.slug, text: 'Peliin' }) : null);
+      })) : null,
+    ].filter(Boolean));
+  }
+  var friendsNote = '', nameError = '';
+  function renderFriends() {
+    document.title = 'Kaverit · AI-pelit';
+    showSortPicker(false);
+    var st = friends.state, parts = [
+      el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
+      el('h1', { text: '👫 Kaverit' }),
+    ];
+    // The nickname field while there is none, or the kept one is taken or rejected; it stays
+    // until the server takes a name.
+    var problem = friends.nameNote();
+    if (!friends.name() || problem || nameError) {
+      var input = el('input', { class: 'friends-name', maxlength: '16', placeholder: 'Nimimerkki', 'aria-label': 'Nimimerkki' });
+      var save = el('button', { type: 'button', class: 'button', text: 'Tallenna' });
+      save.addEventListener('click', function () {
+        var v = input.value.trim();
+        if (!v) return;
+        save.disabled = true;
+        friends.setName(v).then(function (r) {
+          nameError = friends.nameError(r, v);
+          return friends.refresh();
+        }).then(renderFriends, renderFriends);
+      });
+      parts.push(el('p', { class: 'muted', text: problem || 'Valitse nimimerkki, niin kaverit tunnistavat sinut.' }),
+        el('div', { class: 'friends-form' }, [input, save]));
+      if (nameError) parts.push(el('p', { class: 'friends-note friends-name-error', role: 'status', text: nameError }));
+    }
+    parts.push(el('p', { class: 'muted', text: 'Kaveriksi pääsee pelihuoneessa: napauta ➕ Kaveriksi toisen pelaajan nimen vieressä, ja hän hyväksyy. Kaverit näkevät, mitä pelaat, ja voivat kutsua sinut huoneeseensa.' }));
+    if (friendsNote) parts.push(el('p', { class: 'friends-note', role: 'status', text: friendsNote }));
+    if (!st) {
+      parts.push(el('p', { class: 'muted friends-wait', text: 'Haetaan kavereita…' }));
+    } else {
+      if (st.requests.length) {
+        parts.push(el('h2', { text: 'Kaveripyynnöt' }), el('ul', { class: 'friends' }, st.requests.map(requestRow)));
+      }
+      parts.push(el('h2', { text: st.friends.length ? 'Kaverisi (' + st.friends.length + ')' : 'Kaverisi' }));
+      if (!st.friends.length) parts.push(el('p', { class: 'muted friends-none', text: 'Ei vielä kavereita.' }));
+      else parts.push(el('ul', { class: 'friends' }, st.friends.map(function (f) {
+        var x = el('button', { type: 'button', class: 'secondary friend-remove', 'aria-label': 'Poista ' + f.name + ' kavereista', text: '✕' });
+        x.addEventListener('click', function () {
+          if (!window.confirm('Poistetaanko ' + f.name + ' kavereista?')) return;
+          x.disabled = true;
+          friends.remove(f.pid).then(answered);
+        });
+        return friendRow(f, x);
+      })));
+    }
+    view.replaceChildren.apply(view, parts);
+  }
+  function answered(r) {
+    friendsNote = friends.friendError(r);
+    if (location.hash === '#/kaverit') renderFriends(); else drawPlaying();
+  }
+  if (friends) {
+    friends.quietRequests = true; // until render() knows the page
+    friends.on(function () {
+      if (!catalog) return;
+      if (location.hash === '#/kaverit') {
+        // Not while a nickname is being typed: drawing the page again would drop it.
+        if (!document.activeElement || !document.activeElement.classList.contains('friends-name')) renderFriends();
+      } else drawPlaying();
+    });
+    // Only a phone with a nickname can have friends or requests: no request for the others.
+    if (friends.name()) friends.refresh();
   }
 
   // Network first, every time the shelf is opened or comes back on screen, so a new

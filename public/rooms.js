@@ -30,6 +30,12 @@
 // A version may move the chip with data-voice-corner="left|top-left|top-right|bottom-left|
 // bottom-right" (default: the right edge, a little above the middle) or leave voice out with
 // data-voice="off". Without a microphone, permission or connection the game plays the same.
+//
+// Friends (#324): a phone with a nickname joins with its friend id (`fid`, a hash of its secret
+// player id), and the room passes it on in `peers`. With public/kaverit.js on the page (back.js
+// loads it), the room screen shows "➕ Kaveriksi" beside each other player who has one, the
+// requests sent to this phone ("Hyväksy" / "Ei"), and "📨 Kutsu kaveri", which invites a friend
+// into this room.
 (function () {
   'use strict';
   var script = document.currentScript;
@@ -60,6 +66,26 @@
   function cleanName(s) { return String(s || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16); }
 
   var myKey = load(KEY, '') || (function () { var k = hex(16); save(KEY, k); return k; })();
+
+  // ---- Friends (#324) ----
+  // This phone's friend id: the first 32 hex digits of SHA-256 of its player id (the high-score
+  // lists' own, made here as scores.js makes it). Only a phone with a nickname tells it.
+  var PLAYER = 'ai-pelit:_pelaaja:id';
+  // The hash takes a moment: connect() waits for it (fidWait), so even the first join (a room
+  // link, or a name typed on the room screen just now) carries it.
+  var myFid = '', fidFor = '', fidWait = null;
+  function findFid() {
+    if (!cleanName(load(NAME, '')) || !window.crypto || !crypto.subtle) return;
+    var id = load(PLAYER, '');
+    if (!/^[a-f0-9]{32}$/.test(id)) { id = hex(16); save(PLAYER, id); }
+    if (fidFor === id) return;
+    fidFor = id;
+    var wait = fidWait = crypto.subtle.digest('SHA-256', new TextEncoder().encode(id)).then(function (h) {
+      myFid = Array.prototype.map.call(new Uint8Array(h).slice(0, 16), function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join('');
+    }).catch(function () { fidFor = ''; }).then(function () { if (fidWait === wait) fidWait = null; });
+  }
+  findFid();
+  function friendsLib() { return window.AiPelitKaverit || null; }
   // A name picked here is kept, so it stays the same after a reload or a QR join. It is not the
   // nickname, so the high-score list still asks for a real one.
   function myName() {
@@ -109,9 +135,16 @@
   // ---- The connection ----
   function connect() {
     clearTimeout(net.timer);
+    findFid();
+    if (fidWait) {
+      render();
+      fidWait.then(function () { if (net.on && !net.ws) connect(); });
+      return;
+    }
     var u = new URL(net.code, API);
     u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
     var q = { key: myKey, name: myName() };
+    if (myFid && cleanName(load(NAME, ''))) q.fid = myFid;
     if (net.host) { q.host = '1'; q.game = GAME; q.v = VERSION; q.max = MAX; }
     u.search = new URLSearchParams(q);
     var ws;
@@ -756,6 +789,26 @@
       '#aipr-talk.mid{top:calc(env(safe-area-inset-top,0px) + 54px)!important;left:auto!important;right:calc(50% - 164px)!important}' +
     '}',
     '#aipr li button.mute{margin-left:auto;padding:0 2px;background:none;box-shadow:none;font-size:18px;line-height:1}',
+    // Friends (#324): a small button on each player's row, the requests above the list, and the
+    // invite list over the whole room screen.
+    '#aipr li .fr{margin-left:auto;font:800 13px system-ui,sans-serif;padding:4px 9px;border-radius:9px;background:#3f8ad8;box-shadow:0 2px 0 #2a5f99;white-space:nowrap}',
+    '#aipr li .fr.ok{background:#4f9a3a;box-shadow:0 2px 0 #2f6a22}',
+    '#aipr li .fr+button.mute,#aipr li .frs+button.mute{margin-left:6px}',
+    '#aipr li .frs{margin-left:auto;font-size:13px;font-weight:700;color:#8a7658;white-space:nowrap}',
+    '#aipr-friends{display:flex;flex-direction:column;align-items:center;gap:6px}',
+    '#aipr-friends:empty{display:none}',
+    '#aipr .ask{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;background:#e8def5;border-radius:12px;padding:6px 10px;font-size:15px;font-weight:700;max-width:320px}',
+    '#aipr .ask .who{flex:1 1 auto;text-align:left;min-width:0}',
+    '#aipr .ask button{font-size:14px;padding:6px 10px;box-shadow:0 3px 0 #2f6a22}',
+    '#aipr-friends>button{font-size:15px;padding:7px 12px}',
+    '#aipr .ask button.no{background:#b8ad95;box-shadow:0 3px 0 #8a8270}',
+    '#aipr-friends>button{background:#9a5cc6;box-shadow:0 4px 0 #6b3a86}',
+    '#aipr-inv{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 18px calc(env(safe-area-inset-bottom,0px) + 14px);box-sizing:border-box;background:#f6f1e6;overflow-y:auto}',
+    '#aipr-inv ul{width:min(340px,100%)}',
+    '#aipr-inv li{justify-content:space-between;text-align:left;padding:6px 10px}',
+    '#aipr-inv li div{min-width:0}',
+    '#aipr-inv li small{display:block;font-size:13px;font-weight:600;color:#8a7658}',
+    '#aipr-inv li button{font-size:15px;padding:7px 12px;flex:none}',
     '#aipr-pause{position:fixed;left:16px;right:16px;top:40%;z-index:2147483641;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px;border-radius:16px;background:rgba(30,20,40,.88);color:#fff;text-align:center;font:700 17px/1.35 system-ui,sans-serif;touch-action:manipulation}',
     '#aipr-pause p{margin:0}',
     '#aipr-pause button{font:800 16px system-ui,sans-serif;padding:9px 16px;border:0;border-radius:12px;background:#f2c94c;color:#2b2416}',
@@ -777,6 +830,7 @@
         '<div><p class="small"><b>Huoneen koodi</b></p><p id="aipr-code"></p>' +
         '<p class="small">Kaverit liittyvät koodilla tai skannaamalla kuvan.</p></div></div>' +
       '<ul id="aipr-members"></ul>' +
+      '<div id="aipr-friends"></div>' +
       '<p id="aipr-info"></p>' +
       '<div id="aipr-extra"></div>' +
       '<div class="sws"><label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
@@ -784,7 +838,9 @@
       '<button id="aipr-start" hidden>Aloita kierros</button>' +
     '</div>' +
     '<p id="aipr-err"></p>' +
-    '<button id="aipr-back" class="plain">Takaisin</button>';
+    '<button id="aipr-back" class="plain">Takaisin</button>' +
+    '<div id="aipr-inv" hidden><h2>📨 Kutsu kaveri</h2><p class="small">Kutsu tulee kaverin puhelimeen, vaikka hän pelaisi toista peliä.</p>' +
+      '<ul id="aipr-invList"></ul><p class="small" id="aipr-invNone"></p><button id="aipr-invClose">Valmis</button></div>';
 
   // Like back.js: the game never sees a touch or a key meant for the room screen.
   function shield(e) {
@@ -804,7 +860,7 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'qr', 'members', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn']
+    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'qr', 'members', 'friends', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
@@ -816,10 +872,12 @@
     el.back.addEventListener('click', function () { if (net.on) leave(); else { show(false); fire('menu'); } });
     el.goOn.addEventListener('click', goOn);
     el.voice.addEventListener('change', function () { setVoice(el.voice.checked); });
+    el.invClose.addEventListener('click', function () { inviting = false; render(); });
   }
   function takeName() {
     var n = cleanName(el.name.value);
     if (n && n !== myName()) save(NAME, n);
+    findFid();
   }
   function joinTyped() {
     takeName();
@@ -856,6 +914,7 @@
   function show(on) {
     build();
     shown = on;
+    if (!on) inviting = false;
     root.hidden = !on;
     if (on) el.name.value = myName();
     render();
@@ -867,6 +926,7 @@
   function render() {
     renderVoice();
     if (!root) return;
+    hookFriends();
     renderPause();
     if (!shown) return;
     el.join.hidden = net.on;
@@ -884,6 +944,8 @@
       li.appendChild(dot);
       li.appendChild(document.createTextNode((m.id === net.hostId ? '👑 ' : '') + m.name + (m.id === net.me ? ' (sinä)' : '') + (m.on ? '' : ' – ei yhteyttä')));
       if (!m.on) li.className = 'off';
+      var fb = friendButton(m);
+      if (fb) li.appendChild(fb);
       // A player whose voice this phone can hear: a tap mutes them here (#322).
       var vp = voice.peers[m.id];
       if (voice.on && vp && vp.on && m.id !== net.me) {
@@ -896,6 +958,7 @@
       }
       el.members.appendChild(li);
     });
+    renderFriends();
     var online = net.members.filter(function (m) { return m.on; }).length, info;
     if (!net.connected) info = 'Yhdistetään…';
     else if (net.host) {
@@ -913,6 +976,149 @@
     el.start.disabled = online < MIN || !net.connected;
     el.start.textContent = net.played ? 'Uusi kierros' : 'Aloita kierros';
   }
+  // ---- Friends on the room screen (#324) ----
+  var INVITE_MS = 10 * 60e3;
+  var inviting = false, invited = {}, askName = '', askRow = null, friendNote = '', friendsSig = '';
+  function friendButton(m) {
+    var F = friendsLib();
+    if (!F || !m.fid || m.id === net.me) return null;
+    var st = F.status(m.fid);
+    if (st === 'me') return null;
+    // A request from this player is answered in its own row under the list.
+    if (st === 'friend' || st === 'asked' || st === 'asks') {
+      var s = document.createElement('span');
+      s.className = 'frs';
+      s.textContent = st === 'friend' ? '👫 Kaveri' : st === 'asked' ? 'Pyydetty' : 'Pyytää kaveriksi';
+      return s;
+    }
+    var b = document.createElement('button');
+    b.className = 'fr';
+    b.textContent = '➕ Kaveriksi';
+    b.addEventListener('click', function () {
+      if (!cleanName(load(NAME, '')) || F.nameNote()) { askName = m.fid; friendNote = ''; return render(); }
+      b.disabled = true;
+      F.ask(m.fid).then(function (r) { r.pid = m.fid; friendResult(r); });
+    });
+    return b;
+  }
+  // A phone that took a nickname in the room joins again on a new connection, so the room
+  // learns its friend id (and nickname) and the others get "➕ Kaveriksi" for it. The room keeps
+  // only the newest connection of a phone; the old one's close is ignored (net.ws has moved on).
+  function rejoinWithFid() {
+    findFid();
+    (fidWait || Promise.resolve()).then(function () { if (net.on && net.ws && myFid) { net.ws = null; connect(); } });
+  }
+  function friendResult(r) {
+    // The nickname is not usable (rejected meanwhile): open the row for a new one.
+    var F = friendsLib();
+    // (Or taken by another phone: the same.)
+    if ((r.status === 403 || r.name) && F && F.nameNote()) { askName = r.pid || true; askRow = null; friendNote = ''; return render(); }
+    friendNote = F ? F.friendError(r) : '';
+    render();
+  }
+  function renderFriends() {
+    var box = el.friends, F = friendsLib();
+    el.inv.hidden = !(inviting && F && F.state);
+    var st = F && net.on ? F.state : null;
+    // Drawn again only when something in it changed, so a half-typed nickname keeps its focus.
+    var sig = JSON.stringify([!!F && net.on, F && F.titles, askName, friendNote, st && st.requests, st && st.friends.length, inviting && st && st.friends, invitesNow(), net.code,
+      net.members.map(function (m) { return m.fid || ''; })]);
+    if (sig === friendsSig) return;
+    friendsSig = sig;
+    box.textContent = '';
+    if (!F || !net.on) return;
+    if (askName) {
+      // Kept between draws, so what is typed stays while the screen redraws.
+      if (!askRow) {
+        var input = document.createElement('input'), ok = document.createElement('button');
+        askRow = document.createElement('div');
+        askRow.className = 'ask';
+        // A rejected or taken nickname says so; with none, the row only asks for one.
+        askRow.appendChild(document.createTextNode(F.nameNote() || 'Nimimerkkisi kavereille:'));
+        input.maxLength = 16; input.placeholder = 'Nimimerkki'; input.style.width = '150px';
+        ok.textContent = 'Pyydä';
+        ok.addEventListener('click', function () {
+          if (!cleanName(input.value)) return;
+          var pid = askName;
+          ok.disabled = true;
+          var v = cleanName(input.value);
+          // Only once the server took the name: then join again with the friend id, and ask.
+          F.setName(v).then(function (r) {
+            if (!r.ok) { ok.disabled = false; friendNote = F.nameError(r, v); render(); return; }
+            askName = ''; askRow = null; friendNote = '';
+            rejoinWithFid();
+            return pid === true ? render() : F.ask(pid).then(friendResult);
+          });
+        });
+        askRow.appendChild(input); askRow.appendChild(ok);
+      }
+      box.appendChild(askRow);
+    }
+    if (friendNote) {
+      var n = document.createElement('p'); n.className = 'small'; n.textContent = friendNote; box.appendChild(n);
+    }
+    if (!st) return;
+    st.requests.forEach(function (q) {
+      var row = document.createElement('div'), yes = document.createElement('button'), no = document.createElement('button');
+      row.className = 'ask';
+      var who = document.createElement('span'); who.className = 'who'; who.textContent = q.name + ' haluaa kaveriksi';
+      yes.textContent = 'Hyväksy'; no.textContent = 'Ei'; no.className = 'no';
+      yes.addEventListener('click', function () { yes.disabled = no.disabled = true; F.answer(q.pid, true).then(friendResult); });
+      no.addEventListener('click', function () { yes.disabled = no.disabled = true; F.answer(q.pid, false).then(friendResult); });
+      row.appendChild(who); row.appendChild(yes); row.appendChild(no);
+      box.appendChild(row);
+    });
+    if (st.friends.length && GAME) {
+      var b = document.createElement('button');
+      b.textContent = '📨 Kutsu kaveri';
+      b.addEventListener('click', function () { inviting = true; render(); F.refresh(); });
+      box.appendChild(b);
+    }
+    if (inviting) renderInvites(F, st);
+  }
+  function invitesNow() {
+    var out = {};
+    Object.keys(invited).forEach(function (k) {
+      var at = invited[k];
+      out[k] = typeof at === 'number' ? Date.now() - at < INVITE_MS : at;
+    });
+    return out;
+  }
+  function renderInvites(F, st) {
+    var here = {};
+    net.members.forEach(function (m) { if (m.fid) here[m.fid] = true; });
+    el.invList.textContent = '';
+    var left = st.friends.filter(function (f) { return !here[f.pid]; });
+    left.forEach(function (f) {
+      var li = document.createElement('li'), d = document.createElement('div'), b = document.createElement('button');
+      d.textContent = f.name;
+      var small = document.createElement('small'); small.textContent = F.doing(f); d.appendChild(small);
+      var key = net.code + f.pid, at = invited[key];
+      // An invite lives 10 minutes on the server; after that the friend may be invited again.
+      var live = at === 'sending' || (typeof at === 'number' && Date.now() - at < INVITE_MS);
+      b.textContent = at === 'sending' ? 'Kutsutaan…' : live ? 'Kutsuttu ✓' : at === 'failed' ? 'Ei onnistunut' : 'Kutsu';
+      b.disabled = live;
+      b.addEventListener('click', function () {
+        invited[key] = 'sending'; render();
+        F.invite(f.pid, { game: GAME, version: VERSION, room: net.code }).then(function (r) { invited[key] = r.ok ? Date.now() : 'failed'; render(); });
+      });
+      li.appendChild(d); li.appendChild(b);
+      el.invList.appendChild(li);
+    });
+    el.invNone.textContent = left.length ? '' : 'Kaikki kaverisi ovat jo tässä huoneessa.';
+  }
+  // Read the friends while the room screen shows a room, every 10 s; and draw again when
+  // kaverit.js has loaded or has news.
+  var watchingFriends = false, hooked = false;
+  function hookFriends() {
+    var F = friendsLib();
+    if (!F) return;
+    if (!hooked) { hooked = true; F.on(render); }
+    var want = !!(shown && net.on);
+    if (want !== watchingFriends) { watchingFriends = want; F.watch(want); }
+  }
+  window.addEventListener('aipelitkaverit', function () { hookFriends(); render(); });
+
   var pauseShown = '';
   function renderPause() {
     if (!root) return; // nothing drawn yet: the room screen has not been opened on this page

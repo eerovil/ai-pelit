@@ -81,7 +81,7 @@ request, with the version that taught it (#181, Eero's choice).
    for being big: phones cache only the versions they open, and git stores each copy as a diff.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
-   "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
+   "‹ Pelit" in the top-left corner; a tap opens its menu (back to the shelf, the game volume). When the game's own score or buttons are there, move the chip
    with `data-corner="top-right"`, `"bottom-left"` or `"bottom-right"` on that script tag.
 4. **Phone first.** Touch only, playable on a 360 × 640 screen, no hover, no keyboard
    needed. Fill the screen with a fixed box (`position:fixed; top:0; bottom:0`, or `height:100%`),
@@ -213,7 +213,15 @@ high-score lists (#25), then play counts (#26).
   shown on `/yllapito/`, never on GitHub). A game needs nothing for it. Once a day at 17.00 the host's
   `ai-pelit-palautteet.timer` (`scripts/systemd/`) runs `scripts/feedback_issue.py` from
   `origin/main`, which files the new ones as one "Palautteet" issue (see "What a request means").
-- `public/scores.js`, `public/rooms.js` and `public/outfits.js` are shared by every version that uses them: change them
+- **Friends (#324).** Two phones become friends in a game room: `rooms.js` shows "➕ Kaveriksi"
+  beside each other player who has a nickname, and the other phone accepts. `public/kaverit.js`
+  (loaded by `back.js` in every game, and by the shelf) tells the server what a phone with
+  friends plays every 30 s while a page is on screen, shows invites ("Liity") and requests as a
+  banner, and the room screen's "📨 Kutsu kaveri" invites a friend into the room. The shelf has
+  the friends page at `#/kaverit` and "Kaverit pelaamassa" on its front page. A game needs nothing
+  for it. Phones know each other only by a friend id, a hash of the secret player id
+  (`pidOf()` in `server/api.js`), which a phone with a nickname sends to the room as `fid`.
+- `public/scores.js`, `public/rooms.js`, `public/kaverit.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
@@ -292,6 +300,11 @@ blip and not `kisa.js`'s "jee!" (Pituushyppy v12).
   goes in the next `aanet-<N+1>/`, a copy of the folder with the new files, used by the next
   versions. A game's music and its own tunes (Piano's notes) stay its own.
 - `sw.js` keeps the files after their first use, so the game sounds the same offline.
+- The player's game volume (#336) is in the menu `back.js`'s "‹ Pelit" chip opens, one setting for every
+  game: it puts a gain between each audio context and the speaker by patching `AudioNode`'s
+  `connect`. So connect nothing to `ctx.destination` before `back.js` has run (make the context
+  and its nodes on the first tap, as every game does); a game needs no volume control of its own.
+  The friends' voice in a room is not touched.
 
 ## Before you mark the pull request ready
 
@@ -324,6 +337,13 @@ blip and not `kisa.js`'s "jee!" (Pituushyppy v12).
   #207): `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
   and the game's versions in `catalog.json`. A 404 right after the merge is the deploy still
   running: look again a minute later before calling it not live (#205).
+- GitHub runs no pull-request CI while the pull request conflicts with `main` (#346): the push
+  starts no run, so a wake-on for the `test` check never fires, and closing and reopening does not
+  help. When no run appears for a pushed head, read `gh pr view <n> --json
+  mergeable,mergeStateStatus` once. If it says `CONFLICTING` or `DIRTY`, merge `origin/main` into
+  the branch (never rebase pushed commits), fix the conflict, push, and register the wake-on again
+  for the new head. `main` moves often here (many Works at once), so on a long-running pull
+  request merge `origin/main` before each push.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
   For a 3D game, launch Chromium with `tests/conftest.py`'s `GPU_ARGS`, so it draws on the card.
