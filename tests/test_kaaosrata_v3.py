@@ -161,3 +161,16 @@ def test_without_the_sound_library_it_still_plays_with_its_beeps(site, browser):
         assert page.errors == []
     finally:
         ctx.close()
+
+
+def test_a_jump_down_into_a_gap_falls_without_a_landing_thud(site, context):
+    page = open_game(site, context)
+    running(page)
+    # Up in the air above the gap between two stepping stones, coming down.
+    put(page, x=-1.7, y=40, z=1, vz=-1, cp=1)
+    page.wait_for_function("me.fall > 0", timeout=2000)
+    page.wait_for_timeout(600)
+    got = heard(page)
+    assert got[:2] == ["putoaminen", "ohhoo"], got
+    assert "tomahdys" not in got
+    assert page.errors == []

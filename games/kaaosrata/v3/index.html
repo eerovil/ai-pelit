@@ -216,8 +216,9 @@ function move(r, dt, t) {
   if (r.z > 0 || r.vz > 0) {
     r.vz -= GRAV * dt; r.z += r.vz * dt;
     if (r.z <= 0) {
-      // Down from a jump or a knock: a thud, louder from higher (only a sound, no old beep).
-      if (r === me && r.vz < -2) S.play('tomahdys', { vol: Math.min(0.8, 0.25 - r.vz * 0.06) });
+      // Down from a jump or a knock onto a floor: a thud, louder from higher (only a sound, no old
+      // beep). Coming down over a gap is the fall's sound instead.
+      if (r === me && r.vz < -2 && groundAt(r.x, r.y, t)) S.play('tomahdys', { vol: Math.min(0.8, 0.25 - r.vz * 0.06) });
       r.z = 0; r.vz = 0;
     }
   }
