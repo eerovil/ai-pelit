@@ -92,6 +92,13 @@
       "note": "Alun tutkimusasema on nyt Aurora: kolme kerrosta railon yllä, SISU telakoituu sen alle ja tornista noustaan suoraan sisään, ja selviytyjät tarvitsevat vesiviljelyyn pumpun Kestrelin ruumasta; hylkyjen huoneet ovat ihmisen mittaisia ja järjestyksessä, ruoka ja lääkkeet vain laatikoissa, SISU on isompi, jäävuoria ja pohjan kasvillisuutta, kosketusohjaus ja hiljaisemmat äänet.",
       "request": "Lisää maailmaan erikokoisia jäävuoria ja jäätikönmuotoja sekä vaihtelevia pohjanmuotoja sekä pohjakasvillisuutta.\n\nKorjaa hylkyjen mittakaava: kerrokset ja huoneet ovat liian korkeita ja kalusteet liian pieniä pelaajahahmoon nähden. Tee kaikkiin hylkyihin looginen huonejärjestys ja tavaroiden sijoittelu. Poista erikseen kerättävät leijuvat lääke- ja ruokaobjektit, näitä on enää vain laatikoissa.\n\nKorjaa laatikon kantaminen siten, että laatikko näyttää pysyvän pelaajan käsissä pelaajan kääntymisestä huolimatta.\n\nSuurenna pelaajan sukellusvenettä hieman siten, että hahmon pää ei osu kattoon.\n\nKorjaa kameran toiminta autopilotin aikana veneen sisällä liikkuessa siten, että se seuraa pelaajahahmoa veneen liikkeestä huolimatta.\n\nLisää myös sukellusveneen ohjaukseen kosketuksen seuraaminen samaan tapaan kuin veneen sisällä huoneisiin liikuttaessa.\n\nTee Aurora-tutkimusasemalle sukellusveneen telakointiasema, jota kautta pääsee sukellusveneestä tornin kautta suoraan asemalle sisään. Tee asemaan kolme kerrosta, joiden välillä liikutaan tikkaiden avulla. Asemalla on muutamia selviytyjiä, jotka tarvitsevat vesiviljelyjärjestelmän korjaamiseksi uuden pumpun. Pelaaja etsii sopivan pumpun hylystä ja tuo sen heille. Pumppu kannetaan käsissä laatikoiden tapaan.\n\nVaimenna sukellusveneen taustasuhinaa ja lumiaskelten ääniä.\n\n(Tarkennukset: Aurora on jään päällä, ei pohjassa – se on alun tutkimusasema A-3, jonka tilalle tulee kolmikerroksinen.)",
       "issue": "eerovil/ai-pelit#300"
+    },
+    {
+      "n": 14,
+      "date": "2026-11-01",
+      "note": "Hiljaisempi SISU: veneen sisällä soinut sihinä (reaktorin huminasilmukka) on poistettu.",
+      "request": "Hirmuinen on edelleen tuo sihinä veneessä",
+      "issue": "eerovil/ai-pelit#300"
     }
   ]
 }
