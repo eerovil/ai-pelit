@@ -22,6 +22,8 @@ v7 (#297) plays as v6 on `public/lib/yleisurheilu-5/`: with friends the meet wai
 
 v8 (#313) plays as v7, but a pad that does nothing right then is greyed out and does not light up when pressed: while "Heitä" is held the feet add no speed, so they show grey (v7 flashed them). `padOn()` in `games/keihas/v8/index.html` says which pads are on, and both `drawControls()` and the presses read it; see `yleisurheilu-napit.md`.
 
+v9 (#311) plays as v8 with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/keihas/v9/index.html`, `asut.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

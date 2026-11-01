@@ -44,6 +44,13 @@
       "note": "Napit, jotka eivät juuri silloin tee mitään, näkyvät harmaina eivätkä välähdä: jalat seipäällä ollessa ja Istuta-nappi ennen kuin vauhti lähestyy laatikkoa.",
       "request": "Ottelun lajeissa (yleisurheilu) napit, jotka eivät sillä hetkellä tee mitään, pitää näyttää pois käytöstä (harmaina/himmennettyinä), ettei pelaaja luule niiden toimivan. Esimerkki (#312): Keihäänheitto v7:ssä jalkanapit välähtävät, kun niitä painaa Heitä-napin ollessa pohjassa, vaikka askel ei lisää vauhtia. Tähtäyksen aikana jalkanappien pitäisi näkyä pois käytöstä eikä välähtää.",
       "issue": "eerovil/ai-pelit#313"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-01",
+      "note": "Asut: valitse hyppääjällesi asu tai Halloween-puku, ja sama asu on käytössä kaikissa yleisurheilulajeissa ja Ottelussa.",
+      "request": "Puvut voisi toimia kaikissa ottelu peleissä ainakin. Onko puvuille jo oma shared lib",
+      "issue": "eerovil/ai-pelit#311"
     }
   ]
 }

@@ -12,6 +12,8 @@ v8 (#297) plays as v7 on `public/lib/yleisurheilu-5/`: with friends the meet wai
 
 v9 (#313) plays as v8, but a pad that does nothing right then is greyed out and does not light up when pressed: while "Hyppää" is held the feet add no speed, so they show grey (v8 flashed them); in the air every pad is still the legs, once. `padOn()` in `games/pituushyppy/v9/index.html`; see `yleisurheilu-napit.md`.
 
+v10 (#311) adds the outfit picker ("👕 Asu" in the menu, `asut.md`): the player's jumper wears the outfit in every pose, on the podium and on friends' phones, and the choice is one for every athletics event and Ottelu (`data-share="yleisurheilu"` in `games/pituushyppy/v10/index.html`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]

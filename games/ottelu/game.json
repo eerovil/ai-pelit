@@ -44,6 +44,13 @@
       "note": "Ottelu pelaa nyt aina jokaisen lajin uusinta versiota, joten kavereiden kanssa vuoroaan odottavat seisovat katsomassa ja voivat kannustaa 📣, ja kenttälajissa odotetaan vain vuorossa olevaa puhelinta.",
       "request": "Ottelun pitäisi käyttää automaattisesti lajien uusimpia versioita, ettei jokaisen lajipäivityksen jälkeen tarvitse erikseen tehdä uutta Ottelu-versiota. Nyt Ottelu soittaa vanhoja lajiversioita. Esim. #297 / PR #301 toi katsojat ja \"📣 Kannusta\"-napin uusiin versioihin (Pituushyppy v8, Keihäänheitto v7, Kuulantyöntö v2, Moukarinheitto v5, Korkeushyppy v5, Seiväshyppy v5, Mäkihyppy v3), mutta Ottelussa niitä ei näy. Toive (Eero): Ottelu ottaa jatkossa itsestään lajien uusimmat versiot. Nyt heti: Ottelu käyttämään uusimpia versioita, joissa on katsojat ja kannustus.",
       "issue": "eerovil/ai-pelit#303"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-01",
+      "note": "Asu-nappi: valitse asu tai Halloween-puku, ja se on päällä ottelun jokaisessa lajissa.",
+      "request": "Puvut voisi toimia kaikissa ottelu peleissä ainakin. Onko puvuille jo oma shared lib",
+      "issue": "eerovil/ai-pelit#311"
     }
   ]
 }

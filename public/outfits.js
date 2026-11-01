@@ -19,12 +19,34 @@
 // The choice is saved per game on the phone (ai-pelit:_asut:<slug>), so every version of a game
 // shares it. AiPelitOutfits.current() is the outfit now; .get(id) is any outfit by id (for a
 // friend's figure in a room: send current().id with the player); .open() shows the picker.
+//
+// Shared choice (#311): with data-share="<group>" on the script tag, the choice is one for every
+// game of that group (ai-pelit:_asut:<group>), so the athletics events and Ottelu wear the same
+// outfit. The first time a phone opens one of them, the choice made before in one game of the
+// group (an older version, its own key) becomes the group's: the first found in SHARED_FROM's
+// fixed order, so every game shows the same one, whichever is opened first. A pick is saved to
+// both keys, so the game's older versions (which read only their own) follow it too.
+// AiPelitOutfits.yleisurheilu is the athletics events' common everyday set: pass it as `outfits`,
+// so an id picked in one event is found in every other.
 // Later versions load this same file, so it must stay compatible with every version that uses it.
 (function () {
   'use strict';
   var script = document.currentScript;
   var GAME = (script && script.getAttribute('data-game')) || '';
-  var KEY = 'ai-pelit:_asut:' + GAME;
+  var SHARE = (script && script.getAttribute('data-share')) || '';
+  var OWN = 'ai-pelit:_asut:' + GAME;
+  var KEY = SHARE ? 'ai-pelit:_asut:' + SHARE : OWN;
+  // The games whose own earlier choice a group takes over, in order (#311): those that had
+  // outfits before the group shared one, the longest-dressed first.
+  var SHARED_FROM = { yleisurheilu: ['keihas', 'aitajuoksu', 'kuula'] };
+  function adopt() {
+    if (!SHARE || load(KEY, null) !== null) return;
+    var from = (SHARED_FROM[SHARE] || []).concat([GAME]);
+    for (var i = 0; i < from.length; i++) {
+      var o = byId(load('ai-pelit:_asut:' + from[i], ''));
+      if (o) { save(KEY, o.id); return; }
+    }
+  }
   function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
@@ -38,6 +60,20 @@
     { id: 'muumio', name: 'Muumio', emoji: '🩹', skin: '#e9dfc4', hair: '#e9dfc4', top: '#e2d6b6', bottom: '#d6c9a6', shoe: '#c4b690', cape: null, head: 'mummy' },
   ];
   HALLOWEEN.forEach(function (o) { o.halloween = true; });
+
+  // ---- The athletics events' everyday kits (#311), one set for all of them ----
+  // 'perus' leaves the shirt (top: null) to the game, which gives it the competitor's own colour.
+  // The ids are those the events had on their own (Keihäs, Kuula, Aitajuoksu), so a choice made
+  // there is found here too.
+  var YLEISURHEILU = [
+    { id: 'perus', name: 'Perus', skin: '#c98a62', hair: 'rgba(0,0,0,.25)', top: null, bottom: '#1b1b2f', shoe: '#ffffff', cape: null, head: null },
+    { id: 'suomi', name: 'Sinivalkoinen', skin: '#e8b48f', hair: '#e2c27a', top: '#f4f6fa', bottom: '#1f4fa8', shoe: '#1f4fa8', stripe: '#1f4fa8', cape: null, head: null },
+    { id: 'musta', name: 'Musta', skin: '#8d5a3b', hair: '#111111', top: '#1e1e22', bottom: '#1e1e22', shoe: '#f2c230', cape: null, head: null },
+    { id: 'punainen', name: 'Punainen', skin: '#f0c5a0', hair: '#5a3418', top: '#d23a2f', bottom: '#f4f6fa', shoe: '#d23a2f', cape: null, head: null },
+    { id: 'vihrea', name: 'Vihreä', skin: '#f0c5a0', hair: '#9a4a22', top: '#27a35a', bottom: '#f4f6fa', shoe: '#27a35a', cape: null, head: null },
+    { id: 'kulta', name: 'Kulta', skin: '#e0a98a', hair: '#6b3e26', top: '#e3b23c', bottom: '#f4f1e8', shoe: '#e3b23c', cape: null, head: null },
+    { id: 'neon', name: 'Neon', skin: '#8d5a3b', hair: '#161616', top: '#1a1a1a', bottom: '#1a1a1a', shoe: '#c8ff2e', stripe: '#c8ff2e', cape: null, head: null },
+  ];
 
   // Around Halloween (20 October to 2 November) the costumes come first.
   function season(d) {
@@ -161,6 +197,7 @@
     b.appendChild(el('span', 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', (o.emoji && innerHeight >= 500 ? o.emoji + ' ' : '') + o.name));
     b.onclick = function () {
       save(KEY, o.id);
+      if (KEY !== OWN) save(OWN, o.id);
       if (changeFn) { try { changeFn(o); } catch (e) {} }
       fill(grid);
     };
@@ -223,6 +260,7 @@
       if (opts.halloween !== false) outfits = outfits.concat(HALLOWEEN);
       drawFn = opts.draw || null;
       changeFn = opts.change || null;
+      adopt();
       return current();
     },
     current: current,
@@ -232,6 +270,7 @@
     close: close,
     isOpen: function () { return !!panel; },
     halloween: HALLOWEEN,
+    yleisurheilu: YLEISURHEILU,
     season: season,
     head: head,
   };
