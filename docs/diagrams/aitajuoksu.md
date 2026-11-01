@@ -14,6 +14,8 @@ From v6 (#170) the legs run forwards: in `body()` in `games/aitajuoksu/v6/index.
 
 From v7 (#211) the race sounds like one: the beeps are recorded sounds from the shared library `public/lib/aanet-2/` (`aanikirjasto.md`), loaded in `games/aitajuoksu/v7/index.html` as `S` — a whistle for a false start, the starting pistol, footsteps, the take-off with a whoosh, a hurdle's metal clatter, a chime at the finish and applause for a new record. Each falls back to v6's own beep when it cannot play (before the sound loads, offline on the first open).
 
+From v8 (#308) the jump button is where the other athletics games have it (Pituushyppy v4, #177): upright, a bar across the screen above the two feet with a gap between, not between the feet; on its side the top of each edge column, with the same 44 px gap above the foot. A touch in the gap, or on the jump's lowest 12 px, is a step, so a thumb drumming the feet does not jump by mistake (`pads()` and `padAt()` in `games/aitajuoksu/v8/index.html`).
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]
@@ -27,7 +29,7 @@ flowchart TD
   C --> D{Mitä nappia painetaan?}
   D -- Eri jalka kuin viimeksi --> E[Vauhti kasvaa]
   D -- Sama jalka --> F[Vauhti hidastuu hieman]
-  D -- Hyppää --> G[Hyppy]
+  D -- Hyppää: palkki jalkojen yläpuolella --> G[Hyppy]
   E --> HA{Aidat ja aidan kohdalla?}
   F --> HA
   G --> HA
@@ -75,6 +77,7 @@ flowchart TD
 - **Keltainen kortti**: `card` 1: a small yellow card by the name and 🟨 in the top bar; `afterFalse()` calls `countdown()`, a new random gun moment.
 - **Punainen kortti: ulos radalta**: `card` 2: the runner stays at the start, dimmed, and comes last as "Hylätty" (`standings()` `dq`). Alone, the player's own red card ends the race straight to the menu, with nothing saved; in a room the race goes on without them.
 - **PAM! Kello käy**: `race.phase` becomes `run`; the race clock starts from the gun on each phone. `bang()`: from v7 the `lahto` pistol.
+- **Mitä nappia painetaan?**: `pointerdown` on the canvas. Upright v1-v7 had three pads in a row, left foot, jump, right foot; from v8 `padAt()` reads the jump bar above the feet (`PAD_GAP` 44 px under it, the gap and the bar's lowest `JUMP_EDGE` 12 px count as the foot under the thumb), and a tap on the track jumps too. On its side (v4) each edge column is a jump pad on top and that side's foot under it.
 - **Vauhti kasvaa**: `step()`: each tap on the other foot adds speed, less the faster the runner goes (up to 12 m/s); `move()` takes some away all the time, so about 8 taps a second holds about 8.3 m/s. The stride's speed follows it (`r.ph`); from v6 the knee bends as each leg swings forward (`body()`). From v7 each tap plays `askel` or `askel2`, a little faster at speed.
 - **Vauhti hidastuu hieman**: `step()`: the same foot twice takes 0.3 m/s off.
 - **Hyppy**: `jump()`: a jump of about half a second, 0.58 m high; no steps in the air. From v7 `ponnistus` and a soft `suhahdus`.
