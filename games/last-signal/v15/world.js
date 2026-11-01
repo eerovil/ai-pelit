@@ -778,7 +778,10 @@ function toW15(o) {
   o.sub = { x: 330, y: 30, dir: 1 };
   o.chart = ''; o.seed = true;
   o.finds = (o.finds || []).map(d => ({ ...d, y: Math.floor((floorY(d.x) - 0.9) * 10) / 10 })).filter(d => !siteAt(d.x, d.y) && !diverHits(d.x, d.y));
-  const had = new Set((o.crates || []).map(c => c.id)), kept = (o.crates || []).filter(c => c.w !== 'sea');
+  const had = new Set((o.crates || []).map(c => c.id));
+  // a crate out of the sea keeps its own id, but for one whose id is now v15's pump (Saukko's old junk, `aurora:14,6`):
+  // it is renamed, so it never stands in for the pump the player has not found yet
+  const kept = (o.crates || []).filter(c => c.w !== 'sea').map(c => c.k !== 'pumppu' && CRATES0.some(k => k.id === c.id && k.k === 'pumppu') ? { ...c, id: c.id + ':v13' } : c);
   const pumpDone = f.pumppu || kept.some(c => c.k === 'pumppu');
   const sea = CRATES0.filter(c => c.w === 'sea' && !kept.some(k => k.id === c.id) && (had.has(c.id) || c.k === 'pumppu'))
     .map(c => c.k === 'pumppu' && pumpDone ? { ...c, k: 'romu', n: 0, junk: 'TYHJÄ' } : { ...c });

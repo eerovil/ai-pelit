@@ -236,17 +236,18 @@ function campCard(msg) {
   }
   const paras = [];
   if (msg) paras.push({ t: msg, c: 'msg' });
-  if (!t) {
-    paras.push({ t: 'Vanhin hymyilee. »Kerroimme kaiken, mitä tiedämme. Meri on sinun.»' });
-    card(s.flags.suoja ? '🔥 Nomadien vanhin' : '🔥 Nomadien leiri', paras, [{ label: 'Takaisin', cls: 'go', fn: closeCard }]);
-    return;
-  }
   // v15 (#329): Aurora's lights are on: tell them of the shelter, and they move there, all of them
+  // (first, even when every trade is already done, so the story always goes on)
   if (s.flags.sahko && !s.flags.suoja) {
     paras.push({ t: 'Tulen ääressä istuu turkkeihin pukeutunut vanhin. Lapset painautuvat koirien kylkeen. »Myrsky tulee. Teltat eivät kestä toista talvea.»' },
       { t: 'Kerro heille Aurorasta: asemalla on taas valot ja lämpöä, ja tilaa monelle.', c: 'msg' });
     card('🔥 Nomadien leiri', paras, [{ label: '🏠 Kerro: Aurorassa on suojaa', cls: 'go', fn: () => act('suoja') }, { label: 'Takaisin', fn: closeCard }]);
     G.card = 'camp';
+    return;
+  }
+  if (!t) {
+    paras.push({ t: 'Vanhin hymyilee. »Kerroimme kaiken, mitä tiedämme. Meri on sinun.»' });
+    card(s.flags.suoja ? '🔥 Nomadien vanhin' : '🔥 Nomadien leiri', paras, [{ label: 'Takaisin', cls: 'go', fn: closeCard }]);
     return;
   }
   if (!s.trade && !msg) paras.push({ t: s.flags.suoja ? 'Vanhin istuu messin pöydän ääressä, turkki olkapäillä. »Meri antaa ja ottaa. Mitä sinä tuot?»'

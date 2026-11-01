@@ -438,3 +438,45 @@ def test_a_reload_keeps_aurora_lit_the_nomads_in_and_the_pump_on_the_shelf(site,
     assert page.evaluate("[G.s.flags.sahko, G.s.flags.suoja, crateById('aurora:14,6').w]") == [1, 1, "shelf"]
     assert page.evaluate("goalNow().text").startswith("Vie pumppu")
     assert page.errors == []
+
+
+def test_with_every_trade_done_the_elder_still_hears_of_the_shelter_first(site, browser):
+    # a player who traded everything at the camp before Aurora's power came back
+    page = game(site, browser, paivakirja=True, **LIT)
+    page.evaluate("G.s.trade = TRADES.length; campCard()")
+    assert "Aurorasta" in page.inner_text("#card")
+    page.click("#card button:has-text('Kerro')")
+    assert page.evaluate("!!G.s.flags.suoja")
+    page.evaluate("closeCard(); campCard()")
+    assert "Kerroimme kaiken" in page.inner_text("#card")
+    assert page.errors == []
+
+
+def test_a_v13_save_with_saukko_s_junk_on_the_shelf_still_finds_the_pump(site, browser):
+    page = v4.open_game(site, browser)
+    s = page.evaluate("JSON.parse(JSON.stringify(fresh()))")
+    s.pop("w15")
+    s["flags"].update({"pinged": True, "koti": True})
+    for c in s["crates"]:
+        if c["id"] == "aurora:14,6":  # in v13 this was a junk crate, which the player put on SISU's shelf
+            c.update({"k": "romu", "n": 0, "junk": "KIVIÄ", "w": "shelf", "slot": 0})
+        if c["id"] == "kestrel:18,7":
+            c["k"] = "pumppu"
+    page.evaluate(f"localStorage.setItem('{SAVE13}', {json.dumps(json.dumps(s))}); menu()")
+    page.click("#jatka")
+    page.evaluate("G.hold = true; closeCard()")
+    got = page.evaluate("G.s.crates.filter(c => c.id.startsWith('aurora:14,6')).map(c => [c.id, c.k, c.w]).sort()")
+    assert got == [["aurora:14,6", "pumppu", "sea"], ["aurora:14,6:v13", "romu", "shelf"]]
+    assert page.errors == []
+
+
+def test_a_night_trip_tells_of_every_contact_it_heard(site, browser):
+    page = game(site, browser, **LIT)
+    page.evaluate("G.s.heard = { railo0: 1, asema: 1 }; G.s.known.majakka = G.s.heard.majakka = 1; sub.x = 330; sub.y = 30;"
+                  " act('auto', 'majakka'); G.s.heard.majakka = 1; delete G.s.heard.majakka; G.s.known.majakka = 1; act('eat'); G.sonarQ = []; sleep(true)")
+    n = page.evaluate("G.sonarQ.length")
+    assert n > 3
+    assert page.evaluate("G.sonarQ.every(t => /^📡 Sonar: .+ · (noin \\d+ m|pieni) · /.test(t))")
+    card = page.inner_text("#card")
+    assert "perille" in card and card.count("📡 Sonar:") == n
+    assert page.errors == []

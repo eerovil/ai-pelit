@@ -258,6 +258,7 @@ const STORY = {
   [{ label: 'Takaisin', cls: 'go', fn: closeCard }]); },
   day: m => card(`Päivä ${G.s.day}`, [{ t: DAY_LINES[G.s.day % DAY_LINES.length] },
     ...(m && m.trip ? [{ t: '🧭 Nukkuessasi autopilotti ajoi SISUn perille: ' + m.trip + '.', c: 'msg' }] : []),
+    ...(m && Array.isArray(m.found) ? m.found.map(t => ({ t: String(t), c: 'small' })) : []),  // v15: what the sonar heard on the way
     { t: G.s.finds.length ? 'Sonar kuulee yöllä uusia pieniä kaikuja – virta on tuonut jotain pohjaan.' : 'Meri on hiljaa.', c: 'msg' }],
   [{ label: 'Nouse', cls: 'go', fn: closeCard }]),
   faint: () => card(`Päivä ${G.s.day}`, [{ t: 'Pyörryt. Heräät punkasta tunteja myöhemmin – kaapin pohjalta löytyy viimeinen näkkileipä.' },

@@ -187,6 +187,7 @@ function stepIce(dt) {
 // pikamatkustus nukkumalla, kun on ensin syönyt"): along the way the lamps map the sea and the sonar hears what it passes.
 function sleep(trip) {
   const s = G.s;
+  let found = [];
   if (trip && G.auto) {
     const A = G.auto, pts = [[sub.x, sub.y]].concat(A.pts.slice(A.i)), end = pts[pts.length - 1];
     const heard = [];
@@ -202,8 +203,9 @@ function sleep(trip) {
     if (A.id.startsWith('railo')) { const h = +A.id.slice(5); sub.x = holeMid(h); sub.y = holeSurf(h); }
     G.auto = null; G.coast = false; G.mapNew = true;
     if (net) { net.helm = null; net.subT = null; }
-    for (const [c, x, y] of heard.slice(0, 3)) heardNew(c, x, y);
-    if (heard.length > 3) heardNew({ id: '', kind: '', x: 0, y: 0 }, 0, 0, `📡 Yöllä sonar kuuli ${heard.length} uutta kaikua: ne ovat merikartalla`);
+    // every one is told, kind, size and distance as heard on the way, and listed in the morning's card too
+    found = heard.map(([c, x, y]) => sonarText(c, x, y));
+    for (const [c, x, y] of heard) heardNew(c, x, y);
     trip = A.name;
   } else trip = null;
   s.day++;
@@ -212,7 +214,7 @@ function sleep(trip) {
   s.m.health = Math.min(100, s.m.health + 15);
   newFinds();
   save();
-  story('day', trip ? { trip } : undefined);
+  story('day', trip ? { trip, found } : undefined);
 }
 // Small random finds the current brings each night: a crate, a buoy, a lost bag.
 function newFinds() {
