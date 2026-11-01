@@ -72,6 +72,8 @@
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
+    // Most points in a ski-jumping meet (two jumps); level: 'taso', the level the player is on.
+    makihyppy: { order: 'high', score: function (s) { return fixed(s, 1) + ' p'; }, level: function () { return saved('makihyppy', 'taso'); } },
     // Longest hammer throw in metres; level: 'taso', the level the player is on.
     moukari: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('moukari', 'taso'); } },
     // Longest shot put in metres; level: 'taso', the level the player is on.
