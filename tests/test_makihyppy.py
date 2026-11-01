@@ -338,10 +338,13 @@ def test_a_guest_cannot_jump_out_of_turn_or_send_a_made_up_jump(site, browser):
         host.evaluate("fair()")
     aino.wait_for_function("th && th.mine", timeout=8000)
     n = host.evaluate("K.comp.seq")
-    # A mark that no jump could make is not taken.
-    aino.evaluate(f"AiPelitRooms.send({{ t: 'res', round: K.comp.room, seq: {n}, mark: {{ d: 999, p: 999 }} }})")
+    # A mark that no jump could make is not taken: out of range, or points the distance cannot
+    # give (140 m with a perfect style is 156 points), or a distance not to the half metre.
+    for mark in ("{ d: 999, p: 999 }", "{ d: 140, p: 399 }", "{ d: 140, p: 156.1 }", "{ d: 130.3, p: 100 }"):
+        aino.evaluate(f"AiPelitRooms.send({{ t: 'res', round: K.comp.room, seq: {n}, mark: {mark} }})")
     host.wait_for_timeout(300)
     assert host.evaluate("K.comp.seq") == n
+    assert host.evaluate("[K.F.valid({ d: 140, p: 156 }), K.F.valid({ d: 140, p: 399 }), K.F.valid({ d: 80.5, p: 0 })]") == [True, False, True]
     relay.drop(aino)
     host.wait_for_function("AiPelitRooms.paused", timeout=8000)
     # "Jatka ilman heitä": the computer jumps Aino's turn.

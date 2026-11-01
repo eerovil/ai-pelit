@@ -277,8 +277,10 @@ function totals(o) {
     standings: c => c.throwers.slice().sort((a, b) => sum(b) - sum(a) || c.throwers.indexOf(a) - c.throwers.indexOf(b)),
     placeOf: (c, t) => F.standings(c).indexOf(t) + 1,
     bestOf: t => t.marks.some(ok) ? sum(t) : -2,
-    // A mark from a phone: a distance and points a jump could make.
-    valid: m => ok(m) && typeof m.d === 'number' && m.d >= 0 && m.d < 400 && m.p >= 0 && m.p < 400,
+    // A mark from a phone: a distance to the half metre, and no more points than that distance
+    // with a perfect style (60) could make.
+    valid: m => ok(m) && typeof m.d === 'number' && m.d >= 0 && m.d < 400 && m.d * 2 === Math.round(m.d * 2)
+      && m.p >= 0 && m.p <= r1(distPoints(m.d) + 60) + 1e-6,
     advance(c, cpu, human) {
       for (;;) {
         if (c.turn >= c.order.length) {
