@@ -37,6 +37,13 @@
       "note": "Kisan lopuksi palkintojenjako: kolme parasta nousee korokkeelle omissa asuissaan, mitalit ripustetaan kaulaan, ja koroke jää näkyviin, kunnes napautat sen pois.",
       "request": "165 follow up: podium cutscene, mitalien ripustus kaulaan. Podium saisi jäädä siihen kunnes poistuu. Tämä kaikkiin kisoihin",
       "issue": "eerovil/ai-pelit#176"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-01",
+      "note": "Oikeat äänet piippausten tilalle: askeleet, tähtäyksen naksu, heiton suhahdus, keihään tömähdys nurmeen, yleisön aplodit ja ohhoo sekä mitalien kilinä.",
+      "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): vuoro valinta, askeleet askel/askel2, tähtäys naksu, heitto suhahdus, keihään osuma nurmeen tomahdys, hyvä tulos onnistui ja johdosta tai ennätyksestä aplodit, yliastuttu ohhoo, mitalit mitali (kuten Pituushyppy v7).\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v6 on jo varattu, käytä seuraavaa vapaata numeroa.",
+      "issue": "eerovil/ai-pelit#218"
     }
   ]
 }

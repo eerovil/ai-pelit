@@ -22,6 +22,13 @@
       "note": "Vapaa heitto: heitä mökkitaulua tai darts-taulua niin kauan kuin haluat, ilman tietokonetta ja ilman kierrosrajaa; näkyvissä vuoron pisteet, keskiarvo ja paras vuoro.",
       "request": "Tikanheitto. Darts ja mökkitikka myös ilman tietokonetta (vapaa moodi)",
       "issue": "eerovil/ai-pelit#147"
+    },
+    {
+      "n": 4,
+      "date": "2026-11-01",
+      "note": "Oikeat äänet: tikka suhahtaa, osuu tauluun puisella kopsahduksella, 501:n yli menevä vuoro surahtaa, täysi vuoro saa yleisön huutamaan ja voitto soittaa sävelen.",
+      "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): heitto suhahdus, osuma tauluun puu, ohi puu hiljaa, yli virhe, iso heitto yleiso, voitto voitto.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v4 on jo varattu, käytä seuraavaa vapaata numeroa.",
+      "issue": "eerovil/ai-pelit#230"
     }
   ]
 }

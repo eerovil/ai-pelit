@@ -1,6 +1,6 @@
 # Seiväshyppy: one vault and one meet
 
-How Seiväshyppy plays (v1; v3 (#176) ends the meet with the medal ceremony from `yleisurheilu-4`, the podium staying until a tap; v2 plays the same, with the meet, the results board, the saves and the
+How Seiväshyppy plays (v1; v4 (#227) plays the same with recorded sounds from `public/lib/aanet-2/` instead of beeps, each falling back to v3's beep when it cannot play: `valinta` when the turn comes (`step()`) and on a pass (`pass()`), `askel`/`askel2` per step (`press()`), `seivas` at the plant (`plantNow()`), `suhahdus` at the let-go (`vaultNow()`), `rima` when the bar falls, `tomahdys` on the mat and then `aplodit` (a new lead or record) or `onnistui` for a clearance, `ohhoo` for a failure (`landed()`, `outcome()`), and `mitali` per medal with `aplodit` for the gold (the meet's `chime`); v3 (#176) ends the meet with the medal ceremony from `yleisurheilu-4`, the podium staying until a tap; v2 plays the same, with the meet, the results board, the saves and the
 room handling from the shared athletics library's bar-height format, `public/lib/yleisurheilu-1/korkeus.js` (from v3 `yleisurheilu-4/korkeus.js`),
 see `yleisurheilu-kirjasto.md`: there a vaulter's attempts are `rec` per height, failures in a row `run`, the
 computer's start `first`, a stop `S`; v2 also has Keihäänheitto v3's buttons, the plant a full-width bar above
