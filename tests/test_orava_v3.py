@@ -35,7 +35,7 @@ def test_a_picked_costume_is_saved_shown_and_worn_in_play(site, browser):
         assert page.locator("#asu").inner_text() == "👕 Asu: Punaorava"
         page.locator("#asu").tap()
         cards = page.locator("#ai-pelit-asut [data-asu]")
-        assert cards.count() == 10   # four squirrels, six costumes
+        assert cards.count() == 13   # four squirrels, six Halloween costumes, three Tylypahka (#321)
         page.locator("[data-asu=kurpitsa]").tap()
         assert page.evaluate("localStorage.getItem('ai-pelit:_asut:orava')") == '"kurpitsa"'
         page.locator("#ai-pelit-asut-valmis").tap()

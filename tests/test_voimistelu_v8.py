@@ -40,7 +40,7 @@ def test_picking_a_costume_saves_it_and_dresses_the_gymnast(voim_site, browser):
     ctx, page, errors = open_at(browser, voim_site, 360, 740)
     assert page.inner_text("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    assert page.locator("#ai-pelit-asut [data-asu]").count() == 10
+    assert page.locator("#ai-pelit-asut [data-asu]").count() == 13  # 4 own, 6 Halloween, 3 Tylypahka (#321)
     page.click("[data-asu=luuranko]")
     page.click("#ai-pelit-asut-valmis")
     assert page.evaluate("localStorage.getItem('ai-pelit:_asut:voimistelu')") == '"luuranko"'
