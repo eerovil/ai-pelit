@@ -1,16 +1,18 @@
-# Mäkihyppy: one jump and one meet
+# Mäkihyppy: one jump and one ski-jumping week
 
-How Mäkihyppy plays (v1, #269). A meet has twelve jumpers on a large hill (K 120, HS 134): the
-player and eleven computer jumpers alone, or 2–8 phones in a room with the computer filling the
-rest. Everyone jumps once in a drawn order; the best ten jump again, the last of them first, and
-the points of both jumps add up. On their turn the player taps to leave the bar, taps again just
+How Mäkihyppy plays (v1, #269; v2, #283: a week of four hills). Twelve jumpers on a large hill
+(K 120, HS 134): the player and eleven computer jumpers alone, or 2–8 phones in a room with the
+computer filling the rest. On each hill everyone jumps once (in v1 in a drawn order; in v2 the
+week's leader last); the hill's best ten jump again, the last of them first. v1's meet is one
+hill; v2's week is four (Lahti, Kuopio, Rovaniemi, Ruka), and the points of every jump add up,
+so the podium comes only after the last hill. On their turn the player taps to leave the bar, taps again just
 before the table's edge to spring, steers the flight position with Taakse and Eteen, and taps
 the telemark just before the snow. The meet itself (turns, saves, room, podium) is the shared
 library's `kisa.js`, see `yleisurheilu-kirjasto.md`.
 
 ```mermaid
 flowchart TD
-  M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]
+  M[Valikko: Mäkiviikolle!, Jatka tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]
   K --> T[Tulostaulu: hyppy ja pisteet yhteensä]
   T --> Q{Kenen vuoro?}
   Q -- Tietokone tai poissa oleva --> CPU[Tietokone hyppää heti]
@@ -39,13 +41,16 @@ flowchart TD
   J --> NX{Kierros täynnä?}
   NX -- Ei --> T
   NX -- Ensimmäinen --> CUT[10 parasta jatkaa, viimeisestä alkaen]
-  NX -- Toinen --> END[Palkintojenjako ja lopputulokset]
+  NX -- Toinen --> LAST{Viimeinen mäki?}
+  LAST -- Ei --> HILL[Seuraava mäki: kaikki hyppäävät, johtaja viimeisenä]
+  LAST -- Kyllä --> END[Palkintojenjako ja lopputulokset]
+  HILL --> T
   CUT --> T
   END --> S[Paras kisa, pisin hyppy, tuloslista, seuraava taso]
   class M,B,IN,F,T blue
   class CPU,WT violet
-  class Q,P,FA,TL,NX amber
-  class K,PG,PW,PN,TM,TE,TW,J,CUT teal
+  class Q,P,FA,TL,NX,LAST amber
+  class K,PG,PW,PN,TM,TE,TW,J,CUT,HILL teal
   class FALL rose
   class END,S green
 ```
@@ -61,9 +66,9 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/makihyppy/v1/index.html`: a new meet at the player's level (`taso`), "Jatka kisaa" for a meet left unfinished (`kesken`), and the room (`rooms.js`, 2–8 phones). It shows meets, wins, the longest jump (`pisin`) and the best meet (`ennatys`).
+- **Valikko: Mäkiviikolle!, Jatka tai kaverit**: `showMenu()` in `games/makihyppy/v2/index.html` (v1: "Kisaan!"): a new week at the player's level (`taso`), "Jatka mäkiviikkoa (Mäki 2/4 · kierros 1/2)" for a week left unfinished (`kesken`; one saved by v1 goes on as its one hill, `roundText()`), and the room (`rooms.js`, 2–8 phones). It shows meets, wins, the longest jump (`pisin`) and the best meet (`ennatys`).
 - **Kisa: 12 hyppääjää, arvottu järjestys**: `AiPelitKisa.meet()` from `public/lib/yleisurheilu-4/kisa.js` with the game's own format `totals()`: the computer jumpers average `base(level)` metres (104 m at level 1, 3 m more per level up to 126 m), spread around it.
-- **Tulostaulu: hyppy ja pisteet yhteensä**: `board()` in `totals()`: the latest jump's length and the points so far; a dashed line after ten in the first round. Shown 3.5 s (`BOARD_T`); alone a tap skips it.
+- **Tulostaulu: hyppy ja pisteet yhteensä**: `board()` in `totals()`: the latest jump's length and the points so far over the whole week, titled by the hill and its round (`title()`, "Kuopio 2/4 · 1. kierros"); a dashed line after ten in the very first round, where the board's order is the hill's. Shown 3.5 s (`BOARD_T`); alone a tap skips it.
 - **Tietokone hyppää heti**: `cpuMark()`: the skill, a scatter of 4.5 m and 2.2 m per m/s of wind, style from the skill; now and then a landing on both feet, a hand in the snow or a fall.
 - **Kaverin hyppy näkyy samana**: the jumping phone sends where its jumper is twelve times a second (`p`) and the judged result (`fin`); other phones ease the jumper along (`watchStep()`) and show the same result card. The host takes a guest's jump only when it could be real (`valid()` in `totals()`): the distance to the half metre, and no more points than that distance with a perfect style.
 - **Napauta: lähde liikkeelle**: `go()`: the action bar ("Lähde"), or anywhere on the scene. In a room a jumper who waits 30 s (`TURN_MAX`) is sent down.
@@ -73,6 +78,8 @@ flowchart TD
 - **Liian edessä?**: past `FALL` forward in the air, or still well forward at the landing, the jumper falls.
 - **Telemark ajoissa?**: a tap in the air (`action()`) after 0.6 s of flight sets the telemark; it counts by the time from the tap to the real touch-down (`TELE`). The action bar turns yellow when the snow is under 1.3 s away and green only inside the good window, under 0.6 s (`cue()`, `timeToLand()`); on the in-run it is green only in the last 0.12 s before the edge, the take-off judged good.
 - **Pituus ja viisi tuomaria**: `landed()` and `judge()`: the distance along the slope from the edge (`distAt()`), to the half metre; 60 points at K and 1.8 a metre; five judges give style out of 20 with deductions for the take-off, the flight (the average position) and the landing, and the highest and lowest are dropped. The longest jump is saved at once (`pisin`).
-- **10 parasta jatkaa, viimeisestä alkaen**: `advance()` in `totals()`: after the first round the best ten (`final`) jump again, the last of them first.
-- **Palkintojenjako ja lopputulokset**: the library's podium (`K.drawPodium()`), with the meet's total points; it stays until a tap.
-- **Paras kisa, pisin hyppy, tuloslista, seuraava taso**: the library's `end()` saves `kisat`, a win alone adds `voitot` and the next `taso`, the meet's total goes to `ennatys` and the high-score list (`makihyppy` in `public/scores.js` and `server/api.js`).
+- **10 parasta jatkaa, viimeisestä alkaen**: `advance()` in `totals()`: after a hill's first round its best ten by that hill's points (`hillStandings()`, `final`) jump again, the last of them first. When no phone's jumper is among them, the computer's jumps are in at once and the next hill comes, with no podium.
+- **Viimeinen mäki?**: v2's week has four hills (`HILLS`, `c.hills`); a meet saved by v1 has none and is one hill (`hills()`), so it ends after its second round as before.
+- **Seuraava mäki: kaikki hyppäävät, johtaja viimeisenä**: `advance()`: a new hill's first round has all twelve, in reverse order of the week's standings.
+- **Palkintojenjako ja lopputulokset**: the library's podium (`K.drawPodium()`), with the week's total points, only after the last hill's second round (#283: in v1 it came after every two jumps); it stays until a tap.
+- **Paras kisa, pisin hyppy, tuloslista, seuraava taso**: the library's `end()` saves `kisat`, a win alone adds `voitot` and the next `taso`, the meet's total goes to `ennatys` and the high-score list (`makihyppy` in `public/scores.js` and `server/api.js`): v2's week on its own list, Mäkiviikko (`viikko`, the shelf's first, `scoreList()`), v1's two-jump meet on `main` (Yksi kisa).

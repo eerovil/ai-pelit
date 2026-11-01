@@ -72,8 +72,10 @@
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
-    // Most points in a ski-jumping meet (two jumps); level: 'taso', the level the player is on.
-    makihyppy: { order: 'high', score: function (s) { return fixed(s, 1) + ' p'; }, level: function () { return saved('makihyppy', 'taso'); } },
+    // Most points in a ski-jumping meet; level: 'taso', the level the player is on. Named lists, the
+    // shelf's first: Mäkiviikko (v2, four hills, #283) on 'viikko', one meet of two jumps (v1) on 'main'.
+    makihyppy: { order: 'high', score: function (s) { return fixed(s, 1) + ' p'; }, level: function () { return saved('makihyppy', 'taso'); },
+      lists: [['viikko', 'Mäkiviikko'], ['main', 'Yksi kisa']] },
     // Longest hammer throw in metres; level: 'taso', the level the player is on.
     moukari: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('moukari', 'taso'); } },
     // Longest shot put in metres; level: 'taso', the level the player is on.
