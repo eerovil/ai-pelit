@@ -136,7 +136,7 @@
     net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0; net.pub = !!(host && pub); listed = null;
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
-    net.result = ''; net.resultClass = ''; net.note = ''; lastPz = '';
+    net.result = ''; net.resultClass = ''; net.note = ''; lastPz = ''; net.rejoin = false;
     show(true);
     connect();
   }
@@ -189,6 +189,9 @@
       if (!first) return;
       m = Object.assign({}, m);
       delete m._d; delete m._r; delete m.to;
+      // Back through "Palaa kierrokseen" after the round ended: its end shows in the game, not
+      // behind the room screen (the game goes back to the room after it, with backToRoom()).
+      if (net.rejoin && net.round && net.round.over && String(key.split(':')[0]) === net.round.id) { net.rejoin = false; show(false); }
     }
     fire('message', m, net.hostId);
   }
@@ -324,7 +327,7 @@
     var same = net.round && net.round.id === m.round;
     net.round = { id: String(m.round), players: m.players, over: !!m.over };
     net.wait = false;
-    if (m.over) forgetAway(net.code); else keepAway();
+    if (m.over) forgetAway(net.code); else { keepAway(); net.rejoin = false; }
     if (same) return update();
     net.played = true;
     if (!m.over) { net.result = ''; show(false); }
@@ -468,7 +471,7 @@
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
     el.joinBtn.addEventListener('click', joinTyped);
-    el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false); } });
+    el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false); net.rejoin = true; } });
     el.codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
     el.start.addEventListener('click', startRound);
     el.pub.addEventListener('change', function () { net.pub = el.pub.checked; if (net.joined) keepHere(); tellList(); render(); });

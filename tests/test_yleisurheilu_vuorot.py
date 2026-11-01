@@ -182,3 +182,43 @@ def test_alone_the_meet_plays_as_before_with_no_spectators(site, context, path):
     page.wait_for_function(f"K.comp.seq > {n}")
     assert page.evaluate("[K.fans().length, !!document.getElementById('kisa-cheer')]") == [0, False]
     assert page.errors == []
+
+
+def test_back_after_the_meet_ended_shows_its_results(site, browser):
+    """A friend who comes back through "Palaa kierrokseen" only after the meet ended sees the
+    podium and the results, not the room screen over them."""
+    path = "pituushyppy/v8"
+    relay, pages, code = room(site, browser, path, ["Eero", "Aino"])
+    host, aino = pages
+    ids = {p.evaluate("AiPelitRooms.me"): p for p in pages}
+    me_aino = aino.evaluate("AiPelitRooms.me")
+    play(host, ids, lambda pid: pid != me_aino)
+    ctx = aino.context
+    relay.drop(aino)
+    host.wait_for_function(f"!AiPelitRooms.members.find(m => m.id === {json.dumps(me_aino)}).on")
+    aino.close()
+    relay.blocked.discard(me_aino)
+    # The host plays the meet to its end, skipping each of her turns.
+    for _ in range(80):
+        if host.evaluate("K.comp === null || K.comp.over || K.ending !== null"):
+            break
+        if on_turn(host) == me_aino:
+            host.wait_for_selector("#aipr-goOn", state="visible", timeout=5000)
+            n = host.evaluate("K.comp.seq")
+            host.click("#aipr-goOn")
+            host.wait_for_function(f"K.comp.over || K.comp.seq > {n}")
+        else:
+            play(host, {k: v for k, v in ids.items() if k != me_aino}, lambda pid: pid == me_aino)
+    host.wait_for_function("K.ending !== null")
+    aino = new_phone(site, browser, relay, path, "Aino", ctx)
+    aino.click("#multi")
+    aino.click("#aipr-again")
+    aino.wait_for_function("K.ending !== null && document.getElementById('aipr').hidden", timeout=8000)
+    assert aino.evaluate("K.ending.res.length") == 12
+    # Tapping through the podium goes back to the room, with her result.
+    aino.evaluate("K.ending.t = 99; step(0.01); K.skip(); step(0.01)")
+    aino.wait_for_function("!document.getElementById('aipr').hidden && document.getElementById('aipr-result').textContent !== ''", timeout=5000)
+    assert aino.locator("#aipr-again").count() == 1
+    assert host.errors == aino.errors == []
+    for p in (host, aino):
+        p.context.close()
