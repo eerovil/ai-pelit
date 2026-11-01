@@ -1,6 +1,6 @@
 # Areena: one fight, and how the opponent thinks
 
-How one Areena fight plays (v1, v2 which is easier, and v3 which adds a fight against a friend on another phone). The player names their fighter, then fights one AI opponent
+How one Areena fight plays (v1, v2 which is easier, v3 which adds a fight against a friend on another phone, v4 which plays sideways, and v5 with recorded sounds). The player names their fighter, then fights one AI opponent
 with a sword, a bow and a dodge. The opponent switches between close and ranged fighting,
 dodges arrows and swings, and gets quicker, tougher and smarter with every level the player wins.
 
@@ -29,6 +29,7 @@ flowchart TD
   Q --> R{Kumman energia loppui?}
   R --> S[Tulos molemmille, takaisin huoneeseen]
   S --> O
+  C -. jokainen tapahtuma .-> T[Äänet: gongi, suhahdus, osuma tai potku, tömähdys ja yleisö, voitto tai tappio]
   class A,B,C blue
   class D,I,L amber
   class E,F,G teal
@@ -36,6 +37,7 @@ flowchart TD
   class M green
   class O,P,Q,S teal
   class R amber
+  class T violet
   class N rose
 ```
 
@@ -44,7 +46,7 @@ flowchart TD
 - **blue**: what the player sees and does
 - **amber**: a check that decides the path
 - **teal**: the player's three moves, and the fight against a friend (v3)
-- **violet**: the opponent's own decisions
+- **violet**: the opponent's own decisions, and the sounds (v5)
 - **green**: a win, saved on the phone
 - **rose**: a loss, saved on the phone
 
@@ -61,3 +63,4 @@ flowchart TD
 - **Isäntä pyörittää taistelua, kaveri lähettää ohjauksensa**: the phone that made the room runs the fight (`step()` with `friendInput()`) and sends the state 30 times a second (`sendState()`); the friend's phone sends its stick and buttons (`guestStep()`). If the friend drops off and the host taps "Jatka ilman heitä", the computer opponent takes over.
 - **Kumpikin näkee oman hahmonsa alhaalla**: the friend's phone turns the arena round (`unpack()`), so both players fight upwards.
 - **Tulos molemmille, takaisin huoneeseen**: `endOnline()` sends the winner with `deliver()`; both phones show it on the room screen (`backToRoom()`). Online fights do not change the solo level or wins.
+- **Äänet: gongi, suhahdus, osuma tai potku, tömähdys ja yleisö, voitto tai tappio**: v5 (`games/areena/v5/index.html`, #212) loads `public/lib/aanet-2/aanet.js` and plays recorded sounds through `sfx`: `gongi` when the fight starts, `suhahdus` for a sword swing, an arrow (higher) and a dodge (quiet, lower), `osuma` for a light hit (an arrow, 12 or less) and `potku` for a big one (a sword), `tomahdys` then `yleiso` at the knockout, and `voitto` or `tappio` when the fight ends (alone in `endFight()`, online in `finishOnline()`). A friend's phone plays the same from the host's state (`unpack()`, `guestState()`). When a sound cannot play (before it has loaded, offline on the first open), the v4 beep plays instead; the end tunes had no beep and stay silent.
