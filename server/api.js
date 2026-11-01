@@ -47,6 +47,7 @@ export const GAMES = {
   tikka: { order: 'high', boards: /^(main|mokki)$/, first: 'mokki' },
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
   pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
+  makihyppy: { order: 'high', boards: /^main$/ }, // most points in a ski-jumping meet (two jumps)
   moukari: { order: 'high', boards: /^main$/ }, // longest hammer throw in metres
   kuula: { order: 'high', boards: /^main$/ }, // longest shot put in metres
   seivashyppy: { order: 'high', boards: /^main$/ }, // highest pole vault cleared in metres
