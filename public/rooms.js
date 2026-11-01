@@ -651,7 +651,12 @@
     var calls = Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); });
     var cls = voice.talking ? 'live' : voice.pressed ? 'wait' : calls ? '' : 'none';
     var text = voice.err && Date.now() - voice.errAt < 3000 ? voice.err : '';
-    if (!text && on) { var who = speakers(); if (who.length) text = '🔊 ' + who.join(', '); }
+    if (!text && on) {
+      var who = speakers();
+      // The phone held the sound back (no tap on this page yet): a tap anywhere lets it play.
+      var held = Object.keys(voice.peers).some(function (id) { var a = voice.peers[id].audio; return a && a.paused && voice.peers[id].talking; });
+      if (who.length) text = '🔊 ' + who.join(', ') + (held ? ' – napauta ruutua' : '');
+    }
     var k = on + cls + text;
     if (k === vShown) return;
     vShown = k;
