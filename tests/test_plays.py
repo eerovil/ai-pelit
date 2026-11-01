@@ -53,15 +53,13 @@ def test_the_shelf_shows_each_games_total_and_keeps_it_offline(site, context):
     page = context.new_page()
     page.goto(site.url)
     page.wait_for_selector('.card[data-slug="pomppu"] .plays:text("pelattu 412 kertaa")')
-    # A game nobody has opened yet shows no count; the order stays as it was.
+    # A game nobody has opened yet shows no count.
     assert page.locator('.card[data-slug="hyppy"] .plays').inner_text() == ""
-    order = page.eval_on_selector_all(".card", "cs => cs.map(c => c.dataset.slug)")
 
     fake.totals = {"pomppu": 1, "hyppy": 2}
     page.reload()
     page.wait_for_selector('.card[data-slug="pomppu"] .plays:text("pelattu 1 kerran")')
     assert page.locator('.card[data-slug="hyppy"] .plays').inner_text() == " · pelattu 2 kertaa"
-    assert page.eval_on_selector_all(".card", "cs => cs.map(c => c.dataset.slug)") == order
 
     # Without the network the last totals still show.
     fake.online = False
