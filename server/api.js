@@ -52,7 +52,7 @@ export const GAMES = {
   kuula: { order: 'high', boards: /^main$/ }, // longest shot put in metres
   seivashyppy: { order: 'high', boards: /^main$/ }, // highest pole vault cleared in metres
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
-  ottelu: { order: 'high', boards: /^lajit-[2-5]$/, first: 'lajit-5' }, // most combined-event points, one list per number of events
+  ottelu: { order: 'high', boards: /^lajit-[2-7]$/, first: 'lajit-5' }, // most combined-event points, one list per number of events
   yoajo: { order: 'high', boards: /^osa-[1-9]$/, first: 'osa-1' }, // most points on one leg of the night drive ('osa-N')
   vuoristorata: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest ride per level, seconds
 };
