@@ -9,6 +9,8 @@ the Olympic one: D (the difficulty of each different element) plus E (10 less th
 
 From v11 (#233) the beeps are recorded sounds from the shared library (`aanikirjasto.md`). From v9 (#199) the score levels stop at 12,0 (level 18, then straight on to 21), a catch never adds speed, and the routine's D shows all through it. From v8 (#158) the gymnast wears the outfit picked under "👕 Asu" at the top of the screen before the first touch and on the score board (`figure()` in `games/voimistelu/v8/index.html`; the picker is `asut.md`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Roikkuu tangossa, pieni heilahdus] --> B[Sormi alhaalla: vartalo vetäytyy, heilahdus kasvaa]

@@ -9,9 +9,27 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from conftest import ROOT
-from test_sormiskeitti import PLAY
 
 ADMIN_KEY = "avain"
+
+# The newest version of each game played here: the high-score library working in the game as it is.
+PUHELINKOPPI = "games/puhelinkoppi/v7/"
+SORMISKEITTI = "games/sormiskeitti/v8/"
+HIIHTO = "games/hiihto/v11/"
+PIANO = "games/piano/v8/"
+
+# Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
+# hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
+PLAY = """([push, trick]) => {
+  reset(); tap();
+  for (let f = 1; f < 5000 && st !== 'end'; f++) {
+    if (st === 'roll' && s < L && f % push === 0) tap();
+    if (trick && st === 'roll' && s > L && !ollie && theta() > 1.43) tap();
+    if (trick && st === 'air' && !letGo && Math.abs(avy) <= 0.6) tap();
+    step();
+  }
+  return { won, level, best };
+}"""
 
 
 class FakeApi:
@@ -119,6 +137,11 @@ def fake(context):
     return f
 
 
+def open_hiihto(site, page):
+    page.goto(site.url + HIIHTO)
+    page.wait_for_function("typeof course === 'object' && ui.wax.length === 4")
+
+
 def win_puhelinkoppi(page):
     page.evaluate("noise = 0; newRound(); launch({ v0: 3 });"
                   "for (let t = 0; t < 3 && state !== 'result'; t += 1 / 60) step(1 / 60);")
@@ -129,7 +152,7 @@ def win_puhelinkoppi(page):
 def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/puhelinkoppi/v2/")
+    page.goto(site.url + PUHELINKOPPI)
     assert page.locator("#ai-pelit-tulokset-nappi").is_visible()
     win_puhelinkoppi(page)
     # Asked once, on this phone's first score.
@@ -140,7 +163,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono') || '{}')).length === 0")
     [(player, name)] = [(i, p["name"]) for i, p in fake.players.items()]
     assert name == "Eero"
-    assert fake.scores == {("puhelinkoppi", "main", player): {"score": 2, "version": 2}}
+    assert fake.scores == {("puhelinkoppi", "main", player): {"score": 2, "version": 6}}
     # Pending: only the player's own row, marked as theirs.
     assert page.locator("#ai-pelit-tulokset").inner_text().count("taso 2") == 1
     page.click("#ai-pelit-tulokset button:has-text('Sulje')")
@@ -154,21 +177,21 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('taso 3')")
     text = page.locator("#ai-pelit-tulokset").inner_text()
-    assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v2" in text
+    assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v6" in text
 
 
 @pytest.mark.games("sormiskeitti")
 def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.goto(site.url + SORMISKEITTI)
     page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
     fake.online = False
     page.evaluate(PLAY, [6, True])
     page.evaluate(PLAY, [30, False])  # a lower score later does not replace the best one waiting
     queue = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))")
     best_cm = round(page.evaluate("best") / 10)
-    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 5, "score": best_cm}}
+    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 7, "score": best_cm}}
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('Ei verkkoyhteyttä')")
     assert fake.scores == {}
@@ -183,7 +206,7 @@ def test_scores_wait_on_the_phone_while_offline(site, context, fake):
 def test_a_tap_on_the_list_never_reaches_the_game(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.goto(site.url + SORMISKEITTI)
     st = page.evaluate("st")
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-nimi")
@@ -193,10 +216,11 @@ def test_a_tap_on_the_list_never_reaches_the_game(site, context, fake):
 
 
 @pytest.mark.games("hiihto")
+@pytest.mark.alone  # Hiihto is 3D: run on the host, never beside other tests
 def test_hiihto_keeps_one_list_per_course(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/hiihto/v2/")
+    open_hiihto(site, page)
     page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
     page.evaluate("maxLevel = 3; level = 2; newRace(); AiPelitScores.submit(71.5)")
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
@@ -256,7 +280,7 @@ def test_a_refused_name_says_why_instead_of_waiting(site, context, fake, status,
     site.build(ROOT / "games")
     fake.refuse = {"Aino": status}
     page = context.new_page()
-    page.goto(f"{site.url}games/puhelinkoppi/v2/")
+    page.goto(site.url + PUHELINKOPPI)
     page.click("#ai-pelit-tulokset-nappi")
     page.fill("#ai-pelit-nimi", "Aino")
     page.click("#ai-pelit-tulokset button:has-text('Tallenna')")
@@ -282,11 +306,12 @@ def test_the_admin_never_approves_a_name_they_did_not_see(site, context, fake):
 
 
 @pytest.mark.games("hiihto")
+@pytest.mark.alone  # Hiihto is 3D: run on the host, never beside other tests
 @pytest.mark.parametrize("refusal", [429, 403, 503])
 def test_a_score_the_server_turns_away_for_now_is_sent_later(site, context, fake, refusal):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/hiihto/v2/")
+    open_hiihto(site, page)
     page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
     fake.score_refusals = [refusal]
     page.evaluate("AiPelitScores.submit(71.5)")
@@ -303,7 +328,7 @@ def test_a_score_the_server_turns_away_for_now_is_sent_later(site, context, fake
 def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.goto(site.url + SORMISKEITTI)
     page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
     fake.online = False
     won = page.evaluate(PLAY, [6, True])
@@ -313,7 +338,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.reload()
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
-    assert row == {"score": round(won["best"] / 10), "version": 5, "level": 2}
+    assert row == {"score": round(won["best"] / 10), "version": 7, "level": 2}
     fake.players[key[2]]["status"] = "approved"
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset .tulos:has-text('taso 2')")
@@ -329,25 +354,27 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.evaluate(PLAY, [30, False])
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     assert len(fake.posts) == sent + 1
-    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 5, "level": 4}
+    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 7, "level": 4}
 
 
 @pytest.mark.games("hiihto")
+@pytest.mark.alone  # Hiihto is 3D: run on the host, never beside other tests
 def test_hiihto_sends_courses_passed(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/hiihto/v2/")
+    open_hiihto(site, page)
     page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
-    # Passing the first course: v2 sends before it saves the next level, and the level is read
-    # only when sending, so it still counts.
-    page.evaluate("level = maxLevel = 1; newRace(); P.t = 60; finish()")
+    # Passing the first course: the game sends before it saves the next level, and the level is read
+    # only when sending, so it still counts. Its ideal time is three stars, well inside the limit.
+    page.evaluate("level = maxLevel = 1; newRace(); P.t = course.ideal; finish()")
+    shown = page.evaluate("fmtTime(Math.round(P.t * 10) / 10)")
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("hiihto", "taso-1") and row["level"] == 1
     fake.players[key[2]]["status"] = "approved"
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset .tulos:has-text('1 rata läpi')")
-    assert "1.00,0" in page.locator("#ai-pelit-tulokset").inner_text()
+    assert shown in page.locator("#ai-pelit-tulokset").inner_text()
 
 
 def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
@@ -401,10 +428,10 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
 
 @pytest.mark.games("sormiskeitti")
 def test_a_won_level_is_sent_even_when_the_ollie_is_no_record(site, context, fake):
-    """Sormiskeitti v5 hands over its score before it saves the next level: the level is read when sending."""
+    """Sormiskeitti hands over its score before it saves the next level: the level is read when sending."""
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.goto(site.url + SORMISKEITTI)
     page.evaluate("""localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'));
         localStorage.setItem('ai-pelit:_tulokset:lahetetyt', JSON.stringify({'sormiskeitti|main': {score: 999, level: 1}}))""")
     page.reload()
@@ -421,7 +448,7 @@ def test_a_won_level_is_sent_even_when_the_ollie_is_no_record(site, context, fak
 def test_a_level_won_while_a_score_is_on_its_way_is_sent_too(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/sormiskeitti/v5/")
+    page.goto(site.url + SORMISKEITTI)
     page.evaluate("""localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'));
         localStorage.setItem('ai-pelit:_tulokset:lahetetyt', JSON.stringify({'sormiskeitti|main': {score: 999, level: 1}}))""")
     page.reload()
@@ -469,14 +496,14 @@ def test_a_slow_answer_for_an_earlier_course_never_shows_under_a_later_one(site,
 def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(f"{site.url}games/piano/v1/")
+    page.goto(site.url + PIANO)
     page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
     page.click("#go")
     page.evaluate("score = 300; lives = 1; miss(0, 'Ohi!')")
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
-    assert row == {"score": 300, "version": 1, "level": 1}
+    assert row == {"score": 300, "version": 8, "level": 1}
 
 
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):

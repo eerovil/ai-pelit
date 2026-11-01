@@ -84,8 +84,9 @@ the version that taught it, so you can read the code that fixed it.
   earlier one (Piano v3). A new level gives fresh lives.
 - **A saved round in a new shape gets a new key.** Lasting saves (level, records) are shared by
   every version, but a version that saves an unfinished round in a different shape keeps it under
-  its own key (Pilkkiminen v2 `kisa2`, v3 `kisa3`): a phone that opens an older version again must
-  never find a save that version cannot read.
+  its own key (Pilkkiminen v2 `kisa2`, v3 `kisa3`): a phone that still has an older version
+  cached (only the newest is kept since #346, but a phone may open its old copy until the next
+  update) must never find a save that version cannot read.
 - **A reload is not a lost round.** If the page reloads or the phone turns mid-round, the round
   goes on or comes back (Jään alla saves the submarine's place on each dive; rule 4 in AGENTS.md
   for turning).
@@ -120,7 +121,7 @@ the version that taught it, so you can read the code that fixed it.
 ## Build it so it can be tested
 
 - **Keep the game's state where a test can reach it.** Top-level variables and a `step(dt)`
-  function let a test set up a scene and run the game frame by frame (see `tests/test_orava.py`).
+  function let a test set up a scene and run the game frame by frame (see `run()` and `step(1 / 60)` in `tests/test_orava_v4.py`).
   A test that waits on real time is slow and flaky on CI.
 - **Test what a player would complain about**: a level that cannot be passed, a tap that misses,
   a save that is lost, a second round after a finished one, a 390 px phone.

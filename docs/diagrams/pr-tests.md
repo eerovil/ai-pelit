@@ -2,7 +2,8 @@
 
 Which tests a pull request runs, and where. The shared tests always run. A game's own test file runs
 only when the change touches one of the game versions that file tests, or the game's tests
-themselves. Old, published versions never change, so their tests stay quiet. The chosen test
+themselves. Only each game's newest version is kept (#346): a new version moves the game's folder
+and its test files on to the next number, so the move itself runs the game's tests. The chosen test
 files then run on four Chromium workers side by side, one whole file per worker at a time, except
 the 3D games' tests. Those never run in GitHub CI: they run on the AgentDeck host (bazzite) as
 the deck's verification job for the pull request's head, and the deck merges only when that job
@@ -67,12 +68,12 @@ flowchart TD
 
 - **Changed paths since origin/main**: `changed_paths()` in `tests/conftest.py`: `git diff` against the base, plus uncommitted and new files.
 - **Test file tied to a game?**: `games_of()` in `tests/conftest.py`: the file is `tests/test_<slug>*.py`, or its tests carry `@pytest.mark.games("<slug>")`.
-- **Tied by a games mark?**: a test in a shared file marked `@pytest.mark.games("<slug>")` keeps the game-level rule: it runs for any change to that game. A mark may name several games: `tests/test_ottelu_v6.py` names Ottelu and all its events, so it runs on any change to an event, because Ottelu v6 plays each event's newest version (#303).
+- **Tied by a games mark?**: a test in a shared file marked `@pytest.mark.games("<slug>")` keeps the game-level rule: it runs for any change to that game. A mark may name several games: `tests/test_ottelu_v7.py`'s `test_every_event_plays_its_newest_version` names Ottelu and all its events, so it runs on any change to an event, because Ottelu (from v6) plays each event's newest version (#303).
 - **Was an older test file of that game edited?**: `whole_games_changed()` in `tests/conftest.py`: a `tests/test_<slug>*.py` that already existed on `main` and changed, or a file under `games/<slug>/` beside the version folders other than `game.json` and `thumb.webp`. Then every test file of that game runs, because they import helpers from each other (`test_kirkkis_v4.py` imports from `test_kirkkis_v3.py`).
 - **Is this test file itself changed or new?**: `Changes.test_files`: a test file in the change always runs. A test file new on the branch, as each new version brings, runs only itself: no other test imports it yet.
 - **Did any version of the game change?**: `changed_versions()`: only `game.json` or `thumb.webp` changing runs none of the game's tests; `scripts/build.py` already checks both.
 - **File names no version at all?**: the safe fallback: a game test file that names no version runs whenever a version of its game changes.
-- **Does the change touch a version this file tests?**: a file's versions are the `_v<N>` in its name plus every `games/<slug>/v<N>` written in it (`versions_of_test_file()`). `test_areena.py` names `games/areena/v3`, so it runs for v3; `test_voimistelu_v4.py` builds its address from a parameter but its name gives v4.
+- **Does the change touch a version this file tests?**: a file's versions are the `_v<N>` in its name plus every `games/<slug>/v<N>` written in it (`versions_of_test_file()`). `test_areena_v5.py` names `games/areena/v5`, so it runs for v5. When a version is moved on (#346), the deleted old folder is a changed version no file names, so every test file of the game runs.
 - **Is a changed version named by no test file?**: `versions_with_tests()`: a new version with no tests of its own runs every test file of its game, as before.
 - **Plays a 3D version?**: `is_3d()` in `tests/conftest.py`: a version the test file tests loads `lib/three` (Hiihto v7 on, Pallorata, Jään alla), or the file says `pytestmark = pytest.mark.alone` (`test_lib_three.py`). Such tests get the `alone` mark.
 - **On bazzite: scripts/host-tests.sh, four side by side**: `scripts/host-tests.sh`, run by each Work agent with `agentdeck job submit --verification` on the AgentDeck host, never in `.github/workflows/ci.yml` (#123). On GitHub's 4-core runner software WebGL beside other Chromiums dropped too many frames for the 3D games' timed races, so they ran one at a time and took 9 of 14 minutes. On bazzite they first ran two side by side, since four in software failed a Hiihto v8 race on a busy host; drawn on the graphics card (#248), four (`-n 4`, under `nice`) passed every 3D test three times in a row. Exit code 5 (nothing selected) counts as a pass.

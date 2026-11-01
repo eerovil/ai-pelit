@@ -255,7 +255,12 @@
       // A room that does not say its game was made by a game from before this file (Kirkkis v2),
       // whose messages this game does not speak: leave it, and say why.
       if (!net.host && (!m.game || !m.v)) return leave('Huone on toisessa pelissä.');
-      // A room made in another game or version: open that one, in this room.
+      // A room made in an older version of this game: only the newest is kept (#346), so its
+      // address would bring this phone straight back here. The host's phone has an old copy.
+      if (!net.host && m.game === GAME && Number(m.v) < Number(VERSION)) {
+        return leave('Huone on pelin vanhemmassa versiossa. Pyydä huoneen tekijää avaamaan peli hyllyltä uudelleen.');
+      }
+      // A room made in another game or a newer version: open that one, in this room.
       if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
         var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
         net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
@@ -902,6 +907,8 @@
     el.rooms.textContent = '';
     openRooms.forEach(function (r) {
       if (!r || !/^[A-Z]{4}$/.test(r.code)) return;
+      // A room on an older version would only say so when joined (#346): leave it off the list.
+      if (Number(r.v) < VERSION) return;
       var b = document.createElement('button');
       b.textContent = r.code + ' · ' + r.n + '/' + r.max + ' pelaajaa';
       b.addEventListener('click', function () { takeName(); enter(r.code, false); });

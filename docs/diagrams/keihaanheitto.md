@@ -24,6 +24,8 @@ v8 (#313) plays as v7, but a pad that does nothing right then is greyed out and 
 
 v9 (#311) plays as v8 with the athletics events' common outfit set and one choice shared by every event and Ottelu (`data-share="yleisurheilu"` in `games/keihas/v9/index.html`, `asut.md`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

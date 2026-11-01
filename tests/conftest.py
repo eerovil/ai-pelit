@@ -3,6 +3,7 @@ import functools
 import http.server
 import json
 import os
+import shutil
 import re
 import subprocess
 import sys
@@ -250,13 +251,18 @@ def game_page(title: str, body: str = "", script: str = "") -> str:
     )
 
 
-def make_game(games: Path, slug: str, pages: list[str], title: str | None = None, dates=None, group: str | None = None) -> None:
+def make_game(games: Path, slug: str, pages: list[str], title: str | None = None, dates=None, group: str | None = None,
+              only_newest: bool = True) -> None:
+    """A game with a version per page. Only the newest has a folder (#346): an older one's is removed."""
     d = games / slug
     d.mkdir(parents=True, exist_ok=True)
     versions = []
     for i, page in enumerate(pages, start=1):
-        (d / f"v{i}").mkdir(exist_ok=True)
-        (d / f"v{i}" / "index.html").write_text(page)
+        if only_newest and i < len(pages):
+            shutil.rmtree(d / f"v{i}", ignore_errors=True)
+        else:
+            (d / f"v{i}").mkdir(exist_ok=True)
+            (d / f"v{i}" / "index.html").write_text(page)
         date = dates[i - 1] if dates else f"2026-10-{i:02d}"
         versions.append({"n": i, "date": date, "note": f"Versio {i}", "request": "", "issue": None})
     meta = {"title": title or slug.capitalize(), "description": f"Peli {slug}", "versions": versions}

@@ -12,6 +12,8 @@ From v7 (#231) the beeps are recorded sounds from the shared library `lib/aanet-
 
 From v8 (#298) a well-timed push is a soft whoosh (`suhahdus`, louder the better the timing) instead of v7's arcade power-up, which rang over the mat's boing on every good bounce (`sound('spring', q)` in `games/trampoliini/v8/index.html`).
 
+Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
+
 ```mermaid
 flowchart TD
   A[Taso: trampoliini ja temppulista] --> B[Matolla: napauta, v2: päästä irti, pohjalla]
