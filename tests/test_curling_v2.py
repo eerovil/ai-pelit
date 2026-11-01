@@ -5,7 +5,7 @@ In v1 the stone sat 74 px above the bottom edge, so upright only guards could be
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/curling/v2/"
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) update(DT); }; }"
@@ -71,4 +71,17 @@ def test_upright_a_full_pull_on_the_screen_takes_a_stone_out(site, browser, size
     assert pull_and_throw(page, page.evaluate("pad.pull + 5")) == "Poistolyönti"
     assert page.evaluate("stones.find(s => s.t === 1).out") is True
     assert page.errors == []
+    ctx.close()
+
+
+def test_turned_sideways_and_back_the_full_pull_still_fits(site, browser):
+    ctx, page = aiming(site, browser, (360, 740))
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("wide === true")
+    turn(page, {"width": 360, "height": 740})
+    page.wait_for_function("wide === false")
+    assert page.evaluate("[phase, H - safeB - pad.y - pad.pull >= 22]") == ["aim", True]
+    page.evaluate("stones.push(stone(1, 0, TEE))")
+    assert pull_and_throw(page, page.evaluate("pad.pull + 5")) == "Poistolyönti"
+    assert page.evaluate("stones.find(s => s.t === 1).out") is True
     ctx.close()
