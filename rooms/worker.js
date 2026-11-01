@@ -27,6 +27,10 @@
 // it its state, and phones read it with GET /api/rooms?game=<slug> (server/api.js), or every game's
 // with GET /api/rooms, which the shelf's front page shows (#203). A listing not
 // refreshed for LISTED_FOR is dropped, so a room that vanished without saying so leaves the list.
+//
+// Friends (#324): a phone with a nickname joins with `fid`, its public friend id (a hash of its
+// secret player id, server/api.js pidOf), and the room sends it with that member in `peers`, so
+// the others can ask it to be their friend. A join without it is as before.
 
 const CODE = /^[A-Z]{4}$/;
 const KEY = /^[a-f0-9]{32}$/;
@@ -65,7 +69,7 @@ export class Room {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.env = env;
-    this.room = undefined; // {host, members: {id: name}, code, game?, v?, max?, listed?, told?}, read from storage on first use
+    this.room = undefined; // {host, members: {id: name}, fids?: {id: fid}, code, game?, v?, max?, listed?, told?}, read from storage on first use
   }
 
   async load() {
@@ -93,6 +97,7 @@ export class Room {
     const code = (url.pathname.split('/').pop() || '').toUpperCase();
     const key = url.searchParams.get('key') || '', name = cleanName(url.searchParams.get('name'));
     const wantsHost = url.searchParams.get('host') === '1';
+    const fid = url.searchParams.get('fid') || '';
     if (!CODE.test(code) || !KEY.test(key) || !name) return new Response('bad code, key or name', { status: 400 });
     const id = await publicId(key);
 
@@ -110,6 +115,8 @@ export class Room {
       return refuse(4001, 'Huone on täynnä');
     }
     room.members[id] = name;
+    room.fids = room.fids || {};
+    if (KEY.test(fid)) room.fids[id] = fid; else delete room.fids[id];
     await this.store(room);
     await this.ctx.storage.deleteAlarm();
 
@@ -135,6 +142,7 @@ export class Room {
     if (!room) return;
     if (msg.t === 'bye') { // leaving for good, not dropping off
       delete room.members[me.id];
+      if (room.fids) delete room.fids[me.id];
       await this.store(room);
       try { ws.close(1000, 'Poistuit'); } catch (e) { /* gone */ }
       await this.peers(ws);
@@ -193,7 +201,9 @@ export class Room {
       host: room.host,
       ...(room.game ? { game: room.game } : {}),
       ...(room.v ? { v: room.v } : {}),
-      members: Object.entries(room.members).map(([id, name]) => ({ id, name, on: on.has(id) })),
+      members: Object.entries(room.members).map(([id, name]) => ({
+        id, name, on: on.has(id), ...(room.fids && room.fids[id] ? { fid: room.fids[id] } : {}),
+      })),
     });
     for (const o of open) send(o.ws, text);
   }

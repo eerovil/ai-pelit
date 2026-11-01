@@ -18,6 +18,13 @@
 //   POST /api/feedback         {player, game, version?, text} -> {ok}, approved nicknames only (#184)
 //   GET  /api/admin/feedback?new=1|issue= (X-Admin-Key)      -> {feedback}
 //   POST /api/admin/feedback   (X-Admin-Key) {ids, issue}    -> {ok}, filed in a "Palautteet" issue
+//   GET  /api/friends?player=                                -> {friends, requests, asked, invites} (#324)
+//   POST /api/presence         {player, game?, version?}     -> the same, and "now playing" kept
+//   POST /api/friends/requests {player, to}                  -> {ok, friends}, a friend request (to: a pid)
+//   POST /api/friends/requests/answer {player, from, yes}    -> {ok}
+//   DELETE /api/friends        {player, pid}                 -> {ok}
+//   POST /api/invites          {player, to, game, version, room} -> {ok}, an invite into a room
+//   POST /api/invites/<id>/answer {player}                   -> {ok}
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -136,9 +143,9 @@ async function setName(request, env, body) {
   await env.DB.prepare('DELETE FROM names WHERE player = ? AND locked = 0 AND name_key != ?').bind(id, key).run();
   // Every new nickname, and every change of one, waits for the admin again.
   await env.DB.prepare(
-    `INSERT INTO players (id, name, status, created_at, updated_at, source) VALUES (?, ?, 'pending', ?, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET name = excluded.name, status = 'pending', updated_at = excluded.updated_at`
-  ).bind(id, name, t, t, source).run();
+    `INSERT INTO players (id, name, status, created_at, updated_at, source, pid) VALUES (?, ?, 'pending', ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET name = excluded.name, status = 'pending', updated_at = excluded.updated_at, pid = excluded.pid`
+  ).bind(id, name, t, t, source, await pidOf(id)).run();
   return json({ name, status: 'pending' });
 }
 
@@ -345,6 +352,207 @@ async function adminFiled(env, body) {
   return json({ ok: true });
 }
 
+// Friends (#324). Two phones become friends in a game room: one asks, the other accepts. Each
+// phone is known to the others only by its pid (pidOf), never by its secret player id. A phone
+// with friends tells what it plays every 30 s (public/kaverit.js), and may invite a friend into
+// the room it is in. Friends need a nickname that is not rejected; a pending one shows to them,
+// as it already does to room-mates.
+export const FRIENDS_MAX = 50;
+export const ASKS_PER_HOUR = 30;
+export const INVITES_PER_HOUR = 30;
+export const PLAYING_FOR = 90e3; // a "now playing" message older than this: not playing now
+const REQUEST_FOR = 7 * 864e5;
+const INVITE_FOR = 10 * 60e3;
+const ROOM = /^[A-Z]{4}$/;
+
+// A player's public friend id: the first 32 hex digits of SHA-256 of its secret id.
+export async function pidOf(id) {
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id)));
+  return [...hash.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+const ago = (ms) => new Date(Date.now() - ms).toISOString();
+
+// The player as friends see it, its pid filled on first use (players from before #324 have none).
+async function friendSelf(env, id) {
+  const p = await env.DB.prepare('SELECT name, status, pid FROM players WHERE id = ?').bind(id).first();
+  if (p && !p.pid) {
+    p.pid = await pidOf(id);
+    await env.DB.prepare('UPDATE players SET pid = ? WHERE id = ?').bind(p.pid, id).run();
+  }
+  return p;
+}
+
+const pair = (x, y) => (x < y ? [x, y] : [y, x]);
+
+async function areFriends(env, x, y) {
+  const [a, b] = pair(x, y);
+  return !!(await env.DB.prepare('SELECT 1 FROM friends WHERE a = ? AND b = ?').bind(a, b).first());
+}
+
+async function friendCount(env, id) {
+  return (await env.DB.prepare('SELECT COUNT(*) AS n FROM friends WHERE a = ? OR b = ?').bind(id, id).first()).n;
+}
+
+// Everything a phone shows about its friends: the friends with what each plays, the requests
+// waiting for it, the pids it has asked, and its open invites. Old requests and invites go first.
+async function friendState(env, id) {
+  await env.DB.prepare('DELETE FROM friend_requests WHERE at < ?').bind(ago(REQUEST_FOR)).run();
+  await env.DB.prepare('DELETE FROM invites WHERE at < ?').bind(ago(INVITE_FOR)).run();
+  const pid = await pidOf(id), since = ago(PLAYING_FOR);
+  const { results: rows } = await env.DB.prepare(
+    `SELECT p.pid, p.name, x.game, x.version, x.at FROM friends f
+     JOIN players p ON p.id = CASE WHEN f.a = ? THEN f.b ELSE f.a END
+     LEFT JOIN presence x ON x.player = p.id
+     WHERE (f.a = ? OR f.b = ?) AND p.status != 'rejected' AND p.pid IS NOT NULL
+     ORDER BY p.name COLLATE NOCASE`
+  ).bind(id, id, id).all();
+  const friends = rows.map((r) => ({ pid: r.pid, name: r.name, game: r.game, version: r.version, at: r.at, now: !!r.at && r.at > since }));
+  friends.sort((x, y) => y.now - x.now);
+  const { results: asking } = await env.DB.prepare(
+    `SELECT p.pid, p.name FROM friend_requests r JOIN players p ON p.id = r.sender
+     WHERE r.receiver = ? AND p.status != 'rejected' AND p.pid IS NOT NULL ORDER BY r.at DESC`
+  ).bind(pid).all();
+  const { results: asked } = await env.DB.prepare('SELECT receiver FROM friend_requests WHERE sender = ?').bind(id).all();
+  const { results: invites } = await env.DB.prepare(
+    `SELECT i.id, p.pid AS sender, p.name, i.game, i.version, i.room FROM invites i JOIN players p ON p.id = i.sender
+     WHERE i.receiver = ? AND p.status != 'rejected' ORDER BY i.at DESC`
+  ).bind(id).all();
+  return {
+    pid,
+    friends,
+    requests: asking.map((r) => ({ pid: r.pid, name: r.name })),
+    asked: asked.map((r) => r.receiver),
+    invites: invites.map((r) => ({ id: r.id, from: r.sender, name: r.name, game: r.game, version: r.version, room: r.room })),
+  };
+}
+
+async function getFriends(env, url) {
+  const player = url.searchParams.get('player') || '';
+  if (!ID.test(player)) return fail(400, 'bad player');
+  await friendSelf(env, player);
+  return json(await friendState(env, player));
+}
+
+// "Now playing": a game and version the site has, or none (the shelf).
+async function presence(env, url, body) {
+  const player = String(body.player || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  let game = null, version = null;
+  if (body.game !== undefined && body.game !== null) {
+    game = String(body.game);
+    version = Number(body.version);
+    if (!SLUG.test(game)) return fail(400, 'bad game');
+    if (!Number.isInteger(version) || version < 1 || version > 999) return fail(400, 'bad version');
+    const known = await knownVersions(env, url);
+    if (known && known !== 'any' && !(known.get(game) && known.get(game).has(version))) game = version = null;
+  }
+  if (!(await friendSelf(env, player))) return fail(404, 'unknown player');
+  await env.DB.prepare(
+    `INSERT INTO presence (player, game, version, at) VALUES (?, ?, ?, ?)
+     ON CONFLICT (player) DO UPDATE SET game = excluded.game, version = excluded.version, at = excluded.at`
+  ).bind(player, game, version, now()).run();
+  return json(await friendState(env, player));
+}
+
+const usable = (p) => p && p.status !== 'rejected';
+
+async function befriend(env, x, y) {
+  const [a, b] = pair(x, y);
+  await env.DB.prepare('INSERT INTO friends (a, b, at) VALUES (?, ?, ?) ON CONFLICT (a, b) DO NOTHING').bind(a, b, now()).run();
+  await env.DB.prepare('DELETE FROM friend_requests WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)')
+    .bind(x, await pidOf(y), y, await pidOf(x)).run();
+}
+
+async function askFriend(env, body) {
+  const player = String(body.player || ''), to = String(body.to || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  if (!ID.test(to)) return fail(400, 'bad friend');
+  const me = await friendSelf(env, player);
+  if (!usable(me)) return fail(403, 'nickname needed');
+  if (to === me.pid) return fail(400, 'not yourself');
+  const other = await env.DB.prepare('SELECT id, status FROM players WHERE pid = ?').bind(to).first();
+  if (other && (await areFriends(env, player, other.id))) return json({ ok: true, friends: true });
+  if ((await friendCount(env, player)) >= FRIENDS_MAX) return fail(409, 'too many friends');
+  // Both asked: they are friends at once.
+  if (usable(other) && (await env.DB.prepare('SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = ?').bind(other.id, me.pid).first())) {
+    if ((await friendCount(env, other.id)) >= FRIENDS_MAX) return fail(409, 'too many friends');
+    await befriend(env, player, other.id);
+    return json({ ok: true, friends: true });
+  }
+  // The count and the insert are one statement, so asks at once cannot pass the limit together.
+  const res = await env.DB.prepare(
+    `INSERT INTO friend_requests (sender, receiver, at)
+     SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM friend_requests WHERE sender = ? AND at > ?) < ?
+     ON CONFLICT (sender, receiver) DO NOTHING`
+  ).bind(player, to, now(), player, ago(3600e3), ASKS_PER_HOUR).run();
+  if (!res.meta.changes && !(await env.DB.prepare('SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = ?').bind(player, to).first())) {
+    return fail(429, 'too many requests');
+  }
+  return json({ ok: true, friends: false });
+}
+
+async function answerFriend(env, body) {
+  const player = String(body.player || ''), from = String(body.from || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  if (!ID.test(from)) return fail(400, 'bad friend');
+  const me = await friendSelf(env, player), pid = me ? me.pid : await pidOf(player);
+  const other = await env.DB.prepare('SELECT id, status FROM players WHERE pid = ?').bind(from).first();
+  const asked = other && (await env.DB.prepare('SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = ?').bind(other.id, pid).first());
+  if (!asked) return fail(404, 'no such request');
+  if (body.yes === true) {
+    if (!usable(me)) return fail(403, 'nickname needed');
+    if (!usable(other)) return fail(404, 'no such request');
+    if ((await friendCount(env, player)) >= FRIENDS_MAX || (await friendCount(env, other.id)) >= FRIENDS_MAX) return fail(409, 'too many friends');
+    await befriend(env, player, other.id);
+  } else {
+    await env.DB.prepare('DELETE FROM friend_requests WHERE sender = ? AND receiver = ?').bind(other.id, pid).run();
+  }
+  return json({ ok: true });
+}
+
+async function removeFriend(env, body) {
+  const player = String(body.player || ''), pid = String(body.pid || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  if (!ID.test(pid)) return fail(400, 'bad friend');
+  const other = await env.DB.prepare('SELECT id FROM players WHERE pid = ?').bind(pid).first();
+  if (other) {
+    const [a, b] = pair(player, other.id);
+    await env.DB.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(a, b).run();
+    await env.DB.prepare('DELETE FROM invites WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)')
+      .bind(player, other.id, other.id, player).run();
+  }
+  return json({ ok: true });
+}
+
+async function invite(env, url, body) {
+  const player = String(body.player || ''), to = String(body.to || ''), game = String(body.game || '');
+  const version = Number(body.version), room = String(body.room || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  if (!ID.test(to)) return fail(400, 'bad friend');
+  if (!SLUG.test(game) || !Number.isInteger(version) || version < 1 || version > 999) return fail(400, 'bad game');
+  if (!ROOM.test(room)) return fail(400, 'bad room');
+  const known = await knownVersions(env, url);
+  if (known && known !== 'any' && !(known.get(game) && known.get(game).has(version))) return fail(404, 'no such version');
+  const me = await friendSelf(env, player);
+  const other = await env.DB.prepare('SELECT id FROM players WHERE pid = ?').bind(to).first();
+  if (!usable(me) || !other || !(await areFriends(env, player, other.id))) return fail(403, 'friends only');
+  const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM invites WHERE sender = ? AND at > ?').bind(player, ago(3600e3)).first();
+  if (sent.n >= INVITES_PER_HOUR) return fail(429, 'too many invites');
+  // One open invite per pair: a new one replaces the old.
+  await env.DB.prepare('DELETE FROM invites WHERE sender = ? AND receiver = ?').bind(player, other.id).run();
+  await env.DB.prepare('INSERT INTO invites (sender, receiver, game, version, room, at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(player, other.id, game, version, room, now()).run();
+  return json({ ok: true });
+}
+
+async function answerInvite(env, id, body) {
+  const player = String(body.player || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  await env.DB.prepare('DELETE FROM invites WHERE id = ? AND receiver = ?').bind(id, player).run();
+  return json({ ok: true });
+}
+
 async function adminPlayers(env) {
   // Waiting names first, then the newest.
   const { results } = await env.DB.prepare(
@@ -414,6 +622,32 @@ async function route(request, env) {
   if (path === '/api/feedback' && method === 'POST') {
     const body = await readBody(request);
     return body ? addFeedback(env, url, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/friends' && method === 'GET') return getFriends(env, url);
+  if (path === '/api/presence' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? presence(env, url, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/friends/requests' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? askFriend(env, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/friends/requests/answer' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? answerFriend(env, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/friends' && method === 'DELETE') {
+    const body = await readBody(request);
+    return body ? removeFriend(env, body) : fail(400, 'bad body');
+  }
+  if (path === '/api/invites' && method === 'POST') {
+    const body = await readBody(request);
+    return body ? invite(env, url, body) : fail(400, 'bad body');
+  }
+  const inv = path.match(/^\/api\/invites\/([1-9][0-9]{0,15})\/answer$/);
+  if (inv && method === 'POST') {
+    const body = await readBody(request);
+    return body ? answerInvite(env, Number(inv[1]), body) : fail(400, 'bad body');
   }
   if (path === '/api/admin/feedback') {
     if (!isAdmin(request, env)) return fail(403, 'admin key needed');

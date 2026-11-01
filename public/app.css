@@ -68,3 +68,20 @@ p { margin: 0 0 6px; }
 /* The shelf's order (#279): a small menu in the header, beside the name. */
 .top .sort { margin-left: auto; background: var(--card); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 6px 8px; font: 14px system-ui, sans-serif; }
 .top .sort + .status { margin-left: 10px; }
+/* Friends (#324): the 👫 button in the header, the friends page and the front page's list. */
+.friends-link { margin-left: 10px; font-size: 22px; text-decoration: none; padding: 4px 8px; border-radius: 10px; background: var(--card); line-height: 1.2; }
+.top .brand { margin-right: auto; }
+.friends-playing { margin: 0 0 18px; }
+.friends-playing h2 { margin: 4px 0 8px; }
+.friends { list-style: none; padding: 0; margin: 0 0 18px; }
+.friend { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px; }
+.friend.now { border: 1px solid #4f9a3a; }
+.friend > div { flex: 1; min-width: 0; }
+.friend h3 { margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend .meta { margin: 0; }
+.friend-face { width: 36px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 24px; background: #11131c; border-radius: 6px; }
+.friend-buttons { flex: none !important; display: flex; gap: 6px; }
+.friend-remove { flex: none; padding: 6px 12px; }
+.friends-form { display: flex; gap: 8px; margin: 8px 0 12px; }
+.friends-form input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 10px; font: 16px system-ui, sans-serif; }
+.friends-note { color: var(--accent); }
