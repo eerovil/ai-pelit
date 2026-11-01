@@ -63,7 +63,7 @@ def ready(page, sp="ahven", g=200, bait=None):
       rivals = []; schools = [];
       stand(LAKE_W / 2, LAKE_H / 2);
       const h = hole(me.x, me.y, 'me', true); holes.push(h); atHole(h); jigD = 2;
-      const f = newFish(lake.spots[0], '{sp}'); f.g = {g}; f.d = 2; f.lx = f.wx = me.x + 0.4; f.ly = f.wy = me.y; f.linger = 999; f.school = 0;
+      const f = newFish(lake.spots[0], '{sp}'); f.g = {g}; f.d = 2; f.lx = f.wx = f.gx = me.x + 0.4; f.ly = f.wy = f.gy = me.y; f.linger = 999;
       pond = [f]; sight();
       {f"bait = '{bait}';" if bait else ""}
       run(() => !target, 3);
@@ -190,7 +190,7 @@ def test_a_fish_coming_to_the_jig_is_felt_as_a_nibble_without_a_sounder(site, co
       const h = hole(me.x, me.y, 'me', true); holes.push(h); atHole(h); jigD = 2; nibN = 0; run(() => true, 5); }""")
     assert page.evaluate("[nibN, shownFish().length]") == [0, 0]
     # A perch comes to look: the rod tip dips, the phone buzzes, and it keeps nibbling.
-    page.evaluate("""() => { const f = newFish(lake.spots[0], 'ahven'); f.d = 2; f.lx = f.wx = me.x + 0.4; f.ly = f.wy = me.y; f.linger = 999; f.school = 0;
+    page.evaluate("""() => { const f = newFish(lake.spots[0], 'ahven'); f.d = 2; f.lx = f.wx = f.gx = me.x + 0.4; f.ly = f.wy = f.gy = me.y; f.linger = 999;
       pond = [f]; sight(); update(DT); window.first = [nibN, nib, rodPull()]; }""")
     n, nib, pull = page.evaluate("first")
     assert n == 1 and nib > 0.3 and pull > 0.15
@@ -278,28 +278,36 @@ def test_the_lake_has_schools_lone_pike_and_burbot_and_one_giant(site, context):
     res = page.evaluate("""() => ({
       giants: pond.filter(f => f.giant).length,
       giantKind: pond.find(f => f.giant).sp,
-      schooled: [...new Set(pond.filter(f => f.school).map(f => f.sp))].sort(),
-      alone: [...new Set(pond.filter(f => !f.school).map(f => f.sp))].sort(),
+      kinds: [...new Set(pond.map(f => f.sp))],
     })""")
     assert res["giants"] == 1 and res["giantKind"] == "hauki"
-    assert set(res["schooled"]) <= {"ahven", "sarki", "lahna", "kiiski", "kuha"}
-    assert set(res["alone"]) <= {"hauki", "made"}
-    # A school keeps together as it swims.
+    # Each fish steers itself; the schooling ones still end up in schools after a while.
     page.evaluate("rivals = []; run(() => true, 40)")
-    spread = page.evaluate("""() => Math.max(...schools.map(sc => Math.max(0, ...pond.filter(f => f.school === sc.id && !f.look).map(f => Math.hypot(f.lx - sc.lx, f.ly - sc.ly)))))""")
-    assert spread < 30
-
-
-def test_a_school_keeps_away_from_a_pike(site, context):
-    page = start(site, context)
-    page.evaluate("""() => {
-      rivals = [];
-      const sc = schools[0], p = newFish(lake.spots[0], 'hauki');
-      p.lx = p.wx = sc.lx + 3; p.ly = p.wy = sc.ly; p.linger = 999; p.school = 0; pond.push(p);
-      window.sc = sc; window.was = sc.tgt;
+    together = page.evaluate("""() => {
+      buildGrid();
+      const sch = pond.filter(f => schooling(f.sp));
+      const ok = sch.filter(f => near(f, 5, []).filter(q => q.sp === f.sp).length >= 2).length;
+      return ok / sch.length;
     }""")
-    page.evaluate("run(() => true, 0.1)")
-    assert page.evaluate("sc.flee > 0 && sc.go && sc.tgt !== was") is True
+    assert together > 0.7
+    # And they keep moving: not one block standing still.
+    moving = page.evaluate("pond.filter(f => schooling(f.sp) && Math.hypot(f.mx, f.my) > 0.05).length / pond.filter(f => schooling(f.sp)).length")
+    assert moving > 0.5
+
+
+def test_fish_keep_away_from_a_pike(site, context):
+    page = start(site, context)
+    page.evaluate("rivals = []; run(() => true, 20)")
+    page.evaluate("""() => {
+      const f = pond.find(q => q.sp === 'sarki' || q.sp === 'ahven');
+      const p = newFish(lake.spots[0], 'hauki'); p.lx = p.wx = p.hx = f.lx + 2; p.ly = p.wy = p.hy = f.ly; p.linger = 999; p.go = false;
+      pond.push(p); window.pk = p; buildGrid();
+      window.close = pond.filter(q => q !== p && Math.hypot(q.lx - p.lx, q.ly - p.ly) < 5);
+      window.before = close.reduce((a, q) => a + Math.hypot(q.lx - p.lx, q.ly - p.ly), 0) / close.length;
+    }""")
+    page.evaluate("pk.dart = 0; Math.random = () => 0.99; run(() => true, 3)")
+    after = page.evaluate("close.filter(q => pond.includes(q)).reduce((a, q) => a + Math.hypot(q.lx - pk.lx, q.ly - pk.ly), 0) / close.length")
+    assert after > page.evaluate("before") + 2
 
 
 def test_a_caught_fish_is_gone_and_the_others_swim_between_spots(site, context):
@@ -341,12 +349,12 @@ def test_a_reload_keeps_the_contest_the_lake_and_v1_s_save(site, context):
     page = start(site, context)
     page.evaluate("localStorage.setItem('ai-pelit:pilkki:kisa', '\"v1\"')")
     page.evaluate("stand(LAKE_W / 2, LAKE_H / 2); iceAction(); turnAuger(99); toIce(); me.tx = me.x + 6; run(() => !standing(), 3); myG = 700; myN = 3; left = 200; keepContest()")
-    before = page.evaluate("[r1(me.x), r1(me.y), holes.length, pond.length, schools.length, pond.map(f => f.sp + f.g).sort().join()]")
+    before = page.evaluate("[r1(me.x), r1(me.y), holes.length, pond.length, pond.map(f => f.sp + f.g).sort().join()]")
     page.reload()
     page.evaluate(RUN)
     assert "3:20" in page.locator("#resume").inner_text()
     page.click("#resume")
-    assert page.evaluate("[r1(me.x), r1(me.y), holes.length, pond.length, schools.length, pond.map(f => f.sp + f.g).sort().join()]") == before
+    assert page.evaluate("[r1(me.x), r1(me.y), holes.length, pond.length, pond.map(f => f.sp + f.g).sort().join()]") == before
     assert page.evaluate("[phase, myG, myN]") == ["ice", 700, 3]
     assert page.evaluate("localStorage.getItem('ai-pelit:pilkki:kisa')") == '"v1"'
 

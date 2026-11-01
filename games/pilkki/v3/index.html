@@ -124,6 +124,7 @@ function newFish(spot, sp) {
   const f = { id: nextId++, sp, g: weighOf(sp), lx: spot.x + rnd(-4, 4), ly: spot.y + rnd(-3, 3), hf: Math.random(), tgt: spot.i, go: false,
     linger: rnd(20, 120), wx: 0, wy: 0, d: 0, x: 0, vx: 1, int: 0, flee: 0, look: false };
   if (HABITS[sp].home) { f.hx = f.lx; f.hy = f.ly; }
+  if (HABITS[sp].school) { f.mx = f.my = 0; f.gx = f.lx; f.gy = f.ly; f.stamp = 0; }
   f.d = homeAt(f); wander(f, spot);
   return f;
 }
@@ -137,7 +138,7 @@ function homeAt(f) {
 // A new point to swim to near a spot: a school roams all round it, a fish alone stays closer.
 function wander(f, s) {
   if (f.hx !== undefined) { const h = HABITS[f.sp].home / 2; [f.wx, f.wy] = onIce(f.hx + rnd(-h, h), f.hy + rnd(-h, h) * 0.7); return; }
-  const r = f.kind === 'school' ? 10 : 4.5; [f.wx, f.wy] = onIce(s.x + rnd(-r, r), s.y + rnd(-r, r) * 0.7);
+  const r = 4.5; [f.wx, f.wy] = onIce(s.x + rnd(-r, r), s.y + rnd(-r, r) * 0.7);
 }
 const kg = g => (g / 1000).toFixed(2).replace('.', ',') + ' kg';
 const weightText = g => g < 1000 ? g + ' g' : kg(g);
@@ -199,31 +200,34 @@ function onIce(px, py) {
 }
 
 // ---------- The fish of the lake ----------
-// Every fish is its own, and lives as its kind does (#289). Perch, roach and bream go about in
-// schools that keep together; ruffe in small ones on the bottom, zander in loose small groups in
-// deep water. Pike and burbot live alone: a pike lies in wait in the shallows and darts at a school
-// that comes near, and the other fish keep away from it; a burbot crawls slowly on the bottom.
-// One giant pike lives in the lake. A school (or a lone fish) swims to a spot that suits its kind,
-// stays there a while, then swims on to another. A fish caught is gone for the rest of the contest,
-// and a place gets new fish only when they swim there.
-let pond = [], schools = [], nextId = 1;
+// Every fish is its own and steers itself (#291). Schooling fish (perch, roach, bream, ruffe and
+// zander) follow three simple rules about the fish near them, the way real schools are usually
+// modelled ("boids"): keep a little apart, swim the way the neighbours swim, and do not stray from
+// them. Each also has somewhere it means to go (a spot that suits its kind), and picks up where its
+// neighbours are heading, so a school travels together, though it may split or merge with another;
+// nothing holds it in shape. Any fish keeps away from a pike near it. Pike and burbot live alone:
+// a pike in its home area near the shore, darting at fish that pass close; a burbot slowly on the
+// bottom. One giant pike lives in the lake. A fish caught is gone for the rest of the contest.
+let pond = [], nextId = 1, goalN = 1;
 const VIEW_X = 5, VIEW_Y = 3.5;  // metres: how far round the hole a fish is in sight
 const inSight = (f, s) => Math.abs(f.lx - s.x) < VIEW_X && Math.abs(f.ly - s.y) < VIEW_Y;
-// school: how many keep together; spread: how far apart, in metres; pace: how fast it gets about;
-// stay: seconds it stays at a spot.
 // From what is known of these fish in winter (#291): roach and bream gather in big schools, perch
-// in schools of fish of a size, all of them on the move in daytime (cruising about 1.6 body lengths
-// a second); a pike keeps to a home area a few tens of metres across, near the shore.
+// in schools of fish of a size, all on the move in daytime (cruising about 1.6 body lengths a
+// second); a pike keeps to a home area a few tens of metres across, near the shore.
+// school: how many start together; gap: the space a fish keeps from its neighbours, in metres;
+// pace: its cruising speed, m/s; stay: seconds at a spot before heading on.
 const HABITS = {
-  ahven: { school: [15, 50], spread: 3.5, pace: 1, stay: [10, 40] },
-  sarki: { school: [25, 80], spread: 4.5, pace: 1, stay: [10, 40] },
-  lahna: { school: [8, 25], spread: 3, pace: 0.8, stay: [20, 60] },
-  kiiski: { school: [5, 15], spread: 1.5, pace: 0.6, stay: [30, 90] },
-  kuha: { school: [3, 8], spread: 4, pace: 0.9, stay: [20, 60] },
-  made: { pace: 0.35, stay: [60, 180] },
-  hauki: { pace: 0.3, stay: [60, 200], home: 25 },
+  ahven: { school: [15, 50], gap: 1.2, pace: 0.45, stay: [10, 40] },
+  sarki: { school: [25, 80], gap: 1.4, pace: 0.45, stay: [10, 40] },
+  lahna: { school: [8, 25], gap: 1.4, pace: 0.35, stay: [20, 60] },
+  kiiski: { school: [5, 15], gap: 0.8, pace: 0.25, stay: [30, 90] },
+  kuha: { school: [3, 8], gap: 2.5, pace: 0.4, stay: [20, 60] },
+  made: { pace: 0.12, stay: [60, 180] },
+  hauki: { pace: 0.1, stay: [60, 200], home: 25 },
 };
+const schooling = sp => !!HABITS[sp].school;
 const GIANT = [12000, 16000];  // grams: the lake's one giant pike
+const PIKE = 12, BURBOT = 6;     // besides the giant
 // How well a spot suits a kind: deep enough, and in its depths (a pike likes the shallows).
 function suits(sp, s) {
   const k = SPECIES[sp];
@@ -238,46 +242,48 @@ function pickSpot(sp, not) {
   for (const s of ok) { v -= suits(sp, s); if (v <= 0) return s; }
   return ok[0] || lake.spots[0];
 }
-function newSchool(sp, s) {
-  const o = { id: nextId++, kind: 'school', sp, lx: s.x + rnd(-3, 3), ly: s.y + rnd(-2, 2), wx: 0, wy: 0, tgt: s.i, go: false, linger: rnd(...HABITS[sp].stay), flee: 0 };
-  wander(o, s);
-  return o;
-}
-// A fish's place in its school: loose and uneven, thick in the middle and thinning out, with some
-// stragglers; the bigger the school, the wider. Long along the way it swims, narrow across it.
-function join(f, sc, n) {
-  const h = HABITS[f.sp], R = h.spread * Math.sqrt(n || 10) / 2.2;
-  const r = R * Math.min(2.2, Math.sqrt(-Math.log(1 - Math.random() * 0.98)) * 0.75), a = Math.random() * Math.PI * 2;
-  f.school = sc.id; f.ox = Math.cos(a) * r * 1.5; f.oy = Math.sin(a) * r * 0.6;
-  f.lx = sc.lx + f.ox; f.ly = sc.ly + f.oy; f.tgt = sc.tgt;
-}
-const schoolOf = f => f.school ? schools.find(q => q.id === f.school) : null;
+// Where a schooling fish means to go: a point about a spot, the spot's number, and how new the
+// plan is (a newer plan spreads to the neighbours).
+function plan(f, s, go) { [f.gx, f.gy] = onIce(s.x + rnd(-8, 8), s.y + rnd(-6, 6)); f.tgt = s.i; f.go = go; f.stamp = goalN++; f.linger = rnd(...HABITS[f.sp].stay); }
 function stockPond(saved) {
   if (saved && saved.fish) {
-    nextId = 1;
-    schools = saved.schools.map(q => ({ id: q[0], kind: 'school', sp: SP[q[1]] || 'ahven', lx: q[2], ly: q[3], wx: q[4], wy: q[5], tgt: lake.spots[q[6]] ? q[6] : 0, go: !!q[7], linger: q[8], flee: 0 }));
     pond = saved.fish.map(q => {
       const s = lake.spots[q[5]] || lake.spots[0], f = newFish(s, SP[q[0]] || 'ahven');
-      Object.assign(f, { g: q[1], lx: q[2], ly: q[3], d: q[4], tgt: s.i, linger: q[6], hf: q[7], go: !!q[8], school: q[9] || 0, ox: q[10] || 0, oy: q[11] || 0, giant: !!q[12] });
-      if (f.go) { f.wx = s.x; f.wy = s.y; }
+      Object.assign(f, { g: q[1], lx: q[2], ly: q[3], d: q[4], tgt: s.i, linger: q[6], hf: q[7], go: !!q[8], gx: q[9], gy: q[10], stamp: q[11] || 0, giant: !!q[12] });
       if (f.hx !== undefined) { f.hx = f.lx; f.hy = f.ly; }
+      if (f.go && !schooling(f.sp)) { f.wx = s.x; f.wy = s.y; }
       return f;
     });
-    nextId = 1 + Math.max(0, ...pond.map(f => f.id), ...schools.map(q => q.id));
-    for (const f of pond) if (f.school && !schoolOf(f)) f.school = 0;
+    nextId = 1 + Math.max(0, ...pond.map(f => f.id));
+    goalN = 1 + Math.max(0, ...pond.map(f => f.stamp || 0));
     return;
   }
-  pond = []; schools = []; nextId = 1;
-  // At each spot one or two schools of kinds that suit it, or a lone pike or burbot.
+  pond = []; nextId = 1; goalN = 1;
+  // At each spot one or two schools of kinds that suit it.
   for (const s of lake.spots) {
     for (let k = 0, n = Math.random() < 0.5 ? 1 : 2; k < n; k++) {
-      const sp = pickSpecies(s.depth), h = HABITS[sp];
-      if (!h.school) { pond.push(newFish(s, sp)); continue; }
-      const sc = newSchool(sp, s), m = h.school[0] + Math.floor(Math.random() * (h.school[1] - h.school[0] + 1));
-      schools.push(sc);
-      for (let i = 0; i < m; i++) { const f = newFish(s, sp); join(f, sc, m); pond.push(f); }
+      let sp = pickSpecies(s.depth);
+      for (let t = 0; t < 20 && !HABITS[sp].school; t++) sp = pickSpecies(s.depth);
+      const h = HABITS[sp];
+      if (!h.school) continue;
+      const m = h.school[0] + Math.floor(Math.random() * (h.school[1] - h.school[0] + 1)), R = h.gap * Math.sqrt(m) * 0.7;
+      const first = newFish(s, sp); plan(first, s, false);
+      for (let i = 0; i < m; i++) {
+        const f = i ? newFish(s, sp) : first, a = Math.random() * Math.PI * 2, r = R * Math.sqrt(Math.random());
+        f.lx = s.x + Math.cos(a) * r; f.ly = s.y + Math.sin(a) * r * 0.7;
+        Object.assign(f, { gx: first.gx, gy: first.gy, tgt: s.i, go: false, stamp: first.stamp, linger: rnd(...h.stay), mx: 0, my: 0 });
+        pond.push(f);
+      }
     }
   }
+  // Pike, each in its own home area in the shallows near the shore; burbot on deep bottoms.
+  for (let i = 0; i < PIKE; i++) {
+    const a = Math.random() * Math.PI * 2, e = rnd(0.6, 0.88), px = LAKE_W / 2 + Math.cos(a) * LAKE_W / 2 * e, py = LAKE_H / 2 + Math.sin(a) * LAKE_H / 2 * e;
+    const f = newFish({ x: px, y: py, i: 0, depth: depthAt(px, py) }, 'hauki');
+    f.tgt = lake.spots.reduce((b, q) => Math.hypot(q.x - px, q.y - py) < Math.hypot(b.x - px, b.y - py) ? q : b).i;
+    pond.push(f);
+  }
+  for (let i = 0; i < BURBOT; i++) { const s = pickSpot('made', -1); pond.push(newFish(s, 'made')); }
   // The giant pike, at a shallow spot.
   const gs = pickSpot('hauki', -1), giant = newFish(gs, 'hauki');
   giant.g = Math.round(rnd(...GIANT)); giant.giant = true;
@@ -285,14 +291,14 @@ function stockPond(saved) {
 }
 const r1 = v => Math.round(v * 10) / 10;
 const pondSave = () => ({
-  fish: pond.map(f => [SP.indexOf(f.sp), f.g, r1(f.lx), r1(f.ly), r1(f.d), f.tgt, Math.round(f.linger), Math.round(f.hf * 100) / 100, f.go ? 1 : 0, f.school || 0, r1(f.ox || 0), r1(f.oy || 0), f.giant ? 1 : 0]),
-  schools: schools.map(q => [q.id, SP.indexOf(q.sp), r1(q.lx), r1(q.ly), r1(q.wx), r1(q.wy), q.tgt, q.go ? 1 : 0, Math.round(q.linger)]),
+  fish: pond.map(f => [SP.indexOf(f.sp), f.g, r1(f.lx), r1(f.ly), r1(f.d), f.tgt, Math.round(f.linger), Math.round(f.hf * 100) / 100, f.go ? 1 : 0, r1(f.gx || 0), r1(f.gy || 0), f.stamp || 0, f.giant ? 1 : 0]),
 });
-// Off to another spot that suits its kind (a zander only where it is deep, a pike in the shallows).
+// Off somewhere else: a schooling fish to another spot that suits its kind (a zander only where it
+// is deep), a pike about its home area, a burbot to another spot.
 function leave(o) {
+  if (schooling(o.sp)) { plan(o, pickSpot(o.sp, o.tgt), true); return; }
   const h = HABITS[o.sp].home;
   if (h && o.hx !== undefined) {
-    // A pike stays in its home area.
     o.go = true; o.linger = rnd(...HABITS[o.sp].stay);
     [o.wx, o.wy] = onIce(o.hx + rnd(-h, h), o.hy + rnd(-h, h) * 0.7);
     return;
@@ -300,51 +306,92 @@ function leave(o) {
   const s = pickSpot(o.sp, o.tgt);
   o.tgt = s.i; o.go = true; o.linger = rnd(...HABITS[o.sp].stay); o.wx = s.x + rnd(-3, 3); o.wy = s.y + rnd(-2, 2);
 }
-// A school, or a lone fish, gets about the lake.
+// A lone fish gets about the lake.
 function travel(o, dt, pace) {
   const s = lake.spots[o.tgt], dx = o.wx - o.lx, dy = o.wy - o.ly, dist = Math.hypot(dx, dy);
-  const sp = (o.go ? 0.8 : o.kind === 'school' ? 0.45 : 0.28) * pace * (o.flee > 0 ? 2.6 : 1);
+  const sp = (o.go ? 3 : 1) * pace * (o.flee > 0 ? 6 : 1);
   if (dist > 0.05) { const st = Math.min(dist, sp * dt); o.lx += dx / dist * st; o.ly += dy / dist * st; if (Math.abs(dx) > 0.02) o.vx = Math.sign(dx); }
-  // A school turns slowly towards where it swims.
-  if (o.kind === 'school' && dist > 0.5) { let da = Math.atan2(dy, dx) - (o.dir || 0); da = Math.atan2(Math.sin(da), Math.cos(da)); o.dir = (o.dir || 0) + da * Math.min(1, dt * 0.6); }
   if (dist < 0.3) { o.go = false; wander(o, s); }
   if (!o.go && (o.linger -= dt) <= 0) leave(o);
-  o.flee = Math.max(0, (o.flee || 0) - dt);
 }
-// One step of a fish that is not busy with the jig: in its school's formation, or on its own.
+// The fish near each other, found through a grid of 6 m squares.
+const CELL = 6, grid = new Map();
+const cellOf = (px, py) => Math.floor(px / CELL) * 4096 + Math.floor(py / CELL);
+function buildGrid() {
+  grid.clear();
+  for (const f of pond) { const k = cellOf(f.lx, f.ly); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(f); }
+}
+function near(f, r, out) {
+  out.length = 0;
+  const cx = Math.floor(f.lx / CELL), cy = Math.floor(f.ly / CELL);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+    const a = grid.get((cx + i) * 4096 + cy + j);
+    if (a) for (const q of a) if (q !== f && Math.abs(q.lx - f.lx) < r && Math.abs(q.ly - f.ly) < r) out.push(q);
+  }
+  return out;
+}
+const nb = [];
+// A schooling fish steers: its plan, its neighbours, a pike near it, and a little of its own whim.
+function steer(f, dt) {
+  const h = HABITS[f.sp];
+  let dvx = 0, dvy = 0;
+  // Its plan: on its way, straight for it; at the spot, milling about it.
+  const gdx = f.gx - f.lx, gdy = f.gy - f.ly, gd = Math.hypot(gdx, gdy) || 1;
+  const pull = f.go ? 1 : Math.min(1, gd / 10) * 0.6;
+  dvx += gdx / gd * h.pace * pull; dvy += gdy / gd * h.pace * pull;
+  if (f.go && gd < 3) { f.go = false; f.linger = rnd(...h.stay); }
+  if (!f.go && (f.linger -= dt) <= 0) {
+    // Time to move on: often with the neighbours' newer plan, else a new one of its own.
+    const newer = near(f, 6, nb).filter(q => q.sp === f.sp && q.stamp > f.stamp);
+    if (newer.length) { const q = newer[0]; f.gx = q.gx; f.gy = q.gy; f.tgt = q.tgt; f.stamp = q.stamp; f.go = true; f.linger = rnd(...h.stay); }
+    else plan(f, pickSpot(f.sp, f.tgt), true);
+  }
+  // The neighbours: apart, alongside, together. A pike near: away from it, fast.
+  let n = 0, cx = 0, cy = 0, ax = 0, ay = 0, sx = 0, sy = 0, fx = 0, fy = 0;
+  for (const q of near(f, 6, nb)) {
+    const dx = f.lx - q.lx, dy = f.ly - q.ly, d = Math.hypot(dx, dy) || 0.01;
+    if (q.sp === 'hauki' && d < 7) { fx += dx / d * (7 - d); fy += dy / d * (7 - d); continue; }
+    if (q.sp !== f.sp || d > 5) continue;
+    if (n >= 14) continue;
+    n++; cx += q.lx; cy += q.ly; ax += q.mx || 0; ay += q.my || 0;
+    if (d < h.gap) { sx += dx / d * (h.gap - d); sy += dy / d * (h.gap - d); }
+    // A newer plan nearby is taken up on the way, so the school keeps together.
+    if (q.stamp > f.stamp && Math.random() < dt * 0.5) { f.gx = q.gx; f.gy = q.gy; f.tgt = q.tgt; f.stamp = q.stamp; f.go = q.go; }
+  }
+  if (n) { dvx += (cx / n - f.lx) * 0.12 + (ax / n) * 0.6; dvy += (cy / n - f.ly) * 0.12 + (ay / n) * 0.6; }
+  dvx += sx * 0.9 + Math.sin(playT * 0.6 + f.id * 2.1) * 0.08; dvy += sy * 0.9 + Math.cos(playT * 0.5 + f.id * 1.7) * 0.08;
+  if (fx || fy) { f.flee = 2; dvx += fx * 0.6; dvy += fy * 0.6; }
+  // Turn towards it gradually, no faster than the fish can swim.
+  const max = f.flee > 0 ? 2 : h.pace * 1.8;
+  const k = Math.min(1, dt * 1.5);
+  f.mx = (f.mx || 0) + (dvx - (f.mx || 0)) * k; f.my = (f.my || 0) + (dvy - (f.my || 0)) * k;
+  const v = Math.hypot(f.mx, f.my);
+  if (v > max) { f.mx *= max / v; f.my *= max / v; }
+}
+// One step of a fish that is not busy with the jig.
 function swim(f, dt) {
-  const sc = schoolOf(f);
-  if (sc) {
-    // Its place in the school, turned the way the school swims: the school closes up on the move
-    // or fleeing and spreads out when it rests. Each fish wanders about its place on its own.
-    const k = sc.flee > 0 ? 0.5 : sc.go ? 0.7 : 1, cs = Math.cos(sc.dir || 0), sn = Math.sin(sc.dir || 0);
-    const ox = f.ox * k + Math.sin(playT * 0.23 + f.id) * 1.6, oy = f.oy * k + Math.cos(playT * 0.19 + f.id * 1.3) * 1.1;
-    f.wx = sc.lx + ox * cs - oy * sn; f.wy = sc.ly + ox * sn + oy * cs;
-    const dx = f.wx - f.lx, dy = f.wy - f.ly, dist = Math.hypot(dx, dy);
-    if (dist > 0.02) { const st = Math.min(dist, (0.25 + dist * 1.5) * dt); f.lx += dx / dist * st; f.ly += dy / dist * st; if (Math.abs(dx) > 0.05) f.vx = Math.sign(dx); }
-    f.tgt = sc.tgt; f.go = sc.go;
+  if (schooling(f.sp)) {
+    // Steering five times a second is plenty for a fish, and light on a phone.
+    if (f.steerT === undefined || (f.steerT -= dt) <= 0) { steer(f, 0.2); f.steerT = 0.2 * (0.8 + 0.4 * hash(f.id)); }
+    [f.lx, f.ly] = onIce(f.lx + f.mx * dt, f.ly + f.my * dt);
+    if (Math.abs(f.mx) > 0.02) f.vx = Math.sign(f.mx);
+    // For the guests: where it will be in a second.
+    f.wx = f.lx + f.mx; f.wy = f.ly + f.my;
+    f.flee = Math.max(0, (f.flee || 0) - dt);
   } else {
     travel(f, dt, HABITS[f.sp].pace);
-    // A pike in wait darts at a school passing close.
-    if (f.sp === 'hauki' && f.dart > 0) { f.dart -= dt; const st = 2.6 * dt; const d = Math.hypot(f.px - f.lx, f.py - f.ly) || 1; f.lx += (f.px - f.lx) / d * Math.min(d, st); f.ly += (f.py - f.ly) / d * Math.min(d, st); }
-  }
-  f.d += (homeAt(f) + (f.school ? f.ox * 0.15 : 0) - f.d) * Math.min(1, dt * 0.4);
-}
-// The schools keep away from a pike: one coming within reach scatters off to another spot, and the
-// pike darts at it.
-function fearPike() {
-  for (const p of pond) {
-    if (p.sp !== 'hauki' || p.look) continue;
-    for (const sc of schools) {
-      if (sc.flee > 0 || Math.hypot(sc.lx - p.lx, sc.ly - p.ly) > 7) continue;
-      sc.flee = 4; leave(sc);
-      if (!(p.dart > 0) && Math.random() < 0.5) { p.dart = 0.8; p.px = sc.lx; p.py = sc.ly; }
+    f.flee = Math.max(0, (f.flee || 0) - dt);
+    // A pike in wait darts at a fish passing close.
+    if (f.sp === 'hauki') {
+      if (f.dart > 0) { f.dart -= dt; const d = Math.hypot(f.px - f.lx, f.py - f.ly) || 1, st = 2.6 * dt; f.lx += (f.px - f.lx) / d * Math.min(d, st); f.ly += (f.py - f.ly) / d * Math.min(d, st); }
+      else if (Math.random() < dt * 0.2) { const q = near(f, 5, nb).find(o => o.sp !== 'hauki'); if (q) { f.dart = 0.8; f.px = q.lx; f.py = q.ly; } }
     }
   }
+  f.d += (homeAt(f) - f.d) * Math.min(1, dt * 0.4);
 }
-function stepPond(dt, guest) {
-  if (!guest) { for (const sc of schools) travel(sc, dt, HABITS[sc.sp].pace); fearPike(); }
-}
+// The grid is rebuilt as often as the fish steer (five times a second): enough, and cheap on a phone.
+let gridT = 0;
+function stepPond(dt, guest) { if (!guest && (gridT -= dt) <= 0) { gridT = 0.2; buildGrid(); } }
 
 // ---------- Shared fish in a room ----------
 // The host owns the lake's fish: it swims them and sends them to every phone about once a second
@@ -372,7 +419,8 @@ function caught(f) {
 }
 // A guest's fish between the host's messages: on towards where it is going, at its pace.
 function follow(f, dt) {
-  const dx = f.wx - f.lx, dy = f.wy - f.ly, dist = Math.hypot(dx, dy), sp = (f.go ? 1.1 : 0.28) * (f.flee > 0 ? 2.6 : 1);
+  // A schooling fish's point is where the host has it in a second: it gets there in about that.
+  const dx = f.wx - f.lx, dy = f.wy - f.ly, dist = Math.hypot(dx, dy), sp = schooling(f.sp) ? Math.max(0.3, dist) : (f.go ? 1.1 : 0.28) * (f.flee > 0 ? 2.6 : 1);
   if (dist > 0.05) { const st = Math.min(dist, sp * dt); f.lx += dx / dist * st; f.ly += dy / dist * st; if (Math.abs(dx) > 0.02) f.vx = Math.sign(dx); }
   f.d += (homeAt(f) - f.d) * Math.min(1, dt * 0.4);
 }
@@ -697,7 +745,7 @@ function twitch() {
   return 'off';
 }
 // A fish frightened or let go swims off to another place.
-function scare(f, t) { f.int = 0; f.look = false; f.flee = t; f.school = 0; leave(f); release(f, true); }
+function scare(f, t) { f.int = 0; f.look = false; f.flee = t; leave(f); release(f, true); }
 function bite(f) {
   phase = 'bite'; phaseT = 0; biter = f; f.lx = spot.x + 0.15; f.ly = spot.y; f.x = 0.15; f.d = jigD;
   S.play('osuma', { vol: 0.7 });
@@ -837,7 +885,7 @@ function cpuAnglers(dt) {
       // A while at one hole, or long without a fish in sight: on to near another spot.
       if ((r.t -= dt) <= 0 || r.empty > 20) {
         // Old hands: they head for where a school was last seen, the better ones more surely.
-        const sc = schools[Math.floor(Math.random() * schools.length)], sp = lake.spots[Math.floor(Math.random() * lake.spots.length)];
+        const fishy = pond.filter(q => schooling(q.sp)), sc = fishy[Math.floor(Math.random() * fishy.length)], sp = lake.spots[Math.floor(Math.random() * lake.spots.length)];
         const to = sc && Math.random() < 0.4 + 0.08 * Math.min(level, 6) ? [sc.lx, sc.ly] : [sp.x, sp.y];
         [r.tx, r.ty] = onIce(to[0] + rnd(-3, 3), to[1] + rnd(-2, 2));
         r.st = 'walk'; r.hole = null;
@@ -1438,6 +1486,8 @@ function drawIce() {
       x.fillStyle = SPECIES[f.sp].col; x.globalAlpha = 0.8;
       x.beginPath(); x.arc(px, py, Math.max(2.5, (0.25 + 0.5 * Math.cbrt(f.g / 1000)) * icePx), 0, 7); x.fill();
       x.globalAlpha = 1;
+      // A pike or a burbot, alone, marked with its letter.
+      if (!schooling(f.sp)) { x.font = '800 11px system-ui'; x.textAlign = 'center'; x.fillStyle = '#1d3555'; x.fillText(f.sp === 'hauki' ? 'H' : 'M', px, py - 7); }
       if (f.giant) { x.strokeStyle = '#e5383b'; x.lineWidth = 2; x.beginPath(); x.arc(px, py, 10, 0, 7); x.stroke(); }
     }
     x.font = '700 11px system-ui'; x.textAlign = 'left'; x.fillStyle = '#e5383b'; x.fillText('DEBUG: kalat näkyvät', safeL + 10, baitBtn.y + baitBtn.h + 16);
