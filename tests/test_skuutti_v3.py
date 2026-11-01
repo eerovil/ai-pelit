@@ -263,7 +263,8 @@ def test_turning_the_phone_mid_run_keeps_the_run(site, context):
     before = page.evaluate("[phase, P.s, P.h, points, timeLeft]")
     turn(page, {"width": 740, "height": 360})
     assert page.evaluate("[phase, P.s, P.h, points, timeLeft]") == before
-    page.wait_for_function("wide && W === 740")
+    # Checked on a timer: after the turn this headless page drew no frame to check on (seen on main, #337).
+    page.wait_for_function("wide && W === 740", polling=100)
     page.evaluate("draw()")
 
 
