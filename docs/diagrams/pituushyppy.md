@@ -15,7 +15,10 @@ flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]
   K --> T[Tulostaulu: kierros, sijat, viimeisin ja paras]
   T --> Q{Kenen vuoro?}
-  Q -- Tietokone tai poissa oleva --> CPU[Tietokone hyppää heti]
+  Q -- Tietokone --> CPU[Tietokone hyppää heti]
+  Q -- Poissa oleva kaveri, ennen v8 --> CPU
+  Q -- Poissa oleva kaveri, v8 --> AWAY["Poissa oleva kaveri, v8: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa"]
+  AWAY --> NX
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> R[Vauhdinotto: vasen, oikea vuorotellen]
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama lento]
@@ -47,7 +50,7 @@ flowchart TD
   TAP -- Yksin --> M
   TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,A,F,T blue
-  class CPU,WT violet
+  class CPU,WT,AWAY violet
   class Q,LN,RL,AU,L,NX,TAP amber
   class K,D,DR,HB,CUT,AUTO teal
   class X rose
@@ -69,7 +72,8 @@ flowchart TD
 - **Kisa: 12 hyppääjää, arvottu järjestys**: `newComp()` (v2: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js` (from v8 `yleisurheilu-5/kisa.js`, #297), from v5 `yleisurheilu-2/kisa.js`, from v6 `yleisurheilu-3/kisa.js`, with `base`, `spread` and `init` from the game): the players, then computer jumpers up to twelve (`FIELD`), each with a skill around `base(level)` metres (5.20 m at level 1, 25 cm more per level up to 7.00 m); the order of rounds 1–3 is drawn once (`order0`), and a seed (`seed`) gives every jump its wind.
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()` (v2: the library's `K.drawBoard()`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best jump, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` (v2: the library's) jumps for every computer jumper up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's, with the wind for it (`windFor(seq)`, −1.5 to +2.5 m/s, shown as "Tuuli").
-- **Tietokone hyppää heti**: `cpuMark()`: the skill plus a scatter of 20 cm and 5 cm per m/s of wind, a foul about one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's jumps to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
+- **Tietokone hyppää heti**: `cpuMark()`: the skill plus a scatter of 20 cm and 5 cm per m/s of wind, a foul about one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's jumps to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v8 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
+- **Poissa oleva kaveri, v8: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa**: from v8 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (-1 (X)) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
 - **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the jumper goes (as in Keihäänheitto and Aitajuoksu), the same foot twice slows; about 8.3 m/s at eight taps a second. v3: `runLegs()` in `drawJumper()` (`games/pituushyppy/v3/index.html`) bends the knee as each leg swings forward and keeps it near straight as it pushes back; v1–v2 had it the other way round, so the jumper looked to run backwards. The bar in the score panel shows the speed; the green part of the runway is the last 120 ms of running before the line at the speed now (`ZONE`), so with the grace past the line the clean take-off zone is 200 ms; an earlier release is legal but shorter, as the jump is measured from the line, the yellow "merkki" 2.8 m before it is where to start holding. v2 (Keihäänheitto v3's controls, #166): no "merkki"; a yellow zone at the speed now (`zones()`) shows where to start holding so the angle is green at the line, and a strip under the runway (`drawStrip()`) shows the whole run-up from the first step: you, the yellow and the green part.
 - **Yli viivan ja armon ilman ponnistusta?**: `step()` and `overLimit()`: timing is measured in time, not distance, and holding Hyppää never fouls by itself. The foot may pass the line by up to 80 ms of running (`GRACE`, at least 8 cm); a release within it takes off at the line (`release()`), so it is legal and measured from the line. Only running on past that, holding or not, is a foul, "Yliastuttu", with the shoe's print in the plasticine. v2: still holding when the foot reaches the line takes off by itself, from the line (`leap()`), so only running on without holding fouls. In a room 45 s with no tap (`TURN_MAX`, counted in `th.idle`) is a foul, "Aika loppui".
 - **Pidä Hyppää: v1 merkistä, v2 keltaiselta alueelta; kulma nousee**: `startAim()`: holding the middle pad (upright; v2: a full-width bar above the two feet, 18 px apart, `PAD_GAP`, and a touch in the gap does nothing, upright and sideways; v4, #177: 44 px apart, and the gap and the jump's bottom 12 px, `JUMP_EDGE`, are the foot under it, upright and sideways, so a thumb drumming the feet does not jump), the top pad of either side column or anywhere on the scene (sideways) raises the take-off angle from 5° at 45° a second (`AIM_RATE`); the dial beside the jumper shows it, green from 16° to 24° (`GREEN`), the angles within about 20 cm of the best. The jumper crouches and keeps most of the speed.
