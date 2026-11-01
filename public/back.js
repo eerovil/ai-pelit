@@ -165,9 +165,9 @@
     if (e.key !== LEVEL && e.key !== MUTE) return;
     readSound(); applyGain(); drawSound();
   });
-  // The 🔊 chip is drawn inside the back chip's own box, on its inner side, so a game that keeps its
-  // HUD clear of #ai-pelit-back (Orava v2–v4 measure it sideways) keeps it clear of 🔊 too.
-  var inner = horizontal === 'right' ? 'left' : 'right';
+  // The chip opens a small menu (#336, Eero's choice): a big back button and the game volume. No
+  // new chip, so nothing in a published version is covered (Jään alla v2 and Orava v2–v4 lay their
+  // sideways HUD out right beside this one).
   var box = document.createElement('div');
   box.id = 'ai-pelit-kulma';
   box.style.cssText = [
@@ -175,41 +175,40 @@
     vertical + ':calc(env(safe-area-inset-' + vertical + ', 0px) + 6px)',
     horizontal + ':calc(env(safe-area-inset-' + horizontal + ', 0px) + 6px)',
   ].join(';');
-  // all:unset first: a game's own button and link styles must not reach these.
-  var CHIP = ['all:unset', 'box-sizing:border-box', 'display:inline-block', 'color:#fff',
-    'font:600 13px/1 system-ui,sans-serif', 'text-decoration:none', 'touch-action:manipulation'];
   var a = document.createElement('a');
   a.href = shelf + (slug ? '#/' + slug : '');
   a.textContent = '‹ Pelit';
-  a.setAttribute('aria-label', 'Takaisin pelilistaan');
+  a.setAttribute('aria-label', 'Valikko: takaisin pelilistaan, pelin äänet');
+  a.setAttribute('aria-expanded', 'false');
   a.id = 'ai-pelit-back';
-  a.style.cssText = CHIP.concat(['padding:6px 10px', 'padding-' + inner + ':46px', 'border-radius:999px',
-    'background:rgba(0,0,0,.45)']).join(';');
-  var sound = document.createElement('button');
-  sound.type = 'button';
-  sound.id = 'ai-pelit-aani';
-  sound.setAttribute('aria-expanded', 'false');
-  sound.style.cssText = CHIP.concat(['position:absolute', 'top:0', 'bottom:0', inner + ':0', 'width:38px',
-    'text-align:center', 'cursor:pointer', 'border-' + horizontal + ':1px solid rgba(255,255,255,.3)']).join(';');
-  // The setting: a slider and a mute, opened from the 🔊, below it (above it at the bottom).
+  // all:unset first: a game's own button and link styles must not reach these.
+  a.style.cssText = [
+    'all:unset', 'box-sizing:border-box', 'display:inline-block', 'padding:6px 10px', 'border-radius:999px',
+    'background:rgba(0,0,0,.45)', 'color:#fff', 'font:600 13px/1 system-ui,sans-serif', 'cursor:pointer',
+    'touch-action:manipulation',
+  ].join(';');
+  // The menu, below the chip (above it when the chip is at the bottom).
   var panel = document.createElement('div');
-  panel.id = 'ai-pelit-aani-paneeli';
+  panel.id = 'ai-pelit-valikko';
   panel.style.cssText = [
     'all:unset', 'display:none', 'position:fixed', 'z-index:2147483647', 'box-sizing:border-box', 'width:230px', 'padding:12px 14px',
     'border-radius:14px', 'background:#16181f', 'color:#fff', 'box-shadow:0 6px 24px rgba(0,0,0,.4)',
     'font:14px/1.3 system-ui,sans-serif', 'touch-action:manipulation',
-    vertical + ':calc(env(safe-area-inset-' + vertical + ', 0px) + 44px)',
+    vertical + ':calc(env(safe-area-inset-' + vertical + ', 0px) + 40px)',
     horizontal + ':calc(env(safe-area-inset-' + horizontal + ', 0px) + 6px)',
   ].join(';');
+  var BIG = 'all:unset;box-sizing:border-box;display:block;text-align:center;cursor:pointer;width:100%;padding:10px;border-radius:10px;' +
+    'color:#fff;font:600 15px system-ui,sans-serif;';
   panel.innerHTML =
-    '<div style="display:flex;margin:0;justify-content:space-between;font-weight:700"><span>Pelin äänet</span><span id="ai-pelit-aani-luku"></span></div>' +
+    '<a id="ai-pelit-takaisin" style="' + BIG + 'background:#2f6fd6">‹ Takaisin pelilistaan</a>' +
+    '<div style="display:flex;margin:14px 0 0;justify-content:space-between;font-weight:700"><span>Pelin äänet</span><span id="ai-pelit-aani-luku"></span></div>' +
     '<input id="ai-pelit-aani-liuku" type="range" min="0" max="100" step="5" aria-label="Pelin äänenvoimakkuus" ' +
-    'style="display:block;box-sizing:border-box;width:100%;margin:12px 0;padding:0;border:0;box-shadow:none;background:none;accent-color:#7cc4ff;height:28px">' +
-    '<button id="ai-pelit-aani-mykista" type="button" style="all:unset;box-sizing:border-box;display:block;text-align:center;cursor:pointer;width:100%;padding:9px;border:0;border-radius:10px;' +
-    'background:rgba(255,255,255,.14);color:#fff;font:600 14px system-ui,sans-serif"></button>' +
+    'style="display:block;box-sizing:border-box;width:100%;margin:10px 0;padding:0;border:0;box-shadow:none;background:none;accent-color:#7cc4ff;height:28px">' +
+    '<button id="ai-pelit-aani-mykista" type="button" style="' + BIG + 'padding:9px;font-size:14px;background:rgba(255,255,255,.14)"></button>' +
     '<div style="margin:8px 0 0;font-size:12px;opacity:.75">Kavereiden puhe ei hiljene.</div>';
+  var home = panel.querySelector('#ai-pelit-takaisin');
+  home.href = a.href;
   box.appendChild(a);
-  box.appendChild(sound);
   [box, panel].forEach(function (el) {
     ['pointerdown', 'pointerup', 'pointermove', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(function (type) {
       el.addEventListener(type, function (e) { e.stopPropagation(); }, { passive: true });
@@ -219,8 +218,6 @@
   var muteBtn = panel.querySelector('#ai-pelit-aani-mykista');
   function drawSound() {
     var off = muted || level === 0;
-    sound.textContent = off ? '🔇' : level < 50 ? '🔉' : '🔊';
-    sound.setAttribute('aria-label', off ? 'Pelin äänet: pois' : 'Pelin äänet: ' + level + ' %');
     slider.value = String(level);
     panel.querySelector('#ai-pelit-aani-luku').textContent = muted ? 'Mykistetty' : level + ' %';
     muteBtn.textContent = off ? '🔊 Äänet päälle' : '🔇 Mykistä';
@@ -246,9 +243,8 @@
   });
   function openPanel(open) {
     panel.style.display = open ? 'block' : 'none';
-    sound.setAttribute('aria-expanded', open ? 'true' : 'false');
+    a.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
-  sound.addEventListener('click', function () { openPanel(panel.style.display === 'none'); });
   // A tap anywhere else closes it.
   window.addEventListener('pointerdown', function (e) {
     if (panel.style.display !== 'none' && !box.contains(e.target) && !panel.contains(e.target)) openPanel(false);
@@ -256,7 +252,7 @@
   // A tap inside a frame (Ottelu's events) never reaches this window; it only takes the focus.
   window.addEventListener('blur', function () { openPanel(false); });
   drawSound();
-  // The chip and the phone's own back both go up, to the game's page, never back into a game
+  // The menu's back button and the phone's own back both go up, to the game's page, never back into a game
   // (#68). When the shelf opened this game it left the game's page just below it in the history
   // (app.js marks that in sessionStorage), so the chip steps back to it. Otherwise (a link, a
   // home-screen shortcut, a reload into a room) the chip takes this page's place, so back from
@@ -270,13 +266,21 @@
       history.replaceState(state, '');
     }
   } catch (e) {}
-  a.addEventListener('click', function (e) {
+  function goUp(e) {
     // A new tab (Ctrl, Cmd, Shift, middle button) opens the link as it is.
-    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return false;
     e.preventDefault();
     if (history.state && history.state.aiPelitUp) history.back();
     else location.replace(a.href);
+    return true;
+  }
+  // The chip opens and closes the menu; the menu's button goes up.
+  a.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    openPanel(panel.style.display === 'none');
   });
+  home.addEventListener('click', function (e) { if (goUp(e)) openPanel(false); });
   // Play full screen: the installed app already is (manifest "display": "fullscreen"); in a browser
   // tab, or an app installed before that, the first tap asks for it. Only a pointerup, touchend or
   // click lets a page go full screen, and a tap after the player left full screen asks again.
