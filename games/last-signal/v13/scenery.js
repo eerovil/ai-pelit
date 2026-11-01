@@ -191,7 +191,7 @@ function drawAurora() {
     ctx.fillStyle = '#d9dee2'; ctx.fillRect(A.x0, r, A.x1 - A.x0, f0 - r);
     ctx.fillStyle = '#c2484a'; ctx.fillRect(A.x0, r + 0.6, A.x1 - A.x0, 0.5); ctx.fillRect(A.x0, f1 - 0.2, A.x1 - A.x0, 0.25); ctx.fillRect(A.x0, f2 - 0.2, A.x1 - A.x0, 0.25);
     for (const [fy, lit] of [[f2, '#ffe8a8'], [f1, null], [f0, '#ffe8a8']]) for (let x = A.x0 + 3; x < A.x1 - 2; x += 6) {
-      const gh = !lit && x < 1150;  // the greenhouse windows on the middle floor
+      const gh = !lit && x < A.x0 + 28;  // the greenhouse windows on the middle floor
       ctx.fillStyle = gh ? (green ? '#8fe07a' : '#5a4630') : lit || '#ffe8a8';
       ctx.fillRect(x, fy - 2.4, gh ? 4.4 : 2.2, 1.2);
     }
@@ -223,30 +223,34 @@ function drawAurora() {
     ctx.moveTo(x - 0.32, hi); ctx.lineTo(x - 0.32, lo); ctx.moveTo(x + 0.32, hi); ctx.lineTo(x + 0.32, lo); ctx.stroke();
     for (let y = hi + 0.2; y < lo; y += 0.4) { ctx.beginPath(); ctx.moveTo(x - 0.32, y); ctx.lineTo(x + 0.32, y); ctx.stroke(); }
   }
-  // the dock: a winch over the pool, diving gear on the wall; the pump room's broken pipes (whole once fixed)
+  // (the furniture stands by the rooms of AUR, measured from its west wall X)
+  const X = A.x0;
+  // the dock: a winch over the pool, diving gear on the wall
   ctx.fillStyle = '#56606a'; ctx.fillRect((p0 + p1) / 2 - 0.2, f1 + 0.25, 0.4, 1.4);
   ctx.strokeStyle = '#3a4248'; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.moveTo((p0 + p1) / 2, f1 + 1.6); ctx.lineTo((p0 + p1) / 2, f0 - 1.8); ctx.stroke();
-  for (let n = 0; n < 3; n++) { ctx.fillStyle = ['#e0b020', '#c96a2a', '#e0b020'][n]; ctx.fillRect(A.x0 + 2 + n * 1.5, f0 - 2.6, 0.9, 1.4); }
+  for (let n = 0; n < 3; n++) { ctx.fillStyle = ['#e0b020', '#c96a2a', '#e0b020'][n]; ctx.fillRect(X + 2 + n * 1.5, f0 - 2.6, 0.9, 1.4); }
+  // the hydroponics' pump at the end of its room: the pipes, and the pump (rusty brown until the new one is in)
   ctx.strokeStyle = '#6a7a84'; ctx.lineWidth = 0.25; ctx.beginPath();
-  ctx.moveTo(1169, f0 - 0.5); ctx.lineTo(1169, f1 + 0.4); ctx.moveTo(1171, f0 - 0.5); ctx.lineTo(1171, f0 - 2.4); ctx.stroke();
-  ctx.fillStyle = green ? '#3a7ab8' : '#5a4a3a'; ctx.fillRect(1170, f0 - 1.6, 1.4, 1.2);
+  ctx.moveTo(X + 26, f1 - 0.4); ctx.lineTo(X + 26, f2 + 0.6); ctx.lineTo(X + 2, f2 + 0.6); ctx.moveTo(X + 28, f1 - 0.4); ctx.lineTo(X + 28, f1 - 2.6); ctx.stroke();
+  ctx.fillStyle = green ? '#3a7ab8' : '#5a4a3a'; ctx.fillRect(X + 26.3, f1 - 1.6, 1.5, 1.4);
+  if (!green) { ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(X + 26.4, f1 - 1.5); ctx.lineTo(X + 27.7, f1 - 0.3); ctx.stroke(); }
   // hydroponics: racks of plants under grow lights
   for (let rack = 0; rack < 3; rack++) {
-    const x = 1119 + rack * 9;
+    const x = X + 2 + rack * 8;
     ctx.fillStyle = '#6b7a84'; for (const y of [f1 - 1.1, f1 - 2.5]) ctx.fillRect(x, y, 7, 0.15);
-    ctx.fillStyle = green ? 'rgba(255,120,220,.35)' : 'rgba(255,120,220,.08)'; ctx.fillRect(x, f2 + 0.3, 7, 0.25);
+    ctx.fillStyle = green ? 'rgba(255,120,220,.35)' : 'rgba(255,120,220,.08)'; ctx.fillRect(x, f2 + 0.9, 7, 0.25);
     for (const y of [f1 - 1.1, f1 - 2.5]) for (let k = 0; k < 7; k++) {
       ctx.fillStyle = green ? (k % 2 ? '#5fc04a' : '#3f9a3a') : (k % 2 ? '#7a6040' : '#5a4630');
       ctx.beginPath(); ctx.ellipse(x + 0.5 + k, y - (green ? 0.35 : 0.15), 0.4, green ? 0.35 : 0.15, 0, 0, 7); ctx.fill();
     }
   }
-  // the mess: a table, a stove; the control room: screens and the radio; the quarters: bunks
-  ctx.fillStyle = '#6b5236'; ctx.fillRect(1158, f1 - 0.85, 4, 0.12); ctx.fillRect(1158.3, f1 - 0.75, 0.12, 0.75); ctx.fillRect(1161.6, f1 - 0.75, 0.12, 0.75);
-  ctx.fillStyle = '#3a3a3a'; ctx.fillRect(1170, f1 - 0.9, 1, 0.9);
-  ctx.fillStyle = '#123'; ctx.fillRect(1119, f2 - 2.2, 6, 1.2); ctx.fillStyle = '#5fe0a0'; ctx.fillRect(1119.3, f2 - 2, 2.4, 0.8); ctx.fillStyle = '#5fb0ff'; ctx.fillRect(1122.2, f2 - 2, 2.4, 0.8);
-  ctx.fillStyle = '#6b4a2a'; ctx.fillRect(1119, f2 - 0.9, 6, 0.15);
-  ctx.fillStyle = '#5a4a3a'; for (const x of [1148, 1156, 1164]) { ctx.fillRect(x, f2 - 0.55, 4.5, 0.15); ctx.fillRect(x, f2 - 1.95, 4.5, 0.15); }
-  ctx.fillStyle = '#9fb6c9'; for (const x of [1148, 1156, 1164]) { ctx.fillRect(x + 0.1, f2 - 0.78, 4.2, 0.24); ctx.fillRect(x + 0.1, f2 - 2.18, 4.2, 0.24); }
+  // the mess: a table and a stove; the radio room: screens and the radio; the quarters: bunks
+  ctx.fillStyle = '#6b5236'; ctx.fillRect(X + 33, f1 - 0.85, 4, 0.12); ctx.fillRect(X + 33.3, f1 - 0.75, 0.12, 0.75); ctx.fillRect(X + 36.6, f1 - 0.75, 0.12, 0.75);
+  ctx.fillStyle = '#3a3a3a'; ctx.fillRect(X + 47, f1 - 0.9, 1, 0.9);
+  ctx.fillStyle = '#123'; ctx.fillRect(X + 3, f2 - 2.2, 6, 1.2); ctx.fillStyle = '#5fe0a0'; ctx.fillRect(X + 3.3, f2 - 2, 2.4, 0.8); ctx.fillStyle = '#5fb0ff'; ctx.fillRect(X + 6.2, f2 - 2, 2.4, 0.8);
+  ctx.fillStyle = '#6b4a2a'; ctx.fillRect(X + 3, f2 - 0.9, 6, 0.15);
+  ctx.fillStyle = '#5a4a3a'; for (const x of [X + 35, X + 43]) { ctx.fillRect(x, f2 - 0.55, 4.5, 0.15); ctx.fillRect(x, f2 - 1.95, 4.5, 0.15); }
+  ctx.fillStyle = '#9fb6c9'; for (const x of [X + 35, X + 43]) { ctx.fillRect(x + 0.1, f2 - 0.78, 4.2, 0.24); ctx.fillRect(x + 0.1, f2 - 2.18, 4.2, 0.24); }
   // the survivors
   for (const p of CREW13) survivor(p.x, A.floors[p.fl], p.col, p.lead && Math.abs(walker.x - p.x) < 8 && walker.fl === p.fl);
   // room names

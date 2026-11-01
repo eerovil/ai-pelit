@@ -836,3 +836,42 @@ def test_greens_not_yet_brought_home_go_into_the_stores_after_a_reload(site, bro
     page.evaluate("G.s.day++; G.mode = 'ice'; act('greens'); act('home')")
     assert page.evaluate("[G.s.inv.ruoka, G.s.tuore]") == [food + 4, 0]
     assert page.errors == []
+
+
+# Records every rectangle and ellipse drawAurora() draws from inside, with its colour.
+DRAWN = """(() => { const out = [], f = ctx.fillRect, e = ctx.ellipse;
+  ctx.fillRect = function (x, y, w, h) { out.push([x, x + w, String(ctx.fillStyle)]); return f.apply(this, arguments); };
+  ctx.ellipse = function (x, y) { out.push([x, x, String(ctx.fillStyle)]); return e.apply(this, arguments); };
+  ctx.setTransform(1, 0, 0, 1, 0, 0); drawAurora(); ctx.fillRect = f; ctx.ellipse = e; return out; })()"""
+
+
+def test_aurora_s_furniture_stands_inside_it_and_its_plants_turn_green_with_the_pump(site, browser):
+    page = game(site, browser)
+    page.evaluate("G.mode = 'ice'; walker.x = 270; walker.y = AUR.floors[1]; walker.fl = 1")
+    before = page.evaluate(DRAWN)
+    lo, hi = page.evaluate("[AUR.x0 - 0.5, AUR.x1 + 0.5]")
+    assert len(before) > 80
+    # (the survivors are drawn round their own spot: only world-placed shapes count)
+    assert [d for d in before if d[0] > 100 and (d[0] < lo or d[1] > hi)] == []
+    assert not any(c in ("#5fc04a", "#3f9a3a") for *_, c in before)
+    page.evaluate("G.s.flags.pumppu = 1")
+    after = page.evaluate(DRAWN)
+    assert sum(c in ("#5fc04a", "#3f9a3a") for *_, c in after) >= 40
+    assert page.errors == []
+
+
+def test_a_crate_the_player_left_at_v12_s_shelf_station_moves_into_aurora_s_store(site, browser):
+    crates = [{"id": "pinta:c1", "k": "osa", "n": 1, "w": "ice", "x": 180, "y": -2.8, "vy": 0, "f": 0},
+              {"id": "pinta:c2", "k": "ruoka", "n": 3, "w": "ice", "x": 128, "y": -2.8},
+              {"id": "polaris:7,4", "k": "tarvike", "n": 2, "w": "ice", "x": 600, "y": -0.8, "vy": 0, "f": 0}]
+    page = v4.open_game(site, browser)
+    page.evaluate(f"localStorage.setItem('{SAVE12}', {json.dumps(json.dumps(v12_save(crates)))}); menu()")
+    page.click("#jatka")
+    page.evaluate("G.hold = true; closeCard(); run(() => G.s.crates.some(c => c.f), 10)")
+    got = page.evaluate("""(() => { const c = id => G.s.crates.find(c => c.id === id);
+      return [[c('pinta:c1').n, bldAt(c('pinta:c1').x) === AUR, c('pinta:c1').y <= AUR.floors[0] + 0.01 && c('pinta:c1').y > AUR.floors[1] && !c('pinta:c1').f],
+        [c('pinta:c2').n, c('pinta:c2').x > 240], [c('polaris:7,4').x, c('polaris:7,4').n]]; })()""")
+    assert got[0] == [1, True, True]                      # the player's half-used crate, in Aurora's store (on its pile)
+    assert got[1][1] is True                              # the untouched one is Aurora's own again
+    assert got[2] == [600, 2]                             # one left out on the sea ice stays where it was
+    assert page.errors == []

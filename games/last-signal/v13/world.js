@@ -659,7 +659,11 @@ function load() {
         // of them is a spare part.
         // (a save from v11 or older got v13's own crates just above: nothing to move)
         const moved = c => !s.w12 || c.w !== 'sea' || 'vy' in c || 'hw' in c;
-        const kept = (o.crates || []).filter(c => moved(c) && !(c.w === 'ice' && c.x < 240)).map(c => c.w === 'sea' ? { ...c, f: 1 } : c);
+        // v12's station on the shelf is gone: its crates the player never touched are replaced by Aurora's own; one the
+        // player moved there (lifted and let go) goes, as it is, into Aurora's store by the dock.
+        let shelfN = 0;
+        const kept = (o.crates || []).filter(c => moved(c) && !(c.w === 'ice' && c.x < 240 && !('vy' in c || 'hw' in c)))
+          .map(c => c.w === 'ice' && c.x < 240 ? { ...c, x: 292.6 + (shelfN++ % 6), y: AUR.floors[0] - 2, f: 1 } : c.w === 'sea' ? { ...c, f: 1 } : c);
         const left = {};
         for (const c of o.crates || []) if (!moved(c)) { const site = c.id.split(':')[0]; left[site] = left[site] || {}; left[site][c.k] = (left[site][c.k] || 0) + 1; }
         const fresh13 = CRATES0.filter(c => !kept.some(k => k.id === c.id) && (c.w === 'sea' || c.id.startsWith('pinta:'))).map(c => ({ ...c }));
