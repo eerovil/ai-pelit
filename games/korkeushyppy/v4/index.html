@@ -363,11 +363,14 @@ function airTap() {
 }
 function landed() {
   const f = th.f;
-  th.phase = 'land'; th.t = 0;
+  // Another phone may land its own copy of the jump before the jumper's 'done' arrives; then
+  // 'done' only puts the jumper's result in: no second thud, and the landing keeps its time.
+  const again = th.phase === 'land';
+  th.phase = 'land'; if (!again) th.t = 0;
   th.res = { ok: !f.fail, min: f.min, why: f.fail ? whyFail(f) : '' };
   th.mark = th.res.ok ? 'O' : 'X'; th.why = th.res.why;
   // The jumper lands on the mat, on every phone.
-  AU.play('tomahdys', { vol: th.mine ? 0.9 : 0.5 });
+  if (!again) AU.play('tomahdys', { vol: th.mine ? 0.9 : 0.5 });
   if (th.mine) {
     if (isNet()) K.send({ t: 'done', a: [f.d, f.v, f.archT, f.kickT] });
     if (th.res.ok) {

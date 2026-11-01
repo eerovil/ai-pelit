@@ -146,13 +146,29 @@ def test_in_a_room_the_watching_phone_hears_the_bar_and_the_mat_and_after_a_relo
         other.wait_for_function("heard.some(h => h[0] === 'tomahdys')", timeout=5000)
         # The jumper's crowd (ohhoo) is its own phone's; every phone hears the bar and the mat.
         assert played(other) == ["rima", "tomahdys"]
-        # The watching phone reloads mid-meet: after its next tap the sounds play again.
-        other.reload()
-        other.evaluate(v2.HELPERS)
-        other.wait_for_function("K.comp", timeout=10000)
-        other.mouse.click(180, 150)
-        other.wait_for_function("['rima', 'tomahdys'].every(AiPelitAanet.ready)", timeout=10000)
-        other.wait_for_function("AiPelitAanet.play('tomahdys', { vol: 0 })", timeout=5000)
+        # A watcher that lands its own copy before the jumper's 'done' arrives thuds once
+        # (counted by the calls, as this watcher may be a phone without sound on).
+        jumper = v2.jumper_page(pages)
+        watcher = next(p for p in pages if p is not jumper)
+        watcher.evaluate("if (!window.heard) (" + SPY + ")(); heard.splice(0)")
+        jumper.wait_for_function("th && th.mine && th.phase === 'ready'", timeout=8000)
+        jumper.evaluate("go(1.05, 8, 0.3, 0.46)")
+        watcher.wait_for_function("th && th.f && th.phase === 'air'", timeout=5000)
+        watcher.evaluate("th.f.acc = 99; step(0.001)")
+        assert watcher.evaluate("th.phase") == "land"
+        seq = jumper.evaluate("K.comp.seq")
+        jumper.evaluate("quick()")
+        watcher.wait_for_function(f"K.comp.seq > {seq}", timeout=5000)
+        assert [n for n, _ in watcher.evaluate("heard.splice(0)")].count("tomahdys") == 1
+        # A guest reloads mid-meet: after its next tap the sounds play again.
+        guest = pages[1]
+        guest.bring_to_front()
+        guest.reload()
+        guest.evaluate(v2.HELPERS)
+        guest.wait_for_function("K.comp", timeout=10000)
+        guest.mouse.click(180, 150)
+        guest.wait_for_function("['rima', 'tomahdys'].every(AiPelitAanet.ready)", timeout=10000)
+        guest.wait_for_function("AiPelitAanet.play('tomahdys', { vol: 0 })", timeout=5000)
         assert all(p.errors == [] for p in pages)
     finally:
         for p in pages:
