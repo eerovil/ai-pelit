@@ -134,10 +134,8 @@ def test_a_friends_phone_in_a_room_hears_the_hits_the_misses_and_the_crowd(site,
     # The host throws three tens: Aino's phone hears each dart and then the crowd for the 30.
     v2.throw_turn(host, 0, 0, host)
     aino.wait_for_function("cur === 1 && mine() && heard.some(h => h[0] === 'yleiso')", timeout=8000)
-    asked = aino.evaluate("heard.splice(0)")
-    got = [(n, v) for n, ok, v in asked if ok]
-    # Each dart is asked for; on a slow machine (#337, CI) one may not sound, play() saying false.
-    assert [n for n, _, _ in asked].count("puu") == 3 and ("yleiso", 0.7) in got, asked
+    got = [(n, v) for n, ok, v in aino.evaluate("heard.splice(0)") if ok]
+    assert [n for n, _ in got].count("puu") == 3 and ("yleiso", 0.7) in got, got
     assert all(v == 1 or v is None for n, v in got if n == "puu"), got
     # Aino misses the board: her own phone plays the quiet knock, not the hit.
     aino.wait_for_function("!banner && !flying && dartsLeft === 3", timeout=8000)

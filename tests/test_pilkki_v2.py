@@ -273,13 +273,12 @@ def test_the_computer_anglers_get_better_level_by_level(site, context):
     page = open_game(site, context)
     means = page.evaluate("""() => [1, 6].map(l => {
       level = l; let tot = 0;
-      // 20 contests, not 6: six once averaged 2508 g on level 1 (#337, CI), luck over the bound.
-      for (let k = 0; k < 20; k++) {
+      for (let k = 0; k < 6; k++) {
         save(SAVE, null); newContest();
         run(() => true, CONTEST - 1);
         tot += Math.max(...rivals.map(r => r.g));
       }
-      return tot / 20;
+      return tot / 6;
     })""")
     assert 200 < means[0] < 2500 and means[1] > means[0] * 1.5
 

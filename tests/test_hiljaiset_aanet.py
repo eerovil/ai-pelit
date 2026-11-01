@@ -1,8 +1,9 @@
 """The games' versions without crowd noise and with the loudest sounds quieter (#337).
 
 Each is its previous version with the sounds changed: it loads aanet-4, opens, starts on a tap
-and throws nothing. What it may play is checked for every game's newest version in
-test_lib_aanet.py.
+and throws nothing. Each version's own tests/test_<slug>_v<N>.py runs this check, so that a pull
+request on it runs that file and not every older version's tests. What a version may play is
+checked for every game's newest version in test_lib_aanet.py.
 """
 
 import pytest
@@ -19,7 +20,6 @@ VERSIONS = [
     "games/tikka/v5", "games/trampoliini/v9", "games/voimistelu/v12", "games/vuoristorata/v3",
     "games/yoajo/v9",
 ]
-pytestmark = pytest.mark.games(*sorted({v.split("/")[1] for v in VERSIONS}))
 
 # Records every sound the game asks for, from before its own script runs.
 SPY = """
@@ -41,9 +41,7 @@ def real(tmp_path_factory):
     s.close()
 
 
-@pytest.mark.parametrize("version", VERSIONS)
-def test_it_opens_and_plays_with_the_quiet_library(real, context, version):
-    site = real
+def opens_and_plays_with_the_quiet_library(site, context, version):
     context.add_init_script(SPY)
     page = context.new_page()
     errors = []

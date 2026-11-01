@@ -217,8 +217,7 @@ def test_the_computer_takes_over_at_the_road(site, browser, where):
     host, guest = room_on_level(site, browser, 3, relay)
     assert host.evaluate("!!course.road") and guest.evaluate("P.clog") == host.evaluate("P.clog")
     if where == "before":
-        # Slowly, so a slow machine (#337, CI) has not reached the road before the guest drops.
-        guest.evaluate("P.clog = 3; P.z = course.road.z0 - 8; P.v = 0.3")
+        guest.evaluate("P.clog = 3; P.z = course.road.z0 - 8; P.v = 2")
         host.wait_for_function("net.skiers[1].z > course.road.z0 - 9 && net.skiers[1].clog === 3", timeout=3000)
     else:
         guest.evaluate("P.clog = 2; P.z = course.road.z0 + 3; P.v = 0; P.road = 'walk'; P.lastKick = P.t - 1")
