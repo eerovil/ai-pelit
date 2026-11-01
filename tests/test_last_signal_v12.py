@@ -508,6 +508,34 @@ def test_a_friend_lifts_a_crate_and_shelves_it_in_the_host_s_sisu(site, browser)
     assert host.errors == [] and aino.errors == []
 
 
+def test_two_people_reaching_for_one_crate_the_first_gets_it(site, browser):
+    host, aino = v5.room(site, browser, names=("Eero", "Aino"))
+    v5.close_cards(host, aino)
+    host.evaluate("const c = G.s.crates[0]; c.w = 'sub'; c.x = 2.4; c.y = LOW; c.f = 0; save()")
+    aino.wait_for_function("G.s.crates[0].w === 'sub'")
+    # Aino's ask reaches the host after the host's own lift: the crate stays in the host's hands, Aino's hands stay empty.
+    host.evaluate("act('lift', G.s.crates[0].id)")
+    aino.evaluate("act('lift', G.s.crates[0].id)")
+    host.wait_for_timeout(400)
+    assert host.evaluate("[G.s.crates[0].w, G.s.crates[0].by === R.me]") == ["held", True]
+    aino.wait_for_function("G.s.crates[0].w === 'held' && !myCrate()")
+    # and the host lets go of it on the deck: both phones see it there
+    host.evaluate("act('drop', [G.s.crates[0].id, 'sub', 3, 0.5]); run(() => true, 1)")
+    aino.wait_for_function("G.s.crates[0].w === 'sub' && Math.abs(G.s.crates[0].y - LOW) < 0.05")
+    assert host.errors == [] and aino.errors == []
+
+
+def test_a_crate_let_go_of_over_an_opening_sinks_into_the_sea(site, browser):
+    page = game(site, browser)
+    page.evaluate("const c = G.s.crates.find(c => c.id === 'pinta:c1'); c.w = 'held'; c.by = 'me';"
+                  " act('drop', [c.id, 'ice', holeMid(0) - 10, -2]); run(() => true, 4)")
+    c = page.evaluate("(() => { const c = crateById('pinta:c1'); return [c.w, c.y > 1]; })()")
+    assert c == ["sea", True]
+    page.evaluate("run(() => crateById('pinta:c1').f, 200)")
+    assert page.evaluate("Math.abs(crateById('pinta:c1').y - floorY(crateById('pinta:c1').x)) < 0.5")
+    assert page.errors == []
+
+
 # ---------- layout ----------
 
 @pytest.mark.parametrize("w,h", [(360, 740), (390, 844), (740, 360)])
