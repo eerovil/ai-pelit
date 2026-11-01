@@ -311,6 +311,25 @@ def test_three_phones_two_share_a_team_and_take_its_turns(room):
     assert ids == [eero, iida, eero, iida]
 
 
+def test_a_throw_out_of_turn_or_sent_twice_is_ignored(room):
+    host, [guest] = room("Eero", "Aino")
+    # The host's turn: a throw from the guest does nothing.
+    host.evaluate("hammer = 1; startEnd()")
+    host.wait_for_function("myTurn()")
+    guest.wait_for_function("phase === 'aim' && !myTurn()")
+    guest.evaluate("AiPelitRooms.send({ t: 'throw', round: net.round, n: throwN, x: 0, w: 0.5, spin: 1 })")
+    host.wait_for_timeout(400)
+    assert host.evaluate("[phase, stones.length]") == ["aim", 0]
+    # The guest's turn: its throw sent twice (a double tap, a resend) throws one stone.
+    host.evaluate("doThrow({ x: 0, w: 0.5, spin: 1 }); run(() => phase === 'slide')")
+    guest.wait_for_function("myTurn()", timeout=5000)
+    guest.evaluate("const m = { t: 'throw', round: net.round, n: throwN, x: 0.2, w: 0.5, spin: -1 }; AiPelitRooms.send(m); AiPelitRooms.send(m)")
+    host.wait_for_function("phase === 'slide'", timeout=3000)
+    host.evaluate("run(() => phase === 'slide')")
+    assert host.evaluate("[throwN, stones.filter(s => s.t === 1).length]") == [2, 1]
+    assert host.errors == guest.errors == []
+
+
 def test_a_phone_let_go_is_thrown_for_by_the_computer(room):
     host, [guest, third] = room("Eero", "Aino", "Iida")
     host.evaluate("hammer = 0; startEnd()")
