@@ -15,18 +15,21 @@ SPY = """() => {
 }"""
 
 
-def start(site, browser, silent=False):
+def start(site, browser, silent=False, nolib=False):
     shutil.copytree(ROOT / "games" / "kirkkis", site.games / "kirkkis", dirs_exist_ok=True)
     site.build()
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
                               service_workers="block")
     if silent:
         ctx.route("**/*.mp3", lambda route: route.abort())
+    if nolib:
+        ctx.route("**/aanet.js", lambda route: route.abort())
     page = ctx.new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.goto(site.url + URL)
-    page.evaluate(SPY)
+    if not nolib:
+        page.evaluate(SPY)
     page.click("#modes button[data-mode=kirkkis]")
     page.click("#hide")
     return ctx, page
@@ -77,7 +80,19 @@ def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
     ctx, page = start(site, browser, silent=True)
     page.evaluate("""() => { const b = people.indexOf(bots[0]);
       show(['ready']); show(['spot', b]); show(['all', b]); }""")
-    assert page.evaluate("heard.length") >= 3 and played(page) == []
+    # Only the beeps: "Kaikki pelastettu" without its file beeps, it does not try the save sound.
+    assert [n for n, ok in page.evaluate("heard")] == ["valinta", "onnistui", "voitto"]
+    assert played(page) == []
+    r = page.evaluate("""() => { let t = 0; while (phase !== 'menu' && t < 260) { step(1 / 30); t += 1 / 30; } return phase; }""")
+    assert r == "menu"
+    assert page.errors == []
+    ctx.close()
+
+
+def test_without_the_sound_library_the_game_still_plays(site, browser):
+    ctx, page = start(site, browser, nolib=True)
+    page.evaluate("""() => { const b = people.indexOf(bots[0]);
+      show(['ready']); show(['spot', b]); show(['save', b]); show(['all', b]); sfx.step(); }""")
     r = page.evaluate("""() => { let t = 0; while (phase !== 'menu' && t < 260) { step(1 / 30); t += 1 / 30; } return phase; }""")
     assert r == "menu"
     assert page.errors == []
