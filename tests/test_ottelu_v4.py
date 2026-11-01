@@ -223,3 +223,29 @@ def test_the_race_and_its_results_fit(site, context, size):
     box = in_frame(page, "({ ...race.resultsBox, H, ctrlTop })")
     assert box["top"] >= 0 and box["bottom"] <= min(box["H"], box["ctrlTop"])
     assert page.errors == []
+
+
+def test_a_reload_mid_race_runs_the_race_again_and_keeps_the_points(site, context):
+    page = open_game(site, context, saved={"lajit": ["kuula", "aitajuoksu"]})
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    finish_event(page)
+    with page.expect_navigation():
+        page.click("#next")
+    page.wait_for_function("frameReady && M.at === 1 && document.getElementById('laji').contentWindow.eval('race')", timeout=10000)
+    for _ in range(200):
+        page.evaluate("play()")
+        if in_frame(page, "race.phase === 'run' && me.x > 20"):
+            break
+        page.wait_for_timeout(20)
+    page.reload()
+    # A reload shows the menu with the match to go on; the race starts again from the gun.
+    assert page.inner_text("#cont") == "Jatka ottelua (laji 2/2)"
+    page.click("#cont")
+    page.wait_for_function("frameReady && document.getElementById('laji').contentWindow.eval('race')", timeout=10000)
+    assert in_frame(page, "[race.phase, me.x, race.runners.length].join()") == "cd,0,8"
+    finish_event(page)
+    me = page.evaluate("M.rows.find(r => r.p === 'me')")
+    assert me["marks"][0] == 15 and me["pts"][0] == 790 and me["marks"][1] > 10
+    assert page.inner_text("#bTitle") == "Lopputulokset"
+    assert page.errors == []
