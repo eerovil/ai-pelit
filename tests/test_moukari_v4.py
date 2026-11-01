@@ -133,3 +133,23 @@ def test_with_friends_a_meet_still_plays_through(site, browser):
         p.wait_for_function("K.ending !== null", timeout=10000)
         assert p.errors == []
         p.context.close()
+
+
+def test_a_meet_left_in_v3_goes_on_in_v4_with_sound(site, context):
+    page = open_game(site, context)
+    page.goto(page.url.replace("/v4/", "/v3/"))
+    page.evaluate(v2.HELPERS)
+    page.click("#go")
+    page.evaluate("th.t = 99; step(0.001); th.phase = 'land'; th.mark = 55.5; th.t = 99; th.sent = false; step(0.001)")
+    first = page.evaluate("K.mine().marks[0]")
+    page.goto(page.url.replace("/v3/", "/v4/"))
+    page.evaluate(v2.HELPERS)
+    page.evaluate(SPY)
+    assert page.inner_text("#cont") == "Jatka kisaa (kierros 2/6)"
+    page.click("#cont")
+    assert page.evaluate("[K.comp.round, K.mine().marks[0], th.mine]") == [2, first, True]
+    page.wait_for_function("AiPelitAanet.ready('valinta')", timeout=10000)
+    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+    page.evaluate("heard.splice(0); th.t = 99; step(0.001)")
+    assert played(page) == ["valinta"]
+    assert page.errors == []
