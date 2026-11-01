@@ -101,13 +101,57 @@ def test_the_medals_ring_and_the_gold_gets_applause(site, context):
     assert page.errors == []
 
 
+# Every fallback beep, by its start frequency, in window.beeps (tone() is a global the game calls).
+TONES = """() => {
+  window.beeps = [];
+  const real = tone;
+  window.tone = (f, ...rest) => { beeps.push(f); return real(f, ...rest); };
+}"""
+
+
 def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
     try:
         ctx.route("**/*.mp3", lambda route: route.abort())
         page = open_game(site, ctx)
-        v5.win_meet(page)
+        page.evaluate(TONES)
+        page.click("#go")
+        page.evaluate("th.t = 99; step(0.001); press(1); press(2)")
+        assert page.evaluate("beeps.splice(0)") == [660, 190, 230]
+        page.evaluate("th.x = -6; startAim(1); th.aimT = (36 - AIM0) / AIM_RATE; th.ang = 36; th.v = 9; release(); quick()")
+        assert page.evaluate("beeps.splice(0)") == [300, 520, 880]
+        for _ in range(5):
+            page.evaluate("go(9, 36, -3.5); quick()")
+        page.wait_for_timeout(300)  # the throws' second chime notes
+        page.evaluate("beeps.splice(0); for (let i = 0; i < 60 * 60; i++) step(1 / 60)")
+        page.wait_for_timeout(300)  # the gold's second note comes 140 ms later
+        assert sorted(page.evaluate("beeps")) == [523, 659, 784, 1047]
         assert played(page) == []
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_a_result_sound_missing_alone_falls_back_to_its_beep(site, browser):
+    # The thud and the medal run loaded, the applause and the chime did not.
+    ctx = browser.new_context(viewport={"width": 360, "height": 740}, service_workers="block")
+    try:
+        ctx.route(lambda url: url.endswith(("/onnistui.mp3", "/aplodit.mp3")), lambda route: route.abort())
+        page = open_game(site, ctx)
+        page.evaluate(TONES)
+        page.click("#go")
+        page.wait_for_function("['tomahdys', 'mitali'].every(AiPelitAanet.ready)", timeout=10000)
+        page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+        page.evaluate("go(9, 36, -3.5); heard.splice(0); beeps.length = 0; quick()")
+        assert played(page) == ["tomahdys"]
+        assert page.evaluate("beeps.splice(0)") == [880]
+        for _ in range(5):
+            page.evaluate("go(9, 36, -3.5); quick()")
+        page.wait_for_timeout(300)
+        page.evaluate("heard.splice(0); beeps.length = 0; for (let i = 0; i < 60 * 60; i++) step(1 / 60)")
+        page.wait_for_timeout(300)
+        assert played(page).count("mitali") == 3
+        assert page.evaluate("beeps") == [1047]
         assert page.errors == []
     finally:
         ctx.close()

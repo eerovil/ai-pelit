@@ -199,8 +199,9 @@ const K = AiPelitKisa.meet({
   look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
   chime: i => {
     // v6: a steel-drum run per medal, higher for a better one, and applause for the gold.
-    if (S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 })) { if (i === 0) S.play('aplodit', { delay: 0.6, vol: 0.7 }); return; }
-    tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06); if (i === 0) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140);
+    // Each falls back to its own part of v5's chime when its file is not there.
+    S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 }) || tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06);
+    if (i === 0 && !S.play('aplodit', { delay: 0.6, vol: 0.7 })) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140);
   },
 });
 const thrower = id => K.thrower(id);
@@ -310,13 +311,13 @@ function landed() {
   th.phase = 'land'; th.t = 0;
   // v6: every javelin thuds into the grass, a friend's quieter; a good throw of the player's own
   // gets a chime, a new lead or the player's record the crowd's applause.
-  const thud = S.play('tomahdys', { vol: th.mine ? 0.9 : 0.45 });
+  S.play('tomahdys', { vol: th.mine ? 0.9 : 0.45 });
   if (th.mark >= 0) {
     th.leads = K.comp && K.standings()[0] && th.mark > K.bestOf(K.standings()[0]);
     if (th.mine) {
       th.record = K.record(th.mark);
-      if (thud) S.play(th.leads || th.record ? 'aplodit' : 'onnistui', { delay: 0.2, vol: th.leads || th.record ? 0.8 : 0.5 });
-      else { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      const big = th.leads || th.record;
+      if (!S.play(big ? 'aplodit' : 'onnistui', { delay: 0.2, vol: big ? 0.8 : 0.5 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
     }
   } else if (th.mine) S.play('ohhoo', { vol: 0.8 }) || tone(160, 0.3, 'sawtooth', 0.08, 70);
 }
