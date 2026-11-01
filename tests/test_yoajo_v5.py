@@ -91,3 +91,18 @@ def test_v4_saves_carry_over(site, context):
     page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
     assert page.evaluate("[maxLeg, controls]") == [4, "kaksi"]
     assert page.errors == []
+
+
+def test_turning_the_phone_mid_leg_moves_the_dial_and_keeps_the_leg(site, context):
+    page = open_game(site, context)
+    page.evaluate("HOLD = true; newLeg(1); P.s = 900; P.v = 22; draw()")
+    up = page.evaluate("speedoBox()")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("W === 740 && H === 360")
+    side = page.evaluate("draw(), [speedoBox(), mode, P.s, thumbTop()]")
+    assert side[1] == "drive" and side[2] == 900
+    assert side[0]["cx"] == 370 and side[0]["r"] < up["r"] and side[3] > side[0]["cy"] + side[0]["r"]
+    # A retry after a crash draws the dial again from the start.
+    page.evaluate("crash('Kolari!'); newLeg(1); draw()")
+    assert page.evaluate("[mode, Math.round(P.v * KMH)]") == ["drive", 0]
+    assert page.errors == []
