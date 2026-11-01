@@ -1,0 +1,97 @@
+Sound effects for AI-pelit (#205), aanet-2: the files of aanet-1 unchanged, and new ones below. Every file is CC0 1.0 (public domain, see LICENSE); no credit
+is owed. Each was cut, its leading and trailing silence trimmed, turned mono, its peak set to the
+dB below and encoded as 64 kbps MP3 with ffmpeg (libmp3lame), 2026-11-01.
+
+Kenney (www.kenney.nl), "Impact Sounds" 1.0, https://kenney.nl/assets/impact-sounds, CC0:
+askel.mp3      footstep_concrete_000.ogg, peak -3 dB
+askel2.mp3     footstep_concrete_002.ogg, peak -3 dB
+ponnistus.mp3  impactPlank_medium_000.ogg, peak -1 dB
+hiekka.mp3     impactSoft_heavy_000.ogg mixed with footstep_snow_000.ogg, peak -1 dB
+tomahdys.mp3   impactSoft_heavy_001.ogg, peak -1 dB
+osuma.mp3      impactGeneric_light_000.ogg, peak -2 dB
+metalli.mp3    impactMetal_medium_000.ogg, peak -3 dB
+puu.mp3        impactWood_medium_000.ogg, peak -2 dB
+potku.mp3      impactPunch_heavy_000.ogg, peak -1 dB
+
+Kenney, "Interface Sounds", https://kenney.nl/assets/interface-sounds, CC0:
+naksu.mp3      click_001.ogg, peak -4 dB
+valinta.mp3    select_001.ogg, peak -4 dB
+onnistui.mp3   confirmation_002.ogg, peak -3 dB
+virhe.mp3      error_004.ogg, peak -3 dB
+
+Kenney, "Digital Audio", https://kenney.nl/assets/digital-audio, CC0:
+nousu.mp3      powerUp1.ogg, peak -4 dB
+hyppy.mp3      phaseJump1.ogg, peak -4 dB
+
+Kenney, "Music Jingles", https://kenney.nl/assets/music-jingles, CC0:
+voitto.mp3     Sax jingles/jingles_SAX02.ogg (a rising run), peak -2 dB
+tappio.mp3     Sax jingles/jingles_SAX07.ogg (a falling run), peak -2 dB
+mitali.mp3     Steel jingles/jingles_STEEL03.ogg (four rising notes), peak -2 dB
+
+OpenGameArt.org, each page licensed CC0 only:
+suhahdus.mp3   "Air Whoosh", https://opengameart.org/content/air-whoosh, whoosh2_0.wav 0.00-0.75 s, fade out 0.25 s, peak -2 dB
+loiskis.mp3    "6 short water splashes", https://opengameart.org/content/6-short-water-splashes, ws.mp3 2.5-3.5 s, fade out 0.3 s, peak -2 dB
+aplodit.mp3    "Applause in a large hall or church" by expl0it3r, https://opengameart.org/content/applause-in-a-large-hall-or-church, 1.0-5.6 s, fades in 0.15 s and out 1.2 s, peak -4 dB
+yleiso.mp3     "Crowd shouting/speaking ambience", https://opengameart.org/content/crowd-shoutingspeaking-ambience, crowd_shouting_0.ogg 3.0-7.0 s, fades in 0.15 s and out 1.0 s, peak -5 dB
+ohhoo.mp3      "Oooooooooo", https://opengameart.org/content/oooooooooooooo, oooooooooo_0.ogg whole, peak -3 dB
+
+New in aanet-2, 2026-11-01, made the same way. Loops (marked loop) are not trimmed; "loop of
+a-b s" is that part of the source, its last 0.5-0.8 s cross-faded into its start.
+
+Made here with ffmpeg's aevalsrc and anoisesrc (no recording; CC0 as the rest):
+pilli.mp3      a 2.9 kHz tone warbling at 30 Hz, 0.45 s, peak -2 dB
+pilli2.mp3     the same, two blasts in 1.3 s, peak -2 dB
+putoaminen.mp3 a tone falling from 1.6 kHz with a slow vibrato, 1.3 s, peak -4 dB
+kitka.mp3      band-passed pink noise and a warbling 1.05 kHz tone, 0.9 s, peak -4 dB
+
+Kenney, "Impact Sounds", https://kenney.nl/assets/impact-sounds, CC0:
+lasku.mp3      impactWood_heavy_000.ogg, peak -2 dB
+pop.mp3        impactWood_light_001.ogg, peak -3 dB
+ruoho.mp3      footstep_grass_000.ogg, peak -3 dB
+lyonti.mp3     impactPunch_medium_000.ogg, peak -2 dB
+
+Kenney, "RPG Audio", https://kenney.nl/assets/rpg-audio, CC0:
+verkko.mp3     cloth1.ogg, peak -3 dB
+narina.mp3     creak1.ogg, peak -3 dB
+
+Kenney, "Sci-fi Sounds", https://kenney.nl/assets/sci-fi-sounds, CC0:
+rajahdys.mp3     explosionCrunch_000.ogg, peak -1 dB
+sukellusvene.mp3 spaceEngineLow_000.ogg, loop of 0-4.4 s, peak -6 dB
+
+OpenGameArt.org, each page licensed CC0 only:
+lahto.mp3      "Gunshots", https://opengameart.org/content/gunshots, 22 Pistol.wav 0-0.45 s, peak -1 dB
+rima.mp3       "100 CC0 metal and wood SFX", https://opengameart.org/content/100-cc0-metal-and-wood-sfx, metal_falling_01.ogg, peak -2 dB
+seivas.mp3     the same pack, metal_hit_01.ogg, peak -3 dB
+jousi.mp3      the same pack, metal_spring_01.ogg, peak -3 dB
+gongi.mp3      "100 CC0 SFX", https://opengameart.org/content/100-cc0-sfx, gong_01.ogg, peak -3 dB
+kello.mp3      the same pack, bell_01.ogg, peak -3 dB
+halytys.mp3    "Short alarm", https://opengameart.org/content/short-alarm, alarm.ogg, peak -4 dB
+kaiku.mp3      "Sonar ping", https://opengameart.org/content/sonar-ping, sonar_ping.mp3, peak -3 dB
+lumi.mp3       "Walking on snow sound", https://opengameart.org/content/walking-on-snow-sound, SnowWalk.ogg, peak -3 dB
+kupla.mp3      "40 CC0 water / splash / slime SFX", https://opengameart.org/content/40-cc0-water-splash-slime-sfx, bubble_01.ogg, peak -3 dB
+litsahdus.mp3  the same pack, slime_01.ogg, peak -3 dB
+kuplat.mp3     the same pack, loop_bubbles_1.ogg, loop as it is, peak -6 dB
+kolari.mp3     "Crash / collision", https://opengameart.org/content/crash-collision, qubodup-crash.ogg, peak -1 dB
+lasi.mp3       "75 CC0 breaking / falling / hit SFX", https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx, bfh1_glass_breaking_01.ogg, peak -2 dB
+karhu.mp3      "Bear growls", https://opengameart.org/content/bear-growls, bear_01.ogg, peak -2 dB
+jaa.mp3        "Ice breaking / shattering", https://opengameart.org/content/ice-breakingshattering, LedasLuzta2.ogg, peak -3 dB
+lintu.mp3      "Crow", https://opengameart.org/content/crow, crow.ogg, peak -3 dB
+rouske.mp3     "Crunch sounds (cucumber)", https://opengameart.org/content/crunch-sounds-cucumber, crunch_0_0.ogg 1.1-1.8 s, peak -3 dB
+boing.mp3      "Boing", https://opengameart.org/content/boing, boing.ogg 0-1.4 s, fade out 0.6 s, peak -3 dB
+vauva.mp3      "Baby sound effect", https://opengameart.org/content/baby-sound-effect, Baby 01.ogg, peak -3 dB
+nams.mp3       "80 CC0 creature SFX", https://opengameart.org/content/80-cc0-creature-sfx, eat_01.ogg, peak -3 dB
+royhtays.mp3   the same pack, burp_01.ogg, peak -3 dB
+pruut.mp3      the same pack, spit_01.ogg, peak -3 dB
+lusikka.mp3    "Cutlery sounds", https://opengameart.org/content/cutlery-sounds, drop_cutlery_01.ogg, peak -3 dB
+kirkuna.mp3    "Female high-pitched scream SFX", https://opengameart.org/content/female-high-pitched-scream-sfx, screams.ogg 0-0.95 s, fade out 0.3 s, peak -4 dB
+jarru.mp3      "Steam release sounds", https://opengameart.org/content/steam-release-sounds, steam hisses - Marker #1.wav, peak -4 dB
+ketju.mp3      "Chain / winch sounds", https://opengameart.org/content/chain-winch-sounds, winch - Marker #2.wav, peak -4 dB
+torvi.mp3      "Car sound effects pack (low quality)", https://opengameart.org/content/car-sound-effects-pack-low-quality, car_horn_0.ogg, peak -3 dB
+moottori.mp3   the same pack, car_engine_loop_1.ogg, loop as it is, peak -5 dB
+kartti.mp3     "Racing car engine sound loops", https://opengameart.org/content/racing-car-engine-sound-loops, loop_0.wav, loop as it is, peak -5 dB
+kamera.mp3     "Camera shutter", https://opengameart.org/content/camerashudder, camera.ogg, peak -3 dB
+rullaus.mp3    "30 CC0 SFX loops", https://opengameart.org/content/30-cc0-sfx-loops, rolling.ogg, loop as it is, peak -6 dB
+humina.mp3     the same pack, machine_01.ogg, loop as it is, peak -8 dB
+sade.mp3       the same pack, rain.ogg, loop as it is, peak -8 dB
+syvyys.mp3     "Underwater or space engine rumble", https://opengameart.org/content/underwater-or-space-engine-rumble, deep_rumble.ogg, loop of 10-16 s, peak -6 dB
+tuuli.mp3      "Mild wind background noise", https://opengameart.org/content/mild-wind-background-noise, wind background noise 2.wav, loop of 5-11 s, peak -8 dB
