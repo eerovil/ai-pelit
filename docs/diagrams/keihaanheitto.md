@@ -14,6 +14,8 @@ pad between them (`games/keihas/v3/index.html`).
 
 v4 (#165) plays as v3, with the meet, the results board, the saves, the outfit message and the room handling from the shared athletics library (see `yleisurheilu-kirjasto.md`); the running knee bends the right way (#170), and sideways the gap between a column's throw pad and its foot does nothing. v5 (#176) plays as v4 on `yleisurheilu-3`: the meet ends with the medal ceremony, the medallists in their outfits, and the podium stays until a tap.
 
+v6 (#218) plays as v5 with recorded sounds from the shared library (`aanikirjasto.md`, `lib/aanet-2/`) instead of beeps: `valinta` when the player's turn is ready, `askel`/`askel2` per foot tap in `press()`, `naksu` when "Heitä" goes down in `startAim()`, `suhahdus` as the javelin leaves the hand in `throwNow()`, `tomahdys` as it lands in `landed()` (every thrower's, a friend's quieter), then `onnistui` for the player's own good throw or `aplodit` for a new lead or record, `ohhoo` for a foul (`landed()`, `outcome()`), and the meet's `chime` rings `mitali` per medal with applause for the gold. Each sound that replaced a v5 beep falls back to that beep, one by one, while its file is not there; the landing thud is new (v5 had no landing sound), so it is simply left out then (`games/keihas/v6/index.html`).
+
 From v2 (#158) the player's athlete wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's thrower wears its own (`drawAthlete()` in `games/keihas/v2/index.html`; the picker is `asut.md`).
 
 ```mermaid
