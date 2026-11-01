@@ -135,3 +135,31 @@ def test_v1_saves_are_read_as_they_are(site, browser):
         assert page.errors == []
     finally:
         ctx.close()
+
+
+def test_two_at_once_a_restart_and_back_to_the_menu(site, browser):
+    ctx, page = open_page(site, browser)
+    try:
+        riding(page)
+        # Braking as the car goes over into a drop: both sound, once each.
+        page.evaluate("""() => { const o = game.track.S.find(o => o.kind === 'drop');
+            game.car.s = o.s; game.car.v = 10; game.car.brake = true; sound(game.car); sound(game.car); }""")
+        assert sorted(played(page)) == ["jarru", "kirkuna"]
+        # A derail quiets the rumble; once the car is back on the track it rumbles again, and the
+        # next drop screams again.
+        page.evaluate("game.car.brake = false; crash('air')")
+        assert played(page) == ["kolari"]
+        page.wait_for_function("game.mode === 'ride'", timeout=8000)
+        page.evaluate("game.car.v = 15; sound(game.car)")
+        assert page.evaluate("rumble.vol") > 0
+        page.evaluate("""() => { const o = game.track.S.filter(o => o.kind === 'drop').at(-1);
+            game.car.s = o.s; game.car.v = 10; sound(game.car); }""")
+        assert played(page) == ["kirkuna"]
+        # A new ride after the menu starts quiet and counts down again.
+        page.evaluate("quiet(); game.mode = 'menu'")
+        assert page.evaluate("[rumble.vol, chainL.vol]") == [0, 0]
+        page.evaluate("startRide()")
+        assert played(page) == ["valinta"]
+        assert page.errors == []
+    finally:
+        ctx.close()
