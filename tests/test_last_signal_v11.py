@@ -123,3 +123,18 @@ def test_without_the_sound_files_it_plays_with_its_own_beeps(site, browser):
     page.evaluate("soundStep(0.01)")
     assert page.evaluate("BED.sea.playing()") is False
     assert page.errors == []
+
+
+def test_after_a_reload_jatka_brings_the_loops_back_and_the_save_is_kept(site, browser):
+    page = sounding(site, browser)
+    page.evaluate("sub.x += 20; G.s.day = 3; save()")
+    day = page.evaluate("G.s.day")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    page.evaluate("G.hold = true; input.x = input.y = 0")
+    assert page.evaluate("G.s.day") == day
+    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
+    page.evaluate("soundStep(0.01)")
+    page.wait_for_function("BED.sea.playing() && BED.engine.playing()", timeout=5000)
+    assert page.errors == []
