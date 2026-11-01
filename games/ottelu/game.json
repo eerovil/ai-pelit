@@ -30,6 +30,13 @@
       "note": "Mukana myös kuulantyöntö ja 100 metrin aitajuoksu, joten ottelusta voi tehdä jopa seitsenottelun; lajit ovat uusimpia versioitaan oikeine äänineen, ja palkintojenjaon sijaan lajin jälkeen näkyvät sen lopputulokset.",
       "request": "Ottelusta puuttuu lajeja",
       "issue": "eerovil/ai-pelit#287"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-01",
+      "note": "Kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa, ja napautus vie lopputuloksiin; korkeus- ja seiväshypyssä rima nousee kaksi kertaa isommin askelin, joten ne menevät nopeammin.",
+      "request": "Ottelun lopussa palkintojenjako: kun koko ottelu päättyy, kolme parasta ottelupisteiden mukaan nousee palkintopallille ja saa mitalinsa (yleisurheilukirjaston oma palkintojenjako), ja napautus vie lopputuloksiin. Lajien välissä ei palkintojenjakoa, kuten v4:ssä. Lisäksi (Eero, chatissa): korkeuslajit nopeammiksi isommilla riman nostoilla.",
+      "issue": "eerovil/ai-pelit#294"
     }
   ]
 }
