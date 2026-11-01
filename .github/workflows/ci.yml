@@ -69,6 +69,9 @@ jobs:
       # The checkout brings functions/ and server/: wrangler bundles them as the site's /api/.
       - uses: actions/checkout@v4
         if: steps.ready.outputs.ready == 'true'
+        with:
+          # The whole history: scripts/build.py orders same-day versions by their merge time (#279).
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         if: steps.ready.outputs.ready == 'true'
         with:
