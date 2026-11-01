@@ -23,7 +23,11 @@ from test_ottelu_v5 import (  # noqa: F401
     test_a_match_alone_with_the_hurdles_and_the_shot_put, test_alone_the_podium_shows_only_at_the_end_of_the_match,
     test_all_seven_events_can_be_picked, test_an_event_ends_on_its_results_not_a_podium,
     test_the_bar_rises_in_twice_the_events_steps, test_two_phones_run_the_hurdles_and_see_the_same_points,
-    test_with_friends_every_phone_sees_the_podium_at_the_end)
+    test_with_friends_every_phone_sees_the_podium_at_the_end, test_a_reload_during_the_podium_still_sends_the_score,
+    test_the_podium_fills_the_screen, test_a_reload_mid_race_runs_the_race_again_and_keeps_the_points,
+    test_each_newer_field_event_plays_to_its_results_in_the_match)
+from test_ottelu_v4 import test_the_race_and_its_results_fit  # noqa: F401
+from test_ottelu import test_the_menu_and_the_board_fit  # noqa: F401
 
 EVENTS = ["aitajuoksu", "pituushyppy", "kuula", "korkeushyppy", "seivashyppy", "keihas", "moukari"]
 pytestmark = pytest.mark.games("ottelu", *EVENTS)
@@ -96,6 +100,8 @@ def test_a_match_saved_by_v5_goes_on_with_its_versions(site, context):
 def test_with_friends_the_others_cheer_and_an_away_phones_turn_is_skipped(site, browser):
     relay, pages = room(site, browser, ["Eero", "Aino", "Ville"], ["kuula", "keihas"])
     host, aino, ville = pages
+    for p in pages:
+        p.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers && Ottelu.K.current()", timeout=10000)
     assert all(p.evaluate("M.v.kuula") == newest("kuula") for p in pages)
     ids = {p.evaluate("AiPelitRooms.me"): p for p in pages}
     me_aino = aino.evaluate("AiPelitRooms.me")
@@ -153,3 +159,58 @@ def test_in_the_race_an_away_phones_runner_goes_to_the_computer_until_it_is_back
     for p in pages:
         assert p.errors == []
         p.context.close()
+
+
+def test_an_away_friend_comes_back_into_the_event_and_a_reload_keeps_the_versions(site, browser):
+    relay, pages = room(site, browser, ["Eero", "Aino"], ["keihas", "pituushyppy"])
+    host, aino = pages
+    for p in pages:
+        p.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    me_aino = aino.evaluate("AiPelitRooms.me")
+    relay.drop(aino)
+    host.wait_for_function(f"!AiPelitRooms.members.find(m => m.id === {json.dumps(me_aino)}).on", timeout=8000)
+    relay.back(aino)
+    # Back in the room: the match and the meet where they are, on the versions the host started.
+    aino.wait_for_function("M && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.seq === parent.Ottelu.K.comp.seq", timeout=15000)
+    host.wait_for_function(f"AiPelitRooms.members.find(m => m.id === {json.dumps(me_aino)}).on", timeout=8000)
+    # A reload mid-event, too.
+    aino.reload()
+    aino.wait_for_function("M && M.at === 0 && Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=15000)
+    assert aino.evaluate("JSON.stringify(M.v)") == host.evaluate("JSON.stringify(M.v)")
+    assert in_frame(aino, "document.baseURI").endswith(f"/games/keihas/v{newest('keihas')}/")
+    assert host.evaluate("AiPelitRooms.paused") is False or host.evaluate(f"Ottelu.K.current().p") == me_aino
+    for p in pages:
+        assert p.errors == []
+        p.context.close()
+
+
+def test_a_reload_mid_event_goes_on_with_the_same_versions(site, context):
+    page = open_game(site, context, saved={"lajit": ["seivashyppy", "pituushyppy", "moukari"]})
+    ready(page)
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.seq >= 0", timeout=10000)
+    for _ in range(40):
+        page.evaluate("play()")
+        if page.evaluate("Ottelu.K.comp.seq >= 3"):
+            break
+        page.wait_for_timeout(50)
+    seq = page.evaluate("Ottelu.K.comp.seq")
+    v = page.evaluate("M.v")
+    page.reload()
+    assert page.inner_text("#cont") == "Jatka ottelua (laji 1/3)"
+    page.click("#cont")
+    page.wait_for_function(f"Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.seq === {seq}", timeout=10000)
+    assert page.evaluate("M.v") == v
+    assert in_frame(page, "document.baseURI").endswith(f"/games/seivashyppy/v{newest('seivashyppy')}/")
+    assert page.errors == []
+
+
+def test_the_newest_event_pages_are_fetched_ahead_for_offline_play(site, context):
+    page = open_game(site, context)
+    urls = []
+    page.on("request", lambda r: urls.append(r.url))
+    page.reload()
+    page.wait_for_timeout(2500)
+    for slug in EVENTS:
+        assert any(u.endswith(f"/games/{slug}/v{newest(slug)}/") for u in urls), slug
+    assert any(u.endswith("/lib/yleisurheilu-5/korkeus.js") for u in urls)
