@@ -757,13 +757,14 @@ function pads() {
 // v9 (#313): whether pad k does something now, as step() and jump() decide. The feet: at the
 // start (a step there is a false start) and while running on the ground; not while the whistle
 // blows, in the air over a hurdle, stumbling or past the line. The jump: only running on the
-// ground, and never in a race with no hurdles. Off, a pad shows greyed out and does not flash
+// ground, and never in a race with no hurdles. Neither for a runner with a red card. Off, a pad shows greyed out and does not flash
 // (v8 flashed every pad at every tap, and greyed out only the jump with no hurdles).
 function padOn(k) {
   if (!race || !me || race.phase === 'done') return false;
   const running = race.phase === 'run' && me.fin === null && me.y <= 0 && me.stum <= 0;
+  if (me.card >= 2) return false;  // a red card is out of the race: no step, no jump
   if (k === 3) return race.hurdles && running && me.vy <= 0;
-  return me.card < 2 && (race.phase === 'cd' || running);
+  return race.phase === 'cd' || running;
 }
 function drawControls() {
   if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }

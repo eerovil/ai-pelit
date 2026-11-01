@@ -1,5 +1,8 @@
 """Aitajuoksu v9: a pad that does nothing shows greyed out and does not flash (#313)."""
 
+from conftest import ROOT
+
+import test_aitajuoksu_v2 as v2
 from test_aitajuoksu_v4 import open_game, start_running
 
 URL = "games/aitajuoksu/v9/"
@@ -65,3 +68,29 @@ def test_after_a_false_start_the_feet_are_off_until_the_start_is_called_again(si
     page.wait_for_function("race.phase === 'cd'", timeout=6000)
     assert page.evaluate("[padOn(1), padOn(2), padOn(3), color(1) !== '%s']" % OFF) == [True, True, False, True]
     assert page.errors == []
+
+
+def test_with_friends_a_red_card_greys_out_the_jump_too_after_the_gun(site, browser):
+    site.build(ROOT / "games")
+    old = v2.URL
+    v2.URL = URL
+    try:
+        host, guest = v2.room_of_two_at_set(site, browser)
+    finally:
+        v2.URL = old
+    guest.evaluate(COLOR)
+    # Aino's second false start: a red card.
+    host.evaluate("race.runners[1].card = 1; falseStart(race.runners[1])")
+    guest.wait_for_function("me.card === 2", timeout=3000)
+    host.wait_for_function("race.phase === 'cd'", timeout=5000)
+    host.evaluate("race.gunAt = 0.1")
+    guest.wait_for_function("race.phase === 'run'", timeout=5000)
+    # After the gun the out runner's pads are all grey, and neither a step nor a jump moves them.
+    out = guest.evaluate("""flash[1] = flash[3] = 0; press(1); press(3);
+      [padOn(1), padOn(2), padOn(3), flash[1], flash[3], me.vy, me.v, color(1), color(3)]""")
+    assert out == [False, False, False, 0, 0, 0, 0, OFF, OFF]
+    # The host, still in the race, can jump.
+    assert host.evaluate("[me.card, padOn(3)]") == [0, True]
+    assert host.errors == guest.errors == []
+    for p in (host, guest):
+        p.context.close()
