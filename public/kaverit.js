@@ -98,7 +98,7 @@
     var n = name(), t = load(K + 'tila', '');
     if (!n) return '';
     if (t === 'taken') return 'Nimimerkkiä ' + n + ' käyttää jo joku muu. Valitse toinen.';
-    if (t === 'rejected') return 'Nimimerkkiä ' + n + ' ei hyväksytty. Valitse toinen.';
+    if (t === 'rejected') return 'Ylläpitäjä ei hyväksynyt nimimerkkiä ' + n + '. Valitse toinen.';
     return '';
   }
 
@@ -107,6 +107,11 @@
   function take(r) {
     if (!r.ok || !r.body || !Array.isArray(r.body.friends)) return state;
     state = r.body;
+    // The server's word on this phone's nickname, the one place it is read for friends: rejected
+    // later by the admin, or forgotten (sent again on the next request).
+    var n = name();
+    if (n && state.me && state.me.name === n) save(K + 'tila', state.me.status);
+    else if (n && !state.me && load(K + 'lahetetty', '') === n) save(K + 'lahetetty', '');
     var had = load(ON, false);
     save(ON, state.friends.length > 0);
     if (state.friends.length || state.invites.length) readTitles();
@@ -157,6 +162,7 @@
   }
 
   // ---- Asking, answering, inviting ----
+  // A 403 means the nickname is not (or no longer) usable: the refresh brings the server's word.
   function after(r) { return refresh().then(function () { return { ok: r.ok, status: r.status }; }); }
   function ask(pid) {
     return register().then(function (ok) {

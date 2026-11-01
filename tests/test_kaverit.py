@@ -38,6 +38,7 @@ class FriendsApi:
         self.next_invite = 1
         self.calls = []
         self.taken = set()  # nicknames another phone owns: POST /api/players answers 409
+        self.status = {}  # player id -> 'pending', 'approved' or 'rejected' (the admin's word)
 
     def attach(self, context):
         context.route(re.compile(r".*/api/(players|friends|presence|invites)(\b.*)?$"), self.answer)
@@ -57,6 +58,7 @@ class FriendsApi:
         friends.sort(key=lambda f: (not f["now"], f["name"].lower()))
         return {
             "pid": mine,
+            "me": {"name": self.names[me], "status": self.status.get(me, "pending")} if me in self.names else None,
             "friends": friends,
             "requests": [{"pid": pid_of(s), "name": self.names[s]} for s, r in self.requests
                          if r == mine and s in self.names and (s, r) not in self.declined],
@@ -78,6 +80,7 @@ class FriendsApi:
             if body["name"].lower() in self.taken:
                 return ok({"error": "name taken"}, 409)
             self.names[body["id"]] = body["name"]
+            self.status[body["id"]] = "pending"
             return ok({"name": body["name"], "status": "pending"})
         if path == "friends" and req.method == "GET":
             return ok(self.state(parse_qs(url.query)["player"][0]))
@@ -89,7 +92,7 @@ class FriendsApi:
             return ok(self.state(me))
         if path == "friends/requests":
             me, to = body["player"], body["to"]
-            if me not in self.names:
+            if me not in self.names or self.status.get(me) == "rejected":
                 return ok({"error": "nickname needed"}, 403)
             other = self.by_pid(to)
             if other and (other, pid_of(me)) in self.requests:
@@ -499,6 +502,50 @@ def test_a_taken_nickname_in_the_room_asks_again_and_sends_nothing(phones):
     assert [c for c in phones.api.calls if c[1] == "friends/requests"] == []
     assert len(phones.relay.joins) == joins
     assert host.locator("#aipr-friends .ask button").is_enabled()
+    host.fill("#aipr-friends .ask input", "Aino2")
+    host.locator("#aipr-friends .ask button").click()
+    host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")
+    assert (A, pid_of(B)) in phones.api.requests
+    guest.wait_for_function(f"AiPelitRooms.members.some(m => m.fid === '{pid_of(A)}' && m.name === 'Aino2')")
+
+
+def registered(page, name):
+    """The phone's nickname as the server already has it (sent before, so not sent again)."""
+    page.evaluate(f"""localStorage.setItem('ai-pelit:_pelaaja:lahetetty', JSON.stringify({json.dumps(name)}));
+        localStorage.setItem('ai-pelit:_pelaaja:tila', JSON.stringify('approved'))""")
+
+
+def test_a_name_rejected_while_the_friends_page_is_open_offers_a_new_one(phones):
+    phones.api.names[A] = "Aino"
+    phones.api.status[A] = "approved"
+    shelf = phones("Aino", None, player=A)
+    registered(shelf, "Aino")
+    shelf.reload()
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none, .friend")
+    assert shelf.locator(".friends-name").count() == 0
+    # The admin rejects the name; the page's next 10 s read brings it, and a field for a new one.
+    phones.api.status[A] = "rejected"
+    shelf.wait_for_selector(".friends-name", timeout=15_000)
+    assert "Ylläpitäjä ei hyväksynyt nimimerkkiä Aino" in shelf.locator("main").inner_text()
+    shelf.fill(".friends-name", "Aino2")
+    shelf.locator(".friends-form button").click()
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino2" and phones.api.status[A] == "pending"
+
+
+def test_a_name_rejected_while_in_the_room_offers_a_new_one_then_asks(phones):
+    host, guest, code = room_of_two(phones)
+    host.wait_for_selector("#aipr-members button.fr")
+    # Aino's name was registered (room_of_two sends it on the first ask); the admin rejects it.
+    phones.api.names[A] = "Aino"
+    phones.api.status[A] = "rejected"
+    registered(host, "Aino")
+    host.locator("#aipr-members button.fr").click()
+    host.wait_for_selector("#aipr-friends .ask input")
+    assert "Ylläpitäjä ei hyväksynyt nimimerkkiä Aino" in host.locator("#aipr-friends .ask").inner_text()
+    assert phones.api.requests == set()
     host.fill("#aipr-friends .ask input", "Aino2")
     host.locator("#aipr-friends .ask button").click()
     host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")

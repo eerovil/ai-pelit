@@ -216,3 +216,14 @@ test('the friend list: playing a game first, then browsing the shelf, then the r
   env.DB.raw.prepare('UPDATE presence SET at = ? WHERE player = ?').run(new Date(Date.now() - PLAYING_FOR - 1000).toISOString(), C);
   assert.deepEqual((await state(A)).friends.map((f) => f.name), ['Daniel', 'Eeva', 'Bertta', 'Ceci']);
 });
+
+test('each answer tells the phone its own nickname and the admin\'s word on it', async () => {
+  const { player, state, call } = setup();
+  assert.equal((await state(A)).me, null);
+  await player(A, 'Aino');
+  assert.deepEqual((await state(A)).me, { name: 'Aino', status: 'pending' });
+  await call('POST', '/api/admin/players', { id: A, name: 'Aino', status: 'approved' }, ADMIN);
+  assert.deepEqual((await call('POST', '/api/presence', { player: A })).body.me, { name: 'Aino', status: 'approved' });
+  await call('POST', '/api/admin/players', { id: A, name: 'Aino', status: 'rejected' }, ADMIN);
+  assert.deepEqual((await state(A)).me, { name: 'Aino', status: 'rejected' });
+});

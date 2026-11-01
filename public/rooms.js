@@ -995,9 +995,9 @@
     b.className = 'fr';
     b.textContent = '➕ Kaveriksi';
     b.addEventListener('click', function () {
-      if (!cleanName(load(NAME, ''))) { askName = m.fid; friendNote = ''; return render(); }
+      if (!cleanName(load(NAME, '')) || F.nameNote()) { askName = m.fid; friendNote = ''; return render(); }
       b.disabled = true;
-      F.ask(m.fid).then(friendResult);
+      F.ask(m.fid).then(function (r) { r.pid = m.fid; friendResult(r); });
     });
     return b;
   }
@@ -1009,6 +1009,9 @@
     (fidWait || Promise.resolve()).then(function () { if (net.on && net.ws && myFid) { net.ws = null; connect(); } });
   }
   function friendResult(r) {
+    // The nickname is not usable (rejected meanwhile): open the row for a new one.
+    var F = friendsLib();
+    if (r.status === 403 && F && F.nameNote()) { askName = r.pid || true; askRow = null; friendNote = ''; return render(); }
     friendNote = r.ok ? '' : r.status === 403 ? 'Nimimerkkiäsi ei hyväksytty: valitse toinen.'
       : r.status === 409 ? 'Kavereita on jo niin monta kuin mahtuu.'
       : r.status === 429 ? 'Liian monta pyyntöä. Yritä myöhemmin.' : 'Ei yhteyttä. Yritä uudelleen.';
@@ -1031,7 +1034,8 @@
         var input = document.createElement('input'), ok = document.createElement('button');
         askRow = document.createElement('div');
         askRow.className = 'ask';
-        askRow.appendChild(document.createTextNode('Nimimerkkisi kavereille:'));
+        // A rejected or taken nickname says so; with none, the row only asks for one.
+        askRow.appendChild(document.createTextNode(F.nameNote() || 'Nimimerkkisi kavereille:'));
         input.maxLength = 16; input.placeholder = 'Nimimerkki'; input.style.width = '150px';
         ok.textContent = 'Pyydä';
         ok.addEventListener('click', function () {
@@ -1044,7 +1048,7 @@
             if (!r.ok) { ok.disabled = false; friendNote = F.nameError(r, v); render(); return; }
             askName = ''; askRow = null; friendNote = '';
             rejoinWithFid();
-            return F.ask(pid).then(friendResult);
+            return pid === true ? render() : F.ask(pid).then(friendResult);
           });
         });
         askRow.appendChild(input); askRow.appendChild(ok);

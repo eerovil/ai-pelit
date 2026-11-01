@@ -461,8 +461,12 @@ async function friendState(env, id) {
     `SELECT i.id, p.pid AS sender, p.name, i.game, i.version, i.room FROM invites i JOIN players p ON p.id = i.sender
      WHERE i.receiver = ? AND p.status != 'rejected' ORDER BY i.at DESC`
   ).bind(id).all();
+  // The phone's own nickname and the admin's word on it, so the phone can offer a new name when
+  // it was rejected or the server no longer knows it (null).
+  const self = await env.DB.prepare('SELECT name, status FROM players WHERE id = ?').bind(id).first();
   return {
     pid,
+    me: self ? { name: self.name, status: self.status } : null,
     friends,
     requests: asking.map((r) => ({ pid: r.pid, name: r.name })),
     asked: asked.map((r) => r.receiver),
