@@ -2,7 +2,7 @@
 of its own and signs, side roads with cars pulling out, no overtaking through a junction, and
 the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
-from conftest import ROOT
+from conftest import ROOT, turn
 from test_yoajo_v7 import BOT as BOT_V7, RUN
 
 URL = "games/yoajo/v8/"
@@ -166,4 +166,33 @@ def test_an_oncoming_truck_in_snow_brings_a_haze_not_a_white_flash(site, context
       const first = seen.findIndex(w => w > 0);
       return { first, max: Math.max(...seen), jump: Math.max(...seen.slice(1).map((w, i) => w - seen[i])), end: seen[seen.length - 1] }; }""")
     assert r["first"] >= 0 and r["max"] <= 0.5 and r["jump"] < 0.05 and r["end"] == 0, r
+    assert page.errors == []
+
+
+def test_sideways_and_on_a_390_phone_the_lights_and_the_stick_stay_apart(site, context):
+    page = open_game(site, context)
+    page.evaluate("HOLD = true; newLeg(1)")
+    for size in ({"width": 740, "height": 360}, {"width": 390, "height": 844}, {"width": 360, "height": 640}):
+        turn(page, size)
+        page.wait_for_timeout(200)
+        r = page.evaluate("""() => { resize(); btns = []; draw(); const b = btns.find(b => b.id === 'lights'), h = stickHome();
+          return { b, h, R: STICK, W, H }; }""")
+        b, h, R = r["b"], r["h"], r["R"]
+        assert h["x"] - R > b["x"] + b["w"], (size, r)
+        assert b["x"] >= 0 and b["y"] + b["h"] <= r["H"], (size, r)
+    assert page.errors == []
+
+
+def test_a_retry_brings_back_the_same_junctions_a_fresh_waiting_car_and_no_haze(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(5);
+      const before = JSON.stringify(road.junctions), cars = events.filter(e => e.kind === 'liittyja').length;
+      const J = road.junctions[0]; P.s = J.s - 60; P.v = 0; events = events.filter(e => e.kind === 'liittyja' && e.j === J);
+      for (let i = 0; i < 30; i++) step(1 / 60);
+      const t = things.find(t => t.kind === 'liittyja'); if (t) t.plan = 'turn';
+      cloudIn = 0.25; step(1 / 60); crash('Kolari toisen auton kanssa.'); act({ id: 'uudelleen' });
+      return { same: JSON.stringify(road.junctions) === before, cars: events.filter(e => e.kind === 'liittyja').length, want: cars,
+        things: things.length, whiteout, cloudIn, mode }; }""")
+    assert r["same"] and r["cars"] == r["want"] and r["things"] == 0, r
+    assert r["whiteout"] == 0 and r["cloudIn"] == 0 and r["mode"] == "drive", r
     assert page.errors == []
