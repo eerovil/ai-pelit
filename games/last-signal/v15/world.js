@@ -885,7 +885,7 @@ function sonarText(c, x, y) {
   const d = Math.hypot(c.x - x, c.y - y), w = c.box ? Math.round(c.box[2] - c.box[0]) : c.id.startsWith('railo') ? Math.round(2 * c.r) : 0;
   const size = w >= 3 ? `noin ${w} m` : 'pieni';
   const way = (c.x >= x ? 'itään' : 'länteen') + (c.y - y > 40 ? ', syvemmällä' : c.y - y < -40 ? ', ylempänä' : '');
-  return `📡 Sonar: ${sonarWord(c)} · ${size} · ${Math.round(d / 10) * 10} m ${way}`;
+  return `📡 Sonar: ${sonarWord(c)} · ${size} · ` + (d < 25 ? 'aivan tässä' : `${Math.round(d / 10) * 10} m ${way}`);
 }
 function heardNew(c, x, y, text) {
   const t = text || sonarText(c, x, y);
