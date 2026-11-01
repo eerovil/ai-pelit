@@ -59,7 +59,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: Kisaan!, Jatka kisaa, kaverit tai asu**: `showMenu()` in `games/kuula/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones); "👕 Asu" the outfits (`public/outfits.js`).
+- **Valikko: Kisaan!, Jatka kisaa, kaverit tai asu**: `showMenu()` in `games/kuula/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones); "👕 Asu" the outfits (`public/outfits.js`: the game's own, the Halloween costumes and, from #321, Harry, Ron and Hermione).
 - **Kisa: 12 työntäjää, arvottu järjestys**: `AiPelitKisa.meet()` in `public/lib/yleisurheilu-4/kisa.js` (from v2 `yleisurheilu-5/kisa.js`, #297) with `AiPelitKisa.rounds()`: the players, then computer putters up to twelve, each with a skill around `base(level)` (14 m at level 1, 0.8 m more per level up to 19 m).
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: the library's `K.drawBoard()`, shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it.
 - **Kenen vuoro?**: the library's `advance()` and `follow()`; the game's `newTurn()` sets up this phone's view of the put (`th`).

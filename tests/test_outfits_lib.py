@@ -90,7 +90,29 @@ def test_harry_ron_and_hermione_have_a_group_of_their_own(site, browser, day, or
     assert school == [["Harry", "harry", True], ["Ron", "ron", True], ["Hermione", "hermione", True]]
     page.click("[data-asu=hermione]")
     assert page.evaluate("AiPelitOutfits.current().id") == "hermione"
+    # A friend in a room wears another one at the same time, and the choice outlives a reload.
+    assert page.evaluate("AiPelitOutfits.get('ron').head") == "ron"
+    page.reload()
+    assert page.evaluate("AiPelitOutfits.current().id") == "hermione"
     assert errors == []
+    ctx.close()
+
+
+def test_the_tylypahka_cards_fit_a_390_px_phone(site, browser):
+    site.build()
+    (site.root / "koe").mkdir(exist_ok=True)
+    (site.root / "koe" / "index.html").write_text(PAGE)
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.clock.set_fixed_time("2026-06-15T12:00:00")
+    page.goto(site.url + "koe/")
+    page.evaluate("AiPelitOutfits.open()")
+    for k in ["harry", "ron", "hermione"]:
+        box = page.locator(f"[data-asu={k}]").bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= 390 and box["y"] + box["height"] <= 844
+    page.locator("[data-asu=ron]").tap()
+    assert page.evaluate("AiPelitOutfits.current().id") == "ron"
+    assert page.evaluate("document.scrollingElement.scrollWidth") <= 390
     ctx.close()
 
 
