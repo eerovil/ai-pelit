@@ -36,8 +36,14 @@
   var framed = true;
   try { framed = window.top !== window.self; } catch (e) {}
   if (slug && !framed && /^https?:$/.test(location.protocol)) {
+    // From crypto, not Math.random(): a game's tests seed Math.random(), and an id drawn from it
+    // here shifted every number the game drew after it (#330).
     var pageId = '';
-    while (pageId.length < 16) pageId += Math.random().toString(36).slice(2);
+    try {
+      var bytes = new Uint8Array(12);
+      crypto.getRandomValues(bytes);
+      for (var i = 0; i < bytes.length; i++) pageId += (bytes[i] % 36).toString(36);
+    } catch (e) { pageId = String(Date.now()) + String(performance.now()).replace(/\D/g, ''); }
     pageId = pageId.slice(0, 16);
     var beat = 0;
     var tell = function (gone) {

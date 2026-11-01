@@ -29,6 +29,9 @@ def test_every_real_version_loads_without_errors(site, context, changed_games_on
     # ...and the open rooms the front page lists (#203), as the real one does with none open.
     context.route("**/api/rooms", lambda route: route.fulfill(
         status=200, content_type="application/json", body='{"rooms": []}'))
+    # ...and the "playing now" beats every game page sends (#325).
+    context.route("**/api/playing", lambda route: route.fulfill(
+        status=200, content_type="application/json", body='{"ok": true}' if route.request.method == "POST" else '{"games": {}}'))
     page = context.new_page()
     found = errors_on(page)
     for game in catalog["games"]:
