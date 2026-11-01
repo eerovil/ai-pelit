@@ -10,6 +10,8 @@ before the table's edge to spring, steers the flight position with Taakse and Et
 the telemark just before the snow. The meet itself (turns, saves, room, podium) is the shared
 library's `kisa.js`, see `yleisurheilu-kirjasto.md`.
 
+v3 (#297) plays as v2 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Mäkiviikolle!, Jatka tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]
@@ -67,7 +69,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Mäkiviikolle!, Jatka tai kaverit**: `showMenu()` in `games/makihyppy/v2/index.html` (v1: "Kisaan!"): a new week at the player's level (`taso`), "Jatka mäkiviikkoa (Mäki 2/4 · kierros 1/2)" for a week left unfinished (`kesken`; one saved by v1 goes on as its one hill, `roundText()`), and the room (`rooms.js`, 2–8 phones). It shows meets, wins, the longest jump (`pisin`) and the best meet (v1: `ennatys`; v2: the best week, `viikko-ennatys`, its own record set by v2's `K.record`, so v1 keeps showing its best two-jump meet).
-- **Kisa: 12 hyppääjää, arvottu järjestys**: `AiPelitKisa.meet()` from `public/lib/yleisurheilu-4/kisa.js` with the game's own format `totals()`: the computer jumpers average `base(level)` metres (104 m at level 1, 3 m more per level up to 126 m), spread around it.
+- **Kisa: 12 hyppääjää, arvottu järjestys**: `AiPelitKisa.meet()` from `public/lib/yleisurheilu-4/kisa.js` (from v3 `yleisurheilu-5/kisa.js`, #297) with the game's own format `totals()`: the computer jumpers average `base(level)` metres (104 m at level 1, 3 m more per level up to 126 m), spread around it.
 - **Tulostaulu: hyppy ja pisteet yhteensä**: `board()` in `totals()`: the latest jump's length and the points so far over the whole week, titled by the hill and its round (`title()`, "Kuopio 2/4 · 1. kierros"); a dashed line after ten in the very first round, where the board's order is the hill's. Shown 3.5 s (`BOARD_T`); alone a tap skips it.
 - **Tietokone hyppää heti**: `cpuMark()`: the skill, a scatter of 4.5 m and 2.2 m per m/s of wind, style from the skill; now and then a landing on both feet, a hand in the snow or a fall.
 - **Kaverin hyppy näkyy samana**: the jumping phone sends where its jumper is twelve times a second (`p`) and the judged result (`fin`); other phones ease the jumper along (`watchStep()`) and show the same result card. The host takes a guest's jump only when it could be real (`valid()` in `totals()`): the distance to the half metre, and no more points than that distance with a perfect style.

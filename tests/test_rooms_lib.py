@@ -702,3 +702,24 @@ def test_a_game_not_in_turns_never_offers_the_round_back(phones):
     guest.click("#multi")
     assert guest.locator("#aipr-again").is_hidden()
     assert guest.evaluate("localStorage.getItem('ai-pelit:_huone:kesken')") is None
+
+
+def test_a_round_left_in_turns_is_forgotten_when_the_host_restarts(phones):
+    """#297: the host reloads while a phone that left is away; that round is gone, so coming back
+    lands in the room and the button is not offered again."""
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    other = join(phones, "Iida", code)
+    for p in (host, guest, other):
+        p.evaluate("AiPelitRooms.turns(id => false)")
+    start(host, [guest, other])
+    guest.evaluate("AiPelitRooms.leave()")
+    host.reload()
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.connected")
+    host.evaluate("AiPelitRooms.turns(id => false)")
+    guest.click("#multi")
+    guest.click("#aipr-again")
+    guest.wait_for_function("AiPelitRooms.inRoom && localStorage.getItem('ai-pelit:_huone:kesken') === null", timeout=8000)
+    assert guest.locator("#aipr-room").is_visible()
+    assert guest.evaluate("AiPelitRooms.players") == []
+    assert host.errors == guest.errors == other.errors == []

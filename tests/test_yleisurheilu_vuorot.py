@@ -144,6 +144,12 @@ def test_friends_not_on_turn_stand_by_and_cheer(site, browser, path):
         p.wait_for_function(f"K.cheers[{json.dumps(tid)}]", timeout=5000)
         text = p.evaluate(f"K.cheers[{json.dumps(tid)}].text")
         assert name in text and text.endswith("!")
+    # Both spectators cheer at the same moment: every phone shows both.
+    tids = [p.evaluate("K.mine().id") for p in fans]
+    for p in fans:
+        p.evaluate("K.cheer()")
+    for p in pages:
+        p.wait_for_function(f"{json.dumps(tids)}.every(id => K.cheers[id] && performance.now() - K.cheers[id].at < 1500)", timeout=5000)
     # Once the turn is over, the next one on turn loses the button.
     n = host.evaluate("K.comp.seq")
     jumper.evaluate(f"K.report({n}, {MARK})")

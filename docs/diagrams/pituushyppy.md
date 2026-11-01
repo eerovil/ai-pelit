@@ -8,6 +8,8 @@ player takes a run-up by tapping the left and right foot in turn, holds "Hyppä�
 mark so the take-off angle rises, and lets go on the board before the line. In the air a tap throws
 the legs forward for the landing. The computer's jumps are worked out at once.
 
+v8 (#297) plays as v7 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]
@@ -64,7 +66,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/pituushyppy/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's jumps, so a reload or a trip to the shelf keeps it); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 hyppääjää, arvottu järjestys**: `newComp()` (v2: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js`, from v5 `yleisurheilu-2/kisa.js`, from v6 `yleisurheilu-3/kisa.js`, with `base`, `spread` and `init` from the game): the players, then computer jumpers up to twelve (`FIELD`), each with a skill around `base(level)` metres (5.20 m at level 1, 25 cm more per level up to 7.00 m); the order of rounds 1–3 is drawn once (`order0`), and a seed (`seed`) gives every jump its wind.
+- **Kisa: 12 hyppääjää, arvottu järjestys**: `newComp()` (v2: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js` (from v8 `yleisurheilu-5/kisa.js`, #297), from v5 `yleisurheilu-2/kisa.js`, from v6 `yleisurheilu-3/kisa.js`, with `base`, `spread` and `init` from the game): the players, then computer jumpers up to twelve (`FIELD`), each with a skill around `base(level)` metres (5.20 m at level 1, 25 cm more per level up to 7.00 m); the order of rounds 1–3 is drawn once (`order0`), and a seed (`seed`) gives every jump its wind.
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()` (v2: the library's `K.drawBoard()`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best jump, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` (v2: the library's) jumps for every computer jumper up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's, with the wind for it (`windFor(seq)`, −1.5 to +2.5 m/s, shown as "Tuuli").
 - **Tietokone hyppää heti**: `cpuMark()`: the skill plus a scatter of 20 cm and 5 cm per m/s of wind, a foul about one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's jumps to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
