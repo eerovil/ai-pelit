@@ -248,3 +248,26 @@ def test_the_chip_and_label_fit_a_phone(phones, width, height):
     assert host.evaluate("document.getElementById('aipr').scrollHeight") <= height
     assert host.locator("#aipr-voice").is_visible()
     a.mouse.up()
+
+
+def test_a_chip_with_no_one_to_hear_never_opens_the_microphone(phones):
+    page = phones("Eero")
+    page.evaluate("""(() => { window.__mic = 0; const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (c) => { window.__mic++; return gum(c); }; })()""")
+    page.click("#multi")
+    page.click("#aipr-create")
+    page.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.code")
+    assert page.locator("#aipr-mic").get_attribute("class") == "none mid"
+    hold(page)
+    page.wait_for_function("document.getElementById('aipr-talk').textContent === 'Kukaan ei kuule vielä.'")
+    page.wait_for_timeout(300)
+    page.mouse.up()
+    assert page.evaluate("[window.__mic, AiPelitRooms.voice.talking]") == [0, False]
+    # A friend joins: now it opens.
+    a = join(phones, "Aino", page.evaluate("AiPelitRooms.code"))
+    page.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=15000)
+    hold(page)
+    page.wait_for_function("AiPelitRooms.voice.talking")
+    assert page.evaluate("window.__mic") == 1
+    page.mouse.up()
+    assert a.errors == []

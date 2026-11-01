@@ -510,7 +510,9 @@ function publicRooms(request, env) {
 // Cloudflare's public STUN server (it tells a phone its own address); with the TURN key bound
 // (TURN_KEY_ID, TURN_KEY_TOKEN, scripts/cloudflare_setup.py) also short-lived credentials for
 // Cloudflare's TURN relay, which passes the sound on when two phones cannot reach each other
-// directly. One set is kept for half an hour per isolate, valid for two. Only for this site's pages.
+// directly. One set is kept for half an hour per isolate, valid for two. Only for this site's own
+// pages: the relay credentials go only to a request the browser marks same-origin (Fetch
+// Metadata); any other, or one with no such mark, gets STUN alone.
 //
 // The relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so the
 // credentials are handed out only while this month's use (turn_usage, written every hour by the
@@ -541,8 +543,9 @@ async function underCap(env) {
 
 async function iceServers(request, env) {
   if (request.method !== 'GET') return fail(405, 'GET only');
-  if (request.headers.get('sec-fetch-site') === 'cross-site') return fail(403, 'this site only');
-  if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN || !(await underCap(env))) return json({ iceServers: [STUN] });
+  const site = request.headers.get('sec-fetch-site');
+  if (site === 'cross-site') return fail(403, 'this site only');
+  if (site !== 'same-origin' || !env.TURN_KEY_ID || !env.TURN_KEY_TOKEN || !(await underCap(env))) return json({ iceServers: [STUN] });
   if (!turnCache || Date.now() - turnCache.at > 1800e3) {
     try {
       const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {

@@ -564,6 +564,11 @@
   // ---- Push to talk ----
   function press() {
     if (voice.pressed || !voice.on || !net.on) return;
+    // Nobody to hear it yet: the microphone stays off (and is not even asked for).
+    if (!Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); })) {
+      voice.err = 'Kukaan ei kuule vielä.'; voice.errAt = Date.now();
+      return renderVoice();
+    }
     voice.pressed = true; voice.pressAt = Date.now(); voice.err = ''; voice.errAt = 0;
     renderVoice();
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }).then(function (s) {

@@ -8,7 +8,7 @@ const { handle, STUN, TURN_CAP, TURN_STALE, forgetTurn } = await import('../../s
 
 const ADMIN = 'k'.repeat(24);
 const req = (path, init = {}) => new Request(`https://pelit.test${path}`, init);
-const ice = (env, headers = {}) => handle(req('/api/voice/ice', { headers }), env);
+const ice = (env, headers = { 'sec-fetch-site': 'same-origin' }) => handle(req('/api/voice/ice', { headers }), env);
 const usage = (env, body, key = ADMIN) => handle(req('/api/admin/turn-usage', {
   method: 'POST', headers: { 'x-admin-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body),
 }), env);
@@ -79,4 +79,17 @@ test('when Cloudflare does not answer, the STUN server is still given', async (t
   t.mock.method(globalThis, 'fetch', async () => { throw new Error('offline'); });
   t.mock.method(console, 'error', () => {});
   assert.deepEqual(await (await ice(env)).json(), { iceServers: [STUN] });
+});
+
+test('relay credentials go only to this site\'s own pages; anything else gets STUN alone', async (t) => {
+  const { env, calls } = turnEnv(t);
+  await usage(env, { month: month(), bytes: 0 });
+  for (const headers of [{}, { 'sec-fetch-site': 'none' }, { 'sec-fetch-site': 'same-site' }]) {
+    const res = await ice(env, headers);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { iceServers: [STUN] }, JSON.stringify(headers));
+  }
+  assert.equal((await ice(env, { 'sec-fetch-site': 'cross-site' })).status, 403);
+  assert.equal(calls.length, 0);
+  assert.deepEqual(await (await ice(env)).json(), { iceServers: SERVERS });
 });
