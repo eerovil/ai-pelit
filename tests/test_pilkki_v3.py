@@ -298,23 +298,24 @@ def test_the_lake_has_schools_lone_pike_and_burbot_and_one_giant(site, context):
 def test_fish_keep_away_from_a_pike_and_a_hungry_pike_hunts(site, context):
     page = start(site, context)
     page.evaluate("rivals = []; run(() => true, 20)")
-    # A pike that has eaten: the fish next to it move a few metres off.
+    # A pike swimming about in the open (it has eaten): the fish next to it move a few metres off.
     page.evaluate("""() => {
       const f = pond.find(q => q.sp === 'sarki' || q.sp === 'ahven');
-      const p = newFish(lake.spots[0], 'hauki'); p.g = 3000; p.lx = p.wx = p.hx = f.lx + 1; p.ly = p.wy = p.hy = f.ly; p.linger = 999; p.go = false; p.full = 999;
+      const p = newFish(lake.spots[0], 'hauki'); p.g = 3000; p.lx = p.wx = p.hx = f.lx + 1; p.ly = p.wy = p.hy = f.ly; p.linger = 999; p.go = true; p.wy = p.ly + 0.01; p.wx = p.lx; p.full = 999;
       pond.push(p); window.pk = p; buildGrid();
       window.close = pond.filter(q => q !== p && Math.hypot(q.lx - p.lx, q.ly - p.ly) < 2.5);
       window.before = close.reduce((a, q) => a + Math.hypot(q.lx - p.lx, q.ly - p.ly), 0) / close.length;
     }""")
-    page.evaluate("run(() => true, 3)")
+    # (Held where it is, swimming on the spot, so only the fish move.)
+    page.evaluate("for (let t = 0; t < 3; t += DT) { pk.go = true; pk.wx = pk.hx + 0.5; pk.wy = pk.hy; pk.lx = pk.hx; pk.ly = pk.hy; update(DT); }")
     after = page.evaluate("close.reduce((a, q) => a + Math.hypot(q.lx - pk.lx, q.ly - pk.ly), 0) / close.length")
-    assert after > page.evaluate("before") + 1
+    assert after > page.evaluate("before") + 0.5 and after > 2.2
     # Hungry, it creeps up on a fish, darts, and in time eats some.
     # (A small school of perch kept passing by it, so the test does not wait on chance.)
     page.evaluate("""() => {
       pk.full = 0;
       for (let t = 0; t < 120 && !pk.eaten; t += 10) {
-        for (let i = 0; i < 12; i++) { const f = newFish(lake.spots[0], 'ahven'); f.g = 150; f.lx = f.gx = pk.lx + 6 + Math.random() * 3; f.ly = f.gy = pk.ly + Math.random() * 3; f.linger = 999; pond.push(f); }
+        for (let i = 0; i < 12; i++) { const f = newFish(lake.spots[0], 'ahven'); f.g = 60; f.lx = f.gx = pk.lx + 6 + Math.random() * 3; f.ly = f.gy = pk.ly + Math.random() * 3; f.linger = 999; pond.push(f); }
         run(() => !pk.eaten, 10);
       }
     }""")

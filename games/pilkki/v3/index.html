@@ -98,11 +98,11 @@ const WIN = 0.17;              // seconds a twitch may be off the beat and still
 // Real fish of a Finnish lake in winter. tempo: the twitching pace (seconds a beat) that fish
 // likes; w: its weight range in grams; p: how common it is; d: the depths it keeps to, or bottom.
 const SPECIES = {
-  ahven: { name: 'Ahven', col: '#71903b', belly: '#d8d48a', fin: '#d8572f', tempo: 0.55, w: [40, 480], p: 6, d: [0.8, 8], stripes: true },
-  sarki: { name: 'Särki', col: '#8f9fac', belly: '#e3e8ec', fin: '#c8463a', tempo: 0.8, w: [40, 380], p: 4, d: [0.5, 4] },
-  kiiski: { name: 'Kiiski', col: '#8b7b4b', belly: '#cfc49a', fin: '#9c8a5a', tempo: 0.65, w: [15, 80], p: 3, bottom: true },
-  lahna: { name: 'Lahna', col: '#a58d5a', belly: '#d9c9a0', fin: '#6d5a3a', tempo: 1.0, w: [300, 2600], p: 1.5, d: [3, 12], bottom: true, min: 3 },
-  kuha: { name: 'Kuha', col: '#7b8c84', belly: '#d7dfd8', fin: '#5d6b63', tempo: 1.1, w: [400, 4200], p: 1.2, d: [5, 12], min: 5, stripes: true },
+  ahven: { name: 'Ahven', col: '#71903b', belly: '#d8d48a', fin: '#d8572f', tempo: 0.55, w: [40, 480], p: 6, d: [0.8, 8], stripes: true, nearBottom: true },
+  sarki: { name: 'Särki', col: '#8f9fac', belly: '#e3e8ec', fin: '#c8463a', tempo: 0.8, w: [40, 380], p: 2.5, d: [2, 10] },
+  kiiski: { name: 'Kiiski', col: '#8b7b4b', belly: '#cfc49a', fin: '#9c8a5a', tempo: 0.65, w: [15, 80], p: 0.6, bottom: true, min: 2 },
+  lahna: { name: 'Lahna', col: '#a58d5a', belly: '#d9c9a0', fin: '#6d5a3a', tempo: 1.0, w: [300, 2600], p: 0.5, d: [3, 12], bottom: true, min: 3 },
+  kuha: { name: 'Kuha', col: '#7b8c84', belly: '#d7dfd8', fin: '#5d6b63', tempo: 1.1, w: [400, 4200], p: 0.6, d: [5, 12], min: 5, stripes: true },
   made: { name: 'Made', col: '#5d583a', belly: '#9d9670', fin: '#4a4630', tempo: 1.2, w: [300, 2200], p: 1, bottom: true, min: 4 },
   hauki: { name: 'Hauki', col: '#58783a', belly: '#d6d8a8', fin: '#8a6a2a', tempo: 0.7, w: [800, 6500], p: 0.5, d: [0.5, 4], long: true },
 };
@@ -132,6 +132,8 @@ function newFish(spot, sp) {
 function homeAt(f) {
   const k = SPECIES[f.sp], D = depthAt(f.lx, f.ly);
   if (k.bottom) return D - 0.15 - 0.35 * f.hf;
+  // Perch rest near the bottom by day in winter (Eckmann & Imbrock 1996).
+  if (k.nearBottom) return Math.max(0.5, D - 0.3 - 1.2 * f.hf);
   const lo = Math.min(k.d[0], D - 0.4), hi = Math.max(lo, Math.min(k.d[1], D - 0.3));
   return lo + (hi - lo) * f.hf;
 }
@@ -211,19 +213,20 @@ function onIce(px, py) {
 let pond = [], nextId = 1, goalN = 1;
 const VIEW_X = 5, VIEW_Y = 3.5;  // metres: how far round the hole a fish is in sight
 const inSight = (f, s) => Math.abs(f.lx - s.x) < VIEW_X && Math.abs(f.ly - s.y) < VIEW_Y;
-// From what is known of these fish in winter (#291): roach and bream gather in big schools, perch
-// in schools of fish of a size, all on the move in daytime (cruising about 1.6 body lengths a
-// second); a pike keeps to a home area a few tens of metres across, near the shore.
+// From what is known of these fish in winter (#291, docs/research/pilkkiminen-kalat.md): roach and
+// bream gather in big schools in deep water; tagged perch swim about 0.06-0.10 m/s on average, the
+// others no faster in cold water; a pike keeps to a home area of 0.02-0.95 ha near the shore. The
+// gap between schooling fish is wider than the real 1-2 body lengths, so a school reads on a phone.
 // school: how many start together; gap: the space a fish keeps from its neighbours, in metres;
 // pace: its cruising speed, m/s; stay: seconds at a spot before heading on.
 const HABITS = {
-  ahven: { school: [15, 50], gap: 2.6, pace: 0.45, stay: [10, 40] },
-  sarki: { school: [25, 80], gap: 3, pace: 0.45, stay: [10, 40] },
-  lahna: { school: [8, 25], gap: 3, pace: 0.35, stay: [20, 60] },
-  kiiski: { school: [5, 15], gap: 1.6, pace: 0.25, stay: [30, 90] },
-  kuha: { school: [3, 8], gap: 4.5, pace: 0.4, stay: [20, 60] },
+  ahven: { school: [15, 50], gap: 2.6, pace: 0.15, stay: [10, 40] },
+  sarki: { school: [25, 80], gap: 3, pace: 0.15, stay: [10, 40] },
+  lahna: { school: [8, 25], gap: 3, pace: 0.12, stay: [20, 60] },
+  kiiski: { school: [5, 15], gap: 1.6, pace: 0.08, stay: [30, 90] },
+  kuha: { school: [3, 8], gap: 4.5, pace: 0.15, stay: [20, 60] },
   made: { pace: 0.12, stay: [60, 180] },
-  hauki: { pace: 0.1, stay: [60, 200], home: 25 },
+  hauki: { pace: 0.1, stay: [60, 200], home: 45 },
 };
 const schooling = sp => !!HABITS[sp].school;
 const GIANT = [12000, 16000];  // grams: the lake's one giant pike
@@ -352,8 +355,8 @@ function steer(f, dt) {
     const dx = f.lx - q.lx, dy = f.ly - q.ly, d = Math.hypot(dx, dy) || 0.01;
     // A pike: kept a few metres off; one darting is fled from in earnest. A pike creeping up slowly
     // is hardly noticed, which is how it gets close.
-    // (A fish needs a moment to react to a dart: the first 0.3 s of it go unnoticed.)
-    const fear = q.sp === 'hauki' ? (q.dart > 0 ? (q.dart < 0.6 ? 6 : 0) : q.prey ? 1.5 : 3) : 0;
+    // A pike creeping up is not noticed; one swimming about in the open is kept a few metres off.
+    const fear = q.sp === 'hauki' ? (q.dart > 0 || q.prey ? 0 : q.go ? 3 : 1) : 0;
     if (fear && d < fear) { fx += dx / d * (fear - d) * 2; fy += dy / d * (fear - d) * 2; continue; }
     if (q.sp === 'hauki') continue;
     if (q.sp !== f.sp || d > 7) continue;
@@ -397,18 +400,22 @@ let gridT = 0;
 // on it, then darts the last few metres. About one dart in three takes the fish, which is then
 // gone from the lake; a pike that has eaten rests a minute or two. A miss sends it back to wait.
 // It never takes a fish an angler is working, and keeps near its home area.
-const preyOk = (p, q) => q.sp !== 'hauki' && q.g < p.g * 0.35 && !q.look && q !== biter && !(fight && q === fight.fish) && !taken(q);
+// Prey up to about a third of the pike's length (Turesson & Brönmark 2004), so about 0.035 of its
+// weight; small slim fish rather than bream (Nilsson & Brönmark 2000).
+const preyOk = (p, q) => q.sp !== 'hauki' && q.sp !== 'lahna' && Math.cbrt(q.g / p.g) < 0.33 && !q.look && q !== biter && !(fight && q === fight.fish) && !taken(q);
 function hunt(p, dt) {
   p.full = Math.max(0, (p.full || 0) - dt);
   if (p.dart > 0) {
     p.dart -= dt;
     const q = pond.find(o => o.id === p.prey);
     if (!q) { p.dart = 0; return; }
-    const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01, st = 4.5 * dt;
+    const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01, st = 4 * dt;
     p.lx += (q.lx - p.lx) / d * Math.min(d, st); p.ly += (q.ly - p.ly) / d * Math.min(d, st); p.vx = Math.sign(q.lx - p.lx) || p.vx;
     if (d < 0.6 && !p.struck) {
       p.struck = true;
-      if (Math.random() < 0.35 && preyOk(p, q)) { pond.splice(pond.indexOf(q), 1); p.eaten = (p.eaten || 0) + 1; p.full = rnd(60, 150); p.dart = 0; p.prey = 0; }
+      // An unnoticed strike from close takes the prey about one time in three (36 %, Turesson &
+      // Brönmark 2004). A cold pike that has eaten does not hunt again for a long while.
+      if (Math.random() < 0.36 && preyOk(p, q)) { pond.splice(pond.indexOf(q), 1); p.eaten = (p.eaten || 0) + 1; p.full = 600; p.dart = 0; p.prey = 0; }
     }
     if (p.dart <= 0) { p.rest = rnd(4, 9); p.prey = 0; }
     return;
@@ -417,8 +424,10 @@ function hunt(p, dt) {
   if (p.full > 0 || p.rest > 0 || p.look) { p.prey = 0; return; }
   const far = p.hx !== undefined && Math.hypot(p.lx - p.hx, p.ly - p.hy) > HABITS.hauki.home * 1.5;
   let q = p.prey ? pond.find(o => o.id === p.prey) : null;
+  // It gives up on a fish it cannot get near in a quarter of a minute, and waits again.
+  if (q && (p.stalk = (p.stalk || 0) + dt) > 15) { p.rest = rnd(4, 9); p.prey = 0; p.stalk = 0; return; }
   if (!q || far || !preyOk(p, q) || Math.hypot(q.lx - p.lx, q.ly - p.ly) > 16) {
-    q = null; p.prey = 0;
+    q = null; p.prey = 0; p.stalk = 0;
     if (far || (p.lookT = (p.lookT || 0) - dt) > 0) return;
     p.lookT = 0.5;
     let bd = 14;
@@ -428,8 +437,11 @@ function hunt(p, dt) {
   }
   // Creep up on it slowly, then dart.
   const d = Math.hypot(q.lx - p.lx, q.ly - p.ly) || 0.01;
-  if (d < 2.5) { p.dart = 0.9; p.struck = false; return; }
-  const st = 0.5 * dt;
+  // Creep slowly to within about a body length (strikes start 0.1-0.5 m off; Harper & Blake 1991),
+  // then strike: a fraction of a second at about 4 m/s.
+  const reach = Math.max(0.5, Math.min(1.2, 0.012 * Math.cbrt(p.g / 0.0055)));
+  if (d < reach) { p.dart = 0.35; p.struck = false; return; }
+  const st = 0.3 * dt;
   p.lx += (q.lx - p.lx) / d * st; p.ly += (q.ly - p.ly) / d * st; p.vx = Math.sign(q.lx - p.lx) || p.vx;
   p.wx = p.lx; p.wy = p.ly;
 }
