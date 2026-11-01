@@ -55,11 +55,12 @@ def start(site, context):
     return page
 
 
-# A hole drilled, and one perch of 200 g waiting at 2 m beside the jig.
+# A hole drilled, and the lake's only fish (a perch of 200 g) waiting at 2 m beside the jig.
 def ready(page, sp="ahven", g=200):
     page.evaluate(f"""() => {{
       holes.push(spot.i); toJig(); jigD = 2;
-      fish = [newFish(spot, '{sp}')]; fish[0].g = {g}; fish[0].d = 2; fish[0].home = 2; fish[0].x = 0.4;
+      const f = newFish(spot, '{sp}'); f.g = {g}; f.d = 2; f.lx = f.wx = spot.x + 0.4; f.ly = f.wy = spot.y; f.linger = 999;
+      pond = [f]; sight();
       run(() => !target, 3);
     }}""")
 
@@ -121,7 +122,7 @@ def test_off_the_beat_or_in_a_frenzy_no_fish_bites(site, context):
     }""")
     assert res[0] == "jig" and set(res[1]) == {"off"} and res[2] == 0
     # Many taps at once frighten it away.
-    res = page.evaluate("() => { twitch(); update(DT); const r = twitch(); return [r, phase, fish[0].flee > 0]; }")
+    res = page.evaluate("() => { twitch(); update(DT); const r = twitch(); return [r, phase, pond[0].flee > 0]; }")
     assert res == ["fast", "jig", True]
 
 
@@ -131,7 +132,7 @@ def test_a_missed_bite_lets_the_fish_go(site, context):
     page.evaluate(ON_BEAT, 10)
     page.evaluate("run(() => phase === 'bite', 3)")
     assert page.evaluate("phase") == "jig"
-    assert page.evaluate("fish[0].flee > 0 && fish[0].int === 0") is True
+    assert page.evaluate("pond[0].flee > 0 && pond[0].int === 0 && pond[0].go") is True
 
 
 def test_holding_through_a_big_fish_s_rush_breaks_the_line(site, context):
@@ -139,7 +140,7 @@ def test_holding_through_a_big_fish_s_rush_breaks_the_line(site, context):
     ready(page, "hauki", 5000)
     page.evaluate(ON_BEAT, 12)
     page.evaluate("strike(); holding = 1; run(() => phase === 'fight', 30)")
-    assert page.evaluate("[phase, myG, fish.length]") == ["snap", 0, 1]
+    assert page.evaluate("[phase, myG, pond.length, pond[0].go]") == ["snap", 0, 1, True]
     # A new jig is tied on, and it goes back down by itself.
     page.evaluate("run(() => phase === 'snap', 5); run(() => jigGoal !== null, 5)")
     assert page.evaluate("phase") == "jig" and page.evaluate("jigD") > 1.5
@@ -199,36 +200,62 @@ def test_the_contest_ends_after_five_minutes_and_a_win_raises_the_level(site, co
 
 def test_the_computer_anglers_get_better_level_by_level(site, context):
     page = open_game(site, context)
-    means = page.evaluate("""() => [1, 3, 6].map(l => {
+    means = page.evaluate("""() => [1, 6].map(l => {
       level = l; let tot = 0;
-      for (let k = 0; k < 60; k++) {
-        rivals = RIVALS.map(n => ({ name: n, g: 0, n: 0, spot: k % SPOTS }));
-        for (let t = 0; t < CONTEST; t += 0.25) cpuAnglers(0.25);
+      for (let k = 0; k < 6; k++) {
+        save('kisa', null); newContest(); holes.push(spot.i); toJig();
+        const n = pond.length;
+        run(() => true, CONTEST - 1);
+        // What they land is gone from the lake.
+        if (pond.length !== n - rivals.reduce((a, r) => a + r.n, 0)) return -1;
         tot += Math.max(...rivals.map(r => r.g));
       }
-      return tot / 60;
+      return tot / 6;
     })""")
-    # Level 1's best rival lands about a kilo or so; it grows from there.
-    assert 600 < means[0] < 2200 and means[0] < means[1] < means[2]
+    # Level 1's best rival lands a kilo or two; level 6's far more.
+    assert 700 < means[0] < 3500 and means[1] > means[0] * 1.5
 
 
-def test_a_fished_out_place_stays_so_and_refills_slowly(site, context):
+def test_every_fish_swims_from_place_to_place_and_a_caught_one_is_gone(site, context):
     page = start(site, context)
-    first = page.evaluate("holes.push(spot.i); toJig(); spot.i")
-    # A full place has no fish waiting: one landed after a long while is not replaced at once.
-    page.evaluate("run(() => true, 40)")
-    n = page.evaluate("spot.start")
-    page.evaluate("fish.pop(); run(() => true, 1)")
-    assert page.evaluate("fish.length") == n - 1
-    # Fished out, left and visited again at once: still empty.
-    page.evaluate("fish.length = 0")
+    page.evaluate("holes.push(spot.i); toJig()")
+    n = page.evaluate("pond.length")
+    page.evaluate("pond.forEach(f => f.was = f.tgt)")
+    page.evaluate("run(() => true, 150)")
+    # Only the computer anglers fished: every other fish is still there, many now at another place.
+    assert page.evaluate("pond.length + rivals.reduce((a, r) => a + r.n, 0)") == n
+    page.evaluate("rivals = []")
+    moved = page.evaluate("pond.filter(f => f.tgt !== f.was).length")
+    assert moved > n * 0.4
+    # A fished-out place stays empty when you walk off and come straight back...
+    first = page.evaluate("spot.i")
     other = page.evaluate(f"lake.find(s => s.i !== {first}).i")
-    page.evaluate(f"moveTo(lake[{other}]); run(() => phase === 'walk', 10); holes.push(spot.i); toJig()")
-    page.evaluate(f"moveTo(lake[{first}]); run(() => phase === 'walk', 10)")
+    page.evaluate(f"""() => {{
+      pond = pond.filter(f => Math.abs(f.lx - spot.x) > 12 || Math.abs(f.ly - spot.y) > 12);
+      for (const f of pond) {{ f.linger = 999; if (f.tgt === {first}) leave(f); }}
+      moveTo(lake[{other}]); run(() => phase === 'walk', 10); holes.push(spot.i); toJig();
+      moveTo(lake[{first}]); run(() => phase === 'walk', 10);
+    }}""")
     assert page.evaluate("[spot.i, fish.length]") == [first, 0]
-    # One fish comes back every 35 s it has been short.
-    page.evaluate("run(() => true, 36)")
+    # ...and gets a fish when one swims there.
+    page.evaluate(f"const f = pond[0]; f.tgt = {first}; f.go = true; f.wx = spot.x; f.wy = spot.y")
+    page.evaluate("run(() => !fish.length, 300)")
     assert page.evaluate("fish.length") == 1
+
+
+def test_a_reload_keeps_every_fish_of_the_lake(site, context):
+    page = start(site, context)
+    page.evaluate("holes.push(spot.i); toJig(); run(() => true, 20)")
+    here = page.evaluate("spot.i")
+    # This place fished out (nothing near it), the rest of the lake as it swims.
+    page.evaluate("pond = pond.filter(f => Math.abs(f.lx - spot.x) > 6 || Math.abs(f.ly - spot.y) > 4.5); sight()")
+    before = page.evaluate("pond.map(f => [f.sp, f.g, f.tgt]).sort().join(';')")
+    page.evaluate("keepContest()")
+    page.reload()
+    page.evaluate(RUN)
+    page.click("#resume")
+    assert page.evaluate("[spot.i, phase, fish.length]") == [here, "jig", 0]
+    assert page.evaluate("pond.map(f => [f.sp, f.g, f.tgt]).sort().join(';')") == before
 
 
 def test_a_reload_mid_contest_can_carry_it_on(site, context):
@@ -343,7 +370,7 @@ def test_a_paused_contest_takes_no_fishing_input(room):
     host.mouse.up()
     assert host.evaluate("[phase, drill, holes.length]") == ["drill", 0, 0]
     # A hole ready and a fish biting: a tap does not hook it while paused.
-    host.evaluate("holes.push(spot.i); toJig(); jigD = 2; fish[0].d = 2; bite(fish[0])")
+    host.evaluate("holes.push(spot.i); toJig(); jigD = 2; bite(pond[0])")
     host.mouse.click(180, 500)
     assert host.evaluate("[phase, myN]") == ["bite", 0]
     assert host.errors == []

@@ -17,6 +17,7 @@ flowchart TD
   A{Onko paikassa jo reikä?} -- Ei --> B[Pyöritä sormella ympyrää: kaira menee jään läpi]
   A -- On --> C
   B --> C[Vedä alas tai ylös: pilkki kalojen syvyydelle]
+  Z[Järven kalat: jokainen ui omaa reittiään paikasta toiseen] -.-> D
   C --> D{Onko kala lähellä pilkkiä?}
   D -- Ei --> M[🚶 Uusi paikka: valitse kohta järven kartalta]
   M --> A
@@ -37,13 +38,14 @@ flowchart TD
   O --> C
   N -- Ei, kala reiällä --> P[Saalis punnitaan ja tallennetaan heti]
   P --> C
+  P -.-> Z
   C -.-> T{Viisi minuuttia kulunut?}
   T -- Yksin --> U[Sijoitus tietokoneen pilkkijöitä vastaan; voitto nostaa tasoa]
   T -- Kavereiden kanssa --> V[Huoneen tekijä odottaa viimeiset saaliit, tulos kaikille kerran]
   class S2,S3,V violet
   class S,A,D,F,J,N,T amber
   class B,C,E,K,L,M blue
-  class G,P teal
+  class G,P,Z teal
   class U green
   class H,I,O rose
   class S1 blue
@@ -61,13 +63,14 @@ flowchart TD
 ## Boxes
 
 - **Miten pelataan?**: the menu in `games/pilkki/v1/index.html`: **Aloita pilkkikisa** (`newContest()`), **Jatka kisaa** when a contest alone was left unfinished (kept every two seconds as `ai-pelit:pilkki:kisa` by `keepContest()`), or **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`).
-- **Sinä ja kolme tietokoneen pilkkijää samalla järvellä**: `cpuAnglers()` lands a fish now and then for each rival; how often and how big grows with the level (`rivalRate()`).
+- **Sinä ja kolme tietokoneen pilkkijää samalla järvellä**: `cpuAnglers()` now and then lands for each rival a fish that is at its place, and that fish is gone from the lake; how often, and how often the bigger of two, grows with the level (`rivalRate()`).
 - **Huone: 2–8 puhelinta, sama järvi, kukin omassa paikassaan**: `setupFor()` on the host sends the lake's seed (`makeLake()`) and a starting place for each phone.
 - **Kukin pilkkii omalla puhelimellaan ja lähettää saaliinsa; huoneen tekijä pitää kelloa ja tulostaulua**: each phone sends `me` (its catch, `sendMe()`) every second and after each fish; the host sends `s` (the clock and everyone's catch, `snapshot()`) twice a second. A catch on the host's list only grows, so a phone that reloads gets its catch back. While the room waits for a phone that is away (`AiPelitRooms.paused`), the clock stops and no phone takes fishing input.
 - **Onko paikassa jo reikä?**: `goTo()`; holes drilled this contest are in `holes`.
 - **Pyöritä sormella ympyrää: kaira menee jään läpi**: `turnAuger()`; six turns of the finger round the auger (`TURNS`).
 - **Vedä alas tai ylös: pilkki kalojen syvyydelle**: a drag in the water moves the jig (`jigD`); after a catch or a broken line it sinks back to the last depth by itself (`jigGoal`).
-- **🚶 Uusi paikka: valitse kohta järven kartalta**: `drawMap()` and `moveTo()`; twelve places, shallow by the shore and deep in the middle, each with its own fish (`newFish()`, `SPECIES`), kept for the whole contest: a fished-out place stays empty when you come back and gets one fish back for every 35 s it has been short (`refill()`). A walk takes a couple of seconds.
+- **🚶 Uusi paikka: valitse kohta järven kartalta**: `drawMap()` and `moveTo()`; twelve places, shallow by the shore and deep in the middle, where the fish gather. A walk takes a couple of seconds.
+- **Järven kalat: jokainen ui omaa reittiään paikasta toiseen**: `pond`, about a hundred single fish (`newFish()`, `SPECIES`) on a lake of 150 × 110 m. Each swims to a place that suits its kind, stays there half a minute to two minutes, then swims on (`swim()`, `leave()`); a frightened or lost fish swims off at once (`scare()`). A fish caught is gone for the rest of the contest, and none are added, so a fished-out place fills again only when fish swim there. The side view shows the fish within 5 m of the hole (`sight()`). The contest save keeps every fish (`pondSave()`), so a reload finds the lake as it was. In a room each phone has its own fish of the same lake.
 - **Pallo heiluu kalan tahdissa: napauta, kun se osuu reunaan**: `period()` is the tempo of the fish the jig is working on (`target`); a perch likes fast twitches, a zander or a burbot slow ones.
 - **Miten napautit?**: `twitch()`: within `WIN` (0.17 s) of the beat is good, faster than half a beat is a frenzy.
 - **Tärppi! Napauta heti**: `bite()`, then `strike()` within about a second.

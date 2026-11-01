@@ -108,19 +108,30 @@ function pickSpecies(depth, r = Math.random) {
   return ok[0];
 }
 function weighOf(sp, r = Math.random) { const [a, b] = SPECIES[sp].w; return Math.round(a + (b - a) * Math.pow(r(), 2.4)); }
+// A fish lives at a point of the lake (lx, ly in metres) and keeps to a depth that suits its kind
+// at the place it is near (hf, its own spot in that range). x is its place across the side view
+// while it is in sight of the hole.
 function newFish(spot, sp) {
   sp = sp || pickSpecies(spot.depth);
-  const s = SPECIES[sp], D = spot.depth;
-  const home = s.bottom ? D - rnd(0.15, 0.5) : Math.min(D - 0.3, rnd(s.d[0], Math.min(s.d[1], D)));
-  return { sp, g: weighOf(sp), x: rnd(-4, 4), d: home, home, vx: rnd(0.2, 0.5) * (Math.random() < 0.5 ? -1 : 1), int: 0, flee: 0, look: false };
+  const f = { sp, g: weighOf(sp), lx: spot.x + rnd(-4, 4), ly: spot.y + rnd(-3, 3), hf: Math.random(), tgt: spot.i, go: false,
+    linger: rnd(20, 120), wx: 0, wy: 0, d: 0, x: 0, vx: 1, int: 0, flee: 0, look: false };
+  f.d = homeAt(f, spot); wander(f, spot);
+  return f;
 }
+function homeAt(f, s) {
+  const k = SPECIES[f.sp], D = s.depth;
+  if (k.bottom) return D - 0.15 - 0.35 * f.hf;
+  const lo = Math.min(k.d[0], D - 0.4), hi = Math.max(lo, Math.min(k.d[1], D - 0.3));
+  return lo + (hi - lo) * f.hf;
+}
+function wander(f, s) { f.wx = s.x + rnd(-4.5, 4.5); f.wy = s.y + rnd(-3, 3); }
 const kg = g => (g / 1000).toFixed(2).replace('.', ',') + ' kg';
 const weightText = g => g < 1000 ? g + ' g' : kg(g);
 
 // ---------- The lake ----------
 // Twelve places on the same lake, the same for every phone of a contest (from its seed): near the
-// shore it is shallow, out in the middle deep. Each place has its own fish, and new ones come
-// slowly, so a fished-out hole is worth leaving.
+// shore it is shallow, out in the middle deep. The lake is LAKE_W x LAKE_H metres; its fish are a
+// fixed number of single fish that gather at the places and swim from one to another.
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const SPOTS = 12;
 function makeLake(seed) {
@@ -130,7 +141,7 @@ function makeLake(seed) {
     const a = i / SPOTS * Math.PI * 2 + r() * 0.4, out = i % 3 === 0 ? 0.15 + r() * 0.25 : 0.5 + r() * 0.4;
     const mx = 0.5 + Math.cos(a) * out * 0.44, my = 0.5 + Math.sin(a) * out * 0.4;
     const depth = Math.round((1.6 + (1 - out) * 9 + r() * 2) * 10) / 10;
-    list.push({ i, mx, my, depth });
+    list.push({ i, mx, my, depth, x: 0, y: 0 });
   }
   // Push places apart so each one is its own target on the map, and keep them on the lake.
   for (let k = 0; k < 40; k++) for (const p of list) for (const q of list) {
@@ -142,7 +153,49 @@ function makeLake(seed) {
       if (e > 1) { s.mx = 0.5 + ex / e * 0.44; s.my = 0.5 + ey / e * 0.4; }
     }
   }
+  for (const s of list) { s.x = s.mx * LAKE_W; s.y = s.my * LAKE_H; }
   return list;
+}
+const LAKE_W = 150, LAKE_H = 110;
+
+// ---------- The fish of the lake ----------
+// Every fish is its own: it swims to a place that suits its kind, stays there a while, then swims
+// on to another. A fish caught is gone for the rest of the contest, and a place gets new fish only
+// when they swim there, so a fished-out hole fills again slowly, and only if fish come by.
+let pond = [];
+const VIEW_X = 5, VIEW_Y = 3.5;  // metres: how far round the hole a fish is in sight
+const inSight = (f, s) => Math.abs(f.lx - s.x) < VIEW_X && Math.abs(f.ly - s.y) < VIEW_Y;
+function stockPond(saved) {
+  if (saved) {
+    pond = saved.map(q => {
+      const s = lake[q[5]] || lake[0], f = newFish(s, SP[q[0]] || 'ahven');
+      Object.assign(f, { g: q[1], lx: q[2], ly: q[3], d: q[4], tgt: s.i, linger: q[6], hf: q[7], go: !!q[8] });
+      if (f.go) { f.wx = s.x; f.wy = s.y; }
+      return f;
+    });
+    return;
+  }
+  pond = [];
+  // Six to nine at each place to start with, and a few on their way somewhere.
+  for (const s of lake) { const n = 6 + Math.floor(Math.random() * 4); for (let i = 0; i < n; i++) pond.push(newFish(s)); }
+  for (let i = 0; i < 16; i++) { const f = newFish(lake[i % SPOTS]); f.lx = rnd(0.1, 0.9) * LAKE_W; f.ly = rnd(0.1, 0.9) * LAKE_H; leave(f); pond.push(f); }
+}
+const r1 = v => Math.round(v * 10) / 10;
+const pondSave = () => pond.map(f => [SP.indexOf(f.sp), f.g, r1(f.lx), r1(f.ly), r1(f.d), f.tgt, Math.round(f.linger), Math.round(f.hf * 100) / 100, f.go ? 1 : 0]);
+// Off to another place, one that suits the fish's kind (a zander only where it is deep).
+function leave(f) {
+  const ok = lake.filter(s => s.i !== f.tgt && (SPECIES[f.sp].min || 0) <= s.depth);
+  const s = ok[Math.floor(Math.random() * ok.length)] || lake[f.tgt];
+  f.tgt = s.i; f.go = true; f.linger = rnd(30, 130); f.wx = s.x + rnd(-3, 3); f.wy = s.y + rnd(-2, 2);
+}
+// One step of a fish that is not busy with the jig.
+function swim(f, dt) {
+  const s = lake[f.tgt], dx = f.wx - f.lx, dy = f.wy - f.ly, dist = Math.hypot(dx, dy);
+  const sp = (f.go ? 0.75 : 0.28) * (f.flee > 0 ? 2.6 : 1);
+  if (dist > 0.05) { const st = Math.min(dist, sp * dt); f.lx += dx / dist * st; f.ly += dy / dist * st; if (Math.abs(dx) > 0.02) f.vx = Math.sign(dx); }
+  if (dist < 0.3) { f.go = false; wander(f, s); }
+  if (!f.go && (f.linger -= dt) <= 0) leave(f);
+  f.d += (homeAt(f, s) - f.d) * Math.min(1, dt * 0.4);
 }
 
 // ---------- The contest ----------
@@ -157,13 +210,14 @@ const playing = () => ['drill', 'walk', 'jig', 'bite', 'fight', 'caught', 'snap'
 
 const RIVALS = ['Pilkki-Pekka', 'Ahven-Aili', 'Kaira-Kalle'];
 // The computer's anglers: a catch that grows the more the levels go up.
-function rivalRate(l) { l = Math.min(l, 12) - 1; return { perMin: 1.2 + 0.25 * l, big: 0.3 + 0.05 * l }; }
+function rivalRate(l) { l = Math.min(l, 12) - 1; return { perMin: 0.9 + 0.25 * l, big: Math.min(0.9, 0.15 + 0.07 * l) }; }
 
 function newContest(resume) {
   net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, away: [], closing: 0 };
   menu.classList.add('hidden');
   seed = resume ? resume.seed : Math.floor(Math.random() * 1e9);
   lake = makeLake(seed);
+  stockPond(resume && resume.pond);
   if (resume) {
     left = resume.left; myG = resume.g; myN = resume.n; myBig = resume.big; holes = resume.holes.slice();
     rivals = resume.riv.map((q, i) => ({ name: RIVALS[i], g: q[0], n: q[1], spot: q[2] }));
@@ -179,21 +233,9 @@ function newContest(resume) {
 }
 // Arrive at a place: a hole already drilled is ready, a new one is drilled first.
 function goTo(s, now) {
-  if (spot && spot.fish) spot.leftAt = playT;
   spot = s; target = biter = fight = landed = null; mapOpen = false;
-  // A place keeps its fish for the whole contest: one fished out stays so when you come back,
-  // and refills only one fish every 35 s it has been short, here or away.
-  if (!s.fish) {
-    s.fish = []; s.spawnT = 0;
-    const n = 6 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < n; i++) s.fish.push(newFish(s));
-    s.start = n;
-  } else if (s.leftAt !== undefined) {
-    if (s.fish.length < s.start) s.spawnT += Math.max(0, playT - s.leftAt);
-    refill(s);
-  }
-  fish = s.fish;
-  for (const f of fish) { f.int = 0; f.look = false; }
+  for (const f of pond) { f.int = 0; f.look = false; }
+  sight();
   jigD = 0; jigGoal = null;
   if (!now) { phase = 'walk'; walkT = 1.2 + Math.hypot(walkTo.to.mx - walkTo.from.mx, walkTo.to.my - walkTo.from.my) * 4; phaseT = 0; return; }
   if (holes.includes(spot.i)) toJig(); else { phase = 'drill'; drill = 0; phaseT = 0; }
@@ -208,7 +250,7 @@ function moveTo(s) {
 // The contest alone is kept every couple of seconds, so a reload or a trip to the shelf does not lose it.
 function keepContest() {
   if (net.on || !playing()) return;
-  save('kisa', { left: Math.round(left), g: myG, n: myN, big: myBig, holes, spot: spot.i, seed, lv: level, riv: rivals.map(r => [r.g, r.n, r.spot]) });
+  save('kisa', { left: Math.round(left), g: myG, n: myN, big: myBig, holes, spot: spot.i, seed, lv: level, riv: rivals.map(r => [r.g, r.n, r.spot]), pond: pondSave() });
 }
 
 function update(dt) {
@@ -222,7 +264,7 @@ function update(dt) {
   if (!net.on) cpuAnglers(dt);
   world(dt);
   if (phase === 'walk') { if (phaseT >= walkT) goTo(walkTo.to, true); }
-  else if (phase === 'bite') { if (phaseT > 0.95) { say('Kala karkasi', '#ffd166'); biter.int = 0; biter.flee = 4; biter = null; toJig(); } }
+  else if (phase === 'bite') { if (phaseT > 0.95) { say('Kala karkasi', '#ffd166'); scare(biter, 4); biter = null; toJig(); } }
   else if (phase === 'fight') fightStep(dt);
   else if (phase === 'caught') { if (phaseT > 2) afterCatch(); }
   else if (phase === 'snap') { if (phaseT > 2.6) { toJig(); jigGoal = lastDepth; } }
@@ -238,47 +280,47 @@ function tick(dt) {
 }
 function say(s, col) { texts.push({ s, c: col, t: 1.1 }); }
 
-// The fish swim about; the ones near the jig look at it, and the twitching makes them want it.
+// The fish in sight of the hole, each with its place across the side view.
+function sight() {
+  fish = pond.filter(f => inSight(f, spot) || f === biter || (fight && f === fight.fish));
+  for (const f of fish) f.x = f.lx - spot.x;
+}
+// The whole lake's fish swim; the ones near the jig look at it, and the twitching makes them want it.
 function world(dt) {
-  if (phase === 'walk' || phase === 'drill') return;
+  const busy = f => f === biter || (fight && f === fight.fish);
+  for (const f of pond) {
+    if (busy(f) || f.look) continue;
+    f.flee = Math.max(0, f.flee - dt);
+    f.int = Math.max(0, f.int - 0.3 * dt);
+    swim(f, dt);
+  }
+  sight();
+  if (phase === 'walk' || phase === 'drill') { for (const f of fish) f.look = false; return; }
   if (jigGoal !== null && phase === 'jig') {
     const st = 2.6 * dt;
     if (Math.abs(jigGoal - jigD) <= st) { jigD = jigGoal; jigGoal = null; } else jigD += Math.sign(jigGoal - jigD) * st;
   }
-  // Fresh fish come by now and then, up to what the place had.
-  if (fish.length < spot.start) { spot.spawnT += dt; refill(spot); } else spot.spawnT = 0;
   beat += dt / period();
   const P = period(), since = playT - lastTwitch;
   target = null;
   for (const f of fish) {
-    if (f === biter || (fight && f === fight.fish)) continue;
-    f.flee = Math.max(0, f.flee - dt);
-    f.look = phase === 'jig' && f.flee <= 0 && jigD > 0.3 && Math.abs(f.d - jigD) < 1.6 && Math.abs(f.x) < 3;
+    if (busy(f)) continue;
+    const was = f.look;
+    f.look = phase === 'jig' && f.flee <= 0 && jigD > 0.3 && Math.abs(f.d - jigD) < 1.6 && Math.abs(f.x) < 3 && Math.abs(f.ly - spot.y) < 2.5;
     if (f.look) {
       // It comes to the jig, and stays interested only while the jig keeps moving.
-      const gx = f.x < 0 ? -0.28 : 0.28;
-      f.x += Math.max(-0.7 * dt, Math.min(0.7 * dt, gx - f.x));
+      const gx = spot.x + (f.x < 0 ? -0.28 : 0.28);
+      f.lx += Math.max(-0.7 * dt, Math.min(0.7 * dt, gx - f.lx));
+      f.ly += Math.max(-0.5 * dt, Math.min(0.5 * dt, spot.y - f.ly));
       f.d += Math.max(-0.5 * dt, Math.min(0.5 * dt, jigD - f.d));
       f.int = Math.max(0, f.int - (since > 2.3 * P ? 0.22 : 0.03) * dt);
+      // A fish busy with the jig stays at this place.
+      f.tgt = spot.i; f.go = false; f.linger = Math.max(f.linger, 8);
+      f.x = f.lx - spot.x;
       if (!target || f.int > target.int || (f.int === target.int && Math.abs(f.d - jigD) < Math.abs(target.d - jigD))) target = f;
-    } else {
-      f.int = Math.max(0, f.int - 0.3 * dt);
-      const sp = f.flee > 0 ? 2.2 : 1;
-      f.x += f.vx * sp * dt;
-      if (Math.abs(f.x) > 4.6) { f.vx = -Math.sign(f.x) * Math.abs(f.vx); f.x = Math.sign(f.x) * 4.6; }
-      f.d += (f.home - f.d) * Math.min(1, dt * 0.5);
-    }
+    } else if (was) wander(f, spot);
   }
   if (phase === 'jig' && target && target.int >= 0.96) bite(target);
-}
-// The recovery clock runs only while the place is short of fish, so a full place never has
-// one waiting to come.
-function refill(s) {
-  while (s.spawnT >= 35 && s.fish.length < s.start) {
-    s.spawnT -= 35;
-    const f = newFish(s); f.x = Math.random() < 0.5 ? -5 : 5; s.fish.push(f);
-  }
-  if (s.fish.length >= s.start) s.spawnT = 0;
 }
 // The beat follows the fish the jig is working on, or a middle pace while none looks.
 function period() { return target ? SPECIES[target.sp].tempo : 0.75; }
@@ -290,7 +332,7 @@ function twitch() {
   const lookers = fish.filter(f => f.look);
   if (since < 0.5 * P) {
     // Twitching in a frenzy frightens the fish off.
-    for (const f of lookers) { f.int -= 0.25; if (f.int < 0) { f.int = 0; f.flee = 3; } }
+    for (const f of lookers) { f.int -= 0.25; if (f.int < 0) scare(f, 3); }
     say('Liian nopeasti!', '#ff8a6b');
     return 'fast';
   }
@@ -306,8 +348,10 @@ function twitch() {
   if (lookers.length) say(fr < 0.5 ? 'Myöhässä' : 'Liian aikaisin', '#ffd166');
   return 'off';
 }
+// A fish frightened or let go swims off to another place.
+function scare(f, t) { f.int = 0; f.look = false; f.flee = t; leave(f); }
 function bite(f) {
-  phase = 'bite'; phaseT = 0; biter = f; f.x = 0.15; f.d = jigD;
+  phase = 'bite'; phaseT = 0; biter = f; f.lx = spot.x + 0.15; f.ly = spot.y; f.x = 0.15; f.d = jigD;
   S.play('osuma', { vol: 0.7 });
 }
 // The strike: a tap while the fish has the jig hooks it.
@@ -337,19 +381,20 @@ function fightStep(dt) {
   if (on && (reelT -= dt) <= 0) { reelT = 0.11; S.play('naksu', { vol: 0.18, rate: 1.6 }); }
   if (f.T > 1) f.over += dt; else f.over = Math.max(0, f.over - dt * 2);
   f.sway += dt * (f.burst > 0 ? 9 : 4);
-  f.fish.x = Math.sin(f.sway) * (f.burst > 0 ? 0.45 : 0.2); f.fish.d = Math.max(0, f.L);
+  f.fish.x = Math.sin(f.sway) * (f.burst > 0 ? 0.45 : 0.2); f.fish.lx = spot.x + f.fish.x; f.fish.ly = spot.y; f.fish.d = Math.max(0, f.L);
   jigD = Math.max(0, f.L);
   if (f.over > 0.4) snap();
   else if (f.L <= 0) land();
 }
 function snap() {
   const f = fight.fish;
-  f.flee = 5; f.int = 0; f.vx = 1.4 * (Math.random() < 0.5 ? -1 : 1);
-  fight = null; phase = 'snap'; phaseT = 0; jigD = 0;
+  fight = null; scare(f, 5); phase = 'snap'; phaseT = 0; jigD = 0;
   S.play('virhe', { vol: 0.6 });
 }
 function land() {
   const f = fight.fish;
+  // Gone from the lake for the rest of the contest.
+  pond.splice(pond.indexOf(f), 1);
   fish.splice(fish.indexOf(f), 1);
   fight = null; phase = 'caught'; phaseT = 0; jigD = 0;
   landed = { sp: f.sp, g: f.g };
@@ -382,15 +427,23 @@ function turnAuger(da) {
   }
 }
 
-// The computer's anglers alone: now and then one lands a fish of its place.
+// The computer's anglers alone: now and then one lands a fish that is at its place, which is then
+// gone from the lake like any other. Better anglers land more, and the bigger ones more often.
 function cpuAnglers(dt) {
   const k = rivalRate(level);
   for (const r of rivals) {
+    const s = lake[r.spot];
     if (Math.random() < k.perMin / 60 * dt) {
-      const d = lake[r.spot].depth, sp = pickSpecies(d);
-      r.g += Math.round(weighOf(sp) * k.big); r.n++;
+      const here = pond.filter(f => inSight(f, s) && !f.look && f !== biter && !(fight && f === fight.fish));
+      if (here.length) {
+        // It hooks one of two at random: the smaller, unless it is good enough to take the bigger.
+        const a = here[Math.floor(Math.random() * here.length)], b = here[Math.floor(Math.random() * here.length)];
+        const f = (Math.random() < k.big) === (a.g > b.g) ? a : b;
+        pond.splice(pond.indexOf(f), 1);
+        r.g += f.g; r.n++;
+      } else r.spot = Math.floor(Math.random() * SPOTS);
     }
-    if (Math.random() < dt / 70) r.spot = Math.floor(Math.random() * SPOTS);
+    if (Math.random() < dt / 90) r.spot = Math.floor(Math.random() * SPOTS);
   }
 }
 
@@ -446,6 +499,7 @@ function setupFor(round, list) {
 function applySetup(s) {
   net = { on: true, round: s.round, setup: s, board: {}, sendT: 0, meT: 0, away: [], closing: 0 };
   seed = s.seed; lake = makeLake(seed); holes = []; left = CONTEST;
+  stockPond();
   myG = 0; myN = 0; myBig = null; rivals = [];
   const i = Math.max(0, s.players.findIndex(p => p.id === R.me));
   goTo(lake[s.spots[i] || 0], true);
@@ -731,8 +785,8 @@ function drawWater() {
   for (const f of fish) {
     if (fight && f === fight.fish) continue;
     const dir = f.look ? (f.x < 0 ? 1 : -1) : Math.sign(f.vx) || 1;
-    // Seen dimly; the ones looking at the jig a little clearer.
-    drawFish(f, fishX(f.x), depthY(f.d), 1, dir, f.look ? 0.55 + f.int * 0.4 : 0.38);
+    // Seen dimly, dimmer the further off the line of sight; the ones looking at the jig clearer.
+    drawFish(f, fishX(f.x), depthY(f.d), 1, dir, f.look ? 0.55 + f.int * 0.4 : 0.42 * (1 - 0.6 * Math.abs(f.ly - spot.y) / VIEW_Y));
     if (f.look && f.int > 0.05) {
       const px = fishX(f.x), py = depthY(f.d) - 16;
       x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(px - 15, py, 30, 4);
