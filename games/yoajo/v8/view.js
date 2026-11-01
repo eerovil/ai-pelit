@@ -160,7 +160,8 @@ function buildWorld() {
   V3.scene.fog = new THREE.Fog(sky, 25, wx === 'pyry' ? 160 : snowy ? 230 : wet ? 300 : 420);
   V3.moon.intensity = snowy ? 1.1 : 0.55;
   w.add(groundMesh(snowy, wet));
-  if (!snowy || wx === 'lumi') w.add(markings(snowy));
+  // v8: in a blizzard too, where only the junctions' no-overtaking lines show (v1–v7: no lines at all).
+  w.add(markings(snowy, wx === 'pyry'));
   w.add(trees(snowy));
   w.add(posts(snowy));
   V3.signs = road.signs.map(signMesh); V3.signs.forEach(m => w.add(m));
@@ -234,8 +235,9 @@ function groundMesh(snowy, wet) {
   return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
 }
 // Painted lines: white edges, a yellow dashed middle (Finnish roads part the two directions in
-// yellow). Under snow only the edges show here and there.
-function markings(snowy) {
+// yellow). Under snow only the edges show here and there; in a blizzard (buried) only the
+// junctions' solid lines, here and there.
+function markings(snowy, buried) {
   const pos = [], col = [], white = new THREE.Color('#e8e8e2'), yellow = new THREE.Color('#e7b723');
   function strip(s0, s1, lat, w, c) {
     for (let s = s0; s < s1; s += 4) {
@@ -255,6 +257,7 @@ function markings(snowy) {
   const open = (s, side) => road.junctions.some(J => Math.abs(s + 6 - J.s) < 9 && (J.side === side || J.both)) || (side > 0 && bayWidth(s + 6) > 0);
   const r = rng(5);
   for (let s = 0; s < road.total; s += 12) {
+    if (buried) { if (noPass(s + 6) && r() < 0.6) strip(s, s + 12, 0, 0.14, yellow); continue; }
     if (!snowy || r() < 0.3) for (const side of [-1, 1]) {
       if (!open(s, side)) strip(s, s + 12, side * (EDGE - 0.1), 0.12, white);
       else if (side > 0 && bayWidth(s + 6) > 0) strip(s, s + 4, EDGE - 0.1, 0.12, white);
@@ -263,13 +266,15 @@ function markings(snowy) {
     if (!snowy) strip(s, s + (noPass(s + 6) ? 12 : 3), 0, 0.12, yellow);
     else if (noPass(s + 6) && r() < 0.5) strip(s, s + 12, 0, 0.12, yellow);
   }
-  for (const b of road.bays) {
+  for (const b of buried ? [] : road.bays) {
     for (let s = b.s0 - BAY_IN; s < b.s1 + BAY_IN; s += 2) strip(s, s + 2, EDGE + bayWidth(s + 1) - 0.25, 0.12, white);
     for (let s = b.s0 + 6; s < b.s1 - 6; s += 3.2) bar(s, 8.3, 11.2, 0.12, white);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
-  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x111111 }));
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x111111 }));
+  m.userData.markings = true;
+  return m;
 }
 // Spruces, a few thousand, one draw.
 function trees(snowy) {

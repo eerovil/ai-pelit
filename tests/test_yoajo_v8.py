@@ -196,3 +196,19 @@ def test_a_retry_brings_back_the_same_junctions_a_fresh_waiting_car_and_no_haze(
     assert r["same"] and r["cars"] == r["want"] and r["things"] == 0, r
     assert r["whiteout"] == 0 and r["cloudIn"] == 0 and r["mode"] == "drive", r
     assert page.errors == []
+
+
+def test_the_no_overtaking_line_shows_in_a_blizzard_too(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("V3 && V3.scene || no3d", timeout=15000)
+    r = page.evaluate("""() => { const out = []; maxLeg = 8;
+      for (const n of [5, 7, 8]) { newLeg(n); mode = 'menu'; buildWorld();
+        let m = null; V3.world.traverse(o => { if (o.userData.markings) m = o; });
+        // Yellow vertices inside the junctions' no-overtaking stretches.
+        let yellow = 0; const c = m ? m.geometry.attributes.color.array : [];
+        for (let i = 0; i < c.length; i += 3) if (c[i] > 0.7 && c[i + 2] < 0.2) yellow++;
+        out.push({ n, weather: leg.weather, junctions: road.junctions.length, yellow }); }
+      return out; }""")
+    assert all(x["junctions"] > 0 and x["yellow"] > 0 for x in r), r
+    assert r[1]["weather"] == "pyry" and r[2]["weather"] == "pyry", r
+    assert page.errors == []
