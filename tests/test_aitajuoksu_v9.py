@@ -51,3 +51,17 @@ def test_with_no_hurdles_the_jump_is_off(site, context):
     flat = page.evaluate("[race.hurdles, padOn(1), padOn(3), (flash[3] = 0, press(3), flash[3]), me.vy, color(3)]")
     assert flat == [False, True, False, 0, 0, OFF]
     assert page.errors == []
+
+
+def test_after_a_false_start_the_feet_are_off_until_the_start_is_called_again(site, context):
+    page = open_game(site, context, URL)
+    page.evaluate(COLOR)
+    page.click("#go")
+    page.evaluate("race.runners.forEach(r => { r.ai.jumpy = null; }); race.gunAt = 99; race.cdT = SET_AT + 0.1")
+    # A step after "Valmiit…" is a false start: the whistle blows and every pad is grey.
+    fs = page.evaluate("press(1); [race.phase, me.card, padOn(1), padOn(2), padOn(3), (flash[2] = 0, press(2), flash[2]), color(1)]")
+    assert fs == ["false", 1, False, False, False, 0, OFF]
+    # The start is called again: the feet are on, the jump still off.
+    page.wait_for_function("race.phase === 'cd'", timeout=6000)
+    assert page.evaluate("[padOn(1), padOn(2), padOn(3), color(1) !== '%s']" % OFF) == [True, True, False, True]
+    assert page.errors == []
