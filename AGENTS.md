@@ -181,7 +181,7 @@ high-score lists (#25), then play counts (#26).
   choice and one set of kits for every event, so the match wears the same outfit throughout;
   Pituushyppy v10 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-5/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-6/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
@@ -190,7 +190,7 @@ high-score lists (#25), then play counts (#26).
   (#176): the top three on the podium, the medals hung around their necks, the final standings
   under it; it stays until the player taps it away (the game passes its taps to `K.skip()`).
   Like `lib/three-r*/`, a folder never changes once published: a fix goes in the next one
-  (`yleisurheilu-6/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
+  (`yleisurheilu-7/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
   friends only for the phone on turn (rooms.js `turns()`), a friend may leave and come back
   ("Palaa kierrokseen"), the host skips an away friend's turn, and the game draws the friends not
   on turn as cheering spectators with `K.drawFans(ctx, box)`. The bar-height format (high jump, pole vault)
@@ -257,8 +257,8 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 ## Sound effects
 
 Recorded sounds (#205) are a shared library like three.js: the newest `public/lib/aanet-<N>/`
-(now `aanet-2/`, 71 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
-a classic `<script src="../../../lib/aanet-2/aanet.js"></script>` before its own script, names the sounds
+(now `aanet-3/`, 72 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
+a classic `<script src="../../../lib/aanet-3/aanet.js"></script>` before its own script, names the sounds
 it uses once (`AiPelitAanet.load(['askel', 'hiekka'])`, so the phone downloads only those) and
 plays them by name: `AiPelitAanet.play('hiekka', { vol, rate, delay })`. The names and what each
 sound is are listed at the top of `aanet.js`. Sound starts only after the first tap, and `play()`
