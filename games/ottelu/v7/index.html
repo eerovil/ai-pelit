@@ -51,6 +51,18 @@
   #mine{margin:0;font-size:14px;color:#cfe0ee;line-height:1.5}
   #waiting{margin:0;font-size:16px;color:#b9cfe0}
   #loading p{margin:0;font-size:18px;color:#b9cfe0}
+  /* v7 (#311): a short upright phone has the outfit button too: tighter, so the menu still fits. */
+  @media (orientation: portrait) and (max-height: 700px) {
+    #menu{gap:8px}
+    #menu h1{font-size:32px}
+    #menu #lajit{gap:4px}
+    #menu .laji{font-size:14px;padding:6px 10px 6px 6px}
+    #btns{gap:8px}
+    #btns #asu{padding:7px 12px;font-size:15px}
+    #menu .help{font-size:12px}
+    /* With a kept match its "Jatka ottelua" button takes the help's place. */
+    #menu:has(#cont:not(.hidden)) .help{display:none}
+  }
   /* A phone on its side: two columns. */
   @media (orientation: landscape) and (max-height: 560px) {
     #menu{display:grid;grid-template-columns:minmax(0,280px) minmax(0,340px);align-content:center;justify-content:center;column-gap:28px;row-gap:8px;

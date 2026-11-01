@@ -93,3 +93,17 @@ def test_the_player_wears_the_outfit_on_the_podium_at_the_end_of_the_match(site,
     page.wait_for_function("cer.K.ending.t > 2", timeout=8000)
     page.screenshot(path="/var/tmp/i311/ottelu-podium.png")
     assert page.errors == []
+
+
+def test_a_kept_match_with_the_outfit_button_fits_a_short_phone(site, context):
+    # CI on #315: at 360 × 640 the fourth button pushed the menu off the screen.
+    page = open_game(site, context, saved={"lajit": ["keihas", "moukari"]})
+    turn(page, {"width": 360, "height": 640})
+    page.click("#go")
+    page.wait_for_function("Ottelu.K && Ottelu.K.comp && Ottelu.K.comp.throwers", timeout=10000)
+    page.reload()
+    assert page.is_visible("#cont") and page.is_visible("#asu")
+    for s in ("#menu h1", "#go", "#cont", "#multi", "#asu", "#stats"):
+        b = page.locator(s).bounding_box()
+        assert b["y"] >= 0 and b["y"] + b["height"] <= 640, s
+    assert page.errors == []
