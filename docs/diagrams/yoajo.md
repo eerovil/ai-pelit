@@ -1,6 +1,6 @@
 # Yöajo: one leg of the night drive
 
-How one leg of Yöajo plays (v1, #181; v4 drives with one thumb as a round stick and adds the reckless-driving rules; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`). The player drives at night up Valtatie 4 from Helsinki
+How one leg of Yöajo plays (v1, #181; v4 drives with one thumb as a round stick and adds the reckless-driving rules; v3 steers and presses the gas with one thumb a side; v2 is the same game, sized from the real screen so it fits at once after going full screen: `index.html` and `fitCheck()` in `games/yoajo/v2/ui.js`; v5 shows the speed on a car's dial at the top, #206). The player drives at night up Valtatie 4 from Helsinki
 to Rovaniemi, one leg a level, seen in 3D from behind the car. In v1 and v2 the car pulls up
 to speed by itself and the player steers and brakes with buttons; in v3 the left thumb steers and
 the right thumb presses the gas or brakes, by how far each slides. The player also switches the
@@ -19,6 +19,7 @@ flowchart TD
   E -- Ei --> E1[Ohitus +40..60]
   E -- Kyllä --> E2[Odota takana, lähivaloilla]
   E -- Ohitit silti, vastaantulija alle 180 m --> E3[Vaarallinen ohitus -50, ei ohituspisteitä]
+  B --> M[Nopeusmittari yläreunassa: viisari, rajoitus vieressä]
   B --> P{Pitkät tyhjällä tiellä?}
   P -- Kyllä --> P1[+5 joka 100 m, ei katuvaloissa]
   P -- Ei, 6 s --> P2[Muistutus: pitkät päälle]
@@ -46,7 +47,7 @@ flowchart TD
   Z --> S[Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä]
   S --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
   X --> A
-  class A,B,E2,L,P2 blue
+  class A,B,E2,L,P2,M blue
   class C,D,E,F,G,H,K,V,Y,P,R amber
   class D1,E1,F1,K2,V1,P1 teal
   class D2,F2,H1,K1,V2,X,E3,R1 rose
@@ -65,6 +66,7 @@ flowchart TD
 
 - **Valitse osuus, Aja**: the menu (`menu()` in `games/yoajo/v1/ui.js`) lists the eight legs of `LEGS` in `game.js`, from Helsinki → Järvenpää to Oulu → Rovaniemi; a leg opens when the one before is driven (`maxLeg`, saved as `ai-pelit:yoajo:taso`). Each leg has its own weather (dry, rain, snow, blizzard) and its own mix of traffic. `newLeg()` builds the road (`makeRoad()`: bends and hills from the leg's seed), the speed limits and signs, and the list of what happens where (`events`).
 - **Aja: ohjaa, kaasuta, jarruta, valot**: `drive()` in `game.js`. v1 and v2: the car pulls up to 130 km/h by itself unless JARRU is held, and ◀ ▶ buttons steer fully. v3 (#181 feedback, Eero's choice): one thumb a side, anywhere below the top line (`thumbs` and `setThumbs()` in `games/yoajo/v3/ui.js`). The left thumb slides sideways from where it landed: a short slide is a gentle turn, a long one sharper than v1's buttons (`input.steer`, the slide to the power 1.4). The right thumb is the gas: landing is a light press (35 %), sliding up gives more, up to full, and sliding down past where it landed brakes by how far (`input.gas`, `input.brake`). Off the gas the engine slows the car a little. A bend pushes the car outwards, more the faster and the slipperier (`WEATHER[...].grip`). VALOT (a button in the middle in v3) switches between low beams (42 m) and high beams (135 m), less in rain and snow; `view.js` draws them as one spot light, so what is beyond the beam stays dark. v4 (#181, Eero's choice after trying a prototype): one thumb as a round stick like Areena's, 56 px across its radius, wherever the thumb lands (`oneThumbGuide()`, `STICK` in `games/yoajo/v4/ui.js`): sideways steers, up is gas, down brakes, and diagonals do both. The lights move to the lower right corner. The menu's "Ohjaus" switch picks v3's two thumbs instead (saved as `ohjaus`). v4 also gives traffic a speed habit (`cruise()` in `game.js`): each car keeps to the limit where it is, some 12–22 km/h under (the ones to overtake), most about at it, a few 6–15 over; trucks keep to 80 or up to 4 km/h over. The reckless driver from behind slows behind the player instead of driving into them. Limits change less (one stretch every 1.3–2 km), and 60 (villages, with street lights) comes only from leg 5.
+- **Nopeusmittari yläreunassa: viisari, rajoitus vieressä**: v5 (#206: "nopeusmittari yläreunaan, samannäköinen kuin auton nopeusmittari"; Eero picked the round dial). `speedometer()` and `speedoBox()` in `games/yoajo/v5/ui.js` draw a round dial in the top middle, under the trip line: 0–200 km/h, ticks every 10, numbers every 20, a red needle (`needleAngle()`: 0 at the lower left, 100 straight up, 200 at the lower right), the speed in digits in the gap at the bottom (red more than 5 over the limit), and the rim red above the limit. The time, distance and alertness sit on its left, the points and the limit sign on its right. No thumb starts on it (`thumbTop()`). Up to v4 the speed was digits by the lights button. Sounds stay as v4's; recorded ones wait for #205's shared library (Eero's choice).
 - **Pitkät pois ajoissa?**: `lights()` in `game.js`. An oncoming car is released 620 m ahead; if the high beams were on when it came into sight and are off before it is 150 m away, +20. Still on at 150 m: −30 and it flashes its own at the player. A car ahead within 70 m dazzled for 1.5 s costs −20. v4 (#181: the dazzle came too easily): judged at 90 m, and a car ahead after 2.5 s within 50 m.
 - **Ohitus +40..60**: `meet()`: passing a slow vehicle in the player's direction scores once (tractor 40, car 50, truck 60). Same-direction cars keep behind slower ones and behind the player.
 - **Väljä ohitus +20**: walkers keep to the left edge facing traffic, or now and then the right edge; a third have no reflector and show only in the beam. Passing with under a metre of room above 40 km/h costs −40; touching one ends the leg as a near miss ("Vaaratilanne").
