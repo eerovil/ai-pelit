@@ -31,8 +31,8 @@
   }
   // Playing right now (#325): while this page is on screen it says so every 45 seconds, and says it
   // left when it is hidden, so the shelf can show how many play each game now. The id is random
-  // per page open, kept only in this page. A game inside another game's frame (Ottelu's events)
-  // is not counted apart: the page the player opened is.
+  // per page open, kept only in this page. A game inside another page's frame is not counted
+  // apart: the page the player opened is (Ottelu already drops back.js from its events' frames).
   var framed = true;
   try { framed = window.top !== window.self; } catch (e) {}
   if (slug && !framed && /^https?:$/.test(location.protocol)) {

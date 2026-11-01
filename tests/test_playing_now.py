@@ -97,3 +97,48 @@ def test_a_group_card_adds_up_its_games(site, context):
     page = context.new_page()
     page.goto(site.url)
     page.wait_for_selector('.card[data-slug="yleisurheilu"] .now:text("● 4")')
+
+
+def test_a_page_hidden_and_shown_again_says_it_left_and_is_back(site, context):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    fake = playing_on(context)
+    page = context.new_page()
+    page.goto(f"{site.url}games/pomppu/v1/")
+    page.wait_for_selector("#ai-pelit-back")
+    page.wait_for_timeout(200)
+
+    def show(state):
+        page.evaluate("s => { Object.defineProperty(document, 'visibilityState', { value: s, configurable: true });"
+                      " document.dispatchEvent(new Event('visibilitychange')); }", state)
+        page.wait_for_timeout(200)
+
+    show("hidden")
+    show("visible")
+    assert [("gone" if m.get("gone") else m["game"]) for m in fake.sent] == ["pomppu", "gone", "pomppu"]
+    assert len({m["id"] for m in fake.sent}) == 1
+
+
+def test_the_number_follows_on_a_390_px_phone_without_a_reload(site, browser):
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    try:
+        fake = playing_on(context)
+        fake.now = {"pomppu": 1}
+        page = context.new_page()
+        page.clock.install()
+        page.goto(site.url)
+        page.wait_for_selector('.card[data-slug="pomppu"] .now:text("● 1")')
+        # Two more start playing, then everyone stops: the shelf follows on its 20-second reads.
+        fake.now = {"pomppu": 3}
+        page.clock.run_for(21000)
+        page.wait_for_selector('.card[data-slug="pomppu"] .now:text("● 3")')
+        fake.now = {}
+        page.clock.run_for(21000)
+        page.wait_for_function("document.querySelector('.card[data-slug=\"pomppu\"] .now').textContent === ''")
+        # The card's line stays inside the card at 390 px.
+        box = page.locator('.card[data-slug="pomppu"]').bounding_box()
+        assert box["x"] + box["width"] <= 390
+    finally:
+        context.close()
