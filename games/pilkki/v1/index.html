@@ -288,6 +288,10 @@ function hostFish(m, from) {
     if (net.claims[m.id] !== from || !f) { R.send({ t: 'nocatch', round: net.round, id: m.id }, from); return; }
     delete net.claims[m.id];
     pond.splice(pond.indexOf(f), 1);
+    // The host counts the fish to that player itself, once, so it counts even if the phone drops
+    // or reloads before it hears so (it takes its catch back from the host's list).
+    const b = net.board[from] || { g: 0, n: 0, big: null, sp: 0 };
+    net.board[from] = { g: b.g + f.g, n: b.n + 1, big: !b.big || f.g > b.big.g ? { s: f.sp, g: f.g } : b.big, sp: b.sp };
     R.send({ t: 'gone', round: net.round, id: m.id, by: from, sp: f.sp, g: f.g });
   }
 }
@@ -679,7 +683,7 @@ R.on('message', (m, from) => {
   else if (m.t === 'gone' && net.on && m.round === net.round) {
     const f = pond.find(q => q.id === m.id);
     if (f) { lost(f); pond.splice(pond.indexOf(f), 1); sight(); }
-    // The host says this phone's catch counts.
+    // The host says this phone's catch counts (it comes before any list that has it, in order).
     const p = net.pending[m.id];
     if (p && m.by === R.me) { delete net.pending[m.id]; credit(p.sp, p.g); }
   } else if (m.t === 'nocatch' && net.on && m.round === net.round) {

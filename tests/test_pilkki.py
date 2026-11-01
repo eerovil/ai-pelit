@@ -451,6 +451,33 @@ def test_a_guest_jigs_and_lands_a_shared_fish_by_playing(room):
     assert host.errors == guest.errors == []
 
 
+def test_a_catch_the_host_accepted_counts_even_if_the_phone_misses_the_answer(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.wait_for_function("pond.length > 50", timeout=5000)
+    aino = guest.evaluate("AiPelitRooms.me")
+    # Aino's phone has a fish on the line; its connection drops just as its "caught" reaches the
+    # host, so the host's answer never gets to it.
+    x, g = guest.evaluate("""() => {
+      const f = pond[0]; f.look = true; claim(f); holes.push(spot.i); toJig();
+      fight = { fish: f, L: 1, T: 0.3, over: 0, burst: 0, next: 9, t: 0, sway: 0 }; phase = 'fight';
+      return [f.id, f.g];
+    }""")
+    host.wait_for_function(f"net.claims[{x}] === {json.dumps(aino)}", timeout=4000)
+    room.relay.drop(guest)
+    host.evaluate(f"hostFish({{ t: 'caught', round: net.round, id: {x} }}, {json.dumps(aino)})")
+    # The host counted it to her the moment it accepted it.
+    assert host.evaluate(f"[pond.some(f => f.id === {x}), standings().find(s => s.name === 'Aino').g]") == [False, g]
+    # She reloads while away and comes back: the catch is hers on her phone too, counted once.
+    room.relay.back(guest)
+    guest.reload()
+    guest.evaluate(RUN)
+    guest.wait_for_function(f"net.on && myG === {g} && myN === 1", timeout=8000)
+    host.wait_for_timeout(1200)
+    assert host.evaluate("standings().find(s => s.name === 'Aino').g") == g
+    assert guest.evaluate("[myG, myN]") == [g, 1]
+    assert host.errors == guest.errors == []
+
+
 def test_two_phones_racing_for_one_fish_only_the_first_gets_it(room):
     host, [guest] = room("Eero", "Aino")
     guest.wait_for_function("pond.length > 50", timeout=5000)
