@@ -212,3 +212,28 @@ def test_the_no_overtaking_line_shows_in_a_blizzard_too(site, context):
     assert all(x["junctions"] > 0 and x["yellow"] > 0 for x in r), r
     assert r[1]["weather"] == "pyry" and r[2]["weather"] == "pyry", r
     assert page.errors == []
+
+
+def test_a_car_waiting_or_turning_at_a_right_side_road_does_not_slow_the_main_road(site, context):
+    page = open_game(site, context)
+    for plan in ("wait", "turn"):
+        r = page.evaluate("""(plan) => { HOLD = true; maxLeg = 8; newLeg(1); things = []; events = []; road.cams = []; road.nopass = [];
+          P.s = 50; P.lat = -LANE;   // the player out of the way
+          const J = { s: Math.round((P.s + 400) / 4) * 4, side: 1 };
+          const j = release({ kind: 'liittyja', j: J, side: 1, dir: 'same', careless: false, r: 0.3 });
+          const car = add('auto', { s: J.s - 60, lat: LANE, v: 25, habit: 0 }); car.base = car.v;
+          if (plan === 'turn') { j.plan = 'turn'; j.turn = 0.05; }
+          let dropped = 0;
+          for (let i = 0; i < 60 * 1.2; i++) { P.v = 0; P.lat = -LANE; const v0 = car.v; move(car, 1 / 60); if (plan === 'wait') { j.s = J.s; j.v = 0; } else if (j.lat > EDGE) move(j, 1 / 60);
+            if (j.lat > EDGE) dropped = Math.max(dropped, v0 - car.v); }
+          return { dropped, v: car.v, joinerLat: j.lat }; }""", plan)
+        assert r["dropped"] == 0 and r["v"] > 25, (plan, r)
+    # And once the main-road car has gone by, the waiting car pulls out: nobody waits for the other.
+    r = page.evaluate("""() => { HOLD = true; newLeg(1); things = []; events = []; road.cams = []; road.nopass = [];
+      const J = { s: Math.round((P.s + 300) / 4) * 4, side: 1 };
+      const j = release({ kind: 'liittyja', j: J, side: 1, dir: 'same', careless: false, r: 0.3 });
+      const car = add('auto', { s: J.s - 50, lat: LANE, v: 22, habit: 0 }); car.base = car.v;
+      for (let i = 0; i < 60 * 8 && mode === 'drive'; i++) { P.v = 25; P.lat = LANE; P.vl = 0; step(1 / 60); }
+      return { carPast: car.s > J.s + 20, carV: car.v, joined: j.kind === 'auto' || j.plan === 'turn' }; }""")
+    assert r["carPast"] and r["carV"] > 15 and r["joined"], r
+    assert page.errors == []

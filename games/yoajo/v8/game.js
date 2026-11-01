@@ -384,7 +384,8 @@ function move(t, dt) {
     // A slow car or truck ahead keeps behind a slower one.
     // v8: it brakes for it from 70 m, as hard as it needs (v1–v7: matched its speed at once from
     // 30 m, which a car close behind could not brake for, now that cars pull out of side roads).
-    const front = things.find(o => o !== t && o.v > 0 && o.lat > 0 && o.s > t.s && o.s - t.s < 70 && vehicle(o));
+    // Only a car on the road counts: not one still at or coming out of a side road (out of the lane).
+    const front = things.find(o => o !== t && o.v > 0 && o.lat > 0 && o.lat < EDGE && o.kind !== 'liittyja' && o.s > t.s && o.s - t.s < 70 && vehicle(o));
     if (front && t.lat > 0 && t.v > front.v) {
       const gap = front.s - t.s - (front.len + t.len) / 2;
       if (gap < 8) t.v = front.v;
