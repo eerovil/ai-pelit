@@ -17,6 +17,23 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
     assert [v["n"] for v in catalog["games"][0]["versions"]] == [1, 2]
 
 
+def test_versions_of_the_same_day_go_by_their_merge_time(tmp_path):
+    # #279: 28 games updated on one day sat in reverse alphabetical order under Päivitetyt.
+    games = tmp_path / "games"
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    who = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for slug, hour in (("aamu", "06"), ("zeta", "07"), ("myohaan", "08")):
+        make_game(games, slug, [game_page("a")], dates=["2026-11-01"])
+        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+        subprocess.run(["git", *who, "commit", "-qm", slug, "--date", f"2026-11-01T{hour}:00:00"], cwd=tmp_path, check=True,
+                       env={"PATH": "/usr/bin:/bin", "GIT_COMMITTER_DATE": f"2026-11-01T{hour}:00:00"})
+    # A version not committed yet (an agent's local build) counts as the newest.
+    make_game(games, "kesken", [game_page("a")], dates=["2026-11-01"])
+    make_game(games, "eilen", [game_page("a")], dates=["2026-10-31"])
+    catalog = build.build_catalog(games)
+    assert [g["slug"] for g in catalog["games"]] == ["kesken", "myohaan", "zeta", "aamu", "eilen"]
+
+
 def test_a_group_gathers_its_games_and_is_listed_only_when_used(tmp_path):
     make_game(tmp_path, "yksin", [game_page("a")])
     assert build.build_catalog(tmp_path)["groups"] == []
