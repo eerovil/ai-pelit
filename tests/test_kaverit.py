@@ -39,6 +39,7 @@ class FriendsApi:
         self.calls = []
         self.taken = set()  # nicknames another phone owns: POST /api/players answers 409
         self.status = {}  # player id -> 'pending', 'approved' or 'rejected' (the admin's word)
+        self.new_names_left = None  # how many new names the server still takes today (None: any)
 
     def attach(self, context):
         context.route(re.compile(r".*/api/(players|friends|presence|invites)(\b.*)?$"), self.answer)
@@ -79,6 +80,10 @@ class FriendsApi:
         if path == "players" and req.method == "POST":
             if body["name"].lower() in self.taken:
                 return ok({"error": "name taken"}, 409)
+            if self.new_names_left is not None:
+                if self.new_names_left <= 0:
+                    return ok({"error": "too many new names from here today"}, 429)
+                self.new_names_left -= 1
             self.names[body["id"]] = body["name"]
             self.status[body["id"]] = "pending"
             return ok({"name": body["name"], "status": "pending"})
@@ -626,3 +631,17 @@ def test_joining_by_an_invite_leaves_the_room_the_phone_was_in(phones):
     # The tab now keeps the new room, not Ceci's, so opening Toinen peli again does not rejoin it.
     here = json.loads(bertta.evaluate("sessionStorage.getItem('ai-pelit:_huone:nyt')"))
     assert here["game"] == "huonetesti" and here["code"] != old
+
+
+def test_the_daily_new_name_limit_is_not_called_a_rejected_name(phones):
+    """Seen live after #327: a nickname refused for the daily limit said "ei hyväksytty"."""
+    host, guest, code = room_of_two(phones)
+    phones.api.new_names_left = 0
+    host.locator("#aipr-members button.fr").click()
+    host.wait_for_function("[...document.querySelectorAll('#aipr-friends .small')].some(p => p.textContent === 'Uusia nimimerkkejä tulee juuri nyt liikaa. Yritä myöhemmin.')")
+    assert phones.api.requests == set()
+    # The button is there to try again; with the limit gone, the same tap sends the request.
+    phones.api.new_names_left = None
+    host.locator("#aipr-members button.fr").click()
+    host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")
+    assert (A, pid_of(B)) in phones.api.requests

@@ -1011,10 +1011,9 @@
   function friendResult(r) {
     // The nickname is not usable (rejected meanwhile): open the row for a new one.
     var F = friendsLib();
-    if (r.status === 403 && F && F.nameNote()) { askName = r.pid || true; askRow = null; friendNote = ''; return render(); }
-    friendNote = r.ok ? '' : r.status === 403 ? 'Nimimerkkiäsi ei hyväksytty: valitse toinen.'
-      : r.status === 409 ? 'Kavereita on jo niin monta kuin mahtuu.'
-      : r.status === 429 ? 'Liian monta pyyntöä. Yritä myöhemmin.' : 'Ei yhteyttä. Yritä uudelleen.';
+    // (Or taken by another phone: the same.)
+    if ((r.status === 403 || r.name) && F && F.nameNote()) { askName = r.pid || true; askRow = null; friendNote = ''; return render(); }
+    friendNote = F ? F.friendError(r) : '';
     render();
   }
   function renderFriends() {
