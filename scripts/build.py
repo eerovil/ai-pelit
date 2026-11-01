@@ -92,6 +92,11 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
             raise GameError(f"{slug} v{i}: note is missing")
     # Only the newest version has a folder (#346); the older entries are its history.
     i = last
+    # Ottelu plays each event's newest version that does not say "ottelu": false, and no older one
+    # is left to fall back on: the site would send it to this one anyway.
+    if versions[-1].get("ottelu") is False:
+        raise GameError(f"{slug} v{i}: the newest version cannot be kept out of Ottelu (\"ottelu\": false); "
+                        "make a new Ottelu version that plays it or leaves it out (#346)")
     page = game_dir / f"v{i}" / "index.html"
     if not page.is_file():
         raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
@@ -174,9 +179,12 @@ def redirects(catalog: dict) -> str:
     (`?huone=`) goes along. 302, because the newest moves on with each version."""
     lines = ["# Written by scripts/build.py: each game's older versions go to its newest (#346)."]
     for g in sorted(catalog["games"], key=lambda g: g["slug"]):
-        to = f"/games/{g['slug']}/v{g['versions'][-1]['n']}/"
-        for v in g["versions"][:-1]:
-            at = f"/games/{g['slug']}/v{v['n']}"
+        last = g["versions"][-1]["n"]
+        to = f"/games/{g['slug']}/v{last}/"
+        # Every number below the newest, a skipped one too (Puhelinkoppi's withdrawn v3 and v4 were
+        # published before they went).
+        for n in range(1, last):
+            at = f"/games/{g['slug']}/v{n}"
             lines += [f"{at} {to} 302", f"{at}/ {to} 302", f"{at}/index.html {to} 302"]
     return "\n".join(lines) + "\n"
 

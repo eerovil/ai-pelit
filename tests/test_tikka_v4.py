@@ -181,7 +181,13 @@ def test_a_friends_phone_in_a_room_hears_the_hits_the_misses_and_the_crowd(site,
         p.wait_for_function("AiPelitAanet.play('puu', { vol: 0 })", timeout=5000)
         p.evaluate("heard.splice(0)")
     # The host throws three tens: Aino's phone hears each dart and then the crowd for the 30.
-    throw_turn(host, 0, 0, host)
+    # Each dart lands on Aino's phone before the next one goes: a dart thrown while the one before
+    # is still flying there skips that one's hit (seen in CI once every test of the game ran, #346).
+    host.wait_for_function("mine() && !banner && !flying && dartsLeft === 3", timeout=8000)
+    for k in range(3):
+        host.evaluate("release(0, 0)")
+        host.wait_for_function(f"dartsLeft === {2 - k} && !flying", timeout=5000)
+        aino.wait_for_function(f"heard.filter(h => h[0] === 'puu').length === {k + 1} && !flying", timeout=5000)
     aino.wait_for_function("cur === 1 && mine() && heard.some(h => h[0] === 'yleiso')", timeout=8000)
     got = [(n, v) for n, ok, v in aino.evaluate("heard.splice(0)") if ok]
     assert [n for n, _ in got].count("puu") == 3 and ("yleiso", 0.7) in got, got

@@ -21,10 +21,11 @@ def test_a_version_kept_out_of_ottelu_says_so_in_the_catalog(tmp_path):
     # #303: Ottelu plays each event's newest version, except one whose game.json entry says not to.
     make_game(tmp_path, "kuula", [game_page("a"), game_page("b")])
     meta = json.loads((tmp_path / "kuula" / "game.json").read_text())
-    meta["versions"][1]["ottelu"] = False
+    # Only an older entry may say so now (#346); the catalog passes it on as it is.
+    meta["versions"][0]["ottelu"] = False
     (tmp_path / "kuula" / "game.json").write_text(json.dumps(meta))
     versions = build.build_catalog(tmp_path)["games"][0]["versions"]
-    assert ["ottelu" in v for v in versions] == [False, True] and versions[1]["ottelu"] is False
+    assert ["ottelu" in v for v in versions] == [True, False] and versions[0]["ottelu"] is False
 
 
 def test_versions_of_the_same_day_go_by_their_merge_time(tmp_path):
@@ -250,10 +251,39 @@ def test_only_the_newest_version_is_served_and_the_older_ones_go_to_it(tmp_path)
     assert not any("*" in r[0] or ":" in r[0] for r in rules)
 
 
+def test_a_skipped_number_goes_to_the_newest_too(tmp_path):
+    # Puhelinkoppi's v3 and v4 were published, then withdrawn and left out of game.json.
+    games = tmp_path / "games"
+    make_game(games, "koppi", [game_page("a"), game_page("b"), game_page("c"), game_page("d"), game_page("e")])
+    meta = json.loads((games / "koppi" / "game.json").read_text())
+    meta["versions"] = [meta["versions"][0], meta["versions"][1], meta["versions"][4]]
+    (games / "koppi" / "game.json").write_text(json.dumps(meta))
+    build.build(games, ROOT / "public", tmp_path / "out")
+    rules = [line.split() for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
+    for n in (1, 2, 3, 4):
+        assert [f"/games/koppi/v{n}/", "/games/koppi/v5/", "302"] in rules
+
+
+def test_the_newest_version_cannot_be_kept_out_of_ottelu(tmp_path):
+    # With only the newest kept (#346), Ottelu would fall back to an older version that is gone.
+    make_game(tmp_path, "hyppy", [game_page("a"), game_page("b")])
+    meta = json.loads((tmp_path / "hyppy" / "game.json").read_text())
+    meta["versions"][0]["ottelu"] = False  # an older one may have said so; that is history
+    (tmp_path / "hyppy" / "game.json").write_text(json.dumps(meta))
+    build.load_game(tmp_path / "hyppy")
+    meta["versions"][1]["ottelu"] = False
+    (tmp_path / "hyppy" / "game.json").write_text(json.dumps(meta))
+    with pytest.raises(build.GameError, match="cannot be kept out of Ottelu"):
+        build.load_game(tmp_path / "hyppy")
+
+
 def test_the_real_redirects_fit_cloudflare_pages(tmp_path):
     build.build(ROOT / "games", ROOT / "public", tmp_path / "out")
-    rules = [line for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
+    rules = [line.split() for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
     assert 0 < len(rules) <= 2000
+    # Puhelinkoppi's withdrawn v3 and v4 were published once, so they go to the newest too.
+    assert ["/games/puhelinkoppi/v3/", "/games/puhelinkoppi/v6/", "302"] in rules
+    assert ["/games/puhelinkoppi/v4/", "/games/puhelinkoppi/v6/", "302"] in rules
 
 
 def test_rewriting_a_published_entry_fails(repo):

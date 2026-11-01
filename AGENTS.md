@@ -44,8 +44,10 @@ player sees is Finnish unless the request says otherwise.
   request too. `LAJIT` in its `index.html` names fallback versions for when the catalog cannot be
   read; an old one there is sent on to the newest by the site (#346).
   A new event version must still play in the match: keep `kisa.js`'s options and the race's
-  functions that Ottelu's `laji.js` and `aita.js` change, or, when it cannot, add `"ottelu": false`
-  to its `game.json` entry and make a new Ottelu version for it. Alone, each next event loads in a
+  functions that Ottelu's `laji.js` and `aita.js` change, or, when it cannot, make a new Ottelu
+  version in the same pull request that plays it. `"ottelu": false` no longer helps: no older
+  version is left for the match to fall back on, so the build refuses it on a newest version
+  (#346). Alone, each next event loads in a
   fresh page: a second frame in the same page took no taps on Eero's phone (see docs/making-games.md).
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
@@ -104,8 +106,8 @@ request, with the version that taught it (#181, Eero's choice).
    it. Never touch another game's keys.
 6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (rising, never reused),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
-   (the issue text) and `issue` (`eerovil/ai-pelit#<n>`); an Ottelu event's version may add
-   `"ottelu": false` (see "What a request means").
+   (the issue text) and `issue` (`eerovil/ai-pelit#<n>`). An older entry may still carry
+   `"ottelu": false` as history; a new one may not (see "What a request means").
 
 ## Online extras
 
