@@ -15,6 +15,12 @@
 // messages have a `t` starting with "_"; the room's are you, peers, hello and bye. A game uses any
 // other `t`. Later versions load this same file, so it must stay compatible with every version
 // that uses it. With no connection the game still plays alone.
+//
+// A game played in turns (the athletics meets, #297) calls turns(id => …) to say which phones the
+// round needs right now. The round then waits only for an away phone whose turn it is, a phone
+// that leaves the room keeps its player (the computer never takes it), the host's button skips
+// the turn ('skip'), and the phone remembers the round so its room screen offers
+// "Palaa kierrokseen".
 (function () {
   'use strict';
   var script = document.currentScript;
@@ -34,6 +40,8 @@
   var KEY = 'ai-pelit:_huone:avain'; // this phone's secret key, never shown to the others
   var HERE = 'ai-pelit:_huone:nyt'; // sessionStorage: the room this tab is in, to rejoin after a reload
   var COUNTED = 'ai-pelit:_huone:kierros'; // sessionStorage: rounds whose result this tab saved
+  var AWAY = 'ai-pelit:_huone:kesken'; // a turns() game's round this phone is in, to come back to
+  var AWAY_MS = 6 * 3600e3; // forgotten after this long
 
   function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -71,6 +79,24 @@
   function inRound(id) { return !!(net.round && net.round.players.some(function (p) { return p.id === id; })); }
   function racing() { return !!(net.round && !net.round.over); }
 
+  // ---- A game played in turns (#297) ----
+  var needs = null; // id => true while the round needs that phone; null: it needs every phone
+  function needed(id) { try { return !needs || !!needs(id); } catch (e) { return true; } }
+  // The round this phone is in, kept while it lasts, so the phone can come back to it even after
+  // closing the game. Only for a guest: the host keeps the round and cannot leave it.
+  function keepAway() {
+    if (needs && net.on && !net.host && racing()) save(AWAY, { game: GAME, v: VERSION, code: net.code, round: net.round.id, at: Date.now() });
+  }
+  function forgetAway(code) {
+    var a = load(AWAY, null);
+    if (a && (!code || a.code === code)) try { localStorage.removeItem(AWAY); } catch (e) {}
+  }
+  function awayRound() {
+    var a = load(AWAY, null);
+    if (!needs || !a || a.game !== GAME || a.v !== VERSION || !/^[A-Z]{4}$/.test(a.code) || !(Date.now() - a.at < AWAY_MS)) return null;
+    return a;
+  }
+
   // ---- The connection ----
   function connect() {
     clearTimeout(net.timer);
@@ -95,6 +121,7 @@
       if (!net.on) return;
       // A code someone else is using: a new room gets a new code.
       if (e.code === 4009 && net.host && !net.joined) { net.code = newCode(); return connect(); }
+      if (e.code === 4004) forgetAway(net.code); // the room is gone
       if (e.code >= 4000 && e.code < 4100) return leave(e.reason || 'Yhteys katkesi.');
       if (!net.joined && ++net.tries >= 3) return leave('Ei yhteyttä. Kokeile hetken päästä uudelleen.');
       net.timer = setTimeout(connect, Math.min(4000, 700 * (net.tries + 1)));
@@ -109,7 +136,7 @@
     net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0; net.pub = !!(host && pub); listed = null;
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
-    net.result = ''; net.resultClass = ''; net.note = ''; lastPz = '';
+    net.result = ''; net.resultClass = ''; net.note = ''; lastPz = ''; net.rejoin = false;
     show(true);
     connect();
   }
@@ -120,7 +147,9 @@
     if (!net.on) return;
     var ws = net.ws;
     if (net.host) sendRaw({ t: '_close' });
-    sendRaw({ t: 'bye' });
+    // A guest leaving a game played in turns mid-round keeps its seat (no bye): the room stays
+    // full for a newcomer, so "Palaa kierrokseen" always gets back in (#297).
+    if (net.host || !needs || !racing()) sendRaw({ t: 'bye' });
     net.on = false; net.ws = null; net.connected = false; clearTimeout(net.timer);
     if (ws) try { ws.close(1000, 'Poistui'); } catch (e) { /* gone */ }
     ssave(HERE, null);
@@ -145,13 +174,14 @@
     }
     if (m.t === '_start') return onStart(m);
     if (m.t === '_lobby') {
+      forgetAway(net.code);
       net.wait = false; net.listening = false;
       if (net.round) { net.round = null; net.pz = []; net.result = ''; fire('lobby'); show(true); }
       return render();
     }
-    if (m.t === '_wait') { net.wait = true; net.listening = false; return render(); }
+    if (m.t === '_wait') { forgetAway(net.code); net.wait = true; net.listening = false; return render(); }
     if (m.t === '_pz') { net.pz = Array.isArray(m.names) ? m.names : []; return update(); }
-    if (m.t === '_close') return leave('Huone suljettiin.');
+    if (m.t === '_close') { forgetAway(net.code); return leave('Huone suljettiin.'); }
     if (!net.listening || !m.t || m.t.charAt(0) === '_') return;
     // A delivered message (deliver()): confirm it, and pass it on only the first time.
     if (m._d) {
@@ -161,6 +191,9 @@
       if (!first) return;
       m = Object.assign({}, m);
       delete m._d; delete m._r; delete m.to;
+      // Back through "Palaa kierrokseen" after the round ended: its end shows in the game, not
+      // behind the room screen (the game goes back to the room after it, with backToRoom()).
+      if (net.rejoin && net.round && net.round.over && String(key.split(':')[0]) === net.round.id) { net.rejoin = false; show(false); }
     }
     fire('message', m, net.hostId);
   }
@@ -205,14 +238,16 @@
       if (net.host && !net.round) sendRaw({ t: '_lobby' });
     }
     if (net.host) {
-      // Someone who left the room for good is the computer's from now on.
-      if (racing()) {
+      // Someone who left the room for good is the computer's from now on (in a game played in
+      // turns, it keeps its player and may come back).
+      if (racing() && !needs) {
         var gone = net.round.players.filter(function (p) {
           return p.id !== net.me && !net.released[p.id] && !net.members.some(function (x) { return x.id === p.id; });
         }).map(function (p) { return p.id; });
         if (gone.length) { gone.forEach(function (id) { net.released[id] = true; }); fire('continue', gone); }
       }
     } else if (!net.members.some(function (x) { return x.id === net.hostId; })) {
+      forgetAway(net.code);
       return leave('Huone suljettiin.');
     }
     fire('peers', net.members.slice());
@@ -294,6 +329,7 @@
     var same = net.round && net.round.id === m.round;
     net.round = { id: String(m.round), players: m.players, over: !!m.over };
     net.wait = false;
+    if (m.over) forgetAway(net.code); else { keepAway(); net.rejoin = false; }
     if (same) return update();
     net.played = true;
     if (!m.over) { net.result = ''; show(false); }
@@ -308,7 +344,7 @@
   function waitingFor() {
     if (!net.on || !racing()) return [];
     if (!net.host) return net.pz.slice();
-    return net.round.players.filter(function (p) { return p.id !== net.me && !net.online[p.id] && !net.released[p.id]; })
+    return net.round.players.filter(function (p) { return p.id !== net.me && !net.online[p.id] && !net.released[p.id] && needed(p.id); })
       .map(function (p) { return p.name; });
   }
   function isPaused() {
@@ -316,17 +352,21 @@
     return !net.connected || (!net.host && !hostOn()) || waitingFor().length > 0;
   }
   function update() {
-    if (net.host && net.on) {
-      var pz = JSON.stringify(waitingFor());
-      if (pz !== lastPz) { lastPz = pz; sendRaw({ t: '_pz', names: JSON.parse(pz) }); }
-      tellList();
-    }
+    if (net.host && net.on) { tellPause(); tellList(); }
     render();
+  }
+  // The host tells the others whom the round waits for, when that changes. In a game played in
+  // turns it changes with the turn too, so it is looked at every 250 ms as well.
+  function tellPause() {
+    var pz = JSON.stringify(waitingFor());
+    if (pz !== lastPz) { lastPz = pz; sendRaw({ t: '_pz', names: JSON.parse(pz) }); }
   }
   function goOn() {
     if (!net.host || !racing()) return;
-    var ids = net.round.players.filter(function (p) { return p.id !== net.me && !net.online[p.id] && !net.released[p.id]; })
+    var ids = net.round.players.filter(function (p) { return p.id !== net.me && !net.online[p.id] && !net.released[p.id] && needed(p.id); })
       .map(function (p) { return p.id; });
+    // A game played in turns skips the turn; the player stays theirs.
+    if (needs) { if (ids.length) fire('skip', ids); update(); return; }
     ids.forEach(function (id) { net.released[id] = true; });
     if (ids.length) fire('continue', ids);
     update();
@@ -363,6 +403,7 @@
     '#aipr-open{gap:6px;margin-top:6px}',
     '#aipr-rooms{display:flex;flex-direction:column;gap:6px}',
     '#aipr-rooms button{font-size:16px;padding:8px 16px;background:#3f8ad8;box-shadow:0 4px 0 #2a5f99}',
+    '#aipr #aipr-again{background:#3f8ad8;box-shadow:0 4px 0 #2a5f99;margin-bottom:6px}',
     '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
     '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
     // A phone on its side (#95): the room in two columns, the code and QR left and everything to
@@ -388,6 +429,7 @@
     '<h2>👥 Kavereiden kanssa</h2>' +
     '<div class="v" id="aipr-join">' +
       '<label>Nimesi <input id="aipr-name" maxlength="16" autocomplete="off" enterkeyhint="done"></label>' +
+      '<button id="aipr-again" hidden></button>' +
       '<button id="aipr-create">Luo huone</button>' +
       '<p class="small">tai liity kaverin huoneeseen koodilla</p>' +
       '<div class="row"><input id="aipr-codeIn" maxlength="4" placeholder="KOOD" autocapitalize="characters" autocomplete="off" enterkeyhint="go"><button id="aipr-joinBtn">Liity</button></div>' +
@@ -426,11 +468,12 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'room', 'result', 'code', 'qr', 'members', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn']
+    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'room', 'result', 'code', 'qr', 'members', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
     el.joinBtn.addEventListener('click', joinTyped);
+    el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false); net.rejoin = true; } });
     el.codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
     el.start.addEventListener('click', startRound);
     el.pub.addEventListener('change', function () { net.pub = el.pub.checked; if (net.joined) keepHere(); tellList(); render(); });
@@ -492,7 +535,7 @@
     el.room.hidden = !net.on;
     el.back.textContent = net.on ? 'Poistu huoneesta' : 'Takaisin';
     el.err.textContent = net.on ? '' : net.error;
-    if (!net.on) return renderList();
+    if (!net.on) { var a = awayRound(); el.again.hidden = !a; if (a) el.again.textContent = '↩ Palaa kierrokseen ' + a.code; return renderList(); }
     if (el.code.textContent !== net.code) { el.code.textContent = net.code; drawQR(el.qr, joinLink()); }
     el.result.textContent = net.result;
     el.result.className = net.resultClass || '';
@@ -524,6 +567,7 @@
   function renderPause() {
     if (!root) return; // nothing drawn yet: the room screen has not been opened on this page
     var text = '', canGoOn = false;
+    if (needs && net.host && net.on) tellPause();
     if (net.on && racing() && !shown) {
       var names = waitingFor();
       if (!net.connected) text = 'Yhteys katkesi – yhdistetään…';
@@ -536,6 +580,7 @@
     el.pause.hidden = !text;
     el.pauseText.textContent = text;
     el.goOn.hidden = !canGoOn;
+    el.goOn.textContent = needs ? 'Ohita vuoro' : 'Jatka ilman heitä';
   }
 
   // ---- A QR code of the join link, drawn here (byte mode, error correction M, versions 1-9) ----
@@ -653,7 +698,8 @@
     // on(type, fn): 'start' ({round, players: [{id, name}], host, over}), 'message' (msg, fromId),
     // 'peers' (members), 'hello' (id; host: a phone in the round is back, send it the round),
     // 'continue' (ids; host: the computer takes these players), 'back' (id; host: a player the
-    // computer had is back), 'lobby' (the host lost the round; stop it), 'leave' (reason; out of
+    // computer had is back), 'skip' (ids; host, a game played in turns: skip the turn of these
+    // away players), 'lobby' (the host lost the round; stop it), 'leave' (reason; out of
     // the room), 'menu' (the room screen is closed; show the game's menu).
     on: function (type, fn) { (handlers[type] = handlers[type] || []).push(fn); return this; },
     open: function () { if (!net.on) net.error = ''; show(true); },
@@ -677,6 +723,7 @@
     backToRoom: function (text, className) {
       if (!net.on) return;
       if (net.round) net.round.over = true;
+      forgetAway(net.code);
       net.result = text || ''; net.resultClass = className || '';
       show(true);
     },
@@ -706,6 +753,10 @@
     // The round should stand still: a phone in it, or the host, or this phone's connection is away.
     get paused() { return isPaused(); },
     get waiting() { return waitingFor(); },
+    // A game played in turns (#297): fn(id) is true while the round needs that phone (its turn).
+    // Then the round waits only for those, a phone that leaves keeps its player, the host's
+    // button is "Ohita vuoro" and fires 'skip' (ids), and the phone can come back to the round.
+    turns: function (fn) { needs = typeof fn === 'function' ? fn : null; },
     // Host: the players the computer moves now (let go with "Jatka ilman heitä", or left the room).
     isReleased: function (id) { return !!net.released[id]; },
     name: myName,

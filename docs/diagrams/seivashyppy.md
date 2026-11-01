@@ -14,12 +14,17 @@ goes on until everyone is out. On their turn the player runs up by tapping the l
 in turn, presses "Istuta" in the green zone to plant the pole, holds it to swing the legs up, and
 lets go when the pole is straight. The computer's attempts are worked out at once.
 
+v5 (#297) plays as v4 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella]
   K --> T[Tulostaulu: rima, tämän korkeuden merkinnät, paras]
   T --> Q{Kenen vuoro?}
-  Q -- Tietokone tai poissa oleva --> CPU[Tietokone hyppää heti]
+  Q -- Tietokone --> CPU[Tietokone hyppää heti]
+  Q -- Poissa oleva kaveri, ennen v5 --> CPU
+  Q -- Poissa oleva kaveri, v5 --> AWAY["Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = X, tai hän palaa"]
+  AWAY --> NX
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> P{Hyppää vai ohita?}
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama hyppy kaikilla]
@@ -51,7 +56,7 @@ flowchart TD
   TAP -- Yksin --> M
   TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,B,F,T blue
-  class CPU,WT violet
+  class CPU,WT,AWAY violet
   class Q,P,PL,SL,OK,NX,TAP amber
   class K,O,PS,UP teal
   class X,XB rose
@@ -70,10 +75,11 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/seivashyppy/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`), the menu shows its first height; "Jatka kisaa (rima N m)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's attempts); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella**: `newComp()` (v2: `meet()` and `heights()` in the library, with `heightsFor()` and `cpuPlan()` from the game): the players, then computer vaulters up to twelve (`FIELD`), each with a skill around `base(level)` (4,00 m at level 1, 20 cm more per level up to 5,90 m); the first height is 80 cm under it (`h0Of()`), the bar then rises `STEP_H` (10 cm). `cpuPlan()` picks where each computer vaulter comes in (50–80 cm under its skill) and a few heights it passes. The order (`order`) is drawn once.
+- **Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella**: `newComp()` (v2: `meet()` and `heights()` in the library, with `heightsFor()` and `cpuPlan()` from the game): the players, then computer vaulters up to twelve (`FIELD`), each with a skill around `base(level)` (4,00 m at level 1, 20 cm more per level up to 5,90 m); the first height is 80 cm under it (`h0Of()`), the bar then rises `STEP_H` (10 cm). `cpuPlan()` picks where each computer vaulter comes in (50–80 cm under its skill) and a few heights it passes. The order (`order`) is drawn once. From v5 the meet is `yleisurheilu-5/kisa.js` (#297).
 - **Tulostaulu: rima, tämän korkeuden merkinnät, paras**: `drawBoard()` (v2: `board()` in `korkeus.js`, as in Korkeushyppy v2), shown for 3.5 s (`BOARD_T`) before each player's attempt; alone a tap skips it. Each row shows the place, the marks at this height (O, X, - for a pass; "ulos" when out) and the best height; "NM" (no mark) before any. The foot line says who is next and how many attempts they have left (`TRIES - cons`).
 - **Kenen vuoro?**: `advance()` (v2: in `korkeus.js`, rounds at a height by `att`, not a queue) makes every computer attempt up to the next player on a phone; a round at a height is `comp.q`, the vaulters still `trying()` there, in the drawn order. `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
-- **Tietokone hyppää heti**: `cpuTry()`: clears when its skill plus a scatter of 13 cm reaches the bar; a run-through one time in twenty. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`, from the height it is at) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
+- **Tietokone hyppää heti**: `cpuTry()`: clears when its skill plus a scatter of 13 cm reaches the bar; a run-through one time in twenty. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`, from the height it is at) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v5 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
+- **Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = X, tai hän palaa**: from v5 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (X) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
 - **Hyppää vai ohita?**: before the first foot tap the "⏭ Ohita korkeus" button (`passBox`, acts when the finger lifts on it) passes this height, `pass()`; passing the lowest heights is how the player picks the height to start at. Passing after a failure keeps the failure: the next height then has fewer attempts left. The player alone at the top, everyone else out, sees "🏁 Lopeta kisa" instead (`soleWinner()`), and keeps the win.
 - **- ohitettu**: `apply()` with `-`: no attempt, failures in a row unchanged.
 - **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the vaulter goes (as in Aitajuoksu and Keihäänheitto), the same foot twice slows; about 8 m/s at eight taps a second. The bar in the score panel shows the speed; the runway shows the take-off zone in green, brighter within 30 cm of the best spot (`TAKEOFF`, 4 m before the box).

@@ -143,6 +143,10 @@ high-score lists (#25), then play counts (#26).
     shows only the code and the count, not names. The shelf's front page lists every game's open
     rooms the same way (#203, `GET /api/rooms`), and a tap opens the room's version with `?huone=`.
     A game needs nothing for it.
+  - A game played in turns (#297) calls `turns(id => …)`, true while the round needs that phone
+    (its turn): the round then waits only for an away phone on turn, a phone that leaves keeps its
+    player, the host's button is "Ohita vuoro" (`on('skip', ids)`), and the room screen offers
+    "Palaa kierrokseen" to a phone that left the round.
   - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
   - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
     that plays the room in Playwright.
@@ -167,16 +171,19 @@ high-score lists (#25), then play counts (#26).
   (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
   `get(id)`. Trampoliini v6 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-4/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-5/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
   game keeps its own attempt and drawing. The options are listed at the top of `kisa.js`;
-  Pituushyppy v6 is the model. At the end, `K.drawPodium(ctx, box)` draws the medal ceremony
+  Pituushyppy v8 is the model. At the end, `K.drawPodium(ctx, box)` draws the medal ceremony
   (#176): the top three on the podium, the medals hung around their necks, the final standings
   under it; it stays until the player taps it away (the game passes its taps to `K.skip()`).
   Like `lib/three-r*/`, a folder never changes once published: a fix goes in the next one
-  (`yleisurheilu-5/`), used by the next versions. The bar-height format (high jump, pole vault)
+  (`yleisurheilu-6/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
+  friends only for the phone on turn (rooms.js `turns()`), a friend may leave and come back
+  ("Palaa kierrokseen"), the host skips an away friend's turn, and the game draws the friends not
+  on turn as cheering spectators with `K.drawFans(ctx, box)`. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose

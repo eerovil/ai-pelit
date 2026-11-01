@@ -13,12 +13,17 @@ the legs lift. The computer's attempts are worked out at once.
 
 From v4 (#220) the jump sounds like one: the beeps are recorded sounds from the shared library `public/lib/aanet-2/` (`aanikirjasto.md`), loaded in `games/korkeushyppy/v4/index.html` as `AU` (`S` is the drawing scale there) — a blip when the turn comes, footsteps, the take-off thump with a whoosh, a soft whoosh for each tap over the bar, the bar's metal clatter when it falls, a thud on the mat, a chime for a clear or applause for a new record, the crowd's "ooh" for a failure, and a steel-drum chime per medal. Each falls back to v3's own beep when it cannot play (before the sound loads, offline on the first open); the mat's thud has no beep, as v3 had none.
 
+v5 (#297) plays as v4 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys, riman korkeudet]
   K --> T[Tulostaulu: rima, yritykset tällä korkeudella, paras]
   T --> Q{Kenen vuoro?}
-  Q -- Tietokone tai poissa oleva --> CPU[Tietokone hyppää heti]
+  Q -- Tietokone --> CPU[Tietokone hyppää heti]
+  Q -- Poissa oleva kaveri, ennen v5 --> CPU
+  Q -- Poissa oleva kaveri, v5 --> AWAY["Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = X, tai hän palaa"]
+  AWAY --> NX
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> PS{Jättää korkeuden väliin?}
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama floppi lentää]
@@ -51,7 +56,7 @@ flowchart TD
   TAP -- Yksin --> M
   TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,J,A,L,T blue
-  class CPU,WT violet
+  class CPU,WT,AWAY violet
   class Q,PS,RP,C,NX,TAP,SO amber
   class K,O,P,GO teal
   class X rose
@@ -70,10 +75,11 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/korkeushyppy/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`), the line under the title tells where the bar starts; "Jatka kisaa (rima N m)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's attempts); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 hyppääjää, arvottu järjestys, riman korkeudet**: `newComp()` (v2: `meet()` in `kisa.js` and `heights()` in `public/lib/yleisurheilu-1/korkeus.js` (from v3 `yleisurheilu-4/korkeus.js`), with `heightsFor()` and the computer's `plan` from the game): the players, then computer jumpers up to twelve (`FIELD`), each with a skill (the height it clears half the time) around `base(level)` (1.75 m at level 1, 2.5 cm more per level up to 1.90 m) and a first height a little under it. `heightsFor()`: the bar starts 25 cm under `base`, rises 5 cm at a time, then 3 cm, then 2 cm (never a bigger step than before, as the rules say).
+- **Kisa: 12 hyppääjää, arvottu järjestys, riman korkeudet**: `newComp()` (v2: `meet()` in `kisa.js` (from v5 `yleisurheilu-5/kisa.js`, #297) and `heights()` in `public/lib/yleisurheilu-1/korkeus.js` (from v3 `yleisurheilu-4/korkeus.js`), with `heightsFor()` and the computer's `plan` from the game): the players, then computer jumpers up to twelve (`FIELD`), each with a skill (the height it clears half the time) around `base(level)` (1.75 m at level 1, 2.5 cm more per level up to 1.90 m) and a first height a little under it. `heightsFor()`: the bar starts 25 cm under `base`, rises 5 cm at a time, then 3 cm, then 2 cm (never a bigger step than before, as the rules say).
 - **Tulostaulu: rima, yritykset tällä korkeudella, paras**: `drawBoard()` (v2: `board()` in `korkeus.js`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it; from v4 the turn starting plays `valinta` on the jumper's phone. "NYT" is the attempts at this height as on a result sheet (O, X, –), "ulos" for a jumper out. The standings (`standings()`, `placeOf()`) go by the best height cleared, then fewer failures at that height, then fewer failures in all up to it; a full tie shares the place (no jump-off).
 - **Kenen vuoro?**: `advance()` (v2: in `korkeus.js`) jumps for every computer jumper up to the next player on a phone (`due()`: not out, has not cleared or passed this height, and is at this attempt round); `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
-- **Tietokone hyppää heti**: `cpuTry()`: clears with a chance that falls from near certain to near nought within about 10 cm around its skill. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
+- **Tietokone hyppää heti**: `cpuTry()`: clears with a chance that falls from near certain to near nought within about 10 cm around its skill. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v5 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
+- **Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = X, tai hän palaa**: from v5 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (X) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
 - **Jättää korkeuden väliin?**: the "⏭ Jätä korkeus väliin" button on the canvas before the run (`actBoxes`, acts when the finger lifts on it, `pass()`). A failure before the pass still counts: X then a pass leaves two attempts at the next height (`t.run`, three in a row and out).
 - **Väliin: –**: `mark()` writes '-' for the rest of the height.
 - **Vauhdinotto J-kaarta: vasen, oikea vuorotellen**: `press()` (from v4 `askel` or `askel2` per tap, a little faster at speed): a step on the other foot adds speed, more the slower the jumper goes (as in Aitajuoksu and Keihäänheitto), the same foot twice slows. From 6 m before the bar (`CURVE0`) the run is on the curve of the J (drawn as a dashed line on the apron, `depth()`), where more than 8 m/s (`VCURVE`) cannot be carried. The green ellipse is where to take off (`ZONE`, 0.8–1.4 m before the bar).

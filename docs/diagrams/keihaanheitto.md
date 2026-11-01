@@ -18,12 +18,17 @@ v6 (#218) plays as v5 with recorded sounds from the shared library (`aanikirjast
 
 From v2 (#158) the player's athlete wears the outfit picked under "👕 Asu" in the menu, and in a room each phone's thrower wears its own (`drawAthlete()` in `games/keihas/v2/index.html`; the picker is `asut.md`).
 
+v7 (#297) plays as v6 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]
   K --> T[Tulostaulu: kierros, sijat, viimeisin ja paras]
   T --> Q{Kenen vuoro?}
-  Q -- Tietokone tai poissa oleva --> CPU[Tietokone heittää heti]
+  Q -- Tietokone --> CPU[Tietokone heittää heti]
+  Q -- Poissa oleva kaveri, ennen v7 --> CPU
+  Q -- Poissa oleva kaveri, v7 --> AWAY["Poissa oleva kaveri, v7: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa"]
+  AWAY --> NX
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> R[Vauhdinotto: vasen, oikea vuorotellen]
   Q -- Kaveri toisella puhelimella --> WT[Kaverin heitto näkyy, sama keihäs lentää]
@@ -52,7 +57,7 @@ flowchart TD
   TAP -- Yksin --> M
   TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,R,Y,A,F,T blue
-  class CPU,WT violet
+  class CPU,WT,AWAY violet
   class Q,LN,AU,RL,OK,NX,TAP amber
   class K,D,CUT teal
   class X rose
@@ -71,10 +76,11 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/keihas/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's throws, so a reload or a trip to the shelf keeps it); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 heittäjää, arvottu järjestys**: `newComp()` (v4: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js`, from v5 `yleisurheilu-3/kisa.js`): the players, then computer throwers up to twelve (`FIELD`), each with a skill around `base(level)` metres (50 m at level 1, 4 m more per level up to 84 m); the order of rounds 1–3 is drawn once (`order0`).
+- **Kisa: 12 heittäjää, arvottu järjestys**: `newComp()` (v4: `meet()` and `rounds()` in `public/lib/yleisurheilu-1/kisa.js` (from v7 `yleisurheilu-5/kisa.js`, #297), from v5 `yleisurheilu-3/kisa.js`): the players, then computer throwers up to twelve (`FIELD`), each with a skill around `base(level)` metres (50 m at level 1, 4 m more per level up to 84 m); the order of rounds 1–3 is drawn once (`order0`).
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()` (v4: the library's `K.drawBoard()`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best throw, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` (v4: the library's) throws for every computer thrower up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
-- **Tietokone heittää heti**: `cpuMark()`: the skill plus a scatter of 3.5 m, a foul one time in eight. In a room the host's "Jatka ilman heitä" hands an away phone's throws to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`).
+- **Tietokone heittää heti**: `cpuMark()`: the skill plus a scatter of 3.5 m, a foul one time in eight. In a room the host's "Jatka ilman heitä" hands an away phone's throws to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v7 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
+- **Poissa oleva kaveri, v7: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa**: from v7 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (-1 (X)) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
 - **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the thrower goes (as in Aitajuoksu), the same foot twice slows (from v3 it only adds nothing); about 8 m/s at eight taps a second. The bar under the score panel shows the speed; the green part of the runway (`stopDist()`) is where letting go stops the thrower before the line at that speed.
 - **Keltainen alue: aloita Heitä**: v3 `zones()` and `drawStrip()`: at the speed now, the yellow part of the runway is where pressing "Heitä" brings the angle into the green just as the thrower reaches the end of the green part; "Pidä Heitä pohjassa!" shows there. The whole runway, the thrower, the yellow and the green show as a strip under the ground's distances from the first step, and the camera looks further ahead (about 11 m across) than v2's. Upright, the throw is a bar of its own above the two feet (`pads()`), and a touch in the gap between them does nothing (`padAt()`).
 - **Vihreän alueen loppu?**: v3 `step()`: a throw still held at the last safe step (`-stopDist(v)`) goes by itself (`letFly()`), at least at 10°, so holding too long is no longer a foul. It is thrown from the position and speed rounded to the centimetre, the same numbers other phones get.

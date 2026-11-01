@@ -9,6 +9,13 @@
       "note": "Ensimmäinen versio: liuku tai pyörähdys ympyrän poikki, työntö vihreällä hetkellä ja kulma pitämällä Työnnä-nappia, liian myöhään yli renkaan ja pyörähdyksestä aikainen työntö sektorin ohi; kuuden kierroksen arvokisa, jossa kahdeksan parasta jatkaa, yksin tai 2–8 kaverin kanssa.",
       "request": "Uusi yleisurheilulaji yleisurheilun ryhmään: kuulantyöntö. Ota liuku- tai pyörähdysvauhtia ympyrässä, työnnä kuula oikeaan aikaan ja oikeassa kulmassa, äläkä astu renkaan yli. Arvokisa tietokonetta vastaan tai kavereiden kanssa, kuten muissakin heittolajeissa.\n\nIdeoista #246.",
       "issue": "eerovil/ai-pelit#268"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-01",
+      "note": "Kavereiden kanssa kisa odottaa vain sitä, jonka vuoro on: muut voivat poistua ja palata kesken kisan (Palaa kierrokseen), poissaolijan vuoron voi ohittaa, ja vuoroaan odottavat seisovat katsomassa ja kannustavat.",
+      "request": "Moninpeli: anna poistua ja liittyä takaisin joissain peleissä, mm. yleisurheilu. Eli jos ei ole oma vuoro niin ei ole tarve pausettaa, ja ei ole tarvetta korvata botilla. Lisää vuoroaan odottavat pelaajat katsojiksi, ja he voivat kannustaa.",
+      "issue": "eerovil/ai-pelit#297"
     }
   ]
 }

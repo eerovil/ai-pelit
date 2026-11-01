@@ -15,6 +15,13 @@
       "note": "Mäkiviikko: neljä mäkeä peräkkäin (Lahti, Kuopio, Rovaniemi, Ruka), kussakin kaksi kierrosta, pisteet lasketaan yhteen koko viikolta ja palkintojenjako tulee vasta viimeisen mäen jälkeen.",
       "request": "Muutetaan podium: ainoastaan kun kisa loppuu. — Mäkihypyssä podium tuli melkein joka hypyn jälkeen; Eero valitsi pidemmän kisan: useampi mäki peräkkäin kuten mäkiviikolla, podium vasta viimeisen jälkeen.",
       "issue": "eerovil/ai-pelit#283"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-01",
+      "note": "Kavereiden kanssa kisa odottaa vain sitä, jonka vuoro on: muut voivat poistua ja palata kesken kisan (Palaa kierrokseen), poissaolijan vuoron voi ohittaa, ja vuoroaan odottavat seisovat katsomassa ja kannustavat.",
+      "request": "Moninpeli: anna poistua ja liittyä takaisin joissain peleissä, mm. yleisurheilu. Eli jos ei ole oma vuoro niin ei ole tarve pausettaa, ja ei ole tarvetta korvata botilla. Lisää vuoroaan odottavat pelaajat katsojiksi, ja he voivat kannustaa.",
+      "issue": "eerovil/ai-pelit#297"
     }
   ]
 }

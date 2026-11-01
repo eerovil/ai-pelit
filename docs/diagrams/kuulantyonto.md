@@ -7,12 +7,17 @@ turn the player picks the glide or the spin, presses Työnnä when the thrower r
 position, holds it while the angle rises and lets go at the green angle. The computer's puts are
 worked out at once.
 
+v2 (#297) plays as v1 on `public/lib/yleisurheilu-5/`: with friends the meet waits only for the phone on turn, a friend may leave and come back ("↩ Palaa kierrokseen"), the host's "Ohita vuoro" skips an away friend's turn as a miss (the computer never takes them), and the friends not on turn stand in a row at the bottom of the scene as spectators with "📣 Kannusta" (`K.drawFans()` in `drawScene()`, see `yleisurheilu-kirjasto.md`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa, kaverit tai asu] --> K[Kisa: 12 työntäjää, arvottu järjestys]
   K --> T[Tulostaulu: kierros, sijat, viimeisin ja paras]
   T --> Q{Kenen vuoro?}
-  Q -- Tietokone tai poissa oleva --> CPU[Tietokone työntää heti]
+  Q -- Tietokone --> CPU[Tietokone työntää heti]
+  Q -- Poissa oleva kaveri, ennen v2 --> CPU
+  Q -- Poissa oleva kaveri, v2 --> AWAY["Poissa oleva kaveri, v2: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa"]
+  AWAY --> NX
   CPU --> NX
   Q -- Kaveri toisella puhelimella --> WT[Kaverin työntö näkyy, sama kuula lentää]
   Q -- Pelaaja tällä puhelimella --> P{Liuku vai pyörähdys?}
@@ -36,7 +41,7 @@ flowchart TD
   CUT --> T
   END --> SV[Ennätys, tuloslista, voitosta seuraava taso]
   class M,MV,H,REL,T blue
-  class CPU,WT violet
+  class CPU,WT,AWAY violet
   class Q,P,TP,SEC,NX amber
   class K,D,CUT teal
   class X rose
@@ -55,10 +60,11 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa, kaverit tai asu**: `showMenu()` in `games/kuula/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones); "👕 Asu" the outfits (`public/outfits.js`).
-- **Kisa: 12 työntäjää, arvottu järjestys**: `AiPelitKisa.meet()` in `public/lib/yleisurheilu-4/kisa.js` with `AiPelitKisa.rounds()`: the players, then computer putters up to twelve, each with a skill around `base(level)` (14 m at level 1, 0.8 m more per level up to 19 m).
+- **Kisa: 12 työntäjää, arvottu järjestys**: `AiPelitKisa.meet()` in `public/lib/yleisurheilu-4/kisa.js` (from v2 `yleisurheilu-5/kisa.js`, #297) with `AiPelitKisa.rounds()`: the players, then computer putters up to twelve, each with a skill around `base(level)` (14 m at level 1, 0.8 m more per level up to 19 m).
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: the library's `K.drawBoard()`, shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it.
 - **Kenen vuoro?**: the library's `advance()` and `follow()`; the game's `newTurn()` sets up this phone's view of the put (`th`).
-- **Tietokone työntää heti**: `cpuMark()`: the skill plus a scatter of 0.8 m, a foul one time in ten. In a room the host's "Jatka ilman heitä" hands an away phone's puts to the computer.
+- **Tietokone työntää heti**: `cpuMark()`: the skill plus a scatter of 0.8 m, a foul one time in ten. In a room the host's "Jatka ilman heitä" hands an away phone's puts to the computer. From v2 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
+- **Poissa oleva kaveri, v2: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa**: from v2 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (-1 (X)) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
 - **Liuku vai pyörähdys?**: `press(k)` in the `ready` phase: the left pad is the glide (1), the right the spin (2), both in `TECH`. The glide is easier: a push window of ±0.14 s and straight down the middle, about 19.4 m at best. The spin puts further, about 22.3 m at best, but its window is ±0.085 s and an early push goes wide (`pushDev()`).
 - **Ympyrän poikki: pallo kulkee kohti vihreää**: the `move` phase: the hips go across the circle on `hip(k, t)`, reaching the power position at `T` seconds. The strip under the field (`drawStrip()`) shows the time as a ball running to the green window and the red end over the board. From here the whole pad area is Työnnä (`pads()`).
 - **Työnnä painettu?**: `startPush()`: how far the press is from the power position (`off`) sets the shot's speed (`pushSpeed()`): within the window a little less the further off; earlier, much weaker. After the window the weight is already over the board, "Liian myöhään: yli renkaan"; no press by then, "Ei työntöä ajoissa: yli renkaan" (in `step()`); in a room a minute in the `ready` phase, "Aika loppui".
