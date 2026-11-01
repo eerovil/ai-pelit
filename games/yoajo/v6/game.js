@@ -452,9 +452,10 @@ function holes() {
       if (P.v > 70 / KMH) P.damage++;
       shake = 1; P.vl += (Math.random() < 0.5 ? -1 : 1) * 1.6; P.v *= 0.9;
       tally.kuopat++;
+      // v6: the thud comes first, also for the hit that bursts the tyre.
+      if (typeof bumpSound === 'function') bumpSound();
       if (P.damage >= 4) return crash('Rengas puhkesi kuoppaan.');
       score(-15, 'Kuoppa!');
-      if (typeof bumpSound === 'function') bumpSound();
     }
   }
 }

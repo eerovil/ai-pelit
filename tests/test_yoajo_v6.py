@@ -145,3 +145,26 @@ def test_pause_and_a_restart_after_a_crash_silence_and_bring_back_the_engine(sit
     page.evaluate("crash('Ajoit ojaan.')")
     assert played(page) == ["naksu", "kitka", "kolari", "lasi"]
     assert page.errors == []
+
+
+def test_the_rain_stops_when_a_leg_ends_either_way(site, context):
+    page = open_game(site, context)
+    sound_on(page)
+    drive(page, "", 0.2, 2)
+    assert page.evaluate("rain.vol") > 0
+    page.evaluate("crash('Ajoit ojaan.'); engineSound()")
+    assert page.evaluate("[mode, rain.vol, engine.vol]") == ["crash", 0, 0]
+    drive(page, "P.s = road.len - 5", 2, 2)
+    page.evaluate("engineSound()")
+    assert page.evaluate("[mode, rain.vol, engine.vol]") == ["done", 0, 0]
+    assert page.errors == []
+
+
+def test_the_fourth_hard_pothole_thuds_before_the_tyre_bursts(site, context):
+    page = open_game(site, context)
+    sound_on(page)
+    drive(page, "P.damage = 3; road.holes = [{ s: P.s + 2, lat: LANE - 0.75, r: 0.4, hit: false }]")
+    assert page.evaluate("[mode, crashWhy]") == ["crash", "Rengas puhkesi kuoppaan."]
+    assert played(page) == ["tomahdys", "kitka"]
+    assert page.errors == []
+

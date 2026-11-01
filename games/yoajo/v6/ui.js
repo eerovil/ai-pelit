@@ -175,13 +175,13 @@ function honkSound() { S.play('torvi', { vol: 0.45, delay: 0.15 }) || tone(420, 
 function truckSound(rel) { S.play('suhahdus', { vol: clamp(0.35 + rel / 50, 0.35, 0.9), rate: 0.7 }); }
 function legDoneSound() { S.play('voitto', { vol: 0.8 }) || [523, 659, 784].forEach((f, i) => setTimeout(() => tone(f, 0.18, 'sine', 0.06), i * 120)); }
 // The engine follows the speed and the gas; the rain (also the snow legs, as the issue asked) is
-// on while the car is on the road.
+// on while the leg goes on, paused too, and stops when it ends.
 function engineSound() {
   const drive = mode === 'drive' && P;
   if (engine) engine.set(drive ? { vol: 0.25 + 0.15 * input.gas, rate: 0.6 + P.v / 30 } : { vol: 0 });
   if (rain) {
     const wet = P && leg && leg.weather !== 'kuiva', snow = wet && leg.weather !== 'sade';
-    rain.set(wet && mode !== 'menu' ? { vol: snow ? 0.25 : 0.45, rate: snow ? 0.8 : 1 } : { vol: 0 });
+    rain.set(wet && (mode === 'drive' || mode === 'pause') ? { vol: snow ? 0.25 : 0.45, rate: snow ? 0.8 : 1 } : { vol: 0 });
   }
 }
 let lastPoints = 0;
