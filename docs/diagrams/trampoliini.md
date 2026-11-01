@@ -10,6 +10,8 @@ From v6 (#158) the jumper wears the outfit picked under "👕 Asu" in the menu (
 
 From v7 (#231) the beeps are recorded sounds from the shared library `lib/aanet-2/` (`sound()` in `games/trampoliini/v7/index.html`, see `aanikirjasto.md`): a thud for the push, a spring creak on the mat under 7 m/s and a cartoon boing above it, a power-up for a well-timed push, a confirmation for a trick (higher for a listed one), a thud and the crowd's "ooh" for a fall, and a win or loss tune at the end; each falls back to its v6 beep while its file is not there (`beep()`).
 
+From v8 (#298) a well-timed push is a soft whoosh (`suhahdus`, louder the better the timing) instead of v7's arcade power-up, which rang over the mat's boing on every good bounce (`sound('spring', q)` in `games/trampoliini/v8/index.html`).
+
 ```mermaid
 flowchart TD
   A[Taso: trampoliini ja temppulista] --> B[Matolla: napauta, v2: päästä irti, pohjalla]
@@ -64,7 +66,7 @@ flowchart TD
 ## Boxes
 
 - **Taso: trampoliini ja temppulista**: `LEVELS` and `levelOf()` in `games/trampoliini/v1/index.html`. Levels 1–5 go big garden trampoline with a net, small garden trampoline, mini trampoline, competition trampoline, giant trampoline (`TRAMPS`: each its own mat length `half`, top speed `vMax` and height); from level 6 they come round again with four tricks drawn from those the trampoline has air for (`needs()`, which already leaves time to stretch out; the mini trampoline has exactly five, so it gets four of them; tests check every level from 6 to 30 asks four different tricks, and land every trick of the first fifteen levels).
-- **Matolla: napauta, v2: päästä irti, pohjalla**: `tap()`; each bounce spends 0.3 s on the mat (`mat()`), and a tap up to 0.12 s before landing still counts. From v2 (`games/trampoliini/v2/index.html`) the push is letting go: a finger on the screen bends the knees and keeps them bent (`squatDown()`, `bend`, `legBend()`), pressing the mat up to 30 % deeper, and letting go (`squatUp()`, only the same finger) is the tap's push, with a thump, the arms swinging down (`kick`) and a spring sound when it counts well. Held through a whole bounce, there is no push and the bounce dies down. The flip buttons work as in v1.
+- **Matolla: napauta, v2: päästä irti, pohjalla**: `tap()`; each bounce spends 0.3 s on the mat (`mat()`), and a tap up to 0.12 s before landing still counts. From v2 (`games/trampoliini/v2/index.html`) the push is letting go: a finger on the screen bends the knees and keeps them bent (`squatDown()`, `bend`, `legBend()`), pressing the mat up to 30 % deeper, and letting go (`squatUp()`, only the same finger) is the tap's push, with a thump, the arms swinging down (`kick`) and a spring sound when it counts well (from v8 a soft whoosh). Held through a whole bounce, there is no push and the bounce dies down. The flip buttons work as in v1.
 - **Ajoitus?**: `pumpQuality()`: within 0.05 s of the bottom is perfect; it fades to nothing 0.25 s away.
 - **Korkeammalle, enintään trampoliinin huippu**: `takeoff()`: 90 % of the landing speed plus up to 2 m/s, never over the trampoline's `vMax`; without a tap 82 %, so the bounce dies down to a small hop.
 - **Voltin nappi tai 🌀 matolla**: `press()` and `twistTap()` on the mat also count as the tap, and start the flip or twist from the take-off; a flip started from the mat carries you 0.25 m/s back or forward (`DRIFT`), which matters on the small trampolines.
