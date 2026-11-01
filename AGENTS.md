@@ -284,8 +284,8 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 ## Sound effects
 
 Recorded sounds (#205) are a shared library like three.js: the newest `public/lib/aanet-<N>/`
-(now `aanet-3/`, 72 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
-a classic `<script src="../../../lib/aanet-3/aanet.js"></script>` before its own script, names the sounds
+(now `aanet-4/`, 68 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
+a classic `<script src="../../../lib/aanet-4/aanet.js"></script>` before its own script, names the sounds
 it uses once (`AiPelitAanet.load(['askel', 'hiekka'])`, so the phone downloads only those) and
 plays them by name: `AiPelitAanet.play('hiekka', { vol, rate, delay })`. The names and what each
 sound is are listed at the top of `aanet.js`. Sound starts only after the first tap, and `play()`
@@ -295,6 +295,10 @@ model. A sound that goes on (an engine, wind, wheels rolling; marked LOOP in the
 `const m = AiPelitAanet.loop('moottori', { vol })`, then `m.set({ rate, vol })` each frame to
 follow the speed, and `m.stop()` when the round ends; it starts by itself once sound is on. Sound
 sleeps while the page is hidden.
+No crowd noise and no loud sounds (#337, Eero's choice): `aanet-4` has no applause, crowd or cheer,
+and plays its loudest files (a whistle, tyres, the winning tune...) quieter by itself (`LOUD` in
+`aanet.js`). A field event passes `cheerSound` to `AiPelitKisa.meet`, so "📣 Kannusta" is a quiet
+blip and not `kisa.js`'s "jee!" (Pituushyppy v12).
 
 - Only CC0 sounds (no credit owed, the repository is public), each named with its source in the
   folder's `SOURCE`; Kenney.nl's packs and CC0-only pages on OpenGameArt.org have most of what a

@@ -29,6 +29,13 @@
       "note": "Oikeat äänet jaetusta äänikirjastosta: heiton suhahdus, kopin osuma, lattialle putoavan puhelimen tomahdys ja lasin särähdys, voiton ja tappion sävelmät.",
       "request": "Äänet (#205): vaihda pelin piippaukset jaetun äänikirjaston oikeisiin ääniin, `lib/aanet-2/` (AGENTS.md, \"Sound effects\"; Pituushyppy v7 on malli).\n\nÄänet tähän peliin (nimet `aanet.js`:n listasta): heitto suhahdus, kiinniotto osuma, ohi suhahdus hiljaa, lattialle tomahdys + lasi, voitto voitto, tappio tappio.\n\nJos jokin ääni puuttuu kirjastosta tai ei sovi, pidä sille pelin oma piippaus ja kerro siitä pull requestissa. Muuten peli pelaa kuten ennen, tallennukset ennallaan. Jos v6 on jo varattu, käytä seuraavaa vapaata numeroa.",
       "issue": "eerovil/ai-pelit#226"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-01",
+      "note": "Kovimmat äänet soivat nyt hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }

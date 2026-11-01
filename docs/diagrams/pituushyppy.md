@@ -16,6 +16,8 @@ v10 (#311) adds the outfit picker ("👕 Asu" in the menu, `asut.md`): the playe
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v12 (#337, `aanet-4`) has no crowd: a jump into the sand (a lead or a record too) is the sand and the quiet `onnistui` blip at 0.3, a foul is silent, the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]

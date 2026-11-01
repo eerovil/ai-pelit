@@ -6,6 +6,8 @@ dodges arrows and swings, and gets quicker, tougher and smarter with every level
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v6 (#337, `aanet-4`) has no crowd: a knockout is the hit and the thud only.
+
 ```mermaid
 flowchart TD
   A[Valikko: anna hahmolle nimi] --> B[Taisteluun! 3-2-1]
@@ -31,7 +33,7 @@ flowchart TD
   Q --> R{Kumman energia loppui?}
   R --> S[Tulos molemmille, takaisin huoneeseen]
   S --> O
-  C -. jokainen tapahtuma .-> T[Äänet: gongi, suhahdus, osuma tai potku, tömähdys ja yleisö, voitto tai tappio]
+  C -. jokainen tapahtuma .-> T[Äänet: gongi, suhahdus, osuma tai potku, tömähdys, voitto tai tappio]
   class A,B,C blue
   class D,I,L amber
   class E,F,G teal
@@ -65,4 +67,4 @@ flowchart TD
 - **Isäntä pyörittää taistelua, kaveri lähettää ohjauksensa**: the phone that made the room runs the fight (`step()` with `friendInput()`) and sends the state 30 times a second (`sendState()`); the friend's phone sends its stick and buttons (`guestStep()`). If the friend drops off and the host taps "Jatka ilman heitä", the computer opponent takes over.
 - **Kumpikin näkee oman hahmonsa alhaalla**: the friend's phone turns the arena round (`unpack()`), so both players fight upwards.
 - **Tulos molemmille, takaisin huoneeseen**: `endOnline()` sends the winner with `deliver()`; both phones show it on the room screen (`backToRoom()`). Online fights do not change the solo level or wins.
-- **Äänet: gongi, suhahdus, osuma tai potku, tömähdys ja yleisö, voitto tai tappio**: v5 (`games/areena/v5/index.html`, #212) loads `public/lib/aanet-2/aanet.js` and plays recorded sounds through `sfx`: `gongi` when the fight starts, `suhahdus` for a sword swing, an arrow (higher) and a dodge (quiet, lower), `osuma` for a light hit (an arrow, 12 or less) and `potku` for a big one (a sword; decided in `damage()` before the player's hits are made 30 % lighter), `tomahdys` then `yleiso` at the knockout (each on its own, so the crowd still shouts if the thud cannot play), and `voitto` or `tappio` when the fight ends (alone in `endFight()`, online in `finishOnline()`). A friend's phone plays the same from the host's state (`unpack()`, `guestState()`). When a sound cannot play (before it has loaded, offline on the first open), the v4 beep plays instead; the end tunes had no beep and stay silent.
+- **Äänet: gongi, suhahdus, osuma tai potku, tömähdys, voitto tai tappio**: from v6 (#337) a knockout has no `yleiso` after the thud. Before it: v5 (`games/areena/v5/index.html`, #212) loads `public/lib/aanet-2/aanet.js` and plays recorded sounds through `sfx`: `gongi` when the fight starts, `suhahdus` for a sword swing, an arrow (higher) and a dodge (quiet, lower), `osuma` for a light hit (an arrow, 12 or less) and `potku` for a big one (a sword; decided in `damage()` before the player's hits are made 30 % lighter), `tomahdys` then `yleiso` at the knockout (each on its own, so the crowd still shouts if the thud cannot play), and `voitto` or `tappio` when the fight ends (alone in `endFight()`, online in `finishOnline()`). A friend's phone plays the same from the host's state (`unpack()`, `guestState()`). When a sound cannot play (before it has loaded, offline on the first open), the v4 beep plays instead; the end tunes had no beep and stay silent.

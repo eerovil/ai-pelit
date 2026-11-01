@@ -72,6 +72,13 @@
       "note": "Sama asu kaikissa yleisurheilulajeissa ja Ottelussa, ja asuja on nyt seitsemän.",
       "request": "Puvut voisi toimia kaikissa ottelu peleissä ainakin. Onko puvuille jo oma shared lib",
       "issue": "eerovil/ai-pelit#311"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-01",
+      "note": "Yleisön huudot, aplodit ja ”ooh”-äänet on poistettu, ja kovimmat äänet soivat hiljempaa.",
+      "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
+      "issue": "eerovil/ai-pelit#337"
     }
   ]
 }

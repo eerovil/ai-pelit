@@ -22,6 +22,8 @@ v10 (#311) plays as v9 with the athletics events' common outfit set and one choi
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v11 (#337, `aanet-4`) has no crowd: the finish is the quiet `onnistui` blip at 0.3 (no applause for a record), and the whistle is quieter.
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]
@@ -55,7 +57,7 @@ flowchart TD
   Q --> R[Tulokset kaikille, takaisin huoneeseen]
   L --> S[Ennätys ja tuloslista]
   L --> SO{Uusi ennätys?}
-  SO -- Kyllä --> AP[Kilahdus ja aplodit]
+  SO -- Kyllä --> AP[Hiljainen kilahdus]
   SO -- Ei --> KL[Kilahdus]
   class V,A,B,C,D blue
   class HA,H,K,M,N,FS,YC,SO amber
@@ -96,6 +98,6 @@ flowchart TD
 - **Isäntä odottaa kaikki maaliin, enintään 20 s per 100 m ensimmäisen jälkeen**: `hostTick()` waits `race.late` after the first finish: 20 s in v1-v2, and from v3 20 s per 100 m (`20 * d / 100`: 20, 40 or 80 s), with `race.firstFin` set by whichever runner is in first, the host's own, the computer's or a guest's `p` message: each guest runs its own runner and sends it to the host 12 times a second (`p`); the host sends everyone's runners back (`s`) and runs the computer for a phone that is away (`on('continue')`). A guest that reloads takes its runner back from the host's `s`, mid-jump or mid-stumble included (`pack()` sends the jump speed, last foot and stumble too).
 - **Tulokset kaikille, takaisin huoneeseen**: the host's `R.deliver()` of `end` with the standings; each phone shows them for three seconds, saves its time once (`R.once`), and goes back to the room with its place and the standings as the room's note.
 - **Uusi ennätys?**: v7: when this phone's runner crosses the line, `move()` compares its time with the saved record of this race (`bestKey()`; `finish()` saves the new one a moment later). No record yet counts as a new one.
-- **Kilahdus ja aplodit**: v7: `onnistui`, then `aplodit` 0.3 s later. When `onnistui` cannot play, v6's two-note beep plays instead and no applause.
+- **Hiljainen kilahdus**: from v11 (#337) `onnistui` at 0.3, with no applause, for every finish. Before it, v7: `onnistui`, then `aplodit` 0.3 s later. When `onnistui` cannot play, v6's two-note beep plays instead and no applause.
 - **Kilahdus**: v7: `onnistui` alone.
 - **Ennätys ja tuloslista**: `AiPelitScores.submit()` with the time; the list is the fastest first (`aitajuoksu` in `public/scores.js` and `server/api.js`). v3: each race has its own record (`bestKey()`: 100 m hurdles keeps `ennatys`, the rest `ennatys-<matka>-<aidat|tasainen>`) and list (`boardId()`: 100 m hurdles keeps `main`, the rest e.g. `400-tasainen`); the shelf still shows the `main` list. The level is shared by every race.

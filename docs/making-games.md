@@ -55,9 +55,13 @@ the version that taught it, so you can read the code that fixed it.
   corners in landscape, the lower edge in portrait. Leave the top-left for the "‹ Pelit" chip.
 - **Sound follows the game, not the finger.** Piano v5 plays each note when the song reaches it;
   a tap does not play it. Short sounds, only after the first tap (Web Audio rule in AGENTS.md).
-- **Real sounds over beeps.** A thud, a footstep or applause from the shared library
-  (`lib/aanet-1/`, "Sound effects" in AGENTS.md) tells the player what happened better than a
-  tone. Pituushyppy v7: the sand, and the crowd clapping a new lead.
+- **Real sounds over beeps.** A thud or a footstep from the shared library
+  (`lib/aanet-4/`, "Sound effects" in AGENTS.md) tells the player what happened better than a
+  tone. Pituushyppy v7: the sand.
+- **No crowd noise, no loud sounds (#337, Eero's choice).** No applause, shouting crowd, crowd's
+  "ooh" or cheer: a good moment gets a quiet short blip (`onnistui` at about 0.3), a near miss or a
+  fall nothing more than its own thud. Keep every sound about as loud as the rest; `aanet-4`
+  already plays its loudest files quieter. The losing tune may stay as it is.
 
 ## Difficulty
 

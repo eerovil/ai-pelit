@@ -3,7 +3,7 @@ turn it is, the host skips an away phone's turn, a phone that leaves keeps its c
 back with "Palaa kierrokseen", and the friends not on turn stand by as spectators and cheer.
 
 The tests play each event's newest version (only that folder is kept, #346), on whichever
-library folder it loads; yleisurheilu-6 changed only the cheer's sound (test_yleisurheilu_jee.py).
+library folder it loads; yleisurheilu-6 changed only the cheer's sound, which the events now replace with their own quiet blip (test_yleisurheilu_hiljaa.py).
 """
 
 import json

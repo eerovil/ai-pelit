@@ -14,6 +14,8 @@ v3 (#297) plays as v2 on `public/lib/yleisurheilu-5/`: with friends the meet wai
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v5 (#337, `aanet-4`) has no crowd: a long jump (past the K point, the longest or a lead) lands with the quiet `onnistui` blip at 0.3, any other jump only its landing, a fall only its thud, the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
+
 ```mermaid
 flowchart TD
   M[Valikko: Mäkiviikolle!, Jatka tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]

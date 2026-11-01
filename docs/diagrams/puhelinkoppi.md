@@ -10,6 +10,8 @@ library (violet), or the game's own beep when it cannot.
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v7 (#337) loads `aanet-4`, which plays the loudest sounds (the winning tune) quieter; nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Puhelin kämmenellä, ruutu ylöspäin] --> B[Heittoliike: käsi nykäisee ylös]

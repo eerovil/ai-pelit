@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Curling</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#dfeaf2;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (rule 4, #181). */
+  canvas{position:fixed;top:0;left:0;right:0;bottom:0;display:block;width:100%;height:100%;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(14,38,66,.9);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:40px;letter-spacing:1px;color:#fff;text-shadow:0 3px 0 #1d4f8a}
+  #result{margin:0;font-size:26px;font-weight:800}
+  #result.win{color:#7ee081}#result.lose{color:#ff7a6b}#result.draw{color:#ffd166}
+  #foe{margin:4px 0 0;font-size:17px;color:#ffd0a8}
+  .go{font:800 20px system-ui,sans-serif;padding:13px 22px;border:0;border-radius:16px;background:#ffd166;color:#2a1a05;box-shadow:0 4px 0 #9a6b12}
+  #resume{background:#7ee081;box-shadow:0 4px 0 #2f7a3a}
+  .go[hidden]{display:none}
+  .go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a6b12}
+  #multi{font:700 17px system-ui,sans-serif;padding:11px 18px;border:2px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166}
+  #stats{margin:0;font-size:14px;color:#c4d8ea}
+  .help{margin:6px 0 0;font-size:13px;line-height:1.45;color:#b8cde0;max-width:320px}
+  .help.short{display:none}
+  /* Sideways (#95): two columns, so the whole menu fits a 360 px tall screen without scrolling. */
+  @media (orientation:landscape) and (max-height:520px){
+    #menu{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:repeat(5,auto);align-content:center;justify-items:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu h1{grid-column:1;grid-row:1;font-size:34px}
+    #result{grid-column:1;grid-row:2;font-size:22px}
+    #foe{grid-column:1;grid-row:3;margin:0}
+    #stats{grid-column:1;grid-row:4}
+    .help.short{display:block;grid-column:1;grid-row:5;margin:0;max-width:330px}
+    .help.long{display:none}
+    #resume{grid-column:2;grid-row:1;align-self:end}
+    #go{grid-column:2;grid-row:2/4;align-self:center}
+    #multi{grid-column:2;grid-row:4/6;align-self:start}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🥌 Curling</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button class="go" id="resume" hidden>Jatka ottelua</button>
+  <button class="go" id="go">Pelaa yksin</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help long">Liu'uta kivi pesään. Vedä kiveä taaksepäin ja päästä irti: sivulle vetäminen tähtää, pitkä veto heittää kovaa. Valitse kierre, niin kivi kaartaa.
+    Kun kivi liukuu, <b>hankaa sormella ruutua</b>: harjaus vie kiveä pidemmälle ja suoremmin.<br>
+    Pesän keskustaa lähimmät kivet tuovat pisteet. Kolme päätä, neljä kiveä kummallekin.</p>
+  <p class="help short">Vedä kiveä taakse ja päästä irti. Valitse kierre. Kun kivi liukuu, hankaa ruutua: harjaus vie pidemmälle. Lähimmät kivet keskustaa tuovat pisteet.</p>
+</div>
+<script src="../../../rooms.js" data-game="curling" data-min="2" data-max="4"></script>
+<!-- v3 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
+     and with the loudest sounds quieter -->
+<script src="../../../lib/aanet-4/aanet.js"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+const S = window.AiPelitAanet;
+S.load(['onnistui', 'puu', 'suhahdus', 'voitto', 'tappio', 'valinta', 'rullaus']);
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:curling:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), losses = load('haviot', 0);
+let friends = load('kaverit', { voitot: 0, haviot: 0, tasapelit: 0 });
+
+const FOES = ['Jääkarhut', 'Kurkiseura', 'Harjamestarit', 'Pesäketut', 'Kivikova', 'Mestarit'];
+function foeName(l) { return l <= FOES.length ? FOES[l - 1] : FOES[FOES.length - 1] + ' ' + (l - FOES.length + 1); }
+
+// ---------- The sheet ----------
+// World in metres, seen from above: x across the sheet (right is +), y along it from where the
+// stone is let go (0) towards the house. Shorter than a real sheet, so a stone slides about 8 s;
+// the house and the stones are their real size.
+const SIDE = 2.375, RS = 0.16, HOG = 16, TEE = 21.5, HOUSE = 1.83, BACK = TEE + HOUSE, END = 25.2, NEAR = -2.5;
+const RINGS = [[1.83, '#2f6fd6'], [1.22, '#f4f8fb'], [0.61, '#d93a3a'], [0.15, '#f4f8fb']];
+const FRICTION = 0.6;          // m/s² the ice slows a stone
+const CURL = 0.2;              // how hard a turning stone bends (more as it slows)
+const SWEEP_FRICTION = 0.12;   // full sweeping takes this much of the friction away (about 3 m more)
+const SWEEP_CURL = 0.5;        // ... and this much of the bend
+const ENDS = 3, STONES = 4, ROOM_LEVEL = 4;
+const COLORS = [['#ffd23f', '#a07a00'], ['#e5383b', '#7a1416']];
+const DT = 1 / 120;            // the world always steps this much, in the game and in the computer's tries
+
+// How hard a throw goes: up to 0.75 the weight is where it would stop on a straight line (12 m to
+// the back board), above it a takeout, up to 7.5 m/s.
+function speedFor(w) {
+  w = Math.max(0, Math.min(1, w));
+  if (w <= 0.75) return Math.sqrt(2 * FRICTION * (12 + (END - 12) * w / 0.75));
+  const top = Math.sqrt(2 * FRICTION * END);
+  return top + (7.5 - top) * (w - 0.75) / 0.25;
+}
+const stopAt = w => w <= 0.75 ? 12 + (END - 12) * Math.max(0, w) / 0.75 : Infinity;
+const weightFor = d => (d - 12) / (END - 12) * 0.75;
+function weightName(w) {
+  const d = stopAt(w);
+  if (d - RS < HOG) return 'Liian kevyt';
+  if (d < TEE - HOUSE - RS) return 'Vartija';
+  if (d <= BACK) return 'Pesään';
+  if (w <= 0.75) return 'Pesän läpi';
+  return 'Poistolyönti';
+}
+
+// A stone: team t, place, speed, spin (+1 bends right, -1 left), the turn of its handle.
+function stone(t, sx, sy) { return { t, x: sx, y: sy, vx: 0, vy: 0, spin: 0, rot: Math.random() * 6, m: false, out: false, fade: 0, thrown: false, hit: false, sw: false }; }
+function launch(list, t, aim) {
+  const s = stone(t, 0, 0), v = speedFor(aim.w), d = Math.hypot(aim.x, TEE) || 1;
+  s.vx = aim.x / d * v; s.vy = TEE / d * v; s.spin = aim.spin; s.m = true; s.thrown = true; s.sw = true;
+  list.push(s);
+  return s;
+}
+// One step of the world. sweep (0..1) works on the stone just thrown. Returns how many stones hit.
+function physics(list, dt, sweep) {
+  let hits = 0;
+  for (const s of list) {
+    if (s.out || !s.m) continue;
+    const v = Math.hypot(s.vx, s.vy), sw = s.sw ? sweep : 0;
+    const nv = Math.max(0, v - FRICTION * (1 - SWEEP_FRICTION * sw) * dt);
+    if (nv <= 0.004) { s.vx = s.vy = 0; s.m = false; continue; }
+    s.vx *= nv / v; s.vy *= nv / v;
+    // A turning stone bends, the more the slower it goes: turn its heading a little.
+    if (s.spin) {
+      const a = Math.max(-0.05, Math.min(0.05, -s.spin * CURL * (1 - SWEEP_CURL * sw) / (nv + 0.6) / nv * dt));
+      const cs = Math.cos(a), sn = Math.sin(a), vx = s.vx * cs - s.vy * sn, vy = s.vx * sn + s.vy * cs;
+      s.vx = vx; s.vy = vy;
+      s.rot += s.spin * dt * 2;
+    }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+  }
+  // Stones knock each other: equal weights, a little bounce lost.
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i], b = list[j];
+    if (a.out || b.out || (!a.m && !b.m)) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d >= RS * 2 || d === 0) continue;
+    const nx = dx / d, ny = dy / d, vn = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+    const push = (RS * 2 - d) / 2;
+    a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+    if (vn <= 0) continue;
+    const j2 = vn * (1 + 0.92) / 2;
+    a.vx -= j2 * nx; a.vy -= j2 * ny; b.vx += j2 * nx; b.vy += j2 * ny;
+    a.m = b.m = true; a.hit = b.hit = true;
+    // A knocked stone goes straight; the thrown one keeps a little of its turn.
+    a.spin *= 0.3; b.spin *= 0.3; a.sw = b.sw = false;
+    hits++;
+  }
+  for (const s of list) {
+    if (s.out) continue;
+    // Out of play: touching the side line, or wholly past the back line.
+    if (Math.abs(s.x) + RS >= SIDE || s.y - RS > BACK) { s.out = true; s.m = false; }
+  }
+  return hits;
+}
+const moving = list => list.some(s => s.m && !s.out);
+// After everything stops: a thrown stone that did not wholly cross the far hog line, and hit
+// nothing, is taken off.
+function settle(list) {
+  for (const s of list) {
+    if (s.thrown && !s.out && !s.hit && s.y - RS <= HOG) { s.out = true; s.short = true; }
+    s.thrown = false; s.sw = false; s.hit = false;
+  }
+}
+const dTee = s => Math.hypot(s.x, s.y - TEE);
+// Who scores the end now: the team with the stone nearest the tee, one point for each of its
+// stones in the house nearer than the other team's nearest.
+function endPoints(list) {
+  const inside = list.filter(s => !s.out && dTee(s) <= HOUSE + RS).sort((a, b) => dTee(a) - dTee(b));
+  if (!inside.length) return { t: -1, n: 0, counted: [] };
+  const t = inside[0].t;
+  let n = 0;
+  while (n < inside.length && inside[n].t === t) n++;
+  return { t, n, counted: inside.slice(0, n) };
+}
+
+// ---------- The computer's throw ----------
+// It tries throws in its head with the same physics, picks the one that leaves it best placed,
+// then throws it with an error that shrinks as the levels go up.
+function simulate(list, t, aim) {
+  const l = list.filter(s => !s.out).map(s => ({ ...s }));
+  launch(l, t, aim);
+  // Twice the game's step: close enough, and the computer has many throws to try.
+  for (let i = 0; i < 20 / DT && moving(l); i++) physics(l, DT * 2, 0);
+  settle(l);
+  return l.filter(s => !s.out);
+}
+function value(list, t, left) {
+  const p = endPoints(list);
+  let v = p.t === t ? p.n : p.t >= 0 ? -p.n * 1.1 : 0;
+  if (p.t >= 0) v += (p.t === t ? 1 : -1) * (HOUSE + RS - dTee(p.counted[0])) * 0.15;
+  for (const s of list) {
+    const d = dTee(s);
+    if (d <= HOUSE + RS) v += s.t === t ? 0.08 : -0.08;
+    // Early in the end, a stone of its own guarding the house is worth a little.
+    else if (left > 2 && s.t === t && s.y > HOG && s.y < TEE - HOUSE && Math.abs(s.x) < 1.2) v += 0.2;
+  }
+  return v;
+}
+function cpuPlan(list, t, left) {
+  let best = null, bv = -Infinity;
+  const ws = [];
+  for (let w = 0.36; w <= 0.66; w += 0.02) ws.push(w);
+  ws.push(0.82, 0.92, 1);
+  for (const spin of [-1, 1]) for (let ax = -1.8; ax <= 1.81; ax += 0.2) for (const w of ws) {
+    const aim = { x: ax, w, spin };
+    const v = value(simulate(list, t, aim), t, left);
+    if (v > bv) { bv = v; best = aim; }
+  }
+  return best;
+}
+function skillOf(l) { l = Math.min(l, 10) - 1; return { ex: Math.max(0.06, 0.36 - 0.033 * l), ew: Math.max(0.008, 0.045 - 0.0042 * l) }; }
+const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 0.5;
+
+// ---------- The match ----------
+// phase: menu, aim (someone is aiming), slide (stones moving), endshow (the end's points),
+// done, room (waiting in a room), wait (a guest waiting for the host).
+let phase = 'menu', stones = [], end = 1, score = [0, 0], ends = [], hammer = 1, throwN = 0, phaseT = 0;
+let mySpin = 1, aim = { x: 0, w: 0.55, spin: 1 }, aimShown = false, sweep = 0, endMsg = null, texts = [], cpu = null;
+let net = { on: false, round: '', sendT: 0, setup: null, sw: {}, away: [], th: '' };
+const turnTeam = (n = throwN) => n % 2 === 0 ? 1 - hammer : hammer;
+const myId = () => net.on ? R.me : 'me';
+let myTeam = 0;
+// Who throws now: alone, 'me' for team 0 and 'cpu' for team 1; in a room, the team's phones take
+// turns, and the computer throws for a phone that was let go.
+function thrower() {
+  const t = turnTeam();
+  if (!net.on) return t === 0 ? 'me' : 'cpu';
+  if (!R.isHost) return net.th;
+  const ph = net.setup.teams[t], p = ph[Math.floor(throwN / 2) % ph.length];
+  return net.away.includes(p.id) ? 'cpu' : p.id;
+}
+function throwerName() {
+  const t = turnTeam(), th = thrower();
+  if (!net.on) return th === 'me' ? 'Sinä' : foeName(foeLevel());
+  if (th === myId()) return 'Sinä';
+  const ph = net.setup.teams[t], p = ph[Math.floor(throwN / 2) % ph.length];
+  return p ? p.name : '';
+}
+const myTurn = () => phase === 'aim' && thrower() === myId();
+const foeLevel = () => recorded ? recorded.lv : level;
+const teamName = t => net.on ? (t === 0 ? 'Keltaiset' : 'Punaiset') : t === 0 ? 'Te' : foeName(foeLevel());
+
+function newMatch(resume) {
+  recorded = null;
+  net = { on: false, round: '', sendT: 0, setup: null, sw: {}, away: [], th: '' };
+  myTeam = 0;
+  menu.classList.add('hidden');
+  if (resume) {
+    stones = resume.st.map(q => stone(q[0], q[1], q[2]));
+    end = resume.e; score = resume.sc.slice(); ends = resume.en.slice(); hammer = resume.h; throwN = resume.n;
+    toAim();
+    return;
+  }
+  score = [0, 0]; ends = []; end = 1;
+  hammer = Math.random() < 0.5 ? 0 : 1;
+  startEnd();
+}
+function startEnd() {
+  stones = []; throwN = 0; endMsg = null;
+  toAim();
+}
+function toAim() {
+  phase = 'aim'; phaseT = 0; sweep = 0; cpu = null; aimShown = false;
+  aim = { x: 0, w: 0.55, spin: mySpin };
+  drag.id = null;
+  camGoal('house');
+  keepMatch();
+}
+// The match alone is saved before every throw, so a reload or a trip to the shelf does not lose it.
+function keepMatch() {
+  if (net.on || phase !== 'aim') return;
+  save('ottelu', { st: stones.filter(s => !s.out).map(s => [s.t, r2(s.x), r2(s.y)]), e: end, sc: score, en: ends, h: hammer, n: throwN, lv: level });
+}
+// Let go of a stone: every phone does it the same way, the host (or the phone alone) runs it.
+function doThrow(a) {
+  if (phase !== 'aim') return;
+  aim = { x: Math.max(-2.2, Math.min(2.2, +a.x || 0)), w: Math.max(0, Math.min(1, +a.w || 0)), spin: a.spin < 0 ? -1 : 1 };
+  aimShown = true;
+  launch(stones, turnTeam(), aim);
+  phase = 'slide'; phaseT = 0; sweep = 0; net.sw = {};
+  camGoal('stone');
+  S.play('suhahdus', { vol: 0.35, rate: 0.7 });
+}
+let hitsSeen = 0;
+function slide(dt) {
+  const t = turnTeam();
+  const sw = sweepOf(t);
+  for (let n = Math.round(dt / DT); n > 0; n--) {
+    const h = physics(stones, DT, sw);
+    if (h) { hitsSeen += h; clack(); }
+  }
+  for (const s of stones) if (s.out && s.fade < 1) { if (s.fade === 0 && !s.short) say(s.x, Math.min(s.y, BACK), 'Ulos', '#fff'); s.fade += dt * 2; }
+  if (!moving(stones) && phaseT > 0.4) {
+    settle(stones);
+    for (const s of stones) if (s.short) { s.short = false; say(s.x, s.y, 'Ei ylittänyt hog-viivaa', '#ffd166'); s.fade = 0.01; }
+    throwN++;
+    if (throwN >= STONES * 2) scoreEnd(); else toAim();
+  }
+}
+// The sweepers of the throwing team: this phone's rubbing, and in a room each phone of that team.
+function sweepOf(t) {
+  if (!net.on) return t === myTeam ? sweep : 0;
+  let s = t === myTeam ? sweep : 0;
+  const now = performance.now();
+  for (const id in net.sw) { const q = net.sw[id]; if (q.t === t && now - q.at < 400) s = Math.max(s, q.s); }
+  return s;
+}
+function scoreEnd() {
+  const p = endPoints(stones);
+  const pts = [0, 0];
+  if (p.t >= 0) { pts[p.t] = p.n; score[p.t] += p.n; hammer = 1 - p.t; }
+  ends.push(pts);
+  endMsg = { t: p.t, n: p.n };
+  phase = 'endshow'; phaseT = 0;
+  camGoal('house');
+  if (p.t === myTeam && p.n) S.play('onnistui', { vol: 0.3 });
+  // The match's result is saved the moment the last end is scored, the next end's start otherwise.
+  if (!net.on) { if (over()) record(); else save('ottelu', { st: [], e: end + 1, sc: score, en: ends, h: hammer, n: 0, lv: level }); }
+}
+// Level after the last end: one more end until someone wins it.
+const over = () => end >= ENDS && score[0] !== score[1];
+function nextEnd() {
+  if (over()) { if (net.on) hostEnd(); else endMatch(); return; }
+  end++;
+  startEnd();
+}
+let recorded = null;
+function record() {
+  save('ottelu', null);
+  recorded = { lv: level };
+  if (score[0] > score[1]) { wins++; level++; } else losses++;
+  save('taso', level); save('voitot', wins); save('haviot', losses);
+}
+function endMatch() {
+  phase = 'done';
+  if (!recorded) record();
+  recorded = null;
+  const a = score[0], b = score[1];
+  S.play(a > b ? 'voitto' : 'tappio', { vol: 0.6 });
+  showMenu(a > b ? 'Voitit ' + a + '–' + b + '! 🏆' : 'Hävisit ' + a + '–' + b, a > b ? 'win' : 'lose');
+}
+// The computer aims: a moment to look, the broom moving to its spot, then the throw.
+function cpuTurn(dt) {
+  if (!cpu) {
+    if (phaseT < 0.5) return;
+    const t = turnTeam(), left = STONES * 2 - throwN;
+    const plan = cpuPlan(stones, t, left);
+    const k = skillOf(net.on ? ROOM_LEVEL : level);
+    cpu = { plan, go: { x: plan.x + gauss() * k.ex, w: plan.w + gauss() * k.ew * (plan.w > 0.75 ? 2 : 1), spin: plan.spin }, t: 0 };
+    aim = { x: 0, w: 0.5, spin: plan.spin }; aimShown = true;
+    return;
+  }
+  cpu.t += dt;
+  const k = Math.min(1, dt * 3);
+  aim.x += (cpu.plan.x - aim.x) * k; aim.w += (cpu.plan.w - aim.w) * k; aim.spin = cpu.plan.spin;
+  if (cpu.t > 1.6) doThrow(cpu.go);
+}
+
+function update(dt) {
+  phaseT += dt;
+  tick(dt);
+  if (phase === 'menu' || phase === 'done' || phase === 'room' || phase === 'wait') return;
+  if (net.on && R.paused) return;
+  if (net.on && !R.isHost) { guestUpdate(dt); return; }
+  if (phase === 'aim' && thrower() === 'cpu') cpuTurn(dt);
+  else if (phase === 'slide') slide(dt);
+  else if (phase === 'endshow' && phaseT > 3.2) nextEnd();
+  if (net.on && (net.sendT -= dt) <= 0) { net.sendT = phase === 'slide' ? 0.05 : 0.12; R.send(snapshot()); }
+}
+function tick(dt) {
+  for (const t of texts) t.t -= dt;
+  texts = texts.filter(t => t.t > 0);
+  // Sweeping dies away when the finger stops.
+  // How fast the finger rubs, in px a second, smoothed: about 1300 px/s is full sweeping.
+  rub.rate += (rub.n / dt - rub.rate) * Math.min(1, dt * 6); rub.n = 0;
+  sweep = Math.min(1, rub.rate / 1300);
+  if (phase !== 'slide' || turnTeam() !== myTeam) { sweep = 0; rub.rate = 0; }
+}
+function say(wx, wy, s, col) { texts.push({ x: wx, y: wy, s, c: col, t: 1.4 }); }
+
+// ---------- Playing in a room (rooms.js) ----------
+// The phone that made the room (the host) runs the match: the turns, the physics and the
+// computer's throws. Phones take turns in two teams; the thrower's phone sends its aim while it
+// drags and the throw when it lets go, and every phone of the throwing team sends its sweeping.
+function setupFor(round, list) {
+  const teams = [list.filter((_, i) => i % 2 === 0), list.filter((_, i) => i % 2 === 1)].map(t => t.map(p => ({ id: p.id, name: p.name })));
+  return { t: 'setup', round, teams, hm: Math.random() < 0.5 ? 0 : 1 };
+}
+function applySetup(s) {
+  net = { on: true, round: s.round, sendT: 0, setup: s, sw: {}, away: [], th: '' };
+  myTeam = s.teams[1].some(p => p.id === R.me) ? 1 : 0;
+}
+const r2 = v => Math.round(v * 100) / 100;
+function snapshot() {
+  return { t: 's', round: net.round, ph: phase, pt: r2(phaseT), e: end, sc: score, en: ends, hm: hammer, n: throwN, th: thrower(),
+    st: stones.map(s => [s.t, r2(s.x), r2(s.y), r2(s.vx), r2(s.vy), s.out ? 1 : 0, r2(s.rot), s.sw ? 1 : 0]),
+    a: [r2(aim.x), r2(aim.w), aim.spin, aimShown ? 1 : 0], sw: r2(sweepOf(turnTeam())), h: hitsSeen, m: endMsg,
+    tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]) };
+}
+function applySnapshot(s) {
+  const was = phase, wasN = throwN;
+  phase = s.ph; phaseT = s.pt; end = s.e; score = s.sc; ends = s.en; hammer = s.hm; throwN = s.n; net.th = s.th; endMsg = s.m;
+  if (phase !== was || throwN !== wasN) {
+    camGoal(phase === 'slide' ? 'stone' : 'house');
+    if (phase === 'aim') { drag.id = null; if (s.th === R.me) aim = { x: 0, w: 0.55, spin: mySpin }; }
+    if (phase === 'slide') S.play('suhahdus', { vol: 0.35, rate: 0.7 });
+    if (phase === 'endshow' && endMsg) { if (endMsg.t === myTeam && endMsg.n) S.play('onnistui', { vol: 0.3 }); }
+  }
+  // Keep the stones' drawn places, and move them towards where the host says they are.
+  const old = stones;
+  stones = s.st.map((q, i) => {
+    const o = old[i] && old[i].t === q[0] ? old[i] : stone(q[0], q[1], q[2]);
+    o.tx = q[1]; o.ty = q[2]; o.vx = q[3]; o.vy = q[4]; o.out = !!q[5]; o.rot = q[6]; o.sw = !!q[7]; o.m = !!(q[3] || q[4]);
+    if (o.out && !o.fade) o.fade = 0.01;
+    return o;
+  });
+  // The thrower's own aim stays its own while it drags.
+  if (!(s.th === R.me && phase === 'aim')) { aim = { x: s.a[0], w: s.a[1], spin: s.a[2] }; aimShown = !!s.a[3]; }
+  net.shownSweep = s.sw;
+  if (s.h > hitsSeen) clack();
+  hitsSeen = s.h;
+  texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
+}
+function guestUpdate(dt) {
+  for (const s of stones) {
+    if (s.tx === undefined) continue;
+    s.tx += s.vx * dt; s.ty += s.vy * dt;
+    const k = Math.min(1, dt * 14); s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k;
+    if (s.out && s.fade < 1) s.fade += dt * 2;
+  }
+  if ((net.sendT -= dt) <= 0) {
+    net.sendT = 0.1;
+    if (phase === 'slide' && turnTeam() === myTeam) R.send({ t: 'sw', round: net.round, s: r2(sweep) });
+    if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r2(aim.x), w: r2(aim.w), spin: aim.spin });
+  }
+}
+function hostEnd() {
+  // The end names each phone's team, so a phone that missed the match still knows its result.
+  const m = { t: 'end', round: net.round, sc: score.slice(), ct: net.setup.teams.flatMap((ph, t) => ph.map(p => [p.id, t])) };
+  R.deliver(m);
+  R.endRound();
+  finish(m);
+}
+function finish(m) {
+  phase = 'done';
+  const own = (m.ct || []).find(q => q[0] === R.me), t = own ? own[1] : myTeam;
+  const a = m.sc[t], b = m.sc[1 - t];
+  if (R.once(m.round)) {
+    if (a > b) friends.voitot++; else if (a < b) friends.haviot++; else friends.tasapelit = (friends.tasapelit || 0) + 1;
+    save('kaverit', friends);
+  }
+  S.play(a > b ? 'voitto' : 'tappio', { vol: 0.6 });
+  R.backToRoom((a > b ? 'Voitto ' : 'Häviö ') + a + '–' + b + (a > b ? '! 🏆' : ''), a > b ? 'win' : 'lose');
+}
+
+R.on('start', s => {
+  menu.classList.add('hidden');
+  if (s.over) { net.round = s.round; phase = 'room'; return; }
+  // A guest waits for the host's setup; the same round again (a reconnect) carries on as it is.
+  if (!R.isHost) { if (s.round !== net.round) { phase = 'wait'; stones = []; } return; }
+  const setup = setupFor(s.round, s.players);
+  R.send(setup);
+  applySetup(setup);
+  score = [0, 0]; ends = []; end = 1; hammer = setup.hm;
+  startEnd();
+});
+R.on('message', (m, from) => {
+  if (R.isHost) {
+    if (m.round !== net.round || !net.setup) return;
+    if (m.t === 'sw') {
+      const t = net.setup.teams[1].some(p => p.id === from) ? 1 : 0;
+      net.sw[from] = { s: Math.max(0, Math.min(1, +m.s || 0)), t, at: performance.now() };
+    } else if ((m.t === 'aim' || m.t === 'throw') && phase === 'aim' && m.n === throwN && thrower() === from) {
+      if (m.t === 'throw') doThrow(m);
+      else { aim = { x: +m.x || 0, w: +m.w || 0, spin: m.spin < 0 ? -1 : 1 }; aimShown = true; }
+    }
+    return;
+  }
+  // Only the phones in the match hear its end (rooms.js deliver()).
+  if (m.t === 'end') { finish(m); return; }
+  if (m.t === 'setup') {
+    if (net.round === m.round && net.setup) return;
+    applySetup(m);
+    phase = 'wait';
+    menu.classList.add('hidden');
+  } else if (m.t === 's' && m.round === net.round && net.setup) applySnapshot(m);
+});
+// A phone that comes back gets the match as it is: the teams, then the running stream.
+R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
+// The computer throws for a phone let go with "Jatka ilman heitä", and gives its turns back.
+R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') cpu = null; });
+R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; } });
+R.on('lobby', () => { phase = 'room'; });
+R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
+R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });
+
+// ---------- Screen ----------
+// Upright the sheet runs up the screen; sideways (#95) it runs to the right, the house on the right.
+let box = { left: 0, top: 0, width: 0, height: 0 }, W = 0, H = 0, DPR = 1, safeT = 0, safeB = 0, safeL = 0, safeR = 0;
+let wide = false, sc = 70, midX = 0, midY = 0, viewTop = 0, viewBot = 0, viewL = 0, viewR = 0, pad = null, spinBtns = [];
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  // Sized from the canvas's own box, which every touch is read against too (Hiihto v5).
+  box = c.getBoundingClientRect();
+  W = box.width || innerWidth; H = box.height || innerHeight;
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  wide = W > H;
+  if (wide) {
+    viewTop = safeT + 50; viewBot = H - safeB - 4; viewL = safeL; viewR = W - safeR;
+    sc = Math.min(90, (viewBot - viewTop) / (SIDE * 2 + 0.2));
+    midY = (viewTop + viewBot) / 2; midX = (viewL + viewR) / 2;
+    // The throwing pad sits on the left, the turn buttons above and below the stone.
+    // Far enough in that a full pull back stays on the screen.
+    const px = safeL + Math.min(170, W * 0.22), py = midY + 8;
+    pad = { x: px, y: py, pull: Math.min(150, px - safeL - 14), side: 120 };
+    spinBtns = [{ s: -1, x: px - 56, y: viewTop + 4, w: 112, h: 40, label: '▲ Kaarre' }, { s: 1, x: px - 56, y: H - safeB - 48, w: 112, h: 40, label: 'Kaarre ▼' }];
+  } else {
+    viewTop = safeT + 56; viewBot = H - safeB; viewL = 0; viewR = W;
+    sc = Math.min(95, (W - 12) / (SIDE * 2));
+    midX = W / 2; midY = (viewTop + viewBot) / 2;
+    // The stone sits high enough that a full pull down still ends on the screen (#293: at the
+    // bottom it left only 74 px, enough for a guard but not the house or a takeout).
+    const pull = Math.min(200, H * 0.26), py = H - safeB - pull - 30;
+    pad = { x: W / 2, y: py, pull, side: 130 };
+    const bw = Math.min(110, W * 0.29);
+    spinBtns = [{ s: -1, x: 10, y: py - 22, w: bw, h: 44, label: '◀ Kaarre' }, { s: 1, x: W - 10 - bw, y: py - 22, w: bw, h: 44, label: 'Kaarre ▶' }];
+  }
+}
+addEventListener('resize', resize); addEventListener('orientationchange', resize); document.addEventListener('fullscreenchange', resize);
+resize();
+function fitCheck() { const r = c.getBoundingClientRect(); if (Math.abs(r.width - W) > 0.5 || Math.abs(r.height - H) > 0.5) resize(); }
+
+// camY is the world y at the middle of the view.
+let camY = 20, camMode = 'house';
+function camGoal(m) { camMode = m; if (m === 'stone') camY = camFor(0); }
+function P(wx, wy) {
+  return wide ? [midX + (wy - camY) * sc, midY + wx * sc] : [midX + wx * sc, midY - (wy - camY) * sc];
+}
+const dirS = (fx, fy) => wide ? [fy, fx] : [fx, -fy];
+const viewLen = () => (wide ? viewR - viewL : viewBot - viewTop) / sc;
+// The far end of the view. Upright it stops just past the back line, so the house sits high and the
+// throwing pad has room under it (#293); a stone past the back line is out anyway.
+const farY = () => wide ? END + 0.4 : BACK + 0.6;
+function camFor(sy) {
+  const half = viewLen() / 2;
+  // The moving stone sits 30 % in from the near edge.
+  let cy = sy + half * 0.4;
+  return Math.max(NEAR + half, Math.min(farY() - half, cy));
+}
+function follow(dt) {
+  let goal;
+  if (camMode === 'house') goal = farY() - viewLen() / 2;
+  else {
+    const s = stones.filter(q => q.m && !q.out).sort((a, b) => b.y - a.y)[0];
+    goal = s ? camFor(s.y) : camY;
+  }
+  camY += (goal - camY) * Math.min(1, dt * (camMode === 'house' ? 3 : 8));
+}
+
+// ---------- Touch ----------
+// The thrower drags the stone back from the pad: sideways aims, the length is the weight.
+// While the team's stone slides, rubbing the screen sweeps.
+const drag = { id: null, ox: 0, oy: 0, cx: 0, cy: 0 }, rub = { id: null, lx: 0, ly: 0, n: 0, last: 0, rate: 0 };
+const at = e => [e.clientX - box.left, e.clientY - box.top];
+const inBtn = (b, px, py) => px >= b.x - 6 && px <= b.x + b.w + 6 && py >= b.y - 6 && py <= b.y + b.h + 6;
+// Screen to sheet: how far the finger has pulled back, and how far to the side.
+function dragAim() {
+  const dx = drag.cx - drag.ox, dy = drag.cy - drag.oy;
+  const back = wide ? -dx : dy, side = wide ? dy : dx;
+  return { pull: back, x: Math.max(-2.2, Math.min(2.2, -side / pad.side * 2.2)), w: Math.max(0, Math.min(1, back / pad.pull)) };
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  S.play('valinta', { vol: 0 });
+  if (phase === 'endshow' && (!net.on || R.isHost) && phaseT > 1) { nextEnd(); return; }
+  const [ex, ey] = at(e);
+  if (myTurn()) {
+    for (const b of spinBtns) if (inBtn(b, ex, ey)) { aim.spin = mySpin = b.s; S.play('valinta', { vol: 0.4 }); return; }
+    if (drag.id === null && Math.hypot(ex - pad.x, ey - pad.y) < 90) {
+      drag.id = e.pointerId; drag.ox = drag.cx = ex; drag.oy = drag.cy = ey;
+      try { c.setPointerCapture(e.pointerId); } catch (er) {}
+    }
+    return;
+  }
+  if (phase === 'slide' && turnTeam() === myTeam) { rub.id = e.pointerId; rub.lx = ex; rub.ly = ey; rub.n += 40; }
+});
+c.addEventListener('pointermove', e => {
+  const [ex, ey] = at(e);
+  if (e.pointerId === drag.id) {
+    drag.cx = ex; drag.cy = ey;
+    const a = dragAim();
+    aim.x = a.x; aim.w = a.w; aimShown = a.pull > 18;
+    return;
+  }
+  if (e.pointerId === rub.id && phase === 'slide') {
+    rub.n += Math.hypot(ex - rub.lx, ey - rub.ly); rub.lx = ex; rub.ly = ey;
+    const now = performance.now();
+    if (now - rub.last > 260 && sweep > 0.3) { rub.last = now; S.play('suhahdus', { vol: 0.12 + sweep * 0.12, rate: 1.4 }); }
+  }
+});
+function up(e) {
+  if (e.pointerId === rub.id) rub.id = null;
+  if (e.pointerId !== drag.id) return;
+  drag.id = null;
+  const a = dragAim();
+  // A short pull lets go of nothing: the aim waits for a real throw.
+  if (a.pull < 18 || !myTurn()) { aimShown = false; return; }
+  aim.x = a.x; aim.w = a.w;
+  if (net.on && !R.isHost) { R.send({ t: 'throw', round: net.round, n: throwN, x: r2(aim.x), w: r2(aim.w), spin: aim.spin }); return; }
+  doThrow(aim);
+}
+c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+
+// ---------- Sound ----------
+let ac = null;
+function tone(f, d, vol = 0.08) {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; } }
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(f, t);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function clack() { S.play('puu', { vol: 0.7, rate: 0.75 + Math.random() * 0.1 }) || tone(320, 0.08); }
+const rumble = S.loop('rullaus', { vol: 0 });
+function sound() {
+  let v = 0;
+  for (const s of stones) if (!s.out) v = Math.max(v, Math.hypot(s.vx, s.vy));
+  if (phase !== 'slide') v = 0;
+  rumble.set({ vol: Math.min(0.45, v / 9), rate: 0.6 + Math.min(0.5, v / 12) });
+}
+
+// ---------- Drawing ----------
+function rectW(ax, ay, bx, by) {
+  const [x0, y0] = P(ax, ay), [x1, y1] = P(bx, by);
+  return [Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)];
+}
+function line(ax, ay, bx, by) { x.beginPath(); x.moveTo(...P(ax, ay)); x.lineTo(...P(bx, by)); x.stroke(); }
+function drawSheet() {
+  x.fillStyle = '#9fb4c6'; x.fillRect(0, 0, W, H);
+  // The ice, with a faint pebble.
+  x.fillStyle = '#eef5fa'; x.fillRect(...rectW(-SIDE, NEAR - 2, SIDE, END + 0.3));
+  x.fillStyle = 'rgba(160,190,215,.1)';
+  for (let i = 0; i < 26; i++) x.fillRect(...rectW(-SIDE, NEAR + i * 1.1, SIDE, NEAR + i * 1.1 + 0.5));
+  // The back board.
+  x.fillStyle = '#3a4a5c'; x.fillRect(...rectW(-SIDE - 0.2, END + 0.3, SIDE + 0.2, END + 0.6));
+  // The house.
+  for (const [r, col] of RINGS) { x.fillStyle = col; x.beginPath(); x.arc(...P(0, TEE), r * sc, 0, 7); x.fill(); }
+  x.strokeStyle = 'rgba(30,50,80,.35)'; x.lineWidth = 1;
+  for (const [r] of RINGS) { x.beginPath(); x.arc(...P(0, TEE), r * sc, 0, 7); x.stroke(); }
+  // Lines: the centre line, tee line, back line, and the red hog lines.
+  x.strokeStyle = 'rgba(30,50,80,.55)'; x.lineWidth = 1.5;
+  line(0, NEAR, 0, END + 0.3); line(-SIDE, TEE, SIDE, TEE); line(-SIDE, BACK, SIDE, BACK);
+  x.strokeStyle = '#c62f2f'; x.lineWidth = Math.max(3, 0.1 * sc);
+  line(-SIDE, HOG, SIDE, HOG); line(-SIDE, 0, SIDE, 0);
+  // The side lines.
+  x.strokeStyle = '#26507d'; x.lineWidth = 3;
+  line(-SIDE, NEAR - 2, -SIDE, END + 0.3); line(SIDE, NEAR - 2, SIDE, END + 0.3);
+}
+function drawStone(s, a = 1) {
+  const [sx, sy] = P(s.x, s.y), r = RS * sc, [col, dark] = COLORS[s.t];
+  x.globalAlpha = a;
+  x.fillStyle = 'rgba(0,0,0,.18)'; x.beginPath(); x.arc(sx + 2, sy + 3, r, 0, 7); x.fill();
+  const g = x.createRadialGradient(sx - r * 0.3, sy - r * 0.3, r * 0.2, sx, sy, r);
+  g.addColorStop(0, '#b9bec4'); g.addColorStop(1, '#5d646c');
+  x.fillStyle = g; x.beginPath(); x.arc(sx, sy, r, 0, 7); x.fill();
+  x.fillStyle = col; x.beginPath(); x.arc(sx, sy, r * 0.62, 0, 7); x.fill();
+  x.strokeStyle = dark; x.lineWidth = Math.max(1, r * 0.12); x.stroke();
+  // The handle, turning with the stone.
+  const hx = Math.cos(s.rot) * r * 0.5, hy = Math.sin(s.rot) * r * 0.5;
+  x.strokeStyle = dark; x.lineWidth = Math.max(2, r * 0.25); x.lineCap = 'round';
+  x.beginPath(); x.moveTo(sx - hx * 0.4, sy - hy * 0.4); x.lineTo(sx + hx, sy + hy); x.stroke();
+  x.lineCap = 'butt';
+  x.globalAlpha = 1;
+}
+// Two sweepers walk beside the thrown stone, their brooms going as hard as the sweeping.
+function drawSweepers(s, amount) {
+  const sp = Math.hypot(s.vx, s.vy) || 1, fx = s.vx / sp, fy = s.vy / sp, nx = fy, ny = -fx;
+  const t = performance.now() / 1000, col = COLORS[s.t][0];
+  for (const side of [-1, 1]) {
+    const bx = s.x + fx * (RS + 0.35) + nx * side * 0.12, by = s.y + fy * (RS + 0.35) + ny * side * 0.12;
+    const wob = Math.sin(t * 22 + side * 1.6) * 0.22 * amount;
+    const hx = bx + nx * wob, hy = by + ny * wob;
+    const px = s.x + fx * 0.3 + nx * side * 0.7, py = s.y + fy * 0.3 + ny * side * 0.7;
+    const [ax, ay] = P(px, py), [hx2, hy2] = P(hx, hy);
+    x.strokeStyle = '#6b4a2a'; x.lineWidth = 3; x.beginPath(); x.moveTo(ax, ay); x.lineTo(hx2, hy2); x.stroke();
+    x.fillStyle = '#2b2b33'; x.save(); x.translate(hx2, hy2); const [rx, ry] = dirS(nx, ny); x.rotate(Math.atan2(ry, rx));
+    x.fillRect(-0.16 * sc, -0.05 * sc, 0.32 * sc, 0.1 * sc); x.restore();
+    x.fillStyle = col; x.beginPath(); x.arc(ax, ay, Math.max(7, 0.22 * sc), 0, 7); x.fill();
+    x.strokeStyle = 'rgba(0,0,0,.4)'; x.lineWidth = 1.5; x.stroke();
+    x.fillStyle = '#e0a878'; x.beginPath(); x.arc(ax, ay, Math.max(4, 0.11 * sc), 0, 7); x.fill();
+  }
+}
+// The skip's broom where the throw aims, the line to it, and where it would stop if it went straight.
+function drawAim() {
+  if (phase !== 'aim' || !aimShown) return;
+  const col = COLORS[turnTeam()][0];
+  x.setLineDash([8, 8]); x.strokeStyle = 'rgba(30,60,100,.55)'; x.lineWidth = 2;
+  line(0, 0, aim.x * (END / TEE), END);
+  x.setLineDash([]);
+  const d = stopAt(aim.w);
+  if (d < END) {
+    const k = d / TEE, [gx, gy] = P(aim.x * k, d);
+    x.strokeStyle = col; x.lineWidth = 3; x.beginPath(); x.arc(gx, gy, RS * sc, 0, 7); x.stroke();
+  }
+  // The broom, and an arrow for the way the stone will bend.
+  const [bx, by] = P(aim.x, TEE);
+  x.fillStyle = '#2b2b33';
+  if (wide) x.fillRect(bx - 5, by - 12, 10, 24); else x.fillRect(bx - 12, by - 5, 24, 10);
+  x.font = '800 18px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#1d3555';
+  const arrow = wide ? (aim.spin > 0 ? '↓' : '↑') : (aim.spin > 0 ? '→' : '←');
+  x.fillText(arrow, bx + (wide ? 0 : aim.spin * 26), by + (wide ? aim.spin * 22 : -16));
+  x.textBaseline = 'alphabetic';
+}
+function weightBar() {
+  // A bar of the weights by the pad: too light, guard, house, through, takeout.
+  const len = Math.min(230, (wide ? H - 170 : W - 40)), thick = 12;
+  const g1 = weightFor(HOG + RS), g2 = weightFor(TEE - HOUSE - RS), g3 = weightFor(BACK);
+  const zones = [[0, g1, '#8796a6'], [g1, g2, '#4f8fe0'], [g2, g3, '#3fbf6a'], [g3, 0.75, '#e0a43f'], [0.75, 1, '#e5383b']];
+  let bx, by;
+  if (wide) { bx = pad.x + 70; by = midY + len / 2; } else { bx = W / 2 - len / 2; by = pad.y - 72; }
+  for (const [a, b, col] of zones) {
+    x.fillStyle = col;
+    if (wide) x.fillRect(bx, by - b * len, thick, (b - a) * len); else x.fillRect(bx + a * len, by, (b - a) * len, thick);
+  }
+  x.fillStyle = '#fff';
+  if (wide) x.fillRect(bx - 4, by - aim.w * len - 2, thick + 8, 4); else x.fillRect(bx + aim.w * len - 2, by - 4, 4, thick + 8);
+  // The weight's name: above the bar upright, beside its marker sideways.
+  x.font = '800 16px system-ui'; x.textAlign = wide ? 'left' : 'center'; x.textBaseline = wide ? 'middle' : 'alphabetic';
+  x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.55)';
+  const name = weightName(aim.w), [tx, ty] = wide ? [bx + thick + 8, by - aim.w * len] : [W / 2, by - 10];
+  x.strokeText(name, tx, ty); x.fillStyle = '#fff'; x.fillText(name, tx, ty);
+  x.textBaseline = 'alphabetic';
+}
+function drawPad() {
+  if (!myTurn()) return;
+  // The thrower's stone, and the finger's pull back from it.
+  const g = wide ? x.createLinearGradient(0, 0, pad.x + 120, 0) : x.createLinearGradient(0, H, 0, pad.y - 110);
+  g.addColorStop(0, 'rgba(14,38,66,.78)'); g.addColorStop(1, 'rgba(14,38,66,0)');
+  x.fillStyle = g;
+  if (wide) x.fillRect(0, 0, pad.x + 120, H); else x.fillRect(0, pad.y - 110, W, H - pad.y + 110);
+  let sx = pad.x, sy = pad.y;
+  if (drag.id !== null) { sx = drag.cx; sy = drag.cy; x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 3; x.beginPath(); x.moveTo(pad.x, pad.y); x.lineTo(sx, sy); x.stroke(); }
+  // The stone at the finger, at a fixed size.
+  const r = 22, [col, dark] = COLORS[turnTeam()];
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(sx + 2, sy + 4, r, 0, 7); x.fill();
+  const gr = x.createRadialGradient(sx - 6, sy - 6, 4, sx, sy, r); gr.addColorStop(0, '#c4c9cf'); gr.addColorStop(1, '#5d646c');
+  x.fillStyle = gr; x.beginPath(); x.arc(sx, sy, r, 0, 7); x.fill();
+  x.fillStyle = col; x.beginPath(); x.arc(sx, sy, r * 0.62, 0, 7); x.fill(); x.strokeStyle = dark; x.lineWidth = 3; x.stroke();
+  x.textAlign = 'center'; x.font = '700 13px system-ui'; x.fillStyle = 'rgba(255,255,255,.85)';
+  if (drag.id === null) x.fillText(wide ? 'Vedä vasemmalle' : 'Vedä alas ja päästä irti', pad.x, pad.y + (wide ? 44 : 40));
+  if (drag.id === null && wide) x.fillText('ja päästä irti', pad.x, pad.y + 60);
+  for (const b of spinBtns) {
+    const on = aim.spin === b.s;
+    x.fillStyle = on ? '#ffd166' : 'rgba(255,255,255,.18)'; x.strokeStyle = on ? '#9a6b12' : 'rgba(255,255,255,.5)'; x.lineWidth = 2;
+    x.beginPath(); x.roundRect(b.x, b.y, b.w, b.h, 12); x.fill(); x.stroke();
+    x.fillStyle = on ? '#2a1a05' : '#fff'; x.font = '800 15px system-ui'; x.textBaseline = 'middle';
+    x.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1); x.textBaseline = 'alphabetic';
+  }
+  if (drag.id !== null) weightBar();
+}
+function drawHud() {
+  // The score in the middle, each team's name and stones still to throw on its own side.
+  const w = Math.min(300, W - 120), X = (W - w) / 2, y = safeT + 6, side = (w - 84) / 2;
+  x.fillStyle = 'rgba(14,38,66,.85)'; x.beginPath(); x.roundRect(X, y, w, 44, 12); x.fill();
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '900 22px system-ui'; x.fillStyle = '#fff';
+  x.fillText(score[0] + '–' + score[1], X + w / 2, y + 16);
+  x.font = '700 11px system-ui'; x.fillStyle = '#ffd166';
+  x.fillText(end > ENDS ? 'Lisäpää' : 'Pää ' + end + '/' + ENDS, X + w / 2, y + 35);
+  for (const t of [0, 1]) {
+    const left = t === 0, edge = left ? X + 10 : X + w - 10;
+    x.font = '700 12px system-ui'; x.fillStyle = '#dfe9f3'; x.textAlign = left ? 'left' : 'right';
+    x.fillText((hammer === t && !left ? '🔨 ' : '') + teamName(t) + (hammer === t && left ? ' 🔨' : ''), edge, y + 15, side - 4);
+    const thrown = t === turnTeam(0) ? Math.ceil(throwN / 2) : Math.floor(throwN / 2), rest = STONES - thrown;
+    for (let i = 0; i < rest; i++) {
+      x.fillStyle = COLORS[t][0]; x.beginPath(); x.arc(left ? edge + 4 + i * 11 : edge - 4 - i * 11, y + 33, 4, 0, 7); x.fill();
+    }
+  }
+  x.textBaseline = 'alphabetic';
+}
+function drawMessages() {
+  x.textAlign = 'center';
+  for (const t of texts) {
+    x.font = '800 15px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.5)';
+    x.globalAlpha = Math.max(0, Math.min(1, t.t * 2));
+    const [tx, ty] = P(t.x, t.y), upY = 20 + (1.4 - t.t) * 20;
+    x.strokeText(t.s, tx, ty - upY, W - 20); x.fillStyle = t.c; x.fillText(t.s, tx, ty - upY, W - 20);
+    x.globalAlpha = 1;
+  }
+  let cy = wide ? safeT + 74 : safeT + 82;
+  x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.55)';
+  const banner = (s, size, col, yy = cy) => { x.font = '900 ' + size + 'px system-ui'; x.strokeText(s, W / 2, yy, W - 24); x.fillStyle = col; x.fillText(s, W / 2, yy, W - 24); };
+  if (phase === 'aim') {
+    const name = throwerName(), mine = myTurn();
+    banner(mine ? 'Sinun heittosi' : name + ' heittää', 18, mine ? '#ffd166' : '#fff');
+    if (throwN === STONES * 2 - 1) banner('Viimeinen kivi', 13, '#fff', cy + 20);
+  } else if (phase === 'slide') {
+    const t = turnTeam(), sw = net.on && !R.isHost ? net.shownSweep || 0 : sweepOf(t);
+    if (t === myTeam) banner(sw > 0.15 ? 'Harjataan!' : 'Hankaa ruutua: harjaa!', 18, sw > 0.15 ? '#7ee081' : '#fff');
+    // A meter for the sweeping.
+    if (sw > 0.02) { x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(W / 2 - 60, cy + 12, 120, 8); x.fillStyle = '#7ee081'; x.fillRect(W / 2 - 60, cy + 12, 120 * sw, 8); }
+  } else if (phase === 'endshow' && endMsg) {
+    // Upright the house is at the top: the end's points go under it.
+    if (!wide) cy = H - safeB - 150;
+    x.fillStyle = 'rgba(14,38,66,.6)'; x.fillRect(0, cy - 34, W, 70);
+    const p = endMsg, ours = p.t === myTeam;
+    const s = p.t < 0 ? 'Tyhjä pää' : (net.on ? teamName(p.t) : ours ? 'Te' : foeName(foeLevel())) + ' +' + p.n;
+    banner(s, 32, p.t < 0 ? '#fff' : ours ? '#7ee081' : '#ff8a80');
+    if (!net.on || R.isHost) banner('Napauta jatkaaksesi', 13, '#fff', cy + 26);
+  } else if (phase === 'wait') banner('Odotetaan…', 18, '#fff');
+}
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawSheet();
+  if (phase === 'menu' || phase === 'room') return;
+  // In the end's tally, the stones that count get a ring.
+  const counted = phase === 'endshow' ? endPoints(stones).counted : [];
+  for (const s of stones) {
+    if (s.out && s.fade >= 1) continue;
+    drawStone(s, s.out ? Math.max(0, 1 - s.fade) : 1);
+    if (counted.includes(s)) { const [sx, sy] = P(s.x, s.y); x.strokeStyle = '#7ee081'; x.lineWidth = 3; x.beginPath(); x.arc(sx, sy, RS * sc + 5, 0, 7); x.stroke(); }
+  }
+  if (phase === 'slide') {
+    const s = stones.find(q => q.sw && q.m && !q.out);
+    if (s) drawSweepers(s, net.on && !R.isHost ? net.shownSweep || 0 : sweepOf(turnTeam()));
+  }
+  drawAim();
+  drawHud(); drawMessages(); drawPad();
+}
+
+let prev = 0, acc = 0;
+function loop(t) {
+  fitCheck();
+  const dt = Math.min(0.05, (t - prev) / 1000 || 0); prev = t;
+  // Whole steps of the world, the same size as the computer's tries.
+  acc += dt;
+  const n = Math.floor(acc / DT); acc -= n * DT;
+  if (n) update(n * DT);
+  follow(dt);
+  draw();
+  sound();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + level + ': vastassa ' + foeName(level);
+  const f = friends.voitot + friends.haviot + (friends.tasapelit || 0);
+  document.getElementById('stats').textContent = 'Voitot ' + wins + ' · Häviöt ' + losses +
+    (f ? ' · Kavereita vastaan ' + friends.voitot + '–' + friends.haviot : '');
+  // A match left unfinished can be carried on.
+  const m = load('ottelu', null), res = document.getElementById('resume');
+  res.hidden = !(m && m.lv === level && m.st);
+  if (!res.hidden) res.textContent = 'Jatka ottelua ' + m.sc[0] + '–' + m.sc[1] + ' (pää ' + Math.min(m.e, ENDS + 1) + ')';
+  menu.classList.remove('hidden');
+}
+function roomNote() {
+  if (R.inRoom) R.note('Puhelimet jaetaan vuorotellen keltaisiin ja punaisiin. Joukkueen puhelimet heittävät vuorotellen, ja kaikki joukkueen puhelimet voivat harjata.');
+}
+document.getElementById('go').addEventListener('click', () => { S.play('valinta', { vol: 0.4 }); save('ottelu', null); newMatch(); });
+document.getElementById('resume').addEventListener('click', () => { S.play('valinta', { vol: 0.4 }); newMatch(load('ottelu', null)); });
+document.getElementById('multi').addEventListener('click', () => { R.open(); roomNote(); });
+R.on('peers', roomNote);
+showMenu();
+requestAnimationFrame(loop);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

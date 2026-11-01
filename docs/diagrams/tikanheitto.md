@@ -10,6 +10,8 @@ no end, until the player taps Lopeta. v4 plays recorded sounds from the shared l
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v5 (#337, `aanet-4`) has no crowd: a turn of 30 is the quiet `onnistui` blip at 0.3 instead of a shouting crowd.
+
 ```mermaid
 flowchart TD
   A[Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501] --> R{Yksin vai huoneessa?}
@@ -24,7 +26,7 @@ flowchart TD
   S --> F
   E --> F
   F --> G[Osuma: mökkitaulun rengas tai darts-taulun piste]
-  F -.-> AU[Ääni: suhahdus, puu, virhe, yleisö, voitto]
+  F -.-> AU[Ääni: suhahdus, puu, virhe, hiljainen kilahdus, voitto]
   G --> H{Pisteitä vai 501?}
   H -- Mökkitikka tai Pistekisa --> I[Pisteet kasvavat]
   I --> M{Tikkoja jäljellä?}
@@ -89,4 +91,4 @@ flowchart TD
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: `hostEnd()` ranks the players (most points, then most tens; in 501 the one at nought first, then the least left), sends it with `R.deliver()`, and every phone shows its place and the full list in the room (`netFinish()`, `R.backToRoom()`).
 - **Uusi vuoro, keskiarvo ja paras vuoro**: in Vapaa heitto (`mode === 'vapaa'`, v3) `endTurn()` adds each finished turn to `freeTurns`, `freeSum` and `freeBest` and never ends the game; the panel shows the turn's points, the average (`freeAvg()`) and the best turn, with a Lopeta button (`#stop`). Nothing is saved or sent to a list.
 - **Valikossa kierrokset, keskiarvo ja paras**: `stopBtn.onclick` stops at once (a turn not finished does not count) and the menu reads "Vapaa heitto: <n> kierrosta, keskiarvo <x> p, paras <y> p".
-- **Ääni: suhahdus, puu, virhe, yleisö, voitto**: v4 (#230) loads `lib/aanet-2/aanet.js` and `sound()` plays `suhahdus` when a dart flies (`throwAt()`), `puu` when it sticks in the board and a quiet, lower `puu` when it misses (`land()`, and on a guest's phone `step()`), `virhe` on a 501 bust, `yleiso` for a full turn (30 or 180, `endTurn()`, and on a guest when that banner arrives in `adopt()`) and `voitto` at the end (`endGame()`). Each falls back to v3's own beep when `AiPelitAanet.play()` returns false (the first open offline), and all of them do when `aanet.js` itself did not load.
+- **Ääni: suhahdus, puu, virhe, hiljainen kilahdus, voitto**: from v5 (#337) a turn of 30 plays `onnistui` at 0.3, not `yleiso`. Before it: v4 (#230) loads `lib/aanet-2/aanet.js` and `sound()` plays `suhahdus` when a dart flies (`throwAt()`), `puu` when it sticks in the board and a quiet, lower `puu` when it misses (`land()`, and on a guest's phone `step()`), `virhe` on a 501 bust, `yleiso` for a full turn (30 or 180, `endTurn()`, and on a guest when that banner arrives in `adopt()`) and `voitto` at the end (`endGame()`). Each falls back to v3's own beep when `AiPelitAanet.play()` returns false (the first open offline), and all of them do when `aanet.js` itself did not load.

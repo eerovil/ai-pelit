@@ -7,6 +7,8 @@ before the wheels touch. A higher record opens more tricks and scooter colours. 
 the run sounds with recorded effects from the shared sound library (see `aanikirjasto.md`) through
 `sound()`; each falls back to v1's beep when nothing played. Each box below names its sound.
 
+v3 (#337, `aanet-4`) has no crowd: a wobble is only the wheels' landing, no "ooh"; a trick is the quiet `onnistui` blip at 0.3.
+
 ```mermaid
 flowchart TD
   A[Valikko: temput, värit, Aja!] --> B[Pudottaudu rampin reunalta]
@@ -67,6 +69,6 @@ flowchart TD
 - **Ilmassa: suoraan ylös ja käännös takaisin**: `launch()` and `air()`: the rider leaves the wall straight up and comes back down to the same coping; the drawing (`drawRider()`) eases towards upright and turns round at the top. Sound: `suhahdus` at the take-off.
 - **Pyyhkäise: ↑ Barspin, ↓ Tailwhip, sivulle keskelle Takavoltti, sivulle ulos 360**: `pointermove` (26 px makes a swipe, one trick a finger) and `trick()`. Sideways is read against the wall the rider is over (`P.side`), so the menu says it in words, not with one arrow. Bars, deck, the 360 and the back flip each have their own count (`barTo`, `whipTo`, `spinTo`, `flipTo`) and turn at the same time; the same trick again turns after the first, and no trick undoes another. Sound: a quick `suhahdus` for each trick asked. The four are the ones Eero picked (barspin, tailwhip, 360, back flip).
 - **Temppu auki?**: `isOpen()`: the record (`ai-pelit:skuutti:ennatys`) against the trick's `need`: Barspin and Tailwhip from the start, 360 at 600 p, Takavoltti at 1500 p.
-- **Alastulo: paljonko kesken?**: `land()`: the most of a turn still to go on any of the four: up to 0.08 clean, up to 0.25 a wobble, more a fall (`CLEAN`, `SLOPPY`). Sound: `lasku` when the wheels touch; a wobble adds the crowd's `ohhoo`, a fall is `rima` (`fall()`), the metal clatter of the scooter going down.
+- **Alastulo: paljonko kesken?**: `land()`: the most of a turn still to go on any of the four: up to 0.08 clean, up to 0.25 a wobble, more a fall (`CLEAN`, `SLOPPY`). Sound: `lasku` when the wheels touch; a wobble adds the crowd's `ohhoo`, a fall is `rima` (`fall()`), the metal clatter of the scooter going down. From v3 (#337) a wobble is `lasku` only, no `ohhoo`.
 - **Puhdas: pisteet, putki kasvaa**: `score()`: the tricks' points, ×1.5, ×2… for each more in the same air, 20 a metre of height, +10 % for each clean air in a row (at most double); the same air as the last one pays half, a wobble half. Sound: a clean trick adds `onnistui`.
 - **Ajo loppuu: ennätys, tuloslista, avautuvat temput ja värit**: `finish()`: a run is 60 s (`RUN`); an air under way still lands and counts. Saves the record, sends the points with `AiPelitScores.submit()` (`skuutti` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`) and names what the new record opened. Sound: `voitto` for a new record, otherwise `tappio`.
