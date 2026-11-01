@@ -97,7 +97,7 @@ def test_an_away_friend_stops_the_meet_only_on_their_own_turn(site, browser, pat
     host.click("#aipr-goOn")
     host.wait_for_function(f"K.comp.seq > {before}")
     t = host.evaluate(f"K.comp.throwers.find(t => t.p === {json.dumps(me_aino)})")
-    assert t["bot"] is False
+    assert "bot" not in t  # no computer takeover in yleisurheilu-5
     missed = host.evaluate("K.F.missed === undefined ? -1 : K.F.missed")
     assert missed in t.get("marks", []) or "X" in json.dumps(t.get("rec", []))
     # On with the others (at a bar height her next attempt may come straight after).

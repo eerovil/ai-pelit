@@ -400,7 +400,7 @@
     };
     const isNet = K.isNet = () => !!(K.comp && K.comp.mode === 'net');
     K.isHost = () => !isNet() || R.isHost;
-    const human = t => !!t && t.p !== null && !t.bot;
+    const human = t => !!t && t.p !== null; // a friend is never the computer's (#297)
     K.human = human;
     K.thrower = id => K.comp.throwers.find(t => t.id === id);
     K.current = () => K.comp && !K.comp.over ? F.current(K.comp) : null;
@@ -412,10 +412,10 @@
 
     function newComp(mode, humans, lv) {
       const base = o.skill(lv), spread = o.spread || [0];
-      const ts = humans.map((h, i) => ({ id: 'h' + i, name: h.name, p: h.p, bot: false, skill: base, col: COLORS[i % COLORS.length], marks: [] }));
+      const ts = humans.map((h, i) => ({ id: 'h' + i, name: h.name, p: h.p, skill: base, col: COLORS[i % COLORS.length], marks: [] }));
       humans.forEach((h, i) => { if (h.fit) ts[i].fit = h.fit; });
       for (let k = 0; ts.length < FIELD; k++) {
-        ts.push({ id: 'c' + k, name: o.foes[(lv - 1 + k) % o.foes.length], p: null, bot: false, col: COLORS[ts.length % COLORS.length],
+        ts.push({ id: 'c' + k, name: o.foes[(lv - 1 + k) % o.foes.length], p: null, col: COLORS[ts.length % COLORS.length],
           skill: base + spread[k % spread.length] + (Math.random() - 0.5) * (o.jitter || 0), marks: [] });
       }
       const c = { mode, level: lv, throwers: ts, seq: 0, recent: [] };
@@ -522,7 +522,7 @@
         else if (live) o.watch(m);
       });
       // The meet needs a phone only for its own turn (#297): rooms.js waits for no one else.
-      if (R.turns) R.turns(id => {
+      R.turns(id => {
         const c = K.comp;
         if (!c || !isNet() || c.over) return true;
         const t = F.current(c);
@@ -536,20 +536,6 @@
         take(c.seq, F.missed !== undefined ? F.missed : -1, true);
       });
       R.on('hello', id => { const c = K.comp; if (c && isNet() && R.isHost && !c.over) R.send({ t: 'c', round: c.room, c }, id); });
-      // The computer takes the turns of a phone that is away, and gives them back when it returns.
-      R.on('continue', ids => {
-        const c = K.comp;
-        if (!c || !R.isHost) return;
-        c.throwers.forEach(t => { if (ids.includes(t.p)) t.bot = true; });
-        const t = K.current();
-        if (t && t.bot) { clearTurn(); advance(); if (!c.over) R.send({ t: 'c', round: c.room, c }); follow(); }
-      });
-      R.on('back', id => {
-        const c = K.comp;
-        if (!c || !R.isHost) return;
-        c.throwers.forEach(t => { if (t.p === id) t.bot = false; });
-        R.send({ t: 'c', round: c.room, c });
-      });
       R.on('lobby', () => K.quit());
       R.on('leave', () => { K.quit(); o.menu(); });
       R.on('menu', () => { K.quit(); o.menu(); });
