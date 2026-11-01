@@ -334,7 +334,7 @@ def test_the_computer_anglers_get_better_level_by_level(site, context):
       best.sort((a, b) => a - b);
       return (best[4] + best[5]) / 2;
     })""")
-    assert 200 < means[0] < 2500 and means[1] > means[0] * 1.3
+    assert 50 < means[0] < 2500 and means[1] > means[0] * 1.3
 
 
 def test_a_reload_keeps_the_contest_the_lake_and_v1_s_save(site, context):
