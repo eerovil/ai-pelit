@@ -665,7 +665,7 @@ def test_a_game_in_turns_waits_only_for_the_phone_on_turn(phones):
     aino = guest.evaluate("AiPelitRooms.me")
     # Aino leaves the room mid-round: no one waits and the computer does not take her player.
     guest.evaluate("AiPelitRooms.leave()")
-    host.wait_for_function(f"!AiPelitRooms.members.some(m => m.id === {json.dumps(aino)})")
+    host.wait_for_function(f"!AiPelitRooms.members.find(m => m.id === {json.dumps(aino)}).on")
     held = host.evaluate("demo.clock")
     host.wait_for_function(f"demo.clock > {held} + 2")
     assert host.evaluate("[AiPelitRooms.paused, demo.bots, AiPelitRooms.isReleased(%s)]" % json.dumps(aino)) == [False, [], False]
@@ -722,4 +722,31 @@ def test_a_round_left_in_turns_is_forgotten_when_the_host_restarts(phones):
     guest.wait_for_function("AiPelitRooms.inRoom && localStorage.getItem('ai-pelit:_huone:kesken') === null", timeout=8000)
     assert guest.locator("#aipr-room").is_visible()
     assert guest.evaluate("AiPelitRooms.players") == []
+    assert host.errors == guest.errors == other.errors == []
+
+
+def test_a_phone_that_leaves_a_full_room_in_turns_keeps_its_seat(phones):
+    """#297: in a full room, a phone that leaves a round played in turns keeps its seat, so a
+    newcomer cannot take it and "Palaa kierrokseen" still gets back in."""
+    path = "pieni/v1/"
+    host, code = make_room(phones, path)
+    guest = join(phones, "Aino", code, path)
+    other = join(phones, "Iida", code, path)
+    for p in (host, guest, other):
+        p.evaluate("AiPelitRooms.turns(id => false)")
+    start(host, [guest, other])
+    aino = guest.evaluate("AiPelitRooms.me")
+    guest.evaluate("AiPelitRooms.leave()")
+    host.wait_for_function(f"!AiPelitRooms.members.find(m => m.id === {json.dumps(aino)}).on")
+    # A newcomer finds the room full.
+    late = phones("Ville", path)
+    late.click("#multi")
+    late.fill("#aipr-codeIn", code)
+    late.click("#aipr-joinBtn")
+    late.wait_for_function("document.getElementById('aipr-err').textContent === 'Huone on täynnä'", timeout=8000)
+    assert host.evaluate("AiPelitRooms.members.length") == 3
+    # Aino comes back into the round.
+    guest.click("#multi")
+    guest.click("#aipr-again")
+    guest.wait_for_function("demo.phase === 'play' && AiPelitRooms.inRoom && AiPelitRooms.players.length === 3", timeout=8000)
     assert host.errors == guest.errors == other.errors == []

@@ -147,7 +147,9 @@
     if (!net.on) return;
     var ws = net.ws;
     if (net.host) sendRaw({ t: '_close' });
-    sendRaw({ t: 'bye' });
+    // A guest leaving a game played in turns mid-round keeps its seat (no bye): the room stays
+    // full for a newcomer, so "Palaa kierrokseen" always gets back in (#297).
+    if (net.host || !needs || !racing()) sendRaw({ t: 'bye' });
     net.on = false; net.ws = null; net.connected = false; clearTimeout(net.timer);
     if (ws) try { ws.close(1000, 'Poistui'); } catch (e) { /* gone */ }
     ssave(HERE, null);
