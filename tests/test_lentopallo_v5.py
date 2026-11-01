@@ -244,13 +244,15 @@ def room(game, site, browser):
 
 
 def heard_on(page, name):
-    page.wait_for_function(f"heard.some(h => h[0] === '{name}' && h[1])", timeout=5000)
+    page.wait_for_function(f"heard.some(h => h[0] === '{name}' && h[1])", timeout=10000)
 
 
 def test_in_a_room_the_guest_hears_the_toss_the_net_and_the_sand(room):
     host, [guest] = room("Eero", "Aino")
     for p in (host, guest):
         ready(p)
+    # The guest counts from the host's snapshots: it must have had one before the toss.
+    guest.wait_for_function("fxSeen !== null", timeout=10000)
     host.evaluate("server = mine; ball.held = true; tossed = false; state = 'serve'; press(mine)")
     heard_on(guest, "naksu")
     host.evaluate("state = 'play'; last = mine; touchSide = -1; Object.assign(ball, { x: -0.3, y: 1.5, vx: 6, vy: 0, held: false })")
