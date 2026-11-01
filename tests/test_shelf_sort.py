@@ -65,7 +65,7 @@ def test_the_most_played_order_follows_new_counts(site, context):
     assert cards(page) == ["zorro", "ankka", "yleisurheilu", "orava"]
     totals["orava"] = 9
     page.reload()
-    page.wait_for_function("document.querySelector('.cards > .card').dataset.slug === 'orava'")
+    page.wait_for_function("document.querySelector('.cards > .card')?.dataset.slug === 'orava'")
     assert cards(page) == ["orava", "zorro", "ankka", "yleisurheilu"]
 
 
