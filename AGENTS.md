@@ -1,7 +1,7 @@
 # Agent guide — ai-pelit
 
-AI-made phone games, played from one PWA at https://pelit.vilpponen.fi/. Every version
-of every game stays playable. Eero asks for games as AgentDeck Works on this repository; the
+AI-made phone games, played from one PWA at https://pelit.vilpponen.fi/. Only each game's
+newest version is kept and played (#346, Eero's choice); the older ones are its history. Eero asks for games as AgentDeck Works on this repository; the
 issue is the request, in Finnish. Write code comments and pull requests in English; everything a
 player sees is Finnish unless the request says otherwise.
 
@@ -9,12 +9,15 @@ player sees is Finnish unless the request says otherwise.
 
 - "Uusi peli: …" — a new game. Pick a short slug (lowercase, digits, dashes), make
   `games/<slug>/v1/index.html` and `games/<slug>/game.json`.
-- "<Peli> v<N> (<slug>): …" — a new version. Copy the newest version still in `games/<slug>/`
-  (usually `v<N-1>/`) to the next free number and change the copy; a withdrawn number (rule 1) is
-  skipped for good, so Puhelinkoppi goes from `v2/` to `v5/`. Append the version to `game.json`.
-  If the copy is past about 2000 lines in one file, split it into files (rule 2) as part of this
-  version, without being asked, and say so in the pull request. Do the same for a new game that
-  grows past it.
+- "<Peli> v<N> (<slug>): …" — a new version. Move the game's one version folder to the next
+  number in a commit of its own (`git mv games/<slug>/v<N-1> games/<slug>/v<N>`), then make the
+  change in the next commits, so the pull request shows only what changed (#346). Move its tests
+  along the same way: `git mv` each `tests/test_<slug>_v<N-1>*.py` to `_v<N>`, and change every
+  `games/<slug>/v<N-1>` in the game's test files to `v<N>`. Append the version to `game.json`.
+  The number is one above the game's highest ever (Puhelinkoppi went from `v2/` to `v5/`).
+  If the version is past about 2000 lines in one file, split it into files (rule 2) as part of
+  this version, without being asked, and say so in the pull request. Do the same for a new game
+  that grows past it.
 - "Palautteet <päivä>: <N> kpl" — the players' feedback (#184), filed once a day by
   `scripts/feedback_issue.py`. The feedback is private and this repository public, so the issue
   lists only each item's number and game; read the items with
@@ -35,15 +38,14 @@ player sees is Finnish unless the request says otherwise.
 - A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
   own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
   group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
-- Ottelu (#168), the athletics match, plays published versions of its events (`LAJIT` in its newest
-  `games/ottelu/v<N>/index.html`) in a frame, unchanged. From v6 (#303, Eero's choice) it plays each
-  event's newest version by itself, read from `catalog.json`, so a new event version joins the match
-  with no new Ottelu version, and `tests/test_ottelu_v6.py` runs on that version's pull request too.
+- Ottelu (#168), the athletics match, plays its events' newest versions in a frame, unchanged
+  (#303, Eero's choice), read from `catalog.json`, so a new event version joins the match with no
+  new Ottelu version, and Ottelu's tests (`tests/test_ottelu_v<N>.py`) run on that version's pull
+  request too. `LAJIT` in its `index.html` names fallback versions for when the catalog cannot be
+  read; an old one there is sent on to the newest by the site (#346).
   A new event version must still play in the match: keep `kisa.js`'s options and the race's
   functions that Ottelu's `laji.js` and `aita.js` change, or, when it cannot, add `"ottelu": false`
-  to its `game.json` entry and make a new Ottelu version for it. A version `LAJIT` names (its
-  fallback when the catalog cannot be read) is never withdrawn without a new Ottelu version first.
-  Alone, each next event loads in a
+  to its `game.json` entry and make a new Ottelu version for it. Alone, each next event loads in a
   fresh page: a second frame in the same page took no taps on Eero's phone (see docs/making-games.md).
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
@@ -54,14 +56,18 @@ request, with the version that taught it (#181, Eero's choice).
 
 ## Rules
 
-1. **A published version never changes.** Never edit, move or delete a `games/<slug>/v<N>/` folder
-   or its `game.json` entry once it is on `main`; a fix is a new version. CI runs
-   `scripts/check_immutable.py` and fails a pull request that does. `games/<slug>/thumb.webp`
-   is outside the version folders and may be retaken. The only exception: a version Eero
-   explicitly asks to take out of production is added to `WITHDRAWN` in that script (with where
-   he said so) in its own pull request, and then deleted whole, folder and entry, in the next.
-   Its number is never used again (phones keep the old one cached): the next version skips it.
-2. **One folder per version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
+1. **A published version never changes; only the newest is kept.** Never edit a
+   `games/<slug>/v<N>/` folder or its `game.json` entry once it is on `main`; a fix is a new
+   version (#346, Eero's choice). The phone's offline cache keeps a version folder for good, so
+   only a new address brings it new code. A new version moves the old folder away whole (above),
+   and its `game.json` entry stays as the game's history, shown on the game's page. CI runs
+   `scripts/check_immutable.py`: it fails a pull request that edits a published folder, deletes
+   one in part or without a newer one, changes an entry, or reuses a number.
+   `scripts/build.py` serves only the newest folder and writes `_redirects`, which sends an older
+   version's address (a link, a home-screen shortcut, a room code) to the newest. `public/sw.js`
+   drops a phone's cached copy of an older version. `games/<slug>/thumb.webp` is outside the
+   version folders and may be retaken.
+2. **One folder per game's version, self-contained.** Plain HTML, CSS and JavaScript in the folder, no
    build step, no CDN, no fonts or images from the network. It must play offline, forever. The
    only network a game may use is this site's own `/api/` (see "Online extras"), and only as an
    extra: the game never waits for it, and plays the same without it.
@@ -75,10 +81,9 @@ request, with the version that taught it (#181, Eero's choice).
    choice, first Last Signal v9). Do it yourself in the next version, unasked: `index.html` loads
    them with classic `<script src="world.js"></script>` tags, so their functions stay global for
    the tests. Still no
-   build step: each new version copies the whole folder, and an agent reads only the files its
+   build step: each new version moves the whole folder on, and an agent reads only the files its
    change touches. Keep a `lib/three` import in `index.html` itself, because `scripts/build.py`
-   and `tests/conftest.py` look for it there. Old versions stay as they are, and none is deleted
-   for being big: phones cache only the versions they open, and git stores each copy as a diff.
+   and `tests/conftest.py` look for it there.
 3. **Include the back chip.** Every version's `index.html` ends its body with
    `<script src="../../../back.js"></script>` (the build refuses one without it). It draws
    "‹ Pelit" in the top-left corner. When the game's own score or buttons are there, move the chip
@@ -97,7 +102,7 @@ request, with the version that taught it (#181, Eero's choice).
    `ai-pelit:<slug>:<name>` (keys starting `ai-pelit:_` belong to the shared scripts). All versions of a game share those keys: a new version must read
    the previous version's saved data (or migrate it in place) and never rename, reset or clear
    it. Never touch another game's keys.
-6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (1, 2, 3… in order),
+6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (rising, never reused),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
    (the issue text) and `issue` (`eerovil/ai-pelit#<n>`); an Ottelu event's version may add
    `"ottelu": false` (see "What a request means").
@@ -126,7 +131,7 @@ high-score lists (#25), then play counts (#26).
   its own script (#34), and a "👥 Pelaa kavereiden kanssa" button that calls
   `AiPelitRooms.open()`. Do not copy Kirkkis v2's own room code; it predates the library.
   `rooms.js` draws the room screen (code, QR link, players, "Aloita kierros"), reconnects, rejoins
-  after a reload, sends a typed code from another game or version to the room's own, and pauses
+  after a reload, sends a typed code from another game or a newer version to the room's own (a room on an older one says so instead, #346), and pauses
   the round while a phone in it is away (with "Jatka ilman heitä" on the host). The game keeps the
   game: the phone that made the room (the host) runs the round and the others draw it.
   - `on('start', s => …)` on every phone: `s.players` (`[{id, name}]`, the connected phones in
@@ -307,7 +312,8 @@ sleeps while the page is hidden.
   tests `tests/test_<slug>.py` (or `test_<slug>_<more>.py`, dashes as underscores), or mark a test
   that plays a game with `@pytest.mark.games("<slug>")`. Within a game only the test files of the
   changed versions run (#116): a file tests the `_v<N>` in its name and every `games/<slug>/v<N>`
-  written in it. So a new version's tests go in `tests/test_<slug>_v<N>.py`, or name its folder.
+  written in it. So a new version's tests go in `tests/test_<slug>_v<N>.py`, or name its folder
+  (the moved test files of the version before, see "What a request means").
   Editing an existing test file of the game runs all of them (they import each other); a new test
   file runs only itself; a version no file names runs all of them.
   GitHub CI runs them on four workers (`-n 4 --dist loadfile -m "not alone"`, pytest-xdist). The

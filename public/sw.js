@@ -4,7 +4,8 @@
 
 var BUILD = '__BUILD_ID__';
 var SHELL_CACHE = 'ai-pelit-shell-' + BUILD;
-// Version folders never change once published, so they keep one cache across builds.
+// Version folders never change once published, so they keep one cache across builds. Only each
+// game's newest is kept (#346): a new worker drops the files of the versions before it.
 var GAMES_CACHE = 'ai-pelit-games';
 // Game pictures (#33) are named by their content, so they too keep one cache across builds.
 var THUMBS_CACHE = 'ai-pelit-thumbs';
@@ -50,9 +51,32 @@ self.addEventListener('activate', function (event) {
           if (k.indexOf('ai-pelit-shell-') === 0 && k !== SHELL_CACHE) return caches.delete(k);
         }));
       })
+      .then(pruneGames)
       .then(function () { return self.clients.claim(); })
   );
 });
+
+// The cached files of a version that is no longer its game's newest (#346): the site has sent
+// its address on to the newest since, so the copy would only keep the phone on an old game.
+function pruneGames() {
+  return caches.open(SHELL_CACHE)
+    .then(function (shell) { return shell.match('catalog.json'); })
+    .then(function (r) { return r ? r.json() : null; })
+    .then(function (catalog) {
+      if (!catalog) return;
+      var newest = {};
+      catalog.games.forEach(function (g) { newest[g.slug] = g.versions[g.versions.length - 1].n; });
+      return caches.open(GAMES_CACHE).then(function (cache) {
+        return cache.keys().then(function (keys) {
+          return Promise.all(keys.map(function (req) {
+            var m = new URL(req.url).pathname.slice(GAMES_PREFIX.length).match(/^([^/]+)\/v(\d+)\//);
+            if (m && newest[m[1]] !== undefined && Number(m[2]) !== newest[m[1]]) return cache.delete(req);
+          }));
+        });
+      });
+    })
+    .catch(function () { /* a cache left as it was is still a working one */ });
+}
 
 // Every game's picture, so the whole shelf shows offline; pictures no game uses any more go.
 // A picture that fails to load now is fetched when the shelf shows it.

@@ -37,11 +37,12 @@
     return el('img', { class: cls, src: game.thumb, alt: cls === 'thumb' ? '' : game.title, width: String(w), height: String(h) });
   }
 
-  // Version, how many versions and how many plays, under the game's name.
+  // The version and how many plays, under the game's name. Only the newest is kept (#346), so
+  // how many there have been is the game page's history, not a count here.
   function metaLine(game) {
     var v = latest(game);
     return el('p', { class: 'muted meta' }, [
-      document.createTextNode('v' + v.n + (game.versions.length > 1 ? ' · ' + game.versions.length + ' versiota' : '')),
+      document.createTextNode('v' + v.n),
       el('span', { class: 'plays', text: playsText(game.slug) }),
       nowBadge(game.slug),
     ]);
@@ -361,10 +362,6 @@
     }
 
     function form(name) {
-      var versions = el('select', { class: 'feedback-version', 'aria-label': 'Versio' });
-      game.versions.slice().reverse().forEach(function (ver, i) {
-        versions.appendChild(el('option', { value: String(ver.n), text: 'v' + ver.n + (i ? '' : ' (uusin)') }));
-      });
       var text = el('textarea', { class: 'feedback-text', rows: '4', maxlength: '1000', placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
       text.value = draft;
       text.addEventListener('input', function () { keep(text.value); });
@@ -377,7 +374,7 @@
         note.textContent = 'Lähetetään…';
         fetch('api/feedback', {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ player: scores.id(), game: game.slug, version: Number(versions.value), text: text.value }),
+          body: JSON.stringify({ player: scores.id(), game: game.slug, version: latest(game).n, text: text.value }),
         }).then(function (r) {
           send.disabled = false;
           if (r.ok) { text.value = ''; keep(''); note.textContent = 'Kiitos, ' + name + '! Palaute meni perille.'; return; }
@@ -390,7 +387,6 @@
       });
       box.replaceChildren(
         el('p', { class: 'muted', text: 'Nimimerkillä ' + name + '. Vain ylläpitäjä näkee palautteen.' }),
-        el('div', { class: 'feedback-row' }, [el('span', { text: 'Versio' }), versions]),
         text,
         el('div', { class: 'feedback-row' }, [note, send])
       );
@@ -507,6 +503,7 @@
     var v = latest(game);
     // A game in a group goes up to the group's page, the others to the shelf.
     var group = game.group && findGroup(game.group);
+    // Every version's note as the game's history; only the newest is kept and played (#346).
     var versions = el('ol', { class: 'versions', reversed: '' });
     game.versions.slice().reverse().forEach(function (ver) {
       versions.appendChild(el('li', { class: 'version', 'data-n': String(ver.n) }, [
@@ -515,8 +512,8 @@
           el('span', { class: 'muted', text: ' · ' + fiDate(ver.date) }),
           el('p', { text: ver.note }),
         ]),
-        el('a', { class: 'button secondary', href: playUrl(game.slug, ver.n), text: 'Pelaa' }),
-      ]));
+        ver === v ? el('a', { class: 'button secondary', href: playUrl(game.slug, ver.n), text: 'Pelaa' }) : null,
+      ].filter(Boolean)));
     });
     view.replaceChildren.apply(view, [
       group
@@ -529,7 +526,7 @@
       el('a', { class: 'button big', href: playUrl(game.slug, v.n), text: 'Pelaa uusinta (v' + v.n + ')' }),
       scoreSection(game.slug),
       feedbackSection(game),
-      el('h2', { text: 'Versiot' }),
+      el('h2', { text: 'Versiohistoria' }),
       versions,
     ].filter(Boolean));
     loadPlaying();

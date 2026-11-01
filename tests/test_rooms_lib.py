@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -163,6 +164,8 @@ def phones(site, browser):
     make_game(site.games, "pieni", [demo_page("pieni", 3)])
     make_game(site.games, "iso", [demo_page("iso", 8)])
     site.build()
+    # Only the newest version is on the site (#346); v1 stands for a phone that kept its old copy.
+    shutil.copytree(site.out / "games" / "huonetesti" / "v2", site.out / "games" / "huonetesti" / "v1")
     relay = Relay()
     contexts = []
 
@@ -486,18 +489,30 @@ def test_a_typed_code_from_another_version_opens_the_rooms_version(phones):
     assert guest.errors == away.errors == []
 
 
+def test_a_room_in_an_older_version_is_refused_with_a_reason(phones):
+    # Only the newest version is kept (#346): the old room's address would only bring the guest
+    # back to the newest, so it says why instead of going round.
+    host, code = make_room(phones, "huonetesti/v1/")
+    guest = phones("Aino", "huonetesti/v2/")
+    guest.click("#multi")
+    guest.fill("#aipr-codeIn", code)
+    guest.click("#aipr-joinBtn")
+    guest.wait_for_function("document.getElementById('aipr-err').textContent.indexOf('vanhemmassa versiossa') >= 0")
+    assert not guest.evaluate("AiPelitRooms.inRoom")
+    assert guest.evaluate("location.pathname").endswith("/games/huonetesti/v2/")
+    assert guest.errors == []
+
+
 def test_back_from_a_room_in_another_game_goes_to_that_games_page_then_the_shelf(phones):
-    # Back always goes up (#68), even after a typed code moved the phone to another game or version.
+    # Back always goes up (#68), even after a typed code moved the phone to another game.
     site = phones.site
     small, small_code = make_room(phones, "pieni/v1/")
-    other, other_code = make_room(phones, "huonetesti/v2/")
-    for name, code, url, page in [("Onni", other_code, r".*/games/huonetesti/v2/$", "huonetesti"),
-                                  ("Iida", small_code, r".*/games/pieni/v1/$", "pieni")]:
-        away = phones(name, "huonetesti/v1/")
+    for name, code, url, page in [("Iida", small_code, r".*/games/pieni/v1/$", "pieni")]:
+        away = phones(name, "huonetesti/v2/")
         away.goto(site.url)
         away.click('.card[data-slug="huonetesti"] .card-main')
-        away.click('.version[data-n="1"] a')
-        away.wait_for_url(re.compile(r".*/games/huonetesti/v1/$"))
+        away.click('.version[data-n="2"] a')
+        away.wait_for_url(re.compile(r".*/games/huonetesti/v2/$"))
         away.click("#multi")
         away.fill("#aipr-codeIn", code)
         away.click("#aipr-joinBtn")

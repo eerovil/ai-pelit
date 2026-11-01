@@ -6,6 +6,9 @@
 
 The service worker gets a build id made from everything it serves except the games,
 so each deploy that changes the shell or the catalog is a new worker and phones update.
+
+Only each game's newest version is served (#346). Its older versions stay in game.json as
+history, and `_redirects` sends their addresses to the newest one.
 """
 
 import argparse
@@ -16,9 +19,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_immutable import WITHDRAWN  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 BACK_SCRIPT = '<script src="../../../back.js"></script>'
@@ -66,7 +66,7 @@ class GameError(Exception):
     pass
 
 
-def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path = LIB_DIR) -> dict:
+def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     slug = game_dir.name
     if not SLUG.match(slug):
         raise GameError(f"{slug}: a game folder name is lowercase letters, digits and dashes")
@@ -78,29 +78,29 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path =
         if not meta.get(key):
             raise GameError(f"{slug}: game.json needs {key}")
     versions = meta["versions"]
-    # Numbered 1, 2, 3… in order; a number withdrawn (check_immutable.WITHDRAWN) is skipped for good.
-    skip = {int(d.split("/")[2][1:]) for d in (WITHDRAWN if withdrawn is None else withdrawn) if d.split("/")[1] == slug}
-    expected = 1
+    # Numbered in rising order. A number may be missing (Puhelinkoppi's withdrawn v3 and v4), but
+    # is never used twice: a phone may keep an old version's files in its offline cache.
+    last = 0
     for v in versions:
-        while v.get("n") != expected and expected in skip:
-            expected += 1
-        if v.get("n") != expected:
-            raise GameError(f"{slug}: versions must be numbered 1, 2, 3… in order (found {v.get('n')} where {expected} was due)")
-        i = expected
-        expected += 1
+        i = v.get("n")
+        if not isinstance(i, int) or i <= last:
+            raise GameError(f"{slug}: version numbers must rise (found {i!r} after {last})")
+        last = i
         if not DATE.match(str(v.get("date", ""))):
             raise GameError(f"{slug} v{i}: date must be YYYY-MM-DD")
         if not v.get("note"):
             raise GameError(f"{slug} v{i}: note is missing")
-        page = game_dir / f"v{i}" / "index.html"
-        if not page.is_file():
-            raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
-        html = page.read_text()
-        if not BACK_SCRIPT_RE.search(html):
-            raise GameError(f"{slug} v{i}: index.html must include {BACK_SCRIPT}")
-        for ref in LIB_REF.findall(html):
-            if not (lib_dir / ref).is_file():
-                raise GameError(f"{slug} v{i}: index.html loads lib/{ref}, which is not in public/lib/")
+    # Only the newest version has a folder (#346); the older entries are its history.
+    i = last
+    page = game_dir / f"v{i}" / "index.html"
+    if not page.is_file():
+        raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
+    html = page.read_text()
+    if not BACK_SCRIPT_RE.search(html):
+        raise GameError(f"{slug} v{i}: index.html must include {BACK_SCRIPT}")
+    for ref in LIB_REF.findall(html):
+        if not (lib_dir / ref).is_file():
+            raise GameError(f"{slug} v{i}: index.html loads lib/{ref}, which is not in public/lib/")
     thumb = game_dir / THUMB
     if not thumb.is_file():
         raise GameError(f"{slug}: {THUMB} is missing (python3 scripts/make_thumb.py {slug} <screenshot.png>)")
@@ -112,6 +112,9 @@ def load_game(game_dir: Path, withdrawn: set[str] | None = None, lib_dir: Path =
     extra = folders - {f"v{v['n']}" for v in versions}
     if extra:
         raise GameError(f"{slug}: folders without a game.json version: {', '.join(sorted(extra))}")
+    old = folders - {f"v{last}"}
+    if old:
+        raise GameError(f"{slug}: only the newest version has a folder; delete {', '.join(sorted(old, key=lambda f: int(f[1:])))} (#346)")
     group = meta.get("group")
     if group is not None and group not in GROUPS:
         raise GameError(f"{slug}: game.json names an unknown group {group!r} (GROUPS in scripts/build.py)")
@@ -162,16 +165,38 @@ def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     return {"games": games, "groups": groups}
 
 
+def redirects(catalog: dict) -> str:
+    """Cloudflare Pages' `_redirects`: an older version's address goes to the game's newest (#346).
+
+    A link, a home-screen shortcut, a room code or a friend's invite may still name an old one.
+    Only the page itself is sent on, as static lines: Pages allows 2000 of those but only 100
+    with a `*`, and a phone that has the old page cached has its files cached with it. The query
+    (`?huone=`) goes along. 302, because the newest moves on with each version."""
+    lines = ["# Written by scripts/build.py: each game's older versions go to its newest (#346)."]
+    for g in sorted(catalog["games"], key=lambda g: g["slug"]):
+        to = f"/games/{g['slug']}/v{g['versions'][-1]['n']}/"
+        for v in g["versions"][:-1]:
+            at = f"/games/{g['slug']}/v{v['n']}"
+            lines += [f"{at} {to} 302", f"{at}/ {to} 302", f"{at}/index.html {to} 302"]
+    return "\n".join(lines) + "\n"
+
+
 def build(games_dir: Path, public_dir: Path, out_dir: Path) -> dict:
     catalog = build_catalog(games_dir, public_dir / "lib")
     if out_dir.exists():
         shutil.rmtree(out_dir)
     shutil.copytree(public_dir, out_dir)
-    # The picture is skipped beside game.json only: a version may have a file of the same name.
+    newest = {g["slug"]: f"v{g['versions'][-1]['n']}" for g in catalog["games"]}
+
     def skip(folder, names):
-        return [n for n in names if n == "game.json" or (n == THUMB and Path(folder).parent == games_dir)]
+        # Beside game.json: the picture and every version folder but the newest.
+        if Path(folder).parent == games_dir:
+            return [n for n in names if n in ("game.json", THUMB)
+                    or (re.fullmatch(r"v\d+", n) and n != newest[Path(folder).name])]
+        return []
 
     shutil.copytree(games_dir, out_dir / "games", ignore=skip)
+    (out_dir / "_redirects").write_text(redirects(catalog))
     (out_dir / "thumbs").mkdir()
     for game in catalog["games"]:
         shutil.copyfile(games_dir / game["slug"] / THUMB, out_dir / game["thumb"])

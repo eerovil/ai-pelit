@@ -72,9 +72,10 @@ def small_webp():
 @pytest.mark.parametrize(
     "breakage, message",
     [
-        (lambda d: (d / "v1" / "index.html").write_text("<html></html>"), "must include"),
+        (lambda d: (d / "v2" / "index.html").write_text("<html></html>"), "must include"),
         (lambda d: (d / "v3").mkdir(), "folders without a game.json version"),
         (lambda d: (d / "v2" / "index.html").unlink(), "v2/index.html is missing"),
+        (lambda d: (d / "v1").mkdir(), "only the newest version has a folder"),
         (lambda d: (d / "thumb.webp").unlink(), "thumb.webp is missing"),
         (lambda d: (d / "thumb.webp").write_bytes(b"ei kuva"), "not a WebP image"),
         (lambda d: (d / "thumb.webp").write_bytes(small_webp()), "found 3 x 4"),
@@ -89,12 +90,12 @@ def test_build_refuses_a_broken_game(tmp_path, breakage, message):
         build.build_catalog(tmp_path)
 
 
-def test_version_numbers_must_run_in_order(tmp_path):
+def test_a_version_number_is_a_positive_whole_number(tmp_path):
     make_game(tmp_path, "peli", [game_page("a")])
     meta = json.loads((tmp_path / "peli" / "game.json").read_text())
-    meta["versions"][0]["n"] = 2
+    meta["versions"][0]["n"] = 0
     (tmp_path / "peli" / "game.json").write_text(json.dumps(meta))
-    with pytest.raises(build.GameError, match="numbered"):
+    with pytest.raises(build.GameError, match="must rise"):
         build.build_catalog(tmp_path)
 
 
@@ -185,79 +186,74 @@ def test_editing_a_published_version_fails(repo):
     assert "make a new version" in problems("main", cwd=str(repo))[0]
 
 
-def withdraw_v2(repo):
+def publish(repo, msg):
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", msg)
+
+
+def test_a_new_version_moves_the_old_folder_away(repo):
+    # git mv games/peli/v1 games/peli/v2, then the change (#346): v1 goes whole.
     make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
-    git(repo, "add", ".")
-    git(repo, "commit", "-qm", "v2")
-    import shutil
-    shutil.rmtree(repo / "games" / "peli" / "v2")
-    make_game(repo / "games", "peli", [game_page("a")])
+    assert not (repo / "games" / "peli" / "v1").exists()
+    assert problems("main", cwd=str(repo)) == []
 
 
-def test_a_withdrawn_version_may_be_deleted_whole(repo):
-    withdraw_v2(repo)
-    assert problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}) == []
-    # Without the owner's word it is still refused.
-    assert any("make a new version" in p for p in problems("main", cwd=str(repo), withdrawn=set()))
-
-
-def test_a_withdrawn_version_may_not_be_edited_and_others_stay_put(repo):
-    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
-    git(repo, "add", ".")
-    git(repo, "commit", "-qm", "v2")
-    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("muutettu"))
-    assert "make a new version" in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"})[0]
-    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("b"))
+def test_a_published_version_may_not_go_without_a_newer_one(repo):
     import shutil
     shutil.rmtree(repo / "games" / "peli" / "v1")
-    assert any("v1 is published" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+    assert "newer version folder" in problems("main", cwd=str(repo))[0]
 
 
-def test_a_withdrawn_version_may_not_be_deleted_in_part(repo):
-    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
-    (repo / "games" / "peli" / "v2" / "muu.js").write_text("// toinen tiedosto")
-    git(repo, "add", ".")
-    git(repo, "commit", "-qm", "v2")
-    (repo / "games" / "peli" / "v2" / "muu.js").unlink()  # one file gone, the folder stays
-    assert "delete it whole" in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"})[0]
+def test_a_published_version_may_not_be_deleted_in_part(repo):
+    (repo / "games" / "peli" / "v1" / "muu.js").write_text("// toinen tiedosto")
+    publish(repo, "muu.js")
+    (repo / "games" / "peli" / "v1" / "muu.js").unlink()  # one file gone, the folder stays
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")], only_newest=False)
+    assert "delete it whole" in problems("main", cwd=str(repo))[0]
 
 
-def test_a_withdrawn_folder_and_its_entry_go_together(repo):
-    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
-    git(repo, "add", ".")
-    git(repo, "commit", "-qm", "v2")
-    import shutil
-    shutil.rmtree(repo / "games" / "peli" / "v2")  # the folder goes, its game.json entry stays
-    assert any("remove its entry too" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
+def test_an_old_number_is_never_used_again(repo):
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b"), game_page("c")])
+    publish(repo, "v3")
+    # A later change puts a new folder at v2, below the v3 phones may already have.
+    (repo / "games" / "peli" / "v2").mkdir()
+    (repo / "games" / "peli" / "v2" / "index.html").write_text(game_page("uusi"))
+    assert any("never an old one" in p for p in problems("main", cwd=str(repo)))
 
 
-def test_a_withdrawn_number_is_never_published_again(repo):
-    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
-    git(repo, "add", ".")
-    git(repo, "commit", "-qm", "v2")
-    import shutil
-    shutil.rmtree(repo / "games" / "peli" / "v2")
-    make_game(repo / "games", "peli", [game_page("a")])
-    git(repo, "add", "-A")
-    git(repo, "commit", "-qm", "v2 withdrawn")
-    # A later change tries a new game at the old v2 address.
-    make_game(repo / "games", "peli", [game_page("a"), game_page("uusi")])
-    assert any("never used again" in p for p in problems("main", cwd=str(repo), withdrawn={"games/peli/v2/"}))
-
-
-def test_the_build_skips_a_withdrawn_number(tmp_path):
-    import build
+def test_version_numbers_may_skip_but_only_rise(tmp_path):
     make_game(tmp_path, "peli", [game_page("a"), game_page("b"), game_page("c")])
-    import shutil
     meta = json.loads((tmp_path / "peli" / "game.json").read_text())
-    shutil.move(tmp_path / "peli" / "v2", tmp_path / "peli" / "v-old")
-    shutil.rmtree(tmp_path / "peli" / "v-old")
-    meta["versions"] = [meta["versions"][0], meta["versions"][2]]
+    meta["versions"] = [meta["versions"][0], meta["versions"][2]]  # Puhelinkoppi's withdrawn v3 and v4
     (tmp_path / "peli" / "game.json").write_text(json.dumps(meta))
-    # v1 then v3: fine only when v2 was withdrawn.
-    assert [v["n"] for v in build.load_game(tmp_path / "peli", withdrawn={"games/peli/v2/"})["versions"]] == [1, 3]
-    with pytest.raises(build.GameError):
-        build.load_game(tmp_path / "peli", withdrawn=set())
+    assert [v["n"] for v in build.load_game(tmp_path / "peli")["versions"]] == [1, 3]
+    meta["versions"].reverse()
+    (tmp_path / "peli" / "game.json").write_text(json.dumps(meta))
+    with pytest.raises(build.GameError, match="must rise"):
+        build.load_game(tmp_path / "peli")
+
+
+def test_only_the_newest_version_is_served_and_the_older_ones_go_to_it(tmp_path):
+    games = tmp_path / "games"
+    make_game(games, "peli", [game_page("a"), game_page("b"), game_page("c")])
+    catalog = build.build(games, ROOT / "public", tmp_path / "out")
+    # The history stays in the catalog, for the game's page.
+    assert [v["n"] for v in catalog["games"][0]["versions"]] == [1, 2, 3]
+    assert sorted(p.name for p in (tmp_path / "out" / "games" / "peli").iterdir()) == ["v3"]
+    lines = (tmp_path / "out" / "_redirects").read_text().splitlines()
+    rules = [line.split() for line in lines if not line.startswith("#")]
+    assert ["/games/peli/v1/", "/games/peli/v3/", "302"] in rules
+    assert ["/games/peli/v2", "/games/peli/v3/", "302"] in rules
+    assert ["/games/peli/v2/index.html", "/games/peli/v3/", "302"] in rules
+    assert not any(r[0].startswith("/games/peli/v3") for r in rules)
+    # Pages allows only 100 rules with a * or a :placeholder; these are all plain ones.
+    assert not any("*" in r[0] or ":" in r[0] for r in rules)
+
+
+def test_the_real_redirects_fit_cloudflare_pages(tmp_path):
+    build.build(ROOT / "games", ROOT / "public", tmp_path / "out")
+    rules = [line for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
+    assert 0 < len(rules) <= 2000
 
 
 def test_rewriting_a_published_entry_fails(repo):

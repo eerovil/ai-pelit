@@ -37,7 +37,9 @@ flowchart TD
     L16[➕ Kaveriksi ja 📨 Kutsu kaveri]
     L7[Tallenna tulos kerran per kierros]
     L8{Väärä peli tai versio?}
-    L8 -- Kyllä --> L9[Avaa oikean pelin version]
+    L8 -- Kyllä --> L17{Saman pelin vanhempi versio?}
+    L17 -- Ei --> L9[Avaa oikean pelin version]
+    L17 -- Kyllä --> L18[Huone on pelin vanhemmassa versiossa]
   end
   subgraph Cloudflare
     C1[Huone: välittää viestit, muistaa pelin ja version]
@@ -98,11 +100,11 @@ flowchart TD
   V4 --> V6
   V7 --> V6
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18 blue
   class C1,C2,C3,C4,C5,C7 violet
   class V1,V2,V4,V5,V6,V7 blue
   class S1 green
-  class L5,L8,L13,V3,C6 amber
+  class L5,L8,L13,L17,V3,C6 amber
   class L6,G7,L14 rose
 ```
 
@@ -132,7 +134,9 @@ flowchart TD
 - **Piirtää pelin oman pelaajan silmin**: the game's drawing, from this phone's player. Kirkkis: `draw()` with the fog cut by that player's field of view.
 - **Huone: välittää viestit, muistaa pelin ja version**: `rooms/worker.js` `Room`, in the `ai-pelit-rooms` Worker, at `/api/rooms/<KOODI>` through `server/api.js` (`ROOMS` binding). Each phone connects with a secret key and is known by a hash of it, so nobody can take another phone's place. The host's messages go to all (or `to`), the others' to the host with `from`; `peers` says who is in and connected. It keeps the host's `game`, `v` and `max` (2–8, default 5) and sends `game` and `v` in `peers`. A phone with a nickname joins with `fid`, its friend id (#324), which the room keeps and sends with that member in `peers`. An empty room is forgotten after 6 hours.
 - **Väärä peli tai versio?**: `onPeers()` on a guest's first `peers`: the room's `game` and `v` against the page's own. A room that names no game (made by Kirkkis v2, from before the library) is left at once with "Huone on toisessa pelissä."
-- **Avaa oikean pelin version**: the guest moves to `../../<game>/v<v>/?huone=<KOODI>`, which joins the room there. Back still goes up (#68): a game opened from the shelf has its page below it, so another version takes the game's place over that same page; another game steps back to the page, which `public/app.js` (`openFromRoom()`) turns into the new game's page once it has loaded, before opening the game over it. When the new game sits under another parent than the old one (a shelf group, #153), `openFromRoom()` first makes the history below its own: from a shelf game into a grouped one it puts the group's page between, from a grouped game into one outside the group it steps back to the group's page and turns that into the new game's page over the shelf; the room screen steps back only once, however many room updates arrive meanwhile. A game opened any other way is simply replaced.
+- **Saman pelin vanhempi versio?**: only each game's newest version is kept (#346), and the site sends an older version's address on to the newest, so a guest moving to a room's older version would come straight back and go round. `onPeers()` compares the room's `v` with the page's own `VERSION`.
+- **Huone on pelin vanhemmassa versiossa**: the guest leaves the room with "Huone on pelin vanhemmassa versiossa. Pyydä huoneen tekijää avaamaan peli hyllyltä uudelleen." The host's phone still had an old copy; opened from the shelf it gets the newest (and `public/sw.js` drops the old copy with the next worker).
+- **Avaa oikean pelin version**: another game, or a newer version of this one: the guest moves to `../../<game>/v<v>/?huone=<KOODI>`, which joins the room there. Back still goes up (#68): a game opened from the shelf has its page below it, so another version takes the game's place over that same page; another game steps back to the page, which `public/app.js` (`openFromRoom()`) turns into the new game's page once it has loaded, before opening the game over it. When the new game sits under another parent than the old one (a shelf group, #153), `openFromRoom()` first makes the history below its own: from a shelf game into a grouped one it puts the group's page between, from a grouped game into one outside the group it steps back to the group's page and turns that into the new game's page over the shelf; the room screen steps back only once, however many room updates arrive meanwhile. A game opened any other way is simply replaced.
 - **Yhdistää uudelleen, palaa huoneeseen latauksen jälkeen**: `connect()` retries with a growing wait; the room this tab is in is kept in `sessionStorage` (`ai-pelit:_huone:nyt`). On every connection a guest says `hello`; the host sends a phone in the round `_start` again and fires `on('hello')`, so the game sends the round as it is. A host that comes back without its round (a reload) sends `_lobby`, and everyone goes back to the room. Kirkkis: `on('hello')` sends that phone `kr`.
 - **Onko joku kierroksen puhelin poissa?**: `waitingFor()`: a phone in the round with no connection, unless the computer took it; on a guest also the host, or its own connection. The host sends the names (`_pz`).
 - **⏸ Odotetaan, isännällä Jatka ilman heitä**: `renderPause()`: every phone shows who is being waited for; only the host has the button (`goOn()`).
