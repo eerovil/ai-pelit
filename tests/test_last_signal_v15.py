@@ -400,11 +400,41 @@ def test_shelved_food_counts_and_the_save_is_v15_s_own(site, browser):
     assert page.errors == []
 
 
-@pytest.mark.parametrize("w,h", [(360, 740), (740, 360)])
+@pytest.mark.parametrize("w,h", [(360, 740), (390, 844), (740, 360)])
 def test_the_new_cards_fit(site, browser, w, h):
     page = game(site, browser, w, h, paivakirja=True, **LIT)
     for js in ["auroraCard('power')", "auroraCard('moved')", "G.s.flags.suoja = 0; campCard()"]:
         page.evaluate(js)
         assert page.evaluate(v4.OVERFLOW) == []
         page.evaluate("closeCard()")
+    assert page.errors == []
+
+
+def test_a_friend_fixes_aurora_s_power_and_tells_the_nomads_and_the_host_s_game_has_it(site, browser):
+    host, aino = v5.room(site, browser, names=("Eero", "Aino"))
+    v5.close_cards(host, aino)
+    host.evaluate("G.s.inv.sulake = 1; G.s.flags.pimea = 1; sendState()")
+    aino.wait_for_function("G.s.inv.sulake === 1")
+    # both phones press at once: the first ask wins, the fuses are used once
+    aino.evaluate("act('power')")
+    host.evaluate("act('power')")
+    host.wait_for_function("!!G.s.flags.sahko")
+    assert host.evaluate("G.s.inv.sulake") == 0
+    aino.wait_for_function("!!G.s.flags.sahko")
+    aino.evaluate("act('suoja')")
+    host.wait_for_function("!!G.s.flags.suoja")
+    # the day it happened, kept in the host's own save
+    assert host.evaluate("[G.s.flags.suoja === G.s.day, JSON.parse(localStorage.getItem('%s')).flags.suoja === G.s.day]" % SAVE15) == [True, True]
+    assert host.errors == [] and aino.errors == []
+
+
+def test_a_reload_keeps_aurora_lit_the_nomads_in_and_the_pump_on_the_shelf(site, browser):
+    page = game(site, browser, paivakirja=True, suoja=1, ingrid=True, **LIT)
+    page.evaluate("const c = crateById('aurora:14,6'); c.w = 'shelf'; c.slot = 0; save()")
+    page.reload()
+    page.wait_for_function("window.drawn === true")
+    page.click("#jatka")
+    page.evaluate("closeCard(); drawHud()")
+    assert page.evaluate("[G.s.flags.sahko, G.s.flags.suoja, crateById('aurora:14,6').w]") == [1, 1, "shelf"]
+    assert page.evaluate("goalNow().text").startswith("Vie pumppu")
     assert page.errors == []
