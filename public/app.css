@@ -57,3 +57,11 @@ p { margin: 0 0 6px; }
 .feedback input, .feedback select, .feedback textarea { background: var(--bg); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 10px; font: 16px system-ui, sans-serif; }
 .feedback input { flex: 1; min-width: 0; }
 .feedback textarea { display: block; width: 100%; resize: vertical; }
+/* Every game's public rooms at the top of the shelf (#203). */
+.open-rooms { margin: 0 0 18px; }
+.open-rooms h2 { margin: 4px 0 8px; }
+.rooms { list-style: none; padding: 0; margin: 0; }
+.room { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--accent); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px; }
+.room > div { flex: 1; min-width: 0; }
+.room h3 { margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thumb.small { width: 36px; height: 48px; border-radius: 6px; }

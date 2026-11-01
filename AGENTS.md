@@ -140,7 +140,9 @@ high-score lists (#25), then play counts (#26).
   - Public rooms (#50): the host's "🌍 Julkinen" switch in the room lists it on every phone's room
     screen for the same game (any version), under "Avoimet huoneet"; one tap joins. A room is
     listed only while it waits between rounds, has space and its host is connected. The list
-    shows only the code and the count, not names. A game needs nothing for it.
+    shows only the code and the count, not names. The shelf's front page lists every game's open
+    rooms the same way (#203, `GET /api/rooms`), and a tap opens the room's version with `?huone=`.
+    A game needs nothing for it.
   - The nickname is the phone's one name (`ai-pelit:_pelaaja:nimi`, as on the high-score lists).
   - The game must still play alone with no room. Tests: `tests/test_rooms_lib.py` has a `Relay`
     that plays the room in Playwright.

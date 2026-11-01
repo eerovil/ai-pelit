@@ -304,3 +304,18 @@ test('GET /api/rooms?game= reads the list; anything else about it is refused', a
   assert.equal((await handle(new Request('https://pelit.test/api/rooms?game=pallo', { method: 'POST', body: '{}' }), { ROOMS })).status, 405);
   assert.equal((await handle(new Request('https://pelit.test/api/rooms?game=pallo'), {})).status, 503);
 });
+
+test('GET /api/rooms with no game lists every game\'s public rooms, each naming its game (#203)', async () => {
+  const { ROOMS, make } = world();
+  for (const [code, game] of [['AAAA', 'pallo'], ['BBBB', 'kirkkis'], ['CCCC', 'pallo']]) {
+    const r = make(code), h = await r.join(H, 'Eero', true, code, { game, v: '3', max: '4' });
+    if (code !== 'CCCC') await r.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: true }));
+  }
+  const res = await handle(new Request('https://pelit.test/api/rooms'), { ROOMS });
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).rooms, [
+    { code: 'BBBB', game: 'kirkkis', v: 3, n: 1, max: 4 },
+    { code: 'AAAA', game: 'pallo', v: 3, n: 1, max: 4 },
+  ]);
+  assert.equal((await handle(new Request('https://pelit.test/api/rooms?game='), { ROOMS })).status, 400);
+});

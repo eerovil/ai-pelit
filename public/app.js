@@ -101,7 +101,9 @@
       shown[group.slug] = true;
       list.appendChild(groupCard(group));
     });
-    view.replaceChildren(catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
+    var rooms = el('section', { class: 'open-rooms', hidden: '' });
+    view.replaceChildren(rooms, catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
+    showRooms(rooms);
     showWaitingNames();
     loadPlays();
     loadTops();
@@ -117,6 +119,48 @@
     );
     loadPlays();
     loadTops();
+  }
+
+  // Every game's public rooms on the shelf (#203): the rooms whose host switched 🌍 Julkinen on
+  // and that wait for players (rooms/worker.js), from GET /api/rooms, read while the shelf shows
+  // and again every 10 seconds. A tap opens the room's own game version with ?huone=, which joins
+  // it (public/rooms.js). Hidden while there are none or no answer, so offline nothing shows.
+  var openRooms = [], roomsTimer = 0;
+  function roomRow(r) {
+    var game = catalog.games.filter(function (g) { return g.slug === r.game; })[0];
+    if (!game || !/^[A-Z]{4}$/.test(r.code)) return null;
+    // A version the shelf does not have (withdrawn, or not yet on this phone's catalog) is skipped.
+    if (!game.versions.some(function (v) { return v.n === r.v; })) return null;
+    return el('li', { class: 'room', 'data-code': r.code }, [
+      thumb(game, 'thumb small', 36, 48),
+      el('div', {}, [
+        el('h3', { text: game.title }),
+        el('p', { class: 'muted meta', text: 'v' + r.v + ' · koodi ' + r.code + ' · ' + r.n + '/' + r.max + ' pelaajaa' }),
+      ]),
+      el('a', { class: 'button', href: playUrl(game.slug, r.v) + '?huone=' + r.code, text: 'Liity' }),
+    ]);
+  }
+  function drawRooms(box) {
+    var rows = openRooms.map(roomRow).filter(Boolean);
+    box.hidden = !rows.length;
+    box.replaceChildren(el('h2', { text: 'Avoimet huoneet' }), el('ul', { class: 'rooms' }, rows));
+  }
+  function showRooms(box) {
+    clearTimeout(roomsTimer);
+    drawRooms(box);
+    if (!window.fetch) return;
+    fetch('api/rooms', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) { if (b && Array.isArray(b.rooms)) openRooms = b.rooms; })
+      .catch(function () {})
+      .then(function () {
+        // Only while this same shelf is still on screen; another page drops it.
+        if (!box.isConnected) return;
+        drawRooms(box);
+        roomsTimer = setTimeout(function () {
+          if (box.isConnected && document.visibilityState === 'visible') showRooms(box);
+        }, 10000);
+      });
   }
 
   // High scores outside the games (#25): each card shows its game's no. 1, all from one request,
@@ -410,7 +454,7 @@
     var a = e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     var href = a.getAttribute('href');
-    var game = href.match(/^games\/([a-z0-9-]+)\/v\d+\/$/);
+    var game = href.match(/^games\/([a-z0-9-]+)\/v\d+\/(\?huone=[A-Z]{4})?$/);
     if (href === '#/' || a.hasAttribute('data-up')) {
       // Up: back to the page below when this one was opened from it, else in this page's place.
       e.preventDefault();
@@ -490,6 +534,9 @@
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     loadCatalog();
+    // The open rooms change by the minute: read them again on coming back to the shelf.
+    var rooms = view.querySelector('.open-rooms');
+    if (rooms) showRooms(rooms);
     if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); });
   });
 
