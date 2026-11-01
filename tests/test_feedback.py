@@ -130,8 +130,9 @@ def test_a_double_tap_sends_once_and_the_box_fits_a_390px_phone(site, context, f
     page.set_viewport_size({"width": 390, "height": 844})
     page.wait_for_selector(".feedback-text")
     page.fill(".feedback-text", "Kaksi kertaa")
-    page.locator(".feedback button:has-text('Lähetä')").dispatch_event("click")
-    page.locator(".feedback button:has-text('Lähetä')").dispatch_event("click")
+    # Both taps in one go in the page (#272): tapped from here one at a time, the stand-in API could
+    # answer the first before the second, which then found the box empty and replaced the thanks.
+    page.locator(".feedback button:has-text('Lähetä')").evaluate("b => { b.click(); b.click(); }")
     page.wait_for_selector(".feedback-note:text('Kiitos')")
     page.wait_for_timeout(200)
     assert len(fake.feedback) == 1
