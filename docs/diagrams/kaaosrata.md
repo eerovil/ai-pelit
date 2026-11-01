@@ -2,7 +2,8 @@
 
 How one race of Kaaosrata plays (v1). Jellybean players run up a course seen from above, through
 five obstacle sections, and bump into each other on the way; off the floor you fall and come
-back at the last checkpoint. Alone it is a race against seven computer players of the player's
+back at the last checkpoint. Since v3 (#217) each moment has a recorded sound from the shared
+library (`lib/aanet-2/`), named in brackets below; a sound not loaded yet falls back to v1's beep. Alone it is a race against seven computer players of the player's
 level; in a room each phone runs its own player, and the phone that made the room (the host)
 moves the computer players and ends the race.
 
@@ -50,15 +51,15 @@ flowchart TD
 ## Boxes
 
 - **Juokse! tai Aloita kierros**: `soloRace()` in `games/kaaosrata/v1/index.html` starts the player against seven computer players whose skill rises with the level; in a room, `R.on('start')` gives each phone in the round its own player (2–8 phones) and fills the start up to six with computer players.
-- **3, 2, 1, MENE!**: `tick()` counts `race.cdT` to 3 s; in a room only the host counts and the others follow its `s` messages. Nobody moves or jumps before it.
-- **Peukalo ohjaa, nappi hyppää**: a thumb anywhere drags a stick from where it lands (`pointerdown`/`pointermove`, `input`); the round button bottom right jumps (`press()` → `jump()`, held 0.15 s so an early tap still counts). `move()` runs at 5.5 m/s, jumps about 1.3 m high, and carries the player with a moving floor (`groundAt()`).
+- **3, 2, 1, MENE!**: `tick()` counts `race.cdT` to 3 s; in a room only the host counts and the others follow its `s` messages. Nobody moves or jumps before it. v3: `valinta` on each number, higher on MENE!.
+- **Peukalo ohjaa, nappi hyppää**: a thumb anywhere drags a stick from where it lands (`pointerdown`/`pointermove`, `input`); the round button bottom right jumps (`press()` → `jump()`, held 0.15 s so an early tap still counts). v3: `hyppy` on the jump, `tomahdys` on landing (louder from higher; no beep before v3, so none as a fallback). `move()` runs at 5.5 m/s, jumps about 1.3 m high, and carries the player with a moving floor (`groundAt()`).
 - **Mihin osuu?**: `hits()` for the bars (`SWEEPERS`, low enough to jump), the sliding walls (`PUSHERS`, too tall to jump), the bumpers and the hammers (`HAMMERS`); `bumps()` for the players.
-- **Lennät kauas, hetken pyörryksissä**: `knock()`: thrown the way the bar or ball moves, 0.6–0.7 s with little control.
+- **Lennät kauas, hetken pyörryksissä**: `knock()`: thrown the way the bar or ball moves, 0.6–0.7 s with little control. v3: `potku`. A swinging ball also whooshes (`suhahdus`, `whoosh()` in `games/kaaosrata/v3/index.html`) as it passes the middle of the bridge within 7 m of the player, louder the closer. The bumpers keep their own beep.
 - **Seinä työntää mukanaan**: a wall moving into the player pushes it along, off the edge if it does not get out of the way.
-- **Tönäisy: molemmat kimpoavat**: `bumps()` pushes apart every player moved on this phone, harder the faster they met; a player moved on another phone gets its own push there. A player who has finished passes through everyone, so it cannot change a result still being raced.
+- **Tönäisy: molemmat kimpoavat**: `bumps()` pushes apart every player moved on this phone, harder the faster they met (v3: `osuma`, louder the harder); a player moved on another phone gets its own push there. A player who has finished passes through everyone, so it cannot change a result still being raced.
 - **Lattiaa jalkojen alla?**: `groundAt()`: the floors, the stepping stones, the sliding platform and the three spinning discs; over nothing for 0.1 s means falling.
-- **Putoat, takaisin viime välietapille**: `respawn()` after 1.1 s at the last of the checkpoints (`CPS`, the green dashed lines) the player has stood past.
-- **Aika maalissa**: `move()` sets `fin` when the player crosses 140 m, to 1/100 s. From then on the player stands still where it crossed (`tick()` skips it on every phone, and it bumps nobody) until the race ends.
+- **Putoat, takaisin viime välietapille**: `respawn()` after 1.1 s at the last of the checkpoints (`CPS`, the green dashed lines) the player has stood past. v3: `putoaminen` as the player falls, the crowd's `ohhoo` just after; `valinta`, a little higher, on passing a checkpoint.
+- **Aika maalissa**: `move()` sets `fin` when the player crosses 140 m, to 1/100 s (v3: `voitto`). From then on the player stands still where it crossed (`tick()` skips it on every phone, and it bumps nobody) until the race ends.
 - **Taso nousee, taitavammat vastustajat**: only first place with a time wins (`won` in `finish()`): at the 150 s limit the one who got furthest heads the standings but has not won, alone or in a room. `finish()` saves `ai-pelit:kaaosrata:taso`, `voitot`, `kisat` and `ennatys`; higher levels make the computer players faster and surer in their jumps (`think()`).
 - **Isäntä odottaa kaikki ihmiset maaliin, enintään 30 s ensimmäisen jälkeen**: `over()` and `hostTick()`: each guest runs its own player and sends it to the host 12 times a second (`p`); the host sends everyone back (`s`), with the race clock that moves every obstacle, and runs the computer for a phone that is away (`on('continue')`). The race also ends at 150 s.
 - **Tulokset kaikille, takaisin huoneeseen**: the host's `R.deliver()` of `end` with the standings (finishers by time, the rest by how far they got); each phone shows them, saves once (`R.once`) and goes back to the room.
