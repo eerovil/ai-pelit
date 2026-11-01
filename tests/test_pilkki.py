@@ -212,6 +212,25 @@ def test_the_computer_anglers_get_better_level_by_level(site, context):
     assert 600 < means[0] < 2200 and means[0] < means[1] < means[2]
 
 
+def test_a_fished_out_place_stays_so_and_refills_slowly(site, context):
+    page = start(site, context)
+    first = page.evaluate("holes.push(spot.i); toJig(); spot.i")
+    # A full place has no fish waiting: one landed after a long while is not replaced at once.
+    page.evaluate("run(() => true, 40)")
+    n = page.evaluate("spot.start")
+    page.evaluate("fish.pop(); run(() => true, 1)")
+    assert page.evaluate("fish.length") == n - 1
+    # Fished out, left and visited again at once: still empty.
+    page.evaluate("fish.length = 0")
+    other = page.evaluate(f"lake.find(s => s.i !== {first}).i")
+    page.evaluate(f"moveTo(lake[{other}]); run(() => phase === 'walk', 10); holes.push(spot.i); toJig()")
+    page.evaluate(f"moveTo(lake[{first}]); run(() => phase === 'walk', 10)")
+    assert page.evaluate("[spot.i, fish.length]") == [first, 0]
+    # One fish comes back every 35 s it has been short.
+    page.evaluate("run(() => true, 36)")
+    assert page.evaluate("fish.length") == 1
+
+
 def test_a_reload_mid_contest_can_carry_it_on(site, context):
     page = start(site, context)
     page.evaluate("holes.push(spot.i); toJig(); myG = 700; myN = 3; left = 200; keepContest()")
@@ -309,6 +328,45 @@ def test_a_late_or_repeated_catch_message_never_takes_fish_off(room):
     host.wait_for_timeout(500)
     assert host.evaluate("Object.values(net.board).map(b => b.g).sort((a, b) => a - b)") == [0, 900]
     assert host.errors == guest.errors == []
+
+
+def test_a_paused_contest_takes_no_fishing_input(room):
+    host, [guest] = room("Eero", "Aino")
+    room.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.paused", timeout=5000)
+    ax, ay = host.evaluate("augerC()")
+    host.mouse.move(ax + 50, ay)
+    host.mouse.down()
+    for i in range(1, 7 * 24):
+        a = i / 24 * 2 * math.pi
+        host.mouse.move(ax + 50 * math.cos(a), ay + 50 * math.sin(a))
+    host.mouse.up()
+    assert host.evaluate("[phase, drill, holes.length]") == ["drill", 0, 0]
+    # A hole ready and a fish biting: a tap does not hook it while paused.
+    host.evaluate("holes.push(spot.i); toJig(); jigD = 2; fish[0].d = 2; bite(fish[0])")
+    host.mouse.click(180, 500)
+    assert host.evaluate("[phase, myN]") == ["bite", 0]
+    assert host.errors == []
+
+
+def test_a_guest_that_reloads_after_the_end_gets_its_real_place(room):
+    host, [guest] = room("Eero", "Aino")
+    guest.evaluate("myG = 200; myN = 1; sendMe()")
+    host.evaluate("myG = 900; myN = 3")
+    host.wait_for_function("Object.values(net.board).some(b => b.g === 200)", timeout=4000)
+    # Aino's phone is away while the host lets the contest run out without it.
+    room.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1", timeout=5000)
+    host.click("#aipr-goOn")
+    host.evaluate("left = 0.2")
+    host.wait_for_function("phase === 'done'", timeout=6000)
+    room.relay.back(guest)
+    guest.reload()
+    guest.evaluate(RUN)
+    guest.wait_for_function("phase === 'done' && document.querySelector('#aipr-result') && document.querySelector('#aipr-result').innerText.length > 0", timeout=8000)
+    assert guest.locator("#aipr-result").inner_text().startswith("2. sija · 0,20 kg")
+    assert guest.evaluate("localStorage.getItem('ai-pelit:pilkki:kaverit')") == '{"kisat":1,"voitot":0}'
+    assert guest.errors == []
 
 
 def test_a_guest_that_reloads_mid_contest_keeps_its_catch(room):

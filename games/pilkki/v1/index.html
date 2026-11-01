@@ -149,7 +149,7 @@ function makeLake(seed) {
 // phase: menu, drill, walk, jig (the jig in the water), bite (a fish took it), fight, caught,
 // snap (the line broke), done, room (waiting in a room), wait (waiting for the host).
 let phase = 'menu', phaseT = 0, left = CONTEST, seed = 1, lake = makeLake(1), spot = lake[0], holes = [];
-let fish = [], spawnT = 0, jigD = 0, jigGoal = null, jigKick = 0, lastDepth = 2, drill = 0, walkTo = null, walkT = 0;
+let fish = [], jigD = 0, jigGoal = null, jigKick = 0, lastDepth = 2, drill = 0, walkTo = null, walkT = 0;
 let beat = 0, lastTwitch = -9, playT = 0, target = null, biter = null, fight = null, landed = null;
 let myG = 0, myN = 0, myBig = null, rivals = [], texts = [], mapOpen = false, hookedOnce = false;
 let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, away: [], closing: 0 };
@@ -179,10 +179,21 @@ function newContest(resume) {
 }
 // Arrive at a place: a hole already drilled is ready, a new one is drilled first.
 function goTo(s, now) {
-  spot = s; fish = []; spawnT = 0; target = biter = fight = landed = null; mapOpen = false;
-  const n = 6 + Math.floor(Math.random() * 4);
-  for (let i = 0; i < n; i++) fish.push(newFish(spot));
-  spot.start = n;
+  if (spot && spot.fish) spot.leftAt = playT;
+  spot = s; target = biter = fight = landed = null; mapOpen = false;
+  // A place keeps its fish for the whole contest: one fished out stays so when you come back,
+  // and refills only one fish every 35 s it has been short, here or away.
+  if (!s.fish) {
+    s.fish = []; s.spawnT = 0;
+    const n = 6 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) s.fish.push(newFish(s));
+    s.start = n;
+  } else if (s.leftAt !== undefined) {
+    if (s.fish.length < s.start) s.spawnT += Math.max(0, playT - s.leftAt);
+    refill(s);
+  }
+  fish = s.fish;
+  for (const f of fish) { f.int = 0; f.look = false; }
   jigD = 0; jigGoal = null;
   if (!now) { phase = 'walk'; walkT = 1.2 + Math.hypot(walkTo.to.mx - walkTo.from.mx, walkTo.to.my - walkTo.from.my) * 4; phaseT = 0; return; }
   if (holes.includes(spot.i)) toJig(); else { phase = 'drill'; drill = 0; phaseT = 0; }
@@ -235,7 +246,7 @@ function world(dt) {
     if (Math.abs(jigGoal - jigD) <= st) { jigD = jigGoal; jigGoal = null; } else jigD += Math.sign(jigGoal - jigD) * st;
   }
   // Fresh fish come by now and then, up to what the place had.
-  if ((spawnT += dt) > 35 && fish.length < spot.start) { spawnT = 0; const f = newFish(spot); f.x = Math.random() < 0.5 ? -5 : 5; fish.push(f); }
+  if (fish.length < spot.start) { spot.spawnT += dt; refill(spot); } else spot.spawnT = 0;
   beat += dt / period();
   const P = period(), since = playT - lastTwitch;
   target = null;
@@ -259,6 +270,15 @@ function world(dt) {
     }
   }
   if (phase === 'jig' && target && target.int >= 0.96) bite(target);
+}
+// The recovery clock runs only while the place is short of fish, so a full place never has
+// one waiting to come.
+function refill(s) {
+  while (s.spawnT >= 35 && s.fish.length < s.start) {
+    s.spawnT -= 35;
+    const f = newFish(s); f.x = Math.random() < 0.5 ? -5 : 5; s.fish.push(f);
+  }
+  if (s.fish.length >= s.start) s.spawnT = 0;
 }
 // The beat follows the fish the jig is working on, or a middle pace while none looks.
 function period() { return target ? SPECIES[target.sp].tempo : 0.75; }
@@ -330,7 +350,7 @@ function snap() {
 }
 function land() {
   const f = fight.fish;
-  fish = fish.filter(q => q !== f);
+  fish.splice(fish.indexOf(f), 1);
   fight = null; phase = 'caught'; phaseT = 0; jigD = 0;
   landed = { sp: f.sp, g: f.g };
   myG += f.g; myN++;
@@ -376,15 +396,16 @@ function cpuAnglers(dt) {
 
 // The standings: name, catch, fish, and whether it is this phone.
 function standings() {
-  let list;
-  if (!net.on) list = [{ name: 'Sinä', g: myG, n: myN, me: true }, ...rivals.map(r => ({ name: r.name, g: r.g, n: r.n }))];
-  else {
-    list = (net.setup ? net.setup.players : []).map(p => {
-      const b = net.board[p.id] || { g: 0, n: 0 };
-      return p.id === R.me ? { name: p.name, g: myG, n: myN, me: true, id: p.id } : { name: p.name, g: b.g, n: b.n, id: p.id, away: net.away.includes(p.id) };
-    });
-  }
-  return list.sort((a, b) => b.g - a.g || b.n - a.n);
+  if (!net.on) return [{ name: 'Sinä', g: myG, n: myN, me: true }, ...rivals.map(r => ({ name: r.name, g: r.g, n: r.n }))].sort(byCatch);
+  return roomStandings(net.setup ? net.setup.players : [], net.board);
+}
+const byCatch = (a, b) => b.g - a.g || b.n - a.n;
+// A room's standings from its players and the host's list of catches.
+function roomStandings(players, board) {
+  return players.map(p => {
+    const b = board[p.id] || { g: 0, n: 0 };
+    return p.id === R.me ? { name: p.name, g: myG, n: myN, me: true, id: p.id } : { name: p.name, g: b.g, n: b.n, id: p.id, away: net.away.includes(p.id) };
+  }).sort(byCatch);
 }
 
 function timeUp() {
@@ -459,7 +480,8 @@ function finish(m) {
   const own = net.board[R.me];
   // A phone that missed the end (it reloaded) still has its catch in the host's list.
   if (own && own.g > myG) { myG = own.g; myN = own.n; myBig = own.big; }
-  const st = standings(), place = st.findIndex(s => s.me) + 1;
+  // From the round's own players: a phone that reloaded after the end has no setup any more.
+  const st = roomStandings(m.players || (net.setup ? net.setup.players : []), net.board), place = st.findIndex(s => s.me) + 1;
   if (R.once(m.round)) {
     friends.kisat++;
     if (place === 1 && myG > 0) friends.voitot++;
@@ -473,7 +495,7 @@ function finish(m) {
 
 R.on('start', s => {
   menu.classList.add('hidden');
-  if (s.over) { net.round = s.round; phase = 'room'; return; }
+  if (s.over) { net.round = s.round; net.on = false; phase = 'room'; return; }
   if (!R.isHost) { if (s.round !== net.round) { phase = 'wait'; net.on = false; } return; }
   const setup = setupFor(s.round, s.players);
   R.send(setup);
@@ -553,7 +575,8 @@ c.addEventListener('pointerdown', e => {
   S.play('valinta', { vol: 0 });
   const [ex, ey] = at(e);
   pressed.add(e.pointerId); holding = pressed.size;
-  if (!playing()) return;
+  // While a room waits for a phone that is away, nobody fishes on.
+  if (!playing() || (net.on && R.paused)) return;
   if (mapOpen) {
     // The nearest place to the finger, if it is near one.
     let s = null, sd = 30;
@@ -572,7 +595,7 @@ c.addEventListener('pointerdown', e => {
   if (phase === 'jig') twitch();
 });
 c.addEventListener('pointermove', e => {
-  if (e.pointerId !== touch.id) return;
+  if (e.pointerId !== touch.id || (net.on && R.paused)) return;
   const [ex, ey] = at(e);
   if (phase === 'drill') {
     const [ax, ay] = augerC();
