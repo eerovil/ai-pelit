@@ -121,3 +121,18 @@ def test_v9_saves_carry_on(site, context):
     page = open_game(site, context)
     assert page.evaluate("[maxLevel, level, style, bests[1], sBests[2]]") == [3, 3, "luistelu", 200, 150]
     assert page.errors == []
+
+
+def test_skating_pushes_crunch_a_slip_on_the_road_thuds_and_a_restart_silences_the_glide(site, context):
+    page = open_game(site, context)
+    sound_on(page)
+    page.evaluate("setStyle('luistelu'); level = 3; newRace(); chooseWax(bestWax(course.weather.T)); mode = 'race'; npcs = []; heard.splice(0)")
+    page.evaluate("down(7, 40, H / 2 + 40); up(7); down(7, W - 40, H / 2 + 40); up(7)")
+    assert played(page) == ["lumi", "lumi"]
+    # On the road's ice two quick steps: the second comes before the beat and slips.
+    page.evaluate("P.road = 'walk'; P.z = course.road.z0; P.lastKick = P.t - 1; heard.splice(0); roadFx(roadTap(P)); roadFx(roadTap(P))")
+    assert played(page) == ["askel", "tomahdys"]
+    page.evaluate("P.road = null; P.fallT = 0; P.z = 30; P.v = 8; glideSound()")
+    assert page.evaluate("glide.vol") > 0
+    assert page.evaluate("newRace(); glideSound(), glide.vol") == 0
+    assert page.errors == []
