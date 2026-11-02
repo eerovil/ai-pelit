@@ -112,6 +112,14 @@ export class Room {
       room = { host: id, members: {}, code, told: true, ...gameOf(url.searchParams) };
     } else if (wantsHost && room.host !== id) {
       return refuse(4009, 'Koodi on jo käytössä');
+    } else if (wantsHost && room.host === id) {
+      // The original host may rejoin on another game without changing the room code.
+      // Never shrink the capacity below the members already in the room.
+      const next = gameOf(url.searchParams);
+      if ((next.max || room.max || MAX_PLAYERS) < Object.keys(room.members).length) {
+        return refuse(4001, 'Huone on täynnä');
+      }
+      Object.assign(room, next);
     } else if (!room) {
       return refuse(4004, 'Huonetta ei löydy');
     }
@@ -149,9 +157,17 @@ export class Room {
       if (room.fids) delete room.fids[me.id];
       await this.store(room);
       try { ws.close(1000, 'Poistuit'); } catch (e) { /* gone */ }
-      await this.peers(ws);
-      await this.tell(ws);
-      await this.maybeEmpty(ws);
+      if (!Object.keys(room.members).length) {
+        // An intentional last departure frees the code right away. A dropped socket
+        // still keeps its seat and continues to use the old six-hour timeout.
+        await this.tell(ws, true);
+        this.room = null;
+        await this.ctx.storage.deleteAll();
+      } else {
+        await this.peers(ws);
+        await this.tell(ws);
+        await this.maybeEmpty(ws);
+      }
       return;
     }
     if (msg.t === '_list') { // the host lists its room, or takes it off the list
@@ -189,7 +205,7 @@ export class Room {
   }
 
   async maybeEmpty(closing) {
-    if (!this.open(closing).length) await this.ctx.storage.setAlarm(Date.now() + IDLE);
+    if (await this.load() && !this.open(closing).length) await this.ctx.storage.setAlarm(Date.now() + IDLE);
   }
 
   async alarm() {
