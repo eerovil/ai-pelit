@@ -1,8 +1,8 @@
 """The field events without crowd noise (#337): on aanet-4, "📣 Kannusta" is a quiet blip from the
 game (cheerSound), not kisa.js's "jee!" (#330, which this file replaces) nor a shouting crowd.
 
-games/pituushyppy/v12, games/keihas/v11, games/kuula/v5, games/moukari/v8, games/korkeushyppy/v8,
-games/seivashyppy/v9, games/makihyppy/v5.
+games/pituushyppy/v13, games/keihas/v12, games/kuula/v6, games/moukari/v9, games/korkeushyppy/v9,
+games/seivashyppy/v10, games/makihyppy/v6.
 """
 
 import json
@@ -11,7 +11,7 @@ import pytest
 from conftest import ROOT
 from test_yleisurheilu_vuorot import MARK, on_turn, room
 
-EVENTS = ["pituushyppy/v12", "keihas/v11", "kuula/v5", "moukari/v8", "korkeushyppy/v8", "seivashyppy/v9", "makihyppy/v5"]
+EVENTS = ["pituushyppy/v13", "keihas/v12", "kuula/v6", "moukari/v9", "korkeushyppy/v9", "seivashyppy/v10", "makihyppy/v6"]
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
 
