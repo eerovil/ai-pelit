@@ -4,7 +4,7 @@
 //   <script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5"></script>
 //
 // placed before the game's own script, and a button that calls AiPelitRooms.open(). This file
-// draws the room screen (make a room, join by code, QR link or the list of public rooms, who is in,
+// draws the room screen (make a room, join by code, link or the list of public rooms, who is in,
 // the host's "Julkinen huone" switch, "Aloita kierros"),
 // keeps the connection, comes back to the room after a reload, and pauses the round while a phone
 // in it is away. The game keeps the game: the phone that made the room (the host) runs the round
@@ -54,6 +54,7 @@
   var PICKED = 'ai-pelit:_huone:nimi'; // an animal name picked for a phone with no nickname
   var KEY = 'ai-pelit:_huone:avain'; // this phone's secret key, never shown to the others
   var HERE = 'ai-pelit:_huone:nyt'; // sessionStorage: the room this tab is in, to rejoin after a reload
+  var ISANTA = 'ai-pelit:_isanta'; // sessionStorage: the host's room for a minute while it switches games (#354)
   var COUNTED = 'ai-pelit:_huone:kierros'; // sessionStorage: rounds whose result this tab saved
   var AWAY = 'ai-pelit:_huone:kesken'; // a turns() game's round this phone is in, to come back to
   var AWAY_MS = 6 * 3600e3; // forgotten after this long
@@ -86,7 +87,7 @@
   }
   findFid();
   function friendsLib() { return window.AiPelitKaverit || null; }
-  // A name picked here is kept, so it stays the same after a reload or a QR join. It is not the
+  // A name picked here is kept, so it stays the same after a reload or a join by link. It is not the
   // nickname, so the high-score list still asks for a real one.
   function myName() {
     return cleanName(load(NAME, '')) || load(PICKED, '') || (function () {
@@ -175,6 +176,7 @@
 
   function enter(code, host, pub) {
     clearTimeout(net.timer);
+    choosing = false;
     net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0; net.pub = !!(host && pub); listed = null;
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
@@ -244,6 +246,38 @@
   }
 
   var moving = false; // this page is on its way to the room's own game or version
+  function moveRoom(game, v) {
+    if (moving || !/^[a-z0-9-]{1,40}$/.test(game) || !Number.isInteger(Number(v))) return;
+    var to = new URL('../../' + game + '/v' + v + '/?huone=' + net.code, location.href);
+    moving = true;
+    // No bye: this same player remains a member while changing pages and rejoins
+    // with the same secret identity. A bye would delete the room if the host was alone.
+    var ws = net.ws;
+    net.on = false; net.ws = null; net.connected = false;
+    clearTimeout(net.timer);
+    if (ws) try { ws.close(1000, 'Vaihdetaan peliä'); } catch (e) {}
+    ssave(HERE, null);
+    voiceReset();
+    // The existing shelf handoff keeps back going to the new game's own page.
+    var up = history.state && history.state.aiPelitUp;
+    try {
+      if (up && game === GAME) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
+      if (up && game !== GAME) {
+        sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + GAME, page: '#/' + game, game: to.href }));
+        history.back();
+        return;
+      }
+    } catch (e) {}
+    location.replace(to.href);
+  }
+  function switchGame(game) {
+    if (!net.host || !net.on || !net.connected || racing() || !shown || !game ||
+        !game.room || game.room.max < net.members.length) return;
+    var v = game.versions && game.versions[game.versions.length - 1];
+    if (!v || (game.slug === GAME && v.n === VERSION)) return;
+    ssave(ISANTA, { code: net.code, at: Date.now(), pub: net.pub });
+    moveRoom(game.slug, v.n);
+  }
   function onPeers(m) {
     // A second peers message before the page has gone must not step back twice (#68).
     if (moving) return;
@@ -260,32 +294,16 @@
       if (!net.host && m.game === GAME && Number(m.v) < Number(VERSION)) {
         return leave('Huone on pelin vanhemmassa versiossa. Pyydä huoneen tekijää avaamaan peli hyllyltä uudelleen.');
       }
-      // A room made in another game or a newer version: open that one, in this room.
-      if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
-        var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
-        net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
-        moving = true;
-        // Back always goes up (#68): opened from the shelf, this game has its page below it.
-        var up = history.state && history.state.aiPelitUp;
-        try {
-          // Another version: the same page stays below the new one, and back.js marks it.
-          if (up && m.game === GAME) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
-          // Another game: back to this game's page, which app.js turns into that game's page
-          // before it opens the game over it.
-          if (up && m.game !== GAME) {
-            sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + GAME, page: '#/' + m.game, game: to.href }));
-            history.back();
-            return;
-          }
-        } catch (e) {}
-        location.replace(to.href);
-        return;
-      }
       net.joined = true;
       keepHere();
       // A host that comes back without its round (a reload) sends everyone back to the room. Only
       // then: after an ordinary round each phone goes back on its own, keeping its result.
       if (net.host && !net.round) sendRaw({ t: '_lobby' });
+    }
+    // A host can change games after everyone has joined. Move guests already in
+    // the room as well as newcomers; all keep their member identity (#354).
+    if (!net.host && m.game && m.v && (m.game !== GAME || Number(m.v) !== VERSION)) {
+      return moveRoom(m.game, m.v);
     }
     if (net.host) {
       // Someone who left the room for good is the computer's from now on (in a game played in
@@ -359,6 +377,7 @@
     var players = net.members.filter(function (m) { return m.on; }).slice(0, MAX)
       .map(function (m) { return { id: m.id, name: m.name }; });
     if (players.length < MIN) return;
+    choosing = false;
     net.round = { id: hex(5), players: players, over: false };
     net.released = {}; net.pz = []; net.played = true; net.result = '';
     sendRaw({ t: '_start', round: net.round.id, players: players, over: false });
@@ -733,6 +752,36 @@
 
   // ---- The screen ----
   var root = null, el = {};
+  var catalogGames = null, loadingGames = false, choosing = false;
+  function readGames() {
+    if (!shown || !net.host || !net.on || catalogGames || loadingGames || !window.fetch) return;
+    loadingGames = true;
+    fetch(new URL('catalog.json', script.src), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { catalogGames = d && Array.isArray(d.games) ? d.games : []; })
+      .catch(function () { catalogGames = []; })
+      .then(function () { loadingGames = false; render(); });
+  }
+  function eligibleGames() {
+    return (catalogGames || []).filter(function (g) {
+      return g.room && g.room.max >= net.members.length && g.versions && g.versions.length;
+    });
+  }
+  function renderGames() {
+    el.games.hidden = !choosing || !net.host || racing();
+    if (el.games.hidden) return;
+    el.gameList.textContent = '';
+    eligibleGames().forEach(function (g) {
+      var v = g.versions[g.versions.length - 1], current = g.slug === GAME && v.n === VERSION;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.game = g.slug;
+      b.disabled = current;
+      b.textContent = g.title + (current ? ' (nyt)' : '');
+      b.addEventListener('click', function () { switchGame(g); });
+      el.gameList.appendChild(b);
+    });
+  }
   var CSS = [
     '#aipr{position:fixed;inset:0;z-index:2147483640;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:6px;padding:calc(env(safe-area-inset-top,0px) + 40px) 22px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:#f6f1e6;color:#2b2416;font:16px/1.35 system-ui,sans-serif;text-align:center;touch-action:manipulation;overflow-y:auto}',
     '#aipr[hidden],#aipr [hidden],#aipr-pause[hidden]{display:none!important}',
@@ -742,14 +791,13 @@
     '#aipr input{font:800 20px system-ui,sans-serif;padding:8px 10px;border:2px solid #c9b48a;border-radius:12px;width:200px;text-align:center;background:#fff;color:#2b2416;box-sizing:border-box}',
     '#aipr-codeIn{width:110px!important;letter-spacing:4px;text-transform:uppercase}',
     '#aipr .row{display:flex;gap:10px;align-items:center}',
-    '#aipr .row .small{max-width:160px}',
+    '#aipr .row .small{max-width:260px}',
     '#aipr button{font:800 18px system-ui,sans-serif;padding:11px 18px;border:0;border-radius:14px;color:#fff;background:#4f9a3a;box-shadow:0 4px 0 #2f6a22}',
     '#aipr button:active{transform:translateY(3px);box-shadow:none}',
     '#aipr button:disabled{background:#b8ad95;box-shadow:none}',
     '#aipr button.plain{background:none;box-shadow:none;color:#7d6a4c;font-size:15px;text-decoration:underline;padding:6px}',
     '#aipr .small{margin:0;font-size:13px;color:#8a7658}',
     '#aipr-code{margin:0 0 4px;font:900 40px/1.1 system-ui,sans-serif;letter-spacing:6px}',
-    '#aipr canvas{width:124px;height:124px;flex:none;image-rendering:pixelated;background:#fff;border-radius:8px}',
     '#aipr ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;min-width:220px}',
     '#aipr li{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;background:rgba(255,255,255,.75);border-radius:10px;padding:3px 10px}',
     '#aipr li.off{opacity:.5}',
@@ -765,8 +813,12 @@
     '#aipr #aipr-again{background:#3f8ad8;box-shadow:0 4px 0 #2a5f99;margin-bottom:6px}',
     '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
     '#aipr .sws{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px}',
+    // The host's two buttons share a row (#354), so the game picker adds no height on its side.
+    '#aipr .acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 10px}',
+    '#aipr .acts button{font-size:17px;padding:11px 13px}',
+    '#aipr-switchGame{background:#3f8ad8!important;box-shadow:0 4px 0 #2a5f99!important}',
     '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
-    // A phone on its side (#95): the room in two columns, the code and QR left and everything to
+    // A phone on its side (#95): the room in two columns, the code left and everything to
     // tap right, so "Aloita kierros" shows without scrolling even with a full room.
     '@media (orientation:landscape) and (max-height:500px){' +
       '#aipr{gap:4px;padding:calc(env(safe-area-inset-top,0px) + 8px) calc(env(safe-area-inset-right,0px) + 16px) calc(env(safe-area-inset-bottom,0px) + 6px) calc(env(safe-area-inset-left,0px) + 16px)}' +
@@ -775,7 +827,6 @@
       '#aipr-room>*{grid-column:2;margin-top:6px}' +
       '#aipr-room>.row{grid-column:1;grid-row:1/span 7;flex-direction:column;gap:2px;margin:0}' +
       '#aipr-room>.row .small{max-width:180px}' +
-      '#aipr canvas{width:96px;height:96px}' +
       '#aipr-code{font-size:32px;margin:0}' +
       '#aipr ul{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:3px 6px}' +
       '#aipr li{font-size:15px;padding:2px 8px}' +
@@ -808,7 +859,9 @@
     '#aipr-friends>button{font-size:15px;padding:7px 12px}',
     '#aipr .ask button.no{background:#b8ad95;box-shadow:0 3px 0 #8a8270}',
     '#aipr-friends>button{background:#9a5cc6;box-shadow:0 4px 0 #6b3a86}',
-    '#aipr-inv{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 18px calc(env(safe-area-inset-bottom,0px) + 14px);box-sizing:border-box;background:#f6f1e6;overflow-y:auto}',
+    '#aipr-inv,#aipr-games{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 18px calc(env(safe-area-inset-bottom,0px) + 14px);box-sizing:border-box;background:#f6f1e6;overflow-y:auto}',
+    '#aipr-games button{width:min(320px,100%);font-size:16px;padding:9px 12px}',
+    '#aipr-gameList{display:flex;flex-direction:column;gap:8px;width:min(320px,100%)}',
     '#aipr-inv ul{width:min(340px,100%)}',
     '#aipr-inv li{justify-content:space-between;text-align:left;padding:6px 10px}',
     '#aipr-inv li div{min-width:0}',
@@ -831,21 +884,23 @@
     '</div>' +
     '<div class="v" id="aipr-room" hidden>' +
       '<p id="aipr-result"></p>' +
-      '<div class="row"><canvas id="aipr-qr" width="300" height="300"></canvas>' +
-        '<div><p class="small"><b>Huoneen koodi</b></p><p id="aipr-code"></p>' +
-        '<p class="small">Kaverit liittyvät koodilla tai skannaamalla kuvan.</p></div></div>' +
+      '<div class="row"><div><p class="small"><b>Huoneen koodi</b></p><p id="aipr-code"></p>' +
+        '<p class="small">Kaverit liittyvät tällä koodilla.</p></div></div>' +
       '<ul id="aipr-members"></ul>' +
       '<div id="aipr-friends"></div>' +
       '<p id="aipr-info"></p>' +
       '<div id="aipr-extra"></div>' +
       '<div class="sws"><label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
       '<label class="sw" id="aipr-voiceRow" hidden><input type="checkbox" id="aipr-voice">🎤 Puhe</label></div>' +
-      '<button id="aipr-start" hidden>Aloita kierros</button>' +
+      '<div class="acts"><button id="aipr-switchGame" hidden>🎲 Vaihda peliä</button>' +
+      '<button id="aipr-start" hidden>Aloita kierros</button></div>' +
     '</div>' +
     '<p id="aipr-err"></p>' +
     '<button id="aipr-back" class="plain">Takaisin</button>' +
     '<div id="aipr-inv" hidden><h2>📨 Kutsu kaveri</h2><p class="small">Kutsu tulee kaverin puhelimeen, vaikka hän pelaisi toista peliä.</p>' +
-      '<ul id="aipr-invList"></ul><p class="small" id="aipr-invNone"></p><button id="aipr-invClose">Valmis</button></div>';
+      '<ul id="aipr-invList"></ul><p class="small" id="aipr-invNone"></p><button id="aipr-invClose">Valmis</button></div>' +
+    '<div id="aipr-games" hidden><h2>🎲 Vaihda peliä</h2><p class="small">Huone ja kaverit pysyvät mukana. Valitse seuraava peli.</p>' +
+      '<div id="aipr-gameList"></div><button id="aipr-gamesClose" class="plain">Takaisin</button></div>';
 
   // Like back.js: the game never sees a touch or a key meant for the room screen.
   function shield(e) {
@@ -865,7 +920,7 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'qr', 'members', 'friends', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
+    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'members', 'friends', 'info', 'extra', 'start', 'switchGame', 'games', 'gameList', 'gamesClose', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
@@ -873,6 +928,8 @@
     el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false); net.rejoin = true; } });
     el.codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
     el.start.addEventListener('click', startRound);
+    el.switchGame.addEventListener('click', function () { choosing = true; render(); });
+    el.gamesClose.addEventListener('click', function () { choosing = false; render(); });
     el.pub.addEventListener('change', function () { net.pub = el.pub.checked; if (net.joined) keepHere(); tellList(); render(); });
     el.back.addEventListener('click', function () { if (net.on) leave(); else { show(false); fire('menu'); } });
     el.goOn.addEventListener('click', goOn);
@@ -921,14 +978,13 @@
   function show(on) {
     build();
     shown = on;
-    if (!on) inviting = false;
+    if (!on) { inviting = false; choosing = false; }
     root.hidden = !on;
     if (on) el.name.value = myName();
     render();
     readList();
     tellList();
   }
-  function joinLink() { return location.origin + location.pathname + '?huone=' + net.code; }
 
   function render() {
     renderVoice();
@@ -936,12 +992,14 @@
     hookFriends();
     renderPause();
     if (!shown) return;
+    readGames();
+    renderGames();
     el.join.hidden = net.on;
     el.room.hidden = !net.on;
     el.back.textContent = net.on ? 'Poistu huoneesta' : 'Takaisin';
     el.err.textContent = net.on ? '' : net.error;
     if (!net.on) { var a = awayRound(); el.again.hidden = !a; if (a) el.again.textContent = '↩ Palaa kierrokseen ' + a.code; return renderList(); }
-    if (el.code.textContent !== net.code) { el.code.textContent = net.code; drawQR(el.qr, joinLink()); }
+    if (el.code.textContent !== net.code) el.code.textContent = net.code;
     el.result.textContent = net.result;
     el.result.className = net.resultClass || '';
     el.members.textContent = '';
@@ -972,13 +1030,14 @@
       info = online < MIN ? 'Odotetaan kavereita…'
         : online < MAX ? online + ' pelaajaa.'
         : MAX + ' pelaajaa – huone on täynnä.';
-    } else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : 'Odotetaan, että ' + hostName() + ' aloittaa kierroksen…';
+    } else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : 'Huoneen tekijä valitsee seuraavan pelin. Odotetaan, että ' + hostName() + ' aloittaa kierroksen…';
     if (net.note) info += ' ' + net.note;
     el.info.textContent = info;
     el.pubRow.hidden = !net.host;
     el.pub.checked = net.pub;
     el.voiceRow.hidden = !RTC;
     el.voice.checked = voice.on;
+    el.switchGame.hidden = !net.host || !net.connected || racing() || eligibleGames().length < 2;
     el.start.hidden = !net.host;
     el.start.disabled = online < MIN || !net.connected;
     el.start.textContent = net.played ? 'Uusi kierros' : 'Aloita kierros';
@@ -1146,115 +1205,6 @@
     el.goOn.textContent = needs ? 'Ohita vuoro' : 'Jatka ilman heitä';
   }
 
-  // ---- A QR code of the join link, drawn here (byte mode, error correction M, versions 1-9) ----
-  function qrMatrix(text) {
-    var ECC = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22], BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5];
-    function rawModules(v) { var r = (16 * v + 128) * v + 64; if (v >= 2) { var n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; } return r; }
-    function bit(x, i) { return ((x >>> i) & 1) !== 0; }
-    function mul(x, y) { var z = 0; for (var i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11d); z ^= ((y >>> i) & 1) * x; } return z; }
-    var bytes = Array.prototype.slice.call(new TextEncoder().encode(text));
-    var v = 1;
-    while (v <= 9 && 12 + bytes.length * 8 > (Math.floor(rawModules(v) / 8) - ECC[v] * BLOCKS[v]) * 8) v++;
-    if (v > 9) return null;
-    var nData = Math.floor(rawModules(v) / 8) - ECC[v] * BLOCKS[v];
-    var bits = [];
-    function put(val, n) { for (var i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); }
-    put(4, 4); put(bytes.length, 8); bytes.forEach(function (b) { put(b, 8); });
-    put(0, Math.min(4, nData * 8 - bits.length)); put(0, (8 - bits.length % 8) % 8);
-    for (var pad = 0xec; bits.length < nData * 8; pad ^= 0xec ^ 0x11) put(pad, 8);
-    var data = [], i, j;
-    for (i = 0; i < bits.length; i += 8) { var b = 0; for (j = 0; j < 8; j++) b = b << 1 | bits[i + j]; data.push(b); }
-    // Reed-Solomon error correction, block by block, then interleaved.
-    var ecl = ECC[v], nb = BLOCKS[v], raw = Math.floor(rawModules(v) / 8), nShort = nb - raw % nb, shortLen = Math.floor(raw / nb);
-    var div = [], root2, k;
-    for (i = 0; i < ecl; i++) div.push(0);
-    div[ecl - 1] = 1;
-    for (i = 0, root2 = 1; i < ecl; i++) { for (j = 0; j < ecl; j++) { div[j] = mul(div[j], root2); if (j + 1 < ecl) div[j] ^= div[j + 1]; } root2 = mul(root2, 2); }
-    var blocks = [];
-    for (i = 0, k = 0; i < nb; i++) {
-      var d = data.slice(k, k += shortLen - ecl + (i < nShort ? 0 : 1)), rem = [];
-      for (j = 0; j < ecl; j++) rem.push(0);
-      d.forEach(function (byte) { var f = byte ^ rem.shift(); rem.push(0); div.forEach(function (c, jj) { rem[jj] ^= mul(c, f); }); });
-      if (i < nShort) d.push(0);
-      blocks.push(d.concat(rem));
-    }
-    var all = [];
-    for (i = 0; i < blocks[0].length; i++) blocks.forEach(function (bl, jj) { if (i !== shortLen - ecl || jj >= nShort) all.push(bl[i]); });
-    // The modules: finders, timing, alignment, version and format, then the data in a zigzag.
-    var size = v * 4 + 17, m = [], fn = [], y, x;
-    for (y = 0; y < size; y++) { m.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
-    function set(x, y, dark) { m[y][x] = dark; fn[y][x] = true; }
-    for (i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
-    [[3, 3], [size - 4, 3], [3, size - 4]].forEach(function (c) {
-      for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
-        var dd = Math.max(Math.abs(dx), Math.abs(dy)), xx = c[0] + dx, yy = c[1] + dy;
-        if (xx >= 0 && xx < size && yy >= 0 && yy < size) set(xx, yy, dd !== 2 && dd !== 4);
-      }
-    });
-    var ap = [];
-    if (v > 1) { var n = Math.floor(v / 7) + 2, stepA = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2; ap.push(6); for (var p = v * 4 + 10; ap.length < n; p -= stepA) ap.splice(1, 0, p); }
-    for (i = 0; i < ap.length; i++) for (j = 0; j < ap.length; j++) {
-      if ((i === 0 && j === 0) || (i === 0 && j === ap.length - 1) || (i === ap.length - 1 && j === 0)) continue;
-      for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) set(ap[i] + dx, ap[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
-    }
-    function format(mask) {
-      var r = mask, ii; for (ii = 0; ii < 10; ii++) r = (r << 1) ^ ((r >>> 9) * 0x537);
-      var fb = (mask << 10 | r) ^ 0x5412; // level M is 00
-      for (ii = 0; ii <= 5; ii++) set(8, ii, bit(fb, ii));
-      set(8, 7, bit(fb, 6)); set(8, 8, bit(fb, 7)); set(7, 8, bit(fb, 8));
-      for (ii = 9; ii < 15; ii++) set(14 - ii, 8, bit(fb, ii));
-      for (ii = 0; ii < 8; ii++) set(size - 1 - ii, 8, bit(fb, ii));
-      for (ii = 8; ii < 15; ii++) set(8, size - 15 + ii, bit(fb, ii));
-      set(8, size - 8, true);
-    }
-    format(0);
-    if (v >= 7) {
-      var r = v; for (i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1f25);
-      var vb = v << 12 | r;
-      for (i = 0; i < 18; i++) { var a = size - 11 + i % 3, cc = Math.floor(i / 3); set(a, cc, bit(vb, i)); set(cc, a, bit(vb, i)); }
-    }
-    for (var right = size - 1, ib = 0; right >= 1; right -= 2) {
-      if (right === 6) right = 5;
-      for (var vert = 0; vert < size; vert++) for (j = 0; j < 2; j++) {
-        x = right - j; y = ((right + 1) & 2) === 0 ? size - 1 - vert : vert;
-        if (!fn[y][x] && ib < all.length * 8) { m[y][x] = bit(all[ib >>> 3], 7 - (ib & 7)); ib++; }
-      }
-    }
-    // Pick the mask that leaves the fewest long runs, 2×2 blocks and imbalance.
-    var MASKS = [
-      function (x, y) { return (x + y) % 2 === 0; }, function (x, y) { return y % 2 === 0; },
-      function (x) { return x % 3 === 0; }, function (x, y) { return (x + y) % 3 === 0; },
-      function (x, y) { return (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; }, function (x, y) { return x * y % 2 + x * y % 3 === 0; },
-      function (x, y) { return (x * y % 2 + x * y % 3) % 2 === 0; }, function (x, y) { return ((x + y) % 2 + x * y % 3) % 2 === 0; }];
-    function flip(mk) { for (var yy = 0; yy < size; yy++) for (var xx = 0; xx < size; xx++) if (!fn[yy][xx] && MASKS[mk](xx, yy)) m[yy][xx] = !m[yy][xx]; }
-    function penalty() {
-      var pen = 0, dark = 0, aa, bb, yy, xx;
-      for (aa = 0; aa < size; aa++) [true, false].forEach(function (horiz) {
-        var run = 1;
-        for (bb = 1; bb <= size; bb++) {
-          var same = bb < size && (horiz ? m[aa][bb] === m[aa][bb - 1] : m[bb][aa] === m[bb - 1][aa]);
-          if (same) run++; else { if (run >= 5) pen += run - 2; run = 1; }
-        }
-      });
-      for (yy = 0; yy < size; yy++) for (xx = 0; xx < size; xx++) {
-        if (m[yy][xx]) dark++;
-        if (xx < size - 1 && yy < size - 1 && m[yy][xx] === m[yy][xx + 1] && m[yy][xx] === m[yy + 1][xx] && m[yy][xx] === m[yy + 1][xx + 1]) pen += 3;
-      }
-      return pen + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
-    }
-    var best = 0, bestP = Infinity;
-    for (var mk = 0; mk < 8; mk++) { flip(mk); format(mk); var pp = penalty(); if (pp < bestP) { bestP = pp; best = mk; } flip(mk); }
-    flip(best); format(best);
-    return m;
-  }
-  function drawQR(cv, text) {
-    var m = qrMatrix(text), g = cv.getContext('2d');
-    g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
-    if (!m) return;
-    var n = m.length + 8, k = Math.floor(cv.width / n), o = Math.floor((cv.width - k * n) / 2) + 4 * k;
-    g.fillStyle = '#000';
-    m.forEach(function (row, y) { row.forEach(function (d, x) { if (d) g.fillRect(o + x * k, o + y * k, k, k); }); });
-  }
 
   // ---- The API ----
   window.AiPelitRooms = {
@@ -1267,6 +1217,10 @@
     on: function (type, fn) { (handlers[type] = handlers[type] || []).push(fn); return this; },
     open: function () { if (!net.on) net.error = ''; show(true); },
     leave: function () { if (net.on) leave(); else if (shown) { show(false); fire('menu'); } },
+    // Going up to the shelf is an intentional departure only when this phone is alone.
+    leaveIfAlone: function () {
+      if (net.on && net.members.length === 1 && net.members[0].id === net.me) leave();
+    },
     // Host: to every other phone, or to one id. A guest: to the host.
     send: function (msg, to) { var m = Object.assign({}, msg); if (to && net.host) m.to = to; sendRaw(m); },
     // Host: to every phone in the round, and only to them. Each phone confirms it; one that has
@@ -1303,7 +1257,6 @@
       seen.push(key); ssave(COUNTED, seen.slice(-20));
       return true;
     },
-    qr: drawQR,
     get inRoom() { return net.on; },
     get isHost() { return net.on && net.host; },
     get connected() { return net.connected; },
@@ -1339,8 +1292,14 @@
     var back = sload(HERE, null);
     if (back && (back.game !== GAME || back.v !== VERSION)) back = null;
     if (q) history.replaceState(history.state, '', location.pathname);
-    if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) enter(q.toUpperCase(), false);
-    else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
+    var handoff = sload(ISANTA, null);
+    if (q && /^[A-Za-z]{4}$/.test(q) && handoff && handoff.code === q.toUpperCase() &&
+        handoff.at && Date.now() - handoff.at >= 0 && Date.now() - handoff.at < 60000) {
+      ssave(ISANTA, null);
+      enter(q.toUpperCase(), true, !!handoff.pub);
+    } else if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) {
+      enter(q.toUpperCase(), false);
+    } else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(autoJoin); });
   else setTimeout(autoJoin);

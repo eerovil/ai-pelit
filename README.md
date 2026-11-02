@@ -12,9 +12,9 @@ https://pelit.vilpponen.fi/
 - Osassa peleistä on netin tuloslista (🏆 Tulokset). Nimimerkki valitaan kerran puhelimelle, ja se
   näkyy listoilla, kun ylläpitäjä on hyväksynyt sen osoitteessa `/yllapito/`. Ilman verkkoa
   tulos odottaa puhelimessa ja lähtee myöhemmin.
-- Kirkkistä (v2) voi pelata kavereiden kanssa: yksi puhelin luo huoneen, muut liittyvät
-  neljän kirjaimen koodilla tai QR-koodilla. 2–5 puhelinta, tyhjät paikat täyttävät
-  tietokonepelaajat.
+- Monia pelejä voi pelata kavereiden kanssa (👥 Pelaa kavereiden kanssa): yksi puhelin luo
+  huoneen, muut liittyvät neljän kirjaimen koodilla, linkillä, kutsulla tai avoimien huoneiden
+  listalta. Huoneen tekijä voi vaihtaa peliä kierrosten välissä, ja kaikki siirtyvät mukana.
 - Uusi peli tai versio tehdään AgentDeckissä: uusi Work tähän repoon.
 
 ## How it works

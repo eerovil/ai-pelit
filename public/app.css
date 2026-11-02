@@ -78,14 +78,20 @@ p { margin: 0 0 6px; }
 .friends-playing { margin: 0 0 18px; }
 .friends-playing h2 { margin: 4px 0 8px; }
 .friends { list-style: none; padding: 0; margin: 0 0 18px; }
-.friend { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px; }
+.friend, .push-row { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px; }
 .friend.in-game { border: 1px solid #4f9a3a; }
-.friend > div { flex: 1; min-width: 0; }
-.friend h3 { margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.friend .meta { margin: 0; }
+.friend > div, .push-row > div { flex: 1; min-width: 0; }
+.friend h3, .push-row h3 { margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend .meta, .push-row .meta { margin: 0; }
 .friend-face { width: 36px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 24px; background: #11131c; border-radius: 6px; }
 .friend-buttons { flex: none !important; display: flex; gap: 6px; }
 .friend-remove { flex: none; padding: 6px 12px; }
 .friends-form { display: flex; gap: 8px; margin: 8px 0 12px; }
 .friends-form input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 10px; font: 16px system-ui, sans-serif; }
 .friends-note { color: var(--accent); }
+/* Invites as phone notifications (#367): an on/off switch. */
+.push-row .push-note { white-space: normal; }
+.push-row .push-note.warn { color: var(--accent); }
+.push-switch { flex: none; min-width: 76px; padding: 8px 12px; border: 0; border-radius: 999px; background: #3a3f55; color: var(--text); font: 700 15px system-ui, sans-serif; }
+.push-switch.on { background: #4f9a3a; color: #fff; }
+.push-switch:disabled { opacity: .5; }
