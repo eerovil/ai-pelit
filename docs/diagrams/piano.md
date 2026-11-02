@@ -12,13 +12,15 @@ takes the oldest note still in the zone, so a late press no longer steals the ne
 tune plays by itself, each note on its beat; a press makes no sound. From v7 the hit zone is half
 as wide again, so a press a little early or late still counts. From v8 a "Ei häviötä" switch in the menu
 makes a game one song with no hearts to lose: misses cost nothing, and when the song ends the
-menu shows the score and the hits, which go to neither the record nor the high-score list.
+menu shows the score and the hits, which go to neither the record nor the high-score list. From v9
+the menu starts on the song played last (also after the game is closed), not the furthest one;
+› still goes up to the furthest.
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
 ```mermaid
 flowchart TD
-  A[Valikko: jatka pisimmältä tasolta tai valitse aiempi] --> NF{Ei häviötä päällä?}
+  A[Valikko: valmiina viimeksi soitettu kappale, nuolilla muut] --> NF{Ei häviötä päällä?}
   NF -- Ei --> A2[Tason alussa kolme uutta sydäntä]
   NF -- Kyllä --> A3[Yksi kappale ilman sydämiä]
   A3 --> B
@@ -37,8 +39,8 @@ flowchart TD
   K -- Ei --> B
   K -- Kyllä --> KS{Ei häviötä -peli?}
   KS -- Ei --> V[Tulos talteen ja tuloslistalle]
-  KS -- Kyllä --> NE[Valikkoon: pisteet ja osumat näkyvät, seuraava taso auki, ei tuloslistalle]
-  NE --> A
+  KS -- Kyllä --> NE[Valikkoon: pisteet ja osumat näkyvät, ei uutta tasoa, ei tuloslistalle]
+  NE -- sama kappale valmiina --> A
   V --> L[Seuraava taso: uusi kappale vähän nopeammin]
   L --> A2
   G --> M{Sydämiä jäljellä? Ei häviötä -pelissä aina}
@@ -46,7 +48,7 @@ flowchart TD
   M -- Kyllä --> B
   M -- Ei --> N[Peli päättyi: ennätys ja paras taso talteen]
   N --> O[Pisteet tuloslistalle]
-  O --> A
+  O -- sama kappale valmiina --> A
   class A,A2,A3,B,C blue
   class D,K,M,NF,KS amber
   class E,F,H teal
@@ -67,11 +69,11 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: jatka pisimmältä tasolta tai valitse aiempi**: v3 `showMenu()` / `showPick()` in `games/piano/v3/index.html`: the button reads "Jatka tasolta N" for the furthest level reached (`ai-pelit:piano:taso`), and ‹ › pick any earlier one; `newGame(pick)` starts there with the score at 0. v1 and v2 always start from level 1.
+- **Valikko: valmiina viimeksi soitettu kappale, nuolilla muut**: from v9 (#356) `showMenu()` sets `pick` to the level last started, saved by `startLevel()` as `ai-pelit:piano:viimeisin` (clamped to 1…`topLevel`; a phone with no such save falls back to `topLevel`), so after a game over or a no-fail song the same song is ready, and after a reload too. Before v9: v3 `showMenu()` / `showPick()` in `games/piano/v3/index.html`: the button reads "Jatka tasolta N" for the furthest level reached (`ai-pelit:piano:taso`), and ‹ › pick any earlier one; `newGame(pick)` starts there with the score at 0. v1 and v2 always start from level 1.
 - **Ei häviötä päällä?**: v8 (#318) the "🛡️ Ei häviötä: pois/päällä" switch (`#nofail`) under the play button in `games/piano/v8/index.html`; `noFail` is kept as `ai-pelit:piano:eihaviota`, and `newGame(pick, noFail)` sets `safe` for that game.
 - **Yksi kappale ilman sydämiä**: v8 with `safe` set, `miss()` breaks the streak and shows the miss but takes no heart, so `gameOver()` never runs; the HUD shows "🛡️ Ei häviötä" in place of the hearts, and the level's banner says so.
 - **Ei häviötä -peli?**: v8 `songDone()` checks `safe` first.
-- **Valikkoon: pisteet ja osumat näkyvät, seuraava taso auki, ei tuloslistalle**: v8 `songDone()` with `safe`: `state = 'over'`, the next level opens in `ai-pelit:piano:taso` as after any finished song, and `showMenu()` says "Kappale soitettu: N pistettä, osuit H/T"; `keepScore()` is not called, so neither the record nor `AiPelitScores.submit()` sees it (Eero's choice).
+- **Valikkoon: pisteet ja osumat näkyvät, ei uutta tasoa, ei tuloslistalle**: v8 `songDone()` with `safe`: `state = 'over'`; in v8 the next level opened in `ai-pelit:piano:taso` as after any finished song, from v9 (#356, Eero's choice) it does not and the text adds "Ei häviötä -tila ei avaa tasoja"; and `showMenu()` says "Kappale soitettu: N pistettä, osuit H/T"; `keepScore()` is not called, so neither the record nor `AiPelitScores.submit()` sees it (Eero's choice).
 - **Tason alussa kolme uutta sydäntä**: v3 `startLevel()` sets `lives = LIVES` (3) on every level; in v1 and v2 the three hearts last the whole game.
 - **Kappale alkaa: nuotit putoavat neljää kaistaa**: `startLevel()` → `levelNotes()` in `games/piano/v1/index.html`. Four songs in `SONGS` (Tuiki tuiki tähtönen, Ukko Nooa, Jaakko kulta, Oodi ilolle), then round again; v2 has nine, adding Maija pikkuinen, Piippolan vaari, Lontoon silta, Paljon onnea vaan and Kulkuset; v3 adds four hard ones at the end: Vuorenpeikkojen luolassa, Turkkilainen marssi, Kimalaisen lento and Tulimyrsky (written for the game), with sixteenth notes down to 0.1 s apart. A dense song falls faster (`lead` per song) so its notes do not overlap. `nextLane()` puts each note one lane right for a step up in the tune, one left for a step down, two for a leap, and the same lane for a repeated note. From v2 a leap that would go past the edge takes one step instead of turning right round.
 - **Painat kaistan nappia**: the `pointerdown` handler: anywhere in a lane below the top bar counts as that lane's key, so several fingers can play at once.
