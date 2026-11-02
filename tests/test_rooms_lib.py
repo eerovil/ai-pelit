@@ -852,3 +852,38 @@ def test_back_chip_leaves_if_alone(phones):
     host.wait_for_timeout(200)
     assert code not in phones.relay.rooms
 
+
+
+def test_two_guests_follow_a_switch_and_one_that_dropped_off_follows_on_return(phones):
+    host, code = make_room(phones)
+    here = join(phones, "Aino", code)
+    away = join(phones, "Iida", code)
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 3")
+    phones.relay.drop(away)
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-switchGame")
+    host.click("#aipr-gameList button[data-game='iso']")
+    host.wait_for_url(re.compile(r"/games/iso/v1/"))
+    here.wait_for_url(re.compile(r"/games/iso/v1/"))
+    # Back from a lost connection, the phone that missed the switch lands in the new game too.
+    phones.relay.back(away)
+    away.wait_for_url(re.compile(r"/games/iso/v1/"), timeout=15_000)
+    away.wait_for_function("AiPelitRooms.inRoom && !AiPelitRooms.isHost")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 3")
+    assert {p.evaluate("AiPelitRooms.code") for p in (host, here, away)} == {code}
+    # A reload in the new game keeps the room and the host's role.
+    host.reload()
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 3")
+    assert host.errors == here.errors == away.errors == []
+
+
+def test_back_chip_with_others_in_the_room_keeps_it(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    host.wait_for_function("AiPelitRooms.members.length === 2")
+    host.click("#ai-pelit-back")
+    host.click("#ai-pelit-takaisin")
+    host.wait_for_url(re.compile(r"/#/?$|/#/huonetesti$"))
+    host.wait_for_timeout(200)
+    assert code in phones.relay.rooms
+    assert guest.evaluate("AiPelitRooms.inRoom")

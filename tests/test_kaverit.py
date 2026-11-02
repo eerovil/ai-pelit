@@ -667,3 +667,23 @@ def test_shelf_and_friends_page_show_invites_without_duplicate_banner(phones):
     assert phones.api.invites == []
     assert shelf.errors == []
 
+
+def test_an_invite_shows_on_the_front_page_without_a_reload_on_a_390_px_phone(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    shelf = phones("Bertta", None, player=B, width=390, height=844)
+    shelf.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
+    shelf.wait_for_timeout(300)
+    assert shelf.locator(".friends-playing [data-invite]").count() == 0
+    # Aino invites Bertta while the front page is open; its next 30 s check shows it.
+    phones.api.invites.append({
+        "id": 2, "sender": A, "to": B, "from": pid_of(A),
+        "name": "Aino", "game": "huonetesti", "version": 1, "room": "KISA",
+    })
+    shelf.wait_for_selector(".friends-playing [data-invite='2']", timeout=40_000)
+    assert shelf.locator("#aipk").count() == 0
+    assert shelf.evaluate("document.documentElement.scrollWidth") <= 390
+    shelf.locator("[data-invite='2'] button", has_text="Liity").click()
+    shelf.wait_for_url(re.compile(r".*/games/huonetesti/v1/.*"))
+    assert phones.api.invites == []
+
