@@ -28,7 +28,10 @@
 //   POST /api/friends/requests/answer {player, from, yes}    -> {ok}
 //   DELETE /api/friends        {player, pid}                 -> {ok}
 //   POST /api/invites          {player, to, game, version, room} -> {ok}, an invite into a room
-//   POST /api/invites/<id>/answer {player}                   -> {ok}
+//   POST /api/invites/<id>/answer {player} | {endpoint}      -> {ok}
+//   POST /api/push             {player, endpoint}            -> {ok}, invites as notifications (#367)
+//   DELETE /api/push           {player, endpoint}            -> {ok}
+//   GET  /api/push/pending?endpoint=                         -> {invite: {id, name, title, url} | null}
 //
 // A new or changed nickname is 'pending' and shows on no list (except to its own phone) until
 // the admin approves it; from then on that name is locked to that phone. Each name has one owner
@@ -587,7 +590,7 @@ async function removeFriend(env, body) {
   return json({ ok: true });
 }
 
-async function invite(env, url, body) {
+async function invite(env, url, body, jobs) {
   const player = String(body.player || ''), to = String(body.to || ''), game = String(body.game || '');
   const version = Number(body.version), room = String(body.room || '');
   if (!ID.test(player)) return fail(400, 'bad player');
@@ -604,14 +607,145 @@ async function invite(env, url, body) {
   await env.DB.prepare('DELETE FROM invites WHERE sender = ? AND receiver = ?').bind(player, other.id).run();
   await env.DB.prepare('INSERT INTO invites (sender, receiver, game, version, room, at) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(player, other.id, game, version, room, now()).run();
+  // The friend's phones hear of it as a notification (#367), after this answer has gone.
+  jobs.push(pushTo(env, other.id));
   return json({ ok: true });
 }
 
+// The invite is answered by its friend: the player id from a page, or the push endpoint from the
+// service worker when the notification is tapped (#367).
 async function answerInvite(env, id, body) {
-  const player = String(body.player || '');
+  let player = String(body.player || '');
+  if (body.endpoint !== undefined) {
+    const sub = await env.DB.prepare('SELECT player FROM push_subs WHERE endpoint = ?').bind(String(body.endpoint)).first();
+    player = sub ? sub.player : '';
+    if (!sub) return json({ ok: true });
+  }
   if (!ID.test(player)) return fail(400, 'bad player');
   await env.DB.prepare('DELETE FROM invites WHERE id = ? AND receiver = ?').bind(id, player).run();
   return json({ ok: true });
+}
+
+// Invites as phone notifications (#367). A phone that switched on "🔔 Ilmoitukset kutsuista"
+// (public/kaverit.js) gives its web push subscription; an invite to it then sends an empty push
+// to each of its phones, and the phone's service worker (public/sw.js) asks GET /api/push/pending
+// what it was about. Empty, so nothing needs encrypting: only VAPID, the site's signature, which
+// the push service checks (RFC 8292). The public key is VAPID_PUBLIC below and in kaverit.js; the
+// private one is the VAPID_PRIVATE_KEY secret (scripts/cloudflare_setup.py; VAPID_PUBLIC_KEY only
+// in the tests, which make their own pair). Without it no push is sent, and invites still show as
+// banners.
+export const VAPID_PUBLIC = 'BBJL6kHsqkvq19Du_1GPSNscDuQIokodz5TgsdHR60ClQa4-mMJ3jgn2sGKjMfQdvTTyUVr_MVCNF2tFBynQ1ko';
+const VAPID_SUB = 'https://pelit.vilpponen.fi/';
+export const PUSH_TTL = 600; // the invite's own ten minutes: a phone off for longer hears nothing
+export const PUSH_PER_PLAYER = 5; // phones (or browsers) per player; the oldest goes
+// Only the browsers' own push services: the server posts to these addresses, so not to any.
+const PUSH_HOST = /^(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9.-]+\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9.-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com)$/;
+
+export function pushEndpoint(endpoint) {
+  if (typeof endpoint !== 'string' || endpoint.length > 1000) return '';
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === 'https:' && !u.port && PUSH_HOST.test(u.hostname) ? endpoint : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+async function addPush(env, body) {
+  const player = String(body.player || ''), endpoint = pushEndpoint(body.endpoint);
+  if (!ID.test(player)) return fail(400, 'bad player');
+  if (!endpoint) return fail(400, 'bad endpoint');
+  if (!(await env.DB.prepare('SELECT 1 FROM players WHERE id = ?').bind(player).first())) return fail(404, 'unknown player');
+  await env.DB.prepare(
+    `INSERT INTO push_subs (player, endpoint, at) VALUES (?, ?, ?)
+     ON CONFLICT (endpoint) DO UPDATE SET player = excluded.player, at = excluded.at`
+  ).bind(player, endpoint, now()).run();
+  await env.DB.prepare(
+    `DELETE FROM push_subs WHERE player = ? AND endpoint NOT IN
+     (SELECT endpoint FROM push_subs WHERE player = ? ORDER BY at DESC LIMIT ?)`
+  ).bind(player, player, PUSH_PER_PLAYER).run();
+  return json({ ok: true });
+}
+
+async function removePush(env, body) {
+  const player = String(body.player || ''), endpoint = String(body.endpoint || '');
+  if (!ID.test(player)) return fail(400, 'bad player');
+  await env.DB.prepare('DELETE FROM push_subs WHERE player = ? AND endpoint = ?').bind(player, endpoint).run();
+  return json({ ok: true });
+}
+
+// What a push was about: the newest open invite to the phone that owns this endpoint.
+async function pendingPush(env, url) {
+  const endpoint = url.searchParams.get('endpoint') || '';
+  const sub = endpoint && await env.DB.prepare('SELECT player FROM push_subs WHERE endpoint = ?').bind(endpoint).first();
+  if (!sub) return json({ invite: null });
+  const r = await env.DB.prepare(
+    `SELECT i.id, p.name, i.game, i.version, i.room FROM invites i JOIN players p ON p.id = i.sender
+     WHERE i.receiver = ? AND i.at > ? ORDER BY i.at DESC, i.id DESC LIMIT 1`
+  ).bind(sub.player, ago(INVITE_FOR)).first();
+  if (!r) return json({ invite: null });
+  return json({ invite: { id: r.id, name: r.name, title: await gameTitle(env, url, r.game), url: `games/${r.game}/v${r.version}/?huone=${r.room}` } });
+}
+
+let titleCache = null, titleAt = 0;
+async function gameTitle(env, url, slug) {
+  if (env.ASSETS && (!titleCache || Date.now() - titleAt > CATALOG_TTL)) {
+    try {
+      const res = await env.ASSETS.fetch(new URL('/catalog.json', url));
+      if (res.ok) {
+        titleCache = new Map((await res.json()).games.map((g) => [g.slug, g.title]));
+        titleAt = Date.now();
+      }
+    } catch (e) { /* the slug will do */ }
+  }
+  return (titleCache && titleCache.get(slug)) || slug;
+}
+
+const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64url = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+const publicKey = (env) => env.VAPID_PUBLIC_KEY || VAPID_PUBLIC;
+let vapidKey = null; // {secret, key}: the imported private key, kept per isolate
+async function signingKey(env) {
+  if (vapidKey && vapidKey.secret === env.VAPID_PRIVATE_KEY) return vapidKey.key;
+  const pub = unb64url(publicKey(env));
+  const jwk = { kty: 'EC', crv: 'P-256', d: env.VAPID_PRIVATE_KEY, x: b64url(pub.slice(1, 33)), y: b64url(pub.slice(33, 65)), ext: true };
+  const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  vapidKey = { secret: env.VAPID_PRIVATE_KEY, key };
+  return key;
+}
+
+// The VAPID header for one push service: a JWT signed with ES256, valid for twelve hours.
+export async function vapidAuth(env, endpoint) {
+  const enc = (o) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+  const claims = { aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: VAPID_SUB };
+  const unsigned = `${enc({ typ: 'JWT', alg: 'ES256' })}.${enc(claims)}`;
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, await signingKey(env), new TextEncoder().encode(unsigned));
+  return `vapid t=${unsigned}.${b64url(sig)}, k=${publicKey(env)}`;
+}
+
+// An empty push to each of the player's phones. A phone that has gone (404 or 410: the app
+// uninstalled, notifications switched off) is forgotten. Nothing here may fail the invite.
+async function pushTo(env, player) {
+  try {
+    if (!env.VAPID_PRIVATE_KEY) return;
+    const { results } = await env.DB.prepare('SELECT endpoint FROM push_subs WHERE player = ?').bind(player).all();
+    await Promise.all(results.map(async ({ endpoint }) => {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { authorization: await vapidAuth(env, endpoint), ttl: String(PUSH_TTL), urgency: 'high', 'content-length': '0' },
+        });
+        if (res.status === 404 || res.status === 410) {
+          await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ?').bind(endpoint).run();
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }));
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 async function adminPlayers(env) {
@@ -659,7 +793,7 @@ async function adminDecide(env, body) {
   return json({ name: expected, status });
 }
 
-async function route(request, env) {
+async function route(request, env, jobs) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '');
   const method = request.method;
@@ -708,8 +842,14 @@ async function route(request, env) {
   }
   if (path === '/api/invites' && method === 'POST') {
     const body = await readBody(request);
-    return body ? invite(env, url, body) : fail(400, 'bad body');
+    return body ? invite(env, url, body, jobs) : fail(400, 'bad body');
   }
+  if (path === '/api/push' && (method === 'POST' || method === 'DELETE')) {
+    const body = await readBody(request);
+    if (!body) return fail(400, 'bad body');
+    return method === 'POST' ? addPush(env, body) : removePush(env, body);
+  }
+  if (path === '/api/push/pending' && method === 'GET') return pendingPush(env, url);
   const inv = path.match(/^\/api\/invites\/([1-9][0-9]{0,15})\/answer$/);
   if (inv && method === 'POST') {
     const body = await readBody(request);
@@ -827,16 +967,24 @@ async function turnUsage(env, body) {
   return json({ ok: true });
 }
 
-export async function handle(request, env) {
+export async function handle(request, env, ctx) {
   if (/^\/api\/voice\/ice\/?$/.test(new URL(request.url).pathname)) return iceServers(request, env);
   if (/^\/api\/rooms\/?$/.test(new URL(request.url).pathname)) return publicRooms(request, env);
   const rooms = new URL(request.url).pathname.match(/^\/api\/rooms\/([^/]*)$/);
   if (rooms) return room(request, env, rooms[1].toUpperCase());
   if (!env.DB) return fail(503, 'no database');
+  // Work that may finish after the answer has gone (a push, #367): Cloudflare's waitUntil keeps it
+  // running. Without it (the tests) the request waits for it.
+  const jobs = [];
   try {
-    return await route(request, env);
+    return await route(request, env, jobs);
   } catch (e) {
     console.error(e);
     return fail(500, 'server error');
+  } finally {
+    if (jobs.length) {
+      if (ctx && ctx.waitUntil) ctx.waitUntil(Promise.all(jobs));
+      else await Promise.all(jobs);
+    }
   }
 }
