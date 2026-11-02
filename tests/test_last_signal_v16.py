@@ -1223,8 +1223,8 @@ def test_a_state_bigger_than_the_room_s_message_limit_reaches_a_friend_in_parts(
     # double when escaped, so they are in it too, and the state is bigger than 64 000 once sent.
     host, aino = room(site, browser, names=("Eero", "Aino"))
     close_cards(host, aino)
-    host.evaluate("G.s.pad = 'x'.repeat(30000) + '\"'.repeat(12000); save()")
-    aino.wait_for_function("G.s.pad && G.s.pad.length === 42000")
+    host.evaluate("G.s.pad = 'x'.repeat(40000) + '\"'.repeat(20000); save()")
+    aino.wait_for_function("G.s.pad && G.s.pad.length === 60000")
     # And the next, smaller change still arrives after it.
     host.evaluate("delete G.s.pad; G.s.crates[0].w = 'sub'; save()")
     aino.wait_for_function("!G.s.pad && G.s.crates[0].w === 'sub'")
