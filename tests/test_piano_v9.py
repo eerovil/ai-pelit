@@ -173,3 +173,25 @@ def test_a_reload_has_the_song_last_played_ready(site, context):
 def test_a_saved_last_level_past_the_furthest_is_clamped(site, context):
     page = open_menu(site, context, saves={"taso": 3, "viimeisin": 9})
     assert page.inner_text("#go") == "Jatka tasolta 3"
+
+
+def test_real_taps_on_a_390_px_phone_bring_back_the_no_fail_song(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.add_init_script("if (!sessionStorage.x) { sessionStorage.x = 1; localStorage.setItem('ai-pelit:piano:taso', '3'); }")
+    page.goto(site.url + "games/piano/v9/")
+    page.evaluate("window.AiPelitScores = {submit() {}}")
+    page.tap("#nofail")
+    page.tap("#prev")
+    page.tap("#go")
+    page.evaluate(FINISH, 2)
+    assert page.evaluate("[state, topLevel]") == ["over", 3]
+    # The menu fits the phone with the end text's second line, and the same song is one tap away.
+    assert page.evaluate("document.getElementById('menu').scrollHeight <= innerHeight")
+    assert page.inner_text("#go") == "Soita tasolta 2"
+    page.tap("#go")
+    assert page.evaluate("[state, level, safe]") == ["play", 2, True]
+    page.reload()
+    assert page.inner_text("#go") == "Soita tasolta 2"
+    ctx.close()
