@@ -106,22 +106,30 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
         p.context.close()
 
 
-def test_a_cheer_still_shows_and_a_reloaded_phone_gets_the_spots(site, browser):
-    path = "pituushyppy/v13"
+@pytest.mark.parametrize("path", ["pituushyppy/v13", "moukari/v9"])
+def test_both_watching_tap_at_once_and_a_reloaded_phone_gets_the_spots(site, browser, path):
     relay, pages, athlete, fans = watching(site, browser, path)
     fan, host = fans
     me = fan.evaluate("K.mine().id")
-    tap_scene(host, 300)
     hid = host.evaluate("K.mine().id")
+    # The guest and the host tap at the same moment: each walks to its own spot on every phone.
+    fan.evaluate("K.tapFans(40)")
+    host.evaluate("K.tapFans(300)")
+    mine = fan.evaluate(f"K.spot[{json.dumps(me)}]")
     want = host.evaluate(f"K.spot[{json.dumps(hid)}]")
-    fan.wait_for_function(f"K.spot[{json.dumps(hid)}] === {want}", timeout=5000)
+    for p in pages:
+        p.wait_for_function(
+            f"K.spot[{json.dumps(me)}] === {mine} && K.spot[{json.dumps(hid)}] === {want}", timeout=5000
+        )
     fan.evaluate("K.cheer()")
     for p in pages:
         p.wait_for_function(f"K.cheers[{json.dumps(me)}]", timeout=5000)
     # The guest reloads: the host gives it the spots back with the meet.
     fan.reload()
     fan.wait_for_function("K.comp && K.comp.seq >= 0 && !K.comp.wait", timeout=10000)
-    fan.wait_for_function(f"K.spot[{json.dumps(hid)}] === {want}", timeout=5000)
+    fan.wait_for_function(
+        f"K.spot[{json.dumps(hid)}] === {want} && K.spot[{json.dumps(me)}] === {mine}", timeout=5000
+    )
     for p in pages:
         assert p.errors == []
         p.context.close()
