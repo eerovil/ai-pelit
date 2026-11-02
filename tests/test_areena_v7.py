@@ -4,6 +4,8 @@ one room, everyone against everyone."""
 import json
 import shutil
 
+import pytest
+
 from conftest import ROOT
 from test_rooms_lib import Relay
 
@@ -343,6 +345,11 @@ def test_three_phones_fight_in_one_room_and_all_hear_the_result(site, browser):
         before = host.evaluate("byId(%s).x" % json.dumps(aino.evaluate("R.me")))
         aino.evaluate("pad.id = 1; pad.ox = 100; pad.oy = 600; pad.x = 150; pad.y = 600")
         host.wait_for_function("Math.abs(byId(%s).x - %s) > 20" % (json.dumps(aino.evaluate("R.me")), before))
+        # A guest reloaded mid-round gets the round back, as its own fighter, from the host's state.
+        ville = guests[1]
+        ville.reload()
+        ville.wait_for_function("state === 'fight' && fighters.length === 3 && me.name === 'Ville' && net && !net.fresh", timeout=10000)
+        assert ville.evaluate("fighters.map(f => f.out)") == [False, False, False]
         # The host knocks out both guests: every phone hears who won.
         host.evaluate("for (const f of fighters) if (f !== me) { f.dash = 0; f.hp = 1; damage(f, 18, 0, 0, 0); }")
         for p in everyone:
@@ -355,3 +362,65 @@ def test_three_phones_fight_in_one_room_and_all_hear_the_result(site, browser):
     finally:
         for ctx in contexts:
             ctx.close()
+
+
+def test_one_swing_that_fells_the_last_two_wins_at_once(site, context):
+    page = open_game(site, context)
+    host_round(page, 3)
+    page.evaluate("""() => {
+      const [a, b, c] = fighters;
+      a.x = 170; a.y = 200; b.x = 170; b.y = 170; c.x = 192; c.y = 182; b.hp = c.hp = 1;
+      for (const f of fighters) f.dash = 0;
+      act(a, b, { ...IDLE, sword: true }, 0.001);
+      for (let i = 0; i < 20; i++) act(a, b, IDLE, 0.01);
+      stateT = 0.001; step(0.01);
+    }""")
+    assert page.evaluate("delivered[0].w") == page.evaluate("R.me")
+    assert page.evaluate("result") == ["🏆 Minä voitti!", "win"]
+    assert page.errors == []
+
+
+def test_when_the_last_two_fall_together_the_last_to_fall_wins(site, context):
+    page = open_game(site, context)
+    host_round(page, 3)
+    page.evaluate("me.hp = 1; damage(me, 18, 0, 0, 0); fighters[1].hp = 1; fighters[2].hp = 1; damage(fighters[1], 18, 0, 0, 0); damage(fighters[2], 18, 0, 0, 0)")
+    page.evaluate("stateT = 0.001; step(0.01)")
+    assert page.evaluate("delivered.length") == 1
+    assert page.evaluate("delivered[0].o") == ["p2", "p1", page.evaluate("R.me")]
+    assert page.evaluate("result") == ["💀 Pelaaja 3 voitti · olit 3.", "lose"]
+    assert page.errors == []
+
+
+def test_input_out_of_order_or_from_a_fallen_fighter_changes_nothing(site, context):
+    page = open_game(site, context)
+    host_round(page, 3)
+    # A dodge is a count: a late message with an older count does not dodge again.
+    page.evaluate("""() => {
+      const f = byId('p1');
+      onMessage({ t: 'in', mx: 0, my: 0, d: 2, sid: 'a' }, 'p1'); remoteInput(f);
+      onMessage({ t: 'in', mx: 0, my: 0, d: 1, sid: 'a' }, 'p1');
+      window.dashAgain = remoteInput(f).dash;
+    }""")
+    assert page.evaluate("dashAgain") is False
+    page.evaluate("const f = byId('p2'); f.hp = 1; damage(f, 18, 0, 0, 0); onMessage({ t: 'in', mx: 1, my: 0, sw: 1, d: 1, sid: 'b' }, 'p2'); window.at = [f.x, f.y]; for (let i = 0; i < 30; i++) step(1 / 60)")
+    assert page.evaluate("[byId('p2').x, byId('p2').y]") == page.evaluate("at")
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("w,h", [(360, 740), (390, 844), (740, 360)])
+def test_eight_fighters_fit_the_screen(site, browser, w, h):
+    ctx = browser.new_context(viewport={"width": w, "height": h}, service_workers="block")
+    try:
+        page = open_game(site, ctx)
+        host_round(page, 8)
+        page.evaluate("draw()")
+        # The count on the right does not run into the player's own bar on the left.
+        fits = page.evaluate("""() => {
+          x.font = '800 15px system-ui';
+          const right = land ? W - safeR - 12 : W - 12, barEnd = land ? safeL + 12 + sideW - 16 : 12 + (W - 36) / 2;
+          return right - x.measureText('Pystyssä 8/8').width > barEnd + 8 && oy + AH * scale <= (land ? H : ctrlTop);
+        }""")
+        assert fits
+        assert page.errors == []
+    finally:
+        ctx.close()

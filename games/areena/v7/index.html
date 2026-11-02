@@ -507,7 +507,8 @@ function byId(id) { return fighters.find(f => f.id === id && f !== me); }
 R.on('continue', ids => { if (net) for (const id of [].concat(ids)) { const f = byId(id); if (f) f.bot = true; } });
 R.on('back', id => { const f = net && byId(id); if (f) f.bot = false; });
 
-R.on('message', (m, from) => {
+R.on('message', (m, from) => onMessage(m, from));
+function onMessage(m, from) {
   if (!net) return;
   if (net.host) {
     const f = m.t === 'in' && byId(from);
@@ -522,7 +523,7 @@ R.on('message', (m, from) => {
   if (m.round !== net.round) return;
   if (m.t === 's') guestState(m);
   if (m.t === 'end') finishOnline(m);
-});
+}
 
 // A friend's phone: the host's numbers, with the sounds of what changed in them.
 function unpack(f, a) {
