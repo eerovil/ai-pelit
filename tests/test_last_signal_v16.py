@@ -1218,8 +1218,9 @@ def test_it_opens_and_plays_with_the_quiet_library(real, context):
 
 
 def test_a_state_bigger_than_the_room_s_message_limit_reaches_a_friend_in_parts(site, browser):
-    # #355: the room drops a message over 16 000 characters (rooms/worker.js, and the test Relay),
-    # and a lived-in game's state is bigger; quotes double when escaped, so they are in it too.
+    # #355: the room drops a message over its limit (rooms/worker.js, and the test Relay: 16 000
+    # characters until #375, now 64 000), so the state goes in parts that fit under either; quotes
+    # double when escaped, so they are in it too, and the state is bigger than 64 000 once sent.
     host, aino = room(site, browser, names=("Eero", "Aino"))
     close_cards(host, aino)
     host.evaluate("G.s.pad = 'x'.repeat(30000) + '\"'.repeat(12000); save()")

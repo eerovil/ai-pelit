@@ -50,6 +50,13 @@
       "note": "Huoneeseen mahtuu 2–8 pelaajaa: useampi kuin kaksi ottelee kaikki kaikkia vastaan, viimeinen pystyssä voittaa, ja kierros kestää enintään puolitoista minuuttia.",
       "request": "Huoneeseen mahtuu 6–8 pelaajaa (nyt 2), niin koko porukka pääsee mukaan, kun huoneen tekijä vaihtaa peliksi Areenan (#354). Lyhyet kierrokset: kaksintaistelu kasvaa kaikki kaikkia vastaan -otteluksi.",
       "issue": "eerovil/ai-pelit#369"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-02",
+      "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
+      "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
+      "issue": "eerovil/ai-pelit#355"
     }
   ]
 }

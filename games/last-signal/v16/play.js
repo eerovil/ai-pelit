@@ -268,8 +268,9 @@ function setOther(id, p) {
   o.harp = !!p[7];
   if (jump) { o.x = o.tx; o.y = o.ty; }
 }
-// v16 (#355): the room drops a message over 16 000 characters (MSG_MAX in rooms/worker.js), and a
-// lived-in game's state is bigger, so the host sends it in parts ('sp') the guest joins up again.
+// v16 (#355): the room drops a message over its limit (MSG_MAX in rooms/worker.js: 16 000
+// characters until #375 made it 64 000), and a lived-in game's state was bigger, so the host sends
+// it in parts ('sp') the guest joins up again, which fit under any limit the room has had.
 // A part's text may double when sent (each quote escaped), so it stays under half the limit.
 const PART = 7000;
 let stateSeq = 0;
