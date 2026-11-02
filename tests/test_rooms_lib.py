@@ -72,6 +72,12 @@ class Relay:
         elif host and room["host"] != me:
             close(ws, 4009, "Koodi on jo käytössä")
             return
+        elif host and room["host"] == me:
+            capacity = min(8, int(q.get("max", room["max"])))
+            if capacity < len(room["members"]):
+                close(ws, 4001, "Huone on täynnä")
+                return
+            room.update(game=q.get("game", room["game"]), v=int(q.get("v", room["v"] or 1)), max=capacity)
         elif room is None:
             close(ws, 4004, "Huonetta ei löydy")
             return
@@ -112,7 +118,12 @@ class Relay:
         if msg.get("t") == "bye":
             room["members"].pop(me, None)
             room["socks"].pop(me, None)
-            self.peers(room)
+            if room["members"]:
+                self.peers(room)
+            else:
+                for code, current in list(self.rooms.items()):
+                    if current is room:
+                        del self.rooms[code]
             return
         if me == room["host"]:
             for other, ws in list(room["socks"].items()):
@@ -236,7 +247,7 @@ def test_phones_meet_by_code_and_by_link(phones):
     guest.wait_for_function("document.querySelectorAll('#aipr-members button.mute').length === 1")
     assert host.locator("#aipr-members li").all_inner_texts() == ["👑 Eero (sinä)", "Aino\n🔊"]
     assert guest.locator("#aipr-members li").all_inner_texts() == ["👑 Eero\n🔊", "Aino (sinä)"]
-    assert text(guest, "info") == "Odotetaan, että Eero aloittaa kierroksen…"
+    assert "Huoneen tekijä valitsee seuraavan pelin" in text(guest, "info")
     assert host.locator("#aipr-start").is_enabled()
     # A link joins at once, and a reload goes back to the same room.
     linked = phones("Onni", f"huonetesti/v2/?huone={code}")
@@ -787,3 +798,52 @@ def test_a_phone_that_leaves_a_full_room_in_turns_keeps_its_seat(phones):
     guest.click("#aipr-again")
     guest.wait_for_function("demo.phase === 'play' && AiPelitRooms.inRoom && AiPelitRooms.players.length === 3", timeout=8000)
     assert host.errors == guest.errors == other.errors == []
+
+def test_host_switches_game_and_guests_follow_same_room(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    host.wait_for_function("!document.getElementById('aipr-switchGame').hidden")
+    assert guest.locator("#aipr-switchGame").is_hidden()
+    host.click("#aipr-switchGame")
+    assert host.locator("#aipr-gameList button[data-game='pieni']").count() == 1
+    host.click("#aipr-gameList button[data-game='iso']")
+    host.wait_for_url(re.compile(r"/games/iso/v1/"))
+    guest.wait_for_url(re.compile(r"/games/iso/v1/"))
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 2")
+    guest.wait_for_function("!AiPelitRooms.isHost && AiPelitRooms.members.length === 2")
+    assert host.evaluate("AiPelitRooms.code") == guest.evaluate("AiPelitRooms.code") == code
+    start(host, [guest])
+    assert host.locator("#aipr-switchGame").is_hidden()
+    host.evaluate("end()")
+    guest.wait_for_function("demo.results.length === 1")
+    assert host.errors == guest.errors == []
+
+
+def test_game_picker_excludes_games_too_small_for_room(phones):
+    host, code = make_room(phones)
+    guests = [join(phones, n, code) for n in ("Aino", "Iida", "Onni")]
+    host.wait_for_function("AiPelitRooms.members.length === 4")
+    host.click("#aipr-switchGame")
+    assert host.locator("#aipr-gameList button[data-game='pieni']").count() == 0
+    assert host.locator("#aipr-gameList button[data-game='iso']").count() == 1
+    assert all(not p.errors for p in guests)
+
+
+def test_last_member_explicitly_leaving_frees_code_but_dropping_does_not(phones):
+    host, code = make_room(phones)
+    host.click("#aipr-back")
+    host.wait_for_function("!AiPelitRooms.inRoom")
+    host.wait_for_timeout(200)
+    assert code not in phones.relay.rooms
+    lost = phones("Aino", f"huonetesti/v2/?huone={code}")
+    lost.wait_for_function("!AiPelitRooms.inRoom && document.getElementById('aipr-err').textContent === 'Huonetta ei löydy'")
+
+
+def test_back_chip_leaves_if_alone(phones):
+    host, code = make_room(phones)
+    host.click("#ai-pelit-back")
+    host.click("#ai-pelit-takaisin")
+    host.wait_for_url(re.compile(r"/#/?$|/#/huonetesti$"))
+    host.wait_for_timeout(200)
+    assert code not in phones.relay.rooms
+
