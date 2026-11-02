@@ -117,7 +117,8 @@ def test_a_version_on_aanet_4_or_5_plays_its_success_blip_quietly():
         if not re.search(r"lib/aanet-[45]/", code):
             continue
         levels = re.findall(r"'onnistui', \{[^}]*?\bvol: (\d+(?:\.\d+)?)", code)
-        levels += re.findall(r"'onnistui', (\d+(?:\.\d+)?)\b", code)
+        # A volume given as the next argument (not a fallback beep's frequency, as Last Signal's).
+        levels += [x for x in re.findall(r"'onnistui', (\d+(?:\.\d+)?)\b", code) if float(x) <= 1]
         loud = [float(x) for x in levels if float(x) > 0.3]
         assert not loud, f"{v.relative_to(ROOT)} plays onnistui at {loud}"
         # A play of it with no volume given would be at full volume.

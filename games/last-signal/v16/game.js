@@ -398,7 +398,8 @@ const SND = { eat: ['onnistui', 500, 650, 0.2, 'triangle', 0.07], med: ['onnistu
   up: ['nousu', 400, 800, 0.3, 'triangle', 0.08], got: ['valinta', 700, 1100, 0.15, 'triangle', 0.08],
   log: ['valinta', 500, 500, 0.4, 'triangle', 0.06], home: ['valinta', 500, 700, 0.2, 'triangle', 0.08],
   no: ['virhe', 300, 220, 0.15, 'square', 0.04] };
-function snd(k) { const [name, ...beep] = SND[k]; sfx(name, 0.7, ...beep); }
+// v16 (#355): the success chime is a quiet blip, as in every other game (#337).
+function snd(k) { const [name, ...beep] = SND[k]; sfx(name, name === 'onnistui' ? 0.3 : 0.7, ...beep); }
 function me() { return net ? R.me : 'me'; }
 function act(a, arg) {
   // Where this person stands goes with the ask, so the host judges it from where they are now.

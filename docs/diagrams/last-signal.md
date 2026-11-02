@@ -14,7 +14,7 @@ hollows, a far background layer), lets the sonar tell of every new contact, open
 comes up, starts Aurora dark and empty (its power first, then the nomads moving in, then the pump from the nearest
 wreck, Saukko), and lets a fed player sleep through the autopilot's trip.
 
-v16 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+v16 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); its success chime (eating, medicine) plays at 0.3, not 0.7, a quiet blip as in every other game (#337).
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 

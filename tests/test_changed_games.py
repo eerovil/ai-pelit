@@ -51,8 +51,8 @@ def test_a_test_file_s_versions_come_from_its_name_and_the_folders_it_names(tmp_
 def test_a_3d_game_s_tests_run_alone_and_the_others_side_by_side():
     # #116: is_3d marks a test file `alone` when a version it tests loads lib/three.
     from conftest import ROOT
-    assert is_3d(ROOT / "tests" / "test_hiihto_v11.py", "hiihto")
-    assert is_3d(ROOT / "tests" / "test_pallorata_v4.py", "pallorata")
+    assert is_3d(ROOT / "tests" / "test_hiihto_v12.py", "hiihto")
+    assert is_3d(ROOT / "tests" / "test_pallorata_v5.py", "pallorata")
     assert not is_3d(ROOT / "tests" / "test_piano_v9.py", "piano")
 
 
