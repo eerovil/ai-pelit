@@ -135,6 +135,28 @@ def test_no_game_plays_a_sound_eero_found_too_loud_from_an_older_library():
             assert "lib/aanet-5/aanet.js" in code, f"{v.relative_to(ROOT)} plays {sorted(played)} from an older library"
 
 
+def test_aanet_5_swapped_sounds_are_soft(site, context):
+    # #355: each file Eero picked to replace a too-loud one is levelled near -22 dB (its RMS, as
+    # ffmpeg's volumedetect reports it), so none is louder on average than -20 dB, and peaks at
+    # -1.5 dB at most. Decoded in the browser, as a phone does, so no ffmpeg is needed.
+    page = open_demo(site, context, ["askel"], TAG5)
+    levels = page.evaluate("""async names => {
+      const out = {};
+      for (const n of names) {
+        const bytes = await (await fetch('../../../lib/aanet-5/' + n + '.mp3')).arrayBuffer();
+        const buf = await new OfflineAudioContext(1, 44100, 44100).decodeAudioData(bytes);
+        const d = buf.getChannelData(0);
+        let sum = 0, peak = 0;
+        for (const x of d) { sum += x * x; peak = Math.max(peak, Math.abs(x)); }
+        out[n] = [10 * Math.log10(sum / d.length), 20 * Math.log10(peak)];
+      }
+      return out;
+    }""", sorted(SWAPPED))
+    for name, (mean, peak) in levels.items():
+        assert mean < -20, f"{name} averages {mean:.1f} dB"
+        assert peak <= -1.0, f"{name} peaks at {peak:.1f} dB"
+
+
 def test_aanet_5_plays_the_win_and_losing_tunes_quieter(site, context):
     page = open_demo(site, context, ["voitto", "tappio", "pilli", "askel"], TAG5)
     assert page.evaluate("AiPelitAanet.level('voitto', 0.8)") == pytest.approx(0.2)
