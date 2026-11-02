@@ -205,7 +205,9 @@
   // then wakes the site's service worker (sw.js), which asks the server what it was about and
   // shows it. The server's public signing key (server/api.js VAPID_PUBLIC):
   var VAPID = 'BBJL6kHsqkvq19Du_1GPSNscDuQIokodz5TgsdHR60ClQa4-mMJ3jgn2sGKjMfQdvTTyUVr_MVCNF2tFBynQ1ko';
-  var PUSH = 'ai-pelit:_kaverit:ilmoitukset'; // the day the subscription was last told to the server
+  // The day the subscription was last told to the server; 'kesken' while the first telling has not
+  // gone through (no network, a server error), so the next page tries again.
+  var PUSH = 'ai-pelit:_kaverit:ilmoitukset';
   function iPhone() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
   function installed() { return navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches); }
   function pushReg() {
@@ -264,7 +266,7 @@
           if (perm !== 'granted') return done(false);
           return reg.pushManager.getSubscription().then(function (sub) {
             return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes() });
-          }).then(tellPush).then(function (r) {
+          }).then(function (sub) { save(PUSH, 'kesken'); return tellPush(sub); }).then(function (r) {
             return done(r.ok, r.ok ? '' : 'Ilmoituksia ei saatu päälle. Yritä uudelleen.');
           });
         });
