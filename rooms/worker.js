@@ -162,6 +162,7 @@ export class Room {
         // still keeps its seat and continues to use the old six-hour timeout.
         await this.tell(ws, true);
         this.room = null;
+        await this.ctx.storage.deleteAlarm();
         await this.ctx.storage.deleteAll();
       } else {
         await this.peers(ws);
