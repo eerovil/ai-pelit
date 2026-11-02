@@ -340,6 +340,7 @@
     // What the player wrote, kept while the name is asked again (the admin rejected or the name
     // changed between opening the box and sending), so it is there when the form comes back,
     // on this page or after leaving it, until the tab closes.
+    var FEEDBACK_MAX = 5000; // FEEDBACK_MAX in server/api.js
     var DRAFT = 'ai-pelit:_palaute:' + game.slug;
     var draft = '';
     try { draft = sessionStorage.getItem(DRAFT) || ''; } catch (e) {}
@@ -363,9 +364,16 @@
     }
 
     function form(name) {
-      var text = el('textarea', { class: 'feedback-text', rows: '4', maxlength: '1000', placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
+      var text = el('textarea', { class: 'feedback-text', rows: '6', maxlength: String(FEEDBACK_MAX), placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
       text.value = draft;
-      text.addEventListener('input', function () { keep(text.value); });
+      // How much room is left, shown only near the end (#351).
+      var left = el('p', { class: 'muted feedback-left', 'aria-live': 'polite' });
+      function count() {
+        var n = FEEDBACK_MAX - text.value.length;
+        left.textContent = n <= 500 ? 'Merkkejä jäljellä ' + n + '.' : '';
+      }
+      text.addEventListener('input', function () { keep(text.value); count(); });
+      count();
       var send = el('button', { type: 'button', class: 'button', text: 'Lähetä' });
       var note = el('p', { class: 'muted feedback-note', role: 'status' });
       send.addEventListener('click', function () {
@@ -378,7 +386,7 @@
           body: JSON.stringify({ player: scores.id(), game: game.slug, version: latest(game).n, text: text.value }),
         }).then(function (r) {
           send.disabled = false;
-          if (r.ok) { text.value = ''; keep(''); note.textContent = 'Kiitos, ' + name + '! Palaute meni perille.'; return; }
+          if (r.ok) { text.value = ''; keep(''); count(); note.textContent = 'Kiitos, ' + name + '! Palaute meni perille.'; return; }
           if (r.status === 403) { keep(text.value); show(); return; }
           note.textContent = r.status === 429 ? 'Olet antanut tänään jo paljon palautetta. Jatka huomenna.' : 'Palautetta ei saatu lähetettyä. Yritä uudelleen.';
         }).catch(function () {
@@ -389,6 +397,7 @@
       box.replaceChildren(
         el('p', { class: 'muted', text: 'Nimimerkillä ' + name + '. Vain ylläpitäjä näkee palautteen.' }),
         text,
+        left,
         el('div', { class: 'feedback-row' }, [note, send])
       );
       text.focus();

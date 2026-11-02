@@ -83,6 +83,33 @@ def test_an_approved_player_sends_feedback_on_the_newest_version(site, context, 
     assert page.locator(".feedback-text").input_value() == "Vielä yksi"
 
 
+def test_long_feedback_fits_and_the_box_grows(site, context, fake):
+    # Up to 5000 characters (#351, was 1000); the room left shows only near the end.
+    fake.players = {ME: {"name": "Aino", "status": "approved"}}
+    page = shelf(site, context, "Aino")
+    page.wait_for_selector(".feedback-text")
+    assert page.locator(".feedback-text").get_attribute("maxlength") == "5000"
+    short = page.locator(".feedback-text").bounding_box()["height"]
+    page.fill(".feedback-text", "Pitkä palaute. " * 200)
+    assert page.locator(".feedback-left").inner_text() == ""
+    assert page.locator(".feedback-text").bounding_box()["height"] > short
+    long_text = "x" * 4800
+    page.fill(".feedback-text", long_text)
+    assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 200."
+    # Back on the page later, on a 390 px phone: the kept draft comes back grown, with its count.
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.reload()
+    page.click("button:has-text('Anna palautetta')")
+    page.wait_for_selector(".feedback-text")
+    assert page.locator(".feedback-text").input_value() == long_text
+    assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 200."
+    box = page.locator(".feedback-text").bounding_box()
+    assert box["height"] > short and box["height"] <= 0.6 * 844 + 1 and box["width"] <= 390
+    page.click(".feedback button:has-text('Lähetä')")
+    page.wait_for_selector(".feedback-note:text('Palaute meni perille')")
+    assert fake.feedback[-1]["text"] == long_text
+    assert page.locator(".feedback-left").inner_text() == ""
+
 def test_a_phone_with_no_name_chooses_one_and_waits_for_the_admin(site, context, fake):
     page = shelf(site, context)
     page.wait_for_selector(".feedback-name")
