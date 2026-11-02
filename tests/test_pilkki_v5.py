@@ -596,3 +596,30 @@ def test_first_nibble_strike_success_miss_and_late_strike(site, context):
       } finally { Math.random = random; }
     }""")
     assert state == [True, True, False, True]
+
+
+# #345: with two guests each one gets the fish round itself, in its own sends.
+def test_two_guests_each_get_their_own_nearby_fish(room):
+    host, guests = room("Eero", "Aino", "Ville")
+    spots = host.evaluate("lake.spots.slice().sort((a, b) => a.x - b.x).map(s => [s.x, s.y])")
+    (ax, ay), (bx, by) = spots[0], spots[-1]
+    guests[0].evaluate(f"() => {{ stand({ax}, {ay}); sendMe(); }}")
+    guests[1].evaluate(f"() => {{ stand({bx}, {by}); sendMe(); }}")
+    for g, (x, y) in zip(guests, [(ax, ay), (bx, by)]):
+        g.wait_for_function(f"pond.length > 0 && pond.every(f => net.claims[f.id] || (Math.abs(f.lx - {x}) < 60 && Math.abs(f.ly - {y}) < 60))", timeout=10000)
+        want = host.evaluate(f"pond.filter(f => Math.abs(f.lx - {x}) < 40 && Math.abs(f.ly - {y}) < 40).length")
+        assert g.evaluate("pond.length") >= want > 0
+    assert host.errors == guests[0].errors == guests[1].errors == []
+
+
+# #345: a host that reloads mid-round starts its sends again; they still count as newer.
+def test_a_reloaded_host_s_sends_are_not_taken_as_old(site, context):
+    page = start(site, context)
+    k = page.evaluate("""() => {
+      net = Object.assign(net, { on: true, round: 1, setup: { players: [{ id: 'g' }], starts: [[me.x, me.y]] }, board: {}, claims: {}, pSeq: 0 });
+      const sent = [], original = R.send;
+      R.send = m => sent.push(m);
+      try { sendPond('g'); const t = Date.now(); while (Date.now() < t + 3); net.pSeq = 0; sendPond('g'); } finally { R.send = original; }
+      return sent.map(m => m.k);
+    }""")
+    assert k[0] > 1e12 and k[-1] > k[0]
