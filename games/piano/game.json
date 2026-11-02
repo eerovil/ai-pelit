@@ -64,6 +64,13 @@
       "note": "Valikossa on valmiina se kappale, jota soitit viimeksi, myös kun peli avataan uudelleen, eikä Ei häviötä -tilassa soitettu kappale enää avaa seuraavaa tasoa.",
       "request": "Pianopelissä voisi aina siinä olla valmiina se sama biisi mitä olit äsken soittamassa. / Älä anna käyttää No Fail Modea, että pääset tasoja eteenpäin.",
       "issue": "eerovil/ai-pelit#356"
+    },
+    {
+      "n": 10,
+      "date": "2026-11-02",
+      "note": "Tallennettu pisin taso laskettiin kerran tasolle 5, jos se oli sitä korkeampi, koska Ei häviötä -tilalla pääsi aiemmin tasoja eteenpäin.",
+      "request": "Resetoi kaikkien tallennettu taso tasoon 5",
+      "issue": "eerovil/ai-pelit#356"
     }
   ]
 }
