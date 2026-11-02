@@ -643,7 +643,7 @@
     var problem = pushError || friends.push.note(pushNow);
     var note = problem ||
       (on ? 'Puhelin ilmoittaa, kun kaveri kutsuu sinut pelaamaan, vaikka pelit olisivat kiinni.' : 'Saat ilmoituksen, kun kaveri kutsuu sinut pelaamaan, vaikka pelit olisivat kiinni.');
-    return el('div', { class: 'friend push-row' }, [
+    return el('div', { class: 'push-row' }, [
       el('span', { class: 'friend-face', text: '🔔' }),
       el('div', {}, [el('h3', { text: 'Ilmoitukset kutsuista' }), el('p', { class: 'muted meta push-note' + (problem ? ' warn' : ''), role: 'status', text: note })]),
       sw,
