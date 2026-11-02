@@ -96,6 +96,15 @@ def test_long_feedback_fits_and_the_box_grows(site, context, fake):
     long_text = "x" * 4800
     page.fill(".feedback-text", long_text)
     assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 200."
+    # Back on the page later, on a 390 px phone: the kept draft comes back grown, with its count.
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.reload()
+    page.click("button:has-text('Anna palautetta')")
+    page.wait_for_selector(".feedback-text")
+    assert page.locator(".feedback-text").input_value() == long_text
+    assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 200."
+    box = page.locator(".feedback-text").bounding_box()
+    assert box["height"] > short and box["height"] <= 0.6 * 844 + 1 and box["width"] <= 390
     page.click(".feedback button:has-text('Lähetä')")
     page.wait_for_selector(".feedback-note:text('Palaute meni perille')")
     assert fake.feedback[-1]["text"] == long_text
