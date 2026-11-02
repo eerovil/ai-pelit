@@ -364,15 +364,24 @@
     }
 
     function form(name) {
-      var text = el('textarea', { class: 'feedback-text', rows: '6', maxlength: String(FEEDBACK_MAX), placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
+      var text = el('textarea', { class: 'feedback-text', rows: '6', placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
       text.value = draft;
       // How much room is left, shown only near the end (#351).
       var left = el('p', { class: 'muted feedback-left', 'aria-live': 'polite' });
+      // Counted in characters as the server counts them (an emoji is one), not in the UTF-16
+      // units a maxlength counts (an emoji is two), so text past the limit is cut here.
       function count() {
-        var n = FEEDBACK_MAX - text.value.length;
+        var chars = Array.from(text.value);
+        if (chars.length > FEEDBACK_MAX) {
+          var at = text.selectionEnd;
+          text.value = chars.slice(0, FEEDBACK_MAX).join('');
+          text.selectionStart = text.selectionEnd = Math.min(at, text.value.length);
+          chars = chars.slice(0, FEEDBACK_MAX);
+        }
+        var n = FEEDBACK_MAX - chars.length;
         left.textContent = n <= 500 ? 'Merkkejä jäljellä ' + n + '.' : '';
       }
-      text.addEventListener('input', function () { keep(text.value); count(); });
+      text.addEventListener('input', function () { count(); keep(text.value); });
       count();
       var send = el('button', { type: 'button', class: 'button', text: 'Lähetä' });
       var note = el('p', { class: 'muted feedback-note', role: 'status' });

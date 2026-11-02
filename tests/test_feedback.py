@@ -88,7 +88,6 @@ def test_long_feedback_fits_and_the_box_grows(site, context, fake):
     fake.players = {ME: {"name": "Aino", "status": "approved"}}
     page = shelf(site, context, "Aino")
     page.wait_for_selector(".feedback-text")
-    assert page.locator(".feedback-text").get_attribute("maxlength") == "5000"
     short = page.locator(".feedback-text").bounding_box()["height"]
     page.fill(".feedback-text", "Pitkä palaute. " * 200)
     assert page.locator(".feedback-left").inner_text() == ""
@@ -109,6 +108,22 @@ def test_long_feedback_fits_and_the_box_grows(site, context, fake):
     page.wait_for_selector(".feedback-note:text('Palaute meni perille')")
     assert fake.feedback[-1]["text"] == long_text
     assert page.locator(".feedback-left").inner_text() == ""
+
+def test_emoji_count_as_one_character_as_on_the_server(site, context, fake):
+    # The server counts characters (code points): 5000 emoji fit, the 5001st is cut (#351).
+    fake.players = {ME: {"name": "Aino", "status": "approved"}}
+    page = shelf(site, context, "Aino")
+    page.wait_for_selector(".feedback-text")
+    page.fill(".feedback-text", "😀" * 4900)
+    assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 100."
+    page.fill(".feedback-text", "😀" * 5000)
+    assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 0."
+    page.locator(".feedback-text").press("End")
+    page.keyboard.insert_text("😀x")
+    assert page.locator(".feedback-text").input_value() == "😀" * 5000
+    page.click(".feedback button:has-text('Lähetä')")
+    page.wait_for_selector(".feedback-note:text('Palaute meni perille')")
+    assert fake.feedback[-1]["text"] == "😀" * 5000
 
 def test_a_phone_with_no_name_chooses_one_and_waits_for_the_admin(site, context, fake):
     page = shelf(site, context)
