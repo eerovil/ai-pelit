@@ -70,7 +70,8 @@
 </div>
 <script src="../../../rooms.js" data-game="moukari" data-min="2" data-max="8"></script>
 <!-- v7 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
-<script src="../../../lib/yleisurheilu-6/kisa.js"></script>
+<!-- v9 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
+<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
 <script src="../../../outfits.js" data-game="moukari" data-share="yleisurheilu"></script>
 <!-- v8 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -484,6 +485,9 @@ function drawScene(dt) {
     if (lb > 0) markArc(lb, '#ffd166', '1. ' + (lead.p === K.me ? 'Sinä' : lead.name), -1);
   }
   if (best !== null) markArc(best, '#f1faee', 'Ennätys', 1);
+  // v9 (#341): the friends watching walk along the bottom of the field, under the circle, the thrower
+  // and the cage, so they never cover the throw; a tap walks your own along the row.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 12, h: 40, walk: true });
   drawCircle(s);
   // The thrower and the hammer.
   if (th) {
@@ -492,8 +496,6 @@ function drawScene(dt) {
   }
   drawCage(s);
   if (th && th.jav) drawFlight(th.jav, s);
-  // v5 (#297): with friends, the others stand by and cheer.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 16, h: 34 });
   drawHud();
   if (th && th.phase === 'wait') drawBoard(false);
   if (comp && comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
@@ -780,6 +782,8 @@ function padAt(cx, cy) {
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (K.ending) { K.skip(); return; }  // v3: a tap ends the ceremony, the next leaves the podium
+  // v9 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
+  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX)) return;
   const k = padAt(e.clientX, e.clientY);
   if (k) press(k);
   else if (th && th.mine && th.phase === 'wait' && !isNet()) th.t = BOARD_T;

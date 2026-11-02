@@ -13,10 +13,10 @@ from conftest import ROOT, Site, wait_for_worker
 VERSIONS = [
     "games/aitajuoksu/v11", "games/areena/v6", "games/curling/v3", "games/hiihto/v11",
     "games/jaan-alla/v6", "games/jalkapallo/v3", "games/kaahari/v5", "games/kaaosrata/v4",
-    "games/keihas/v11", "games/kirkkis/v9", "games/korkeushyppy/v8", "games/kuula/v5",
-    "games/lentopallo/v6", "games/makihyppy/v5", "games/molkky/v3", "games/moukari/v8",
-    "games/orava/v5", "games/pallorata/v4", "games/pilkki/v4", "games/pituushyppy/v12",
-    "games/puhelinkoppi/v7", "games/seivashyppy/v9", "games/skuutti/v3", "games/sormiskeitti/v8",
+    "games/keihas/v12", "games/kirkkis/v9", "games/korkeushyppy/v9", "games/kuula/v6",
+    "games/lentopallo/v6", "games/makihyppy/v6", "games/molkky/v3", "games/moukari/v9",
+    "games/orava/v5", "games/pallorata/v4", "games/pilkki/v4", "games/pituushyppy/v13",
+    "games/puhelinkoppi/v7", "games/seivashyppy/v10", "games/skuutti/v3", "games/sormiskeitti/v8",
     "games/tikka/v5", "games/trampoliini/v9", "games/voimistelu/v12", "games/vuoristorata/v3",
     "games/yoajo/v9",
 ]

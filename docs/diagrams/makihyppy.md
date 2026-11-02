@@ -16,6 +16,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v5 (#337, `aanet-4`) has no crowd: a long jump (past the K point, the longest or a lead) lands with the quiet `onnistui` blip at 0.3, any other jump only its landing, a fall only its thud, the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
 
+
+v6 (#341) plays as v5 on `public/lib/yleisurheilu-7/`: the friends watching stand in front of the forest, behind the hill and the jumper, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 ```mermaid
 flowchart TD
   M[Valikko: Mäkiviikolle!, Jatka tai kaverit] --> K[Kisa: 12 hyppääjää, arvottu järjestys]

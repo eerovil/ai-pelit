@@ -2,7 +2,7 @@
 
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
-URL = "games/moukari/v8"
+URL = "games/moukari/v9"
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):

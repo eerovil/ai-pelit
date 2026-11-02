@@ -19,6 +19,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v8 (#337, `aanet-4`) has no crowd: a good throw (a lead or a record too) is the quiet `onnistui` blip at 0.3, out of time its error buzz, pulled out of the circle nothing, the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
 
+
+v9 (#341) plays as v8 on `public/lib/yleisurheilu-7/`: the friends watching stand along the bottom of the field, under the circle, the thrower and the cage, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

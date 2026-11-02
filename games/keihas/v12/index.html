@@ -70,7 +70,8 @@
 </div>
 <script src="../../../rooms.js" data-game="keihas" data-min="2" data-max="8"></script>
 <!-- v10 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
-<script src="../../../lib/yleisurheilu-6/kisa.js"></script>
+<!-- v12 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
+<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
 <!-- v11 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <script src="../../../lib/aanet-4/aanet.js"></script>
@@ -409,6 +410,9 @@ function drawScene(dt) {
       x.beginPath(); x.arc(k * gap + off - pc, standTop + 8 + row * 12, 3.6, 0, 7); x.fill();
     }
   }
+  // v12 (#341): the friends watching stand behind the boards, which hide their legs, drawn before the
+  // athlete so they never cover it; a tap walks your own along the row.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true });
   // Boards along the front of the stands.
   x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, groundY - standTop - standH);
   const bw = 120, bo = ((camX * 30) % bw + bw) % bw;
@@ -474,8 +478,6 @@ function drawScene(dt) {
     }
     if (th.mine && th.phase === 'aim') drawDial(sx(th.x + 0.9), sy(1.4), th.ang);
   }
-  // v7 (#297): with friends, the others stand by and cheer.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 16, h: 34 });
   drawHud();
   drawStrip();
   if (th && th.phase === 'wait') drawBoard(false);
@@ -766,6 +768,8 @@ function padAt(cx, cy) {
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (K.ending) { K.skip(); return; }  // v5: a tap ends the ceremony, the next leaves the podium
+  // v12 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
+  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX)) return;
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) startAim(e.pointerId); else if (k) press(k);
 });

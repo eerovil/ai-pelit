@@ -1,24 +1,27 @@
 """The field events without crowd noise (#337): on aanet-4, "📣 Kannusta" is a quiet blip from the
 game (cheerSound), not kisa.js's "jee!" (#330, which this file replaces) nor a shouting crowd.
 
-games/pituushyppy/v12, games/keihas/v11, games/kuula/v5, games/moukari/v8, games/korkeushyppy/v8,
-games/seivashyppy/v9, games/makihyppy/v5.
+games/pituushyppy/v13, games/keihas/v12, games/kuula/v6, games/moukari/v9, games/korkeushyppy/v9,
+games/seivashyppy/v10, games/makihyppy/v6.
 """
 
 import json
+import re
 
 import pytest
 from conftest import ROOT
 from test_yleisurheilu_vuorot import MARK, on_turn, room
 
-EVENTS = ["pituushyppy/v12", "keihas/v11", "kuula/v5", "moukari/v8", "korkeushyppy/v8", "seivashyppy/v9", "makihyppy/v5"]
+EVENTS = ["pituushyppy/v13", "keihas/v12", "kuula/v6", "moukari/v9", "korkeushyppy/v9", "seivashyppy/v10", "makihyppy/v6"]
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
 
 @pytest.mark.parametrize("path", EVENTS)
 def test_the_version_loads_the_quiet_library(path):
     page = (ROOT / "games" / path / "index.html").read_text()
-    assert "lib/yleisurheilu-6/kisa.js" in page and "lib/yleisurheilu-5/" not in page
+    # yleisurheilu-6 or newer, whose cheer the game's cheerSound replaces (-7 from #341).
+    libs = {int(n) for n in re.findall(r"lib/yleisurheilu-(\d+)/", page)}
+    assert libs and min(libs) >= 6
     assert "lib/aanet-4/aanet.js" in page and "lib/aanet-3/" not in page and "lib/aanet-2/" not in page
 
 

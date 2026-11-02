@@ -70,8 +70,9 @@
 </div>
 <script src="../../../rooms.js" data-game="seivashyppy" data-min="2" data-max="8"></script>
 <!-- v8 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
-<script src="../../../lib/yleisurheilu-6/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-6/korkeus.js"></script>
+<!-- v10 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
+<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-7/korkeus.js"></script>
 <script src="../../../outfits.js" data-game="seivashyppy" data-share="yleisurheilu"></script>
 <!-- v9 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -170,7 +171,7 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-6/korkeus.js). The real rules: the bar rises 10 cm at a
+// in its bar-height format (lib/yleisurheilu-7/korkeus.js). The real rules: the bar rises 10 cm at a
 // time; at each height everyone still trying takes a first attempt in the drawn order, then those
 // who failed a second, then a third. A vaulter may pass any height, even after failing at it; three
 // failures in a row and they are out. K.comp is the meet: a vaulter is {id, name, p, bot, skill (the
@@ -464,6 +465,9 @@ function drawScene(dt) {
       x.beginPath(); x.arc(k * gap + off - pc, standTop + 8 + row * 12, 3.6, 0, 7); x.fill();
     }
   }
+  // v10 (#341): the friends watching stand behind the boards, which hide their legs, drawn before the
+  // athlete so they never cover it; a tap walks your own along the row.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true });
   x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, groundY - standTop - standH);
   const bw = 120, bo = ((camX * 30) % bw + bw) % bw;
   x.font = '900 11px system-ui'; x.textAlign = 'center';
@@ -502,8 +506,6 @@ function drawScene(dt) {
     else if ((th.phase === 'fly' || th.phase === 'land') && th.fly) drawFlying(th, sx, sy, s, look);
     else drawRunner(th, sx(th.x), groundY, s, look, name);
   }
-  // v5 (#297): with friends, the others stand by and cheer.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 16, h: 34 });
   drawHud();
   if (th && th.phase === 'wait') drawBoard(false);
   if (K.comp && K.comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
@@ -853,6 +855,8 @@ c.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (K.ending) { K.skip(); return; }  // v3: a tap ends the ceremony, the next leaves the podium
   if (inPass(e.clientX, e.clientY)) { passPtr = e.pointerId; return; }  // acts when the finger lifts on it
+  // v10 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
+  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX)) return;
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) hold(e.pointerId); else if (k) press(k);
 });
