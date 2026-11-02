@@ -79,11 +79,10 @@
   <p class="help long"></p>
   </div>
 </div>
-<script src="../../../rooms.js" data-game="kirkkis" data-min="2" data-max="5"></script>
+<script src="../../../rooms.js" data-game="kirkkis" data-min="2" data-max="8"></script>
 <!-- v9 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
-<!-- v10 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
-<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/aanet-4/aanet.js"></script>
 <script>
 'use strict';
 const R = window.AiPelitRooms; // the shared room library (public/rooms.js)
@@ -426,7 +425,9 @@ function person(name, color, isPlayer) {
            path: [], goal: null, repath: 0, look: 0, brave: 30, saw: null, peek: false, run: false, spot: null, bubble: '', bt: 0, moving: 0, stuck: 0, lx: 0, ly: 0,
            breath: 1, spr: false, winded: false, freeze: 0, from: null, noBack: 0 };
 }
-const COLORS = ['#f2c94c', '#e46a9b', '#4a8fe0', '#9b6ae0', '#e07b3a'];
+// v10 (#370): a room takes eight phones, so eight colours; the first five are v1's.
+const COLORS = ['#f2c94c', '#e46a9b', '#4a8fe0', '#9b6ae0', '#e07b3a', '#3cc8d8', '#9ad83a', '#7a4a2a'];
+const MOST = 8, FILL = 5; // phones in a round at most; computer players fill a round up to FILL
 const BOT_NAMES = ['Aino', 'Eetu', 'Iida', 'Onni', 'Venla'];
 // Alone: the player and four computer players, as in v1. With friends the cast is made per round.
 const SOLO = [person('Sinä', COLORS[0], true), ...BOT_NAMES.slice(0, 4).map((n, i) => person(n, COLORS[i + 1]))];
@@ -1224,8 +1225,10 @@ function drawBaseArrow() {
   x.font = '18px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('⛪', ax - Math.cos(a) * 22, ay - Math.sin(a) * 22);
 }
 function drawHud() {
-  // Upright across the top beside the back chip; sideways a panel in the top-right corner.
-  const w = wide ? Math.min(290, W - safeR - 100) : W - 100, x0 = wide ? W - safeR - 8 - w : 92, y0 = safeT + 8;
+  // Upright across the top beside the back chip; sideways a panel in the top-right corner, or in a
+  // room (v10) beside the back chip, as rooms.js puts its 🎤 chip in the top bar right of the middle.
+  const leftSide = !wide || R.inRoom;
+  const w = wide ? Math.min(290, W - safeR - 100) : W - 100, x0 = leftSide ? 92 : W - safeR - 8 - w, y0 = safeT + 8;
   x.fillStyle = 'rgba(255,255,255,0.88)'; rrect(x, x0, y0, w, 52, 12); x.fill();
   x.textBaseline = 'middle'; x.textAlign = 'left'; x.fillStyle = '#2b2416'; x.font = '800 14px system-ui';
   const t = Math.max(0, Math.ceil(timer));
@@ -1240,13 +1243,14 @@ function drawHud() {
   if (left !== null) { const l = Math.max(0, Math.ceil(left)); x.textAlign = 'right'; x.fillText(`${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`, x0 + w - 10, y0 + 15); }
   // Every hider and what has become of them; in Hippa everyone, and who is it.
   x.textAlign = 'center'; x.font = '700 11px system-ui';
+  // v10: eight fit, each dot and its sign centred in its own slot.
   const hs = mode === 'hippa' ? people : hiders(), gap = Math.min(52, (w - 12) / hs.length);
   const icons = mode === 'piilosta' ? { hiding: '🙈', saved: '✅', caught: '🔎' } : { hiding: '🙈', spotted: '❗', saved: '✅', caught: '✋' };
   hs.forEach((h, i) => {
-    const cx = x0 + 10 + gap * i + gap / 2 - 4, cy = y0 + 38;
-    x.fillStyle = h.color; x.beginPath(); x.arc(cx - 12, cy, 6, 0, 7); x.fill();
+    const cx = x0 + 6 + gap * i + gap / 2, cy = y0 + 38;
+    x.fillStyle = h.color; x.beginPath(); x.arc(cx - 8, cy, gap < 40 ? 5 : 6, 0, 7); x.fill();
     if (h.isPlayer) { x.strokeStyle = '#2b2416'; x.lineWidth = 2; x.stroke(); }
-    x.fillStyle = '#2b2416'; x.fillText(mode === 'hippa' ? (h === seeker ? '✋' : '💨') : icons[h.st] || '', cx + 6, cy);
+    x.fillStyle = '#2b2416'; x.fillText(mode === 'hippa' ? (h === seeker ? '✋' : '💨') : icons[h.st] || '', cx + 7, cy);
   });
 }
 
@@ -1399,7 +1403,7 @@ R.on('back', id => {
 R.on('peers', members => {
   // A new room starts from the beginning: nobody seeks next yet.
   if (roomCode !== R.code) { roomCode = R.code; useSolo(); played = false; nextSeeker = null; }
-  if (!played) R.note(members.filter(m => m.on).length < 5 ? 'Tyhjät paikat täyttävät tietokonepelaajat.' : '');
+  if (!played) R.note(members.filter(m => m.on).length < FILL ? 'Tyhjät paikat täyttävät tietokonepelaajat.' : '');
 });
 R.on('lobby', () => { phase = 'room'; letGo(); played = false; castRound = ''; });
 R.on('leave', () => {
@@ -1409,15 +1413,15 @@ R.on('leave', () => {
 R.on('menu', showMenu);
 
 // ----- On the host -----
-// The cast: the phones in the round, then computer players up to five.
+// The cast: the phones in the round (up to eight, v10), then computer players up to five.
 function hostStart(s) {
-  const cast = s.players.slice(0, 5).map((m, i) => {
+  const cast = s.players.slice(0, MOST).map((m, i) => {
     const p = person(m.name, COLORS[i], m.id === R.me);
     p.id = m.id; p.ctrl = m.id === R.me ? 'me' : 'remote';
     return p;
   });
   const humans = cast.length, taken = new Set(cast.map(p => p.name.toLowerCase()));
-  for (const n of BOT_NAMES) if (cast.length < 5 && !taken.has(n.toLowerCase())) cast.push(person(n, COLORS[cast.length]));
+  for (const n of BOT_NAMES) if (cast.length < FILL && !taken.has(n.toLowerCase())) cast.push(person(n, COLORS[cast.length]));
   loadMap(roomMap); mode = roomMode;
   people = cast; player = cast.find(p => p.isPlayer); bots = cast.filter(p => p.ctrl === 'bot');
   // The first one caught last round seeks; the first round, a phone picked at random.
