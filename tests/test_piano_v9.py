@@ -1,4 +1,6 @@
-"""Piano v8: no-fail mode (#318). One song with no hearts to lose, off the high-score list."""
+"""Piano v8: no-fail mode (#318). One song with no hearts to lose, off the high-score list.
+
+v9 (#356): the menu has the song last played ready, and a no-fail song opens no level."""
 
 import pytest
 
@@ -12,7 +14,7 @@ def open_menu(site, context, size=None, saves=None):
         page.set_viewport_size(size)
     if saves:
         page.add_init_script("".join(f"localStorage.setItem('ai-pelit:piano:{k}', '{v}');" for k, v in saves.items()))
-    page.goto(site.url + "games/piano/v8/")
+    page.goto(site.url + "games/piano/v9/")
     page.evaluate("window._sent = []; window.AiPelitScores = {submit: s => _sent.push(s)}")
     return page
 
@@ -46,19 +48,22 @@ def test_a_no_fail_song_plays_through_its_misses_and_ends_in_the_menu(site, cont
     assert page.is_visible("#menu")
     hits, total, score = page.evaluate("[cur.notes.filter(n => n.hit).length, cur.notes.length, score]")
     assert hits < total - 3 and score > 0
-    assert page.inner_text("#result") == f"Kappale soitettu: {score} pistettä, osuit {hits}/{total}"
+    assert page.inner_text("#result") == f"Kappale soitettu: {score} pistettä, osuit {hits}/{total}\nEi häviötä -tila ei avaa tasoja"
     # Off the list and the record; the furthest level is unchanged.
     assert page.evaluate("[_sent.length, best, topLevel]") == [0, 100000, 3]
 
 
-def test_a_no_fail_song_opens_the_next_level(site, context):
+def test_a_no_fail_song_opens_no_level(site, context):
+    # v9 (#356): v8 opened the next level here, so no-fail was a way past a hard song.
     page = open_menu(site, context)
     page.click("#nofail")
     page.click("#go")
     page.evaluate(FINISH, 1)
-    assert page.evaluate("[state, topLevel]") == ["over", 2]
-    assert page.evaluate("localStorage.getItem('ai-pelit:piano:taso')") == "2"
-    assert page.inner_text("#go") == "Jatka tasolta 2"
+    assert page.evaluate("[state, topLevel]") == ["over", 1]
+    assert page.evaluate("localStorage.getItem('ai-pelit:piano:taso')") == "1"
+    assert page.inner_text("#go") == "Soita!"
+    assert not page.is_visible("#pickrow")
+    assert page.inner_text("#result").endswith("Ei häviötä -tila ei avaa tasoja")
     assert page.evaluate("[_sent.length, localStorage.getItem('ai-pelit:piano:ennatys')]") == [0, None]
 
 
@@ -85,8 +90,7 @@ def test_a_normal_game_after_a_no_fail_one_has_hearts_again(site, context):
     page.click("#nofail")
     page.click("#go")
     page.evaluate(FINISH, 2)
-    page.click("#nofail")  # off again
-    page.click("#prev")
+    page.click("#nofail")  # off again; level 1 is ready, as the song just played
     page.click("#go")
     assert page.evaluate("[safe, lives, level]") == [False, 3, 1]
     page.evaluate("tap(0)")
@@ -109,7 +113,7 @@ def test_real_taps_on_a_390_px_phone_cost_nothing_in_no_fail(site, browser):
     site.build(ROOT / "games")
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
     page = ctx.new_page()
-    page.goto(site.url + "games/piano/v8/")
+    page.goto(site.url + "games/piano/v9/")
     page.tap("#nofail")
     page.tap("#go")
     lane_x, lane_w, btn = page.evaluate("[laneX, laneW, btnTop]")
@@ -123,4 +127,71 @@ def test_real_taps_on_a_390_px_phone_cost_nothing_in_no_fail(site, browser):
     }""")
     page.touchscreen.tap(lane_x + (page.evaluate("_n.lane") + 0.5) * lane_w, (btn + 844) / 2)
     assert page.evaluate("_n.hit") is True
+    ctx.close()
+
+
+def test_the_menu_has_the_no_fail_song_just_played_ready(site, context):
+    page = open_menu(site, context, saves={"taso": 3})
+    assert page.inner_text("#go") == "Jatka tasolta 3"  # nothing played yet: the furthest
+    page.click("#nofail")
+    page.click("#prev")
+    page.click("#prev")
+    page.click("#go")
+    page.evaluate(FINISH, 1)
+    assert page.evaluate("state") == "over"
+    assert page.inner_text("#pick") == "Taso 1 · " + page.evaluate("songOf(1).name")
+    assert page.inner_text("#go") == "Soita!"
+    page.click("#next")
+    assert page.inner_text("#go") == "Soita tasolta 2"
+    page.click("#next")
+    assert page.inner_text("#go") == "Jatka tasolta 3"
+
+
+def test_the_menu_has_the_level_of_a_game_over_ready(site, context):
+    page = open_menu(site, context, saves={"taso": 4})
+    page.click("#prev")
+    page.click("#prev")
+    page.click("#go")
+    assert page.evaluate("level") == 2
+    page.evaluate("for (let i = 0; i < 3; i++) tap(0)")
+    assert page.evaluate("state") == "over"
+    assert page.inner_text("#go") == "Soita tasolta 2"
+    assert page.evaluate("localStorage.getItem('ai-pelit:piano:viimeisin')") == "2"
+
+
+def test_a_reload_has_the_song_last_played_ready(site, context):
+    page = open_menu(site, context, saves={"taso": 3})
+    page.click("#prev")
+    page.click("#prev")
+    page.click("#go")
+    page.evaluate("update(cur.notes[3].t - now)")
+    page.reload()
+    assert page.inner_text("#pick").startswith("Taso 1 · ")
+    assert page.inner_text("#go") == "Soita!"
+
+
+def test_a_saved_last_level_past_the_furthest_is_clamped(site, context):
+    page = open_menu(site, context, saves={"taso": 3, "viimeisin": 9})
+    assert page.inner_text("#go") == "Jatka tasolta 3"
+
+
+def test_real_taps_on_a_390_px_phone_bring_back_the_no_fail_song(site, browser):
+    site.build(ROOT / "games")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    page.add_init_script("if (!sessionStorage.x) { sessionStorage.x = 1; localStorage.setItem('ai-pelit:piano:taso', '3'); }")
+    page.goto(site.url + "games/piano/v9/")
+    page.evaluate("window.AiPelitScores = {submit() {}}")
+    page.tap("#nofail")
+    page.tap("#prev")
+    page.tap("#go")
+    page.evaluate(FINISH, 2)
+    assert page.evaluate("[state, topLevel]") == ["over", 3]
+    # The menu fits the phone with the end text's second line, and the same song is one tap away.
+    assert page.evaluate("document.getElementById('menu').scrollHeight <= innerHeight")
+    assert page.inner_text("#go") == "Soita tasolta 2"
+    page.tap("#go")
+    assert page.evaluate("[state, level, safe]") == ["play", 2, True]
+    page.reload()
+    assert page.inner_text("#go") == "Soita tasolta 2"
     ctx.close()

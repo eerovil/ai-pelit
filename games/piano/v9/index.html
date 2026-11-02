@@ -13,6 +13,7 @@
   #menu.hidden{display:none}
   #menu h1{margin:0;font-size:42px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #7a3fb0}
   #result{margin:0;font-size:24px;font-weight:800;color:#c8b6ff}
+  #result small{display:block;margin-top:4px;font-size:15px;font-weight:600;color:#d8ccff}
   #go{font:800 22px system-ui,sans-serif;padding:14px 34px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
   #go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
   #pickrow{display:flex;align-items:center;gap:10px}
@@ -51,8 +52,8 @@
   <button id="nofail" aria-pressed="false"></button>
   <p id="stats"></p>
   <p class="help">Nuotit putoavat neljää kaistaa pitkin. Kappale soi itsestään. Paina kaistan nappia, kun nuotin keskikohta on valaistulla alueella viivan kohdalla.
-    Ohi mennyt nuotti tai turha painallus vie sydämen; jokaisella tasolla on kolme uutta. Peli jatkuu aina pisimmältä tasolta, jolle pääsit, ja nuolilla voit valita aiemman. Loppupään kappaleet ovat todella nopeita.
-    Ei häviötä -tilassa soitat yhden kappaleen loppuun asti ilman sydämiä; tulos ei mene tuloslistalle.</p>
+    Ohi mennyt nuotti tai turha painallus vie sydämen; jokaisella tasolla on kolme uutta. Valikossa on valmiina kappale, jota soitit viimeksi, ja nuolilla voit valita muun tason pisimpään saakka. Loppupään kappaleet ovat todella nopeita.
+    Ei häviötä -tilassa soitat yhden kappaleen loppuun asti ilman sydämiä; tulos ei mene tuloslistalle eikä avaa uutta tasoa.</p>
 </div>
 <script>
 'use strict';
@@ -64,6 +65,8 @@ const KEY = 'ai-pelit:piano:';
 function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
 let best = load('ennatys', 0), topLevel = load('taso', 1);
+// v9 (#356): the level last started, so the menu has that song ready again (0: none yet).
+let lastLevel = load('viimeisin', 0);
 // v8 (#318): no-fail mode, its switch kept between games. A no-fail game is one song with no
 // hearts to lose; its score goes to neither the record nor the high-score list (Eero's choice).
 let noFail = load('eihaviota', false);
@@ -252,6 +255,7 @@ function startLevel() {
   if (safe) banner.note = 'Ei häviötä';
   // Saved from level 1 on, so even a first game's score carries its level to the list.
   topLevel = Math.max(topLevel, level); save('taso', topLevel);
+  lastLevel = level; save('viimeisin', level);  // v9 (#356)
 }
 
 const mult = () => 1 + Math.min(3, Math.floor(combo / 10));
@@ -297,13 +301,16 @@ function keepScore() {
   return record;
 }
 function songDone() {
-  // v8: a no-fail song ends the game: back to the menu with the score and the hits, and the
-  // next level opens as after any finished song, but nothing goes to the record or the list.
+  // v8: a no-fail song ends the game: back to the menu with the score and the hits, and
+  // nothing goes to the record or the list. v9 (#356, Eero's choice): nor does it open the next
+  // level (v8 did), so no-fail is no way past a hard song.
   if (safe) {
     const hits = cur.notes.filter(n => n.hit).length;
     state = 'over';
-    topLevel = Math.max(topLevel, level + 1); save('taso', topLevel);
     showMenu('Kappale soitettu: ' + score + ' pistettä, osuit ' + hits + '/' + cur.notes.length);
+    const why = document.createElement('small');
+    why.textContent = 'Ei häviötä -tila ei avaa tasoja';
+    document.getElementById('result').append(why);
     return;
   }
   keepScore();
@@ -484,8 +491,10 @@ function loop(t) {
 }
 
 // ---------- Menu ----------
-// The level to start from: the furthest one reached, or an earlier one picked with the arrows.
-let pick = topLevel;
+// The level to start from, picked with the arrows up to the furthest one reached. v9 (#356): the
+// menu starts on the level last played (v3–v8: the furthest), or the furthest when none is saved.
+const lastPick = () => lastLevel >= 1 ? Math.min(lastLevel, topLevel) : topLevel;
+let pick = lastPick();
 function showPick() {
   document.getElementById('pickrow').classList.toggle('hidden', topLevel <= 1);
   document.getElementById('pick').textContent = 'Taso ' + pick + ' · ' + songOf(pick).name;
@@ -500,7 +509,7 @@ document.getElementById('nofail').addEventListener('click', () => { noFail = !no
 function showMenu(result) {
   document.getElementById('result').textContent = result || '';
   document.getElementById('stats').textContent = 'Ennätys ' + best + ' pistettä · paras taso ' + topLevel;
-  pick = topLevel;
+  pick = lastPick();
   showPick();
   menu.classList.remove('hidden');
 }
