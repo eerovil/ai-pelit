@@ -21,3 +21,13 @@ def test_a_friend_joins_a_host_whose_chart_is_explored(site, browser):
     assert size * 2 < MSG_MAX  # room to grow as the game goes on
     assert aino.evaluate("G.s.chart") == host.evaluate("G.s.chart")
     assert not host.errors and not aino.errors
+
+
+def test_a_friend_who_reloads_gets_the_explored_game_again(site, browser):
+    """The host sends the whole game again to a phone that comes back (`on('hello')`), just as big."""
+    host, aino = room(site, browser, names=("Eero", "Aino"), saves=[save_with(w12=1, w13=1, w15=1, chart=CHART, cave=CAVE), None])
+    aino.reload()
+    aino.wait_for_function("window.drawn === true")
+    aino.wait_for_function("G.s && G.mode !== 'wait' && G.mode !== 'menu'")
+    assert aino.evaluate("G.s.chart") == host.evaluate("G.s.chart")
+    assert not host.errors and not aino.errors
