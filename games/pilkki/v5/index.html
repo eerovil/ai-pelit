@@ -500,8 +500,10 @@ function sendPond(id) {
     (Math.abs(f.lx - pos[0]) < NEAR && Math.abs(f.ly - pos[1]) < NEAR));
   const claims = {};
   for (const f of nearby) if (net.claims[f.id]) claims[f.id] = net.claims[f.id];
-  const k = ++net.pSeq, parts = [[]];
-  // Four digits reserved for packet number/count; 16k is never approached.
+  // Numbered from the clock, so a host that reloads mid-round never sends numbers a guest
+  // already saw (it would skip them as old).
+  const k = net.pSeq = Math.max(net.pSeq + 1, Date.now()), parts = [[]];
+  // Room for the largest part numbers; the whole message stays well under 16k.
   const overhead = JSON.stringify({t:'p',round:net.round,k,i:9999,n:9999,c:claims,f:[],to:id}).length;
   const capacity = POND_LIMIT - overhead;
   if (capacity < 256) throw Error('Too many claims in pond snapshot');

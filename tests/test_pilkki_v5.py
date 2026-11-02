@@ -537,7 +537,7 @@ def test_dense_school_is_chunked_below_relay_limit(room):
     host, [guest] = room("Host", "Guest")
     guest_id = guest.evaluate("AiPelitRooms.me")
     guest.evaluate("() => { stand(LAKE_W / 2, LAKE_H / 2); sendMe(); }")
-    host.wait_for_function("(id) => !!net.board[id]", guest_id)
+    host.wait_for_function("(id) => !!net.board[id]", arg=guest_id)
     sizes = host.evaluate("""(id) => {
       const original = R.send, sizes = [];
       R.send = (m, to) => {
