@@ -506,6 +506,24 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     assert row == {"score": 300, "version": 10, "level": 1}
 
 
+@pytest.mark.games("piano")
+def test_piano_after_the_cut_to_5_sends_a_higher_level_without_a_record(site, context, fake):
+    """Piano v10 (#356) cuts a saved level above 5 to 5; scores.js must still send level 6 later."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.add_init_script("""if (!sessionStorage.x) { sessionStorage.x = 1;
+      localStorage.setItem('ai-pelit:piano:taso', '23');
+      localStorage.setItem('ai-pelit:_tulokset:lahetetyt', JSON.stringify({'piano|main': {score: 900, level: 23}})); }""")
+    page.goto(site.url + PIANO)
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt'))['piano|main']") == {"score": 900, "level": 5}
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
+    page.click("#go")
+    page.evaluate("score = 300; songDone(); lives = 1; miss(0, 'Ohi!')")  # level 6 reached, no record
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    [(key, row)] = fake.scores.items()
+    assert row["level"] == 6 and row["score"] == 300
+
+
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
     """Puhelinkoppi's v3/v4 streak list was withdrawn (#9): its no. 1 kept on the phone must not read as a level."""
     site.build(ROOT / "games")

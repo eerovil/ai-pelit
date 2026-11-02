@@ -290,6 +290,19 @@ test('each row carries the highest level reached, which can rise without a bette
   assert.equal((await call('GET', '/api/scores?game=voimistelu')).body.rows[0].level, null);
 });
 
+test('a Piano version before v10 cannot send a level above 5 back (#356)', async () => {
+  const { call, admin } = setup();
+  await call('POST', '/api/players', { id: A, name: 'Aino' });
+  await admin(A, 'approved');
+  const post = (version, score, level) => call('POST', '/api/scores', { player: A, game: 'piano', board: 'main', version, score, level });
+  assert.equal((await post(9, 900, 23)).status, 200); // a v9 page left open after the cut
+  let rows = (await call('GET', '/api/scores?game=piano')).body.rows;
+  assert.deepEqual([rows[0].score, rows[0].level], [900, 5]);
+  assert.equal((await post(10, 800, 7)).status, 200); // v10 reached 7 again: kept
+  rows = (await call('GET', '/api/scores?game=piano')).body.rows;
+  assert.deepEqual([rows[0].score, rows[0].level], [900, 7]);
+});
+
 test('the shelf gets every game\'s no. 1 in one request', async () => {
   const { call, admin } = setup();
   for (const [id, name] of [[A, 'Aino'], [B, 'Bertta'], [C, 'Cecilia']]) {

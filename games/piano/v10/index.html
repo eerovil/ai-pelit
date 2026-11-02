@@ -70,6 +70,13 @@ let best = load('ennatys', 0), topLevel = load('taso', 1);
 // aside at his word); `tasoraja` marks it done, so a level reached again later is kept.
 if (!load('tasoraja', false)) {
   if (topLevel > 5) { topLevel = 5; save('taso', 5); }
+  // scores.js sends a round that is no record only when its level beats the level it last sent
+  // for Piano, so lower that one too, or levels 6 and up would not reach the list again.
+  try {
+    const SENT = 'ai-pelit:_tulokset:lahetetyt', sent = JSON.parse(localStorage.getItem(SENT) || '{}');
+    const p = sent['piano|main'];
+    if (p && p.level > 5) { p.level = 5; localStorage.setItem(SENT, JSON.stringify(sent)); }
+  } catch (e) {}
   save('tasoraja', true);
 }
 // v9 (#356): the level last started, so the menu has that song ready again (0: none yet).
