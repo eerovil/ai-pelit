@@ -91,6 +91,7 @@ p { margin: 0 0 6px; }
 .friends-note { color: var(--accent); }
 /* Invites as phone notifications (#367): an on/off switch. */
 .push-row .push-note { white-space: normal; }
+.push-row .push-note.warn { color: var(--accent); }
 .push-switch { flex: none; min-width: 76px; padding: 8px 12px; border: 0; border-radius: 999px; background: #3a3f55; color: var(--text); font: 700 15px system-ui, sans-serif; }
 .push-switch.on { background: #4f9a3a; color: #fff; }
 .push-switch:disabled { opacity: .5; }
