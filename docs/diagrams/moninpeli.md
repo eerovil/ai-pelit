@@ -37,6 +37,8 @@ flowchart TD
     L13 -- Kyllä, hänen vuoronsa --> L14[⏸ Odotetaan, isännällä Ohita vuoro]
     L15[↩ Palaa kierrokseen KOOD]
     L16[➕ Kaveriksi ja 📨 Kutsu kaveri]
+    L19[🎲 Vaihda peliä: isäntä vie koko huoneen toiseen peliin]
+    L20[Viimeinen poistuu tarkoituksella: huone poistetaan heti]
     L7[Tallenna tulos kerran per kierros]
     L8{Väärä peli tai versio?}
     L8 -- Kyllä --> L17{Saman pelin vanhempi versio?}
@@ -59,6 +61,10 @@ flowchart TD
   C1 --> L8
   L8 -- Ei --> L2
   L3 --> G2
+  L2 --> L19
+  L19 -- sama koodi --> C1
+  L2 --> L20
+  L20 --> C1
   G3 --> C1
   G6 --> C1
   C1 --> G4
@@ -102,7 +108,7 @@ flowchart TD
   V4 --> V6
   V7 --> V6
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18,L19,L20 blue
   class C1,C2,C3,C4,C5,C7 violet
   class V1,V2,V4,V5,V6,V7 blue
   class S1 green
@@ -130,7 +136,7 @@ flowchart TD
 - **Koodi ja QR-koodi, pelaajalista**: the code, a QR code of `<version>/?huone=<KOODI>` drawn in the page (`qrMatrix()`), and who is in, the host with 👑, someone without a connection greyed out. A QR link joins at once; `rooms.js` then clears `?huone=` from the address and keeps the page's history state, so the "‹ Pelit" chip still knows where up is (#68). On a phone on its side (#95) the room screen is two columns, the code and QR left and the players (in two columns), the game's own choices, 🌍 Julkinen and "Aloita kierros" right, so a full room of 8 fits 740 × 360 without scrolling; a CSS `@media (orientation:landscape) and (max-height:500px)` block in `rooms.js`, so upright nothing changes.
 - **Pelin omat valinnat pelaajalistan alla**: `extra(node)` in `public/rooms.js`: a game's own element shown in the room under the player list, kept up to date by the game. Hiihto v3 puts the host's level and style there (`roomControls()`); Ottelu v1 (#168) puts the host's event picker there (`hostPick()`).
 - **Aloita kierros**: host only, once `data-min` phones are connected. Sends `_start` with the round id and players, and fires the game's `on('start')` on every phone.
-- **Kierros alkaa: isäntä pyörittää peliä**: the game's `on('start')`. The host runs the rules and the clock, and stops the clock while `AiPelitRooms.paused`. Kirkkis: `hostStart()` makes the cast (the phones in the round, then computer players up to five), picks the seeker and sends the round (`kr`); a guest waits for it (`phase = 'wait'`), and builds its cast from it (`castFrom()`).
+- **Kierros alkaa: isäntä pyörittää peliä**: the game's `on('start')`. The host runs the rules and the clock, and stops the clock while `AiPelitRooms.paused`. Kirkkis: `hostStart()` makes the cast (the phones in the round, up to eight from v10, then computer players up to five), picks the seeker and sends the round (`kr`); a guest waits for it (`phase = 'wait'`), and builds its cast from it (`castFrom()`).
 - **Isäntä lähettää tilanteen monta kertaa sekunnissa**: the game's `AiPelitRooms.send()`. A phone that joined after the round began hears none of it (`net.listening` in `onMessage()`), and waits for the next round. Kirkkis: `hostSend()` (`ks`), 12 times a second, with what happened since (`happen()`).
 - **Oma sormi liikuttaa omaa pelaajaa, sijainti isännälle**: a guest moves its own player at once and sends where it is (`send()`); the host hears it in `on('message', (msg, from))`. Kirkkis: `guestStep()` (`kme`).
 - **Piirtää pelin oman pelaajan silmin**: the game's drawing, from this phone's player. Kirkkis: `draw()` with the fog cut by that player's field of view.
@@ -160,3 +166,5 @@ flowchart TD
 - **Tämän kuun käyttö alle 800 Gt?**: `underCap()` in `server/api.js`: the relay is free up to 1000 GB a month and billed after, with no cap at Cloudflare, so credentials are handed out only while this month's row in `turn_usage` (migration 0008) is under `TURN_CAP` (800 GB, Eero's choice) and was written within 3 days. No: only STUN; calls then go only directly. Read at most every 10 minutes.
 - **Koneen tarkistus kerran tunnissa: käyttö Cloudflarelta**: `scripts/turn_usage.py`, run hourly from `origin/main` by `scripts/systemd/ai-pelit-turn.timer` on the AgentDeck host: the whole account's TURN bytes this month from Cloudflare's GraphQL (`callsTurnUsageAdaptiveGroups`), written with the admin key to `POST /api/admin/turn-usage`. A host that is off for 3 days turns the relay off.
 - **➕ Kaveriksi ja 📨 Kutsu kaveri**: friends in the room (#324), drawn by `friendButton()` and `renderFriends()` in `public/rooms.js` once `public/kaverit.js` is on the page: "➕ Kaveriksi" beside each other player with a `fid`, the requests to this phone with Hyväksy / Ei under the list (read every 10 s while the room screen shows), and "📨 Kutsu kaveri", a list of friends that sends an invite to this room; a friend who switched on "🔔 Ilmoitukset kutsuista" also gets it as a phone notification with the site closed (#367). See `kaverit.md`.
+- **🎲 Vaihda peliä: isäntä vie koko huoneen toiseen peliin**: between rounds the host picks a game whose `room.max` in `catalog.json` fits everyone (#354); its phone opens that game with the same code (a one-minute `ai-pelit:_isanta` note keeps it host), `rooms/worker.js` takes the new `game`, `v` and `max` from the host's join, and `onPeers()` moves every guest, also one already in the room or coming back from a lost connection. See `porukka.md`.
+- **Viimeinen poistuu tarkoituksella: huone poistetaan heti**: a `bye` that leaves no member ("Poistu huoneesta", or the "‹ Pelit" chip through `AiPelitRooms.leaveIfAlone()` in `public/back.js`) deletes the room and its public listing at once (#354); a phone that only drops off still keeps its seat for 6 hours (`IDLE`).

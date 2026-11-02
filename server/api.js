@@ -183,8 +183,11 @@ async function addScore(env, body) {
   if (!Number.isInteger(version) || version < 1) return fail(400, 'bad version');
   if (!Number.isFinite(score)) return fail(400, 'bad score');
   // The level reached, shown beside the score; optional, as older versions do not send it.
-  const level = body.level === undefined || body.level === null ? null : Number(body.level);
+  let level = body.level === undefined || body.level === null ? null : Number(body.level);
   if (level !== null && !(Number.isInteger(level) && level >= 1 && level <= 100000)) return fail(400, 'bad level');
+  // Piano v10 (#356, Eero's choice) cut every saved level above 5 to 5, as v8's no-fail songs had
+  // opened levels; a page of an older version still open could send its old level back.
+  if (game === 'piano' && version < 10 && level > 5) level = 5;
   const known = await env.DB.prepare('SELECT 1 FROM players WHERE id = ?').bind(player).first();
   if (!known) return fail(404, 'unknown player');
   const better = GAMES[game].order === 'low' ? '<' : '>';

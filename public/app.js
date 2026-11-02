@@ -569,6 +569,7 @@
       // Requests show on the front page and the friends page themselves; on a game's or a
       // group's page they come as kaverit.js's banner.
       friends.quietRequests = !m || m[1] === 'kaverit';
+      friends.quietInvites = !m || m[1] === 'kaverit';
       friends.drawBanner();
       if (m && m[1] === 'kaverit') friends.watch(true);
       else friends.watch(!m && !!friends.name(), 30e3, true);
@@ -602,22 +603,41 @@
       el('div', { class: 'friend-buttons' }, [no, yes]),
     ]);
   }
-  // The front page: requests waiting for this phone, and the friends playing right now.
+  function inviteRow(inv) {
+    var yes = el('button', { type: 'button', class: 'button', text: 'Liity' });
+    var no = el('button', { type: 'button', class: 'secondary', text: 'Ei' });
+    yes.addEventListener('click', function () {
+      yes.disabled = no.disabled = true;
+      friends.acceptInvite(inv).then(function (r) {
+        if (!r.ok) { friendsNote = 'Kutsuun liittyminen ei onnistunut.'; friends.refresh(); }
+      });
+    });
+    no.addEventListener('click', function () {
+      yes.disabled = no.disabled = true;
+      friends.declineInvite(inv).then(function (r) {
+        if (!r.ok) friendsNote = 'Kutsun hylkääminen ei onnistunut.';
+      });
+    });
+    return el('li', { class: 'friend ask', 'data-invite': String(inv.id) }, [
+      el('span', { class: 'friend-face', text: '📨' }),
+      el('div', {}, [
+        el('h3', { text: inv.name + ' kutsuu' }),
+        el('p', { class: 'muted meta', text: friends.title(inv.game) }),
+      ]),
+      el('div', { class: 'friend-buttons' }, [no, yes]),
+    ]);
+  }
+  // The front page: pending room invites and friend requests, no playing-status duplicates.
   function drawPlaying() {
     var box = view.querySelector('.friends-playing');
     if (!box || !friends) return;
-    // Playing a game, not only browsing the shelf ("Selaa pelejä" shows on the friends page).
-    var st = friends.state, now = st ? st.friends.filter(function (f) { return f.now && f.game; }) : [];
-    var asks = st ? st.requests : [];
-    box.hidden = !now.length && !asks.length;
+    var st = friends.state, invites = st ? st.invites : [], asks = st ? st.requests : [];
+    box.hidden = !invites.length && !asks.length;
     box.replaceChildren.apply(box, [
+      invites.length ? el('h2', { text: 'Kutsut' }) : null,
+      invites.length ? el('ul', { class: 'friends' }, invites.map(inviteRow)) : null,
       asks.length ? el('h2', { text: 'Kaveripyynnöt' }) : null,
       asks.length ? el('ul', { class: 'friends' }, asks.map(requestRow)) : null,
-      now.length ? el('h2', { text: 'Kaverit pelaamassa' }) : null,
-      now.length ? el('ul', { class: 'friends' }, now.map(function (f) {
-        var game = f.game && gameOf(f.game);
-        return friendRow(f, game ? el('a', { class: 'button secondary', href: '#/' + game.slug, text: 'Peliin' }) : null);
-      })) : null,
     ].filter(Boolean));
   }
   var friendsNote = '', nameError = '';
@@ -680,6 +700,9 @@
     if (!st) {
       parts.push(el('p', { class: 'muted friends-wait', text: 'Haetaan kavereita…' }));
     } else {
+      if (st.invites.length) {
+        parts.push(el('h2', { text: 'Kutsut' }), el('ul', { class: 'friends' }, st.invites.map(inviteRow)));
+      }
       if (st.requests.length) {
         parts.push(el('h2', { text: 'Kaveripyynnöt' }), el('ul', { class: 'friends' }, st.requests.map(requestRow)));
       }

@@ -351,3 +351,50 @@ test('a phone with a nickname tells its friend id, and the room passes it on (#3
   assert.equal((await room.load()).fids[A], undefined);
   void h;
 });
+
+
+test('the same host can switch games without losing the room or members (#354)', async () => {
+  const { room, join } = setup();
+  const host = await join(H, 'Eero', true, 'KISA', { game: 'vanha', v: '1', max: '4' });
+  const a = await join(A, 'Aino');
+  await join(B, 'Iida');
+  const tooSmall = await join(H, 'Eero', true, 'KISA', { game: 'pieni', v: '1', max: '2' });
+  assert.equal(tooSmall.client.closed.code, 4001);
+  assert.equal((await room.load()).game, 'vanha');
+  const changed = await join(H, 'Eero', true, 'KISA', { game: 'uusi', v: '2', max: '8' });
+  assert.equal(changed.refused, null);
+  assert.equal(host.server.closed.code, 4000);
+  assert.deepEqual(a.server.last('peers').members.map((m) => m.id), [H, A, B]);
+  assert.deepEqual([a.server.last('peers').game, a.server.last('peers').v], ['uusi', 2]);
+  assert.equal((await room.load()).max, 8);
+});
+
+test('the final intentional bye frees the room code; a disconnect does not (#354)', async () => {
+  const { room, ctx, join } = setup();
+  const h = await join(H, 'Eero', true, 'KISA', { game: 'pallo', v: '1' });
+  const a = await join(A, 'Aino');
+  a.server.close(1000, 'connection lost');
+  await room.webSocketClose(a.server);
+  assert.deepEqual(Object.keys((await room.load()).members), [H, A]);
+  const returning = await join(A, 'Aino');
+  await room.webSocketMessage(returning.server, JSON.stringify({ t: 'bye' }));
+  assert.deepEqual(Object.keys((await room.load()).members), [H]);
+  await room.webSocketMessage(h.server, JSON.stringify({ t: 'bye' }));
+  assert.equal(await room.load(), null);
+  assert.equal(ctx.store.size, 0);
+  assert.equal(ctx.alarm, null);
+  const next = await join(B, 'Iida', true, 'KISA', { game: 'uusi', v: '1' });
+  assert.equal(next.refused, null);
+  assert.equal(next.server.last('peers').host, B);
+});
+
+test('an intentionally empty public room disappears from the listing immediately (#354)', async () => {
+  const { make, list } = world();
+  const r = make('KISA');
+  const h = await r.join(H, 'Eero', true, 'KISA', { game: 'pallo', v: '1' });
+  await r.room.webSocketMessage(h.server, JSON.stringify({ t: '_list', on: true }));
+  assert.equal((await list('pallo')).length, 1);
+  await r.room.webSocketMessage(h.server, JSON.stringify({ t: 'bye' }));
+  assert.deepEqual(await list('pallo'), []);
+});
+

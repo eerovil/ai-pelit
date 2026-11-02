@@ -23,7 +23,7 @@ flowchart TD
   subgraph Hylly[Pelihylly: public/app.js]
     H1[👫 Kaverit -sivu: pyynnöt ja kaverilista]
     H6[Kuka pelaa mitä nyt]
-    H7[Etusivu: kaverit pelaamassa nyt]
+    H7[Etusivu: kutsut ja kaveripyynnöt]
     H8[Poista kaveri]
     H9[🔔 Ilmoitukset kutsuista: Päällä tai Pois]
   end
@@ -55,11 +55,12 @@ flowchart TD
   B1 --> S4
   S3 --> H1
   S4 --> H6
-  S4 --> H7
+  S6 --> H7
   R4 --> S5
   S5 -- Kyllä --> S6
   S6 -- vastaus seuraavaan 30 s ilmoitukseen --> B2
   B2 -- Liity --> R2
+  H7 -- Liity --> R2
   H9 --> S7
   S6 --> S8
   S7 --> S8
@@ -69,8 +70,8 @@ flowchart TD
   W2 -- napautus --> R2
 
   class R1,R3,H8,S2 amber
-  class B1,S4,H6,H7 teal
-  class R4,S5,S6,B2,R2 violet
+  class B1,S4,H6 teal
+  class R4,S5,S6,B2,R2,H7 violet
   class R0,S1,S3,H1,S9 blue
   class H9,S7,S8,W1,W2 green
 ```
@@ -92,8 +93,8 @@ flowchart TD
 - **kaverit.js: kerro 30 s välein mitä pelaan**: `ping()` in `public/kaverit.js` sends `POST /api/presence {player, game, version}` while the page is visible, only on a phone that has a friend. `public/back.js` only loads `kaverit.js` in every game; the shelf loads it from `public/index.html`.
 - **Missä kukin on nyt**: the `presence` table; a row older than 90 s means the friend is not playing now, its time shows as "nähty … sitten".
 - **📨 Kutsu kaveri**: a button on the room screen, shown on a phone with friends; it lists them (playing a game first, then browsing the shelf, then the rest) and sends `POST /api/invites`; the button reads "Kutsutaan…", then "Kutsuttu ✓" for the invite's 10 minutes, after which the friend may be invited again.
-- **Banneri: kaveripyyntö tai kutsu**: `drawBanner()` in `public/kaverit.js`, on every page that loads it, from the requests and invites in the latest answer. "Liity" first leaves the room the phone is in, as "Poistu huoneesta" does (`AiPelitRooms.leave()`), then opens the new room so that back still goes up (`openInvite()`, the same handoff as a room code for another game in `rooms.js`, finished by `openFromRoom()` in `public/app.js`): game → its page → the shelf, never back into the game the phone was playing. On the shelf's front page and friends page `public/app.js` sets `quietRequests`, so a request shows on the page itself and only an invite as a banner; on a game's or a group's page a request comes as the banner; on a room screen requests show in its own list.
-- **Etusivu: kaverit pelaamassa nyt**: `drawPlaying()` in `public/app.js`: friend requests (Hyväksy / Ei) and the friends playing a game right now (one only browsing the shelf shows as "Selaa pelejä" on the friends page instead), above "Avoimet huoneet". A phone with a nickname but no friends yet sends no "now playing", so the front page reads `GET /api/friends` every 30 s while it shows (`watch(true, 30e3, true)`), and the first request appears without leaving the page.
+- **Banneri: kaveripyyntö tai kutsu**: `drawBanner()` in `public/kaverit.js`, on every page that loads it, from the requests and invites in the latest answer. "Liity" first leaves the room the phone is in, as "Poistu huoneesta" does (`AiPelitRooms.leave()`), then opens the new room so that back still goes up (`openInvite()`, the same handoff as a room code for another game in `rooms.js`, finished by `openFromRoom()` in `public/app.js`): game → its page → the shelf, never back into the game the phone was playing. On the shelf's front page and friends page `public/app.js` sets both `quietRequests` and `quietInvites` (#354), so requests and invites show in the page's own lists and no banner shows there; on a game's or a group's page a request comes as the banner; on a room screen requests show in its own list.
+- **Etusivu: kutsut ja kaveripyynnöt**: `drawPlaying()` in `public/app.js` (#354): pending room invites ("Kutsut", Liity / Ei, `inviteRow()`) above friend requests (Hyväksy / Ei), above "Avoimet huoneet"; the friends page lists the same invites at its top. The front page no longer lists friends playing; who plays what shows only on the friends page. A phone with a nickname but no friends yet sends no "now playing", so the front page reads `GET /api/friends` every 30 s while it shows (`watch(true, 30e3, true)`), and a new request or invite appears without leaving the page.
 - **Pyyntö piiloon: kysyjä näkee yhä Pyydetty**: "Ei" marks the request declined (`migrations/0008_friend_request_declined.sql`); the asked phone no longer sees it, and the asking phone keeps "Pyydetty" until it is a week old, so a "no" is never shown.
 - **🔔 Ilmoitukset kutsuista: Päällä tai Pois**: the switch at the bottom of the friends page (`pushRow()` in `public/app.js`). On: `AiPelitKaverit.push.set(true)` in `public/kaverit.js` sends the nickname first if needed, asks the phone's permission, subscribes with the site's public key (`VAPID`) and sends `POST /api/push`. Off: unsubscribes and `DELETE /api/push`. Denied permission says "Ilmoitukset on estetty puhelimen asetuksista."; an iPhone outside the installed app says to add the games to the home screen. A phone with it on tells the server its subscription again once a day (`pushSync()`).
 - **Puhelinten push-tilaukset**: the `push_subs` table (`migrations/0010_push.sql`): a phone's push address (`endpoint`), which only that phone knows, and its player; up to five per player. Only the browsers' own push services are taken (`pushEndpoint()` in `server/api.js`).

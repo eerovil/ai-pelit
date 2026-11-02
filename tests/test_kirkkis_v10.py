@@ -4,7 +4,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/kirkkis/v9/"
+URL = "games/kirkkis/v10/"
 NAMES = ["valinta", "onnistui", "tappio", "voitto", "ruoho"]
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -104,4 +104,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/kirkkis/v9")
+    opens_and_plays_with_the_quiet_library(real, context, "games/kirkkis/v10")
