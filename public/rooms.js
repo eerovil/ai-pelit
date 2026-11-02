@@ -54,6 +54,7 @@
   var PICKED = 'ai-pelit:_huone:nimi'; // an animal name picked for a phone with no nickname
   var KEY = 'ai-pelit:_huone:avain'; // this phone's secret key, never shown to the others
   var HERE = 'ai-pelit:_huone:nyt'; // sessionStorage: the room this tab is in, to rejoin after a reload
+  var ISANTA = 'ai-pelit:_isanta'; // sessionStorage: the host's room for a minute while it switches games (#354)
   var COUNTED = 'ai-pelit:_huone:kierros'; // sessionStorage: rounds whose result this tab saved
   var AWAY = 'ai-pelit:_huone:kesken'; // a turns() game's round this phone is in, to come back to
   var AWAY_MS = 6 * 3600e3; // forgotten after this long
@@ -175,6 +176,7 @@
 
   function enter(code, host, pub) {
     clearTimeout(net.timer);
+    choosing = false;
     net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0; net.pub = !!(host && pub); listed = null;
     net.hostId = host ? net.me : ''; net.members = []; net.online = {}; net.wait = false; net.error = '';
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
@@ -244,6 +246,38 @@
   }
 
   var moving = false; // this page is on its way to the room's own game or version
+  function moveRoom(game, v) {
+    if (moving || !/^[a-z0-9-]{1,40}$/.test(game) || !Number.isInteger(Number(v))) return;
+    var to = new URL('../../' + game + '/v' + v + '/?huone=' + net.code, location.href);
+    moving = true;
+    // No bye: this same player remains a member while changing pages and rejoins
+    // with the same secret identity. A bye would delete the room if the host was alone.
+    var ws = net.ws;
+    net.on = false; net.ws = null; net.connected = false;
+    clearTimeout(net.timer);
+    if (ws) try { ws.close(1000, 'Vaihdetaan peliä'); } catch (e) {}
+    ssave(HERE, null);
+    voiceReset();
+    // The existing shelf handoff keeps back going to the new game's own page.
+    var up = history.state && history.state.aiPelitUp;
+    try {
+      if (up && game === GAME) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
+      if (up && game !== GAME) {
+        sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + GAME, page: '#/' + game, game: to.href }));
+        history.back();
+        return;
+      }
+    } catch (e) {}
+    location.replace(to.href);
+  }
+  function switchGame(game) {
+    if (!net.host || !net.on || !net.connected || racing() || !shown || !game ||
+        !game.room || game.room.max < net.members.length) return;
+    var v = game.versions && game.versions[game.versions.length - 1];
+    if (!v || (game.slug === GAME && v.n === VERSION)) return;
+    ssave(ISANTA, { code: net.code, at: Date.now(), pub: net.pub });
+    moveRoom(game.slug, v.n);
+  }
   function onPeers(m) {
     // A second peers message before the page has gone must not step back twice (#68).
     if (moving) return;
@@ -260,32 +294,16 @@
       if (!net.host && m.game === GAME && Number(m.v) < Number(VERSION)) {
         return leave('Huone on pelin vanhemmassa versiossa. Pyydä huoneen tekijää avaamaan peli hyllyltä uudelleen.');
       }
-      // A room made in another game or a newer version: open that one, in this room.
-      if (!net.host && (m.game !== GAME || m.v !== VERSION)) {
-        var to = new URL('../../' + m.game + '/v' + m.v + '/?huone=' + net.code, location.href);
-        net.on = false; sendRaw({ t: 'bye' }); ssave(HERE, null);
-        moving = true;
-        // Back always goes up (#68): opened from the shelf, this game has its page below it.
-        var up = history.state && history.state.aiPelitUp;
-        try {
-          // Another version: the same page stays below the new one, and back.js marks it.
-          if (up && m.game === GAME) sessionStorage.setItem('ai-pelit:_ylos', to.pathname);
-          // Another game: back to this game's page, which app.js turns into that game's page
-          // before it opens the game over it.
-          if (up && m.game !== GAME) {
-            sessionStorage.setItem('ai-pelit:_avaa', JSON.stringify({ from: '#/' + GAME, page: '#/' + m.game, game: to.href }));
-            history.back();
-            return;
-          }
-        } catch (e) {}
-        location.replace(to.href);
-        return;
-      }
       net.joined = true;
       keepHere();
       // A host that comes back without its round (a reload) sends everyone back to the room. Only
       // then: after an ordinary round each phone goes back on its own, keeping its result.
       if (net.host && !net.round) sendRaw({ t: '_lobby' });
+    }
+    // A host can change games after everyone has joined. Move guests already in
+    // the room as well as newcomers; all keep their member identity (#354).
+    if (!net.host && m.game && m.v && (m.game !== GAME || Number(m.v) !== VERSION)) {
+      return moveRoom(m.game, m.v);
     }
     if (net.host) {
       // Someone who left the room for good is the computer's from now on (in a game played in
@@ -359,6 +377,7 @@
     var players = net.members.filter(function (m) { return m.on; }).slice(0, MAX)
       .map(function (m) { return { id: m.id, name: m.name }; });
     if (players.length < MIN) return;
+    choosing = false;
     net.round = { id: hex(5), players: players, over: false };
     net.released = {}; net.pz = []; net.played = true; net.result = '';
     sendRaw({ t: '_start', round: net.round.id, players: players, over: false });
@@ -733,6 +752,36 @@
 
   // ---- The screen ----
   var root = null, el = {};
+  var catalogGames = null, loadingGames = false, choosing = false;
+  function readGames() {
+    if (!shown || !net.host || !net.on || catalogGames || loadingGames || !window.fetch) return;
+    loadingGames = true;
+    fetch(new URL('catalog.json', script.src), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { catalogGames = d && Array.isArray(d.games) ? d.games : []; })
+      .catch(function () { catalogGames = []; })
+      .then(function () { loadingGames = false; render(); });
+  }
+  function eligibleGames() {
+    return (catalogGames || []).filter(function (g) {
+      return g.room && g.room.max >= net.members.length && g.versions && g.versions.length;
+    });
+  }
+  function renderGames() {
+    el.games.hidden = !choosing || !net.host || racing();
+    if (el.games.hidden) return;
+    el.gameList.textContent = '';
+    eligibleGames().forEach(function (g) {
+      var v = g.versions[g.versions.length - 1], current = g.slug === GAME && v.n === VERSION;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.game = g.slug;
+      b.disabled = current;
+      b.textContent = g.title + (current ? ' (nyt)' : '');
+      b.addEventListener('click', function () { switchGame(g); });
+      el.gameList.appendChild(b);
+    });
+  }
   var CSS = [
     '#aipr{position:fixed;inset:0;z-index:2147483640;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:6px;padding:calc(env(safe-area-inset-top,0px) + 40px) 22px calc(env(safe-area-inset-bottom,0px) + 18px);box-sizing:border-box;background:#f6f1e6;color:#2b2416;font:16px/1.35 system-ui,sans-serif;text-align:center;touch-action:manipulation;overflow-y:auto}',
     '#aipr[hidden],#aipr [hidden],#aipr-pause[hidden]{display:none!important}',
@@ -765,6 +814,10 @@
     '#aipr #aipr-again{background:#3f8ad8;box-shadow:0 4px 0 #2a5f99;margin-bottom:6px}',
     '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
     '#aipr .sws{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px}',
+    // The host's two buttons share a row (#354), so the game picker adds no height on its side.
+    '#aipr .acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 10px}',
+    '#aipr .acts button{font-size:17px;padding:11px 13px}',
+    '#aipr-switchGame{background:#3f8ad8!important;box-shadow:0 4px 0 #2a5f99!important}',
     '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
     // A phone on its side (#95): the room in two columns, the code and QR left and everything to
     // tap right, so "Aloita kierros" shows without scrolling even with a full room.
@@ -808,7 +861,9 @@
     '#aipr-friends>button{font-size:15px;padding:7px 12px}',
     '#aipr .ask button.no{background:#b8ad95;box-shadow:0 3px 0 #8a8270}',
     '#aipr-friends>button{background:#9a5cc6;box-shadow:0 4px 0 #6b3a86}',
-    '#aipr-inv{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 18px calc(env(safe-area-inset-bottom,0px) + 14px);box-sizing:border-box;background:#f6f1e6;overflow-y:auto}',
+    '#aipr-inv,#aipr-games{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 40px) 18px calc(env(safe-area-inset-bottom,0px) + 14px);box-sizing:border-box;background:#f6f1e6;overflow-y:auto}',
+    '#aipr-games button{width:min(320px,100%);font-size:16px;padding:9px 12px}',
+    '#aipr-gameList{display:flex;flex-direction:column;gap:8px;width:min(320px,100%)}',
     '#aipr-inv ul{width:min(340px,100%)}',
     '#aipr-inv li{justify-content:space-between;text-align:left;padding:6px 10px}',
     '#aipr-inv li div{min-width:0}',
@@ -840,12 +895,15 @@
       '<div id="aipr-extra"></div>' +
       '<div class="sws"><label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
       '<label class="sw" id="aipr-voiceRow" hidden><input type="checkbox" id="aipr-voice">🎤 Puhe</label></div>' +
-      '<button id="aipr-start" hidden>Aloita kierros</button>' +
+      '<div class="acts"><button id="aipr-switchGame" hidden>🎲 Vaihda peliä</button>' +
+      '<button id="aipr-start" hidden>Aloita kierros</button></div>' +
     '</div>' +
     '<p id="aipr-err"></p>' +
     '<button id="aipr-back" class="plain">Takaisin</button>' +
     '<div id="aipr-inv" hidden><h2>📨 Kutsu kaveri</h2><p class="small">Kutsu tulee kaverin puhelimeen, vaikka hän pelaisi toista peliä.</p>' +
-      '<ul id="aipr-invList"></ul><p class="small" id="aipr-invNone"></p><button id="aipr-invClose">Valmis</button></div>';
+      '<ul id="aipr-invList"></ul><p class="small" id="aipr-invNone"></p><button id="aipr-invClose">Valmis</button></div>' +
+    '<div id="aipr-games" hidden><h2>🎲 Vaihda peliä</h2><p class="small">Huone ja kaverit pysyvät mukana. Valitse seuraava peli.</p>' +
+      '<div id="aipr-gameList"></div><button id="aipr-gamesClose" class="plain">Takaisin</button></div>';
 
   // Like back.js: the game never sees a touch or a key meant for the room screen.
   function shield(e) {
@@ -865,7 +923,7 @@
     document.body.appendChild(root);
     document.body.appendChild(pause);
     shield(root); shield(pause);
-    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'qr', 'members', 'friends', 'info', 'extra', 'start', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
+    ['join', 'name', 'again', 'create', 'codeIn', 'joinBtn', 'open', 'rooms', 'none', 'pubRow', 'pub', 'voiceRow', 'voice', 'room', 'result', 'code', 'qr', 'members', 'friends', 'info', 'extra', 'start', 'switchGame', 'games', 'gameList', 'gamesClose', 'err', 'back', 'pauseText', 'goOn', 'inv', 'invList', 'invNone', 'invClose']
       .forEach(function (k) { el[k] = document.getElementById('aipr-' + k); });
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
@@ -873,6 +931,8 @@
     el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false); net.rejoin = true; } });
     el.codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
     el.start.addEventListener('click', startRound);
+    el.switchGame.addEventListener('click', function () { choosing = true; render(); });
+    el.gamesClose.addEventListener('click', function () { choosing = false; render(); });
     el.pub.addEventListener('change', function () { net.pub = el.pub.checked; if (net.joined) keepHere(); tellList(); render(); });
     el.back.addEventListener('click', function () { if (net.on) leave(); else { show(false); fire('menu'); } });
     el.goOn.addEventListener('click', goOn);
@@ -921,7 +981,7 @@
   function show(on) {
     build();
     shown = on;
-    if (!on) inviting = false;
+    if (!on) { inviting = false; choosing = false; }
     root.hidden = !on;
     if (on) el.name.value = myName();
     render();
@@ -936,6 +996,8 @@
     hookFriends();
     renderPause();
     if (!shown) return;
+    readGames();
+    renderGames();
     el.join.hidden = net.on;
     el.room.hidden = !net.on;
     el.back.textContent = net.on ? 'Poistu huoneesta' : 'Takaisin';
@@ -972,13 +1034,14 @@
       info = online < MIN ? 'Odotetaan kavereita…'
         : online < MAX ? online + ' pelaajaa.'
         : MAX + ' pelaajaa – huone on täynnä.';
-    } else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : 'Odotetaan, että ' + hostName() + ' aloittaa kierroksen…';
+    } else info = net.wait ? 'Kierros on käynnissä – pääset mukaan seuraavaan.' : 'Huoneen tekijä valitsee seuraavan pelin. Odotetaan, että ' + hostName() + ' aloittaa kierroksen…';
     if (net.note) info += ' ' + net.note;
     el.info.textContent = info;
     el.pubRow.hidden = !net.host;
     el.pub.checked = net.pub;
     el.voiceRow.hidden = !RTC;
     el.voice.checked = voice.on;
+    el.switchGame.hidden = !net.host || !net.connected || racing() || eligibleGames().length < 2;
     el.start.hidden = !net.host;
     el.start.disabled = online < MIN || !net.connected;
     el.start.textContent = net.played ? 'Uusi kierros' : 'Aloita kierros';
@@ -1267,6 +1330,10 @@
     on: function (type, fn) { (handlers[type] = handlers[type] || []).push(fn); return this; },
     open: function () { if (!net.on) net.error = ''; show(true); },
     leave: function () { if (net.on) leave(); else if (shown) { show(false); fire('menu'); } },
+    // Going up to the shelf is an intentional departure only when this phone is alone.
+    leaveIfAlone: function () {
+      if (net.on && net.members.length === 1 && net.members[0].id === net.me) leave();
+    },
     // Host: to every other phone, or to one id. A guest: to the host.
     send: function (msg, to) { var m = Object.assign({}, msg); if (to && net.host) m.to = to; sendRaw(m); },
     // Host: to every phone in the round, and only to them. Each phone confirms it; one that has
@@ -1339,8 +1406,14 @@
     var back = sload(HERE, null);
     if (back && (back.game !== GAME || back.v !== VERSION)) back = null;
     if (q) history.replaceState(history.state, '', location.pathname);
-    if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) enter(q.toUpperCase(), false);
-    else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
+    var handoff = sload(ISANTA, null);
+    if (q && /^[A-Za-z]{4}$/.test(q) && handoff && handoff.code === q.toUpperCase() &&
+        handoff.at && Date.now() - handoff.at >= 0 && Date.now() - handoff.at < 60000) {
+      ssave(ISANTA, null);
+      enter(q.toUpperCase(), true, !!handoff.pub);
+    } else if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) {
+      enter(q.toUpperCase(), false);
+    } else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(autoJoin); });
   else setTimeout(autoJoin);

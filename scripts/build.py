@@ -32,6 +32,8 @@ THUMB_SIZE = (360, 480)
 # A shared library a version loads from public/lib/ (#99), e.g. '../../../lib/three-r187/three.module.js'.
 LIB_REF = re.compile(r"""['"]\.\./\.\./\.\./lib/([^'"?#]+)""")
 LIB_DIR = ROOT / "public" / "lib"
+ROOM_SCRIPT_RE = re.compile(r'<script[^>]+src="\.\./\.\./\.\./rooms\.js"[^>]*>')
+ROOM_MAX_RE = re.compile(r'data-max="([2-8])"')
 # Shelf groups (#153): a game.json with "group": "<key>" shows inside that group's card, and the
 # group's page lists its games. A key is a shelf address like a game's slug, so no game may take it.
 GROUPS = {
@@ -120,6 +122,10 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     old = folders - {f"v{last}"}
     if old:
         raise GameError(f"{slug}: only the newest version has a folder; delete {', '.join(sorted(old, key=lambda f: int(f[1:])))} (#346)")
+    # The host's game picker uses the actual capacity of each newest room version.
+    room_script = ROOM_SCRIPT_RE.search(html)
+    room_match = ROOM_MAX_RE.search(room_script.group(0)) if room_script else None
+    room_max = int(room_match.group(1)) if room_match else 5
     group = meta.get("group")
     if group is not None and group not in GROUPS:
         raise GameError(f"{slug}: game.json names an unknown group {group!r} (GROUPS in scripts/build.py)")
@@ -128,6 +134,7 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
         "title": meta["title"],
         "description": meta["description"],
         **({"group": group} if group else {}),
+        **({"room": {"max": room_max}} if room_script else {}),
         # A new picture gets a new name, so no phone keeps showing an old one from its cache.
         "thumb": f"thumbs/{slug}-{hashlib.sha256(thumb.read_bytes()).hexdigest()[:8]}.webp",
         "versions": [

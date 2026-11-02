@@ -270,6 +270,9 @@
     // A new tab (Ctrl, Cmd, Shift, middle button) opens the link as it is.
     if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return false;
     e.preventDefault();
+    // Going back from a lone room member is an intentional departure, not a dropout.
+    if (window.AiPelitRooms && typeof window.AiPelitRooms.leaveIfAlone === 'function')
+      window.AiPelitRooms.leaveIfAlone();
     if (history.state && history.state.aiPelitUp) history.back();
     else location.replace(a.href);
     return true;
