@@ -16,7 +16,7 @@ ADMIN_KEY = "avain"
 PUHELINKOPPI = "games/puhelinkoppi/v7/"
 SORMISKEITTI = "games/sormiskeitti/v8/"
 HIIHTO = "games/hiihto/v11/"
-PIANO = "games/piano/v9/"
+PIANO = "games/piano/v10/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
@@ -503,7 +503,7 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
-    assert row == {"score": 300, "version": 9, "level": 1}
+    assert row == {"score": 300, "version": 10, "level": 1}
 
 
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
