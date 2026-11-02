@@ -9,7 +9,7 @@ games/korkeushyppy/v9, games/seivashyppy/v10, games/moukari/v9, games/makihyppy/
 import json
 
 import pytest
-from test_yleisurheilu_vuorot import on_turn, room
+from test_yleisurheilu_vuorot import MARK, on_turn, room
 
 # Each event and the function that draws its athlete on the runway or in the circle.
 EVENTS = {
@@ -130,6 +130,62 @@ def test_both_watching_tap_at_once_and_a_reloaded_phone_gets_the_spots(site, bro
     fan.wait_for_function(
         f"K.spot[{json.dumps(hid)}] === {want} && K.spot[{json.dumps(me)}] === {mine}", timeout=5000
     )
+    for p in pages:
+        assert p.errors == []
+        p.context.close()
+
+
+def xs(page):
+    return page.evaluate("Object.fromEntries(K.fanSpots.map(f => [f.id, f.x]))")
+
+
+@pytest.mark.parametrize("path", ["pituushyppy/v13", "korkeushyppy/v9"])
+def test_nobody_moves_as_the_turn_goes_round_or_a_new_meet_starts(site, browser, path):
+    relay, pages, athlete, fans = watching(site, browser, path)
+    host = pages[0]
+    ids = {p.evaluate("AiPelitRooms.me"): p for p in pages}
+    seen = {}  # friend id -> where it stood while watching, on the host's screen
+
+    def note():
+        host.wait_for_timeout(700)  # long enough to walk a good way, had it started to
+        for k, v in xs(host).items():
+            assert seen.setdefault(k, v) == v, "a friend nobody tapped moved"
+
+    note()
+    # Two turn changes, nobody tapping: each friend watches from the same place every time.
+    for _ in range(2):
+        pid = on_turn(host)
+        n = host.evaluate("K.comp.seq")
+        ids[pid].evaluate(f"K.report({n}, {MARK})")
+        host.wait_for_function(f"K.comp.seq > {n} && K.current() && K.current().p !== {json.dumps(pid)}")
+        host.wait_for_function("K.fanSpots.length === 2", timeout=5000)
+        note()
+    assert len(seen) == 3
+    # A friend walks away, then the host starts a new meet in the same room: everyone starts from
+    # their own place again, without walking there from where they stood before.
+    fan = next(p for p in pages if p.evaluate("K.fans().some(f => f.p === AiPelitRooms.me)") and p is not host)
+    fid = fan.evaluate("K.mine().id")
+    tap_scene(fan, 30)
+    for p in pages:  # it has walked to the row's left end
+        p.wait_for_function(f"Math.abs(K.fanSpots.find(f => f.id === {json.dumps(fid)}).x - 30) < 3", timeout=8000)
+    room0 = host.evaluate("K.comp.room")
+    host.evaluate("AiPelitRooms.endRound(); AiPelitRooms.backToRoom('', 'win')")
+    host.wait_for_selector("#aipr-start", state="visible", timeout=5000)
+    host.click("#aipr-start")
+    for p in pages:
+        p.wait_for_function(
+            f"K.comp && K.comp.room !== {json.dumps(room0)} && K.comp.seq >= 0 && K.fanSpots.length === 2", timeout=8000
+        )
+        assert p.evaluate("Object.keys(K.spot).length") == 0
+    first = xs(host)
+    host.wait_for_timeout(700)
+    assert xs(host) == first
+    # Each stands on its own place: its order among the friends, along the row (h 40 from the box).
+    for p in pages:
+        assert p.evaluate("""(() => {
+          const all = K.comp.throwers.filter(t => t.p !== null), l = 12 + 16, r = SW - 12 - 16;
+          return K.fanSpots.every(f => Math.abs(f.x - (l + (all.findIndex(t => t.id === f.id) + 0.5) / all.length * (r - l))) < 1);
+        })()""")
     for p in pages:
         assert p.errors == []
         p.context.close()

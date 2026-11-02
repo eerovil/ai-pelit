@@ -483,7 +483,7 @@
       if (!saved) { advance(); save('kesken', K.comp); }
       follow();
     };
-    K.quit = () => { K.comp = null; K.ending = null; clearTurn(); K.spot = {}; };
+    K.quit = () => { K.comp = null; K.ending = null; clearTurn(); K.spot = {}; walkX = {}; };
 
     // ---------- Playing with friends ----------
     // The host keeps the meet and takes the computer's turns; the phone whose turn it is runs its
@@ -491,7 +491,7 @@
     // live messages on to the others, who draw the same attempt, and sends the meet (c).
     if (R) {
       R.on('start', s => {
-        K.ending = null; K.me = R.me; clearTurn(); K.cheers = {}; K.spot = {};
+        K.ending = null; K.me = R.me; clearTurn(); K.cheers = {}; K.spot = {}; walkX = {};
         if (window.AiPelitAanet && !o.cheerSound) window.AiPelitAanet.load(['jee']);
         if (R.isHost && !s.over) {
           K.comp = newComp('net', s.players.map(p => ({ name: p.name, p: p.id, fit: p.id === R.me && o.fit ? o.fit() : null })), K.level);
@@ -642,11 +642,13 @@
       x.restore();
     };
     // ---------- Spectators in the background (#341) ----------
-    // Each spectator stands on a spot along the row, a share of its width (0 … 1), spread evenly
-    // until its phone taps the scene; then it walks there. K.spot holds the spots that were tapped,
+    // Each spectator stands on a spot along the row, a share of its width (0 … 1), until its phone
+    // taps the scene; then it walks there. The untapped spot is by the friend's place among all the
+    // friends in the meet, not among those watching now, so it stays put as the turn moves on. K.spot holds the spots that were tapped,
     // walkX where each figure is drawn now (also a share), so a new spot is walked to, not jumped to.
     K.spot = {}; K.fanSpots = [];
-    const walkX = {}, WALK = 1.2;      // a walk's speed: figure heights a second
+    let walkX = {};
+    const WALK = 1.2;      // a walk's speed: figure heights a second
     let lastRow = null, lastWalk = 0, lastGo = -1e9;
     const spotOf = v => typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(1, v)) : null;
     function drawWalkers(x, box, fans) {
@@ -658,8 +660,9 @@
       const live = fans.filter(f => K.cheers[f.id] && now - K.cheers[f.id].at < CHEER_T * 1000)
         .sort((a, b) => K.cheers[a.id].at - K.cheers[b.id].at);
       x.save();
-      const spots = fans.map((f, i) => {
-        const want = K.spot[f.id] !== undefined ? K.spot[f.id] : (i + 0.5) / fans.length;
+      const all = K.comp.throwers.filter(human);
+      const spots = fans.map(f => {
+        const want = K.spot[f.id] !== undefined ? K.spot[f.id] : (all.indexOf(f) + 0.5) / all.length;
         if (walkX[f.id] === undefined) walkX[f.id] = want;
         const d = want - walkX[f.id], stepMax = WALK * h * dt / w;
         walkX[f.id] = Math.abs(d) <= stepMax ? want : walkX[f.id] + Math.sign(d) * stepMax;
