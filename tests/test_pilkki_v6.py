@@ -14,7 +14,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/pilkki/v5/"
+URL = "games/pilkki/v6/"
 
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) { update(DT); closing(DT); } }; }"
 
@@ -529,7 +529,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v5")
+    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v6")
 
 
 # #345: the Worker drops oversized room messages; a dense school still reaches guests.

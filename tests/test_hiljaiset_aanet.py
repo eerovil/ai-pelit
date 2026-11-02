@@ -18,7 +18,7 @@ VERSIONS = [
     "games/jaan-alla/v7", "games/jalkapallo/v4", "games/kaahari/v6", "games/kaaosrata/v5",
     "games/keihas/v13", "games/kirkkis/v10", "games/korkeushyppy/v10", "games/kuula/v7",
     "games/lentopallo/v7", "games/makihyppy/v7", "games/molkky/v4", "games/moukari/v10",
-    "games/orava/v6", "games/pallorata/v5", "games/pilkki/v5", "games/pituushyppy/v14",
+    "games/orava/v6", "games/pallorata/v5", "games/pilkki/v6", "games/pituushyppy/v14",
     "games/puhelinkoppi/v8", "games/seivashyppy/v11", "games/skuutti/v4", "games/sormiskeitti/v9",
     "games/tikka/v6", "games/trampoliini/v10", "games/voimistelu/v13", "games/vuoristorata/v4",
     "games/yoajo/v10", "games/last-signal/v16", "games/vauvan-syotto/v4",
