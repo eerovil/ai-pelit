@@ -8,7 +8,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/kirkkis/v10/"
+URL = "games/kirkkis/v11/"
 NAMES = ["Eero", "Aino", "Eetu", "Iida", "Onni", "Venla", "Kalle", "Saara"]
 
 
