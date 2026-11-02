@@ -229,9 +229,17 @@ high-score lists (#25), then play counts (#26).
   (loaded by `back.js` in every game, and by the shelf) tells the server what a phone with
   friends plays every 30 s while a page is on screen, shows invites ("Liity") and requests as a
   banner, and the room screen's "📨 Kutsu kaveri" invites a friend into the room. The shelf has
-  the friends page at `#/kaverit` and "Kaverit pelaamassa" on its front page. A game needs nothing
-  for it. Phones know each other only by a friend id, a hash of the secret player id
+  the friends page at `#/kaverit`; pending invites and friend requests are on the shelf's
+  front page, and friends' game activity appears only on the friends page (#354). A game needs
+  nothing for it. Phones know each other only by a friend id, a hash of the secret player id
   (`pidOf()` in `server/api.js`), which a phone with a nickname sends to the room as `fid`.
+- **Switching games in one room (#354).** Between rounds the host can choose a new game from
+  `catalog.json`; only games whose `room.max` fits every member are offered. Every phone follows
+  into the new game with the same room code and friend identity (no `bye` when switching), and a
+  short sessionStorage handoff tells the next page that its phone is the host. A room is deleted
+  immediately when its final member deliberately leaves (including with the "‹ Pelit" chip);
+  dropped connections still have six hours to rejoin. On the shelf and friends page, invitations
+  are shown with Liity/Ei, not duplicated by the invitation banner.
 - `public/scores.js`, `public/rooms.js`, `public/kaverit.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
