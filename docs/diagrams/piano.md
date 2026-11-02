@@ -1,6 +1,6 @@
 # Piano: one game, from the first note to the last heart
 
-How a game of Piano plays (v1–v9). Notes of a familiar tune fall down four lanes, and the
+How a game of Piano plays (v1–v10). Notes of a familiar tune fall down four lanes, and the
 player presses the lane's key at the bottom when a note reaches the line, which scores that
 note (in v1–v4 the press also played it; from v5 the tune plays by itself). Each finished song is a level; the next song is a little faster. A missed note or a
 press with no note near the line costs one of three hearts. From v2 the score is also kept
@@ -14,7 +14,8 @@ as wide again, so a press a little early or late still counts. From v8 a "Ei hä
 makes a game one song with no hearts to lose: misses cost nothing, and when the song ends the
 menu shows the score and the hits, which go to neither the record nor the high-score list. From v9
 the menu starts on the song played last (also after the game is closed), not the furthest one;
-› still goes up to the furthest.
+› still goes up to the furthest, and a no-fail song no longer opens the next level. In v10 a saved
+furthest level above 5 went down to 5, once per phone, undoing the levels no-fail had opened.
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
@@ -69,7 +70,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: valmiina viimeksi soitettu kappale, nuolilla muut**: from v9 (#356) `showMenu()` sets `pick` to the level last started, saved by `startLevel()` as `ai-pelit:piano:viimeisin` (clamped to 1…`topLevel`; a phone with no such save falls back to `topLevel`), so after a game over or a no-fail song the same song is ready, and after a reload too. Before v9: v3 `showMenu()` / `showPick()` in `games/piano/v3/index.html`: the button reads "Jatka tasolta N" for the furthest level reached (`ai-pelit:piano:taso`), and ‹ › pick any earlier one; `newGame(pick)` starts there with the score at 0. v1 and v2 always start from level 1.
+- **Valikko: valmiina viimeksi soitettu kappale, nuolilla muut**: from v9 (#356) `showMenu()` sets `pick` to the level last started, saved by `startLevel()` as `ai-pelit:piano:viimeisin` (clamped to 1…`topLevel`; a phone with no such save falls back to `topLevel`), so after a game over or a no-fail song the same song is ready, and after a reload too. v10 (#356, Eero's choice) lowers a saved `taso` above 5 to 5 once per phone, marked done in `ai-pelit:piano:tasoraja`, before the menu reads it. Before v9: v3 `showMenu()` / `showPick()` in `games/piano/v3/index.html`: the button reads "Jatka tasolta N" for the furthest level reached (`ai-pelit:piano:taso`), and ‹ › pick any earlier one; `newGame(pick)` starts there with the score at 0. v1 and v2 always start from level 1.
 - **Ei häviötä päällä?**: v8 (#318) the "🛡️ Ei häviötä: pois/päällä" switch (`#nofail`) under the play button in `games/piano/v8/index.html`; `noFail` is kept as `ai-pelit:piano:eihaviota`, and `newGame(pick, noFail)` sets `safe` for that game.
 - **Yksi kappale ilman sydämiä**: v8 with `safe` set, `miss()` breaks the streak and shows the miss but takes no heart, so `gameOver()` never runs; the HUD shows "🛡️ Ei häviötä" in place of the hearts, and the level's banner says so.
 - **Ei häviötä -peli?**: v8 `songDone()` checks `safe` first.
