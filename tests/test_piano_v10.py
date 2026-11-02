@@ -216,3 +216,11 @@ def test_a_level_reached_past_5_after_the_cut_is_kept(site, context):
 def test_a_level_at_or_below_5_is_untouched(site, context):
     page = open_menu(site, context, saves={"taso": 4})
     assert page.evaluate("[topLevel, localStorage.getItem('ai-pelit:piano:taso')]") == [4, "4"]
+
+
+def test_the_cut_happens_only_on_the_first_open(site, context):
+    page = open_menu(site, context, saves={"taso": 9})
+    assert page.evaluate("topLevel") == 5
+    # A restart: the test's init script writes 9 again, as if reached anew; the cut is not repeated.
+    page.reload()
+    assert page.evaluate("[topLevel, localStorage.getItem('ai-pelit:piano:tasoraja')]") == [9, "true"]
