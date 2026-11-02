@@ -9,7 +9,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/areena/v7/"
+URL = "games/areena/v8/"
 SOUNDS = ["gongi", "suhahdus", "osuma", "potku", "tomahdys", "voitto", "tappio"]
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -167,7 +167,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/areena/v7")
+    opens_and_plays_with_the_quiet_library(real, context, "games/areena/v8")
 
 
 # ---------- v7 (#369): 2-8 phones, everyone against everyone ----------
