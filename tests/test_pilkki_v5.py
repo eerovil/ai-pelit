@@ -1,4 +1,4 @@
-"""Pilkkiminen v3 (#291): a nibble felt at the jig, so a fish is noticed without a sounder; and
+"""Pilkkiminen v5 (#345): a nibble felt at the jig, so a fish is noticed without a sounder; and
 everything of v2 (#289): walking on the ice, the sounder chosen in the menu, baits, and fish that
 school, fear the pike, and one giant pike.
 
@@ -14,7 +14,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/pilkki/v4/"
+URL = "games/pilkki/v5/"
 
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) { update(DT); closing(DT); } }; }"
 
@@ -529,4 +529,70 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v5")
+
+
+# #345: the Worker drops oversized room messages; a dense school still reaches guests.
+def test_dense_school_is_chunked_below_relay_limit(room):
+    host, [guest] = room("Host", "Guest")
+    guest_id = guest.evaluate("AiPelitRooms.me")
+    guest.evaluate("() => { stand(LAKE_W / 2, LAKE_H / 2); sendMe(); }")
+    host.wait_for_function("(id) => !!net.board[id]", guest_id)
+    sizes = host.evaluate("""(id) => {
+      const original = R.send, sizes = [];
+      R.send = (m, to) => {
+        if (m.t === 'p') sizes.push(JSON.stringify({ ...m, to }).length);
+        original(m, to);
+      };
+      try {
+        const s = lake.spots[0], x = LAKE_W / 2, y = LAKE_H / 2;
+        pond = Array.from({ length: 700 }, (_, i) => {
+          const f = newFish(s, 'ahven');
+          f.lx = f.wx = x + (i % 15) * 0.3;
+          f.ly = f.wy = y + Math.floor(i / 15) * 0.3;
+          return f;
+        });
+        sendPond(id);
+      } finally { R.send = original; }
+      return sizes;
+    }""", guest_id)
+    assert len(sizes) > 1 and all(0 < n <= 12000 for n in sizes)
+    guest.wait_for_function("pond.length === 700", timeout=8000)
+    assert host.evaluate("pond.map(f => f.id).sort((a,b)=>a-b)") == guest.evaluate(
+        "pond.map(f => f.id).sort((a,b)=>a-b)")
+    assert host.errors == guest.errors == []
+
+
+def test_incomplete_and_stale_fish_snapshots_are_ignored(site, context):
+    page = start(site, context)
+    result = page.evaluate("""() => {
+      net.on = true; net.pReceived = 0; net.parts = null;
+      const one = id => [id, 0, 100, 130, 95, 2, 130, 95, 0, 0, 0, 0];
+      const prior = pond.length;
+      receivePond({k:20,i:0,n:2,c:{},f:[one(10001)]});
+      const partial = pond.length === prior && net.pReceived === 0;
+      receivePond({k:21,i:0,n:1,c:{},f:[one(10002)]});
+      receivePond({k:20,i:1,n:2,c:{},f:[one(10003)]});
+      return [partial, pond.map(f => f.id), net.pReceived];
+    }""")
+    assert result == [True, [10002], 21]
+
+
+def test_first_nibble_strike_success_miss_and_late_strike(site, context):
+    page = start(site, context)
+    ready(page)
+    state = page.evaluate("""() => {
+      const f = pond[0], random = Math.random;
+      try {
+        f.int = 0; nibble(0.35, f); Math.random = () => 0;
+        const caught = strikeAtNibble() && phase === 'fight';
+        toJig(); f.look = true; f.int = 0.6;
+        nibble(0.35, f); Math.random = () => 0.99;
+        const before = f.int, missed = strikeAtNibble() && phase === 'jig' && f.int < before;
+        f.look = true; nibble(0.35, f); playT += 0.5;
+        const late = strikeAtNibble();
+        lost(f); nibble(0.35, f);
+        return [caught, missed, late, !strikeAtNibble()];
+      } finally { Math.random = random; }
+    }""")
+    assert state == [True, True, False, True]

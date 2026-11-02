@@ -29,6 +29,13 @@
       "note": "Yleisön huudot, aplodit ja ”ooh”-äänet on poistettu, ja kovimmat äänet soivat hiljempaa.",
       "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
       "issue": "eerovil/ai-pelit#337"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-02",
+      "note": "Kaverihuoneessa kalat näkyvät myös muille kuin isännälle, ja kala voi tarttua jo ensimmäisestä näykkäyksestä ajoitetulla vastaiskulla.",
+      "request": "Pilkkipelissä vain host sai tutkan. Muut pelaajat ei saaneet nykäisyäkään(onko  bugi ettei kaloja ole ilman tutkaa)",
+      "issue": "eerovil/ai-pelit#345"
     }
   ]
 }
