@@ -272,14 +272,23 @@ def test_phones_meet_by_code_and_by_link(phones):
     assert host.errors == guest.errors == linked.errors == []
 
 
-def test_the_qr_code_reads_back_as_the_join_link(phones):
-    cv2 = pytest.importorskip("cv2")
-    import numpy as np
-
-    host, code = make_room(phones)
-    img = np.frombuffer(host.locator("#aipr-qr").screenshot(), dtype=np.uint8)
-    got, _, _ = cv2.QRCodeDetector().detectAndDecode(cv2.imdecode(img, cv2.IMREAD_GRAYSCALE))
-    assert got.endswith(f"/games/huonetesti/v2/?huone={code}")
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844)])
+def test_the_room_screen_has_no_qr_code(phones, width, height):
+    # Nobody scanned it (#354, Eero's choice): friends join by the code, a link or an invite.
+    host = phones("Eero", width=width, height=height)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    # A reload keeps the room and still draws no QR code.
+    host.reload()
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.code === %r" % code)
+    host.evaluate("AiPelitRooms.open()")
+    assert host.locator("#aipr canvas").count() == 0
+    assert host.evaluate("document.documentElement.scrollWidth") <= width
+    assert host.evaluate("document.getElementById('aipr').scrollHeight") <= height
+    assert text(host, "code") == code
+    assert "Kaverit liittyvät tällä koodilla." in text(host, "room")
 
 
 def test_a_round_goes_both_ways(phones):
@@ -607,7 +616,7 @@ def test_the_room_screen_fits_a_small_phone(phones):
         join(phones, n, code)
     host.wait_for_function("AiPelitRooms.members.length === 5")
     # Everything is on the screen without scrolling, the way out included.
-    for part in ["#aipr-qr", "#aipr-pub", "#aipr-start", "#aipr-back"]:
+    for part in ["#aipr-code", "#aipr-pub", "#aipr-start", "#aipr-back"]:
         box = host.locator(part).bounding_box()
         assert box["y"] >= 0 and box["y"] + box["height"] <= 640, part
 
@@ -630,7 +639,7 @@ EXTRA = """() => {
 
 @pytest.mark.parametrize("width,height", [(740, 360), (640, 360), (844, 390)])
 def test_the_room_screen_fits_a_phone_on_its_side(phones, width, height):
-    # Sideways (#95) the room is two columns: the code and QR left, the players and buttons right.
+    # Sideways (#95) the room is two columns: the code left, the players and buttons right.
     # A full room of eight, with the game's own host controls, still fits without scrolling.
     host = phones("Eero", "iso/v1/", width=width, height=height)
     host.click("#multi")
@@ -647,16 +656,16 @@ def test_the_room_screen_fits_a_phone_on_its_side(phones, width, height):
     host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 8")
     guest.wait_for_function("AiPelitRooms.inRoom && AiPelitRooms.members.length === 8")
     assert text(host, "info") == "8 pelaajaa – huone on täynnä."
-    for page, parts in [(host, ["#aipr-qr", "#aipr-code", "#tracks", "#aipr-pub", "#aipr-start", "#aipr-back"]),
-                        (guest, ["#aipr-qr", "#aipr-code", "#aipr-info", "#aipr-back"])]:
+    for page, parts in [(host, ["#aipr-code", "#tracks", "#aipr-pub", "#aipr-start", "#aipr-back"]),
+                        (guest, ["#aipr-code", "#aipr-info", "#aipr-back"])]:
         assert page.evaluate("document.getElementById('aipr').scrollHeight") <= height
         assert page.locator("#aipr-members li").count() == 8
         for part in parts + ["#aipr-members li >> nth=7"]:
             box = page.locator(part).bounding_box()
             assert box["y"] >= 0 and box["y"] + box["height"] <= height, part
             assert box["x"] >= 0 and box["x"] + box["width"] <= width, part
-    qr, start_ = host.locator("#aipr-qr").bounding_box(), host.locator("#aipr-start").bounding_box()
-    assert qr["x"] + qr["width"] < start_["x"]
+    code_, start_ = host.locator("#aipr-code").bounding_box(), host.locator("#aipr-start").bounding_box()
+    assert code_["x"] + code_["width"] < start_["x"]
     # The game's own control and the start button both take a tap where they show.
     host.locator("#tracks button >> nth=1").click()
     assert host.evaluate("window.picked") == "Viidakko"
