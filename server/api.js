@@ -73,7 +73,7 @@ const ID = /^[a-f0-9]{32}$/;
 const NAME_MAX = 16;
 export const NEW_PER_DAY = 5;
 export const PENDING_MAX = 30;
-const BODY_MAX = 4000; // room for 1000 characters of feedback (#184), emoji and all
+const BODY_MAX = 12000; // room for 5000 characters of feedback (#184, #351), emoji and all
 const LIST = 10;
 
 function json(body, status = 200) {
@@ -339,7 +339,7 @@ function isAdmin(request, env) {
 // Feedback on a game (#184). Only a player whose current nickname the admin approved may write,
 // so it needs no moderation of its own; at most FEEDBACK_PER_DAY a day per player. Private: no
 // route shows it to players.
-export const FEEDBACK_MAX = 1000;
+export const FEEDBACK_MAX = 5000; // was 1000; players asked to write longer (#351)
 export const FEEDBACK_PER_DAY = 10;
 
 // Like cleanName(), but keeps line breaks (at most two in a row).

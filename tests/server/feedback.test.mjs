@@ -65,7 +65,7 @@ test('the admin reads it, and the daily check files it once', async () => {
   assert.equal((await call('GET', '/api/admin/feedback?issue=190')).status, 403);
 });
 
-test('feedback is 1 to 1000 characters, about a real game, and limited per day', async () => {
+test('feedback is 1 to 5000 characters, about a real game, and limited per day', async () => {
   const { env, call, player } = setup();
   await player(A, 'Aino', 'approved');
   const send = (body) => call('POST', '/api/feedback', { player: A, game: 'hiihto', text: 'ok', ...body });

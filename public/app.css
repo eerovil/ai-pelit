@@ -56,7 +56,8 @@ p { margin: 0 0 6px; }
 .feedback-row .feedback-note { flex: 1; margin: 0; }
 .feedback input, .feedback select, .feedback textarea { background: var(--bg); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 10px; font: 16px system-ui, sans-serif; }
 .feedback input { flex: 1; min-width: 0; }
-.feedback textarea { display: block; width: 100%; resize: vertical; }
+.feedback textarea { display: block; width: 100%; resize: vertical; min-height: 9em; max-height: 60vh; field-sizing: content; }
+.feedback-left { margin: 4px 0 0; font-size: 13px; }
 /* Every game's public rooms at the top of the shelf (#203). */
 .open-rooms { margin: 0 0 18px; }
 .open-rooms h2 { margin: 4px 0 8px; }
