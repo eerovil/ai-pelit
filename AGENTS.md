@@ -132,7 +132,7 @@ high-score lists (#25), then play counts (#26).
   `<script src="../../../rooms.js" data-game="<slug>" data-min="2" data-max="5"></script>` before
   its own script (#34), and a "👥 Pelaa kavereiden kanssa" button that calls
   `AiPelitRooms.open()`. Do not copy Kirkkis v2's own room code; it predates the library.
-  `rooms.js` draws the room screen (code, QR link, players, "Aloita kierros"), reconnects, rejoins
+  `rooms.js` draws the room screen (code, players, "Aloita kierros"), reconnects, rejoins
   after a reload, sends a typed code from another game or a newer version to the room's own (a room on an older one says so instead, #346), and pauses
   the round while a phone in it is away (with "Jatka ilman heitä" on the host). The game keeps the
   game: the phone that made the room (the host) runs the round and the others draw it.
