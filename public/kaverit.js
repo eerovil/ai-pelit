@@ -265,10 +265,23 @@
     // Nothing of ours below: the invited game takes this page's place.
     location.replace(to.href);
   }
+  function acceptInvite(inv) {
+    if (!inv || !inv.id || !inv.game || !/^[A-Z]{4}$/.test(inv.room)) return Promise.resolve({ ok: false });
+    return call('POST', 'invites/' + inv.id + '/answer', { player: playerId() }).then(function (r) {
+      if (r.ok) openInvite(inv.game, 'games/' + inv.game + '/v' + inv.version + '/?huone=' + inv.room);
+      return r;
+    });
+  }
+  function declineInvite(inv) {
+    if (!inv || !inv.id) return Promise.resolve({ ok: false });
+    return call('POST', 'invites/' + inv.id + '/answer', { player: playerId() })
+      .then(function (r) { return refresh().then(function () { return r; }); });
+  }
   function roomScreenShowing() { var r = document.getElementById('aipr'); return !!(r && !r.hidden); }
   function drawBanner() {
     if (!document.body) return;
-    var inv = state && state.invites.filter(function (i) { return !dismissed['i' + i.id]; })[0];
+    var inv = !window.AiPelitKaverit.quietInvites && state &&
+      state.invites.filter(function (i) { return !dismissed['i' + i.id]; })[0];
     // The shelf shows requests on its own page (app.js sets quietRequests), a room screen in its list.
     var req = !inv && state && !roomScreenShowing() && !window.AiPelitKaverit.quietRequests &&
       state.requests.filter(function (q) { return !dismissed['r' + q.pid]; })[0];
@@ -331,6 +344,9 @@
     answer: answer,
     remove: remove,
     invite: invite,
+    acceptInvite: acceptInvite,
+    declineInvite: declineInvite,
+    quietInvites: false,
     doing: doing,
     title: title,
     get titles() { return titles ? Object.keys(titles).length : 0; }, // game names read so far
