@@ -11,14 +11,14 @@ import pytest
 from conftest import ROOT, Site, wait_for_worker
 
 VERSIONS = [
-    "games/aitajuoksu/v11", "games/areena/v6", "games/curling/v3", "games/hiihto/v11",
-    "games/jaan-alla/v6", "games/jalkapallo/v3", "games/kaahari/v5", "games/kaaosrata/v4",
-    "games/keihas/v12", "games/kirkkis/v9", "games/korkeushyppy/v9", "games/kuula/v6",
-    "games/lentopallo/v6", "games/makihyppy/v6", "games/molkky/v3", "games/moukari/v9",
-    "games/orava/v5", "games/pallorata/v4", "games/pilkki/v4", "games/pituushyppy/v13",
-    "games/puhelinkoppi/v7", "games/seivashyppy/v10", "games/skuutti/v3", "games/sormiskeitti/v8",
-    "games/tikka/v5", "games/trampoliini/v9", "games/voimistelu/v12", "games/vuoristorata/v3",
-    "games/yoajo/v9",
+    "games/aitajuoksu/v12", "games/areena/v7", "games/curling/v4", "games/hiihto/v12",
+    "games/jaan-alla/v7", "games/jalkapallo/v4", "games/kaahari/v6", "games/kaaosrata/v5",
+    "games/keihas/v13", "games/kirkkis/v10", "games/korkeushyppy/v10", "games/kuula/v7",
+    "games/lentopallo/v7", "games/makihyppy/v7", "games/molkky/v4", "games/moukari/v10",
+    "games/orava/v6", "games/pallorata/v5", "games/pilkki/v5", "games/pituushyppy/v14",
+    "games/puhelinkoppi/v8", "games/seivashyppy/v11", "games/skuutti/v4", "games/sormiskeitti/v9",
+    "games/tikka/v6", "games/trampoliini/v10", "games/voimistelu/v13", "games/vuoristorata/v4",
+    "games/yoajo/v10",
 ]
 
 # Records every sound the game asks for, from before its own script runs.

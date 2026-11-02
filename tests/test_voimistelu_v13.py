@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT
 
-URL = "games/voimistelu/v12/"
+URL = "games/voimistelu/v13/"
 SOUNDS = ["onnistui", "valinta", "suhahdus", "lyonti", "tomahdys", "voitto", "tappio"]
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -141,4 +141,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/voimistelu/v12")
+    opens_and_plays_with_the_quiet_library(real, context, "games/voimistelu/v13")

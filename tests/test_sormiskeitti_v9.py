@@ -4,7 +4,7 @@ import pytest
 
 from conftest import ROOT
 
-URL = "games/sormiskeitti/v8/"
+URL = "games/sormiskeitti/v9/"
 SOUNDS = ['pop', 'lasku', 'puu', 'onnistui', 'voitto', 'tappio', 'rullaus']
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -141,4 +141,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/sormiskeitti/v8")
+    opens_and_plays_with_the_quiet_library(real, context, "games/sormiskeitti/v9")

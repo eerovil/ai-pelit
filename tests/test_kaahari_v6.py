@@ -5,7 +5,7 @@ import json
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/kaahari/v5/"
+URL = "games/kaahari/v6/"
 SOUNDS = ['kartti', 'valinta', 'onnistui', 'voitto', 'tappio', 'kitka', 'hyppy', 'nousu', 'naksu',
           'suhahdus', 'rajahdys', 'metalli', 'osuma']
 
@@ -204,4 +204,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/kaahari/v5")
+    opens_and_plays_with_the_quiet_library(real, context, "games/kaahari/v6")

@@ -10,7 +10,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/jalkapallo/v3/"
+URL = "games/jalkapallo/v4/"
 SOUNDS = ['onnistui', 'pilli', 'pilli2', 'potku', 'verkko', 'suhahdus', 'puu', 'osuma', 'metalli']
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -322,4 +322,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/jalkapallo/v3")
+    opens_and_plays_with_the_quiet_library(real, context, "games/jalkapallo/v4")

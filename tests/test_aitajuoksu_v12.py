@@ -5,7 +5,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/aitajuoksu/v11/"
+URL = "games/aitajuoksu/v12/"
 SHARED = "ai-pelit:_asut:yleisurheilu"
 
 
@@ -62,4 +62,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/aitajuoksu/v11")
+    opens_and_plays_with_the_quiet_library(real, context, "games/aitajuoksu/v12")

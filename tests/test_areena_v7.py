@@ -4,7 +4,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/areena/v6/"
+URL = "games/areena/v7/"
 SOUNDS = ["gongi", "suhahdus", "osuma", "potku", "tomahdys", "voitto", "tappio"]
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -162,4 +162,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/areena/v6")
+    opens_and_plays_with_the_quiet_library(real, context, "games/areena/v7")

@@ -2,7 +2,7 @@
 
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
-URL = "games/kuula/v6"
+URL = "games/kuula/v7"
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):

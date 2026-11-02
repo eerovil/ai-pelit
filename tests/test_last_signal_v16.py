@@ -15,7 +15,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/last-signal/v15/"
+URL = "games/last-signal/v16/"
 SAVE = "ai-pelit:last-signal:peli"
 SAVE12 = SAVE + "12"
 SAVE13 = SAVE + "13"

@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT
 
-URL = "games/jaan-alla/v6/"
+URL = "games/jaan-alla/v7/"
 SAVE = "ai-pelit:jaan-alla:peli"
 CHAPTER1_DONE = ("{v: 1, t: 900, flags: {stationLog: true, nordlysLog: true, jaavuoriLog: true, radio: true},"
                  " inv: {ruoka: 3, romu: 1, antenni: 1, kristalli: 1}, m: {power: 90, food: 70, hull: 80, air: 100, warm: 100},"
@@ -147,4 +147,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/jaan-alla/v6")
+    opens_and_plays_with_the_quiet_library(real, context, "games/jaan-alla/v7")

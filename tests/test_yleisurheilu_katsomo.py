@@ -2,8 +2,8 @@
 before the athlete, in a stadium behind the boards, and a spectator's tap on the scene walks its own
 figure there on every phone.
 
-The events' versions on yleisurheilu-7: games/pituushyppy/v13, games/keihas/v12, games/kuula/v6,
-games/korkeushyppy/v9, games/seivashyppy/v10, games/moukari/v9, games/makihyppy/v6.
+The events' versions on yleisurheilu-7: games/pituushyppy/v14, games/keihas/v13, games/kuula/v7,
+games/korkeushyppy/v10, games/seivashyppy/v11, games/moukari/v10, games/makihyppy/v7.
 """
 
 import json

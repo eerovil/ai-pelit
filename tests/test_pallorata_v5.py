@@ -7,7 +7,7 @@ import pytest
 
 from conftest import ROOT
 
-URL = "games/pallorata/v4/"
+URL = "games/pallorata/v5/"
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
 SPY = """() => {
@@ -187,4 +187,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/pallorata/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/pallorata/v5")

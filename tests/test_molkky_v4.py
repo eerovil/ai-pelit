@@ -12,7 +12,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/molkky/v3/"
+URL = "games/molkky/v4/"
 
 # Steps the game by hand, 1/240 s at a time, while cond() holds, at most max seconds of game time.
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) update(DT); }; }"
@@ -498,4 +498,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/molkky/v3")
+    opens_and_plays_with_the_quiet_library(real, context, "games/molkky/v4")

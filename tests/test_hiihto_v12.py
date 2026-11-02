@@ -2,7 +2,7 @@
 
 from conftest import ROOT
 
-URL = "games/hiihto/v11/"
+URL = "games/hiihto/v12/"
 SOUNDS = ["valinta", "naksu", "lumi", "askel", "puu", "tomahdys", "voitto", "tappio", "tuuli"]
 
 # Plays one race as a careful skier: the given wax (the right one by default), V on the steep
@@ -178,4 +178,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/hiihto/v11")
+    opens_and_plays_with_the_quiet_library(real, context, "games/hiihto/v12")

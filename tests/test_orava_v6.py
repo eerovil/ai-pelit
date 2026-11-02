@@ -4,7 +4,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/orava/v5/"
+URL = "games/orava/v6/"
 SOUNDS = ["hyppy", "ruoho", "tomahdys", "rouske", "lintu", "osuma", "voitto", "tappio"]
 
 RUN = "() => { window.run = (cond, max = 10) => { for (let t = 0; t < max && cond(); t += 1 / 60) step(1 / 60); }; }"
@@ -159,4 +159,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/orava/v5")
+    opens_and_plays_with_the_quiet_library(real, context, "games/orava/v6")

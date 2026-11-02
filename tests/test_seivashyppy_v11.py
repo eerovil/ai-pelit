@@ -1,8 +1,8 @@
-"""moukari v8: no crowd noise, the loudest sounds quieter (#337)."""
+"""seivashyppy v9: no crowd noise, the loudest sounds quieter (#337)."""
 
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
-URL = "games/moukari/v9"
+URL = "games/seivashyppy/v11"
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):

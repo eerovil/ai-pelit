@@ -4,7 +4,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/vauvan-syotto/v3/"
+URL = "games/vauvan-syotto/v4/"
 NAMES = ["valinta", "nams", "litsahdus", "lusikka", "vauva", "royhtays", "pruut", "suhahdus"]
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
