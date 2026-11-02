@@ -364,15 +364,31 @@
     }
 
     function form(name) {
-      var text = el('textarea', { class: 'feedback-text', rows: '6', maxlength: String(FEEDBACK_MAX), placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
+      var text = el('textarea', { class: 'feedback-text', rows: '6', placeholder: 'Mitä korjaisit tai lisäisit?', 'aria-label': 'Palaute' });
       text.value = draft;
       // How much room is left, shown only near the end (#351).
       var left = el('p', { class: 'muted feedback-left', 'aria-live': 'polite' });
+      // Counted in characters as the server counts them (an emoji is one), not in the UTF-16
+      // units a maxlength counts (an emoji is two). Past the limit, only what was just typed or
+      // pasted is cut, found by comparing with the text before it, so nothing written earlier is
+      // lost wherever the cursor was.
+      var prev = '';
       function count() {
-        var n = FEEDBACK_MAX - text.value.length;
+        var chars = Array.from(text.value);
+        if (chars.length > FEEDBACK_MAX) {
+          var old = Array.from(prev), a = 0, b = 0;
+          while (a < old.length && a < chars.length && old[a] === chars[a]) a++;
+          while (b < old.length - a && b < chars.length - a && old[old.length - 1 - b] === chars[chars.length - 1 - b]) b++;
+          var added = chars.slice(a, chars.length - b).slice(0, Math.max(0, FEEDBACK_MAX - a - b));
+          chars = chars.slice(0, a).concat(added, chars.slice(chars.length - b)).slice(0, FEEDBACK_MAX);
+          text.value = chars.join('');
+          text.selectionStart = text.selectionEnd = Math.min(chars.slice(0, a + added.length).join('').length, text.value.length);
+        }
+        prev = text.value;
+        var n = FEEDBACK_MAX - chars.length;
         left.textContent = n <= 500 ? 'Merkkejä jäljellä ' + n + '.' : '';
       }
-      text.addEventListener('input', function () { keep(text.value); count(); });
+      text.addEventListener('input', function () { count(); keep(text.value); });
       count();
       var send = el('button', { type: 'button', class: 'button', text: 'Lähetä' });
       var note = el('p', { class: 'muted feedback-note', role: 'status' });
