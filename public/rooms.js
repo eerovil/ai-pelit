@@ -775,6 +775,7 @@
       var v = g.versions[g.versions.length - 1], current = g.slug === GAME && v.n === VERSION;
       var b = document.createElement('button');
       b.type = 'button';
+      b.dataset.game = g.slug;
       b.disabled = current;
       b.textContent = g.title + (current ? ' (nyt)' : '');
       b.addEventListener('click', function () { switchGame(g); });
