@@ -121,9 +121,28 @@ def test_emoji_count_as_one_character_as_on_the_server(site, context, fake):
     page.locator(".feedback-text").press("End")
     page.keyboard.insert_text("😀x")
     assert page.locator(".feedback-text").input_value() == "😀" * 5000
+
+    # Typing or pasting into a full box, at the start or in the middle, keeps what was there:
+    # only the new text is cut (#351 review).
+    full = "a" * 2500 + "😀" * 2499 + "Z"
+    page.fill(".feedback-text", full)
+
+    def put(start, end, what):  # select code units start..end, then type or paste `what`
+        page.evaluate("([s, e]) => { const t = document.querySelector('.feedback-text'); t.focus(); t.setSelectionRange(s, e); }", [start, end])
+        page.keyboard.insert_text(what)
+        return page.locator(".feedback-text").input_value()
+
+    assert put(0, 0, "X") == full
+    assert put(2600, 2600, "😀😀") == full
+    # Two characters replaced (an "a" and an emoji) by three emoji: two fit, the end stays.
+    assert put(2499, 2502, "😺😺😺") == "a" * 2499 + "😺😺" + "😀" * 2498 + "Z"
+    assert page.locator(".feedback-left").inner_text() == "Merkkejä jäljellä 0."
+    caret = page.evaluate("document.querySelector('.feedback-text').selectionEnd")
+    assert caret == 2499 + 4
+    page.fill(".feedback-text", full)
     page.click(".feedback button:has-text('Lähetä')")
     page.wait_for_selector(".feedback-note:text('Palaute meni perille')")
-    assert fake.feedback[-1]["text"] == "😀" * 5000
+    assert fake.feedback[-1]["text"] == full
 
 def test_a_phone_with_no_name_chooses_one_and_waits_for_the_admin(site, context, fake):
     page = shelf(site, context)
