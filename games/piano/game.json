@@ -57,6 +57,13 @@
       "note": "Valikossa on Ei häviötä -kytkin: silloin soitat yhden kappaleen loppuun ilman sydämiä, ja tulos näytetään mutta ei mene ennätykseksi eikä tuloslistalle.",
       "request": "Piano: lisää no fail moodi",
       "issue": "eerovil/ai-pelit#318"
+    },
+    {
+      "n": 9,
+      "date": "2026-11-02",
+      "note": "Valikossa on valmiina se kappale, jota soitit viimeksi, myös kun peli avataan uudelleen, eikä Ei häviötä -tilassa soitettu kappale enää avaa seuraavaa tasoa.",
+      "request": "Pianopelissä voisi aina siinä olla valmiina se sama biisi mitä olit äsken soittamassa. / Älä anna käyttää No Fail Modea, että pääset tasoja eteenpäin.",
+      "issue": "eerovil/ai-pelit#356"
     }
   ]
 }
