@@ -14,6 +14,9 @@ player sees is Finnish unless the request says otherwise.
   change in the next commits, so the pull request shows only what changed (#346). Move its tests
   along the same way: `git mv` each `tests/test_<slug>_v<N-1>*.py` to `_v<N>`, and change every
   `games/<slug>/v<N-1>` in the game's test files to `v<N>`. Append the version to `game.json`.
+  Other games' tests name versions too (`tests/test_scores.py` names Puhelinkoppi's, Hiihto's and
+  Piano's): `grep -rn "<slug>/v<N-1>" tests/` and run every file it finds before the first push,
+  not only the game's own tests.
   The number is one above the game's highest ever (Puhelinkoppi went from `v2/` to `v5/`).
   If the version is past about 2000 lines in one file, split it into files (rule 2) as part of
   this version, without being asked, and say so in the pull request. Do the same for a new game
@@ -370,13 +373,29 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
   help. When no run appears for a pushed head, read `gh pr view <n> --json
   mergeable,mergeStateStatus` once. If it says `CONFLICTING` or `DIRTY`, merge `origin/main` into
   the branch (never rebase pushed commits), fix the conflict, push, and register the wake-on again
-  for the new head. `main` moves often here (many Works at once), so on a long-running pull
-  request merge `origin/main` before each push.
+  for the new head. `main` moves often here (many Works at once), and another Work often takes
+  the same version number, so merge `origin/main` right before you mark the pull request ready
+  and again after each review pass, and on a long-running pull request before each push.
+- Never put an edit (`sed -i`, a heredoc) in the same Bash call as a test run: the AgentDeck
+  queue hook refuses the whole chain. Edit in one call, then run the test alone with
+  `AGENTDECK_HEAVY_SLOT_HELD=1`.
+- A fix for a chance-based test (a throw, a random round): run it once with a short timeout and
+  measure its real range before you queue a long job on it.
+- Before you add a new row to a list in `public/app.js`, grep `tests/` for that list's class
+  selectors (`.friend`, `.friend .meta`) and give the new row a class of its own, so the old
+  tests do not pick it up.
 - Play it yourself at 360 × 740 in Playwright, and attach screenshots of the shelf and the game
   mid-play to the issue, as AgentDeck's evidence rule says.
   For a 3D game, launch Chromium with `tests/conftest.py`'s `GPU_ARGS`, so it draws on the card.
 - `games/<slug>/thumb.webp` shows the current version mid-play.
 - The use-case walkthrough is: open the shelf, open the game, play one round, go back.
+
+## Taking over a pull request, and specs
+
+- When you take over a pull request another Work started, read every earlier review comment and
+  every test it asked for, and cover each one before you first mark it ready.
+- On a spec-only issue, end the turn that posts the spec with the approval question in the
+  question box in that same turn, not with a prose summary.
 
 ## Running it locally
 
