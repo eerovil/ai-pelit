@@ -623,3 +623,58 @@ def test_a_reloaded_host_s_sends_are_not_taken_as_old(site, context):
       return sent.map(m => m.k);
     }""")
     assert k[0] > 1e12 and k[-1] > k[0]
+
+
+# #345: eight phones at one dense spot, many fish held by different phones: every part the host
+# sends any guest, as the relay sees it (with `to`, the claims and the part numbers), fits under
+# the relay's limit, and each guest's parts join into exactly its fish.
+def test_eight_phones_at_a_dense_spot_with_claims_every_part_fits(site, context):
+    from test_rooms_lib import MSG_MAX
+    page = start(site, context)
+    out = page.evaluate("""() => {
+      const ids = ['host', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7'], x = LAKE_W / 2, y = LAKE_H / 2;
+      const s = lake.spots[0];
+      pond = Array.from({ length: 900 }, (_, i) => {
+        const f = newFish(s, i % 3 ? 'ahven' : 'sarki');
+        f.lx = f.wx = x + (i % 30) * 0.4; f.ly = f.wy = y + Math.floor(i / 30) * 0.4; f.g = 12345 + i;
+        return f;
+      });
+      const claims = {};
+      pond.slice(0, 70).forEach((f, i) => { claims[f.id] = 'g' + (1 + i % 7); });
+      net = Object.assign(net, { on: true, round: 'abc123', claims, pSeq: 0,
+        setup: { players: ids.map(id => ({ id })), starts: ids.map(() => [x, y]) },
+        board: Object.fromEntries(ids.map((id, i) => [id, { x: x + i, y: y + i }])) });
+      const sent = [], original = R.send;
+      R.send = (m, to) => sent.push({ to, text: JSON.stringify(Object.assign({}, m, { to })) });
+      try { for (const id of ids.slice(1)) sendPond(id); } finally { R.send = original; }
+      const want = {};
+      for (const id of ids.slice(1)) {
+        const b = net.board[id];
+        want[id] = pond.filter(f => claims[f.id] === id || (Math.abs(f.lx - b.x) < NEAR && Math.abs(f.ly - b.y) < NEAR)).map(f => f.id).sort((a, b) => a - b);
+      }
+      return { sent, want, claims };
+    }""")
+    by = {}
+    for s in out["sent"]:
+        assert len(s["text"]) <= MSG_MAX
+        m = json.loads(s["text"])
+        assert m["t"] == "p" and m["to"] == s["to"] and 0 <= m["i"] < m["n"]
+        by.setdefault(s["to"], []).append(m)
+    assert sorted(by) == sorted(out["want"])
+    for to, parts in by.items():
+        assert len({p["k"] for p in parts}) == 1 and sorted(p["i"] for p in parts) == list(range(parts[0]["n"]))
+        assert parts[0]["n"] > 1  # the dense spot really needs several parts
+        got = sorted(q[0] for p in sorted(parts, key=lambda p: p["i"]) for q in p["f"])
+        assert got == out["want"][to]
+        # Each guest hears who holds its fish, so it does not jig a fish another phone has.
+        held = {k: v for k, v in out["claims"].items() if int(k) in set(got)}
+        assert all(p["c"] == held for p in parts)
+    # A guest's own page joins the parts, given last part first, into the same fish.
+    to, parts = next(iter(by.items()))
+    guest = start(site, context)
+    ids = guest.evaluate("""(parts) => {
+      net.on = true; net.round = 'abc123'; net.pReceived = 0; net.parts = null; pond = [];
+      for (const m of parts.slice().reverse()) receivePond(m);
+      return pond.map(f => f.id).sort((a, b) => a - b);
+    }""", parts)
+    assert ids == out["want"][to]
