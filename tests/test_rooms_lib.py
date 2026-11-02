@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from conftest import make_game
+from conftest import ROOT, make_game
 
 DEMO = (Path(__file__).parent / "fixtures" / "rooms-demo.html").read_text()
 
@@ -32,6 +32,9 @@ def close(ws, code, reason=""):
         asyncio.get_running_loop().create_task(ws._impl_obj.close(code=code, reason=reason))
     except RuntimeError:
         ws.close(code=code, reason=reason)
+
+
+MSG_MAX = int(re.search(r"const MSG_MAX = (\d+);", (ROOT / "rooms/worker.js").read_text()).group(1))
 
 
 class Relay:
@@ -95,6 +98,8 @@ class Relay:
         self.peers(room)
 
     def message(self, room, me, text):
+        if len(text) > MSG_MAX:
+            return  # same silent oversize drop as rooms/worker.js
         msg = json.loads(text)
         if msg.get("t") == "hello" and me in self.slow:
             self.slow[me].append((room, text))

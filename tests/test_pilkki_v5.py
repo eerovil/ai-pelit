@@ -1,4 +1,4 @@
-"""Pilkkiminen v3 (#291): a nibble felt at the jig, so a fish is noticed without a sounder; and
+"""Pilkkiminen v5 (#345): a nibble felt at the jig, so a fish is noticed without a sounder; and
 everything of v2 (#289): walking on the ice, the sounder chosen in the menu, baits, and fish that
 school, fear the pike, and one giant pike.
 
@@ -14,7 +14,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/pilkki/v4/"
+URL = "games/pilkki/v5/"
 
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) { update(DT); closing(DT); } }; }"
 
@@ -529,4 +529,152 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v5")
+
+
+# #345: the Worker drops oversized room messages; a dense school still reaches guests.
+def test_dense_school_is_chunked_below_relay_limit(room):
+    host, [guest] = room("Host", "Guest")
+    guest_id = guest.evaluate("AiPelitRooms.me")
+    guest.evaluate("() => { stand(LAKE_W / 2, LAKE_H / 2); sendMe(); }")
+    host.wait_for_function("(id) => !!net.board[id]", arg=guest_id)
+    sizes = host.evaluate("""(id) => {
+      const original = R.send, sizes = [];
+      R.send = (m, to) => {
+        if (m.t === 'p') sizes.push(JSON.stringify({ ...m, to }).length);
+        original(m, to);
+      };
+      try {
+        const s = lake.spots[0], x = LAKE_W / 2, y = LAKE_H / 2;
+        pond = Array.from({ length: 700 }, (_, i) => {
+          const f = newFish(s, 'ahven');
+          f.lx = f.wx = x + (i % 15) * 0.3;
+          f.ly = f.wy = y + Math.floor(i / 15) * 0.3;
+          return f;
+        });
+        sendPond(id);
+      } finally { R.send = original; }
+      return sizes;
+    }""", guest_id)
+    assert len(sizes) > 1 and all(0 < n <= 12000 for n in sizes)
+    guest.wait_for_function("pond.length === 700", timeout=8000)
+    assert host.evaluate("pond.map(f => f.id).sort((a,b)=>a-b)") == guest.evaluate(
+        "pond.map(f => f.id).sort((a,b)=>a-b)")
+    assert host.errors == guest.errors == []
+
+
+def test_incomplete_and_stale_fish_snapshots_are_ignored(site, context):
+    page = start(site, context)
+    result = page.evaluate("""() => {
+      net.on = true; net.pReceived = 0; net.parts = null;
+      const one = id => [id, 0, 100, 130, 95, 2, 130, 95, 0, 0, 0, 0];
+      const prior = pond.length;
+      receivePond({k:20,i:0,n:2,c:{},f:[one(10001)]});
+      const partial = pond.length === prior && net.pReceived === 0;
+      receivePond({k:21,i:0,n:1,c:{},f:[one(10002)]});
+      receivePond({k:20,i:1,n:2,c:{},f:[one(10003)]});
+      return [partial, pond.map(f => f.id), net.pReceived];
+    }""")
+    assert result == [True, [10002], 21]
+
+
+def test_first_nibble_strike_success_miss_and_late_strike(site, context):
+    page = start(site, context)
+    ready(page)
+    state = page.evaluate("""() => {
+      const f = pond[0], random = Math.random;
+      try {
+        f.int = 0; nibble(0.35, f); Math.random = () => 0;
+        const caught = strikeAtNibble() && phase === 'fight';
+        toJig(); f.look = true; f.int = 0.6;
+        nibble(0.35, f); Math.random = () => 0.99;
+        const before = f.int, missed = strikeAtNibble() && phase === 'jig' && f.int < before;
+        f.look = true; nibble(0.35, f); playT += 0.5;
+        const late = strikeAtNibble();
+        lost(f); nibble(0.35, f);
+        return [caught, missed, late, !strikeAtNibble()];
+      } finally { Math.random = random; }
+    }""")
+    assert state == [True, True, False, True]
+
+
+# #345: with two guests each one gets the fish round itself, in its own sends.
+def test_two_guests_each_get_their_own_nearby_fish(room):
+    host, guests = room("Eero", "Aino", "Ville")
+    spots = host.evaluate("lake.spots.slice().sort((a, b) => a.x - b.x).map(s => [s.x, s.y])")
+    (ax, ay), (bx, by) = spots[0], spots[-1]
+    guests[0].evaluate(f"() => {{ stand({ax}, {ay}); sendMe(); }}")
+    guests[1].evaluate(f"() => {{ stand({bx}, {by}); sendMe(); }}")
+    for g, (x, y) in zip(guests, [(ax, ay), (bx, by)]):
+        g.wait_for_function(f"pond.length > 0 && pond.every(f => net.claims[f.id] || (Math.abs(f.lx - {x}) < 60 && Math.abs(f.ly - {y}) < 60))", timeout=10000)
+        want = host.evaluate(f"pond.filter(f => Math.abs(f.lx - {x}) < 40 && Math.abs(f.ly - {y}) < 40).length")
+        assert g.evaluate("pond.length") >= want > 0
+    assert host.errors == guests[0].errors == guests[1].errors == []
+
+
+# #345: a host that reloads mid-round starts its sends again; they still count as newer.
+def test_a_reloaded_host_s_sends_are_not_taken_as_old(site, context):
+    page = start(site, context)
+    k = page.evaluate("""() => {
+      net = Object.assign(net, { on: true, round: 1, setup: { players: [{ id: 'g' }], starts: [[me.x, me.y]] }, board: {}, claims: {}, pSeq: 0 });
+      const sent = [], original = R.send;
+      R.send = m => sent.push(m);
+      try { sendPond('g'); const t = Date.now(); while (Date.now() < t + 3); net.pSeq = 0; sendPond('g'); } finally { R.send = original; }
+      return sent.map(m => m.k);
+    }""")
+    assert k[0] > 1e12 and k[-1] > k[0]
+
+
+# #345: eight phones at one dense spot, many fish held by different phones: every part the host
+# sends any guest, as the relay sees it (with `to`, the claims and the part numbers), fits under
+# the relay's limit, and each guest's parts join into exactly its fish.
+def test_eight_phones_at_a_dense_spot_with_claims_every_part_fits(site, context):
+    from test_rooms_lib import MSG_MAX
+    page = start(site, context)
+    out = page.evaluate("""() => {
+      const ids = ['host', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7'], x = LAKE_W / 2, y = LAKE_H / 2;
+      const s = lake.spots[0];
+      pond = Array.from({ length: 900 }, (_, i) => {
+        const f = newFish(s, i % 3 ? 'ahven' : 'sarki');
+        f.lx = f.wx = x + (i % 30) * 0.4; f.ly = f.wy = y + Math.floor(i / 30) * 0.4; f.g = 12345 + i;
+        return f;
+      });
+      const claims = {};
+      pond.slice(0, 70).forEach((f, i) => { claims[f.id] = 'g' + (1 + i % 7); });
+      net = Object.assign(net, { on: true, round: 'abc123', claims, pSeq: 0,
+        setup: { players: ids.map(id => ({ id })), starts: ids.map(() => [x, y]) },
+        board: Object.fromEntries(ids.map((id, i) => [id, { x: x + i, y: y + i }])) });
+      const sent = [], original = R.send;
+      R.send = (m, to) => sent.push({ to, text: JSON.stringify(Object.assign({}, m, { to })) });
+      try { for (const id of ids.slice(1)) sendPond(id); } finally { R.send = original; }
+      const want = {};
+      for (const id of ids.slice(1)) {
+        const b = net.board[id];
+        want[id] = pond.filter(f => claims[f.id] === id || (Math.abs(f.lx - b.x) < NEAR && Math.abs(f.ly - b.y) < NEAR)).map(f => f.id).sort((a, b) => a - b);
+      }
+      return { sent, want, claims };
+    }""")
+    by = {}
+    for s in out["sent"]:
+        assert len(s["text"]) <= MSG_MAX
+        m = json.loads(s["text"])
+        assert m["t"] == "p" and m["to"] == s["to"] and 0 <= m["i"] < m["n"]
+        by.setdefault(s["to"], []).append(m)
+    assert sorted(by) == sorted(out["want"])
+    for to, parts in by.items():
+        assert len({p["k"] for p in parts}) == 1 and sorted(p["i"] for p in parts) == list(range(parts[0]["n"]))
+        assert parts[0]["n"] > 1  # the dense spot really needs several parts
+        got = sorted(q[0] for p in sorted(parts, key=lambda p: p["i"]) for q in p["f"])
+        assert got == out["want"][to]
+        # Each guest hears who holds its fish, so it does not jig a fish another phone has.
+        held = {k: v for k, v in out["claims"].items() if int(k) in set(got)}
+        assert all(p["c"] == held for p in parts)
+    # A guest's own page joins the parts, given last part first, into the same fish.
+    to, parts = next(iter(by.items()))
+    guest = start(site, context)
+    ids = guest.evaluate("""(parts) => {
+      net.on = true; net.round = 'abc123'; net.pReceived = 0; net.parts = null; pond = [];
+      for (const m of parts.slice().reverse()) receivePond(m);
+      return pond.map(f => f.id).sort((a, b) => a - b);
+    }""", parts)
+    assert ids == out["want"][to]

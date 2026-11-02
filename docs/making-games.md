@@ -153,3 +153,5 @@ here in the same pull request (AGENTS.md says so), naming the version that taugh
 When Eero is unsure how something should feel ("prototyyppi:" in the request, as in Trampoliini v3
 and Voimistelu v4), build the change in the new version, let him play it on his phone, and tune
 it from what he says before marking it ready. Remove any testing buttons first (Voimistelu v5).
+
+A room game message exceeding `MSG_MAX = 16000` characters is silently discarded by the Worker. Send large multiplayer state per recipient, split it into smaller packets, and apply only a complete snapshot. Measure `JSON.stringify` with all fields, including the recipient `to` (Pilkkiminen v5, #345).
