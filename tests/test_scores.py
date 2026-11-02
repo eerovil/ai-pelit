@@ -16,7 +16,7 @@ ADMIN_KEY = "avain"
 PUHELINKOPPI = "games/puhelinkoppi/v7/"
 SORMISKEITTI = "games/sormiskeitti/v8/"
 HIIHTO = "games/hiihto/v11/"
-PIANO = "games/piano/v9/"
+PIANO = "games/piano/v10/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
@@ -503,7 +503,47 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
-    assert row == {"score": 300, "version": 9, "level": 1}
+    assert row == {"score": 300, "version": 10, "level": 1}
+
+
+@pytest.mark.games("piano")
+def test_piano_after_the_cut_to_5_sends_a_higher_level_without_a_record(site, context, fake):
+    """Piano v10 (#356) cuts a saved level above 5 to 5; scores.js must still send level 6 later."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.add_init_script("""if (!sessionStorage.x) { sessionStorage.x = 1;
+      localStorage.setItem('ai-pelit:piano:taso', '23');
+      localStorage.setItem('ai-pelit:_tulokset:lahetetyt', JSON.stringify({'piano|main': {score: 900, level: 23}})); }""")
+    page.goto(site.url + PIANO)
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt'))['piano|main']") == {"score": 900, "level": 5}
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'))")
+    page.click("#go")
+    page.evaluate("score = 300; songDone(); lives = 1; miss(0, 'Ohi!')")  # level 6 reached, no record
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    [(key, row)] = fake.scores.items()
+    assert row["level"] == 6 and row["score"] == 300
+
+
+@pytest.mark.games("piano")
+def test_piano_a_score_v9_left_offline_is_sent_as_v10_after_the_cut(site, context, fake):
+    """A v9 score still queued at the upgrade carries v10's number, so the server keeps the level since."""
+    site.build(ROOT / "games")
+    fake.online = False
+    page = context.new_page()
+    page.add_init_script("""if (!sessionStorage.x) { sessionStorage.x = 1;
+      localStorage.setItem('ai-pelit:piano:taso', '23');
+      localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'));
+      localStorage.setItem('ai-pelit:_tulokset:jono', JSON.stringify({'piano|main': {game: 'piano', board: 'main', version: 9, score: 900}})); }""")
+    page.goto(site.url + PIANO)
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['piano|main']") == {
+        "game": "piano", "board": "main", "version": 10, "score": 900}
+    page.click("#go")
+    page.evaluate("score = 300; songDone(); lives = 1; miss(0, 'Ohi!')")  # level 6, no record: 900 stays queued
+    fake.online = True
+    page.evaluate("dispatchEvent(new Event('online'))")
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    [(key, row)] = fake.scores.items()
+    assert row == {"score": 900, "version": 10, "level": 6}
 
 
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
