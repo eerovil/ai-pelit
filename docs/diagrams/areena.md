@@ -8,6 +8,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v6 (#337, `aanet-4`) has no crowd: a knockout is the hit and the thud only.
 
+v7 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Valikko: anna hahmolle nimi] --> B[Taisteluun! 3-2-1]

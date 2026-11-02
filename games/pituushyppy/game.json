@@ -93,6 +93,13 @@
       "note": "Kannustavat kaverit ovat nyt taustalla mainostaulujen takana, eivätkä enää peitä suoritusta; oman hahmon saa kävelemään napauttamalla.",
       "request": "Kannustajaukkelit pitää olla taustalla eikä siinä edessä häiritsemässä. Noissa areenalejaissa ne vois olla siellä sen aidan takana, niitä vois myös liikutella siinä, vois kävellä edes taas.",
       "issue": "eerovil/ai-pelit#341"
+    },
+    {
+      "n": 14,
+      "date": "2026-11-02",
+      "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty, ja kannustuksen kilahdus on paljon hiljaisempi.",
+      "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
+      "issue": "eerovil/ai-pelit#355"
     }
   ]
 }

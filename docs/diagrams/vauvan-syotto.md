@@ -6,6 +6,8 @@ given to the baby is dropped on the floor and must be washed. The level is won w
 full and lost when the baby's mood runs out. v3 (#232) plays recorded sounds from the shared
 library instead of beeps.
 
+v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
 ```mermaid

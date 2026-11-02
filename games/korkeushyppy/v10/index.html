@@ -76,7 +76,9 @@
 <script src="../../../outfits.js" data-game="korkeushyppy" data-share="yleisurheilu"></script>
 <!-- v8 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
-<script src="../../../lib/aanet-4/aanet.js"></script>
+<!-- v10 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
+     and the cheer's chime is quieter -->
+<script src="../../../lib/aanet-5/aanet.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c');
@@ -262,7 +264,7 @@ const isNet = () => K.isNet();
 const fmt = m => m === undefined || m === null || m < 0 ? '–' : m.toFixed(2).replace('.', ',') + ' m';
 const K = AiPelitKisa.meet({
   // v8 (#337): a friend's "📣 Kannusta" is a quiet blip, not the library's "jee!".
-  cheerSound: () => AU.play('onnistui', { vol: 0.25, rate: 1.2 }),
+  cheerSound: () => AU.play('onnistui', { vol: 0.08 }),
   slug: 'korkeushyppy', foes: FOES, skill: base,
   format: AiPelitKisa.heights({
     heights: heightsFor, tries: TRIES,

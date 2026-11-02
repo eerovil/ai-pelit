@@ -12,6 +12,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v5 (#337, `aanet-4`) has no crowd: a turn of 30 is the quiet `onnistui` blip at 0.3 instead of a shouting crowd.
 
+v6 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501] --> R{Yksin vai huoneessa?}

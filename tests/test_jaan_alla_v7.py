@@ -142,7 +142,7 @@ def test_the_menu_is_silent_and_a_reload_brings_the_sound_back(site, browser):
     assert page.errors == []
 
 
-# #337: the version on aanet-4, without crowd noise.
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 

@@ -199,7 +199,7 @@ def test_without_the_sound_library_script_it_still_races_with_its_beeps(site, br
         ctx.close()
 
 
-# #337: the version on aanet-4, without crowd noise.
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 

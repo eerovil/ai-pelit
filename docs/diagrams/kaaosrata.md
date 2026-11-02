@@ -11,6 +11,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v4 (#337, `aanet-4`) has no crowd: a fall plays only the (quieter) falling whistle, no "ooh".
 
+v5 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Juokse! tai Aloita kierros] --> B[3, 2, 1, MENE!]

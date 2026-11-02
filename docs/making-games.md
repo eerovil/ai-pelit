@@ -56,12 +56,13 @@ the version that taught it, so you can read the code that fixed it.
 - **Sound follows the game, not the finger.** Piano v5 plays each note when the song reaches it;
   a tap does not play it. Short sounds, only after the first tap (Web Audio rule in AGENTS.md).
 - **Real sounds over beeps.** A thud or a footstep from the shared library
-  (`lib/aanet-4/`, "Sound effects" in AGENTS.md) tells the player what happened better than a
+  (`lib/aanet-5/`, "Sound effects" in AGENTS.md) tells the player what happened better than a
   tone. Pituushyppy v7: the sand.
 - **No crowd noise, no loud sounds (#337, Eero's choice).** No applause, shouting crowd, crowd's
   "ooh" or cheer: a good moment gets a quiet short blip (`onnistui` at about 0.3), a near miss or a
-  fall nothing more than its own thud. Keep every sound about as loud as the rest; `aanet-4`
-  already plays its loudest files quieter. The losing tune may stay as it is.
+  fall nothing more than its own thud. Keep every sound about as loud as the rest; `aanet-5`
+  has the softer files Eero picked by ear (#355) and plays its loudest quieter. A cheer or other
+  sound that every phone in a room plays at each friend's tap is quieter still (0.08, #355).
 
 ## Difficulty
 

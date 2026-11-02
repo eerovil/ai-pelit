@@ -1,4 +1,4 @@
-"""The shared sound effects in public/lib/aanet-1/, aanet-2/ (#205), aanet-3/ (#330) and aanet-4/ (#337), on a test-only game."""
+"""The shared sound effects in public/lib/aanet-1/, aanet-2/ (#205), aanet-3/ (#330), aanet-4/ (#337) and aanet-5/ (#355), on a test-only game."""
 
 import re
 from pathlib import Path
@@ -11,7 +11,13 @@ LIB = ROOT / "public" / "lib" / "aanet-1"
 TAG = '<script src="../../../lib/aanet-1/aanet.js"></script>'
 TAG2 = TAG.replace("aanet-1", "aanet-2")
 TAG4 = TAG.replace("aanet-1", "aanet-4")
+TAG5 = TAG.replace("aanet-1", "aanet-5")
 CROWD = {"aplodit", "yleiso", "ohhoo", "jee"}
+# #355: the sounds Eero still found too loud, swapped in aanet-5 for softer ones he picked by ear.
+SWAPPED = {"metalli", "suhahdus", "valinta", "onnistui", "nousu", "pilli", "pilli2", "boing", "putoaminen",
+           "kitka", "torvi", "kamera", "jarru", "kirkuna", "humina"}
+# ... and the two he wanted only quieter.
+QUIETER = {"voitto", "tappio"}
 
 
 def sounds(lib=LIB):
@@ -20,7 +26,7 @@ def sounds(lib=LIB):
     return dict(re.findall(r"^\s+(\w+): '([\w-]+\.mp3)',", text, re.M))
 
 
-@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2", "aanet-3", "aanet-4"])
+@pytest.mark.parametrize("folder", ["aanet-1", "aanet-2", "aanet-3", "aanet-4", "aanet-5"])
 def test_every_sound_is_there_small_and_its_source_named(folder):
     lib = LIB.parent / folder
     listed = sounds(lib)
@@ -60,6 +66,18 @@ def test_aanet_4_is_aanet_3_without_the_crowd_sounds():
     assert not any(re.match(rf"{c}\.mp3", line) for c in CROWD for line in (b / "SOURCE").read_text().splitlines())
 
 
+def test_aanet_5_is_aanet_4_with_the_too_loud_sounds_swapped():
+    a, b = LIB.parent / "aanet-4", LIB.parent / "aanet-5"
+    four, five = sounds(a), sounds(b)
+    assert four == five
+    changed = {n for n, f in five.items() if (a / f).read_bytes() != (b / f).read_bytes()}
+    assert changed == SWAPPED
+    source = (b / "SOURCE").read_text()
+    new = source[source.index("New in aanet-5"):]
+    for name in SWAPPED:
+        assert re.search(rf"^{name}\.mp3\s", new, re.M), f"{name} is not in SOURCE's aanet-5 part"
+
+
 def newest_versions():
     for game in sorted((ROOT / "games").iterdir()):
         versions = [d for d in game.glob("v*") if d.name[1:].isdigit()]
@@ -78,24 +96,25 @@ def test_no_game_plays_a_crowd_or_loads_an_older_library_for_one():
             assert "cheerSound:" in code, f"{v.relative_to(ROOT)} cheers with kisa.js's own sound"
 
 
-def test_a_version_on_aanet_4_loads_every_sound_it_plays_by_name():
+def test_a_version_on_aanet_4_or_5_loads_every_sound_it_plays_by_name():
     # A sound the game did not load never plays (#337: the quiet blip that took the crowd's place
     # was first left out of some games' lists).
     for v in newest_versions():
         code = "\n".join(p.read_text() for p in v.rglob("*") if p.suffix in (".html", ".js"))
         lists = re.findall(r"\.load\(\[([^\]]*)\]", code)
-        if "lib/aanet-4/" not in code or not any("'" in l for l in lists):
+        lib = re.search(r"lib/(aanet-[45])/", code)
+        if not lib or not any("'" in l for l in lists):
             continue
         loaded = {n for l in lists for n in re.findall(r"'(\w+)'", l)}
-        played = set(re.findall(r"\b(?:play|snd)\('(\w+)'", code)) & set(sounds(LIB.parent / "aanet-4"))
+        played = set(re.findall(r"\b(?:play|snd)\('(\w+)'", code)) & set(sounds(LIB.parent / lib.group(1)))
         assert played <= loaded, f"{v.relative_to(ROOT)} plays {sorted(played - loaded)} without loading it"
 
 
-def test_a_version_on_aanet_4_plays_its_success_blip_quietly():
+def test_a_version_on_aanet_4_or_5_plays_its_success_blip_quietly():
     # #337: a good moment is a quiet short blip, about 0.3, wherever the game plays it.
     for v in newest_versions():
         code = "\n".join(p.read_text() for p in v.rglob("*") if p.suffix in (".html", ".js"))
-        if "lib/aanet-4/" not in code:
+        if not re.search(r"lib/aanet-[45]/", code):
             continue
         levels = re.findall(r"'onnistui', \{[^}]*?\bvol: (\d+(?:\.\d+)?)", code)
         levels += re.findall(r"'onnistui', (\d+(?:\.\d+)?)\b", code)
@@ -103,6 +122,29 @@ def test_a_version_on_aanet_4_plays_its_success_blip_quietly():
         assert not loud, f"{v.relative_to(ROOT)} plays onnistui at {loud}"
         # A play of it with no volume given would be at full volume.
         assert not re.search(r"'onnistui'\)", code), f"{v.relative_to(ROOT)} plays onnistui at full volume"
+
+
+def test_no_game_plays_a_sound_eero_found_too_loud_from_an_older_library():
+    # #355: a newest version that plays one of them loads aanet-5, where it is softer.
+    for v in newest_versions():
+        code = "\n".join(p.read_text() for p in v.rglob("*") if p.suffix in (".html", ".js"))
+        if not re.search(r"lib/aanet-\d/aanet\.js", code):
+            continue
+        played = set(re.findall(r"['\"](\w+)['\"]", code)) & (SWAPPED | QUIETER)
+        if played:
+            assert "lib/aanet-5/aanet.js" in code, f"{v.relative_to(ROOT)} plays {sorted(played)} from an older library"
+
+
+def test_aanet_5_plays_the_win_and_losing_tunes_quieter(site, context):
+    page = open_demo(site, context, ["voitto", "tappio", "pilli", "askel"], TAG5)
+    assert page.evaluate("AiPelitAanet.level('voitto', 0.8)") == pytest.approx(0.2)
+    assert page.evaluate("AiPelitAanet.level('tappio')") == pytest.approx(0.5)
+    # The swapped whistle is soft by itself, and the ordinary sounds play as loud as the game asks.
+    assert page.evaluate("[AiPelitAanet.level('pilli', 0.8), AiPelitAanet.level('askel')]") == [0.8, 1]
+    page.wait_for_function("AiPelitAanet.ready('voitto')", timeout=10000)
+    page.mouse.click(180, 400)
+    page.wait_for_function("AiPelitAanet.play('voitto', { vol: 0.8 }) === true", timeout=5000)
+    assert page.errors == []
 
 
 def test_aanet_4_plays_the_loudest_sounds_quieter(site, context):

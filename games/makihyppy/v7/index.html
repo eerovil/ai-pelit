@@ -67,7 +67,9 @@
 <script src="../../../lib/yleisurheilu-7/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
-<script src="../../../lib/aanet-4/aanet.js"></script>
+<!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
+     and the cheer's chime is quieter -->
+<script src="../../../lib/aanet-5/aanet.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -405,7 +407,7 @@ const base = lv => Math.min(126, 104 + 3 * (lv - 1));
 const isNet = () => K.isNet();
 const K = AiPelitKisa.meet({
   // v5 (#337): a friend's "📣 Kannusta" is a quiet blip, not the library's "jee!".
-  cheerSound: () => S.play('onnistui', { vol: 0.25, rate: 1.2 }),
+  cheerSound: () => S.play('onnistui', { vol: 0.08 }),
   slug: 'makihyppy', format: totals(), foes: FOES, skill: base, fmt: fmtP,
   spread: [5, 3.5, 2, 0.5, -1, -2.5, -4, -5.5, -7, -9, -11], jitter: 2,
   // The wind for each jump comes from the meet's seed, the same on every phone.

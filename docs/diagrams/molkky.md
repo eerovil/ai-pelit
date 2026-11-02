@@ -8,6 +8,8 @@ and three misses in a row put a player out. Alone the computer is the other play
 
 v3 (#337, `aanet-4`) has no crowd: a win is the quiet `onnistui` blip at 0.3, a big throw of your own a blip at 0.25, going over 50 or out silent (no applause, no "ooh").
 
+v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}

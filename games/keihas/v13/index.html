@@ -74,7 +74,9 @@
 <script src="../../../lib/yleisurheilu-7/kisa.js"></script>
 <!-- v11 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
-<script src="../../../lib/aanet-4/aanet.js"></script>
+<!-- v13 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
+     and the cheer's chime is quieter -->
+<script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="../../../outfits.js" data-game="keihas" data-share="yleisurheilu"></script>
 <script>
 'use strict';
@@ -195,7 +197,7 @@ const base = lv => Math.min(84, 50 + 4 * (lv - 1));
 const isNet = () => K.isNet();
 const K = AiPelitKisa.meet({
   // v11 (#337): a friend's "📣 Kannusta" is a quiet blip, not the library's "jee!".
-  cheerSound: () => S.play('onnistui', { vol: 0.25, rate: 1.2 }),
+  cheerSound: () => S.play('onnistui', { vol: 0.08 }),
   slug: 'keihas', format: AiPelitKisa.rounds(), foes: FOES, skill: base,
   spread: [4, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 3,
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,

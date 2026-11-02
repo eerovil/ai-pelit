@@ -524,7 +524,7 @@ def test_turning_the_phone_on_the_ice_keeps_the_contest(site, browser):
     ctx.close()
 
 
-# #337: the version on aanet-4, without crowd noise.
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 

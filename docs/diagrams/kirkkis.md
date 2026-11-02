@@ -15,6 +15,8 @@ adds two more games, plain hide and seek (Piilosta) and tag (Hippa), a sprint, t
 
 v9 (#337) loads `aanet-4`, which plays the loudest sounds (the winning tune) quieter; nothing else changed.
 
+v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   L0[Valitse leikki: Kirkkis, Piilosta tai Hippa] --> K0

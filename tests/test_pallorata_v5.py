@@ -182,7 +182,7 @@ def test_a_second_round_rolls_and_sounds_again(game):
     assert page.errors == []
 
 
-# #337: the version on aanet-4, without crowd noise.
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 

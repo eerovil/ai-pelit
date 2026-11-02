@@ -115,3 +115,11 @@ def test_the_saves_of_v2_are_read_as_they_are(site, context):
     page.evaluate("localStorage.setItem('ai-pelit:vauvan-syotto:taso', '4')")
     page.reload()
     assert page.evaluate("level") == 4
+
+
+from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: E402,F401
+
+
+def test_it_opens_and_plays_with_the_quiet_library(real, context):
+    # #355: on aanet-5, the sounds Eero found too loud softer.
+    opens_and_plays_with_the_quiet_library(real, context, "games/vauvan-syotto/v4")

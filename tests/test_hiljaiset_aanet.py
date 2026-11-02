@@ -1,10 +1,13 @@
-"""The games' versions without crowd noise and with the loudest sounds quieter (#337).
+"""The games' versions without crowd noise and with the loudest sounds quieter (#337), and softer (#355).
 
-Each is its previous version with the sounds changed: it loads aanet-4, opens, starts on a tap
-and throws nothing. Each version's own tests/test_<slug>_v<N>.py runs this check, so that a pull
+Each is its previous version with the sounds changed: it loads aanet-5 (#355: the sounds Eero
+still found too loud swapped for softer ones or played quieter; aanet-4 before), opens, starts on
+a tap and throws nothing. Each version's own tests/test_<slug>_v<N>.py runs this check, so that a pull
 request on it runs that file and not every older version's tests. What a version may play is
 checked for every game's newest version in test_lib_aanet.py.
 """
+
+import re
 
 import pytest
 
@@ -18,8 +21,11 @@ VERSIONS = [
     "games/orava/v6", "games/pallorata/v5", "games/pilkki/v5", "games/pituushyppy/v14",
     "games/puhelinkoppi/v8", "games/seivashyppy/v11", "games/skuutti/v4", "games/sormiskeitti/v9",
     "games/tikka/v6", "games/trampoliini/v10", "games/voimistelu/v13", "games/vuoristorata/v4",
-    "games/yoajo/v10",
+    "games/yoajo/v10", "games/last-signal/v16", "games/vauvan-syotto/v4",
 ]
+
+# The field events' newest versions, whose "📣 Kannusta" chime Eero found too loud (#355).
+EVENTS = ["keihas", "korkeushyppy", "kuula", "makihyppy", "moukari", "pituushyppy", "seivashyppy"]
 
 # Records every sound the game asks for, from before its own script runs.
 SPY = """
@@ -51,9 +57,21 @@ def opens_and_plays_with_the_quiet_library(site, context, version):
     page.goto(f"{site.url}{version}/")
     page.wait_for_function("window.AiPelitAanet && window.__played", timeout=10000)
     assert "aplodit" not in page.evaluate("AiPelitAanet.names()")
+    assert page.evaluate("[...document.scripts].some(s => s.src.includes('/lib/aanet-5/aanet.js'))")
     for x, y in [(180, 400), (180, 600), (180, 300)]:
         page.mouse.click(x, y)
         page.wait_for_timeout(400)
     page.wait_for_timeout(1000)
     assert not {"aplodit", "yleiso", "ohhoo", "jee"} & set(page.evaluate("window.__played"))
     assert errors == []
+
+
+def cheer_is_quiet(version):
+    """#355: the cheer plays aanet-5's soft chime at 0.08 at most, never pitched up."""
+    code = (ROOT / version / "index.html").read_text()
+    m = re.search(r"cheerSound: \(\) => \w+\.play\('onnistui', \{([^}]*)\}\)", code)
+    assert m, f"{version} has no onnistui cheerSound"
+    vol = re.search(r"\bvol: (\d+(?:\.\d+)?)", m.group(1))
+    rate = re.search(r"\brate: (\d+(?:\.\d+)?)", m.group(1))
+    assert vol and float(vol.group(1)) <= 0.08, m.group(0)
+    assert not rate or float(rate.group(1)) <= 1, m.group(0)

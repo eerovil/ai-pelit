@@ -16,6 +16,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v9 (#337, `aanet-4`) has no crowd: a crash is only its thud, no "ooh"; a trick or a task is the quiet `onnistui` blip at 0.3.
 
+v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Taso: trampoliini ja temppulista] --> B[Matolla: napauta, v2: päästä irti, pohjalla]

@@ -284,7 +284,7 @@ def test_a_guest_that_reloads_hears_the_match_end_once(room):
     assert host.errors == guest.errors == third.errors == []
 
 
-# #337: the version on aanet-4, without crowd noise.
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 

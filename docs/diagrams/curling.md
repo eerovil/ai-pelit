@@ -8,6 +8,8 @@ team; with friends, 2–4 phones split into two teams through the shared room li
 
 v3 (#337, `aanet-4`) has no crowd: an end your team wins is the quiet `onnistui` blip at 0.3, any other end is silent (no applause, no "ooh").
 
+v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}
