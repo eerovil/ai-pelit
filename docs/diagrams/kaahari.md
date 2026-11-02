@@ -9,6 +9,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v5 (#337, `aanet-4`) has no crowd: the race's end plays only its tune, the line on a friend's race the quiet `onnistui` blip at 0.3; the kart engine, tyres and explosions are quieter.
 
+v6 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Valitse rata, Aja!] --> B[3, 2, 1, AJA!]

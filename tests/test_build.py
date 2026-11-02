@@ -296,8 +296,8 @@ def test_the_real_redirects_fit_cloudflare_pages(tmp_path):
     rules = [line.split() for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
     assert 0 < len(rules) <= 2000
     # Puhelinkoppi's withdrawn v3 and v4 were published once, so they go to the newest too.
-    assert ["/games/puhelinkoppi/v3/", "/games/puhelinkoppi/v7/", "302"] in rules
-    assert ["/games/puhelinkoppi/v4/", "/games/puhelinkoppi/v7/", "302"] in rules
+    assert ["/games/puhelinkoppi/v3/", "/games/puhelinkoppi/v8/", "302"] in rules
+    assert ["/games/puhelinkoppi/v4/", "/games/puhelinkoppi/v8/", "302"] in rules
 
 
 def test_rewriting_a_published_entry_fails(repo):

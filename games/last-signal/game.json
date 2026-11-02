@@ -106,6 +106,13 @@
       "note": "Uusi meri: pohja nousee ja laskee paljon enemmän, isot jäävuoret kierretään alta ja kalliosilloilla on tunneli, hylyt ovat syvänteissä ja taustalla näkyy kaukainen pohja; sonar kertoo jokaisesta uudesta kaiusta, pienestä avannosta nousee vain torni, Aurora on aluksi pimeä ja sen sähköt korjataan ensin, nomadit muuttavat asemalle, pumppu on lähimmässä hylyssä ja käy hyllyyn, ja syötyään voi nukkua autopilotin matkan perille.",
       "request": "Pelin alussa oleva ohjeilmoitus ruuasta ja kontista pois.\n\nSonar ilmoittaa aina pelaajalle uusista sonar-havainnoista. Esim. ”metallinen objekti”, koko ja etäisyys tai ”onkalo”.\n\nSiirretään Auroralle tarvittava vesipumppu lähimpään hylkyyn. Muutenkin alkupään tehtävien kohteiden tulisi olla aika lähellä. Pumppu toimii kuten laatikot eli senkin voi laittaa hyllyyn.\n\nMaailman rakenteen muutos: paljon enemmän pohjan syvyysvaihtelua ja toisaalta isoja jäävuoria, jotka pitää kiertää alapuolelta. Reitti kentän vasemmasta laidasta oikeaan mutkittelee esteiden välillä eri syvyyksillä, vaihtelee kapean ja leveän välillä ja joillakin osuuksilla on myös vaihtoehtoisia reittejä. Hylyt ja muut löydöt ovat hieman syrjässä pääreitiltä esim. syvänteissä, ettei autopilotti aja aivan niiden läheltä. \nLisää maailmaan myös tausta-layer syvyysvaikutelman lisäämiseksi. \n\nAurora-asema on aluksi tyhjä ja pimeä. Pelaajan tulee ensin korjata sähköjärjestelmä. Sitten pelaaja neuvoo kohtaamansa nomadit etsimään suojaa asemalta ja sitten vasta saadaan tehtävä pumpun hakemiseksi.\n\nVene voi tulla pintaan myös pienemmästä avannosta siten, että vain tornin yläosa on pinnan yläpuolella.\n\nJa laitetaan myös autopilotin pikamatkustus nukkumalla, kun on ensin syönyt",
       "issue": "eerovil/ai-pelit#329"
+    },
+    {
+      "n": 16,
+      "date": "2026-11-02",
+      "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
+      "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
+      "issue": "eerovil/ai-pelit#355"
     }
   ]
 }

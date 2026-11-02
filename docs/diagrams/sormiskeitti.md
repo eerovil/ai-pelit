@@ -13,6 +13,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v8 (#337) loads `aanet-4`, which plays the loudest sounds (the winning tune) quieter; nothing else changed.
 
+v9 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   S[Avaa peli: taso ja ennätys puhelimesta] --> A

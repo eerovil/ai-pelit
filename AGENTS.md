@@ -301,8 +301,8 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 ## Sound effects
 
 Recorded sounds (#205) are a shared library like three.js: the newest `public/lib/aanet-<N>/`
-(now `aanet-4/`, 68 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
-a classic `<script src="../../../lib/aanet-4/aanet.js"></script>` before its own script, names the sounds
+(now `aanet-5/`, 68 sounds), short mono MP3s with `aanet.js` beside them. A version loads it with
+a classic `<script src="../../../lib/aanet-5/aanet.js"></script>` before its own script, names the sounds
 it uses once (`AiPelitAanet.load(['askel', 'hiekka'])`, so the phone downloads only those) and
 plays them by name: `AiPelitAanet.play('hiekka', { vol, rate, delay })`. The names and what each
 sound is are listed at the top of `aanet.js`. Sound starts only after the first tap, and `play()`
@@ -315,7 +315,10 @@ sleeps while the page is hidden.
 No crowd noise and no loud sounds (#337, Eero's choice): `aanet-4` has no applause, crowd or cheer,
 and plays its loudest files (a whistle, tyres, the winning tune...) quieter by itself (`LOUD` in
 `aanet.js`). A field event passes `cheerSound` to `AiPelitKisa.meet`, so "📣 Kannusta" is a quiet
-blip and not `kisa.js`'s "jee!" (Pituushyppy v12).
+blip and not `kisa.js`'s "jee!" (Pituushyppy v12). Eero then picked by ear (#355) softer files for
+the 17 sounds he still found too loud (the select blip, the success chime, the whoosh, the whistles,
+the horn...), which `aanet-5` has under the same names, and halved the win and losing tunes; the
+cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as these.
 
 - Only CC0 sounds (no credit owed, the repository is public), each named with its source in the
   folder's `SOURCE`; Kenney.nl's packs and CC0-only pages on OpenGameArt.org have most of what a

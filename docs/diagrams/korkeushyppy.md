@@ -21,6 +21,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v8 (#337, `aanet-4`) has no crowd: a clearance (a record too) is the quiet `onnistui` blip at 0.3, a failure only the bar's clatter, the podium only the medal tune, and "📣 Kannusta" a quiet blip at 0.25 (`cheerSound`).
 
+v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); the cheer's chime plays at 0.08, not 0.25 pitched up.
+
 
 v9 (#341) plays as v8 on `public/lib/yleisurheilu-7/`: the friends watching stand behind the boards, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 ```mermaid

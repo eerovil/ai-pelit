@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Kuulantyöntö</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (AGENTS.md rule 4, #181). */
+  #c{display:block;position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(18,32,58,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:34px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  :where(#menu) button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  :where(#menu) button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #cont:active{box-shadow:0 1px 0 #3c8a3f}
+  #cont.hidden{display:none}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #asu{font-size:16px;padding:9px 18px;background:#3d5a80;color:#fff;box-shadow:0 3px 0 #24364f}
+  #asu:active{box-shadow:0 1px 0 #24364f}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
+  .help.side{display:none}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,280px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#cont,#multi,#asu{grid-column:2;justify-self:stretch}
+    #go{grid-row:1 / span 2;align-self:center}
+    #cont{grid-row:3;align-self:center}
+    #multi{grid-row:4;align-self:start;padding:12px 14px;white-space:nowrap}
+    #asu{grid-row:5;align-self:start}
+    .help{margin:0;display:none}
+    .help.side{display:block}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>Kuulantyöntö</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Kisaan!</button>
+  <button id="cont" class="hidden">Jatka kisaa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <button id="asu">👕 Asu</button>
+  <p id="stats"></p>
+  <p class="help">Valitse liuku (helpompi) tai pyörähdys (pidemmälle, tarkempi). Kun pallo tulee vihreälle,
+    paina Työnnä pohjaan: kulma nousee. Päästä irti, kun kulma on vihreällä. Liian myöhään, ja astut
+    renkaan yli. Kolme työntöä, kahdeksan parasta saa kolme lisää.</p>
+  <p class="help side">Valitse liuku tai pyörähdys. Paina Työnnä pohjaan, kun pallo on vihreällä, ja päästä irti,
+    kun kulma on vihreällä. Myöhään, ja astut renkaan yli. Kolme työntöä, kahdeksan parasta saa kolme lisää.</p>
+</div>
+<script src="../../../rooms.js" data-game="kuula" data-min="2" data-max="8"></script>
+<!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
+<!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
+<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
+<!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
+     and with the loudest sounds quieter -->
+<!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
+     and the cheer's chime is quieter -->
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../outfits.js" data-game="kuula" data-share="yleisurheilu"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+window.x2d = x;
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+const FOES = ['Kuula-Kalle', 'Rauta-Riikka', 'Tykki-Tuomas', 'Kivi-Kirsi', 'Pommi-Pekka', 'Puntti-Päivi', 'Järkäle-Jussi',
+  'Lyijy-Liisa', 'Karhu-Kari', 'Tankki-Tiina', 'Voima-Ville', 'Moukari-Maija', 'Möhkäle-Matti'];
+
+// ---------- The circle and the throw ----------
+// Seen from the side, metres: x forward towards the sector, 0 at the inside edge of the stop board
+// (the circle's front rim), so the circle runs from -2.135 to 0. World Athletics: a 2.135 m circle,
+// a 34.92° sector from its centre, a stop board 0.10 m high in front; the mark is measured from the
+// inside of the rim, so from the centre less 1.0675 m.
+const CIRCLE_R = 1.0675, SECTOR = 34.92, HALF = SECTOR / 2 * Math.PI / 180, DEG = Math.PI / 180;
+const BOARD_W = 0.114, BOARD_H = 0.1;
+// The two ways across the circle (1: the glide, 2: the spin). The thrower's hips go from x0 at the
+// back and reach the power position xp at T seconds; pushing within win seconds of it is good.
+// Later than that the thrower's weight is already over the board: a foul. v is the shot's speed
+// from a perfect push, dev how many degrees off the middle a push at the window's edge goes.
+// The spin throws further, but its window is narrower and an early push sends it wide.
+const TECH = {
+  1: { name: 'Liuku', T: 1.1, win: 0.14, v: 13.4, x0: -1.75, xp: -0.85, dev: 1.5 },
+  2: { name: 'Pyörähdys', T: 1.4, win: 0.085, v: 14.5, x0: -1.7, xp: -0.9, dev: 8 },
+};
+// Holding Työnnä raises the push's angle; letting go puts the shot. The best is about 37°.
+const AIM0 = 10, AIM_RATE = 40, AIM_MAX = 70, GREEN = [33, 42];   // degrees, degrees a second
+const REL_H = 2.1, REACH = 0.6, G = 9.81;                         // metres: the hand over the front foot
+const LAND_T = 2.2, BOARD_T = 3.5, TURN_MAX = 60;                 // seconds; a minute for an attempt, as the rules say
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Where the hips are t seconds into the glide or spin: speeding up to the power position, and on
+// at that speed after it. The front foot is FOOT ahead, so it touches the board when the window ends.
+function hip(k, t) {
+  const T = TECH[k], u = t / T.T, d = T.xp - T.x0;
+  return u <= 1 ? T.x0 + d * (0.35 * u + 0.65 * u * u) : T.xp + d * 1.65 * (u - 1);
+}
+const foot = k => -hip(k, TECH[k].T + TECH[k].win);
+// The shot's speed for a push off seconds from the power position (negative: early), and how far
+// off the middle it goes. Early is pushing before the legs are set: weaker, and wide from the spin.
+function pushSpeed(k, off) {
+  const T = TECH[k], q = off / T.win;
+  return q >= -1 ? T.v * (1 - 0.03 * q * q) : T.v * Math.max(0.6, 0.94 - 2.2 * (-off - T.win));
+}
+const pushDev = (k, off) => clamp(off / TECH[k].win * TECH[k].dev, -40, 40);
+// A steeper push is a weaker one (the arm pushes hardest level with the shoulder), so the best
+// angle is about 37° rather than 42°.
+const relSpeed = (v, ang) => v * (1 - 0.06 * Math.pow(Math.max(0, ang - 30), 1.5) / 100);
+// Where the shot lands and why it does not count. The flight is a plain arc from the hand; the
+// landing point is measured from the circle's centre, so the sector lines judge it fairly.
+function flight(k, off, ang) {
+  const xr = hip(k, TECH[k].T + off) + REACH, v = relSpeed(pushSpeed(k, off), ang), a = ang * DEG;
+  const vx = v * Math.cos(a), vy = v * Math.sin(a), tl = (vy + Math.sqrt(vy * vy + 2 * G * REL_H)) / G, L = vx * tl;
+  const dev = pushDev(k, off) * DEG, fwd = CIRCLE_R + xr + L * Math.cos(dev), lat = L * Math.sin(dev);
+  const d = Math.hypot(fwd, lat) - CIRCLE_R, out = Math.abs(Math.atan2(lat, fwd)) >= HALF;
+  const why = out ? 'Sektorin ulkopuolelle' : '';
+  return { xr, vx, vy, tl, L, d, lat, fwd, dev: dev / DEG, mark: why ? -1 : Math.floor(d * 100) / 100, why };
+}
+
+// ---------- Layout ----------
+// The scene is drawn from SX and SW wide. Upright it is the whole width with the pads under it;
+// on its side the pads are columns at the left and right edges, under the thumbs.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, ctrlTop, ctrlH, groundY, hudTop, sceneB;
+let land = false, SX = 0, SW = 0, side = 0, runS = 60, flyS = 12;
+function resize() {
+  const r = c.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  if (land) {
+    side = Math.max(110, Math.min(160, W * 0.17));
+    SX = safeL + side; SW = W - SX - safeR - side;
+    ctrlTop = H; ctrlH = 0; hudTop = safeT + 6; sceneB = H - safeB;
+    groundY = sceneB - 56;
+  } else {
+    SX = 0; SW = W;
+    ctrlH = Math.max(140, Math.min(200, H * 0.25));
+    ctrlTop = H - safeB - ctrlH; hudTop = safeT + 44; sceneB = ctrlTop;
+    groundY = ctrlTop - 64;
+  }
+  // In the circle about 4.6 m across, the thrower and the dial under the texts; in flight about
+  // 16 m of field round the shot, and its highest point.
+  runS = Math.min(SW / 4.6, (groundY - hudTop - 150) / 2.3);
+  flyS = Math.min(SW / 16, (groundY - hudTop - 80) / 8);
+}
+addEventListener('resize', resize);
+addEventListener('fullscreenchange', resize);
+// The box the canvas fills may change without a resize event (the installed app going full
+// screen, #181): checked each frame.
+function fitCheck() { const r = c.getBoundingClientRect(); if (Math.abs(r.width - W) > 0.5 || Math.abs(r.height - H) > 0.5) resize(); }
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+// Recorded sounds from the shared library (#205); each falls back to a beep while its file is not
+// there yet (the first open offline).
+const S = AiPelitAanet;
+S.load(['valinta', 'askel', 'suhahdus', 'ponnistus', 'onnistui', 'virhe', 'tomahdys', 'mitali']);
+
+// ---------- The competition ----------
+// The meet, its saves and playing it with friends are the shared athletics library's (#165):
+// twelve throwers, three rounds, the best eight put three more. K.comp is the meet, plain numbers:
+// a thrower is {id, name, p (the player's id on a phone, null for the computer), bot, skill (metres
+// the computer puts on average), col, marks: one per round, -1 a foul, fit: the outfit}; seq
+// counts the puts made. th is this phone's view of the put.
+let th = null;
+const base = lv => Math.min(19, 14 + 0.8 * (lv - 1));   // 14 m at level 1, 0.8 m more per level
+const isNet = () => K.isNet();
+const K = AiPelitKisa.meet({
+  // v5 (#337): a friend's "📣 Kannusta" is a quiet blip, not the library's "jee!".
+  cheerSound: () => S.play('onnistui', { vol: 0.08 }),
+  slug: 'kuula', format: AiPelitKisa.rounds(), foes: FOES, skill: base,
+  spread: [1.2, 0.6, 0.3, 0, -0.3, -0.6, -0.9, -1.2, -1.5, -1.8, -2.1], jitter: 0.6,
+  cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
+  live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä työntöä',
+  fit: () => outfit.id, started: () => menu.classList.add('hidden'),
+  look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
+  chime: i => {
+    S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 }) || tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06);
+    if (i === 0 && !S.ready('mitali')) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140);
+  },
+});
+const thrower = id => K.thrower(id);
+const COLORS = K.COLORS;
+
+// The computer puts around its skill, a foul about one time in ten.
+function cpuMark(t) {
+  if (Math.random() < 0.1) return -1;
+  return Math.max(8, Math.floor((t.skill + K.gauss() * 0.8) * 100) / 100);
+}
+// A new turn: this phone draws it, and runs it when it is its own.
+function newTurn(t, mine, seq) {
+  th = { seq, id: t.id, mine, phase: 'wait', t: 0, k: 1, ang: AIM0, hold: 0, off: 0, ft: 0, over: false,
+    shot: null, mark: null, why: '', sendT: 0, idle: 0 };
+  blend = 0; pop = null;
+}
+
+// ---------- One put ----------
+// phase: wait (the standings), ready (standing at the back of the circle), move (the glide or the
+// spin, t seconds in), push (Työnnä held, the angle rising), fly (the shot in the air, or a foul in
+// the circle), land (the mark is shown).
+let pop = null;
+function say(text, col) { pop = { text, col, t: 0.8 }; }
+function step(dt) {
+  for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
+  if (pop) { pop.t -= dt; if (pop.t <= 0) pop = null; }
+  if (K.step(dt)) return;
+  if (!th || !K.comp) return;
+  if (isNet() && R.paused) return;
+  const a = th;
+  a.t += dt;
+  if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; if (a.mine) S.play('valinta', { vol: 0.6 }) || tone(660, 0.1, 'sine', 0.06); } return; }
+  if (a.phase === 'ready') {
+    a.idle += dt;
+    if (a.mine && isNet() && a.idle > TURN_MAX) return outcome(-1, 'Aika loppui');
+    return;
+  }
+  if (a.phase === 'move') {
+    // Past the window with no push: the thrower's weight carries them over the board.
+    if (a.mine && a.t > TECH[a.k].T + TECH[a.k].win) return outcome(-1, 'Ei työntöä ajoissa: yli renkaan', true);
+    sendPos(dt);
+    return;
+  }
+  if (a.phase === 'push') {
+    a.t -= dt;   // the thrower holds the power position while the angle rises
+    a.hold += dt;
+    a.ang = Math.min(AIM_MAX, AIM0 + AIM_RATE * a.hold);
+    if (a.mine && a.ang >= AIM_MAX) return letGo();   // held to the top: it goes, steep
+    sendPos(dt);
+    return;
+  }
+  if (a.phase === 'fly' || a.phase === 'land') {
+    a.ft += dt;
+    const j = a.shot;
+    if (j && !j.down) {
+      j.t = Math.min(j.tl, j.t + dt);
+      if (j.t >= j.tl) { j.down = true; landed(); }
+    }
+    if (a.phase === 'land' && a.t >= LAND_T && a.mine && !a.sent) { a.sent = true; report(a.mark); }
+  }
+}
+function sendPos(dt) {
+  const a = th;
+  if (!a.mine || !isNet()) return;
+  a.sendT -= dt;
+  if (a.sendT <= 0) { a.sendT = 1 / 12; K.send({ t: 'p', a: [a.phase, r2(a.t), a.k, Math.round(a.ang)] }); }
+}
+const r2 = n => Math.round(n * 100) / 100, r3 = n => Math.round(n * 1000) / 1000;
+// The shot in the air, t seconds after it left the hand: [x, height]. Its ground track runs
+// straight to where it is measured, so the mark under it is the mark shown.
+function shotAt(j) {
+  const f = j.tl > 0 ? j.t / j.tl : 1;
+  return [j.xr + (j.d - j.xr) * f, Math.max(0, REL_H + j.vy * j.t - G * j.t * j.t / 2)];
+}
+
+// 1 Liuku, 2 Pyörähdys: the first tap picks the way across the circle and starts it.
+function press(k) {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[k] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }  // alone, a tap skips the standings
+  if (th.phase !== 'ready') return;
+  th.phase = 'move'; th.k = k; th.t = 0; th.idle = 0;
+  S.play(k === 2 ? 'suhahdus' : 'askel', { vol: 0.6, rate: k === 2 ? 0.8 : 1 }) || tone(220, 0.08, 'triangle', 0.05, 330);
+}
+// Työnnä (3) pressed: the push starts, judged by how near the power position it is.
+let aimPtr = null;
+function startPush(ptr) {
+  unlock();
+  if (!th || !th.mine) return;
+  flash[3] = 0.09;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }
+  if (th.phase !== 'move') return;
+  const T = TECH[th.k], off = th.t - T.T;
+  if (off > T.win) return outcome(-1, 'Liian myöhään: yli renkaan', true);
+  th.phase = 'push'; th.off = off; th.hold = 0; th.ang = AIM0; aimPtr = ptr; th.idle = 0;
+  if (off < -T.win) { say('Liian aikaisin', '#ff9a8b'); S.play('virhe', { vol: 0.4 }) || tone(150, 0.12, 'sawtooth', 0.05); }
+  else if (Math.abs(off) < T.win * 0.35) { say('Täydellinen!', '#7ee081'); S.play('ponnistus', { vol: 0.8 }) || tone(880, 0.07, 'sine', 0.07); }
+  else { say('Hyvä!', '#7ee081'); S.play('ponnistus', { vol: 0.6 }) || tone(660, 0.07, 'sine', 0.07); }
+}
+// Työnnä let go: the shot leaves the hand at the angle reached.
+function release() {
+  aimPtr = null;
+  if (!th || !th.mine || th.phase !== 'push') return;
+  letGo();
+}
+function letGo() {
+  aimPtr = null;
+  // Rounded as it goes over the room, so every phone puts the very same shot.
+  const off = r3(th.off), ang = Math.round(th.ang);
+  throwNow(th.k, off, ang);
+  if (isNet()) K.send({ t: 'rel', a: [th.k, off, ang] });
+}
+function throwNow(k, off, ang) {
+  const a = th;
+  a.phase = 'fly'; a.t = 0; a.ft = 0; a.k = k; a.off = off; a.ang = ang;
+  const f = flight(k, off, ang);
+  a.mark = f.mark; a.why = f.why;
+  a.shot = Object.assign(f, { t: 0, down: false });
+  if (a.mine) S.play('suhahdus', { vol: 0.8, rate: 1.1 }) || tone(520, 0.18, 'sawtooth', 0.06, 160);
+}
+function landed() {
+  th.phase = 'land'; th.t = 0;
+  S.play('tomahdys', { vol: th.mine ? 1 : 0.5 });
+  if (th.mark >= 0) {
+    th.leads = K.comp && K.standings()[0] && th.mark > K.bestOf(K.standings()[0]);
+    if (th.mine) {
+      th.record = K.record(th.mark);
+      // A good put confirms (#337: no crowd's applause).
+      if (!S.play('onnistui', { delay: 0.2, vol: 0.3 })) {
+        tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120);
+      }
+    }
+  }
+}
+// A foul in the circle: the turn is over, no put. over: the thrower stumbles over the board.
+function outcome(mark, why, over) {
+  aimPtr = null;
+  th.phase = 'land'; th.t = 0; th.ft = 0; th.mark = mark; th.why = why; th.shot = null; th.over = !!over;
+  if (th.mine) {
+    if (!over) S.play('virhe', { vol: 0.8 }) || tone(160, 0.3, 'sawtooth', 0.08, 70);
+    if (isNet()) K.send({ t: 'rel', a: [th.k, 0, 0], why, over: !!over });
+  }
+}
+function report(mark) { K.report(th.seq, mark); }
+
+// Another phone's thrower, as its phone sends it: the glide or spin and the push (p), the put (rel).
+function watchFrom(m) {
+  if (!th || th.mine || !K.comp || th.id !== m.id) return;
+  if (m.t === 'p' && (th.phase === 'wait' || th.phase === 'ready' || th.phase === 'move' || th.phase === 'push')) {
+    th.phase = m.a[0]; th.t = m.a[1]; th.k = m.a[2]; th.ang = m.a[3];
+    if (th.phase === 'push') th.hold = (th.ang - AIM0) / AIM_RATE;
+  }
+  if (m.t === 'rel' && th.phase !== 'fly' && th.phase !== 'land') {
+    th.k = m.a[0];
+    if (m.why) { th.t = TECH[th.k].T + TECH[th.k].win; outcome(-1, m.why, m.over); } else throwNow(m.a[0], m.a[1], m.a[2]);
+  }
+}
+const fmt = K.fmt;
+
+// ---------- The loop ----------
+let lastT = performance.now();
+function frame(now) {
+  fitCheck();
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  step(dt);
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+// ---------- Drawing ----------
+let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = -3;
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function draw(dt = 0) {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
+  x.save();
+  if (land) { x.beginPath(); x.rect(SX, 0, SW, H); x.clip(); x.translate(SX, 0); }
+  drawScene(dt);
+  x.restore();
+  drawControls();
+  // The end of the meet is the medal ceremony over the whole screen (#176). It stays until a tap.
+  if (K.ending) {
+    x.fillStyle = 'rgba(8,16,32,.82)'; x.fillRect(0, 0, W, H);
+    K.drawPodium(x, { left: safeL + 8, top: safeT + 44, w: W - safeL - safeR - 16, bottom: H - safeB - 8 });
+  }
+}
+// The camera: close on the circle while putting, out over the whole put while it flies.
+function camera(dt) {
+  const fly = th && (th.phase === 'fly' || th.phase === 'land') && th.shot;
+  blend = fly ? Math.min(1, blend + dt * 1.6) : Math.max(0, blend - dt * 3);
+  const e = blend * blend * (3 - 2 * blend);
+  const s = runS * Math.pow(flyS / runS, e);
+  // Close up the circle sits a little left of the middle, the board and the field ahead; out, the
+  // shot a little left of the middle, the circle in view until it has gone a few metres.
+  const near = -0.9 - 0.5 * SW / runS, far = fly ? Math.max(-2.8, shotAt(th.shot)[0] - 0.45 * SW / flyS) : near;
+  camX = near + (far - near) * e;
+  return s;
+}
+function drawScene(dt) {
+  const W = SW, s = camera(dt);
+  const sx = m => (m - camX) * s, sy = h => groundY - h * s;
+  // Sky, and the stands across the field.
+  const sky = x.createLinearGradient(0, 0, 0, groundY);
+  sky.addColorStop(0, '#5fa8e8'); sky.addColorStop(1, '#cfe9ff');
+  x.fillStyle = sky; x.fillRect(0, 0, W, groundY);
+  const standH = Math.max(60, (groundY - hudTop) * 0.42), standTop = groundY - 22 - standH;
+  x.fillStyle = '#2b374b'; x.fillRect(0, standTop - 10, W, 10);
+  x.fillStyle = '#3b4a63'; x.fillRect(0, standTop, W, standH);
+  const crowd = ['#e63946', '#f1faee', '#ffb703', '#8ecae6', '#2a9d8f', '#f4a261'], gap = 11, pc = camX * 6;
+  for (let row = 0; row * 12 + 8 < standH; row++) {
+    const off = (row % 2) * gap / 2;
+    for (let k = Math.floor((pc - off) / gap) - 1; k * gap + off - pc < W + gap; k++) {
+      const n = (k * 7919 + row * 104729) >>> 0;
+      x.fillStyle = crowd[n % crowd.length];
+      x.beginPath(); x.arc(k * gap + off - pc, standTop + 8 + row * 12, 3.6, 0, 7); x.fill();
+    }
+  }
+  // v6 (#341): the friends watching stand behind the boards, which hide their legs, drawn before the
+  // athlete so they never cover it; a tap walks your own along the row.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true });
+  x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, groundY - standTop - standH);
+  const bw = 120, bo = ((camX * 20) % bw + bw) % bw;
+  x.font = '900 11px system-ui'; x.textAlign = 'center';
+  for (let k = -1; k * bw - bo < W + bw; k++) {
+    const bx = k * bw - bo, n = (Math.floor(camX * 20 / bw) + k) & 1;
+    x.fillStyle = n ? '#1d4e89' : '#f1faee'; x.fillRect(bx, standTop + standH - 16, bw - 2, 16);
+    x.fillStyle = n ? '#ffd166' : '#1d4e89'; x.fillText(n ? 'AI-PELIT' : 'KUULA', bx + bw / 2, standTop + standH - 4);
+  }
+  // The field with a stripe every metre, the concrete circle, the white stop board.
+  x.fillStyle = '#5aa64e'; x.fillRect(0, groundY, W, sceneB - groundY);
+  for (let m = 0; m < 34; m++) {
+    if (m % 2) continue;
+    x.fillStyle = '#62ae55'; x.fillRect(sx(m), groundY, s, sceneB - groundY);
+  }
+  const c0 = sx(-2 * CIRCLE_R), c1 = sx(0), rim = Math.max(3, 0.06 * s);
+  x.fillStyle = '#c8553d'; x.fillRect(c0 - 0.5 * s, groundY, c1 - c0 + 0.5 * s, sceneB - groundY);
+  x.fillStyle = '#9aa3ab'; x.fillRect(c0, groundY, c1 - c0, sceneB - groundY);
+  x.fillStyle = '#fff'; x.fillRect(c0 - rim, groundY - 1, rim, sceneB - groundY + 1);
+  x.fillRect(c1, groundY - 1, rim, sceneB - groundY + 1);
+  const bh = Math.max(7, BOARD_H * s), bwp = Math.max(7, BOARD_W * s);
+  x.fillStyle = th && th.over && th.phase === 'land' ? '#ff6b5e' : '#f1faee';
+  rr(c1, groundY - bh, bwp, bh, 2); x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = 1; x.stroke();
+  // Distances from the rim: a tick every metre, the metres every two.
+  x.textAlign = 'center';
+  for (let m = 1; m <= 32; m++) {
+    const px = sx(m);
+    if (px < -40 || px > W + 40) continue;
+    x.fillStyle = 'rgba(255,255,255,.8)'; x.fillRect(px - 1, groundY, 2, m % 2 ? 8 : 16);
+    if (m % 2 === 0) {
+      x.font = '800 13px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.45)';
+      x.strokeText(m + ' m', px, groundY + 32); x.fillStyle = '#fff'; x.fillText(m + ' m', px, groundY + 32);
+    }
+  }
+  // Flags: the leader's mark and the player's own record.
+  let leadX = null;
+  const comp = K.comp, best = K.best;
+  if (comp && comp.throwers.length) {
+    const lead = K.standings()[0], lb = K.bestOf(lead);
+    if (lb > 0) { leadX = sx(lb); flag(leadX, '#ffd166', '1. ' + (lead.p === K.me ? 'Sinä' : lead.name), 0); }
+  }
+  if (best !== null) flag(sx(best), '#f1faee', 'Ennätys', leadX !== null && Math.abs(sx(best) - leadX) < 110 ? 16 : 0);
+  // The thrower and the shot.
+  if (th) {
+    const t = thrower(th.id);
+    drawPutter(th, s, sx, groundY, t ? t.col : COLORS[0], t ? (th.mine ? 'Sinä' : t.name) : '', looks(t));
+    const j = th.shot;
+    if (j) {
+      // Its arc so far, fading, so the eye finds it against the crowd; a ring where it came down.
+      const n = 14;
+      for (let i = 1; i <= n; i++) {
+        const q = shotAt(Object.assign({}, j, { t: j.t * i / n }));
+        x.fillStyle = 'rgba(255,255,255,' + (0.15 + 0.5 * i / n) + ')';
+        x.beginPath(); x.arc(sx(q[0]), sy(q[1]), 2, 0, 7); x.fill();
+      }
+      const q = shotAt(j);
+      if (j.down) {
+        x.strokeStyle = th.mark >= 0 ? '#fff' : '#ff6b5e'; x.lineWidth = 2.5;
+        x.beginPath(); x.ellipse(sx(q[0]), groundY, 12, 5, 0, 0, 7); x.stroke();
+      }
+      ball(sx(q[0]), sy(q[1]), s, x, !j.down);
+      drawSector(j);
+    }
+    if (th.mine && th.phase === 'push') { const h = handAt(th, s, sx); drawDial(h[0] + 0.25 * s, h[1], th.ang); }
+  }
+  drawHud();
+  drawStrip();
+  if (th && th.phase === 'wait') drawBoard(false);
+  if (comp && comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
+}
+function flag(px, col, label, up) {
+  if (px < -60 || px > SW + 60) return;
+  const top = groundY - 44 - up;
+  x.strokeStyle = '#eee'; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(px, groundY); x.lineTo(px, top); x.stroke();
+  x.fillStyle = col; x.beginPath(); x.moveTo(px, top); x.lineTo(px + 16, top + 6); x.lineTo(px, top + 12); x.fill();
+  x.font = '700 11px system-ui'; x.textAlign = 'left'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.5)';
+  x.strokeText(label, px + 3, top - 5); x.fillStyle = '#fff'; x.fillText(label, px + 3, top - 5);
+}
+// The shot: a dark iron ball with a shine, never smaller than a few pixels.
+function ball(px, py, s, g = x, ring = false) {
+  const r = Math.max(4, 0.07 * s);
+  g.fillStyle = '#2d3138'; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
+  if (ring) { g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.5; g.stroke(); }   // in the air, against the crowd
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.beginPath(); g.arc(px - r * 0.35, py - r * 0.35, r * 0.35, 0, 7); g.fill();
+}
+// From above, small in a corner while the shot flies: the sector, and where it came down. The
+// side view cannot show a put that goes wide; this does.
+function drawSector(j) {
+  const R0 = 60, cx = SW - 24 - R0 * Math.sin(HALF) - 6, cy = hudTop + 72 + R0 + 8, k = R0 / 25;
+  x.fillStyle = 'rgba(10,20,40,.55)'; rr(cx - R0 * 0.75, cy - R0 - 8, R0 * 1.5, R0 + 18, 10); x.fill();
+  x.fillStyle = 'rgba(126,224,129,.35)'; x.strokeStyle = '#fff'; x.lineWidth = 1.5;
+  x.beginPath(); x.moveTo(cx, cy); x.arc(cx, cy, R0, -Math.PI / 2 - HALF, -Math.PI / 2 + HALF); x.closePath(); x.fill(); x.stroke();
+  x.fillStyle = '#9aa3ab'; x.beginPath(); x.arc(cx, cy, 3, 0, 7); x.fill();
+  const f = j.t / j.tl, px = cx + j.lat * f * k, py = cy - (j.fwd - CIRCLE_R) * f * k;
+  x.fillStyle = j.down && th.mark < 0 ? '#ff6b5e' : '#ffd166';
+  x.beginPath(); x.arc(clamp(px, cx - R0 * 0.75 + 4, cx + R0 * 0.75 - 4), Math.max(py, cy - R0 - 4), 3.5, 0, 7); x.fill();
+}
+
+// The thrower seen from the side. Both ways start at the back of the circle with their back to the
+// sector, the shot at the neck. The glide crouches low and slides backwards; the spin turns one and
+// a half times; in the power position they face the sector, lean back and push.
+// Heights in metres from the feet; a limb's angles are from straight down, positive forward.
+function pose(a) {
+  const k = a.k || 1, T = TECH[k];
+  if (a.phase === 'move' || a.phase === 'push') {
+    const t = a.phase === 'push' ? T.T + a.off : a.t, u = clamp(t / T.T, 0, 1.3);
+    if (a.phase === 'push') return { hx: hip(k, t), hh: 0.76, f: 1, lean: -0.32, legs: [[0.6, 0.35], [-0.5, 0.25]], arm: 'neck', turn: 1 };
+    if (k === 1) {
+      // The glide: low over the right leg, the left leg reaching back towards the board.
+      const d = Math.sin(clamp(u, 0, 1) * Math.PI);
+      return { hx: hip(k, t), hh: 0.62 + 0.08 * u, f: -1, lean: 0.55 - 0.3 * u, legs: [[0.45 - 0.2 * d, -0.7], [-0.6 - 0.5 * d, -0.6 - 0.4 * d]], arm: 'neck', turn: 0 };
+    }
+    // The spin: one and a half turns, from the back to facing the sector.
+    const psi = Math.PI * (1 + 3 * Math.min(1, u)), q = Math.sin(psi * 2) * 0.5;
+    return { hx: hip(k, t), hh: 0.82, f: Math.cos(psi), lean: 0.2, legs: [[q, -0.3], [-q - 0.2, -0.5]], arm: 'neck', turn: Math.min(1, u) };
+  }
+  if (a.phase === 'fly' || a.phase === 'land') {
+    const xp = hip(a.k || 1, TECH[a.k || 1].T + (a.shot ? a.off : TECH[a.k || 1].win));
+    if (a.over) {
+      // Over the board: the weight carries on, a foot comes down outside the circle.
+      const e = Math.min(1, a.ft * 2.5);
+      return { hx: xp + 0.65 * e, hh: 0.92 - 0.12 * e, f: 1, lean: 0.25 + 0.45 * e, legs: [[0.5 + 0.3 * e, 0.3], [-0.6, -0.8]], arm: 'neck', turn: 1, fall: e };
+    }
+    // The reverse after the put: the legs change over, the arm follows through.
+    const e = Math.min(1, a.ft * 3);
+    return { hx: xp + 0.25 * e, hh: 0.8 + 0.15 * e, f: 1, lean: -0.1 + 0.45 * e, legs: [[0.3 + 0.1 * e, 0.2], [-0.3 - 0.6 * e, -0.3 - 0.7 * e]], arm: 'out', turn: 1 };
+  }
+  return { hx: TECH[1].x0, hh: 0.92, f: -1, lean: 0.05, legs: [[0.12, 0.05], [-0.1, -0.1]], arm: 'neck', turn: 0 };
+}
+function joints(a, s, sx, base) {
+  const p = pose(a), f = p.f, fs = Math.abs(f) < 0.25 ? Math.sign(f || 1) * 0.25 : f;
+  const hipX = sx(p.hx), hipY = base - p.hh * s;
+  const neckX = hipX + Math.sin(p.lean) * 0.55 * s * fs, neckY = hipY - Math.cos(p.lean) * 0.55 * s;
+  return { p, fs, hipX, hipY, neckX, neckY };
+}
+// Where the hand holding the shot is: at the neck, or out along the put after it.
+function handAt(a, s, sx, base = groundY) {
+  const J = joints(a, s, sx, base);
+  if (J.p.arm === 'out') {
+    const ang = (a.ang || 37) * DEG, e = Math.min(1, a.ft * 6);
+    return [J.neckX + Math.cos(ang) * 0.62 * s * (0.3 + 0.7 * e), J.neckY - Math.sin(ang) * 0.62 * s * (0.3 + 0.7 * e)];
+  }
+  return [J.neckX + 0.13 * s * J.fs, J.neckY - 0.02 * s];
+}
+function drawPutter(a, s, sx, base, col, name, o = null, g = x) {
+  o = o || plain(col);
+  const J = joints(a, s, sx, base), { p, fs, hipX, hipY, neckX, neckY } = J;
+  if (hipX < -80 || hipX > SW + 80) return;
+  const lw = Math.max(2.5, 0.11 * s), L = 0.46 * s;
+  const pt = (x0, y0, ang, l) => [x0 + Math.sin(ang) * l * fs, y0 + Math.cos(ang) * l];
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const limb = (ox, oy, [a1, a2], len, c2) => {
+    const k = pt(ox, oy, a1, len), e = pt(k[0], k[1], a2, len);
+    g.strokeStyle = c2; g.lineWidth = lw;
+    g.beginPath(); g.moveTo(ox, oy); g.lineTo(k[0], k[1]); g.lineTo(e[0], e[1]); g.stroke();
+    if (o.bones && c2 !== o.skin) { g.strokeStyle = o.skin; g.lineWidth = Math.max(1, lw * 0.3); g.stroke(); }
+    return e;
+  };
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(hipX, base, 0.35 * s, 0.06 * s, 0, 0, 7); g.fill();
+  if (o.cape) {
+    g.fillStyle = o.cape; g.beginPath(); g.moveTo(neckX, neckY);
+    g.lineTo(neckX - 0.45 * s * fs, neckY + 0.6 * s); g.lineTo(hipX - 0.12 * s * fs, hipY + 0.05 * s); g.closePath(); g.fill();
+  }
+  const farSkin = shade(o.skin, 0.84), legSkin = o.halloween ? o.bottom : o.skin, farLeg = shade(legSkin, 0.84);
+  // The free arm, out for balance (it pulls in on the push).
+  const freeArm = p.arm === 'out' ? [-0.9, -0.4] : a.phase === 'push' ? [Math.PI * 0.55, Math.PI * 0.75] : [Math.PI * 0.5, Math.PI * 0.55];
+  limb(neckX, neckY + 0.05 * s, freeArm, 0.3 * s, farSkin);
+  const far = limb(hipX, hipY, p.legs[1], L, farLeg);
+  g.fillStyle = shade(o.shoe, 0.6); g.beginPath(); g.ellipse(far[0] + 0.06 * s * fs, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); g.fill();
+  g.strokeStyle = o.top; g.lineWidth = lw * 2.3;
+  g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(neckX, neckY); g.stroke();
+  if (o.bones) {
+    g.strokeStyle = o.skin; g.lineWidth = Math.max(1, lw * 0.35);
+    g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(neckX, neckY);
+    [0.45, 0.62, 0.79].forEach(k => { const rx = hipX + (neckX - hipX) * k, ry = hipY + (neckY - hipY) * k; g.moveTo(rx - lw * 0.9, ry); g.lineTo(rx + lw * 0.9, ry); });
+    g.stroke();
+  }
+  const near = limb(hipX, hipY, p.legs[0], L, legSkin);
+  g.fillStyle = o.shoe; g.beginPath(); g.ellipse(near[0] + 0.06 * s * fs, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); g.fill();
+  g.strokeStyle = o.bottom; g.lineWidth = lw * 1.7;
+  g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(...pt(hipX, hipY, p.legs[0][0], 0.16 * s)); g.stroke();
+  // The putting arm: the elbow up and back, the shot against the neck; after the put, straight out.
+  const hand = g === x ? handAt(a, s, sx, base) : [neckX + 0.13 * s * fs, neckY - 0.02 * s];
+  const sh = [neckX, neckY + 0.06 * s];
+  const elbow = p.arm === 'out' ? [(sh[0] + hand[0]) / 2, (sh[1] + hand[1]) / 2 - 0.03 * s] : [neckX - 0.12 * s * fs, neckY + 0.12 * s];
+  g.strokeStyle = o.skin; g.lineWidth = lw;
+  g.beginPath(); g.moveTo(sh[0], sh[1]); g.lineTo(elbow[0], elbow[1]); g.lineTo(hand[0], hand[1]); g.stroke();
+  const hx = neckX + Math.sin(p.lean) * 0.16 * s * fs, hy = neckY - Math.cos(p.lean) * 0.16 * s;
+  if (o.head) AiPelitOutfits.head(g, o.head, hx, hy, 0.13 * s, fs < 0 ? -1 : 1);
+  else {
+    g.fillStyle = o.skin; g.beginPath(); g.arc(hx, hy, 0.13 * s, 0, 7); g.fill();
+    g.fillStyle = o.hair; g.beginPath(); g.arc(hx - 0.03 * s * fs, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); g.fill();
+  }
+  // The shot in the hand until it is put (or the turn is a foul before it).
+  if (!a.shot && !a.bare) ball(hand[0], hand[1], s, g);
+  // The player's own name only while someone else's turn or the result shows: the texts say it's theirs.
+  if (s > 18 && name && !(a.mine && (a.phase === 'ready' || a.phase === 'move' || a.phase === 'push'))) {
+    g.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; g.textAlign = 'center';
+    g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.45)';
+    const lab = a.mine ? '▼ Sinä' : name, ly = hy - 0.62 * s - (o.head === 'witch' ? 0.2 * s : 0);
+    g.strokeText(lab, hx, ly); g.fillStyle = a.mine ? '#ffd166' : '#fff'; g.fillText(lab, hx, ly);
+  }
+  if (pop && a.mine) {
+    g.font = '900 20px system-ui'; g.textAlign = 'center'; g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.5)';
+    const y = Math.max(hudTop + 172, hy - 0.9 * s) - (0.8 - pop.t) * 30;   // under the texts, over the head
+    g.globalAlpha = Math.min(1, pop.t * 3);
+    g.strokeText(pop.text, hx, y); g.fillStyle = pop.col; g.fillText(pop.text, hx, y);
+    g.globalAlpha = 1;
+  }
+}
+// Outfits (#158): everyone without one (the computer) puts in a shirt of their own colour.
+// v3 (#311): the athletics events' common set, and one choice for all of them (outfits.js
+// data-share), so the outfit picked here is worn in every event and in Ottelu.
+const OUTFITS = AiPelitOutfits.yleisurheilu;
+function plain(col) { return Object.assign({}, OUTFITS[0], { top: col }); }
+// How an athlete with outfit id looks, its shirt col when it wears none or 'perus'.
+function kit(id, col) { return looks({ fit: id, col }) || plain(col); }
+function looks(t) {
+  if (!t || !t.fit) return null;
+  const o = AiPelitOutfits.get(t.fit);
+  return !o || o.id === 'perus' || !o.top ? plain(t.col) : o;
+}
+function shade(hex, k) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v * k)));
+  return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1);
+}
+let outfit = AiPelitOutfits.setup({
+  outfits: OUTFITS,
+  draw(g, o, w, h) {
+    const s = h * 0.46;
+    drawPutter({ phase: 'push', k: 1, off: 0, ang: 37, bare: false, mine: false }, s, m => w * 0.5 + (m + 0.85) * s, h * 0.95, COLORS[0], '', o.top ? o : plain(COLORS[0]), g);
+  },
+  change(o) {
+    outfit = o; showAsu();
+    if (K.comp && !isNet()) { K.comp.throwers.forEach(t => { if (t.p === 'me') t.fit = o.id; }); }
+  },
+});
+function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
+// The angle while pushing: a quarter dial with the green angles, and the push's angle on it.
+function drawDial(cx, cy, ang) {
+  const r = Math.min(64, Math.max(44, runS * 0.7));
+  const rad = d => -d * Math.PI / 180;
+  x.lineWidth = 12; x.lineCap = 'butt';
+  x.strokeStyle = 'rgba(255,255,255,.55)'; x.beginPath(); x.arc(cx, cy, r, rad(AIM_MAX), 0); x.stroke();
+  x.strokeStyle = '#7ee081'; x.beginPath(); x.arc(cx, cy, r, rad(GREEN[1]), rad(GREEN[0])); x.stroke();
+  const ok = ang >= GREEN[0] && ang <= GREEN[1];
+  x.strokeStyle = ok ? '#7ee081' : '#ffd166'; x.lineWidth = 4; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(rad(ang)) * (r + 10), cy + Math.sin(rad(ang)) * (r + 10)); x.stroke();
+  x.font = '900 18px system-ui'; x.textAlign = 'left'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.55)';
+  const tx = cx + Math.cos(rad(ang)) * (r + 16), ty = cy + Math.sin(rad(ang)) * (r + 16);
+  x.strokeText(Math.round(ang) + '°', tx, ty); x.fillStyle = ok ? '#7ee081' : '#ffd166'; x.fillText(Math.round(ang) + '°', tx, ty);
+}
+
+function drawHud() {
+  const W = SW, top = hudTop;
+  const comp = K.comp;
+  if (!comp || !comp.throwers.length) return;
+  x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, 64, 12); x.fill();
+  const me = K.mine(), ROUNDS = K.F.ROUNDS;
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
+  x.fillText('Kierros ' + Math.min(comp.round, ROUNDS) + '/' + ROUNDS, 20, top + 24);
+  x.textAlign = 'right'; x.font = '700 14px system-ui';
+  if (me) x.fillText(me.marks.length ? 'Paras ' + (K.bestOf(me) > 0 ? fmt(K.bestOf(me)) : 'X') + ' · ' + K.placeOf(me) + '.' : 'Ei työntöä vielä', W - 20, top + 24);
+  const t = th && thrower(th.id);
+  if (t) {
+    x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
+    const how = th.phase === 'move' || th.phase === 'push' || th.phase === 'fly' || th.phase === 'land' ? ' · ' + TECH[th.k].name : '';
+    x.fillText(fit((th.mine ? 'Sinun vuorosi' : 'Työntää: ' + t.name) + how, W - 40), 20, top + 50);
+  }
+  if (!th) return;
+  if (th.phase === 'ready' && th.mine) {
+    message('Sinun vuorosi!', '#ffd166');
+    small('Valitse liuku tai pyörähdys', '#fff');
+  } else if (th.mine && th.phase === 'move') {
+    small('Työnnä, kun pallo on vihreällä', '#fff');
+  } else if (th.mine && th.phase === 'push') {
+    small(th.ang >= GREEN[0] && th.ang <= GREEN[1] ? 'Päästä irti nyt!' : th.ang < GREEN[0] ? 'Pidä…' : 'Päästä irti!', th.ang >= GREEN[0] ? '#7ee081' : '#fff');
+  } else if (th.phase === 'land') {
+    if (th.mark >= 0) {
+      message(fmt(th.mark), '#fff');
+      if (th.mine && th.record) small('Uusi ennätys!', '#7ee081');
+      else if (th.leads) small('Johtoon!', '#7ee081');
+    } else {
+      message('X', '#ff6b5e');
+      small(th.why || 'Hylätty', '#ff9a8b');
+    }
+  }
+}
+// The glide or spin as a strip under the field's metres: the ball is where the thrower is in time,
+// the green is when to push, the red end is over the board. It shows from the ready position on.
+function drawStrip() {
+  if (!th || !th.mine || !(th.phase === 'ready' || th.phase === 'move' || th.phase === 'push')) return;
+  const x0 = 20, w = SW - 40, y = Math.min(groundY + 44, sceneB - 14);
+  x.fillStyle = 'rgba(10,20,40,.55)'; rr(x0 - 4, y - 4, w + 8, 16, 8); x.fill();
+  if (th.phase === 'ready') {
+    x.font = '700 12px system-ui'; x.textAlign = 'center'; x.fillStyle = '#cfe0ef';
+    x.fillText('Liuku: leveä vihreä · Pyörähdys: kapea, pidemmälle', SW / 2, y + 8);
+    return;
+  }
+  const T = TECH[th.k], end = T.T + T.win + 0.12, mx = t => x0 + t / end * w;
+  x.fillStyle = '#9aa3ab'; x.fillRect(x0, y, mx(T.T - T.win) - x0, 8);
+  x.fillStyle = '#7ee081'; x.fillRect(mx(T.T - T.win), y, mx(T.T + T.win) - mx(T.T - T.win), 8);
+  x.fillStyle = '#ff6b5e'; x.fillRect(mx(T.T + T.win), y, x0 + w - mx(T.T + T.win), 8);
+  x.fillStyle = '#fff'; x.fillRect(mx(T.T) - 1, y - 2, 2, 12);
+  const t = th.phase === 'push' ? T.T + th.off : th.t, px = mx(clamp(t, 0, end));
+  x.fillStyle = '#ffd166'; x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 2;
+  x.beginPath(); x.arc(px, y + 4, 7, 0, 7); x.fill(); x.stroke();
+}
+function message(s, col) {
+  x.textAlign = 'center'; x.font = '900 34px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 110; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function small(s, col) {
+  x.textAlign = 'center'; x.font = '800 18px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 140; s = fit(s, SW - 20); x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+// The standings, drawn by the library: between turns, and at the end with the medals.
+let boardBox = null;
+function fit(s, w) { if (x.measureText(s).width <= w) return s; while (s.length > 1 && x.measureText(s + '…').width > w) s = s.slice(0, -1); return s + '…'; }
+function drawBoard(final) {
+  boardBox = land ? K.drawBoard(x, final, { w: SW, top: safeT + 6, bottom: sceneB - 6, middle: true })
+    : K.drawBoard(x, final, { w: SW, top: hudTop + 72, bottom: sceneB - 4 });
+}
+
+// The pads. Standing at the back: Liuku and Pyörähdys side by side (on its side, a column at each
+// edge). Once across the circle has begun, the whole pad area is Työnnä, held for the angle.
+function pushing() { return th && th.mine && (th.phase === 'move' || th.phase === 'push'); }
+function pads() {
+  const k1 = pushing() ? 3 : 1, k2 = pushing() ? 3 : 2;
+  if (land) {
+    const y = safeT + 40, h = H - safeB - 6 - y, w = side - 12;
+    return [{ k: k1, x: safeL + 6, y, w, h }, { k: k2, x: W - safeR - side + 6, y, w, h }];
+  }
+  const y = ctrlTop + 6, h = ctrlH - 12;
+  if (pushing()) return [{ k: 3, x: 6, y, w: W - 12, h }];
+  return [{ k: 1, x: 6, y, w: W / 2 - 9, h }, { k: 2, x: W / 2 + 3, y, w: W / 2 - 9, h }];
+}
+function drawControls() {
+  if (!land) { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
+  const live = th && th.mine && (th.phase === 'ready' || pushing());
+  for (const b of pads()) {
+    const held = b.k === 3 && th && th.phase === 'push';
+    x.fillStyle = !live ? '#22385a' : flash[b.k] > 0 || held ? '#ffe08a' : b.k === 3 ? '#ffb703' : '#4f7fc4';
+    rr(b.x, b.y, b.w, b.h, 18); x.fill();
+    x.fillStyle = !live ? '#6f86a6' : b.k === 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    const label = b.k === 1 ? 'Liuku' : b.k === 2 ? 'Pyörähdys' : held ? 'Päästä irti!' : 'Työnnä';
+    x.font = '900 32px system-ui';
+    x.fillText(b.k === 1 ? '⇠' : b.k === 2 ? '⟳' : '➚', b.x + b.w / 2, b.y + b.h / 2 + 2);
+    x.font = '800 16px system-ui';
+    x.fillText(label, b.x + b.w / 2, b.y + b.h / 2 + 28);
+    if (b.k !== 3 && live) {
+      x.font = '600 12px system-ui'; x.fillStyle = '#d6e4f5';
+      x.fillText(b.k === 1 ? 'helpompi' : 'pidemmälle', b.x + b.w / 2, b.y + b.h / 2 + 46);
+    }
+  }
+}
+
+// ---------- Input ----------
+// Which pad a finger is on: 1 Liuku, 2 Pyörähdys, 3 Työnnä. The scene is Työnnä too once moving.
+function padAt(cx, cy) {
+  const b = pads().find(p => cx >= p.x - 6 && cx <= p.x + p.w + 6 && cy >= p.y - 6 && cy <= p.y + p.h + 6);
+  if (b) return b.k;
+  if (pushing()) return land ? (cx >= SX && cx < SX + SW ? 3 : 0) : cy < ctrlTop ? 3 : 0;
+  return 0;
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (K.ending) { K.skip(); return; }  // a tap ends the ceremony, the next leaves the podium
+  // v6 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
+  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX)) return;
+  const k = padAt(e.clientX, e.clientY);
+  if (k === 3) startPush(e.pointerId);
+  else if (k) press(k);
+  else if (th && th.mine && th.phase === 'wait' && !isNet()) th.t = BOARD_T;
+});
+const lift = e => { if (e.pointerId === aimPtr) release(); };
+addEventListener('pointerup', lift);
+addEventListener('pointercancel', lift);
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
+  else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
+  else if (e.key === ' ' || e.key === 'ArrowUp') startPush('key');
+});
+addEventListener('keyup', e => { if ((e.key === ' ' || e.key === 'ArrowUp') && aimPtr === 'key') release(); });
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + K.level + ': ' + FOES[(K.level - 1) % FOES.length] + ' ja 10 muuta';
+  document.getElementById('stats').textContent = 'Kisat ' + K.comps + ' · Voitot ' + K.wins + (K.best !== null ? ' · Ennätys ' + fmt(K.best) : '');
+  const kept = K.kept(), cont = document.getElementById('cont');
+  cont.classList.toggle('hidden', !kept);
+  if (kept) cont.textContent = 'Jatka kisaa (kierros ' + kept.round + '/' + K.F.ROUNDS + ')';
+  menu.classList.remove('hidden');
+}
+function soloComp(saved) {
+  // A kept meet wears the outfit picked now.
+  if (saved) saved.throwers.forEach(t => { if (t.p === 'me') t.fit = outfit.id; });
+  K.solo(saved);
+  menu.classList.add('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });
+document.getElementById('cont').addEventListener('click', () => {
+  unlock();
+  const kept = K.kept();
+  if (kept) soloComp(kept); else showMenu();
+});
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+document.getElementById('asu').addEventListener('click', () => AiPelitOutfits.open());
+showAsu();
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="kuula" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>

@@ -10,6 +10,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v11 (#337, `aanet-4`) has no crowd: the finish plays only the winning or losing tune, no applause; the winning tune is quieter.
 
+v12 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   Y{Yksin vai kavereiden kanssa?} -- Yksin --> S{Tyyli: perinteinen vai luistelu?}

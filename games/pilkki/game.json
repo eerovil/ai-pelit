@@ -36,6 +36,13 @@
       "note": "Kaverihuoneessa kalat näkyvät myös muille kuin isännälle, ja kala voi tarttua jo ensimmäisestä näykkäyksestä ajoitetulla vastaiskulla.",
       "request": "Pilkkipelissä vain host sai tutkan. Muut pelaajat ei saaneet nykäisyäkään(onko  bugi ettei kaloja ole ilman tutkaa)",
       "issue": "eerovil/ai-pelit#345"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-02",
+      "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
+      "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
+      "issue": "eerovil/ai-pelit#355"
     }
   ]
 }

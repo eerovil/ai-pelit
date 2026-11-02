@@ -9,6 +9,8 @@ shared room library (see `moninpeli.md`).
 
 v4 (#337, `aanet-4`) removed the crowd sounds. v5 (#345) sends each guest its nearby fish in small, complete packets, and allows a strike on any nibble.
 
+v6 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}

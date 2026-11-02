@@ -13,9 +13,9 @@ from conftest import ROOT
 ADMIN_KEY = "avain"
 
 # The newest version of each game played here: the high-score library working in the game as it is.
-PUHELINKOPPI = "games/puhelinkoppi/v7/"
-SORMISKEITTI = "games/sormiskeitti/v8/"
-HIIHTO = "games/hiihto/v11/"
+PUHELINKOPPI = "games/puhelinkoppi/v8/"
+SORMISKEITTI = "games/sormiskeitti/v9/"
+HIIHTO = "games/hiihto/v12/"
 PIANO = "games/piano/v10/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
@@ -163,7 +163,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono') || '{}')).length === 0")
     [(player, name)] = [(i, p["name"]) for i, p in fake.players.items()]
     assert name == "Eero"
-    assert fake.scores == {("puhelinkoppi", "main", player): {"score": 2, "version": 7}}
+    assert fake.scores == {("puhelinkoppi", "main", player): {"score": 2, "version": 8}}
     # Pending: only the player's own row, marked as theirs.
     assert page.locator("#ai-pelit-tulokset").inner_text().count("taso 2") == 1
     page.click("#ai-pelit-tulokset button:has-text('Sulje')")
@@ -177,7 +177,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('taso 3')")
     text = page.locator("#ai-pelit-tulokset").inner_text()
-    assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v7" in text
+    assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v8" in text
 
 
 @pytest.mark.games("sormiskeitti")
@@ -191,7 +191,7 @@ def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     page.evaluate(PLAY, [30, False])  # a lower score later does not replace the best one waiting
     queue = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))")
     best_cm = round(page.evaluate("best") / 10)
-    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 8, "score": best_cm}}
+    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 9, "score": best_cm}}
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('Ei verkkoyhteyttä')")
     assert fake.scores == {}
@@ -338,7 +338,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.reload()
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
-    assert row == {"score": round(won["best"] / 10), "version": 8, "level": 2}
+    assert row == {"score": round(won["best"] / 10), "version": 9, "level": 2}
     fake.players[key[2]]["status"] = "approved"
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset .tulos:has-text('taso 2')")
@@ -354,7 +354,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.evaluate(PLAY, [30, False])
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     assert len(fake.posts) == sent + 1
-    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 8, "level": 4}
+    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 9, "level": 4}
 
 
 @pytest.mark.games("hiihto")

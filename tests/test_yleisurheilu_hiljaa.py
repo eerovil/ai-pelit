@@ -1,8 +1,9 @@
-"""The field events without crowd noise (#337): on aanet-4, "📣 Kannusta" is a quiet blip from the
-game (cheerSound), not kisa.js's "jee!" (#330, which this file replaces) nor a shouting crowd.
+"""The field events without crowd noise (#337): "📣 Kannusta" is a quiet blip from the game
+(cheerSound), not kisa.js's "jee!" (#330, which this file replaces) nor a shouting crowd. From #355
+on aanet-5, whose chime is softer, at 0.08 (Eero found it too loud at 0.25).
 
-games/pituushyppy/v13, games/keihas/v12, games/kuula/v6, games/moukari/v9, games/korkeushyppy/v9,
-games/seivashyppy/v10, games/makihyppy/v6.
+games/pituushyppy/v14, games/keihas/v13, games/kuula/v7, games/moukari/v10, games/korkeushyppy/v10,
+games/seivashyppy/v11, games/makihyppy/v7.
 """
 
 import json
@@ -12,7 +13,7 @@ import pytest
 from conftest import ROOT
 from test_yleisurheilu_vuorot import MARK, on_turn, room
 
-EVENTS = ["pituushyppy/v13", "keihas/v12", "kuula/v6", "moukari/v9", "korkeushyppy/v9", "seivashyppy/v10", "makihyppy/v6"]
+EVENTS = ["pituushyppy/v14", "keihas/v13", "kuula/v7", "moukari/v10", "korkeushyppy/v10", "seivashyppy/v11", "makihyppy/v7"]
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
 
@@ -22,7 +23,7 @@ def test_the_version_loads_the_quiet_library(path):
     # yleisurheilu-6 or newer, whose cheer the game's cheerSound replaces (-7 from #341).
     libs = {int(n) for n in re.findall(r"lib/yleisurheilu-(\d+)/", page)}
     assert libs and min(libs) >= 6
-    assert "lib/aanet-4/aanet.js" in page and "lib/aanet-3/" not in page and "lib/aanet-2/" not in page
+    assert "lib/aanet-5/aanet.js" in page and "lib/aanet-4/" not in page and "lib/aanet-3/" not in page and "lib/aanet-2/" not in page
 
 
 @pytest.mark.parametrize("path", EVENTS)
@@ -44,7 +45,7 @@ def test_a_cheer_is_one_quiet_blip_on_every_phone(site, browser, path):
         p.wait_for_function(f"K.cheers[{json.dumps(tid)}]", timeout=5000)
     fan.wait_for_timeout(500)
     for p in pages:
-        assert p.evaluate("heard.filter(h => h[0] === 'onnistui' || h[0] === 'jee')") == [["onnistui", 0.25]]
+        assert p.evaluate("heard.filter(h => h[0] === 'onnistui' || h[0] === 'jee')") == [["onnistui", 0.08]]
         # The library never fetched its own cheer.
         assert not p.evaluate("AiPelitAanet.ready('jee')")
         assert p.errors == []

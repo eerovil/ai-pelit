@@ -12,6 +12,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v3 (#337) loads `aanet-4`, which plays the loudest sounds quieter, and its success sound is at 0.3.
 
+v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   A[Valikko: taso, paras aika, Aja!] --> B[Rata rakennetaan tasosta: nousu, pudotus, mäet, mutkat, silmukat, kierteet]

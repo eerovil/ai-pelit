@@ -24,6 +24,8 @@ Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/
 
 v11 (#337, `aanet-4`) has no crowd: the finish is the quiet `onnistui` blip at 0.3 (no applause for a record), and the whistle is quieter.
 
+v12 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]
