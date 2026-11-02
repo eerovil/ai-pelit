@@ -53,8 +53,8 @@
   var NAME = 'ai-pelit:_pelaaja:nimi'; // the phone's one nickname, shared with scores.js
   var PICKED = 'ai-pelit:_huone:nimi'; // an animal name picked for a phone with no nickname
   var KEY = 'ai-pelit:_huone:avain'; // this phone's secret key, never shown to the others
-  var HERE = 'ai-pelit:_huone:nyt';
-  var ISANTA = 'ai-pelit:_isanta'; // short-lived handoff while the host switches games (#354) // sessionStorage: the room this tab is in, to rejoin after a reload
+  var HERE = 'ai-pelit:_huone:nyt'; // sessionStorage: the room this tab is in, to rejoin after a reload
+  var ISANTA = 'ai-pelit:_isanta'; // sessionStorage: the host's room for a minute while it switches games (#354)
   var COUNTED = 'ai-pelit:_huone:kierros'; // sessionStorage: rounds whose result this tab saved
   var AWAY = 'ai-pelit:_huone:kesken'; // a turns() game's round this phone is in, to come back to
   var AWAY_MS = 6 * 3600e3; // forgotten after this long
@@ -814,6 +814,10 @@
     '#aipr #aipr-again{background:#3f8ad8;box-shadow:0 4px 0 #2a5f99;margin-bottom:6px}',
     '#aipr label.sw{flex-direction:row;gap:8px;font-size:15px;color:#2b2416}',
     '#aipr .sws{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px}',
+    // The host's two buttons share a row (#354), so the game picker adds no height on its side.
+    '#aipr .acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 10px}',
+    '#aipr .acts button{font-size:17px;padding:11px 13px}',
+    '#aipr-switchGame{background:#3f8ad8!important;box-shadow:0 4px 0 #2a5f99!important}',
     '#aipr input[type=checkbox]{width:22px;height:22px;padding:0;margin:0;accent-color:#3f8ad8}',
     // A phone on its side (#95): the room in two columns, the code and QR left and everything to
     // tap right, so "Aloita kierros" shows without scrolling even with a full room.
@@ -891,8 +895,8 @@
       '<div id="aipr-extra"></div>' +
       '<div class="sws"><label class="sw" id="aipr-pubRow" hidden><input type="checkbox" id="aipr-pub">🌍 Julkinen: kuka tahansa voi liittyä</label>' +
       '<label class="sw" id="aipr-voiceRow" hidden><input type="checkbox" id="aipr-voice">🎤 Puhe</label></div>' +
-      '<button id="aipr-switchGame" hidden>🎲 Vaihda peliä</button>' +
-      '<button id="aipr-start" hidden>Aloita kierros</button>' +
+      '<div class="acts"><button id="aipr-switchGame" hidden>🎲 Vaihda peliä</button>' +
+      '<button id="aipr-start" hidden>Aloita kierros</button></div>' +
     '</div>' +
     '<p id="aipr-err"></p>' +
     '<button id="aipr-back" class="plain">Takaisin</button>' +
