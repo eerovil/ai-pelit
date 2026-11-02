@@ -20,6 +20,8 @@ round (`MOST`), each with its own colour (`COLORS`, eight), and computer players
 to five (`FILL`). The HUD's row of players fits eight, and on a phone on its side in a room the HUD
 sits beside the back chip, clear of the 🎤 chip `rooms.js` puts right of the middle.
 
+v11 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
+
 ```mermaid
 flowchart TD
   L0[Valitse leikki: Kirkkis, Piilosta tai Hippa] --> K0

@@ -71,6 +71,13 @@
       "note": "Huoneeseen mahtuu nyt kahdeksan pelaajaa, ja jokaisella on oma värinsä.",
       "request": "Huoneeseen mahtuu 6–8 pelaajaa (nyt 5), niin koko porukka pääsee mukaan, kun huoneen tekijä vaihtaa peliksi Kirkkiksen (#354).\n",
       "issue": "eerovil/ai-pelit#370"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-02",
+      "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
+      "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
+      "issue": "eerovil/ai-pelit#355"
     }
   ]
 }
