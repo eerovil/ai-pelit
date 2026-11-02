@@ -311,10 +311,12 @@ def test_fish_keep_away_from_a_pike_and_a_hungry_pike_hunts(site, context):
     after = page.evaluate("close.reduce((a, q) => a + Math.hypot(q.lx - pk.lx, q.ly - pk.ly), 0) / close.length")
     assert after > page.evaluate("before") + 0.5
     # Hungry, it creeps up on a fish, darts, and in time eats some.
-    # (A small school of perch kept passing by it, so the test does not wait on chance.)
+    # (A small school of perch kept passing by it, so the test does not wait on chance. Each strike
+    # lands only 36 % of the time: eight trials ate after 10 to 110 s, and CI once saw none in
+    # 120 s (#355), so it gets up to 600 s.)
     page.evaluate("""() => {
       pk.full = 0;
-      for (let t = 0; t < 120 && !pk.eaten; t += 10) {
+      for (let t = 0; t < 600 && !pk.eaten; t += 10) {
         for (let i = 0; i < 12; i++) { const f = newFish(lake.spots[0], 'ahven'); f.g = 60; f.lx = f.gx = pk.lx + 6 + Math.random() * 3; f.ly = f.gy = pk.ly + Math.random() * 3; f.linger = 999; pond.push(f); }
         run(() => !pk.eaten, 10);
       }
@@ -524,7 +526,7 @@ def test_turning_the_phone_on_the_ice_keeps_the_contest(site, browser):
     ctx.close()
 
 
-# #337: the version on aanet-4, without crowd noise.
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 
