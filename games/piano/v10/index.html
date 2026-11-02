@@ -65,6 +65,13 @@ const KEY = 'ai-pelit:piano:';
 function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
 let best = load('ennatys', 0), topLevel = load('taso', 1);
+// v10 (#356, Eero's choice): once per phone, a furthest level above 5 goes down to 5, undoing
+// the levels v8 let a no-fail song open. The only time a version lowers a save (rule 5 set
+// aside at his word); `tasoraja` marks it done, so a level reached again later is kept.
+if (!load('tasoraja', false)) {
+  if (topLevel > 5) { topLevel = 5; save('taso', 5); }
+  save('tasoraja', true);
+}
 // v9 (#356): the level last started, so the menu has that song ready again (0: none yet).
 let lastLevel = load('viimeisin', 0);
 // v8 (#318): no-fail mode, its switch kept between games. A no-fail game is one song with no

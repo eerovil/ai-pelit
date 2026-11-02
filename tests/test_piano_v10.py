@@ -1,6 +1,7 @@
 """Piano v8: no-fail mode (#318). One song with no hearts to lose, off the high-score list.
 
-v9 (#356): the menu has the song last played ready, and a no-fail song opens no level."""
+v9 (#356): the menu has the song last played ready, and a no-fail song opens no level.
+v10 (#356): a furthest level above 5 goes down to 5, once per phone."""
 
 import pytest
 
@@ -195,3 +196,23 @@ def test_real_taps_on_a_390_px_phone_bring_back_the_no_fail_song(site, browser):
     page.reload()
     assert page.inner_text("#go") == "Soita tasolta 2"
     ctx.close()
+
+
+def test_a_furthest_level_above_5_goes_down_to_5_once(site, context):
+    page = open_menu(site, context, saves={"taso": 9, "viimeisin": 8})
+    assert page.evaluate("[topLevel, localStorage.getItem('ai-pelit:piano:taso')]") == [5, "5"]
+    assert page.evaluate("localStorage.getItem('ai-pelit:piano:tasoraja')") == "true"
+    assert page.inner_text("#go") == "Jatka tasolta 5"  # the last played (8) is clamped too
+    assert page.inner_text("#stats").endswith("paras taso 5")
+
+
+def test_a_level_reached_past_5_after_the_cut_is_kept(site, context):
+    page = open_menu(site, context, saves={"taso": 7, "tasoraja": "true"})
+    assert page.evaluate("topLevel") == 7
+    page.evaluate("newGame(5, false); songDone()")  # a song finished with hearts still opens the next
+    assert page.evaluate("[level, topLevel]") == [6, 7]
+
+
+def test_a_level_at_or_below_5_is_untouched(site, context):
+    page = open_menu(site, context, saves={"taso": 4})
+    assert page.evaluate("[topLevel, localStorage.getItem('ai-pelit:piano:taso')]") == [4, "4"]
