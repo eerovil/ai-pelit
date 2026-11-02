@@ -22,7 +22,7 @@ flowchart TD
   subgraph Hylly[Pelihylly: public/app.js]
     H1[👫 Kaverit -sivu: pyynnöt ja kaverilista]
     H6[Kuka pelaa mitä nyt]
-    H7[Etusivu: kaverit pelaamassa nyt]
+    H7[Etusivu: kutsut ja kaveripyynnöt]
     H8[Poista kaveri]
   end
   subgraph Palvelin[server/api.js ja D1]
@@ -47,15 +47,16 @@ flowchart TD
   B1 --> S4
   S3 --> H1
   S4 --> H6
-  S4 --> H7
+  S6 --> H7
   R4 --> S5
   S5 -- Kyllä --> S6
   S6 -- vastaus seuraavaan 30 s ilmoitukseen --> B2
   B2 -- Liity --> R2
+  H7 -- Liity --> R2
 
   class R1,R3,H8,S2 amber
-  class B1,S4,H6,H7 teal
-  class R4,S5,S6,B2,R2 violet
+  class B1,S4,H6 teal
+  class R4,S5,S6,B2,R2,H7 violet
   class R0,S1,S3,H1,S9 blue
 ```
 
