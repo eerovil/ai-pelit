@@ -451,3 +451,23 @@ def test_a_timeout_with_the_most_health_level_is_a_draw(site, context):
     page.evaluate("net.done = false; finishOnline({ ...delivered[0], d: ['p2', 'p3'], o: ['p2', 'p3', R.me, 'p1'] })")
     assert page.evaluate("result") == ["💀 Tasapeli: Pelaaja 3 ja Pelaaja 4 · olit 3.", "lose"]
     assert page.errors == []
+
+
+def test_the_time_limit_ends_the_round_without_the_starting_gong(site, context):
+    page = open_game(site, context)
+    start_fight(page)
+    host_round(page, 3)
+    page.evaluate("heard.splice(0); net.left = 0.005; step(0.01)")
+    assert page.evaluate("state") == "ko" and played(page) == []
+    msg = page.evaluate("sendState(); sent[sent.length - 1]")
+    assert msg["tu"] == 1
+    # A guest hears the same message: AIKA! and no gong; the result then plays the end tune.
+    page.evaluate("""m => {
+      onlineFight({ host: false, round: 1, players: [0, 1, 2].map(i => ({ id: i === 1 ? R.me : 'p' + i, name: 'P' + i })) });
+      guestState({ ...m, st: 'fight', tu: 0 }); heard.splice(0); guestState(m);
+    }""", msg)
+    assert page.evaluate("[state, net.timeUp]") == ["ko", True]
+    assert played(page) == []
+    page.evaluate("finishOnline({ t: 'end', round: 1, w: 'p0', o: ['p0', R.me, 'p2'], d: [] })")
+    assert played(page) == ["tappio"]
+    assert page.errors == []

@@ -391,7 +391,8 @@ function step(dt) {
   if (state === 'ko') { stateT -= dt / slow; if (stateT <= 0) return net ? endOnline() : endFight(); }
   // Online the round has a time limit: when it runs out, the one with the most health left wins.
   if (net && state === 'fight' && (net.left -= dt) <= 0) {
-    net.left = 0; net.timeUp = true; state = 'ko'; stateT = 1.6; slow = 0.3; sfx.start();
+    // No sound here: the gong is the start's; the end tune plays with the result.
+    net.left = 0; net.timeUp = true; state = 'ko'; stateT = 1.6; slow = 0.3;
   }
   dt *= slow;
   const pi = playerInput();
@@ -558,7 +559,7 @@ function guestState(m) {
   if (m.st !== 'room') { state = m.st; stateT = m.T; }
   if (m.L !== undefined) net.left = m.L;
   if (before === 'count' && state === 'fight') sfx.start();
-  if (m.tu && !net.timeUp) { net.timeUp = true; sfx.start(); }
+  if (m.tu) net.timeUp = true;
 }
 function guestStep(dt) {
   texts.forEach(t => { t.t -= dt; t.dy -= 30 * dt; }); texts = texts.filter(t => t.t > 0);
