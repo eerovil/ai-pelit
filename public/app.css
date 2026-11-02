@@ -89,3 +89,8 @@ p { margin: 0 0 6px; }
 .friends-form { display: flex; gap: 8px; margin: 8px 0 12px; }
 .friends-form input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid #3a3f55; border-radius: 10px; padding: 10px; font: 16px system-ui, sans-serif; }
 .friends-note { color: var(--accent); }
+/* Invites as phone notifications (#367): an on/off switch. */
+.push-row .push-note { white-space: normal; }
+.push-switch { flex: none; min-width: 76px; padding: 8px 12px; border: 0; border-radius: 999px; background: #3a3f55; color: var(--text); font: 700 15px system-ui, sans-serif; }
+.push-switch.on { background: #4f9a3a; color: #fff; }
+.push-switch:disabled { opacity: .5; }

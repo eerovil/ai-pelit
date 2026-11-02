@@ -232,6 +232,11 @@ high-score lists (#25), then play counts (#26).
   the friends page at `#/kaverit` and "Kaverit pelaamassa" on its front page. A game needs nothing
   for it. Phones know each other only by a friend id, a hash of the secret player id
   (`pidOf()` in `server/api.js`), which a phone with a nickname sends to the room as `fid`.
+  An invite also comes as a phone notification (#367), with the site closed, once the phone has
+  switched on "🔔 Ilmoitukset kutsuista" on the friends page (on iPhone only in the installed app):
+  the server sends an empty web push (`push_subs`, signed with the `VAPID_PRIVATE_KEY` secret,
+  whose public half is in `server/api.js` and `kaverit.js`; the pair is kept on this host in
+  `~/.local/share/ai-pelit/vapid.env`), and `public/sw.js` asks `GET /api/push/pending` what it was.
 - `public/scores.js`, `public/rooms.js`, `public/kaverit.js` and `public/outfits.js` are shared by every version that uses them: change them
   only in ways every one of them keeps working with.
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with

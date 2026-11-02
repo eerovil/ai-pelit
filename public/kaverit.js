@@ -26,6 +26,12 @@
 //   .nameNote()                what is wrong with the kept nickname ('' when nothing): taken,
 //                              rejected by the admin, or not yet sent
 //   .doing(friend)             "Pelaa: Pilkkiminen", "Selaa pelejä", "Nähty 5 min sitten"…
+//   .push.state()              -> Promise of invites as phone notifications (#367): 'on', 'off',
+//                              'blocked' (denied in the phone's settings), 'install' (an iPhone
+//                              outside the installed app) or 'none' (the browser cannot)
+//   .push.set(on)              -> Promise of {ok, state, error}: asks permission and subscribes, or
+//                              unsubscribes; error is in Finnish ('' when none)
+//   .push.note(state)          what a state means, in Finnish ('' for 'on' and 'off')
 (function () {
   'use strict';
   if (window.AiPelitKaverit) return;
@@ -194,6 +200,89 @@
       .then(function (r) { return { ok: r.ok, status: r.status }; });
   }
 
+  // ---- Invites as phone notifications (#367) ----
+  // A phone that switches them on gives the server its web push subscription; an invite to it
+  // then wakes the site's service worker (sw.js), which asks the server what it was about and
+  // shows it. The server's public signing key (server/api.js VAPID_PUBLIC):
+  var VAPID = 'BBJL6kHsqkvq19Du_1GPSNscDuQIokodz5TgsdHR60ClQa4-mMJ3jgn2sGKjMfQdvTTyUVr_MVCNF2tFBynQ1ko';
+  var PUSH = 'ai-pelit:_kaverit:ilmoitukset'; // the day the subscription was last told to the server
+  function iPhone() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+  function installed() { return navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches); }
+  function pushReg() {
+    if (!('serviceWorker' in navigator) || !window.PushManager || !window.Notification) return Promise.resolve(null);
+    // The site's own worker, which app.js registers; a game page is in its scope too.
+    return Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise(function (ok) { setTimeout(ok, 5000, null); }),
+    ]).then(function (reg) { return reg && reg.pushManager ? reg : null; }, function () { return null; });
+  }
+  function pushState() {
+    if (iPhone() && !installed() && !window.PushManager) return Promise.resolve('install');
+    return pushReg().then(function (reg) {
+      if (!reg) return iPhone() && !installed() ? 'install' : 'none';
+      if (Notification.permission === 'denied') return 'blocked';
+      return reg.pushManager.getSubscription().then(function (sub) {
+        return sub && Notification.permission === 'granted' ? 'on' : 'off';
+      });
+    }).catch(function () { return 'none'; });
+  }
+  function pushNote(st) {
+    if (st === 'blocked') return 'Ilmoitukset on estetty puhelimen asetuksista.';
+    if (st === 'install') return 'iPhonessa ilmoitukset toimivat, kun pelit on lisätty kotivalikkoon.';
+    if (st === 'none') return 'Tämä selain ei osaa näyttää ilmoituksia.';
+    return '';
+  }
+  function keyBytes() {
+    var s = atob(VAPID.replace(/-/g, '+').replace(/_/g, '/'));
+    var b = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+    return b;
+  }
+  function tellPush(sub) {
+    return call('POST', 'push', { player: playerId(), endpoint: sub.endpoint }).then(function (r) {
+      if (r.status === 404) save(K + 'lahetetty', ''); // the server does not know this phone
+      if (r.ok) save(PUSH, new Date().toISOString().slice(0, 10));
+      return r;
+    });
+  }
+  function pushSet(on) {
+    var done = function (ok, error) { return pushState().then(function (st) { return { ok: ok, state: st, error: error || pushNote(st) }; }); };
+    return pushReg().then(function (reg) {
+      if (!reg) return done(false);
+      if (!on) {
+        try { localStorage.removeItem(PUSH); } catch (e) {}
+        return reg.pushManager.getSubscription().then(function (sub) {
+          if (!sub) return done(true);
+          var endpoint = sub.endpoint;
+          return sub.unsubscribe().catch(function () {}).then(function () {
+            return call('DELETE', 'push', { player: playerId(), endpoint: endpoint });
+          }).then(function () { return done(true); });
+        });
+      }
+      return nameFirst(function () {
+        return Promise.resolve(Notification.permission === 'granted' ? 'granted' : Notification.requestPermission()).then(function (perm) {
+          if (perm !== 'granted') return done(false);
+          return reg.pushManager.getSubscription().then(function (sub) {
+            return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes() });
+          }).then(tellPush).then(function (r) {
+            return done(r.ok, r.ok ? '' : 'Ilmoituksia ei saatu päälle. Yritä uudelleen.');
+          });
+        });
+      }).then(function (r) {
+        // nameFirst answers {ok:false, name:true} when the nickname could not be sent.
+        return r && r.name ? done(false, name() ? nameError(r, name()) : 'Valitse ensin nimimerkki.') : r;
+      }, function () { return done(false, 'Ilmoituksia ei saatu päälle. Yritä uudelleen.'); });
+    });
+  }
+  // Once a day the subscription is told again, in case the browser renewed it or the server lost it.
+  function pushSync() {
+    var day = load(PUSH, '');
+    if (!day || day === new Date().toISOString().slice(0, 10) || !window.Notification || Notification.permission !== 'granted') return;
+    pushReg().then(function (reg) { return reg && reg.pushManager.getSubscription(); }).then(function (sub) {
+      if (sub) tellPush(sub);
+    }).catch(function () {});
+  }
+
   // ---- Game names, from the shelf's catalog ----
   var titles = null;
   function readTitles() {
@@ -335,8 +424,10 @@
     title: title,
     get titles() { return titles ? Object.keys(titles).length : 0; }, // game names read so far
     drawBanner: drawBanner,
+    push: { state: pushState, set: pushSet, note: pushNote },
   };
   // rooms.js may be waiting for this file: tell it it is here.
   try { window.dispatchEvent(new Event('aipelitkaverit')); } catch (e) {}
   ping();
+  pushSync();
 })();

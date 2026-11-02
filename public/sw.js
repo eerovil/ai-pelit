@@ -163,3 +163,52 @@ self.addEventListener('fetch', function (event) {
   else if (url.pathname.indexOf(LIB_PREFIX) === 0) event.respondWith(cachedFile(request, LIB_CACHE));
   else event.respondWith(shellFile(request));
 });
+
+// A friend's invite into a room, as a notification (#367). The push carries nothing: the site is
+// asked what it was about, by this phone's push address, which only this phone knows. With
+// nothing open (the invite was answered, or it is old) nothing shows.
+self.addEventListener('push', function (event) {
+  event.waitUntil(
+    self.registration.pushManager.getSubscription()
+      .then(function (sub) {
+        if (!sub) return null;
+        return fetch(API_PREFIX + 'push/pending?endpoint=' + encodeURIComponent(sub.endpoint), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; });
+      })
+      .then(function (got) {
+        var inv = got && got.invite;
+        if (!inv) return;
+        return self.registration.showNotification(inv.name + ' kutsuu sinut pelaamaan: ' + inv.title, {
+          body: 'Napauta, niin liityt huoneeseen.',
+          icon: new URL('icons/icon-192.png', self.registration.scope).href,
+          tag: 'ai-pelit-kutsu',
+          renotify: true,
+          data: { id: inv.id, url: new URL(inv.url, self.registration.scope).href },
+          actions: [{ action: 'liity', title: 'Liity' }],
+        });
+      })
+      .catch(function () {})
+  );
+});
+
+// A tap joins the room: the invite is answered (so no banner asks again), and the room's game
+// opens with ?huone=, in a window of this site already open when there is one.
+self.addEventListener('notificationclick', function (event) {
+  var data = event.notification.data || {};
+  event.notification.close();
+  if (!data.url) return;
+  var answered = self.registration.pushManager.getSubscription().then(function (sub) {
+    if (!sub || !data.id) return;
+    return fetch(API_PREFIX + 'invites/' + data.id + '/answer', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }),
+    });
+  }).catch(function () {});
+  var opened = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (wins) {
+    var win = wins.filter(function (w) { return w.url.indexOf(self.registration.scope) === 0; })[0];
+    if (win && win.navigate) {
+      return win.focus().then(function (w) { return (w || win).navigate(data.url); }).catch(function () { return self.clients.openWindow(data.url); });
+    }
+    return self.clients.openWindow(data.url);
+  });
+  event.waitUntil(Promise.all([answered, opened]));
+});

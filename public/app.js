@@ -573,8 +573,9 @@
       if (m && m[1] === 'kaverit') friends.watch(true);
       else friends.watch(!m && !!friends.name(), 30e3, true);
     }
-    if (m && m[1] === 'kaverit' && friends) renderFriends();
-    else if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
+    if (m && m[1] === 'kaverit' && friends) return renderFriends();
+    pushNow = null; pushError = ''; // the friends page reads the notification switch again
+    if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
   }
 
   // Friends (#324), from public/kaverit.js: the friends page (#/kaverit), and on the shelf's
@@ -620,6 +621,33 @@
     ].filter(Boolean));
   }
   var friendsNote = '', nameError = '';
+  // Invites as phone notifications (#367): the switch, its state read once per visit to the page.
+  var pushNow = null, pushError = '', pushBusy = false;
+  function pushRow() {
+    if (pushNow === null) {
+      pushNow = 'wait';
+      friends.push.state().then(function (st) { pushNow = st; if (location.hash === '#/kaverit') renderFriends(); });
+    }
+    var on = pushNow === 'on', can = pushNow === 'on' || pushNow === 'off';
+    var sw = el('button', { type: 'button', role: 'switch', class: 'push-switch' + (on ? ' on' : ''), 'aria-checked': on ? 'true' : 'false',
+      'aria-label': 'Ilmoitukset kutsuista', text: on ? 'Päällä' : 'Pois' });
+    sw.disabled = pushBusy || !can;
+    sw.addEventListener('click', function () {
+      pushBusy = true; pushError = '';
+      renderFriends();
+      friends.push.set(!on).then(function (r) {
+        pushBusy = false; pushNow = r.state; pushError = r.error;
+        if (location.hash === '#/kaverit') renderFriends();
+      });
+    });
+    var note = pushError || friends.push.note(pushNow) ||
+      (on ? 'Puhelin ilmoittaa, kun kaveri kutsuu sinut pelaamaan, vaikka pelit olisivat kiinni.' : 'Saat ilmoituksen, kun kaveri kutsuu sinut pelaamaan, vaikka pelit olisivat kiinni.');
+    return el('div', { class: 'friend push-row' }, [
+      el('span', { class: 'friend-face', text: '🔔' }),
+      el('div', {}, [el('h3', { text: 'Ilmoitukset kutsuista' }), el('p', { class: 'muted meta push-note', role: 'status', text: note })]),
+      sw,
+    ]);
+  }
   function renderFriends() {
     document.title = 'Kaverit · AI-pelit';
     showSortPicker(false);
@@ -665,6 +693,7 @@
         });
         return friendRow(f, x);
       })));
+      parts.push(pushRow());
     }
     view.replaceChildren.apply(view, parts);
   }
