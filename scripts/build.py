@@ -32,8 +32,8 @@ THUMB_SIZE = (360, 480)
 # A shared library a version loads from public/lib/ (#99), e.g. '../../../lib/three-r187/three.module.js'.
 LIB_REF = re.compile(r"""['"]\.\./\.\./\.\./lib/([^'"?#]+)""")
 LIB_DIR = ROOT / "public" / "lib"
-ROOM_SCRIPT_RE = re.compile(r'<script[^>]+src=["\\\']\\.\\./\\.\\./\\.\\./rooms\\.js["\\\'][^>]*>')
-ROOM_MAX_RE = re.compile(r'\\bdata-max=["\\\']([2-8])["\\\']')
+ROOM_SCRIPT_RE = re.compile(r'<script[^>]+src="\.\./\.\./\.\./rooms\.js"[^>]*>')
+ROOM_MAX_RE = re.compile(r'data-max="([2-8])"')
 # Shelf groups (#153): a game.json with "group": "<key>" shows inside that group's card, and the
 # group's page lists its games. A key is a shelf address like a game's slug, so no game may take it.
 GROUPS = {
