@@ -1215,3 +1215,15 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
     # #355: on aanet-5, the sounds Eero found too loud softer.
     opens_and_plays_with_the_quiet_library(real, context, "games/last-signal/v16")
+
+
+def test_a_state_bigger_than_the_room_s_message_limit_reaches_a_friend_in_parts(site, browser):
+    # #355: the room drops a message over 16 000 characters (rooms/worker.js, and the test Relay),
+    # and a lived-in game's state is bigger; quotes double when escaped, so they are in it too.
+    host, aino = room(site, browser, names=("Eero", "Aino"))
+    close_cards(host, aino)
+    host.evaluate("G.s.pad = 'x'.repeat(30000) + '\"'.repeat(12000); save()")
+    aino.wait_for_function("G.s.pad && G.s.pad.length === 42000")
+    # And the next, smaller change still arrives after it.
+    host.evaluate("delete G.s.pad; G.s.crates[0].w = 'sub'; save()")
+    aino.wait_for_function("!G.s.pad && G.s.crates[0].w === 'sub'")

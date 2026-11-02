@@ -268,7 +268,28 @@ function setOther(id, p) {
   o.harp = !!p[7];
   if (jump) { o.x = o.tx; o.y = o.ty; }
 }
-function sendState(to) { if (net && net.host && G.s) { R.send({ t: 's', s: G.s }, to); if (!to) net.dirty = false; } }
+// v16 (#355): the room drops a message over 16 000 characters (MSG_MAX in rooms/worker.js), and a
+// lived-in game's state is bigger, so the host sends it in parts ('sp') the guest joins up again.
+// A part's text may double when sent (each quote escaped), so it stays under half the limit.
+const PART = 7000;
+let stateSeq = 0;
+function sendState(to) {
+  if (!(net && net.host && G.s)) return;
+  const json = JSON.stringify(G.s), n = Math.ceil(json.length / PART), k = ++stateSeq;
+  if (n <= 1) R.send({ t: 's', s: G.s }, to);
+  else for (let i = 0; i < n; i++) R.send({ t: 'sp', k, i, n, d: json.slice(i * PART, (i + 1) * PART) }, to);
+  if (!to) net.dirty = false;
+}
+// A guest keeps only the newest state's parts (the room keeps their order, so a new number is a
+// newer state, or a reloaded host's), and uses it once every part is there.
+let stateParts = null;
+function statePart(m) {
+  if (!stateParts || stateParts.k !== m.k) stateParts = { k: m.k, n: m.n, got: 0, d: [] };
+  if (stateParts.d[m.i] === undefined) { stateParts.d[m.i] = String(m.d); stateParts.got++; }
+  if (stateParts.got < stateParts.n) return null;
+  const json = stateParts.d.join(''); stateParts = null;
+  try { return JSON.parse(json); } catch (e) { return null; }
+}
 function snapshot() {
   const ps = { [R.me]: mine() };
   for (const [id, o] of Object.entries(net.others)) ps[id] = [o.mode, o.tx, o.ty, o.dir, o.suit ? (o.kit === 'hose' ? 2 : 1) : 0, o.ang, o.hose || 0, o.harp ? 1 : 0];
@@ -357,6 +378,7 @@ R.on('message', (m, from) => {
     }
     return;
   }
+  if (m.t === 'sp') { const st = statePart(m); if (st) { G.s = st; if (G.mode === 'wait') guestBegin(); } return; }
   if (m.t === 's' && m.s) { G.s = m.s; if (G.mode === 'wait') guestBegin(); return; }
   if (!G.s || G.mode === 'wait') return;
   if (m.t === 'f') {
