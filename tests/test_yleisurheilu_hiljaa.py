@@ -6,6 +6,7 @@ games/seivashyppy/v10, games/makihyppy/v6.
 """
 
 import json
+import re
 
 import pytest
 from conftest import ROOT
@@ -18,7 +19,9 @@ pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 @pytest.mark.parametrize("path", EVENTS)
 def test_the_version_loads_the_quiet_library(path):
     page = (ROOT / "games" / path / "index.html").read_text()
-    assert "lib/yleisurheilu-6/kisa.js" in page and "lib/yleisurheilu-5/" not in page
+    # yleisurheilu-6 or newer, whose cheer the game's cheerSound replaces (-7 from #341).
+    libs = {int(n) for n in re.findall(r"lib/yleisurheilu-(\d+)/", page)}
+    assert libs and min(libs) >= 6
     assert "lib/aanet-4/aanet.js" in page and "lib/aanet-3/" not in page and "lib/aanet-2/" not in page
 
 
