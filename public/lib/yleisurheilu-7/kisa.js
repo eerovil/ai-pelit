@@ -670,14 +670,21 @@
         x.globalAlpha = f.p === R.me || on[f.p] ? 1 : 0.45;
         front(x, fx, box.bottom - hop - bob, h, lookOf(o, f), going ? 1 : 0, ph);
         x.globalAlpha = 1;
-        // The name over the head: under the feet it would be behind the boards.
-        const top = box.bottom - hop - h - 3;
-        x.textAlign = 'center'; x.font = '800 ' + fs + 'px system-ui';
-        x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.6)'; x.fillStyle = f.p === R.me ? '#ffd166' : '#fff';
-        const nm = fit(x, f.p === R.me ? 'Sinä' : f.name, Math.max(h * 1.6, 40));
-        x.strokeText(nm, fx, top); x.fillText(nm, fx, top);
         K.fanSpots.push({ id: f.id, x: fx, y: box.bottom });
-        return { f, fx, age, top };
+        return { f, fx, age, top: box.bottom - hop - h - 3 };
+      });
+      // The names over the heads (under the feet they would be behind the boards); one that would
+      // touch its neighbour's goes a line higher.
+      x.textAlign = 'center'; x.font = '800 ' + fs + 'px system-ui'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.6)';
+      const names = [];
+      spots.slice().sort((a, b) => a.fx - b.fx).forEach(sp => {
+        const f = sp.f, nm = fit(x, f.p === R.me ? 'Sinä' : f.name, Math.max(h * 1.6, 40)), tw = x.measureText(nm).width;
+        let y = sp.top;
+        while (names.some(q => Math.abs(q.y - y) < fs && Math.abs(q.x - sp.fx) < (q.w + tw) / 2 + 4)) y -= fs + 1;
+        names.push({ x: sp.fx, y, w: tw });
+        sp.top = Math.min(sp.top, y);
+        x.fillStyle = f.p === R.me ? '#ffd166' : '#fff';
+        x.strokeText(nm, sp.fx, y); x.fillText(nm, sp.fx, y);
       });
       // The cheers in speech bubbles over the names, kept inside the row's ends.
       x.font = '800 ' + Math.max(12, Math.round(h * 0.3)) + 'px system-ui';
@@ -685,7 +692,7 @@
       live.forEach((f, k) => {
         const sp = spots.find(q => q.f === f), ch = K.cheers[f.id];
         const tw = x.measureText(ch.text).width + 16, up = (live.length - 1 - k) * (bh + 4);
-        const bx = Math.max(box.left, Math.min(box.right - tw, sp.fx - tw / 2)), by = box.bottom - h - fs - bh - 10 - up;
+        const bx = Math.max(box.left, Math.min(box.right - tw, sp.fx - tw / 2)), by = sp.top - fs - bh - 4 - up;
         x.globalAlpha = Math.min(1, (CHEER_T - sp.age) * 3);
         x.fillStyle = '#fff'; rr(x, bx, by, tw, bh, bh / 2); x.fill();
         if (!up) { x.beginPath(); x.moveTo(sp.fx - 5, by + bh - 1); x.lineTo(sp.fx + 5, by + bh - 1); x.lineTo(sp.fx, by + bh + 6); x.fill(); }
