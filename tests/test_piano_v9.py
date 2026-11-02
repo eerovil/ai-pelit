@@ -12,7 +12,7 @@ def open_menu(site, context, size=None, saves=None):
         page.set_viewport_size(size)
     if saves:
         page.add_init_script("".join(f"localStorage.setItem('ai-pelit:piano:{k}', '{v}');" for k, v in saves.items()))
-    page.goto(site.url + "games/piano/v8/")
+    page.goto(site.url + "games/piano/v9/")
     page.evaluate("window._sent = []; window.AiPelitScores = {submit: s => _sent.push(s)}")
     return page
 
@@ -109,7 +109,7 @@ def test_real_taps_on_a_390_px_phone_cost_nothing_in_no_fail(site, browser):
     site.build(ROOT / "games")
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
     page = ctx.new_page()
-    page.goto(site.url + "games/piano/v8/")
+    page.goto(site.url + "games/piano/v9/")
     page.tap("#nofail")
     page.tap("#go")
     lane_x, lane_w, btn = page.evaluate("[laneX, laneW, btnTop]")
