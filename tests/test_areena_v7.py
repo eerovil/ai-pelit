@@ -424,3 +424,30 @@ def test_eight_fighters_fit_the_screen(site, browser, w, h):
         assert page.errors == []
     finally:
         ctx.close()
+
+
+@pytest.mark.parametrize("w,h", [(360, 740), (740, 360)])
+@pytest.mark.parametrize("me", range(8))
+def test_every_phone_of_eight_starts_near_the_bottom_of_its_screen(site, browser, w, h, me):
+    ctx = browser.new_context(viewport={"width": w, "height": h}, service_workers="block")
+    try:
+        page = open_game(site, ctx)
+        host_round(page, 8, me=me)
+        # In the lowest third of the arena as this phone draws it.
+        assert page.evaluate("(W2(me.x, me.y)[1] - oy) / (AH * scale)") > 0.7
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def test_a_timeout_with_the_most_health_level_is_a_draw(site, context):
+    page = open_game(site, context)
+    host_round(page, 4)
+    page.evaluate("fighters[1].hp = 1; damage(fighters[1], 18, 0, 0, 0); fighters[3].hp = 50; net.left = 0.005; step(0.01); stateT = 0.001; step(0.01)")
+    end = page.evaluate("delivered[0]")
+    assert end["w"] == "" and sorted(end["d"]) == sorted([page.evaluate("R.me"), "p2"])
+    assert page.evaluate("result") == ["🤝 Tasapeli: Minä ja Pelaaja 3", ""]
+    # A phone outside the draw hears it and its place.
+    page.evaluate("net.done = false; finishOnline({ ...delivered[0], d: ['p2', 'p3'], o: ['p2', 'p3', R.me, 'p1'] })")
+    assert page.evaluate("result") == ["💀 Tasapeli: Pelaaja 3 ja Pelaaja 4 · olit 3.", "lose"]
+    assert page.errors == []

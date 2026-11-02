@@ -81,8 +81,10 @@ const AW = 340, AH = 440, PR = 14, ARROW_V = 320;
 const PILLARS = [{ x: 82, y: 220, r: 22 }, { x: 258, y: 220, r: 22 }];
 const SWING = 0.26, HP = 100;
 // v7: where each phone's fighter starts, in the room's order: the first two as in the duel, then
-// the corners, then beside the pillars. An online round lasts at most ROUND seconds.
-const SPOTS = [[170, 380], [170, 60], [40, 380], [300, 60], [300, 380], [40, 60], [40, 220], [300, 220]];
+// the corners, then one more each side of the middle. Every spot is in the arena's lower or upper
+// part, never its middle row, so each phone (turned round for the upper ones) sees its own fighter
+// start near the bottom. An online round lasts at most ROUND seconds.
+const SPOTS = [[170, 380], [170, 60], [40, 380], [300, 60], [300, 380], [40, 60], [235, 330], [105, 110]];
 const COLORS = [['#3d8bfd', '#1f4fa8'], ['#e5484d', '#8f1d22'], ['#3fb950', '#1f6f2c'], ['#f0883e', '#9a4a12'],
   ['#a371f7', '#5b2fa8'], ['#2bb3c0', '#146a73'], ['#f778ba', '#9c2f6a'], ['#e3b341', '#8a6512']];
 const ROUND = 90;
@@ -576,10 +578,12 @@ function guestStep(dt) {
 
 // The host decides the places and tells every phone; all go back to the room screen. Places: the
 // ones still standing by health left, then the knocked out, the last to fall first.
+// When time runs out with two or more level on the most health, it is a draw between them (d), no winner.
 function endOnline() {
-  const standing = fighters.filter(f => !f.out).sort((a, b) => b.hp - a.hp).map(f => f.id);
-  const order = standing.concat(net.outs.slice().reverse());
-  const m = { t: 'end', round: net.round, w: order[0], o: order };
+  const up = fighters.filter(f => !f.out).sort((a, b) => b.hp - a.hp);
+  const tied = up.length > 1 && up[1].hp === up[0].hp ? up.filter(f => f.hp === up[0].hp).map(f => f.id) : [];
+  const order = up.map(f => f.id).concat(net.outs.slice().reverse());
+  const m = { t: 'end', round: net.round, w: tied.length ? '' : order[0], o: order, d: tied };
   R.deliver(m); R.endRound();
   finishOnline(m);
 }
@@ -589,9 +593,16 @@ function finishOnline(m) {
   const won = m.w === R.me;
   const w = fighters.find(f => f.id === m.w), place = (m.o || []).indexOf(R.me) + 1;
   state = 'room';
-  sfx.end(won);
+  if (!(m.d || []).includes(R.me)) sfx.end(won);
   pad.id = null; for (const k in held) delete held[k];
-  const lost = `💀 ${w ? w.name : 'Vastustaja'} voitti` + (fighters.length > 2 && place > 1 ? ` · olit ${place}.` : '');
+  const after = fighters.length > 2 && place > 1 ? ` · olit ${place}.` : '';
+  const tied = m.d || [];
+  if (tied.length) {
+    const names = tied.map(id => (fighters.find(f => f.id === id) || { name: '?' }).name);
+    const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' ja ' + names[names.length - 1] : names[0];
+    return R.backToRoom(tied.includes(R.me) ? `🤝 Tasapeli: ${list}` : `💀 Tasapeli: ${list}${after}`, tied.includes(R.me) ? '' : 'lose');
+  }
+  const lost = `💀 ${w ? w.name : 'Vastustaja'} voitti` + after;
   R.backToRoom(won ? `🏆 ${me.name} voitti!` : lost, won ? 'win' : 'lose');
 }
 R.on('lobby', () => { if (net) state = 'room'; });
