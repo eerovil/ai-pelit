@@ -1,6 +1,6 @@
 # Piano: one game, from the first note to the last heart
 
-How a game of Piano plays (v1–v8). Notes of a familiar tune fall down four lanes, and the
+How a game of Piano plays (v1–v9). Notes of a familiar tune fall down four lanes, and the
 player presses the lane's key at the bottom when a note reaches the line, which scores that
 note (in v1–v4 the press also played it; from v5 the tune plays by itself). Each finished song is a level; the next song is a little faster. A missed note or a
 press with no note near the line costs one of three hearts. From v2 the score is also kept
