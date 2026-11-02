@@ -155,4 +155,4 @@ When Eero is unsure how something should feel ("prototyyppi:" in the request, as
 and Voimistelu v4), build the change in the new version, let him play it on his phone, and tune
 it from what he says before marking it ready. Remove any testing buttons first (Voimistelu v5).
 
-A room game message exceeding `MSG_MAX = 16000` characters is silently discarded by the Worker. Send large multiplayer state per recipient, split it into smaller packets, and apply only a complete snapshot. Measure `JSON.stringify` with all fields, including the recipient `to` (Pilkkiminen v5, #345).
+A room game message exceeding `MSG_MAX` in `rooms/worker.js` (64 000 characters; 16 000 until #375) is silently discarded by the Worker, and the phone it was for waits for good (Last Signal v15, #375). Send large multiplayer state per recipient, split it into smaller packets, and apply only a complete snapshot. Measure `JSON.stringify` with all fields, including the recipient `to` (Pilkkiminen v5, #345).

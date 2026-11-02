@@ -353,16 +353,17 @@ def test_the_room_screen_with_friends_fits_a_phone_both_ways(phones):
         assert box[0] <= box[1] and box[2] <= box[3], size
 
 
-def test_the_shelf_lists_friends_and_requests_and_shows_who_plays(phones):
+def test_the_shelf_lists_requests_and_shows_friends_playing_on_friends_page_only(phones):
     phones.api.names.update({A: "Aino", B: "Bertta", "c" * 32: "Ceci"})
     phones.api.friends.add(frozenset((A, B)))
     phones.api.requests.add(("c" * 32, pid_of(A)))
     phones.api.presence[B] = ("huonetesti", 1, now_iso(10))
     shelf = phones("Aino", None, player=A)
     shelf.wait_for_selector(".friends-playing:not([hidden]) .friend")
-    assert "Bertta" in shelf.locator(".friends-playing").inner_text()
-    assert "Pelaa: Huonetesti" in shelf.locator(".friends-playing").inner_text()
+    assert "Bertta" not in shelf.locator(".friends-playing").inner_text()
+    assert "Kaverit pelaamassa" not in shelf.locator(".friends-playing").inner_text()
     shelf.click(".friends-link")
+    assert "Pelaa: Huonetesti" in shelf.locator(".friend[data-pid='%s']" % pid_of(B)).inner_text()
     shelf.wait_for_selector(".friend.ask")
     assert "Ceci" in shelf.locator(".friend.ask").inner_text()
     shelf.locator(".friend.ask button", has_text="Hyväksy").click()
@@ -402,17 +403,17 @@ def test_a_reload_keeps_the_friend_id_and_a_declined_request_stays_quiet(phones)
     assert phones.api.friends == set()
 
 
-def test_the_shelf_shows_a_friend_start_playing_without_a_reload(phones):
+def test_the_shelf_does_not_show_friend_playing_status(phones):
     phones.api.names.update({A: "Aino", B: "Bertta"})
     phones.api.friends.add(frozenset((A, B)))
     shelf = phones("Aino", None, player=A, width=390, height=844)
     shelf.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
     shelf.wait_for_timeout(300)
     assert shelf.locator(".friends-playing").is_hidden()
-    # Bertta opens a game; the shelf's next 30 s check shows her playing.
+    # The shelf no longer lists friends' activity; the friends page still does.
     phones.api.presence[B] = ("huonetesti", 1, now_iso())
-    shelf.wait_for_selector(".friends-playing:not([hidden]) .friend", timeout=40_000)
-    assert "Pelaa: Huonetesti" in shelf.locator(".friends-playing").inner_text()
+    shelf.click(".friends-link")
+    shelf.wait_for_function("document.querySelector('.friend .meta') && document.querySelector('.friend .meta').textContent.includes('Pelaa: Huonetesti')", timeout=15_000)
     assert shelf.evaluate("document.documentElement.scrollWidth") <= 390
 
 
@@ -646,3 +647,43 @@ def test_the_daily_new_name_limit_is_not_called_a_rejected_name(phones):
     host.locator("#aipr-members button.fr").click()
     host.wait_for_function("document.querySelector('#aipr-members .frs') && document.querySelector('#aipr-members .frs').textContent === 'Pyydetty'")
     assert (A, pid_of(B)) in phones.api.requests
+
+def test_shelf_and_friends_page_show_invites_without_duplicate_banner(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    phones.api.invites.append({
+        "id": 1, "sender": A, "to": B, "from": pid_of(A),
+        "name": "Aino", "game": "huonetesti", "version": 1, "room": "KISA",
+    })
+    shelf = phones("Bertta", None, player=B)
+    shelf.wait_for_selector(".friends-playing [data-invite='1']")
+    assert "Aino kutsuu" in shelf.locator(".friends-playing").inner_text()
+    assert shelf.locator("#aipk").count() == 0
+    shelf.click(".friends-link")
+    shelf.wait_for_selector("[data-invite='1']")
+    assert shelf.locator("#aipk").count() == 0
+    shelf.locator("[data-invite='1'] button", has_text="Ei").click()
+    shelf.wait_for_function("document.querySelector('[data-invite]') === null")
+    assert phones.api.invites == []
+    assert shelf.errors == []
+
+
+def test_an_invite_shows_on_the_front_page_without_a_reload_on_a_390_px_phone(phones):
+    phones.api.names.update({A: "Aino", B: "Bertta"})
+    phones.api.friends.add(frozenset((A, B)))
+    shelf = phones("Bertta", None, player=B, width=390, height=844)
+    shelf.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
+    shelf.wait_for_timeout(300)
+    assert shelf.locator(".friends-playing [data-invite]").count() == 0
+    # Aino invites Bertta while the front page is open; its next 30 s check shows it.
+    phones.api.invites.append({
+        "id": 2, "sender": A, "to": B, "from": pid_of(A),
+        "name": "Aino", "game": "huonetesti", "version": 1, "room": "KISA",
+    })
+    shelf.wait_for_selector(".friends-playing [data-invite='2']", timeout=40_000)
+    assert shelf.locator("#aipk").count() == 0
+    assert shelf.evaluate("document.documentElement.scrollWidth") <= 390
+    shelf.locator("[data-invite='2'] button", has_text="Liity").click()
+    shelf.wait_for_url(re.compile(r".*/games/huonetesti/v1/.*"))
+    assert phones.api.invites == []
+

@@ -19,6 +19,11 @@ Safe to run again; run it after adding a file to migrations/, before that change
   file is missing it makes a Cloudflare Realtime TURN key and saves it there, if the API token
   may (permission "Calls Write"); otherwise it says how to make one by hand, and voice in rooms
   works without the relay (phones connect directly, which some mobile networks block).
+- Binds the invite notifications' signing key (#367) as the `VAPID_PRIVATE_KEY` secret, from
+  ~/.local/share/ai-pelit/vapid.env (`VAPID_PUBLIC_KEY=…` and `VAPID_PRIVATE_KEY=…`). Its public
+  half is written in server/api.js and public/kaverit.js, so a new pair is never made here: when
+  the file is missing or its public key is not the one in server/api.js, the step is skipped with
+  a note, and invites show only as banners.
 
 The bindings live on the Pages project rather than in a wrangler.toml, so CI's deploy token
 needs no D1 permission: `wrangler pages deploy` keeps the project's bindings.
@@ -37,6 +42,7 @@ PROJECT = "ai-pelit"
 DATABASES = {"production": "ai-pelit", "preview": "ai-pelit-preview"}
 KEY_FILE = Path.home() / ".local/share/ai-pelit/admin-key"
 TURN_FILE = Path.home() / ".local/share/ai-pelit/turn.env"
+VAPID_FILE = Path.home() / ".local/share/ai-pelit/vapid.env"
 ROOMS_SCRIPT, ROOMS_CLASS = "ai-pelit-rooms", "Room"
 
 
@@ -123,6 +129,18 @@ def turn_key() -> dict | None:
     return {k: {"type": "secret_text", "value": pairs[k]} for k in ("TURN_KEY_ID", "TURN_KEY_TOKEN")}
 
 
+def vapid_key() -> dict | None:
+    if not VAPID_FILE.is_file():
+        print(f"  no {VAPID_FILE}: invites are not sent as notifications")
+        return None
+    pairs = dict(line.split("=", 1) for line in VAPID_FILE.read_text().split() if "=" in line)
+    public = pairs.get("VAPID_PUBLIC_KEY", "")
+    if not public or not pairs.get("VAPID_PRIVATE_KEY") or f"'{public}'" not in (ROOT / "server/api.js").read_text():
+        print(f"  {VAPID_FILE} does not match VAPID_PUBLIC in server/api.js: invites are not sent as notifications")
+        return None
+    return {"VAPID_PRIVATE_KEY": {"type": "secret_text", "value": pairs["VAPID_PRIVATE_KEY"]}}
+
+
 def main() -> int:
     for var in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"):
         if not os.environ.get(var):
@@ -131,18 +149,19 @@ def main() -> int:
     key = admin_key()
     rooms = rooms_namespace()
     turn = turn_key()
+    vapid = vapid_key()
     for env, name in DATABASES.items():
         db = database(name)
         print(f"{name}: {db}")
         migrate(db, name)
         configs[env] = {
             "d1_databases": {"DB": {"id": db}},
-            "env_vars": {"ADMIN_KEY": {"type": "secret_text", "value": key}, **(turn or {})},
+            "env_vars": {"ADMIN_KEY": {"type": "secret_text", "value": key}, **(turn or {}), **(vapid or {})},
         }
         if rooms:
             configs[env]["durable_object_namespaces"] = {"ROOMS": {"namespace_id": rooms}}
     api("PATCH", f"/pages/projects/{PROJECT}", {"deployment_configs": configs})
-    bound = "DB, ADMIN_KEY" + (", TURN_KEY_*" if turn else "") + (" and ROOMS" if rooms else "")
+    bound = "DB, ADMIN_KEY" + (", TURN_KEY_*" if turn else "") + (", VAPID_PRIVATE_KEY" if vapid else "") + (" and ROOMS" if rooms else "")
     print(f"pages project {PROJECT}: {bound} bound (they apply from the next deploy)")
     return 0
 

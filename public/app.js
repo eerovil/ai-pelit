@@ -569,12 +569,14 @@
       // Requests show on the front page and the friends page themselves; on a game's or a
       // group's page they come as kaverit.js's banner.
       friends.quietRequests = !m || m[1] === 'kaverit';
+      friends.quietInvites = !m || m[1] === 'kaverit';
       friends.drawBanner();
       if (m && m[1] === 'kaverit') friends.watch(true);
       else friends.watch(!m && !!friends.name(), 30e3, true);
     }
-    if (m && m[1] === 'kaverit' && friends) renderFriends();
-    else if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
+    if (m && m[1] === 'kaverit' && friends) return renderFriends();
+    pushNow = null; pushError = ''; // the friends page reads the notification switch again
+    if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
   }
 
   // Friends (#324), from public/kaverit.js: the friends page (#/kaverit), and on the shelf's
@@ -601,25 +603,72 @@
       el('div', { class: 'friend-buttons' }, [no, yes]),
     ]);
   }
-  // The front page: requests waiting for this phone, and the friends playing right now.
+  function inviteRow(inv) {
+    var yes = el('button', { type: 'button', class: 'button', text: 'Liity' });
+    var no = el('button', { type: 'button', class: 'secondary', text: 'Ei' });
+    yes.addEventListener('click', function () {
+      yes.disabled = no.disabled = true;
+      friends.acceptInvite(inv).then(function (r) {
+        if (!r.ok) { friendsNote = 'Kutsuun liittyminen ei onnistunut.'; friends.refresh(); }
+      });
+    });
+    no.addEventListener('click', function () {
+      yes.disabled = no.disabled = true;
+      friends.declineInvite(inv).then(function (r) {
+        if (!r.ok) friendsNote = 'Kutsun hylkääminen ei onnistunut.';
+      });
+    });
+    return el('li', { class: 'friend ask', 'data-invite': String(inv.id) }, [
+      el('span', { class: 'friend-face', text: '📨' }),
+      el('div', {}, [
+        el('h3', { text: inv.name + ' kutsuu' }),
+        el('p', { class: 'muted meta', text: friends.title(inv.game) }),
+      ]),
+      el('div', { class: 'friend-buttons' }, [no, yes]),
+    ]);
+  }
+  // The front page: pending room invites and friend requests, no playing-status duplicates.
   function drawPlaying() {
     var box = view.querySelector('.friends-playing');
     if (!box || !friends) return;
-    // Playing a game, not only browsing the shelf ("Selaa pelejä" shows on the friends page).
-    var st = friends.state, now = st ? st.friends.filter(function (f) { return f.now && f.game; }) : [];
-    var asks = st ? st.requests : [];
-    box.hidden = !now.length && !asks.length;
+    var st = friends.state, invites = st ? st.invites : [], asks = st ? st.requests : [];
+    box.hidden = !invites.length && !asks.length;
     box.replaceChildren.apply(box, [
+      invites.length ? el('h2', { text: 'Kutsut' }) : null,
+      invites.length ? el('ul', { class: 'friends' }, invites.map(inviteRow)) : null,
       asks.length ? el('h2', { text: 'Kaveripyynnöt' }) : null,
       asks.length ? el('ul', { class: 'friends' }, asks.map(requestRow)) : null,
-      now.length ? el('h2', { text: 'Kaverit pelaamassa' }) : null,
-      now.length ? el('ul', { class: 'friends' }, now.map(function (f) {
-        var game = f.game && gameOf(f.game);
-        return friendRow(f, game ? el('a', { class: 'button secondary', href: '#/' + game.slug, text: 'Peliin' }) : null);
-      })) : null,
     ].filter(Boolean));
   }
   var friendsNote = '', nameError = '';
+  // Invites as phone notifications (#367): the switch, its state read once per visit to the page.
+  var pushNow = null, pushError = '', pushBusy = false;
+  function pushRow() {
+    if (pushNow === null) {
+      pushNow = 'wait';
+      friends.push.state().then(function (st) { pushNow = st; if (location.hash === '#/kaverit') renderFriends(); });
+    }
+    var on = pushNow === 'on', can = pushNow === 'on' || pushNow === 'off';
+    var sw = el('button', { type: 'button', role: 'switch', class: 'push-switch' + (on ? ' on' : ''), 'aria-checked': on ? 'true' : 'false',
+      'aria-label': 'Ilmoitukset kutsuista', text: on ? 'Päällä' : 'Pois' });
+    sw.disabled = pushBusy || !can;
+    sw.addEventListener('click', function () {
+      pushBusy = true; pushError = '';
+      renderFriends();
+      friends.push.set(!on).then(function (r) {
+        pushBusy = false; pushNow = r.state; pushError = r.error;
+        if (location.hash === '#/kaverit') renderFriends();
+      });
+    });
+    var problem = pushError || friends.push.note(pushNow);
+    var note = problem ||
+      (on ? 'Puhelin ilmoittaa, kun kaveri kutsuu sinut pelaamaan, vaikka pelit olisivat kiinni.' : 'Saat ilmoituksen, kun kaveri kutsuu sinut pelaamaan, vaikka pelit olisivat kiinni.');
+    return el('div', { class: 'push-row' }, [
+      el('span', { class: 'friend-face', text: '🔔' }),
+      el('div', {}, [el('h3', { text: 'Ilmoitukset kutsuista' }), el('p', { class: 'muted meta push-note' + (problem ? ' warn' : ''), role: 'status', text: note })]),
+      sw,
+    ]);
+  }
   function renderFriends() {
     document.title = 'Kaverit · AI-pelit';
     showSortPicker(false);
@@ -651,6 +700,9 @@
     if (!st) {
       parts.push(el('p', { class: 'muted friends-wait', text: 'Haetaan kavereita…' }));
     } else {
+      if (st.invites.length) {
+        parts.push(el('h2', { text: 'Kutsut' }), el('ul', { class: 'friends' }, st.invites.map(inviteRow)));
+      }
       if (st.requests.length) {
         parts.push(el('h2', { text: 'Kaveripyynnöt' }), el('ul', { class: 'friends' }, st.requests.map(requestRow)));
       }
@@ -665,6 +717,7 @@
         });
         return friendRow(f, x);
       })));
+      parts.push(pushRow());
     }
     view.replaceChildren.apply(view, parts);
   }
