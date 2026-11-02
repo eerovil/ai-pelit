@@ -272,10 +272,21 @@ def test_phones_meet_by_code_and_by_link(phones):
     assert host.errors == guest.errors == linked.errors == []
 
 
-def test_the_room_screen_has_no_qr_code(phones):
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844)])
+def test_the_room_screen_has_no_qr_code(phones, width, height):
     # Nobody scanned it (#354, Eero's choice): friends join by the code, a link or an invite.
-    host, code = make_room(phones)
+    host = phones("Eero", width=width, height=height)
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    # A reload keeps the room and still draws no QR code.
+    host.reload()
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.code === %r" % code)
+    host.evaluate("AiPelitRooms.open()")
     assert host.locator("#aipr canvas").count() == 0
+    assert host.evaluate("document.documentElement.scrollWidth") <= width
+    assert host.evaluate("document.getElementById('aipr').scrollHeight") <= height
     assert text(host, "code") == code
     assert "Kaverit liittyvät tällä koodilla." in text(host, "room")
 
