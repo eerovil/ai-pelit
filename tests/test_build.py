@@ -17,6 +17,20 @@ def test_catalog_lists_every_game_newest_first(tmp_path):
     assert [v["n"] for v in catalog["games"][0]["versions"]] == [1, 2]
 
 
+
+def test_catalog_exposes_only_newest_games_room_capacity(tmp_path):
+    # The game picker must not offer a game too small for the current group.
+    base = game_page("a")
+    marker = '<script src="../../../back.js"></script>'
+    room = base.replace(marker,
+        '<script src="../../../rooms.js" data-game="iso" data-min="2" data-max="8"></script>\n' + marker)
+    make_game(tmp_path, "iso", [room])
+    make_game(tmp_path, "yksin", [base])
+    catalog = {g["slug"]: g for g in build.build_catalog(tmp_path)["games"]}
+    assert catalog["iso"]["room"] == {"max": 8}
+    assert "room" not in catalog["yksin"]
+
+
 def test_a_version_kept_out_of_ottelu_says_so_in_the_catalog(tmp_path):
     # #303: Ottelu plays each event's newest version, except one whose game.json entry says not to.
     make_game(tmp_path, "kuula", [game_page("a"), game_page("b")])
