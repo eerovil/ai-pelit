@@ -167,3 +167,26 @@ test('a player keeps its newest few phones', async () => {
   await call('POST', '/api/push', { player: A, endpoint: rows[0] });
   assert.equal(env.DB.raw.prepare('SELECT player FROM push_subs WHERE endpoint = ?').get(rows[0]).player, A);
 });
+
+test('two invites at once: pending names the newest; an old one or one already answered, none', async () => {
+  const { call, env } = await setup({ vapid: false });
+  const C = 'c'.repeat(32), PC = await pidOf(C);
+  await call('POST', '/api/players', { id: C, name: 'Ceci' });
+  await call('POST', '/api/friends/requests', { player: C, to: PB });
+  await call('POST', '/api/friends/requests/answer', { player: B, from: PC, yes: true });
+  await call('POST', '/api/push', { player: B, endpoint: FCM });
+  const pending = async () => (await call('GET', '/api/push/pending?endpoint=' + encodeURIComponent(FCM))).body.invite;
+  await inviteB(call);
+  await call('POST', '/api/invites', { player: C, to: PB, game: 'kirkkis', version: 9, room: 'WXYZ' });
+  const newest = await pending();
+  assert.deepEqual([newest.name, newest.url], ['Ceci', 'games/kirkkis/v9/?huone=WXYZ']);
+  // Answered on the phone's banner before the push arrived: the older one is shown instead.
+  await call('POST', `/api/invites/${newest.id}/answer`, { player: B });
+  assert.equal((await pending()).name, 'Aino');
+  // A tap on a notification whose invite is already gone changes nothing and fails nothing.
+  assert.equal((await call('POST', `/api/invites/${newest.id}/answer`, { endpoint: FCM })).status, 200);
+  assert.equal((await call('POST', '/api/invites/1/answer', { endpoint: 'https://fcm.googleapis.com/fcm/send/nobody' })).status, 200);
+  // Past its ten minutes, nothing.
+  env.DB.raw.prepare('UPDATE invites SET at = ?').run(new Date(Date.now() - 11 * 60e3).toISOString());
+  assert.equal(await pending(), null);
+});

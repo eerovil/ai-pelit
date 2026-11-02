@@ -119,3 +119,14 @@ def test_no_nickname_asks_for_one_first(phones):
     assert page.locator(".push-note").inner_text() == "Valitse ensin nimimerkki."
     assert switch(page).get_attribute("aria-checked") == "false"
     assert calls == []
+
+
+def test_the_switch_row_fits_a_390_px_phone_and_turns(phones):
+    page, _ = friends_page(phones)
+    page.wait_for_function("!document.querySelector('.push-switch').disabled")
+    for size in ({"width": 390, "height": 844}, {"width": 740, "height": 360}):
+        page.set_viewport_size(size)
+        row = page.locator(".push-row").bounding_box()
+        sw = page.locator(".push-switch").bounding_box()
+        assert page.evaluate("document.documentElement.scrollWidth") <= size["width"]
+        assert sw["x"] + sw["width"] <= row["x"] + row["width"]
