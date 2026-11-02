@@ -76,6 +76,12 @@ if (!load('tasoraja', false)) {
     const SENT = 'ai-pelit:_tulokset:lahetetyt', sent = JSON.parse(localStorage.getItem(SENT) || '{}');
     const p = sent['piano|main'];
     if (p && p.level > 5) { p.level = 5; localStorage.setItem(SENT, JSON.stringify(sent)); }
+    // A score an older version left waiting offline is sent with that version's number, and the
+    // server caps the level of a Piano version before v10 at 5 (server/api.js), while scores.js
+    // records the level it sent: send it as v10, so the level reached since counts.
+    const QUEUE = 'ai-pelit:_tulokset:jono', queue = JSON.parse(localStorage.getItem(QUEUE) || '{}');
+    const q = queue['piano|main'];
+    if (q && q.version < 10) { q.version = 10; localStorage.setItem(QUEUE, JSON.stringify(queue)); }
   } catch (e) {}
   save('tasoraja', true);
 }

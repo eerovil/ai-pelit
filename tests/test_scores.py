@@ -524,6 +524,28 @@ def test_piano_after_the_cut_to_5_sends_a_higher_level_without_a_record(site, co
     assert row["level"] == 6 and row["score"] == 300
 
 
+@pytest.mark.games("piano")
+def test_piano_a_score_v9_left_offline_is_sent_as_v10_after_the_cut(site, context, fake):
+    """A v9 score still queued at the upgrade carries v10's number, so the server keeps the level since."""
+    site.build(ROOT / "games")
+    fake.online = False
+    page = context.new_page()
+    page.add_init_script("""if (!sessionStorage.x) { sessionStorage.x = 1;
+      localStorage.setItem('ai-pelit:piano:taso', '23');
+      localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Aino'));
+      localStorage.setItem('ai-pelit:_tulokset:jono', JSON.stringify({'piano|main': {game: 'piano', board: 'main', version: 9, score: 900}})); }""")
+    page.goto(site.url + PIANO)
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['piano|main']") == {
+        "game": "piano", "board": "main", "version": 10, "score": 900}
+    page.click("#go")
+    page.evaluate("score = 300; songDone(); lives = 1; miss(0, 'Ohi!')")  # level 6, no record: 900 stays queued
+    fake.online = True
+    page.evaluate("dispatchEvent(new Event('online'))")
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
+    [(key, row)] = fake.scores.items()
+    assert row == {"score": 900, "version": 10, "level": 6}
+
+
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
     """Puhelinkoppi's v3/v4 streak list was withdrawn (#9): its no. 1 kept on the phone must not read as a level."""
     site.build(ROOT / "games")
