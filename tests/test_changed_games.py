@@ -53,7 +53,7 @@ def test_a_3d_game_s_tests_run_alone_and_the_others_side_by_side():
     from conftest import ROOT
     assert is_3d(ROOT / "tests" / "test_hiihto_v12.py", "hiihto")
     assert is_3d(ROOT / "tests" / "test_pallorata_v5.py", "pallorata")
-    assert not is_3d(ROOT / "tests" / "test_piano_v9.py", "piano")
+    assert not is_3d(ROOT / "tests" / "test_piano_v10.py", "piano")
 
 
 def test_when_git_cannot_say_no_game_is_tested():
