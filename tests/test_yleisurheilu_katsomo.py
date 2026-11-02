@@ -177,6 +177,9 @@ def test_nobody_moves_as_the_turn_goes_round_or_a_new_meet_starts(site, browser,
             f"K.comp && K.comp.room !== {json.dumps(room0)} && K.comp.seq >= 0 && K.fanSpots.length === 2", timeout=8000
         )
         assert p.evaluate("Object.keys(K.spot).length") == 0
+        # K.fanSpots is what the last frame drew, and the game draws the old meet's friends behind
+        # the room screen too: wait for frames drawn with the new meet before reading it (#362).
+        p.evaluate("new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
     first = xs(host)
     host.wait_for_timeout(700)
     assert xs(host) == first
