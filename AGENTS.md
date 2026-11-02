@@ -200,7 +200,7 @@ high-score lists (#25), then play counts (#26).
   choice and one set of kits for every event, so the match wears the same outfit throughout;
   Pituushyppy v10 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-6/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-7/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
@@ -209,10 +209,14 @@ high-score lists (#25), then play counts (#26).
   (#176): the top three on the podium, the medals hung around their necks, the final standings
   under it; it stays until the player taps it away (the game passes its taps to `K.skip()`).
   Like `lib/three-r*/`, a folder never changes once published: a fix goes in the next one
-  (`yleisurheilu-7/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
+  (`yleisurheilu-8/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
   friends only for the phone on turn (rooms.js `turns()`), a friend may leave and come back
   ("Palaa kierrokseen"), the host skips an away friend's turn, and the game draws the friends not
-  on turn as cheering spectators with `K.drawFans(ctx, box)`. The bar-height format (high jump, pole vault)
+  on turn as cheering spectators with `K.drawFans(ctx, box)`. From `yleisurheilu-7/` (#341) they stay in
+  the background: the game calls `K.drawFans(ctx, {..., walk: true})` early in its scene, before the
+  athlete (in a stadium behind the boards, which hide their legs), and offers a tap on its scene to
+  `K.tapFans(px)` first, which walks a spectator's own figure there on every phone; nobody walks by
+  themselves (Eero's choice). The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose

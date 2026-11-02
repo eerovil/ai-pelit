@@ -65,6 +65,13 @@
       "note": "Yleisön huudot, aplodit ja ”ooh”-äänet on poistettu, ja kovimmat äänet soivat hiljempaa.",
       "request": "Poistetaan mölinät ja hurraa huudot. Koetetaan pitää kovat äänet poissa.",
       "issue": "eerovil/ai-pelit#337"
+    },
+    {
+      "n": 10,
+      "date": "2026-11-02",
+      "note": "Kannustavat kaverit ovat nyt taustalla mainostaulujen takana, eivätkä enää peitä suoritusta; oman hahmon saa kävelemään napauttamalla.",
+      "request": "Kannustajaukkelit pitää olla taustalla eikä siinä edessä häiritsemässä. Noissa areenalejaissa ne vois olla siellä sen aidan takana, niitä vois myös liikutella siinä, vois kävellä edes taas.",
+      "issue": "eerovil/ai-pelit#341"
     }
   ]
 }
