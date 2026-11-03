@@ -85,7 +85,9 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
     for p in pages:
         assert p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") == before[p]
     x0 = fan.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(me)}).x")
-    target = 60 if x0 > 150 else 280
+    x1 = before[fan]
+    # From yleisurheilu-8 (#373) a tap on the other friend climbs onto them, so tap clear of them.
+    target = max((t for t in (60, 170, 280) if abs(t - x0) > 50), key=lambda t: abs(t - x1))
     tap_scene(fan, target)
     want = fan.evaluate(f"K.spot[{json.dumps(me)}]")
     assert want is not None
