@@ -135,13 +135,29 @@ async function sourceOf(request, env) {
 // "Testi" and up to 8 more letters, digits or spaces, any case: Testi, Testi1, Testi A, Testi184b.
 export const isTestName = (name) => /^testi[\p{L}\p{N} ]{0,8}$/iu.test(String(name || '').trim());
 
+// The players among `rows` that are real players who took a test name: each owns a name the
+// admin approved that is not a test name (`names.locked`). They are never hidden or deleted.
+async function realOnes(env, rows) {
+  const ids = rows.filter((p) => isTestName(p.name)).map((p) => p.id);
+  const real = new Set();
+  for (let i = 0; i < ids.length; i += 50) {
+    const part = ids.slice(i, i + 50);
+    const { results } = await env.DB.prepare(
+      `SELECT player, name_key FROM names WHERE locked = 1 AND player IN (${part.map(() => '?').join(',')})`
+    ).bind(...part).all();
+    for (const r of results) if (!isTestName(r.name_key)) real.add(r.player);
+  }
+  return real;
+}
+
 // Deletes the test players made over TEST_KEEP ago, and every row that names them (#380).
 // friend_requests.receiver is a pid; every other column holds the secret player id.
 export async function cleanTestPlayers(env) {
   const { results } = await env.DB.prepare(
     "SELECT id, name, pid FROM players WHERE lower(name) LIKE 'testi%' AND created_at < ?"
   ).bind(new Date(Date.now() - TEST_KEEP).toISOString()).all();
-  const gone = results.filter((p) => isTestName(p.name)).slice(0, TEST_CLEAN_MAX);
+  const real = await realOnes(env, results);
+  const gone = results.filter((p) => isTestName(p.name) && !real.has(p.id)).slice(0, TEST_CLEAN_MAX);
   for (const p of gone) {
     const pid = p.pid || (await pidOf(p.id));
     for (const [sql, ...args] of [
@@ -794,7 +810,8 @@ async function adminPlayers(env) {
     `SELECT id, name, status, updated_at FROM players
      ORDER BY status = 'pending' DESC, updated_at DESC LIMIT 400`
   ).all();
-  return json({ players: results.filter((p) => !isTestName(p.name)).slice(0, 200) });
+  const real = await realOnes(env, results);
+  return json({ players: results.filter((p) => !isTestName(p.name) || real.has(p.id)).slice(0, 200) });
 }
 
 async function adminDecide(env, body) {

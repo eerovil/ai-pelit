@@ -97,3 +97,31 @@ test('waiting test names take no place among the names waiting', async () => {
   assert.equal((await call('POST', '/api/players', { id: id(700), name: 'Viimeinen' })).status, 200);
   assert.equal((await call('POST', '/api/players', { id: id(701), name: 'Liikaa' })).status, 429);
 });
+
+test('a real player who renames itself "Testi" keeps its scores and stays on the admin list', async () => {
+  const { env, call, adminList, age, count } = setup();
+  const E = id(9);
+  await call('POST', '/api/players', { id: E, name: 'Eero' });
+  const name = 'Eero';
+  await call('POST', '/api/admin/players', { id: E, name, status: 'approved' }, { 'x-admin-key': ADMIN_KEY });
+  await call('POST', '/api/scores', { player: E, game: 'sormiskeitti', board: 'main', version: 5, score: 80 });
+  await call('POST', '/api/players', { id: E, name: 'Testi' });
+  age(E, 30 * 864e5);
+  assert.deepEqual(await adminList(), ['Testi']);
+  await call('POST', '/api/players', { id: id(10), name: 'Aino' });
+  assert.equal(count('SELECT COUNT(*) AS n FROM players WHERE id = ?', E), 1);
+  assert.equal(count('SELECT COUNT(*) AS n FROM scores WHERE player = ?', E), 1);
+  assert.equal(env.DB.raw.prepare('SELECT status FROM players WHERE id = ?').get(E).status, 'pending');
+});
+
+test('many old test players are cleaned a batch at a time, all gone after a few requests', async () => {
+  const { env, adminList, count } = setup();
+  const t = new Date(Date.now() - 2 * 864e5).toISOString();
+  const add = env.DB.raw.prepare("INSERT INTO players (id, name, status, created_at, updated_at) VALUES (?, ?, 'rejected', ?, ?)");
+  for (let i = 0; i < 120; i++) add.run(id(1000 + i), `Testi${i}`, t, t);
+  await adminList();
+  assert.equal(count('SELECT COUNT(*) AS n FROM players'), 70);
+  await adminList();
+  await adminList();
+  assert.equal(count('SELECT COUNT(*) AS n FROM players'), 0);
+});
