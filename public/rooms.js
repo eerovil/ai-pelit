@@ -641,6 +641,9 @@
     }
     voice.pressed = true; voice.pressAt = Date.now(); voice.err = ''; voice.errAt = 0;
     renderVoice();
+    // On an iPhone, recording needs this audio session type; it also plays through the silent
+    // switch, as back.js's 'playback' does (#381).
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }).then(function (s) {
       if (voice.stream) voice.stream.getTracks().forEach(function (t) { t.stop(); });
       voice.stream = s; voice.track = s.getAudioTracks()[0] || null;
