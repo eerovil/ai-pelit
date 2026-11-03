@@ -57,6 +57,13 @@
       "note": "Katsojat juoksevat urheilijan perässä ja voivat kiivetä toistensa harteille.",
       "request": "Spectatorit tulee liikkua parallax tyyliin taustan mukana",
       "issue": "eerovil/ai-pelit#373"
+    },
+    {
+      "n": 9,
+      "date": "2026-11-03",
+      "note": "Mäkiviikko on puolet lyhyempi: kaksi mäkeä (Lahti ja Kuopio), kussakin kaksi kierrosta, ja lyhyellä viikolla on oma ennätys ja tuloslista.",
+      "request": "Mäkihyppy peli voisi sen mäki viikon puolittaa sen pituuden.",
+      "issue": "eerovil/ai-pelit#387"
     }
   ]
 }

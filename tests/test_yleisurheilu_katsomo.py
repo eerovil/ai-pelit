@@ -20,7 +20,7 @@ EVENTS = {
     "korkeushyppy/v11": "drawAthlete",
     "seivashyppy/v12": "drawRunner",
     "moukari/v10": "drawThrower",
-    "makihyppy/v8": "drawJumper",
+    "makihyppy/v9": "drawJumper",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
 STADIUM = {"pituushyppy/v15", "keihas/v14", "kuula/v8", "korkeushyppy/v11", "seivashyppy/v12"}

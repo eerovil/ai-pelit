@@ -123,6 +123,10 @@ test('bad scores and unknown players are refused', async () => {
   assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'luistelu-3' })).status, 200);
   assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'luistelu-0' })).status, 400);
   assert.equal((await call('GET', '/api/scores?game=hiihto&board=main')).status, 400);
+  // Mäkihyppy v9's two-hill week has its own list beside the four-hill one (#387).
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'makihyppy', board: 'viikko2' })).status, 200);
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'makihyppy', board: 'viikko' })).status, 200);
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'makihyppy', board: 'viikko3' })).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, score: 'paljon' })).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, version: 0 })).status, 400);
   assert.equal((await call('POST', '/api/scores', 'ei jsonia')).status, 400);

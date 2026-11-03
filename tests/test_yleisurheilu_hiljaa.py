@@ -13,7 +13,7 @@ import pytest
 from conftest import ROOT
 from test_yleisurheilu_vuorot import MARK, on_turn, room
 
-EVENTS = ["pituushyppy/v15", "keihas/v14", "kuula/v8", "moukari/v10", "korkeushyppy/v11", "seivashyppy/v12", "makihyppy/v8"]
+EVENTS = ["pituushyppy/v15", "keihas/v14", "kuula/v8", "moukari/v10", "korkeushyppy/v11", "seivashyppy/v12", "makihyppy/v9"]
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
 
