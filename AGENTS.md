@@ -156,8 +156,12 @@ high-score lists (#25), then play counts (#26).
   - Every phone: `paused` (stop the clock while true), `once(round)` (save a result only when true),
     `backToRoom(text, 'win'|'lose')` after the game's own end screen, `note(text)`,
     `extra(node)` (the game's own controls under the player list, such as the host's choice of course),
-    `on('lobby')` (the host lost the round: stop it), `on('leave', why)` and `on('menu')` (show the
+    `on('lobby')` (the host lost or ended the round: stop it), `on('leave', why)` and `on('menu')` (show the
     game's menu again), `me`, `isHost`, `inRoom`.
+  - The host can end a round still going (#392): "⏹ Lopeta kierros kaikilta" in the "‹ Pelit"
+    chip's menu (`back.js`, asked twice) calls `stopRound()`, and every phone in the round,
+    the host's too, hears `on('lobby')` and gets the room screen. A game needs nothing for it,
+    as long as its `lobby` handler stops the round on the host as well.
   - Public rooms (#50): the host's "🌍 Julkinen" switch in the room lists it on every phone's room
     screen for the same game (any version), under "Avoimet huoneet"; one tap joins. A room is
     listed only while it waits between rounds, has space and its host is connected. The list

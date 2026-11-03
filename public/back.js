@@ -240,6 +240,7 @@
     'color:#fff;font:600 15px system-ui,sans-serif;';
   panel.innerHTML =
     '<a id="ai-pelit-takaisin" style="' + BIG + 'background:#2f6fd6">‹ Takaisin pelilistaan</a>' +
+    '<button id="ai-pelit-lopeta" type="button" style="' + BIG + 'display:none;margin:8px 0 0;background:#b8432f"></button>' +
     '<div style="display:flex;margin:14px 0 0;justify-content:space-between;font-weight:700"><span>Pelin äänet</span><span id="ai-pelit-aani-luku"></span></div>' +
     '<input id="ai-pelit-aani-liuku" type="range" min="0" max="100" step="5" aria-label="Pelin äänenvoimakkuus" ' +
     'style="display:block;box-sizing:border-box;width:100%;margin:10px 0;padding:0;border:0;box-shadow:none;background:none;accent-color:#7cc4ff;height:28px">' +
@@ -280,7 +281,25 @@
     else muted = true;
     saveSound();
   });
+  // The room's host may end a round still going and take every phone back to the room (#392).
+  // An end for everyone is asked twice: the first tap only asks.
+  var stopBtn = panel.querySelector('#ai-pelit-lopeta'), stopAsk = false;
+  function rooms() { return window.AiPelitRooms && typeof window.AiPelitRooms.stopRound === 'function' ? window.AiPelitRooms : null; }
+  function drawStop() {
+    var R = rooms();
+    stopBtn.style.display = R && R.canStop ? 'block' : 'none';
+    stopBtn.textContent = stopAsk ? '✓ Kyllä, lopeta kaikilta' : '⏹ Lopeta kierros kaikilta';
+  }
+  stopBtn.addEventListener('click', function () {
+    var R = rooms();
+    if (!R || !R.canStop) { openPanel(false); return; }
+    if (!stopAsk) { stopAsk = true; drawStop(); return; }
+    R.stopRound();
+    openPanel(false);
+  });
   function openPanel(open) {
+    stopAsk = false;
+    if (open) drawStop();
     panel.style.display = open ? 'block' : 'none';
     a.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
