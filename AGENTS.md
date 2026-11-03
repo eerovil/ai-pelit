@@ -127,7 +127,11 @@ high-score lists (#25), then play counts (#26).
   `GAMES` in `server/api.js` (which way is better, which lists). Scores wait on the phone while
   offline, and a round that beats neither the score nor the level is not sent. The shelf shows
   each game's no. 1 on its card and its top 10 on its page (`data-shelf`). Nicknames are one
-  per phone, and show on lists only once approved at `/yllapito/`.
+  per phone, and show on lists only once approved at `/yllapito/`. A live check on the real site
+  names its phones "Testi", "Testi1", "Testi A"... ("Testi" and up to 8 more letters, digits or
+  spaces, #380): the server keeps such names off `/yllapito/` and out of the spam limits, and
+  deletes them, with their scores and friends, a day after they were made (`isTestName()` in
+  `server/api.js`).
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
