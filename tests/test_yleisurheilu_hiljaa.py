@@ -3,7 +3,7 @@
 on aanet-5, whose chime is softer, at 0.08 (Eero found it too loud at 0.25).
 
 games/pituushyppy/v15, games/keihas/v14, games/kuula/v8, games/moukari/v10, games/korkeushyppy/v11,
-games/seivashyppy/v12, games/makihyppy/v8.
+games/seivashyppy/v12, games/makihyppy/v9.
 """
 
 import json

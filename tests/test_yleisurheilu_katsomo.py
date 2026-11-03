@@ -4,7 +4,7 @@ figure there on every phone.
 
 The events' versions (on yleisurheilu-8 from #373, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v15, games/keihas/v14, games/kuula/v8, games/korkeushyppy/v11,
-games/seivashyppy/v12, games/moukari/v10, games/makihyppy/v8.
+games/seivashyppy/v12, games/moukari/v10, games/makihyppy/v9.
 """
 
 import json
