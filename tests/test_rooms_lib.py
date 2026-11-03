@@ -896,3 +896,54 @@ def test_back_chip_with_others_in_the_room_keeps_it(phones):
     host.wait_for_timeout(200)
     assert code in phones.relay.rooms
     assert guest.evaluate("AiPelitRooms.inRoom")
+
+
+def test_the_host_stops_a_round_from_the_chip_and_everyone_is_back_in_the_room(phones):
+    # #392: the host's "‹ Pelit" menu ends a round still going; a first tap only asks.
+    host, code = make_room(phones)
+    here, away = join(phones, "Aino", code), join(phones, "Iida", code)
+    # Nobody has the button outside a round, and a guest never has it.
+    host.click("#ai-pelit-back")
+    assert host.locator("#ai-pelit-lopeta").is_hidden()
+    host.click("#ai-pelit-back")
+    start(host, [here, away])
+    here.click("#ai-pelit-back")
+    assert here.locator("#ai-pelit-lopeta").is_hidden()
+    here.click("#ai-pelit-back")
+    # Something delivered to a phone that is away is not sent again once the round is stopped.
+    phones.relay.drop(away)
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.evaluate("AiPelitRooms.deliver({ t: 'kesken' })")
+    here.wait_for_function("demo.heard.includes('kesken')")
+    host.click("#ai-pelit-back")
+    stop = host.locator("#ai-pelit-lopeta")
+    assert stop.inner_text() == "⏹ Lopeta kierros kaikilta"
+    stop.click()
+    assert stop.inner_text() == "✓ Kyllä, lopeta kaikilta"
+    assert host.evaluate("demo.phase") == "play"
+    stop.click()
+    assert host.locator("#ai-pelit-valikko").is_hidden()
+    for p in (host, here):
+        p.wait_for_function("demo.log.some(l => l[0] === 'lobby') && demo.phase === 'room'")
+        assert p.locator("#aipr-room").is_visible()
+    assert text(host, "result") == "Lopetit kierroksen."
+    assert text(here, "result") == "Eero lopetti kierroksen."
+    assert host.evaluate("[AiPelitRooms.round, AiPelitRooms.canStop, AiPelitRooms.paused]") == ["", False, False]
+    phones.relay.back(away)
+    away.wait_for_function("demo.log.some(l => l[0] === 'lobby') && AiPelitRooms.connected", timeout=8000)
+    away.wait_for_timeout(300)
+    assert away.locator("#aipr-room").is_visible()
+    # A new round starts as usual, and the menu offers the stop again. The stopped round's
+    # undelivered message never reaches the phone that was away (it would come before the new
+    # round, as an old round's end).
+    start(host, [here, away])
+    phones.relay.drop(away)
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    phones.relay.back(away)
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 3", timeout=8000)
+    away.wait_for_timeout(500)
+    assert "kesken" not in away.evaluate("demo.heard")
+    assert [l for l in away.evaluate("demo.log") if l[0] == "start" and l[2]] == []
+    host.click("#ai-pelit-back")
+    assert host.locator("#ai-pelit-lopeta").is_visible()
+    assert host.errors == here.errors == away.errors == []
