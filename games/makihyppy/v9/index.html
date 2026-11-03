@@ -58,7 +58,7 @@
   <p id="stats"></p>
   <p class="help">Napauta, niin lähdet. Ponnista nokalta napauttamalla juuri ennen reunaa (vihreä).
     Ilmassa pidä asento vihreällä Taakse- ja Eteen-napeilla. Juuri ennen alastuloa napauta: telemark.
-    Mäkiviikko: neljä mäkeä, kussakin kaksi kierrosta, ja kymmenen parasta pääsee toiselle.
+    Mäkiviikko: kaksi mäkeä, kussakin kaksi kierrosta, ja kymmenen parasta pääsee toiselle.
     Pisteet lasketaan yhteen kaikista hypyistä.</p>
 </div>
 <script src="../../../rooms.js" data-game="makihyppy" data-min="2" data-max="8"></script>
@@ -266,13 +266,16 @@ function loops() {
 
 // ---------- The competition ----------
 // The meet, its saves and playing it with friends are the shared meet library's (#165). v2 (#283):
-// a ski-jumping week of four hills, as in the Four Hills: on each hill two rounds, all twelve jump
+// a ski-jumping week of hills (four until v8, two from v9, #387), as in the Four Hills: on each hill two rounds, all twelve jump
 // the first and the best ten of that hill the second, the last of them first. Every jump's points
 // add up over the whole week, and the medal ceremony comes only at its end, not after every hill.
 // The format is the library's rounds() with standings by the total: a jump's mark is
 // {d: metres, p: points}, marks[2h] and marks[2h + 1] the jumps on hill h (from 0).
 // A meet saved by v1 (no `hills`) goes on as v1's one hill.
+// v9 (#387): a new week is half as long, its first two hills; a week saved with four (v2–v8)
+// goes on as its four, named from the same list.
 const HILLS = ['Lahti', 'Kuopio', 'Rovaniemi', 'Ruka'];
+const WEEK_HILLS = 2;
 function totals(o) {
   o = o || {};
   const FINAL = o.final || 10;
@@ -289,7 +292,7 @@ function totals(o) {
     blank: () => ({ throwers: [], order: [], turn: 0, round: 1 }),
     setup(c) {
       const order = AiPelitKisa.shuffle(c.throwers.map(t => t.id));
-      Object.assign(c, { hills: HILLS.length, round: 1, turn: 0, order0: order, order: order.slice(), final: null });
+      Object.assign(c, { hills: WEEK_HILLS, round: 1, turn: 0, order0: order, order: order.slice(), final: null });
     },
     current: c => c.turn < c.order.length ? c.throwers.find(t => t.id === c.order[c.turn]) : null,
     standings: c => c.throwers.slice().sort((a, b) => sum(b) - sum(a) || c.throwers.indexOf(a) - c.throwers.indexOf(b)),
@@ -392,7 +395,7 @@ function totals(o) {
   };
   return F;
 }
-// Where the meet is, in short: "Mäki 2/4 · kierros 1/2" (v1's meet: "Kierros 1/2").
+// Where the meet is, in short: "Mäki 2/2 · kierros 1/2" (v1's meet: "Kierros 1/2").
 function roundText(c) {
   const F = K.F, h = F.hillOf(c), r = Math.min(c.round, F.rounds(c)) - 2 * h;
   return (F.hills(c) > 1 ? 'Mäki ' + (h + 1) + '/' + F.hills(c) + ' · kierros ' : 'Kierros ') + r + '/2';
@@ -427,14 +430,24 @@ const thrower = id => K.thrower(id);
 // A week (v2, #283), or a meet saved by v1 going on as its one hill. A guest's meet before the
 // host's arrives has no jumpers yet: a v2 room is always a week.
 const isWeek = () => !K.comp || !K.comp.throwers.length || K.F.hills(K.comp) > 1;
-// The week's best total is its own record ('viikko-ennatys'): 'ennatys' stays the best one-hill
-// meet, as v1 shows it.
+// A week of four hills, saved by v2–v8 and going on in v9 (#387).
+const isLong = () => !!K.comp && K.comp.throwers.length > 0 && K.F.hills(K.comp) >= 4;
+// The week's best total is its own record: 'ennatys' stays the best one-hill meet, as v1 shows it.
+// v9 (#387): the two-hill week's best is 'viikko2-ennatys', the one the menu shows; a four-hill
+// week still beats only the four-hill best, 'viikko-ennatys', about twice as many points.
 const meetRecord = K.record;
-K.weekBest = K.load('viikko-ennatys', null);
+K.weekBest = K.load('viikko2-ennatys', null);
 K.record = mark => {
   if (!isWeek()) return meetRecord(mark);
-  if (!(mark > 0) || (K.weekBest !== null && mark <= K.weekBest)) return false;
-  K.weekBest = mark; K.save('viikko-ennatys', mark);
+  if (!(mark > 0)) return false;
+  if (isLong()) {
+    const best = K.load('viikko-ennatys', null);
+    if (best !== null && mark <= best) return false;
+    K.save('viikko-ennatys', mark);
+    return true;
+  }
+  if (K.weekBest !== null && mark <= K.weekBest) return false;
+  K.weekBest = mark; K.save('viikko2-ennatys', mark);
   return true;
 };
 
@@ -1167,10 +1180,12 @@ function showMenu(result, cls) {
 }
 function soloComp(saved) { K.solo(saved); menu.classList.add('hidden'); scoreList(); }
 // The high-score list: the week's from the start (the menu's 🏆 too), v1's for a meet saved by v1.
-// Set again at each turn, so a guest's list follows the host's meet once it arrives.
+// Set again at each turn, so a guest's list follows the host's meet once it arrives. v9 (#387):
+// the two-hill week has its own list ('viikko2'); a four-hill week saved by v8 goes on 'viikko'.
 function scoreList() {
   if (!window.AiPelitScores) return;
-  if (isWeek()) AiPelitScores.board('viikko', 'Mäkiviikko'); else AiPelitScores.board('main', '');
+  if (isLong()) AiPelitScores.board('viikko', 'Mäkiviikko, 4 mäkeä');
+  else if (isWeek()) AiPelitScores.board('viikko2', 'Mäkiviikko'); else AiPelitScores.board('main', '');
 }
 addEventListener('load', scoreList);
 document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });

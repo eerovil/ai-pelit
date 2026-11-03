@@ -70,6 +70,8 @@ flowchart TD
 
 v8 (#373) plays as v7 on `public/lib/yleisurheilu-8/`: the friends watching run after the athlete as the background moves, a little slower than it, and catch up once it stops (`scroll:` in the `K.drawFans()` call in `drawScene()`, 0 with the athlete at the start), and a tap on another spectator climbs onto their shoulders (`K.tapFans(px, py)` in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 
+v9 (#387) halves the week: a new week has two hills (Lahti, Kuopio), still two rounds on each, so at most four jumps for the podium instead of eight. A week left unfinished by v8 goes on as its four hills. The shorter week has its own best (`viikko2-ennatys`) and its own high-score list (`viikko2`, "Mäkiviikko"); the four-hill list stays as "Mäkiviikko, 4 mäkeä".
+
 ## Colours
 
 - **blue**: what the player sees and does
@@ -95,7 +97,7 @@ v8 (#373) plays as v7 on `public/lib/yleisurheilu-8/`: the friends watching run 
 - **Telemark ajoissa?**: a tap in the air (`action()`) after 0.6 s of flight sets the telemark; it counts by the time from the tap to the real touch-down (`TELE`). The action bar turns yellow when the snow is under 1.3 s away and green only inside the good window, under 0.6 s (`cue()`, `timeToLand()`); on the in-run it is green only in the last 0.12 s before the edge, the take-off judged good.
 - **Pituus ja viisi tuomaria**: `landed()` and `judge()`: the distance along the slope from the edge (`distAt()`), to the half metre; 60 points at K and 1.8 a metre; five judges give style out of 20 with deductions for the take-off, the flight (the average position) and the landing, and the highest and lowest are dropped. The longest jump is saved at once (`pisin`).
 - **10 parasta jatkaa, viimeisestä alkaen**: `advance()` in `totals()`: after a hill's first round its best ten by that hill's points (`hillStandings()`, `final`) jump again, the last of them first. When no phone's jumper is among them, the computer's jumps are in at once and the next hill comes, with no podium.
-- **Viimeinen mäki?**: v2's week has four hills (`HILLS`, `c.hills`); a meet saved by v1 has none and is one hill (`hills()`), so it ends after its second round as before.
+- **Viimeinen mäki?**: v2's week has four hills (`HILLS`, `c.hills`); from v9 (#387) a new week has two (`WEEK_HILLS`), and a week saved with four keeps its four; a meet saved by v1 has none and is one hill (`hills()`), so it ends after its second round as before.
 - **Seuraava mäki: kaikki hyppäävät, johtaja viimeisenä**: `advance()`: a new hill's first round has all twelve, in reverse order of the week's standings.
 - **Palkintojenjako ja lopputulokset**: the library's podium (`K.drawPodium()`), with the week's total points, only after the last hill's second round (#283: in v1 it came after every two jumps); it stays until a tap.
 - **Paras kisa, pisin hyppy, tuloslista, seuraava taso**: the library's `end()` saves `kisat`, a win alone adds `voitot` and the next `taso`, the meet's total goes to `ennatys` (v2's week to `viikko-ennatys`) and the high-score list (`makihyppy` in `public/scores.js` and `server/api.js`): v2's week on its own list, Mäkiviikko (`viikko`, the shelf's first, `scoreList()`: set at load, so the menu's 🏆 shows it, and again at every turn, so a guest whose meet arrives from the host sends to it too), v1's two-jump meet on `main` (Yksi kisa).

@@ -3,7 +3,7 @@
 on aanet-5, whose chime is softer, at 0.08 (Eero found it too loud at 0.25).
 
 games/pituushyppy/v15, games/keihas/v14, games/kuula/v8, games/moukari/v10, games/korkeushyppy/v11,
-games/seivashyppy/v12, games/makihyppy/v8.
+games/seivashyppy/v12, games/makihyppy/v9.
 """
 
 import json
@@ -13,7 +13,7 @@ import pytest
 from conftest import ROOT
 from test_yleisurheilu_vuorot import MARK, on_turn, room
 
-EVENTS = ["pituushyppy/v15", "keihas/v14", "kuula/v8", "moukari/v10", "korkeushyppy/v11", "seivashyppy/v12", "makihyppy/v8"]
+EVENTS = ["pituushyppy/v15", "keihas/v14", "kuula/v8", "moukari/v10", "korkeushyppy/v11", "seivashyppy/v12", "makihyppy/v9"]
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
 
