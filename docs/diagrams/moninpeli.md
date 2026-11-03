@@ -42,6 +42,7 @@ flowchart TD
     L16[➕ Kaveriksi ja 📨 Kutsu kaveri]
     L19[🎲 Vaihda peliä: isäntä vie koko huoneen toiseen peliin]
     L20[Viimeinen poistuu tarkoituksella: huone poistetaan heti]
+    L21[⏹ Lopeta kierros kaikilta: isäntä keskeyttää kierroksen]
     L7[Tallenna tulos kerran per kierros]
     L8{Väärä peli tai versio?}
     L8 -- Kyllä --> L17{Saman pelin vanhempi versio?}
@@ -94,6 +95,8 @@ flowchart TD
   L2 --> L16
   G7 --> G2
   G2 --> G5
+  G2 --> L21
+  L21 -- _lobby, kaikki huoneeseen --> L2
   G5 --> L7
   L7 --> L2
   subgraph Puhe[Puhe: rooms.js, kaikissa huoneissa]
@@ -133,7 +136,7 @@ flowchart TD
   V8 -- Ei --> V10
   V10 -- Kyllä --> V11
   class G1,G2,G3,G4,G5,G6 teal
-  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18,L19,L20 blue
+  class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18,L19,L20,L21 blue
   class C1,C2,C3,C4,C5,C7 violet
   class V1,V2,V4,V5,V6,V7,V9,V11 blue
   class S1 green
@@ -199,6 +202,7 @@ flowchart TD
 - **➕ Kaveriksi ja 📨 Kutsu kaveri**: friends in the room (#324), drawn by `friendButton()` and `renderFriends()` in `public/rooms.js` once `public/kaverit.js` is on the page: "➕ Kaveriksi" beside each other player with a `fid`, the requests to this phone with Hyväksy / Ei under the list (read every 10 s while the room screen shows), and "📨 Kutsu kaveri", a list of friends that sends an invite to this room; a friend who switched on "🔔 Ilmoitukset kutsuista" also gets it as a phone notification with the site closed (#367). See `kaverit.md`.
 - **🎲 Vaihda peliä: isäntä vie koko huoneen toiseen peliin**: between rounds the host picks a game whose `room.max` in `catalog.json` fits everyone (#354); its phone opens that game with the same code (a one-minute `ai-pelit:_isanta` note keeps it host), `rooms/worker.js` takes the new `game`, `v` and `max` from the host's join, and `onPeers()` moves every guest, also one already in the room or coming back from a lost connection. See `porukka.md`.
 - **Viimeinen poistuu tarkoituksella: huone poistetaan heti**: a `bye` that leaves no member ("Poistu huoneesta", or the "‹ Pelit" chip through `AiPelitRooms.leaveIfAlone()` in `public/back.js`) deletes the room and its public listing at once (#354); a phone that only drops off still keeps its seat for 6 hours (`IDLE`).
+- **⏹ Lopeta kierros kaikilta: isäntä keskeyttää kierroksen**: while a round is still going, the host's "‹ Pelit" chip menu (`public/back.js`) has "⏹ Lopeta kierros kaikilta"; the first tap turns it into "✓ Kyllä, lopeta kaikilta", the second calls `AiPelitRooms.stopRound()` (#392). The host forgets the round and whatever of it was still owed to an away phone, sends `_lobby` with `stop: true`, and fires the game's own `on('lobby')` on its phone too. Every phone in the round goes back to the room screen ("Lopetit kierroksen." on the host, "<host> lopetti kierroksen." on the others), where a new round can start or the game change; a phone that was away hears `_lobby` on its `hello`. No result is saved.
 - **Puhuuko joku, mutta häneltä ei tule ääntä 3 sekuntiin?**: `heal()` in `public/rooms.js`, every second while another phone says it is talking (`_rtc` `talk` on): it reads the call's incoming sound bytes (`getStats()`, `inbound-rtp`). A call that is not up, or is up but has brought no new sound for 3 seconds of that phone's talking, is broken even if it says "connected" (#386: after a game switch some players could not hear each other until they switched voice off and on).
 - **Soitetaan hänelle uudelleen, enintään kerran 10 s:ssa**: the phone with the smaller id hangs up and calls again (`dial()`); the other asks it to (`_rtc` `again`). At most once per 10 seconds per pair, so a phone that truly cannot be reached is not called in a loop. When the new call is up while a phone talks, it says so again (`talk` on, from `newPc()`), since hanging up made the other phone forget; so the name bubble stays and the check goes on. `AiPelitRooms.voice.heals` counts these calls.
 - **Onko ääni pysähtynyt puhelimessa?**: sound is arriving, but that player's hidden `<audio>` is paused (the phone held it back or stopped it).

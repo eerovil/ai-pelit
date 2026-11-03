@@ -260,7 +260,9 @@
     if (m.t === '_lobby') {
       forgetAway(net.code);
       net.wait = false; net.listening = false;
-      if (net.round) { net.round = null; net.pz = []; net.result = ''; fire('lobby'); show(true); }
+      var stopped = m.stop && net.round && !net.round.over;
+      if (net.round) { net.round = null; net.pz = []; net.result = ''; net.resultClass = ''; fire('lobby'); show(true); }
+      if (stopped) net.result = hostName() + ' lopetti kierroksen.';
       return render();
     }
     if (m.t === '_wait') { forgetAway(net.code); net.wait = true; net.listening = false; return render(); }
@@ -423,6 +425,25 @@
     show(false);
     fire('start', { round: net.round.id, players: players.slice(), host: true, over: false });
     update();
+  }
+
+  // The host ends the round while it is still going (#392): every phone in the room goes back to
+  // the room screen ('lobby'), where a new round can start or the game change. Nothing owed from
+  // the round is sent again, so a phone that was away hears only that it is back in the room.
+  function stopRound() {
+    if (!net.host || !net.on || !net.connected || !racing()) return false;
+    var cut = net.round.id;
+    Object.keys(net.owed).forEach(function (id) {
+      net.owed[id] = net.owed[id].filter(function (o) { return o.round !== cut; });
+      if (!net.owed[id].length) delete net.owed[id];
+    });
+    net.round = null; net.released = {}; net.pz = [];
+    sendRaw({ t: '_lobby', stop: true });
+    fire('lobby');
+    net.result = 'Lopetit kierroksen.'; net.resultClass = '';
+    show(true);
+    update();
+    return true;
   }
 
   // ---- On a guest ----
@@ -1474,7 +1495,7 @@
     // 'peers' (members), 'hello' (id; host: a phone in the round is back, send it the round),
     // 'continue' (ids; host: the computer takes these players), 'back' (id; host: a player the
     // computer had is back), 'skip' (ids; host, a game played in turns: skip the turn of these
-    // away players), 'lobby' (the host lost the round; stop it), 'leave' (reason; out of
+    // away players), 'lobby' (the host lost or ended the round; stop it), 'leave' (reason; out of
     // the room), 'menu' (the room screen is closed; show the game's menu).
     on: function (type, fn) { (handlers[type] = handlers[type] || []).push(fn); return this; },
     open: function () { if (!net.on) net.error = ''; show(true); },
@@ -1498,6 +1519,10 @@
     },
     // Host: the round is over. Phones in it that come back later still get it (as over).
     endRound: function () { if (net.host && net.round) { net.round.over = true; update(); } },
+    // Host: end the round now and take every phone back to the room screen (#392). The chip's
+    // menu in back.js offers it while canStop is true.
+    stopRound: function () { return stopRound(); },
+    get canStop() { return !!(net.host && net.on && net.connected && racing()); },
     // After the game's own end screen: the room screen again, with a result line if given.
     backToRoom: function (text, className) {
       if (!net.on) return;
