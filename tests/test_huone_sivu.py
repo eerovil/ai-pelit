@@ -237,3 +237,21 @@ def test_the_host_stops_a_round_from_the_chip_on_the_room_page(phones):
         assert page.evaluate("window.__mark") == 1
         assert "/huone/" in page.url
     assert host.errors == guest.errors == []
+
+
+def test_switching_games_twice_leaves_one_frame_watcher(phones):
+    # The frame keeps its window when it loads the next game: the page must let go of the old
+    # game's watcher, or every game the room has played would be called and kept.
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for slug in ("iso", "huonetesti"):
+        game(host).locator("#aipr-switchGame").click()
+        game(host).locator(f"#aipr-gameList button[data-game='{slug}']").click()
+        for page in (host, guest):
+            page.wait_for_function(f"{ROOMS}?.game === '{slug}' && {ROOMS}.inRoom && {ROOMS}.members.length === 2")
+    for page in (host, guest):
+        # The room page's own bar, and the game in the frame now.
+        page.wait_for_function("AiPelitRoomShell.watching === 2")
+        page.wait_for_timeout(600)
+        assert page.evaluate("AiPelitRoomShell.watching") == 2
+    assert host.errors == guest.errors == []

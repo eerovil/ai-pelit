@@ -1345,7 +1345,9 @@
   var sh = { ws: null, url: '', v: null, you: '', peers: '', grace: 0, watchers: [] };
   function shellChanged() {
     sh.watchers = sh.watchers.filter(function (w) {
-      try { if (w.win.closed) return false; w.fn(); return true; } catch (e) { return false; }
+      // A frame that loaded the next game keeps its window but not its document: let go of the
+      // old game's watcher, or it would be called, and kept, for as long as the room lasts.
+      try { if (w.win.closed || w.win.document !== w.doc) return false; w.fn(); return true; } catch (e) { return false; }
     });
   }
   function vcall(v, k, e) { try { var f = v[k]; if (f) f(e); } catch (err) { setTimeout(function () { throw err; }); } }
@@ -1447,7 +1449,8 @@
         if (api.onleft) setTimeout(function () { try { api.onleft(why || ''); } catch (e) {} });
       },
       // The room page's frame redraws the room screen when the calls change.
-      watch: function (win, fn) { sh.watchers.push({ win: win, fn: fn }); },
+      watch: function (win, fn) { sh.watchers.push({ win: win, doc: win.document, fn: fn }); },
+      get watching() { return sh.watchers.length; },
       setVoice: setVoice, toggleMute: toggleMute, press: press, release: release, replay: replay,
       get state() {
         return {
