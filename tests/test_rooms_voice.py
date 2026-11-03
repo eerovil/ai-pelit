@@ -449,6 +449,9 @@ def test_a_connected_call_that_brings_no_sound_is_made_again(phones, listener_ca
     listener.wait_for_timeout(500)
     before = heard(listener)
     listener.wait_for_function(f"window.__bytes > {before} + 2000", polling=200, timeout=10000)
+    # The listening phone still shows who talks, after the call was made again.
+    name = "Eero" if talker is host else "Aino"
+    listener.wait_for_function(f"AiPelitRooms.voice.speakers.join() === '{name}'", timeout=3000)
     talker.mouse.up()
     assert listener.evaluate("AiPelitRooms.voice.heals") == 1
     assert talker.evaluate("AiPelitRooms.voice.heals") == 0
@@ -495,6 +498,7 @@ def test_two_talking_at_once_only_the_silent_calls_are_made_again(phones):
         p.wait_for_function("AiPelitRooms.voice.heals === 1", timeout=8000)
     for p in (host, b):
         p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=8000)
+        p.wait_for_function("AiPelitRooms.voice.speakers.includes('Aino')", timeout=3000)
     host.wait_for_timeout(4000)
     # Iida stops: what Eero hears now is Aino's sound alone, through the call made again.
     b.mouse.up()

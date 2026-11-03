@@ -523,7 +523,11 @@
     pc.ontrack = function (e) { if (p.pc === pc) hear(id, p, e.streams && e.streams[0] || new MediaStream([e.track])); };
     pc.onconnectionstatechange = function () {
       if (p.pc !== pc) return;
-      if (pc.connectionState === 'connected') p.fails = 0;
+      if (pc.connectionState === 'connected') {
+        p.fails = 0;
+        // A call made again while this phone talks (#386): the other phone forgot it (hang()).
+        if (voice.talking) sendRtc(id, { k: 'talk', on: true });
+      }
       if (pc.connectionState === 'failed') {
         // Try again later, waiting longer each time (a network that lets no call through).
         hang(id);
