@@ -1453,7 +1453,18 @@
   // In the room page's frame: the room screen follows the page's calls, and a page that goes
   // (the next game loads) lets go of its socket at once.
   if (SHELL) {
-    try { SHELL.watch(window, function () { render(); }); } catch (e) {}
+    // The page calls this four times a second: the chip follows each time, the room screen only
+    // when what it shows of the calls changed, so its buttons are not replaced under a finger.
+    var shellKey = '';
+    try {
+      SHELL.watch(window, function () {
+        var k = JSON.stringify([voice.on, Object.keys(voice.peers).map(function (id) { return id + (voice.peers[id].on ? 1 : 0); }).sort(),
+          Object.keys(voice.muted).sort()]);
+        if (k === shellKey) return renderVoice();
+        shellKey = k;
+        render();
+      });
+    } catch (e) {}
     window.addEventListener('pagehide', function () { if (net.ws) try { net.ws.close(1000, 'Vaihdetaan peliä'); } catch (e) {} });
   }
 

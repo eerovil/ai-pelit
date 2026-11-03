@@ -196,3 +196,23 @@ def test_a_room_page_with_no_room_goes_to_the_shelf(phones):
     page = phones("Eero")
     page.goto(f"{phones.site.url}huone/?koodi=xx")
     page.wait_for_url(re.compile(r"/$|/#/?$"))
+
+
+def test_a_held_press_on_the_room_screen_survives_the_pages_ticks(phones):
+    # The room page tells its frame four times a second; the room screen's buttons must stay the
+    # same nodes, or a slow finger's tap gets no click.
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    mute = game(host).locator("#aipr .mute")
+    mute.wait_for(timeout=15_000)
+    mute.evaluate("b => { b.__kept = 1 }")
+    box = mute.bounding_box()
+    stage = host.locator("#stage").bounding_box()
+    host.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    host.mouse.down()
+    host.wait_for_timeout(900)
+    assert mute.evaluate("b => b.__kept") == 1
+    host.mouse.up()
+    host.wait_for_function(f"{ROOMS}?.inRoom && document.getElementById('game').contentWindow.document.querySelector('#aipr .mute').textContent === '🔇'")
+    assert stage["y"] < box["y"]
+    assert host.errors == guest.errors == []
