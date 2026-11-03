@@ -455,6 +455,7 @@
     peers: {}, // id -> {greet, on, sid, pc, early, audio, talking, talkAt, fails, retryAt}
     muted: {}, // id -> true: not heard on this phone, while in this room
     stream: null, track: null, pressed: false, talking: false, ice: null, iceAt: 0, err: '', errAt: 0,
+    heals: 0, // calls made again because no sound came while the other phone talked (#386)
   };
   var STUCK = 20e3;
   function vpeer(id) { return voice.peers[id] || (voice.peers[id] = { early: [], fails: 0, retryAt: 0 }); }
@@ -516,7 +517,7 @@
 
   function newPc(id, p, c, servers) {
     var pc = new RTCPeerConnection({ iceServers: servers });
-    pc.c = c; pc.upAt = Date.now();
+    pc.c = c; pc.upAt = Date.now(); pc.at = Date.now();
     p.pc = pc;
     pc.onicecandidate = function (e) { if (e.candidate && p.pc === pc) sendRtc(id, { k: 'ice', c: c, ice: e.candidate.toJSON() }); };
     pc.ontrack = function (e) { if (p.pc === pc) hear(id, p, e.streams && e.streams[0] || new MediaStream([e.track])); };
@@ -608,8 +609,56 @@
       else if (p.early.length < 60) p.early.push({ c: m.c, ice: m.ice });
       return;
     }
-    if (m.k === 'talk') { p.talking = m.on === true; p.talkAt = Date.now(); renderVoice(); }
+    if (m.k === 'talk') { p.talking = m.on === true; p.talkAt = Date.now(); p.inAt = Date.now(); renderVoice(); }
+    // The other phone heard nothing from this one while it talked: this one calls again (heal()).
+    if (m.k === 'again' && voice.on && p.on && net.me < id && !p.dialing && Date.now() - (p.healAt || 0) > HEAL_GAP) {
+      p.healAt = Date.now();
+      hang(id);
+      dial(id);
+    }
   }
+
+  // ---- A call that brings no sound is made again (#386) ----
+  // After a game switch some players could not hear each other until they switched voice off and
+  // on, though the calls said they were up. So while another phone says it talks, this one checks
+  // every second that its sound arrives; with nothing new for 3 s the call is made again (by the
+  // phone with the smaller id, as always; the other asks it to), at most once per 10 s per pair.
+  // Sound that arrives into a paused player is started again, as a tap does.
+  var HEAL_SILENT = 3000, HEAL_GAP = 10e3;
+  function inBytes(pc) {
+    return pc.getStats().then(function (st) {
+      var n = 0;
+      st.forEach(function (r) { if (r.type === 'inbound-rtp' && r.kind === 'audio') n += r.bytesReceived || 0; });
+      return n;
+    });
+  }
+  function heal() {
+    if (!RTC || !voice.on || !net.on || !net.connected) return;
+    Object.keys(voice.peers).forEach(function (id) {
+      var p = voice.peers[id];
+      if (!p.talking || !p.on || Date.now() - p.talkAt > 60e3 || p.checking) return;
+      var pc = p.pc;
+      if (!pc || !live(p)) return broken(id, p);
+      p.checking = true;
+      inBytes(pc).then(function (n) {
+        p.checking = false;
+        if (p.pc !== pc || !p.talking) return;
+        if (pc.inBytes !== n) { pc.inBytes = n; p.inAt = Date.now(); }
+        if (Date.now() - p.inAt > HEAL_SILENT) return broken(id, p);
+        if (p.audio && p.audio.paused) p.audio.play().catch(function () {});
+      }, function () { p.checking = false; });
+    });
+  }
+  function broken(id, p) {
+    var now = Date.now();
+    // Silent since the talk began, or since the last sound; a call just being made gets its 3 s.
+    if (now - (p.inAt || 0) <= HEAL_SILENT || p.dialing || (p.pc && now - p.pc.at <= HEAL_SILENT)) return;
+    if (now - (p.healAt || 0) <= HEAL_GAP) return;
+    p.healAt = now; p.inAt = now;
+    voice.heals++;
+    if (net.me < id) { hang(id); dial(id); } else sendRtc(id, { k: 'again' });
+  }
+  setInterval(heal, 1000);
 
   // Another phone's sound: its own hidden player, silent while muted here.
   function hear(id, p, stream) {
@@ -1281,7 +1330,7 @@
     // Voice (#322): whether it is on on this phone, this phone talking, who is heard now, and how
     // many phones a call is up with.
     get voice() {
-      return { on: RTC && voice.on, talking: voice.talking, speakers: speakers(),
+      return { on: RTC && voice.on, talking: voice.talking, speakers: speakers(), heals: voice.heals,
         calls: Object.keys(voice.peers).filter(function (id) { return live(voice.peers[id]); }).length };
     },
     name: myName,
