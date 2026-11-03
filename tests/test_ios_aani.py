@@ -88,3 +88,24 @@ def test_talking_in_a_room_asks_for_play_and_record(phones):  # noqa: F811
     # Game sound plays on: play-and-record ignores the silent switch as well, and a tap keeps it.
     a.mouse.click(180, 600)
     assert a.evaluate("navigator.audioSession.type") == "play-and-record"
+
+
+def test_a_reload_and_each_next_event_frame_set_it_again(site, context):
+    # Ottelu removes each event's frame and makes a new one; a player may reload mid-match.
+    script = """window.nextEvent = () => new Promise(done => {
+      document.querySelectorAll('iframe').forEach(f => f.remove());
+      const f = document.createElement('iframe');
+      f.srcdoc = '<body>laji</body>';
+      f.onload = () => setTimeout(() => done(f.contentWindow.navigator.audioSession.type), 0);
+      document.body.appendChild(f);
+    });"""
+    make_game(site.games, "ottelu", [game_page("v1", script=script)])
+    site.build()
+    context.add_init_script(SESSION)
+    page = context.new_page()
+    for _ in range(2):
+        page.goto(f"{site.url}games/ottelu/v1/")
+        page.wait_for_selector("#ai-pelit-back")
+        assert page.evaluate("navigator.audioSession.type") == "playback"
+        assert [page.evaluate("nextEvent()") for _ in range(3)] == ["playback"] * 3
+        page.reload()
