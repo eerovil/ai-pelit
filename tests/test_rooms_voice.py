@@ -7,7 +7,7 @@ phone's calls are counted by wrapping RTCPeerConnection, so a test can read how 
 
 import pytest
 
-from conftest import make_game
+from conftest import keep_rooms_in_game, make_game
 from test_rooms_lib import Relay, demo_page, join, make_room, start  # noqa: F401
 
 FAKE_MIC = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]
@@ -43,7 +43,7 @@ COUNT_CALLS = """
 
 @pytest.fixture(scope="module")
 def browser(_playwright):
-    b = _playwright.chromium.launch(args=FAKE_MIC)
+    b = keep_rooms_in_game(_playwright.chromium.launch(args=FAKE_MIC))
     yield b
     b.close()
 

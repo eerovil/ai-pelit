@@ -36,6 +36,14 @@
 // loads it), the room screen shows "➕ Kaveriksi" beside each other player who has one, the
 // requests sent to this phone ("Hyväksy" / "Ei"), and "📨 Kutsu kaveri", which invites a friend
 // into this room.
+//
+// The room page (#388): a phone in a room plays on /huone/ (public/huone/index.html), which stays
+// loaded while the game changes. This same file runs there with data-shell: it keeps the room's
+// WebSocket and the voice calls, and the game plays in a frame below the page's bar. Inside that
+// frame this file finds the page around it (AiPelitRoomShell) and talks to the room through it, so
+// a game switch reloads only the frame and the calls stay up. A game page on its own moves onto the
+// room page as it makes or joins a room. The room screen, the round and the game API are the same
+// in all three.
 (function () {
   'use strict';
   var script = document.currentScript;
@@ -46,6 +54,18 @@
   var VERSION = vm ? +vm[1] : 1;
   var API = new URL('api/rooms/', script.src);
   var LIST = new URL('../rooms?game=' + encodeURIComponent(GAME), API); // this game's public rooms (#50)
+  // The room page (#388). SHELL_MODE: this is it. SHELL: this game is in its frame. PAGE: this game
+  // is a page of its own, and goes to the room page to be in a room. A frame of another page
+  // (Ottelu's events) stays as it was. Tests of a game's own room play set __aiPelitHuoneSivu to
+  // false and keep the room in the game's page, which plays the room the same way.
+  var SHELL_MODE = script.hasAttribute('data-shell');
+  var SHELL = null;
+  if (!SHELL_MODE) try { if (window.parent !== window && window.parent.AiPelitRoomShell) SHELL = window.parent.AiPelitRoomShell; } catch (e) {}
+  var PAGE = !SHELL_MODE && !SHELL && window.top === window.self && window.__aiPelitHuoneSivu !== false && /^https?:$/.test(location.protocol);
+  var ROOM_PAGE = new URL('huone/', script.src);
+  var PALUU = 'ai-pelit:_huone:paluu'; // sessionStorage: back into a turns() round, carried to the room page
+  var VIRHE = 'ai-pelit:_huone:virhe'; // sessionStorage: why the room page let this phone go
+  var YLOS = 'ai-pelit:_huone:ylos'; // sessionStorage: the shelf's game page is below the room page
 
   var LETTERS = 'ABCDEFGHJKLMNPRSTUVY'; // easy to read aloud: no I, O, Q, W, X, Z
   var NICKS = ['Siili', 'Orava', 'Kettu', 'Jänis', 'Pöllö', 'Ilves', 'Hirvi', 'Majava'];
@@ -149,7 +169,7 @@
     if (net.host) { q.host = '1'; q.game = GAME; q.v = VERSION; q.max = MAX; }
     u.search = new URLSearchParams(q);
     var ws;
-    try { ws = new WebSocket(u); } catch (e) { return; }
+    try { ws = SHELL ? SHELL.open(u.href, window) : new WebSocket(u); } catch (e) { return; }
     net.ws = ws;
     ws.onopen = function () { if (net.ws === ws) { net.connected = true; listed = null; render(); } };
     ws.onmessage = function (e) {
@@ -174,7 +194,8 @@
   }
   function newCode() { var c = ''; for (var i = 0; i < 4; i++) c += LETTERS[Math.floor(Math.random() * LETTERS.length)]; return c; }
 
-  function enter(code, host, pub) {
+  function enter(code, host, pub, rejoin) {
+    if (PAGE) return toRoomPage(code, host, pub, rejoin);
     clearTimeout(net.timer);
     choosing = false;
     net.on = true; net.host = host; net.code = code; net.joined = false; net.tries = 0; net.pub = !!(host && pub); listed = null;
@@ -182,8 +203,22 @@
     net.round = null; net.released = {}; net.owed = {}; net.got = {}; net.pz = []; net.played = false;
     net.result = ''; net.resultClass = ''; net.note = ''; lastPz = ''; net.rejoin = false;
     voiceReset();
+    if (rejoin) net.rejoin = true;
     show(true);
     connect();
+  }
+  // A game page of its own takes the room page's place, with this game in its frame (#388). The
+  // host hands its room on as a game switch does (ISANTA), so the frame makes it as the host.
+  function toRoomPage(code, host, pub, rejoin) {
+    if (moving) return;
+    moving = true;
+    if (host) ssave(ISANTA, { code: code, at: Date.now(), pub: !!pub });
+    if (rejoin) ssave(PALUU, code);
+    // The shelf's page for this game is below (#68): the room page keeps it so, for back and leaving.
+    try { if (history.state && history.state.aiPelitUp) sessionStorage.setItem(YLOS, GAME); } catch (e) {}
+    var to = new URL(ROOM_PAGE.href);
+    to.search = new URLSearchParams({ koodi: code, peli: GAME, v: VERSION });
+    location.replace(to.href);
   }
 
   // Leaves the room. With a reason (the room closed, a refused join) the room screen stays open on
@@ -203,6 +238,8 @@
     update();
     fire('leave', why || '');
     if (why) { net.error = why; show(true); } else { show(false); fire('menu'); }
+    // Out of the room: the room page gives its place back to this game alone.
+    if (SHELL) try { SHELL.left(why || ''); } catch (e) {}
   }
 
   function onMessage(m) {
@@ -258,6 +295,8 @@
     if (ws) try { ws.close(1000, 'Vaihdetaan peliä'); } catch (e) {}
     ssave(HERE, null);
     voiceReset();
+    // In the room page's frame only the frame moves; the room and the calls stay up (#388).
+    if (SHELL) return location.replace(to.href);
     // The existing shelf handoff keeps back going to the new game's own page.
     var up = history.state && history.state.aiPelitUp;
     try {
@@ -457,6 +496,10 @@
     stream: null, track: null, pressed: false, talking: false, ice: null, iceAt: 0, err: '', errAt: 0,
     heals: 0, // calls made again because no sound came while the other phone talked (#386)
   };
+  // In the room page's frame the page's calls are this game's: the room screen reads them and asks
+  // the page to change them (#388); none are made here.
+  var RTC_UI = SHELL ? !!SHELL.rtc : RTC;
+  if (SHELL) { voice = SHELL.voice; RTC = false; }
   var STUCK = 20e3;
   function vpeer(id) { return voice.peers[id] || (voice.peers[id] = { early: [], fails: 0, retryAt: 0 }); }
   function sendRtc(to, m) { m.t = '_rtc'; m.to = to; sendRaw(m); }
@@ -477,8 +520,9 @@
   }
 
   // After this phone's own connection came back: everyone is greeted again.
-  function voiceAgain() { Object.keys(voice.peers).forEach(function (id) { voice.peers[id].greet = false; }); }
+  function voiceAgain() { if (SHELL) return; Object.keys(voice.peers).forEach(function (id) { voice.peers[id].greet = false; }); }
   function voiceReset() {
+    if (SHELL) return;
     release();
     Object.keys(voice.peers).forEach(function (id) { hang(id); });
     voice.peers = {}; voice.muted = {};
@@ -679,6 +723,7 @@
   // A phone may block sound that starts by itself: the next tap anywhere starts it. Coming back
   // from another app, Android has paused it: it starts again.
   function replay() {
+    if (SHELL) return SHELL.replay();
     Object.keys(voice.peers).forEach(function (id) { var a = voice.peers[id].audio; if (a && a.paused) a.play().catch(function () {}); });
   }
   document.addEventListener('pointerdown', replay, true);
@@ -712,7 +757,7 @@
     });
   }
   function release() {
-    if (!voice.pressed) return;
+    if (SHELL || !voice.pressed) return;
     voice.pressed = false;
     // A quick tap: say how the chip works.
     if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
@@ -730,6 +775,7 @@
   document.addEventListener('visibilitychange', function () { if (document.hidden) release(); });
 
   function setVoice(on) {
+    if (SHELL) return SHELL.setVoice(on);
     if (!RTC || on === voice.on) return;
     voice.on = on;
     save(VOICE_KEY, on);
@@ -739,6 +785,7 @@
     render();
   }
   function toggleMute(id) {
+    if (SHELL) return SHELL.toggleMute(id);
     if (voice.muted[id]) delete voice.muted[id]; else voice.muted[id] = true;
     var p = voice.peers[id];
     if (p && p.audio) p.audio.muted = !!voice.muted[id];
@@ -781,6 +828,7 @@
     vel = { chip: chip, bubble: bubble };
   }
   function renderVoice() {
+    if (SHELL_MODE) return shellChanged();
     if (!RTC) return;
     var on = net.on && voice.on;
     if (!on && !vel) return;
@@ -981,7 +1029,7 @@
     el.pause = pause;
     el.create.addEventListener('click', function () { takeName(); enter(newCode(), true); });
     el.joinBtn.addEventListener('click', joinTyped);
-    el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false); net.rejoin = true; } });
+    el.again.addEventListener('click', function () { var a = awayRound(); if (a) { takeName(); enter(a.code, false, false, true); } });
     el.codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });
     el.start.addEventListener('click', startRound);
     el.switchGame.addEventListener('click', function () { choosing = true; render(); });
@@ -1043,6 +1091,7 @@
   }
 
   function render() {
+    if (SHELL_MODE) return shellChanged();
     renderVoice();
     if (!root) return;
     hookFriends();
@@ -1091,7 +1140,7 @@
     el.info.textContent = info;
     el.pubRow.hidden = !net.host;
     el.pub.checked = net.pub;
-    el.voiceRow.hidden = !RTC;
+    el.voiceRow.hidden = !RTC_UI;
     el.voice.checked = voice.on;
     el.switchGame.hidden = !net.host || !net.connected || racing() || eligibleGames().length < 2;
     el.start.hidden = !net.host;
@@ -1262,6 +1311,148 @@
   }
 
 
+  // ---- The room page (#388) ----
+  // On /huone/ this file keeps the room's one WebSocket and the voice calls; the game in the
+  // page's frame talks through it as if through its own socket (open() gives it one). A game that
+  // loads in the frame again with the same address gets the same connection, told again who this
+  // phone is and who is in the room. Another address (the host's next game, or a new nickname)
+  // connects anew; the calls stay up meanwhile, since their sound goes straight between the phones.
+  var sh = { ws: null, url: '', v: null, you: '', peers: '', grace: 0, watchers: [] };
+  function shellChanged() {
+    sh.watchers = sh.watchers.filter(function (w) {
+      try { if (w.win.closed) return false; w.fn(); return true; } catch (e) { return false; }
+    });
+  }
+  function vcall(v, k, e) { try { var f = v[k]; if (f) f(e); } catch (err) { setTimeout(function () { throw err; }); } }
+  function vopen(v) { if (v.readyState !== 0 || sh.v !== v) return; v.readyState = 1; vcall(v, 'onopen', {}); }
+  function vsend(v, data) { if (v.readyState === 1 && sh.v === v) vcall(v, 'onmessage', { data: data }); }
+  function vclose(v, code, reason) {
+    if (v.readyState === 3) return;
+    v.readyState = 3;
+    if (sh.v === v) sh.v = null;
+    vcall(v, 'onclose', { code: code, reason: reason || '' });
+  }
+  function shellDrop(reason) {
+    var ws = sh.ws;
+    sh.ws = null; sh.url = ''; sh.you = ''; sh.peers = '';
+    net.ws = null; net.connected = false;
+    if (ws) try { ws.close(1000, reason); } catch (e) {}
+  }
+  function shellConnect(url) {
+    var ws;
+    try { ws = new WebSocket(url); } catch (e) { if (sh.v) vclose(sh.v, 1006, ''); return; }
+    sh.ws = ws; sh.url = url; net.ws = ws;
+    ws.onopen = function () {
+      if (sh.ws !== ws) return;
+      net.connected = true;
+      if (sh.v) vopen(sh.v);
+      shellChanged();
+    };
+    ws.onmessage = function (e) {
+      if (sh.ws !== ws) return;
+      var m;
+      try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (!m || typeof m !== 'object') return;
+      if (m.t === '_rtc') return onRtc(m); // the calls are this page's
+      if (m.t === 'you') { sh.you = e.data; net.me = m.id; voiceAgain(); }
+      if (m.t === 'peers') {
+        sh.peers = e.data;
+        net.members = Array.isArray(m.members) ? m.members : [];
+        net.hostId = m.host; net.online = {};
+        net.members.forEach(function (x) { if (x.on) net.online[x.id] = true; });
+        voiceSync();
+      }
+      if (sh.v) vsend(sh.v, e.data);
+      if (m.t === 'peers') shellChanged();
+    };
+    ws.onclose = function (e) {
+      if (sh.ws !== ws) return;
+      sh.ws = null; sh.url = ''; sh.you = ''; sh.peers = '';
+      net.ws = null; net.connected = false;
+      if (sh.v) vclose(sh.v, e.code, e.reason);
+      shellChanged();
+    };
+  }
+  function makeShell() {
+    var api = window.AiPelitRoomShell = {
+      rtc: RTC, voice: voice,
+      // A socket for the game in the frame (win), on the room's WebSocket address.
+      open: function (url) {
+        var code = (new URL(url).pathname.match(/\/([A-Z]{4})$/) || [])[1] || '';
+        clearTimeout(sh.grace);
+        if (sh.v) { var old = sh.v; sh.v = null; old.readyState = 3; }
+        if (code !== net.code) { shellDrop('Toinen huone'); voiceReset(); net.members = []; net.me = ''; net.code = code; }
+        net.on = true;
+        var v = {
+          readyState: 0, onopen: null, onmessage: null, onclose: null,
+          send: function (text) { if (sh.v === v && sh.ws && sh.ws.readyState === 1) sh.ws.send(text); },
+          close: function () {
+            if (v.readyState === 3) return;
+            v.readyState = 3;
+            if (sh.v !== v) return;
+            // The game moves on (a switch, a reload): the room waits a while for its next page.
+            sh.v = null;
+            sh.grace = setTimeout(function () { if (!sh.v) { shellDrop('Poistui'); voiceReset(); net.on = false; shellChanged(); } }, 30e3);
+          },
+        };
+        sh.v = v;
+        if (sh.ws && sh.url === url) {
+          // Same address: this connection again, with who this phone is and who is in the room.
+          if (sh.ws.readyState === 1) setTimeout(function () {
+            vopen(v);
+            if (sh.you) vsend(v, sh.you);
+            if (sh.peers) vsend(v, sh.peers);
+          });
+        } else {
+          shellDrop('Vaihdetaan peliä');
+          shellConnect(url);
+        }
+        if (api.onroom) try { api.onroom(code); } catch (e) {}
+        shellChanged();
+        return v;
+      },
+      // The game left the room (rooms.js leave()): the room page gives way to it.
+      left: function (why) {
+        clearTimeout(sh.grace);
+        if (sh.v) { sh.v.readyState = 3; sh.v = null; }
+        shellDrop('Poistui');
+        net.on = false;
+        voiceReset();
+        shellChanged();
+        if (api.onleft) setTimeout(function () { try { api.onleft(why || ''); } catch (e) {} });
+      },
+      // The room page's frame redraws the room screen when the calls change.
+      watch: function (win, fn) { sh.watchers.push({ win: win, fn: fn }); },
+      setVoice: setVoice, toggleMute: toggleMute, press: press, release: release, replay: replay,
+      get state() {
+        return {
+          on: net.on, code: net.code, me: net.me, host: net.hostId, connected: net.connected,
+          members: net.members.map(function (m, i) {
+            var p = voice.peers[m.id];
+            return { id: m.id, name: m.name, on: !!m.on, color: COLORS[i % COLORS.length],
+              talking: !!(p && p.talking && live(p) && !voice.muted[m.id] && Date.now() - p.talkAt < 60e3),
+              muted: !!voice.muted[m.id] };
+          }),
+          voice: { on: RTC && voice.on, pressed: voice.pressed, talking: voice.talking,
+            calls: Object.keys(voice.peers).filter(function (id) { return live(voice.peers[id]); }).length,
+            err: voice.err && Date.now() - voice.errAt < 3000 ? voice.err : '' },
+        };
+      },
+    };
+  }
+  if (SHELL_MODE) {
+    makeShell();
+    setInterval(renderVoice, 250);
+    setInterval(voiceSync, 3000);
+    return;
+  }
+  // In the room page's frame: the room screen follows the page's calls, and a page that goes
+  // (the next game loads) lets go of its socket at once.
+  if (SHELL) {
+    try { SHELL.watch(window, function () { render(); }); } catch (e) {}
+    window.addEventListener('pagehide', function () { if (net.ws) try { net.ws.close(1000, 'Vaihdetaan peliä'); } catch (e) {} });
+  }
+
   // ---- The API ----
   window.AiPelitRooms = {
     // on(type, fn): 'start' ({round, players: [{id, name}], host, over}), 'message' (msg, fromId),
@@ -1334,7 +1525,7 @@
     // Voice (#322): whether it is on on this phone, this phone talking, who is heard now, and how
     // many phones a call is up with.
     get voice() {
-      return { on: RTC && voice.on, talking: voice.talking, speakers: speakers(), heals: voice.heals,
+      return { on: RTC_UI && voice.on, talking: voice.talking, speakers: speakers(), heals: voice.heals,
         calls: Object.keys(voice.peers).filter(function (id) { return live(voice.peers[id]); }).length };
     },
     name: myName,
@@ -1344,7 +1535,12 @@
   // A join link (?huone=KOOD) joins at once; a reload goes back to the room this tab was in. After
   // the game's own script has run, so its handlers hear it.
   function autoJoin() {
+    // The room page let this phone go, with a reason (the room closed): the room screen says it.
+    var why = sload(VIRHE, null);
+    if (why) { ssave(VIRHE, null); net.error = String(why); show(true); return; }
     var q = new URLSearchParams(location.search).get('huone');
+    var paluu = sload(PALUU, null);
+    if (paluu) ssave(PALUU, null);
     var back = sload(HERE, null);
     if (back && (back.game !== GAME || back.v !== VERSION)) back = null;
     if (q) history.replaceState(history.state, '', location.pathname);
@@ -1354,7 +1550,7 @@
       ssave(ISANTA, null);
       enter(q.toUpperCase(), true, !!handoff.pub);
     } else if (q && /^[A-Za-z]{4}$/.test(q) && !(back && back.code === q.toUpperCase() && back.host)) {
-      enter(q.toUpperCase(), false);
+      enter(q.toUpperCase(), false, false, paluu === q.toUpperCase());
     } else if (back && /^[A-Z]{4}$/.test(back.code)) enter(back.code, !!back.host, !!back.pub);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(autoJoin); });

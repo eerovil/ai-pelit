@@ -336,9 +336,33 @@ GPU_ARGS = [] if os.environ.get("CI") else [
 # A fresh Chromium for each test file (#95). With one browser for the whole run, the 3D games'
 # WebGL pages (Hiihto from v7, Pallorata) slowed it down for every file after them on CI, until
 # their rounds timed out.
+# A game page that makes or joins a room moves onto the room page (/huone/, #388), with the game in
+# its frame. The tests written before it play the room in the game's own page: rooms.js keeps it
+# there while this flag is false. A test of the room page sets it true in its page first.
+ROOMS_IN_GAME = "if (!('__aiPelitHuoneSivu' in window)) window.__aiPelitHuoneSivu = false;"
+
+
+def keep_rooms_in_game(b):
+    """Makes every page of browser b keep its room in the game's own page (see ROOMS_IN_GAME)."""
+    new_context, new_page = b.new_context, b.new_page
+
+    def context(*args, **kwargs):
+        ctx = new_context(*args, **kwargs)
+        ctx.add_init_script(ROOMS_IN_GAME)
+        return ctx
+
+    def page(*args, **kwargs):
+        pg = new_page(*args, **kwargs)
+        pg.add_init_script(ROOMS_IN_GAME)
+        return pg
+
+    b.new_context, b.new_page = context, page
+    return b
+
+
 @pytest.fixture(scope="module")
 def browser(_playwright):
-    b = _playwright.chromium.launch(args=GPU_ARGS)
+    b = keep_rooms_in_game(_playwright.chromium.launch(args=GPU_ARGS))
     yield b
     b.close()
 

@@ -33,8 +33,9 @@
   // left when it is hidden, so the shelf can show how many play each game now. The id is random
   // per page open, kept only in this page. A game inside another page's frame is not counted
   // apart: the page the player opened is (Ottelu already drops back.js from its events' frames).
+  // The room page (#388) is no game: the game in its frame is the one counted.
   var framed = true;
-  try { framed = window.top !== window.self; } catch (e) {}
+  try { framed = window.top !== window.self && !window.parent.AiPelitRoomShell; } catch (e) {}
   if (slug && !framed && /^https?:$/.test(location.protocol)) {
     // From crypto, not Math.random(): a game's tests seed Math.random(), and an id drawn from it
     // here shifted every number the game drew after it (#330).
@@ -312,7 +313,11 @@
     // Going back from a lone room member is an intentional departure, not a dropout.
     if (window.AiPelitRooms && typeof window.AiPelitRooms.leaveIfAlone === 'function')
       window.AiPelitRooms.leaveIfAlone();
-    if (history.state && history.state.aiPelitUp) history.back();
+    // In the room page's frame (#388) the room page goes, not only the game in it.
+    var shell = null;
+    try { shell = window.parent !== window && window.parent.AiPelitRoomShell; } catch (err) {}
+    if (shell && shell.up) shell.up(a.href);
+    else if (history.state && history.state.aiPelitUp) history.back();
     else location.replace(a.href);
     return true;
   }
@@ -326,9 +331,13 @@
   // Play full screen: the installed app already is (manifest "display": "fullscreen"); in a browser
   // tab, or an app installed before that, the first tap asks for it. Only a pointerup, touchend or
   // click lets a page go full screen, and a tap after the player left full screen asks again.
-  var root = document.documentElement;
+  // In the room page's frame (#388) the room page goes full screen, with its room bar; a tap in
+  // the frame lets its parent ask too.
+  var fsDoc = document;
+  try { if (window.parent !== window && window.parent.AiPelitRoomShell) fsDoc = window.parent.document; } catch (e) {}
+  var root = fsDoc.documentElement;
   function fullScreen(e) {
-    if (box.contains(e.target) || panel.contains(e.target) || document.fullscreenElement || !root.requestFullscreen) return;
+    if (box.contains(e.target) || panel.contains(e.target) || fsDoc.fullscreenElement || !root.requestFullscreen) return;
     if (window.matchMedia && matchMedia('(display-mode: fullscreen)').matches) return;
     var asked = root.requestFullscreen({ navigationUI: 'hide' });
     if (asked && asked.catch) asked.catch(function () {});
