@@ -146,12 +146,30 @@
       if (s && (!s.type || s.type === 'auto')) s.type = 'playback';
     } catch (e) {}
   }
+  // An iPhone also stops a page's sound when the screen locks, another app plays or a call comes
+  // ('interrupted', or 'suspended'), and a game that resumes only a 'suspended' context, or only on
+  // its first tap, stays silent after that (Piano v10, #381). So a tap, and the page coming back on
+  // screen, resume every context of this window that follows the game volume. Only a visible page
+  // resumes: the sound library puts its own context to sleep while the page is hidden.
+  function wakeSound(win) {
+    try { if (win.document.hidden) return; } catch (e) { return; }
+    liveGains().forEach(function (e) {
+      if (e.win !== win) return;
+      try {
+        var c = e.g.context;
+        if (c.state === 'suspended' || c.state === 'interrupted') {
+          var r = c.resume();
+          if (r && r.catch) r.catch(function () {});
+        }
+      } catch (err) {}
+    });
+  }
   function playMediaOnTaps(win) {
     playMedia(win);
     try {
-      var on = function () { playMedia(win); };
-      win.addEventListener('pointerdown', on, true);
-      win.addEventListener('touchend', on, true);
+      var on = function () { playMedia(win); wakeSound(win); };
+      ['pointerdown', 'pointerup', 'touchend', 'click'].forEach(function (t) { win.addEventListener(t, on, true); });
+      win.document.addEventListener('visibilitychange', function () { wakeSound(win); });
     } catch (e) {}
   }
   playMediaOnTaps(window);
