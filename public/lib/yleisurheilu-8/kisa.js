@@ -765,14 +765,15 @@
       x.save();
 
       // Chase belongs to the background, not to the walking target (#373). Each friend has a
-      // stable pace from its id, and jogs toward the background once the camera stops.
+      // stable pace from its id (65-85 % of the background's speed), and jogs to it once it stops.
       fans.forEach(f => {
         const want = K.spot[f.id] !== undefined ? K.spot[f.id] : (all.indexOf(f) + 0.5) / all.length;
         if (walkX[f.id] === undefined) walkX[f.id] = want;
         const wd = want - walkX[f.id], stepMax = WALK * h * dt / w;
         walkX[f.id] = Math.abs(wd) <= stepMax ? want : walkX[f.id] + Math.sign(wd) * stepMax;
         if (chase[f.id] === undefined) chase[f.id] = scroll;
-        const gap = scroll - chase[f.id], run = Math.max(pace(f.id) * ds, JOG * h * dt);
+        // While the background moves they run at their pace, never quite as fast; once it stops, a jog.
+        const gap = scroll - chase[f.id], run = ds > 0.01 ? pace(f.id) * ds : JOG * h * dt;
         chase[f.id] += Math.sign(gap) * Math.min(Math.abs(gap), run);
         lastRow.lags[f.id] = scroll - chase[f.id];
       });

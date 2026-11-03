@@ -74,6 +74,31 @@ def test_chase_lags_then_catches_up_and_restores_the_position(site, browser):
     close_pages(pages)
 
 
+def test_a_steady_run_leaves_them_behind_until_it_stops(site, browser):
+    """A background moving at a steady, slow speed (slower than their jog) still outruns them."""
+    _, pages, _, fans = watching(site, browser)
+    page = fans[0]
+    install_fake_scroll(page)
+    fid = page.evaluate("K.mine().id")
+    start = fan_x(page, fid)
+    page.evaluate("""() => new Promise(done => {
+      const t0 = performance.now();
+      const step = () => {
+        const t = (performance.now() - t0) / 1000;
+        window.__spectatorScroll = Math.min(t, 1.5) * 40;  // 40 px a second, half their jog
+        if (t < 1.5) requestAnimationFrame(step); else done();
+      };
+      step();
+    })""")
+    # Keeping up would leave them where they stood on the screen; they slid back with the stand.
+    assert start - fan_x(page, fid) > 6, "they kept up with the background"
+    page.wait_for_function("""({ id, start }) => {
+      const x = K.fanSpots.find(f => f.id === id)?.x;
+      return x !== undefined && Math.abs(x - start) < 2;
+    }""", arg={"id": fid, "start": start}, timeout=6000)
+    close_pages(pages)
+
+
 def test_tap_accounts_for_my_own_lag_and_keeps_spot_normalized(site, browser):
     _, pages, _, fans = watching(site, browser)
     page = fans[0]
