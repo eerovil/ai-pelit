@@ -134,11 +134,32 @@
     Object.defineProperty(Node.prototype, '__aiPelitAani', { value: true });
   }
   installSound(window);
+  // iPhone silent switch (#381): Safari treats Web Audio as ringer sound and mutes it while the
+  // switch is on silent, so every game was silent. Telling it the page plays media (Safari 17 /
+  // iOS 17) lets the games sound, as stemmanauhat-cf#100 did. Set when the page loads and again on
+  // each tap, since a game may make its audio context before this runs. A type something else
+  // chose is kept: rooms.js asks for 'play-and-record' while the microphone is on. Browsers without
+  // audioSession are left alone.
+  function playMedia(win) {
+    try {
+      var s = win.navigator.audioSession;
+      if (s && (!s.type || s.type === 'auto')) s.type = 'playback';
+    } catch (e) {}
+  }
+  function playMediaOnTaps(win) {
+    playMedia(win);
+    try {
+      var on = function () { playMedia(win); };
+      win.addEventListener('pointerdown', on, true);
+      win.addEventListener('touchend', on, true);
+    } catch (e) {}
+  }
+  playMediaOnTaps(window);
   // Ottelu plays its events in a frame without back.js; each frame that loads follows this page.
   function watchFrame(f) {
     if (f.__aiPelitAani) return;
     f.__aiPelitAani = true;
-    var put = function () { try { installSound(f.contentWindow); } catch (e) {} };
+    var put = function () { try { installSound(f.contentWindow); playMediaOnTaps(f.contentWindow); } catch (e) {} };
     f.addEventListener('load', put);
     put();
   }
