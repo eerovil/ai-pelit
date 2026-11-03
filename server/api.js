@@ -39,6 +39,9 @@
 // as sent: there is no cheat check (Eero's choice).
 // Against spam: each game has a fixed set of lists, one network makes at most NEW_PER_DAY names
 // a day, and while PENDING_MAX names wait for the admin no new one is taken.
+// Test names (#380): the agents' live checks play the real site as "Testi1", "Testi2"... from
+// the same home network as Eero's family. A test name (isTestName) counts toward neither limit,
+// never shows to the admin, and is deleted with everything it left TEST_KEEP after it was made.
 
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
@@ -76,6 +79,8 @@ const ID = /^[a-f0-9]{32}$/;
 const NAME_MAX = 16;
 export const NEW_PER_DAY = 5;
 export const PENDING_MAX = 30;
+export const TEST_KEEP = 864e5; // a test name lives a day, ms
+const TEST_CLEAN_MAX = 50; // test players deleted per request, so one request stays quick
 const BODY_MAX = 12000; // room for 5000 characters of feedback (#184, #351), emoji and all
 const LIST = 10;
 
@@ -127,23 +132,57 @@ async function sourceOf(request, env) {
   return [...hash.slice(0, 12)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// "Testi" and up to 8 more letters, digits or spaces, any case: Testi, Testi1, Testi A, Testi184b.
+export const isTestName = (name) => /^testi[\p{L}\p{N} ]{0,8}$/iu.test(String(name || '').trim());
+
+// Deletes the test players made over TEST_KEEP ago, and every row that names them (#380).
+// friend_requests.receiver is a pid; every other column holds the secret player id.
+export async function cleanTestPlayers(env) {
+  const { results } = await env.DB.prepare(
+    "SELECT id, name, pid FROM players WHERE lower(name) LIKE 'testi%' AND created_at < ?"
+  ).bind(new Date(Date.now() - TEST_KEEP).toISOString()).all();
+  const gone = results.filter((p) => isTestName(p.name)).slice(0, TEST_CLEAN_MAX);
+  for (const p of gone) {
+    const pid = p.pid || (await pidOf(p.id));
+    for (const [sql, ...args] of [
+      ['DELETE FROM names WHERE player = ?', p.id],
+      ['DELETE FROM scores WHERE player = ?', p.id],
+      ['DELETE FROM presence WHERE player = ?', p.id],
+      ['DELETE FROM push_subs WHERE player = ?', p.id],
+      ['DELETE FROM friend_sends WHERE player = ?', p.id],
+      ['DELETE FROM feedback WHERE player = ?', p.id],
+      ['DELETE FROM friends WHERE a = ? OR b = ?', p.id, p.id],
+      ['DELETE FROM friend_requests WHERE sender = ? OR receiver = ?', p.id, pid],
+      ['DELETE FROM invites WHERE sender = ? OR receiver = ?', p.id, p.id],
+      ['DELETE FROM players WHERE id = ?', p.id],
+    ]) await env.DB.prepare(sql).bind(...args).run();
+  }
+  return gone.length;
+}
+
 async function setName(request, env, body) {
   const id = String(body.id || ''), name = cleanName(body.name);
   if (!ID.test(id)) return fail(400, 'bad id');
   if (!name) return fail(400, `a name is 1–${NAME_MAX} characters`);
+  await cleanTestPlayers(env);
+  const test = isTestName(name);
   const key = nameKey(name);
   const owner = await env.DB.prepare('SELECT player FROM names WHERE name_key = ?').bind(key).first();
   if (owner && owner.player !== id) return fail(409, 'name taken');
   const old = await env.DB.prepare('SELECT name, status FROM players WHERE id = ?').bind(id).first();
   if (old && old.name === name) return json({ name, status: old.status });
-  const waiting = await env.DB.prepare("SELECT COUNT(*) AS n FROM players WHERE status = 'pending'").first();
-  if (waiting.n >= PENDING_MAX) return fail(429, 'too many names waiting');
+  // Test names count toward neither limit, and take no place in them (#380).
+  const real = (rows) => rows.results.filter((p) => !isTestName(p.name)).length;
+  if (!test) {
+    const waiting = await env.DB.prepare("SELECT name FROM players WHERE status = 'pending'").all();
+    if (real(waiting) >= PENDING_MAX) return fail(429, 'too many names waiting');
+  }
   const source = await sourceOf(request, env), t = now();
-  if (!old) {
+  if (!old && !test) {
     const day = new Date(Date.now() - 864e5).toISOString();
-    const made = await env.DB.prepare('SELECT COUNT(*) AS n FROM players WHERE source = ? AND created_at > ?')
-      .bind(source, day).first();
-    if (made.n >= NEW_PER_DAY) return fail(429, 'too many new names from here today');
+    const made = await env.DB.prepare('SELECT name FROM players WHERE source = ? AND created_at > ?')
+      .bind(source, day).all();
+    if (real(made) >= NEW_PER_DAY) return fail(429, 'too many new names from here today');
   }
   if (!(await claim(env, key, id, 0))) return fail(409, 'name taken');
   // The name it had before is free again, unless the admin approved it (locked).
@@ -749,12 +788,13 @@ async function pushTo(env, player) {
 }
 
 async function adminPlayers(env) {
-  // Waiting names first, then the newest.
+  await cleanTestPlayers(env);
+  // Waiting names first, then the newest; test names never (#380).
   const { results } = await env.DB.prepare(
     `SELECT id, name, status, updated_at FROM players
-     ORDER BY status = 'pending' DESC, updated_at DESC LIMIT 200`
+     ORDER BY status = 'pending' DESC, updated_at DESC LIMIT 400`
   ).all();
-  return json({ players: results });
+  return json({ players: results.filter((p) => !isTestName(p.name)).slice(0, 200) });
 }
 
 async function adminDecide(env, body) {
