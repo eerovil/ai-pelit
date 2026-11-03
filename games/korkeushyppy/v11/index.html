@@ -71,8 +71,9 @@
 <script src="../../../rooms.js" data-game="korkeushyppy" data-min="2" data-max="8"></script>
 <!-- v7 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v9 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
-<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-7/korkeus.js"></script>
+<!-- v11 (#373): yleisurheilu-8, so the friends watching run along after the athlete and climb onto each other -->
+<script src="../../../lib/yleisurheilu-8/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-8/korkeus.js"></script>
 <script src="../../../outfits.js" data-game="korkeushyppy" data-share="yleisurheilu"></script>
 <!-- v8 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -245,7 +246,7 @@ AU.load(['valinta', 'askel', 'askel2', 'ponnistus', 'suhahdus', 'rima', 'onnistu
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-7/korkeus.js): the bar rises; at each height everyone
+// in its bar-height format (lib/yleisurheilu-8/korkeus.js): the bar rises; at each height everyone
 // still in takes a first attempt in the drawn order, then those who failed a second, then a third;
 // a pass is allowed, three failures in a row and you are out. K.comp is the meet: a jumper is {id,
 // name, p, bot, skill (the height the computer clears half the time), first (the height index it
@@ -501,7 +502,9 @@ function drawScene(dt) {
   x.fillStyle = 'rgba(59,74,99,.45)'; x.fillRect(0, standTop, W, standH);
   // v9 (#341): the friends watching stand behind the boards, which hide their legs, drawn before the
   // athlete so they never cover it; a tap walks your own along the row.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true });
+  // v11 (#373): scroll is how far the background behind them has moved since the athlete stood at
+  // the start; the friends run after it, a little slower, and catch up once it stops.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true, scroll: (camX - Math.min(START - 0.3 * SW / runS, 0.6 - 0.62 * SW / runS)) * 9 });
   // Boards along the front of the stands, the infield grass, then the apron.
   x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, far - standTop - standH);
   const bw = 120, bo = ((camX * 30) % bw + bw) % bw;
@@ -878,7 +881,7 @@ c.addEventListener('pointerdown', e => {
   const b = actAt(e.clientX, e.clientY);
   if (b) { unlock(); actDown = { k: b.k, id: e.pointerId }; return; }
   // v9 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
-  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX)) return;
+  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX, e.clientY)) return;
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) jumpPress(); else if (k) press(k);
 });
