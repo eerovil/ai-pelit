@@ -216,3 +216,24 @@ def test_a_held_press_on_the_room_screen_survives_the_pages_ticks(phones):
     host.wait_for_function(f"{ROOMS}?.inRoom && document.getElementById('game').contentWindow.document.querySelector('#aipr .mute').textContent === '🔇'")
     assert stage["y"] < box["y"]
     assert host.errors == guest.errors == []
+
+
+def test_the_host_stops_a_round_from_the_chip_on_the_room_page(phones):
+    # #392 in the room page's frame: the host's "‹ Pelit" menu ends the round on every phone, and
+    # everyone stays on the room page.
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    host.wait_for_function(f"{ROOMS}.members.filter(m => m.on).length === 2")
+    game(host).locator("#aipr-start").click()
+    for page in (host, guest):
+        page.wait_for_function(f"{DEMO}.phase === 'play'")
+        page.evaluate("window.__mark = 1")
+    game(host).locator("#ai-pelit-back").click()
+    stop = game(host).locator("#ai-pelit-lopeta")
+    stop.click()
+    stop.click()
+    for page in (host, guest):
+        page.wait_for_function(f"{DEMO}.phase === 'room'")
+        assert page.evaluate("window.__mark") == 1
+        assert "/huone/" in page.url
+    assert host.errors == guest.errors == []
