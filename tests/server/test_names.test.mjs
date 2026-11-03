@@ -119,9 +119,41 @@ test('many old test players are cleaned a batch at a time, all gone after a few 
   const t = new Date(Date.now() - 2 * 864e5).toISOString();
   const add = env.DB.raw.prepare("INSERT INTO players (id, name, status, created_at, updated_at) VALUES (?, ?, 'rejected', ?, ?)");
   for (let i = 0; i < 120; i++) add.run(id(1000 + i), `Testi${i}`, t, t);
+  for (let i = 0; i < 120; i++) {
+    env.DB.raw.prepare('INSERT INTO scores (player, game, board, version, score, at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id(1000 + i), 'sormiskeitti', 'main', 5, i, t);
+  }
+  // One request deletes a batch of 40 in a handful of statements, far under D1's limit of 50.
+  const before = env.DB.queries;
   await adminList();
-  assert.equal(count('SELECT COUNT(*) AS n FROM players'), 70);
+  assert.ok(env.DB.queries - before <= 15, `${env.DB.queries - before} statements`);
+  assert.equal(count('SELECT COUNT(*) AS n FROM players'), 80);
+  assert.equal(count('SELECT COUNT(*) AS n FROM scores'), 80);
   await adminList();
   await adminList();
   assert.equal(count('SELECT COUNT(*) AS n FROM players'), 0);
+  assert.equal(count('SELECT COUNT(*) AS n FROM scores'), 0);
+});
+
+test('a failing delete leaves every test player whole', async () => {
+  const { env, adminList, count } = setup();
+  const t = new Date(Date.now() - 2 * 864e5).toISOString();
+  env.DB.raw.prepare("INSERT INTO players (id, name, status, created_at, updated_at) VALUES (?, 'Testi', 'rejected', ?, ?)").run(id(1), t, t);
+  env.DB.raw.prepare("INSERT INTO names (name_key, player, locked, at) VALUES ('testi', ?, 0, ?)").run(id(1), t);
+  env.DB.raw.exec("CREATE TRIGGER stop BEFORE DELETE ON players BEGIN SELECT RAISE(ABORT, 'stop'); END");
+  await assert.rejects(adminList());
+  assert.equal(count('SELECT COUNT(*) AS n FROM names'), 1);
+  assert.equal(count('SELECT COUNT(*) AS n FROM players'), 1);
+});
+
+test('hundreds of fresh test names do not push a real waiting name off the admin list', async () => {
+  const { env, call, adminList } = setup();
+  await call('POST', '/api/players', { id: id(1), name: 'Aino' });
+  const now = new Date(Date.now() + 1000).toISOString();
+  const add = env.DB.raw.prepare("INSERT INTO players (id, name, status, created_at, updated_at) VALUES (?, ?, 'pending', ?, ?)");
+  for (let i = 0; i < 450; i++) add.run(id(2000 + i), `Testi${i}`, now, now);
+  // A name that only starts like a test name is a real one, and shows too.
+  add.run(id(3000), 'Testi-ukko', now, now);
+  add.run(id(3001), 'Testiä', now, now);
+  assert.deepEqual((await adminList()).sort(), ['Aino', 'Testi-ukko']);
 });

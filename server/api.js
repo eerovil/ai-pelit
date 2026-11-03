@@ -80,7 +80,9 @@ const NAME_MAX = 16;
 export const NEW_PER_DAY = 5;
 export const PENDING_MAX = 30;
 export const TEST_KEEP = 864e5; // a test name lives a day, ms
-const TEST_CLEAN_MAX = 50; // test players deleted per request, so one request stays quick
+// Test players deleted per request: one batch of ten statements, each binding at most 2 × 40
+// values (D1 allows 100 per statement), so a request stays well inside D1's query limits.
+const TEST_CLEAN_MAX = 40;
 const BODY_MAX = 12000; // room for 5000 characters of feedback (#184, #351), emoji and all
 const LIST = 10;
 
@@ -136,7 +138,8 @@ async function sourceOf(request, env) {
 export const isTestName = (name) => /^testi[\p{L}\p{N} ]{0,8}$/iu.test(String(name || '').trim());
 
 // The players among `rows` that are real players who took a test name: each owns a name the
-// admin approved that is not a test name (`names.locked`). They are never hidden or deleted.
+// admin approved that is not a test name (`names.locked`). They are never hidden or deleted
+// (Eero's choice on #380: an accidental rename must not lose a family member's scores).
 async function realOnes(env, rows) {
   const ids = rows.filter((p) => isTestName(p.name)).map((p) => p.id);
   const real = new Set();
@@ -158,21 +161,24 @@ export async function cleanTestPlayers(env) {
   ).bind(new Date(Date.now() - TEST_KEEP).toISOString()).all();
   const real = await realOnes(env, results);
   const gone = results.filter((p) => isTestName(p.name) && !real.has(p.id)).slice(0, TEST_CLEAN_MAX);
-  for (const p of gone) {
-    const pid = p.pid || (await pidOf(p.id));
-    for (const [sql, ...args] of [
-      ['DELETE FROM names WHERE player = ?', p.id],
-      ['DELETE FROM scores WHERE player = ?', p.id],
-      ['DELETE FROM presence WHERE player = ?', p.id],
-      ['DELETE FROM push_subs WHERE player = ?', p.id],
-      ['DELETE FROM friend_sends WHERE player = ?', p.id],
-      ['DELETE FROM feedback WHERE player = ?', p.id],
-      ['DELETE FROM friends WHERE a = ? OR b = ?', p.id, p.id],
-      ['DELETE FROM friend_requests WHERE sender = ? OR receiver = ?', p.id, pid],
-      ['DELETE FROM invites WHERE sender = ? OR receiver = ?', p.id, p.id],
-      ['DELETE FROM players WHERE id = ?', p.id],
-    ]) await env.DB.prepare(sql).bind(...args).run();
-  }
+  if (!gone.length) return 0;
+  const ids = gone.map((p) => p.id);
+  const pids = await Promise.all(gone.map((p) => p.pid || pidOf(p.id)));
+  const list = (n) => Array(n).fill('?').join(',');
+  const of = list(ids.length);
+  // One batch: D1 runs it as one transaction, so no player is left half deleted.
+  await env.DB.batch([
+    [`DELETE FROM names WHERE player IN (${of})`, ids],
+    [`DELETE FROM scores WHERE player IN (${of})`, ids],
+    [`DELETE FROM presence WHERE player IN (${of})`, ids],
+    [`DELETE FROM push_subs WHERE player IN (${of})`, ids],
+    [`DELETE FROM friend_sends WHERE player IN (${of})`, ids],
+    [`DELETE FROM feedback WHERE player IN (${of})`, ids],
+    [`DELETE FROM friends WHERE a IN (${of}) OR b IN (${of})`, [...ids, ...ids]],
+    [`DELETE FROM friend_requests WHERE sender IN (${of}) OR receiver IN (${of})`, [...ids, ...pids]],
+    [`DELETE FROM invites WHERE sender IN (${of}) OR receiver IN (${of})`, [...ids, ...ids]],
+    [`DELETE FROM players WHERE id IN (${of})`, ids],
+  ].map(([sql, args]) => env.DB.prepare(sql).bind(...args)));
   return gone.length;
 }
 
@@ -806,9 +812,16 @@ async function pushTo(env, player) {
 async function adminPlayers(env) {
   await cleanTestPlayers(env);
   // Waiting names first, then the newest; test names never (#380).
+  // Test names are dropped before the limit, so any number of them cannot push a real one off.
+  // SQL cannot run isTestName's pattern, so it keeps every name that might not be one: not
+  // starting "testi", too long, or with a character other than A–Z, digits or space after it
+  // (a Finnish letter), or owning an approved name (a real player who took a test name, kept by
+  // Eero's choice on #380); isTestName and realOnes then settle those few.
   const { results } = await env.DB.prepare(
     `SELECT id, name, status, updated_at FROM players
-     ORDER BY status = 'pending' DESC, updated_at DESC LIMIT 400`
+     WHERE lower(name) NOT LIKE 'testi%' OR length(name) > 13 OR substr(name, 6) GLOB '*[^A-Za-z0-9 ]*'
+        OR id IN (SELECT player FROM names WHERE locked = 1)
+     ORDER BY status = 'pending' DESC, updated_at DESC LIMIT 200`
   ).all();
   const real = await realOnes(env, results);
   return json({ players: results.filter((p) => !isTestName(p.name) || real.has(p.id)).slice(0, 200) });
