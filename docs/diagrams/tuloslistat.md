@@ -21,7 +21,10 @@ flowchart TD
   end
   subgraph Cloudflare Pages Functions
     F -- Kyllä --> G[POST /api/players]
-    G --> H{Roskapostirajat}
+    G --> X[Poista yli vuorokauden vanhat testinimet]
+    X --> TN{Testinimi?}
+    TN -- Kyllä --> I
+    TN -- Ei --> H{Roskapostirajat}
     H -- Liikaa --> C
     H -- OK --> I[Nimi odottaa hyväksyntää]
     F -- Kyllä --> J[POST /api/scores: pidä paras]
@@ -33,15 +36,18 @@ flowchart TD
     S2[Pelin sivu: top 10] --> K
   end
   subgraph Ylläpito
-    I --> M[Hyllyllä: N nimimerkkiä odottaa]
+    I --> Q{Testinimi?}
+    Q -- Ei --> M[Hyllyllä: N nimimerkkiä odottaa]
+    Q -- Kyllä --> R[Piilossa ylläpidolta]
     M --> N["/yllapito/: Hyväksy tai Hylkää"]
     N -- Hyväksy --> O[Nimi lukitaan puhelimelle]
     O --> K
   end
   class A,B,E,T,L,S1,S2 blue
-  class D,F,H amber
+  class D,F,H,TN,Q amber
   class C,G,J,K,K2,P teal
-  class I,M,N violet
+  class I,M,N,R violet
+  class X rose
   class O green
 ```
 
@@ -52,6 +58,7 @@ flowchart TD
 - **teal**: where a score is kept and sent
 - **violet**: the admin's part
 - **green**: a name that shows on the lists
+- **rose**: clean-up of the agents' test names (#380)
 
 ## Boxes
 
@@ -59,7 +66,10 @@ flowchart TD
 - **Jono puhelimessa: paras tulos per lista**: `localStorage` key `ai-pelit:_tulokset:jono`; only the best waiting score per list is kept, and `flush()` sends it on load, on `online`, and after each round. It leaves the queue only once the server took it (2xx), or answered 400 (a score it can never take).
 - **Kysy nimimerkki kerran**: the first score on a phone opens the list with a name field; the name is one per phone for every game (`ai-pelit:_pelaaja:nimi`, with a random id in `ai-pelit:_pelaaja:id`).
 - **POST /api/players**: `server/api.js` `setName()`, served by `functions/api/[[path]].js` on the D1 database (`migrations/`). The same function also forwards `/api/rooms/<CODE>` to the live game rooms, and `GET /api/rooms?game=` (one game's) and `GET /api/rooms` (every game's, for the shelf, #203) to their list of public rooms (#50), before it needs the database; neither touches scores (see `moninpeli.md`). A new or changed name is `pending`; it claims the name in `names` at once, so two phones asking together cannot both get it.
-- **Roskapostirajat**: `setName()`: at most 5 new names a day per network (a salted hash, never the address) and none while 30 wait; a 429 leaves the name to be sent later. Each game accepts only its own lists (`GAMES` in `server/api.js`).
+- **Poista yli vuorokauden vanhat testinimet**: `cleanTestPlayers()` in `server/api.js` (#380), run at the start of `setName()` and `adminPlayers()`: every player whose name is a test name (`isTestName()`) and was made over 24 hours ago is deleted, with its rows in every table that names it (names, scores, presence, friends, friend requests, invites, friend sends, push subscriptions, feedback), at most 40 a request, in one `env.DB.batch()` of ten statements (one transaction, so no player is left half deleted).
+- **Testinimi?**: `isTestName()` in `server/api.js` (#380): a name that is "Testi" followed by at most 8 more letters, digits or spaces (Testi, Testi1, Testi A, Testi184b), any case. Agents' live checks on the real site use such names. A real player who renames itself so keeps everything: one that owns an approved name that is not a test name (`names.locked`, `realOnes()`) is never hidden or deleted (Eero's choice on #380).
+- **Piilossa ylläpidolta**: `adminPlayers()` leaves test names out in its SQL before the limit of 200, so no number of them can push a real one off, and `showWaitingNames()` on the shelf counts only the others, so the admin never sees them. The admin API can still approve one by id (a live check of feedback needs an approved name).
+- **Roskapostirajat**: `setName()`: at most 5 new names a day per network (a salted hash, never the address) and none while 30 wait, test names left out of both counts (#380); a 429 leaves the name to be sent later. Each game accepts only its own lists (`GAMES` in `server/api.js`).
 - **POST /api/scores: pidä paras**: `addScore()` keeps each player's best per list; no cheat checks (Eero's choice).
 - **Tuloslista pelin päällä**: the overlay in `scores.js`: top 10 approved names with score and version, the player's own row, and its name's state (waiting, rejected, taken).
 - **Kysy nimimerkki kerran** is also asked by the shelf's feedback box (#184): `AiPelitScores.me()` and `setName()` in `scores.js` read and set the same name; only an approved one may write feedback (see `palaute.md`).

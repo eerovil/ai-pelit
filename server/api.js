@@ -39,6 +39,9 @@
 // as sent: there is no cheat check (Eero's choice).
 // Against spam: each game has a fixed set of lists, one network makes at most NEW_PER_DAY names
 // a day, and while PENDING_MAX names wait for the admin no new one is taken.
+// Test names (#380): the agents' live checks play the real site as "Testi1", "Testi2"... from
+// the same home network as Eero's family. A test name (isTestName) counts toward neither limit,
+// never shows to the admin, and is deleted with everything it left TEST_KEEP after it was made.
 
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
@@ -76,6 +79,10 @@ const ID = /^[a-f0-9]{32}$/;
 const NAME_MAX = 16;
 export const NEW_PER_DAY = 5;
 export const PENDING_MAX = 30;
+export const TEST_KEEP = 864e5; // a test name lives a day, ms
+// Test players deleted per request: one batch of ten statements, each binding at most 2 × 40
+// values (D1 allows 100 per statement), so a request stays well inside D1's query limits.
+const TEST_CLEAN_MAX = 40;
 const BODY_MAX = 12000; // room for 5000 characters of feedback (#184, #351), emoji and all
 const LIST = 10;
 
@@ -127,23 +134,78 @@ async function sourceOf(request, env) {
   return [...hash.slice(0, 12)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// "Testi" and up to 8 more letters, digits or spaces, any case: Testi, Testi1, Testi A, Testi184b.
+export const isTestName = (name) => /^testi[\p{L}\p{N} ]{0,8}$/iu.test(String(name || '').trim());
+
+// The players among `rows` that are real players who took a test name: each owns a name the
+// admin approved that is not a test name (`names.locked`). They are never hidden or deleted
+// (Eero's choice on #380: an accidental rename must not lose a family member's scores).
+async function realOnes(env, rows) {
+  const ids = rows.filter((p) => isTestName(p.name)).map((p) => p.id);
+  const real = new Set();
+  for (let i = 0; i < ids.length; i += 50) {
+    const part = ids.slice(i, i + 50);
+    const { results } = await env.DB.prepare(
+      `SELECT player, name_key FROM names WHERE locked = 1 AND player IN (${part.map(() => '?').join(',')})`
+    ).bind(...part).all();
+    for (const r of results) if (!isTestName(r.name_key)) real.add(r.player);
+  }
+  return real;
+}
+
+// Deletes the test players made over TEST_KEEP ago, and every row that names them (#380).
+// friend_requests.receiver is a pid; every other column holds the secret player id.
+export async function cleanTestPlayers(env) {
+  const { results } = await env.DB.prepare(
+    // The oldest 200 at most, so one request reads a fixed number of rows however many wait.
+    "SELECT id, name, pid FROM players WHERE lower(name) LIKE 'testi%' AND created_at < ? ORDER BY created_at LIMIT 200"
+  ).bind(new Date(Date.now() - TEST_KEEP).toISOString()).all();
+  const real = await realOnes(env, results);
+  const gone = results.filter((p) => isTestName(p.name) && !real.has(p.id)).slice(0, TEST_CLEAN_MAX);
+  if (!gone.length) return 0;
+  const ids = gone.map((p) => p.id);
+  const pids = await Promise.all(gone.map((p) => p.pid || pidOf(p.id)));
+  const list = (n) => Array(n).fill('?').join(',');
+  const of = list(ids.length);
+  // One batch: D1 runs it as one transaction, so no player is left half deleted.
+  await env.DB.batch([
+    [`DELETE FROM names WHERE player IN (${of})`, ids],
+    [`DELETE FROM scores WHERE player IN (${of})`, ids],
+    [`DELETE FROM presence WHERE player IN (${of})`, ids],
+    [`DELETE FROM push_subs WHERE player IN (${of})`, ids],
+    [`DELETE FROM friend_sends WHERE player IN (${of})`, ids],
+    [`DELETE FROM feedback WHERE player IN (${of})`, ids],
+    [`DELETE FROM friends WHERE a IN (${of}) OR b IN (${of})`, [...ids, ...ids]],
+    [`DELETE FROM friend_requests WHERE sender IN (${of}) OR receiver IN (${of})`, [...ids, ...pids]],
+    [`DELETE FROM invites WHERE sender IN (${of}) OR receiver IN (${of})`, [...ids, ...ids]],
+    [`DELETE FROM players WHERE id IN (${of})`, ids],
+  ].map(([sql, args]) => env.DB.prepare(sql).bind(...args)));
+  return gone.length;
+}
+
 async function setName(request, env, body) {
   const id = String(body.id || ''), name = cleanName(body.name);
   if (!ID.test(id)) return fail(400, 'bad id');
   if (!name) return fail(400, `a name is 1–${NAME_MAX} characters`);
+  await cleanTestPlayers(env);
+  const test = isTestName(name);
   const key = nameKey(name);
   const owner = await env.DB.prepare('SELECT player FROM names WHERE name_key = ?').bind(key).first();
   if (owner && owner.player !== id) return fail(409, 'name taken');
   const old = await env.DB.prepare('SELECT name, status FROM players WHERE id = ?').bind(id).first();
   if (old && old.name === name) return json({ name, status: old.status });
-  const waiting = await env.DB.prepare("SELECT COUNT(*) AS n FROM players WHERE status = 'pending'").first();
-  if (waiting.n >= PENDING_MAX) return fail(429, 'too many names waiting');
+  // Test names count toward neither limit, and take no place in them (#380).
+  const real = (rows) => rows.results.filter((p) => !isTestName(p.name)).length;
+  if (!test) {
+    const waiting = await env.DB.prepare("SELECT name FROM players WHERE status = 'pending'").all();
+    if (real(waiting) >= PENDING_MAX) return fail(429, 'too many names waiting');
+  }
   const source = await sourceOf(request, env), t = now();
-  if (!old) {
+  if (!old && !test) {
     const day = new Date(Date.now() - 864e5).toISOString();
-    const made = await env.DB.prepare('SELECT COUNT(*) AS n FROM players WHERE source = ? AND created_at > ?')
-      .bind(source, day).first();
-    if (made.n >= NEW_PER_DAY) return fail(429, 'too many new names from here today');
+    const made = await env.DB.prepare('SELECT name FROM players WHERE source = ? AND created_at > ?')
+      .bind(source, day).all();
+    if (real(made) >= NEW_PER_DAY) return fail(429, 'too many new names from here today');
   }
   if (!(await claim(env, key, id, 0))) return fail(409, 'name taken');
   // The name it had before is free again, unless the admin approved it (locked).
@@ -749,12 +811,21 @@ async function pushTo(env, player) {
 }
 
 async function adminPlayers(env) {
-  // Waiting names first, then the newest.
+  await cleanTestPlayers(env);
+  // Waiting names first, then the newest; test names never (#380).
+  // Test names are dropped before the limit, so any number of them cannot push a real one off.
+  // SQL cannot run isTestName's pattern, so it keeps every name that might not be one: not
+  // starting "testi", too long, or with a character other than A–Z, digits or space after it
+  // (a Finnish letter), or owning an approved name (a real player who took a test name, kept by
+  // Eero's choice on #380); isTestName and realOnes then settle those few.
   const { results } = await env.DB.prepare(
     `SELECT id, name, status, updated_at FROM players
+     WHERE lower(name) NOT LIKE 'testi%' OR length(name) > 13 OR substr(name, 6) GLOB '*[^A-Za-z0-9 ]*'
+        OR id IN (SELECT player FROM names WHERE locked = 1)
      ORDER BY status = 'pending' DESC, updated_at DESC LIMIT 200`
   ).all();
-  return json({ players: results });
+  const real = await realOnes(env, results);
+  return json({ players: results.filter((p) => !isTestName(p.name) || real.has(p.id)).slice(0, 200) });
 }
 
 async function adminDecide(env, body) {
