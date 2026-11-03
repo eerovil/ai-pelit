@@ -175,7 +175,8 @@ high-score lists (#25), then play counts (#26).
     other. Upright the chip sits on the right edge above the middle; on its side, in the top bar
     right of the middle. A new version whose controls are there moves it with
     `data-voice-corner="left|top-left|top-right|bottom-left|bottom-right"` on its `rooms.js` tag,
-    or leaves voice out with `data-voice="off"`. Each phone has "🎤 Puhe" on the room screen and a
+    or leaves voice out with `data-voice="off"`. A call that brings no sound while the other phone talks (it says it is up, but nothing
+    arrives for 3 s) is made again by itself, at most once per 10 s per pair (#386). Each phone has "🎤 Puhe" on the room screen and a
     🔊/🔇 mute beside each name. In every room, public ones too, until a friends list exists
     (Eero's choice). The relay is free up to 1000 GB a month and Cloudflare has no cap, so the site
     hands out relay credentials only under 800 GB this month (Eero's choice), as the host's hourly

@@ -88,6 +88,10 @@ flowchart TD
     V3 -- Ei --> V5[Mikrofoni kiinni]
     V6[🔊 Nimi puhuu: muut kuulevat]
     V7[🔇 Mykistä pelaaja pelaajalistassa]
+    V8{Puhuuko joku, mutta häneltä ei tule ääntä 3 sekuntiin?}
+    V9[Soitetaan hänelle uudelleen, enintään kerran 10 s:ssa]
+    V10{Onko ääni pysähtynyt puhelimessa?}
+    V11[Ääni käynnistetään uudelleen]
   end
   subgraph CfPuhe[Cloudflare: puhe]
     C3[Huone välittää yhteyden avausviestit _rtc kenelle tahansa]
@@ -107,12 +111,17 @@ flowchart TD
   G2 --> V3
   V4 --> V6
   V7 --> V6
+  V6 --> V8
+  V8 -- Kyllä --> V9
+  V9 --> V2
+  V8 -- Ei --> V10
+  V10 -- Kyllä --> V11
   class G1,G2,G3,G4,G5,G6 teal
   class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18,L19,L20 blue
   class C1,C2,C3,C4,C5,C7 violet
-  class V1,V2,V4,V5,V6,V7 blue
+  class V1,V2,V4,V5,V6,V7,V9,V11 blue
   class S1 green
-  class L5,L8,L13,L17,V3,C6 amber
+  class L5,L8,L13,L17,V3,C6,V8,V10 amber
   class L6,G7,L14 rose
 ```
 
@@ -168,3 +177,7 @@ flowchart TD
 - **➕ Kaveriksi ja 📨 Kutsu kaveri**: friends in the room (#324), drawn by `friendButton()` and `renderFriends()` in `public/rooms.js` once `public/kaverit.js` is on the page: "➕ Kaveriksi" beside each other player with a `fid`, the requests to this phone with Hyväksy / Ei under the list (read every 10 s while the room screen shows), and "📨 Kutsu kaveri", a list of friends that sends an invite to this room; a friend who switched on "🔔 Ilmoitukset kutsuista" also gets it as a phone notification with the site closed (#367). See `kaverit.md`.
 - **🎲 Vaihda peliä: isäntä vie koko huoneen toiseen peliin**: between rounds the host picks a game whose `room.max` in `catalog.json` fits everyone (#354); its phone opens that game with the same code (a one-minute `ai-pelit:_isanta` note keeps it host), `rooms/worker.js` takes the new `game`, `v` and `max` from the host's join, and `onPeers()` moves every guest, also one already in the room or coming back from a lost connection. See `porukka.md`.
 - **Viimeinen poistuu tarkoituksella: huone poistetaan heti**: a `bye` that leaves no member ("Poistu huoneesta", or the "‹ Pelit" chip through `AiPelitRooms.leaveIfAlone()` in `public/back.js`) deletes the room and its public listing at once (#354); a phone that only drops off still keeps its seat for 6 hours (`IDLE`).
+- **Puhuuko joku, mutta häneltä ei tule ääntä 3 sekuntiin?**: `heal()` in `public/rooms.js`, every second while another phone says it is talking (`_rtc` `talk` on): it reads the call's incoming sound bytes (`getStats()`, `inbound-rtp`). A call that is not up, or is up but has brought no new sound for 3 seconds of that phone's talking, is broken even if it says "connected" (#386: after a game switch some players could not hear each other until they switched voice off and on).
+- **Soitetaan hänelle uudelleen, enintään kerran 10 s:ssa**: the phone with the smaller id hangs up and calls again (`dial()`); the other asks it to (`_rtc` `again`). At most once per 10 seconds per pair, so a phone that truly cannot be reached is not called in a loop. When the new call is up while a phone talks, it says so again (`talk` on, from `newPc()`), since hanging up made the other phone forget; so the name bubble stays and the check goes on. `AiPelitRooms.voice.heals` counts these calls.
+- **Onko ääni pysähtynyt puhelimessa?**: sound is arriving, but that player's hidden `<audio>` is paused (the phone held it back or stopped it).
+- **Ääni käynnistetään uudelleen**: `play()` on it, as a tap does (`replay()`); when the phone still refuses, the "Napauta ruutua" hint shows as before.

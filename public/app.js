@@ -681,6 +681,10 @@
     var problem = friends.nameNote();
     if (!friends.name() || problem || nameError) {
       var input = el('input', { class: 'friends-name', maxlength: '16', placeholder: 'Nimimerkki', 'aria-label': 'Nimimerkki' });
+      // A redraw (the friends list refreshing) keeps what was typed: a tap on "Tallenna" just as
+      // the page is drawn again would otherwise save nothing (a flaky CI run on #389).
+      var typed = view.querySelector('.friends-name');
+      if (typed) input.value = typed.value;
       var save = el('button', { type: 'button', class: 'button', text: 'Tallenna' });
       save.addEventListener('click', function () {
         var v = input.value.trim();

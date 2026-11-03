@@ -18,15 +18,25 @@ COUNT_CALLS = """
   window.__pcs = [];
   window.RTCPeerConnection = function (cfg) { const pc = new Real(cfg); window.__pcs.push(pc); return pc; };
   window.RTCPeerConnection.prototype = Real.prototype;
-  // Bytes of sound that came in, over every call this page has had.
+  // Bytes of sound that came in, over every call this page has had (a closed call keeps its last
+  // count, so the total never goes down).
+  const last = new Map();
   window.__heard = async () => {
     let n = 0;
     for (const pc of window.__pcs) {
-      if (pc.connectionState === 'closed') continue;
-      (await pc.getStats()).forEach((r) => { if (r.type === 'inbound-rtp' && r.kind === 'audio') n += r.bytesReceived || 0; });
+      if (pc.connectionState !== 'closed') {
+        let b = 0;
+        (await pc.getStats()).forEach((r) => { if (r.type === 'inbound-rtp' && r.kind === 'audio') b += r.bytesReceived || 0; });
+        last.set(pc, b);
+      }
+      n += last.get(pc) || 0;
     }
     return n;
   };
+  // The same, read every 200 ms: wait_for_function takes a returned promise as true at once (#386),
+  // so a wait reads this number instead.
+  window.__bytes = 0;
+  setInterval(() => { window.__heard().then((n) => { window.__bytes = n; }); }, 200);
 })();
 """
 
@@ -104,7 +114,7 @@ def test_a_held_chip_is_heard_by_everyone_in_the_room_guest_to_guest_too(phones)
     assert a.evaluate("document.getElementById('aipr-talk').hidden")  # no "hold to talk" hint while holding
     for p in (host, b):
         p.wait_for_function("document.getElementById('aipr-talk').textContent === '🔊 Aino'")
-        p.wait_for_function(f"window.__heard().then(n => n > {before[p]} + 2000)", polling=200)
+        p.wait_for_function(f"window.__bytes > {before[p]} + 2000", polling=200)
     a.mouse.up()
     a.wait_for_function("!AiPelitRooms.voice.talking")
     for p in (host, b):
@@ -162,7 +172,7 @@ def test_a_reloaded_phone_is_called_again(phones):
         p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=15000)
     before = heard(a)
     hold(b)
-    a.wait_for_function(f"window.__heard().then(n => n > {before} + 2000)", polling=200)
+    a.wait_for_function(f"window.__bytes > {before} + 2000", polling=200)
     b.mouse.up()
 
 
@@ -186,7 +196,7 @@ def test_a_version_may_leave_voice_out(phones):
     a = join(phones, "Aino", code, "hiljainen/v1/")
     a.wait_for_timeout(800)
     for p in (host, a):
-        assert p.evaluate("AiPelitRooms.voice") == {"on": False, "talking": False, "speakers": [], "calls": 0}
+        assert p.evaluate("AiPelitRooms.voice") == {"on": False, "talking": False, "speakers": [], "calls": 0, "heals": 0}
         assert p.locator("#aipr-mic").count() == 0
         assert not p.locator("#aipr-voiceRow").is_visible()
 
@@ -202,7 +212,7 @@ def test_two_phones_talk_on_a_room_from_before_voice(phones):
     before = heard(a)
     hold(host)
     a.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Eero'")
-    a.wait_for_function(f"window.__heard().then(n => n > {before} + 2000)", polling=200)
+    a.wait_for_function(f"window.__bytes > {before} + 2000", polling=200)
     host.mouse.up()
 
 
@@ -381,3 +391,122 @@ def test_lost_setups_heal_for_every_pair_and_a_working_call_is_kept(phones):
     assert [p.evaluate("window.__pcs.length") for p in (host, a, b)] == count
     for p in (host, a, b):
         assert p.evaluate("AiPelitRooms.voice.calls") == 2
+
+
+# ---- Voice heals itself (#386) ----
+
+def test_every_phone_hears_every_other_after_a_game_switch(site, phones):
+    # After a game switch every phone loads the new game's page and the calls are made again; a
+    # phone that comes late (its connection was away during the switch) is called too.
+    import re
+    make_game(site.games, "iso", [demo_page("iso", 8)])
+    site.build()
+    host, a, b = room_of_three(phones)
+    phones.relay.drop(b)
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    host.click("#aipr-switchGame")
+    host.click("#aipr-gameList button[data-game='iso']")
+    for p in (host, a):
+        p.wait_for_url(re.compile(r"/games/iso/v1/"))
+    host.wait_for_timeout(3000)
+    phones.relay.back(b)
+    b.wait_for_url(re.compile(r"/games/iso/v1/"), timeout=20000)
+    for p in (host, a, b):
+        p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=20000)
+    for talker in (host, a, b):
+        others = [p for p in (host, a, b) if p is not talker]
+        before = [heard(p) for p in others]
+        hold(talker)
+        for p, n in zip(others, before):
+            p.wait_for_function(f"window.__bytes > {n} + 2000", polling=200, timeout=8000)
+        talker.mouse.up()
+    assert host.errors == a.errors == b.errors == []
+
+
+def room_of_two(phones):
+    host, code = make_room(phones)
+    a = join(phones, "Aino", code)
+    for p in (host, a):
+        p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=15000)
+    return host, a
+
+
+@pytest.mark.parametrize("listener_calls", [True, False])
+def test_a_connected_call_that_brings_no_sound_is_made_again(phones, listener_calls):
+    # The call says "connected" but no sound comes through it: the phone listening notices within
+    # a few seconds of the other one talking, and the call is made again. The phone with the smaller
+    # id calls; when the listener is the other one, it asks for the call ("again").
+    host, a = room_of_two(phones)
+    small = host.evaluate("AiPelitRooms.me") < a.evaluate("AiPelitRooms.me")
+    listener = host if small == listener_calls else a
+    talker = a if listener is host else host
+    calls = [p.evaluate("window.__pcs.length") for p in (host, a)]
+    before = heard(listener)
+    hold(talker)
+    listener.wait_for_function(f"window.__bytes > {before} + 2000", polling=200)
+    # The talker's sound stops going into the call; the call itself stays up.
+    talker.evaluate("window.__pcs.forEach(pc => { if (pc.connectionState !== 'closed') pc.getSenders().forEach(s => s.replaceTrack(null)); })")
+    listener.wait_for_timeout(500)
+    before = heard(listener)
+    listener.wait_for_function(f"window.__bytes > {before} + 2000", polling=200, timeout=10000)
+    # The listening phone still shows who talks, after the call was made again.
+    name = "Eero" if talker is host else "Aino"
+    listener.wait_for_function(f"AiPelitRooms.voice.speakers.join() === '{name}'", timeout=3000)
+    talker.mouse.up()
+    assert listener.evaluate("AiPelitRooms.voice.heals") == 1
+    assert talker.evaluate("AiPelitRooms.voice.heals") == 0
+    assert [p.evaluate("window.__pcs.length") for p in (host, a)] == [n + 1 for n in calls]
+    assert host.errors == a.errors == []
+
+
+def test_a_paused_player_is_started_again_while_someone_talks(phones):
+    host, a = room_of_two(phones)
+    before = heard(a)
+    hold(host)
+    a.wait_for_function(f"window.__bytes > {before} + 2000", polling=200)
+    a.wait_for_function("[...document.querySelectorAll('audio')].some(x => !x.paused)")
+    a.evaluate("document.querySelectorAll('audio').forEach(x => x.pause())")
+    a.wait_for_function("[...document.querySelectorAll('audio')].some(x => !x.paused)", timeout=3000)
+    host.mouse.up()
+    assert a.evaluate("AiPelitRooms.voice.heals") == 0
+
+
+def test_a_working_call_is_not_made_again_while_someone_talks(phones):
+    host, a = room_of_two(phones)
+    calls = [p.evaluate("window.__pcs.length") for p in (host, a)]
+    hold(host)
+    host.wait_for_timeout(10000)
+    host.mouse.up()
+    hold(a)
+    a.wait_for_timeout(5000)
+    a.mouse.up()
+    assert [p.evaluate("window.__pcs.length") for p in (host, a)] == calls
+    assert host.evaluate("AiPelitRooms.voice.heals") == a.evaluate("AiPelitRooms.voice.heals") == 0
+
+
+def test_two_talking_at_once_only_the_silent_calls_are_made_again(phones):
+    # Aino and Iida talk at once, and Aino's sound stops going into her calls. Eero and Iida each
+    # make their call with Aino again, once; the calls with Iida, who is heard, are kept.
+    host, a, b = room_of_three(phones)
+    hold(a)
+    hold(b)
+    host.wait_for_function("AiPelitRooms.voice.speakers.length === 2")
+    host.wait_for_timeout(1000)
+    calls = [p.evaluate("window.__pcs.length") for p in (host, a, b)]
+    a.evaluate("window.__pcs.forEach(pc => { if (pc.connectionState !== 'closed') pc.getSenders().forEach(s => s.replaceTrack(null)); })")
+    for p in (host, b):
+        p.wait_for_function("AiPelitRooms.voice.heals === 1", timeout=8000)
+    for p in (host, b):
+        p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=8000)
+        p.wait_for_function("AiPelitRooms.voice.speakers.includes('Aino')", timeout=3000)
+    host.wait_for_timeout(4000)
+    # Iida stops: what Eero hears now is Aino's sound alone, through the call made again.
+    b.mouse.up()
+    host.wait_for_timeout(600)
+    before = heard(host)
+    host.wait_for_function(f"window.__bytes > {before} + 2000", polling=200, timeout=8000)
+    a.mouse.up()
+    assert [p.evaluate("AiPelitRooms.voice.heals") for p in (host, a, b)] == [1, 0, 1]
+    # Two calls were made again, both with Aino: one new call on Eero's and Iida's phones, two on Aino's.
+    assert [p.evaluate("window.__pcs.length") for p in (host, a, b)] == [calls[0] + 1, calls[1] + 2, calls[2] + 1]
+    assert host.errors == a.errors == b.errors == []
