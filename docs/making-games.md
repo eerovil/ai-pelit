@@ -43,7 +43,10 @@ the version that taught it, so you can read the code that fixed it.
   reload, played fine). The test phone and headless Chromium did not show it, and adb taps
   reached the game, so neither proves a fix. Load the page afresh for each new frame (Ottelu v3
   reloads between events), and let Eero try a preview (`wrangler pages deploy … --branch`) on his
-  own phone before calling a touch bug fixed.
+  own phone before calling a touch bug fixed. In the #388 prototype both a frame given a new
+  address and a frame replaced by a new one kept their taps on his phone, so the cause is not
+  known; the room page (`public/huone/`) changes its frame's address, and the next change of the
+  kind needs his phone again.
 - **A frame gets no safe areas.** Inside an `<iframe>`, `env(safe-area-inset-*)` is 0; the page
   around it must hand them in (Ottelu v2 sets the frame's `#safe` padding).
 - **A pull-back fits on the screen.** A control the finger drags away from (a sling, a throw

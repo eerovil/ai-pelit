@@ -143,6 +143,14 @@ high-score lists (#25), then play counts (#26).
   after a reload, sends a typed code from another game or a newer version to the room's own (a room on an older one says so instead, #346), and pauses
   the round while a phone in it is away (with "Jatka ilman heitä" on the host). The game keeps the
   game: the phone that made the room (the host) runs the round and the others draw it.
+  - The room page (#388): making or joining a room moves the phone onto `public/huone/`, which
+    keeps the room's WebSocket and the voice calls (`rooms.js` with `data-shell`) and plays the
+    game in a frame under a slim room bar (code, players); the game's own 🎤 chip stays where it is and works the page's calls. The game's `rooms.js` talks through
+    the page's connection, so a game switch reloads only the frame and the calls stay up; leaving
+    the room sends the phone to the game's own page. A game needs nothing for it. A game inside
+    another frame (Ottelu's events) keeps the room in its own page, and so do the tests:
+    `tests/conftest.py` sets `window.__aiPelitHuoneSivu = false` on every page
+    (`ROOMS_IN_GAME`); `tests/test_huone_sivu.py` turns it on.
   - `on('start', s => …)` on every phone: `s.players` (`[{id, name}]`, the connected phones in
     room order), `s.round`, `s.host`, `s.over` (a finished round sent to a phone that missed it).
   - `send(msg, to)` (host: to all or one id; a guest: to the host) and `on('message', (msg, from) => …)`.
