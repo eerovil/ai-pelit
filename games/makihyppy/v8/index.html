@@ -64,7 +64,8 @@
 <script src="../../../rooms.js" data-game="makihyppy" data-min="2" data-max="8"></script>
 <!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
-<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
+<!-- v8 (#373): yleisurheilu-8, so the friends watching run along after the athlete and climb onto each other -->
+<script src="../../../lib/yleisurheilu-8/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -697,7 +698,9 @@ function drawScene(dt) {
   forest(0.3, sceneB * 0.8);
   // v6 (#341): the friends watching stand in front of the forest, behind the hill and the jumper,
   // so they never cover the jump; a tap walks your own along the row.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 12, h: 40, walk: true });
+  // v8 (#373): scroll is how far the background behind them has moved since the athlete stood at
+  // the start; the friends run after it, a little slower, and catch up once it stops.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: sceneB - 12, h: 40, walk: true, scroll: camX * 0.3 * camS - (inAt(0)[0] - 0.42 * SW / sIn) * 0.3 * sIn });
   // The tower: the in-run on its legs, then the knoll, the landing hill and the outrun.
   const groundAt = px => px < 0 ? HILL_Y0 - 3.4 * (1 - Math.exp(px / 8)) : hillY(px);
   x.strokeStyle = '#5a6b7f'; x.lineWidth = Math.max(1.5, s * 0.18);
@@ -1131,7 +1134,7 @@ c.addEventListener('pointerdown', e => {
   if (K.ending) { K.skip(); return; }
   const r = c.getBoundingClientRect();
   // v6 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
-  if ((land ? e.clientX - r.left >= SX && e.clientX - r.left < SX + SW : e.clientY - r.top < ctrlTop) && K.tapFans(e.clientX - r.left - SX)) return;
+  if ((land ? e.clientX - r.left >= SX && e.clientX - r.left < SX + SW : e.clientY - r.top < ctrlTop) && K.tapFans(e.clientX - r.left - SX, e.clientY - r.top)) return;
   const k = padAt(e.clientX - r.left, e.clientY - r.top);
   if (k === 3) action();
   else if (k) { holding.set(e.pointerId, k); flash[k] = 0.09; setInput(); }

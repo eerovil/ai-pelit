@@ -2,8 +2,9 @@
 before the athlete, in a stadium behind the boards, and a spectator's tap on the scene walks its own
 figure there on every phone.
 
-The events' versions on yleisurheilu-7: games/pituushyppy/v14, games/keihas/v13, games/kuula/v7,
-games/korkeushyppy/v10, games/seivashyppy/v11, games/moukari/v10, games/makihyppy/v7.
+The events' versions (on yleisurheilu-8 from #373, Moukarinheitto still on yleisurheilu-7):
+games/pituushyppy/v15, games/keihas/v14, games/kuula/v8, games/korkeushyppy/v11,
+games/seivashyppy/v12, games/moukari/v10, games/makihyppy/v8.
 """
 
 import json
@@ -13,16 +14,16 @@ from test_yleisurheilu_vuorot import MARK, on_turn, room
 
 # Each event and the function that draws its athlete on the runway or in the circle.
 EVENTS = {
-    "pituushyppy/v14": "drawJumper",
-    "keihas/v13": "drawAthlete",
-    "kuula/v7": "drawPutter",
-    "korkeushyppy/v10": "drawAthlete",
-    "seivashyppy/v11": "drawRunner",
+    "pituushyppy/v15": "drawJumper",
+    "keihas/v14": "drawAthlete",
+    "kuula/v8": "drawPutter",
+    "korkeushyppy/v11": "drawAthlete",
+    "seivashyppy/v12": "drawRunner",
     "moukari/v10": "drawThrower",
-    "makihyppy/v7": "drawJumper",
+    "makihyppy/v8": "drawJumper",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
-STADIUM = {"pituushyppy/v14", "keihas/v13", "kuula/v7", "korkeushyppy/v10", "seivashyppy/v11"}
+STADIUM = {"pituushyppy/v15", "keihas/v14", "kuula/v8", "korkeushyppy/v11", "seivashyppy/v12"}
 
 
 def watching(site, browser, path):
@@ -84,7 +85,9 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
     for p in pages:
         assert p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") == before[p]
     x0 = fan.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(me)}).x")
-    target = 60 if x0 > 150 else 280
+    x1 = before[fan]
+    # From yleisurheilu-8 (#373) a tap on the other friend climbs onto them, so tap clear of them.
+    target = max((t for t in (60, 170, 280) if abs(t - x0) > 50), key=lambda t: abs(t - x1))
     tap_scene(fan, target)
     want = fan.evaluate(f"K.spot[{json.dumps(me)}]")
     assert want is not None
@@ -106,7 +109,7 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
         p.context.close()
 
 
-@pytest.mark.parametrize("path", ["pituushyppy/v14", "moukari/v10"])
+@pytest.mark.parametrize("path", ["pituushyppy/v15", "moukari/v10"])
 def test_both_watching_tap_at_once_and_a_reloaded_phone_gets_the_spots(site, browser, path):
     relay, pages, athlete, fans = watching(site, browser, path)
     fan, host = fans
@@ -139,7 +142,7 @@ def xs(page):
     return page.evaluate("Object.fromEntries(K.fanSpots.map(f => [f.id, f.x]))")
 
 
-@pytest.mark.parametrize("path", ["pituushyppy/v14", "korkeushyppy/v10"])
+@pytest.mark.parametrize("path", ["pituushyppy/v15", "korkeushyppy/v11"])
 def test_nobody_moves_as_the_turn_goes_round_or_a_new_meet_starts(site, browser, path):
     relay, pages, athlete, fans = watching(site, browser, path)
     host = pages[0]

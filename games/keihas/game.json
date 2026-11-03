@@ -93,6 +93,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty, ja kannustuksen kilahdus on paljon hiljaisempi.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 14,
+      "date": "2026-11-03",
+      "note": "Katsojat juoksevat urheilijan perässä ja voivat kiivetä toistensa harteille.",
+      "request": "Spectatorit tulee liikkua parallax tyyliin taustan mukana",
+      "issue": "eerovil/ai-pelit#373"
     }
   ]
 }

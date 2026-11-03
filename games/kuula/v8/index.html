@@ -72,7 +72,8 @@
 <script src="../../../rooms.js" data-game="kuula" data-min="2" data-max="8"></script>
 <!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
-<script src="../../../lib/yleisurheilu-7/kisa.js"></script>
+<!-- v8 (#373): yleisurheilu-8, so the friends watching run along after the athlete and climb onto each other -->
+<script src="../../../lib/yleisurheilu-8/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -432,7 +433,9 @@ function drawScene(dt) {
   }
   // v6 (#341): the friends watching stand behind the boards, which hide their legs, drawn before the
   // athlete so they never cover it; a tap walks your own along the row.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true });
+  // v8 (#373): scroll is how far the background behind them has moved since the athlete stood at
+  // the start; the friends run after it, a little slower, and catch up once it stops.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: standTop + standH - 7, h: 40, walk: true, scroll: (camX - (-0.9 - 0.5 * SW / runS)) * 6 });
   x.fillStyle = '#4f9a45'; x.fillRect(0, standTop + standH, W, groundY - standTop - standH);
   const bw = 120, bo = ((camX * 20) % bw + bw) % bw;
   x.font = '900 11px system-ui'; x.textAlign = 'center';
@@ -804,7 +807,7 @@ c.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (K.ending) { K.skip(); return; }  // a tap ends the ceremony, the next leaves the podium
   // v6 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
-  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX)) return;
+  if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX, e.clientY)) return;
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) startPush(e.pointerId);
   else if (k) press(k);
