@@ -132,12 +132,23 @@ def test_a_switch_changes_only_the_frame_and_keeps_the_call(phones):
     for page, n in zip((host, guest), calls):
         page.wait_for_function(f"{ROOMS}.voice.calls === 1")
         assert page.evaluate("window.__pcs.length") == n
-    # Sound still goes through: the guest holds the bar's 🎤 and the host hears it.
+    # Sound still goes through: the guest holds the game's own 🎤 chip, where it sits in the game
+    # alone (on the right edge above the middle), and the host hears it.
+    chip = game(guest).locator("#aipr-mic")
+    chip.wait_for(state="visible")
+    assert guest.locator("#bar #mic").count() == 0
+    box, stage = chip.bounding_box(), guest.locator("#stage").bounding_box()
+    assert box["x"] + box["width"] > stage["width"] - 70 and box["y"] < stage["y"] + stage["height"] / 2
     before = host.evaluate("window.__bytes")
-    guest.locator("#mic").dispatch_event("pointerdown", {"pointerId": 1})
+    chip.dispatch_event("pointerdown", {"pointerId": 1})
     guest.wait_for_function(f"{ROOMS}.voice.talking")
+    game(guest).locator("#aipr-mic.live").wait_for()
     host.wait_for_function(f"window.__bytes > {before} + 2000", timeout=10_000)
-    guest.locator("#mic").dispatch_event("pointerup", {"pointerId": 1})
+    # The host's game says who talks, and its bar lights the name.
+    game(host).locator("#aipr-talk", has_text="🔊 Aino").wait_for()
+    host.locator("#who span.talk", has_text="Aino").wait_for()
+    chip.dispatch_event("pointerup", {"pointerId": 1})
+    guest.wait_for_function(f"!{ROOMS}.voice.talking")
     assert host.errors == guest.errors == []
 
 

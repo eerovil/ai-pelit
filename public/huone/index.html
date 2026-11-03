@@ -8,7 +8,8 @@
 <title>Huone · AI-pelit</title>
 <style>
   /* The room page (#388): the room's connection and the voice calls live here, and the game plays
-     in the frame under the room bar. Switching games changes only the frame. */
+     in the frame under the room bar. Switching games changes only the frame. The game draws its own 🎤 chip, where
+     it sits in the game alone, and it works this page's calls. */
   html, body { margin: 0; height: 100%; background: #000; color: #eef2f7; font: 14px system-ui, sans-serif; overflow: hidden; }
   :root { --bar: 44px; }
   @media (orientation: landscape) and (max-height: 500px) { :root { --bar: 34px; } }
@@ -27,14 +28,6 @@
   #who span.talk i { box-shadow: 0 0 0 3px rgba(255, 255, 255, .35); }
   #who em { font-style: normal; overflow: hidden; text-overflow: ellipsis; max-width: 7.5em; }
   #state { flex: none; color: #ffd166; font-size: 12px; }
-  #mic { flex: none; width: 40px; height: calc(var(--bar) - 8px); border: 0; border-radius: 10px; font-size: 18px;
-         background: #2c3a4c; color: #fff; touch-action: none; -webkit-touch-callout: none; padding: 0; }
-  #mic.none { opacity: .5; }
-  #mic.wait { background: #8a6d12; }
-  #mic.live { background: #c0392b; }
-  #tip { position: fixed; z-index: 3; right: calc(env(safe-area-inset-right, 0px) + 6px);
-         top: calc(env(safe-area-inset-top, 0px) + var(--bar) + 6px); max-width: 70%;
-         background: rgba(22, 32, 44, .95); border-radius: 10px; padding: 7px 10px; font-size: 13px; }
   #stage { position: fixed; left: 0; right: 0; bottom: 0; top: calc(env(safe-area-inset-top, 0px) + var(--bar));
            padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
            box-sizing: border-box; }
@@ -46,9 +39,7 @@
   <span id="code"><small>Huone</small><b></b></span>
   <span id="who"></span>
   <span id="state" hidden>Yhdistetään…</span>
-  <button id="mic" type="button" hidden aria-label="Pidä pohjassa ja puhu">🎤</button>
 </div>
-<div id="tip" hidden></div>
 <div id="stage"><iframe id="game" title="Peli" allow="autoplay; fullscreen"></iframe></div>
 <script src="../rooms.js" data-shell></script>
 <script>
@@ -124,12 +115,12 @@
 
   var el = {
     code: document.querySelector('#code b'), who: document.getElementById('who'),
-    state: document.getElementById('state'), mic: document.getElementById('mic'), tip: document.getElementById('tip'),
+    state: document.getElementById('state'),
   };
   var drawn = '';
   function render() {
-    var s = S.state, vo = s.voice;
-    var key = JSON.stringify([code, s.members, s.connected, vo]);
+    var s = S.state;
+    var key = JSON.stringify([code, s.members, s.connected]);
     if (key === drawn) return;
     drawn = key;
     el.code.textContent = code;
@@ -145,22 +136,9 @@
       el.who.appendChild(span);
     });
     el.state.hidden = s.connected || !s.on;
-    el.mic.hidden = !vo.on;
-    el.mic.className = vo.talking ? 'live' : vo.pressed ? 'wait' : vo.calls ? '' : 'none';
-    el.tip.hidden = !vo.err;
-    el.tip.textContent = vo.err;
   }
   S.watch(window, render);
   render();
-
-  // Push to talk, as the 🎤 chip in a game does.
-  el.mic.addEventListener('pointerdown', function (e) {
-    e.preventDefault();
-    try { el.mic.setPointerCapture(e.pointerId); } catch (err) {}
-    S.press();
-  });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) { el.mic.addEventListener(type, S.release); });
-  el.mic.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 })();
 </script>
 </body>

@@ -498,7 +498,7 @@
   };
   // In the room page's frame the page's calls are this game's: the room screen reads them and asks
   // the page to change them (#388); none are made here.
-  var RTC_UI = SHELL ? !!SHELL.rtc : RTC;
+  var RTC_UI = SHELL ? !!SHELL.rtc && script.getAttribute('data-voice') !== 'off' : RTC;
   if (SHELL) { voice = SHELL.voice; RTC = false; }
   var STUCK = 20e3;
   function vpeer(id) { return voice.peers[id] || (voice.peers[id] = { early: [], fails: 0, retryAt: 0 }); }
@@ -731,6 +731,7 @@
 
   // ---- Push to talk ----
   function press() {
+    if (SHELL) return SHELL.press();
     if (voice.pressed || !voice.on || !net.on) return;
     // Nobody to hear it yet: the microphone stays off (and is not even asked for).
     if (!Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); })) {
@@ -757,7 +758,8 @@
     });
   }
   function release() {
-    if (SHELL || !voice.pressed) return;
+    if (SHELL) return SHELL.release();
+    if (!voice.pressed) return;
     voice.pressed = false;
     // A quick tap: say how the chip works.
     if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
@@ -829,7 +831,9 @@
   }
   function renderVoice() {
     if (SHELL_MODE) return shellChanged();
-    if (!RTC) return;
+    // In the room page's frame the chip sits where it does in the game alone, and works the
+    // page's calls (#388).
+    if (!RTC_UI) return;
     var on = net.on && voice.on;
     if (!on && !vel) return;
     voiceUI();

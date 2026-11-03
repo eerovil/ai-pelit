@@ -145,7 +145,7 @@ high-score lists (#25), then play counts (#26).
   game: the phone that made the room (the host) runs the round and the others draw it.
   - The room page (#388): making or joining a room moves the phone onto `public/huone/`, which
     keeps the room's WebSocket and the voice calls (`rooms.js` with `data-shell`) and plays the
-    game in a frame under a slim room bar (code, players, 🎤). The game's `rooms.js` talks through
+    game in a frame under a slim room bar (code, players); the game's own 🎤 chip stays where it is and works the page's calls. The game's `rooms.js` talks through
     the page's connection, so a game switch reloads only the frame and the calls stay up; leaving
     the room sends the phone to the game's own page. A game needs nothing for it. A game inside
     another frame (Ottelu's events) keeps the room in its own page, and so do the tests:
