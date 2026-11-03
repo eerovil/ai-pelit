@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from test_yleisurheilu_vuorot import newest, on_turn, room
+from test_yleisurheilu_vuorot import newest, on_turn, play, room
 
 
 def watching(site, browser, names=("Eero", "Aino", "Ville")):
@@ -240,4 +240,45 @@ def test_each_event_scrolls_from_zero_at_the_start(site, browser, slug):
     page.wait_for_function("window.__scroll !== undefined")
     page.wait_for_timeout(600)
     assert abs(page.evaluate("window.__scroll")) < 1
+    close_pages(pages)
+
+
+def climb(page, onto):
+    page.evaluate("""id => { const p = K.fanSpots.find(f => f.id === id); K.tapFans(p.x, p.y - 20); }""", onto)
+
+
+def test_two_climb_onto_the_same_friend_at_once(site, browser):
+    """Two phones climb onto the same friend at the same moment: the host stacks them one over
+    the other, and every phone ends with the same column."""
+    _, pages, athlete, fans = watching(site, browser, ("Eero", "Aino", "Ville", "Iida"))
+    ids = [p.evaluate("K.mine().id") for p in fans]
+    climb(fans[1], ids[0])
+    climb(fans[2], ids[0])
+    for p in pages:
+        p.wait_for_function("([a, b]) => !!K.on[a] && !!K.on[b]", arg=[ids[1], ids[2]], timeout=5000)
+    ons = [p.evaluate("JSON.stringify(Object.entries(K.on).sort())") for p in pages]
+    assert len(set(ons)) == 1, ons
+    # One column: the two are on the base and on each other, not both on the base.
+    on = dict(json.loads(ons[0]))
+    a, b = ids[1], ids[2]
+    assert (on[a], on[b]) in ((ids[0], a), (b, ids[0])), on
+    close_pages(pages)
+
+
+def test_the_column_comes_down_when_its_base_is_on_turn(site, browser):
+    """The friend at the bottom gets the turn: the one on their shoulders hops down, on every phone."""
+    _, pages, athlete, fans = watching(site, browser, ("Eero", "Aino", "Ville"))
+    base, top = fans
+    base_id, top_id = base.evaluate("K.mine().id"), top.evaluate("K.mine().id")
+    base_p = base.evaluate("AiPelitRooms.me")
+    climb(top, base_id)
+    for p in pages:
+        p.wait_for_function("([t, b]) => K.on[t] === b", arg=[top_id, base_id], timeout=5000)
+    host = pages[0]
+    phones = {p.evaluate("AiPelitRooms.me"): p for p in pages}
+    play(host, phones, lambda pid: pid == base_p)
+    for p in pages:
+        p.wait_for_function(f"K.current() && K.current().p === {json.dumps(base_p)}", timeout=5000)
+    for p in (athlete, top):
+        p.wait_for_function("t => K.fanSpots.length && !K.on[t]", arg=top_id, timeout=5000)
     close_pages(pages)
