@@ -157,7 +157,8 @@ async function realOnes(env, rows) {
 // friend_requests.receiver is a pid; every other column holds the secret player id.
 export async function cleanTestPlayers(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, pid FROM players WHERE lower(name) LIKE 'testi%' AND created_at < ?"
+    // The oldest 200 at most, so one request reads a fixed number of rows however many wait.
+    "SELECT id, name, pid FROM players WHERE lower(name) LIKE 'testi%' AND created_at < ? ORDER BY created_at LIMIT 200"
   ).bind(new Date(Date.now() - TEST_KEEP).toISOString()).all();
   const real = await realOnes(env, results);
   const gone = results.filter((p) => isTestName(p.name) && !real.has(p.id)).slice(0, TEST_CLEAN_MAX);

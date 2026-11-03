@@ -157,3 +157,16 @@ test('hundreds of fresh test names do not push a real waiting name off the admin
   add.run(id(3001), 'Testiä', now, now);
   assert.deepEqual((await adminList()).sort(), ['Aino', 'Testi-ukko']);
 });
+
+test('a flood of old test names drains a batch per request, each request a fixed few statements', async () => {
+  const { env, adminList, count } = setup();
+  const t = new Date(Date.now() - 2 * 864e5).toISOString();
+  const add = env.DB.raw.prepare("INSERT INTO players (id, name, status, created_at, updated_at) VALUES (?, ?, 'rejected', ?, ?)");
+  for (let i = 0; i < 2000; i++) add.run(id(10000 + i), `Testi${i}`, t, t);
+  for (let r = 0; r < 3; r++) {
+    const before = env.DB.queries;
+    await adminList();
+    assert.ok(env.DB.queries - before <= 20, `${env.DB.queries - before} statements`);
+  }
+  assert.equal(count('SELECT COUNT(*) AS n FROM players'), 2000 - 3 * 40);
+});
