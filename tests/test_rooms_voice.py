@@ -479,3 +479,30 @@ def test_a_working_call_is_not_made_again_while_someone_talks(phones):
     a.mouse.up()
     assert [p.evaluate("window.__pcs.length") for p in (host, a)] == calls
     assert host.evaluate("AiPelitRooms.voice.heals") == a.evaluate("AiPelitRooms.voice.heals") == 0
+
+
+def test_two_talking_at_once_only_the_silent_calls_are_made_again(phones):
+    # Aino and Iida talk at once, and Aino's sound stops going into her calls. Eero and Iida each
+    # make their call with Aino again, once; the calls with Iida, who is heard, are kept.
+    host, a, b = room_of_three(phones)
+    hold(a)
+    hold(b)
+    host.wait_for_function("AiPelitRooms.voice.speakers.length === 2")
+    host.wait_for_timeout(1000)
+    calls = [p.evaluate("window.__pcs.length") for p in (host, a, b)]
+    a.evaluate("window.__pcs.forEach(pc => { if (pc.connectionState !== 'closed') pc.getSenders().forEach(s => s.replaceTrack(null)); })")
+    for p in (host, b):
+        p.wait_for_function("AiPelitRooms.voice.heals === 1", timeout=8000)
+    for p in (host, b):
+        p.wait_for_function("AiPelitRooms.voice.calls === 2", timeout=8000)
+    host.wait_for_timeout(4000)
+    # Iida stops: what Eero hears now is Aino's sound alone, through the call made again.
+    b.mouse.up()
+    host.wait_for_timeout(600)
+    before = heard(host)
+    host.wait_for_function(f"window.__bytes > {before} + 2000", polling=200, timeout=8000)
+    a.mouse.up()
+    assert [p.evaluate("AiPelitRooms.voice.heals") for p in (host, a, b)] == [1, 0, 1]
+    # Two calls were made again, both with Aino: one new call on Eero's and Iida's phones, two on Aino's.
+    assert [p.evaluate("window.__pcs.length") for p in (host, a, b)] == [calls[0] + 1, calls[1] + 2, calls[2] + 1]
+    assert host.errors == a.errors == b.errors == []
