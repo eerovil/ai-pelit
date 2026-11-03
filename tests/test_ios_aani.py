@@ -109,3 +109,33 @@ def test_a_reload_and_each_next_event_frame_set_it_again(site, context):
         assert page.evaluate("navigator.audioSession.type") == "playback"
         assert [page.evaluate("nextEvent()") for _ in range(3)] == ["playback"] * 3
         page.reload()
+
+
+# Like Piano v10: the context is made on the start button and resumed only while 'suspended'.
+PIANO_LIKE = """
+let ac = null;
+document.addEventListener('click', () => { if (!ac) ac = new AudioContext(); });
+window.note = () => { const o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination);
+  o.start(); o.stop(ac.currentTime + 0.05); };
+"""
+
+
+def test_a_tap_or_coming_back_resumes_a_game_sound_the_phone_stopped(site, context):
+    # An iPhone stops a page's sound on a lock, a call or another app; Piano never resumed it (#381).
+    make_game(site.games, "soitin", [game_page("v1", script=PIANO_LIKE)])
+    site.build()
+    page = context.new_page()
+    page.goto(f"{site.url}games/soitin/v1/")
+    page.wait_for_selector("#ai-pelit-back")
+    page.mouse.click(180, 500)
+    page.evaluate("note()")
+    page.wait_for_function("ac.state === 'running'")
+    page.evaluate("ac.suspend()")
+    page.wait_for_function("ac.state === 'suspended'")
+    page.mouse.click(180, 500)
+    page.wait_for_function("ac.state === 'running'", timeout=3000)
+    # Coming back on screen resumes it too, with no tap.
+    page.evaluate("ac.suspend()")
+    page.wait_for_function("ac.state === 'suspended'")
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_function("ac.state === 'running'", timeout=3000)
