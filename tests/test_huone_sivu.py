@@ -296,6 +296,32 @@ def test_the_game_hears_a_second_finger_while_the_chip_is_held(phones):
     assert host.errors == guest.errors == []
 
 
+def test_a_frame_inside_the_game_goes_full_screen_with_the_room_bar_and_chip(phones):
+    # Ottelu's events (laji.js) sit in a frame of their own and ask their parent's root for full
+    # screen. Seen on a real phone: Ottelu's frame alone filled the screen, over the bar and the 🎤.
+    host, code = make_room(phones)
+    game(host).locator("body").evaluate("""body => {
+      const inner = document.createElement('iframe');
+      inner.id = 'laji';
+      inner.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483647';
+      inner.srcdoc = `<body style="margin:0;height:100vh"><script>
+        const root = parent.document.documentElement;
+        addEventListener('pointerup', () => { window.asked = root.requestFullscreen({ navigationUI: 'hide' }); });
+      </` + `script>`;
+      body.appendChild(inner);
+    }""")
+    box = game(host).locator("#laji").bounding_box()
+    host.wait_for_timeout(200)
+    assert game(host).locator("body").evaluate(
+        "() => document.elementFromPoint(innerWidth / 2, innerHeight / 2).id") == "laji"
+    for _ in range(2):  # the second tap, already full screen, must change nothing
+        host.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        host.wait_for_function("document.fullscreenElement === document.documentElement")
+    assert host.locator("#bar").is_visible()
+    assert host.locator("#aipr-mic").is_visible()
+    assert host.errors == []
+
+
 def test_leaving_goes_back_to_the_game_alone(phones):
     host, code = make_room(phones)
     guest = join(phones, "Aino", code)
