@@ -72,6 +72,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty, ja kannustuksen kilahdus on paljon hiljaisempi.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-04",
+      "note": "Tietokone ei enää heitä yli 85 metriä, joten kisan voi voittaa hyvällä heitolla.",
+      "request": "Miten moukarissa voi heittää 86",
+      "issue": "eerovil/ai-pelit#404"
     }
   ]
 }

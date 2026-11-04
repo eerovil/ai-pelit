@@ -245,9 +245,14 @@ const thrower = id => K.thrower(id);
 const COLORS = K.COLORS;
 
 // The computer throws: around its skill, a foul about one time in seven (hammer throwers foul often).
+// v11 (#404): a computer's throw stays within what a good player reaches (a player's limit is about
+// 86 m). A throw over it is drawn again, not cut, so the board shows no row of the same 85,00 m.
+const CPU_MAX = 85;
 function cpuMark(t) {
   if (Math.random() < 0.14) return -1;
-  return Math.max(20, Math.floor((t.skill + K.gauss() * 3) * 100) / 100);
+  let m;
+  do m = Math.floor((t.skill + K.gauss() * 3) * 100) / 100; while (m > CPU_MAX);
+  return Math.max(20, m);
 }
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {

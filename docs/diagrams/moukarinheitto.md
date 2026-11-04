@@ -22,6 +22,8 @@ v8 (#337, `aanet-4`) has no crowd: a good throw (a lead or a record too) is the 
 v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); the cheer's chime plays at 0.08, not 0.25 pitched up.
 
 
+v11 (#404) plays as v10, but a computer's throw over 85 m is drawn again (see the box "Yli 85 m?").
+
 v9 (#341) plays as v8 on `public/lib/yleisurheilu-7/`: the friends watching stand along the bottom of the field, under the circle, the thrower and the cage, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 ```mermaid
 flowchart TD
@@ -32,7 +34,9 @@ flowchart TD
   Q -- Poissa oleva kaveri, ennen v5 --> CPU
   Q -- Poissa oleva kaveri, v5 --> AWAY["Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa"]
   AWAY --> NX
-  CPU --> NX
+  CPU --> CAP{Yli 85 m?}
+  CAP -- Kyllä, arvotaan uudelleen --> CPU
+  CAP -- Ei --> NX
   Q -- Pelaaja tällä puhelimella --> S[Vauhtia: heilautukset alkavat]
   Q -- Kaveri toisella puhelimella --> WT[Kaverin heitto näkyy, sama moukari lentää]
   S --> LP{Napautus alakohdassa?}
@@ -60,7 +64,7 @@ flowchart TD
   TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
   class M,S,I,T,UP,DN blue
   class CPU,WT,AWAY violet
-  class Q,LP,N5,SEC,NX,TAP amber
+  class Q,CAP,LP,N5,SEC,NX,TAP amber
   class K,D,CUT teal
   class X rose
   class END,SV,RM green
@@ -82,6 +86,7 @@ flowchart TD
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: `drawBoard()` (v2: the library's `K.drawBoard()`), shown for 3.5 s (`BOARD_T`) before each player's turn; alone a tap skips it. The standings (`standings()`) go by the best throw, then the second best, as in a real meet; a dashed line shows the cut after eight.
 - **Kenen vuoro?**: `advance()` (v2: the library's) throws for every computer thrower up to the next player on a phone; `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone heittää heti**: `cpuMark()`: the skill plus a scatter of 3 m, a foul one time in seven. In a room the host's "Jatka ilman heitä" hands an away phone's throws to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v5 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
+- **Yli 85 m?**: from v11 (#404) `cpuMark()` draws a computer's throw again while it is over 85 m (`CPU_MAX`), so the computer never throws past what a good player reaches (a player's limit is about 86 m, the best on the list 84,34 m). Drawing again, not clamping, keeps the marks looking like throws and not a row of 85,00 m. A foul stays a foul.
 - **Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = -1 (X), tai hän palaa**: from v5 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (-1 (X)) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
 - **Vauhtia: heilautukset alkavat**: `press(1)` in the `ready` phase (from v4 a soft `suhahdus`; the turn itself starts with `valinta` when the board goes): the hammer starts round the thrower at 9 m/s (`V0`), anticlockwise seen from above. It goes round at 0.6 times its real pace (`SLOW`), so a lap takes about 1.8 s in the first swing and 0.7 s at full speed. The first two laps are the wind-up swings, the next four the turns (`SWINGS`, `TURNS`, `LAPS` in all), each later lap starting at a low point; the thrower moves across the circle during the turns (`geo()`). Each low point beeps low (`tone(110)`), and from v4 each turn's low point also whooshes (`suhahdus`, faster with the speed).
 - **Napautus alakohdassa?**: `press(1)` in the `spin` phase. The low point (`PHI_LOW`, behind and left) is drawn green on the hammer's path, as wide as 0.1 s (`WIN`) either side at the speed it goes, so the window is the same length in time at every speed.
