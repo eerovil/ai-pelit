@@ -67,6 +67,8 @@ the version that taught it, so you can read the code that fixed it.
   has the softer files Eero picked by ear (#355) and plays its loudest quieter. A cheer or other
   sound that every phone in a room plays at each friend's tap is quieter still (0.08, #355).
 
+- A choice a player repeats turn after turn gets one step for all of them: Korkeushyppy v13 and Seiväshyppy v14 (#399) pick the next height from a panel, not pass ten heights one at a time.
+
 ## Difficulty
 
 - **Every level can be beaten.** Sormiskeitti v2: level 8 could not be passed. Write a test that
