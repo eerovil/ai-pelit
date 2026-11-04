@@ -1,6 +1,7 @@
 """Tikanheitto v7 (#400): the throw is harder. The hand shakes, settles for a moment and tires, the
 sight leaves the target after each dart, and the harder game has its own bests and lists."""
 
+from conftest import turn
 from test_tikka_v7 import RUN, open_plain, room, start
 
 # Plays whole games through the real touch handlers. Each dart holds for `held` seconds; with
@@ -121,3 +122,60 @@ def test_a_guests_dart_goes_where_the_sight_was_and_its_sight_then_leaves(site, 
     assert 30 <= guest.evaluate("Math.hypot(aim.x, aim.y)") <= 60
     assert 0 < host.evaluate("stuck[0] && Math.hypot(stuck[0].x, stuck[0].y)") < 70
     assert host.errors == [] and guest.errors == []
+
+
+def test_a_brush_or_a_cancelled_touch_throws_nothing_and_leaves_the_sight(site, context):
+    page = play(site, context)
+    page.click("#go")
+    before = page.evaluate("[aim.x, aim.y, dartsLeft]")
+    page.evaluate("dart(0.05, null)")
+    assert page.evaluate("[aim.x, aim.y, dartsLeft]") == before
+    page.evaluate("""() => {
+      c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, clientX: 100, clientY: 400, bubbles: true }));
+      run(() => hold && hold.t < 1.3, 2);
+      c.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 7, bubbles: true }));
+    }""")
+    assert page.evaluate("[aim.x, aim.y, dartsLeft]") == before
+    assert page.evaluate("hold") is None
+
+
+def test_two_players_on_one_phone_each_keep_their_own_sight(site, context):
+    page = play(site, context, {"vastus": "kaveri"})
+    page.click("#go501")
+    for who in (0, 1):
+        assert page.evaluate("cur") == who
+        for _ in range(3):
+            page.evaluate("dart(1.3, spotOf(20, 1))")
+        left = page.evaluate("[players[cur].aim.x, players[cur].aim.y]")
+        assert page.evaluate("[aim.x, aim.y]") == left
+        page.evaluate("run(() => pause > 0 || flying, 5)")
+    # Back to the first player: their sight is where their hand came back to, not the second's.
+    assert page.evaluate("cur") == 0
+    assert page.evaluate("aim.x === players[0].aim.x && aim.y === players[0].aim.y")
+    assert page.evaluate("aim.x !== players[1].aim.x")
+
+
+def test_the_computers_sight_keeps_to_a_steady_hand(site, context):
+    page = play(site, context, {"vastus": "kova"})
+    page.click("#go501")
+    page.evaluate("players[1].score = 501; cur = 1; startTurn(); run(() => bot && bot.t < 0.8, 2)")
+    assert page.evaluate("bot !== null")
+    assert page.evaluate("swayAmp(HAND.settled)") == 28
+
+
+def test_the_menu_fits_a_wider_phone_and_a_game_goes_on_when_it_turns(site, browser):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True)
+    page = play(site, ctx)
+    fits = "(() => { const m = document.getElementById('menu'); return m.scrollHeight <= m.clientHeight && m.scrollWidth <= m.clientWidth; })()"
+    assert page.evaluate(fits)
+    page.click("#go")
+    page.evaluate(f"dart(1.3, {MIDDLE})")
+    aim = page.evaluate("[aim.x, aim.y, dartsLeft]")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("LAND")
+    assert page.evaluate("[aim.x, aim.y, dartsLeft]") == aim
+    assert page.evaluate("phase") == "play"
+    page.evaluate(f"dart(1.3, {MIDDLE})")
+    assert page.evaluate("dartsLeft") == 1
+    assert page.errors == []
+    ctx.close()
