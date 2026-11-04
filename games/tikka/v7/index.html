@@ -78,9 +78,9 @@
     </div>
   </div>
   <p id="stats"></p>
-  <p class="help">Paina sormi ruutuun ja liikuta tähtäintä. Käsi heiluu: päästä irti oikealla
-    hetkellä, niin tikka lentää. Mökkitikassa heität 10 kierrosta, 3 tikkaa kerrallaan:
-    keskusta on 10 pistettä.</p>
+  <p class="help">Paina sormi ruutuun ja vie tähtäin kohteeseen. Käsi tärisee ensin, rauhoittuu
+    hetkeksi ja väsyy sitten: päästä irti, kun tähtäin on vihreä. Mökkitikassa heität 10 kierrosta,
+    3 tikkaa kerrallaan: keskusta on 10 pistettä.</p>
 </div>
 <script src="../../../rooms.js" data-game="tikka" data-min="2" data-max="5"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
@@ -213,18 +213,38 @@ function newGame(m) {
 function startTurn() {
   dartsLeft = 3; turnDarts = []; stuck = []; turnStart = players[cur].score; hold = null; bot = null; seen = null;
   // Each player's sight starts where they last let go.
-  aim = Object.assign({}, players[cur].aim || { x: 0, y: 0 });
+  aim = startAim();
   if (players[cur].ai && runs()) botNext();
   sync();
 }
 
 // ---- Throwing ----
-// The sway of the hand, in mm: small at first, growing after 1.4 s of holding.
+// The hand (#400). Through v6 the sway was 5 mm from the first moment and the sight stayed on the
+// 10, so tapping alone scored 300 of 300. Now the hand shakes at first, settles for a moment and
+// then tires: the throw is in the timing, and each dart's sight has to be brought back.
+const HAND = { shaky: 90, steady: 28, settled: 1.0, tires: 1.7, tiring: 40, worst: 70, scatter: 4 };
+function swayAmp(heldFor) {
+  if (heldFor < HAND.settled) {
+    const k = heldFor / HAND.settled;
+    return HAND.shaky + (HAND.steady - HAND.shaky) * k * k * (3 - 2 * k);
+  }
+  return HAND.steady + Math.min(HAND.worst, Math.max(0, heldFor - HAND.tires) * HAND.tiring);
+}
+const isSteady = heldFor => heldFor >= HAND.settled && heldFor <= HAND.tires;
+// The sway of the hand, in mm, after holding for so long.
 function sway(heldFor) {
-  const a = 5 + Math.min(20, Math.max(0, heldFor - 1.4) * 10);
+  const a = swayAmp(heldFor);
   return { x: a * (Math.sin(wob * 2.3) + 0.5 * Math.sin(wob * 5.3 + 1)) / 1.5,
            y: a * (Math.cos(wob * 1.9) + 0.5 * Math.sin(wob * 4.1 + 2)) / 1.5 };
 }
+// After a dart the hand comes back a little off: the sight moves 30 to 60 mm in a random direction.
+function offAim(from) {
+  const d = 30 + Math.random() * 30, a = Math.random() * 2 * Math.PI;
+  const edge = v => Math.max(-R_ALL, Math.min(R_ALL, v));
+  return { x: edge(from.x + Math.cos(a) * d), y: edge(from.y + Math.sin(a) * d) };
+}
+// Each player's sight starts where their hand came back to; their first one, near the middle.
+function startAim() { return Object.assign({}, players[cur].aim || offAim({ x: 0, y: 0 })); }
 function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
 function throwAt(tx, ty) {
   flying = { x: tx, y: ty, t: 0, p: cur };
@@ -278,6 +298,9 @@ function endGame() {
   after = () => { banner = null; if (net) hostEnd(); else finish(winner); };
   sync();
 }
+// The harder throw (v7, #400) has its own bests, as its points do not compare with v1-v6's, whose
+// saves 'mokki' and 'ennatys' stay as they are.
+const bestKey = () => mode === 'mokki' ? 'mokki2' : 'kisa2';
 // Best first: the most points (then the most tens) in Mökkitikka, the least left in 501.
 function standings() {
   const list = players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, tens: p.tens, i }));
@@ -287,7 +310,7 @@ function standings() {
 }
 function record(sc) {
   // The best of the mode on this phone, and the high-score list.
-  const k = mode === 'mokki' ? 'mokki' : 'ennatys', best = +load(k, 0);
+  const k = bestKey(), best = +load(k, 0);
   if (sc > best) save(k, sc);
   if (window.AiPelitScores) { pickBoard(); AiPelitScores.submit(sc); }
   return sc > best;
@@ -348,7 +371,9 @@ function letGo(e) {
   const h = hold; hold = null;
   if (h.t < 0.12 || e.type === 'pointercancel') return;   // a brush of the screen does not throw
   const w = sway(h.t);
-  release(aim.x + w.x + gauss() * 2.5, aim.y + w.y + gauss() * 2.5);
+  const p = players[cur];
+  release(aim.x + w.x + gauss() * HAND.scatter, aim.y + w.y + gauss() * HAND.scatter);
+  aim = offAim(aim); p.aim = { x: aim.x, y: aim.y };
 }
 c.addEventListener('pointerup', letGo);
 c.addEventListener('pointercancel', letGo);
@@ -385,7 +410,7 @@ function adopt(m) {
   if (!flying) stuck = m.st.map(a => ({ x: a[0], y: a[1], p: a[2] }));
   if (m.ban && (!banner || banner.text !== m.ban)) { banner = { text: m.ban, t: 0 }; if (m.ban.startsWith('Yli')) sound('bust'); else if (m.ban.endsWith('!') && /^\d/.test(m.ban)) sound('cheer'); }
   if (!m.ban) banner = null;
-  if (turnChanged) { seen = null; hold = null; if (mine()) aim = Object.assign({}, players[cur].aim || { x: 0, y: 0 }); }
+  if (turnChanged) { seen = null; hold = null; if (mine()) aim = startAim(); }
 }
 R.on('start', s => {
   net = { round: s.round, host: R.isHost }; ownFlying = 0; stopBtn.classList.add('hidden');
@@ -487,7 +512,7 @@ function step(dt) {
     aimSend -= dt;
     if (aimSend <= 0) {
       aimSend = 0.1;
-      const w = hold ? sway(hold.t) : sway(0);
+      const w = sway(hold ? hold.t : HAND.settled);
       R.send({ t: 'a', round: net.round, x: r1(aim.x + w.x), y: r1(aim.y + w.y) });
     }
   }
@@ -594,11 +619,13 @@ function drawSight() {
   let at;
   if (hold) { const w = sway(hold.t); at = { x: aim.x + w.x, y: aim.y + w.y }; }
   else if (seen && !mine()) at = seen;
-  else if (bot) { const w = sway(0); at = { x: aim.x + w.x, y: aim.y + w.y }; }
+  else if (bot) { const w = sway(HAND.settled); at = { x: aim.x + w.x, y: aim.y + w.y }; }
   else if (mine()) at = aim;
   else return;
   const px = sx(at.x), py = sy(at.y), r = 13;
-  x.strokeStyle = hold && hold.t > 1.4 ? '#ff8a6b' : mine() || bot ? '#fff' : PCOL[cur % PCOL.length]; x.lineWidth = 2;
+  // Green and thicker while the hand is steady, orange while it shakes or tires.
+  const good = hold && isSteady(hold.t);
+  x.strokeStyle = good ? '#6dff8a' : hold ? '#ff8a6b' : mine() || bot ? '#fff' : PCOL[cur % PCOL.length]; x.lineWidth = good ? 3.5 : 2;
   x.beginPath(); x.arc(px, py, r, 0, 7); x.stroke();
   x.beginPath(); x.moveTo(px - r - 6, py); x.lineTo(px - 4, py); x.moveTo(px + 4, py); x.lineTo(px + r + 6, py);
   x.moveTo(px, py - r - 6); x.lineTo(px, py - 4); x.moveTo(px, py + 4); x.lineTo(px, py + r + 6); x.stroke();
@@ -644,7 +671,7 @@ function drawPanel() {
     dots(P.x + P.w - 46, P.y + 20);
     label(players[0].score + ' p', P.x + 14, P.y + 54, 32, 800, '#ffd166', 'left');
     label(last, P.x + 14, P.y + 88, 15, 700, '#fff', 'left');
-    const best = +load(mode === 'mokki' ? 'mokki' : 'ennatys', 0);
+    const best = +load(bestKey(), 0);
     if (LAND && best) label('Ennätys ' + best + ' p', P.x + 14, P.y + 116, 14, 600, '#c4d2df', 'left');
     return;
   }
@@ -731,10 +758,10 @@ function draw() {
 }
 
 // ---- Menu ----
-// The high-score list the 🏆 chip shows: Mökkitikka has its own, Pistekisa keeps v1's 'main'.
+// The high-score list the 🏆 chip shows: from v7 (#400) both start anew on 'mokki2' and 'kisa2'.
 function pickBoard() {
   if (!window.AiPelitScores) return;
-  if (mode === 'kisa') AiPelitScores.board('main', 'Pistekisa'); else AiPelitScores.board('mokki', 'Mökkitikka');
+  if (mode === 'kisa') AiPelitScores.board('kisa2', 'Pistekisa'); else AiPelitScores.board('mokki2', 'Mökkitikka');
 }
 function pickOpp(o) {
   opp = o; save('vastus', o);
@@ -746,7 +773,7 @@ function showMenu() {
   if (!net) { mode = 'mokki'; players = []; resize(); }
   pickOpp(['helppo', 'keski', 'kova', 'kaveri'].includes(opp) ? opp : 'keski');
   pickBoard();
-  const mk = +load('mokki', 0), best = +load('ennatys', 0), wins = +load('voitot', 0);
+  const mk = +load('mokki2', 0), best = +load('kisa2', 0), wins = +load('voitot', 0);
   const parts = [];
   if (mk) parts.push('Mökkitikka ' + mk + ' p');
   if (best) parts.push('Pistekisa ' + best + ' p');

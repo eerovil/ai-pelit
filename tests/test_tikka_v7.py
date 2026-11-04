@@ -163,8 +163,8 @@ def test_without_the_sound_script_it_still_starts_and_plays(site, browser):
         ctx.close()
 
 
-def test_v3_saves_are_read_as_they_are(site, context):
-    page = open_game(site, context, {"mokki": 231, "ennatys": 412, "voitot": 3, "vapaa": "darts"})
+def test_saves_are_read_as_they_are(site, context):
+    page = open_game(site, context, {"mokki2": 231, "kisa2": 412, "voitot": 3, "vapaa": "darts"})
     assert page.inner_text("#stats") == "Ennätykset: Mökkitikka 231 p · Pistekisa 412 p · Voittoja tietokoneesta 3"
     page.click("#frees button[data-b=darts]")
     assert page.evaluate("freeBoard") == "darts"

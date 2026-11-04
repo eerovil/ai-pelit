@@ -349,10 +349,14 @@ test('Tikanheitto keeps Mökkitikka and Pistekisa apart, and its shelf no. 1 is 
     await admin(id, 'approved');
   }
   const post = (player, board, score, version) => call('POST', '/api/scores', { player, game: 'tikka', board, version, score });
-  assert.equal((await post(A, 'mokki', 254, 2)).status, 200);
-  assert.equal((await post(B, 'main', 412, 1)).status, 200);
+  assert.equal((await post(A, 'mokki2', 254, 7)).status, 200);
+  assert.equal((await post(B, 'kisa2', 412, 7)).status, 200);
+  // The easy throw's lists (v1-v6) stay.
+  assert.equal((await post(B, 'mokki', 300, 6)).status, 200);
+  assert.equal((await post(A, 'main', 1350, 2)).status, 200);
   assert.equal((await post(A, 'darts', 10, 2)).status, 400);
-  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki')).body.rows.map(r => r.name), ['Aino']);
-  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=main')).body.rows.map(r => r.name), ['Bertta']);
-  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.tikka, { board: 'mokki', name: 'Aino', score: 254, level: null, version: 2 });
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki2')).body.rows.map(r => r.name), ['Aino']);
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=kisa2')).body.rows.map(r => r.name), ['Bertta']);
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki')).body.rows.map(r => r.name), ['Bertta']);
+  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.tikka, { board: 'mokki2', name: 'Aino', score: 254, level: null, version: 7 });
 });
