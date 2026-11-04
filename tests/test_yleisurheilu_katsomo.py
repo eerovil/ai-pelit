@@ -4,7 +4,7 @@ figure there on every phone.
 
 The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v16, games/keihas/v15, games/kuula/v9, games/korkeushyppy/v13,
-games/seivashyppy/v14, games/moukari/v10, games/makihyppy/v10.
+games/seivashyppy/v14, games/moukari/v11, games/makihyppy/v10.
 """
 
 import json
@@ -19,7 +19,7 @@ EVENTS = {
     "kuula/v9": "drawPutter",
     "korkeushyppy/v13": "drawAthlete",
     "seivashyppy/v14": "drawRunner",
-    "moukari/v10": "drawThrower",
+    "moukari/v11": "drawThrower",
     "makihyppy/v10": "drawJumper",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
@@ -109,7 +109,7 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
         p.context.close()
 
 
-@pytest.mark.parametrize("path", ["pituushyppy/v16", "moukari/v10"])
+@pytest.mark.parametrize("path", ["pituushyppy/v16", "moukari/v11"])
 def test_both_watching_tap_at_once_and_a_reloaded_phone_gets_the_spots(site, browser, path):
     relay, pages, athlete, fans = watching(site, browser, path)
     fan, host = fans
