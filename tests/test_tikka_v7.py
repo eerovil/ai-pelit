@@ -5,7 +5,7 @@ import json
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/tikka/v6/"
+URL = "games/tikka/v7/"
 NAMES = "['onnistui', 'suhahdus', 'puu', 'virhe', 'voitto']"
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -207,4 +207,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/tikka/v6")
+    opens_and_plays_with_the_quiet_library(real, context, "games/tikka/v7")
