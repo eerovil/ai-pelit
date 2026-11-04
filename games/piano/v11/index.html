@@ -509,8 +509,11 @@ let prev = 0;
 // song runs on to the event's own time before the press is judged, and the next frame takes only
 // what is left.
 function catchUp(e) {
-  const d = e.timeStamp - prev;
-  if (d > 0 && d < 100) { update(Math.min(0.05, d / 1000)); prev = e.timeStamp; }
+  let d = e.timeStamp - prev;
+  if (d > 0 && d < 100) {
+    prev = e.timeStamp;
+    for (; d > 0; d -= 50) update(Math.min(0.05, d / 1000));
+  }
 }
 function loop(t) {
   const dt = Math.min(0.05, Math.max(0, t - prev) / 1000 || 0); prev = Math.max(prev, t);

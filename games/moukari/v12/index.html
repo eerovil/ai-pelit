@@ -418,8 +418,11 @@ let lastT = performance.now();
 // v12 (#404): a tap counts at the moment the finger touched, not at the last drawn frame. The game
 // runs on to the event's own time before it is judged, and the next frame takes only what is left.
 function catchUp(e) {
-  const d = e.timeStamp - lastT;
-  if (d > 0 && d < 100) { step(Math.min(0.05, d / 1000)); lastT = e.timeStamp; }
+  let d = e.timeStamp - lastT;
+  if (d > 0 && d < 100) {
+    lastT = e.timeStamp;
+    for (; d > 0; d -= 50) step(Math.min(0.05, d / 1000));
+  }
 }
 function frame(now) {
   const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);

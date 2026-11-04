@@ -30,7 +30,8 @@ flowchart TD
 
 - **Aika edellisestä ruudusta 0–100 ms?**: `catchUp(e)` in each game's `index.html`, for example `games/moukari/v12/index.html`: `e.timeStamp` and the frame's time are on the same clock. A tap the frame already passed, or a time gap after a pause, moves nothing.
 - **Peli liikkuu tasavälein askelin?**: Trampoliini and Sormiskeitti run fixed physics steps; the others step by the time since the last frame.
-- **Peli etenee napautuksen hetkeen**: `step()` runs once with the time up to the tap (`update()` in Piano) and the frame's last time is set to the tap's, so no time is counted twice.
+- **Peli etenee napautuksen hetkeen**: `step()` runs with the time up to the tap, at most 50 ms at a go (`update()` in Piano), and the frame's last time is set to the tap's, so no time is counted twice.
 - **Kokonaiset askeleet ajetaan, loppuaika jää muistiin**: `catchUp(e)` in `games/trampoliini/v11/index.html` and `games/sormiskeitti/v10/index.html`. The physics step stays as it was, so flights do not change.
 - **Arvio lisää loppuajan**: Trampoliini: `J.matT + acc` and `timeToMat()`. Sormiskeitti: `part()` in `tap()`, for the board's place on the ramp and its speed at the top.
+- **Sormi osuu tai nousee, tai näppäin painuu**: every press and letting go that a game scores or that steers it: Mäkihyppy's held pads and Trampoliini's flip buttons and legs catch up too, so a short hold lasts as long as the finger stayed.
 - **Seuraava ruutu ottaa vain jäljellä olevan ajan**: a frame can start just before the tap it runs after, so its time can be behind; the loop then takes no time back (`Math.max`).

@@ -55,7 +55,7 @@ def test_a_tap_between_frames_runs_the_game_to_its_own_moment(real, context, url
           };
           const down = () => new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, clientX: 2, clientY: 2 });
           const keyDown = () => new KeyboardEvent('keydown', { key });
-          const out = { key: tap(keyDown, 8), finger: tap(down, 8), paused: tap(keyDown, 5000), behind: tap(keyDown, -5) };
+          const out = { key: tap(keyDown, 8), finger: tap(down, 8), paused: tap(keyDown, 5000), behind: tap(keyDown, -5), long: tap(keyDown, 80) };
           // A frame that started before the tap it runs after takes no time back.
           log.length = 0;
           const was = lastT;
@@ -71,6 +71,10 @@ def test_a_tap_between_frames_runs_the_game_to_its_own_moment(real, context, url
     assert got["finger"]["log"][0] == pytest.approx(0.008, abs=1e-6)
     assert got["paused"]["log"] == ["judged"]             # after a pause the game does not jump
     assert got["behind"]["log"] == ["judged"]
+    # A long frame is run through whole, in steps a frame could take.
+    assert got["long"]["log"][:2] == pytest.approx([0.05, 0.03], abs=1e-6)
+    assert got["long"]["log"][2:] == ["judged"]
+    assert got["long"]["left"] == 0
     assert got["frame"]["log"] == [0]
     assert got["frame"]["moved"] == 0
     assert page.errors == []
@@ -144,6 +148,89 @@ def test_piano_a_press_between_frames_hits_the_note_it_reached(real, context):
     assert got["hit"] is True
     assert got["moved"] == pytest.approx(0.008, abs=1e-6)
     assert got["left"] == 0
+    assert page.errors == []
+
+
+def test_piano_a_long_frame_is_run_through_whole(real, context):
+    page = opened(real, context, "games/piano/v11", "typeof catchUp === 'function'")
+    page.evaluate("document.getElementById('go').click()")
+    page.wait_for_function("state === 'play' && cur && cur.notes.length")
+    got = page.evaluate(
+        """() => {
+          requestAnimationFrame = () => 0;
+          const ev = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, clientX: 2, clientY: 2 });
+          cur.notes = []; cur.end = 99; now = 1; prev = ev.timeStamp - 80;
+          c.dispatchEvent(ev);
+          return { moved: now - 1, left: prev - ev.timeStamp };
+        }"""
+    )
+    assert got["moved"] == pytest.approx(0.08, abs=1e-6)
+    assert got["left"] == 0
+
+
+def test_makihyppy_a_short_hold_steers_until_the_finger_lifts(real, context):
+    page = opened(real, context, "games/makihyppy/v11", "typeof catchUp === 'function'")
+    got = page.evaluate(
+        """() => {
+          requestAnimationFrame = () => 0;
+          padAt = () => 1;
+          const log = [], realStep = step;
+          step = d => { log.push(holding.size); realStep(d); };
+          const finger = type => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, clientX: 2, clientY: 400 });
+          const down = finger('pointerdown');
+          lastT = down.timeStamp;
+          c.dispatchEvent(down);
+          const up = finger('pointerup');
+          lastT = up.timeStamp - 6;
+          c.dispatchEvent(up);
+          const pointer = { log: [...log], left: holding.size };
+          log.length = 0;
+          dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+          const lift = new KeyboardEvent('keyup', { key: 'ArrowLeft' });
+          lastT = lift.timeStamp - 6;
+          dispatchEvent(lift);
+          return { pointer, key: { log: [...log], left: holding.size } };
+        }"""
+    )
+    assert got["pointer"] == {"log": [1], "left": 0}    # one step, the finger still down
+    assert got["key"]["log"][-1] == 1
+    assert got["key"]["left"] == 0
+    assert page.errors == []
+
+
+def test_trampoliini_a_short_press_lasts_until_the_finger_lifts(real, context):
+    page = opened(real, context, "games/trampoliini/v11", "typeof catchUp === 'function'")
+    page.evaluate("startGo()")
+    page.wait_for_function("J && (phase === 'air' || phase === 'mat')")
+    got = page.evaluate(
+        """() => {
+          requestAnimationFrame = () => 0;
+          const seen = [], realStep = step;
+          step = d => { seen.push({ held, twistHeld, squat }); realStep(d); };
+          const finger = (type, id = 7) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, clientX: 2, clientY: 2 });
+          const lift = (act, set) => {
+            seen.length = 0; set(); acc = 0;
+            const ev = finger('pointerup');
+            lastT = ev.timeStamp - 20;
+            pad.querySelector(`[data-act="${act}"]`).dispatchEvent(ev);
+            return seen[0];
+          };
+          const flip = lift('taakse', () => { held = 1; });
+          const twist = lift('kierre', () => { twistHeld = true; });
+          const afterFlip = held, afterTwist = twistHeld;
+          // Bending the legs starts when the finger touched, not before.
+          seen.length = 0; squat = false; acc = 0; phase = 'air';
+          const ev = finger('pointerdown');
+          lastT = ev.timeStamp - 20;
+          c.dispatchEvent(ev);
+          return { flip, twist, afterFlip, afterTwist, legs: seen[0], bent: squat };
+        }"""
+    )
+    assert got["flip"]["held"] == 1
+    assert got["twist"]["twistHeld"] is True
+    assert got["afterFlip"] == 0 and got["afterTwist"] is False
+    assert got["legs"]["squat"] is False
+    assert got["bent"] is True
     assert page.errors == []
 
 

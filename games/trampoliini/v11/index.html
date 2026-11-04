@@ -416,10 +416,10 @@ pad.querySelectorAll('button').forEach(b => {
     const act = b.dataset.act;
     if (act === 'kierre') twistDown(); else press(act === 'taakse' ? 1 : -1);
   });
-  const up = () => { b.classList.remove('on'); if (b.dataset.act === 'kierre') twistUp(); else release(); };
+  const up = e => { catchUp(e); b.classList.remove('on'); if (b.dataset.act === 'kierre') twistUp(); else release(); };
   b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
 });
-c.addEventListener('pointerdown', e => { e.preventDefault(); squatDown(e.pointerId); }, { passive: false });
+c.addEventListener('pointerdown', e => { e.preventDefault(); catchUp(e); squatDown(e.pointerId); }, { passive: false });
 addEventListener('pointerup', e => { catchUp(e); squatUp(e.pointerId); });
 addEventListener('pointercancel', e => { catchUp(e); squatUp(e.pointerId); });
 
