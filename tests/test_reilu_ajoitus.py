@@ -76,6 +76,33 @@ def test_a_tap_between_frames_runs_the_game_to_its_own_moment(real, context, url
     assert page.errors == []
 
 
+@pytest.mark.parametrize("url,key,judge", GAMES)
+def test_two_taps_in_one_frame_count_the_time_once(real, context, url, key, judge):
+    page = opened(real, context, url, "typeof catchUp === 'function'")
+    got = page.evaluate(
+        """([key, judge]) => {
+          requestAnimationFrame = () => 0;
+          const log = [], realStep = step;
+          step = d => { log.push(d); realStep(d); };
+          eval(judge + ' = () => {}');
+          const first = new KeyboardEvent('keydown', { key }), second = new KeyboardEvent('keydown', { key: 'q' });
+          const start = first.timeStamp - 8;
+          lastT = start;
+          dispatchEvent(first); dispatchEvent(second);
+          const inOrder = { ran: log.reduce((a, b) => a + b, 0) * 1000, want: second.timeStamp - start };
+          // The later one handed over first: the earlier one then moves nothing.
+          log.length = 0; lastT = start;
+          dispatchEvent(second); dispatchEvent(first);
+          return { inOrder, swapped: { ran: log.reduce((a, b) => a + b, 0) * 1000, left: lastT - second.timeStamp, want: second.timeStamp - start } };
+        }""",
+        [key, judge],
+    )
+    assert got["inOrder"]["ran"] == pytest.approx(got["inOrder"]["want"], abs=1e-6)
+    assert got["swapped"]["ran"] == pytest.approx(got["swapped"]["want"], abs=1e-6)
+    assert got["swapped"]["left"] == 0
+    assert page.errors == []
+
+
 @pytest.mark.parametrize("url,finger,judge", LETTING_GO)
 def test_letting_go_between_frames_counts_at_its_own_moment(real, context, url, finger, judge):
     page = opened(real, context, url, "typeof catchUp === 'function'")
@@ -117,6 +144,28 @@ def test_piano_a_press_between_frames_hits_the_note_it_reached(real, context):
     assert got["hit"] is True
     assert got["moved"] == pytest.approx(0.008, abs=1e-6)
     assert got["left"] == 0
+    assert page.errors == []
+
+
+def test_piano_two_fingers_at_once_are_both_judged_and_the_time_counts_once(real, context):
+    page = opened(real, context, "games/piano/v11", "typeof catchUp === 'function'")
+    page.evaluate("document.getElementById('go').click()")
+    page.wait_for_function("state === 'play' && cur && cur.notes.length")
+    got = page.evaluate(
+        """() => {
+          requestAnimationFrame = () => 0;
+          const a = { t: 5, lane: 0, pitch: 60, beats: 1 }, b = { t: 5, lane: 3, pitch: 64, beats: 1 };
+          cur.notes = [a, b]; now = 5 - 0.008;
+          const finger = (lane, id) => new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: id,
+            clientX: laneX + (lane + 0.5) * laneW, clientY: innerHeight - 5 });
+          const one = finger(0, 7), two = finger(3, 8), start = one.timeStamp - 8, at = now;
+          prev = start;
+          c.dispatchEvent(one); c.dispatchEvent(two);
+          return { hits: [a.hit, b.hit], moved: (now - at) * 1000, want: two.timeStamp - start };
+        }"""
+    )
+    assert got["hits"] == [True, True]
+    assert got["moved"] == pytest.approx(got["want"], abs=1e-6)
     assert page.errors == []
 
 
@@ -174,4 +223,20 @@ def test_sormiskeitti_the_tap_reads_the_board_at_its_own_moment(real, context):
     assert got["lip"]["part"] == pytest.approx(0.72, abs=1e-6)
     assert got["lip"]["text"] == "TÄYDELLINEN OLLIE!"
     assert got["top"]["text"] == "TÄYDELLINEN IRROTUS!"
+    assert page.errors == []
+
+
+def test_sormiskeitti_a_new_run_starts_clean_with_time_left_in_the_step(real, context):
+    page = opened(real, context, "games/sormiskeitti/v10", "typeof catchUp === 'function'")
+    got = page.evaluate(
+        """() => {
+          requestAnimationFrame = () => 0;
+          st = 'end'; endT = -1e9; acc = 15;
+          dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));   // back to the start
+          const after = st;
+          dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));   // the first push
+          return { after, st, kicks: kicks.length, ollie };
+        }"""
+    )
+    assert got == {"after": "ready", "st": "roll", "kicks": 1, "ollie": 0}
     assert page.errors == []
