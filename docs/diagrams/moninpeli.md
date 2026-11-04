@@ -105,7 +105,8 @@ flowchart TD
     V2[Puhelinyhteys jokaiseen huoneen puhelimeen]
     V3{Pitääkö pelaaja 🎤-nappia pohjassa?}
     V3 -- Kyllä --> V4[Mikrofoni päälle, ääni muille]
-    V3 -- Ei --> V5[Mikrofoni kiinni]
+    V3 -- Ei --> V15[Mikrofoni auki vielä 1 s nostosta]
+    V15 --> V5[Mikrofoni kiinni]
     V6[🔊 Nimi puhuu: muut kuulevat]
     V7[🔇 Mykistä pelaaja pelaajalistassa]
     V8{Puhuuko joku, mutta häneltä ei tule ääntä 3 sekuntiin?}
@@ -146,7 +147,7 @@ flowchart TD
   class G1,G2,G3,G4,G5,G6 teal
   class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18,L19,L20,L21 blue
   class C1,C2,C3,C4,C5,C7 violet
-  class V1,V2,V4,V5,V6,V7,V9,V11,V13,V14 blue
+  class V1,V2,V4,V5,V6,V7,V9,V11,V13,V14,V15 blue
   class S1 green
   class H1,H2,H3,H4,H5 blue
   class L5,L8,L13,L17,V3,C6,V8,V10,V12 amber
@@ -202,7 +203,8 @@ flowchart TD
 - **Vaihtuuko peli kesken puheen?**: the host's switch loads a new page in the frame on every phone, while someone may be holding the 🎤 (#394). Before #394 the chip was in the frame: the old page going away fired `visibilitychange` there, which released the microphone in mid-sentence.
 - **Sormi ja mikrofoni pysyvät: 🎤 on huonesivulla, vain kehys vaihtuu**: the chip is an element of `public/huone/index.html`, so its pointer capture and the finger's lift survive the frame's change; `release()` comes only from the chip or the room page itself. A game in the frame tells the page its own `data-voice-corner` and `data-voice` (`AiPelitRoomShell.chip()`); a new place takes effect once the finger is up.
 - **Yhteyden palattua kerrotaan muille taas, puhuuko tämä puhelin**: the host's connection is made anew on a switch, so a `talk` sent in that gap is lost. `hi` carries `talk` too, and `voiceAgain()` sends it on each new connection: a name's 🔊 does not stay on, and `heal()` does not redial a call that only went quiet.
-- **Mikrofoni päälle, ääni muille**: `getUserMedia({audio: {echoCancellation, noiseSuppression}})` on each press (the first asks for permission), its track put on every connection with `replaceTrack()`; on release the track is stopped, so the phone's microphone light is off between presses. Just before `getUserMedia`, `press()` sets `navigator.audioSession.type = 'play-and-record'` where Safari has it (#381), since `back.js` asks for `playback`, which does not record; it also plays through the iPhone's silent switch.
+- **Mikrofoni auki vielä 1 s nostosta**: `release()` leaves the microphone on for `TAIL` (1 second) after the lift, so the end of a sentence is not cut (#398); the chip stays red and in its place, and the others still see 🔊. A press in that second goes on with the same microphone. `stopTalk()` ends it. No second after a quick tap (under 400 ms); none when the phone hides the page, voice is switched off or the phone leaves the room: then the microphone goes off at once.
+- **Mikrofoni päälle, ääni muille**: `getUserMedia({audio: {echoCancellation, noiseSuppression}})` on each press (the first asks for permission), its track put on every connection with `replaceTrack()`; once it is let go the track is stopped, so the phone's microphone light is off between presses. Just before `getUserMedia`, `press()` sets `navigator.audioSession.type = 'play-and-record'` where Safari has it (#381), since `back.js` asks for `playback`, which does not record; it also plays through the iPhone's silent switch.
 - **🔊 Nimi puhuu: muut kuulevat**: each call's sound plays through its own hidden `<audio>` (`hear()`; a tap anywhere starts one the phone held back); the speaker's name shows next to the chip while they hold theirs (`_rtc` `talk` on and off), in a bubble that wraps rather than cuts; while the sound is held back it adds "Napauta ruutua" on its own line (#333).
 - **🔇 Mykistä pelaaja pelaajalistassa**: a 🔊 button beside each other player who has voice on (`render()`); a tap makes it 🔇 and mutes that player on this phone for as long as it is in the room (`toggleMute()`).
 - **Huone välittää yhteyden avausviestit _rtc kenelle tahansa**: `rooms/worker.js` `webSocketMessage()`: a `_rtc` message from any phone goes only to the phone named in `to`, with `from` set, guest to guest too. Every other message is routed as before.
