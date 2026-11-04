@@ -377,8 +377,14 @@ const fmtWind = w => (w > 0 ? '+' : w < 0 ? '−' : '±') + Math.abs(w).toFixed(
 
 // ---------- The loop ----------
 let lastT = performance.now();
+// v17 (#404): a tap counts at the moment the finger touched, not at the last drawn frame. The game
+// runs on to the event's own time before it is judged, and the next frame takes only what is left.
+function catchUp(e) {
+  const d = e.timeStamp - lastT;
+  if (d > 0 && d < 100) { step(Math.min(0.05, d / 1000)); lastT = e.timeStamp; }
+}
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
   step(dt);
   draw(dt);
   requestAnimationFrame(frame);
@@ -845,6 +851,7 @@ function padAt(cx, cy) {
 }
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
+  catchUp(e);
   if (K.ending) { K.skip(); return; }  // v6: the podium stays until a tap after the ceremony leaves it
   // v13 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
   if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX, e.clientY)) return;
@@ -852,16 +859,17 @@ c.addEventListener('pointerdown', e => {
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) startAim(e.pointerId); else if (k) press(k);
 });
-const letGo = e => { if (e.pointerId === aimPtr) release(); };
+const letGo = e => { if (e.pointerId === aimPtr) { catchUp(e); release(); } };
 addEventListener('pointerup', letGo);
 addEventListener('pointercancel', letGo);
 addEventListener('keydown', e => {
   if (e.repeat) return;
+  catchUp(e);
   if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
   else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
   else if (e.key === ' ' || e.key === 'ArrowUp') startAim('key');
 });
-addEventListener('keyup', e => { if ((e.key === ' ' || e.key === 'ArrowUp') && aimPtr === 'key') release(); });
+addEventListener('keyup', e => { if ((e.key === ' ' || e.key === 'ArrowUp') && aimPtr === 'key') { catchUp(e); release(); } });
 
 // ---------- Menu ----------
 function showMenu(result, cls) {

@@ -446,8 +446,14 @@ const medal = i => ['🥇', '🥈', '🥉'][i - 1] || '';
 
 // ---------- The loop ----------
 let lastT = performance.now();
+// v14 (#404): a tap counts at the moment the finger touched, not at the last drawn frame. The game
+// runs on to the event's own time before it is judged, and the next frame takes only what is left.
+function catchUp(e) {
+  const d = e.timeStamp - lastT;
+  if (d > 0 && d < 100) { step(Math.min(0.05, d / 1000)); lastT = e.timeStamp; }
+}
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
   step(dt);
   draw(dt);
   requestAnimationFrame(frame);
@@ -911,6 +917,7 @@ let actDown = null;
 const actAt = (cx, cy) => actBoxes.find(b => cx - SX >= b.x && cx - SX <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
+  catchUp(e);
   if (K.ending) { K.skip(); return; }  // v3: a tap ends the ceremony, the next leaves the podium
   const b = actAt(e.clientX, e.clientY);
   if (b) { unlock(); actDown = { k: b.k, id: e.pointerId }; return; }
@@ -931,6 +938,7 @@ addEventListener('pointerup', e => {
 addEventListener('pointercancel', () => { actDown = null; });
 addEventListener('keydown', e => {
   if (e.repeat) return;
+  catchUp(e);
   if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
   else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
   else if (e.key === ' ' || e.key === 'ArrowUp') jumpPress();

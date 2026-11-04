@@ -430,8 +430,14 @@ const medal = p => ['🥇', '🥈', '🥉'][p - 1] || '';
 
 // ---------- The loop ----------
 let lastT = performance.now();
+// v15 (#404): a tap counts at the moment the finger touched, not at the last drawn frame. The game
+// runs on to the event's own time before it is judged, and the next frame takes only what is left.
+function catchUp(e) {
+  const d = e.timeStamp - lastT;
+  if (d > 0 && d < 100) { step(Math.min(0.05, d / 1000)); lastT = e.timeStamp; }
+}
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
   step(dt);
   draw(dt);
   requestAnimationFrame(frame);
@@ -901,6 +907,7 @@ let passPtr = null, pickDown = null;
 const pickAt = (cx, cy) => pickBoxes.find(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
+  catchUp(e);
   if (K.ending) { K.skip(); return; }  // v3: a tap ends the ceremony, the next leaves the podium
   if (inPass(e.clientX, e.clientY)) { passPtr = e.pointerId; return; }  // acts when the finger lifts on it
   const pb = pickAt(e.clientX, e.clientY);
@@ -917,16 +924,17 @@ addEventListener('pointerup', e => {
     if (b && b.k === k) { if (k === 'back') { if (th) th.pick = false; } else pass(nextHeights()[+k.slice(2)]); }
     return;
   }
-  if (e.pointerId === holdPtr) letGo();
+  if (e.pointerId === holdPtr) { catchUp(e); letGo(); }
 });
-addEventListener('pointercancel', e => { pickDown = null; if (e.pointerId === passPtr) passPtr = null; if (e.pointerId === holdPtr) letGo(); });
+addEventListener('pointercancel', e => { pickDown = null; if (e.pointerId === passPtr) passPtr = null; if (e.pointerId === holdPtr) { catchUp(e); letGo(); } });
 addEventListener('keydown', e => {
   if (e.repeat) return;
+  catchUp(e);
   if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
   else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
   else if (e.key === ' ' || e.key === 'ArrowUp') hold('key');
 });
-addEventListener('keyup', e => { if ((e.key === ' ' || e.key === 'ArrowUp') && holdPtr === 'key') letGo(); });
+addEventListener('keyup', e => { if ((e.key === ' ' || e.key === 'ArrowUp') && holdPtr === 'key') { catchUp(e); letGo(); } });
 
 // ---------- Menu ----------
 function showMenu(result, cls) {

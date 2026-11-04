@@ -32,6 +32,8 @@ v13 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapp
 
 
 v12 (#341) plays as v11 on `public/lib/yleisurheilu-7/`: the friends watching stand behind the boards, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
+v16 (#404) plays as v15, but a tap is judged at its own moment, not at the last drawn frame: see `reilu-ajoitus.md`.
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

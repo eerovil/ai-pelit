@@ -79,6 +79,13 @@
       "note": "Tietokone ei enää heitä yli 85 metriä, joten kisan voi voittaa hyvällä heitolla.",
       "request": "Miten moukarissa voi heittää 86",
       "issue": "eerovil/ai-pelit#404"
+    },
+    {
+      "n": 12,
+      "date": "2026-11-04",
+      "note": "Heitto lasketaan nyt täsmälleen sillä hetkellä, kun sormi osuu ruutuun, eikä edellisen piirretyn kuvan kohdalta, joten hyvä ajoitus palkitaan reilusti.",
+      "request": "Fair timing should be build for all games like this",
+      "issue": "eerovil/ai-pelit#404"
     }
   ]
 }
