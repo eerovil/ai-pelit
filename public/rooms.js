@@ -517,7 +517,7 @@
     sid: hex(6), // this page's own: a phone that reloaded is called again
     peers: {}, // id -> {greet, on, sid, pc, early, audio, talking, talkAt, fails, retryAt}
     muted: {}, // id -> true: not heard on this phone, while in this room
-    stream: null, track: null, pressed: false, talking: false, ice: null, iceAt: 0, err: '', errAt: 0,
+    stream: null, track: null, pressed: false, tail: 0, talking: false, ice: null, iceAt: 0, err: '', errAt: 0,
     heals: 0, // calls made again because no sound came while the other phone talked (#386)
   };
   // In the room page's frame the page's calls are this game's: the room screen reads them and asks
@@ -549,7 +549,7 @@
   function voiceAgain() { if (SHELL) return; Object.keys(voice.peers).forEach(function (id) { voice.peers[id].greet = false; }); }
   function voiceReset() {
     if (SHELL) return;
-    release();
+    stopTalk();
     Object.keys(voice.peers).forEach(function (id) { hang(id); });
     voice.peers = {}; voice.muted = {};
     renderVoice();
@@ -757,9 +757,17 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) replay(); });
 
   // ---- Push to talk ----
+  // How long the microphone stays on after the finger lifts, so the end of a sentence is not cut
+  // (#398). The chip stays red for it. A press in that time goes on with the same microphone.
+  var TAIL = 1000;
   function press() {
     if (SHELL) return SHELL.press();
     if (voice.pressed || !voice.on || !net.on) return;
+    if (voice.tail) {
+      clearTimeout(voice.tail); voice.tail = 0;
+      voice.pressed = true; voice.err = ''; voice.errAt = 0;
+      return renderVoice();
+    }
     // Nobody to hear it yet: the microphone stays off (and is not even asked for).
     if (!Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); })) {
       voice.err = 'Kukaan ei kuule vielä.'; voice.errAt = Date.now();
@@ -787,9 +795,28 @@
   function release() {
     if (SHELL) return SHELL.release();
     if (!voice.pressed) return;
-    voice.pressed = false;
-    // A quick tap: say how the chip works.
+    // Any sound already going out gets its second, a short "joo" too.
+    if (voice.talking) {
+      voice.pressed = false;
+      voice.tail = setTimeout(stopTalk, TAIL);
+      return renderVoice();
+    }
+    // The microphone had not opened. A quick tap: say how the chip works.
     if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
+    stopTalk();
+  }
+  // The browser took the finger away, so no sentence is ending. Capture is also lost right after a
+  // normal lift: by then the press is over, and its second goes on.
+  function cancelPress() {
+    if (SHELL) return SHELL.release();
+    if (voice.pressed) stopTalk();
+  }
+  // Off now: after the lift's second, and at once when the phone hides the page, voice is switched
+  // off or the phone leaves the room.
+  function stopTalk() {
+    if (!voice.pressed && !voice.tail) return;
+    clearTimeout(voice.tail); voice.tail = 0;
+    voice.pressed = false;
     if (voice.talking) { voice.talking = false; tellTalk(false); }
     dropMic();
     renderVoice();
@@ -803,14 +830,14 @@
   function tellTalk(on) { eachPc(function (pc, id) { sendRtc(id, { k: 'talk', on: on }); }); }
   // Not a frame's own: a game going away for the next one is hidden too, and the finger is still
   // on the room page's chip (#394). The room page hears the phone hiding it all.
-  if (!SHELL) document.addEventListener('visibilitychange', function () { if (document.hidden) release(); });
+  if (!SHELL) document.addEventListener('visibilitychange', function () { if (document.hidden) stopTalk(); });
 
   function setVoice(on) {
     if (SHELL) return SHELL.setVoice(on);
     if (!RTC || on === voice.on) return;
     voice.on = on;
     save(VOICE_KEY, on);
-    if (!on) { release(); Object.keys(voice.peers).forEach(function (id) { hang(id); }); }
+    if (!on) { stopTalk(); Object.keys(voice.peers).forEach(function (id) { hang(id); }); }
     if (net.on && net.connected) others().forEach(function (m) { greet(m.id, false); });
     voiceSync();
     render();
@@ -865,7 +892,8 @@
       try { chip.setPointerCapture(e.pointerId); } catch (err) {}
       press();
     });
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) { chip.addEventListener(type, release); });
+    chip.addEventListener('pointerup', release);
+    ['pointercancel', 'lostpointercapture'].forEach(function (type) { chip.addEventListener(type, cancelPress); });
     chip.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     vel = { chip: chip, bubble: bubble };
     placeChip();
@@ -874,11 +902,12 @@
     if (SHELL_MODE) shellChanged();
     // In the room page's frame the page draws the chip (#394).
     if ((SHELL && SHELL.chip) || !RTC_UI) return;
-    if (chipWant && !voice.pressed) {
+    var inUse = voice.pressed || !!voice.tail;
+    if (chipWant && !inUse) {
       chipAt = chipWant.at; chipOn = chipWant.on; chipWant = null;
       if (vel) placeChip();
     }
-    var on = net.on && voice.on && (chipOn || voice.pressed);
+    var on = net.on && voice.on && (chipOn || inUse);
     if (!on && !vel) return;
     voiceUI();
     var calls = Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); });

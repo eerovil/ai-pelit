@@ -128,6 +128,120 @@ def test_a_held_chip_is_heard_by_everyone_in_the_room_guest_to_guest_too(phones)
         assert p.errors == []
 
 
+COUNT_MIC = """(() => { window.__mic = 0; const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = (c) => { window.__mic++; return gum(c); }; })()"""
+UNTIL_QUIET = """new Promise(done => { const t = performance.now(), i = setInterval(() => {
+  if (!AiPelitRooms.voice.talking) { clearInterval(i); done(performance.now() - t); } }, 20); })"""
+
+
+def hold_and_lift(page):
+    hold(page)
+    page.wait_for_function("AiPelitRooms.voice.talking")
+    page.wait_for_timeout(500)  # longer than a quick tap
+    page.mouse.up()
+
+
+def test_the_microphone_stays_on_a_second_after_the_lift(phones):
+    # The end of a sentence is not cut (#398).
+    host, a, _ = room_of_three(phones)
+    hold_and_lift(a)
+    assert a.evaluate("[AiPelitRooms.voice.talking, document.getElementById('aipr-mic').className]") == [True, "live mid"]
+    before = heard(host)
+    assert 700 < a.evaluate(UNTIL_QUIET) < 1500
+    assert heard(host) > before  # the second's sound arrived
+    host.wait_for_function("document.getElementById('aipr-talk').hidden")
+    assert a.locator("#aipr-mic").get_attribute("class") == " mid"
+    assert host.errors == a.errors == []
+
+
+def test_a_press_in_that_second_goes_on_with_the_same_microphone(phones):
+    host, a, _ = room_of_three(phones)
+    a.evaluate(COUNT_MIC)
+    hold_and_lift(a)
+    a.mouse.down()
+    a.wait_for_timeout(1500)
+    assert a.evaluate("[AiPelitRooms.voice.talking, window.__mic]") == [True, 1]
+    assert host.evaluate("AiPelitRooms.voice.speakers") == ["Aino"]
+    a.mouse.up()
+    assert 700 < a.evaluate(UNTIL_QUIET) < 1500
+    assert host.errors == a.errors == []
+
+
+def test_a_short_word_gets_its_second_too(phones):
+    # A "joo" lifted under the quick tap's 400 ms, with the microphone already open.
+    host, a, _ = room_of_three(phones)
+    # This phone's clock stands still: however long the microphone takes to open here, the lift
+    # comes "at once", as a quick tap's does.
+    a.evaluate("(() => { window.__now = Date.now; const t = Date.now(); Date.now = () => t; })()")
+    hold(a)
+    a.wait_for_function("AiPelitRooms.voice.talking")
+    host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
+    assert a.evaluate("""(() => { document.getElementById('aipr-mic').dispatchEvent(new PointerEvent('pointerup'));
+      Date.now = window.__now; return AiPelitRooms.voice.talking; })()""") is True
+    # It was heard, so the phone does not say how the chip works.
+    assert a.evaluate("document.getElementById('aipr-talk').hidden")
+    before = heard(host)
+    assert 700 < a.evaluate(UNTIL_QUIET) < 1500
+    assert heard(host) > before
+    host.wait_for_function("document.getElementById('aipr-talk').hidden")
+    a.mouse.up()
+    assert host.errors == a.errors == []
+
+
+@pytest.mark.parametrize("event", ["pointercancel", "lostpointercapture"])
+def test_a_touch_the_browser_cancels_lets_the_microphone_go_at_once(phones, event):
+    # No finger lifted, so no sentence is ending: no second.
+    host, a, _ = room_of_three(phones)
+    hold(a)
+    a.wait_for_function("AiPelitRooms.voice.talking")
+    a.wait_for_timeout(500)
+    assert a.evaluate(f"""(() => {{ document.getElementById('aipr-mic').dispatchEvent(new PointerEvent('{event}'));
+      return AiPelitRooms.voice.talking; }})()""") is False
+    host.wait_for_function("AiPelitRooms.voice.speakers.length === 0")
+    a.mouse.up()
+    assert host.errors == a.errors == []
+
+
+@pytest.mark.parametrize("how", ["hidden", "voice off", "leaving"])
+def test_in_that_second_the_microphone_still_goes_off_at_once(phones, how):
+    host, a, _ = room_of_three(phones)
+    hold_and_lift(a)
+    if how == "hidden":
+        a.evaluate("""() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+          document.dispatchEvent(new Event('visibilitychange')); }""")
+    elif how == "voice off":
+        a.locator("#aipr-voice").uncheck()
+    else:
+        a.click("#aipr-back")
+    assert a.evaluate("AiPelitRooms.voice.talking") is False
+    a.wait_for_timeout(1300)  # and the second's end finds nothing to do
+    assert a.errors == []
+
+
+def test_a_lift_before_the_microphone_opened_never_goes_live(phones):
+    # A slow phone: the finger is up before the microphone is, so there is no second to keep.
+    host, a, _ = room_of_three(phones)
+    a.evaluate("""(() => { const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (c) => new Promise(ok => setTimeout(ok, 900)).then(() => gum(c)); })()""")
+    hold(a)
+    a.wait_for_timeout(500)
+    a.mouse.up()
+    a.wait_for_timeout(800)
+    assert a.evaluate("AiPelitRooms.voice.talking") is False
+    assert host.evaluate("AiPelitRooms.voice.speakers") == []
+    assert a.locator("#aipr-mic").get_attribute("class") == " mid"
+    assert host.errors == a.errors == []
+
+
+def test_a_reload_in_that_second_leaves_no_name_talking(phones):
+    # The page goes before it can say it stopped.
+    host, a, _ = room_of_three(phones)
+    hold_and_lift(a)
+    a.reload()
+    host.wait_for_function("AiPelitRooms.voice.speakers.length === 0", timeout=15000)
+    assert host.errors == []
+
+
 def test_the_chip_shows_over_the_round_and_the_round_plays_on(phones):
     host, a, b = room_of_three(phones)
     start(host, [a, b])
@@ -502,7 +616,7 @@ def test_two_talking_at_once_only_the_silent_calls_are_made_again(phones):
     host.wait_for_timeout(4000)
     # Iida stops: what Eero hears now is Aino's sound alone, through the call made again.
     b.mouse.up()
-    host.wait_for_timeout(600)
+    host.wait_for_timeout(1600)  # her microphone stays on for a second after the lift (#398)
     before = heard(host)
     host.wait_for_function(f"window.__bytes > {before} + 2000", polling=200, timeout=8000)
     a.mouse.up()

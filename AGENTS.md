@@ -181,7 +181,7 @@ high-score lists (#25), then play counts (#26).
     player, the host's button is "Ohita vuoro" (`on('skip', ids)`), and the room screen offers
     "Palaa kierrokseen" to a phone that left the round.
   - Voice (#322): every room has push to talk, with nothing for a game to do. While a phone holds
-    the 🎤 chip `rooms.js` draws, the others in the room hear it; the sound goes straight between
+    the 🎤 chip `rooms.js` draws, and for a second after the lift (#398), the others in the room hear it; the sound goes straight between
     the phones (WebRTC), the room passes on only the calls' setup (`_rtc`), and Cloudflare's TURN
     relay (`GET /api/voice/ice`, the `TURN_KEY_*` secrets) helps where phones cannot reach each
     other. Upright the chip sits on the right edge above the middle; on its side, in the top bar
