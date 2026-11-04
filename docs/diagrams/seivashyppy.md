@@ -7,7 +7,7 @@ computer's start `first`, a stop `S`; v2 also has Keihäänheitto v3's buttons, 
 the two feet with a gap that does nothing, and the running knee bends the right way, #170). A meet left unfinished is shared both ways: v2 reads v1's saved meet, and saves its own with v1's
 fields beside it (`keepForV1()`), so v1 can go on with it too. A meet has twelve vaulters: the player and eleven computer vaulters
 alone, or 2–8 phones in a room with the computer filling the rest. The bar starts at the level's
-first height and rises 10 cm at a time. At each height everyone still trying takes a first attempt
+first height and rises 10 cm at a time (from v14, #399, 20 cm until well over the level's base). At each height everyone still trying takes a first attempt
 in a drawn order, then those who failed a second, then a third. Anyone may pass a height, even after
 failing at it; three failures in a row, at one height or over several, and they are out. The meet
 goes on until everyone is out. On their turn the player runs up by tapping the left and right foot
@@ -64,7 +64,7 @@ flowchart TD
   X --> NX
   XB --> NX
   NX -- Joku tällä korkeudella --> T
-  NX -- Kaikki yli, ohi tai ulkona --> UP[Rima nousee 10 cm]
+  NX -- Kaikki yli, ohi tai ulkona --> UP[Rima nousee]
   UP --> T
   NX -- Kaikki ulkona --> END[Palkintojenjako; Lopputulokset: korkein rima, uusintalaskenta]
   END --> S[Ennätys, tuloslista, voitosta seuraava taso]
@@ -99,7 +99,7 @@ v14 (#399): passing many heights takes two taps, and the bar rises 20 cm at a ti
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/seivashyppy/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`), the menu shows its first height; "Jatka kisaa (rima N m)" shows when a meet alone was left unfinished (`kesken`, saved after each of the player's attempts); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones). The menu shows meets, wins and the record (`kisat`, `voitot`, `ennatys`).
-- **Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella**: `newComp()` (v2: `meet()` and `heights()` in the library, with `heightsFor()` and `cpuPlan()` from the game): the players, then computer vaulters up to twelve (`FIELD`), each with a skill around `base(level)` (4,00 m at level 1, 20 cm more per level up to 5,90 m); the first height is 80 cm under it (`h0Of()`), the bar then rises `STEP_H` (10 cm). `cpuPlan()` picks where each computer vaulter comes in (50–80 cm under its skill) and a few heights it passes. The order (`order`) is drawn once. From v5 the meet is `yleisurheilu-5/kisa.js` (#297).
+- **Kisa: 12 hyppääjää, arvottu järjestys, rima alkukorkeudella**: `newComp()` (v2: `meet()` and `heights()` in the library, with `heightsFor()` and `cpuPlan()` from the game): the players, then computer vaulters up to twelve (`FIELD`), each with a skill around `base(level)` (4,00 m at level 1, 20 cm more per level up to 5,90 m); the first height is 80 cm under it (`h0Of()`), the bar then rises `STEP_LOW` (20 cm) until 30 cm over `base`, then `STEP_H` (10 cm); before v14 (#399), and still in Ottelu's frame (`inMatch`), always `STEP_H`. `cpuPlan()` picks where each computer vaulter comes in (50–80 cm under its skill) and a few heights it passes. The order (`order`) is drawn once. From v5 the meet is `yleisurheilu-5/kisa.js` (#297).
 - **Tulostaulu: rima, tämän korkeuden merkinnät, paras**: `drawBoard()` (v2: `board()` in `korkeus.js`, as in Korkeushyppy v2), shown for 3.5 s (`BOARD_T`) before each player's attempt; alone a tap skips it. Each row shows the place, the marks at this height (O, X, - for a pass; "ulos" when out) and the best height; "NM" (no mark) before any. The foot line says who is next and how many attempts they have left (`TRIES - cons`).
 - **Kenen vuoro?**: `advance()` (v2: in `korkeus.js`, rounds at a height by `att`, not a queue) makes every computer attempt up to the next player on a phone; a round at a height is `comp.q`, the vaulters still `trying()` there, in the drawn order. `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone hyppää heti**: `cpuTry()`: clears when its skill plus a scatter of 13 cm reaches the bar; a run-through one time in twenty. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`, from the height it is at) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v5 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.

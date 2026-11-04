@@ -148,3 +148,66 @@ def test_with_friends_a_phone_passes_its_turns_up_to_the_height(site, browser, p
     aino.wait_for_function(f"th && th.mine && K.comp.hi === {hi + 3}")
     assert aino.evaluate("passTo") in (0, host.evaluate(f"K.comp.heights[{hi + 3}]"))
     assert host.errors == [] and aino.errors == []
+
+
+@pytest.mark.parametrize("path", EVENTS)
+def test_on_a_390_px_phone_the_panel_works_too(site, browser, path):
+    page = open_event(site, browser, path, (390, 844))
+    page.click("#go")
+    my_turn(page)
+    start = page.evaluate("K.comp.hi")
+    tap(page, "pass")
+    tap(page, "to11")
+    page.wait_for_function(f"K.comp.hi === {start + 12} && th && th.mine", timeout=4000)
+
+
+@pytest.mark.parametrize("path", EVENTS)
+def test_a_reload_while_passing_gives_the_next_turn_back_to_the_player(site, browser, path):
+    page = open_event(site, browser, path)
+    page.click("#go")
+    my_turn(page)
+    start = page.evaluate("K.comp.hi")
+    page.evaluate("pass(K.comp.heights[K.comp.hi + 8])")
+    page.wait_for_function(f"K.comp.hi > {start}", timeout=4000)
+    page.reload()
+    page.click("#cont")
+    my_turn(page)  # no height aimed at any more: the turn stays until the player acts
+    hi = page.evaluate("K.comp.hi")
+    assert start < hi <= start + 8
+    assert page.evaluate("passTo") == 0
+    assert page.evaluate("K.current().rec").count("-") == hi - start
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("path", EVENTS)
+def test_a_meet_saved_with_the_old_steps_goes_on_with_them(site, browser, path):
+    page = open_event(site, browser, path)
+    page.click("#go")
+    my_turn(page)
+    old = STEPS[path][1]
+    page.evaluate(
+        """old => { const k = K.load('kesken', null); k.heights = old.concat(k.heights.slice(old.length)); K.save('kesken', k); }""",
+        old,
+    )
+    page.reload()
+    page.click("#cont")
+    my_turn(page)
+    assert page.evaluate("K.comp.heights")[: len(old)] == old
+    tap(page, "pass")
+    assert page.evaluate("nextHeights()")[0] == old[page.evaluate("K.comp.hi") + 1]
+
+
+@pytest.mark.parametrize("path", EVENTS)
+def test_a_failure_before_the_pass_still_counts(site, browser, path):
+    page = open_event(site, browser, path)
+    page.click("#go")
+    my_turn(page)
+    start = page.evaluate("K.comp.hi")
+    page.evaluate("K.report(K.comp.seq, 'X')")
+    page.wait_for_function(f"th && th.mine && K.current() && (K.current().rec[{start}] || '') === 'X'", timeout=4000)
+    my_turn(page)
+    page.evaluate("pass(K.comp.heights[K.comp.hi + 3])")
+    page.wait_for_function(f"K.comp.hi === {start + 3} && th && th.mine", timeout=4000)
+    me = page.evaluate("(({ rec, run, out }) => ({ rec, run, out }))(K.current())")
+    assert me["rec"][start : start + 3] == ["X-", "-", "-"]
+    assert me["run"] == 1 and me["out"] is False
