@@ -506,6 +506,9 @@
   // ---- Voice (#322) ----
   var VOICE_KEY = 'ai-pelit:_huone:puhe'; // false: this phone has switched voice off
   var VOICE_AT = script.getAttribute('data-voice-corner') || 'right';
+  // Where the chip sits and whether it shows. On the room page the game in the frame says so
+  // (chip()), and a held chip stays put until the finger lifts (#394).
+  var chipAt = VOICE_AT, chipOn = true, chipWant = null;
   var ICE = new URL('api/voice/ice', script.src);
   var STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }];
   var RTC = script.getAttribute('data-voice') !== 'off' && !!(window.RTCPeerConnection && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -525,7 +528,9 @@
   function vpeer(id) { return voice.peers[id] || (voice.peers[id] = { early: [], fails: 0, retryAt: 0 }); }
   function sendRtc(to, m) { m.t = '_rtc'; m.to = to; sendRaw(m); }
   // Says to a phone whether this one takes calls; r asks it to say the same back.
-  function greet(id, r) { sendRtc(id, { k: 'hi', on: voice.on, sid: voice.sid, r: r }); }
+  // It says whether this phone talks too: a `talk` sent while a connection was being made again
+  // (the host's, at a game switch) is lost, and this comes after it (#394).
+  function greet(id, r) { sendRtc(id, { k: 'hi', on: voice.on, sid: voice.sid, r: r, talk: voice.talking }); }
   function others() { return net.members.filter(function (m) { return m.on && m.id !== net.me; }); }
   function sender(pc) { var t = pc.getTransceivers()[0]; return t ? t.sender : null; }
   function eachPc(fn) { Object.keys(voice.peers).forEach(function (id) { var p = voice.peers[id]; if (p.pc) try { fn(p.pc, id, p); } catch (e) {} }); }
@@ -660,6 +665,7 @@
     if (m.k === 'hi') {
       var was = p.on;
       p.on = m.on === true; p.sid = String(m.sid || '');
+      if (typeof m.talk === 'boolean' && m.talk !== !!p.talking) { p.talking = m.talk; p.talkAt = Date.now(); p.inAt = Date.now(); }
       if (m.r) greet(id, false);
       if (!p.on && was) hang(id);
       voiceSync();
@@ -795,7 +801,9 @@
     voice.stream = null; voice.track = null;
   }
   function tellTalk(on) { eachPc(function (pc, id) { sendRtc(id, { k: 'talk', on: on }); }); }
-  document.addEventListener('visibilitychange', function () { if (document.hidden) release(); });
+  // Not a frame's own: a game going away for the next one is hidden too, and the finger is still
+  // on the room page's chip (#394). The room page hears the phone hiding it all.
+  if (!SHELL) document.addEventListener('visibilitychange', function () { if (document.hidden) release(); });
 
   function setVoice(on) {
     if (SHELL) return SHELL.setVoice(on);
@@ -823,23 +831,34 @@
 
   // The chip and, beside it, who is talking.
   var vel = null, vShown = '';
-  function voiceUI() {
-    if (vel) return;
-    build();
-    var side = /left/.test(VOICE_AT) ? 'left' : 'right';
-    var vert = /^top/.test(VOICE_AT) ? 'top' : /^bottom/.test(VOICE_AT) ? 'bottom' : 'mid';
-    var chip = document.createElement('button'), bubble = document.createElement('div');
-    chip.id = 'aipr-mic'; chip.type = 'button'; chip.textContent = '🎤'; chip.hidden = true;
-    chip.setAttribute('aria-label', 'Pidä pohjassa ja puhu');
-    bubble.id = 'aipr-talk'; bubble.hidden = true;
+  // On the room page the chip is the page's, over the frame, so that a game switch leaves it under
+  // the finger (#394). It sits in #stage, the frame's box, where it sits in the game alone.
+  function placeChip() {
+    var chip = vel.chip, bubble = vel.bubble, st = SHELL_MODE && document.getElementById('stage');
+    var side = /left/.test(chipAt) ? 'left' : 'right';
+    var vert = /^top/.test(chipAt) ? 'top' : /^bottom/.test(chipAt) ? 'bottom' : 'mid';
+    var top = st ? '0px' : 'env(safe-area-inset-top,0px)'; // the room bar is above the frame's box
+    [chip, bubble].forEach(function (e) {
+      e.style.left = e.style.right = e.style.top = e.style.bottom = '';
+      e.style.position = st ? 'absolute' : '';
+    });
     var edge = 'calc(env(safe-area-inset-' + side + ',0px) + 8px)';
     chip.style[side] = edge;
     bubble.style[side] = 'calc(env(safe-area-inset-' + side + ',0px) + 68px)';
     if (vert === 'mid') { chip.style.top = '38%'; bubble.style.top = 'calc(38% + 12px)'; }
-    if (vert === 'top') { chip.style.top = 'calc(env(safe-area-inset-top,0px) + 56px)'; bubble.style.top = 'calc(env(safe-area-inset-top,0px) + 68px)'; }
+    if (vert === 'top') { chip.style.top = 'calc(' + top + ' + 56px)'; bubble.style.top = 'calc(' + top + ' + 68px)'; }
     if (vert === 'bottom') { chip.style.bottom = 'calc(env(safe-area-inset-bottom,0px) + 72px)'; bubble.style.bottom = 'calc(env(safe-area-inset-bottom,0px) + 84px)'; }
-    document.body.appendChild(chip);
-    document.body.appendChild(bubble);
+  }
+  function voiceUI() {
+    if (vel) return;
+    if (SHELL_MODE) addCss(); else build();
+    var chip = document.createElement('button'), bubble = document.createElement('div');
+    chip.id = 'aipr-mic'; chip.type = 'button'; chip.textContent = '🎤'; chip.hidden = true;
+    chip.setAttribute('aria-label', 'Pidä pohjassa ja puhu');
+    bubble.id = 'aipr-talk'; bubble.hidden = true;
+    var home = SHELL_MODE && document.getElementById('stage') || document.body;
+    home.appendChild(chip);
+    home.appendChild(bubble);
     shield(chip);
     chip.addEventListener('pointerdown', function (e) {
       e.preventDefault();
@@ -849,13 +868,17 @@
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) { chip.addEventListener(type, release); });
     chip.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     vel = { chip: chip, bubble: bubble };
+    placeChip();
   }
   function renderVoice() {
-    if (SHELL_MODE) return shellChanged();
-    // In the room page's frame the chip sits where it does in the game alone, and works the
-    // page's calls (#388).
-    if (!RTC_UI) return;
-    var on = net.on && voice.on;
+    if (SHELL_MODE) shellChanged();
+    // In the room page's frame the page draws the chip (#394).
+    if ((SHELL && SHELL.chip) || !RTC_UI) return;
+    if (chipWant && !voice.pressed) {
+      chipAt = chipWant.at; chipOn = chipWant.on; chipWant = null;
+      if (vel) placeChip();
+    }
+    var on = net.on && voice.on && (chipOn || voice.pressed);
     if (!on && !vel) return;
     voiceUI();
     var calls = Object.keys(voice.peers).some(function (id) { return live(voice.peers[id]); });
@@ -868,11 +891,11 @@
       var held = Object.keys(voice.peers).some(function (id) { var a = voice.peers[id].audio; return a && a.paused && voice.peers[id].talking; });
       if (who.length) text = '🔊 ' + who.join(', ') + (held ? '\nNapauta ruutua' : '');
     }
-    var k = on + cls + text;
+    var k = on + cls + text + chipAt;
     if (k === vShown) return;
     vShown = k;
     vel.chip.hidden = !on;
-    var mid = /^(right|left)$/.test(VOICE_AT) ? 'mid' : '';
+    var mid = /^(right|left)$/.test(chipAt) ? 'mid' : '';
     vel.chip.className = cls + (mid ? ' ' + mid : '');
     vel.bubble.className = mid;
     vel.bubble.hidden = !text;
@@ -972,6 +995,7 @@
     '@media (orientation:landscape) and (max-height:500px){' +
       '#aipr-mic.mid{top:calc(env(safe-area-inset-top,0px) + 4px)!important;left:calc(50% + 120px)!important;right:auto!important;width:44px;height:44px;line-height:44px;font-size:20px}' +
       '#aipr-talk.mid{top:calc(env(safe-area-inset-top,0px) + 54px)!important;left:auto!important;right:calc(50% - 164px)!important}' +
+      '#stage #aipr-mic.mid{top:4px!important}#stage #aipr-talk.mid{top:54px!important}' +
     '}',
     '#aipr li button.mute{margin-left:auto;padding:0 2px;background:none;box-shadow:none;font-size:18px;line-height:1}',
     // Friends (#324): a small button on each player's row, the requests above the list, and the
@@ -1036,11 +1060,17 @@
     ['pointerdown', 'pointerup', 'pointermove', 'touchstart', 'touchend', 'touchmove', 'mousedown', 'mouseup', 'click', 'keydown', 'keyup']
       .forEach(function (type) { e.addEventListener(type, function (ev) { ev.stopPropagation(); }, { passive: true }); });
   }
-  function build() {
-    if (root) return;
+  var cssIn = false;
+  function addCss() {
+    if (cssIn) return;
+    cssIn = true;
     var style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
+  }
+  function build() {
+    if (root) return;
+    addCss();
     root = document.createElement('div');
     root.id = 'aipr'; root.hidden = true; root.innerHTML = HTML;
     var pause = document.createElement('div');
@@ -1452,6 +1482,8 @@
       watch: function (win, fn) { sh.watchers.push({ win: win, doc: win.document, fn: fn }); },
       get watching() { return sh.watchers.length; },
       setVoice: setVoice, toggleMute: toggleMute, press: press, release: release, replay: replay,
+      // The game in the frame says where its 🎤 sits and whether it has one (#394).
+      chip: function (at, on) { chipWant = { at: at, on: on }; renderVoice(); },
       get state() {
         return {
           on: net.on, code: net.code, me: net.me, host: net.hostId, connected: net.connected,
@@ -1490,6 +1522,7 @@
       });
     } catch (e) {}
     window.addEventListener('pagehide', function () { if (net.ws) try { net.ws.close(1000, 'Vaihdetaan peliä'); } catch (e) {} });
+    if (SHELL.chip) SHELL.chip(VOICE_AT, script.getAttribute('data-voice') !== 'off');
   }
 
   // ---- The API ----

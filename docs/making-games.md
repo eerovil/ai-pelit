@@ -140,6 +140,7 @@ the version that taught it, so you can read the code that fixed it.
 What only showed on a real phone, never in the headless tests. When you hit a new one, add a line
 here in the same pull request (AGENTS.md says so), naming the version that taught it.
 
+- A page in a frame that loads the next page fires `visibilitychange` hidden on its way out, and anything held there goes with it, so what a finger holds through a change belongs on the page around the frame. With the first finger on that page, Chromium sends the frame pointer events but no touch events, so read pointers (room page, #394).
 - **Not `100dvh`.** Yöajo v1 (#181), seen on Eero's Android phone: in the installed app, which
   opens full screen, the bottom of the game was under the screen's edge until the system bars were
   swiped in and out. The likely cause, not proven (a test phone did not show it), is `100dvh`

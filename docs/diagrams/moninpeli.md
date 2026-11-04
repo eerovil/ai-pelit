@@ -12,7 +12,8 @@ Voice (#322): while someone holds the 🎤 chip, the others in the room hear the
 straight between the phones, and the room only passes on the call's setup messages.
 The room page (#388): a phone that makes or joins a room moves onto `/huone/`, which keeps the
 room's connection and the calls and plays the game in a frame, so a game switch changes only the
-frame and the calls stay up.
+frame and the calls stay up. The 🎤 chip lives on that page too (#394), so a sentence goes on through a
+game switch.
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
@@ -111,6 +112,9 @@ flowchart TD
     V9[Soitetaan hänelle uudelleen, enintään kerran 10 s:ssa]
     V10{Onko ääni pysähtynyt puhelimessa?}
     V11[Ääni käynnistetään uudelleen]
+    V12{Vaihtuuko peli kesken puheen?}
+    V13[Sormi ja mikrofoni pysyvät: 🎤 on huonesivulla, vain kehys vaihtuu]
+    V14[Yhteyden palattua kerrotaan muille taas, puhuuko tämä puhelin]
   end
   subgraph CfPuhe[Cloudflare: puhe]
     C3[Huone välittää yhteyden avausviestit _rtc kenelle tahansa]
@@ -129,6 +133,10 @@ flowchart TD
   V2 -.-> C5
   G2 --> V3
   V4 --> V6
+  V4 --> V12
+  V12 -- Kyllä --> V13
+  V13 --> V14
+  V14 --> V6
   V7 --> V6
   V6 --> V8
   V8 -- Kyllä --> V9
@@ -138,10 +146,10 @@ flowchart TD
   class G1,G2,G3,G4,G5,G6 teal
   class L1,L2,L3,L4,L7,L9,L10,L11,L12,L15,L16,L18,L19,L20,L21 blue
   class C1,C2,C3,C4,C5,C7 violet
-  class V1,V2,V4,V5,V6,V7,V9,V11 blue
+  class V1,V2,V4,V5,V6,V7,V9,V11,V13,V14 blue
   class S1 green
   class H1,H2,H3,H4,H5 blue
-  class L5,L8,L13,L17,V3,C6,V8,V10 amber
+  class L5,L8,L13,L17,V3,C6,V8,V10,V12 amber
   class L6,G7,L14 rose
 ```
 
@@ -184,13 +192,16 @@ flowchart TD
 - **Kierros päättyy: tulos kaikille, myös poissa olleille**: the host's `deliver(msg)` sends the end to every phone in the round and to no other. Each phone confirms it (`_got`); until then the host keeps it, and sends it again on that phone's `hello`, after that round's `_start` (so a reloaded page knows the round). A page that reloads just as the round ends, seen as connected before its hello, gets it that way. Then `endRound()`. Kirkkis: `end()` delivers `kfin`, the whole finished round and who seeks next.
 - **Tallenna tulos kerran per kierros**: the game saves only when `AiPelitRooms.once(round)` is true (kept per tab in `ai-pelit:_huone:kierros`), then `backToRoom(text)` shows the room with the result. Kirkkis: `guestEnd()`, into `ai-pelit:kirkkis:tilasto`, then `note('Seuraavaksi etsii …')`.
 - **Luo tai liity: puhelin siirtyy huonesivulle, peli kehykseen**: `enter()` in `public/rooms.js` on a game's own page calls `toRoomPage()`: the page is replaced by `huone/?koodi=<KOODI>&peli=<slug>&v=<N>` (a host hands its room on with the `ai-pelit:_isanta` note, a "Palaa kierrokseen" with `ai-pelit:_huone:paluu`, and the shelf's game page below with `ai-pelit:_huone:ylos`), which loads `games/<slug>/v<N>/?huone=<KOODI>` in its frame; the game there joins as before. A game inside another frame (Ottelu's events) keeps the room in its own page, and so do the tests, through `window.__aiPelitHuoneSivu = false` (`ROOMS_IN_GAME` in `tests/conftest.py`).
-- **Huonepalkki: koodi, pelaajat**: the room page's bar over the frame, 44 px (34 px on a phone on its side) under the top safe area: "Huone KOOD", each player's colour dot and name (greyed while away, 🔊 while talking), "Yhdistetään…" while the connection is down. No 🎤 here: the game in the frame keeps its own chip where it sits in the game alone (Eero's choice after trying the preview), and the chip works the page's calls. The frame gets the left, right and bottom safe areas as padding.
-- **Yksi yhteys huoneeseen ja puhelut pysyvät koko ajan**: `public/rooms.js` with `data-shell` on the room page: `window.AiPelitRoomShell` owns the room's WebSocket and every call. The game in the frame gets a stand-in socket from `open()`: a game that connects again with the same address (a guest's next game, a reload of the frame) gets the same connection, told again who it is (`you`) and who is in (`peers`); another address (the host's join for its new game) connects anew while the calls stay up. The page reads `_rtc` itself and tells the frame four times a second (`watch()`): the frame's 🎤 chip follows each time, its room screen redraws only when what it shows of the calls (voice on, who takes calls, mutes) changed, so a finger held on its buttons keeps them, and a frame that loaded the next game is no longer told (its old game's watcher goes with its document), and asks the room page to go when the game leaves (`left()`), follows an invite (`go()`, from `kaverit.js`) or goes up with the "‹ Pelit" chip (`up()`, from `back.js`).
+- **Huonepalkki: koodi, pelaajat**: the room page's bar over the frame, 44 px (34 px on a phone on its side) under the top safe area: "Huone KOOD", each player's colour dot and name (greyed while away, 🔊 while talking), "Yhdistetään…" while the connection is down. No 🎤 in the bar: the chip sits where it does in the game alone (Eero's choice after trying the preview), but over the frame, drawn by the page itself (#394). The frame gets the left, right and bottom safe areas as padding.
+- **Yksi yhteys huoneeseen ja puhelut pysyvät koko ajan**: `public/rooms.js` with `data-shell` on the room page: `window.AiPelitRoomShell` owns the room's WebSocket and every call. The game in the frame gets a stand-in socket from `open()`: a game that connects again with the same address (a guest's next game, a reload of the frame) gets the same connection, told again who it is (`you`) and who is in (`peers`); another address (the host's join for its new game) connects anew while the calls stay up. The page reads `_rtc` itself and tells the frame four times a second (`watch()`): its room screen redraws only when what it shows of the calls (voice on, who takes calls, mutes) changed, so a finger held on its buttons keeps them, and a frame that loaded the next game is no longer told (its old game's watcher goes with its document), and asks the room page to go when the game leaves (`left()`), follows an invite (`go()`, from `kaverit.js`) or goes up with the "‹ Pelit" chip (`up()`, from `back.js`).
 - **Pelin vaihto: vain kehys vaihtuu**: `moveRoom()` in the frame replaces only the frame's address; the room page updates its own (`peli`, `v`) and title when the frame has loaded. Eero's phone kept its taps in a frame that changed this way, and in one that was replaced (#388 prototype).
 - **Poistuu huoneesta: peli yksin omalle sivulleen**: `leave()` in the frame calls `left(why)`; the room page goes to the game's own page, with the reason (the room closed) in `ai-pelit:_huone:virhe` for its room screen. Back still goes up (#68) as from a game page: the shelf's game page below stays below.
 - **🎤 Puhe-kytkin huoneruudussa, oletuksena päällä**: "🎤 Puhe" on the room screen (#322), beside 🌍 Julkinen, kept in `ai-pelit:_huone:puhe` (`setVoice()`). Off: no 🎤 chip, no calls, and the other phones are told so (`hi`, `on: false`). Shown in every room, public ones too (Eero's choice, until a friends list exists).
 - **Puhelinyhteys jokaiseen huoneen puhelimeen**: `voiceSync()` in `public/rooms.js`: each phone greets each other connected one (`_rtc` `hi`, with its voice switch and a page id `sid`), and the one with the smaller id calls (`dial()`, answered in `pickUp()`): one audio-only `RTCPeerConnection` per pair, at most 7 per phone. Offers, answers and ICE candidates go as `_rtc` messages; candidates that come before their offer is in (while the servers are read) wait in `p.early` and are added after it (`flushIce()`). A phone that reloaded (new `sid`) is called again; a failed call, or one the calling phone sees not up within 20 seconds (its offer or answer lost while a phone was away, #333), is tried again after 1, 2, 4… up to 30 seconds. A failure leaves the game as it is.
-- **Pitääkö pelaaja 🎤-nappia pohjassa?**: every game has the 🎤 chip; on the room page (#388) the chip in the frame works the page's calls through `AiPelitRoomShell.press()` and `release()`, so it sits where it does in the game alone (`voiceUI()`, `renderVoice()`), over the game and the room screen while this phone is in a room: upright on the right edge at 38 % height, on its side in the top bar right of the middle (the athletics events' buttons fill both edges). A version may move it with `data-voice-corner` or leave voice out with `data-voice="off"` on its `rooms.js` tag. Push to talk (`press()`, `release()`): pointerdown starts; pointerup, pointercancel or the page going hidden stops. Faded while no call is up, and then a press only says "Kukaan ei kuule vielä." (the microphone is not asked for); amber while the microphone opens, red while live. A quick tap says "Pidä pohjassa ja puhu."
+- **Pitääkö pelaaja 🎤-nappia pohjassa?**: every game has the 🎤 chip; on the room page the page itself draws it and the "🔊 Nimi" bubble over the frame (#394), where it sits in the game alone (`voiceUI()`, `renderVoice()`), over the game and the room screen while this phone is in a room: upright on the right edge at 38 % height, on its side in the top bar right of the middle (the athletics events' buttons fill both edges). A version may move it with `data-voice-corner` or leave voice out with `data-voice="off"` on its `rooms.js` tag. Push to talk (`press()`, `release()`): pointerdown starts; pointerup, pointercancel or the page going hidden stops (the room page's own hiding, not its frame's: a frame loading the next game is hidden for a moment). Faded while no call is up, and then a press only says "Kukaan ei kuule vielä." (the microphone is not asked for); amber while the microphone opens, red while live. A quick tap says "Pidä pohjassa ja puhu."
+- **Vaihtuuko peli kesken puheen?**: the host's switch loads a new page in the frame on every phone, while someone may be holding the 🎤 (#394). Before #394 the chip was in the frame: the old page going away fired `visibilitychange` there, which released the microphone in mid-sentence.
+- **Sormi ja mikrofoni pysyvät: 🎤 on huonesivulla, vain kehys vaihtuu**: the chip is an element of `public/huone/index.html`, so its pointer capture and the finger's lift survive the frame's change; `release()` comes only from the chip or the room page itself. A game in the frame tells the page its own `data-voice-corner` and `data-voice` (`AiPelitRoomShell.chip()`); a new place takes effect once the finger is up.
+- **Yhteyden palattua kerrotaan muille taas, puhuuko tämä puhelin**: the host's connection is made anew on a switch, so a `talk` sent in that gap is lost. `hi` carries `talk` too, and `voiceAgain()` sends it on each new connection: a name's 🔊 does not stay on, and `heal()` does not redial a call that only went quiet.
 - **Mikrofoni päälle, ääni muille**: `getUserMedia({audio: {echoCancellation, noiseSuppression}})` on each press (the first asks for permission), its track put on every connection with `replaceTrack()`; on release the track is stopped, so the phone's microphone light is off between presses. Just before `getUserMedia`, `press()` sets `navigator.audioSession.type = 'play-and-record'` where Safari has it (#381), since `back.js` asks for `playback`, which does not record; it also plays through the iPhone's silent switch.
 - **🔊 Nimi puhuu: muut kuulevat**: each call's sound plays through its own hidden `<audio>` (`hear()`; a tap anywhere starts one the phone held back); the speaker's name shows next to the chip while they hold theirs (`_rtc` `talk` on and off), in a bubble that wraps rather than cuts; while the sound is held back it adds "Napauta ruutua" on its own line (#333).
 - **🔇 Mykistä pelaaja pelaajalistassa**: a 🔊 button beside each other player who has voice on (`render()`); a tap makes it 🔇 and mutes that player on this phone for as long as it is in the room (`toggleMute()`).
