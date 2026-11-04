@@ -185,6 +185,20 @@ def test_a_short_word_gets_its_second_too(phones):
     assert host.errors == a.errors == []
 
 
+@pytest.mark.parametrize("event", ["pointercancel", "lostpointercapture"])
+def test_a_touch_the_browser_cancels_lets_the_microphone_go_at_once(phones, event):
+    # No finger lifted, so no sentence is ending: no second.
+    host, a, _ = room_of_three(phones)
+    hold(a)
+    a.wait_for_function("AiPelitRooms.voice.talking")
+    a.wait_for_timeout(500)
+    assert a.evaluate(f"""(() => {{ document.getElementById('aipr-mic').dispatchEvent(new PointerEvent('{event}'));
+      return AiPelitRooms.voice.talking; }})()""") is False
+    host.wait_for_function("AiPelitRooms.voice.speakers.length === 0")
+    a.mouse.up()
+    assert host.errors == a.errors == []
+
+
 @pytest.mark.parametrize("how", ["hidden", "voice off", "leaving"])
 def test_in_that_second_the_microphone_still_goes_off_at_once(phones, how):
     host, a, _ = room_of_three(phones)

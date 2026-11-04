@@ -806,6 +806,12 @@
     }
     stopTalk();
   }
+  // The browser took the finger away, so no sentence is ending. Capture is also lost right after a
+  // normal lift: by then the press is over, and its second goes on.
+  function cancelPress() {
+    if (SHELL) return SHELL.release();
+    if (voice.pressed) stopTalk();
+  }
   // Off now: after the lift's second, and at once when the phone hides the page, voice is switched
   // off or the phone leaves the room.
   function stopTalk() {
@@ -887,7 +893,8 @@
       try { chip.setPointerCapture(e.pointerId); } catch (err) {}
       press();
     });
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) { chip.addEventListener(type, release); });
+    chip.addEventListener('pointerup', release);
+    ['pointercancel', 'lostpointercapture'].forEach(function (type) { chip.addEventListener(type, cancelPress); });
     chip.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     vel = { chip: chip, bubble: bubble };
     placeChip();
