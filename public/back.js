@@ -355,6 +355,11 @@
   var fsDoc = document;
   try { if (window.parent !== window && window.parent.AiPelitRoomShell) fsDoc = window.parent.document; } catch (e) {}
   var root = fsDoc.documentElement;
+  // A frame inside this game (Ottelu's events, laji.js) asks this page's root. Passed on to the room
+  // page, or this frame alone would fill the screen, over the room bar and the 🎤 (#394).
+  if (fsDoc !== document) document.documentElement.requestFullscreen = function (options) {
+    return fsDoc.fullscreenElement ? Promise.resolve() : root.requestFullscreen(options);
+  };
   function fullScreen(e) {
     if (box.contains(e.target) || panel.contains(e.target) || fsDoc.fullscreenElement || !root.requestFullscreen) return;
     if (window.matchMedia && matchMedia('(display-mode: fullscreen)').matches) return;

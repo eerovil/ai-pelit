@@ -132,9 +132,10 @@ def test_a_switch_changes_only_the_frame_and_keeps_the_call(phones):
     for page, n in zip((host, guest), calls):
         page.wait_for_function(f"{ROOMS}.voice.calls === 1")
         assert page.evaluate("window.__pcs.length") == n
-    # Sound still goes through: the guest holds the game's own 🎤 chip, where it sits in the game
-    # alone (on the right edge above the middle), and the host hears it.
-    chip = game(guest).locator("#aipr-mic")
+    # Sound still goes through: the guest holds the 🎤 chip, where it sits in the game alone (on the
+    # right edge above the middle), and the host hears it. It is the page's, not the game's (#394).
+    assert game(guest).locator("#aipr-mic").count() == 0
+    chip = guest.locator("#aipr-mic")
     chip.wait_for(state="visible")
     assert guest.locator("#bar #mic").count() == 0
     box, stage = chip.bounding_box(), guest.locator("#stage").bounding_box()
@@ -142,14 +143,196 @@ def test_a_switch_changes_only_the_frame_and_keeps_the_call(phones):
     before = host.evaluate("window.__bytes")
     chip.dispatch_event("pointerdown", {"pointerId": 1})
     guest.wait_for_function(f"{ROOMS}.voice.talking")
-    game(guest).locator("#aipr-mic.live").wait_for()
+    guest.locator("#aipr-mic.live").wait_for()
     host.wait_for_function(f"window.__bytes > {before} + 2000", timeout=10_000)
-    # The host's game says who talks, and its bar lights the name.
-    game(host).locator("#aipr-talk", has_text="🔊 Aino").wait_for()
+    # The host's page says who talks, and its bar lights the name.
+    host.locator("#aipr-talk", has_text="🔊 Aino").wait_for()
     host.locator("#who span.talk", has_text="Aino").wait_for()
     chip.dispatch_event("pointerup", {"pointerId": 1})
     guest.wait_for_function(f"!{ROOMS}.voice.talking")
     assert host.errors == guest.errors == []
+
+
+def hold_chip(page):
+    chip = page.locator("#aipr-mic")
+    chip.wait_for(state="visible")
+    box = chip.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.wait_for_function(f"{ROOMS}.voice.talking")
+
+
+def switch_to_iso(host, code, *others):
+    game(host).locator("#aipr-switchGame").click()
+    game(host).locator("#aipr-gameList button[data-game='iso']").click()
+    for page in (host, *others):
+        page.wait_for_url(re.compile(rf"/huone/\?koodi={code}&peli=iso&v=1$"))
+        page.wait_for_function(f"{ROOMS}?.game === 'iso' && {ROOMS}.inRoom && {ROOMS}.members.length === 2")
+
+
+def test_a_sentence_goes_on_through_a_game_switch(phones):
+    # The host switches while the guest's finger is on the chip (#394): the old game's page going
+    # away must not let go of the microphone, and the finger's lift still ends it.
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for page in (host, guest):
+        page.wait_for_function(f"{ROOMS}.voice.calls === 1", timeout=15_000)
+    hold_chip(guest)
+    host.locator("#who span.talk", has_text="Aino").wait_for()
+    switch_to_iso(host, code, guest)
+    assert guest.evaluate(f"{ROOMS}.voice.talking")
+    assert guest.locator("#aipr-mic.live").is_visible()
+    # The sound still arrives after the switch, and the host still sees who talks.
+    before = host.evaluate("window.__bytes")
+    host.wait_for_function(f"window.__bytes > {before} + 2000", timeout=10_000)
+    host.locator("#aipr-talk", has_text="🔊 Aino").wait_for()
+    host.locator("#who span.talk", has_text="Aino").wait_for()
+    guest.mouse.up()
+    guest.wait_for_function(f"!{ROOMS}.voice.talking")
+    host.locator("#who span.talk").wait_for(state="detached")
+    assert host.errors == guest.errors == []
+
+
+def test_a_lift_during_the_hosts_reconnect_still_reaches_the_others(phones):
+    # The host's connection is made anew at a switch: a `talk` sent in that gap is lost, and the
+    # greeting after it says the phone no longer talks (#394).
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for page in (host, guest):
+        page.wait_for_function(f"{ROOMS}.voice.calls === 1", timeout=15_000)
+    hold_chip(host)
+    guest.locator("#who span.talk", has_text="Eero").wait_for()
+    phones.relay.lose_rtc["talk"] = 1
+    host.mouse.up()
+    host.wait_for_function(f"!{ROOMS}.voice.talking")
+    guest.wait_for_timeout(300)
+    assert guest.locator("#who span.talk", has_text="Eero").count() == 1
+    switch_to_iso(host, code, guest)
+    guest.locator("#who span.talk").wait_for(state="detached", timeout=6_000)
+    assert guest.evaluate(f"{ROOMS}.voice.heals") == 0
+    assert host.errors == guest.errors == []
+
+
+def test_the_page_going_hidden_still_lets_go_of_the_microphone(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for page in (host, guest):
+        page.wait_for_function(f"{ROOMS}.voice.calls === 1", timeout=15_000)
+    hold_chip(guest)
+    guest.evaluate("""() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }""")
+    guest.wait_for_function(f"!{ROOMS}.voice.talking")
+    guest.mouse.up()
+    assert host.errors == guest.errors == []
+
+
+def test_the_chip_moves_to_the_next_games_place_only_after_the_lift(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for page in (host, guest):
+        page.wait_for_function(f"{ROOMS}.voice.calls === 1", timeout=15_000)
+    chip = guest.locator("#aipr-mic")
+    chip.wait_for(state="visible")
+    at = chip.bounding_box()
+    hold_chip(guest)
+    held = chip.bounding_box()  # a live chip is a little bigger
+    guest.evaluate("AiPelitRoomShell.chip('bottom-left', true)")
+    guest.wait_for_timeout(400)
+    assert chip.bounding_box()["x"] == held["x"]
+    guest.mouse.up()
+    guest.wait_for_function("document.getElementById('aipr-mic').getBoundingClientRect().left < 60")
+    # A game with no voice has no chip; the next one brings it back.
+    guest.evaluate("AiPelitRoomShell.chip('right', false)")
+    chip.wait_for(state="hidden")
+    guest.evaluate("AiPelitRoomShell.chip('right', true)")
+    chip.wait_for(state="visible")
+    assert chip.bounding_box()["x"] == at["x"]
+    assert host.errors == guest.errors == []
+
+
+LOG_TOUCHES = """() => {
+  const w = document.getElementById('game').contentWindow;
+  w.__seen = [];
+  for (const t of ['pointerdown', 'pointerup']) w.addEventListener(t, () => w.__seen.push(t), true);
+}"""
+SEEN = "document.getElementById('game').contentWindow.__seen"
+
+
+def touch(cdp, kind, *points):
+    cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [
+        {"x": x, "y": y, "id": i} for i, x, y in points]})
+
+
+def test_the_game_hears_a_second_finger_while_the_chip_is_held(phones):
+    # Talking while playing: one finger on the page's chip, the other in the game's frame. Pointer
+    # events only: with the first finger in another document Chromium sends the frame no touch
+    # events, and every room game reads pointers.
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for page in (host, guest):
+        page.wait_for_function(f"{ROOMS}.voice.calls === 1", timeout=15_000)
+    guest.locator("#aipr-mic").wait_for(state="visible")
+    box = guest.locator("#aipr-mic").bounding_box()
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    guest.evaluate(LOG_TOUCHES)
+    cdp = guest.context.new_cdp_session(guest)
+    # The chip first, then the game.
+    touch(cdp, "touchStart", (1, cx, cy))
+    guest.wait_for_function(f"{ROOMS}.voice.talking")
+    touch(cdp, "touchStart", (1, cx, cy), (2, 100, 500))
+    guest.wait_for_function(f"{SEEN}.includes('pointerdown')")
+    touch(cdp, "touchEnd")
+    guest.wait_for_function(f"{SEEN}.includes('pointerup') && !{ROOMS}.voice.talking")
+    # The game first, then the chip.
+    guest.evaluate(f"{SEEN}.length = 0")
+    touch(cdp, "touchStart", (2, 100, 500))
+    guest.wait_for_function(f"{SEEN}.includes('pointerdown')")
+    touch(cdp, "touchStart", (2, 100, 500), (1, cx, cy))
+    guest.wait_for_function(f"{ROOMS}.voice.talking")
+    touch(cdp, "touchEnd")
+    guest.wait_for_function(f"{SEEN}.includes('pointerup') && !{ROOMS}.voice.talking")
+    assert host.errors == guest.errors == []
+
+
+def test_a_frame_inside_the_game_goes_full_screen_with_the_room_bar_and_chip(phones):
+    # Ottelu's events (laji.js) sit in a frame of their own and ask their parent's root for full
+    # screen. Seen on a real phone: Ottelu's frame alone filled the screen, over the bar and the 🎤.
+    host, code = make_room(phones)
+    game(host).locator("body").evaluate("""body => {
+      const inner = document.createElement('iframe');
+      inner.id = 'laji';
+      inner.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483647';
+      inner.srcdoc = `<body style="margin:0;height:100vh"><script>
+        const root = parent.document.documentElement;
+        addEventListener('pointerup', () => { window.asked = root.requestFullscreen({ navigationUI: 'hide' }); });
+      </` + `script>`;
+      body.appendChild(inner);
+    }""")
+    box = game(host).locator("#laji").bounding_box()
+    host.wait_for_timeout(200)
+    assert game(host).locator("body").evaluate(
+        "() => document.elementFromPoint(innerWidth / 2, innerHeight / 2).id") == "laji"
+    for _ in range(2):  # the second tap, already full screen, must change nothing
+        host.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        host.wait_for_function("document.fullscreenElement === document.documentElement")
+    assert host.locator("#bar").is_visible()
+    assert host.locator("#aipr-mic").is_visible()
+    assert host.errors == []
+
+
+@pytest.mark.parametrize("width, height", [(390, 844), (740, 360)])
+def test_the_chip_sits_in_the_frame_on_a_wider_phone_and_on_its_side(phones, width, height):
+    host, code = make_room(phones)
+    join(phones, "Mikko", code)
+    host.set_viewport_size({"width": width, "height": height})
+    host.wait_for_timeout(200)
+    chip = host.locator("#aipr-mic").bounding_box()
+    stage = host.locator("#stage").bounding_box()
+    assert chip["x"] >= stage["x"] and chip["x"] + chip["width"] <= stage["x"] + stage["width"]
+    assert chip["y"] >= stage["y"] and chip["y"] + chip["height"] <= stage["y"] + stage["height"]
+    assert host.errors == []
 
 
 def test_leaving_goes_back_to_the_game_alone(phones):

@@ -8,8 +8,8 @@
 <title>Huone · AI-pelit</title>
 <style>
   /* The room page (#388): the room's connection and the voice calls live here, and the game plays
-     in the frame under the room bar. Switching games changes only the frame. The game draws its own 🎤 chip, where
-     it sits in the game alone, and it works this page's calls. */
+     in the frame under the room bar. Switching games changes only the frame. rooms.js draws the 🎤 chip here, over
+     the frame, where it sits in the game alone: a finger on it stays through a switch (#394). */
   html, body { margin: 0; height: 100%; background: #000; color: #eef2f7; font: 14px system-ui, sans-serif; overflow: hidden; }
   :root { --bar: 44px; }
   @media (orientation: landscape) and (max-height: 500px) { :root { --bar: 34px; } }
