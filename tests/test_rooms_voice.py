@@ -194,6 +194,30 @@ def test_in_that_second_the_microphone_still_goes_off_at_once(phones, how):
     assert a.errors == []
 
 
+def test_a_lift_before_the_microphone_opened_never_goes_live(phones):
+    # A slow phone: the finger is up before the microphone is, so there is no second to keep.
+    host, a, _ = room_of_three(phones)
+    a.evaluate("""(() => { const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (c) => new Promise(ok => setTimeout(ok, 900)).then(() => gum(c)); })()""")
+    hold(a)
+    a.wait_for_timeout(500)
+    a.mouse.up()
+    a.wait_for_timeout(800)
+    assert a.evaluate("AiPelitRooms.voice.talking") is False
+    assert host.evaluate("AiPelitRooms.voice.speakers") == []
+    assert a.locator("#aipr-mic").get_attribute("class") == " mid"
+    assert host.errors == a.errors == []
+
+
+def test_a_reload_in_that_second_leaves_no_name_talking(phones):
+    # The page goes before it can say it stopped.
+    host, a, _ = room_of_three(phones)
+    hold_and_lift(a)
+    a.reload()
+    host.wait_for_function("AiPelitRooms.voice.speakers.length === 0", timeout=15000)
+    assert host.errors == []
+
+
 def test_the_chip_shows_over_the_round_and_the_round_plays_on(phones):
     host, a, b = room_of_three(phones)
     start(host, [a, b])

@@ -193,6 +193,38 @@ def test_a_sentence_goes_on_through_a_game_switch(phones):
     assert host.errors == guest.errors == []
 
 
+def room_with_a_lift(phones):
+    host, code = make_room(phones)
+    guest = join(phones, "Aino", code)
+    for page in (host, guest):
+        page.wait_for_function(f"{ROOMS}.voice.calls === 1", timeout=15_000)
+    hold_chip(guest)
+    guest.wait_for_timeout(500)  # longer than a quick tap
+    return host, guest
+
+
+def test_the_second_after_the_lift_goes_on_while_the_frame_reloads(phones):
+    # The second is the room page's (#398): the frame's next page does not end it.
+    host, guest = room_with_a_lift(phones)
+    guest.mouse.up()
+    guest.evaluate("document.getElementById('game').contentWindow.location.reload()")
+    assert guest.evaluate("document.getElementById('aipr-mic').className").startswith("live")
+    host.locator("#who span.talk", has_text="Aino").wait_for()
+    host.locator("#who span.talk").wait_for(state="detached", timeout=3_000)
+    assert host.errors == guest.errors == []
+
+
+def test_the_chip_stays_put_for_the_second_after_the_lift(phones):
+    # A press in that second must find it under the finger (#398).
+    host, guest = room_with_a_lift(phones)
+    held = guest.locator("#aipr-mic").bounding_box()
+    guest.evaluate("AiPelitRoomShell.chip('bottom-left', true)")
+    guest.mouse.up()
+    assert guest.locator("#aipr-mic").bounding_box()["x"] == held["x"]
+    guest.wait_for_function("document.getElementById('aipr-mic').getBoundingClientRect().left < 60", timeout=3_000)
+    assert host.errors == guest.errors == []
+
+
 def test_a_lift_during_the_hosts_reconnect_still_reaches_the_others(phones):
     # The host's connection is made anew at a switch: a `talk` sent in that gap is lost, and the
     # greeting after it says the phone no longer talks (#394).
