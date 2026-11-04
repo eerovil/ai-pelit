@@ -61,7 +61,7 @@ export const GAMES = {
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
   // Most points in 10 rounds: Mökkitikka 'mokki' (v2's main mode, the shelf's), Pistekisa 'main' (v1 on).
-  tikka: { order: 'high', boards: /^(main|mokki)$/, first: 'mokki' },
+  tikka: { order: 'high', boards: /^(main|mokki|mokki2|kisa2)$/, first: 'mokki2' }, // the harder throw (v7) on 'mokki2' and 'kisa2'; v1-v6's scores stay on 'mokki' and 'main'
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
   pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
   makihyppy: { order: 'high', boards: /^(main|viikko|viikko2)$/, first: 'viikko2' }, // most points in a ski-jumping week of two hills (v9, 'viikko2'), of four (v2–v8, 'viikko'), or a meet of two jumps (v1, 'main')

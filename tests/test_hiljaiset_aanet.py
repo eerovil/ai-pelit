@@ -20,7 +20,7 @@ VERSIONS = [
     "games/lentopallo/v7", "games/makihyppy/v10", "games/molkky/v4", "games/moukari/v10",
     "games/orava/v6", "games/pallorata/v5", "games/pilkki/v6", "games/pituushyppy/v16",
     "games/puhelinkoppi/v8", "games/seivashyppy/v14", "games/skuutti/v4", "games/sormiskeitti/v9",
-    "games/tikka/v6", "games/trampoliini/v10", "games/voimistelu/v13", "games/vuoristorata/v4",
+    "games/tikka/v7", "games/trampoliini/v10", "games/voimistelu/v13", "games/vuoristorata/v4",
     "games/yoajo/v10", "games/last-signal/v16", "games/vauvan-syotto/v4",
 ]
 

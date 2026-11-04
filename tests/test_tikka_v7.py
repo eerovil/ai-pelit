@@ -5,7 +5,7 @@ import json
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/tikka/v6/"
+URL = "games/tikka/v7/"
 NAMES = "['onnistui', 'suhahdus', 'puu', 'virhe', 'voitto']"
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -163,8 +163,8 @@ def test_without_the_sound_script_it_still_starts_and_plays(site, browser):
         ctx.close()
 
 
-def test_v3_saves_are_read_as_they_are(site, context):
-    page = open_game(site, context, {"mokki": 231, "ennatys": 412, "voitot": 3, "vapaa": "darts"})
+def test_saves_are_read_as_they_are(site, context):
+    page = open_game(site, context, {"mokki2": 231, "kisa2": 412, "voitot": 3, "vapaa": "darts"})
     assert page.inner_text("#stats") == "Ennätykset: Mökkitikka 231 p · Pistekisa 412 p · Voittoja tietokoneesta 3"
     page.click("#frees button[data-b=darts]")
     assert page.evaluate("freeBoard") == "darts"
@@ -207,4 +207,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/tikka/v6")
+    opens_and_plays_with_the_quiet_library(real, context, "games/tikka/v7")
