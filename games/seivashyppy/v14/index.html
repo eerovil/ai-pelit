@@ -89,7 +89,8 @@ const R = window.AiPelitRooms;
 
 const FOES = ['Ponnistus-Pekka', 'Kaari-Kaisa', 'Lento-Leena', 'Taivas-Tero', 'Jousi-Jonna', 'Vauhti-Veera', 'Jänne-Jussi',
   'Salama-Saara', 'Tähti-Tapio', 'Rima-Riikka', 'Pilvi-Pentti', 'Tuuli-Tiina', 'Ukko-Urho'];
-const TRIES = 3, STEP_H = 0.10, MAX_H = 7.0;   // twelve vaulters; the bar goes up 10 cm at a time
+// Twelve vaulters; v14 (#399): the bar goes up 20 cm at a time, and 10 cm once it is well over the level's base.
+const TRIES = 3, STEP_H = 0.10, STEP_LOW = 0.20, MAX_H = 7.0;
 
 // ---------- The vault ----------
 // The runway in metres, the box at 0 (where the pole's tip goes), the bar over x = BAR_X. Running is
@@ -182,9 +183,20 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 // heights it passes), col, rec: per height its attempts ('XO', 'XX-'...), run: failures in a row,
 // out}. th is this phone's view of the attempt.
 let th = null;
+// v14 (#399): "skip" opens a panel of the next heights. One tap on a height passes everything under
+// it: passTo is that height, and this phone answers each of its turns below it at once (step()).
+// It lives only on this phone, so a reload simply brings the next turn back to the player.
+let passTo = 0;
 const base = lv => Math.min(5.9, 4.0 + 0.2 * (lv - 1));
 const h0Of = lv => Math.round((base(lv) - 0.8) * 10) / 10;
-const heightsFor = lv => { const hs = []; for (let i = 0; h0Of(lv) + STEP_H * i <= MAX_H + 1e-9; i++) hs.push(Math.round((h0Of(lv) + STEP_H * i) * 100) / 100); return hs; };
+// v14 (#399): in Ottelu's frame the bar keeps its old, finer steps: the match already takes every
+// second height (#294), so the steps below would be twice too big there.
+const inMatch = (() => { try { return window.parent !== window && !!window.parent.Ottelu; } catch (e) { return false; } })();
+const heightsFor = lv => {
+  const hs = [], fast = base(lv) + 0.3;
+  for (let h = h0Of(lv); h <= MAX_H + 1e-9; h = Math.round((h + (!inMatch && h < fast - 1e-9 ? STEP_LOW : STEP_H)) * 100) / 100) hs.push(h);
+  return hs;
+};
 const isNet = () => K.isNet();
 const fmt = m => m === undefined || m === null || m < 0 ? 'ei tulosta' : m.toFixed(2).replace('.', ',') + ' m';
 const K = AiPelitKisa.meet({
@@ -193,7 +205,7 @@ const K = AiPelitKisa.meet({
   slug: 'seivashyppy', foes: FOES, skill: base,
   format: AiPelitKisa.heights({ heights: heightsFor, tries: TRIES, plan: cpuPlan }),
   spread: [0.3, 0.2, 0.1, 0.05, 0, -0.1, -0.15, -0.2, -0.3, -0.4, -0.5], jitter: 0.16,
-  cpu: cpuTry, turn: newTurn, clear: () => { th = null; }, menu: showMenu, fmt,
+  cpu: cpuTry, turn: newTurn, clear: () => { th = null; passTo = 0; }, menu: showMenu, fmt,
   live: ['p', 'pl', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä tulosta',
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   // v3 (#176): the medal ceremony at the end, a chime per medal; v7 (#311): in their outfits.
@@ -229,10 +241,10 @@ function keepForV1() {
 }
 function cpuPlan(t, c) {
   // Comes in some 50–80 cm under its best, and now and then passes a height well under it.
-  const h0 = c.heights[0];
-  t.first = Math.max(0, Math.round((t.skill - 0.5 - Math.random() * 0.3 - h0) / STEP_H));
+  const hs = c.heights, want = t.skill - 0.5 - Math.random() * 0.3;
+  t.first = Math.max(0, hs.findIndex(h => h >= want - STEP_H / 2));
   t.skip = [];
-  for (let i = t.first + 1; h0 + STEP_H * i < t.skill - 0.3; i++) if (Math.random() < 0.25) t.skip.push(i);
+  for (let i = t.first + 1; i < hs.length && hs[i] < t.skill - 0.3; i++) if (Math.random() < 0.25) t.skip.push(i);
 }
 // The computer vaults: around its skill, now and then a run-through.
 function cpuTry(t) {
@@ -255,6 +267,10 @@ function step(dt) {
   if (isNet() && R.paused) return;
   th.t += dt; th.idle += dt;
   const a = th;
+  if (a.phase === 'wait' && a.mine && passTo) {
+    if (barH(K.comp.hi) < passTo - 1e-6) { a.phase = 'done'; report('-'); return; }
+    passTo = 0;
+  }
   if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; if (a.mine) S.play('valinta', { vol: 0.6 }) || tone(660, 0.1, 'sine', 0.06); } return; }
   if (a.phase === 'ready' || a.phase === 'run') {
     a.v = Math.max(0, a.v - (1.2 + 0.15 * a.v) * dt);
@@ -380,12 +396,18 @@ function outcome(why) {
   }
 }
 // Passing this height (or, the winner alone, stopping): no attempt, straight on.
-function pass() {
+function pass(to) {
   if (!th || !th.mine || th.phase !== 'ready') return;
+  passTo = to || 0;
   const r = soleWinner(thrower(th.id)) ? 'S' : '-';   // v2: the library's mark for stopping (v1: 'R')
   th.phase = 'done';
   S.play('valinta', { vol: 0.5, rate: 0.85 }) || tone(420, 0.08, 'sine', 0.05);
   report(r);
+}
+const nextHeights = () => K.comp.heights.slice(K.comp.hi + 1, K.comp.hi + 13);
+function openPick() {
+  if (!th || !th.mine || th.phase !== 'ready') return;
+  if (nextHeights().length && !soleWinner(thrower(th.id))) th.pick = true; else pass();
 }
 function report(r) { K.report(th.seq, r); }
 
@@ -416,7 +438,7 @@ function frame(now) {
 }
 
 // ---------- Drawing ----------
-let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3, passBox = null;
+let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3, passBox = null, pickBoxes = [];
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
 function draw(dt = 0) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -717,9 +739,27 @@ function drawRunner(a, px, base, s, o, name) {
     x.strokeText(lab, hx, ly); x.fillStyle = a.mine ? '#ffd166' : '#fff'; x.fillText(lab, hx, ly);
   }
 }
+// v14 (#399): which height next: a tap passes everything under it. Sideways four to a row, to fit.
+function drawPick() {
+  const W = SW, hs = nextHeights(), cols = land ? 4 : 3, gap = 8, bh = 36, rows = Math.ceil(hs.length / cols);
+  const bw = Math.min(100, (W - 48 - gap * (cols - 1)) / cols), ph = 42 + rows * (bh + gap) + 44, tw = cols * bw + (cols - 1) * gap;
+  const y0 = Math.max(hudTop, Math.min(hudTop + 72, sceneB - ph - 4)), x0 = (W - tw) / 2;
+  x.fillStyle = 'rgba(10,20,40,.92)'; rr(12, y0, W - 24, ph, 14); x.fill();
+  x.textAlign = 'center'; x.fillStyle = '#ffd166'; x.font = '800 15px system-ui';
+  x.fillText('Minkä korkeuden hyppäät seuraavaksi?', W / 2, y0 + 27);
+  const button = (k, lab, bx, by, w) => {
+    const on = pickDown && pickDown.k === k;
+    pickBoxes.push({ k, x: bx + SX, y: by, w, h: bh });
+    x.fillStyle = on ? '#ffe08a' : 'rgba(255,255,255,.12)'; rr(bx, by, w, bh, 12); x.fill();
+    x.fillStyle = on ? '#2a1a05' : '#fff'; x.font = '800 15px system-ui';
+    x.fillText(lab, bx + w / 2, by + 23);
+  };
+  hs.forEach((h, i) => button('to' + i, fmt(h), x0 + (i % cols) * (bw + gap), y0 + 42 + Math.floor(i / cols) * (bh + gap), bw));
+  button('back', 'Peruuta', (W - 130) / 2, y0 + ph - 44, 130);
+}
 function drawHud() {
   const W = SW, top = hudTop;
-  passBox = null;
+  passBox = null; pickBoxes = [];
   const comp = K.comp;
   if (!comp || !comp.throwers.length) return;
   x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, 64, 12); x.fill();
@@ -750,12 +790,14 @@ function drawHud() {
     x.fillText(th.mine ? 'Sinun vuorosi' : 'Hyppää: ' + t.name, 20, top + 50);
   }
   if (!th) return;
-  if (th.phase === 'ready' && th.mine) {
+  if (th.phase === 'ready' && th.mine && th.pick) {
+    drawPick();
+  } else if (th.phase === 'ready' && th.mine) {
     const left = TRIES - t.run, n = marksAt(t, K.comp.hi).length + 1;
     message('Yritys ' + n + ' · ' + fmt(barH(K.comp.hi)), '#ffd166');
     if (!land) small(left < TRIES ? 'Hylättyjä putkeen ' + t.run + '/3' : 'Ota vauhtia: vasen, oikea…', '#fff');
     // Pass this height (choose where to start), or, alone at the top, stop and keep the win.
-    const lab = soleWinner(t) ? 'Lopeta kisa' : 'Ohita korkeus', bw = 170, bh = 36;
+    const lab = soleWinner(t) ? 'Lopeta kisa' : 'Ohita korkeuksia', bw = 190, bh = 36;
     passBox = { x: (W - bw) / 2 + SX, y: top + (land ? 120 : 154), w: bw, h: bh, lab };
     x.fillStyle = 'rgba(10,20,40,.7)'; rr(passBox.x - SX, passBox.y, bw, bh, 12); x.fill();
     x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 2; x.stroke();
@@ -855,21 +897,29 @@ function padAt(cx, cy) {
   return b ? b.k : 0;
 }
 const inPass = (cx, cy) => passBox && cx >= passBox.x - 6 && cx <= passBox.x + passBox.w + 6 && cy >= passBox.y - 6 && cy <= passBox.y + passBox.h + 6;
-let passPtr = null;
+let passPtr = null, pickDown = null;
+const pickAt = (cx, cy) => pickBoxes.find(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (K.ending) { K.skip(); return; }  // v3: a tap ends the ceremony, the next leaves the podium
   if (inPass(e.clientX, e.clientY)) { passPtr = e.pointerId; return; }  // acts when the finger lifts on it
+  const pb = pickAt(e.clientX, e.clientY);
+  if (pb) { unlock(); pickDown = { k: pb.k, id: e.pointerId }; return; }
   // v10 (#341): a tap on the scene walks a friend watching there (the library takes it only then).
   if ((land ? e.clientX >= SX && e.clientX < SX + SW : e.clientY < ctrlTop) && K.tapFans(e.clientX - SX, e.clientY)) return;
   const k = padAt(e.clientX, e.clientY);
   if (k === 3) hold(e.pointerId); else if (k) press(k);
 });
 addEventListener('pointerup', e => {
-  if (e.pointerId === passPtr) { passPtr = null; if (inPass(e.clientX, e.clientY)) pass(); return; }
+  if (e.pointerId === passPtr) { passPtr = null; if (inPass(e.clientX, e.clientY)) openPick(); return; }
+  if (pickDown && pickDown.id === e.pointerId) {
+    const b = pickAt(e.clientX, e.clientY), k = pickDown.k; pickDown = null;
+    if (b && b.k === k) { if (k === 'back') { if (th) th.pick = false; } else pass(nextHeights()[+k.slice(2)]); }
+    return;
+  }
   if (e.pointerId === holdPtr) letGo();
 });
-addEventListener('pointercancel', e => { if (e.pointerId === passPtr) passPtr = null; if (e.pointerId === holdPtr) letGo(); });
+addEventListener('pointercancel', e => { pickDown = null; if (e.pointerId === passPtr) passPtr = null; if (e.pointerId === holdPtr) letGo(); });
 addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
