@@ -322,6 +322,19 @@ def test_a_frame_inside_the_game_goes_full_screen_with_the_room_bar_and_chip(pho
     assert host.errors == []
 
 
+@pytest.mark.parametrize("width, height", [(390, 844), (740, 360)])
+def test_the_chip_sits_in_the_frame_on_a_wider_phone_and_on_its_side(phones, width, height):
+    host, code = make_room(phones)
+    join(phones, "Mikko", code)
+    host.set_viewport_size({"width": width, "height": height})
+    host.wait_for_timeout(200)
+    chip = host.locator("#aipr-mic").bounding_box()
+    stage = host.locator("#stage").bounding_box()
+    assert chip["x"] >= stage["x"] and chip["x"] + chip["width"] <= stage["x"] + stage["width"]
+    assert chip["y"] >= stage["y"] and chip["y"] + chip["height"] <= stage["y"] + stage["height"]
+    assert host.errors == []
+
+
 def test_leaving_goes_back_to_the_game_alone(phones):
     host, code = make_room(phones)
     guest = join(phones, "Aino", code)
