@@ -291,3 +291,54 @@ def test_the_column_comes_down_when_its_base_is_on_turn(site, browser):
     for p in (athlete, top):
         p.wait_for_function("t => K.fanSpots.length && !K.on[t]", arg=top_id, timeout=5000)
     close_pages(pages)
+
+
+def test_a_column_slides_as_one(site, browser):
+    """Spectators standing on each other keep their column while the row slides (#395)."""
+    _, pages, _, fans = watching(site, browser)
+    top, base = fans
+    top_id = top.evaluate("K.mine().id")
+    base_id = base.evaluate("K.mine().id")
+    climb(top, base_id)
+    base.wait_for_function("([t, b]) => K.on[t] === b", arg=[top_id, base_id], timeout=5000)
+    # The walk there can be long; the column stands once the upper one is on the shoulders.
+    base.wait_for_function("id => K.fanSpots.find(f => f.id === id)?.depth === 1", arg=top_id, timeout=10000)
+    install_fake_scroll(base)
+    before = [fan_x(base, top_id), fan_x(base, base_id)]
+    base.evaluate("window.__spectatorScroll = 100")
+    base.wait_for_function("""({ id, x }) => {
+      const f = K.fanSpots.find(f => f.id === id);
+      return f && Math.abs(f.x - x) < 0.5;
+    }""", arg={"id": base_id, "x": before[1] - 80}, timeout=2000)
+    assert abs(fan_x(base, top_id) - (before[0] - 80)) < 0.5
+    close_pages(pages)
+
+
+def test_a_reloaded_phone_draws_the_slid_row_where_it_was(site, browser):
+    """The row's place comes from the scroll alone, so a restart in mid-slide changes nothing.
+    A guest reloads, as in test_yleisurheilu_katsomo.py."""
+    _, pages, _, fans = watching(site, browser)
+    page = next(p for p in fans if p is not pages[0])
+    fid = page.evaluate("K.mine().id")
+    page.evaluate("K.tapFans(200)")
+    spot = page.evaluate(f"K.spot[{json.dumps(fid)}]")
+    # The walk to the spot ends: the figure stands where it stood a moment ago.
+    page.wait_for_function("""id => {
+      const x = K.fanSpots.find(f => f.id === id)?.x, same = x === window.__lastX;
+      window.__lastX = x;
+      return same && x !== undefined;
+    }""", arg=fid, polling=300, timeout=10000)
+    install_fake_scroll(page)
+    page.evaluate("window.__spectatorScroll = 100")
+    page.wait_for_timeout(200)
+    slid = fan_x(page, fid)
+    page.reload()
+    page.wait_for_function("K.comp && K.comp.seq >= 0 && !K.comp.wait", timeout=10000)
+    page.wait_for_function(f"K.spot[{json.dumps(fid)}] === {spot}", timeout=5000)
+    install_fake_scroll(page)
+    page.evaluate("window.__spectatorScroll = 100")
+    page.wait_for_function("""({ id, x }) => {
+      const f = K.fanSpots.find(f => f.id === id);
+      return f && Math.abs(f.x - x) < 0.5;
+    }""", arg={"id": fid, "x": slid}, timeout=4000)
+    close_pages(pages)
