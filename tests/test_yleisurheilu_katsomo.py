@@ -2,7 +2,7 @@
 before the athlete, in a stadium behind the boards, and a spectator's tap on the scene walks its own
 figure there on every phone.
 
-The events' versions (on yleisurheilu-8 from #373, Moukarinheitto still on yleisurheilu-7):
+The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v16, games/keihas/v15, games/kuula/v9, games/korkeushyppy/v12,
 games/seivashyppy/v13, games/moukari/v10, games/makihyppy/v10.
 """

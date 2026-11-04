@@ -100,6 +100,13 @@
       "note": "Katsojat juoksevat urheilijan perässä ja voivat kiivetä toistensa harteille.",
       "request": "Spectatorit tulee liikkua parallax tyyliin taustan mukana",
       "issue": "eerovil/ai-pelit#373"
+    },
+    {
+      "n": 15,
+      "date": "2026-11-04",
+      "note": "Katsojat seisovat paikallaan ja liukuvat taustan mukana, eivätkä enää juokse.",
+      "request": "Spectatorit ei tarvitsi liikkua ihan noin nopeasti itse. Ja sitten sen lisäksi, jos ne liikkuu itsestään siinä, niin ne ei saisi kävellä tavallaan, jos ei niillä kävele. Ne on paikallaan ja ne silleen parallax-efektillä. Ne vaan pysyy siellä taustalla, mutta ne ei liiku ihan yhtä nopeasti kuin se tausta ehkä.",
+      "issue": "eerovil/ai-pelit#395"
     }
   ]
 }

@@ -70,6 +70,8 @@ flowchart TD
 
 v8 (#373) plays as v7 on `public/lib/yleisurheilu-8/`: the friends watching run after the athlete as the background moves, a little slower than it, and catch up once it stops (`scroll:` in the `K.drawFans()` call in `drawScene()`, 0 with the athlete at the start), and a tap on another spectator climbs onto their shoulders (`K.tapFans(px, py)` in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 
+v10 (#395) plays as v9 on `public/lib/yleisurheilu-9/`: the friends watching no longer run. The row only slides with the background, a little slower than it, and stops when it stops; legs move only on a tapped walk.
+
 v9 (#387) halves the week: a new week has two hills (Lahti, Kuopio), still two rounds on each, so at most four jumps for the podium instead of eight. A week left unfinished by v8 goes on as its four hills. The shorter week has its own best (`viikko2-ennatys`) and its own high-score list (`viikko2`, "Mäkiviikko"); the four-hill list stays as "Mäkiviikko, 4 mäkeä".
 
 ## Colours
