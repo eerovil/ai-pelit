@@ -21,7 +21,9 @@ spectators in the background: behind the boards in front of the stands, never ov
 a tap walks your own figure along the row. `yleisurheilu-8/` (#373, first users Pituushyppy v15,
 Keihäänheitto v14, Kuulantyöntö v8, Korkeushyppy v11, Seiväshyppy v12 and Mäkihyppy v8) has the
 spectators run after the athlete as the background moves, a little slower than it, and climb onto
-each other's shoulders; the next change goes in `yleisurheilu-9/`.
+each other's shoulders. `yleisurheilu-9/` (#395, the same six events' next versions) has them stand still
+instead: the row only slides with the background, a little slower than it, and legs move only on a
+tapped walk; the next change goes in `yleisurheilu-10/`.
 
 ```mermaid
 flowchart TD
@@ -31,7 +33,7 @@ flowchart TD
     G3[Toisen puhelimen suoritus näkyy]
     G4[Kenttä, HUD ja tulostaulun paikka]
   end
-  subgraph Kirjasto[public/lib/yleisurheilu-8/: kisa.js, korkeus.js]
+  subgraph Kirjasto[public/lib/yleisurheilu-9/: kisa.js, korkeus.js]
     K1[meet: 12 kilpailijaa, tietokone täyttää]
     K2[Muoto: rounds 3 + 3 kierrosta]
     K3{Kenen vuoro?}
@@ -43,7 +45,7 @@ flowchart TD
     K8[Huone: isäntä vetää kisaa, välittää suoritukset]
     K10[Katsojat taustalla aidan takana: napautus kävelyttää omaa hahmoa, 📣 Kannusta, hyppy, kupla]
     K13[Napautus toiseen katsojaan: hyppää harteille, pylväs enintään 4]
-    K12[Katsojat juoksevat urheilijan perässä: eivät ihan pysy mukana, kupla jää ruudun reunaan]
+    K12[Katsojat seisovat paikallaan taustalla: rivi liukuu vähän taustaa hitaammin, jalat liikkuvat vain napautuksesta]
     K11[Poissa oleva kaveri: odotetaan vain hänen vuorollaan, Ohita vuoro]
   end
   G1 --> K1 --> K2 --> K3
@@ -99,5 +101,5 @@ flowchart TD
 - **Tallennus: taso, voitot, kisat, ennätys, kesken**: `ai-pelit:<slug>:…`, the keys the v1 games already use. A win alone adds a win and a level; the best mark goes to the high-score list (`AiPelitScores.submit()`); `K.record(mark)` saves a record the moment it is set.
 - **Huone: isäntä vetää kisaa, välittää suoritukset**: the library's `R.on('start' | 'message' | 'hello' | 'continue' | 'back' | 'lobby' | 'leave' | 'menu')` (from `yleisurheilu-5/` `'skip'` in place of `'continue'` and `'back'`, and no competitor has a `bot` flag). The game's live messages (`opts.live`, e.g. Pituushyppy's `p`, `rel`, `leg`) go through `K.send()`; the host adds whose turn it is and passes them to every phone's `opts.watch`. Message types `c`, `res`, `end`, `fit` (an outfit, when the game gives `opts.fit`) `cheer` (from `yleisurheilu-5/`) and `go` (a spectator's walk, from `yleisurheilu-7/`) are the library's. A returning or reloaded phone gets the meet from the host (`hello`), and from `yleisurheilu-7/` the spectators' spots with it.
 - **Oma suoritus: vauhdinotto, ponnistus tai heitto**: the game's own code, unchanged from its previous version.
-- **Katsojat juoksevat urheilijan perässä: eivät ihan pysy mukana, kupla jää ruudun reunaan**: in `yleisurheilu-8/` (#373): `K.drawFans` takes `scroll`, how many px the stand's crowd has moved since the athlete stood at the start (the stadium events `(camX - restX) * 9`, Kuulantyöntö `* 6`, Mäkihyppy the forest). Each spectator runs after it (`chase[id]`) at 65–85 % of its speed, at least a jog while behind, so on the screen they slowly fall back with the stand and catch up once the camera stops; `drawWalkers()` draws each at `scroll - chase` px to the left, in a running stride. `K.tapFans(px)` adds the own figure's lag back, so a spot stays a share of the row at rest. A cheer bubble whose figure is off the screen stays at the edge. Moukarinheitto, seen from above, keeps its row still.
-- **Napautus toiseen katsojaan: hyppää harteille, pylväs enintään 4**: in `yleisurheilu-8/` (#373): a tap on another spectator sends `go` with `on`; the host checks the column (no loop, at most 4 high) and keeps `K.on`, sent to a phone that comes back with the spots. The column runs along as one; when its base leaves, the ones above hop down.
+- **Katsojat seisovat paikallaan taustalla: rivi liukuu vähän taustaa hitaammin, jalat liikkuvat vain napautuksesta**: in `yleisurheilu-9/` (#395, replacing #373's running in `yleisurheilu-8/`): `K.drawFans` takes `scroll`, how many px the stand's crowd has moved since the athlete stood at the start (the stadium events `(camX - restX) * 9`, Kuulantyöntö `* 6`, Mäkihyppy the forest). `drawWalkers()` draws the whole row `PARALLAX * scroll` px to the left (`PARALLAX = 0.8`), the same for everybody, so nobody runs, catches up or moves when the background stops, and the row returns with the background. Legs move only while a figure walks to a tapped spot. `K.tapFans(px)` adds the same shift back, so a spot stays a share of the row at rest. A cheer bubble whose figure is off the screen stays at the edge. Moukarinheitto, seen from above, keeps its row still.
+- **Napautus toiseen katsojaan: hyppää harteille, pylväs enintään 4**: in `yleisurheilu-8/` (#373): a tap on another spectator sends `go` with `on`; the host checks the column (no loop, at most 4 high) and keeps `K.on`, sent to a phone that comes back with the spots. The column slides as one; when its base leaves, the ones above hop down.

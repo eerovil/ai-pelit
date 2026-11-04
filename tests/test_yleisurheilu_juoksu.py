@@ -1,5 +1,5 @@
-"""The friends watching run along after the athlete and climb onto each other (#373,
-yleisurheilu-8), played in Pituushyppy's newest version with the real room helpers.
+"""The friends watching stand still and only slide with the background (#395, yleisurheilu-9),
+and climb onto each other (#373), played in Pituushyppy's newest version with the real room helpers.
 """
 import json
 
@@ -46,56 +46,65 @@ def close_pages(pages):
         p.context.close()
 
 
-def test_chase_lags_then_catches_up_and_restores_the_position(site, browser):
+def test_the_row_slides_a_little_slower_than_the_background_and_stops_with_it(site, browser):
     _, pages, _, fans = watching(site, browser)
     page = fans[0]
     install_fake_scroll(page)
     fid = page.evaluate("K.mine().id")
     start = fan_x(page, fid)
     page.evaluate("window.__spectatorScroll = 100")
-    # With the camera moving, its crowd has moved 100 px, but the spectator runs after it.
+    # The background has moved 100 px: the spectator is 80 px along at once, with no running.
     page.wait_for_function("""({ id, start }) => {
       const x = K.fanSpots.find(f => f.id === id)?.x;
-      return x !== undefined && x < start - 2 && x > start - 98;
-    }""", arg={"id": fid, "start": start}, timeout=5000)
-    after = fan_x(page, fid)
-    assert start - 100 < after < start
-    # Leave the camera standing still: the jog keeps going until the spectator catches the crowd.
-    page.wait_for_function("""({ id, start }) => {
-      const x = K.fanSpots.find(f => f.id === id)?.x;
-      return x !== undefined && Math.abs(x - start) < 2;
-    }""", arg={"id": fid, "start": start}, timeout=6000)
-    # And a camera return to its start brings the spectator back again.
+      return x !== undefined && Math.abs(x - (start - 80)) < 0.5;
+    }""", arg={"id": fid, "start": start}, timeout=2000)
+    # The background stands still, and so do they: nobody moves by themselves.
+    page.wait_for_timeout(1000)
+    assert abs(fan_x(page, fid) - (start - 80)) < 0.5
+    # They come back only with the background.
     page.evaluate("window.__spectatorScroll = 0")
     page.wait_for_function("""({ id, start }) => {
       const x = K.fanSpots.find(f => f.id === id)?.x;
-      return x !== undefined && Math.abs(x - start) < 2;
-    }""", arg={"id": fid, "start": start}, timeout=6000)
+      return x !== undefined && Math.abs(x - start) < 0.5;
+    }""", arg={"id": fid, "start": start}, timeout=2000)
     close_pages(pages)
 
 
-def test_a_steady_run_leaves_them_behind_until_it_stops(site, browser):
-    """A background moving at a steady, slow speed (slower than their jog) still outruns them."""
+def test_legs_stay_still_as_the_row_slides_and_move_on_a_tapped_walk(site, browser):
     _, pages, _, fans = watching(site, browser)
     page = fans[0]
     install_fake_scroll(page)
-    fid = page.evaluate("K.mine().id")
-    start = fan_x(page, fid)
-    page.evaluate("""() => new Promise(done => {
-      const t0 = performance.now();
-      const step = () => {
+    sliding = page.evaluate("""() => new Promise(done => {
+      const t0 = performance.now(), steps = [], gaps = [];
+      const look = () => {
         const t = (performance.now() - t0) / 1000;
-        window.__spectatorScroll = Math.min(t, 1.5) * 40;  // 40 px a second, half their jog
-        if (t < 1.5) requestAnimationFrame(step); else done();
+        window.__spectatorScroll = t * 100;
+        steps.push(...K.fanSpots.map(f => f.step));
+        const xs = K.fanSpots.map(f => f.x).sort((a, b) => a - b);
+        if (xs.length === 2) gaps.push(xs[1] - xs[0]);
+        if (t < 1) requestAnimationFrame(look); else done({ steps, gaps });
       };
-      step();
+      look();
     })""")
-    # Keeping up would leave them where they stood on the screen; they slid back with the stand.
-    assert start - fan_x(page, fid) > 6, "they kept up with the background"
-    page.wait_for_function("""({ id, start }) => {
-      const x = K.fanSpots.find(f => f.id === id)?.x;
-      return x !== undefined && Math.abs(x - start) < 2;
-    }""", arg={"id": fid, "start": start}, timeout=6000)
+    assert sliding["steps"] and all(s == 0 for s in sliding["steps"]), "legs moved with no walk"
+    assert max(sliding["gaps"]) - min(sliding["gaps"]) < 0.5, "the row did not slide as one"
+    # A tap clear of the others walks my own figure, and then the legs go.
+    walked = page.evaluate("""() => new Promise(done => {
+      window.__spectatorScroll = 0;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const me = K.mine().id, mine = K.fanSpots.find(f => f.id === me);
+        const other = K.fanSpots.find(f => f.id !== me);
+        const room = mine.x < other.x ? -1 : 1;
+        K.tapFans(mine.x + room * 25);
+        const t0 = performance.now(), steps = [];
+        const look = () => {
+          steps.push(K.fanSpots.find(f => f.id === me).step);
+          if (performance.now() - t0 < 500) requestAnimationFrame(look); else done(steps);
+        };
+        look();
+      }));
+    })""")
+    assert any(abs(s) > 0.05 for s in walked), "a tapped walk moved no legs"
     close_pages(pages)
 
 
@@ -122,7 +131,7 @@ def test_tap_accounts_for_my_own_lag_and_keeps_spot_normalized(site, browser):
       K.tapFans(x);
       return { expected, actual: K.spot[me], lag };
     }""")
-    assert report["lag"] > 3
+    assert abs(report["lag"] - 96) < 1  # 0.8 of the background's 120 px
     assert report["actual"] is not None
     assert abs(report["actual"] - report["expected"]) < 0.01
     close_pages(pages)
@@ -227,7 +236,7 @@ SCROLLING = ["pituushyppy", "keihas", "kuula", "korkeushyppy", "seivashyppy", "m
 @pytest.mark.parametrize("slug", SCROLLING)
 def test_each_event_scrolls_from_zero_at_the_start(site, browser, slug):
     """Each event's scroll is 0 while its athlete stands at the start, so the friends stand where
-    they did in yleisurheilu-7 until the camera moves."""
+    they always did until the camera moves."""
     relay, pages, code = room(site, browser, newest(slug), ["Eero", "Aino", "Ville"])
     host = pages[0]
     turn = on_turn(host)
@@ -281,4 +290,55 @@ def test_the_column_comes_down_when_its_base_is_on_turn(site, browser):
         p.wait_for_function(f"K.current() && K.current().p === {json.dumps(base_p)}", timeout=5000)
     for p in (athlete, top):
         p.wait_for_function("t => K.fanSpots.length && !K.on[t]", arg=top_id, timeout=5000)
+    close_pages(pages)
+
+
+def test_a_column_slides_as_one(site, browser):
+    """Spectators standing on each other keep their column while the row slides (#395)."""
+    _, pages, _, fans = watching(site, browser)
+    top, base = fans
+    top_id = top.evaluate("K.mine().id")
+    base_id = base.evaluate("K.mine().id")
+    climb(top, base_id)
+    base.wait_for_function("([t, b]) => K.on[t] === b", arg=[top_id, base_id], timeout=5000)
+    # The walk there can be long; the column stands once the upper one is on the shoulders.
+    base.wait_for_function("id => K.fanSpots.find(f => f.id === id)?.depth === 1", arg=top_id, timeout=10000)
+    install_fake_scroll(base)
+    before = [fan_x(base, top_id), fan_x(base, base_id)]
+    base.evaluate("window.__spectatorScroll = 100")
+    base.wait_for_function("""({ id, x }) => {
+      const f = K.fanSpots.find(f => f.id === id);
+      return f && Math.abs(f.x - x) < 0.5;
+    }""", arg={"id": base_id, "x": before[1] - 80}, timeout=2000)
+    assert abs(fan_x(base, top_id) - (before[0] - 80)) < 0.5
+    close_pages(pages)
+
+
+def test_a_reloaded_phone_draws_the_slid_row_where_it_was(site, browser):
+    """The row's place comes from the scroll alone, so a restart in mid-slide changes nothing.
+    A guest reloads, as in test_yleisurheilu_katsomo.py."""
+    _, pages, _, fans = watching(site, browser)
+    page = next(p for p in fans if p is not pages[0])
+    fid = page.evaluate("K.mine().id")
+    page.evaluate("K.tapFans(200)")
+    spot = page.evaluate(f"K.spot[{json.dumps(fid)}]")
+    # The walk to the spot ends: the figure stands where it stood a moment ago.
+    page.wait_for_function("""id => {
+      const x = K.fanSpots.find(f => f.id === id)?.x, same = x === window.__lastX;
+      window.__lastX = x;
+      return same && x !== undefined;
+    }""", arg=fid, polling=300, timeout=10000)
+    install_fake_scroll(page)
+    page.evaluate("window.__spectatorScroll = 100")
+    page.wait_for_timeout(200)
+    slid = fan_x(page, fid)
+    page.reload()
+    page.wait_for_function("K.comp && K.comp.seq >= 0 && !K.comp.wait", timeout=10000)
+    page.wait_for_function(f"K.spot[{json.dumps(fid)}] === {spot}", timeout=5000)
+    install_fake_scroll(page)
+    page.evaluate("window.__spectatorScroll = 100")
+    page.wait_for_function("""({ id, x }) => {
+      const f = K.fanSpots.find(f => f.id === id);
+      return f && Math.abs(f.x - x) < 0.5;
+    }""", arg={"id": fid, "x": slid}, timeout=4000)
     close_pages(pages)

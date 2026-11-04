@@ -1,8 +1,8 @@
-"""makihyppy v5: no crowd noise, the loudest sounds quieter (#337)."""
+"""kuula v5: no crowd noise, the loudest sounds quieter (#337)."""
 
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
-URL = "games/makihyppy/v9"
+URL = "games/kuula/v9"
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
@@ -14,4 +14,4 @@ from test_hiljaiset_aanet import cheer_is_quiet  # noqa: E402
 
 def test_the_cheer_chime_is_quiet():
     # #355: Eero found the cheer's chime too loud.
-    cheer_is_quiet("games/makihyppy/v9")
+    cheer_is_quiet("games/kuula/v9")
