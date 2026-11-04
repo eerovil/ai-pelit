@@ -8,7 +8,7 @@ import json
 
 from conftest import ROOT
 
-URL = "games/makihyppy/v9/"
+URL = "games/makihyppy/v10/"
 
 HELPERS = """() => {
   window.gs = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
