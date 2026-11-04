@@ -1,7 +1,7 @@
 """Korkeushyppy v13 and Seiväshyppy v14 (#399): passing many heights takes two taps, and the bar
 rises in bigger steps, except in Ottelu, which already takes every second height (#294).
 
-games/korkeushyppy/v13, games/seivashyppy/v14.
+games/korkeushyppy/v14, games/seivashyppy/v15.
 """
 
 import pytest
@@ -10,11 +10,11 @@ from test_yleisurheilu_vuorot import MARK, on_turn, room
 
 pytestmark = pytest.mark.games("korkeushyppy", "seivashyppy")
 
-EVENTS = ["korkeushyppy/v13", "seivashyppy/v14"]
+EVENTS = ["korkeushyppy/v14", "seivashyppy/v15"]
 # The first heights at level 1, and in a match (where Ottelu then keeps every second one).
 STEPS = {
-    "korkeushyppy/v13": ([1.5, 1.6, 1.7, 1.8, 1.85, 1.9, 1.93], [1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.78]),
-    "seivashyppy/v14": ([3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.5], [3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9]),
+    "korkeushyppy/v14": ([1.5, 1.6, 1.7, 1.8, 1.85, 1.9, 1.93], [1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.78]),
+    "seivashyppy/v15": ([3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.5], [3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9]),
 }
 # Where this phone's buttons are: Korkeushyppy keeps all in actBoxes, Seiväshyppy in passBox and
 # pickBoxes. The boxes' x is in the scene in the first, on the screen in the second.

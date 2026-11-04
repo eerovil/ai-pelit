@@ -14,9 +14,9 @@ ADMIN_KEY = "avain"
 
 # The newest version of each game played here: the high-score library working in the game as it is.
 PUHELINKOPPI = "games/puhelinkoppi/v8/"
-SORMISKEITTI = "games/sormiskeitti/v9/"
+SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v12/"
-PIANO = "games/piano/v10/"
+PIANO = "games/piano/v11/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
@@ -191,7 +191,7 @@ def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     page.evaluate(PLAY, [30, False])  # a lower score later does not replace the best one waiting
     queue = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))")
     best_cm = round(page.evaluate("best") / 10)
-    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 9, "score": best_cm}}
+    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 10, "score": best_cm}}
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('Ei verkkoyhteyttä')")
     assert fake.scores == {}
@@ -338,7 +338,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.reload()
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
-    assert row == {"score": round(won["best"] / 10), "version": 9, "level": 2}
+    assert row == {"score": round(won["best"] / 10), "version": 10, "level": 2}
     fake.players[key[2]]["status"] = "approved"
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset .tulos:has-text('taso 2')")
@@ -354,7 +354,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.evaluate(PLAY, [30, False])
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     assert len(fake.posts) == sent + 1
-    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 9, "level": 4}
+    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 10, "level": 4}
 
 
 @pytest.mark.games("hiihto")
@@ -503,7 +503,7 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
-    assert row == {"score": 300, "version": 10, "level": 1}
+    assert row == {"score": 300, "version": 11, "level": 1}
 
 
 @pytest.mark.games("piano")

@@ -19,6 +19,8 @@ furthest level above 5 went down to 5, once per phone, undoing the levels no-fai
 
 Since #346 only each game's newest version folder is kept: a `games/<slug>/v<N>/` path below that is not the newest names a version that is history now (its files are in git's history, and the site sends its address to the newest), and what it says about that version is how it was.
 
+v11 (#404) plays as v10, but a tap is judged at its own moment, not at the last drawn frame: see `reilu-ajoitus.md`.
+
 ```mermaid
 flowchart TD
   A[Valikko: valmiina viimeksi soitettu kappale, nuolilla muut] --> NF{Ei häviötä päällä?}

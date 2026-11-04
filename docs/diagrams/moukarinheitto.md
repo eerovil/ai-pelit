@@ -25,6 +25,8 @@ v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapp
 v11 (#404) plays as v10, but a computer's throw over 85 m is drawn again (see the box "Yli 85 m?").
 
 v9 (#341) plays as v8 on `public/lib/yleisurheilu-7/`: the friends watching stand along the bottom of the field, under the circle, the thrower and the cage, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
+v12 (#404) plays as v11, but a tap is judged at its own moment, not at the last drawn frame: see `reilu-ajoitus.md`.
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

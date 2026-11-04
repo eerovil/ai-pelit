@@ -114,6 +114,13 @@
       "note": "Katsojat seisovat paikallaan ja liukuvat taustan mukana, eivätkä enää juokse.",
       "request": "Spectatorit ei tarvitsi liikkua ihan noin nopeasti itse. Ja sitten sen lisäksi, jos ne liikkuu itsestään siinä, niin ne ei saisi kävellä tavallaan, jos ei niillä kävele. Ne on paikallaan ja ne silleen parallax-efektillä. Ne vaan pysyy siellä taustalla, mutta ne ei liiku ihan yhtä nopeasti kuin se tausta ehkä.",
       "issue": "eerovil/ai-pelit#395"
+    },
+    {
+      "n": 17,
+      "date": "2026-11-04",
+      "note": "Ponnistus ja jalat lasketaan nyt täsmälleen sillä hetkellä, kun sormi osuu tai nousee, eikä edellisen piirretyn kuvan kohdalta.",
+      "request": "Fair timing should be build for all games like this",
+      "issue": "eerovil/ai-pelit#404"
     }
   ]
 }

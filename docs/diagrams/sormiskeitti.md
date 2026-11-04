@@ -15,6 +15,8 @@ v8 (#337) loads `aanet-4`, which plays the loudest sounds (the winning tune) qui
 
 v9 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v10 (#404) plays as v9, but a tap is judged at its own moment, not at the last drawn frame: see `reilu-ajoitus.md`.
+
 ```mermaid
 flowchart TD
   S[Avaa peli: taso ja ennätys puhelimesta] --> A

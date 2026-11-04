@@ -68,6 +68,11 @@ the version that taught it, so you can read the code that fixed it.
   sound that every phone in a room plays at each friend's tap is quieter still (0.08, #355).
 
 - A choice a player repeats turn after turn gets one step for all of them: Korkeushyppy v13 and Seiväshyppy v14 (#399) pick the next height from a panel, not pass ten heights one at a time.
+- **Judge a tap at its own moment** (#404). A game moves only when a frame is drawn, so a tap
+  between frames reads a moving value up to 17 ms old, and in a game about timing that is real
+  points. When a tap is scored by where something moving is, run the game on to `e.timeStamp` in
+  the input handler first: `catchUp(e)` in Moukarinheitto v12 (`docs/diagrams/reilu-ajoitus.md`).
+  With fixed physics steps, run the whole steps and add the rest when judging (Trampoliini v11).
 
 ## Difficulty
 
