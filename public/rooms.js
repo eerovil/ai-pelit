@@ -765,7 +765,7 @@
     if (voice.pressed || !voice.on || !net.on) return;
     if (voice.tail) {
       clearTimeout(voice.tail); voice.tail = 0;
-      voice.pressed = true;
+      voice.pressed = true; voice.err = ''; voice.errAt = 0;
       return renderVoice();
     }
     // Nobody to hear it yet: the microphone stays off (and is not even asked for).
@@ -795,10 +795,11 @@
   function release() {
     if (SHELL) return SHELL.release();
     if (!voice.pressed) return;
-    var quick = Date.now() - voice.pressAt < 400;
-    // A quick tap: say how the chip works. Nobody was talking, so the microphone goes off at once.
-    if (quick && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
-    if (voice.talking && !quick) {
+    // A quick tap: say how the chip works.
+    if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
+    // Any sound already going out gets its second, a short "joo" too; a press whose microphone
+    // has not opened yet ends here.
+    if (voice.talking) {
       voice.pressed = false;
       voice.tail = setTimeout(stopTalk, TAIL);
       return renderVoice();

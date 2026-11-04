@@ -167,15 +167,22 @@ def test_a_press_in_that_second_goes_on_with_the_same_microphone(phones):
     assert host.errors == a.errors == []
 
 
-def test_a_quick_tap_lets_the_microphone_go_at_once(phones):
-    _, a, _ = room_of_three(phones)
+def test_a_short_word_gets_its_second_too(phones):
+    # A "joo" lifted under the quick tap's 400 ms, with the microphone already open.
+    host, a, _ = room_of_three(phones)
     hold(a)
     a.wait_for_function("AiPelitRooms.voice.talking")
+    host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
     # However long the microphone took to open here, the lift comes "at once".
     assert a.evaluate("""(() => { const now = Date.now; Date.now = () => 0;
       document.getElementById('aipr-mic').dispatchEvent(new PointerEvent('pointerup'));
-      Date.now = now; return AiPelitRooms.voice.talking; })()""") is False
+      Date.now = now; return AiPelitRooms.voice.talking; })()""") is True
+    before = heard(host)
+    assert 700 < a.evaluate(UNTIL_QUIET) < 1500
+    assert heard(host) > before
+    host.wait_for_function("document.getElementById('aipr-talk').hidden")
     a.mouse.up()
+    assert host.errors == a.errors == []
 
 
 @pytest.mark.parametrize("how", ["hidden", "voice off", "leaving"])
