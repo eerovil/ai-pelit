@@ -170,13 +170,16 @@ def test_a_press_in_that_second_goes_on_with_the_same_microphone(phones):
 def test_a_short_word_gets_its_second_too(phones):
     # A "joo" lifted under the quick tap's 400 ms, with the microphone already open.
     host, a, _ = room_of_three(phones)
+    # This phone's clock stands still: however long the microphone takes to open here, the lift
+    # comes "at once", as a quick tap's does.
+    a.evaluate("(() => { window.__now = Date.now; const t = Date.now(); Date.now = () => t; })()")
     hold(a)
     a.wait_for_function("AiPelitRooms.voice.talking")
     host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
-    # However long the microphone took to open here, the lift comes "at once".
-    assert a.evaluate("""(() => { const now = Date.now; Date.now = () => 0;
-      document.getElementById('aipr-mic').dispatchEvent(new PointerEvent('pointerup'));
-      Date.now = now; return AiPelitRooms.voice.talking; })()""") is True
+    assert a.evaluate("""(() => { document.getElementById('aipr-mic').dispatchEvent(new PointerEvent('pointerup'));
+      Date.now = window.__now; return AiPelitRooms.voice.talking; })()""") is True
+    # It was heard, so the phone does not say how the chip works.
+    assert a.evaluate("document.getElementById('aipr-talk').hidden")
     before = heard(host)
     assert 700 < a.evaluate(UNTIL_QUIET) < 1500
     assert heard(host) > before

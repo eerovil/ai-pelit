@@ -795,15 +795,14 @@
   function release() {
     if (SHELL) return SHELL.release();
     if (!voice.pressed) return;
-    // A quick tap: say how the chip works.
-    if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
-    // Any sound already going out gets its second, a short "joo" too; a press whose microphone
-    // has not opened yet ends here.
+    // Any sound already going out gets its second, a short "joo" too.
     if (voice.talking) {
       voice.pressed = false;
       voice.tail = setTimeout(stopTalk, TAIL);
       return renderVoice();
     }
+    // The microphone had not opened. A quick tap: say how the chip works.
+    if (Date.now() - voice.pressAt < 400 && Date.now() - voice.errAt > 3000) { voice.err = 'Pidä pohjassa ja puhu.'; voice.errAt = Date.now(); }
     stopTalk();
   }
   // The browser took the finger away, so no sentence is ending. Capture is also lost right after a
