@@ -179,3 +179,37 @@ def test_the_menu_fits_a_wider_phone_and_a_game_goes_on_when_it_turns(site, brow
     assert page.evaluate("dartsLeft") == 1
     assert page.errors == []
     ctx.close()
+
+
+def test_the_finger_brings_the_sight_back_after_it_has_left_the_target(site, context):
+    """The step every dart now needs, through the real touch events alone."""
+    page = play(site, context)
+    page.click("#go")
+    page.evaluate(f"dart(1.3, {MIDDLE})")
+    assert page.evaluate("dartsLeft") == 2
+    off = page.evaluate("Math.hypot(aim.x, aim.y)")
+    assert 30 <= off <= 60
+    moved = page.evaluate("""() => {
+      run(() => pause > 0 || flying || banner, 5);
+      const finger = { x: 100, y: 400 };
+      const touch = (type) => c.dispatchEvent(new PointerEvent(type, { pointerId: 7, clientX: finger.x, clientY: finger.y, bubbles: true }));
+      touch('pointerdown');
+      // The way back in two strokes; a finger moves the sight 0.8 mm for each mm on the board.
+      const from = { x: aim.x, y: aim.y }, halves = [];
+      for (const part of [0.5, 0.5]) {
+        finger.x -= from.x * part * K / 0.8;
+        finger.y -= from.y * part * K / 0.8;
+        touch('pointermove');
+        halves.push(Math.hypot(aim.x, aim.y));
+      }
+      run(() => hold && hold.t < 1.3, 2.3);
+      touch('pointerup');
+      return { halves, thrown: flying && Math.hypot(flying.x, flying.y), left: dartsLeft };
+    }""")
+    assert abs(moved["halves"][0] - off / 2) < 0.5
+    assert moved["halves"][1] < 0.5
+    assert moved["left"] == 1
+    # At the steady moment the hand sways at most 28 mm, and the scatter adds a little.
+    assert moved["thrown"] is not None and moved["thrown"] < 45
+    assert page.evaluate("Math.hypot(aim.x, aim.y)") >= 30
+    assert page.errors == []
