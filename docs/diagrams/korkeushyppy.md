@@ -37,7 +37,12 @@ flowchart TD
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> PS{Jättää korkeuden väliin?}
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama floppi lentää]
-  PS -- Kyllä --> P[Väliin: –]
+  PS -- Kyllä --> PK[Paneeli: minkä korkeuden hyppäät seuraavaksi?]
+  PK -- Peruuta --> PS
+  PK -- Valitsee korkeuden --> P[Väliin: –]
+  P --> AU{Oma vuoro valitun korkeuden alla?}
+  AU -- Kyllä --> P
+  AU -- Ei --> NX
   PS -- Ei --> R[Vauhdinotto J-kaarta: vasen, oikea vuorotellen]
   R --> RP{Riman ohi ponnistamatta?}
   RP -- Kyllä --> X[X: pudotus]
@@ -56,7 +61,6 @@ flowchart TD
   WT --> X
   O --> NX{Kolme peräkkäistä X tai kaikki ulos?}
   X --> NX
-  P --> NX
   NX -- Ei --> T
   NX -- Yksi jäljellä --> GO[Viimeisenä jäljellä: johtaja voi lopettaa, muuten jatkaa]
   GO --> T
@@ -65,9 +69,9 @@ flowchart TD
   END --> TAP{Koroke jää: napautus?}
   TAP -- Yksin --> M
   TAP -- Huoneessa, oma napautus --> RM[Huoneessa: sijat kaikille, takaisin huoneeseen]
-  class M,R,J,A,L,T blue
+  class M,R,J,A,L,T,PK blue
   class CPU,WT,AWAY violet
-  class Q,PS,RP,C,NX,TAP,SO amber
+  class Q,PS,RP,C,NX,TAP,SO,AU amber
   class K,O,P,GO teal
   class X rose
   class END,S,RM,MAT,AP,KL,OH green
@@ -76,6 +80,8 @@ flowchart TD
 v11 (#373) plays as v10 on `public/lib/yleisurheilu-8/`: the friends watching run after the athlete as the background moves, a little slower than it, and catch up once it stops (`scroll:` in the `K.drawFans()` call in `drawScene()`, 0 with the athlete at the start), and a tap on another spectator climbs onto their shoulders (`K.tapFans(px, py)` in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 
 v12 (#395) plays as v11 on `public/lib/yleisurheilu-9/`: the friends watching no longer run. The row only slides with the background, a little slower than it, and stops when it stops; legs move only on a tapped walk.
+
+v13 (#399): passing many heights takes two taps, and the bar rises twice as fast: `heightsFor()` steps 10, 5 and 3 cm (before 5, 3 and 2), except in Ottelu's frame (`inMatch`), which keeps the old steps because the match already takes every second height.
 
 ## Colours
 
@@ -94,7 +100,9 @@ v12 (#395) plays as v11 on `public/lib/yleisurheilu-9/`: the friends watching no
 - **Kenen vuoro?**: `advance()` (v2: in `korkeus.js`) jumps for every computer jumper up to the next player on a phone (`due()`: not out, has not cleared or passed this height, and is at this attempt round); `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone hyppää heti**: `cpuTry()`: clears with a chance that falls from near certain to near nought within about 10 cm around its skill. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v5 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
 - **Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = X, tai hän palaa**: from v5 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (X) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
-- **Jättää korkeuden väliin?**: the "⏭ Jätä korkeus väliin" button on the canvas before the run (`actBoxes`, acts when the finger lifts on it, `pass()`). A failure before the pass still counts: X then a pass leaves two attempts at the next height (`t.run`, three in a row and out).
+- **Paneeli: minkä korkeuden hyppäät seuraavaksi?**: v13 (#399): `drawPick()` in `games/korkeushyppy/v13/index.html` lists the next twelve heights (`nextHeights()`), three to a row, four on a phone on its side; a tap on one is `pass(height)`, "Peruuta" closes it, and a foot tap starts the run as before.
+- **Oma vuoro valitun korkeuden alla?**: v13 (#399): `passTo` keeps the chosen height on this phone only. `step()` answers each of this phone's turns under it with '-' at once, with no standings and no tap; a new meet clears it (`clear`), and a reload just brings the next turn back to the player.
+- **Jättää korkeuden väliin?**: the "⏭ Ohita korkeuksia" button (v13; before "⏭ Jätä korkeus väliin") on the canvas before the run (`actBoxes`, acts when the finger lifts on it, opens the panel, `openPick()`). A failure before the pass still counts: X then a pass leaves two attempts at the next height (`t.run`, three in a row and out).
 - **Väliin: –**: `mark()` writes '-' for the rest of the height.
 - **Vauhdinotto J-kaarta: vasen, oikea vuorotellen**: `press()` (from v4 `askel` or `askel2` per tap, a little faster at speed): a step on the other foot adds speed, more the slower the jumper goes (as in Aitajuoksu and Keihäänheitto), the same foot twice slows. From 6 m before the bar (`CURVE0`) the run is on the curve of the J (drawn as a dashed line on the apron, `depth()`), where more than 8 m/s (`VCURVE`) cannot be carried. The green ellipse is where to take off (`ZONE`, 0.8–1.4 m before the bar).
 - **Riman ohi ponnistamatta?**: `step()`: reaching the bar (`RUN_PAST`) without a take-off is a failure, "Ohijuoksu". In a room a minute with no tap (`TURN_MAX`, as in the rules, counted in `th.idle`) is a failure, "Aika loppui".

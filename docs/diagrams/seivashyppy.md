@@ -40,7 +40,12 @@ flowchart TD
   CPU --> NX
   Q -- Pelaaja tällä puhelimella --> P{Hyppää vai ohita?}
   Q -- Kaveri toisella puhelimella --> WT[Kaverin hyppy näkyy, sama hyppy kaikilla]
-  P -- Ohita korkeus --> PS[- ohitettu]
+  P -- Ohita korkeuksia --> PK[Paneeli: minkä korkeuden hyppäät seuraavaksi?]
+  PK -- Peruuta --> P
+  PK -- Valitsee korkeuden --> PS[- ohitettu]
+  PS --> AU{Oma vuoro valitun korkeuden alla?}
+  AU -- Kyllä --> PS
+  AU -- Ei --> NX
   P -- Lopeta kisa, voittaja yksin --> NX
   P -- Juokse --> R[Vauhdinotto: vasen, oikea vuorotellen]
   R --> PL{Istuta vihreällä alueella?}
@@ -58,7 +63,6 @@ flowchart TD
   O --> NX{Kuka vielä yrittää?}
   X --> NX
   XB --> NX
-  PS --> NX
   NX -- Joku tällä korkeudella --> T
   NX -- Kaikki yli, ohi tai ulkona --> UP[Rima nousee 10 cm]
   UP --> T
@@ -71,6 +75,8 @@ flowchart TD
   class CPU,WT,AWAY violet
   class Q,P,PL,SL,OK,NX,TAP amber
   class K,O,PS,UP teal
+  class PK blue
+  class AU amber
   class X,XB rose
   class END,S,RM green
 ```
@@ -78,6 +84,8 @@ flowchart TD
 v12 (#373) plays as v11 on `public/lib/yleisurheilu-8/`: the friends watching run after the athlete as the background moves, a little slower than it, and catch up once it stops (`scroll:` in the `K.drawFans()` call in `drawScene()`, 0 with the athlete at the start), and a tap on another spectator climbs onto their shoulders (`K.tapFans(px, py)` in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
 
 v13 (#395) plays as v12 on `public/lib/yleisurheilu-9/`: the friends watching no longer run. The row only slides with the background, a little slower than it, and stops when it stops; legs move only on a tapped walk.
+
+v14 (#399): passing many heights takes two taps, and the bar rises 20 cm at a time up to 30 cm over the level's base, then 10 cm (`heightsFor()`, before always 10 cm), except in Ottelu's frame (`inMatch`), which keeps the old steps because the match already takes every second height. `cpuPlan()` now reads the heights themselves, as the steps are no longer even.
 
 ## Colours
 
@@ -96,7 +104,9 @@ v13 (#395) plays as v12 on `public/lib/yleisurheilu-9/`: the friends watching no
 - **Kenen vuoro?**: `advance()` (v2: in `korkeus.js`, rounds at a height by `att`, not a queue) makes every computer attempt up to the next player on a phone; a round at a height is `comp.q`, the vaulters still `trying()` there, in the drawn order. `follow()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone hyppää heti**: `cpuTry()`: clears when its skill plus a scatter of 13 cm reaches the bar; a run-through one time in twenty. In a room the host's "Jatka ilman heitä" hands an away phone's attempts to the computer (`R.on('continue')`, from the height it is at) until it is back (`R.on('back')`); while a phone is away the meet waits (`R.paused`). From v5 (`yleisurheilu-5/`, #297) this is the computer's competitors only: a friend's phone is never handed over.
 - **Poissa oleva kaveri, v5: ei taukoa muiden vuoroilla; omalla vuorolla odotetaan, Ohita vuoro = X, tai hän palaa**: from v5 (`yleisurheilu-5/`, #297) the library calls `R.turns()` with the competitor on turn, so a friend who closes the game or leaves the room stops nobody while others are on turn. On their own turn every phone shows "⏸ Odotetaan: <nimi>"; the host's "Ohita vuoro" (`R.on('skip')`) records the format's `missed` mark (X) and the meet goes on, or the friend comes back ("↩ Palaa kierrokseen" on the room screen) and takes the turn themselves. See `yleisurheilu-kirjasto.md`.
-- **Hyppää vai ohita?**: before the first foot tap the "⏭ Ohita korkeus" button (`passBox`, acts when the finger lifts on it) passes this height, `pass()`; passing the lowest heights is how the player picks the height to start at. Passing after a failure keeps the failure: the next height then has fewer attempts left. The player alone at the top, everyone else out, sees "🏁 Lopeta kisa" instead (`soleWinner()`), and keeps the win.
+- **Paneeli: minkä korkeuden hyppäät seuraavaksi?**: v14 (#399): `drawPick()` in `games/seivashyppy/v14/index.html` lists the next twelve heights (`nextHeights()`, `pickBoxes`), three to a row, four on a phone on its side; a tap on one is `pass(height)`, "Peruuta" closes it. The leader left alone gets no panel: their button stops the meet.
+- **Oma vuoro valitun korkeuden alla?**: v14 (#399): `passTo` keeps the chosen height on this phone only. `step()` answers each of this phone's turns under it with '-' at once, with no standings and no tap; a new meet clears it (`clear`), and a reload just brings the next turn back to the player.
+- **Hyppää vai ohita?**: before the first foot tap the "⏭ Ohita korkeuksia" button (before v14 "⏭ Ohita korkeus", passing one height) (`passBox`, acts when the finger lifts on it) passes this height, `pass()`; passing the lowest heights is how the player picks the height to start at. Passing after a failure keeps the failure: the next height then has fewer attempts left. The player alone at the top, everyone else out, sees "🏁 Lopeta kisa" instead (`soleWinner()`), and keeps the win.
 - **- ohitettu**: `apply()` with `-`: no attempt, failures in a row unchanged.
 - **Vauhdinotto: vasen, oikea vuorotellen**: `press()`: a step on the other foot adds speed, more the slower the vaulter goes (as in Aitajuoksu and Keihäänheitto), the same foot twice slows; about 8 m/s at eight taps a second. The bar in the score panel shows the speed; the runway shows the take-off zone in green, brighter within 30 cm of the best spot (`TAKEOFF`, 4 m before the box).
 - **Istuta vihreällä alueella?**: `hold()`: pressing the middle pad (upright), the top pad of either side column (sideways), or anywhere on the scene (either way, `padAt()`) plants the pole, once the run has begun. A press while still standing at the start, or more than 3 m short of the green zone (`PLANT_FROM`, 7.8 m before the spot), does nothing: it is a stray tap (skipping the standings, missing the pass button), not a plant. Just too early, up to 3 m short of the zone (more than 80 cm, `PLANT_OK`, before the spot), is "Liian aikaisin: läpijuoksu", past it "Liian myöhään: läpijuoksu"; running on past the zone without a press is "Läpijuoksu: seiväs jäi istuttamatta" (`step()`). Each is a failed attempt, as under the rules. In a room 45 s with no tap (`TURN_MAX`) is "Aika loppui".
