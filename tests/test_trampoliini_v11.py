@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT
 
-URL = "games/trampoliini/v10/"
+URL = "games/trampoliini/v11/"
 NAMES = ['tomahdys', 'jousi', 'boing', 'suhahdus', 'onnistui', 'voitto', 'tappio']
 
 # Every AiPelitAanet.play() call, with its options and whether it played, in window.heard;
@@ -64,7 +64,7 @@ def test_the_arcade_power_up_is_gone(tramp_site, browser):
         page.evaluate(f"sound({k})")
     page.wait_for_timeout(100)
     assert "nousu" not in [n for n, _, _ in page.evaluate("heard")]
-    assert "nousu" not in (ROOT / "games/trampoliini/v10/index.html").read_text()
+    assert "nousu" not in (ROOT / "games/trampoliini/v11/index.html").read_text()
     assert errors == []
     ctx.close()
 
@@ -109,4 +109,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/trampoliini/v10")
+    opens_and_plays_with_the_quiet_library(real, context, "games/trampoliini/v11")

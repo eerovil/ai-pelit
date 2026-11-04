@@ -14,9 +14,9 @@ ADMIN_KEY = "avain"
 
 # The newest version of each game played here: the high-score library working in the game as it is.
 PUHELINKOPPI = "games/puhelinkoppi/v8/"
-SORMISKEITTI = "games/sormiskeitti/v9/"
+SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v12/"
-PIANO = "games/piano/v10/"
+PIANO = "games/piano/v11/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
