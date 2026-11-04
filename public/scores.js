@@ -65,9 +65,9 @@
     orava: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('orava', 'taso'); } },
     // Most points in one minute's run; no levels.
     skuutti: { order: 'high', score: function (s) { return s + ' p'; } },
-    // Most points in 10 rounds; no level. Named lists, the shelf's first: Mökkitikka (v2) on
-    // 'mokki', Pistekisa on 'main'.
-    tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki', 'Mökkitikka'], ['main', 'Pistekisa']] },
+    // Most points in 10 rounds; no level. Named lists, the shelf's first: the harder throw (v7, #400)
+    // on 'mokki2' and 'kisa2'; the easy throw's scores (v1-v6) stay on 'mokki' and 'main'.
+    tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki2', 'Mökkitikka'], ['kisa2', 'Pistekisa'], ['mokki', 'Vanha Mökkitikka'], ['main', 'Vanha Pistekisa']] },
     // Longest javelin throw in metres; level: 'taso', the level the player is on.
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.

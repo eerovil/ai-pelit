@@ -14,6 +14,8 @@ v5 (#337, `aanet-4`) has no crowd: a turn of 30 is the quiet `onnistui` blip at 
 
 v6 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v7 (#400) makes the throw harder, because three players had a perfect 300 of 300 and tapping alone gave one: the hand shakes at first, is steady for a moment and then tires, the sight turns green while it is steady, and after each dart the sight comes back 30 to 60 mm off. The points no longer compare with v1 to v6's, so both point games start new bests and lists.
+
 ```mermaid
 flowchart TD
   A[Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501] --> R{Yksin vai huoneessa?}
@@ -21,10 +23,11 @@ flowchart TD
   R -- Huone --> RH[Huoneen tekijä valitsee pelin ja pitää kirjaa]
   RH --> B
   B --> C{Kenen vuoro?}
-  C -- Pelaaja tällä puhelimella --> D[Sormi ruutuun: tähtäin liikkuu, käsi heiluu]
+  C -- Pelaaja tällä puhelimella --> D[Sormi ruutuun: käsi tärisee, rauhoittuu, väsyy]
   C -- Kaveri toisella puhelimella --> S[Kaverin tähtäin näkyy, odotetaan]
   C -- Tietokone tai poissa oleva --> E[Tietokone tähtää ja heittää]
   D --> F[Päästä irti: tikka lentää]
+  D -.-> OA[Tähtäin karkaa 30–60 mm]
   S --> F
   E --> F
   F --> G[Osuma: mökkitaulun rengas tai darts-taulun piste]
@@ -56,7 +59,7 @@ flowchart TD
   X --> A
   O --> T[Huoneessa: sijat kaikille, takaisin huoneeseen]
   L --> T
-  class A,B,D,F,V blue
+  class A,B,D,F,V,OA blue
   class E,S violet
   class R,C,H,J,M,N,Q,W amber
   class G,I,RH,FV teal
@@ -76,18 +79,19 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501**: `showMenu()` in `games/tikka/v4/index.html` (v3: `games/tikka/v3/index.html`, the same; v2: `games/tikka/v2/index.html`, without Vapaa heitto; v1: `games/tikka/v1/index.html`, without Mökkitikka and rooms). Mökkitikka is the big first button; "👥 Pelaa kavereiden kanssa" opens the room (`AiPelitRooms.open()`); "Vapaa heitto, ilman tietokonetta" has Mökkitaulu and Darts-taulu (the last one picked is saved as `ai-pelit:tikka:vapaa`); Pistekisa, 501 and the 501 opponent (Helppo, Keskitaso, Kova or Kaveri on the same phone, saved as `ai-pelit:tikka:vastus`) sit under "Darts-taulu". The menu shows the records (`mokki`, `ennatys`) and wins against the computer (`voitot`).
+- **Valikko: Mökkitikka, kaverit, vapaa heitto, Pistekisa tai 501**: `showMenu()` in `games/tikka/v7/index.html` (history: v3 to v6 the same; v2 without Vapaa heitto; v1 without Mökkitikka and rooms). Mökkitikka is the big first button; "👥 Pelaa kavereiden kanssa" opens the room (`AiPelitRooms.open()`); "Vapaa heitto, ilman tietokonetta" has Mökkitaulu and Darts-taulu (the last one picked is saved as `ai-pelit:tikka:vapaa`); Pistekisa, 501 and the 501 opponent (Helppo, Keskitaso, Kova or Kaveri on the same phone, saved as `ai-pelit:tikka:vastus`) sit under "Darts-taulu". The menu shows the records of the harder throw (`mokki2`, `kisa2`) and wins against the computer (`voitot`). Through v6 it showed `mokki` and `ennatys`, which stay saved on the phone as history and are no longer shown here.
 - **Yksin vai huoneessa?**: `newGame()` starts a game on this phone alone; `R.on('start')` starts one in a room (`public/rooms.js`, 2 to 5 phones).
 - **Huoneen tekijä valitsee pelin ja pitää kirjaa**: `roomControls()` shows the host Mökkitikka or 501 under the players (saved as `huonepeli`); the others see who picks. The host keeps the score: a guest sends its throws (`th`), and the host sends each dart's flight (`f`) and the whole game after every change (`g`, `state()` and `adopt()`). A phone that reloads gets the game again (`R.on('hello')`).
-- **Vuoro: 3 tikkaa**: `startTurn()` clears the board, gives three darts and puts the player's sight back where they last let go.
-- **Sormi ruutuun: tähtäin liikkuu, käsi heiluu**: the pointer handlers move `aim` (millimetres from the middle) by the finger's movement, so the finger never covers what it aims at. `sway()` adds the hand's sway: about 5 mm at first, growing after 1.4 s of holding up to 25 mm, and the sight turns orange. Only the phone whose turn it is can throw (`mine()`).
+- **Vuoro: 3 tikkaa**: `startTurn()` clears the board, gives three darts and puts the player's sight where their hand last came back to (`startAim()`); their very first one is 30 to 60 mm from the middle (v7; through v6 it started on the middle and stayed where they let go).
+- **Sormi ruutuun: käsi tärisee, rauhoittuu, väsyy**: the pointer handlers move `aim` (millimetres from the middle) by the finger's movement, so the finger never covers what it aims at. `sway()` adds the hand's sway, `swayAmp()` its size from `HAND` (v7): 90 mm at first, settling to 28 mm by 1.0 s of holding, steady until 1.7 s (`isSteady()`, the sight is green and thicker), then growing up to 98 mm; the sight is orange when the hand is not steady. Through v6 it was 5 mm at first, growing after 1.4 s to 25 mm. Only the phone whose turn it is can throw (`mine()`).
+- **Tähtäin karkaa 30–60 mm**: after each dart `letGo()` moves the thrower's sight with `offAim()` in a random direction and keeps it in `players[cur].aim`, on the phone that threw, so every dart has to be aimed again (v7).
 - **Kaverin tähtäin näkyy, odotetaan**: whoever throws sends where they aim ten times a second (`a`), so every phone sees the sight move in that player's colour, with "Vuorossa: <nimi>" at the bottom.
-- **Tietokone tai poissa oleva**: `botTarget()` aims at the 10 in Mökkitikka, the triple 20 in Pistekisa, and T20 or a finish in 501; `step()` glides the sight there and throws with a scatter of 30, 17 or 9 mm (`AIM_SIGMA`). In a room, the host's "Jatka ilman heitä" hands a phone that is away to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the game waits (`R.paused`).
-- **Päästä irti: tikka lentää**: `letGo()` and `release()` throw at the sight plus the sway and a 2.5 mm scatter; a touch shorter than 0.12 s does not throw. `throwAt()` flies the dart for 0.28 s.
+- **Tietokone tai poissa oleva**: `botTarget()` aims at the 10 in Mökkitikka, the triple 20 in Pistekisa, and T20 or a finish in 501; `step()` glides the sight there and throws with a scatter of 30, 17 or 9 mm (`AIM_SIGMA`, unchanged in v7: a player who lets go at a random steady moment then wins about half against Keskitaso and rarely against Kova, one who also times the sight onto the target nearly always and about four times in ten). In a room, the host's "Jatka ilman heitä" hands a phone that is away to the computer (`R.on('continue')`) until it is back (`R.on('back')`); while a phone is away the game waits (`R.paused`).
+- **Päästä irti: tikka lentää**: `letGo()` and `release()` throw at the sight plus the sway and a 4 mm scatter (`HAND.scatter`; 2.5 mm through v6); a touch shorter than 0.12 s does not throw. `throwAt()` flies the dart for 0.28 s.
 - **Osuma: mökkitaulun rengas tai darts-taulun piste**: `mokkiAt()` scores the cottage board as the Finnish rules give it: the 10 is 35 mm across and rings 9 to 1 are 17 mm wide each (341 mm in all), a dart on a line counts for the better ring. `dartsAt()` scores a real darts board: bull 50, outer bull 25, triple ring 99–107 mm, double ring 162–170 mm.
 - **Kaikki heittäneet kymmenen kierrosta?**: `endTurn()` passes the turn on; a round is over when it comes back to the first player, and Mökkitikka and Pistekisa end after round 10.
 - **Yli! Vuoron pisteet palaavat**: in 501 a dart that would go under nought ends the turn and puts the score back where the turn started. No double is needed to finish.
-- **Ennätys ja tuloslista**: `record()` saves the best Mökkitikka as `mokki` and the best Pistekisa as `ennatys`, and sends it with `AiPelitScores.submit()` to its own list: `pickBoard()` picks `mokki` or `main` (`public/scores.js` and `server/api.js`, `GAMES.tikka`). In a room each phone saves and sends its own score once (`R.once()`).
+- **Ennätys ja tuloslista**: `record()` saves the best Mökkitikka as `mokki2` and the best Pistekisa as `kisa2` (`bestKey()`, v7), and sends it with `AiPelitScores.submit()` to its own list: `pickBoard()` picks `mokki2` or `kisa2` (`public/scores.js` and `server/api.js`, `GAMES.tikka`). The easier throw's saves (`mokki`, `ennatys`) stay untouched, and its lists `mokki` and `main` stay on the game's page as "Vanha Mökkitikka" and "Vanha Pistekisa". In a room each phone saves and sends its own score once (`R.once()`).
 - **Voitot tietokoneesta talteen**: only the player beating the computer adds one to `voitot`.
 - **Voittaja valikossa**: the computer winning shows what the player had left; in a game with a friend on the same phone the menu names the winner, and neither counts as a win.
 - **Huoneessa: sijat kaikille, takaisin huoneeseen**: `hostEnd()` ranks the players (most points, then most tens; in 501 the one at nought first, then the least left), sends it with `R.deliver()`, and every phone shows its place and the full list in the room (`netFinish()`, `R.backToRoom()`).

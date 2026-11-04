@@ -43,6 +43,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-04",
+      "note": "Heitto on vaikeampi: käsi tärisee ensin, rauhoittuu hetkeksi ja väsyy sitten, ja tähtäin karkaa kohteesta joka tikan jälkeen; tuloslistat alkavat alusta.",
+      "request": "Tikkapeli liian helppo",
+      "issue": "eerovil/ai-pelit#400"
     }
   ]
 }

@@ -86,7 +86,7 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = {"hiihto": "taso-1", "tikka": "mokki"}.get(game, "main")
+                first = {"hiihto": "taso-1", "tikka": "mokki2"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
                 low = game == "hiihto"
@@ -565,7 +565,7 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
     site.build(ROOT / "games")
     a, b = "a" * 32, "b" * 32
     fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
-    fake.scores = {("tikka", "mokki", a): {"score": 254, "version": 2}, ("tikka", "main", b): {"score": 412, "version": 1}}
+    fake.scores = {("tikka", "mokki2", a): {"score": 254, "version": 7}, ("tikka", "kisa2", b): {"score": 412, "version": 7}}
     page = context.new_page()
     page.goto(site.url)
     # The shelf card: Mökkitikka's no. 1, named.
@@ -576,9 +576,9 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Mökkitikka"
     assert "Bertta" not in page.locator(".score-list").inner_text()
-    page.click(".score-list .board-list[data-board='main']")
+    page.click(".score-list .board-list[data-board='kisa2']")
     page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
     assert "Aino" not in page.locator(".score-list").inner_text()
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Pistekisa"
-    page.click(".score-list .board-list[data-board='mokki']")
+    page.click(".score-list .board-list[data-board='mokki2']")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
