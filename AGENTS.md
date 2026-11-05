@@ -13,7 +13,8 @@ player sees is Finnish unless the request says otherwise.
   number in a commit of its own (`git mv games/<slug>/v<N-1> games/<slug>/v<N>`), then make the
   change in the next commits, so the pull request shows only what changed (#346). Move its tests
   along the same way: `git mv` each `tests/test_<slug>_v<N-1>*.py` to `_v<N>`, and change every
-  `games/<slug>/v<N-1>` in the game's test files to `v<N>`. Append the version to `game.json`.
+  `games/<slug>/v<N-1>` in the game's test files to `v<N>`. Append the version to `game.json` before
+  you run a test: the build, and so any test that builds the site, refuses a folder with no entry.
   Other games' tests name versions too (`tests/test_scores.py` names Puhelinkoppi's, Hiihto's and
   Piano's): `grep -rn "<slug>/v<N-1>" tests/` and run every file it finds before the first push,
   not only the game's own tests.
@@ -275,7 +276,8 @@ high-score lists (#25), then play counts (#26).
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`; on this host they are in `~/.local/share/ruokalista/cloudflare.env`)
-  before the change merges. It also binds `DB` and `ADMIN_KEY` on the Pages project; the
+  once review has passed, right before the change merges: nothing in CI applies it, a merge deploys
+  at once, and the code still live must keep working on the changed schema. It also binds `DB` and `ADMIN_KEY` on the Pages project; the
   admin key is kept in `~/.local/share/ai-pelit/admin-key`.
 - `npm test` (Node 22) runs `server/api.js` on SQLite with the migrations. To try the real thing,
   deploy a preview: `npx wrangler pages deploy _site --project-name ai-pelit --branch <branch>`
@@ -361,7 +363,9 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 ## Before you mark the pull request ready
 
 - `python3 -m pytest -q --changed-since origin/main`, `npm test` and `python3 scripts/build.py`
-  pass. On a PR also `python3 scripts/check_immutable.py origin/main`. The full browser suite
+  pass. On a PR also `python3 scripts/check_immutable.py origin/main`, after fetching and merging
+  `origin/main`: against a main that has moved on, other Works' releases read as your changes.
+  The full browser suite
   never runs, not in CI and not by you (#65, Eero's choice): with `--changed-since` a game's own
   tests run only when the change touches `games/<slug>/` or that game's test file (#37), and a
   change outside `games/` runs only the shared tests, the ones tied to no game. So name a game's
@@ -381,28 +385,49 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
   processor (#248: `GPU_ARGS` in `tests/conftest.py`); a run with 3D tests ends with a
   `WebGL:` line naming the card, or SwiftShader when it fell back to software.
   When you change a shared file (`public/back.js`, `rooms.js`, `scores.js`...), play a game that
-  uses it yourself.
+  uses it yourself, and grep every game's tests for counts of what it shows.
+- A run proves only the head it ran on. Queue anything long (the `--changed-since` run, the host
+  tests) with `agentdeck job submit`, and run only a single test file directly. Read
+  `~/agentdeck/.venv/bin/agentdeck job list` first and reuse a green run on this exact head; each
+  push or merge of `origin/main` makes a new head, so run again and quote only that run. Leave the
+  checkout alone while a job uses it.
+- `scripts/host-tests.sh` runs only `alone` (3D) tests, and exit code 5, nothing selected, counts as
+  green. Report only the tests its output names, and its `WebGL:` line; run a 2D game's own tests
+  separately. A file's name proves nothing either: `tests/test_hiljaiset_aanet.py` holds helpers and
+  no test, so see a file collected (`python3 -m pytest --collect-only -q <file>`) before you cite it.
+- For each file the pull request changes (a game by `games/<slug>/`), grep the `## Boxes` sections
+  in `docs/diagrams/` and update every box that names it, before review and not from memory:
+  conditions identical to the code, exception and fallback paths as well as the normal flow, and
+  exact example versions, library paths and file names. Say in the pull request when none applies.
 - So that green verification job and the pull request's CI are the last checks before release:
   the deck merges only when both are green on the same head. A merge to `main` deploys at once
   (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
   the site. `main` runs no browser tests; they already passed on the pull request's head.
-  To check it is live, ask the site itself, not a deployment wake-on (the deck saw no deploy for
-  #207): `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
+  To wait for it, register a commit wake-on for the merge commit named `deploy-cloudflare`, never
+  polling: this repository sends no deployment events, so a deployment wake-on does not fire
+  (#207). Then ask the site itself: `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
   and the game's versions in `catalog.json`. A 404 right after the merge is the deploy still
   running: look again a minute later before calling it not live (#205).
+- Record a live check as `verified` only once every merged change in the Work is live and you have
+  tried each flow the request names on the real site. Green tests are not that, and a touch change
+  needs the owner's own phone (docs/making-games.md).
 - GitHub runs no pull-request CI while the pull request conflicts with `main` (#346): the push
-  starts no run, so a wake-on for the `test` check never fires, and closing and reopening does not
-  help. When no run appears for a pushed head, read `gh pr view <n> --json
+  starts no run, so a wake-on for the `test` check never fires, and neither closing and reopening
+  nor an empty commit helps. When no run appears for a pushed head, read `gh pr view <n> --json
   mergeable,mergeStateStatus` once. If it says `CONFLICTING` or `DIRTY`, merge `origin/main` into
   the branch (never rebase pushed commits), fix the conflict, push, and register the wake-on again
   for the new head. `main` moves often here (many Works at once), and another Work often takes
   the same version number, so merge `origin/main` right before you mark the pull request ready
-  and again after each review pass, and on a long-running pull request before each push.
+  and again after each review pass, and on a long-running pull request before each push. Before
+  you build, check open pull requests and sibling Works for the same game's next number. A pull
+  request that needs another open version change merges it in before review and again once it lands.
 - Never put an edit (`sed -i`, a heredoc) in the same Bash call as a test run: the AgentDeck
   queue hook refuses the whole chain. Edit in one call, then run the test alone with
   `AGENTDECK_HEAVY_SLOT_HELD=1`.
 - A fix for a chance-based test (a throw, a random round): run it once with a short timeout and
   measure its real range before you queue a long job on it.
+- A test you did not touch keeps failing: reproduce it on unchanged `origin/main` and find the cause
+  before you change it. No retry commits, no guessed timing fix, no calling it flaky.
 - Before you add a new row to a list in `public/app.js`, grep `tests/` for that list's class
   selectors (`.friend`, `.friend .meta`) and give the new row a class of its own, so the old
   tests do not pick it up.

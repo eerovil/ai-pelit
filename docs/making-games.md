@@ -49,18 +49,22 @@ the version that taught it, so you can read the code that fixed it.
   kind needs his phone again.
 - **A frame gets no safe areas.** Inside an `<iframe>`, `env(safe-area-inset-*)` is 0; the page
   around it must hand them in (Ottelu v2 sets the frame's `#safe` padding).
+- **A frame's window outlives its page.** After the frame loads a new page, `contentWindow` is the
+  same window with a new document, so anything watching the old one is dead (`w.win.document !==
+  w.doc` in `rooms.js`). Test several loads in a row, and that nothing piles up.
 - **A pull-back fits on the screen.** A control the finger drags away from (a sling, a throw
   pulled back) needs its whole range between the start point and the screen's edge, plus the
   finger. Curling v1 put the stone 74 px above the bottom for a 190 px pull, so upright only the
   weakest throws were possible; v2 places it `pull + 30` px above the edge (#293). Test it with a
-  drag that stays on the screen.
+  drag that stays on the screen, as a finger must: a mouse can run past the edge and hide the fault.
 - **Two thumbs, two corners.** Put the buttons a round uses most where thumbs rest: the lower
   corners in landscape, the lower edge in portrait. Leave the top-left for the "‹ Pelit" chip.
 - **Sound follows the game, not the finger.** Piano v5 plays each note when the song reaches it;
   a tap does not play it. Short sounds, only after the first tap (Web Audio rule in AGENTS.md).
 - **Real sounds over beeps.** A thud or a footstep from the shared library
   (`lib/aanet-5/`, "Sound effects" in AGENTS.md) tells the player what happened better than a
-  tone. Pituushyppy v7: the sand.
+  tone. Pituushyppy v7: the sand. Each sound stands alone: a file that fails to load must not
+  silence another event or its beep, so test the partly loaded cases too.
 - **No crowd noise, no loud sounds (#337, Eero's choice).** No applause, shouting crowd, crowd's
   "ooh" or cheer: a good moment gets a quiet short blip (`onnistui` at about 0.3), a near miss or a
   fall nothing more than its own thud. Keep every sound about as loud as the rest; `aanet-5`
@@ -73,6 +77,7 @@ the version that taught it, so you can read the code that fixed it.
   points. When a tap is scored by where something moving is, run the game on to `e.timeStamp` in
   the input handler first: `catchUp(e)` in Moukarinheitto v12 (`docs/diagrams/reilu-ajoitus.md`).
   With fixed physics steps, run the whole steps and add the rest when judging (Trampoliini v11).
+  Run the whole gap, in bounded steps, before the clock moves on, and test a gap near the bound.
 
 ## Difficulty
 
@@ -109,8 +114,11 @@ the version that taught it, so you can read the code that fixed it.
 - **Design for portrait and landscape from the first version.** Every game needed a new version
   for landscape (#95). Menus and end screens fit without scrolling in both (two columns sideways),
   and turning the phone keeps the round.
-- **Check the small phone too.** Play at 360 × 740 and 390 px wide, and sideways at 740 × 360.
-  Long Finnish words and many player names must still fit (Hiihto v6's waiting line).
+- **Check the small phone too.** Play at 360 × 640 (rule 4's smallest), 360 × 740 and 390 px wide,
+  and sideways at 740 × 360, each size and state the request names. Long Finnish words and many
+  player names must still fit (Hiihto v6's waiting line). Check full screens, not only empty ones,
+  and the fastest state of the game. Open a new page per orientation; resize a live page only to
+  test turning mid-round.
 - **The end screen says what happened and offers the next step.** The result, the record, and one
   big button to play again; the round's high-score list if the game has one.
 - **Tell players apart.** The player's own character must stand out from the computer's
@@ -119,7 +127,10 @@ the version that taught it, so you can read the code that fixed it.
 ## Playing with friends
 
 - **Use `rooms.js`, and test with three or more phones.** Hiihto v6 had to make sure races of more
-  than two work. Test a phone reloading mid-round and a phone that leaves.
+  than two work. Test a phone reloading mid-round and a phone that leaves, through real browser
+  actions: every promised player count, a rejoin that cleans up what the phone held, two phones
+  acting at once, several turns with no input, and a new round after a finished one. Keep players
+  under a stable id, not a place in a list, and reset their positions on start.
 - **The host decides.** One phone runs the round (who scored, a false start, the course) and the
   others draw what it sends; each phone may check its own collisions (Kaahari v2) when that feels
   fairer, but the result comes from the host.
@@ -137,7 +148,17 @@ the version that taught it, so you can read the code that fixed it.
   function let a test set up a scene and run the game frame by frame (see `run()` and `step(1 / 60)` in `tests/test_orava_v4.py`).
   A test that waits on real time is slow and flaky on CI.
 - **Test what a player would complain about**: a level that cannot be passed, a tap that misses,
-  a save that is lost, a second round after a finished one, a 390 px phone.
+  a save that is lost, a second round after a finished one, a 390 px phone, a timeout, running out
+  of what a round spends, a finish tapped twice, a reload at each change of mode, an old result left
+  showing after a mode switch. Test the whole change of state, not only the helper or the win.
+- **Set up by state, play by real controls.** A test may place the scene, but proves a game can be
+  played only through the taps a player makes, and it asserts the game's own decision, never a
+  state it forced.
+- **A flaky test wants a signal, not a longer wait.** Wait on observable state with a predicate that
+  returns a boolean (an async helper's Promise is always truthy), such as the guest's first snapshot
+  before the host acts. Run a tightly timed change in one `page.evaluate`, seed randomness, and
+  assert stable state, never animated pixels. Never weaken an assertion, and treat a browser error
+  in a passing test as a failure.
 - **Split a big version into files** once it passes about 2000 lines (#161): `index.html` plus a
   few plain `.js` files in the same folder, each one part of the game (world, screens, sound),
   loaded with classic `<script src>` tags. A file you can read whole is one you can change safely.
