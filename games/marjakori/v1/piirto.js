@@ -13,14 +13,15 @@ var MarjakoriPiirto = (function () {
     ctx.restore();
   }
   function draw(ctx, s, box, selected, motion) {
-    var n = Marjakori.SIZE, z = Math.min(box.w, box.h) / n, ox = box.x + (box.w - z*n)/2, oy = box.y + (box.h-z*n)/2, board = motion && motion.before ? motion.before.board : s.board;
+    var n = Marjakori.SIZE, z = Math.min(box.w, box.h) / n, ox = box.x + (box.w - z*n)/2, oy = box.y + (box.h-z*n)/2, board = motion && motion.before ? motion.before.board : motion && motion.frame ? motion.frame.board : s.board;
     ctx.save(); ctx.fillStyle='#1d3b32'; ctx.fillRect(ox-7,oy-7,z*n+14,z*n+14);
-    for (var i=0;i<board.length;i++) { var p={x:i%n,y:Math.floor(i/n)}, c=board[i], x=ox+(p.x+.5)*z, y=oy+(p.y+.5)*z, dy=motion&&motion.fall?(1-motion.t)*z*2:0;
+    for (var i=0;i<board.length;i++) { var p={x:i%n,y:Math.floor(i/n)}, c=board[i], x=ox+(p.x+.5)*z, y=oy+(p.y+.5)*z;
       if(motion&&motion.before){if(i===motion.a){x+=((motion.b%n)-(motion.a%n))*z*motion.t;y+=(Math.floor(motion.b/n)-Math.floor(motion.a/n))*z*motion.t;}else if(i===motion.b){x+=((motion.a%n)-(motion.b%n))*z*motion.t;y+=(Math.floor(motion.a/n)-Math.floor(motion.b/n))*z*motion.t;}}
+      if(motion&&motion.frame){var move=motion.frame.moves.find(function(q){return q.to===i;});if(move){var from=move.from,fx=from<0?i%n:from%n,fy=from<0?Math.floor(from/n):Math.floor(from/n);x=ox+(fx+.5)*z+(p.x-fx)*z*motion.t;y=oy+(fy+.5)*z+(p.y-fy)*z*motion.t;}}
       ctx.fillStyle = (i===selected ? '#ffe28a' : '#eff4d7'); ctx.fillRect(ox+p.x*z+1,oy+p.y*z+1,z-2,z-2);
       if (s.moss[i]) { ctx.fillStyle='#638f45'; ctx.fillRect(ox+p.x*z+4,oy+p.y*z+z*.74,z-8,z*.18); }
-      shape(ctx,x,y+dy,z*.43,c.kind);
-      if (c.special) { ctx.fillStyle='#fff9bc'; ctx.font='bold '+Math.max(12,z*.37)+'px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(c.special==='puuska'?'↔':'✦',x,y); }
+      shape(ctx,x,y,z*.43,c.kind);
+      if (c.special) { ctx.fillStyle='#fff9bc'; ctx.font='bold '+Math.max(12,z*.37)+'px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(c.special==='puuska'?(c.vertical?'↕':'↔'):'✦',x,y); }
     }
     ctx.restore(); return { x: ox, y: oy, size: z };
   }

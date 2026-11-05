@@ -189,7 +189,7 @@ def test_portrait_lists_every_goal_and_long_level_picker_scrolls(site, context):
 
 def test_idle_hint_finds_a_move_once_until_the_board_changes(site, context):
     page = open_game(site, context)
-    page.click("#go")
+    page.evaluate("start(2)")
     page.wait_for_function("state && state.phase === 'play'")
     page.evaluate("""() => {
       window.hintCalls = 0; const legal = Marjakori.legalMoves;
@@ -198,6 +198,40 @@ def test_idle_hint_finds_a_move_once_until_the_board_changes(site, context):
     }""")
     page.wait_for_timeout(150)
     assert page.evaluate("window.hintCalls") == 1
+    assert page.errors == []
+
+
+def test_last_move_animates_before_menu_and_safe_insets_keep_everything_visible(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("state && state.phase === 'play'")
+    immediate = page.evaluate("""() => {
+      state.goals.forEach(g => g.left = 0); state.mossLeft = 0;
+      const move = Marjakori.legalMoves(state)[0]; play(move[0], move[1]);
+      return [state.phase, !!motion, menu.classList.contains('hidden')];
+    }""")
+    assert immediate == ["win", True, True]
+    page.wait_for_function("!menu.classList.contains('hidden')")
+    page.evaluate("start(2)")
+    page.wait_for_function("state && state.phase === 'play'")
+    page.evaluate("""() => { const root = document.documentElement.style; root.setProperty('--safe-top','21px'); root.setProperty('--safe-right','17px'); root.setProperty('--safe-bottom','19px'); root.setProperty('--safe-left','13px'); resize(); }""")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("boardBox && boardBox.x >= safe.left && boardBox.y >= safe.top && boardBox.x + boardBox.size * 7 <= innerWidth - safe.right && boardBox.y + boardBox.size * 7 <= innerHeight - safe.bottom")
+    assert page.evaluate("[boardBox.x >= safe.left, boardBox.y >= safe.top, boardBox.x + boardBox.size * 7 <= innerWidth - safe.right, boardBox.y + boardBox.size * 7 <= innerHeight - safe.bottom]") == [True, True, True, True]
+    assert page.errors == []
+
+
+def test_puuska_symbols_show_their_actual_direction(site, context):
+    page = open_game(site, context)
+    arrows = page.evaluate("""() => {
+      const s = Marjakori.newLevel(1, 2), seen = [], text = ctx.fillText.bind(ctx);
+      ctx.fillText = function (value) { seen.push(String(value)); return text.apply(ctx, arguments); };
+      s.board[0].special = 'puuska'; s.board[0].vertical = true;
+      s.board[1].special = 'puuska'; s.board[1].vertical = false;
+      MarjakoriPiirto.draw(ctx, s, {x:0,y:0,w:280,h:280}, -1); ctx.fillText = text;
+      return seen.filter(v => v === '↕' || v === '↔');
+    }""")
+    assert arrows == ["↕", "↔"]
     assert page.errors == []
 
 
