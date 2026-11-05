@@ -104,6 +104,8 @@
     },
     // Biggest catch in a five-minute contest, grams; level: 'taso', the level the player is on.
     pilkki: { order: 'high', score: function (s) { return fixed(s / 1000, 2) + ' kg'; }, level: function () { return saved('pilkki', 'taso'); } },
+    // Sum of the best score from each cleared level; level: the first unopened level.
+    marjakori: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('marjakori', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
@@ -197,7 +199,7 @@
     });
   }
 
-  function submit(score) {
+  function submit(score, deferPrompt) {
     if (!GAME || typeof score !== 'number' || !isFinite(score)) return;
     var queue = load(QUEUE, {}), key = GAME + '|' + board, old = queue[key];
     // Whether the round brings anything new (a better score, or a higher level) is decided when it
@@ -208,11 +210,13 @@
     }
     if (!load(K + 'nimi', '') && !load(K + 'kysytty', false)) {
       // The first score on this phone asks for a nickname, once.
+      if (deferPrompt) return true;
       save(K + 'kysytty', true);
       open();
-      return;
+      return true;
     }
     flush();
+    return false;
   }
 
   // ---- The list ----
@@ -359,6 +363,8 @@
   window.AiPelitScores = {
     submit: submit,
     open: function () { open(); },
+    // The nickname question a submit(score, true) put off: it counts as asked only now that it shows.
+    prompt: function () { save(K + 'kysytty', true); open(); },
     board: function (id, label) { board = id; boardLabel = label || ''; },
     format: function (f) { fmt = f; },
     // For the shelf: which games keep lists, and their lists.
