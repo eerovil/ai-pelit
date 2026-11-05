@@ -85,6 +85,20 @@ def test_four_five_crosses_and_two_specials_do_their_own_clear(site, context):
     assert page.errors == []
 
 
+def test_specials_target_the_neighbour_kind_and_their_run_direction(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      const s = Marjakori.newLevel(1, 4);
+      s.board.forEach((c, i) => c.kind = i % 6);
+      const sparkle = Marjakori.specialCells(s.board, 0, { special: 'kimallus', kind: 0, aim: 3 });
+      const vertical = Marjakori.specialCells(s.board, 23, { special: 'puuska', vertical: true });
+      const horizontal = Marjakori.specialCells(s.board, 23, { special: 'puuska', vertical: false });
+      return [sparkle, vertical, horizontal];
+    }""")
+    assert result == [[3, 9, 15, 21, 27, 33, 39, 45], [2, 9, 16, 23, 30, 37, 44], [21, 22, 23, 24, 25, 26, 27]]
+    assert page.errors == []
+
+
 def test_real_swipe_plays_and_keeps_a_round_on_reload(site, context):
     page = open_game(site, context)
     page.click("#go")
