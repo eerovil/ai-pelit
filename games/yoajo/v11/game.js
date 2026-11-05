@@ -291,7 +291,7 @@ function drive(dt) {
   // Speed: v3 has a gas pedal: as much pull as the thumb asks, up to 130 at full; off the gas
   // the engine slows the car a little. The brake by how far the thumb slides down. The
   // shoulder and gravel drag.
-  const top = 130 / KMH, offRoad = Math.abs(P.lat) > EDGE + 0.2;
+  const top = 130 / KMH, offRoad = Math.abs(P.lat) > EDGE + 0.2 && !inBay(P.s, P.lat);
   const brake = clamp(+input.brake || 0, 0, 1), gas = clamp(+input.gas || 0, 0, 1);
   P.gas = gas;
   if (brake > 0) P.v = Math.max(0, P.v - (8 * grip + 1.5) * brake * dt);
@@ -320,7 +320,7 @@ function drive(dt) {
 
   if (Math.abs(P.lat) > DITCH && !inBay(P.s, P.lat)) return crash('Ajoit ojaan.');
   // v8: the rest area's kerb keeps the car on its paving, and its narrowing lane leads it back.
-  if (inBay(P.s, P.lat)) P.lat = Math.min(P.lat, Math.max(DITCH - 0.1, EDGE + bayWidth(P.s) - 0.6));
+  if (inBay(P.s, P.lat)) P.lat = Math.min(P.lat, EDGE + bayWidth(P.s) - 0.6);
 
   // Things come on the road as the player reaches their place.
   while (events.length && events[0].s <= P.s) release(events.shift());
@@ -379,7 +379,7 @@ function move(t, dt) {
     if (t.plan === 'wait' && t.s - P.s < 330) t.plan = 'out';
     if (t.plan === 'out') { t.lat += (LANE - t.lat) * Math.min(1, dt * 1.6); if (t.s < t.truck.s - 22) t.plan = 'in'; }
     if (t.plan === 'in') t.lat += (-LANE - t.lat) * Math.min(1, dt * 1.8);
-  } else if (t.v > 0 && t.kind !== 'kavelija') {
+  } else if (t.v >= 0 && t.kind !== 'kavelija') {
     if (t.habit !== undefined) t.base = cruise(t);
     // A slow car or truck ahead keeps behind a slower one.
     // v8: it brakes for it from 70 m, as hard as it needs (v1–v7: matched its speed at once from
@@ -391,8 +391,9 @@ function move(t, dt) {
       if (gap < 8) t.v = front.v;
       else t.v = Math.max(front.v, t.v - Math.min(9, (t.v - front.v) ** 2 / (2 * (gap - 7))) * dt);
     }
-    // and behind the player: nobody drives into the player's back.
-    if (t.lat > 0 && P.lat > 0 && P.s > t.s && P.s - t.s < 30) t.v = Math.min(t.v, P.v);
+    // Pass a car fully parked in the bay, but wait if it still overlaps the traffic lane.
+    const overlaps = Math.abs(t.lat - P.lat) < (t.wid + P.wid) / 2 + 0.2;
+    if (t.lat > 0 && P.lat > 0 && (P.lat < EDGE || overlaps) && P.s > t.s && P.s - t.s < 30) t.v = Math.min(t.v, P.v);
     else if (t.base && t.v < t.base) t.v = Math.min(t.base, t.v + 2 * dt);
     else if (t.base && t.v > t.base) t.v = Math.max(t.base, t.v - 3 * dt);   // slowing for a lower limit
   }
@@ -589,7 +590,8 @@ function tiredness(dt) {
   if (!leg.tired) return;
   const bay = road.bays.find(b => P.s > b.s0 && P.s < b.s1);
   if (bay && P.lat > EDGE + 0.5 && P.v < 15 / KMH) {
-    P.rest += dt; P.v = Math.max(0, P.v - 6 * dt);
+    P.rest += dt;
+    if (!(input.gas > 0)) P.v = Math.max(0, P.v - 6 * dt);
     if (P.rest > 1.4 && P.tired > 0) { P.tired = 0; tally.tauko++; T += 10; score(30, 'Kahvitauko'); P.blink = 0; }
     return;
   }

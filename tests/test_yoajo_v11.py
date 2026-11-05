@@ -1,10 +1,11 @@
-"""Yöajo v8 (#306): the lights button on the left, a livelier gas pedal, a rest area with a lane
+"""Yöajo v11 (#377): drive forward after coffee and let traffic pass the parked car.
+Yöajo v8 (#306): the lights button on the left, a livelier gas pedal, a rest area with a lane
 of its own and signs, side roads with cars pulling out, no overtaking through a junction, and
 the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v10/"
+URL = "games/yoajo/v11/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -15,7 +16,8 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
   for (const n of legs) { newLeg(n); HOLD = true;
     for (let i = 0; i < 60 * 400 && mode === 'drive'; i++) {
       let want = LANE;
-      const slow = things.find(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro');
+      const slow = things.filter(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro')
+        .sort((a, b) => a.s - b.s)[0];
       const onc = things.some(t => t.v < 0 && t.s > P.s - 5 && t.s - P.s < 330 && vehicle(t));
       const head = things.find(t => t.v < 0 && t.lat > 0.5 && t.s > P.s && t.s - P.s < 260);
       if (slow && !onc && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
@@ -27,13 +29,17 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       const bay = road.bays.find(b => P.s > b.s0 - 5 && P.s < b.s1 - 10);
       const rest = bay && P.tired > 0.15;
       if (rest && !(slow && slow.lat > 0 && slow.s - P.s < 25)) want = 7;
+      // Traffic now passes while parked: yield before merging back into its lane.
+      const merging = P.lat > EDGE && inBay(P.s, P.lat) && things.some(t => vehicle(t) && t.v > 0 && t.lat > 0 && t.lat < EDGE
+        && t.s - P.s > -30 && t.s - P.s < 25);
+      if (merging) want = 7;
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
       input.left = err > 0.15; input.right = err < -0.15;
       const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200);
       input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
         || (slow && want === LANE && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35);
       P.high = !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
-      input.gas = input.brake ? 0 : 1; step(1 / 60);
+      input.gas = input.brake || (rest && P.s > bay.s0 && P.lat > EDGE + 0.5) || merging ? 0 : 1; step(1 / 60);
     }
     out.push({ n, mode, why: crashWhy, T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
   }
@@ -109,6 +115,61 @@ def test_the_rest_area_has_a_lane_signs_and_a_kerb(site, context):
       for (let i = 0; i < 60 * 8 && mode === 'drive'; i++) { P.v = 10; step(1 / 60); }
       return { mode, lat: P.lat, past: P.s > b.s1 + BAY_IN }; }""")
     assert r["mode"] == "drive" and r["past"] and r["lat"] < 5.6, r
+    assert page.errors == []
+
+
+def test_gas_drives_forward_after_coffee_and_the_exit_returns_to_the_road(site, context):
+    page = open_game(site, context)
+    for n in range(3, 9):
+        r = page.evaluate("""(n) => { HOLD = true; maxLeg = 8; newLeg(n);
+          things = []; events = []; road.cams = []; const b = road.bays[0];
+          P.s = b.s0 + 10; P.lat = 9; P.v = 0; P.tired = 0.5;
+          for (let i = 0; i < 120; i++) step(1 / 60);
+          const start = P.s; input.gas = 0.5;
+          for (let i = 0; i < 240 && mode === 'drive'; i++) step(1 / 60);
+          const moved = P.s - start, kmh = P.v * KMH;
+          input.gas = 1;
+          for (let i = 0; i < 60 * 30 && mode === 'drive' && P.s < b.s1 + BAY_IN + 10; i++) step(1 / 60);
+          return { mode, why: crashWhy, moved, kmh, coffee: tally.tauko,
+            past: P.s > b.s1 + BAY_IN, lat: P.lat }; }""", n)
+        assert r["coffee"] == 1 and r["moved"] > 5 and r["kmh"] > 10, (n, r)
+        assert r["mode"] == "drive" and r["past"] and r["lat"] < 3.5, (n, r)
+    assert page.errors == []
+
+
+def test_traffic_passes_a_parked_car_but_still_waits_behind_a_car_on_the_road(site, context):
+    page = open_game(site, context)
+    for kind in ("traktori", "auto", "rekka"):
+        for lat in (1.75, 4.1, 9):
+            r = page.evaluate("""([kind, lat]) => { HOLD = true; maxLeg = 8; newLeg(3);
+              things = []; events = []; road.cams = []; const b = road.bays[0];
+              P.s = b.s0 + 30; P.lat = lat; P.v = 0; P.tired = 0;
+              const start = P.s;
+              const t = add(kind, { s: P.s - 60, lat: 2.4, v: 8 });
+              for (let i = 0; i < 60 * 20 && mode === 'drive'; i++) step(1 / 60);
+              return { mode, passed: t.s > P.s, speed: t.v, gap: P.s - t.s, moved: P.s - start }; }
+            """, [kind, lat])
+            assert r["mode"] == "drive" and r["moved"] == 0, (kind, lat, r)
+            if lat == 9:
+                assert r["passed"] and r["speed"] > 0, (kind, r)
+            else:
+                assert not r["passed"] and r["speed"] == 0 and r["gap"] > 20, (kind, lat, r)
+                if lat == 4.1:
+                    r = page.evaluate("""() => { P.lat = 9; const t = things[0];
+                      for (let i = 0; i < 60 * 20 && mode === 'drive'; i++) step(1 / 60);
+                      return {mode, passed: t.s > P.s, speed: t.v}; }""")
+                    assert r["mode"] == "drive" and r["passed"] and r["speed"] > 0, (kind, r)
+    assert page.errors == []
+
+
+def test_coasting_in_the_rest_area_still_stops_for_coffee(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(3);
+      things = []; events = []; road.cams = []; const b = road.bays[0];
+      P.s = b.s0 + 20; P.lat = 9; P.v = 12 / KMH; P.tired = 0.5;
+      for (let i = 0; i < 60 * 4 && mode === 'drive'; i++) step(1 / 60);
+      return { mode, speed: P.v, coffee: tally.tauko, tired: P.tired }; }""")
+    assert r == {"mode": "drive", "speed": 0, "coffee": 1, "tired": 0}, r
     assert page.errors == []
 
 
@@ -274,4 +335,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v10")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v11")
