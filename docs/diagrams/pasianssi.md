@@ -70,7 +70,7 @@ flowchart TD
 - **Ei sallittu: kortit jäävät paikalleen**: `invalid()` shows the short notice, plays the error sound and shakes the pile's top card; a dragged card drops back where it was with no slide. No move is added or saved.
 - **Sallittu paikka sormen alla?**: `targetAt()` finds the pile under the dragged card's middle and `move()` checks it: a tableau pile takes one rank lower in the other colour, a foundation the next of the same suit.
 - **Edellinen siirto peruutetaan**: `undo()` pops the move list; there is no limit, and with no moves the button is disabled.
-- **Jako tallennetaan puhelimeen**: `saveDeal()` writes the whole deal, its moves and the clock as `ai-pelit:pasianssi:jako1` after every move.
+- **Jako tallennetaan puhelimeen**: `saveDeal()` writes the whole deal, its moves and the clock as `ai-pelit:pasianssi:jako1` after every move, and asks for a redraw; every five seconds of play the clock's `writeDeal()` saves the same without one.
 - **Valmis-nappi nostaa loput maapinoihin**: when the stock and waste are empty and every card is face up, "Valmis" (`finishAll()`) moves them all up at once.
 - **Voitto: aika, siirrot, ennätys**: `win()` adds to `voitot` and `parhaat` (best time per draw mode) and shows the end screen with "Uusi jako".
 - **Aika tuloslistalle**: `AiPelitScores.submit(seconds)` to the `veto1` or `veto3` list, `order: 'low'` (`public/scores.js` and `server/api.js`, `GAMES.pasianssi`).

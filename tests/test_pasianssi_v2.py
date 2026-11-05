@@ -397,8 +397,10 @@ def settle(page):
     )
 
 
-def test_a_table_nobody_touches_draws_nothing_while_its_clock_runs(site, context):
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844), (740, 360)])
+def test_a_table_nobody_touches_draws_nothing_while_its_clock_runs(site, context, width, height):
     page = open_game(site, context)
+    page.set_viewport_size({"width": width, "height": height})
     page.click("#start")
     page.evaluate("drawStock()")
     settle(page)
@@ -516,3 +518,51 @@ def test_the_clock_saves_the_deal_every_five_seconds_of_play(site, context):
     page.click("#start")
     page.evaluate("drawStock(); elapsed = 9.9; saveDeal(); step(0.2)")
     assert page.evaluate("JSON.parse(localStorage.getItem(SAVE)).elapsed") >= 10
+
+
+def test_a_deal_continued_after_a_reload_is_drawn_and_then_rests(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    page.evaluate("deal(2, 1); drawStock()")
+    settle(page)
+    drawn = canvas_pixels(page)
+    page.reload()
+    page.wait_for_function("layoutState && layoutState.cw > 0")
+    page.evaluate(COUNT_DRAWS)
+    page.click("#continue")
+    page.wait_for_timeout(200)
+    assert canvas_pixels(page) == drawn
+    # Coming up may take a second draw when the layout settles, but then it rests.
+    resting = page.evaluate("draws")
+    assert 1 <= resting <= 2
+    page.wait_for_timeout(700)
+    assert page.evaluate("draws") == resting
+
+
+def test_many_changes_in_one_frame_ask_for_one_draw(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("drawStock(); drawStock(); undo(); fit()")
+    settle(page)
+    assert page.evaluate("draws") == 1
+    assert page.errors == []
+
+
+def test_time_away_from_the_page_does_not_reach_the_clock(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    result = page.evaluate("""() => {
+      drawStock(); elapsed = 30; lastTick = performance.now() - 60000;
+      Object.defineProperty(document, 'hidden', {configurable: true, get: () => true});
+      tick(); const away = elapsed;
+      lastTick = performance.now() - 60000;
+      Object.defineProperty(document, 'hidden', {configurable: true, get: () => false});
+      document.dispatchEvent(new Event('visibilitychange'));
+      tick();
+      return {away, back: elapsed};
+    }""")
+    assert result["away"] == 30
+    assert result["back"] < 31
+    assert page.errors == []
