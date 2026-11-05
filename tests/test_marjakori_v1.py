@@ -208,9 +208,10 @@ def test_last_move_animates_before_menu_and_safe_insets_keep_everything_visible(
     immediate = page.evaluate("""() => {
       state.goals.forEach(g => g.left = 0); state.mossLeft = 0;
       const move = Marjakori.legalMoves(state)[0]; play(move[0], move[1]);
-      return [state.phase, !!motion, menu.classList.contains('hidden')];
+      const best = JSON.parse(localStorage.getItem('ai-pelit:marjakori:parhaat'));
+      return [state.phase, !!motion, menu.classList.contains('hidden'), JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso')) === 2, best['1'] === state.score];
     }""")
-    assert immediate == ["win", True, True]
+    assert immediate == ["win", True, True, True, True]
     page.wait_for_function("!menu.classList.contains('hidden')")
     page.evaluate("start(2)")
     page.wait_for_function("state && state.phase === 'play'")
@@ -218,6 +219,7 @@ def test_last_move_animates_before_menu_and_safe_insets_keep_everything_visible(
     turn(page, {"width": 740, "height": 360})
     page.wait_for_function("boardBox && boardBox.x >= safe.left && boardBox.y >= safe.top && boardBox.x + boardBox.size * 7 <= innerWidth - safe.right && boardBox.y + boardBox.size * 7 <= innerHeight - safe.bottom")
     assert page.evaluate("[boardBox.x >= safe.left, boardBox.y >= safe.top, boardBox.x + boardBox.size * 7 <= innerWidth - safe.right, boardBox.y + boardBox.size * 7 <= innerHeight - safe.bottom]") == [True, True, True, True]
+    assert page.evaluate("""() => { const a = document.querySelector('#ai-pelit-tulokset-nappi').getBoundingClientRect(), b = {left:boardBox.x,top:boardBox.y,right:boardBox.x+boardBox.size*7,bottom:boardBox.y+boardBox.size*7}; return a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom; }""")
     assert page.errors == []
 
 
