@@ -71,6 +71,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-05",
+      "note": "Levähdysalueelta pääsee ajamaan eteenpäin takaisin tielle, eikä takaa tuleva traktori tai auto enää jää odottamaan pysäköidyn auton taakse.",
+      "request": "Yö ajo. Kahvitauolta lähtiessä voisi saada liikkua myös eteenpäin. Jos juuri vierellä on traktori niin ei pääse liikkeelle",
+      "issue": "eerovil/ai-pelit#377"
     }
   ]
 }
