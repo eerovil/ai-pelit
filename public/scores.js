@@ -38,6 +38,7 @@
   // ---- What each game's list shows ----
   function fixed(n, d) { return n.toFixed(d).replace('.', ','); }
   function minutes(t) { var m = Math.floor(t / 60), s = t - 60 * m; return m + '.' + (s < 10 ? '0' : '') + fixed(Math.floor(s * 10) / 10, 1); }
+  function clock(t) { t = Math.max(0, Math.floor(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
   // A number the game keeps in its own save (ai-pelit:<slug>:<name>); read only, never written.
   function saved(slug, name) { var v = Math.floor(Number(load('ai-pelit:' + slug + ':' + name, 0))); return isFinite(v) ? v : 0; }
   var GAMES = {
@@ -65,6 +66,8 @@
     orava: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('orava', 'taso'); } },
     // Most points in one minute's run; no levels.
     skuutti: { order: 'high', score: function (s) { return s + ' p'; } },
+    // Fastest Klondike win, separate lists for drawing one or three cards.
+    pasianssi: { order: 'low', score: clock, lists: [['veto1', '1 kortti'], ['veto3', '3 korttia']] },
     // Most points in 10 rounds; no level. Named lists, the shelf's first: the harder throw (v7, #400)
     // on 'mokki2' and 'kisa2'; the easy throw's scores (v1-v6) stay on 'mokki' and 'main'.
     tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki2', 'Mökkitikka'], ['kisa2', 'Pistekisa'], ['mokki', 'Vanha Mökkitikka'], ['main', 'Vanha Pistekisa']] },

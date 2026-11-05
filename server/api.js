@@ -60,6 +60,7 @@ export const GAMES = {
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
+  pasianssi: { order: 'low', boards: /^(veto1|veto3)$/, first: 'veto1' }, // fastest Klondike win, one- or three-card draw
   // Most points in 10 rounds: Mökkitikka 'mokki' (v2's main mode, the shelf's), Pistekisa 'main' (v1 on).
   tikka: { order: 'high', boards: /^(main|mokki|mokki2|kisa2)$/, first: 'mokki2' }, // the harder throw (v7) on 'mokki2' and 'kisa2'; v1-v6's scores stay on 'mokki' and 'main'
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
