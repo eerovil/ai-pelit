@@ -73,7 +73,7 @@ const SUITS=['S','H','D','C'], SYMBOL={S:'♠',H:'♥',D:'♦',C:'♣'}, RED={H:
 const KEY='ai-pelit:pasianssi:', SAVE=KEY+'jako1';
 let piles=Array.from({length:7},()=>[]),stock=[],waste=[],found=Array.from({length:4},()=>[]),moves=[];
 let seed=0,draw=1,menuDraw=load('veto',1),moveCount=0,elapsed=0,started=false,counted=false,phase='menu';
-let W=0,H=0,DPR=1,wide=false,layoutState=null,lastFrame=performance.now(),noticeTimer=0,drag=null,shakeUntil=0;
+let W=0,H=0,DPR=1,wide=false,layoutState=null,lastTick=performance.now(),noticeTimer=0,drag=null,shakeUntil=0,drawAsked=0;
 
 function load(name,fallback){try{const v=localStorage.getItem(name.startsWith('ai-pelit:')?name:KEY+name);return v===null?fallback:JSON.parse(v)}catch(e){return fallback}}
 function store(name,value){try{localStorage.setItem(name.startsWith('ai-pelit:')?name:KEY+name,JSON.stringify(value))}catch(e){}}
@@ -82,7 +82,8 @@ function cardId(card){return card.s+card.r}
 function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function snapshot(){return{piles:clone(piles),stock:clone(stock),waste:clone(waste),found:clone(found),seed,draw,moveCount,elapsed,started}}
 function restore(s){piles=clone(s.piles);stock=clone(s.stock);waste=clone(s.waste);found=clone(s.found);seed=s.seed;draw=s.draw;moveCount=s.moveCount;elapsed=s.elapsed;started=s.started}
-function saveDeal(){if(phase!=='play')return;store(SAVE,{...snapshot(),moves:clone(moves),counted});updateUi()}
+function writeDeal(){if(phase==='play')store(SAVE,{...snapshot(),moves:clone(moves),counted})}
+function saveDeal(){if(phase!=='play')return;writeDeal();updateUi()}
 function savedDeal(){const s=load(SAVE,null);return s&&s.piles&&s.piles.length===7?s:null}
 function clearDeal(){try{localStorage.removeItem(SAVE)}catch(e){}}
 function setScoreBoard(){if(window.AiPelitScores)AiPelitScores.board('veto'+draw,draw===1?'1 kortti':'3 korttia')}
@@ -131,19 +132,22 @@ function win(){
   if(phase==='won')return;phase='won';clearDeal();const seconds=Math.max(1,Math.round(elapsed));
   const wins=load('voitot',0)+1;store('voitot',wins);const bests=load('parhaat',{}),old=bests[draw];const record=!old||seconds<old;if(record){bests[draw]=seconds;store('parhaat',bests)}
   if(window.AiPelitScores){setScoreBoard();AiPelitScores.submit(seconds)}
-  document.getElementById('winResult').textContent=`${timeText(seconds)} · ${moveCount} siirtoa`;
+  document.getElementById('winResult').textContent=`${timeText(seconds)} · ${moveText(moveCount)}`;
   document.getElementById('resultStats').textContent=record?'Uusi ennätys!':`Paras ${timeText(old)}`;
   document.getElementById('won').classList.remove('hidden');document.getElementById('controls').classList.add('hidden');sound('voitto')
 }
 
 function sound(name){if(!name)return;try{AiPelitAanet.play(name,{vol:name==='onnistui'?.3:name==='virhe'?.25:.55})}catch(e){}}
-function invalid(){shakeUntil=performance.now()+280;notice('Ei sallittu');sound('virhe')}
+function invalid(){shakeUntil=performance.now()+280;ask();notice('Ei sallittu');sound('virhe')}
 function notice(text){const n=document.getElementById('notice');n.textContent=text;n.classList.add('show');clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>n.classList.remove('show'),650)}
 function timeText(t){t=Math.max(0,Math.floor(Number(t)||0));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')}
-function updateUi(){
-  document.getElementById('clock').textContent=timeText(elapsed);document.getElementById('moveText').textContent=moveCount+' siirtoa';
+function moveText(n){return n===1?'1 siirto':n+' siirtoa'}
+function setText(id,text){const el=document.getElementById(id);if(el.textContent!==text)el.textContent=text}
+function updateHud(){
+  setText('clock',timeText(elapsed));setText('moveText',moveText(moveCount));
   document.getElementById('undo').disabled=!moves.length;document.getElementById('finish').classList.toggle('hidden',!canFinish());
 }
+function updateUi(){updateHud();ask()}
 function updateMenu(){
   const s=savedDeal(),wins=load('voitot',0),played=load('pelatut',0),bests=load('parhaat',{}),best=bests[menuDraw];
   document.getElementById('continue').classList.toggle('hidden',!s);document.getElementById('stats').textContent=`Voitot ${wins} / ${played}`+(best?` · paras ${timeText(best)}`:'');
@@ -156,7 +160,7 @@ function menuBoard(){if(window.AiPelitScores)AiPelitScores.board('veto'+menuDraw
 function chooseDraw(n){menuDraw=n;store('veto',n);updateMenu();menuBoard()}
 
 function fit(){
-  const b=c.getBoundingClientRect();DPR=Math.min(devicePixelRatio||1,2);W=b.width;H=b.height;wide=W>H;c.width=Math.round(W*DPR);c.height=Math.round(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);layoutState=layout();
+  const b=c.getBoundingClientRect();DPR=Math.min(devicePixelRatio||1,2);W=b.width;H=b.height;wide=W>H;c.width=Math.round(W*DPR);c.height=Math.round(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);layoutState=layout();ask();
 }
 function safeInsets(){const s=getComputedStyle(document.getElementById('safe'));return{top:parseFloat(s.paddingTop)||0,right:parseFloat(s.paddingRight)||0,bottom:parseFloat(s.paddingBottom)||0,left:parseFloat(s.paddingLeft)||0}}
 function layout(){
@@ -190,22 +194,27 @@ function drawBoard(now){
   for(let i=0;i<7;i++){if(!piles[i].length)drawSlot({x:L.pileX[i],y:L.tableY,w:L.cw,h:L.ch},'K');const g=pileGap(i);for(let j=0;j<piles[i].length;j++){const src={type:'pile',i,index:j};if(drag&&drag.src.type==='pile'&&drag.src.i===i&&j>=drag.src.index)continue;const off=now<shakeUntil&&j===piles[i].length-1?Math.sin(now*.08)*3:0;drawCard(piles[i][j],{x:L.pileX[i],y:L.tableY+j*g,w:L.cw,h:L.ch},off)}}
   if(drag){const cards=sourceCards(drag.src);for(let j=0;j<cards.length;j++)drawCard(cards[j],{x:drag.x-drag.dx,y:drag.y-drag.dy+j*Math.min(L.ch*.28,18),w:L.cw,h:L.ch})}
 }
-function step(dt){if(phase==='play'&&started&&!document.hidden){const before=elapsed;elapsed+=Math.max(0,Number(dt)||0);if(Math.floor(elapsed/5)!==Math.floor(before/5))saveDeal()}updateUi()}
+function step(dt){if(phase==='play'&&started&&!document.hidden){const before=elapsed;elapsed+=Math.max(0,Number(dt)||0);if(Math.floor(elapsed/5)!==Math.floor(before/5))writeDeal()}updateHud()}
 function fitCheck(){const b=c.getBoundingClientRect();if(Math.abs(b.width-W)>.5||Math.abs(b.height-H)>.5)fit()}
-function frame(now){fitCheck();const dt=(now-lastFrame)/1000;lastFrame=now;step(dt);if(phase==='play')drawBoard(now);requestAnimationFrame(frame)}
+// The table is drawn only when something on it changes: redrawing every card 60 times a second
+// with nothing moving kept more than a whole processor core busy and heated the phone (v1).
+function ask(){if(!drawAsked)drawAsked=requestAnimationFrame(frame)}
+function frame(now){drawAsked=0;if(phase!=='menu')drawBoard(now);if(now<shakeUntil)ask()}
+function tick(){const now=performance.now(),dt=(now-lastTick)/1000;lastTick=now;step(dt)}
 
-c.addEventListener('pointerdown',e=>{if(phase!=='play'||drag)return;e.preventDefault();const hit=hitAt(e.clientX,e.clientY);if(!hit)return;try{c.setPointerCapture(e.pointerId)}catch(err){}if(hit.type==='stock'){drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,stock:true};return}const r=cardRect(hit);drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,dx:e.clientX-r.x,dy:e.clientY-r.y,moved:false}}, {passive:false});
-c.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;drag.x=e.clientX;drag.y=e.clientY;if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8)drag.moved=true});
-function pointerUp(e){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;if(d.stock){drawStock();return}if(d.moved){const t=targetAt(e.clientX-(d.dx||0)+layoutState.cw/2,e.clientY-(d.dy||0)+layoutState.ch/2);if(!t||!move(d.src,t))invalid()}else bestMove(d.src)}
-c.addEventListener('pointerup',pointerUp);c.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.id)drag=null});
+c.addEventListener('pointerdown',e=>{if(phase!=='play'||drag)return;e.preventDefault();const hit=hitAt(e.clientX,e.clientY);if(!hit)return;ask();try{c.setPointerCapture(e.pointerId)}catch(err){}if(hit.type==='stock'){drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,stock:true};return}const r=cardRect(hit);drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,dx:e.clientX-r.x,dy:e.clientY-r.y,moved:false}}, {passive:false});
+c.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;drag.x=e.clientX;drag.y=e.clientY;ask();if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8)drag.moved=true});
+function pointerUp(e){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;ask();if(d.stock){drawStock();return}if(d.moved){const t=targetAt(e.clientX-(d.dx||0)+layoutState.cw/2,e.clientY-(d.dy||0)+layoutState.ch/2);if(!t||!move(d.src,t))invalid()}else bestMove(d.src)}
+c.addEventListener('pointerup',pointerUp);c.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.id){drag=null;ask()}});
 
 document.getElementById('start').onclick=askNew;document.getElementById('continue').onclick=continueDeal;
 document.getElementById('draw1').onclick=()=>chooseDraw(1);document.getElementById('draw3').onclick=()=>chooseDraw(3);
 document.getElementById('undo').onclick=undo;document.getElementById('finish').onclick=finishAll;document.getElementById('newDeal').onclick=askNew;document.getElementById('menuBtn').onclick=()=>{saveDeal();showMenu()};
 document.getElementById('again').onclick=()=>deal(Date.now(),menuDraw);document.getElementById('winMenu').onclick=showMenu;
 document.getElementById('scores').onclick=()=>{if(window.AiPelitScores){menuBoard();AiPelitScores.open()}};
-addEventListener('resize',fit);addEventListener('orientationchange',fit);addEventListener('fullscreenchange',fit);document.addEventListener('visibilitychange',()=>{if(document.hidden)saveDeal();lastFrame=performance.now()});
-if(window.AiPelitAanet)AiPelitAanet.load(['naksu','valinta','onnistui','voitto','virhe']);fit();updateMenu();menuBoard();requestAnimationFrame(frame);
+addEventListener('resize',fit);addEventListener('orientationchange',fit);addEventListener('fullscreenchange',fit);document.addEventListener('visibilitychange',()=>{if(document.hidden)writeDeal();else ask();lastTick=performance.now()});
+addEventListener('pageshow',ask);c.addEventListener('contextrestored',ask);if(window.ResizeObserver)new ResizeObserver(fitCheck).observe(c);
+if(window.AiPelitAanet)AiPelitAanet.load(['naksu','valinta','onnistui','voitto','virhe']);fit();updateMenu();menuBoard();setInterval(tick,500);
 </script>
 <script src="../../../back.js"></script>
 </body>

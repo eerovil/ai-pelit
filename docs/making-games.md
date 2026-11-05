@@ -182,6 +182,7 @@ here in the same pull request (AGENTS.md says so), naming the version that taugh
   version folder from its cache, so Eero saw no edit and could not clear it on the phone. Serve a
   prototype with `scripts/serve_prototype.py` (AGENTS.md, "Running it locally").
 - **The iPhone's silent switch mutes Web Audio** (#381, reported by Eero; the same as stemmanauhat-cf#100): Safari treats a page's Web Audio as ringer sound. `back.js` sets `navigator.audioSession.type = 'playback'` (iOS 17 and later) for every game, so a game needs nothing; one that records sets `'play-and-record'` first, as `rooms.js` does. The phone also stops the sound on a lock, a call or another app, in a state (`interrupted`) a check for `'suspended'` misses; `back.js` resumes it on the next tap and when the page is back (Piano v10).
+- **A still game must not draw every frame.** Pasianssi v1 (#382) heated the phone: redrawing the whole table 60 times a second with nothing moving took 45–48 % of the test phone's processor, against 29 % on its home screen, and no test or screenshot showed it. A game that waits for the player draws only when something changes (`ask()` in Pasianssi v2), and watches the canvas's size with a `ResizeObserver` instead of a check every frame.
 - **A tap lands where the finger is** (Hiihto v5, see "Controls that feel right"): draw for the
   canvas's own box, not `innerWidth × innerHeight`.
 

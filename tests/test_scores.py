@@ -596,7 +596,7 @@ def test_pasianssi_chip_on_a_fresh_menu_opens_the_chosen_draw_modes_list(site, c
         ("pasianssi", "veto3", b): {"score": 300, "version": 1},
     }
     page = context.new_page()
-    page.goto(site.url + "games/pasianssi/v1/")
+    page.goto(site.url + "games/pasianssi/v2/")
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("text=Aino")
     assert page.locator("text=Ei verkkoyhteyttä").count() == 0

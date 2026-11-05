@@ -1,10 +1,10 @@
-"""Pasianssi v1: Klondike rules, phone controls, saves and responsive layout (#382)."""
+"""Pasianssi v2: Klondike rules, phone controls, saves and responsive layout (#382)."""
 
 import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pasianssi/v1/"
+URL = "games/pasianssi/v2/"
 
 
 def open_game(site, context):
@@ -379,3 +379,190 @@ def test_shared_score_config_has_two_low_time_lists(site, context):
     assert page.evaluate("AiPelitScores.games.pasianssi.lists") == [["veto1", "1 kortti"], ["veto3", "3 korttia"]]
     assert page.evaluate("AiPelitScores.games.pasianssi.score(91)") == "1:31"
 
+
+
+COUNT_DRAWS = """() => {
+  window.draws = 0; const real = drawBoard;
+  drawBoard = now => { window.draws++; real(now); };
+}"""
+
+
+def canvas_pixels(page):
+    return page.evaluate("c.toDataURL()")
+
+
+def settle(page):
+    page.wait_for_function(
+        "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))"
+    )
+
+
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844), (740, 360)])
+def test_a_table_nobody_touches_draws_nothing_while_its_clock_runs(site, context, width, height):
+    page = open_game(site, context)
+    page.set_viewport_size({"width": width, "height": height})
+    page.click("#start")
+    page.evaluate("drawStock()")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    before = page.evaluate("elapsed")
+    page.wait_for_timeout(1600)
+    assert page.evaluate("draws") == 0
+    assert page.evaluate("elapsed") > before + 1
+    assert page.inner_text("#clock") == page.evaluate("timeText(elapsed)")
+    assert page.errors == []
+
+
+def test_every_change_on_the_table_reaches_the_screen(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+
+    # A tap on the stock, then the undo button.
+    before = canvas_pixels(page)
+    box = page.evaluate("({x: layoutState.stock.x + 10, y: layoutState.stock.y + 10})")
+    page.touchscreen.tap(box["x"], box["y"])
+    page.wait_for_function("waste.length === 1")
+    settle(page)
+    turned = canvas_pixels(page)
+    assert turned != before
+    page.click("#undo")
+    settle(page)
+    assert canvas_pixels(page) == before
+
+    # A refused move shakes the card and comes to rest again.
+    page.evaluate("draws = 0; invalid()")
+    page.wait_for_timeout(500)
+    shaken = page.evaluate("draws")
+    assert shaken > 2
+    settle(page)
+    assert canvas_pixels(page) == before
+    page.wait_for_timeout(300)
+    assert page.evaluate("draws") == shaken
+
+    # A drag follows the finger each time it moves.
+    page.evaluate("""() => {
+      draws = 0;
+      const r = cardRect({type: 'pile', i: 0, index: 0}), at = {pointerId: 5, bubbles: true};
+      const send = (type, x, y) => c.dispatchEvent(new PointerEvent(type, {...at, clientX: x, clientY: y}));
+      window.dragTo = (x, y) => send('pointermove', x, y); window.dropAt = (x, y) => send('pointerup', x, y);
+      window.dragStart = {x: r.x + 10, y: r.y + 10}; send('pointerdown', dragStart.x, dragStart.y);
+    }""")
+    settle(page)
+    held = page.evaluate("draws")
+    assert held == 1
+    page.evaluate("dragTo(dragStart.x, dragStart.y + 300)")
+    settle(page)
+    dragged = canvas_pixels(page)
+    assert page.evaluate("draws") == 2
+    assert dragged != before
+    # Back onto its own pile: a refused drop, so the card returns.
+    page.evaluate("dropAt(dragStart.x, dragStart.y + 300)")
+    page.wait_for_timeout(500)
+    assert canvas_pixels(page) == before
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("event", ["document:visibilitychange", "window:pageshow", "c:contextrestored"])
+def test_a_table_wiped_while_away_is_drawn_again_on_return(site, context, event):
+    target, name = event.split(":")
+    page = open_game(site, context)
+    page.click("#start")
+    settle(page)
+    drawn = canvas_pixels(page)
+    page.evaluate(f"ctx.clearRect(0, 0, W, H); {target}.dispatchEvent(new Event('{name}'))")
+    settle(page)
+    assert canvas_pixels(page) == drawn
+    assert page.errors == []
+
+
+def test_a_new_canvas_size_redraws_the_table(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("c.style.height = '500px'")
+    page.wait_for_function("Math.round(H) === 500 && draws > 0")
+    assert page.errors == []
+
+
+def test_the_winning_move_is_drawn_behind_the_end_screen(site, context):
+    page = open_game(site, context)
+    page.evaluate("""() => {
+      deal(3, 1); stock = []; waste = []; piles = Array.from({length: 7}, () => []);
+      found = SUITS.map(s => Array.from({length: 13}, (_, i) => ({s, r: i + 1, up: true})));
+      piles[0] = [found[0].pop()]; started = true; counted = true; saveDeal();
+    }""")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("bestMove({type: 'pile', i: 0, index: 0})")
+    settle(page)
+    assert page.evaluate("[phase, draws]") == ["won", 1]
+    assert page.errors == []
+
+
+def test_one_move_reads_in_the_singular(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    assert page.inner_text("#moveText") == "0 siirtoa"
+    page.evaluate("drawStock()")
+    assert page.inner_text("#moveText") == "1 siirto"
+    page.evaluate("drawStock()")
+    assert page.inner_text("#moveText") == "2 siirtoa"
+    assert page.errors == []
+
+
+def test_the_clock_saves_the_deal_every_five_seconds_of_play(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    page.evaluate("drawStock(); elapsed = 9.9; saveDeal(); step(0.2)")
+    assert page.evaluate("JSON.parse(localStorage.getItem(SAVE)).elapsed") >= 10
+
+
+def test_a_deal_continued_after_a_reload_is_drawn_and_then_rests(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    page.evaluate("deal(2, 1); drawStock()")
+    settle(page)
+    drawn = canvas_pixels(page)
+    page.reload()
+    page.wait_for_function("layoutState && layoutState.cw > 0")
+    page.evaluate(COUNT_DRAWS)
+    page.click("#continue")
+    page.wait_for_timeout(200)
+    assert canvas_pixels(page) == drawn
+    # Coming up may take a second draw when the layout settles, but then it rests.
+    resting = page.evaluate("draws")
+    assert 1 <= resting <= 2
+    page.wait_for_timeout(700)
+    assert page.evaluate("draws") == resting
+
+
+def test_many_changes_in_one_frame_ask_for_one_draw(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("drawStock(); drawStock(); undo(); fit()")
+    settle(page)
+    assert page.evaluate("draws") == 1
+    assert page.errors == []
+
+
+def test_time_away_from_the_page_does_not_reach_the_clock(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    result = page.evaluate("""() => {
+      drawStock(); elapsed = 30; lastTick = performance.now() - 60000;
+      Object.defineProperty(document, 'hidden', {configurable: true, get: () => true});
+      tick(); const away = elapsed;
+      lastTick = performance.now() - 60000;
+      Object.defineProperty(document, 'hidden', {configurable: true, get: () => false});
+      document.dispatchEvent(new Event('visibilitychange'));
+      tick();
+      return {away, back: elapsed};
+    }""")
+    assert result["away"] == 30
+    assert result["back"] < 31
+    assert page.errors == []

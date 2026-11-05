@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: klassinen pasianssi yhden tai kolmen kortin nostolla, napautus- ja raahaussiirrot, kumoa, automaattinen lopetus ja tallennus.",
       "request": "Pasianssi",
       "issue": "eerovil/ai-pelit#382"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-05",
+      "note": "Pöytä piirretään vain kun jokin muuttuu, joten puhelin ei enää kuumene turhaan, ja yksi siirto näkyy oikein muodossa 1 siirto.",
+      "request": "Tuntuu kuumentavan puhelinta. Eihän siinä ole mitään performance-ongelmia?",
+      "issue": "eerovil/ai-pelit#382"
     }
   ]
 }
