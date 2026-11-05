@@ -21,6 +21,29 @@ def test_new_boards_have_no_ready_match_and_a_legal_move(site, context):
     assert page.errors == []
 
 
+def test_greedy_bot_can_clear_every_level(site, context):
+    page = open_game(site, context)
+    wins = page.evaluate("""() => Array.from({length: 40}, (_, level) => {
+      let wins = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        const s = Marjakori.newLevel(level + 1, seed);
+        while (s.phase === 'play') {
+          let best = null;
+          Marjakori.legalMoves(s).forEach(m => {
+            const next = Marjakori.clone(s); Marjakori.trySwap(next, m[0], m[1]);
+            if (!best || next.score > best.score) best = { m, score: next.score };
+          });
+          if (!best) break;
+          Marjakori.trySwap(s, best.m[0], best.m[1]);
+        }
+        if (s.phase === 'win') wins++;
+      }
+      return wins;
+    })""")
+    assert min(wins) >= 12
+    assert page.errors == []
+
+
 def test_a_bad_swap_costs_nothing_and_a_legal_one_resolves(site, context):
     page = open_game(site, context)
     bad = page.evaluate("""() => {
