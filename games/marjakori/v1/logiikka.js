@@ -4,8 +4,8 @@
 // its saved seed and lets the tests play thousands of swaps without waiting for the screen.
 var Marjakori = (function () {
   var SIZE = 7;
-  function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
-  function clone(v) { var copy = JSON.parse(JSON.stringify(v)); if (v.random) copy.random = v.random; return copy; }
+  function rng(seed) { var s = seed >>> 0; function next() { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; } next.state = function () { return s; }; next.set = function (value) { s = value >>> 0; }; return next; }
+  function clone(v) { var copy = JSON.parse(JSON.stringify(v)); if (v.random) copy.random = rng(v.random.state()); return copy; }
   function at(i) { return { x: i % SIZE, y: Math.floor(i / SIZE) }; }
   function adjacent(a, b) { var p = at(a), q = at(b); return Math.abs(p.x - q.x) + Math.abs(p.y - q.y) === 1; }
   function levelSpec(n) {
@@ -59,8 +59,8 @@ var Marjakori = (function () {
   function newLevel(level, seed) { return fresh(level, seed == null ? (Date.now() >>> 0) : seed); }
   function specialFor(board, hit, place) {
     var rs = runs(board), long = rs.some(function (r) { return r.cells.length >= 5; });
-    var crosses = 0; rs.forEach(function (r) { if (r.cells.indexOf(place) >= 0) crosses++; });
-    if (long || crosses >= 2) return 'kimallus';
+    var counts = {}; rs.forEach(function (r) { r.cells.forEach(function (i) { counts[i] = (counts[i] || 0) + 1; }); });
+    if (long || Object.keys(counts).some(function (i) { return counts[i] >= 2; })) return 'kimallus';
     return rs.some(function (r) { return r.cells.length === 4 && r.cells.indexOf(place) >= 0; }) ? 'puuska' : '';
   }
   function explodeSpecial(board, clear) {
@@ -98,7 +98,7 @@ var Marjakori = (function () {
     swap(s.board, a, b);
     if (!special && !matched(s.board).size) { swap(s.board, a, b); return { ok: false }; }
     s.moves--; if (special) { var clear = new Set([a, b]); explodeSpecial(s.board, clear); clear.forEach(function (i) { var c = s.board[i]; if (c.kind === s.target) s.left = Math.max(0, s.left - 1); if (c.moss) s.mossLeft = Math.max(0, s.mossLeft - 1); s.board[i] = null; }); fall(s); s.score += clear.size * 30; }
-    else resolve(s, b);
+    else { var hit = matched(s.board), placed = hit.has(b) ? b : a; resolve(s, placed); }
     if (!hasMove(s.board)) shuffle(s);
     if (s.left === 0 && s.mossLeft === 0) { s.score += s.moves * 50; s.phase = 'win'; }
     else if (s.moves <= 0) s.phase = 'lose';
@@ -106,5 +106,5 @@ var Marjakori = (function () {
   }
   function shuffle(s) { var r = s.random, attempts = 0; do { s.board.sort(function () { return r() - .5; }); attempts++; } while ((matched(s.board).size || !hasMove(s.board)) && attempts < 80); return s; }
   function legalMoves(s) { var out = []; for (var i = 0; i < s.board.length; i++) for (var d of [1, SIZE]) { var b = i + d, p = at(i); if (b >= s.board.length || (d === 1 && p.x === SIZE - 1)) continue; var t = clone(s); if (trySwap(t, i, b).ok) out.push([i, b]); } return out; }
-  return { SIZE: SIZE, newLevel: newLevel, levelSpec: levelSpec, runs: runs, matched: matched, hasMove: hasMove, trySwap: trySwap, shuffle: shuffle, legalMoves: legalMoves, clone: clone };
+  return { SIZE: SIZE, newLevel: newLevel, levelSpec: levelSpec, runs: runs, matched: matched, hasMove: hasMove, specialFor: specialFor, trySwap: trySwap, shuffle: shuffle, legalMoves: legalMoves, clone: clone };
 }());

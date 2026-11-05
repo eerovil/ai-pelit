@@ -1,6 +1,6 @@
 import shutil
 
-from conftest import ROOT
+from conftest import ROOT, turn
 
 URL = "games/marjakori/v1/"
 
@@ -41,6 +41,27 @@ def test_a_bad_swap_costs_nothing_and_a_legal_one_resolves(site, context):
     assert page.errors == []
 
 
+def test_four_five_crosses_and_two_specials_do_their_own_clear(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      const base = () => {
+        const s = Marjakori.newLevel(1, 4);
+        s.board.forEach((c, i) => Object.assign(c, { kind: (i % 7 + 2 * Math.floor(i / 7)) % 7, moss: false, special: '' }));
+        return s;
+      };
+      const four = base(); [0, 1, 2, 3, 4].forEach((i, k) => four.board[i].kind = [0, 0, 0, 1, 0][k]);
+      Marjakori.trySwap(four, 3, 4);
+      const five = base(); [0, 1, 2, 3, 4, 5].forEach((i, k) => five.board[i].kind = [0, 0, 0, 0, 1, 0][k]);
+      Marjakori.trySwap(five, 4, 5);
+      const cross = base(); [2, 8, 9, 10, 16].forEach(i => cross.board[i].kind = 0);
+      const both = base(); both.board[0].special = 'puuska'; both.board[1].special = 'kimallus'; const moves = both.moves;
+      const pair = Marjakori.trySwap(both, 0, 1);
+      return [four.board[3].special, five.board[4].special, Marjakori.specialFor(cross.board, new Set(), 9), pair.ok, both.moves === moves - 1, both.score > 0];
+    }""")
+    assert result == ["puuska", "kimallus", "kimallus", True, True, True]
+    assert page.errors == []
+
+
 def test_real_swipe_plays_and_keeps_a_round_on_reload(site, context):
     page = open_game(site, context)
     page.click("#go")
@@ -52,6 +73,20 @@ def test_real_swipe_plays_and_keeps_a_round_on_reload(site, context):
     a, b = centre(pair[0]), centre(pair[1])
     page.mouse.move(a["x"], a["y"]); page.mouse.down(); page.mouse.move(b["x"], b["y"], steps=4); page.mouse.up()
     page.wait_for_function("state.moves === 19")
+    expected = page.evaluate("""() => { const pair = Marjakori.legalMoves(state)[0], next = Marjakori.clone(state); Marjakori.trySwap(next, pair[0], pair[1]); return [pair, JSON.stringify(next.board), next.moves]; }""")
     page.reload()
     assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:marjakori:kierros')).moves") == 19
+    assert page.evaluate("""(pair) => { const r = Marjakori.trySwap(state, pair[0], pair[1]); return [r.ok, JSON.stringify(state.board), state.moves]; }""", expected[0]) == [True, expected[1], expected[2]]
+    assert page.errors == []
+
+
+def test_active_round_fits_390px_and_landscape(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("window.boardBox && state && state.phase === 'play'")
+    turn(page, {"width": 390, "height": 844})
+    page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
+    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 20, True, True, True, True]
     assert page.errors == []

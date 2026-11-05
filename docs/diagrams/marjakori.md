@@ -1,6 +1,6 @@
 # Marjakori: yksi taso, ensimmäisestä pyyhkäisystä tulokseen
 
-Miten uusi peli Marjakori pelataan. Pelaaja pyyhkäisee metsän kuvion viereisen kanssa paikkaa vaihtaen, ja kolme tai useampi samaa rivissä tai sarakkeessa poistuu. Taso läpäistään keräämällä tason kuviot tai puhdistamalla sammal rajatuilla siirroilla. Tämä on suunnitelma: peliä ei ole vielä rakennettu.
+Marjakori is a swipe match-3 game. The player swaps a forest shape with its neighbour, and three or more in a row or column disappear. A level is passed by collecting its target shapes or clearing moss within a limited number of moves.
 
 ```mermaid
 flowchart TD
