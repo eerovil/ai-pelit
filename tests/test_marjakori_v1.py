@@ -122,11 +122,14 @@ def test_a_cascade_match_can_make_a_special(site, context):
     result = page.evaluate("""() => {
       const s = Marjakori.newLevel(1, 14);
       s.board.forEach((c, i) => { c.kind = (i % 7 + 2 * Math.floor(i / 7)) % 6; c.special = ''; });
-      [0, 1, 2, 3].forEach(i => s.board[i].kind = 0);
-      const made = Marjakori.specialFor(s.board, null);
-      return [made.t, made.place, made.vertical];
+      [0, 7, 14].forEach(i => s.board[i].kind = 5);
+      [21, 28].forEach(i => s.board[i].kind = 0);
+      let fills = [0, 0, 0, .21, .41, .61, .81], fill = 0;
+      s.random = () => fills[fill++] ?? .37;
+      Marjakori.resolve(s, 0);
+      return s.board.filter(c => c.special).map(c => c.special);
     }""")
-    assert result == ["puuska", 0, False]
+    assert result == ["kimallus"]
     assert page.errors == []
 
 
@@ -181,6 +184,20 @@ def test_portrait_lists_every_goal_and_long_level_picker_scrolls(site, context):
     turn(page, {"width": 740, "height": 360})
     page.evaluate("levels.scrollTop = levels.scrollHeight")
     assert page.evaluate("() => { const last = levels.lastElementChild.getBoundingClientRect(), box = levels.getBoundingClientRect(); return [last.bottom <= box.bottom + 1, last.top >= box.top - 1]; }") == [True, True]
+    assert page.errors == []
+
+
+def test_idle_hint_finds_a_move_once_until_the_board_changes(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("state && state.phase === 'play'")
+    page.evaluate("""() => {
+      window.hintCalls = 0; const legal = Marjakori.legalMoves;
+      Marjakori.legalMoves = function () { window.hintCalls++; return legal.apply(this, arguments); };
+      hintMove = null; lastAction = 0;
+    }""")
+    page.wait_for_timeout(150)
+    assert page.evaluate("window.hintCalls") == 1
     assert page.errors == []
 
 
