@@ -275,8 +275,11 @@ var Marjakori = (function () {
   function wavePoints(rs, wave) {
     var groups = [];
     rs.forEach(function (r) {
-      var group = groups.find(function (g) { return r.cells.some(function (i) { return g.has(i); }); });
-      if (!group) { group = new Set(); groups.push(group); }
+      var hits = groups.filter(function (g) { return r.cells.some(function (i) { return g.has(i); }); });
+      var group = new Set();
+      hits.forEach(function (g) { g.forEach(function (i) { group.add(i); }); });
+      groups = groups.filter(function (g) { return hits.indexOf(g) < 0; });
+      groups.push(group);
       r.cells.forEach(function (i) { group.add(i); });
     });
     return groups.reduce(function (n, group) {

@@ -248,6 +248,7 @@ def test_points_cap_at_five_times_and_a_stuck_board_shuffles(site, context):
         { cells: [0, 1, 2] }, { cells: [7, 14, 21, 28] }, { cells: [3, 10, 17, 24, 31] }
       ], wave));
       const cross = Marjakori.wavePoints([{ cells: [0, 1, 2] }, { cells: [1, 8, 15] }], 0);
+      const bridge = Marjakori.wavePoints([{ cells: [0, 1, 2] }, { cells: [14, 15, 16] }, { cells: [0, 7, 14] }], 0);
       let stuck = null, seed = 1, s = Marjakori.newLevel(1, 1);
       while (!stuck && seed < 50000) {
         let random = seed++ >>> 0;
@@ -255,9 +256,9 @@ def test_points_cap_at_five_times_and_a_stuck_board_shuffles(site, context):
         if (!Marjakori.matched(s.board).size && !Marjakori.hasMove(s.board)) stuck = s;
       }
       const shuffled = stuck ? Marjakori.shuffle(stuck) : false;
-      return [scores, cross, !!stuck, shuffled, stuck && !Marjakori.matched(stuck.board).size, stuck && Marjakori.hasMove(stuck.board)];
+      return [scores, cross, bridge, !!stuck, shuffled, stuck && !Marjakori.matched(stuck.board).size, stuck && Marjakori.hasMove(stuck.board)];
     }""")
-    assert result == [[190, 380, 950, 950], 100, True, True, True, True]
+    assert result == [[190, 380, 950, 950], 100, 100, True, True, True, True]
     assert page.errors == []
 
 
