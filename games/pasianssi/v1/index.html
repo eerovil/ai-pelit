@@ -192,10 +192,10 @@ function drawBoard(now){
 function step(dt){if(phase==='play'&&started&&!document.hidden){const before=elapsed;elapsed+=Math.max(0,Number(dt)||0);if(Math.floor(elapsed/5)!==Math.floor(before/5))saveDeal()}updateUi()}
 function frame(now){const dt=(now-lastFrame)/1000;lastFrame=now;step(dt);if(phase==='play')drawBoard(now);requestAnimationFrame(frame)}
 
-c.addEventListener('pointerdown',e=>{if(phase!=='play')return;e.preventDefault();const hit=hitAt(e.clientX,e.clientY);if(!hit)return;try{c.setPointerCapture(e.pointerId)}catch(err){}if(hit.type==='stock'){drag={src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,stock:true};return}const r=cardRect(hit);drag={src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,dx:e.clientX-r.x,dy:e.clientY-r.y,moved:false}}, {passive:false});
-c.addEventListener('pointermove',e=>{if(!drag)return;drag.x=e.clientX;drag.y=e.clientY;if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8)drag.moved=true});
-function pointerUp(e){if(!drag)return;const d=drag;drag=null;if(d.stock){drawStock();return}if(d.moved){const t=targetAt(e.clientX-(d.dx||0)+layoutState.cw/2,e.clientY-(d.dy||0)+layoutState.ch/2);if(!t||!move(d.src,t))invalid()}else bestMove(d.src)}
-c.addEventListener('pointerup',pointerUp);c.addEventListener('pointercancel',()=>{drag=null});
+c.addEventListener('pointerdown',e=>{if(phase!=='play'||drag)return;e.preventDefault();const hit=hitAt(e.clientX,e.clientY);if(!hit)return;try{c.setPointerCapture(e.pointerId)}catch(err){}if(hit.type==='stock'){drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,stock:true};return}const r=cardRect(hit);drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,dx:e.clientX-r.x,dy:e.clientY-r.y,moved:false}}, {passive:false});
+c.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;drag.x=e.clientX;drag.y=e.clientY;if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8)drag.moved=true});
+function pointerUp(e){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;if(d.stock){drawStock();return}if(d.moved){const t=targetAt(e.clientX-(d.dx||0)+layoutState.cw/2,e.clientY-(d.dy||0)+layoutState.ch/2);if(!t||!move(d.src,t))invalid()}else bestMove(d.src)}
+c.addEventListener('pointerup',pointerUp);c.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.id)drag=null});
 
 document.getElementById('start').onclick=()=>deal(Date.now(),menuDraw);document.getElementById('continue').onclick=continueDeal;
 document.getElementById('draw1').onclick=()=>chooseDraw(1);document.getElementById('draw3').onclick=()=>chooseDraw(3);

@@ -108,6 +108,22 @@ def test_a_real_canvas_drag_moves_a_run_to_the_card_under_the_finger(site, conte
     assert page.evaluate("moveCount") == 1
 
 
+def test_a_second_finger_and_its_early_release_do_not_replace_the_first_action(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      deal(91,1); const r={...layoutState.stock,w:layoutState.cw,h:layoutState.ch};
+      const send=(type,id,x,y)=>c.dispatchEvent(new PointerEvent(type,{pointerId:id,clientX:x,clientY:y,bubbles:true}));
+      send('pointerdown',1,r.x+r.w/2,r.y+r.h/2);
+      send('pointerdown',2,layoutState.pileX[0]+5,layoutState.tableY+5);
+      send('pointerup',2,layoutState.pileX[0]+5,layoutState.tableY+5);
+      const before={moves:moveCount,waste:waste.length,active:drag&&drag.id};
+      send('pointerup',1,r.x+r.w/2,r.y+r.h/2);
+      return {before,after:{moves:moveCount,waste:waste.length,active:drag}};
+    }""")
+    assert result["before"] == {"moves": 0, "waste": 0, "active": 1}
+    assert result["after"] == {"moves": 1, "waste": 1, "active": None}
+
+
 def test_the_game_still_plays_if_the_sound_library_was_not_cached(site, context):
     context.route("**/lib/aanet-5/aanet.js", lambda route: route.abort())
     page = open_game(site, context)
