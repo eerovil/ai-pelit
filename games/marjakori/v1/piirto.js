@@ -5,7 +5,8 @@ var MarjakoriPiirto = (function () {
   var names = ['mustikka', 'lakka', 'mansikka', 'sieni', 'lehti', 'käpy'];
   function shape(ctx, cx, cy, r, kind) {
     ctx.save(); ctx.translate(cx, cy); ctx.fillStyle = colors[kind]; ctx.strokeStyle = '#25342a'; ctx.lineWidth = Math.max(1, r / 12);
-    if (kind === 3) { ctx.beginPath(); ctx.arc(0, -r * .15, r * .6, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#f4ecd7'; ctx.fillRect(-r * .18, -r * .15, r * .36, r * .72); }
+    if (kind === 1) { ctx.beginPath(); for(var l=0;l<7;l++){var a=l*Math.PI*2/7-Math.PI/2;ctx.arc(Math.cos(a)*r*.34,Math.sin(a)*r*.34,r*.34,a-Math.PI*.45,a+Math.PI*.45);}ctx.fill(); }
+    else if (kind === 3) { ctx.beginPath(); ctx.arc(0, -r * .15, r * .6, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#f4ecd7'; ctx.fillRect(-r * .18, -r * .15, r * .36, r * .72); }
     else if (kind === 4) { ctx.beginPath(); ctx.moveTo(0, -r*.7); ctx.quadraticCurveTo(r*.75, -r*.15, 0, r*.75); ctx.quadraticCurveTo(-r*.75, -r*.15, 0, -r*.7); ctx.fill(); ctx.stroke(); }
     else if (kind === 5) { ctx.beginPath(); for (var i=0;i<10;i++) { var a=i*Math.PI/5-Math.PI/2, q=i%2?r*.48:r*.75; ctx.lineTo(Math.cos(a)*q,Math.sin(a)*q); } ctx.closePath(); ctx.fill(); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(0, 0, r * .62, 0, Math.PI * 2); ctx.fill(); if (kind === 2) { ctx.fillStyle='#56a84b'; ctx.beginPath(); ctx.ellipse(0,-r*.62,r*.3,r*.18,0,0,Math.PI*2); ctx.fill(); } }

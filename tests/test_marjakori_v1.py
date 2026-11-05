@@ -44,6 +44,24 @@ def test_greedy_bot_can_clear_every_level(site, context):
     assert page.errors == []
 
 
+def test_any_legal_move_bot_does_not_breeze_past_later_levels(site, context):
+    page = open_game(site, context)
+    wins = page.evaluate("""() => Array.from({length: 31}, (_, offset) => {
+      const level = offset + 10; let wins = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        const s = Marjakori.newLevel(level, seed); let turn = 0;
+        while (s.phase === 'play') {
+          const moves = Marjakori.legalMoves(s); if (!moves.length) break;
+          const move = moves[(seed + turn++) % moves.length]; Marjakori.trySwap(s, move[0], move[1]);
+        }
+        if (s.phase === 'win') wins++;
+      }
+      return wins;
+    })""")
+    assert max(wins) <= 10
+    assert page.errors == []
+
+
 def test_a_bad_swap_costs_nothing_and_a_legal_one_resolves(site, context):
     page = open_game(site, context)
     bad = page.evaluate("""() => {
@@ -99,6 +117,19 @@ def test_specials_target_the_neighbour_kind_and_their_run_direction(site, contex
     assert page.errors == []
 
 
+def test_a_cascade_match_can_make_a_special(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      const s = Marjakori.newLevel(1, 14);
+      s.board.forEach((c, i) => { c.kind = (i % 7 + 2 * Math.floor(i / 7)) % 6; c.special = ''; });
+      [0, 1, 2, 3].forEach(i => s.board[i].kind = 0);
+      const made = Marjakori.specialFor(s.board, null);
+      return [made.t, made.place, made.vertical];
+    }""")
+    assert result == ["puuska", 0, False]
+    assert page.errors == []
+
+
 def test_real_swipe_plays_and_keeps_a_round_on_reload(site, context):
     page = open_game(site, context)
     page.click("#go")
@@ -126,7 +157,30 @@ def test_active_round_fits_390px_and_landscape(site, context):
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
     turn(page, {"width": 740, "height": 360})
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
-    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 28, True, True, True, True]
+    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 20, True, True, True, True]
+    assert page.errors == []
+
+
+def test_portrait_lists_every_goal_and_long_level_picker_scrolls(site, context):
+    page = open_game(site, context)
+    page.evaluate("""() => {
+      window.marjakoriText = []; const fill = ctx.fillText.bind(ctx);
+      ctx.fillText = function (text) { window.marjakoriText.push(String(text)); return fill.apply(ctx, arguments); };
+      start(8);
+    }""")
+    turn(page, {"width": 360, "height": 740})
+    page.wait_for_function("window.marjakoriText.some(t => t.startsWith('Kerää ')) && state.goals.length === 3 && state.mossLeft > 0")
+    shown = page.evaluate("[state.goals.length, state.mossLeft, window.marjakoriText.filter(t => t.startsWith('Kerää ')).slice(-3).length, window.marjakoriText.some(t => t.startsWith('Puhdista sammal:')), boardBox.y, boardBox.y + boardBox.size * 7 <= innerHeight]")
+    assert shown[:4] == [3, 1, 3, True]
+    assert shown[4] >= 132 and shown[5]
+    page.evaluate("localStorage.setItem('ai-pelit:marjakori:taso', '40')")
+    page.reload()
+    page.wait_for_function("levels.children.length === 40")
+    page.evaluate("levels.scrollTop = levels.scrollHeight")
+    assert page.evaluate("() => { const last = levels.lastElementChild.getBoundingClientRect(), box = levels.getBoundingClientRect(); return [levels.scrollHeight > levels.clientHeight, last.bottom <= box.bottom + 1, last.top >= box.top - 1]; }") == [True, True, True]
+    turn(page, {"width": 740, "height": 360})
+    page.evaluate("levels.scrollTop = levels.scrollHeight")
+    assert page.evaluate("() => { const last = levels.lastElementChild.getBoundingClientRect(), box = levels.getBoundingClientRect(); return [last.bottom <= box.bottom + 1, last.top >= box.top - 1]; }") == [True, True]
     assert page.errors == []
 
 
