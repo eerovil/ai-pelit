@@ -6,7 +6,7 @@ Marjakori is a swipe match-3 game. The player swaps a forest shape with its neig
 flowchart TD
   A[Valikko: Jatka tai valitse taso] --> B[Taso alkaa: 7 × 7 lauta, ei valmiita rivejä, vähintään yksi siirto]
   B --> C[Pyyhkäise kuvio viereisen paikalle, tai napauta kahta vierekkäistä]
-  C --> D{Onko toinen erikoiskuvio?}
+  C --> D{Kimallus tai kaksi erikoiskuviota?}
   D -- Kyllä --> H[Erikoiskuvio laukeaa]
   D -- Ei --> E{Syntyikö 3 tai enemmän samaa?}
   E -- Ei --> F[Kuviot palaavat, siirto ei kulu]

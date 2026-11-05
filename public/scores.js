@@ -199,7 +199,7 @@
     });
   }
 
-  function submit(score) {
+  function submit(score, deferPrompt) {
     if (!GAME || typeof score !== 'number' || !isFinite(score)) return;
     var queue = load(QUEUE, {}), key = GAME + '|' + board, old = queue[key];
     // Whether the round brings anything new (a better score, or a higher level) is decided when it
@@ -210,11 +210,13 @@
     }
     if (!load(K + 'nimi', '') && !load(K + 'kysytty', false)) {
       // The first score on this phone asks for a nickname, once.
+      if (deferPrompt) return true;
       save(K + 'kysytty', true);
       open();
-      return;
+      return true;
     }
     flush();
+    return false;
   }
 
   // ---- The list ----
