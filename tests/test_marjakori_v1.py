@@ -97,9 +97,11 @@ def test_four_five_crosses_and_two_specials_do_their_own_clear(site, context):
       const cross = base(); [2, 8, 9, 10, 16].forEach(i => cross.board[i].kind = 0);
       const both = base(); both.board[0].special = 'puuska'; both.board[1].special = 'kimallus'; const moves = both.moves;
       const pair = Marjakori.trySwap(both, 0, 1);
-      return [four.board[3].special, five.board[4].special, Marjakori.runs(cross.board).length, pair.ok, both.moves === moves - 1, both.score > 0];
+      const alone = base(); alone.board[0].special = 'puuska'; const before = JSON.stringify(alone.board), left = alone.moves, rejected = Marjakori.trySwap(alone, 0, 1);
+      const mixed = base(); [0, 7, 14].forEach(i => mixed.board[i].kind = 0); [3, 10, 17, 24].forEach(i => mixed.board[i].kind = 1); const made = Marjakori.specialFor(mixed.board, 0);
+      return [four.board[3].special, five.board[4].special, Marjakori.runs(cross.board).length, pair.ok, both.moves === moves - 1, both.score > 0, rejected.ok, alone.moves === left, JSON.stringify(alone.board) === before, made.t, made.place];
     }""")
-    assert result == ["puuska", "kimallus", 2, True, True, True]
+    assert result == ["puuska", "kimallus", 2, True, True, True, False, True, True, "puuska", 3]
     assert page.errors == []
 
 
@@ -206,13 +208,15 @@ def test_last_move_animates_before_menu_and_safe_insets_keep_everything_visible(
     page.click("#go")
     page.wait_for_function("state && state.phase === 'play'")
     immediate = page.evaluate("""() => {
+      let sent = null; AiPelitScores.submit = value => { sent = value; };
       state.goals.forEach(g => g.left = 0); state.mossLeft = 0;
       const move = Marjakori.legalMoves(state)[0]; play(move[0], move[1]);
       const best = JSON.parse(localStorage.getItem('ai-pelit:marjakori:parhaat'));
-      return [state.phase, !!motion, menu.classList.contains('hidden'), JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso')) === 2, best['1'] === state.score];
+      return [state.phase, !!motion, menu.classList.contains('hidden'), JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso')) === 2, best['1'] === state.score, sent === state.score];
     }""")
-    assert immediate == ["win", True, True, True, True]
-    page.wait_for_function("!menu.classList.contains('hidden')")
+    assert immediate == ["win", True, True, True, True, True]
+    page.reload()
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso'))") == 2
     page.evaluate("start(2)")
     page.wait_for_function("state && state.phase === 'play'")
     page.evaluate("""() => { const root = document.documentElement.style; root.setProperty('--safe-top','21px'); root.setProperty('--safe-right','17px'); root.setProperty('--safe-bottom','19px'); root.setProperty('--safe-left','13px'); resize(); }""")
