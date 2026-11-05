@@ -379,7 +379,7 @@ function move(t, dt) {
     if (t.plan === 'wait' && t.s - P.s < 330) t.plan = 'out';
     if (t.plan === 'out') { t.lat += (LANE - t.lat) * Math.min(1, dt * 1.6); if (t.s < t.truck.s - 22) t.plan = 'in'; }
     if (t.plan === 'in') t.lat += (-LANE - t.lat) * Math.min(1, dt * 1.8);
-  } else if (t.v > 0 && t.kind !== 'kavelija') {
+  } else if (t.v >= 0 && t.kind !== 'kavelija') {
     if (t.habit !== undefined) t.base = cruise(t);
     // A slow car or truck ahead keeps behind a slower one.
     // v8: it brakes for it from 70 m, as hard as it needs (v1–v7: matched its speed at once from

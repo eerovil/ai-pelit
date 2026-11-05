@@ -30,7 +30,7 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       const rest = bay && P.tired > 0.15;
       if (rest && !(slow && slow.lat > 0 && slow.s - P.s < 25)) want = 7;
       // Traffic now passes while parked: yield before merging back into its lane.
-      const merging = P.lat > EDGE && things.some(t => vehicle(t) && t.v > 0 && t.lat > 0 && t.lat < EDGE
+      const merging = P.lat > EDGE && inBay(P.s, P.lat) && things.some(t => vehicle(t) && t.v > 0 && t.lat > 0 && t.lat < EDGE
         && t.s - P.s > -30 && t.s - P.s < 25);
       if (merging) want = 7;
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
