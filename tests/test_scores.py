@@ -77,8 +77,9 @@ class FakeApi:
             k = (body["game"], body["board"], body["player"])
             old = self.scores.get(k)
             old_level = (old or {}).get("level")
-            # Like the server: the best score stays (lower is better in Hiihto).
-            beats = not old or (body["score"] < old["score"] if body["game"] == "hiihto" else body["score"] > old["score"])
+            # Like the server: the best score stays, using each game's configured direction.
+            low = body["game"] in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
+            beats = not old or (body["score"] < old["score"] if low else body["score"] > old["score"])
             self.scores[k] = {"score": body["score"], "version": body["version"]} if beats else {"score": old["score"], "version": old["version"]}
             if body.get("level") or old_level:
                 self.scores[k]["level"] = max(body.get("level") or 0, old_level or 0)
@@ -86,10 +87,10 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = {"hiihto": "taso-1", "tikka": "mokki"}.get(game, "main")
+                first = {"hiihto": "taso-1", "tikka": "mokki", "pasianssi": "veto1"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
-                low = game == "hiihto"
+                low = game in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
                 cur = games.get(game)
                 if not cur or (sc["score"] < cur["score"] if low else sc["score"] > cur["score"]):
                     games[game] = {"board": board, "name": self.players[player]["name"], "level": sc.get("level"), **sc}
@@ -108,7 +109,8 @@ class FakeApi:
                     rows.append({"name": p["name"], **s, "me": player == q.get("player")})
                 if player == q.get("player"):
                     mine = {**p, **s}
-            rows.sort(key=lambda r: -r["score"])
+            low = q["game"] in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
+            rows.sort(key=lambda r: r["score"] if low else -r["score"])
             for i, r in enumerate(rows):
                 r["rank"] = i + 1
             return self.reply(route, {"rows": rows, "mine": mine})
@@ -582,3 +584,33 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Pistekisa"
     page.click(".score-list .board-list[data-board='mokki']")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
+
+
+@pytest.mark.games("pasianssi")
+def test_pasianssi_shows_the_fastest_draw_one_time_first_and_draw_three_separately(site, context, fake):
+    site.build(ROOT / "games")
+    a, b, c = "a" * 32, "b" * 32, "c" * 32
+    fake.players = {
+        a: {"name": "Aino", "status": "approved"},
+        b: {"name": "Bertta", "status": "approved"},
+        c: {"name": "Cecilia", "status": "approved"},
+    }
+    fake.scores = {
+        ("pasianssi", "veto1", a): {"score": 250, "version": 1},
+        ("pasianssi", "veto1", b): {"score": 180, "version": 1},
+        ("pasianssi", "veto3", c): {"score": 300, "version": 1},
+    }
+    page = context.new_page()
+    page.goto(site.url)
+    page.wait_for_selector('.top-score[data-top="pasianssi"]:has-text("Bertta")')
+    assert page.locator('.top-score[data-top="pasianssi"]').inner_text() == "🏆 1 kortti: Bertta · 3:00"
+
+    page.goto(site.url + "#/pasianssi")
+    page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
+    assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "1 kortti"
+    assert [" ".join(row.split()) for row in page.locator(".score-list .tulos").all_inner_texts()] == [
+        "1. Bertta 3:00 v1", "2. Aino 4:10 v1"]
+    page.click(".score-list .board-list[data-board='veto3']")
+    page.wait_for_selector(".score-list .tulos:has-text('Cecilia')")
+    assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "3 korttia"
+    assert "Aino" not in page.locator(".score-list").inner_text()

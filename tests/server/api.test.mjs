@@ -352,3 +352,19 @@ test('Tikanheitto keeps Mökkitikka and Pistekisa apart, and its shelf no. 1 is 
   assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=main')).body.rows.map(r => r.name), ['Bertta']);
   assert.deepEqual((await call('GET', '/api/scores/top')).body.games.tikka, { board: 'mokki', name: 'Aino', score: 254, level: null, version: 2 });
 });
+
+test('Pasianssi keeps draw modes apart, ranks the fastest time first, and shows draw one on the shelf', async () => {
+  const { call, admin } = setup();
+  for (const [id, name] of [[A, 'Aino'], [B, 'Bertta'], [C, 'Cecilia']]) {
+    await call('POST', '/api/players', { id, name });
+    await admin(id, 'approved');
+  }
+  const post = (player, board, score) => call('POST', '/api/scores', { player, game: 'pasianssi', board, version: 1, score });
+  assert.equal((await post(A, 'veto1', 250)).status, 200);
+  assert.equal((await post(B, 'veto1', 180)).status, 200);
+  assert.equal((await post(C, 'veto3', 300)).status, 200);
+  assert.equal((await post(A, 'main', 10)).status, 400);
+  assert.deepEqual((await call('GET', '/api/scores?game=pasianssi&board=veto1')).body.rows.map(r => r.name), ['Bertta', 'Aino']);
+  assert.deepEqual((await call('GET', '/api/scores?game=pasianssi&board=veto3')).body.rows.map(r => r.name), ['Cecilia']);
+  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.pasianssi, { board: 'veto1', name: 'Bertta', score: 180, level: null, version: 1 });
+});

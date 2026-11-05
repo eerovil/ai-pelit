@@ -1,0 +1,13 @@
+{
+  "title": "Pasianssi",
+  "description": "Klassinen pasianssi: siirrä kaikki kortit maapinoihin.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-05",
+      "note": "Ensimmäinen versio: klassinen pasianssi yhden tai kolmen kortin nostolla, napautus- ja raahaussiirrot, kumoa, automaattinen lopetus ja tallennus.",
+      "request": "Pasianssi",
+      "issue": "eerovil/ai-pelit#382"
+    }
+  ]
+}
