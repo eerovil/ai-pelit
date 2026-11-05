@@ -60,7 +60,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: Jatka, Uusi jako, 1 tai 3 korttia**: the menu in `games/pasianssi/v1/index.html`. "Jatka" shows only when an unfinished deal is saved; "1 kortti / 3 korttia" is saved as `ai-pelit:pasianssi:veto`. Shows wins, deals played and the best times. `menuBoard()` points the 🏆 chip at the list of the chosen draw mode from page load on.
+- **Valikko: Jatka, Uusi jako, 1 tai 3 korttia**: the menu in `games/pasianssi/v2/index.html`. "Jatka" shows only when an unfinished deal is saved; "1 kortti / 3 korttia" is saved as `ai-pelit:pasianssi:veto`. Shows wins, deals played and the best times. `menuBoard()` points the 🏆 chip at the list of the chosen draw mode from page load on.
 - **Sekoitus siemenestä ja jako**: `deal(seed, draw)` shuffles 52 cards with a seeded random (so a test can deal a known game) and lays out 1 to 7 cards in the seven tableau piles, the top one face up; the rest is the stock.
 - **Pelipöytä: pakka, jätepino, 4 maapinoa, 7 pöytäpinoa**: `fitCheck()` compares the canvas's own box with `W` and `H` each frame and calls `fit()` when they differ, and `layout()` then sizes the cards: upright the stock, waste and four foundations on top and the seven piles under them; sideways stock and waste on the left, foundations on the right, piles in the middle.
 - **Jako aloitettu ja pelaaja vahvistaa?**: `askNew()`, behind "Uusi jako" in the menu and on the play screen: a deal with a move made, also one read back from the save after a reload, is replaced only after "Aloitetaanko uusi jako?"; cancelling keeps it and its save, and stays where the player was: on the menu or at the table.
