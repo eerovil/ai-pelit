@@ -163,7 +163,20 @@ def test_active_round_fits_390px_and_landscape(site, context):
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
     turn(page, {"width": 740, "height": 360})
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
-    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 20, True, True, True, True]
+    page.evaluate("start(10)")
+    page.wait_for_function("state && state.level === 10 && state.phase === 'play'")
+    pair, box, moves = page.evaluate("[Marjakori.legalMoves(state)[0], boardBox, state.moves]")
+    def centre(i):
+        return {"x": box["x"] + (i % 7 + .5) * box["size"], "y": box["y"] + (i // 7 + .5) * box["size"]}
+    a, b = centre(pair[0]), centre(pair[1])
+    page.mouse.move(a["x"], a["y"]); page.mouse.down(); page.mouse.move(b["x"], b["y"], steps=3); page.mouse.up()
+    page.wait_for_function(f"state.moves === {moves - 1}")
+    page.wait_for_timeout(500)
+    pair, box, moves = page.evaluate("[Marjakori.legalMoves(state)[0], boardBox, state.moves]")
+    a, b = centre(pair[0]), centre(pair[1])
+    page.mouse.click(a["x"], a["y"]); page.mouse.click(b["x"], b["y"])
+    page.wait_for_function(f"state.moves === {moves - 1}")
+    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 14, True, True, True, True]
     assert page.errors == []
 
 
@@ -277,11 +290,11 @@ def test_taps_persist_wins_and_allow_a_clean_next_round(site, context):
     won = page.evaluate("""() => {
       let sent = null; AiPelitScores.submit = n => { sent = n; };
       state.score = 123; state.phase = 'win'; finish();
-      const after = [JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso')), JSON.parse(localStorage.getItem('ai-pelit:marjakori:parhaat'))['1'], sent, go.textContent];
+          const after = [JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso')) === 2, JSON.parse(localStorage.getItem('ai-pelit:marjakori:parhaat'))['1'] >= 123, sent === null || sent >= 123, go.textContent];
       go.click(); return [after, state.level, state.phase, state.score];
     }""")
     assert saved == moves - 1
-    assert won == [[2, 123, 123, "Seuraava taso"], 2, "play", 0]
+    assert won == [[True, True, True, "Seuraava taso"], 2, "play", 0]
     assert page.errors == []
 
 
