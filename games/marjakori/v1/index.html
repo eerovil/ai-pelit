@@ -1,23 +1,467 @@
 <!doctype html>
 <html lang="fi">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><title>Marjakori</title>
-<style>
-:root{--safe-top:env(safe-area-inset-top);--safe-right:env(safe-area-inset-right);--safe-bottom:env(safe-area-inset-bottom);--safe-left:env(safe-area-inset-left)}html,body{margin:0;height:100%;overflow:hidden;background:#17352b;color:#fff;font-family:system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}#menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:max(50px,env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) max(25px,env(safe-area-inset-bottom)) max(22px,env(safe-area-inset-left));background:rgba(13,42,31,.88);text-align:center;touch-action:manipulation;overflow:auto}#menu.hidden{display:none}h1{margin:0;font-size:42px;color:#ffdb73;text-shadow:0 3px #855a2d}p{margin:0}.result{font-weight:800;font-size:22px}.help{max-width:340px;line-height:1.45;color:#d2e5cb}.go,.levels button{border:0;border-radius:15px;background:#ffcf57;color:#3b2a12;font:800 21px system-ui;padding:14px 28px;box-shadow:0 4px #a67524}.go:active,.levels button:active{transform:translateY(3px);box-shadow:0 1px #a67524}.levels{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;max-width:350px;max-height:36vh;overflow:auto}.levels button{font-size:15px;padding:8px 11px}.small{font-size:14px;color:#c9ddc7}@media (orientation:landscape) and (max-height:520px){#menu{display:grid;grid-template-columns:minmax(250px,1fr) minmax(250px,1fr);align-content:center;gap:8px 35px;padding:32px 35px}h1{font-size:36px}.help{grid-row:1/6;grid-column:2}.levels{max-width:300px;max-height:160px}.go{padding:10px 23px}}
-</style></head>
-<body>
-<canvas id="c"></canvas><div id="menu"><h1>🧺 Marjakori</h1><p class="result" id="result"></p><p id="progress"></p><button class="go" id="go">Aloita</button><div class="levels" id="levels"></div><p class="help">Pyyhkäise kuvio viereisen kanssa paikkaa vaihtamaan. Kerää tavoite ennen kuin siirrot loppuvat. Neljä tekee puuskan, viisi tai risteys kimalluksen.</p><p class="small">Napauta myös kahta vierekkäistä kuviota.</p></div>
-<script src="../../../lib/aanet-5/aanet.js"></script><script src="../../../scores.js" data-game="marjakori" data-order="high" data-corner="bottom-left"></script><script src="logiikka.js"></script><script src="piirto.js"></script>
-<script>
-'use strict';
-var c=document.getElementById('c'),ctx=c.getContext('2d'),menu=document.getElementById('menu'),result=document.getElementById('result'),progress=document.getElementById('progress'),go=document.getElementById('go'),levels=document.getElementById('levels');
-var KEY='ai-pelit:marjakori:',state=null,selected=-1,pointer=null,boardBox=null,lastAction=Date.now(),motion=null,hintMove=null,W=0,H=0,DPR=1,safe={top:0,right:0,bottom:0,left:0};
-function load(k,d){try{var v=localStorage.getItem(KEY+k);return v===null?d:JSON.parse(v)}catch(e){return d}}function save(k,v){try{localStorage.setItem(KEY+k,JSON.stringify(v))}catch(e){}}
-var level=Math.max(1,Math.floor(load('taso',1)||1)),best=load('parhaat',{}),menuLevel=level;function resize(){var r=c.getBoundingClientRect(),d=devicePixelRatio||1,style=getComputedStyle(document.documentElement);safe={top:parseFloat(style.getPropertyValue('--safe-top'))||0,right:parseFloat(style.getPropertyValue('--safe-right'))||0,bottom:parseFloat(style.getPropertyValue('--safe-bottom'))||0,left:parseFloat(style.getPropertyValue('--safe-left'))||0};if(r.width===W&&r.height===H&&d===DPR)return;DPR=d;W=r.width;H=r.height;c.width=W*DPR;c.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',resize);resize();
-function sound(name,o){if(window.AiPelitAanet)AiPelitAanet.play(name,o||{vol:.18})}if(window.AiPelitAanet)AiPelitAanet.load(['valinta','onnistui']);
-function saveRound(){if(state)save('kierros',{level:state.level,seed:state.seed,randomState:state.random.state(),board:state.board,moss:state.moss,goals:state.goals,moves:state.moves,target:state.target,left:state.left,mossLeft:state.mossLeft,score:state.score,phase:state.phase})}function restore(){var r=load('kierros',null);if(r&&r.phase==='play'){state=Marjakori.newLevel(r.level,r.seed);Object.assign(state,r);if(r.randomState!==undefined)state.random.set(r.randomState);return true}return false}function totalBest(){return Object.keys(best).reduce(function(n,k){return n+(+best[k]||0)},0)}
-function openMenu(message,label,n){menu.classList.remove('hidden');menuLevel=n||level;result.textContent=message||'';progress.textContent='Jatka: taso '+level+' · paras yhteensä '+totalBest()+' p';go.textContent=label||(restore()?'Jatka peliä':'Aloita taso '+menuLevel);levels.innerHTML='';for(var i=1;i<=level;i++){var b=document.createElement('button');b.textContent='Taso '+i;b.onclick=(function(q){return function(){start(q)}})(i);levels.appendChild(b)}}function start(n){state=Marjakori.newLevel(n||level,((Date.now()^((n||level)*7919))>>>0));lastAction=Date.now();hintMove=null;selected=-1;menu.classList.add('hidden');saveRound();sound('valinta',{vol:.14})}
-function cellAt(px,py){if(!boardBox)return-1;var x=Math.floor((px-boardBox.x)/boardBox.size),y=Math.floor((py-boardBox.y)/boardBox.size);return x>=0&&x<7&&y>=0&&y<7?y*7+x:-1}function saveWin(){if(state.winSaved)return;best[state.level]=Math.max(best[state.level]||0,state.score);save('parhaat',best);level=Math.max(level,state.level+1);save('taso',level);state.scorePrompt=AiPelitScores.submit(totalBest(),true);state.winSaved=true}function finish(){var won=state.phase==='win';if(won){saveWin();save('kierros',null);sound('onnistui',{vol:.28});openMenu('Taso läpi! '+state.score+' p · ennätys '+best[state.level]+' p','Seuraava taso',state.level+1);if(state.scorePrompt)AiPelitScores.open()}else if(state.phase==='lose'){save('kierros',null);openMenu('Siirrot loppuivat — yritä uudelleen!','Yritä uudelleen',state.level)}}function play(a,b){if(motion)return;lastAction=Date.now();var before=Marjakori.clone(state),r=Marjakori.trySwap(state,a,b);if(r.ok){selected=-1;hintMove=null;if(state.phase==='win')saveWin();motion={before:before,a:a,b:b,frames:r.events,at:Date.now(),shuffled:r.shuffled,end:state.phase!=='play'};saveRound();sound('valinta',{vol:.12})}else{selected=-1;motion={before:before,a:a,b:b,at:Date.now(),back:true}}}
-function draw(){requestAnimationFrame(draw);resize();ctx.clearRect(0,0,W,H);if(!state||state.phase!=='play'&&!motion)return;var now=Date.now(),m=null;if(motion){var age=now-motion.at;if(motion.back&&age<230)m={before:motion.before,a:motion.a,b:motion.b,t:Math.sin(age/230*Math.PI)};else if(!motion.back&&age<160)m={before:motion.before,a:motion.a,b:motion.b,t:age/160};else if(!motion.back){var step=Math.floor((age-160)/260);if(step<motion.frames.length)m={frame:motion.frames[step],t:((age-160)%260)/260};else{var ended=motion.end;motion=null;if(ended){finish();return;}}}else motion=null;}var land=H<520,rows=state.goals.length+(state.mossLeft?1:0),side=land?Math.min(H-safe.top-safe.bottom-28,(W-safe.left-safe.right)*.58):Math.min(W-safe.left-safe.right-20,H-safe.top-safe.bottom-145),bx=land?W-safe.right-side-12:safe.left+(W-safe.left-safe.right-side)/2,by=land?safe.top+14:Math.max(safe.top+52+rows*20,safe.top+(H-safe.top-safe.bottom-side)/2-20),shown=m&&m.frame?Object.assign({},state,{board:m.frame.board}):state;boardBox=MarjakoriPiirto.draw(ctx,shown,{x:bx,y:by,w:side,h:side},selected,m);if(state.phase==='play'&&Date.now()-lastAction>5000&&!motion){if(!hintMove)hintMove=Marjakori.legalMoves(state)[0];if(hintMove){ctx.strokeStyle='#ffe36a';ctx.lineWidth=3;ctx.strokeRect(bx+(hintMove[0]%7)*boardBox.size+4+Math.sin(Date.now()/180)*3,by+Math.floor(hintMove[0]/7)*boardBox.size+4,boardBox.size-8,boardBox.size-8);}}ctx.fillStyle='#eff5dc';ctx.font='700 17px system-ui';ctx.textAlign=land?'left':'center';var tx=land?safe.left+14:W/2;if(land){ctx.fillText('Taso '+state.level,tx,safe.top+95);ctx.fillText('Siirtoja '+state.moves,tx,safe.top+121);ctx.font='14px system-ui';state.goals.forEach(function(g,i){ctx.fillText(MarjakoriPiirto.names[g.kind]+': '+g.left,tx,safe.top+150+i*21);});if(state.mossLeft)ctx.fillText('sammal: '+state.mossLeft,tx,safe.top+150+state.goals.length*21);}else{ctx.font='700 14px system-ui';ctx.fillText('Taso '+state.level+' · Siirtoja '+state.moves,W/2,safe.top+28);ctx.font='14px system-ui';state.goals.forEach(function(g,i){ctx.fillText('Kerää '+MarjakoriPiirto.names[g.kind]+': '+g.left,W/2,safe.top+52+i*20);});if(state.mossLeft)ctx.fillText('Puhdista sammal: '+state.mossLeft,W/2,safe.top+52+state.goals.length*20);}ctx.fillStyle='#d4e9c9';ctx.font='14px system-ui';ctx.textAlign=land?'left':'center';ctx.fillText('Pisteet '+state.score+(state.chain?' · ketju ×'+Math.min(5,state.chain+1):''),land?safe.left+14:W/2,land?safe.top+70:by+side+25);if(motion&&motion.shuffled){ctx.fillStyle='#ffea86';ctx.font='800 18px system-ui';ctx.textAlign='center';ctx.fillText('Sekoitetaan…',W/2,land?safe.top+30:by+side/2)}}draw();
-c.addEventListener('pointerdown',function(e){if(!state||state.phase!=='play')return;pointer={x:e.clientX,y:e.clientY,cell:cellAt(e.clientX,e.clientY)};c.setPointerCapture(e.pointerId)});c.addEventListener('pointermove',function(e){if(!pointer||pointer.cell<0)return;var dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;if(Math.max(Math.abs(dx),Math.abs(dy))<boardBox.size*.28)return;var p={x:pointer.cell%7,y:Math.floor(pointer.cell/7)},q=Math.abs(dx)>Math.abs(dy)?p.y*7+p.x+(dx>0?1:-1):(p.y+(dy>0?1:-1))*7+p.x;if(q>=0&&q<49&&Math.abs((q%7)-p.x)+Math.abs(Math.floor(q/7)-p.y)===1)play(pointer.cell,q);pointer=null});c.addEventListener('pointerup',function(e){if(!pointer)return;var q=cellAt(e.clientX,e.clientY);if(q>=0){if(selected<0)selected=q;else if(selected!==q)play(selected,q);else selected=-1}pointer=null});go.onclick=function(){if(!restore())start(menuLevel);else{menu.classList.add('hidden');selected=-1}};openMenu('');
-</script><script src="../../../back.js"></script></body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Marjakori</title>
+    <style>
+      :root {
+        --safe-top: env(safe-area-inset-top);
+        --safe-right: env(safe-area-inset-right);
+        --safe-bottom: env(safe-area-inset-bottom);
+        --safe-left: env(safe-area-inset-left);
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #17352b;
+        color: #fff;
+        font-family: system-ui, sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      #menu {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: max(50px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right))
+          max(25px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+        background: rgba(13, 42, 31, 0.88);
+        text-align: center;
+        touch-action: manipulation;
+        overflow: auto;
+      }
+      #menu.hidden {
+        display: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: 42px;
+        color: #ffdb73;
+        text-shadow: 0 3px #855a2d;
+      }
+      p {
+        margin: 0;
+      }
+      .result {
+        font-weight: 800;
+        font-size: 22px;
+      }
+      .help {
+        max-width: 340px;
+        line-height: 1.45;
+        color: #d2e5cb;
+      }
+      .go,
+      .levels button {
+        border: 0;
+        border-radius: 15px;
+        background: #ffcf57;
+        color: #3b2a12;
+        font: 800 21px system-ui;
+        padding: 14px 28px;
+        box-shadow: 0 4px #a67524;
+      }
+      .go:active,
+      .levels button:active {
+        transform: translateY(3px);
+        box-shadow: 0 1px #a67524;
+      }
+      .levels {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 7px;
+        max-width: 350px;
+        max-height: 36vh;
+        overflow: auto;
+      }
+      .levels button {
+        font-size: 15px;
+        padding: 8px 11px;
+      }
+      .small {
+        font-size: 14px;
+        color: #c9ddc7;
+      }
+      @media (orientation: landscape) and (max-height: 520px) {
+        #menu {
+          display: grid;
+          grid-template-columns: minmax(250px, 1fr) minmax(250px, 1fr);
+          align-content: center;
+          gap: 8px 35px;
+          padding: 32px 35px;
+        }
+        h1 {
+          font-size: 36px;
+        }
+        .help {
+          grid-row: 1/6;
+          grid-column: 2;
+        }
+        .levels {
+          max-width: 300px;
+          max-height: 160px;
+        }
+        .go {
+          padding: 10px 23px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="menu">
+      <h1>🧺 Marjakori</h1>
+      <p class="result" id="result"></p>
+      <p id="progress"></p>
+      <button class="go" id="go">Aloita</button>
+      <div class="levels" id="levels"></div>
+      <p class="help">
+        Pyyhkäise kuvio viereisen kanssa paikkaa vaihtamaan. Kerää tavoite ennen kuin siirrot loppuvat. Neljä
+        tekee puuskan, viisi tai risteys kimalluksen.
+      </p>
+      <p class="small">Napauta myös kahta vierekkäistä kuviota.</p>
+    </div>
+    <script src="../../../lib/aanet-5/aanet.js"></script>
+    <script
+      src="../../../scores.js"
+      data-game="marjakori"
+      data-order="high"
+      data-corner="bottom-left"
+    ></script>
+    <script src="logiikka.js"></script>
+    <script src="piirto.js"></script>
+    <script>
+      'use strict';
+      var c = document.getElementById('c'),
+        ctx = c.getContext('2d'),
+        menu = document.getElementById('menu'),
+        result = document.getElementById('result'),
+        progress = document.getElementById('progress'),
+        go = document.getElementById('go'),
+        levels = document.getElementById('levels');
+      var KEY = 'ai-pelit:marjakori:',
+        state = null,
+        selected = -1,
+        pointer = null,
+        boardBox = null,
+        lastAction = Date.now(),
+        motion = null,
+        hintMove = null,
+        W = 0,
+        H = 0,
+        DPR = 1,
+        safe = { top: 0, right: 0, bottom: 0, left: 0 };
+      function load(k, d) {
+        try {
+          var v = localStorage.getItem(KEY + k);
+          return v === null ? d : JSON.parse(v);
+        } catch (e) {
+          return d;
+        }
+      }
+      function save(k, v) {
+        try {
+          localStorage.setItem(KEY + k, JSON.stringify(v));
+        } catch (e) {}
+      }
+      var level = Math.max(1, Math.floor(load('taso', 1) || 1)),
+        best = load('parhaat', {}),
+        menuLevel = level;
+      function resize() {
+        var r = c.getBoundingClientRect(),
+          d = devicePixelRatio || 1,
+          style = getComputedStyle(document.documentElement);
+        safe = {
+          top: parseFloat(style.getPropertyValue('--safe-top')) || 0,
+          right: parseFloat(style.getPropertyValue('--safe-right')) || 0,
+          bottom: parseFloat(style.getPropertyValue('--safe-bottom')) || 0,
+          left: parseFloat(style.getPropertyValue('--safe-left')) || 0,
+        };
+        if (r.width === W && r.height === H && d === DPR) return;
+        DPR = d;
+        W = r.width;
+        H = r.height;
+        c.width = W * DPR;
+        c.height = H * DPR;
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      }
+      addEventListener('resize', resize);
+      resize();
+      function sound(name, o) {
+        if (window.AiPelitAanet) AiPelitAanet.play(name, o || { vol: 0.18 });
+      }
+      if (window.AiPelitAanet) AiPelitAanet.load(['valinta', 'onnistui']);
+      function saveRound() {
+        if (state)
+          save('kierros', {
+            level: state.level,
+            seed: state.seed,
+            randomState: state.random.state(),
+            board: state.board,
+            moss: state.moss,
+            goals: state.goals,
+            moves: state.moves,
+            target: state.target,
+            left: state.left,
+            mossLeft: state.mossLeft,
+            score: state.score,
+            phase: state.phase,
+          });
+      }
+      function restore() {
+        var r = load('kierros', null);
+        if (r && r.phase === 'play') {
+          state = Marjakori.newLevel(r.level, r.seed);
+          Object.assign(state, r);
+          if (r.randomState !== undefined) state.random.set(r.randomState);
+          return true;
+        }
+        return false;
+      }
+      function totalBest() {
+        return Object.keys(best).reduce(function (n, k) {
+          return n + (+best[k] || 0);
+        }, 0);
+      }
+      function openMenu(message, label, n) {
+        menu.classList.remove('hidden');
+        menuLevel = n || level;
+        result.textContent = message || '';
+        progress.textContent = 'Jatka: taso ' + level + ' · paras yhteensä ' + totalBest() + ' p';
+        go.textContent = label || (restore() ? 'Jatka peliä' : 'Aloita taso ' + menuLevel);
+        levels.innerHTML = '';
+        for (var i = 1; level > 1 && i <= level; i++) {
+          var b = document.createElement('button');
+          b.textContent = 'Taso ' + i;
+          b.onclick = (function (q) {
+            return function () {
+              start(q);
+            };
+          })(i);
+          levels.appendChild(b);
+        }
+      }
+      function start(n) {
+        state = Marjakori.newLevel(n || level, (Date.now() ^ ((n || level) * 7919)) >>> 0);
+        lastAction = Date.now();
+        hintMove = null;
+        selected = -1;
+        menu.classList.add('hidden');
+        saveRound();
+        sound('valinta', { vol: 0.14 });
+      }
+      function cellAt(px, py) {
+        if (!boardBox) return -1;
+        var x = Math.floor((px - boardBox.x) / boardBox.size),
+          y = Math.floor((py - boardBox.y) / boardBox.size);
+        return x >= 0 && x < 7 && y >= 0 && y < 7 ? y * 7 + x : -1;
+      }
+      function saveWin() {
+        if (state.winSaved) return;
+        best[state.level] = Math.max(best[state.level] || 0, state.score);
+        save('parhaat', best);
+        level = Math.max(level, state.level + 1);
+        save('taso', level);
+        state.scorePrompt = AiPelitScores.submit(totalBest(), true);
+        state.winSaved = true;
+      }
+      function finish() {
+        var won = state.phase === 'win';
+        if (won) {
+          saveWin();
+          save('kierros', null);
+          sound('onnistui', { vol: 0.28 });
+          openMenu(
+            'Taso läpi! ' + state.score + ' p · ennätys ' + best[state.level] + ' p',
+            'Seuraava taso',
+            state.level + 1,
+          );
+          if (state.scorePrompt) AiPelitScores.prompt();
+        } else if (state.phase === 'lose') {
+          save('kierros', null);
+          openMenu('Siirrot loppuivat — yritä uudelleen!', 'Yritä uudelleen', state.level);
+        }
+      }
+      function play(a, b) {
+        if (motion) return;
+        lastAction = Date.now();
+        var before = Marjakori.clone(state),
+          r = Marjakori.trySwap(state, a, b);
+        if (r.ok) {
+          selected = -1;
+          hintMove = null;
+          if (state.phase === 'win') saveWin();
+          motion = {
+            before: before,
+            a: a,
+            b: b,
+            frames: r.events,
+            at: Date.now(),
+            shuffled: r.shuffled,
+            end: state.phase !== 'play',
+          };
+          saveRound();
+          sound('valinta', { vol: 0.12 });
+        } else {
+          selected = -1;
+          motion = { before: before, a: a, b: b, at: Date.now(), back: true };
+        }
+      }
+      function draw() {
+        requestAnimationFrame(draw);
+        resize();
+        ctx.clearRect(0, 0, W, H);
+        if (!state || (state.phase !== 'play' && !motion)) return;
+        var now = Date.now(),
+          m = null;
+        if (motion) {
+          var age = now - motion.at;
+          if (motion.back && age < 230)
+            m = { before: motion.before, a: motion.a, b: motion.b, t: Math.sin((age / 230) * Math.PI) };
+          else if (!motion.back && age < 160)
+            m = { before: motion.before, a: motion.a, b: motion.b, t: age / 160 };
+          else if (!motion.back) {
+            var step = Math.floor((age - 160) / 260);
+            if (step < motion.frames.length) m = { frame: motion.frames[step], t: ((age - 160) % 260) / 260 };
+            else {
+              var ended = motion.end;
+              motion = null;
+              if (ended) {
+                finish();
+                return;
+              }
+            }
+          } else motion = null;
+        }
+        var land = H < 520,
+          rows = state.goals.length + (state.mossLeft ? 1 : 0),
+          side = land
+            ? Math.min(H - safe.top - safe.bottom - 28, (W - safe.left - safe.right) * 0.58)
+            : Math.min(W - safe.left - safe.right - 20, H - safe.top - safe.bottom - 145),
+          bx = land ? W - safe.right - side - 12 : safe.left + (W - safe.left - safe.right - side) / 2,
+          by = land
+            ? safe.top + 14
+            : Math.max(safe.top + 52 + rows * 20, safe.top + (H - safe.top - safe.bottom - side) / 2 - 20),
+          shown = m && m.frame ? Object.assign({}, state, { board: m.frame.board }) : state;
+        boardBox = MarjakoriPiirto.draw(ctx, shown, { x: bx, y: by, w: side, h: side }, selected, m);
+        if (state.phase === 'play' && Date.now() - lastAction > 5000 && !motion) {
+          if (!hintMove) hintMove = Marjakori.legalMoves(state)[0];
+          if (hintMove) {
+            ctx.strokeStyle = '#ffe36a';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(
+              bx + (hintMove[0] % 7) * boardBox.size + 4 + Math.sin(Date.now() / 180) * 3,
+              by + Math.floor(hintMove[0] / 7) * boardBox.size + 4,
+              boardBox.size - 8,
+              boardBox.size - 8,
+            );
+          }
+        }
+        ctx.fillStyle = '#eff5dc';
+        ctx.font = '700 17px system-ui';
+        ctx.textAlign = land ? 'left' : 'center';
+        var tx = land ? safe.left + 14 : W / 2;
+        if (land) {
+          ctx.fillText('Taso ' + state.level, tx, safe.top + 95);
+          ctx.fillText('Siirtoja ' + state.moves, tx, safe.top + 121);
+          ctx.font = '14px system-ui';
+          state.goals.forEach(function (g, i) {
+            ctx.fillText(MarjakoriPiirto.names[g.kind] + ': ' + g.left, tx, safe.top + 150 + i * 21);
+          });
+          if (state.mossLeft)
+            ctx.fillText('sammal: ' + state.mossLeft, tx, safe.top + 150 + state.goals.length * 21);
+        } else {
+          ctx.font = '700 14px system-ui';
+          ctx.fillText('Taso ' + state.level + ' · Siirtoja ' + state.moves, W / 2, safe.top + 28);
+          ctx.font = '14px system-ui';
+          state.goals.forEach(function (g, i) {
+            ctx.fillText(
+              'Kerää ' + MarjakoriPiirto.names[g.kind] + ': ' + g.left,
+              W / 2,
+              safe.top + 52 + i * 20,
+            );
+          });
+          if (state.mossLeft)
+            ctx.fillText(
+              'Puhdista sammal: ' + state.mossLeft,
+              W / 2,
+              safe.top + 52 + state.goals.length * 20,
+            );
+        }
+        ctx.fillStyle = '#d4e9c9';
+        ctx.font = '14px system-ui';
+        ctx.textAlign = land ? 'left' : 'center';
+        ctx.fillText(
+          'Pisteet ' + state.score + (state.chain ? ' · ketju ×' + Math.min(5, state.chain + 1) : ''),
+          land ? safe.left + 14 : W / 2,
+          land ? safe.top + 70 : by + side + 25,
+        );
+        if (motion && motion.shuffled) {
+          ctx.fillStyle = '#ffea86';
+          ctx.font = '800 18px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText('Sekoitetaan…', W / 2, land ? safe.top + 30 : by + side / 2);
+        }
+      }
+      draw();
+      c.addEventListener('pointerdown', function (e) {
+        if (!state || state.phase !== 'play') return;
+        pointer = { x: e.clientX, y: e.clientY, cell: cellAt(e.clientX, e.clientY) };
+        c.setPointerCapture(e.pointerId);
+      });
+      c.addEventListener('pointermove', function (e) {
+        if (!pointer || pointer.cell < 0) return;
+        var dx = e.clientX - pointer.x,
+          dy = e.clientY - pointer.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < boardBox.size * 0.28) return;
+        var p = { x: pointer.cell % 7, y: Math.floor(pointer.cell / 7) },
+          q =
+            Math.abs(dx) > Math.abs(dy)
+              ? p.y * 7 + p.x + (dx > 0 ? 1 : -1)
+              : (p.y + (dy > 0 ? 1 : -1)) * 7 + p.x;
+        if (q >= 0 && q < 49 && Math.abs((q % 7) - p.x) + Math.abs(Math.floor(q / 7) - p.y) === 1)
+          play(pointer.cell, q);
+        pointer = null;
+      });
+      c.addEventListener('pointerup', function (e) {
+        if (!pointer) return;
+        var q = cellAt(e.clientX, e.clientY);
+        if (q >= 0) {
+          if (selected < 0) selected = q;
+          else if (selected !== q) play(selected, q);
+          else selected = -1;
+        }
+        pointer = null;
+      });
+      go.onclick = function () {
+        if (!restore()) start(menuLevel);
+        else {
+          menu.classList.add('hidden');
+          selected = -1;
+        }
+      };
+      openMenu('');
+    </script>
+    <script src="../../../back.js"></script>
+  </body>
+</html>

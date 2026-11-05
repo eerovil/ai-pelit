@@ -362,7 +362,8 @@
 
   window.AiPelitScores = {
     submit: submit,
-    open: function () { save(K + 'kysytty', true); open(); },
+    open: function () { open(); },
+    // The nickname question a submit(score, true) put off: it counts as asked only now that it shows.
     prompt: function () { save(K + 'kysytty', true); open(); },
     board: function (id, label) { board = id; boardLabel = label || ''; },
     format: function (f) { fmt = f; },

@@ -290,3 +290,91 @@ def test_a_loaded_page_can_play_offline(site, context):
     assert page.evaluate("""() => { const pair = Marjakori.legalMoves(state)[0], moves = state.moves; return [Marjakori.trySwap(state, pair[0], pair[1]).ok, state.moves === moves - 1]; }""") == [True, True]
     context.set_offline(False)
     assert page.errors == []
+
+
+def test_one_swap_making_five_and_three_puts_kimallus_in_the_five(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      const s = Marjakori.newLevel(1, 4);
+      s.board.forEach((c, i) => Object.assign(c, { kind: (i % 7 + 2 * Math.floor(i / 7)) % 7, special: '' }));
+      [9, 16, 30, 37, 24].forEach(i => s.board[i].kind = 7);
+      [17, 23, 31].forEach(i => s.board[i].kind = 8);
+      const before = Marjakori.matched(s.board).size;
+      const r = Marjakori.trySwap(s, 23, 24);
+      const first = s.events[0];
+      return [before, r.ok, first.moves.some(m => m.from === 9 && m.to === 37),
+              first.board.map((c, i) => c.special === 'kimallus' ? i : -1).filter(i => i >= 0)];
+    }""")
+    assert result == [0, True, True, [37]]
+    assert page.errors == []
+
+
+def test_a_lone_puuska_with_no_match_is_a_stuck_board(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      const rows = ['0123450', '2345012', '4501234'];
+      const s = Marjakori.newLevel(1, 1);
+      s.board.forEach((c, i) => Object.assign(c, { kind: +rows[Math.floor(i / 7) % 3][i % 7], special: '' }));
+      s.board[0].special = 'puuska';
+      const stuck = [Marjakori.matched(s.board).size, Marjakori.legalMoves(s).length, Marjakori.hasMove(s.board)];
+      s.board[0].special = 'kimallus';
+      const kimallus = [Marjakori.hasMove(s.board), Marjakori.legalMoves(s).length > 0];
+      s.board[0].special = 'puuska';
+      Marjakori.shuffle(s);
+      return [stuck, kimallus, Marjakori.matched(s.board).size, Marjakori.hasMove(s.board)];
+    }""")
+    assert result == [[0, 0, False], [True, True], 0, True]
+    assert page.errors == []
+
+
+WIN_NOW = """() => {
+  state.goals.forEach(g => g.left = 0); state.mossLeft = 0;
+  const move = Marjakori.legalMoves(state)[0]; play(move[0], move[1]);
+  return [state.score, !!motion, !!document.querySelector('#ai-pelit-tulokset'),
+          JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono') || '{}')['marjakori|main'] !== undefined,
+          localStorage.getItem('ai-pelit:_pelaaja:kysytty')];
+}"""
+MENU_UP = "state.phase === 'win' && !motion && !menu.classList.contains('hidden')"
+ASKED = "JSON.parse(localStorage.getItem('ai-pelit:_pelaaja:kysytty'))"
+
+
+def start_level(page, n):
+    page.evaluate(f"start({n})")
+    page.wait_for_function("state && state.phase === 'play' && !motion")
+
+
+def test_nickname_is_asked_once_after_the_winning_animation(site, context):
+    page = open_game(site, context)
+    # Looking at the list is not the question: it stays owed.
+    page.evaluate("AiPelitScores.open()")
+    page.wait_for_selector("#ai-pelit-tulokset")
+    assert page.evaluate(ASKED) is None
+    page.click("#ai-pelit-tulokset button:text-is('Sulje')")
+
+    start_level(page, 1)
+    first = page.evaluate(WIN_NOW)
+    assert first[1:] == [True, False, True, None]  # queued at once, nothing covers the fall
+    page.wait_for_function(MENU_UP)
+    page.wait_for_selector("#ai-pelit-nimi")
+    assert page.evaluate(ASKED) is True
+    page.click("#ai-pelit-tulokset button:text-is('Sulje')")
+
+    start_level(page, 2)
+    page.evaluate(WIN_NOW)
+    page.wait_for_function(MENU_UP)
+    assert page.evaluate("!!document.querySelector('#ai-pelit-tulokset')") is False
+    assert page.errors == []
+
+
+def test_a_page_closed_during_the_winning_animation_still_owes_the_question(site, context):
+    page = open_game(site, context)
+    start_level(page, 1)
+    assert page.evaluate(WIN_NOW)[1:] == [True, False, True, None]
+    page.reload()
+    assert page.evaluate(ASKED) is None
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso'))") == 2
+    start_level(page, 2)
+    page.evaluate(WIN_NOW)
+    page.wait_for_function(MENU_UP)
+    page.wait_for_selector("#ai-pelit-nimi")
+    assert page.errors == []

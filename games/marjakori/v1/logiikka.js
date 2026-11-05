@@ -1,24 +1,370 @@
 'use strict';
 var Marjakori = (function () {
-  var SIZE=7;
-  function rng(seed){var s=seed>>>0;function n(){s=(s*1664525+1013904223)>>>0;return s/4294967296;}n.state=function(){return s;};n.set=function(v){s=v>>>0;};return n;}
-  function clone(s){var c=JSON.parse(JSON.stringify(s));c.random=rng(s.random.state());return c;} function at(i){return{x:i%SIZE,y:Math.floor(i/SIZE)};} function adjacent(a,b){var p=at(a),q=at(b);return Math.abs(p.x-q.x)+Math.abs(p.y-q.y)===1;} function range(a,b){var r=[];for(var i=a;i<b;i++)r.push(i);return r;}
-  function levelSpec(n){n=Math.max(1,n|0);return{kinds:n<4?5:6,moves:n<10?20-Math.floor(n/6):16,goals:n<3?1:n<8?2:3,need:n<10?Math.min(6,4+Math.floor(n/6)):7,moss:n<5?0:Math.min(4,1+Math.floor(n/10))};}
-  function cell(kind){return{kind:kind,special:'',aim:null,vertical:false};}
-  function runs(b){var o=[],x,y,i,j,k;for(y=0;y<SIZE;y++)for(x=0;x<SIZE;){i=y*SIZE+x;k=b[i].kind;j=x+1;while(j<SIZE&&b[y*SIZE+j].kind===k)j++;if(j-x>=3)o.push({cells:range(i,y*SIZE+j),horizontal:true});x=j;}for(x=0;x<SIZE;x++)for(y=0;y<SIZE;){i=y*SIZE+x;k=b[i].kind;j=y+1;while(j<SIZE&&b[j*SIZE+x].kind===k)j++;if(j-y>=3){var c=[];for(var z=y;z<j;z++)c.push(z*SIZE+x);o.push({cells:c,horizontal:false});}y=j;}return o;}
-  function matched(b){var s=new Set();runs(b).forEach(function(r){r.cells.forEach(function(i){s.add(i);});});return s;} function swap(b,a,d){var t=b[a];b[a]=b[d];b[d]=t;}
-  function canSpecial(a,b){return a.special==='kimallus'||b.special==='kimallus'||(a.special&&b.special);}
-  function hasMove(b){for(var i=0;i<49;i++)for(var d of[1,SIZE]){var q=i+d;if(q>=49||(d===1&&i%7===6))continue;if(canSpecial(b[i],b[q]))return true;swap(b,i,q);var yes=matched(b).size>0;swap(b,i,q);if(yes)return true;}return false;}
-  function newLevel(level,seed){var sp=levelSpec(level),r=rng(seed==null?Date.now():seed),b=[];for(var i=0;i<49;i++){var p=at(i),a=range(0,sp.kinds);if(p.x>1&&b[i-1].kind===b[i-2].kind)a=a.filter(function(k){return k!==b[i-1].kind;});if(p.y>1&&b[i-7].kind===b[i-14].kind)a=a.filter(function(k){return k!==b[i-7].kind;});b.push(cell(a[Math.floor(r()*a.length)]));}while(matched(b).size||!hasMove(b))b.sort(function(){return r()-.5;});var moss=Array(49).fill(false);range(0,49).sort(function(){return r()-.5;}).slice(0,sp.moss).forEach(function(i){moss[i]=true;});var goals=[];for(i=0;i<sp.goals;i++)goals.push({kind:i%sp.kinds,left:sp.need});return{level:level,seed:seed>>>0,random:r,board:b,moss:moss,goals:goals,target:goals[0].kind,left:goals[0].left,mossLeft:sp.moss,moves:sp.moves,score:0,chain:0,phase:'play'};}
-  function specialFor(b,place){var rs=runs(b),counts={},candidate=null,cross,five;rs.forEach(function(r){r.cells.forEach(function(i){counts[i]=(counts[i]||0)+1;});});if(place!=null&&counts[place])candidate=place;five=rs.find(function(r){return r.cells.length>=5;});if(five||Object.keys(counts).some(function(i){return counts[i]>1;})){if(candidate!=null&&counts[candidate]<2&&(!five||five.cells.indexOf(candidate)<0))candidate=null;cross=Object.keys(counts).find(function(i){return counts[i]>1;});if(candidate==null&&cross!==undefined)candidate=+cross;if(candidate==null)candidate=five.cells[0];return{t:'kimallus',place:candidate};}var r=rs.find(function(q){return q.cells.length===4;});return r?{t:'puuska',vertical:!r.horizontal,place:r.cells.indexOf(candidate)>=0?candidate:r.cells[0]}:null;}
-  function specialCells(b,i,c){var a=[];if(c.special==='puuska'){var p=at(i);return c.vertical?range(0,7).map(function(y){return y*7+p.x;}):range(p.y*7,p.y*7+7);}for(var j=0;j<49;j++)if(b[j].kind===(c.aim==null?c.kind:c.aim))a.push(j);return a;}
-  function explode(b,clear){var again=true;while(again){again=false;Array.from(clear).forEach(function(i){var c=b[i];if(!c||!c.special)return;var a=specialCells(b,i,c);c.special='';a.forEach(function(j){if(!clear.has(j)){clear.add(j);again=true;}});});}}
-  function fall(s,events){var next=Array(49),moves=[];for(var x=0;x<7;x++){var keep=[];for(var y=6;y>=0;y--)if(s.board[y*7+x])keep.push({cell:s.board[y*7+x],from:y*7+x});for(var yy=6,k=0;yy>=0;yy--,k++){var old=keep[k],to=yy*7+x;if(old){next[to]=old.cell;if(old.from!==to)moves.push({from:old.from,to:to});}else{next[to]=cell(Math.floor(s.random()*levelSpec(s.level).kinds));moves.push({from:-(k+1)*7+x,to:to});}}}s.board=next;if(events)events.push({board:next.map(function(c){return Object.assign({},c);}),moves:moves});}
-  function take(s,clear){var moss=0;clear.forEach(function(i){var c=s.board[i];s.goals.forEach(function(g){if(c.kind===g.kind)g.left=Math.max(0,g.left-1);});if(s.moss[i]){s.moss[i]=false;moss++;}s.board[i]=null;});s.mossLeft-=moss;s.left=s.goals[0].left;return moss;}
-  function wavePoints(rs,wave){return rs.reduce(function(n,r){return n+(r.cells.length>=5?100:r.cells.length===4?60:30)*Math.min(5,wave+1);},0);}
-  function resolve(s,place,events){var wave=0;while(true){var rs=runs(s.board);if(!rs.length)break;var clear=matched(s.board),sp=specialFor(s.board,wave===0?place:null);if(sp&&clear.has(sp.place)){clear.delete(sp.place);Object.assign(s.board[sp.place],{special:sp.t,vertical:!!sp.vertical,aim:null});}explode(s.board,clear);s.score+=wavePoints(rs,wave)+take(s,clear)*10;fall(s,events);wave++;}s.chain=Math.max(0,wave-1);}
-  function shuffle(s){var n=0;do{s.board.sort(function(){return s.random()-.5;});n++;}while((matched(s.board).size||!hasMove(s.board))&&n<100);return n>0;}
-  function trySwap(s,a,b){if(s.phase!=='play'||!adjacent(a,b))return{ok:false};var first=s.board[a],second=s.board[b];swap(s.board,a,b);var hit=matched(s.board),special=canSpecial(first,second);if(!special&&!hit.size){swap(s.board,a,b);return{ok:false};}s.moves--;s.events=[];s.shuffled=false;if(special){if(first.special==='kimallus')s.board[b].aim=second.kind;if(second.special==='kimallus')s.board[a].aim=first.kind;var clear=new Set([a,b]);explode(s.board,clear);s.score+=take(s,clear)*10+clear.size*30;fall(s,s.events);resolve(s,-1,s.events);}else resolve(s,hit.has(b)?b:a,s.events);if(!hasMove(s.board))s.shuffled=shuffle(s);if(s.goals.every(function(g){return g.left===0;})&&s.mossLeft===0){s.score+=s.moves*50;s.phase='win';}else if(s.moves<=0)s.phase='lose';return{ok:true,phase:s.phase,chain:s.chain,shuffled:s.shuffled,events:s.events};}
-  function legalMoves(s){var out=[];for(var i=0;i<49;i++)for(var d of[1,7]){var b=i+d;if(b>=49||(d===1&&i%7===6))continue;var t=clone(s);if(trySwap(t,i,b).ok)out.push([i,b]);}return out;}
-  return{SIZE:SIZE,newLevel:newLevel,levelSpec:levelSpec,runs:runs,matched:matched,hasMove:hasMove,trySwap:trySwap,shuffle:shuffle,legalMoves:legalMoves,clone:clone,wavePoints:wavePoints,specialCells:specialCells,specialFor:specialFor,resolve:resolve};
-}());
+  var SIZE = 7;
+  function rng(seed) {
+    var s = seed >>> 0;
+    function n() {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    }
+    n.state = function () {
+      return s;
+    };
+    n.set = function (v) {
+      s = v >>> 0;
+    };
+    return n;
+  }
+  function clone(s) {
+    var c = JSON.parse(JSON.stringify(s));
+    c.random = rng(s.random.state());
+    return c;
+  }
+  function at(i) {
+    return { x: i % SIZE, y: Math.floor(i / SIZE) };
+  }
+  function adjacent(a, b) {
+    var p = at(a),
+      q = at(b);
+    return Math.abs(p.x - q.x) + Math.abs(p.y - q.y) === 1;
+  }
+  function range(a, b) {
+    var r = [];
+    for (var i = a; i < b; i++) r.push(i);
+    return r;
+  }
+  function levelSpec(n) {
+    n = Math.max(1, n | 0);
+    return {
+      kinds: n < 4 ? 5 : 6,
+      moves: n < 10 ? 20 - Math.floor(n / 6) : 16,
+      goals: n < 3 ? 1 : n < 8 ? 2 : 3,
+      need: n < 10 ? Math.min(6, 4 + Math.floor(n / 6)) : 7,
+      moss: n < 5 ? 0 : Math.min(4, 1 + Math.floor(n / 10)),
+    };
+  }
+  function cell(kind) {
+    return { kind: kind, special: '', aim: null, vertical: false };
+  }
+  function runs(b) {
+    var o = [],
+      x,
+      y,
+      i,
+      j,
+      k;
+    for (y = 0; y < SIZE; y++)
+      for (x = 0; x < SIZE;) {
+        i = y * SIZE + x;
+        k = b[i].kind;
+        j = x + 1;
+        while (j < SIZE && b[y * SIZE + j].kind === k) j++;
+        if (j - x >= 3) o.push({ cells: range(i, y * SIZE + j), horizontal: true });
+        x = j;
+      }
+    for (x = 0; x < SIZE; x++)
+      for (y = 0; y < SIZE;) {
+        i = y * SIZE + x;
+        k = b[i].kind;
+        j = y + 1;
+        while (j < SIZE && b[j * SIZE + x].kind === k) j++;
+        if (j - y >= 3) {
+          var c = [];
+          for (var z = y; z < j; z++) c.push(z * SIZE + x);
+          o.push({ cells: c, horizontal: false });
+        }
+        y = j;
+      }
+    return o;
+  }
+  function matched(b) {
+    var s = new Set();
+    runs(b).forEach(function (r) {
+      r.cells.forEach(function (i) {
+        s.add(i);
+      });
+    });
+    return s;
+  }
+  function swap(b, a, d) {
+    var t = b[a];
+    b[a] = b[d];
+    b[d] = t;
+  }
+  function canSpecial(a, b) {
+    return a.special === 'kimallus' || b.special === 'kimallus' || (a.special && b.special);
+  }
+  function hasMove(b) {
+    for (var i = 0; i < 49; i++)
+      for (var d of [1, SIZE]) {
+        var q = i + d;
+        if (q >= 49 || (d === 1 && i % 7 === 6)) continue;
+        if (canSpecial(b[i], b[q])) return true;
+        swap(b, i, q);
+        var yes = matched(b).size > 0;
+        swap(b, i, q);
+        if (yes) return true;
+      }
+    return false;
+  }
+  function newLevel(level, seed) {
+    var sp = levelSpec(level),
+      r = rng(seed == null ? Date.now() : seed),
+      b = [];
+    for (var i = 0; i < 49; i++) {
+      var p = at(i),
+        a = range(0, sp.kinds);
+      if (p.x > 1 && b[i - 1].kind === b[i - 2].kind)
+        a = a.filter(function (k) {
+          return k !== b[i - 1].kind;
+        });
+      if (p.y > 1 && b[i - 7].kind === b[i - 14].kind)
+        a = a.filter(function (k) {
+          return k !== b[i - 7].kind;
+        });
+      b.push(cell(a[Math.floor(r() * a.length)]));
+    }
+    while (matched(b).size || !hasMove(b))
+      b.sort(function () {
+        return r() - 0.5;
+      });
+    var moss = Array(49).fill(false);
+    range(0, 49)
+      .sort(function () {
+        return r() - 0.5;
+      })
+      .slice(0, sp.moss)
+      .forEach(function (i) {
+        moss[i] = true;
+      });
+    var goals = [];
+    for (i = 0; i < sp.goals; i++) goals.push({ kind: i % sp.kinds, left: sp.need });
+    return {
+      level: level,
+      seed: seed >>> 0,
+      random: r,
+      board: b,
+      moss: moss,
+      goals: goals,
+      target: goals[0].kind,
+      left: goals[0].left,
+      mossLeft: sp.moss,
+      moves: sp.moves,
+      score: 0,
+      chain: 0,
+      phase: 'play',
+    };
+  }
+  function specialFor(b, place) {
+    var rs = runs(b),
+      counts = {},
+      candidate = null,
+      cross,
+      five;
+    rs.forEach(function (r) {
+      r.cells.forEach(function (i) {
+        counts[i] = (counts[i] || 0) + 1;
+      });
+    });
+    if (place != null && counts[place]) candidate = place;
+    five = rs.find(function (r) {
+      return r.cells.length >= 5;
+    });
+    if (
+      five ||
+      Object.keys(counts).some(function (i) {
+        return counts[i] > 1;
+      })
+    ) {
+      if (candidate != null && counts[candidate] < 2 && (!five || five.cells.indexOf(candidate) < 0))
+        candidate = null;
+      cross = Object.keys(counts).find(function (i) {
+        return counts[i] > 1;
+      });
+      if (candidate == null && cross !== undefined) candidate = +cross;
+      if (candidate == null) candidate = five.cells[0];
+      return { t: 'kimallus', place: candidate };
+    }
+    var r = rs.find(function (q) {
+      return q.cells.length === 4;
+    });
+    return r
+      ? {
+          t: 'puuska',
+          vertical: !r.horizontal,
+          place: r.cells.indexOf(candidate) >= 0 ? candidate : r.cells[0],
+        }
+      : null;
+  }
+  function specialCells(b, i, c) {
+    var a = [];
+    if (c.special === 'puuska') {
+      var p = at(i);
+      return c.vertical
+        ? range(0, 7).map(function (y) {
+            return y * 7 + p.x;
+          })
+        : range(p.y * 7, p.y * 7 + 7);
+    }
+    for (var j = 0; j < 49; j++) if (b[j].kind === (c.aim == null ? c.kind : c.aim)) a.push(j);
+    return a;
+  }
+  function explode(b, clear) {
+    var again = true;
+    while (again) {
+      again = false;
+      Array.from(clear).forEach(function (i) {
+        var c = b[i];
+        if (!c || !c.special) return;
+        var a = specialCells(b, i, c);
+        c.special = '';
+        a.forEach(function (j) {
+          if (!clear.has(j)) {
+            clear.add(j);
+            again = true;
+          }
+        });
+      });
+    }
+  }
+  function fall(s, events) {
+    var next = Array(49),
+      moves = [];
+    for (var x = 0; x < 7; x++) {
+      var keep = [];
+      for (var y = 6; y >= 0; y--)
+        if (s.board[y * 7 + x]) keep.push({ cell: s.board[y * 7 + x], from: y * 7 + x });
+      for (var yy = 6, k = 0; yy >= 0; yy--, k++) {
+        var old = keep[k],
+          to = yy * 7 + x;
+        if (old) {
+          next[to] = old.cell;
+          if (old.from !== to) moves.push({ from: old.from, to: to });
+        } else {
+          next[to] = cell(Math.floor(s.random() * levelSpec(s.level).kinds));
+          moves.push({ from: -(k + 1) * 7 + x, to: to });
+        }
+      }
+    }
+    s.board = next;
+    if (events)
+      events.push({
+        board: next.map(function (c) {
+          return Object.assign({}, c);
+        }),
+        moves: moves,
+      });
+  }
+  function take(s, clear) {
+    var moss = 0;
+    clear.forEach(function (i) {
+      var c = s.board[i];
+      s.goals.forEach(function (g) {
+        if (c.kind === g.kind) g.left = Math.max(0, g.left - 1);
+      });
+      if (s.moss[i]) {
+        s.moss[i] = false;
+        moss++;
+      }
+      s.board[i] = null;
+    });
+    s.mossLeft -= moss;
+    s.left = s.goals[0].left;
+    return moss;
+  }
+  function wavePoints(rs, wave) {
+    return rs.reduce(function (n, r) {
+      return n + (r.cells.length >= 5 ? 100 : r.cells.length === 4 ? 60 : 30) * Math.min(5, wave + 1);
+    }, 0);
+  }
+  function resolve(s, place, events) {
+    var wave = 0;
+    while (true) {
+      var rs = runs(s.board);
+      if (!rs.length) break;
+      var clear = matched(s.board),
+        sp = specialFor(s.board, wave === 0 ? place : null);
+      if (sp && clear.has(sp.place)) {
+        clear.delete(sp.place);
+        Object.assign(s.board[sp.place], { special: sp.t, vertical: !!sp.vertical, aim: null });
+      }
+      explode(s.board, clear);
+      s.score += wavePoints(rs, wave) + take(s, clear) * 10;
+      fall(s, events);
+      wave++;
+    }
+    s.chain = Math.max(0, wave - 1);
+  }
+  function shuffle(s) {
+    var n = 0;
+    do {
+      s.board.sort(function () {
+        return s.random() - 0.5;
+      });
+      n++;
+    } while ((matched(s.board).size || !hasMove(s.board)) && n < 100);
+    return n > 0;
+  }
+  function trySwap(s, a, b) {
+    if (s.phase !== 'play' || !adjacent(a, b)) return { ok: false };
+    var first = s.board[a],
+      second = s.board[b];
+    swap(s.board, a, b);
+    var hit = matched(s.board),
+      special = canSpecial(first, second);
+    if (!special && !hit.size) {
+      swap(s.board, a, b);
+      return { ok: false };
+    }
+    s.moves--;
+    s.events = [];
+    s.shuffled = false;
+    if (special) {
+      if (first.special === 'kimallus') s.board[b].aim = second.kind;
+      if (second.special === 'kimallus') s.board[a].aim = first.kind;
+      var clear = new Set([a, b]);
+      explode(s.board, clear);
+      s.score += take(s, clear) * 10 + clear.size * 30;
+      fall(s, s.events);
+      resolve(s, -1, s.events);
+    } else resolve(s, hit.has(b) ? b : a, s.events);
+    if (!hasMove(s.board)) s.shuffled = shuffle(s);
+    if (
+      s.goals.every(function (g) {
+        return g.left === 0;
+      }) &&
+      s.mossLeft === 0
+    ) {
+      s.score += s.moves * 50;
+      s.phase = 'win';
+    } else if (s.moves <= 0) s.phase = 'lose';
+    return { ok: true, phase: s.phase, chain: s.chain, shuffled: s.shuffled, events: s.events };
+  }
+  function legalMoves(s) {
+    var out = [];
+    for (var i = 0; i < 49; i++)
+      for (var d of [1, 7]) {
+        var b = i + d;
+        if (b >= 49 || (d === 1 && i % 7 === 6)) continue;
+        var t = clone(s);
+        if (trySwap(t, i, b).ok) out.push([i, b]);
+      }
+    return out;
+  }
+  return {
+    SIZE: SIZE,
+    newLevel: newLevel,
+    levelSpec: levelSpec,
+    runs: runs,
+    matched: matched,
+    hasMove: hasMove,
+    trySwap: trySwap,
+    shuffle: shuffle,
+    legalMoves: legalMoves,
+    clone: clone,
+    wavePoints: wavePoints,
+    specialCells: specialCells,
+    specialFor: specialFor,
+    resolve: resolve,
+  };
+})();
