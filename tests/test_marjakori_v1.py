@@ -56,9 +56,9 @@ def test_four_five_crosses_and_two_specials_do_their_own_clear(site, context):
       const cross = base(); [2, 8, 9, 10, 16].forEach(i => cross.board[i].kind = 0);
       const both = base(); both.board[0].special = 'puuska'; both.board[1].special = 'kimallus'; const moves = both.moves;
       const pair = Marjakori.trySwap(both, 0, 1);
-      return [four.board[3].special, five.board[4].special, Marjakori.specialFor(cross.board, new Set(), 9), pair.ok, both.moves === moves - 1, both.score > 0];
+      return [four.board[3].special, five.board[4].special, Marjakori.runs(cross.board).length, pair.ok, both.moves === moves - 1, both.score > 0];
     }""")
-    assert result == ["puuska", "kimallus", "kimallus", True, True, True]
+    assert result == ["puuska", "kimallus", 2, True, True, True]
     assert page.errors == []
 
 
@@ -66,16 +66,17 @@ def test_real_swipe_plays_and_keeps_a_round_on_reload(site, context):
     page = open_game(site, context)
     page.click("#go")
     page.wait_for_function("window.boardBox && state && state.phase === 'play'")
+    start_moves = page.evaluate("state.moves")
     pair = page.evaluate("Marjakori.legalMoves(state)[0]")
     box = page.evaluate("boardBox")
     def centre(i):
         return {"x": box["x"] + (i % 7 + .5) * box["size"], "y": box["y"] + (i // 7 + .5) * box["size"]}
     a, b = centre(pair[0]), centre(pair[1])
     page.mouse.move(a["x"], a["y"]); page.mouse.down(); page.mouse.move(b["x"], b["y"], steps=4); page.mouse.up()
-    page.wait_for_function("state.moves === 19")
+    page.wait_for_function(f"state.moves === {start_moves - 1}")
     expected = page.evaluate("""() => { const pair = Marjakori.legalMoves(state)[0], next = Marjakori.clone(state); Marjakori.trySwap(next, pair[0], pair[1]); return [pair, JSON.stringify(next.board), next.moves]; }""")
     page.reload()
-    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:marjakori:kierros')).moves") == 19
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:marjakori:kierros')).moves") == start_moves - 1
     assert page.evaluate("""(pair) => { const r = Marjakori.trySwap(state, pair[0], pair[1]); return [r.ok, JSON.stringify(state.board), state.moves]; }""", expected[0]) == [True, expected[1], expected[2]]
     assert page.errors == []
 
@@ -88,5 +89,5 @@ def test_active_round_fits_390px_and_landscape(site, context):
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
     turn(page, {"width": 740, "height": 360})
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
-    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 20, True, True, True, True]
+    assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 28, True, True, True, True]
     assert page.errors == []

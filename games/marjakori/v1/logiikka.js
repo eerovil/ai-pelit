@@ -1,110 +1,21 @@
 'use strict';
-
-// The board rules deliberately have no DOM or animation.  This makes a level reproducible from
-// its saved seed and lets the tests play thousands of swaps without waiting for the screen.
 var Marjakori = (function () {
-  var SIZE = 7;
-  function rng(seed) { var s = seed >>> 0; function next() { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; } next.state = function () { return s; }; next.set = function (value) { s = value >>> 0; }; return next; }
-  function clone(v) { var copy = JSON.parse(JSON.stringify(v)); if (v.random) copy.random = rng(v.random.state()); return copy; }
-  function at(i) { return { x: i % SIZE, y: Math.floor(i / SIZE) }; }
-  function adjacent(a, b) { var p = at(a), q = at(b); return Math.abs(p.x - q.x) + Math.abs(p.y - q.y) === 1; }
-  function levelSpec(n) {
-    n = Math.max(1, Math.floor(n || 1));
-    return { kinds: n < 4 ? 5 : 6, moves: Math.max(16, 20 - Math.floor((n - 1) / 5)),
-      target: (n - 1) % (n < 4 ? 5 : 6), need: 10 + Math.min(n, 30) * 2,
-      moss: n < 5 ? 0 : Math.min(12, 2 + Math.floor(n / 2)) };
-  }
-  function cell(kind, moss) { return { kind: kind, moss: !!moss, special: '' }; }
-  function runs(board) {
-    var found = [], x, y, i, j, kind;
-    for (y = 0; y < SIZE; y++) for (x = 0; x < SIZE;) {
-      i = y * SIZE + x; kind = board[i].kind; j = x + 1;
-      while (j < SIZE && board[y * SIZE + j].kind === kind) j++;
-      if (j - x >= 3) found.push({ cells: range(i, y * SIZE + j), horizontal: true });
-      x = j;
-    }
-    for (x = 0; x < SIZE; x++) for (y = 0; y < SIZE;) {
-      i = y * SIZE + x; kind = board[i].kind; j = y + 1;
-      while (j < SIZE && board[j * SIZE + x].kind === kind) j++;
-      if (j - y >= 3) { var cells = []; for (var yy = y; yy < j; yy++) cells.push(yy * SIZE + x); found.push({ cells: cells, horizontal: false }); }
-      y = j;
-    }
-    return found;
-  }
-  function range(a, b) { var r = []; for (var i = a; i < b; i++) r.push(i); return r; }
-  function matched(board) { var s = new Set(); runs(board).forEach(function (r) { r.cells.forEach(function (i) { s.add(i); }); }); return s; }
-  function swap(board, a, b) { var c = board[a]; board[a] = board[b]; board[b] = c; }
-  function hasMove(board) {
-    for (var i = 0; i < board.length; i++) for (var d of [1, SIZE]) {
-      var q = i + d, p = at(i); if (q >= board.length || (d === 1 && p.x === SIZE - 1)) continue;
-      if (board[i].special || board[q].special) return true;
-      swap(board, i, q); var yes = matched(board).size > 0; swap(board, i, q); if (yes) return true;
-    }
-    return false;
-  }
-  function fresh(level, seed) {
-    var spec = levelSpec(level), random = rng(seed), board = [];
-    for (var i = 0; i < SIZE * SIZE; i++) {
-      var choices = range(0, spec.kinds); var p = at(i);
-      if (p.x >= 2 && board[i - 1].kind === board[i - 2].kind) choices = choices.filter(function (k) { return k !== board[i - 1].kind; });
-      if (p.y >= 2 && board[i - SIZE].kind === board[i - 2 * SIZE].kind) choices = choices.filter(function (k) { return k !== board[i - SIZE].kind; });
-      board.push(cell(choices[Math.floor(random() * choices.length)], false));
-    }
-    var moss = range(0, board.length).sort(function () { return random() - .5; }).slice(0, spec.moss);
-    moss.forEach(function (i) { board[i].moss = true; });
-    while (matched(board).size || !hasMove(board)) board.sort(function () { return random() - .5; });
-    return { level: level, seed: seed >>> 0, random: random, board: board, moves: spec.moves,
-      target: spec.target, left: spec.need, mossLeft: spec.moss, score: 0, chain: 0, phase: 'play' };
-  }
-  function newLevel(level, seed) { return fresh(level, seed == null ? (Date.now() >>> 0) : seed); }
-  function specialFor(board, hit, place) {
-    var rs = runs(board), long = rs.some(function (r) { return r.cells.length >= 5; });
-    var counts = {}; rs.forEach(function (r) { r.cells.forEach(function (i) { counts[i] = (counts[i] || 0) + 1; }); });
-    if (long || Object.keys(counts).some(function (i) { return counts[i] >= 2; })) return 'kimallus';
-    return rs.some(function (r) { return r.cells.length === 4 && r.cells.indexOf(place) >= 0; }) ? 'puuska' : '';
-  }
-  function explodeSpecial(board, clear) {
-    var more = true;
-    while (more) { more = false; Array.from(clear).forEach(function (i) {
-      var c = board[i]; if (!c || !c.special) return;
-      var add = []; if (c.special === 'puuska') { var p = at(i); add = range(p.y * SIZE, p.y * SIZE + SIZE); }
-      else { for (var j = 0; j < board.length; j++) if (board[j].kind === c.kind) add.push(j); }
-      c.special = ''; add.forEach(function (j) { if (!clear.has(j)) { clear.add(j); more = true; } });
-    }); }
-  }
-  function fall(s) {
-    var random = s.random, kinds = levelSpec(s.level).kinds;
-    for (var x = 0; x < SIZE; x++) { var kept = [];
-      for (var y = SIZE - 1; y >= 0; y--) { var c = s.board[y * SIZE + x]; if (c) kept.push(c); }
-      for (var yy = SIZE - 1, k = 0; yy >= 0; yy--, k++) s.board[yy * SIZE + x] = kept[k] || cell(Math.floor(random() * kinds), false);
-    }
-  }
-  function resolve(s, placed) {
-    var wave = 0, total = 0;
-    while (true) {
-      var clear = matched(s.board); if (!clear.size) break;
-      var special = wave === 0 ? specialFor(s.board, clear, placed) : '';
-      explodeSpecial(s.board, clear);
-      clear.forEach(function (i) { var c = s.board[i]; if (c.kind === s.target) s.left = Math.max(0, s.left - 1); if (c.moss) s.mossLeft = Math.max(0, s.mossLeft - 1); s.board[i] = null; });
-      var n = clear.size; total += (n >= 5 ? 100 : n === 4 ? 60 : 30) * Math.min(5, wave + 1) + (s.mossLeft < levelSpec(s.level).moss ? 10 : 0);
-      fall(s); wave++;
-      if (special) { s.board[placed].special = special; break; }
-    }
-    s.chain = Math.max(0, wave - 1); s.score += total;
-  }
-  function trySwap(s, a, b) {
-    if (s.phase !== 'play' || !adjacent(a, b)) return { ok: false };
-    var first = s.board[a], second = s.board[b], special = first.special || second.special;
-    swap(s.board, a, b);
-    if (!special && !matched(s.board).size) { swap(s.board, a, b); return { ok: false }; }
-    s.moves--; if (special) { var clear = new Set([a, b]); explodeSpecial(s.board, clear); clear.forEach(function (i) { var c = s.board[i]; if (c.kind === s.target) s.left = Math.max(0, s.left - 1); if (c.moss) s.mossLeft = Math.max(0, s.mossLeft - 1); s.board[i] = null; }); fall(s); s.score += clear.size * 30; }
-    else { var hit = matched(s.board), placed = hit.has(b) ? b : a; resolve(s, placed); }
-    if (!hasMove(s.board)) shuffle(s);
-    if (s.left === 0 && s.mossLeft === 0) { s.score += s.moves * 50; s.phase = 'win'; }
-    else if (s.moves <= 0) s.phase = 'lose';
-    return { ok: true, phase: s.phase, chain: s.chain };
-  }
-  function shuffle(s) { var r = s.random, attempts = 0; do { s.board.sort(function () { return r() - .5; }); attempts++; } while ((matched(s.board).size || !hasMove(s.board)) && attempts < 80); return s; }
-  function legalMoves(s) { var out = []; for (var i = 0; i < s.board.length; i++) for (var d of [1, SIZE]) { var b = i + d, p = at(i); if (b >= s.board.length || (d === 1 && p.x === SIZE - 1)) continue; var t = clone(s); if (trySwap(t, i, b).ok) out.push([i, b]); } return out; }
-  return { SIZE: SIZE, newLevel: newLevel, levelSpec: levelSpec, runs: runs, matched: matched, hasMove: hasMove, specialFor: specialFor, trySwap: trySwap, shuffle: shuffle, legalMoves: legalMoves, clone: clone };
+  var SIZE=7;
+  function rng(seed){var s=seed>>>0;function n(){s=(s*1664525+1013904223)>>>0;return s/4294967296;}n.state=function(){return s;};n.set=function(v){s=v>>>0;};return n;}
+  function clone(s){var c=JSON.parse(JSON.stringify(s));c.random=rng(s.random.state());return c;} function at(i){return{x:i%SIZE,y:Math.floor(i/SIZE)};} function adjacent(a,b){var p=at(a),q=at(b);return Math.abs(p.x-q.x)+Math.abs(p.y-q.y)===1;} function range(a,b){var r=[];for(var i=a;i<b;i++)r.push(i);return r;}
+  function levelSpec(n){n=Math.max(1,n|0);return{kinds:n<4?5:6,moves:Math.max(22,28-Math.floor(n/6)),goals:n<3?1:n<8?2:3,need:Math.min(7,4+Math.floor(n/8)),moss:n<5?0:Math.min(4,1+Math.floor(n/10))};}
+  function cell(kind){return{kind:kind,special:'',aim:null,vertical:false};}
+  function runs(b){var o=[],x,y,i,j,k;for(y=0;y<SIZE;y++)for(x=0;x<SIZE;){i=y*SIZE+x;k=b[i].kind;j=x+1;while(j<SIZE&&b[y*SIZE+j].kind===k)j++;if(j-x>=3)o.push({cells:range(i,y*SIZE+j),horizontal:true});x=j;}for(x=0;x<SIZE;x++)for(y=0;y<SIZE;){i=y*SIZE+x;k=b[i].kind;j=y+1;while(j<SIZE&&b[j*SIZE+x].kind===k)j++;if(j-y>=3){var c=[];for(var z=y;z<j;z++)c.push(z*SIZE+x);o.push({cells:c,horizontal:false});}y=j;}return o;}
+  function matched(b){var s=new Set();runs(b).forEach(function(r){r.cells.forEach(function(i){s.add(i);});});return s;} function swap(b,a,d){var t=b[a];b[a]=b[d];b[d]=t;}
+  function hasMove(b){for(var i=0;i<49;i++)for(var d of[1,SIZE]){var q=i+d;if(q>=49||(d===1&&i%7===6))continue;if(b[i].special||b[q].special)return true;swap(b,i,q);var yes=matched(b).size>0;swap(b,i,q);if(yes)return true;}return false;}
+  function newLevel(level,seed){var sp=levelSpec(level),r=rng(seed==null?Date.now():seed),b=[];for(var i=0;i<49;i++){var p=at(i),a=range(0,sp.kinds);if(p.x>1&&b[i-1].kind===b[i-2].kind)a=a.filter(function(k){return k!==b[i-1].kind;});if(p.y>1&&b[i-7].kind===b[i-14].kind)a=a.filter(function(k){return k!==b[i-7].kind;});b.push(cell(a[Math.floor(r()*a.length)]));}while(matched(b).size||!hasMove(b))b.sort(function(){return r()-.5;});var moss=Array(49).fill(false);range(0,49).sort(function(){return r()-.5;}).slice(0,sp.moss).forEach(function(i){moss[i]=true;});var goals=[];for(i=0;i<sp.goals;i++)goals.push({kind:i%sp.kinds,left:sp.need});return{level:level,seed:seed>>>0,random:r,board:b,moss:moss,goals:goals,target:goals[0].kind,left:goals[0].left,mossLeft:sp.moss,moves:sp.moves,score:0,chain:0,phase:'play'};}
+  function specialFor(b,place){var rs=runs(b),counts={};rs.forEach(function(r){r.cells.forEach(function(i){counts[i]=(counts[i]||0)+1;});});if(rs.some(function(r){return r.cells.length>=5;})||Object.keys(counts).some(function(i){return counts[i]>1;}))return{t:'kimallus'};var r=rs.find(function(q){return q.cells.length===4&&q.cells.indexOf(place)>=0;});return r?{t:'puuska',vertical:!r.horizontal}:null;}
+  function explode(b,clear){var again=true;while(again){again=false;Array.from(clear).forEach(function(i){var c=b[i];if(!c||!c.special)return;var a=[];if(c.special==='puuska'){var p=at(i);a=c.vertical?range(0,7).map(function(y){return y*7+p.x;}):range(p.y*7,p.y*7+7);}else for(var j=0;j<49;j++)if(b[j].kind===(c.aim==null?c.kind:c.aim))a.push(j);c.special='';a.forEach(function(j){if(!clear.has(j)){clear.add(j);again=true;}});});}}
+  function fall(s){for(var x=0;x<7;x++){var keep=[];for(var y=6;y>=0;y--)if(s.board[y*7+x])keep.push(s.board[y*7+x]);for(var yy=6,k=0;yy>=0;yy--,k++)s.board[yy*7+x]=keep[k]||cell(Math.floor(s.random()*levelSpec(s.level).kinds));}}
+  function take(s,clear){var moss=0;clear.forEach(function(i){var c=s.board[i];s.goals.forEach(function(g){if(c.kind===g.kind)g.left=Math.max(0,g.left-1);});if(s.moss[i]){s.moss[i]=false;moss++;}s.board[i]=null;});s.mossLeft-=moss;s.left=s.goals[0].left;return moss;}
+  function resolve(s,place){var wave=0;while(true){var rs=runs(s.board);if(!rs.length)break;var clear=matched(s.board),sp=wave===0?specialFor(s.board,place):null;if(sp&&clear.has(place)){clear.delete(place);Object.assign(s.board[place],{special:sp.t,vertical:!!sp.vertical,aim:null});}explode(s.board,clear);var points=rs.reduce(function(n,r){return n+(r.cells.length>=5?100:r.cells.length===4?60:30)*Math.min(5,wave+1);},0);s.score+=points+take(s,clear)*10;fall(s);wave++;}s.chain=Math.max(0,wave-1);}
+  function shuffle(s){var n=0;do{s.board.sort(function(){return s.random()-.5;});n++;}while((matched(s.board).size||!hasMove(s.board))&&n<100);}
+  function trySwap(s,a,b){if(s.phase!=='play'||!adjacent(a,b))return{ok:false};var first=s.board[a],second=s.board[b];swap(s.board,a,b);var hit=matched(s.board),special=first.special||second.special;if(!special&&!hit.size){swap(s.board,a,b);return{ok:false};}s.moves--;if(special){if(first.special==='kimallus')s.board[b].aim=second.kind;if(second.special==='kimallus')s.board[a].aim=first.kind;var clear=new Set([a,b]);explode(s.board,clear);s.score+=take(s,clear)*10+clear.size*30;fall(s);resolve(s,-1);}else resolve(s,hit.has(b)?b:a);if(!hasMove(s.board))shuffle(s);if(s.goals.every(function(g){return g.left===0;})&&s.mossLeft===0){s.score+=s.moves*50;s.phase='win';}else if(s.moves<=0)s.phase='lose';return{ok:true,phase:s.phase,chain:s.chain};}
+  function legalMoves(s){var out=[];for(var i=0;i<49;i++)for(var d of[1,7]){var b=i+d;if(b>=49||(d===1&&i%7===6))continue;var t=clone(s);if(trySwap(t,i,b).ok)out.push([i,b]);}return out;}
+  return{SIZE:SIZE,newLevel:newLevel,levelSpec:levelSpec,runs:runs,matched:matched,hasMove:hasMove,trySwap:trySwap,shuffle:shuffle,legalMoves:legalMoves,clone:clone};
 }());

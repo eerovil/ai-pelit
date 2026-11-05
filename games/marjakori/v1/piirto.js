@@ -16,7 +16,7 @@ var MarjakoriPiirto = (function () {
     ctx.save(); ctx.fillStyle='#1d3b32'; ctx.fillRect(ox-7,oy-7,z*n+14,z*n+14);
     for (var i=0;i<s.board.length;i++) { var p={x:i%n,y:Math.floor(i/n)}, c=s.board[i], x=ox+(p.x+.5)*z, y=oy+(p.y+.5)*z;
       ctx.fillStyle = (i===selected ? '#ffe28a' : '#eff4d7'); ctx.fillRect(ox+p.x*z+1,oy+p.y*z+1,z-2,z-2);
-      if (c.moss) { ctx.fillStyle='#638f45'; ctx.fillRect(ox+p.x*z+4,oy+p.y*z+z*.74,z-8,z*.18); }
+      if (s.moss[i]) { ctx.fillStyle='#638f45'; ctx.fillRect(ox+p.x*z+4,oy+p.y*z+z*.74,z-8,z*.18); }
       shape(ctx,x,y,z*.43,c.kind);
       if (c.special) { ctx.fillStyle='#fff9bc'; ctx.font='bold '+Math.max(12,z*.37)+'px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(c.special==='puuska'?'↔':'✦',x,y); }
     }
