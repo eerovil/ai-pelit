@@ -15,10 +15,17 @@ flowchart TD
   Q -- Peruuttaa --> A
   S --> P
   P --> T{Mitä pelaaja tekee?}
-  T -- Napauttaa pakkaa --> D[Kääntää 1 tai 3 korttia jätepinoon]
+  T -- Napauttaa pakkaa --> N{Pakassa tai jätepinossa kortteja?}
+  N -- Kyllä --> D[Kääntää 1 tai 3 korttia jätepinoon]
+  N -- Ei --> B
   T -- Napauttaa korttia --> M{Löytyykö sallittu paikka?}
   T -- Raahaa korttia tai pinoa --> R{Sallittu paikka sormen alla?}
   T -- Kumoa --> U[Edellinen siirto peruutetaan]
+  T -- Uusi jako --> Y{Jako aloitettu ja pelaaja vahvistaa?}
+  Y -- Ei aloitettu tai vahvistaa --> S
+  Y -- Peruuttaa --> P
+  T -- Valikko --> Z[Jako tallennetaan, valikko auki]
+  Z --> A
   R -- Kyllä --> K[Siirto tehdään]
   R -- Ei --> B[Ei sallittu: kortit jäävät paikalleen]
   M -- Kyllä --> K
@@ -36,8 +43,8 @@ flowchart TD
   W -- Kyllä --> G[Voitto: aika, siirrot, ennätys]
   G --> L[Aika tuloslistalle]
   G --> A
-  class A,P,D,K,B blue
-  class J,Q,T,M,R,W,X amber
+  class A,P,D,K,B,Z blue
+  class J,Q,Y,N,T,M,R,W,X amber
   class S,F,V,U teal
   class AF violet
   class G,L green
@@ -53,14 +60,16 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: Jatka, Uusi jako, 1 tai 3 korttia**: the menu in `games/pasianssi/v1/index.html`. "Jatka" shows only when an unfinished deal is saved; "1 kortti / 3 korttia" is saved as `ai-pelit:pasianssi:veto`. Shows wins, deals played and the best times.
+- **Valikko: Jatka, Uusi jako, 1 tai 3 korttia**: the menu in `games/pasianssi/v1/index.html`. "Jatka" shows only when an unfinished deal is saved; "1 kortti / 3 korttia" is saved as `ai-pelit:pasianssi:veto`. Shows wins, deals played and the best times. `menuBoard()` points the 🏆 chip at the list of the chosen draw mode from page load on.
 - **Sekoitus siemenestä ja jako**: `deal(seed, draw)` shuffles 52 cards with a seeded random (so a test can deal a known game) and lays out 1 to 7 cards in the seven tableau piles, the top one face up; the rest is the stock.
-- **Pelipöytä: pakka, jätepino, 4 maapinoa, 7 pöytäpinoa**: `layout()` sizes the cards from the canvas's own box each frame: upright the stock, waste and four foundations on top and the seven piles under them; sideways stock and waste on the left, foundations on the right, piles in the middle.
-- **Jako aloitettu ja pelaaja vahvistaa?**: `askNew()`, behind "Uusi jako" in the menu and on the play screen: a deal with a move made, also one read back from the save after a reload, is replaced only after "Aloitetaanko uusi jako?"; cancelling keeps it and its save.
+- **Pelipöytä: pakka, jätepino, 4 maapinoa, 7 pöytäpinoa**: `fitCheck()` compares the canvas's own box with `W` and `H` each frame and calls `fit()` when they differ, and `layout()` then sizes the cards: upright the stock, waste and four foundations on top and the seven piles under them; sideways stock and waste on the left, foundations on the right, piles in the middle.
+- **Jako aloitettu ja pelaaja vahvistaa?**: `askNew()`, behind "Uusi jako" in the menu and on the play screen: a deal with a move made, also one read back from the save after a reload, is replaced only after "Aloitetaanko uusi jako?"; cancelling keeps it and its save, and stays where the player was: on the menu or at the table.
+- **Pakassa tai jätepinossa kortteja?**: `drawStock()` turns cards, or turns an empty stock's waste back over; with both empty it refuses, and no move is made.
+- **Jako tallennetaan, valikko auki**: "Valikko" calls `saveDeal()` and `showMenu()`, which also sets the score list back to the menu's draw mode.
 - **Löytyykö sallittu paikka?**: `bestMove(card)` tries a foundation first, then the first tableau pile with cards that fits, then an empty pile (a king only).
 - **Ei sallittu: kortit jäävät paikalleen**: `invalid()` shows the short notice, plays the error sound and shakes the pile's top card; a dragged card drops back where it was with no slide. No move is added or saved.
 - **Sallittu paikka sormen alla?**: `targetAt()` finds the pile under the dragged card's middle and `move()` checks it: a tableau pile takes one rank lower in the other colour, a foundation the next of the same suit.
-- **Edellinen siirto peruutetaan**: `undo()` pops the move list; there is no limit.
+- **Edellinen siirto peruutetaan**: `undo()` pops the move list; there is no limit, and with no moves the button is disabled.
 - **Jako tallennetaan puhelimeen**: `saveDeal()` writes the whole deal, its moves and the clock as `ai-pelit:pasianssi:jako1` after every move.
 - **Valmis-nappi nostaa loput maapinoihin**: when the stock and waste are empty and every card is face up, "Valmis" (`finishAll()`) moves them all up at once.
 - **Voitto: aika, siirrot, ennätys**: `win()` adds to `voitot` and `parhaat` (best time per draw mode) and shows the end screen with "Uusi jako".

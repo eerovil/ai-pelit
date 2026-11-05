@@ -587,6 +587,27 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
 
 
 @pytest.mark.games("pasianssi")
+def test_pasianssi_chip_on_a_fresh_menu_opens_the_chosen_draw_modes_list(site, context, fake):
+    site.build(ROOT / "games")
+    a, b = "a" * 32, "b" * 32
+    fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
+    fake.scores = {
+        ("pasianssi", "veto1", a): {"score": 250, "version": 1},
+        ("pasianssi", "veto3", b): {"score": 300, "version": 1},
+    }
+    page = context.new_page()
+    page.goto(site.url + "games/pasianssi/v1/")
+    page.click("#ai-pelit-tulokset-nappi")
+    page.wait_for_selector("text=Aino")
+    assert page.locator("text=Ei verkkoyhteyttä").count() == 0
+
+    page.evaluate("localStorage.setItem('ai-pelit:pasianssi:veto', '3')")
+    page.reload()
+    page.click("#ai-pelit-tulokset-nappi")
+    page.wait_for_selector("text=Bertta")
+    assert page.locator("text=Ei verkkoyhteyttä").count() == 0
+
+
 def test_pasianssi_shows_the_fastest_draw_one_time_first_and_draw_three_separately(site, context, fake):
     site.build(ROOT / "games")
     a, b, c = "a" * 32, "b" * 32, "c" * 32

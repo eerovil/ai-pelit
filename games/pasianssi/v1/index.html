@@ -149,10 +149,11 @@ function updateMenu(){
   document.getElementById('continue').classList.toggle('hidden',!s);document.getElementById('stats').textContent=`Voitot ${wins} / ${played}`+(best?` · paras ${timeText(best)}`:'');
   document.getElementById('draw1').classList.toggle('on',menuDraw===1);document.getElementById('draw3').classList.toggle('on',menuDraw===3)
 }
-function showMenu(){phase='menu';drag=null;document.getElementById('menu').classList.remove('hidden');document.getElementById('won').classList.add('hidden');document.getElementById('controls').classList.add('hidden');updateMenu()}
+function showMenu(){phase='menu';drag=null;document.getElementById('menu').classList.remove('hidden');document.getElementById('won').classList.add('hidden');document.getElementById('controls').classList.add('hidden');updateMenu();menuBoard()}
 function showPlay(){document.getElementById('menu').classList.add('hidden');document.getElementById('won').classList.add('hidden');document.getElementById('controls').classList.remove('hidden');updateUi()}
 function askNew(){const saved=savedDeal(),hasStarted=phase==='play'?started:!!(saved&&saved.started);if(!hasStarted||confirm('Aloitetaanko uusi jako?'))deal(Date.now(),menuDraw)}
-function chooseDraw(n){menuDraw=n;store('veto',n);updateMenu();if(window.AiPelitScores){AiPelitScores.board('veto'+n,n===1?'1 kortti':'3 korttia')}}
+function menuBoard(){if(window.AiPelitScores)AiPelitScores.board('veto'+menuDraw,menuDraw===1?'1 kortti':'3 korttia')}
+function chooseDraw(n){menuDraw=n;store('veto',n);updateMenu();menuBoard()}
 
 function fit(){
   const b=c.getBoundingClientRect();DPR=Math.min(devicePixelRatio||1,2);W=b.width;H=b.height;wide=W>H;c.width=Math.round(W*DPR);c.height=Math.round(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);layoutState=layout();
@@ -190,7 +191,8 @@ function drawBoard(now){
   if(drag){const cards=sourceCards(drag.src);for(let j=0;j<cards.length;j++)drawCard(cards[j],{x:drag.x-drag.dx,y:drag.y-drag.dy+j*Math.min(L.ch*.28,18),w:L.cw,h:L.ch})}
 }
 function step(dt){if(phase==='play'&&started&&!document.hidden){const before=elapsed;elapsed+=Math.max(0,Number(dt)||0);if(Math.floor(elapsed/5)!==Math.floor(before/5))saveDeal()}updateUi()}
-function frame(now){const dt=(now-lastFrame)/1000;lastFrame=now;step(dt);if(phase==='play')drawBoard(now);requestAnimationFrame(frame)}
+function fitCheck(){const b=c.getBoundingClientRect();if(Math.abs(b.width-W)>.5||Math.abs(b.height-H)>.5)fit()}
+function frame(now){fitCheck();const dt=(now-lastFrame)/1000;lastFrame=now;step(dt);if(phase==='play')drawBoard(now);requestAnimationFrame(frame)}
 
 c.addEventListener('pointerdown',e=>{if(phase!=='play'||drag)return;e.preventDefault();const hit=hitAt(e.clientX,e.clientY);if(!hit)return;try{c.setPointerCapture(e.pointerId)}catch(err){}if(hit.type==='stock'){drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,stock:true};return}const r=cardRect(hit);drag={id:e.pointerId,src:hit,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,dx:e.clientX-r.x,dy:e.clientY-r.y,moved:false}}, {passive:false});
 c.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;drag.x=e.clientX;drag.y=e.clientY;if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8)drag.moved=true});
@@ -201,9 +203,9 @@ document.getElementById('start').onclick=askNew;document.getElementById('continu
 document.getElementById('draw1').onclick=()=>chooseDraw(1);document.getElementById('draw3').onclick=()=>chooseDraw(3);
 document.getElementById('undo').onclick=undo;document.getElementById('finish').onclick=finishAll;document.getElementById('newDeal').onclick=askNew;document.getElementById('menuBtn').onclick=()=>{saveDeal();showMenu()};
 document.getElementById('again').onclick=()=>deal(Date.now(),menuDraw);document.getElementById('winMenu').onclick=showMenu;
-document.getElementById('scores').onclick=()=>{if(window.AiPelitScores){AiPelitScores.board('veto'+menuDraw,menuDraw===1?'1 kortti':'3 korttia');AiPelitScores.open()}};
+document.getElementById('scores').onclick=()=>{if(window.AiPelitScores){menuBoard();AiPelitScores.open()}};
 addEventListener('resize',fit);addEventListener('orientationchange',fit);addEventListener('fullscreenchange',fit);document.addEventListener('visibilitychange',()=>{if(document.hidden)saveDeal();lastFrame=performance.now()});
-if(window.AiPelitAanet)AiPelitAanet.load(['naksu','valinta','onnistui','voitto','virhe']);fit();updateMenu();requestAnimationFrame(frame);
+if(window.AiPelitAanet)AiPelitAanet.load(['naksu','valinta','onnistui','voitto','virhe']);fit();updateMenu();menuBoard();requestAnimationFrame(frame);
 </script>
 <script src="../../../back.js"></script>
 </body>

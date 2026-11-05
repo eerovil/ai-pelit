@@ -1,5 +1,7 @@
 """Pasianssi v1: Klondike rules, phone controls, saves and responsive layout (#382)."""
 
+import pytest
+
 from conftest import ROOT, turn
 
 URL = "games/pasianssi/v1/"
@@ -63,6 +65,50 @@ def test_rules_tap_priority_reveal_and_undo(site, context):
     assert result["restored"]["found"] == result["before"]["found"]
     assert result["restored"]["moveCount"] == result["before"]["moveCount"]
     assert result["restored"]["started"]  # undoing the first move must not stop the scoring clock
+
+
+def test_a_tap_on_a_card_with_no_place_changes_nothing(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      deal(1,1); stock=[]; waste=[]; found=[[],[],[],[]];
+      piles=[[{s:'C',r:9,up:true}],[{s:'S',r:8,up:true}],[{s:'H',r:3,up:true}],[{s:'D',r:5,up:true}],[{s:'C',r:5,up:true}],[{s:'S',r:12,up:true}],[{s:'C',r:12,up:true}]];
+      moves=[]; moveCount=0; started=false; saveDeal();
+      const r=cardRect({type:'pile',i:0,index:0});
+      return {x:r.x+r.w/2,y:r.y+r.h/2,before:JSON.stringify(snapshot()),saved:localStorage.getItem('ai-pelit:pasianssi:jako1')};
+    }""")
+    box = page.locator("#c").bounding_box()
+    page.mouse.click(box["x"] + result["x"], box["y"] + result["y"])
+    after = page.evaluate("""() => ({
+      state:JSON.stringify(snapshot()),saved:localStorage.getItem('ai-pelit:pasianssi:jako1'),
+      moves:moves.length,notice:document.getElementById('notice').textContent
+    })""")
+    assert after["state"] == result["before"]
+    assert after["saved"] == result["saved"]
+    assert after["moves"] == 0 and after["notice"] == "Ei sallittu"
+    assert page.errors == []
+
+
+def test_undo_after_several_moves_steps_back_through_each_exact_state(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      phase='play'; waste=[]; found=[[],[],[],[]];
+      stock=[{s:'D',r:6,up:false},{s:'S',r:13,up:false}];
+      piles=[[{s:'C',r:9,up:false},{s:'H',r:1,up:true}],[{s:'H',r:9,up:false},{s:'S',r:8,up:true}],[{s:'D',r:9,up:true}],[],[],[],[]];
+      moves=[]; moveCount=0; started=false; counted=true;
+      const board=()=>JSON.stringify({piles,stock,waste,found,moveCount}), states=[board()];
+      bestMove({type:'pile',i:0,index:1}); states.push(board());    // ace up, the nine turns over
+      move({type:'pile',i:1,index:1},{type:'pile',i:2}); states.push(board()); // eight on the nine, another turns
+      drawStock(); states.push(board());
+      bestMove({type:'waste'}); states.push(board());               // the king to an empty pile
+      const undone=[];
+      while(moves.length){undo();undone.push(board())}
+      return {states,undone,refused:undo(),disabled:document.getElementById('undo').disabled};
+    }""")
+    states = result["states"]
+    assert len(set(states)) == 5
+    assert result["undone"] == states[-2::-1]
+    assert result["refused"] is False and result["disabled"]
+    assert page.errors == []
 
 
 def test_undo_never_rewinds_time_and_step_counts_a_full_foreground_stall(site, context):
@@ -279,8 +325,11 @@ def test_canvas_actions_and_cards_fit_both_phone_orientations(site, context):
     assert page.errors == []
 
 
-def test_a_thirteen_card_run_keeps_every_visible_corner_tappable(site, context):
+@pytest.mark.parametrize("width,height", [(360, 640), (390, 844), (740, 360)])
+def test_a_thirteen_card_run_keeps_every_visible_corner_tappable(site, context, width, height):
     page = open_game(site, context)
+    turn(page, {"width": width, "height": height})
+    page.wait_for_function(f"Math.round(W) === {width} && Math.round(H) === {height}")
     result = page.evaluate("""() => {
       phase='play'; stock=[]; waste=[]; found=[[],[],[],[]];
       piles=[Array.from({length:13},(_,i)=>({s:i%2?'H':'S',r:13-i,up:true})),[],[],[],[],[],[]];
@@ -291,6 +340,37 @@ def test_a_thirteen_card_run_keeps_every_visible_corner_tappable(site, context):
     assert result["g"] >= 8
     assert result["hits"] == list(range(13))
     assert result["bottom"] <= result["limit"] + 1
+
+
+def test_the_board_follows_the_canvas_box_when_no_resize_event_comes(site, context):
+    page = open_game(site, context)
+    page.click("#start")
+    page.evaluate("c.style.height = '500px'")
+    page.wait_for_function("Math.round(H) === 500 && layoutState.bottom <= 500")
+    assert page.errors == []
+
+
+def test_refused_draw_with_stock_and_waste_empty_is_no_move(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      deal(7,1); stock=[]; waste=[]; moves=[]; moveCount=0; saveDeal();
+      const saved=localStorage.getItem('ai-pelit:pasianssi:jako1'), ok=drawStock();
+      return {ok,same:saved===localStorage.getItem('ai-pelit:pasianssi:jako1'),moves:moves.length};
+    }""")
+    assert result == {"ok": False, "same": True, "moves": 0}
+    assert page.errors == []
+
+
+def test_play_screen_new_deal_cancel_stays_at_the_table_and_valikko_saves(site, context):
+    page = open_game(site, context)
+    page.evaluate("deal(2024, 1); drawStock()")
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    page.click("#newDeal")
+    assert page.evaluate("[phase, seed, moveCount]") == ["play", 2024, 1]
+    page.click("#menuBtn")
+    assert page.evaluate("phase") == "menu"
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:pasianssi:jako1')).moveCount") == 1
+    assert page.errors == []
 
 
 def test_shared_score_config_has_two_low_time_lists(site, context):
