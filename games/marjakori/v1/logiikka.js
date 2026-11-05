@@ -295,6 +295,11 @@ var Marjakori = (function () {
       var clear = matched(s.board),
         sp = specialFor(s.board, wave === 0 ? place : null);
       if (sp && clear.has(sp.place)) {
+        if (s.board[sp.place].special) {
+          var triggered = new Set([sp.place]);
+          explode(s.board, triggered);
+          triggered.forEach(function (i) { clear.add(i); });
+        }
         clear.delete(sp.place);
         Object.assign(s.board[sp.place], { special: sp.t, vertical: !!sp.vertical, aim: null });
       }
