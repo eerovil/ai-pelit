@@ -114,3 +114,54 @@ def test_active_round_fits_390px_and_landscape(site, context):
     page.wait_for_function("boardBox && boardBox.x >= 0 && boardBox.y >= 0 && boardBox.x + boardBox.size * 7 <= innerWidth && boardBox.y + boardBox.size * 7 <= innerHeight")
     assert page.evaluate("[state.phase, state.moves, boardBox.x >= 0, boardBox.y >= 0, boardBox.x + boardBox.size * 7 <= innerWidth, boardBox.y + boardBox.size * 7 <= innerHeight]") == ["play", 28, True, True, True, True]
     assert page.errors == []
+
+
+def test_points_cap_at_five_times_and_a_stuck_board_shuffles(site, context):
+    page = open_game(site, context)
+    result = page.evaluate("""() => {
+      const scores = [0, 1, 4, 8].map(wave => Marjakori.wavePoints([
+        { cells: [0, 1, 2] }, { cells: [7, 14, 21, 28] }, { cells: [3, 10, 17, 24, 31] }
+      ], wave));
+      let stuck = null, seed = 1, s = Marjakori.newLevel(1, 1);
+      while (!stuck && seed < 50000) {
+        let random = seed++ >>> 0;
+        s.board.forEach(c => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; c.kind = random % 6; c.special = ''; });
+        if (!Marjakori.matched(s.board).size && !Marjakori.hasMove(s.board)) stuck = s;
+      }
+      const shuffled = stuck ? Marjakori.shuffle(stuck) : false;
+      return [scores, !!stuck, shuffled, stuck && !Marjakori.matched(stuck.board).size, stuck && Marjakori.hasMove(stuck.board)];
+    }""")
+    assert result == [[190, 380, 950, 950], True, True, True, True]
+    assert page.errors == []
+
+
+def test_taps_persist_wins_and_allow_a_clean_next_round(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("window.boardBox && state && state.phase === 'play'")
+    pair, box, moves = page.evaluate("[Marjakori.legalMoves(state)[0], boardBox, state.moves]")
+    def centre(i):
+        return {"x": box["x"] + (i % 7 + .5) * box["size"], "y": box["y"] + (i // 7 + .5) * box["size"]}
+    a, b = centre(pair[0]), centre(pair[1])
+    page.mouse.click(a["x"], a["y"]); page.mouse.click(b["x"], b["y"])
+    page.wait_for_function(f"state.moves === {moves - 1}")
+    saved = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:marjakori:kierros')).moves")
+    won = page.evaluate("""() => {
+      let sent = null; AiPelitScores.submit = n => { sent = n; };
+      state.score = 123; state.phase = 'win'; finish();
+      const after = [JSON.parse(localStorage.getItem('ai-pelit:marjakori:taso')), JSON.parse(localStorage.getItem('ai-pelit:marjakori:parhaat'))['1'], sent, go.textContent];
+      go.click(); return [after, state.level, state.phase, state.score];
+    }""")
+    assert saved == moves - 1
+    assert won == [[2, 123, 123, "Seuraava taso"], 2, "play", 0]
+    assert page.errors == []
+
+
+def test_a_loaded_page_can_play_offline(site, context):
+    page = open_game(site, context)
+    context.set_offline(True)
+    page.click("#go")
+    page.wait_for_function("state && state.phase === 'play'")
+    assert page.evaluate("""() => { const pair = Marjakori.legalMoves(state)[0], moves = state.moves; return [Marjakori.trySwap(state, pair[0], pair[1]).ok, state.moves === moves - 1]; }""") == [True, True]
+    context.set_offline(False)
+    assert page.errors == []
