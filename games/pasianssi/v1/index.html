@@ -151,7 +151,7 @@ function updateMenu(){
 }
 function showMenu(){phase='menu';drag=null;document.getElementById('menu').classList.remove('hidden');document.getElementById('won').classList.add('hidden');document.getElementById('controls').classList.add('hidden');updateMenu()}
 function showPlay(){document.getElementById('menu').classList.add('hidden');document.getElementById('won').classList.add('hidden');document.getElementById('controls').classList.remove('hidden');updateUi()}
-function askNew(){if(!started||confirm('Aloitetaanko uusi jako?'))deal(Date.now(),menuDraw)}
+function askNew(){const saved=savedDeal(),hasStarted=phase==='play'?started:!!(saved&&saved.started);if(!hasStarted||confirm('Aloitetaanko uusi jako?'))deal(Date.now(),menuDraw)}
 function chooseDraw(n){menuDraw=n;store('veto',n);updateMenu();if(window.AiPelitScores){AiPelitScores.board('veto'+n,n===1?'1 kortti':'3 korttia')}}
 
 function fit(){
@@ -197,7 +197,7 @@ c.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;drag
 function pointerUp(e){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;if(d.stock){drawStock();return}if(d.moved){const t=targetAt(e.clientX-(d.dx||0)+layoutState.cw/2,e.clientY-(d.dy||0)+layoutState.ch/2);if(!t||!move(d.src,t))invalid()}else bestMove(d.src)}
 c.addEventListener('pointerup',pointerUp);c.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.id)drag=null});
 
-document.getElementById('start').onclick=()=>deal(Date.now(),menuDraw);document.getElementById('continue').onclick=continueDeal;
+document.getElementById('start').onclick=askNew;document.getElementById('continue').onclick=continueDeal;
 document.getElementById('draw1').onclick=()=>chooseDraw(1);document.getElementById('draw3').onclick=()=>chooseDraw(3);
 document.getElementById('undo').onclick=undo;document.getElementById('finish').onclick=finishAll;document.getElementById('newDeal').onclick=askNew;document.getElementById('menuBtn').onclick=()=>{saveDeal();showMenu()};
 document.getElementById('again').onclick=()=>deal(Date.now(),menuDraw);document.getElementById('winMenu').onclick=showMenu;

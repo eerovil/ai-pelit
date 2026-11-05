@@ -149,6 +149,80 @@ def test_saved_deal_continues_after_reload_without_changing_mode(site, context):
     assert page.errors == []
 
 
+def test_menu_new_deal_confirmation_after_reload_can_preserve_the_started_deal(site, context):
+    page = open_game(site, context)
+    page.evaluate("deal(2024, 3); drawStock(); elapsed = 18; saveDeal()")
+    page.reload()
+    before = page.evaluate("localStorage.getItem('ai-pelit:pasianssi:jako1')")
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    page.click("#start")
+    assert page.evaluate("phase") == "menu"
+    assert page.evaluate("localStorage.getItem('ai-pelit:pasianssi:jako1')") == before
+    assert page.errors == []
+
+
+def test_menu_new_deal_replaces_a_started_deal_only_when_confirmed(site, context):
+    page = open_game(site, context)
+    page.evaluate("deal(2024, 1); drawStock(); saveDeal(); showMenu()")
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.click("#start")
+    assert page.evaluate("phase") == "play"
+    assert page.evaluate("seed") != 2024 and page.evaluate("moveCount") == 0
+    assert page.errors == []
+
+
+def test_menu_new_deal_asks_nothing_for_an_untouched_deal(site, context):
+    page = open_game(site, context)
+    page.evaluate("deal(2024, 1); showMenu()")
+    asked = []
+    page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.dismiss()))
+    page.click("#start")
+    assert asked == [] and page.evaluate("phase") == "play"
+    assert page.evaluate("seed") != 2024
+    assert page.errors == []
+
+
+def test_known_seed_wins_through_legal_moves_and_saves_every_step(site, context):
+    page = open_game(site, context)
+    actions = """
+      TP2,2,3 TP6,6,2 TP6,5,0 D WP0 D D D D D WP0 D WP5 D D D D WF D D WF TF1 TF2 TF1
+      TP6,4,1 TF6 D WP0 TP5,5,0 TF5 TP5,3,3 D WP5 WP5 D WF D WF TF0 D WP6 D D WF D WP4
+      TP3,3,4 TP3,2,6 TP3,1,1 TP6,2,1 TP3,0,5 TP5,2,3 WP3 TP0,5,1 TF0 D WF TF4 TF2 TF2
+      WF D WF TF6 TP5,1,6 D D D D WP6 D D WP5 D WF D WP6 TP3,4,6 TF3 D D D WF TF4 TF4
+      TF5 TF5 TF4 D D WF WF FP1,3 FP1,0 FP1,6 TP4,4,6 TF4 TF4 TF4
+    """.split()
+    result = page.evaluate("""actions => {
+      window.scoreCalls=[];
+      window.AiPelitScores={board:(...a)=>scoreCalls.push(['board',...a]),submit:s=>scoreCalls.push(['submit',s])};
+      window.AiPelitAanet={play(){return true}};
+      deal(2,1); elapsed=72; let savedEveryStep=true;
+      for(const action of actions){
+        const [,name,args]=action.match(/^([A-Z]+)(.*)$/), n=args?args.split(',').map(Number):[];
+        let ok=false;
+        if(name==='D') ok=drawStock();
+        if(name==='WF'){const src={type:'waste'},card=sourceCards(src)[0];ok=move(src,{type:'found',i:SUITS.indexOf(card.s)})}
+        if(name==='WP') ok=move({type:'waste'},{type:'pile',i:n[0]});
+        if(name==='TF'){const src={type:'pile',i:n[0],index:piles[n[0]].length-1},card=sourceCards(src)[0];ok=move(src,{type:'found',i:SUITS.indexOf(card.s)})}
+        if(name==='TP') ok=move({type:'pile',i:n[0],index:n[1]},{type:'pile',i:n[2]});
+        if(name==='FP') ok=move({type:'found',i:n[0]},{type:'pile',i:n[1]});
+        if(!ok) throw new Error('Seed 2 action failed: '+action);
+        if(phase==='play'){
+          const saved=JSON.parse(localStorage.getItem('ai-pelit:pasianssi:jako1'));
+          savedEveryStep=savedEveryStep&&saved&&saved.moveCount===moveCount&&saved.seed===2;
+        }
+      }
+      if(phase==='play'&&canFinish()) document.getElementById('finish').click();
+      const read=name=>JSON.parse(localStorage.getItem('ai-pelit:pasianssi:'+name));
+      return {phase,total:found.flat().length,savedEveryStep,saved:localStorage.getItem('ai-pelit:pasianssi:jako1'),calls:scoreCalls,seed,draw,wins:read('voitot'),bests:read('parhaat')};
+    }""", actions)
+    assert result["phase"] == "won" and result["total"] == 52
+    assert result["savedEveryStep"] and result["saved"] is None
+    assert result["seed"] == 2 and result["draw"] == 1
+    assert result["wins"] == 1 and result["bests"] == {"1": 72}
+    assert result["calls"][-2:] == [["board", "veto1", "1 kortti"], ["submit", 72]]
+    assert page.errors == []
+
+
 def test_finish_records_the_win_once_clears_the_save_and_selects_the_board(site, context):
     page = open_game(site, context)
     result = page.evaluate("""() => {
