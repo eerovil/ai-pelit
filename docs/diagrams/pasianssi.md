@@ -1,6 +1,6 @@
 # Pasianssi: one deal from shuffle to win
 
-How Pasianssi (Klondike solitaire v1) plays. A deal is shuffled from a seed, the player
+How Pasianssi (Klondike solitaire v2) plays. A deal is shuffled from a seed, the player
 moves cards by tapping (the card goes to the best legal place) or dragging, and the deal is
 saved after every move so a reload or a turned phone carries on. A won deal saves the time and
 the moves and sends the time to the high-score list.
@@ -62,7 +62,7 @@ flowchart TD
 
 - **Valikko: Jatka, Uusi jako, 1 tai 3 korttia**: the menu in `games/pasianssi/v2/index.html`. "Jatka" shows only when an unfinished deal is saved; "1 kortti / 3 korttia" is saved as `ai-pelit:pasianssi:veto`. Shows wins, deals played and the best times. `menuBoard()` points the 🏆 chip at the list of the chosen draw mode from page load on.
 - **Sekoitus siemenestä ja jako**: `deal(seed, draw)` shuffles 52 cards with a seeded random (so a test can deal a known game) and lays out 1 to 7 cards in the seven tableau piles, the top one face up; the rest is the stock.
-- **Pelipöytä: pakka, jätepino, 4 maapinoa, 7 pöytäpinoa**: `fitCheck()` compares the canvas's own box with `W` and `H` each frame and calls `fit()` when they differ, and `layout()` then sizes the cards: upright the stock, waste and four foundations on top and the seven piles under them; sideways stock and waste on the left, foundations on the right, piles in the middle.
+- **Pelipöytä: pakka, jätepino, 4 maapinoa, 7 pöytäpinoa**: The table is drawn only when something changes (`ask()`: a move, a drag, the shake, a resize, coming back to the page), and the clock is page text a half-second timer updates. A `ResizeObserver` runs `fitCheck()`, which compares the canvas's own box with `W` and `H` and calls `fit()` when they differ, and `layout()` then sizes the cards: upright the stock, waste and four foundations on top and the seven piles under them; sideways stock and waste on the left, foundations on the right, piles in the middle.
 - **Jako aloitettu ja pelaaja vahvistaa?**: `askNew()`, behind "Uusi jako" in the menu and on the play screen: a deal with a move made, also one read back from the save after a reload, is replaced only after "Aloitetaanko uusi jako?"; cancelling keeps it and its save, and stays where the player was: on the menu or at the table.
 - **Pakassa tai jätepinossa kortteja?**: `drawStock()` turns cards, or turns an empty stock's waste back over; with both empty it refuses, and no move is made.
 - **Jako tallennetaan, valikko auki**: "Valikko" calls `saveDeal()` and `showMenu()`, which also sets the score list back to the menu's draw mode.
