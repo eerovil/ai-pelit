@@ -19,6 +19,8 @@ v7 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swappe
 
 
 v6 (#341) plays as v5 on `public/lib/yleisurheilu-7/`: the friends watching stand behind the boards, drawn before the athlete so they never cover it (`K.drawFans(x, {..., walk: true})` in `drawScene()`), and a tap on the scene walks your own figure there on every phone (`K.tapFans()` first in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
+v10 (#404) plays as v9, but a tap is judged at its own moment, not at the last drawn frame: see `reilu-ajoitus.md`.
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa, kaverit tai asu] --> K[Kisa: 12 työntäjää, arvottu järjestys]
@@ -59,6 +61,8 @@ flowchart TD
 ```
 
 v8 (#373) plays as v7 on `public/lib/yleisurheilu-8/`: the friends watching run after the athlete as the background moves, a little slower than it, and catch up once it stops (`scroll:` in the `K.drawFans()` call in `drawScene()`, 0 with the athlete at the start), and a tap on another spectator climbs onto their shoulders (`K.tapFans(px, py)` in the canvas's `pointerdown`). See `yleisurheilu-kirjasto.md`.
+
+v9 (#395) plays as v8 on `public/lib/yleisurheilu-9/`: the friends watching no longer run. The row only slides with the background, a little slower than it, and stops when it stops; legs move only on a tapped walk.
 
 ## Colours
 

@@ -68,17 +68,18 @@
     skuutti: { order: 'high', score: function (s) { return s + ' p'; } },
     // Fastest Klondike win, separate lists for drawing one or three cards.
     pasianssi: { order: 'low', score: clock, lists: [['veto1', '1 kortti'], ['veto3', '3 korttia']] },
-    // Most points in 10 rounds; no level. Named lists, the shelf's first: Mökkitikka (v2) on
-    // 'mokki', Pistekisa on 'main'.
-    tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki', 'Mökkitikka'], ['main', 'Pistekisa']] },
+    // Most points in 10 rounds; no level. Named lists, the shelf's first: the harder throw (v7, #400)
+    // on 'mokki2' and 'kisa2'; the easy throw's scores (v1-v6) stay on 'mokki' and 'main'.
+    tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki2', 'Mökkitikka'], ['kisa2', 'Pistekisa'], ['mokki', 'Vanha Mökkitikka'], ['main', 'Vanha Pistekisa']] },
     // Longest javelin throw in metres; level: 'taso', the level the player is on.
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
     // Most points in a ski-jumping meet; level: 'taso', the level the player is on. Named lists, the
-    // shelf's first: Mäkiviikko (v2, four hills, #283) on 'viikko', one meet of two jumps (v1) on 'main'.
+    // shelf's first: Mäkiviikko (v9, two hills, #387) on 'viikko2', the four-hill week (v2–v8, #283) on
+    // 'viikko', one meet of two jumps (v1) on 'main'.
     makihyppy: { order: 'high', score: function (s) { return fixed(s, 1) + ' p'; }, level: function () { return saved('makihyppy', 'taso'); },
-      lists: [['viikko', 'Mäkiviikko'], ['main', 'Yksi kisa']] },
+      lists: [['viikko2', 'Mäkiviikko'], ['viikko', 'Mäkiviikko, 4 mäkeä'], ['main', 'Yksi kisa']] },
     // Longest hammer throw in metres; level: 'taso', the level the player is on.
     moukari: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('moukari', 'taso'); } },
     // Longest shot put in metres; level: 'taso', the level the player is on.
@@ -106,6 +107,8 @@
     },
     // Biggest catch in a five-minute contest, grams; level: 'taso', the level the player is on.
     pilkki: { order: 'high', score: function (s) { return fixed(s / 1000, 2) + ' kg'; }, level: function () { return saved('pilkki', 'taso'); } },
+    // Sum of the best score from each cleared level; level: the first unopened level.
+    marjakori: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('marjakori', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
@@ -199,7 +202,7 @@
     });
   }
 
-  function submit(score) {
+  function submit(score, deferPrompt) {
     if (!GAME || typeof score !== 'number' || !isFinite(score)) return;
     var queue = load(QUEUE, {}), key = GAME + '|' + board, old = queue[key];
     // Whether the round brings anything new (a better score, or a higher level) is decided when it
@@ -210,11 +213,13 @@
     }
     if (!load(K + 'nimi', '') && !load(K + 'kysytty', false)) {
       // The first score on this phone asks for a nickname, once.
+      if (deferPrompt) return true;
       save(K + 'kysytty', true);
       open();
-      return;
+      return true;
     }
     flush();
+    return false;
   }
 
   // ---- The list ----
@@ -361,6 +366,8 @@
   window.AiPelitScores = {
     submit: submit,
     open: function () { open(); },
+    // The nickname question a submit(score, true) put off: it counts as asked only now that it shows.
+    prompt: function () { save(K + 'kysytty', true); open(); },
     board: function (id, label) { board = id; boardLabel = label || ''; },
     format: function (f) { fmt = f; },
     // For the shelf: which games keep lists, and their lists.

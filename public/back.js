@@ -33,8 +33,9 @@
   // left when it is hidden, so the shelf can show how many play each game now. The id is random
   // per page open, kept only in this page. A game inside another page's frame is not counted
   // apart: the page the player opened is (Ottelu already drops back.js from its events' frames).
+  // The room page (#388) is no game: the game in its frame is the one counted.
   var framed = true;
-  try { framed = window.top !== window.self; } catch (e) {}
+  try { framed = window.top !== window.self && !window.parent.AiPelitRoomShell; } catch (e) {}
   if (slug && !framed && /^https?:$/.test(location.protocol)) {
     // From crypto, not Math.random(): a game's tests seed Math.random(), and an id drawn from it
     // here shifted every number the game drew after it (#330).
@@ -134,11 +135,50 @@
     Object.defineProperty(Node.prototype, '__aiPelitAani', { value: true });
   }
   installSound(window);
+  // iPhone silent switch (#381): Safari treats Web Audio as ringer sound and mutes it while the
+  // switch is on silent, so every game was silent. Telling it the page plays media (Safari 17 /
+  // iOS 17) lets the games sound, as stemmanauhat-cf#100 did. Set when the page loads and again on
+  // each tap, since a game may make its audio context before this runs. A type something else
+  // chose is kept: rooms.js asks for 'play-and-record' while the microphone is on. Browsers without
+  // audioSession are left alone.
+  function playMedia(win) {
+    try {
+      var s = win.navigator.audioSession;
+      if (s && (!s.type || s.type === 'auto')) s.type = 'playback';
+    } catch (e) {}
+  }
+  // An iPhone also stops a page's sound when the screen locks, another app plays or a call comes
+  // ('interrupted', or 'suspended'), and a game that resumes only a 'suspended' context, or only on
+  // its first tap, stays silent after that (Piano v10, #381). So a tap, and the page coming back on
+  // screen, resume every context of this window that follows the game volume. Only a visible page
+  // resumes: the sound library puts its own context to sleep while the page is hidden.
+  function wakeSound(win) {
+    try { if (win.document.hidden) return; } catch (e) { return; }
+    liveGains().forEach(function (e) {
+      if (e.win !== win) return;
+      try {
+        var c = e.g.context;
+        if (c.state === 'suspended' || c.state === 'interrupted') {
+          var r = c.resume();
+          if (r && r.catch) r.catch(function () {});
+        }
+      } catch (err) {}
+    });
+  }
+  function playMediaOnTaps(win) {
+    playMedia(win);
+    try {
+      var on = function () { playMedia(win); wakeSound(win); };
+      ['pointerdown', 'pointerup', 'touchend', 'click'].forEach(function (t) { win.addEventListener(t, on, true); });
+      win.document.addEventListener('visibilitychange', function () { wakeSound(win); });
+    } catch (e) {}
+  }
+  playMediaOnTaps(window);
   // Ottelu plays its events in a frame without back.js; each frame that loads follows this page.
   function watchFrame(f) {
     if (f.__aiPelitAani) return;
     f.__aiPelitAani = true;
-    var put = function () { try { installSound(f.contentWindow); } catch (e) {} };
+    var put = function () { try { installSound(f.contentWindow); playMediaOnTaps(f.contentWindow); } catch (e) {} };
     f.addEventListener('load', put);
     put();
   }
@@ -201,6 +241,7 @@
     'color:#fff;font:600 15px system-ui,sans-serif;';
   panel.innerHTML =
     '<a id="ai-pelit-takaisin" style="' + BIG + 'background:#2f6fd6">‹ Takaisin pelilistaan</a>' +
+    '<button id="ai-pelit-lopeta" type="button" style="' + BIG + 'display:none;margin:8px 0 0;background:#b8432f"></button>' +
     '<div style="display:flex;margin:14px 0 0;justify-content:space-between;font-weight:700"><span>Pelin äänet</span><span id="ai-pelit-aani-luku"></span></div>' +
     '<input id="ai-pelit-aani-liuku" type="range" min="0" max="100" step="5" aria-label="Pelin äänenvoimakkuus" ' +
     'style="display:block;box-sizing:border-box;width:100%;margin:10px 0;padding:0;border:0;box-shadow:none;background:none;accent-color:#7cc4ff;height:28px">' +
@@ -241,7 +282,25 @@
     else muted = true;
     saveSound();
   });
+  // The room's host may end a round still going and take every phone back to the room (#392).
+  // An end for everyone is asked twice: the first tap only asks.
+  var stopBtn = panel.querySelector('#ai-pelit-lopeta'), stopAsk = false;
+  function rooms() { return window.AiPelitRooms && typeof window.AiPelitRooms.stopRound === 'function' ? window.AiPelitRooms : null; }
+  function drawStop() {
+    var R = rooms();
+    stopBtn.style.display = R && R.canStop ? 'block' : 'none';
+    stopBtn.textContent = stopAsk ? '✓ Kyllä, lopeta kaikilta' : '⏹ Lopeta kierros kaikilta';
+  }
+  stopBtn.addEventListener('click', function () {
+    var R = rooms();
+    if (!R || !R.canStop) { openPanel(false); return; }
+    if (!stopAsk) { stopAsk = true; drawStop(); return; }
+    R.stopRound();
+    openPanel(false);
+  });
   function openPanel(open) {
+    stopAsk = false;
+    if (open) drawStop();
     panel.style.display = open ? 'block' : 'none';
     a.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
@@ -273,7 +332,11 @@
     // Going back from a lone room member is an intentional departure, not a dropout.
     if (window.AiPelitRooms && typeof window.AiPelitRooms.leaveIfAlone === 'function')
       window.AiPelitRooms.leaveIfAlone();
-    if (history.state && history.state.aiPelitUp) history.back();
+    // In the room page's frame (#388) the room page goes, not only the game in it.
+    var shell = null;
+    try { shell = window.parent !== window && window.parent.AiPelitRoomShell; } catch (err) {}
+    if (shell && shell.up) shell.up(a.href);
+    else if (history.state && history.state.aiPelitUp) history.back();
     else location.replace(a.href);
     return true;
   }
@@ -287,9 +350,18 @@
   // Play full screen: the installed app already is (manifest "display": "fullscreen"); in a browser
   // tab, or an app installed before that, the first tap asks for it. Only a pointerup, touchend or
   // click lets a page go full screen, and a tap after the player left full screen asks again.
-  var root = document.documentElement;
+  // In the room page's frame (#388) the room page goes full screen, with its room bar; a tap in
+  // the frame lets its parent ask too.
+  var fsDoc = document;
+  try { if (window.parent !== window && window.parent.AiPelitRoomShell) fsDoc = window.parent.document; } catch (e) {}
+  var root = fsDoc.documentElement;
+  // A frame inside this game (Ottelu's events, laji.js) asks this page's root. Passed on to the room
+  // page, or this frame alone would fill the screen, over the room bar and the 🎤 (#394).
+  if (fsDoc !== document) document.documentElement.requestFullscreen = function (options) {
+    return fsDoc.fullscreenElement ? Promise.resolve() : root.requestFullscreen(options);
+  };
   function fullScreen(e) {
-    if (box.contains(e.target) || panel.contains(e.target) || document.fullscreenElement || !root.requestFullscreen) return;
+    if (box.contains(e.target) || panel.contains(e.target) || fsDoc.fullscreenElement || !root.requestFullscreen) return;
     if (window.matchMedia && matchMedia('(display-mode: fullscreen)').matches) return;
     var asked = root.requestFullscreen({ navigationUI: 'hide' });
     if (asked && asked.catch) asked.catch(function () {});

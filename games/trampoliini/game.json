@@ -71,6 +71,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-04",
+      "note": "Ponnistus lasketaan nyt täsmälleen sillä hetkellä, kun sormi liikkuu, eikä edellisen piirretyn kuvan kohdalta.",
+      "request": "Fair timing should be build for all games like this",
+      "issue": "eerovil/ai-pelit#404"
     }
   ]
 }

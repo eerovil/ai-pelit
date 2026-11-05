@@ -16,12 +16,12 @@ from conftest import ROOT, Site, wait_for_worker
 VERSIONS = [
     "games/aitajuoksu/v12", "games/areena/v8", "games/curling/v4", "games/hiihto/v12",
     "games/jaan-alla/v7", "games/jalkapallo/v4", "games/kaahari/v6", "games/kaaosrata/v5",
-    "games/keihas/v14", "games/kirkkis/v11", "games/korkeushyppy/v11", "games/kuula/v8",
-    "games/lentopallo/v7", "games/makihyppy/v8", "games/molkky/v4", "games/moukari/v10",
-    "games/orava/v6", "games/pallorata/v5", "games/pilkki/v6", "games/pituushyppy/v15",
-    "games/puhelinkoppi/v8", "games/seivashyppy/v12", "games/skuutti/v4", "games/sormiskeitti/v9",
-    "games/tikka/v6", "games/trampoliini/v10", "games/voimistelu/v13", "games/vuoristorata/v4",
-    "games/yoajo/v10", "games/last-signal/v16", "games/vauvan-syotto/v4",
+    "games/keihas/v16", "games/kirkkis/v11", "games/korkeushyppy/v14", "games/kuula/v10",
+    "games/lentopallo/v7", "games/makihyppy/v11", "games/molkky/v4", "games/moukari/v12",
+    "games/orava/v6", "games/pallorata/v5", "games/pilkki/v6", "games/pituushyppy/v17",
+    "games/puhelinkoppi/v8", "games/seivashyppy/v15", "games/skuutti/v4", "games/sormiskeitti/v10",
+    "games/tikka/v7", "games/trampoliini/v11", "games/voimistelu/v13", "games/vuoristorata/v4",
+    "games/yoajo/v11", "games/last-signal/v16", "games/vauvan-syotto/v4",
 ]
 
 # The field events' newest versions, whose "📣 Kannusta" chime Eero found too loud (#355).

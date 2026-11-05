@@ -123,6 +123,10 @@ test('bad scores and unknown players are refused', async () => {
   assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'luistelu-3' })).status, 200);
   assert.equal((await call('POST', '/api/scores', { ...ok, game: 'hiihto', board: 'luistelu-0' })).status, 400);
   assert.equal((await call('GET', '/api/scores?game=hiihto&board=main')).status, 400);
+  // Mäkihyppy v9's two-hill week has its own list beside the four-hill one (#387).
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'makihyppy', board: 'viikko2' })).status, 200);
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'makihyppy', board: 'viikko' })).status, 200);
+  assert.equal((await call('POST', '/api/scores', { ...ok, game: 'makihyppy', board: 'viikko3' })).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, score: 'paljon' })).status, 400);
   assert.equal((await call('POST', '/api/scores', { ...ok, version: 0 })).status, 400);
   assert.equal((await call('POST', '/api/scores', 'ei jsonia')).status, 400);
@@ -345,12 +349,16 @@ test('Tikanheitto keeps Mökkitikka and Pistekisa apart, and its shelf no. 1 is 
     await admin(id, 'approved');
   }
   const post = (player, board, score, version) => call('POST', '/api/scores', { player, game: 'tikka', board, version, score });
-  assert.equal((await post(A, 'mokki', 254, 2)).status, 200);
-  assert.equal((await post(B, 'main', 412, 1)).status, 200);
+  assert.equal((await post(A, 'mokki2', 254, 7)).status, 200);
+  assert.equal((await post(B, 'kisa2', 412, 7)).status, 200);
+  // The easy throw's lists (v1-v6) stay.
+  assert.equal((await post(B, 'mokki', 300, 6)).status, 200);
+  assert.equal((await post(A, 'main', 1350, 2)).status, 200);
   assert.equal((await post(A, 'darts', 10, 2)).status, 400);
-  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki')).body.rows.map(r => r.name), ['Aino']);
-  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=main')).body.rows.map(r => r.name), ['Bertta']);
-  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.tikka, { board: 'mokki', name: 'Aino', score: 254, level: null, version: 2 });
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki2')).body.rows.map(r => r.name), ['Aino']);
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=kisa2')).body.rows.map(r => r.name), ['Bertta']);
+  assert.deepEqual((await call('GET', '/api/scores?game=tikka&board=mokki')).body.rows.map(r => r.name), ['Bertta']);
+  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.tikka, { board: 'mokki2', name: 'Aino', score: 254, level: null, version: 7 });
 });
 
 test('Pasianssi keeps draw modes apart, ranks the fastest time first, and shows draw one on the shelf', async () => {

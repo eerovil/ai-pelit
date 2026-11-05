@@ -14,6 +14,8 @@ v9 (#337) loads `aanet-4`, which plays the loudest sounds (tyres, the horn, the 
 
 v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v11 (#377) lets the car drive forward out of the rest area along its lane, and traffic behind drives past a parked car with enough room. The exit follows the narrowing paving fully onto the road; traffic still waits if the parked car overlaps its path.
+
 ```mermaid
 flowchart TD
   A[Valitse osuus, Aja] --> B[Aja: ohjaa, kaasuta, jarruta, valot]
@@ -55,6 +57,10 @@ flowchart TD
   B --> V{Väsyttää?}
   V -- Levähdysalue --> VP[P-merkit 500 m ja 100 m, oma kaista, pysäköintiruudut]
   VP --> V1[Kahvitauko: vireys täyteen, +10 s]
+  V1 --> VL[Lähtö: kaasu, eteenpäin pitkin kaistaa takaisin tielle]
+  VP --> VC{Auto kokonaan sivussa liikenteestä?}
+  VC -- Kyllä --> VT[Takaa tuleva traktori tai auto ajaa pysäköidyn ohi]
+  VC -- Ei --> VW[Liikenne odottaa auton takana]
   V -- Ei taukoa --> V2[Silmät painuvat kiinni]
   V2 --> X
   B --> Y{Ojaan tai kolari?}
@@ -63,8 +69,8 @@ flowchart TD
   Z --> S[Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä]
   S --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
   X --> A
-  class A,B,E2,L,P2,M,N,HW,XH,J,J3,VP,WO blue
-  class C,D,E,F,G,H,K,V,Y,P,R,J1 amber
+  class A,B,E2,L,P2,M,N,HW,XH,J,J3,VP,WO,VL,VT,VW blue
+  class C,D,E,F,G,H,K,V,Y,P,R,J1,VC amber
   class D1,E1,F1,K2,V1,P1,H0 teal
   class D2,F2,H1,K1,V2,X,E3,R1,J2 rose
   class Z,S,T green
@@ -104,4 +110,8 @@ flowchart TD
 - **Ohitit sulkuviivan yli -30, ei ohituspisteitä**: v8 `unsafeOvertake()`: the car's centre over the centre line within a no-overtaking stretch costs 30 once until it is back in its lane, counts as reckless (no third star), and the pass earns nothing.
 - **Sivutieltä auto eteen tai vastaan: jarruta tai ohita myöhemmin**: v8 `joiner()` in `game.js`: nine side roads in ten have a car waiting, facing the road. It pulls out into the player's lane ahead (`dir 'same'`) or turns towards the player (`'vastaan'`), over 1.8 s, then drives on as an ordinary car by its own speed habit. A careful one goes when the player is five to seven seconds away; a careless one (one in three) at two and a half to three seconds, at least 60 m, with "Auto risteyksestä!" on the screen. A car that missed its moment because traffic came stays put. Cars in the player's lane now brake for a slower one from 70 m, as hard as they need (v1–v7: matched its speed at once from 30 m), and only for one on the road: a car still at or coming out of a side road does not slow them.
 - **P-merkit 500 m ja 100 m, oma kaista, pysäköintiruudut**: v8 (#306 "P paikka pitää olla selkeämpi. Tie siihen ja merkkejä"). Blue P signs at 500 m and 100 m, an exit sign with an arrow where the lane begins, and a tall lit P sign by the kiosk. The lane widens from the edge over 40 m (`BAY_IN`, `bayWidth()` in `game.js`), runs 8 m wide past white parking places, and narrows back; a dashed line parts it from the road. Its kerb keeps the car on the paving and leads it back onto the road. The screen shows "P Levähdysalue N m: oikealle ja pysähdy" from 300 m on (v1–v7: only while sleepy, no distance). Signs along it stand beyond the paving.
+- **Lähtö: kaasu, eteenpäin pitkin kaistaa takaisin tielle**: v11 (#377). `drive()` in `games/yoajo/v11/game.js` excludes `inBay(P.s, P.lat)` from the off-road acceleration reduction and drag. `tiredness()` applies the coffee brake only with no gas; coffee still restores alertness once after 1.4 seconds below 15 km/h in the parking stretch. The kerb follows `EDGE + bayWidth(P.s) - 0.6` fully onto the road (v8–v10 stopped guiding at `DITCH - 0.1`, on the shoulder).
+- **Auto kokonaan sivussa liikenteestä?**: `move()` in `games/yoajo/v11/game.js` keeps traffic within 30 m behind the player at no more than the player's speed when both are right of the centre line and either `P.lat < EDGE` or their lateral separation is less than half their combined widths plus 0.2 m. Only a car with sufficient lateral room is passed.
+- **Liikenne odottaa auton takana**: v11 preserves following behavior on the road and protects a coffee stop near the bay's inner edge, where the parked car can still overlap a tractor's or truck's path. Moving farther into the bay releases the waiting vehicle toward its normal speed. `move()` also processes zero-speed vehicles (`t.v >= 0`), so a tractor or car that already stopped can accelerate again when the player moves clear; v10's positive-speed-only branch left it stuck forever.
+- **Takaa tuleva traktori tai auto ajaa pysäköidyn ohi**: v11 (#377). With the player outside the road and clear of the vehicle's width, `move()` no longer stops traffic behind the parked car. The player yields to passing traffic before merging; collisions remain active.
 - **Lumipöly: harso, joka ohenee sekunnissa**: an oncoming truck on a snow leg blows a cloud over the windscreen as it passes (`meet()` in `game.js`). v8 (#306 "Kun rekka tulee vastaan niin ruutu välähtää ikävästi"): it thickens over a quarter of a second to a 50 % haze the road shows through, and thins over a second (`cloudIn`, `CLOUD`; v1–v7: 92 % white at once). The light an oncoming car casts on the road ahead also comes up and goes down over a few tenths of a second (`draw3d()` in `view.js`; v1–v7: on at once as it came within 220 m).

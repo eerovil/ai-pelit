@@ -16,5 +16,24 @@ export function makeD1() {
     all: async () => ({ results: db.prepare(sql).all(...args) }),
     run: async () => ({ meta: { changes: Number(db.prepare(sql).run(...args).changes) } }),
   });
-  return { prepare: (sql) => statement(sql), raw: db };
+  // batch(): every statement in one transaction, all or none, as D1 does. `queries` counts the
+  // statements sent, batched or not, to check a request stays inside D1's per-request limit.
+  const d1 = {
+    queries: 0,
+    prepare: (sql) => { d1.queries++; return statement(sql); },
+    batch: async (stmts) => {
+      db.exec('BEGIN');
+      try {
+        const out = [];
+        for (const s of stmts) out.push(await s.run());
+        db.exec('COMMIT');
+        return out;
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    },
+    raw: db,
+  };
+  return d1;
 }

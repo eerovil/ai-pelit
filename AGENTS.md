@@ -13,7 +13,8 @@ player sees is Finnish unless the request says otherwise.
   number in a commit of its own (`git mv games/<slug>/v<N-1> games/<slug>/v<N>`), then make the
   change in the next commits, so the pull request shows only what changed (#346). Move its tests
   along the same way: `git mv` each `tests/test_<slug>_v<N-1>*.py` to `_v<N>`, and change every
-  `games/<slug>/v<N-1>` in the game's test files to `v<N>`. Append the version to `game.json`.
+  `games/<slug>/v<N-1>` in the game's test files to `v<N>`. Append the version to `game.json` before
+  you run a test: the build, and so any test that builds the site, refuses a folder with no entry.
   Other games' tests name versions too (`tests/test_scores.py` names Puhelinkoppi's, Hiihto's and
   Piano's): `grep -rn "<slug>/v<N-1>" tests/` and run every file it finds before the first push,
   not only the game's own tests.
@@ -127,7 +128,11 @@ high-score lists (#25), then play counts (#26).
   `GAMES` in `server/api.js` (which way is better, which lists). Scores wait on the phone while
   offline, and a round that beats neither the score nor the level is not sent. The shelf shows
   each game's no. 1 on its card and its top 10 on its page (`data-shelf`). Nicknames are one
-  per phone, and show on lists only once approved at `/yllapito/`.
+  per phone, and show on lists only once approved at `/yllapito/`. A live check on the real site
+  names its phones "Testi", "Testi1", "Testi A"... ("Testi" and up to 8 more letters, digits or
+  spaces, #380): the server keeps such names off `/yllapito/` and out of the spam limits, and
+  deletes them, with their scores and friends, a day after they were made (`isTestName()` in
+  `server/api.js`).
 - **Play counts.** `back.js` sends `POST /api/plays` once each time a version opens, and the
   shelf shows each game's all-time total from `GET /api/plays` (#26). Anonymous: only game,
   version, day and a number are kept. A game needs nothing to be counted.
@@ -139,6 +144,14 @@ high-score lists (#25), then play counts (#26).
   after a reload, sends a typed code from another game or a newer version to the room's own (a room on an older one says so instead, #346), and pauses
   the round while a phone in it is away (with "Jatka ilman heitä" on the host). The game keeps the
   game: the phone that made the room (the host) runs the round and the others draw it.
+  - The room page (#388): making or joining a room moves the phone onto `public/huone/`, which
+    keeps the room's WebSocket and the voice calls (`rooms.js` with `data-shell`) and plays the
+    game in a frame under a slim room bar (code, players); the page draws the 🎤 chip over the frame, where it sits in the game alone, so a finger on it stays through a game switch (#394). The game's `rooms.js` talks through
+    the page's connection, so a game switch reloads only the frame and the calls stay up; leaving
+    the room sends the phone to the game's own page. A game needs nothing for it. A game inside
+    another frame (Ottelu's events) keeps the room in its own page, and so do the tests:
+    `tests/conftest.py` sets `window.__aiPelitHuoneSivu = false` on every page
+    (`ROOMS_IN_GAME`); `tests/test_huone_sivu.py` turns it on.
   - `on('start', s => …)` on every phone: `s.players` (`[{id, name}]`, the connected phones in
     room order), `s.round`, `s.host`, `s.over` (a finished round sent to a phone that missed it).
   - `send(msg, to)` (host: to all or one id; a guest: to the host) and `on('message', (msg, from) => …)`.
@@ -152,8 +165,12 @@ high-score lists (#25), then play counts (#26).
   - Every phone: `paused` (stop the clock while true), `once(round)` (save a result only when true),
     `backToRoom(text, 'win'|'lose')` after the game's own end screen, `note(text)`,
     `extra(node)` (the game's own controls under the player list, such as the host's choice of course),
-    `on('lobby')` (the host lost the round: stop it), `on('leave', why)` and `on('menu')` (show the
+    `on('lobby')` (the host lost or ended the round: stop it), `on('leave', why)` and `on('menu')` (show the
     game's menu again), `me`, `isHost`, `inRoom`.
+  - The host can end a round still going (#392): "⏹ Lopeta kierros kaikilta" in the "‹ Pelit"
+    chip's menu (`back.js`, asked twice) calls `stopRound()`, and every phone in the round,
+    the host's too, hears `on('lobby')` and gets the room screen. A game needs nothing for it,
+    as long as its `lobby` handler stops the round on the host as well.
   - Public rooms (#50): the host's "🌍 Julkinen" switch in the room lists it on every phone's room
     screen for the same game (any version), under "Avoimet huoneet"; one tap joins. A room is
     listed only while it waits between rounds, has space and its host is connected. The list
@@ -165,13 +182,14 @@ high-score lists (#25), then play counts (#26).
     player, the host's button is "Ohita vuoro" (`on('skip', ids)`), and the room screen offers
     "Palaa kierrokseen" to a phone that left the round.
   - Voice (#322): every room has push to talk, with nothing for a game to do. While a phone holds
-    the 🎤 chip `rooms.js` draws, the others in the room hear it; the sound goes straight between
+    the 🎤 chip `rooms.js` draws, and for a second after the lift (#398), the others in the room hear it; the sound goes straight between
     the phones (WebRTC), the room passes on only the calls' setup (`_rtc`), and Cloudflare's TURN
     relay (`GET /api/voice/ice`, the `TURN_KEY_*` secrets) helps where phones cannot reach each
     other. Upright the chip sits on the right edge above the middle; on its side, in the top bar
     right of the middle. A new version whose controls are there moves it with
     `data-voice-corner="left|top-left|top-right|bottom-left|bottom-right"` on its `rooms.js` tag,
-    or leaves voice out with `data-voice="off"`. Each phone has "🎤 Puhe" on the room screen and a
+    or leaves voice out with `data-voice="off"`. A call that brings no sound while the other phone talks (it says it is up, but nothing
+    arrives for 3 s) is made again by itself, at most once per 10 s per pair (#386). Each phone has "🎤 Puhe" on the room screen and a
     🔊/🔇 mute beside each name. In every room, public ones too, until a friends list exists
     (Eero's choice). The relay is free up to 1000 GB a month and Cloudflare has no cap, so the site
     hands out relay credentials only under 800 GB this month (Eero's choice), as the host's hourly
@@ -203,7 +221,7 @@ high-score lists (#25), then play counts (#26).
   choice and one set of kits for every event, so the match wears the same outfit throughout;
   Pituushyppy v10 is the model.
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-8/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-9/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
@@ -212,7 +230,7 @@ high-score lists (#25), then play counts (#26).
   (#176): the top three on the podium, the medals hung around their necks, the final standings
   under it; it stays until the player taps it away (the game passes its taps to `K.skip()`).
   Like `lib/three-r*/`, a folder never changes once published: a fix goes in the next one
-  (`yleisurheilu-9/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
+  (`yleisurheilu-10/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
   friends only for the phone on turn (rooms.js `turns()`), a friend may leave and come back
   ("Palaa kierrokseen"), the host skips an away friend's turn, and the game draws the friends not
   on turn as cheering spectators with `K.drawFans(ctx, box)`. From `yleisurheilu-7/` (#341) they stay in
@@ -220,10 +238,11 @@ high-score lists (#25), then play counts (#26).
   athlete (in a stadium behind the boards, which hide their legs), and offers a tap on its scene to
   `K.tapFans(px)` first, which walks a spectator's own figure there on every phone; nobody walks by
   themselves (Eero's choice). From `yleisurheilu-8/` (#373) the game passes `scroll` too, how many px
-  the background behind them has moved since its athlete stood at the start (0 there), and the
-  friends run after it a little slower than it, catching up once it stops; a tap on another
+  the background behind them has moved since its athlete stood at the start (0 there); a tap on another
   spectator climbs onto their shoulders (a column at most four high), so `K.tapFans(px, py)` takes
-  the tap's y too. Moukarinheitto, seen from above, stays on `yleisurheilu-7/`. The bar-height format (high jump, pole vault)
+  the tap's y too. From `yleisurheilu-9/` (#395) nobody runs after it (Eero's choice): the whole row only
+  slides with the background, a little slower than it (0.8 of its speed), and stops when it stops, so it may
+  leave the screen until the next turn; legs move only on a tapped walk. Moukarinheitto, seen from above, stays on `yleisurheilu-7/`. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose
@@ -257,7 +276,8 @@ high-score lists (#25), then play counts (#26).
 - A schema change is a new `migrations/<NNNN>_<what>.sql`. Apply it with
   `python3 scripts/cloudflare_setup.py` (needs `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`; on this host they are in `~/.local/share/ruokalista/cloudflare.env`)
-  before the change merges. It also binds `DB` and `ADMIN_KEY` on the Pages project; the
+  once review has passed, right before the change merges: nothing in CI applies it, a merge deploys
+  at once, and the code still live must keep working on the changed schema. It also binds `DB` and `ADMIN_KEY` on the Pages project; the
   admin key is kept in `~/.local/share/ai-pelit/admin-key`.
 - `npm test` (Node 22) runs `server/api.js` on SQLite with the migrations. To try the real thing,
   deploy a preview: `npx wrangler pages deploy _site --project-name ai-pelit --branch <branch>`
@@ -343,7 +363,9 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 ## Before you mark the pull request ready
 
 - `python3 -m pytest -q --changed-since origin/main`, `npm test` and `python3 scripts/build.py`
-  pass. On a PR also `python3 scripts/check_immutable.py origin/main`. The full browser suite
+  pass. On a PR also `python3 scripts/check_immutable.py origin/main`, after fetching and merging
+  `origin/main`: against a main that has moved on, other Works' releases read as your changes.
+  The full browser suite
   never runs, not in CI and not by you (#65, Eero's choice): with `--changed-since` a game's own
   tests run only when the change touches `games/<slug>/` or that game's test file (#37), and a
   change outside `games/` runs only the shared tests, the ones tied to no game. So name a game's
@@ -363,28 +385,49 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
   processor (#248: `GPU_ARGS` in `tests/conftest.py`); a run with 3D tests ends with a
   `WebGL:` line naming the card, or SwiftShader when it fell back to software.
   When you change a shared file (`public/back.js`, `rooms.js`, `scores.js`...), play a game that
-  uses it yourself.
+  uses it yourself, and grep every game's tests for counts of what it shows.
+- A run proves only the head it ran on. Queue anything long (the `--changed-since` run, the host
+  tests) with `agentdeck job submit`, and run only a single test file directly. Read
+  `~/agentdeck/.venv/bin/agentdeck job list` first and reuse a green run on this exact head; each
+  push or merge of `origin/main` makes a new head, so run again and quote only that run. Leave the
+  checkout alone while a job uses it.
+- `scripts/host-tests.sh` runs only `alone` (3D) tests, and exit code 5, nothing selected, counts as
+  green. Report only the tests its output names, and its `WebGL:` line; run a 2D game's own tests
+  separately. A file's name proves nothing either: `tests/test_hiljaiset_aanet.py` holds helpers and
+  no test, so see a file collected (`python3 -m pytest --collect-only -q <file>`) before you cite it.
+- For each file the pull request changes (a game by `games/<slug>/`), grep the `## Boxes` sections
+  in `docs/diagrams/` and update every box that names it, before review and not from memory:
+  conditions identical to the code, exception and fallback paths as well as the normal flow, and
+  exact example versions, library paths and file names. Say in the pull request when none applies.
 - So that green verification job and the pull request's CI are the last checks before release:
   the deck merges only when both are green on the same head. A merge to `main` deploys at once
   (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
   the site. `main` runs no browser tests; they already passed on the pull request's head.
-  To check it is live, ask the site itself, not a deployment wake-on (the deck saw no deploy for
-  #207): `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
+  To wait for it, register a commit wake-on for the merge commit named `deploy-cloudflare`, never
+  polling: this repository sends no deployment events, so a deployment wake-on does not fire
+  (#207). Then ask the site itself: `curl -s -o /dev/null -w '%{http_code}' "https://pelit.vilpponen.fi/<new path>?x=$RANDOM"`
   and the game's versions in `catalog.json`. A 404 right after the merge is the deploy still
   running: look again a minute later before calling it not live (#205).
+- Record a live check as `verified` only once every merged change in the Work is live and you have
+  tried each flow the request names on the real site. Green tests are not that, and a touch change
+  needs the owner's own phone (docs/making-games.md).
 - GitHub runs no pull-request CI while the pull request conflicts with `main` (#346): the push
-  starts no run, so a wake-on for the `test` check never fires, and closing and reopening does not
-  help. When no run appears for a pushed head, read `gh pr view <n> --json
+  starts no run, so a wake-on for the `test` check never fires, and neither closing and reopening
+  nor an empty commit helps. When no run appears for a pushed head, read `gh pr view <n> --json
   mergeable,mergeStateStatus` once. If it says `CONFLICTING` or `DIRTY`, merge `origin/main` into
   the branch (never rebase pushed commits), fix the conflict, push, and register the wake-on again
   for the new head. `main` moves often here (many Works at once), and another Work often takes
   the same version number, so merge `origin/main` right before you mark the pull request ready
-  and again after each review pass, and on a long-running pull request before each push.
+  and again after each review pass, and on a long-running pull request before each push. Before
+  you build, check open pull requests and sibling Works for the same game's next number. A pull
+  request that needs another open version change merges it in before review and again once it lands.
 - Never put an edit (`sed -i`, a heredoc) in the same Bash call as a test run: the AgentDeck
   queue hook refuses the whole chain. Edit in one call, then run the test alone with
   `AGENTDECK_HEAVY_SLOT_HELD=1`.
 - A fix for a chance-based test (a throw, a random round): run it once with a short timeout and
   measure its real range before you queue a long job on it.
+- A test you did not touch keeps failing: reproduce it on unchanged `origin/main` and find the cause
+  before you change it. No retry commits, no guessed timing fix, no calling it flaky.
 - Before you add a new row to a list in `public/app.js`, grep `tests/` for that list's class
   selectors (`.friend`, `.friend .meta`) and give the new row a class of its own, so the old
   tests do not pick it up.

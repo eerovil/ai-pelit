@@ -18,6 +18,8 @@ v9 (#337, `aanet-4`) has no crowd: a crash is only its thud, no "ooh"; a trick o
 
 v10 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v11 (#404) plays as v10, but a tap is judged at its own moment, not at the last drawn frame: see `reilu-ajoitus.md`.
+
 ```mermaid
 flowchart TD
   A[Taso: trampoliini ja temppulista] --> B[Matolla: napauta, v2: päästä irti, pohjalla]

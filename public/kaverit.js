@@ -328,6 +328,15 @@
   // room code belongs to another game.
   function openInvite(slug, path) {
     var to = new URL(path, ROOT);
+    // In the room page's frame (#388) the room page goes to the invited room; told first, so the
+    // leave below does not send it back to this game alone.
+    var shell = null;
+    try { shell = here && window.parent !== window && window.parent.AiPelitRoomShell; } catch (e) {}
+    if (shell && shell.go) {
+      shell.go(to.href);
+      try { if (window.AiPelitRooms && AiPelitRooms.inRoom) AiPelitRooms.leave(); } catch (e) {}
+      return;
+    }
     // Leave the room this phone is in first, as "Poistu huoneesta" does: the others see it go
     // (a host's room closes), and the tab no longer rejoins it (rooms.js leave()).
     try { if (window.AiPelitRooms && AiPelitRooms.inRoom) AiPelitRooms.leave(); } catch (e) {}

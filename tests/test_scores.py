@@ -14,9 +14,9 @@ ADMIN_KEY = "avain"
 
 # The newest version of each game played here: the high-score library working in the game as it is.
 PUHELINKOPPI = "games/puhelinkoppi/v8/"
-SORMISKEITTI = "games/sormiskeitti/v9/"
+SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v12/"
-PIANO = "games/piano/v10/"
+PIANO = "games/piano/v11/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
@@ -87,7 +87,7 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = {"hiihto": "taso-1", "tikka": "mokki", "pasianssi": "veto1"}.get(game, "main")
+                first = {"hiihto": "taso-1", "tikka": "mokki2", "pasianssi": "veto1"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
                 low = game in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
@@ -193,7 +193,7 @@ def test_scores_wait_on_the_phone_while_offline(site, context, fake):
     page.evaluate(PLAY, [30, False])  # a lower score later does not replace the best one waiting
     queue = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))")
     best_cm = round(page.evaluate("best") / 10)
-    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 9, "score": best_cm}}
+    assert queue == {"sormiskeitti|main": {"game": "sormiskeitti", "board": "main", "version": 10, "score": best_cm}}
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('Ei verkkoyhteyttä')")
     assert fake.scores == {}
@@ -340,7 +340,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.reload()
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
-    assert row == {"score": round(won["best"] / 10), "version": 9, "level": 2}
+    assert row == {"score": round(won["best"] / 10), "version": 10, "level": 2}
     fake.players[key[2]]["status"] = "approved"
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset .tulos:has-text('taso 2')")
@@ -356,7 +356,7 @@ def test_the_level_comes_from_the_game_s_own_save_with_no_new_version(site, cont
     page.evaluate(PLAY, [30, False])
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     assert len(fake.posts) == sent + 1
-    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 9, "level": 4}
+    assert fake.scores[key] == {"score": round(won["best"] / 10), "version": 10, "level": 4}
 
 
 @pytest.mark.games("hiihto")
@@ -505,7 +505,7 @@ def test_piano_sends_its_level_even_from_a_first_game_on_level_1(site, context, 
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'")
     [(key, row)] = fake.scores.items()
     assert key[:2] == ("piano", "main")
-    assert row == {"score": 300, "version": 10, "level": 1}
+    assert row == {"score": 300, "version": 11, "level": 1}
 
 
 @pytest.mark.games("piano")
@@ -567,7 +567,7 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
     site.build(ROOT / "games")
     a, b = "a" * 32, "b" * 32
     fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
-    fake.scores = {("tikka", "mokki", a): {"score": 254, "version": 2}, ("tikka", "main", b): {"score": 412, "version": 1}}
+    fake.scores = {("tikka", "mokki2", a): {"score": 254, "version": 7}, ("tikka", "kisa2", b): {"score": 412, "version": 7}}
     page = context.new_page()
     page.goto(site.url)
     # The shelf card: Mökkitikka's no. 1, named.
@@ -578,11 +578,11 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Mökkitikka"
     assert "Bertta" not in page.locator(".score-list").inner_text()
-    page.click(".score-list .board-list[data-board='main']")
+    page.click(".score-list .board-list[data-board='kisa2']")
     page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
     assert "Aino" not in page.locator(".score-list").inner_text()
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "Pistekisa"
-    page.click(".score-list .board-list[data-board='mokki']")
+    page.click(".score-list .board-list[data-board='mokki2']")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
 
 
