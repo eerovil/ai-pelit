@@ -273,8 +273,15 @@ var Marjakori = (function () {
     return moss;
   }
   function wavePoints(rs, wave) {
-    return rs.reduce(function (n, r) {
-      return n + (r.cells.length >= 5 ? 100 : r.cells.length === 4 ? 60 : 30) * Math.min(5, wave + 1);
+    var groups = [];
+    rs.forEach(function (r) {
+      var group = groups.find(function (g) { return r.cells.some(function (i) { return g.has(i); }); });
+      if (!group) { group = new Set(); groups.push(group); }
+      r.cells.forEach(function (i) { group.add(i); });
+    });
+    return groups.reduce(function (n, group) {
+      var size = group.size;
+      return n + (size >= 5 ? 100 : size === 4 ? 60 : 30) * Math.min(5, wave + 1);
     }, 0);
   }
   function resolve(s, place, events) {
