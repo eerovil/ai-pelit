@@ -362,7 +362,8 @@
 
   window.AiPelitScores = {
     submit: submit,
-    open: function () { open(); },
+    open: function () { save(K + 'kysytty', true); open(); },
+    prompt: function () { save(K + 'kysytty', true); open(); },
     board: function (id, label) { board = id; boardLabel = label || ''; },
     format: function (f) { fmt = f; },
     // For the shelf: which games keep lists, and their lists.
