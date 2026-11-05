@@ -1,0 +1,5 @@
+{
+  "title": "Marjakori",
+  "description": "Vaihda metsän kuviot paikkoja, tee vähintään kolmen rivejä ja kerää kori täyteen.",
+  "versions": [{"n": 1, "date": "2026-11-05", "note": "Ensimmäinen versio: pyyhkäise viereiset metsäkuviot vaihtoon, kerää tavoitteet rajatuilla siirroilla ja tee puuskia sekä kimalluksia.", "request": "Pwli jossa swipetetään kuviot ja match 3 tai enemmän samaa", "issue": "eerovil/ai-pelit#406"}]
+}
