@@ -384,6 +384,36 @@ def test_coming_back_to_the_page_draws_the_menu_again(site, context):
     assert draws_in(page) == 0
 
 
+def test_a_run_coming_back_and_turning_at_once_keeps_one_loop_going(site, context):
+    page = live_game(site, context)
+    page.evaluate("""() => {
+      window.waiting = 0; window.most = 0;
+      const raf = requestAnimationFrame;
+      window.requestAnimationFrame = f => {
+        most = Math.max(most, ++waiting);
+        return raf(t => { waiting--; f(t); });
+      };
+    }""")
+    page.click("#go")
+    assert draws_in(page) > 3
+    page.evaluate("""() => {
+      most = 0;
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pageshow'));
+      window.dispatchEvent(new Event('resize'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    }""")
+    turn(page, {"width": 740, "height": 360})
+    assert draws_in(page) > 3
+    assert page.evaluate("[most, phase]") == [1, "ride"]
+    # A long gap in the frames, as after a hidden page, costs the run at most 0.1 s.
+    left = page.evaluate("timeLeft")
+    page.evaluate("lastT -= 30000")
+    page.wait_for_timeout(100)
+    assert page.evaluate("timeLeft") > left - 1
+    assert page.errors == []
+
+
 def test_the_strip_is_written_again_only_when_its_text_changes(site, context):
     page = open_game(site, context)
     start(page)
