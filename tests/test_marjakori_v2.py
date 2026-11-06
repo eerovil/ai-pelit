@@ -2,7 +2,7 @@ import shutil
 
 from conftest import ROOT, turn
 
-URL = "games/marjakori/v1/"
+URL = "games/marjakori/v2/"
 
 
 def open_game(site, context):
