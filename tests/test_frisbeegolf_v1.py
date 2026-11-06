@@ -119,7 +119,7 @@ def test_collision_lie_allows_next_throw_away(site, browser, kind):
     result = p.evaluate("""kind => {
       const h={...HOLES[0],trees:[],rocks:[],hill:0,wind:[0,0],basket:[100,100],water:[]};
       if(kind==='tree')h.trees=[[0,12,.5,8,'birch']];
-      else h.rocks=[[0,12,3]];
+      else h.rocks=[[0,12,4]];
       const shot={lie:[0,0],angle:0,disc:2,power:1,curve:0,seed:1};
       const first=fly(shot,h,false);
       const second=fly({...shot,lie:first.lie,angle:Math.PI},h,false);
@@ -127,7 +127,7 @@ def test_collision_lie_allows_next_throw_away(site, browser, kind):
         moved:distance(first.lie,second.lie),next:second.reason};
     }""", kind)
     assert result['reason'] == kind
-    assert result['clearance'] > (.6 if kind == 'tree' else 3)
+    assert result['clearance'] > (.6 if kind == 'tree' else 4)
     assert result['moved'] > 10
     assert result['next'] == 'grass'
     assert not p.errors
