@@ -21,15 +21,23 @@
 <script>
 const c = document.getElementById('c'), x = c.getContext('2d');
 let W, H, DPR, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, LAND = false;
+let asked = 0, lastT = 0;
+function ask() { if (!asked) asked = requestAnimationFrame(frame); }
 function resize() {
-  DPR = window.devicePixelRatio || 1;
-  W = innerWidth; H = innerHeight;
-  LAND = W > H; // sideways: the scene fits the height, the words move to the left side
-  c.width = W * DPR; c.height = H * DPR;
+  const d = window.devicePixelRatio || 1;
+  if (W !== innerWidth || H !== innerHeight || DPR !== d) { // setting the size wipes the canvas
+    DPR = d;
+    W = innerWidth; H = innerHeight;
+    LAND = W > H; // sideways: the scene fits the height, the words move to the left side
+    c.width = W * DPR; c.height = H * DPR;
+  }
   const cs = getComputedStyle(document.getElementById('safe'));
   SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0; SAFE_L = parseFloat(cs.paddingLeft) || 0;
+  ask();
 }
 addEventListener('resize', resize); resize();
+// The canvas's box can change with no resize event on the window.
+if (window.ResizeObserver) new ResizeObserver(resize).observe(c);
 
 // ---- Saves (shared by every version) ----
 const KEY = 'ai-pelit:puhelinkoppi:';
@@ -120,6 +128,7 @@ function newRound() {
   pos = mul(N, REST); vel = [0, 0, 0]; w = [0, 0, 0];
   q = qFromAxes(cross(F, N), F, N);
   halfFlips = 0; flipSign = 1; settle = null; result = null; camY = 0; swipe = null; shake = 0; dip = 0;
+  ask();
 }
 newRound();
 
@@ -132,6 +141,7 @@ function launch({ v0, wx = 0, wy = 0, vx = 0, vz = v0 * THROW_Z }) {
   vel = [vx, v0, vz + r() * 3];
   halfFlips = 0; flipSign = 1;
   state = 'air';
+  ask();
   sound('whoosh');
 }
 
@@ -176,9 +186,12 @@ function step(dt) {
     if (settle.t >= 1) judge();
   }
   // The camera rises with a high throw so the phone stays in view.
-  const target = Math.max(0, pos[1] - 0.35);
+  const target = camTarget();
   camY += (target - camY) * Math.min(1, dt * 7);
+  if (Math.abs(target - camY) < CAM_NEAR) camY = target; // under a pixel away: it has arrived
 }
+function camTarget() { return Math.max(0, pos[1] - 0.35); }
+const CAM_NEAR = 0.0003;
 
 // The phone lands on whichever face is lower and lies flat in the palm.
 function caught() {
@@ -431,6 +444,7 @@ function moveHand(dxPx, dyPx) {
   const k = project(hand())[2] / focal();
   handX = Math.max(-0.45, Math.min(0.45, handX + dxPx * k));
   handY = Math.max(HAND_MIN_Y, Math.min(HAND_MAX_Y, handY - dyPx * k / Math.cos(PITCH)));
+  ask();
 }
 function onDown(e) {
   e.preventDefault(); unlock();
@@ -518,14 +532,25 @@ function sound(k) {
 }
 
 // ---- Loop ----
-let lastT = performance.now();
+// A frame is drawn only when something changes (#415): the screen is still before the throw and on
+// the result, and drawing it 60 times a second anyway took a good part of the phone's processor.
+// What changes it calls ask(): the finger moving the hand, a throw, a new round, a new size.
+function moving() {
+  return state === 'air' || state === 'drop' || state === 'settle' || shake > 0 || dip > 0 || camY !== camTarget();
+}
 function frame(t) {
-  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  asked = 0;
+  // The first frame after a rest has no frame before it to measure from.
+  const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 1 / 60;
   step(dt);
   draw();
-  requestAnimationFrame(frame);
+  lastT = moving() ? t : 0;
+  if (lastT) ask();
 }
-requestAnimationFrame(frame);
+// A hidden page may lose what was on its canvas, and it draws no frames, so draw on the way back.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ask(); });
+addEventListener('pageshow', ask);
+c.addEventListener('contextrestored', ask);
 </script>
 <script src="../../../scores.js" data-game="puhelinkoppi" data-order="high" data-corner="bottom-right"></script>
 <script>if (window.AiPelitScores) AiPelitScores.format(s => `taso ${s}`);</script>

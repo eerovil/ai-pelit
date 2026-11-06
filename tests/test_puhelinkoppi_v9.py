@@ -1,4 +1,4 @@
-"""Puhelinkoppi v6: recorded sounds from the shared library public/lib/aanet-2/ (#226)."""
+"""Puhelinkoppi: recorded sounds from the shared library (#226), and drawing only when the screen changes (#415)."""
 
 import shutil
 
@@ -100,3 +100,135 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
     opens_and_plays_with_the_quiet_library(real, context, "games/puhelinkoppi/v9")
+
+
+# #415: the screen is still before the throw and on the result, so nothing is drawn there.
+COUNT = """() => { window.draws = 0; const real = draw; window.draw = () => { draws++; real(); }; }"""
+QUIET = 700  # ms: about 40 frames, had it gone on drawing
+
+
+def still(page):
+    """Waits for the drawing to stop, then says whether it stayed stopped."""
+    page.wait_for_function("!moving()", timeout=8000)
+    page.wait_for_timeout(100)
+    before = page.evaluate("draws")
+    page.wait_for_timeout(QUIET)
+    return page.evaluate("draws") == before
+
+
+def counted(site, browser):
+    ctx, page = open_game(site, browser)
+    page.evaluate(COUNT)
+    return ctx, page
+
+
+def canvas_drawn(page):
+    return page.evaluate("""() => {
+      const d = x.getImageData(c.width / 2, c.height / 2, 1, 1).data; return d[3] === 255;
+    }""")
+
+
+def test_nothing_is_drawn_before_the_throw_even_after_a_tap(site, browser):
+    ctx, page = counted(site, browser)
+    assert still(page)
+    assert page.evaluate("draws") == 0
+    page.touchscreen.tap(180, 150)
+    assert page.evaluate("state") == "ready"
+    assert still(page)
+    assert page.errors == []
+    ctx.close()
+
+
+def test_a_throw_is_drawn_to_its_end_and_then_the_drawing_stops(site, browser):
+    ctx, page = counted(site, browser)
+    page.evaluate("noise = 0; newRound(); launch({ v0: 3, vx: 0.6 })")
+    page.wait_for_function("state === 'result'", timeout=8000)
+    assert page.evaluate("draws") > 20
+    assert page.evaluate("result.kind") == "drop"
+    assert still(page)
+    assert page.evaluate("shake") == 0
+    assert page.errors == []
+    ctx.close()
+
+
+def test_a_catch_with_the_hand_raised_lets_the_camera_arrive_and_rest(site, browser):
+    ctx, page = counted(site, browser)
+    page.evaluate("""noise = 0; newRound(); handY = 0.6; pos = add(hand(), mul(N, REST)); launch({ v0: 3 })""")
+    page.wait_for_function("state === 'result'", timeout=8000)
+    assert page.evaluate("result.kind") == "win"
+    assert still(page)
+    assert page.evaluate("camY === camTarget() && camY > 0.2")
+    assert page.errors == []
+    ctx.close()
+
+
+def test_the_next_round_is_drawn_after_a_result_at_rest(site, browser):
+    ctx, page = counted(site, browser)
+    page.evaluate("noise = 0; newRound(); launch({ v0: 3, vx: 0.6 })")
+    page.wait_for_function("state === 'result'", timeout=8000)
+    assert still(page)
+    page.wait_for_function("performance.now() - resultT > 520")
+    before = page.evaluate("draws")
+    page.touchscreen.tap(180, 150)
+    page.wait_for_function(f"draws > {before}")
+    assert page.evaluate("state") == "ready"
+    assert still(page)
+    ctx.close()
+
+
+def test_dragging_the_hand_draws_and_a_swipe_throws_from_rest(site, browser):
+    ctx, page = counted(site, browser)
+    assert still(page)
+    start = page.evaluate("[...project(pos).slice(0, 2), handX]")
+    page.mouse.move(start[0], start[1])
+    page.mouse.down()
+    page.mouse.move(start[0] + 40, start[1], steps=4)
+    page.wait_for_function("draws > 0")
+    assert page.evaluate("handX") > start[2]
+    assert page.evaluate("state") == "ready"
+    page.mouse.up()
+    assert still(page)  # the hand was only moved: no throw, and the screen rests where it is
+
+    drawn = page.evaluate("draws")
+    page.evaluate("swipe = null; throwFromSwipe({ speedUp: 3000, speedSide: 0, offX: 0, offY: 0 })")
+    assert page.evaluate("state") == "air"
+    page.wait_for_function(f"draws > {drawn + 5}")
+    assert page.errors == []
+    ctx.close()
+
+
+def test_a_new_size_redraws_the_wiped_canvas_and_keeps_the_round(site, browser):
+    ctx, page = counted(site, browser)
+    assert still(page)
+    page.set_viewport_size({"width": 740, "height": 360})
+    page.wait_for_function("draws > 0 && LAND")
+    assert canvas_drawn(page)
+    assert page.evaluate("state") == "ready"
+    assert still(page)
+    ctx.close()
+
+
+def test_coming_back_to_the_page_draws_again(site, browser):
+    ctx, page = counted(site, browser)
+    assert still(page)
+    for event in ("document.dispatchEvent(new Event('visibilitychange'))",
+                  "window.dispatchEvent(new Event('pageshow'))",
+                  "c.dispatchEvent(new Event('contextrestored'))"):
+        before = page.evaluate("draws")
+        page.evaluate(event)
+        page.wait_for_function(f"draws > {before}")
+    ctx.close()
+
+
+def test_a_first_frame_after_rest_moves_a_normal_step(site, browser):
+    ctx, page = counted(site, browser)
+    assert still(page)
+    page.wait_for_timeout(300)
+    # A long rest must not count as time in the air.
+    y = page.evaluate("""() => new Promise(done => {
+      noise = 0; newRound(); launch({ v0: 3 });
+      const y0 = pos[1], real = window.draw;
+      window.draw = () => { window.draw = real; real(); done(pos[1] - y0); };
+    })""")
+    assert 0 < y < 3 * 0.03
+    ctx.close()
