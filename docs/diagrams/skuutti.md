@@ -11,6 +11,8 @@ v3 (#337, `aanet-4`) has no crowd: a wobble is only the wheels' landing, no "ooh
 
 v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v5 (#414) draws less and looks the same. What never moves is on a canvas of its own, drawn once for each screen size, and the loop runs only during a run; the boxes from "Pyydä kuva" on show it.
+
 ```mermaid
 flowchart TD
   A[Valikko: temput, värit, Aja!] --> B[Pudottaudu rampin reunalta]
@@ -43,10 +45,20 @@ flowchart TD
   C --> S{Minuutti täynnä?}
   S -- Kyllä --> T[Ajo loppuu: ennätys, tuloslista, avautuvat temput ja värit]
   T --> A
+  A --> U[Pyydä kuva: koko, väri tai paluu sivulle]
+  C --> V
+  U --> V{Ajo käynnissä?}
+  V -- Ei --> W[Yksi kuva, sitten silmukka seis]
+  V -- Kyllä --> X[Askeleet ja kuva joka ruutuun]
+  X --> Y{Koko muuttui tai sivu palasi?}
+  Y -- Kyllä --> Z[Piirrä tausta uudelleen omalle kankaalle]
+  Y -- Ei --> AA[Tyhjennä pelikangas: ramppi näkyy läpi]
+  Z --> AA
+  AA --> AB[Piirrä kuski ja pisteet, palkin teksti vain sen muuttuessa]
   class D,K blue
-  class E,I,L,O,S amber
-  class B,C,F,G,H,J,N teal
-  class A violet
+  class E,I,L,O,S,V,Y amber
+  class B,C,F,G,H,J,N,X,Z,AA,AB teal
+  class A,U,W violet
   class P,Q,T green
   class M,R rose
 ```
@@ -62,7 +74,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: temput, värit, Aja!**: `showMenu()` in `games/skuutti/v2/index.html` (v1 is the same without the recorded sounds): the tricks (`TRICKS`) open ones with their swipe, locked ones with the record they need; the colours (`COLORS`, the pick saved as `ai-pelit:skuutti:vari`); and the next thing the record opens.
+- **Valikko: temput, värit, Aja!**: `showMenu()` in `games/skuutti/v5/index.html` (v1 is the same without the recorded sounds): the tricks (`TRICKS`) open ones with their swipe, locked ones with the record they need; the colours (`COLORS`, the pick saved as `ai-pelit:skuutti:vari`); and the next thing the record opens.
 - **Pudottaudu rampin reunalta**: `dropIn()`: standing still on the coping, at the start on the left, after a fall on the side of the fall.
 - **Rullaa rampissa**: `ride()`: the halfpipe is a flat bottom, a quarter circle up each side and a short straight wall (`at()`, `FLAT`, `R`, `VERT`); gravity along the surface, rolling and air drag against it. Rolling alone never reaches the coping again. Sound: the `rullaus` loop (`wheelSound()`, each frame), louder and higher with the speed, silent in the air, after a fall and in the menu.
 - **Sormi ruudulla: kyykky**: the canvas's `pointerdown`; while a finger is down the rider crouches and the part of the wall ahead where a pump is best shows green.
@@ -74,3 +86,11 @@ flowchart TD
 - **Alastulo: paljonko kesken?**: `land()`: the most of a turn still to go on any of the four: up to 0.08 clean, up to 0.25 a wobble, more a fall (`CLEAN`, `SLOPPY`). Sound: `lasku` when the wheels touch; a wobble adds the crowd's `ohhoo`, a fall is `rima` (`fall()`), the metal clatter of the scooter going down. From v3 (#337) a wobble is `lasku` only, no `ohhoo`.
 - **Puhdas: pisteet, putki kasvaa**: `score()`: the tricks' points, ×1.5, ×2… for each more in the same air, 20 a metre of height, +10 % for each clean air in a row (at most double); the same air as the last one pays half, a wobble half. Sound: a clean trick adds `onnistui`.
 - **Ajo loppuu: ennätys, tuloslista, avautuvat temput ja värit**: `finish()`: a run is 60 s (`RUN`); an air under way still lands and counts. Saves the record, sends the points with `AiPelitScores.submit()` (`skuutti` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`) and names what the new record opened. Sound: `voitto` for a new record, otherwise `tappio`.
+- **Pyydä kuva: koko, väri tai paluu sivulle**: `ask()` in `games/skuutti/v5/index.html` asks for one `frame()`: called from `showMenu()` (so also a picked colour), `startRun()`, the window's `resize`, the `ResizeObserver` on `#c`, and `back()` on `visibilitychange` and `pageshow`.
+- **Ajo käynnissä?**: `frame()`: it asks for the next frame only while `phase !== 'menu'`.
+- **Yksi kuva, sitten silmukka seis**: the last `frame()` draws the menu's picture and `wheelSound()` quietens the wheels; nothing runs until the next `ask()`. `startRun()` sets `lastT` and `acc` again, so time in the menu is not played.
+- **Askeleet ja kuva joka ruutuun**: `frame()`: fixed 1/60 s `step()`s, then `draw()` and `wheelSound()`.
+- **Koko muuttui tai sivu palasi?**: `sceneDrawn` is false after `resize()` changed the canvases' size, or after `back()`, as a page coming back may have lost its pictures.
+- **Piirrä tausta uudelleen omalle kankaalle**: `drawScene()` and `drawRamp()` on `#scene`, under `#c`: sky, city, fence, ground and ramp. Filling the sky's full-screen gradient every frame was what held the test phone at 30 frames a second.
+- **Tyhjennä pelikangas: ramppi näkyy läpi**: `draw()` clears `#c`, which is transparent over `#scene`. Copying a finished picture of the scene each frame instead reached only 42 frames a second.
+- **Piirrä kuski ja pisteet, palkin teksti vain sen muuttuessa**: `drawLive()` (the green pump zone, the copings), `drawRider()`, `drawHud()`. The strip's text is written by `drawStrip()` only when the time, points or record change (`hudKey`) and copied the rest of the time; pops and the first seconds' hint are drawn each frame.
