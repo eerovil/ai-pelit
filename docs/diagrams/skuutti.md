@@ -11,7 +11,7 @@ v3 (#337, `aanet-4`) has no crowd: a wobble is only the wheels' landing, no "ooh
 
 v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
-v5 (#414) draws less and looks the same. What never moves is on a canvas of its own, drawn once for each screen size, and the loop runs only during a run; the boxes from "Pyydä kuva" on show it.
+v5 (#414) draws less and looks the same, 30 even pictures a second during a run. What never moves is on a canvas of its own, drawn once for each screen size, and the loop runs only during a run; the boxes from "Pyydä kuva" on show it.
 
 ```mermaid
 flowchart TD
@@ -50,7 +50,7 @@ flowchart TD
   U --> V{Ajo, ilma tai kaatuminen käynnissä?}
   V -- Ei --> W[Yksi kuva, sitten silmukka seis]
   V -- Kyllä --> X[Askeleet, enintään 60 sekunnissa]
-  X --> AC{Liikkuiko jokin, tai onko kuva pyydetty?}
+  X --> AC{Kuvan aika, tai onko kuva pyydetty?}
   AC -- Ei --> AD
   AC -- Kyllä --> Y{Koko muuttui tai sivu palasi?}
   Y -- Kyllä --> Z[Piirrä tausta uudelleen omalle kankaalle]
@@ -94,8 +94,8 @@ flowchart TD
 - **Pyydä kuva: koko, väri tai paluu sivulle**: `ask()` in `games/skuutti/v5/index.html` asks for one `frame()` with a picture owed (`owed`): called from `showMenu()` (so also a picked colour), `startRun()`, the window's `resize`, the `ResizeObserver` on `#c`, and `back()` on `visibilitychange` and `pageshow`.
 - **Ajo, ilma tai kaatuminen käynnissä?**: `phase !== 'menu'`, so `ride`, `air` and `down` all run the loop.
 - **Yksi kuva, sitten silmukka seis**: the last `frame()` draws the menu's picture and `wheelSound()` quietens the wheels; nothing runs until the next `ask()`. `startRun()` sets `lastT` and `acc` again, so time in the menu is not played.
-- **Askeleet, enintään 60 sekunnissa**: `frame()`: as many fixed 1/60 s `step()`s as the time since the last frame holds, which on a 120 Hz screen is none every other frame.
-- **Liikkuiko jokin, tai onko kuva pyydetty?**: `moved || owed` in `frame()`: `draw()` and `wheelSound()` run only after a step or an `ask()`, so a faster screen draws no picture that would be the same.
+- **Askeleet, enintään 60 sekunnissa**: `frame()`: as many fixed 1/60 s `step()`s as the time since the last frame holds, which on a 120 Hz screen is none every other frame. Physics, touches and sounds keep this pace whatever is drawn.
+- **Kuvan aika, tai onko kuva pyydetty?**: `owed || (phase !== 'menu' && t - drawnT >= EVERY)` in `frame()`: `draw()` and `wheelSound()` run 30 times a second on any screen, or at once after an `ask()`. The steps stay at 60 a second. On the test phone any picture moving 60 times a second cost 30 % or more of the processor; 30 a second cost 28 %, under v4's 30 %.
 - **Koko muuttui tai sivu palasi?**: `sceneDrawn` is false after `resize()` changed the canvases' size, or after `back()`, as a page coming back may have lost its pictures.
 - **Piirrä tausta uudelleen omalle kankaalle**: `drawScene()` and `drawRamp()` on `#scene`, under `#c`: sky, city, fence, ground and ramp. Filling the sky's full-screen gradient every frame was what held the test phone at 30 frames a second.
 - **Tyhjennä pelikangas: ramppi näkyy läpi**: `draw()` clears `#c`, which is transparent over `#scene`. Copying a finished picture of the scene each frame instead reached only 42 frames a second.

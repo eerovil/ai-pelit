@@ -601,8 +601,12 @@ function wheelSound() {
 
 // ---- Loop: fixed 1/60 s steps, and only during a run ----
 // The menu stands still, so it asks for one picture when something changes and none after it (#414).
-// A run draws only when a step moved something: a 120 Hz screen gets 60 pictures a second, not 120.
-let lastT = performance.now(), acc = 0, asked = false, owed = false;
+// A run draws 30 pictures a second on any screen, while the steps stay at 60 (#414, Eero's choice):
+// on the test phone any picture moving 60 times a second cost 30 % or more of the processor, and
+// even 30 a second cost less than v4 with no hitches. EVERY is under 1/30 s, so that a 60 Hz
+// screen's every other frame always passes, and on a 120 Hz one every fourth.
+const EVERY = 29;
+let lastT = performance.now(), acc = 0, asked = false, owed = false, drawnT = -1e9;
 function ask() { owed = true; next(); }
 function next() {
   if (asked) return;
@@ -612,9 +616,8 @@ function next() {
 function frame(t) {
   asked = false;
   acc += Math.max(0, Math.min(0.1, (t - lastT) / 1000)); lastT = t;
-  let moved = false;
-  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; moved = true; }
-  if (moved || owed) { owed = false; draw(); wheelSound(); }
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
+  if (owed || (phase !== 'menu' && t - drawnT >= EVERY)) { owed = false; drawnT = t; draw(); wheelSound(); }
   if (phase !== 'menu') next();
 }
 // A new size of the screen, however it came; a page coming back may have lost its pictures.

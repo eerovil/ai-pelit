@@ -1,6 +1,8 @@
 """Skuutti v2: recorded sounds from the shared library public/lib/aanet-2/ (#228). v2 plays as
 v1 did (pumping, airs, tricks, falls, the clock and unlocks), and those tests run here too."""
 
+import pytest
+
 from conftest import ROOT, turn
 
 URL = "games/skuutti/v5/"
@@ -348,7 +350,7 @@ def test_the_menu_draws_nothing_until_something_changes(site, context):
     assert page.errors == []
 
 
-def test_a_run_draws_every_frame_and_its_end_stops_the_loop_with_the_wheels_quiet(site, context):
+def test_a_run_keeps_drawing_and_its_end_stops_the_loop_with_the_wheels_quiet(site, context):
     page = live_game(site, context)
     page.click("#go")
     assert draws_in(page) > 3
@@ -414,22 +416,24 @@ def test_a_run_coming_back_and_turning_at_once_keeps_one_loop_going(site, contex
     assert page.errors == []
 
 
-def test_a_faster_screen_draws_only_when_a_step_moved_something(site, context):
+@pytest.mark.parametrize("hz", [60, 90, 120, 144])
+def test_a_run_draws_30_pictures_a_second_and_steps_60_on_any_screen(site, context, hz):
     page = open_game(site, context)
     start(page)
-    got = page.evaluate("""() => {
+    got = page.evaluate("""hz => {
       let draws = 0, steps = 0;
       const d = draw, s = step;
       window.draw = () => { draws++; d(); };
       window.step = dt => { steps++; s(dt); };
       let t = lastT; acc = 0; owed = false;
-      for (let i = 0; i < 120; i++) { t += 1000 / 120; frame(t); }   // one second at 120 Hz
+      for (let i = 0; i < hz; i++) { t += 1000 / hz; frame(t); }   // one second
       const drawn = [draws, steps];
-      // A picture owed for another reason, such as a new size, is drawn with no step.
+      // A picture owed for another reason, such as a new size, is drawn at once.
       draws = 0; acc = 0; ask(); frame(lastT);
       return [...drawn, draws];
-    }""")
-    assert 59 <= got[0] <= 61 and got[0] == got[1], got
+    }""", hz)
+    assert 28 <= got[0] <= 31, got
+    assert 59 <= got[1] <= 61, got
     assert got[2] == 1
     assert page.errors == []
 
