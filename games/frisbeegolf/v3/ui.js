@@ -7,7 +7,7 @@ function renderUI(){
   $('holeLabel').textContent='VÄYLÄ '+(round.hole+1)+' / 9';$('holeName').textContent=h.name;
   const wind=Math.hypot(...h.wind);$('stats').textContent='Par '+h.par+' · '+h.length+' m · '+(wind?('Tuuli '+(h.wind[0]<0?'←':'→')+' '+wind.toFixed(1).replace('.',',')+' m/s'):'Tyyntä');
   $('turnLabel').textContent=round.phase==='fly'?'Kiekko lentää…':(hasTurn()?'Sinun heittosi':p.name+' heittää')+' · '+(p.strokes+1)+'. heitto';
-  $('notice').textContent=round.phase==='fly'?'':round.notice||(round.hole===0?'Napauta suunta. Haamuviiva näyttää lennon.':'');
+  $('notice').textContent=round.phase==='fly'?'':round.notice||(round.hole===0?'Napauta suunta. Viiva näyttää lennon alun.':'');
   $('roster').replaceChildren();if(online)round.players.forEach((p,i)=>{
     const s=document.createElement('span');s.className=i===round.turn?'active':'';s.textContent=p.name+' · '+(p.done?relative(p.scores[round.hole]-h.par):p.strokes+' h');$('roster').append(s);
   });

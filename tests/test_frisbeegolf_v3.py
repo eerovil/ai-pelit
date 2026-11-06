@@ -108,7 +108,22 @@ def test_flight_catches_determinism_ghost_and_hazards(site, browser):
     assert result['ob']['lie'][0] <= 20
     assert result['tree']['reason'] == 'tree'
     p.click('#play')
-    assert p.evaluate('JSON.stringify(preview)===JSON.stringify(fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false))')
+    for disc in range(3):
+        result = p.evaluate("""disc=>{
+          aim.disc=disc;aim.power=.9;aim.curve=.5;refreshPreview();drawScene(0);
+          const full=fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false);
+          const end=preview.path.at(-1),want=flightPoint(full,full.duration/3);
+          const vertices=scene3d.ghost.geometry.getAttribute('position');
+          return {fraction:preview.duration/full.duration,error:Math.hypot(end.x-want.x,end.y-want.y,end.z-want.z),
+            lastTime:end.t,limit:preview.duration,marker:!!scene3d.endRing,
+            drawn:[vertices.getX(vertices.count-1),vertices.getY(vertices.count-1),vertices.getZ(vertices.count-1)],
+            expected:[want.x,want.y+.02,want.z],landingExposed:'lie' in preview};
+        }""", disc)
+        assert result['fraction'] == pytest.approx(1/3)
+        assert result['error'] < 1e-8
+        assert result['lastTime'] == result['limit']
+        assert result['drawn'] == pytest.approx(result['expected'], abs=1e-5)
+        assert not result['marker'] and not result['landingExposed']
     assert not p.errors
     ctx.close()
 

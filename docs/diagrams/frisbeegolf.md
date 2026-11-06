@@ -18,7 +18,7 @@ flowchart TD
   T -- Kyllä --> B[Napauta maata tai koria: suunta sinne]
   T -- Ei --> SK[Isäntä odottaa tai ohittaa: vähintään par + 3]
   B --> C[Valitse Draiveri, Midari tai Putteri]
-  C --> G2[Haamuviiva näyttää koko lennon]
+  C --> G2[Haamuviiva näyttää lennon ensimmäisen kolmanneksen]
   G2 --> D[Vedä alas ja päästä irti: voima ja kaarre]
   D --> E[Kiekko lentää: kiekon ominaisuudet ja tuuli]
   E --> F{Mihin kiekko osui?}
@@ -69,7 +69,7 @@ flowchart TD
 - **Isäntä odottaa tai ohittaa: vähintään par + 3**: the `skip` handler in `room.js` finishes that player's current hole with `max(strokes, par + 3)`. The player can rejoin and play the following holes.
 - **Napauta maata tai koria: suunta sinne**: `groundAt()` raycasts against the drawn terrain. The canvas's own box supplies the coordinates; the map button changes to an overhead view without resetting the round.
 - **Valitse Draiveri, Midari tai Putteri**: `DISCS` in `flight.js` supplies speed, glide, turn, fade and range. `resetAim()` selects a suitable disc; below 10 m it selects the putter and a finer power range.
-- **Haamuviiva näyttää koko lennon**: `refreshPreview()` uses `fly()` with wind but without the hand's seeded shake. `scene.js` redraws it as the direction, disc, power or curve changes, ending at a collision or the final lie.
+- **Haamuviiva näyttää lennon ensimmäisen kolmanneksen**: `refreshPreview()` uses `fly()` with wind but without the hand's seeded shake. `game.js` keeps only the first third of its duration, ending at the interpolated flight point. `scene.js` redraws this short line as the direction, disc, power or curve changes. There is no landing marker; the player discovers the rest of the flight after release (owner's latest choice).
 - **Vedä alas ja päästä irti: voima ja kaarre**: the pointer handlers in `ui.js` turn a downward pull into power and sideways movement into a curve. The pad leaves its whole range inside the screen in portrait and landscape. Cancellation and a tap do not throw; another finger cannot steal a pull.
 - **Kiekko lentää: kiekon ominaisuudet ja tuuli**: `fly()` in `flight.js` samples at no more than 12 cm between points. `flightPoint()` interpolates the animation. `scene.js` follows the disc, then returns behind the new lie; it lowers pixel ratio and then shadows on a slow phone. Drawing rests when nothing moves and pauses when hidden.
 - **Kiekko putoaa esteen juurelle**: a collision with a tree trunk or a rock drops the disc at its foot, 5 cm outside its collision footprint on the impact side, so the next throw can move away; separate tree and rock tests exercise that second throw. `puu` supplies the impact sound.

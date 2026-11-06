@@ -71,7 +71,6 @@ function buildHole(index){
   const fore=add(new T.CylinderGeometry(.06,.06,.53,7),skin,.22,0,0,arm);fore.rotation.z=Math.PI/2;
   const shadow=add(new T.CircleGeometry(.5,24),new T.MeshBasicMaterial({color:'#193a2d',transparent:true,opacity:.18}),0,.02,0,person);shadow.rotation.x=-Math.PI/2;
   v.ghost=new T.Line(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#fff3b4',transparent:true,opacity:.9}));group.add(v.ghost);
-  v.endRing=add(new T.TorusGeometry(.6,.04,6,32),new T.MeshBasicMaterial({color:'#fff0b1'}),0,0,0);v.endRing.rotation.x=Math.PI/2;
   v.position.set(0,4,-8);v.target.set(0,1,20);v.camera.position.copy(v.position);v.moving=true;dirty=true;
 }
 function drawScene(dt){
@@ -89,10 +88,9 @@ function drawScene(dt){
   v.person.position.set(p.lie[0]-.5,ground(h,...p.lie),p.lie[1]-.2);v.person.rotation.y=a;
   v.person.visible=!mapOpen;v.arm.rotation.y=drag?-1.8*aim.power:disc?Math.max(0,.8-round.time)*2:.2;
   v.disc.visible=!!disc; if(disc){v.disc.position.set(disc.x,disc.y,disc.z);v.disc.rotation.set(disc.tilt,round.time*18,disc.tilt);v.disc.material.color.setHex(DISCS[round.shot.disc].colour);}
-  v.ghost.visible=v.endRing.visible=!!(preview&&round?.phase==='aim');
+  v.ghost.visible=!!(preview&&round?.phase==='aim');
   if(preview){const key=JSON.stringify([round.hole,round.seq,aim]);if(key!==v.ghostKey){v.ghostKey=key;
-    v.ghost.geometry.dispose();v.ghost.geometry=new T.BufferGeometry().setFromPoints(preview.path.filter((_,i)=>i%3===0).map(q=>new T.Vector3(q.x,q.y+.02,q.z)));
-    v.endRing.position.set(preview.lie[0],ground(h,...preview.lie)+.08,preview.lie[1]);}}
+    v.ghost.geometry.dispose();v.ghost.geometry=new T.BufferGeometry().setFromPoints(preview.path.filter((_,i,a)=>i%3===0||i===a.length-1).map(q=>new T.Vector3(q.x,q.y+.02,q.z)));}}
   v.sun.position.set(p.lie[0]-25,45,p.lie[1]-15);v.sun.target.position.set(...[p.lie[0],0,p.lie[1]]);
   if(round){const b=new T.Vector3(h.basket[0],ground(h,...h.basket)+2.3,h.basket[1]).project(camera),rect=$('scene').getBoundingClientRect();
     $('basketLabel').hidden=b.z>1||Math.abs(b.x)>.9||Math.abs(b.y)>.9||mapOpen;

@@ -19,8 +19,8 @@
     {
       "n": 3,
       "date": "2026-11-06",
-      "note": "Puhepainike pysyy erillään myös tuloskortista.",
-      "request": "Final production verification of #338: keep the microphone clear of both play controls and the result card.",
+      "note": "Lennon ennakkoviiva näyttää vain ensimmäisen kolmanneksen, ja puhepainike pysyy erillään tuloskortista.",
+      "request": "Owner chose a preview of only the first third of flight because showing the landing made the game too easy. Final layout verification: keep microphone clear of play controls and result card.",
       "issue": "eerovil/ai-pelit#338"
     }
   ]
