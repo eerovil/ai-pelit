@@ -196,3 +196,45 @@ def test_offline_score_queue_and_two_lists(site,browser):
     assert p.evaluate("AiPelitScores.scoreText('kiekkoammunta',18)")=='18/25'
     assert not p.errors
     context.close()
+
+
+@pytest.mark.parametrize('damage', [
+    "r.index=25", "r.offset=7", "r.ammo=-1", "r.shots=[{delay:1}]",
+    "r.phase='flight';r.discs=[{done:false}]",
+])
+def test_invalid_save_does_not_offer_broken_resume(site,browser,damage):
+    context,p=open_game(site,browser);p.click('#trap')
+    p.evaluate("() => {const r=JSON.parse(localStorage.getItem(KEY+'kierros'));"+damage+";localStorage.setItem(KEY+'kierros',JSON.stringify(r));}")
+    p.evaluate('showMenu()')
+    assert p.locator('#resume').is_hidden()
+    p.click('#skeet')
+    assert p.evaluate('round.phase')=='ready'
+    assert not p.errors
+    context.close()
+
+
+def test_long_stall_stops_at_next_ready_target(site,browser):
+    context,p=open_game(site,browser);p.click('#trap')
+    assert p.evaluate('''() => {
+      call();lastTime=1000;realCatchUp(86401000);
+      return round.index===1&&round.phase==='ready'&&round.results[0]===false&&
+        round.results.slice(1).every(v=>v===null)&&validSaved(load('kierros',null));
+    }''')
+    context.close()
+
+
+def test_live_animation_receives_real_pointer_events(site,browser):
+    site.build(ROOT/'games')
+    context=browser.new_context(viewport={'width':360,'height':740},is_mobile=True,has_touch=True)
+    p=context.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
+    p.goto(site.url+URL);p.click('#trap')
+    p.mouse.move(180,520);p.mouse.down()
+    p.wait_for_function('round.discs[0].age>.1')
+    p.mouse.move(200,490);p.mouse.up()
+    assert p.evaluate('round.shotIndex')==1
+    p.wait_for_function("round.phase==='ready'&&round.index===1")
+    assert p.evaluate("validSaved(load('kierros',null))")
+    p.click('#pause')
+    p.wait_for_function('raf===0')
+    assert not errors
+    context.close()

@@ -59,5 +59,7 @@ flowchart TD
 - **Result: hits of 25, record saved**: the best score per discipline is saved at once under `ai-pelit:kiekkoammunta:`; the score goes to that discipline's list.
 
 - **Save disc result and active double**: `keep()` saves results, the remaining target, ammunition and shots in flight in `ai-pelit:kiekkoammunta:kierros`; `resolveDisc()` saves each outcome. `pagehide` and hiding the page also save.
-- **Reload: resume the same round**: `resume()` restores the saved round from the menu. Rotation only changes the canvas size; it never resets the round.
-- **Sound: shot, disc breaking**: `sound()` uses quiet `lahto` and `lasi` from `lib/aanet-5/`, with a quiet noise fallback after a gesture. No crowd cheers.
+- **Reload: resume the same round**: `validSaved()` checks the active index, target slots, ammunition, results and numeric flight state before the menu offers `resume()`. Terminal or inconsistent active saves are not resumed. `resume()` restores a valid saved round from the menu. Rotation only changes the canvas size; it never resets the round.
+- **Sound: shot, disc breaking**: `sound()` uses quiet `lahto` and `lasi` from `lib/aanet-5/`, with a quiet noise fallback after a gesture. A perfect five-target trap stand plays quiet `onnistui` at 0.08. No crowd cheers.
+
+`step()` processes elapsed input time in bounded physics slices, then stops once the current target and transition have reached idle. A stale timestamp cannot simulate unbounded idle time or automatically launch another target.

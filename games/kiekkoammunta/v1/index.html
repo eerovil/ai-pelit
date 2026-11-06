@@ -509,25 +509,36 @@
         return round.mode === "trap" ? "Trap" : "Skeet";
       }
       function keep() {
-        if (round) save("kierros", round);
+        if (round) save("kierros", {...round, shots: round.shots.filter(s => s.delay > 0)});
       }
       function validSaved(r) {
-        return (
-          r &&
-          ["trap", "skeet"].includes(r.mode) &&
-          Number.isInteger(r.index) &&
-          r.index >= 0 &&
-          r.index <= (r.mode === "trap" ? 25 : SKEET.length) &&
-          Array.isArray(r.results) &&
-          r.results.length === 25 &&
-          r.results.every((v) => v === null || typeof v === "boolean") &&
-          ["ready", "flight", "gap", "end"].includes(r.phase) &&
-          Array.isArray(r.discs) &&
-          Array.isArray(r.shots) &&
-          r.aim &&
-          Number.isFinite(r.aim.yaw) &&
-          Number.isFinite(r.aim.pitch)
-        );
+        if (!r || !["trap", "skeet"].includes(r.mode)) return false;
+        const schedule = r.mode === "trap" ? TRAP : SKEET;
+        if (!Number.isInteger(r.index) || r.index < 0 || r.index > schedule.length ||
+            !["ready", "flight", "gap", "end"].includes(r.phase) ||
+            (r.phase === "end") !== (r.index === schedule.length)) return false;
+        const offset = schedule.slice(0, r.index).reduce((n, e) => n + e[1].length, 0);
+        const targets = r.phase === "end" ? 0 : schedule[r.index][1].length;
+        const capacity = r.mode === "trap" ? 2 : targets;
+        const finite = (o, keys) => o && keys.every(k => Number.isFinite(o[k]));
+        if (r.offset !== offset || !Array.isArray(r.results) || r.results.length !== 25 ||
+            !r.results.every((v, i) => i < offset ? typeof v === "boolean" : v === null || typeof v === "boolean") ||
+            !Number.isInteger(r.ammo) || r.ammo < 0 || r.ammo > 2 ||
+            !Number.isInteger(r.shotIndex) || r.shotIndex < 0 || r.shotIndex > 2 ||
+            !finite(r, ["time", "gap"]) || r.time < 0 || r.gap < 0 ||
+            !finite(r.aim, ["yaw", "pitch"]) ||
+            !Array.isArray(r.discs) || r.discs.length > 2 ||
+            !Array.isArray(r.shots) || r.shots.length > 2) return false;
+        if (r.phase === "end") return r.results.every(v => typeof v === "boolean");
+        if (r.ammo + r.shotIndex !== capacity ||
+            r.results.slice(offset + targets).some(v => v !== null)) return false;
+        if (r.phase === "ready") return r.discs.length === 0 && r.shots.length === 0;
+        return r.discs.length === targets && r.discs.every((d, i) =>
+          finite(d, ["x", "y", "z", "vx", "vy", "vz", "age"]) && d.age >= 0 &&
+          d.slot === offset + i && typeof d.done === "boolean" &&
+          (d.done ? typeof r.results[d.slot] === "boolean" : r.results[d.slot] === null)) &&
+          r.shots.every(s => finite(s, ["yaw", "pitch", "delay"]) && s.delay >= 0 &&
+            Number.isInteger(s.slot) && s.slot >= offset && s.slot < offset + targets);
       }
       function sound(name, vol = 0.2, rate = 1) {
         if (window.AiPelitAanet && AiPelitAanet.play(name, { vol, rate }))
@@ -649,6 +660,7 @@
       }
       function prepare() {
         round.phase = "ready";
+        round.gap = 0;
         round.discs = [];
         round.shots = [];
         round.shotIndex = 0;
@@ -746,6 +758,7 @@
       }
       function finish() {
         round.phase = "end";
+        round.gap = 0;
         round.freshRecord = count() > best(round.mode);
         if (round.freshRecord) save("ennatys-" + round.mode, count());
         keep();
@@ -796,6 +809,10 @@
           });
       }
       function advance() {
+        if (round.mode === "trap" && (round.index + 1) % 5 === 0 &&
+            round.results.slice(round.offset - 4, round.offset + 1).every(v => v === true)) {
+          sound("onnistui", .08);
+        }
         round.offset += entry()[1].length;
         round.index++;
         if (round.index === plan().length) {
@@ -809,6 +826,9 @@
       function step(dt) {
         if (screen !== "play" || !round) return;
         while (dt > 0) {
+          // Consume the whole meaningful interval, but do not simulate hours of idle time.
+          // A ready target does not launch until the next press.
+          if (!active()) break;
           const h = Math.min(dt, 1 / 120);
           dt -= h;
           flash = Math.max(0, flash - h);
