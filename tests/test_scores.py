@@ -13,7 +13,7 @@ from conftest import ROOT
 ADMIN_KEY = "avain"
 
 # The newest version of each game played here: the high-score library working in the game as it is.
-PUHELINKOPPI = "games/puhelinkoppi/v8/"
+PUHELINKOPPI = "games/puhelinkoppi/v9/"
 SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v12/"
 PIANO = "games/piano/v11/"

@@ -4,7 +4,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/puhelinkoppi/v8/"
+URL = "games/puhelinkoppi/v9/"
 FLY = """(seconds) => { for (let t = 0; t < seconds && (state === 'air' || state === 'drop' || state === 'settle'); t += 1 / 60) step(1 / 60); return state; }"""
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -99,4 +99,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/puhelinkoppi/v8")
+    opens_and_plays_with_the_quiet_library(real, context, "games/puhelinkoppi/v9")
