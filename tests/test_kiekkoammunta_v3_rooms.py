@@ -332,6 +332,7 @@ def test_the_game_plays_in_the_room_pages_frame(site, browser):
     site.build(ROOT / 'games')
     relay = Relay()
     frames = []
+    pages = []
     contexts = []
     for name in ('Testi1', 'Testi2'):
         ctx = browser.new_context(viewport={'width': 360, 'height': 740}, is_mobile=True, has_touch=True)
@@ -339,6 +340,7 @@ def test_the_game_plays_in_the_room_pages_frame(site, browser):
         ctx.add_init_script('window.__aiPelitHuoneSivu = true;')
         ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi'," + json.dumps(json.dumps(name)) + ")")
         p = ctx.new_page()
+        pages.append(p)
         relay.attach(p)
         p.goto(site.url + URL)
         p.click('#friends')
@@ -362,8 +364,10 @@ def test_the_game_plays_in_the_room_pages_frame(site, browser):
     host.evaluate(QUICK, True)
     guest.wait_for_function("match.seq===2&&round.watch===false&&round.phase==='ready'")
     assert 'Sinun vuorosi' in guest.locator('#hint').inner_text()
-    for f in frames:
-        f.evaluate('R.leave()')
+    # Leaving moves the whole page back to the game's own address, so the call must return first.
+    for f, p in reversed(list(zip(frames, pages))):
+        f.evaluate('setTimeout(() => R.leave(), 0); 0')
+        p.wait_for_url(lambda u: '/huone/' not in u)
     for c in contexts:
         c.close()
 
