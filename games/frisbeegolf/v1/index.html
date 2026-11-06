@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Frisbeegolf</title>
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<canvas id="scene" aria-label="Frisbeegolfrata"></canvas>
+<div id="error" hidden>Puhelin ei pysty piirtämään 3D-peliä. Kokeile toista selainta.</div>
+<section id="menu" class="overlay"><div class="panel menu-panel">
+  <div class="eyebrow">PUISTORATA · 9 VÄYLÄÄ · PAR 30</div><h1>Frisbee<span>golf</span></h1>
+  <p class="intro">Kuusikon halki, lammen ohi.<br>Yksi hyvä heitto kerrallaan.</p>
+  <div id="best" class="record">Ensimmäinen kierros odottaa</div>
+  <div class="menu-actions"><button id="play" class="primary">Pelaa</button><button id="resume" hidden>Jatka kierrosta</button><button id="friends">👥 Pelaa kavereiden kanssa</button><button id="scores">🏆 Tuloslista</button></div>
+  <p class="instructions">Napauta minne heität. Vedä kiekkoa alas ja päästä irti. Sivuttain kaartaa.</p>
+</div></section>
+<main id="game" hidden>
+  <header id="hud"><div id="holeLabel"></div><strong id="holeName"></strong><div id="stats"></div></header>
+  <button id="map" aria-label="Näytä kartta">🗺️ Kartta</button>
+  <div id="roster"></div><div id="basketLabel"></div><div id="notice" role="status"></div>
+  <div id="controls"><div id="turnLabel"></div><div id="discs" role="group" aria-label="Valitse kiekko"></div>
+    <div id="throwPad"><div id="pullTrack"></div><div id="discHandle">↓</div><strong id="powerLabel">Vedä alas</strong><small id="curveLabel">Sivuttain kaartaa</small></div>
+  </div>
+</main>
+<section id="card" class="overlay" hidden><div class="panel card-panel"><div class="eyebrow" id="cardEyebrow"></div><h2 id="cardTitle"></h2><div id="cardTotal"></div><div id="scoreRows"></div><div class="card-actions"><button id="next" class="primary">Seuraava väylä</button><button id="toMenu">Valikkoon</button></div></div></section>
+<script src="../../../rooms.js" data-game="frisbeegolf" data-min="2" data-max="8" data-voice-corner="top-right"></script>
+<script src="../../../scores.js" data-game="frisbeegolf" data-order="low" data-corner="bottom-left"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="holes.js"></script><script src="flight.js"></script><script src="game.js"></script><script src="scene.js"></script><script src="ui.js"></script><script src="room.js"></script>
+<script>import('../../../lib/three-r187/three.module.js').then(initScene).catch(()=>{$('error').hidden=false;});</script>
+<script src="../../../back.js"></script>
+</body></html>

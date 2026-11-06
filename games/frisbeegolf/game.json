@@ -1,0 +1,13 @@
+{
+  "title": "Frisbeegolf",
+  "description": "Heitä kiekko koriin yhdeksän väylän puistoradalla: valitse kiekko, kaarra puiden ohi ja varo lampea. Yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-06",
+      "note": "Ensimmäinen versio: yhdeksän väylää, kolme kiekkoa ja lennon haamuviiva, yksin tai 2–8 kaverin kanssa.",
+      "request": "Frisbee Golf 3D. Allow up to 8 players. Visible ghost line for disc path before throwing",
+      "issue": "eerovil/ai-pelit#338"
+    }
+  ]
+}
