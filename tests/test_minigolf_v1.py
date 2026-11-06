@@ -91,6 +91,18 @@ def test_menu_shows_top_ten_and_fits(site,browser,size):
     ctx.close()
 
 
+def test_tap_hides_the_notice_without_a_stroke(site,browser):
+    ctx,p=open_game(site,browser);p.click('#play')
+    assert p.inner_text('#notice').startswith('Reikä 1/9')
+    p.tap('#c')
+    assert p.inner_text('#notice')==''
+    assert p.evaluate("round.players[0].strokes===0&&round.phase==='aim'")
+    # A room's next state still carries the notice: it stays hidden, and the next notice shows.
+    p.evaluate('updateHUD()');assert p.inner_text('#notice')==''
+    p.evaluate("round.notice='Par!';updateHUD()");assert p.inner_text('#notice')=='Par!'
+    assert not p.errors;ctx.close()
+
+
 def test_cup_water_walls_and_limit(site,browser):
     ctx,p=open_game(site,browser)
     p.click('#play')

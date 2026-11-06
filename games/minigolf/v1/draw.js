@@ -75,7 +75,7 @@ function dragAim(e) {
   if(online&&performance.now()-dragging.sent>100){if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim.a,p:aim.p});dragging.sent=performance.now();}
   updateHUD();askDraw();
 }
-canvas.addEventListener('pointerdown',function(e){if(!canAim()||dragging)return;var p=pointer(e);dragging={id:e.pointerId,x:p[0],y:p[1],sent:0,base:parkedAim&&aim?{a:aim.a,p:aim.p}:null};if(!parkedAim)aim=null;parkedAim=false;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointerdown',function(e){hideNotice();if(!canAim()||dragging)return;var p=pointer(e);dragging={id:e.pointerId,x:p[0],y:p[1],sent:0,base:parkedAim&&aim?{a:aim.a,p:aim.p}:null};if(!parkedAim)aim=null;parkedAim=false;canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',dragAim);
 canvas.addEventListener('pointerup',function(e){
   if(!dragging||e.pointerId!==dragging.id)return;

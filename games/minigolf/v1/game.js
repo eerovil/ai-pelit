@@ -4,7 +4,7 @@ var round=null, online=false, roomRound=0, roomHost='', aim=null, dragging=null;
 var colors=['#fff5d8','#f3b765','#8bc8ff','#e7a3d3','#b2e077','#c4b0ff'];
 var raf=0,lastFrame=0,accumulator=0,lastSend=0,rollingSound=null,lastNoise=0;
 var $=id=>document.getElementById(id);
-var noticeTimer=0,lastNotice='',askName=false;
+var noticeTimer=0,lastNotice='',hiddenNotice='',askName=false;
 var PAR=HOLES.reduce((n,h)=>n+h.par,0);
 function load(key,fallback) { try { var x=localStorage.getItem('ai-pelit:minigolf:'+key); return x===null?fallback:JSON.parse(x); } catch(e) { return fallback; } }
 function save(key,v) { try { localStorage.setItem('ai-pelit:minigolf:'+key,JSON.stringify(v)); } catch(e) {} }
@@ -68,13 +68,16 @@ function updateHUD() {
     $('hud').append(who);
   }
   $('hint').textContent=round.phase==='roll'?'Pallo vierii…':online?(mine()?'Sinun vuorosi · vedä ja päästä irti':p.name+' lyö'):'Vedä taaksepäin ja päästä irti';
-  $('notice').textContent=round.notice||'';
+  if(round.notice!==hiddenNotice)hiddenNotice='';
+  $('notice').textContent=hiddenNotice?'':round.notice||'';
   if(round.notice&&round.notice!==lastNotice){
     clearTimeout(noticeTimer);lastNotice=round.notice;var held=round;
     noticeTimer=setTimeout(function(){if(round===held){round.notice='';lastNotice='';$('notice').textContent='';sendState();}},1500);
   }
   $('power').firstElementChild.style.width=(aim?aim.p*100:0)+'%';
 }
+// A touch hides the notice on this phone only; the host's timer still ends it for the room.
+function hideNotice() { if(round&&round.notice){hiddenNotice=round.notice;$('notice').textContent='';} }
 function sendState(to) { if(online&&R.isHost&&round) R.send({t:'state',round:roomRound,state:round,aim:aim},to); }
 function finishRecord() {
   if(!round||round.phase!=='end') return;
