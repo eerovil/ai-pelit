@@ -533,7 +533,7 @@ function sound(k) {
 
 // ---- Loop ----
 // A frame is drawn only when something changes (#415): the screen is still before the throw and on
-// the result, and drawing it 60 times a second anyway took a good part of the phone's processor.
+// the result, and drawing it anyway kept the test phone at 34 % busy, against 16 % at rest.
 // What changes it calls ask(): the finger moving the hand, a throw, a new round, a new size.
 function moving() {
   return state === 'air' || state === 'drop' || state === 'settle' || shake > 0 || dip > 0 || camY !== camTarget();
