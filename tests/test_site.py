@@ -26,6 +26,9 @@ def test_every_real_version_loads_without_errors(site, context, changed_games_on
     # ...and each game's no. 1 the shelf cards show (#25).
     context.route("**/api/scores/top", lambda route: route.fulfill(
         status=200, content_type="application/json", body='{"games": {}}'))
+    # ...and the top 10 a game's own menu shows (Minigolf, #340).
+    context.route("**/api/scores?*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body='{"rows": []}'))
     # ...and the open rooms the front page lists (#203), as the real one does with none open.
     context.route("**/api/rooms", lambda route: route.fulfill(
         status=200, content_type="application/json", body='{"rooms": []}'))

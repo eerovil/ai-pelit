@@ -1,0 +1,5 @@
+{
+  "title": "Minigolf",
+  "description": "Yhdeksän reiän minigolf: tähtää vetämällä, kierrä esteet ja puttaa. Yksin tai kavereiden kanssa.",
+  "versions": [{"n":1,"date":"2026-11-06","note":"Ensimmäinen versio: yhdeksän reikää, lyönti vetämällä, hiekka, rinteet, vesi ja tuulimylly; yksin tai 2–6 puhelimella vuorotellen.","request":"Mini golf.","issue":"eerovil/ai-pelit#340"}]
+}

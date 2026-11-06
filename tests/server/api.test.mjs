@@ -376,3 +376,19 @@ test('Pasianssi keeps draw modes apart, ranks the fastest time first, and shows 
   assert.deepEqual((await call('GET', '/api/scores?game=pasianssi&board=veto3')).body.rows.map(r => r.name), ['Cecilia']);
   assert.deepEqual((await call('GET', '/api/scores/top')).body.games.pasianssi, { board: 'veto1', name: 'Bertta', score: 180, level: null, version: 1 });
 });
+
+
+test('Minigolf ranks the lowest nine-hole total first and rejects unknown courses', async () => {
+  const { call, admin } = setup();
+  for (const [id, name] of [[A, 'Aino'], [B, 'Bertta']]) {
+    await call('POST', '/api/players', { id, name });
+    await admin(id, 'approved');
+  }
+  const post = (player, board, score) => call('POST', '/api/scores', { player, game: 'minigolf', board, version: 1, score });
+  assert.equal((await post(A, 'main', 30)).status, 200);
+  assert.equal((await post(B, 'main', 25)).status, 200);
+  assert.equal((await post(B, 'main', 29)).status, 200);
+  assert.equal((await post(A, 'other', 10)).status, 400);
+  assert.deepEqual((await call('GET', '/api/scores?game=minigolf')).body.rows.map(r => [r.name, r.score]), [['Bertta',25],['Aino',30]]);
+  assert.equal((await call('GET', '/api/scores/top')).body.games.minigolf.score, 25);
+});

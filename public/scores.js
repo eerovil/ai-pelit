@@ -42,6 +42,7 @@
   // A number the game keeps in its own save (ai-pelit:<slug>:<name>); read only, never written.
   function saved(slug, name) { var v = Math.floor(Number(load('ai-pelit:' + slug + ':' + name, 0))); return isFinite(v) ? v : 0; }
   var GAMES = {
+    minigolf: { order: 'low', score: function (s) { return s + ' lyöntiä'; } },
     // Highest ollie; level: the level the player is on (saved as 'level').
     sormiskeitti: { order: 'high', score: function (s) { return s + ' cm'; }, level: function () { return saved('sormiskeitti', 'level'); } },
     // Best routine total; level: 'taso'.

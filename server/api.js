@@ -46,6 +46,7 @@
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
 export const GAMES = {
+  minigolf: { order: 'low', boards: /^main$/ }, // fewest strokes over nine holes
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
   // Highest level reached ('main'). 'putki' (the streak list of the withdrawn v3 and v4, #9) is
