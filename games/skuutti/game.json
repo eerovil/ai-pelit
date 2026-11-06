@@ -29,6 +29,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-06",
+      "note": "Peli pyörii sulavammin ja lämmittää puhelinta vähemmän: tausta piirretään vain kerran ja valikko ei piirrä mitään, kun mikään ei muutu.",
+      "request": "Pelin pitäisi pyöriä sulavasti ja kuumentaa puhelinta vähemmän.\n\nSkuutin piirtäminen on raskasta. AgentDeckin koneen selaimessa peli putosi pelatessa noin 19 ruutuun sekunnissa ja pääsäie oli varattu 73 % ajasta. Valikossakin se oli varattu 38 %, kun useimmilla peleillä luku on 3–6 %. Testipuhelimella (Huawei) valikko vei 42,7 % suorittimesta, kun kotinäyttö vie noin 31 %.\n\nSelvitä mittaamalla, mikä piirrossa maksaa eniten, ja poista se niin, että peli näyttää samalta. Älä piirrä valikossa joka ruutua, jos ruutu ei muutu. Katso #382 ja docs/making-games.md, kohta \"A still game must not draw every frame\".\n\nMittaa ruudunpäivitys ja suoritin testipuhelimella ennen ja jälkeen.",
+      "issue": "eerovil/ai-pelit#414"
     }
   ]
 }

@@ -3,7 +3,7 @@ v1 did (pumping, airs, tricks, falls, the clock and unlocks), and those tests ru
 
 from conftest import ROOT, turn
 
-URL = "games/skuutti/v4/"
+URL = "games/skuutti/v5/"
 SOUNDS = ['suhahdus', 'lasku', 'onnistui', 'rima', 'voitto', 'tappio', 'rullaus']
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -318,4 +318,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/skuutti/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/skuutti/v5")
