@@ -584,3 +584,72 @@ def test_coming_back_to_the_page_draws_the_board_again(site, context):
     assert page.evaluate("draws") == 1
     assert pixels(page) == still
     assert page.errors == []
+
+
+def test_many_asks_in_one_moment_draw_once(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("ask(); ask(); ask()")
+    settle(page)
+    assert page.evaluate("draws") == 1
+    assert page.errors == []
+
+
+def test_turning_the_phone_during_a_swap_finishes_it_and_then_stops(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    moves = page.evaluate("state.moves")
+    page.evaluate("const m = Marjakori.legalMoves(state)[0]; play(m[0], m[1])")
+    assert page.evaluate("!!motion") is True
+    turn(page, {"width": 390, "height": 844})
+    page.wait_for_function(f"state.moves === {moves - 1} && !motion")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.wait_for_timeout(300)
+    assert page.evaluate("[draws, W, H]") == [0, 390, 844]
+    assert page.errors == []
+
+
+def test_a_tap_during_a_swap_shows_when_the_swap_has_ended(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate("const m = Marjakori.legalMoves(state)[0]; play(m[0], m[1])")
+    x, y = centre(page, 0)
+    page.mouse.click(x, y)
+    page.wait_for_function("!motion")
+    settle(page)
+    shown = pixels(page)
+    assert page.evaluate("selected") == 0
+    page.evaluate("selected = -1; draw()")
+    assert pixels(page) != shown
+    assert page.errors == []
+
+
+def test_a_won_level_ends_in_a_still_menu_with_no_hint_waiting(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate(WIN_NOW)
+    page.wait_for_function(MENU_UP)
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    # Past the moment the hint's timer would have ended: the win cancelled it.
+    page.evaluate("lastAction = 0")
+    page.wait_for_timeout(400)
+    assert page.evaluate("[draws, hint.classList.contains('hidden')]") == [0, True]
+    assert page.errors == []
+
+
+def test_a_new_level_after_a_win_starts_the_hint_clock_again(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate(WIN_NOW)
+    page.wait_for_function(MENU_UP)
+    page.evaluate("document.querySelector('#ai-pelit-tulokset')?.remove()")
+    page.click("#go")
+    page.wait_for_function("state.level === 3 && state.phase === 'play' && menu.classList.contains('hidden')")
+    settle(page)
+    assert page.evaluate("hint.classList.contains('hidden')") is True
+    page.evaluate("lastAction = Date.now() - 4800; ask()")
+    page.wait_for_function(HINT_UP)
+    assert page.errors == []
