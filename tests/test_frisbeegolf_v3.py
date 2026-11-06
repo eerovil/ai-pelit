@@ -3,7 +3,7 @@ import json
 import math
 
 import pytest
-from conftest import ROOT, turn
+from conftest import ROOT, turn, GPU_ARGS
 from test_rooms_lib import Relay
 
 URL = 'games/frisbeegolf/v3/'
@@ -390,3 +390,47 @@ def test_legacy_round_keeps_personal_result_without_new_board_score(site, browse
     assert 'Vanha kierros, ei tuloslistalle' in p.locator('#cardTotal').inner_text()
     assert not p.errors
     ctx.close()
+
+
+def test_room_speaking_label_clears_landscape_roster(site, _playwright):
+    site.build(ROOT / 'games')
+    browser = _playwright.chromium.launch(args=GPU_ARGS + [
+        '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'])
+    relay, contexts = Relay(), []
+    def phone(name):
+        ctx = browser.new_context(viewport={'width': 740, 'height': 360}, is_mobile=True, has_touch=True)
+        contexts.append(ctx)
+        ctx.grant_permissions(['microphone'])
+        ctx.add_init_script('window.__aiPelitHuoneSivu=true;')
+        ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi'," + json.dumps(json.dumps(name)) + ")")
+        p = ctx.new_page()
+        relay.attach(p)
+        p.goto(site.url + URL)
+        p.click('#friends')
+        return p
+    try:
+        host = phone('Testi1'); host.click('#aipr-create'); host.wait_for_url('**/huone/**')
+        host.wait_for_function("document.getElementById('game')?.contentWindow?.AiPelitRooms?.isHost")
+        code = host.locator('#code b').inner_text()
+        guest = phone('Testi2'); guest.fill('#aipr-codeIn', code); guest.click('#aipr-joinBtn')
+        guest.wait_for_url('**/huone/**')
+        for p in (host, guest):
+            p.wait_for_function('AiPelitRoomShell.state.voice.calls===1', timeout=15000)
+        host.frame_locator('#game').locator('#aipr-start').click()
+        host.frame_locator('#game').locator('#discs').wait_for(state='visible')
+        mic = guest.locator('#aipr-mic').bounding_box()
+        guest.mouse.move(mic['x'] + mic['width']/2, mic['y'] + mic['height']/2)
+        guest.mouse.down()
+        label = host.locator('#aipr-talk')
+        label.wait_for(state='visible')
+        host.wait_for_function("document.getElementById('aipr-talk').textContent.includes('Testi2')")
+        bubble = label.bounding_box()
+        roster = host.frame_locator('#game').locator('#roster').bounding_box()
+        assert bubble['y'] + bubble['height'] <= roster['y']
+        assert 'Testi2' in label.inner_text()
+        guest.mouse.up()
+        label.wait_for(state='hidden')
+    finally:
+        for ctx in contexts:
+            ctx.close()
+        browser.close()
