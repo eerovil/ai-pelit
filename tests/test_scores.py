@@ -165,7 +165,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono') || '{}')).length === 0")
     [(player, name)] = [(i, p["name"]) for i, p in fake.players.items()]
     assert name == "Eero"
-    assert fake.scores == {("puhelinkoppi", "main", player): {"score": 2, "version": 8}}
+    assert fake.scores == {("puhelinkoppi", "main", player): {"score": 2, "version": 9}}
     # Pending: only the player's own row, marked as theirs.
     assert page.locator("#ai-pelit-tulokset").inner_text().count("taso 2") == 1
     page.click("#ai-pelit-tulokset button:has-text('Sulje')")
@@ -179,7 +179,7 @@ def test_the_first_score_asks_for_a_name_and_the_list_shows_it_once_approved(sit
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_selector("#ai-pelit-tulokset :text('taso 3')")
     text = page.locator("#ai-pelit-tulokset").inner_text()
-    assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v8" in text
+    assert "odottaa" not in text and "Eero" in text and "taso 3" in text and "v9" in text
 
 
 @pytest.mark.games("sormiskeitti")
