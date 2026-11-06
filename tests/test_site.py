@@ -403,14 +403,17 @@ def test_every_game_picture_shows_offline_also_after_an_update(site, context):
     page = context.new_page()
     page.goto(site.url)
     wait_for_worker(page)
+    # The update happens under a game page (#420). The shelf would draw the new picture itself, so
+    # the old worker would cache it, and it would reload when the new worker takes over: a reload
+    # that could land in the middle of the checks below, with no cards on the page.
+    page.goto(f"{site.url}games/eka/v1/")
+    page.evaluate("navigator.serviceWorker.addEventListener('controllerchange', () => { window.vaihtui = true; })")
     make_game(site.games, "toka", [game_page("toka")])
     site.build()
-    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-    page.wait_for_function(
-        "caches.keys().then(k => k.filter(n => n.startsWith('ai-pelit-shell-')).length === 1)", timeout=10000
-    )
+    page.evaluate("navigator.serviceWorker.getRegistration().then(r => r.update())")
+    page.wait_for_function("window.vaihtui === true", timeout=10000)
     # The new worker cached every picture on install, also one the shelf has not shown yet.
-    page.wait_for_function("caches.open('ai-pelit-thumbs').then(c => c.keys()).then(k => k.length === 2)", timeout=10000)
+    assert page.evaluate("caches.open('ai-pelit-thumbs').then(c => c.keys()).then(k => k.length)") == 2
     context.set_offline(True)
     try:
         page.goto(site.url)
