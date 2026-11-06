@@ -46,7 +46,7 @@
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
 export const GAMES = {
-  frisbeegolf: { order: 'low', boards: /^main$/ }, // strokes against par on the nine-hole park course
+  frisbeegolf: { order: 'low', boards: /^v3$/, first: 'v3', minVersion: 3 }, // harder aiming; v1/v2 scores removed at owner's request (#338)
   kiekkoammunta: { order: 'high', boards: /^(trap|skeet)$/, first: 'trap' }, // hits out of 25
   minigolf: { order: 'low', boards: /^main$/ }, // fewest strokes over nine holes
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
@@ -248,6 +248,7 @@ async function addScore(env, body) {
   if (!Object.hasOwn(GAMES, game)) return fail(400, 'no list for this game');
   if (!GAMES[game].boards.test(String(board || ''))) return fail(400, 'bad board');
   if (!Number.isInteger(version) || version < 1) return fail(400, 'bad version');
+  if (version < (GAMES[game].minVersion || 1)) return fail(400, 'old version');
   if (!Number.isFinite(score)) return fail(400, 'bad score');
   // The level reached, shown beside the score; optional, as older versions do not send it.
   let level = body.level === undefined || body.level === null ? null : Number(body.level);

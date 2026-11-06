@@ -27,6 +27,7 @@ function showCard(){
   $('cardEyebrow').textContent=end?'PUISTORATA · 9 VÄYLÄÄ':'VÄYLÄ '+(round.hole+1)+' · '+h.name;
   $('cardTitle').textContent=end?'Kierros valmis':holeResult(p.scores[round.hole],h.par);
   $('cardTotal').textContent=total+' heittoa · '+relative(total-par)+(end&&load('ennatys',null)===total-par?' · Ennätys!':'');
+  if(end&&round.rules!==3)$('cardTotal').textContent+=' · Vanha kierros, ei tuloslistalle';
   $('scoreRows').replaceChildren();
   const rows=online?round.players.map(p=>[p.name,p.scores.reduce((a,b)=>a+b,0)+' h · '+relative(p.scores.reduce((a,b)=>a+b,0)-par)]):p.scores.map((n,i)=>[(i+1)+'. '+HOLES[i].name,n+' h · '+relative(n-HOLES[i].par)]);
   for(const [i,[label,value]] of rows.entries()){

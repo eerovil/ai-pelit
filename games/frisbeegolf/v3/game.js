@@ -1,5 +1,6 @@
 const $=id=>document.getElementById(id), KEY='ai-pelit:frisbeegolf:';
 const R=window.AiPelitRooms;
+window.AiPelitScores?.board('v3','Frisbeegolf v3+');
 let round=null, online=false, roomRound='', roomHost='', aim={angle:0,disc:1,power:.6,curve:0}, drag=null, aimDrag=null;
 let flight=null, preview=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, dirty=true, askName=false;
 function load(k,d){try{const v=localStorage.getItem(KEY+k);return v===null?d:JSON.parse(v);}catch(e){return d;}}
@@ -11,7 +12,7 @@ function current(){return round.players[round.turn];}
 function hasTurn(){return !!(round&&round.phase==='aim'&&(!online||current().id===R.me));}
 function myTurn(){return hasTurn()&&(!online||!R.paused);}
 function fresh(players=[{id:'me',name:'Sinä'}]){
-  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shot:null,notice:'',order:players.map((_,i)=>i),
+  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shot:null,notice:'',rules:3,order:players.map((_,i)=>i),
     players:players.map(p=>({id:p.id,name:p.name,lie:[0,0],strokes:0,scores:[],done:false}))};
 }
 function resetAim(){
@@ -87,7 +88,8 @@ function finishRecord(){
   const total=p.scores.reduce((a,b)=>a+b,0)-COURSE_PAR,best=load('ennatys',null);
   save('ennatys',best===null?total:Math.min(best,total));save('kierroksia',load('kierroksia',0)+1);
   if(!online)save('kierros',null);
-  askName=window.AiPelitScores?.submit(total,true)===true;
+  // A saved round begun under v1/v2 rules stays a personal result, never a v3 leaderboard entry.
+  askName=round.rules===3&&window.AiPelitScores?.submit(total,true)===true;
 }
 function step(dt){
   if(!round||round.phase!=='fly'||document.hidden||(online&&R.paused))return;

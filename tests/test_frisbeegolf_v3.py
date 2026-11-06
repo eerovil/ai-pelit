@@ -168,6 +168,7 @@ def test_collision_lie_allows_next_throw_away(site, browser, kind):
 
 def test_complete_nine_holes_and_second_round(site, browser):
     ctx, p = open_game(site, browser)
+    p.evaluate("localStorage.setItem('ai-pelit:_tulokset:lahetetyt',JSON.stringify({'frisbeegolf|main':{score:-30,level:0}}))")
     p.click('#play')
     scores = []
     for hole in range(9):
@@ -189,7 +190,7 @@ def test_complete_nine_holes_and_second_round(site, browser):
     assert p.evaluate("load('kierroksia',0)") == 1
     assert len(p.evaluate("load('vaylat',[])")) == 9
     assert p.evaluate("load('ennatys',null)") == sum(scores) - 30
-    assert p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['frisbeegolf|main'].score") == sum(scores) - 30
+    assert p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['frisbeegolf|v3'].score") == sum(scores) - 30
     assert p.evaluate("[-2,0,5].map(n=>AiPelitScores.scoreText('frisbeegolf',n))") == ['−2', 'E', '+5']
     for sel in ['#next', '#toMenu', '#scoreRows']:
         b = p.locator(sel).bounding_box()
@@ -376,3 +377,16 @@ def test_real_room_page_frame_can_play(phones, size):
         r = hf.locator(sel).bounding_box()
         assert (m['x'] + m['width'] <= r['x'] or r['x'] + r['width'] <= m['x']
                 or m['y'] + m['height'] <= r['y'] or r['y'] + r['height'] <= m['y']), sel
+
+
+def test_legacy_round_keeps_personal_result_without_new_board_score(site, browser):
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    p.evaluate("""delete round.rules;round.hole=8;round.players[0].scores=[2,2,2,2,2,2,2,2,2];
+      round.phase='end';finishRecord();showCard();""")
+    assert p.evaluate("load('ennatys',null)") == -12
+    assert p.evaluate("load('kierroksia',0)") == 1
+    assert not p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono')||'{}')['frisbeegolf|v3']")
+    assert 'Vanha kierros, ei tuloslistalle' in p.locator('#cardTotal').inner_text()
+    assert not p.errors
+    ctx.close()
