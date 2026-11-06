@@ -173,7 +173,7 @@ def test_active_round_fits_390px_and_landscape(site, context):
     a, b = centre(pair[0]), centre(pair[1])
     page.mouse.move(a["x"], a["y"]); page.mouse.down(); page.mouse.move(b["x"], b["y"], steps=3); page.mouse.up()
     page.wait_for_function(f"state.moves === {moves - 1}")
-    page.wait_for_timeout(500)
+    page.wait_for_function("!motion")
     pair, box, moves = page.evaluate("[Marjakori.legalMoves(state)[0], boardBox, state.moves]")
     a, b = centre(pair[0]), centre(pair[1])
     page.mouse.click(a["x"], a["y"]); page.mouse.click(b["x"], b["y"])
