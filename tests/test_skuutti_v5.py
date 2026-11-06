@@ -1,9 +1,11 @@
 """Skuutti v2: recorded sounds from the shared library public/lib/aanet-2/ (#228). v2 plays as
 v1 did (pumping, airs, tricks, falls, the clock and unlocks), and those tests run here too."""
 
+import pytest
+
 from conftest import ROOT, turn
 
-URL = "games/skuutti/v4/"
+URL = "games/skuutti/v5/"
 SOUNDS = ['suhahdus', 'lasku', 'onnistui', 'rima', 'voitto', 'tappio', 'rullaus']
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -63,8 +65,10 @@ def begin(site, context, best=None):
     page = open_game(site, context, best)
     start(page)   # the tap on "Aja!" turns sound on
     page.evaluate(SPY)
-    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
-    page.wait_for_function("AiPelitAanet.play('lasku', { vol: 0 })", timeout=5000)
+    # polling: wait_for_function checks again on animation frames by default, and open_game
+    # stubbed those away, so a first check that came too early would never be repeated.
+    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000, polling=50)
+    page.wait_for_function("AiPelitAanet.play('lasku', { vol: 0 })", timeout=5000, polling=50)
     page.evaluate("heard.splice(0)")
     return page
 
@@ -110,7 +114,7 @@ def test_the_wheels_roll_louder_with_speed_and_go_quiet_in_the_air(site, context
     page = begin(site, context)
     page.evaluate("P.s = 0; P.v = 3; wheelSound()")
     slow = page.evaluate("[wheels.vol, wheels.rate]")
-    page.wait_for_function("wheels.playing()", timeout=5000)
+    page.wait_for_function("wheels.playing()", timeout=5000, polling=50)
     page.evaluate("P.v = 9; wheelSound()")
     fast = page.evaluate("[wheels.vol, wheels.rate]")
     assert fast[0] > slow[0] > 0 and fast[1] > slow[1]
@@ -133,7 +137,7 @@ def test_without_the_library_it_still_plays_with_its_own_beeps(site, context):
 def test_after_a_run_ends_the_next_run_rolls_again_and_the_end_tune_plays_once(site, context):
     page = begin(site, context)
     page.evaluate("P.s = 0; P.v = 5; wheelSound()")
-    page.wait_for_function("wheels.playing()", timeout=5000)
+    page.wait_for_function("wheels.playing()", timeout=5000, polling=50)
     # The run ends while rolling: the wheels go quiet, one tune, nothing more on later steps.
     page.evaluate("points = 0; timeLeft = 0.01; step(1 / 60); for (let i = 0; i < 30; i++) step(1 / 60); wheelSound()")
     assert played(page) == ["tappio"]
@@ -313,9 +317,158 @@ def test_the_menu_fits_upright_and_sideways(site, context, browser):
         ctx.close()
 
 
+# #414: the loop draws only during a run, and the still scene only once for each size.
+# Counts the draws of the page's real loop, which open_game() stops.
+LIVE = """() => { window.draws = 0; const d = draw; window.draw = () => { draws++; d(); }; }"""
+
+
+def live_game(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + URL)
+    page.evaluate(LIVE)
+    page.wait_for_function("!asked")
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    return page
+
+
+def draws_in(page, ms=300):
+    page.evaluate("draws = 0")
+    page.wait_for_timeout(ms)
+    return page.evaluate("draws")
+
+
+def test_the_menu_draws_nothing_until_something_changes(site, context):
+    page = live_game(site, context)
+    assert draws_in(page) == 0
+    # A picked colour shows on the rider behind the menu: one picture, then still again.
+    page.evaluate("draws = 0")
+    page.locator("#colors button").nth(1).click()
+    page.wait_for_function("draws > 0 && !asked")
+    assert draws_in(page) == 0
+    assert page.errors == []
+
+
+def test_a_run_keeps_drawing_and_its_end_stops_the_loop_with_the_wheels_quiet(site, context):
+    page = live_game(site, context)
+    page.click("#go")
+    assert draws_in(page) > 3
+    page.evaluate("P.s = 0; P.v = 5; wheelSound()")
+    page.evaluate("timeLeft = 0.001")
+    page.wait_for_function("phase === 'menu' && !asked")
+    assert draws_in(page) == 0
+    assert page.evaluate("!wheels || wheels.vol === 0")
+    # The next run moves from where it starts, with no jump for the time spent in the menu.
+    page.wait_for_timeout(300)
+    page.click("#go")
+    assert page.evaluate("timeLeft") > 59.8
+    assert draws_in(page) > 3
+
+
+def test_a_run_leaves_the_still_scene_alone_and_a_new_size_draws_it_again(site, context):
+    page = live_game(site, context)
+    page.evaluate("""() => {
+      window.scenes = 0; const d = drawScene; window.drawScene = v => { scenes++; d(v); };
+    }""")
+    page.click("#go")
+    assert draws_in(page) > 3
+    assert page.evaluate("scenes") == 0
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("scenes === 1 && W === 740", polling=100)
+    assert page.evaluate("[scene.width, scene.height]") == page.evaluate("[c.width, c.height]")
+
+
+def test_coming_back_to_the_page_draws_the_menu_again(site, context):
+    page = live_game(site, context)
+    page.evaluate("draws = 0; document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_function("draws === 1 && !asked && sceneDrawn")
+    assert draws_in(page) == 0
+
+
+def test_a_run_coming_back_and_turning_at_once_keeps_one_loop_going(site, context):
+    page = live_game(site, context)
+    page.evaluate("""() => {
+      window.waiting = 0; window.most = 0;
+      const raf = requestAnimationFrame;
+      window.requestAnimationFrame = f => {
+        most = Math.max(most, ++waiting);
+        return raf(t => { waiting--; f(t); });
+      };
+    }""")
+    page.click("#go")
+    assert draws_in(page) > 3
+    page.evaluate("""() => {
+      most = 0;
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pageshow'));
+      window.dispatchEvent(new Event('resize'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    }""")
+    turn(page, {"width": 740, "height": 360})
+    assert draws_in(page) > 3
+    assert page.evaluate("[most, phase]") == [1, "ride"]
+    # A long gap in the frames, as after a hidden page, costs the run at most 0.1 s.
+    left = page.evaluate("timeLeft")
+    page.evaluate("lastT -= 30000")
+    page.wait_for_timeout(100)
+    assert page.evaluate("timeLeft") > left - 1
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("hz", [60, 90, 120, 144])
+def test_a_run_draws_30_pictures_a_second_and_steps_60_on_any_screen(site, context, hz):
+    page = open_game(site, context)
+    start(page)
+    got = page.evaluate("""hz => {
+      let draws = 0, steps = 0;
+      const d = draw, s = step;
+      window.draw = () => { draws++; d(); };
+      window.step = dt => { steps++; s(dt); };
+      let t = lastT; acc = 0; owed = false;
+      for (let i = 0; i < hz; i++) { t += 1000 / hz; frame(t); }   // one second
+      const drawn = [draws, steps];
+      // A picture owed for another reason, such as a new size, is drawn at once.
+      draws = 0; acc = 0; ask(); frame(lastT);
+      return [...drawn, draws];
+    }""", hz)
+    assert 28 <= got[0] <= 31, got
+    assert 59 <= got[1] <= 61, got
+    assert got[2] == 1
+    assert page.errors == []
+
+
+def test_the_strip_is_written_again_only_when_its_text_changes(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("""() => {
+      window.strips = 0; const d = drawStrip; window.drawStrip = y => { strips++; d(y); };
+      draw();
+    }""")
+    page.evaluate("strips = 0; draw(); draw(); draw()")
+    assert page.evaluate("strips") == 0
+    page.evaluate("points = 120; draw(); draw()")
+    assert page.evaluate("strips") == 1
+    page.evaluate("timeLeft -= 1; draw()")
+    assert page.evaluate("strips") == 2
+
+
+def test_the_game_canvas_shows_the_scene_through_it_and_the_rider_and_strip_on_it(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("draw()")
+    px = """([cv, u, v]) => Array.from(document.getElementById(cv).getContext('2d')
+      .getImageData(u * DPR, v * DPR, 1, 1).data)"""
+    assert page.evaluate(px, ["c", 180, 10])[3] == 0                 # clear over the sky
+    assert page.evaluate(px, ["scene", 180, 10])[2] > 200            # the sky, blue
+    y = page.evaluate("(wide ? SAFE_T + 6 : SAFE_T + 46) + 2")
+    assert page.evaluate(px, ["c", 180, y])[3] > 100                 # the strip
+    assert page.errors == []
+
+
 # #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/skuutti/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/skuutti/v5")
