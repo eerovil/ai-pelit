@@ -1,7 +1,7 @@
 # Frisbeegolf: one round, from the first tee to the scorecard
 
 How a round of Frisbeegolf plays (#338). Nine holes on a Finnish park and forest course
-drawn with three.js; each throw is aimed with a tap, the disc chosen, and the disc pulled down
+drawn with three.js; each throw is aimed by dragging across the course, the disc chosen, and the disc pulled down
 and let go, sideways at the release giving it a curve. The disc's flight, the trees, the water
 and the chains of the basket are plain numbers the tests can drive. Alone the player plays
 against the par and their own record; with friends, 2–8 phones throw in turn, the one furthest
@@ -15,7 +15,7 @@ flowchart TD
   S1 --> A[Väylä alkaa tiiltä: par, pituus, kartta]
   S2 --> A
   A --> T{Heittäjä paikalla?}
-  T -- Kyllä --> B[Napauta maata tai koria: suunta sinne]
+  T -- Kyllä --> B[Suuntaa heittäjä vetämällä kentällä]
   T -- Ei --> SK[Isäntä odottaa tai ohittaa: vähintään par + 3]
   B --> C[Valitse Draiveri, Midari tai Putteri]
   C --> G2[Haamuviiva näyttää lennon ensimmäisen kolmanneksen]
@@ -67,7 +67,7 @@ flowchart TD
 - **Väylä alkaa tiiltä: par, pituus, kartta**: `HOLES` in `games/frisbeegolf/v3/holes.js` defines nine holes, par 3–4, 45–140 m, total par 30. `scene.js` draws hills, trees, rocks, a pond, marked OB boundaries and the basket. `nextHole()` orders tee honours by the previous hole's strokes.
 - **Heittäjä paikalla?**: `rooms.js` waits only for the player whose turn it is. `myTurn()` blocks input while paused; `hasTurn()` keeps the current player's controls ready when a previous pause clears.
 - **Isäntä odottaa tai ohittaa: vähintään par + 3**: the `skip` handler in `room.js` finishes that player's current hole with `max(strokes, par + 3)`. The player can rejoin and play the following holes.
-- **Napauta maata tai koria: suunta sinne**: `groundAt()` raycasts against the drawn terrain. The canvas's own box supplies the coordinates; the map button changes to an overhead view without resetting the round.
+- **Suuntaa heittäjä vetämällä kentällä**: `moveAim()` in `ui.js` turns the player continuously with horizontal pointer movement: one canvas width turns half a circle. The initial angle and pointer position keep the drag stable while the camera follows. A tap does not turn; cancellation, rotation and visibility changes end the gesture. A second finger cannot steal aiming or start a simultaneous throw. The map uses the same drag and keeps the round.
 - **Valitse Draiveri, Midari tai Putteri**: `DISCS` in `flight.js` supplies speed, glide, turn, fade and range. `resetAim()` selects a suitable disc; below 10 m it selects the putter and a finer power range.
 - **Haamuviiva näyttää lennon ensimmäisen kolmanneksen**: `refreshPreview()` uses `fly()` with wind but without the hand's seeded shake. `game.js` keeps only the first third of its duration, ending at the interpolated flight point. `scene.js` redraws this short line as the direction, disc, power or curve changes. There is no landing marker; the player discovers the rest of the flight after release (owner's latest choice).
 - **Vedä alas ja päästä irti: voima ja kaarre**: the pointer handlers in `ui.js` turn a downward pull into power and sideways movement into a curve. The pad leaves its whole range inside the screen in portrait and landscape. Cancellation and a tap do not throw; another finger cannot steal a pull.

@@ -19,8 +19,8 @@
     {
       "n": 3,
       "date": "2026-11-06",
-      "note": "Lennon ennakkoviiva näyttää vain ensimmäisen kolmanneksen, ja puhepainike pysyy erillään tuloskortista.",
-      "request": "Owner chose a preview of only the first third of flight because showing the landing made the game too easy. Final layout verification: keep microphone clear of play controls and result card.",
+      "note": "Suuntaa vetämällä, näe vain lennon ensimmäinen kolmannes, ja puhepainike pysyy erillään tuloskortista.",
+      "request": "Owner chose a preview of only the first third of flight because showing the landing made the game too easy. Final layout verification: keep microphone clear of play controls and result card. Owner also chose dragging on the course to turn the player, instead of tap-to-aim.",
       "issue": "eerovil/ai-pelit#338"
     }
   ]

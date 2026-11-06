@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id), KEY='ai-pelit:frisbeegolf:';
 const R=window.AiPelitRooms;
-let round=null, online=false, roomRound='', roomHost='', aim={angle:0,disc:1,power:.6,curve:0}, drag=null;
+let round=null, online=false, roomRound='', roomHost='', aim={angle:0,disc:1,power:.6,curve:0}, drag=null, aimDrag=null;
 let flight=null, preview=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, dirty=true, askName=false;
 function load(k,d){try{const v=localStorage.getItem(KEY+k);return v===null?d:JSON.parse(v);}catch(e){return d;}}
 function save(k,v){try{localStorage.setItem(KEY+k,JSON.stringify(v));}catch(e){}}
@@ -17,7 +17,7 @@ function fresh(players=[{id:'me',name:'Sinä'}]){
 function resetAim(){
   if(!round)return;const h=HOLES[round.hole],p=current(),dist=distance(p.lie,h.basket);
   aim={angle:Math.atan2(h.basket[0]-p.lie[0],h.basket[1]-p.lie[1]),disc:dist<10?2:dist>65?0:1,power:.65,curve:0};
-  drag=null;mapOpen=false;refreshPreview();
+  drag=aimDrag=null;mapOpen=false;refreshPreview();
 }
 function refreshPreview(){
   preview=null;
@@ -36,7 +36,7 @@ function keepRound(){if(!round||online||round.phase==='end')return;
   if(round.phase==='fly')return;
   save('kierros',round);
 }
-function menu(){keepRound();round=null;online=false;flight=preview=drag=null;mapOpen=false;
+function menu(){keepRound();round=null;online=false;flight=preview=drag=aimDrag=null;mapOpen=false;
   $('menu').hidden=false;$('game').hidden=true;$('card').hidden=true;
   $('resume').hidden=!validSaved(load('kierros',null));
   const best=load('ennatys',null);$('best').textContent=best===null?'Ensimmäinen kierros odottaa':'Ennätys: '+relative(best)+' · '+(best+COURSE_PAR)+' heittoa';
@@ -47,7 +47,7 @@ function startShot(input){
   if(!Number.isFinite(input.angle)||!Number.isFinite(input.power)||!Number.isFinite(input.curve)||!Number.isInteger(input.disc)||input.disc<0||input.disc>2||input.power<.015||input.power>1||Math.abs(input.curve)>1)return false;
   keepRound();round.shot={angle:input.angle,power:input.power,curve:input.curve,disc:input.disc,lie:current().lie.slice(),seed:12345+round.seq*7919};
   round.phase='fly';round.time=0;round.seq++;round.notice='';current().strokes++;
-  flight=fly(round.shot,HOLES[round.hole]);preview=null;drag=null;mapOpen=false;
+  flight=fly(round.shot,HOLES[round.hole]);preview=null;drag=aimDrag=null;mapOpen=false;
   sound('suhahdus');renderUI();askDraw();if(online)sendState();return true;
 }
 function nextThrower(){
@@ -100,5 +100,5 @@ function tick(t){frame=0;const dt=lastFrame?Math.min((t-lastFrame)/1000,.05):0;l
   if(scene3d){drawScene(dt);dirty=false;}
   if(round?.phase==='fly'||drag||scene3d?.moving)askDraw();
 }
-document.addEventListener('visibilitychange',()=>{drag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;refreshPreview();}});
+document.addEventListener('visibilitychange',()=>{drag=aimDrag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;refreshPreview();}});
 window.addEventListener('pagehide',keepRound);

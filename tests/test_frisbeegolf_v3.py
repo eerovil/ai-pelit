@@ -55,10 +55,27 @@ def pull(p, power, curve=0):
 @pytest.mark.parametrize('size', [(360, 640), (360, 740), (390, 844), (740, 360)])
 def test_real_controls_and_layout(site, browser, size):
     ctx, p = open_game(site, browser, size)
-    for sel in ['#play', '#friends', '#scores']:
+    for sel in ['#play', '#friends', '#scores', '.instructions']:
         b = p.locator(sel).bounding_box()
         assert b['y'] >= 0 and b['y'] + b['height'] <= size[1], sel
     p.click('#play')
+    # Facing follows a drag before release; taps and other pointers do not move it.
+    initial = p.evaluate('aim.angle')
+    p.mouse.move(100, 240); p.mouse.down(); p.mouse.move(160, 240, steps=4)
+    expected = initial + 60 / size[0] * math.pi
+    assert p.evaluate('aim.angle') == pytest.approx(expected)
+    assert p.evaluate('aimDrag!==null&&current().strokes===0')
+    p.dispatch_event('#scene', 'pointerdown', {'pointerId': 42, 'clientX': 10, 'clientY': 240})
+    p.dispatch_event('#scene', 'pointermove', {'pointerId': 42, 'clientX': 300, 'clientY': 240})
+    p.dispatch_event('#throwPad', 'pointerdown', {'pointerId': 42, 'clientX': 180, 'clientY': 520})
+    p.dispatch_event('#scene', 'pointercancel', {'pointerId': 42})
+    assert p.evaluate('aim.angle') == pytest.approx(expected)
+    assert p.evaluate('aimDrag.id===1&&drag===null')
+    p.dispatch_event('#scene', 'pointercancel', {'pointerId': 1})
+    p.mouse.up()
+    assert p.evaluate('aimDrag===null&&round.phase==="aim"&&current().strokes===0')
+    p.mouse.click(100, 240)
+    assert p.evaluate('aim.angle') == pytest.approx(expected)
     p.click('#discs button:nth-child(3)')
     assert p.evaluate('aim.disc') == 2
     p.click('#map')
@@ -340,6 +357,12 @@ def test_real_room_page_frame_can_play(phones, size):
         r = hf.locator(sel).bounding_box()
         assert (m['x'] + m['width'] <= r['x'] or r['x'] + r['width'] <= m['x']
                 or m['y'] + m['height'] <= r['y'] or r['y'] + r['height'] <= m['y']), sel
+    scene = hf.locator('#scene').bounding_box()
+    old_angle = hgame.evaluate('aim.angle')
+    host.mouse.move(scene['x'] + 100, scene['y'] + 180)
+    host.mouse.down(); host.mouse.move(scene['x'] + 140, scene['y'] + 180, steps=4)
+    assert hgame.evaluate('aim.angle') == pytest.approx(old_angle + 40 / scene['width'] * math.pi)
+    host.mouse.up()
     b = hf.locator('#throwPad').bounding_box()
     x, y = b['x'] + b['width']/2, b['y']+24
     host.mouse.move(x,y); host.mouse.down(); host.mouse.move(x,y+45,steps=4); host.mouse.up()
