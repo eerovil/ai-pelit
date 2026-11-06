@@ -2,7 +2,7 @@
 import pytest
 from conftest import ROOT, turn
 
-URL = 'games/kiekkoammunta/v1/'
+URL = 'games/kiekkoammunta/v2/'
 
 
 def open_game(site, browser, size=(360, 740)):
@@ -85,15 +85,42 @@ def test_trap_second_shot_and_skeet_one_per_target(site, browser):
     context.close()
 
 
-def test_lead_is_needed_and_pattern_misses(site, browser):
+def test_skeet_lead_helps_and_pattern_misses(site, browser):
     context, p = open_game(site, browser); p.click('#skeet')
     assert p.evaluate('''() => {
       round.index=6;prepare();call();step(.5);
       const d=round.discs[0],a=direction(d),t=a.distance/PELLETS;
       const lead=direction({...d,x:d.x+d.vx*t,y:d.y+d.vy*t-1.5*t*t,z:d.z+d.vz*t});
       const future={...d,x:d.x+d.vx*t,y:d.y+d.vy*t-1.5*t*t,z:d.z+d.vz*t};
-      return !shotHits(a,future)&&shotHits(lead,future)&&!shotHits({yaw:2,pitch:1},future);
+      const behind={yaw:a.yaw-(lead.yaw-a.yaw)*2,pitch:a.pitch};
+      return shotHits(lead,future)&&!shotHits(behind,future)&&!shotHits({yaw:2,pitch:1},future);
     }''')
+    context.close()
+
+
+def test_skeet_forgives_a_persons_timing_and_trap_stays_as_it_was(site, browser):
+    """Eero found v1's skeet too hard on the phone: a hit needed timing within about 0.02 s.
+
+    From every station, a shot released 60 ms from the ideal moment must still hit, for as long
+    as the disc is in the part of its flight a player shoots at.
+    """
+    context, p = open_game(site, browser); p.click('#skeet')
+    worst = p.evaluate('''() => {
+      let worst=[];
+      const at=(d,t)=>({...d,x:d.x+d.vx*t,y:d.y+d.vy*t-1.5*t*t,z:d.z+d.vz*t});
+      for(let i=0;i<SKEET.length;i++){
+        round.index=i;prepare();
+        for(const kind of entry()[1]) for(const t0 of [.5,.8,1.1,1.4,1.7]){
+          const d=at(originDisc(kind),t0),t=direction(d).distance/PELLETS;
+          const ideal=direction(at(d,t));
+          for(const off of [-.06,.06]) if(!shotHits(ideal,at(d,t+off))) worst.push([i,kind,t0,off]);
+        }
+      }
+      return worst;
+    }''')
+    assert worst == []
+    p.evaluate('showMenu()'); p.click('#trap')
+    assert p.evaluate('[pattern()===PATTERN,originDisc("T").vz>15]') == [True, True]
     context.close()
 
 

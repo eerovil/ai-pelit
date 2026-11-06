@@ -441,6 +441,9 @@
       const KEY = "ai-pelit:kiekkoammunta:",
         RAD = Math.PI / 180,
         PATTERN = 1.6 * RAD,
+        // Skeet's discs cross the view, so it gets a bigger circle and slower discs than trap (#339).
+        SKEET_PATTERN = 4 * RAD,
+        SKEET_SPEED = 15,
         PELLETS = 400;
       // ISSF qualification: high/low singles and ordered doubles, returning to station 4.
       const SKEET = [
@@ -642,9 +645,9 @@
           x: kind === "H" ? -20 : 20,
           y: kind === "H" ? 3.5 : 1.5,
           z: 20,
-          vx: kind === "H" ? 25 : -25,
+          vx: kind === "H" ? SKEET_SPEED : -SKEET_SPEED,
           vy: kind === "H" ? 3.7 : 5.9,
-          vz: 6,
+          vz: SKEET_SPEED * 0.24,
         };
       }
       function direction(d) {
@@ -725,6 +728,9 @@
         hud();
         wake();
       }
+      function pattern() {
+        return round.mode === "skeet" ? SKEET_PATTERN : PATTERN;
+      }
       function shotHits(shot, d) {
         const a = direction(d);
         return (
@@ -732,7 +738,7 @@
             (a.yaw - shot.yaw) * Math.cos(a.pitch),
             a.pitch - shot.pitch,
           ) <=
-          PATTERN + 0.055 / a.distance
+          pattern() + 0.055 / a.distance
         );
       }
       function resolveDisc(d, hit) {
@@ -1050,7 +1056,7 @@
             ctx.arc(
               x,
               y,
-              Math.tan(PATTERN) * scale * (1.3 - p.life),
+              Math.tan(pattern()) * scale * (1.3 - p.life),
               0,
               Math.PI * 2,
             );
@@ -1064,7 +1070,7 @@
         ctx.globalAlpha = 1;
         const x = W / 2,
           y = H * 0.43,
-          r = Math.max(10, Math.tan(PATTERN) * scale);
+          r = Math.max(10, Math.tan(pattern()) * scale);
         ctx.strokeStyle = "#193c43";
         ctx.lineWidth = 3;
         ctx.beginPath();
