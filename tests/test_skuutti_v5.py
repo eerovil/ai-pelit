@@ -339,6 +339,13 @@ def draws_in(page, ms=300):
     return page.evaluate("draws")
 
 
+def keeps_drawing(page):
+    """The loop is alive, however slowly a busy host gives it frames: a run draws only 30 a second,
+    and a window just resized may give none for a moment, so a count over a fixed time says little."""
+    page.evaluate("draws = 0")
+    page.wait_for_function("draws > 3", timeout=5000, polling=50)
+
+
 def test_the_menu_draws_nothing_until_something_changes(site, context):
     page = live_game(site, context)
     assert draws_in(page) == 0
@@ -353,7 +360,7 @@ def test_the_menu_draws_nothing_until_something_changes(site, context):
 def test_a_run_keeps_drawing_and_its_end_stops_the_loop_with_the_wheels_quiet(site, context):
     page = live_game(site, context)
     page.click("#go")
-    assert draws_in(page) > 3
+    keeps_drawing(page)
     page.evaluate("P.s = 0; P.v = 5; wheelSound()")
     page.evaluate("timeLeft = 0.001")
     page.wait_for_function("phase === 'menu' && !asked")
@@ -363,7 +370,7 @@ def test_a_run_keeps_drawing_and_its_end_stops_the_loop_with_the_wheels_quiet(si
     page.wait_for_timeout(300)
     page.click("#go")
     assert page.evaluate("timeLeft") > 59.8
-    assert draws_in(page) > 3
+    keeps_drawing(page)
 
 
 def test_a_run_leaves_the_still_scene_alone_and_a_new_size_draws_it_again(site, context):
@@ -372,7 +379,7 @@ def test_a_run_leaves_the_still_scene_alone_and_a_new_size_draws_it_again(site, 
       window.scenes = 0; const d = drawScene; window.drawScene = v => { scenes++; d(v); };
     }""")
     page.click("#go")
-    assert draws_in(page) > 3
+    keeps_drawing(page)
     assert page.evaluate("scenes") == 0
     turn(page, {"width": 740, "height": 360})
     page.wait_for_function("scenes === 1 && W === 740", polling=100)
@@ -397,7 +404,7 @@ def test_a_run_coming_back_and_turning_at_once_keeps_one_loop_going(site, contex
       };
     }""")
     page.click("#go")
-    assert draws_in(page) > 3
+    keeps_drawing(page)
     page.evaluate("""() => {
       most = 0;
       document.dispatchEvent(new Event('visibilitychange'));
@@ -406,7 +413,7 @@ def test_a_run_coming_back_and_turning_at_once_keeps_one_loop_going(site, contex
       document.dispatchEvent(new Event('visibilitychange'));
     }""")
     turn(page, {"width": 740, "height": 360})
-    assert draws_in(page) > 3
+    keeps_drawing(page)
     assert page.evaluate("[most, phase]") == [1, "ride"]
     # A long gap in the frames, as after a hidden page, costs the run at most 0.1 s.
     left = page.evaluate("timeLeft")
