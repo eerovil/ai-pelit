@@ -90,6 +90,7 @@ the version that taught it, so you can read the code that fixed it.
 - **The field stays playable for a whole game.** Mölkky v1: pins knocked over slid and rolled so far that late in a game every one stood past the longest throw, or off the screen to the sides. Play a whole game of computer throws in a test and check the targets stay within reach and in view (Mölkky v2).
 - **Doing nothing must not score.** Tikanheitto v1–v6: the sight stayed on the 10 and the hand hardly swayed, so tapping alone gave a perfect 300, and the top of the list was full of them. v7's hand shakes, settles and tires, and the sight leaves the target after each dart. Measure a whole game played the laziest way, and read the live high-score list: a list topped by the highest possible score says the game is too easy.
 - **Harder rules start a new list.** When points no longer compare with the old ones (Mäkihyppy v9, Tikanheitto v7), give the new game its own list and its own saved best and keep the old list beside it: a phone that holds a best it can no longer beat would never send a score again.
+- **A script's hit is not a person's.** Kiekkoammunta v1: a scripted drag hit skeet's crossing discs, but only inside about 0.02 s, and Eero found it too hard. For a moving target, work out how much timing a hit forgives and test that a person's 60 ms still hits (v2).
 - **Start easy and grow.** The first round teaches the game. New things arrive in later levels
   (Orava: the marten from level 2, the hawk from level 3; Hiihto: a road crossing on levels 3, 5, 7).
 
