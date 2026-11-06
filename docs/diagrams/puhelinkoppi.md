@@ -14,6 +14,8 @@ v7 (#337) loads `aanet-4`, which plays the loudest sounds (the winning tune) qui
 
 v8 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v9 (#415) draws only when something changes (the box on the side); the game looks and plays as before.
+
 ```mermaid
 flowchart TD
   A[Puhelin kämmenellä, ruutu ylöspäin] --> B[Heittoliike: käsi nykäisee ylös]
@@ -38,10 +40,14 @@ flowchart TD
   H -.-> sH([osuma])
   J -.-> sJ([tappio])
   L -.-> sL([voitto])
+  A -.-> P[Piirretään vain, kun jokin liikkuu]
+  L -.-> P
+  G -.-> P
+  J -.-> P
   class sB,sF,sG,sH,sJ,sL violet
   class A,B,E blue
   class F,I,K amber
-  class C,D,H teal
+  class C,D,H,P teal
   class L,M green
   class G,J rose
 ```
@@ -50,7 +56,7 @@ flowchart TD
 
 - **blue**: what the player sees and does
 - **amber**: a check that decides the result
-- **teal**: the physics of the throw and the landing
+- **teal**: the physics of the throw and the landing, and how the screen is drawn (v9)
 - **green**: a pass, saved on the phone
 - **rose**: a fail; the same level again
 - **violet**: the sound it plays (v6)
@@ -73,3 +79,4 @@ flowchart TD
 - **osuma**: `caught()`: the phone lands in the palm, on either side.
 - **tappio**: a catch screen down.
 - **voitto**: a catch screen up.
+- **Piirretään vain, kun jokin liikkuu**: from v9 (`games/puhelinkoppi/v9/index.html`), `frame()` runs only after `ask()`: `moveHand()`, `newRound()`, `launch()`, `resize()`, and coming back to the page (`visibilitychange`, `pageshow`, `contextrestored`). It asks for the next frame itself while `moving()` is true: `state` is `air`, `drop` or `settle`, `shake` or `dip` is above 0, or `camY` has not reached `camTarget()`. `step()` puts the camera on its target once it is within 0.3 mm of it, or the easing would never end. Before the throw and on the result nothing moves, so nothing is drawn.
