@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <title>Kiekkoammunta</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        color: #f4f6ed;
+        background: #123e43;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: 0;
+        touch-action: manipulation;
+      }
+      button:active {
+        transform: translateY(2px);
+      }
+      button:focus-visible {
+        outline: 3px solid #ffc46c;
+        outline-offset: 3px;
+      }
+      #game {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(
+          #81c1d1 0%,
+          #d8e8dc 65%,
+          #788d50 65%,
+          #364c32 100%
+        );
+      }
+      canvas {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .panel {
+        position: absolute;
+        inset: 0;
+        padding: max(64px, env(safe-area-inset-top))
+          max(24px, env(safe-area-inset-right))
+          max(55px, env(safe-area-inset-bottom))
+          max(24px, env(safe-area-inset-left));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(160deg, #133d44f5, #0d282ded);
+        overflow: hidden;
+      }
+      .content {
+        width: min(100%, 540px);
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 3px;
+        color: #c9d5b1;
+        margin: 0 0 8px;
+      }
+      h1 {
+        font-size: clamp(28px, 8vw, 40px);
+        letter-spacing: -1.5px;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 23px;
+        margin: 0 0 10px;
+      }
+      p {
+        font-size: 14px;
+        line-height: 1.5;
+        color: #d4dfd6;
+        margin: 8px 0 20px;
+      }
+      .menugrid > div:first-child { padding-bottom: 20px; }
+      .choices {
+        display: grid;
+        gap: 12px;
+      }
+      .mode {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        text-align: left;
+        background: #e5eadb;
+        color: #173e40;
+        padding: 17px 20px;
+        border-radius: 16px;
+        box-shadow: 0 4px 0 #071f25;
+      }
+      .mode strong {
+        font-size: 24px;
+      }
+      .mode small {
+        display: block;
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .mode .arrow {
+        grid-column: 2;
+        grid-row: 1/3;
+        align-self: center;
+        font-size: 26px;
+        color: #56735e;
+      }
+      .mode:nth-child(2) {
+        background: #f2ba72;
+      }
+      .instructions {
+        display: flex;
+        gap: 14px;
+        margin-top: 26px;
+      }
+      .instructions span {
+        flex: 1;
+        font-size: 12px;
+        color: #b8cecb;
+        line-height: 1.5;
+      }
+      .instructions b {
+        display: block;
+        font-size: 14px;
+        color: #fff;
+        margin-bottom: 4px;
+      }
+      .resume {
+        background: #396766;
+        color: #fff;
+        width: 100%;
+        padding: 12px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+      }
+      .quiet {
+        background: #355b60;
+        color: #fff;
+        border-radius: 12px;
+        padding: 12px 18px;
+      }
+      .primary {
+        background: #f2ba72;
+        color: #173e40;
+        font-weight: 750;
+        border-radius: 12px;
+        padding: 14px 22px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .actions > * {
+        flex: 1;
+      }
+      #hud {
+        position: absolute;
+        top: max(44px, calc(env(safe-area-inset-top) + 36px));
+        right: max(16px, env(safe-area-inset-right));
+        left: 100px;
+        text-align: right;
+        pointer-events: none;
+        color: #173e40;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      #score {
+        font-size: 23px;
+      }
+      #progress {
+        display: flex;
+        justify-content: flex-end;
+        gap: 3px;
+        margin-top: 8px;
+      }
+      #progress i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        border: 1px solid #365b60;
+        background: #e3ece4;
+      }
+      #progress .hit {
+        background: #286952;
+        border-color: #286952;
+      }
+      #progress .miss {
+        background: #82928a;
+        border-color: #82928a;
+      }
+      #hint {
+        position: absolute;
+        bottom: max(86px, calc(env(safe-area-inset-bottom) + 70px));
+        left: 18px;
+        right: 18px;
+        text-align: center;
+        pointer-events: none;
+        font-size: 14px;
+        font-weight: 650;
+        text-shadow: 0 2px 5px #102a24;
+      }
+      #hint small {
+        display: block;
+        font-weight: 400;
+        margin-top: 5px;
+        color: #e0eadb;
+      }
+      #ammo {
+        position: absolute;
+        bottom: max(30px, env(safe-area-inset-bottom));
+        left: 22px;
+        display: flex;
+        gap: 6px;
+        pointer-events: none;
+      }
+      #ammo i {
+        display: block;
+        width: 12px;
+        height: 28px;
+        border-radius: 4px 4px 2px 2px;
+        background: linear-gradient(#edb564 76%, #b48743 76%);
+        border: 1px solid #463f2d;
+      }
+      #ammo i.used {
+        opacity: 0.23;
+      }
+      #pause {
+        position: absolute;
+        right: 18px;
+        bottom: max(23px, env(safe-area-inset-bottom));
+        background: #163a3ed9;
+        color: white;
+        border-radius: 10px;
+        padding: 11px 15px;
+        font-size: 12px;
+      }
+      #result .content {
+        max-width: 600px;
+      }
+      #resultScore {
+        font-size: 64px;
+        font-weight: 800;
+        letter-spacing: -3px;
+        line-height: 1.1;
+        color: #f2ba72;
+      }
+      #record {
+        margin: 6px 0 12px;
+        color: #dbe4d0;
+      }
+      .boardtitle {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #b8cecb;
+        margin: 15px 0 6px;
+      }
+      #board {
+        max-height: 160px;
+        min-height: 28px;
+        overflow: auto;
+        touch-action: pan-y;
+        font-size: 12px;
+      }
+      #board > div {
+        display: flex;
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 1px solid #ffffff15;
+      }
+      #board > div span:nth-child(2) {
+        flex: 1;
+      }
+      #board small {
+        color: #a6c1bd;
+      }
+      #resultLabel {
+        margin-bottom: 6px;
+      }
+      @media (min-aspect-ratio: 1.3) {
+        .panel {
+          padding: 48px 55px 35px;
+        }
+        .content {
+          width: 100%;
+          max-width: 720px;
+        }
+        .menugrid > div:first-child { padding-bottom: 0; }
+        .menugrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 28px;
+          align-items: center;
+        }
+        h1 {
+          font-size: 32px;
+        }
+        .instructions {
+          margin-top: 14px;
+          gap: 8px;
+        }
+        .mode {
+          padding: 12px 18px;
+        }
+        .mode strong {
+          font-size: 22px;
+        }
+        .resume {
+          margin-bottom: 10px;
+          padding: 9px;
+        }
+        .resultgrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 28px;
+        }
+        #board {
+          max-height: 155px;
+        }
+        .boardtitle {
+          margin-top: 0;
+        }
+        #hint {
+          bottom: 24px;
+          left: 100px;
+          right: 100px;
+        }
+        #hint small {
+          display: inline;
+          margin-left: 6px;
+        }
+        #resultScore {
+          font-size: 58px;
+        }
+        #progress i {
+          width: 7px;
+          height: 7px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game">
+      <canvas
+        id="c"
+        aria-label="Ampumarata: paina, tähtää vetämällä ja ammu päästämällä irti"
+      ></canvas>
+      <div id="hud" hidden>
+        <span id="station"></span>
+        <div id="score"></div>
+        <div id="progress"></div>
+      </div>
+      <div id="hint" hidden></div>
+      <div id="ammo" hidden></div>
+      <button id="pause" hidden>Tauko</button>
+      <section id="menu" class="panel">
+        <div class="content menugrid">
+          <div>
+            <div class="eyebrow">Savikiekot · 25 kiekon kierros</div>
+            <h1>Kiekkoammunta</h1>
+            <p>
+              Tähtää hieman kiekon eteen.<br />Haulit tarvitsevat hetken
+              perille.
+            </p>
+            <div class="instructions">
+              <span><b>1 · Paina</b>Kiekko lähtee.</span
+              ><span><b>2 · Vedä</b>Tähtäin liikkuu.</span
+              ><span><b>3 · Irrota</b>Haulikko laukeaa.</span>
+            </div>
+          </div>
+          <div>
+            <button id="resume" class="resume" hidden>Jatka kierrosta</button>
+            <div class="choices">
+              <button id="trap" class="mode">
+                <strong>Trap</strong
+                ><small
+                  >Poispäin · kaksi laukausta<br /><span
+                    id="bestTrap"
+                  ></span></small
+                ><span class="arrow">↗</span></button
+              ><button id="skeet" class="mode">
+                <strong>Skeet</strong
+                ><small
+                  >Sivuttain · myös tuplakiekot<br /><span
+                    id="bestSkeet"
+                  ></span></small
+                ><span class="arrow">↔</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="result" class="panel" hidden>
+        <div class="content resultgrid">
+          <div>
+            <div class="eyebrow" id="resultLabel"></div>
+            <h2>Kierros ammuttu</h2>
+            <div id="resultScore"></div>
+            <div id="record"></div>
+            <div class="actions">
+              <button id="again" class="primary">Uudestaan</button
+              ><button id="toMenu" class="quiet">Valikko</button>
+            </div>
+          </div>
+          <div>
+            <div class="boardtitle">Parhaat tulokset · vieritä</div>
+            <div id="board"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="../../../lib/aanet-5/aanet.js"></script>
+    <script
+      src="../../../scores.js"
+      data-game="kiekkoammunta"
+      data-order="high"
+      data-corner="top-right"
+    ></script>
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id),
+        c = $("c"),
+        ctx = c.getContext("2d");
+      const KEY = "ai-pelit:kiekkoammunta:",
+        RAD = Math.PI / 180,
+        PATTERN = 1.6 * RAD,
+        PELLETS = 400;
+      // ISSF qualification: high/low singles and ordered doubles, returning to station 4.
+      const SKEET = [
+        [1, "H"],
+        [1, "HL"],
+        [2, "H"],
+        [2, "HL"],
+        [3, "H"],
+        [3, "HL"],
+        [4, "H"],
+        [4, "L"],
+        [5, "L"],
+        [5, "LH"],
+        [6, "L"],
+        [6, "LH"],
+        [7, "LH"],
+        [4, "HL"],
+        [4, "LH"],
+        [8, "H"],
+        [8, "L"],
+      ];
+      const TRAP = Array.from({ length: 25 }, (_, i) => [
+        1 + Math.floor(i / 5),
+        "T",
+      ]);
+      let W = 360,
+        H = 740,
+        scale = 300,
+        round = null,
+        screen = "menu",
+        pointer = null,
+        lastTime = 0,
+        raf = 0,
+        audio = null,
+        flash = 0;
+      let effects = [],
+        boardRequest = 0;
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      function load(k, d) {
+        try {
+          const s = localStorage.getItem(KEY + k);
+          return s === null ? d : JSON.parse(s);
+        } catch (e) {
+          return d;
+        }
+      }
+      function save(k, v) {
+        try {
+          localStorage.setItem(KEY + k, JSON.stringify(v));
+        } catch (e) {}
+      }
+      function best(mode) {
+        const b = load("ennatys-" + mode, 0);
+        return Number.isInteger(b) && b >= 0 && b <= 25 ? b : 0;
+      }
+      function plan() {
+        return round.mode === "trap" ? TRAP : SKEET;
+      }
+      function count() {
+        return round.results.filter((v) => v === true).length;
+      }
+      function entry() {
+        return plan()[round.index];
+      }
+      function title() {
+        return round.mode === "trap" ? "Trap" : "Skeet";
+      }
+      function keep() {
+        if (round) save("kierros", round);
+      }
+      function validSaved(r) {
+        return (
+          r &&
+          ["trap", "skeet"].includes(r.mode) &&
+          Number.isInteger(r.index) &&
+          r.index >= 0 &&
+          r.index <= (r.mode === "trap" ? 25 : SKEET.length) &&
+          Array.isArray(r.results) &&
+          r.results.length === 25 &&
+          r.results.every((v) => v === null || typeof v === "boolean") &&
+          ["ready", "flight", "gap", "end"].includes(r.phase) &&
+          Array.isArray(r.discs) &&
+          Array.isArray(r.shots) &&
+          r.aim &&
+          Number.isFinite(r.aim.yaw) &&
+          Number.isFinite(r.aim.pitch)
+        );
+      }
+      function sound(name, vol = 0.2, rate = 1) {
+        if (window.AiPelitAanet && AiPelitAanet.play(name, { vol, rate }))
+          return;
+        try {
+          if (!audio)
+            audio = new (window.AudioContext || window.webkitAudioContext)();
+          audio.resume();
+          const b = audio.createBuffer(
+              1,
+              audio.sampleRate * 0.075,
+              audio.sampleRate,
+            ),
+            a = b.getChannelData(0);
+          for (let i = 0; i < a.length; i++)
+            a[i] = (Math.random() * 2 - 1) * (1 - i / a.length);
+          const s = audio.createBufferSource(),
+            g = audio.createGain();
+          s.buffer = b;
+          g.gain.value = vol * 0.12;
+          s.connect(g);
+          g.connect(audio.destination);
+          s.start();
+        } catch (e) {}
+      }
+      if (window.AiPelitAanet) AiPelitAanet.load(["lahto", "lasi", "onnistui"]);
+      function showMenu() {
+        screen = "menu";
+        pointer = null;
+        boardRequest++;
+        $("menu").hidden = false;
+        $("result").hidden = true;
+        for (const id of ["hud", "hint", "ammo", "pause"]) $(id).hidden = true;
+        const saved = load("kierros", null);
+        $("resume").hidden = !validSaved(saved) || saved.phase === "end";
+        $("resume").textContent =
+          saved && saved.mode === "skeet" ? "Jatka skeetiä" : "Jatka trapia";
+        $("bestTrap").textContent = "Ennätys " + best("trap") + "/25";
+        $("bestSkeet").textContent = "Ennätys " + best("skeet") + "/25";
+        wake();
+      }
+      function start(mode) {
+        round = {
+          mode,
+          index: 0,
+          offset: 0,
+          results: Array(25).fill(null),
+          phase: "ready",
+          discs: [],
+          shots: [],
+          ammo: 0,
+          shotIndex: 0,
+          aim: { yaw: 0, pitch: 0.12 },
+          time: 0,
+          gap: 0,
+          message: "",
+          freshRecord: false,
+        };
+        prepare();
+        showPlay();
+        keep();
+      }
+      function resume() {
+        const s = load("kierros", null);
+        if (!validSaved(s)) return;
+        round = s;
+        showPlay();
+      }
+      function showPlay() {
+        screen = "play";
+        boardRequest++;
+        pointer = null;
+        effects = [];
+        $("menu").hidden = true;
+        $("result").hidden = true;
+        for (const id of ["hud", "hint", "ammo", "pause"]) $(id).hidden = false;
+        if (window.AiPelitScores) AiPelitScores.board(round.mode, title());
+        hud();
+        wake();
+      }
+      function shooter() {
+        if (round.mode === "trap") return { x: (entry()[0] - 3) * 2, z: 0 };
+        const s = entry()[0];
+        if (s === 8) return { x: 0, z: 8 };
+        const a = ((s - 1) * Math.PI) / 6;
+        return { x: -18 * Math.cos(a), z: 20 - 18 * Math.sin(a) };
+      }
+      function originDisc(kind) {
+        if (kind === "T") {
+          const a = (Math.random() - 0.5) * 45 * RAD;
+          return {
+            x: 0,
+            y: 1.3,
+            z: 15,
+            vx: Math.sin(a) * 24,
+            vy: 9 + Math.random() * 1.8,
+            vz: Math.cos(a) * 24,
+          };
+        }
+        return {
+          x: kind === "H" ? -20 : 20,
+          y: kind === "H" ? 3.5 : 1.5,
+          z: 20,
+          vx: kind === "H" ? 25 : -25,
+          vy: kind === "H" ? 3.7 : 5.9,
+          vz: 6,
+        };
+      }
+      function direction(d) {
+        const s = shooter(),
+          x = d.x - s.x,
+          z = d.z - s.z,
+          y = d.y - 1.5;
+        return {
+          yaw: Math.atan2(x, z),
+          pitch: Math.atan2(y, Math.hypot(x, z)),
+          distance: Math.hypot(x, y, z),
+        };
+      }
+      function prepare() {
+        round.phase = "ready";
+        round.discs = [];
+        round.shots = [];
+        round.shotIndex = 0;
+        round.time = 0;
+        round.message = "";
+        round.ammo = round.mode === "trap" ? 2 : entry()[1].length;
+        const d = originDisc(entry()[1][0]);
+        const t = 0.25;
+        d.x += d.vx * t;
+        d.z += d.vz * t;
+        d.y += d.vy * t - 1.5 * t * t;
+        const aim = direction(d);
+        round.aim = { yaw: aim.yaw, pitch: aim.pitch + 0.04 };
+      }
+      function call() {
+        if (!round || screen !== "play" || round.phase !== "ready") return;
+        round.phase = "flight";
+        round.discs = [...entry()[1]].map((kind, i) => ({
+          ...originDisc(kind),
+          kind,
+          slot: round.offset + i,
+          done: false,
+          age: 0,
+        }));
+        round.message = "";
+        keep();
+        hud();
+        wake();
+      }
+      function drag(dx, dy) {
+        if (!round) return;
+        round.aim.yaw = clamp(round.aim.yaw + (dx / scale) * 1.6, -1.52, 1.52);
+        round.aim.pitch = clamp(
+          round.aim.pitch - (dy / scale) * 1.6,
+          -0.22,
+          0.9,
+        );
+        wake();
+      }
+      function fire() {
+        if (
+          !round ||
+          screen !== "play" ||
+          round.phase !== "flight" ||
+          round.ammo <= 0
+        )
+          return;
+        const index = round.shotIndex++,
+          d = round.mode === "trap" ? round.discs[0] : round.discs[index];
+        if (!d) return;
+        round.ammo--;
+        const delay = direction(d).distance / PELLETS;
+        round.shots.push({
+          yaw: round.aim.yaw,
+          pitch: round.aim.pitch,
+          delay,
+          slot: d.slot,
+        });
+        flash = 0.14;
+        sound("lahto", 0.19, 0.8);
+        keep();
+        hud();
+        wake();
+      }
+      function shotHits(shot, d) {
+        const a = direction(d);
+        return (
+          Math.hypot(
+            (a.yaw - shot.yaw) * Math.cos(a.pitch),
+            a.pitch - shot.pitch,
+          ) <=
+          PATTERN + 0.055 / a.distance
+        );
+      }
+      function resolveDisc(d, hit) {
+        if (d.done) return;
+        d.done = true;
+        round.results[d.slot] = hit;
+        round.message = hit ? "Osuma! +1" : "Ohi";
+        if (hit) {
+          for (let i = 0; i < 15; i++)
+            effects.push({
+              x: d.x,
+              y: d.y,
+              z: d.z,
+              vx: (Math.random() - 0.5) * 8,
+              vy: Math.random() * 6,
+              vz: (Math.random() - 0.5) * 6,
+              life: 0.65,
+            });
+          sound("lasi", 0.12, 1.1);
+        }
+        keep();
+        hud();
+      }
+      function finish() {
+        round.phase = "end";
+        round.freshRecord = count() > best(round.mode);
+        if (round.freshRecord) save("ennatys-" + round.mode, count());
+        keep();
+        screen = "result";
+        pointer = null;
+        for (const id of ["hud", "hint", "ammo", "pause"]) $(id).hidden = true;
+        $("result").hidden = false;
+        $("resultLabel").textContent = title() + " · 25 kiekkoa";
+        $("resultScore").textContent = count() + "/25";
+        $("record").textContent = round.freshRecord
+          ? "Uusi ennätys!"
+          : "Ennätys " + best(round.mode) + "/25";
+        if (window.AiPelitScores) {
+          AiPelitScores.board(round.mode, title());
+          AiPelitScores.submit(count());
+        }
+        showBoard();
+        wake();
+      }
+      function showBoard() {
+        const request = ++boardRequest;
+        $("board").textContent = "Ladataan tuloksia…";
+        if (!window.AiPelitScores) {
+          $("board").textContent = "Tuloslista tarvitsee verkkoyhteyden.";
+          return;
+        }
+        AiPelitScores.list("kiekkoammunta", round.mode)
+          .then((data) => {
+            if (request !== boardRequest || screen !== "result") return;
+            $("board").replaceChildren();
+            if (!data.rows || !data.rows.length) {
+              $("board").textContent = "Ei vielä tuloksia.";
+              return;
+            }
+            for (const r of data.rows.slice(0, 10)) {
+              const row = document.createElement("div");
+              for (const text of [r.rank + ".", r.name, r.score + "/25"]) {
+                const s = document.createElement("span");
+                s.textContent = text;
+                row.append(s);
+              }
+              $("board").append(row);
+            }
+          })
+          .catch(() => {
+            if (request === boardRequest)
+              $("board").textContent = "Tuloslista tarvitsee verkkoyhteyden.";
+          });
+      }
+      function advance() {
+        round.offset += entry()[1].length;
+        round.index++;
+        if (round.index === plan().length) {
+          finish();
+          return;
+        }
+        prepare();
+        keep();
+        hud();
+      }
+      function step(dt) {
+        if (screen !== "play" || !round) return;
+        while (dt > 0) {
+          const h = Math.min(dt, 1 / 120);
+          dt -= h;
+          flash = Math.max(0, flash - h);
+          for (const p of effects) {
+            p.life -= h;
+            p.x += p.vx * h;
+            p.y += p.vy * h;
+            p.z += p.vz * h;
+            p.vy -= 10 * h;
+          }
+          effects = effects.filter((p) => p.life > 0);
+          if (round.phase === "gap") {
+            round.gap -= h;
+            if (round.gap <= 0) advance();
+            continue;
+          }
+          if (round.phase !== "flight") continue;
+          round.time += h;
+          for (const d of round.discs) {
+            if (d.done) continue;
+            d.age += h;
+            const drag = Math.exp(-0.035 * h);
+            d.x += d.vx * h;
+            d.z += d.vz * h;
+            d.y += d.vy * h - 1.5 * h * h;
+            d.vy -= 3 * h;
+            d.vx *= drag;
+            d.vz *= drag;
+          }
+          for (const shot of round.shots) {
+            shot.delay -= h;
+            if (shot.delay > 0) continue;
+            const d = round.discs.find((d) => d.slot === shot.slot);
+            effects.push({
+              ring: true,
+              yaw: shot.yaw,
+              pitch: shot.pitch,
+              life: 0.28,
+            });
+            if (d && !d.done) {
+              if (shotHits(shot, d)) resolveDisc(d, true);
+              else if (
+                round.mode === "skeet" ||
+                (round.ammo === 0 &&
+                  !round.shots.some((s) => s !== shot && s.delay > 0))
+              )
+                resolveDisc(d, false);
+              else {
+                round.message = "Ohi · toinen laukaus";
+                hud();
+              }
+            }
+          }
+          round.shots = round.shots.filter((s) => s.delay > 0);
+          for (const d of round.discs) {
+            if (!d.done && (d.age > 2.7 || d.y < 0 || Math.abs(d.x) > 45))
+              resolveDisc(d, false);
+          }
+          if (round.discs.every((d) => d.done) && !round.shots.length) {
+            round.phase = "gap";
+            round.gap = 0.8;
+            pointer = null;
+            keep();
+            hud();
+          }
+        }
+      }
+      function hud() {
+        if (!round || screen !== "play") return;
+        const e = entry();
+        $("station").textContent =
+          title() +
+          " · " +
+          (round.mode === "trap" ? "Paikka " : "Asema ") +
+          e[0] +
+          (round.mode === "trap" ? "/5" : "/8");
+        $("score").textContent = count() + " / 25";
+        $("progress").replaceChildren(
+          ...round.results.map((v) => {
+            const n = document.createElement("i");
+            n.className = v === true ? "hit" : v === false ? "miss" : "";
+            return n;
+          }),
+        );
+        $("ammo").replaceChildren(
+          ...Array.from(
+            { length: round.mode === "trap" ? 2 : e[1].length },
+            (_, i) => {
+              const n = document.createElement("i");
+              if (i >= round.ammo) n.className = "used";
+              return n;
+            },
+          ),
+        );
+        const pair = e[1].length === 2;
+        const order = pair
+          ? e[1][0] === "H"
+            ? "vasen ensin"
+            : "oikea ensin"
+          : "";
+        if (round.phase === "ready")
+          $("hint").innerHTML =
+            (pair
+              ? "Tupla · " + order
+              : "Kiekko " + (round.offset + 1) + "/25") +
+            "<small>Paina radalle · vedä · päästä irti</small>";
+        else if (round.phase === "gap") $("hint").textContent = round.message;
+        else
+          $("hint").textContent =
+            round.message ||
+            (pair ? "Tupla · " + order : "Tähtää hieman eteen");
+      }
+      function fit() {
+        const r = c.getBoundingClientRect();
+        W = r.width;
+        H = r.height;
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        c.width = Math.round(W * dpr);
+        c.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        scale = Math.min(W / 1.25, H / 1.05);
+        wake();
+      }
+      function project(p) {
+        const a = direction(p);
+        let dy = a.yaw - round.aim.yaw;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        return {
+          x: W / 2 + Math.tan(clamp(dy, -1.5, 1.5)) * scale,
+          y: H * 0.43 - Math.tan(a.pitch - round.aim.pitch) * scale,
+          r: clamp(120 / a.distance, 3.5, 13),
+          visible: Math.abs(dy) < 1.4,
+        };
+      }
+      function polygon(points, colour) {
+        ctx.fillStyle = colour;
+        ctx.beginPath();
+        points.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p)));
+        ctx.closePath();
+        ctx.fill();
+      }
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        if (!round || screen !== "play") return;
+        const horizon = H * 0.43 + Math.tan(round.aim.pitch) * scale;
+        ctx.fillStyle = "#6c8750";
+        ctx.fillRect(0, horizon, W, H);
+        for (let i = -14; i <= 14; i++) {
+          const a = i * 0.11 - round.aim.yaw,
+            x = W / 2 + Math.tan(clamp(a, -1.5, 1.5)) * scale;
+          const ht = 22 + Math.sin(i * 9) * 8;
+          polygon(
+            [
+              [x - 19, horizon + 6],
+              [x, horizon - ht],
+              [x + 19, horizon + 6],
+            ],
+            i % 2 ? "#426d54" : "#50775a",
+          );
+        }
+        ctx.fillStyle = "#8e9e67";
+        ctx.fillRect(0, horizon + 18, W, Math.max(0, H - horizon - 18));
+        // The same world positions draw the buildings and flying targets as the camera pans.
+        for (const b of round.mode === "trap"
+          ? [{ x: 0, y: 1, z: 15, high: false }]
+          : [
+              { x: -20, y: 1, z: 20, high: true },
+              { x: 20, y: 1, z: 20, high: false },
+            ]) {
+          const p = project(b);
+          if (!p.visible) continue;
+          const width = clamp(p.r * 6, 24, 80),
+            height = width * (b.high ? 1.4 : 0.65);
+          ctx.fillStyle = "#d1bc8f";
+          ctx.fillRect(p.x - width / 2, p.y - height, width, height);
+          polygon(
+            [
+              [p.x - width * 0.6, p.y - height],
+              [p.x, p.y - height - 12],
+              [p.x + width * 0.6, p.y - height],
+            ],
+            "#344d45",
+          );
+          ctx.fillStyle = "#273c3b";
+          ctx.fillRect(p.x - width * 0.2, p.y - height + 7, width * 0.4, 10);
+        }
+        for (const d of round.discs) {
+          if (d.done) continue;
+          const p = project(d);
+          if (!p.visible) continue;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(d.age * 4 * (d.vx > 0 ? 1 : -1));
+          ctx.shadowColor = "#4b3624";
+          ctx.shadowBlur = 3;
+          ctx.fillStyle = "#ff7738";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, p.r * 1.35, p.r * 0.62, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = "#542d1d";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.strokeStyle = "#ffd596";
+          ctx.beginPath();
+          ctx.ellipse(0, -1, p.r * 0.85, p.r * 0.3, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        for (const p of effects) {
+          ctx.globalAlpha = clamp(p.life * 3, 0, 1);
+          if (p.ring) {
+            const x = W / 2 + Math.tan(p.yaw - round.aim.yaw) * scale,
+              y = H * 0.43 - Math.tan(p.pitch - round.aim.pitch) * scale;
+            ctx.strokeStyle = "#fff8db";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(
+              x,
+              y,
+              Math.tan(PATTERN) * scale * (1.3 - p.life),
+              0,
+              Math.PI * 2,
+            );
+            ctx.stroke();
+          } else {
+            const q = project(p);
+            ctx.fillStyle = "#ff9b51";
+            ctx.fillRect(q.x, q.y, 4, 3);
+          }
+        }
+        ctx.globalAlpha = 1;
+        const x = W / 2,
+          y = H * 0.43,
+          r = Math.max(10, Math.tan(PATTERN) * scale);
+        ctx.strokeStyle = "#193c43";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = "#fff9da";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.fillStyle = "#fef3cb";
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        const gunY = H - 12 - flash * 130;
+        polygon(
+          [
+            [W * 0.47, H],
+            [W * 0.49, gunY - 85],
+            [W * 0.515, gunY - 85],
+            [W * 0.55, H],
+          ],
+          "#344748",
+        );
+        polygon(
+          [
+            [W * 0.49, H],
+            [W * 0.5, gunY - 85],
+            [W * 0.507, gunY - 85],
+            [W * 0.525, H],
+          ],
+          "#96a6a1",
+        );
+        polygon(
+          [
+            [W * 0.43, H],
+            [W * 0.48, gunY - 38],
+            [W * 0.53, gunY - 38],
+            [W * 0.58, H],
+          ],
+          "#7a5038",
+        );
+        if (flash > 0.08) {
+          ctx.fillStyle = "#ffe5a3";
+          ctx.beginPath();
+          ctx.arc(W * 0.503, gunY - 88, 9, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      function active() {
+        return (
+          screen === "play" &&
+          round &&
+          (round.phase === "flight" ||
+            round.phase === "gap" ||
+            effects.length ||
+            flash > 0)
+        );
+      }
+      function wake() {
+        if (!raf && !document.hidden) {
+          lastTime = performance.now();
+          raf = requestAnimationFrame(frame);
+        }
+      }
+      function catchUp(now) {
+        if (!lastTime) {
+          lastTime = now;
+          return;
+        }
+        const elapsed = Math.max(0, (now - lastTime) / 1000);
+        lastTime = now;
+        if (!document.hidden) step(elapsed);
+      }
+      function frame(now) {
+        raf = 0;
+        catchUp(now);
+        draw();
+        if (active() && !document.hidden) raf = requestAnimationFrame(frame);
+      }
+      c.addEventListener("pointerdown", (e) => {
+        if (screen !== "play" || pointer !== null || round.phase === "gap")
+          return;
+        e.preventDefault();
+        catchUp(e.timeStamp);
+        if (round.phase === "gap" || screen !== "play") return;
+        pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        c.setPointerCapture(e.pointerId);
+        call();
+        wake();
+      });
+      c.addEventListener("pointermove", (e) => {
+        if (!pointer || pointer.id !== e.pointerId) return;
+        e.preventDefault();
+        catchUp(e.timeStamp);
+        if (!pointer) return;
+        drag(e.clientX - pointer.x, e.clientY - pointer.y);
+        pointer.x = e.clientX;
+        pointer.y = e.clientY;
+      });
+      c.addEventListener("pointerup", (e) => {
+        if (!pointer || pointer.id !== e.pointerId) return;
+        e.preventDefault();
+        catchUp(e.timeStamp);
+        if (!pointer) return;
+        drag(e.clientX - pointer.x, e.clientY - pointer.y);
+        pointer = null;
+        fire();
+      });
+      function cancel() {
+        pointer = null;
+        keep();
+      }
+      c.addEventListener("pointercancel", cancel);
+      c.addEventListener("lostpointercapture", cancel);
+      document.addEventListener("visibilitychange", () => {
+        pointer = null;
+        if (document.hidden) {
+          keep();
+          cancelAnimationFrame(raf);
+          raf = 0;
+          lastTime = 0;
+        } else wake();
+      });
+      window.addEventListener("pagehide", keep);
+      $("trap").onclick = () => start("trap");
+      $("skeet").onclick = () => start("skeet");
+      $("resume").onclick = resume;
+      $("again").onclick = () => start(round.mode);
+      $("toMenu").onclick = showMenu;
+      $("pause").onclick = () => {
+        keep();
+        showMenu();
+      };
+      new ResizeObserver(fit).observe(c);
+      showMenu();
+      fit();
+    </script>
+    <script src="../../../back.js"></script>
+  </body>
+</html>

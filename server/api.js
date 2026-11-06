@@ -46,6 +46,7 @@
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
 export const GAMES = {
+  kiekkoammunta: { order: 'high', boards: /^(trap|skeet)$/, first: 'trap' }, // hits out of 25
   minigolf: { order: 'low', boards: /^main$/ }, // fewest strokes over nine holes
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
   voimistelu: { order: 'high', boards: /^main$/ }, // best routine total
