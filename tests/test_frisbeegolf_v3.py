@@ -426,6 +426,8 @@ def test_room_speaking_label_clears_landscape_roster(site, _playwright):
         host.wait_for_function("document.getElementById('aipr-talk').textContent.includes('Testi2')")
         bubble = label.bounding_box()
         roster = host.frame_locator('#game').locator('#roster').bounding_box()
+        hud = host.frame_locator('#game').locator('#hud').bounding_box()
+        assert hud['y'] + hud['height'] <= bubble['y']
         assert bubble['y'] + bubble['height'] <= roster['y']
         assert 'Testi2' in label.inner_text()
         guest.mouse.up()
