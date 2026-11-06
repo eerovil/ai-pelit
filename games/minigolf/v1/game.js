@@ -43,6 +43,10 @@ function menu() {
   var best=load('paras',null); $('best').textContent=Number.isFinite(best)?'Paras: '+best+' lyöntiä ('+relative(best-PAR)+')':'Radan par on '+PAR+'.';
   var s=load('kierros',null); $('resume').classList.toggle('hidden',!validSave(s)||s.phase==='end');
   if(validSave(s)) $('resume').textContent='Jatka kierrosta · reikä '+(s.hole+1);
+  if(window.AiPelitScores) AiPelitScores.list('minigolf').then(function(data){
+    if(round)return;
+    $('menuBoard').replaceChildren(...(data.rows||[]).slice(0,10).map(row=>AiPelitScores.row('minigolf',row,false)));
+  }).catch(function(){});
   askDraw();
 }
 function showPlay() {

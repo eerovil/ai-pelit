@@ -62,6 +62,35 @@ def test_controls_and_layout(site,browser,size):
     ctx.close()
 
 
+@pytest.mark.parametrize('size',[(360,640),(390,844),(740,360)])
+def test_menu_shows_top_ten_and_fits(site,browser,size):
+    site.build(ROOT/'games')
+    ctx=browser.new_context(viewport={'width':size[0],'height':size[1]},is_mobile=True,has_touch=True)
+    rows=[{'rank':i+1,'name':'Testi'+str(i),'score':24+i,'version':1} for i in range(10)]
+    ctx.route('**/api/scores?game=minigolf*',lambda r:r.fulfill(json={'rows':rows}))
+    # The fullest menu: a record and an unfinished round too.
+    ctx.add_init_script("""localStorage.setItem('ai-pelit:minigolf:paras','24');""")
+    p=ctx.new_page();p.goto(site.url+URL);p.click('#play');p.evaluate('keepRound()');p.reload()
+    p.wait_for_function("$('menuBoard').children.length===10")
+    assert p.locator('#menuBoard').inner_text().startswith('1.')
+    for sel in ['#best','#play','#resume','#friends','#scores','#menuBoard']:
+        b=p.locator(sel).bounding_box();assert b['y']>=0 and b['y']+b['height']<=size[1],sel
+    assert p.locator('#menuBoard').bounding_box()['height']>=60
+    chip=p.locator('#ai-pelit-tulokset-nappi').bounding_box()
+    for sel in ['#play','#resume','#friends','#scores']:
+        b=p.locator(sel).bounding_box();assert b['y']+b['height']<=chip['y'] or b['x']+b['width']<=chip['x'],sel
+    board=p.locator('#menuBoard').bounding_box()
+    assert board['y']+board['height']<=chip['y'] or board['x']+board['width']<=chip['x']
+    # All ten can be reached: a finger can scroll the list, and nothing above it blocks that.
+    assert p.evaluate("""() => {const b=$('menuBoard');b.scrollTop=9999;
+      for(let e=b;e;e=e.parentElement)if(getComputedStyle(e).touchAction==='none')return false;
+      return b.scrollTop+b.clientHeight>=b.scrollHeight-1;}""")
+    # A list that arrives after the round has started stays out of the way.
+    p.click('#play');assert p.evaluate("round.phase")=='aim'
+    assert not p.locator('#menuBoard').is_visible()
+    ctx.close()
+
+
 def test_cup_water_walls_and_limit(site,browser):
     ctx,p=open_game(site,browser)
     p.click('#play')
