@@ -414,6 +414,26 @@ def test_a_run_coming_back_and_turning_at_once_keeps_one_loop_going(site, contex
     assert page.errors == []
 
 
+def test_a_faster_screen_draws_only_when_a_step_moved_something(site, context):
+    page = open_game(site, context)
+    start(page)
+    got = page.evaluate("""() => {
+      let draws = 0, steps = 0;
+      const d = draw, s = step;
+      window.draw = () => { draws++; d(); };
+      window.step = dt => { steps++; s(dt); };
+      let t = lastT; acc = 0; owed = false;
+      for (let i = 0; i < 120; i++) { t += 1000 / 120; frame(t); }   // one second at 120 Hz
+      const drawn = [draws, steps];
+      // A picture owed for another reason, such as a new size, is drawn with no step.
+      draws = 0; acc = 0; ask(); frame(lastT);
+      return [...drawn, draws];
+    }""")
+    assert 59 <= got[0] <= 61 and got[0] == got[1], got
+    assert got[2] == 1
+    assert page.errors == []
+
+
 def test_the_strip_is_written_again_only_when_its_text_changes(site, context):
     page = open_game(site, context)
     start(page)

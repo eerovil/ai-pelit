@@ -601,8 +601,10 @@ function wheelSound() {
 
 // ---- Loop: fixed 1/60 s steps, and only during a run ----
 // The menu stands still, so it asks for one picture when something changes and none after it (#414).
-let lastT = performance.now(), acc = 0, asked = false;
-function ask() {
+// A run draws only when a step moved something: a 120 Hz screen gets 60 pictures a second, not 120.
+let lastT = performance.now(), acc = 0, asked = false, owed = false;
+function ask() { owed = true; next(); }
+function next() {
   if (asked) return;
   asked = true;
   requestAnimationFrame(frame);
@@ -610,9 +612,10 @@ function ask() {
 function frame(t) {
   asked = false;
   acc += Math.max(0, Math.min(0.1, (t - lastT) / 1000)); lastT = t;
-  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
-  draw(); wheelSound();
-  if (phase !== 'menu') ask();
+  let moved = false;
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; moved = true; }
+  if (moved || owed) { owed = false; draw(); wheelSound(); }
+  if (phase !== 'menu') next();
 }
 // A new size of the screen, however it came; a page coming back may have lost its pictures.
 new ResizeObserver(() => { resize(); ask(); }).observe(c);

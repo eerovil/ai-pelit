@@ -47,16 +47,21 @@ flowchart TD
   T --> A
   A --> U[Pyydä kuva: koko, väri tai paluu sivulle]
   C --> V
-  U --> V{Ajo käynnissä?}
+  U --> V{Ajo, ilma tai kaatuminen käynnissä?}
   V -- Ei --> W[Yksi kuva, sitten silmukka seis]
-  V -- Kyllä --> X[Askeleet ja kuva joka ruutuun]
-  X --> Y{Koko muuttui tai sivu palasi?}
+  V -- Kyllä --> X[Askeleet, enintään 60 sekunnissa]
+  X --> AC{Liikkuiko jokin, tai onko kuva pyydetty?}
+  AC -- Ei --> AD
+  AC -- Kyllä --> Y{Koko muuttui tai sivu palasi?}
   Y -- Kyllä --> Z[Piirrä tausta uudelleen omalle kankaalle]
   Y -- Ei --> AA[Tyhjennä pelikangas: ramppi näkyy läpi]
   Z --> AA
   AA --> AB[Piirrä kuski ja pisteet, palkin teksti vain sen muuttuessa]
+  AB --> AD{Yhä käynnissä?}
+  AD -- Kyllä: seuraava ruutu --> V
+  AD -- Ei: valikossa --> W
   class D,K blue
-  class E,I,L,O,S,V,Y amber
+  class E,I,L,O,S,V,Y,AC,AD amber
   class B,C,F,G,H,J,N,X,Z,AA,AB teal
   class A,U,W violet
   class P,Q,T green
@@ -86,11 +91,13 @@ flowchart TD
 - **Alastulo: paljonko kesken?**: `land()`: the most of a turn still to go on any of the four: up to 0.08 clean, up to 0.25 a wobble, more a fall (`CLEAN`, `SLOPPY`). Sound: `lasku` when the wheels touch; a wobble adds the crowd's `ohhoo`, a fall is `rima` (`fall()`), the metal clatter of the scooter going down. From v3 (#337) a wobble is `lasku` only, no `ohhoo`.
 - **Puhdas: pisteet, putki kasvaa**: `score()`: the tricks' points, ×1.5, ×2… for each more in the same air, 20 a metre of height, +10 % for each clean air in a row (at most double); the same air as the last one pays half, a wobble half. Sound: a clean trick adds `onnistui`.
 - **Ajo loppuu: ennätys, tuloslista, avautuvat temput ja värit**: `finish()`: a run is 60 s (`RUN`); an air under way still lands and counts. Saves the record, sends the points with `AiPelitScores.submit()` (`skuutti` in `public/scores.js` and `server/api.js`, see `tuloslistat.md`) and names what the new record opened. Sound: `voitto` for a new record, otherwise `tappio`.
-- **Pyydä kuva: koko, väri tai paluu sivulle**: `ask()` in `games/skuutti/v5/index.html` asks for one `frame()`: called from `showMenu()` (so also a picked colour), `startRun()`, the window's `resize`, the `ResizeObserver` on `#c`, and `back()` on `visibilitychange` and `pageshow`.
-- **Ajo käynnissä?**: `frame()`: it asks for the next frame only while `phase !== 'menu'`.
+- **Pyydä kuva: koko, väri tai paluu sivulle**: `ask()` in `games/skuutti/v5/index.html` asks for one `frame()` with a picture owed (`owed`): called from `showMenu()` (so also a picked colour), `startRun()`, the window's `resize`, the `ResizeObserver` on `#c`, and `back()` on `visibilitychange` and `pageshow`.
+- **Ajo, ilma tai kaatuminen käynnissä?**: `phase !== 'menu'`, so `ride`, `air` and `down` all run the loop.
 - **Yksi kuva, sitten silmukka seis**: the last `frame()` draws the menu's picture and `wheelSound()` quietens the wheels; nothing runs until the next `ask()`. `startRun()` sets `lastT` and `acc` again, so time in the menu is not played.
-- **Askeleet ja kuva joka ruutuun**: `frame()`: fixed 1/60 s `step()`s, then `draw()` and `wheelSound()`.
+- **Askeleet, enintään 60 sekunnissa**: `frame()`: as many fixed 1/60 s `step()`s as the time since the last frame holds, which on a 120 Hz screen is none every other frame.
+- **Liikkuiko jokin, tai onko kuva pyydetty?**: `moved || owed` in `frame()`: `draw()` and `wheelSound()` run only after a step or an `ask()`, so a faster screen draws no picture that would be the same.
 - **Koko muuttui tai sivu palasi?**: `sceneDrawn` is false after `resize()` changed the canvases' size, or after `back()`, as a page coming back may have lost its pictures.
 - **Piirrä tausta uudelleen omalle kankaalle**: `drawScene()` and `drawRamp()` on `#scene`, under `#c`: sky, city, fence, ground and ramp. Filling the sky's full-screen gradient every frame was what held the test phone at 30 frames a second.
 - **Tyhjennä pelikangas: ramppi näkyy läpi**: `draw()` clears `#c`, which is transparent over `#scene`. Copying a finished picture of the scene each frame instead reached only 42 frames a second.
 - **Piirrä kuski ja pisteet, palkin teksti vain sen muuttuessa**: `drawLive()` (the green pump zone, the copings), `drawRider()`, `drawHud()`. The strip's text is written by `drawStrip()` only when the time, points or record change (`hudKey`) and copied the rest of the time; pops and the first seconds' hint are drawn each frame.
+- **Yhä käynnissä?**: the end of `frame()`: `next()` asks for the next frame while `phase !== 'menu'`, in the air and after a fall as well as on the ramp; `ask()` is `next()` with a picture owed.
