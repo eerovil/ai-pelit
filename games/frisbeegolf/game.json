@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: yhdeksän väylää, kolme kiekkoa ja lennon haamuviiva, yksin tai 2–8 kaverin kanssa.",
       "request": "Frisbee Golf 3D. Allow up to 8 players. Visible ghost line for disc path before throwing",
       "issue": "eerovil/ai-pelit#338"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-06",
+      "note": "Puhepainike ei peitä tuulitietoa tai karttaa kaveripelissä.",
+      "request": "Production verification of #338: move the room microphone away from the wind label and map control.",
+      "issue": "eerovil/ai-pelit#338"
     }
   ]
 }

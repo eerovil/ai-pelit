@@ -6,7 +6,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = 'games/frisbeegolf/v1/'
+URL = 'games/frisbeegolf/v2/'
 PLAN = """() => {
  window.finishFlight=()=>{for(let i=0;i<1500&&round.phase==='fly';i++)step(.05);};
  window.planThrow=()=>{
@@ -191,8 +191,8 @@ def test_reload_rotate_and_midflight_save(site, browser):
 def phones(site, browser):
     site.build(ROOT / 'games')
     relay, contexts = Relay(), []
-    def phone(name, shell=False):
-        ctx = browser.new_context(viewport={'width': 360, 'height': 740}, is_mobile=True, has_touch=True)
+    def phone(name, shell=False, size=(360, 740)):
+        ctx = browser.new_context(viewport={'width': size[0], 'height': size[1]}, is_mobile=True, has_touch=True)
         contexts.append(ctx)
         if shell:
             ctx.add_init_script('window.__aiPelitHuoneSivu=true;')
@@ -299,15 +299,16 @@ def test_farthest_disc_throws_first_and_offline_continues(site, browser):
     ctx.close()
 
 
-def test_real_room_page_frame_can_play(phones):
+@pytest.mark.parametrize('size', [(360, 640), (390, 844), (740, 360)])
+def test_real_room_page_frame_can_play(phones, size):
     phone, relay = phones
-    host = phone('Testi1', shell=True)
+    host = phone('Testi1', shell=True, size=size)
     host.click('#friends'); host.click('#aipr-create')
     host.wait_for_url('**/huone/**')
     host.wait_for_function("document.getElementById('game')?.contentWindow?.AiPelitRooms?.isHost")
     hf = host.frame_locator('#game')
     code = host.locator('#code b').inner_text()
-    guest = phone('Testi2', shell=True)
+    guest = phone('Testi2', shell=True, size=size)
     guest.click('#friends'); guest.fill('#aipr-codeIn', code); guest.click('#aipr-joinBtn')
     guest.wait_for_url('**/huone/**')
     host.wait_for_function("document.getElementById('game').contentWindow.AiPelitRooms.members.filter(p=>p.on).length===2")
@@ -317,6 +318,13 @@ def test_real_room_page_frame_can_play(phones):
     for f in (hgame, ggame):
         f.wait_for_function("round&&round.phase==='aim'")
         f.evaluate(PLAN)
+    mic = host.locator('#aipr-mic')
+    mic.wait_for(state='visible')
+    m = mic.bounding_box()
+    for sel in ['#hud', '#map', '#roster', '#controls']:
+        r = hf.locator(sel).bounding_box()
+        assert (m['x'] + m['width'] <= r['x'] or r['x'] + r['width'] <= m['x']
+                or m['y'] + m['height'] <= r['y'] or r['y'] + r['height'] <= m['y']), sel
     b = hf.locator('#throwPad').bounding_box()
     x, y = b['x'] + b['width']/2, b['y']+24
     host.mouse.move(x,y); host.mouse.down(); host.mouse.move(x,y+45,steps=4); host.mouse.up()
