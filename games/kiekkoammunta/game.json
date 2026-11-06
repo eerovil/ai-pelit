@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: trap ja skeet, tähtäys vetämällä, 25 kiekon kierrokset ja lajikohtaiset tuloslistat.",
       "request": "Kiekkoammunta haulikolla. Trap ja skeet. Tähtäys vetämällä ja laukaus päästämällä irti.",
       "issue": "eerovil/ai-pelit#339"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-06",
+      "note": "Skeet on helpompi: kiekot lentävät hitaammin ja haulien osuma-alue on isompi.",
+      "request": "Kontrollit ihan hyvät. Skeet on liian vaikea",
+      "issue": "eerovil/ai-pelit#339"
     }
   ]
 }
