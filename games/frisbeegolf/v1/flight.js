@@ -25,7 +25,7 @@ function fly(shot,h,shake=true) {
   const speed=range/duration, arc=putt?.25:1+range*.022*d.glide/4;
   const dx=Math.sin(angle), dz=Math.cos(angle), path=[];
   const sy=ground(h,...start)+1.05;
-  let safe=start.slice(), reason='grass', inBasket=false, hit=false;
+  let safe=start.slice(), reason='grass', inBasket=false, hit=false, obstacle=null;
   const point=(t)=>{
     const side=putt?0:range*(shot.curve*.22*t*t+d.turn*.012*Math.sin(Math.PI*t)+d.fade*.009*t*t*t);
     const x=start[0]+dx*range*t+dz*side+h.wind[0]*t*t*duration*.38;
@@ -42,17 +42,28 @@ function fly(shot,h,shake=true) {
     if(!hit&&Math.hypot(p.x-h.basket[0],p.z-h.basket[1])<.38&&p.y-bh>=.5&&p.y-bh<=1.3) {
       reason='rattle';hit=true;break;
     }
-    if(h.trees.some(t=>Math.hypot(p.x-t[0],p.z-t[1])<t[2]+.1&&p.y<ground(h,t[0],t[1])+t[3])) {
+    const tree=h.trees.find(t=>Math.hypot(p.x-t[0],p.z-t[1])<t[2]+.1&&p.y<ground(h,t[0],t[1])+t[3]);
+    if(tree) {
+      obstacle=[tree[0],tree[1],tree[2]+.1];
       reason='tree';hit=true;break;
     }
-    if(h.rocks.some(r=>Math.hypot(p.x-r[0],p.z-r[1])<r[2]&&p.y<ground(h,r[0],r[1])+r[2]*.65)) {
+    const rock=h.rocks.find(r=>Math.hypot(p.x-r[0],p.z-r[1])<r[2]&&p.y<ground(h,r[0],r[1])+r[2]*.65);
+    if(rock) {
+      obstacle=[rock[0],rock[1],rock[2]];
       reason='rock';hit=true;break;
     }
   }
   let p=path[path.length-1];
   if(!inBasket) {
     // A collision drops to its foot; an ordinary landing slides a little farther.
-    const landing={...p,y:ground(h,p.x,p.z)+.05,t:p.t+.28};path.push(landing);p=landing;
+    const landing={...p,t:p.t+.28};
+    if(obstacle){
+      // Leave the next lie outside the collision footprint, on the side of impact.
+      const ox=p.x-obstacle[0],oz=p.z-obstacle[1],length=Math.hypot(ox,oz),radius=obstacle[2]+.05;
+      landing.x=obstacle[0]+(length?ox/length:-dx)*radius;
+      landing.z=obstacle[1]+(length?oz/length:-dz)*radius;
+    }
+    landing.y=ground(h,landing.x,landing.z)+.05;path.push(landing);p=landing;
     if(!hit)for(let i=1;i<=12;i++) {
       const q={...p,x:p.x+dx*range*.018*i/12,z:p.z+dz*range*.018*i/12,t:p.t+i*.035};
       q.y=ground(h,q.x,q.z)+.05;path.push(q);

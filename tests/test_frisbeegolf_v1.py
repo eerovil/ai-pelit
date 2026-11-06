@@ -113,6 +113,27 @@ def test_flight_catches_determinism_ghost_and_hazards(site, browser):
     ctx.close()
 
 
+@pytest.mark.parametrize('kind', ['tree', 'rock'])
+def test_collision_lie_allows_next_throw_away(site, browser, kind):
+    ctx, p = open_game(site, browser)
+    result = p.evaluate("""kind => {
+      const h={...HOLES[0],trees:[],rocks:[],hill:0,wind:[0,0],basket:[100,100],water:[]};
+      if(kind==='tree')h.trees=[[0,12,.5,8,'birch']];
+      else h.rocks=[[0,12,3]];
+      const shot={lie:[0,0],angle:0,disc:2,power:1,curve:0,seed:1};
+      const first=fly(shot,h,false);
+      const second=fly({...shot,lie:first.lie,angle:Math.PI},h,false);
+      return {reason:first.reason,clearance:distance(first.lie,[0,12]),
+        moved:distance(first.lie,second.lie),next:second.reason};
+    }""", kind)
+    assert result['reason'] == kind
+    assert result['clearance'] > (.6 if kind == 'tree' else 3)
+    assert result['moved'] > 10
+    assert result['next'] == 'grass'
+    assert not p.errors
+    ctx.close()
+
+
 def test_complete_nine_holes_and_second_round(site, browser):
     ctx, p = open_game(site, browser)
     p.click('#play')
