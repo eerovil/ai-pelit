@@ -15,6 +15,13 @@
       "note": "Puhepainike ei peitä tuulitietoa tai karttaa kaveripelissä.",
       "request": "Production verification of #338: move the room microphone away from the wind label and map control.",
       "issue": "eerovil/ai-pelit#338"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-06",
+      "note": "Puhepainike pysyy erillään myös tuloskortista.",
+      "request": "Final production verification of #338: keep the microphone clear of both play controls and the result card.",
+      "issue": "eerovil/ai-pelit#338"
     }
   ]
 }

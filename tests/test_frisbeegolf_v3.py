@@ -6,7 +6,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = 'games/frisbeegolf/v2/'
+URL = 'games/frisbeegolf/v3/'
 PLAN = """() => {
  window.finishFlight=()=>{for(let i=0;i<1500&&round.phase==='fly';i++)step(.05);};
  window.planThrow=()=>{
@@ -332,3 +332,9 @@ def test_real_room_page_frame_can_play(phones, size):
     hgame.evaluate('finishFlight()')
     ggame.wait_for_function('round.turn===1&&round.players[0].strokes===1')
     assert not host.errors and not guest.errors
+
+    hgame.evaluate("round.phase='end';round.hole=8;round.players.forEach(p=>p.scores=[3,3,3,3,4,3,4,3,4]);showCard();")
+    for sel in ['#cardTitle', '#scoreRows', '#next']:
+        r = hf.locator(sel).bounding_box()
+        assert (m['x'] + m['width'] <= r['x'] or r['x'] + r['width'] <= m['x']
+                or m['y'] + m['height'] <= r['y'] or r['y'] + r['height'] <= m['y']), sel
