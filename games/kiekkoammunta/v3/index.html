@@ -251,6 +251,57 @@
         padding: 11px 15px;
         font-size: 12px;
       }
+      #who {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      #who span {
+        max-width: 112px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        padding: 3px 7px;
+        border-radius: 9px;
+        font-size: 11px;
+        color: #fff;
+        background: #163a3ed9;
+      }
+      #who .on {
+        color: #173e40;
+        background: #f2ba72;
+      }
+      .friends {
+        width: 100%;
+        margin-top: 12px;
+      }
+      #kk-room {
+        margin-top: 10px;
+      }
+      #kk-room .help {
+        margin: 0;
+        text-align: center;
+        color: #6b5a44;
+      }
+      #kk-room .chips {
+        display: flex;
+        gap: 8px;
+      }
+      #aipr #kk-room button {
+        flex: 1;
+        padding: 10px;
+        border-radius: 10px;
+        color: #5b4a36;
+        background: #e6dfcf;
+        box-shadow: none;
+      }
+      #aipr #kk-room button.on {
+        color: #173e40;
+        font-weight: 750;
+        background: #f2ba72;
+      }
       #result .content {
         max-width: 600px;
       }
@@ -326,6 +377,10 @@
           margin-bottom: 10px;
           padding: 9px;
         }
+        .friends {
+          margin-top: 8px;
+          padding: 9px;
+        }
         .resultgrid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -353,6 +408,10 @@
           width: 7px;
           height: 7px;
         }
+        #who {
+          max-width: 240px;
+          margin-left: auto;
+        }
       }
     </style>
   </head>
@@ -366,6 +425,7 @@
         <span id="station"></span>
         <div id="score"></div>
         <div id="progress"></div>
+        <div id="who" hidden></div>
       </div>
       <div id="hint" hidden></div>
       <div id="ammo" hidden></div>
@@ -404,6 +464,9 @@
                 ><span class="arrow">↔</span>
               </button>
             </div>
+            <button id="friends" class="quiet friends">
+              👥 Pelaa kavereiden kanssa
+            </button>
           </div>
         </div>
       </section>
@@ -420,7 +483,7 @@
             </div>
           </div>
           <div>
-            <div class="boardtitle">Parhaat tulokset · vieritä</div>
+            <div class="boardtitle" id="boardTitle">Parhaat tulokset · vieritä</div>
             <div id="board"></div>
           </div>
         </div>
@@ -432,6 +495,13 @@
       data-game="kiekkoammunta"
       data-order="high"
       data-corner="top-right"
+    ></script>
+    <script
+      src="../../../rooms.js"
+      data-game="kiekkoammunta"
+      data-min="2"
+      data-max="6"
+      data-voice-corner="bottom-right"
     ></script>
     <script>
       "use strict";
@@ -481,6 +551,14 @@
         flash = 0;
       let effects = [],
         boardRequest = 0;
+      // A room's round (room.js): `match` is what the host keeps, `round` what this phone draws.
+      const R = window.AiPelitRooms;
+      let online = false,
+        roomRound = 0,
+        roomHost = "",
+        match = null,
+        shooting = 0,
+        aimTo = null;
       const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
       function load(k, d) {
         try {
@@ -506,13 +584,13 @@
         return round.results.filter((v) => v === true).length;
       }
       function entry() {
-        return plan()[round.index];
+        return plan()[Math.min(round.index, plan().length - 1)];
       }
       function title() {
         return round.mode === "trap" ? "Trap" : "Skeet";
       }
       function keep() {
-        if (round) save("kierros", {...round, shots: round.shots.filter(s => s.delay > 0)});
+        if (round && !online) save("kierros", {...round, shots: round.shots.filter(s => s.delay > 0)});
       }
       function validSaved(r) {
         if (!r || !["trap", "skeet"].includes(r.mode)) return false;
@@ -576,6 +654,7 @@
         $("result").hidden = true;
         for (const id of ["hud", "hint", "ammo", "pause"]) $(id).hidden = true;
         const saved = load("kierros", null);
+        $("friends").hidden = !R;
         $("resume").hidden = !validSaved(saved) || saved.phase === "end";
         $("resume").textContent =
           saved && saved.mode === "skeet" ? "Jatka skeetiä" : "Jatka trapia";
@@ -618,6 +697,7 @@
         $("menu").hidden = true;
         $("result").hidden = true;
         for (const id of ["hud", "hint", "ammo", "pause"]) $(id).hidden = false;
+        $("pause").hidden = online;
         if (window.AiPelitScores) AiPelitScores.board(round.mode, title());
         hud();
         wake();
@@ -680,6 +760,7 @@
       }
       function call() {
         if (!round || screen !== "play" || round.phase !== "ready") return;
+        if (round.watch || (online && R.paused)) return;
         round.phase = "flight";
         round.discs = [...entry()[1]].map((kind, i) => ({
           ...originDisc(kind),
@@ -689,18 +770,20 @@
           age: 0,
         }));
         round.message = "";
+        live("fly", { discs: round.discs, aim: round.aim });
         keep();
         hud();
         wake();
       }
       function drag(dx, dy) {
-        if (!round) return;
+        if (!round || round.watch) return;
         round.aim.yaw = clamp(round.aim.yaw + (dx / scale) * 1.6, -1.52, 1.52);
         round.aim.pitch = clamp(
           round.aim.pitch - (dy / scale) * 1.6,
           -0.22,
           0.9,
         );
+        liveAim();
         wake();
       }
       function fire() {
@@ -708,6 +791,7 @@
           !round ||
           screen !== "play" ||
           round.phase !== "flight" ||
+          round.watch ||
           round.ammo <= 0
         )
           return;
@@ -724,6 +808,7 @@
         });
         flash = 0.14;
         sound("lahto", 0.19, 0.8);
+        live("shot", { shot: round.shots[round.shots.length - 1] });
         keep();
         hud();
         wake();
@@ -746,6 +831,7 @@
         d.done = true;
         round.results[d.slot] = hit;
         round.message = hit ? "Osuma! +1" : "Ohi";
+        if (!round.watch) live("res", { slot: d.slot, hit });
         if (hit) {
           for (let i = 0; i < 15; i++)
             effects.push({
@@ -821,6 +907,10 @@
         }
         round.offset += entry()[1].length;
         round.index++;
+        if (online) {
+          ownEntryDone();
+          return;
+        }
         if (round.index === plan().length) {
           finish();
           return;
@@ -838,6 +928,11 @@
           const h = Math.min(dt, 1 / 120);
           dt -= h;
           flash = Math.max(0, flash - h);
+          if (round.watch && aimTo) {
+            const k = Math.min(1, h * 14);
+            round.aim.yaw += (aimTo.yaw - round.aim.yaw) * k;
+            round.aim.pitch += (aimTo.pitch - round.aim.pitch) * k;
+          }
           for (const p of effects) {
             p.life -= h;
             p.x += p.vx * h;
@@ -848,7 +943,10 @@
           effects = effects.filter((p) => p.life > 0);
           if (round.phase === "gap") {
             round.gap -= h;
-            if (round.gap <= 0) advance();
+            if (round.gap <= 0) {
+              if (round.watch) syncView(true);
+              else advance();
+            }
             continue;
           }
           if (round.phase !== "flight") continue;
@@ -874,7 +972,8 @@
               pitch: shot.pitch,
               life: 0.28,
             });
-            if (d && !d.done) {
+            // A watching phone draws the ring; the shooter's phone says what it hit.
+            if (d && !d.done && !round.watch) {
               if (shotHits(shot, d)) resolveDisc(d, true);
               else if (
                 round.mode === "skeet" ||
@@ -904,6 +1003,7 @@
       }
       function hud() {
         if (!round || screen !== "play") return;
+        if (online) who();
         const e = entry();
         $("station").textContent =
           title() +
@@ -935,8 +1035,11 @@
             ? "vasen ensin"
             : "oikea ensin"
           : "";
-        if (round.phase === "ready")
+        if (round.phase === "wait") $("hint").textContent = "Vuoro ammuttu";
+        else if (round.watch && round.phase !== "gap") watchHint(pair);
+        else if (round.phase === "ready")
           $("hint").innerHTML =
+            (online ? "Sinun vuorosi · " : "") +
             (pair
               ? "Tupla · " + order
               : "Kiekko " + (round.offset + 1) + "/25") +
@@ -1150,7 +1253,8 @@
         if (active() && !document.hidden) raf = requestAnimationFrame(frame);
       }
       c.addEventListener("pointerdown", (e) => {
-        if (screen !== "play" || pointer !== null || round.phase === "gap")
+        if (screen !== "play" || pointer !== null || round.phase === "gap" ||
+            round.phase === "wait" || round.watch)
           return;
         e.preventDefault();
         catchUp(e.timeStamp);
@@ -1197,12 +1301,16 @@
       $("trap").onclick = () => start("trap");
       $("skeet").onclick = () => start("skeet");
       $("resume").onclick = resume;
-      $("again").onclick = () => start(round.mode);
+      $("again").onclick = () => (online ? backToRoom() : start(round.mode));
       $("toMenu").onclick = showMenu;
+      $("friends").onclick = () => R.open();
       $("pause").onclick = () => {
         keep();
         showMenu();
       };
+    </script>
+    <script src="room.js"></script>
+    <script>
       new ResizeObserver(fit).observe(c);
       showMenu();
       fit();

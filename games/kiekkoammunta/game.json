@@ -15,6 +15,13 @@
       "note": "Skeet on helpompi: kiekot lentävät hitaammin ja haulien osuma-alue on isompi.",
       "request": "Kontrollit ihan hyvät. Skeet on liian vaikea",
       "issue": "eerovil/ai-pelit#339"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-06",
+      "note": "Moninpeli: 2–6 puhelinta ampuu samassa huoneessa vuorotellen, noin viisi kiekkoa vuorossa.",
+      "request": "Ja missä moninpeli. Vuorotellen, vaikka 3 kiekkoa per vuoro. Tai ehkä vähän enemmän",
+      "issue": "eerovil/ai-pelit#339"
     }
   ]
 }
