@@ -1,0 +1,13 @@
+{
+  "title": "Kiekkoammunta",
+  "description": "Ammu savikiekkoja haulikolla: trap tai skeet, 25 kiekkoa, tähtää vetämällä ja laukaise päästämällä irti.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-06",
+      "note": "Ensimmäinen versio: trap ja skeet, tähtäys vetämällä, 25 kiekon kierrokset ja lajikohtaiset tuloslistat.",
+      "request": "Kiekkoammunta haulikolla. Trap ja skeet. Tähtäys vetämällä ja laukaus päästämällä irti.",
+      "issue": "eerovil/ai-pelit#339"
+    }
+  ]
+}

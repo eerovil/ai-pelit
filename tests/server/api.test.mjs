@@ -392,3 +392,20 @@ test('Minigolf ranks the lowest nine-hole total first and rejects unknown course
   assert.deepEqual((await call('GET', '/api/scores?game=minigolf')).body.rows.map(r => [r.name, r.score]), [['Bertta',25],['Aino',30]]);
   assert.equal((await call('GET', '/api/scores/top')).body.games.minigolf.score, 25);
 });
+
+test('Kiekkoammunta keeps trap and skeet separate, highest first and trap on the shelf', async () => {
+  const { call, admin } = setup();
+  for (const [id, name] of [[A, 'Aino'], [B, 'Bertta']]) {
+    await call('POST', '/api/players', { id, name });
+    await admin(id, 'approved');
+  }
+  const post = (player, board, score) => call('POST', '/api/scores', { player, game: 'kiekkoammunta', board, version: 1, score });
+  assert.equal((await post(A, 'trap', 18)).status, 200);
+  assert.equal((await post(B, 'trap', 22)).status, 200);
+  assert.equal((await post(B, 'trap', 12)).status, 200);
+  assert.equal((await post(A, 'skeet', 25)).status, 200);
+  assert.equal((await post(A, 'main', 25)).status, 400);
+  assert.deepEqual((await call('GET', '/api/scores?game=kiekkoammunta&board=trap')).body.rows.map(r => [r.name,r.score]), [['Bertta',22],['Aino',18]]);
+  assert.deepEqual((await call('GET', '/api/scores?game=kiekkoammunta&board=skeet')).body.rows.map(r => [r.name,r.score]), [['Aino',25]]);
+  assert.deepEqual((await call('GET', '/api/scores/top')).body.games.kiekkoammunta, { board: 'trap', name: 'Bertta', score: 22, level: null, version: 1 });
+});
