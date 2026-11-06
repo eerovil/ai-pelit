@@ -121,8 +121,30 @@ def test_every_hole_and_second_round_through_controls(site,browser,size):
         if hole<8:p.evaluate('step(1.3)')
     assert p.evaluate("round.phase==='end'")
     assert p.evaluate("load('paras',null)===total(round.players[0])")
+    # This phone's first score: the nickname question comes over the card, and the score waits for it.
+    assert p.locator('#ai-pelit-nimi').is_visible()
+    assert p.evaluate("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono')||'{}')).length")==1
+    p.locator('#ai-pelit-tulokset button',has_text='Sulje').click()
+    assert p.locator('#next').is_visible()
     p.click('#next');assert p.evaluate("round.hole===0&&round.phase==='aim'&&round.players[0].strokes===0")
     pull(p,-math.pi/2,.58);p.evaluate('runBall()');assert p.evaluate('round.players[0].strokes')==1
+    assert not p.errors;ctx.close()
+
+
+def test_hole_records_show_on_the_card_and_name_is_asked_once(site,browser):
+    ctx,p=open_game(site,browser);p.click('#play')
+    finish="round.hole=8;round.phase='end';round.players[0].scores=[3,3,3,3,3,3,3,3,3];finishRecord();showCard()"
+    p.evaluate("save('reiat',[1,2,2,3,3,3,3,3,4])");p.evaluate(finish)
+    rows=p.evaluate("[...$('scoreRows').rows].map(r=>[...r.cells].map(c=>c.textContent))")
+    assert rows[0]==['Reikä','Par','Sinä','Ennätys']
+    assert rows[1]==['1','2','3','1'] and rows[9]==['9','4','3','3']
+    assert rows[10]==['Yht.','26','27','23']
+    assert p.locator('#ai-pelit-nimi').is_visible()
+    p.locator('#ai-pelit-tulokset button',has_text='Sulje').click()
+    for sel in ['#next','#toMenu','#scoreRows']:
+        b=p.locator(sel).bounding_box();assert b['y']>=0 and b['y']+b['height']<=740
+    p.click('#next');p.evaluate(finish)
+    assert p.locator('#ai-pelit-nimi').count()==0
     assert not p.errors;ctx.close()
 
 

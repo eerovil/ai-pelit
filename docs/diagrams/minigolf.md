@@ -67,8 +67,8 @@ flowchart TD
 - **Pallo vierii: seinät kimmottavat, hiekka hidastaa, rinne kallistaa, tuulimylly torjuu**: `step(dt)` in `game.js` calls `golfStep()` in `golf.js`, fixed 1/240 s steps so a fast ball never passes through a wall.
 - **Pallo hyppää reiän yli ja vierii eteenpäin**: the ball drops only when it is over the cup slower than the capture speed (`CUP_SPEED`); a faster ball lips out.
 - **Reiän tulos 7, siirrytään eteenpäin**: the stroke limit of Finnish rata-minigolf: a ball not holed in six strokes scores 7.
-- **Tuloskortti: lyönnit, par, ero**: `showCard()` in `game.js`; with friends, every player's column.
-- **Ennätys ja tuloslista, Pelaa uudestaan**: `finishRecord()` saves `paras` and `reiat` the moment the last hole is done, in a round alone only; `AiPelitScores.submit(total, true)` with `data-order="low"`. A round in a room counts only in `kaverit`.
+- **Tuloskortti: lyönnit, par, ero**: `showCard()` in `game.js`; alone, this round and each hole's record (`reiat`, column Ennätys); with friends, every player's column.
+- **Ennätys ja tuloslista, Pelaa uudestaan**: `finishRecord()` saves `paras` and `reiat` the moment the last hole is done, in a round alone only; `AiPelitScores.submit(total, true)` with `data-order="low"`; on the phone's first score `showCard()` then calls `AiPelitScores.prompt()`, so the nickname question comes over the finished card. A round in a room counts only in `kaverit`.
 - **Tulos kaikille kerran, takaisin huoneeseen**: `AiPelitRooms.deliver()`; each phone saves its result once (`once(round)`).
 
 - **Yksin seuraava reikä itsestään, kavereiden kanssa tuloskortti ja Seuraava reikä**: alone, `advance()` shows the hole's result as a notice and `step()` calls `nextHole()` after 1.2 s, with no scorecard between holes; the card comes at the end. In a room, `showCard()` shows all nine rows and the running totals after each hole, and `nextHole()` begins the next when the host taps.

@@ -4,7 +4,7 @@ var round=null, online=false, roomRound=0, roomHost='', aim=null, dragging=null;
 var colors=['#fff5d8','#f3b765','#8bc8ff','#e7a3d3','#b2e077','#c4b0ff'];
 var raf=0,lastFrame=0,accumulator=0,lastSend=0,rollingSound=null,lastNoise=0;
 var $=id=>document.getElementById(id);
-var noticeTimer=0,lastNotice='';
+var noticeTimer=0,lastNotice='',askName=false;
 var PAR=HOLES.reduce((n,h)=>n+h.par,0);
 function load(key,fallback) { try { var x=localStorage.getItem('ai-pelit:minigolf:'+key); return x===null?fallback:JSON.parse(x); } catch(e) { return fallback; } }
 function save(key,v) { try { localStorage.setItem('ai-pelit:minigolf:'+key,JSON.stringify(v)); } catch(e) {} }
@@ -87,7 +87,8 @@ function finishRecord() {
   if(best===null||score<best) save('paras',score);
   var holes=load('reiat',[]); if(!Array.isArray(holes)) holes=[];
   p.scores.forEach((n,i)=>{holes[i]=Number.isFinite(holes[i])?Math.min(holes[i],n):n;}); save('reiat',holes);
-  if(window.AiPelitScores) AiPelitScores.submit(score,true);
+  // The first score asks for a nickname: put off until the card is under it (see showCard).
+  if(window.AiPelitScores) askName=AiPelitScores.submit(score,true)===true;
 }
 function showCard() {
   stopSound(); $('card').style.display='flex'; $('menu').style.display='none';
@@ -102,10 +103,12 @@ function showCard() {
   var table=$('scoreRows'); table.replaceChildren();
   var caption=document.createElement('caption'); caption.textContent=online?'Pelaajat numerojärjestyksessä':'Tuloskortti'; table.append(caption);
   var head=table.createTHead().insertRow();
-  ['Reikä','Par',...round.players.map((p,i)=>online?String(i+1):'Sinä')].forEach(s=>{var th=document.createElement('th');th.textContent=s;head.append(th);});
+  var bests=load('reiat',[]);if(!Array.isArray(bests))bests=[];
+  var bestOf=i=>Number.isFinite(bests[i])?bests[i]:'–',extra=online?[]:['Ennätys'];
+  ['Reikä','Par',...round.players.map((p,i)=>online?String(i+1):'Sinä'),...extra].forEach(s=>{var th=document.createElement('th');th.textContent=s;head.append(th);});
   var body=table.createTBody();
-  HOLES.forEach((h,i)=>{var row=body.insertRow(); [String(i+1),h.par,...round.players.map(p=>p.scores[i]||'–')].forEach(s=>row.insertCell().textContent=s);});
-  var foot=table.createTFoot().insertRow(); ['Yht.',PAR,...round.players.map(total)].forEach(s=>foot.insertCell().textContent=s);
+  HOLES.forEach((h,i)=>{var row=body.insertRow(); [String(i+1),h.par,...round.players.map(p=>p.scores[i]||'–'),...(online?[]:[bestOf(i)])].forEach(s=>row.insertCell().textContent=s);});
+  var foot=table.createTFoot().insertRow(); ['Yht.',PAR,...round.players.map(total),...(online?[]:[HOLES.every((h,i)=>Number.isFinite(bests[i]))?HOLES.reduce((n,h,i)=>n+bests[i],0):'–'])].forEach(s=>foot.insertCell().textContent=s);
   if(online&&end) {
     var details=document.createElement('details'),label=document.createElement('summary');
     label.textContent='Tuloskortti · '+total(mineP)+' lyöntiä';details.append(label);
@@ -117,6 +120,7 @@ function showCard() {
   $('next').disabled=!end&&!authority(); $('toMenu').classList.toggle('hidden',online||!end);
   $('board').replaceChildren();
   if(end&&window.AiPelitScores) AiPelitScores.list('minigolf').then(function(data){ if(!round||round.phase!=='end')return; $('board').replaceChildren(); (data.rows||[]).slice(0,10).forEach(row=>$('board').append(AiPelitScores.row('minigolf',row,false))); }).catch(function(){});
+  if(askName){askName=false;AiPelitScores.prompt();}
   askDraw();
 }
 function nextHole() {
