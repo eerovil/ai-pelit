@@ -313,6 +313,103 @@ def test_the_menu_fits_upright_and_sideways(site, context, browser):
         ctx.close()
 
 
+# #414: the loop draws only during a run, and the still scene only once for each size.
+# Counts the draws of the page's real loop, which open_game() stops.
+LIVE = """() => { window.draws = 0; const d = draw; window.draw = () => { draws++; d(); }; }"""
+
+
+def live_game(site, context):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + URL)
+    page.evaluate(LIVE)
+    page.wait_for_function("!asked")
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    return page
+
+
+def draws_in(page, ms=300):
+    page.evaluate("draws = 0")
+    page.wait_for_timeout(ms)
+    return page.evaluate("draws")
+
+
+def test_the_menu_draws_nothing_until_something_changes(site, context):
+    page = live_game(site, context)
+    assert draws_in(page) == 0
+    # A picked colour shows on the rider behind the menu: one picture, then still again.
+    page.evaluate("draws = 0")
+    page.locator("#colors button").nth(1).click()
+    page.wait_for_function("draws > 0 && !asked")
+    assert draws_in(page) == 0
+    assert page.errors == []
+
+
+def test_a_run_draws_every_frame_and_its_end_stops_the_loop_with_the_wheels_quiet(site, context):
+    page = live_game(site, context)
+    page.click("#go")
+    assert draws_in(page) > 3
+    page.evaluate("P.s = 0; P.v = 5; wheelSound()")
+    page.evaluate("timeLeft = 0.001")
+    page.wait_for_function("phase === 'menu' && !asked")
+    assert draws_in(page) == 0
+    assert page.evaluate("!wheels || wheels.vol === 0")
+    # The next run moves from where it starts, with no jump for the time spent in the menu.
+    page.wait_for_timeout(300)
+    page.click("#go")
+    assert page.evaluate("timeLeft") > 59.8
+    assert draws_in(page) > 3
+
+
+def test_a_run_leaves_the_still_scene_alone_and_a_new_size_draws_it_again(site, context):
+    page = live_game(site, context)
+    page.evaluate("""() => {
+      window.scenes = 0; const d = drawScene; window.drawScene = v => { scenes++; d(v); };
+    }""")
+    page.click("#go")
+    assert draws_in(page) > 3
+    assert page.evaluate("scenes") == 0
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("scenes === 1 && W === 740", polling=100)
+    assert page.evaluate("[scene.width, scene.height]") == page.evaluate("[c.width, c.height]")
+
+
+def test_coming_back_to_the_page_draws_the_menu_again(site, context):
+    page = live_game(site, context)
+    page.evaluate("draws = 0; document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_function("draws === 1 && !asked && sceneDrawn")
+    assert draws_in(page) == 0
+
+
+def test_the_strip_is_written_again_only_when_its_text_changes(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("""() => {
+      window.strips = 0; const d = drawStrip; window.drawStrip = y => { strips++; d(y); };
+      draw();
+    }""")
+    page.evaluate("strips = 0; draw(); draw(); draw()")
+    assert page.evaluate("strips") == 0
+    page.evaluate("points = 120; draw(); draw()")
+    assert page.evaluate("strips") == 1
+    page.evaluate("timeLeft -= 1; draw()")
+    assert page.evaluate("strips") == 2
+
+
+def test_the_game_canvas_shows_the_scene_through_it_and_the_rider_and_strip_on_it(site, context):
+    page = open_game(site, context)
+    start(page)
+    page.evaluate("draw()")
+    px = """([cv, u, v]) => Array.from(document.getElementById(cv).getContext('2d')
+      .getImageData(u * DPR, v * DPR, 1, 1).data)"""
+    assert page.evaluate(px, ["c", 180, 10])[3] == 0                 # clear over the sky
+    assert page.evaluate(px, ["scene", 180, 10])[2] > 200            # the sky, blue
+    y = page.evaluate("(wide ? SAFE_T + 6 : SAFE_T + 46) + 2")
+    assert page.evaluate(px, ["c", 180, y])[3] > 100                 # the strip
+    assert page.errors == []
+
+
 # #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
 from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
 

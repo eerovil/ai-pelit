@@ -8,6 +8,9 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#2b2d42;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
   canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  /* v5 (#414): the still scene on a canvas of its own under the game's. */
+  #scene{position:fixed;left:0;top:0;pointer-events:none}
+  #c{position:relative}
   #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
   #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 48px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);box-sizing:border-box;background:rgba(30,32,52,.86);text-align:center;touch-action:manipulation}
   #menu.hidden{display:none}
@@ -38,6 +41,7 @@
 </style>
 </head>
 <body>
+<canvas id="scene"></canvas>
 <canvas id="c"></canvas>
 <div id="safe"></div>
 <div id="menu">
@@ -63,6 +67,11 @@
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
+// v5 (#414): what never moves (sky, city, fence, ramp) is drawn once on this canvas under the
+// game's, which holds only the rider and the HUD. On the test phone the sky's full-screen
+// gradient alone halved the frame rate when it was filled every frame, and copying a finished
+// picture of the scene each frame still left it at 42 frames a second; this way it plays at 60.
+const scene = document.getElementById('scene'), bg = scene.getContext('2d', { alpha: false });
 const menu = document.getElementById('menu');
 let W, H, DPR, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, wide = false;
 function resize() {
@@ -70,13 +79,19 @@ function resize() {
   // Draw for the canvas's own box, so a tap lands where it is drawn (Hiihto v5 to v6).
   const r = c.getBoundingClientRect();
   W = r.width || innerWidth; H = r.height || innerHeight;
-  c.width = W * DPR; c.height = H * DPR;
+  // Setting a canvas's size wipes it, so only a real change does, and asks for a new picture.
+  if (c.width !== Math.floor(W * DPR) || c.height !== Math.floor(H * DPR)) {
+    c.width = scene.width = W * DPR; c.height = scene.height = H * DPR;
+    sceneDrawn = false;
+  }
   const cs = getComputedStyle(document.getElementById('safe'));
   SAFE_T = parseFloat(cs.paddingTop) || 0; SAFE_B = parseFloat(cs.paddingBottom) || 0;
   SAFE_L = parseFloat(cs.paddingLeft) || 0; SAFE_R = parseFloat(cs.paddingRight) || 0;
   wide = W > H;
+  hudKey = '';
 }
-addEventListener('resize', resize); resize();
+let sceneDrawn = false, hudKey = '';
+addEventListener('resize', () => { resize(); ask(); }); resize();
 
 // ---- Saves (shared by every version) ----
 const KEY = 'ai-pelit:skuutti:';
@@ -152,6 +167,8 @@ function startRun() {
   unlock();
   setup();
   menu.classList.add('hidden');
+  lastT = performance.now(); acc = 0;
+  ask();
 }
 
 // ---- Riding the ramp ----
@@ -336,6 +353,7 @@ function showMenu() {
   document.getElementById('go').textContent = lastResult ? 'Uudestaan' : 'Aja!';
   menu.classList.remove('hidden');
   setup(); phase = 'menu';
+  ask();
 }
 document.getElementById('go').addEventListener('click', startRun);
 
@@ -375,22 +393,32 @@ function view() {
   const ground = bottom - Math.max(0, bottom - top - high * S) * 0.2;
   return { S, ground, cx: W / 2 };
 }
-function draw() {
-  x.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const v = view(), { S, ground, cx } = v;
-  const sky = x.createLinearGradient(0, 0, 0, ground);
+// The still scene, once for each size of the screen. It reads only the screen's size.
+function drawScene(v) {
+  const { S, ground } = v;
+  bg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const sky = bg.createLinearGradient(0, 0, 0, ground);
   sky.addColorStop(0, '#5aa9e6'); sky.addColorStop(1, '#cfe8ff');
-  x.fillStyle = sky; x.fillRect(0, 0, W, H);
+  bg.fillStyle = sky; bg.fillRect(0, 0, W, H);
   // A city behind the skatepark fence.
-  x.fillStyle = '#9fb7cc';
+  bg.fillStyle = '#9fb7cc';
   const base = ground - TOP * S;
   [[0.02, 2.6, 0.12], [0.16, 3.6, 0.1], [0.3, 2.2, 0.14], [0.6, 4.2, 0.1], [0.74, 2.8, 0.12], [0.88, 3.4, 0.12]].forEach(([u, h, w]) => {
-    x.fillRect(u * W, base - h * S, w * W, h * S + 2);
+    bg.fillRect(u * W, base - h * S, w * W, h * S + 2);
   });
-  x.strokeStyle = 'rgba(60,70,80,.35)'; x.lineWidth = 1;
-  for (let px = 0; px < W; px += 10) { x.beginPath(); x.moveTo(px, base - 1.2 * S); x.lineTo(px + 10, base); x.stroke(); x.beginPath(); x.moveTo(px + 10, base - 1.2 * S); x.lineTo(px, base); x.stroke(); }
-  x.fillStyle = '#7d8597'; x.fillRect(0, ground, W, H - ground);
+  bg.strokeStyle = 'rgba(60,70,80,.35)'; bg.lineWidth = 1;
+  for (let px = 0; px < W; px += 10) { bg.beginPath(); bg.moveTo(px, base - 1.2 * S); bg.lineTo(px + 10, base); bg.stroke(); bg.beginPath(); bg.moveTo(px + 10, base - 1.2 * S); bg.lineTo(px, base); bg.stroke(); }
+  bg.fillStyle = '#7d8597'; bg.fillRect(0, ground, W, H - ground);
   drawRamp(v);
+  sceneDrawn = true;
+}
+function draw() {
+  const v = view();
+  if (!sceneDrawn) drawScene(v);
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.clearRect(0, 0, c.width, c.height);
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawLive(v);
   drawRider(v);
   drawHud(v);
 }
@@ -398,20 +426,24 @@ const sx = (v, wx) => v.cx + wx * v.S, sy = (v, wy) => v.ground - wy * v.S;
 function drawRamp(v) {
   const { S, ground } = v;
   // The ramp's body, the riding surface and the decks on top.
-  x.beginPath();
-  x.moveTo(0, sy(v, TOP)); x.lineTo(sx(v, -EDGE), sy(v, TOP));
-  for (let i = 0; i <= 60; i++) { const p = at(-LEN + 2 * LEN * i / 60); x.lineTo(sx(v, p.x), sy(v, p.y)); }
-  x.lineTo(W, sy(v, TOP)); x.lineTo(W, ground); x.lineTo(0, ground); x.closePath();
-  x.fillStyle = '#c9a66b'; x.fill();
-  x.strokeStyle = '#8d6e3f'; x.lineWidth = Math.max(3, S * 0.1); x.lineJoin = 'round';
-  x.beginPath();
-  for (let i = 0; i <= 60; i++) { const p = at(-LEN + 2 * LEN * i / 60); i ? x.lineTo(sx(v, p.x), sy(v, p.y)) : x.moveTo(sx(v, p.x), sy(v, p.y)); }
-  x.stroke();
+  bg.beginPath();
+  bg.moveTo(0, sy(v, TOP)); bg.lineTo(sx(v, -EDGE), sy(v, TOP));
+  for (let i = 0; i <= 60; i++) { const p = at(-LEN + 2 * LEN * i / 60); bg.lineTo(sx(v, p.x), sy(v, p.y)); }
+  bg.lineTo(W, sy(v, TOP)); bg.lineTo(W, ground); bg.lineTo(0, ground); bg.closePath();
+  bg.fillStyle = '#c9a66b'; bg.fill();
+  bg.strokeStyle = '#8d6e3f'; bg.lineWidth = Math.max(3, S * 0.1); bg.lineJoin = 'round';
+  bg.beginPath();
+  for (let i = 0; i <= 60; i++) { const p = at(-LEN + 2 * LEN * i / 60); i ? bg.lineTo(sx(v, p.x), sy(v, p.y)) : bg.moveTo(sx(v, p.x), sy(v, p.y)); }
+  bg.stroke();
   // Supports under the decks.
-  x.strokeStyle = 'rgba(90,60,30,.35)'; x.lineWidth = 2;
+  bg.strokeStyle = 'rgba(90,60,30,.35)'; bg.lineWidth = 2;
   [-1, 1].forEach(k => {
-    for (let i = 0; i < 4; i++) { const wx = k * (EDGE + 0.3 + i * 0.5); x.beginPath(); x.moveTo(sx(v, wx), sy(v, TOP)); x.lineTo(sx(v, wx), ground); x.stroke(); }
+    for (let i = 0; i < 4; i++) { const wx = k * (EDGE + 0.3 + i * 0.5); bg.beginPath(); bg.moveTo(sx(v, wx), sy(v, TOP)); bg.lineTo(sx(v, wx), ground); bg.stroke(); }
   });
+}
+// Over the scene, under the rider: these change, or must lie on top of what does.
+function drawLive(v) {
+  const { S } = v;
   // While a finger is down, the part of the wall ahead where letting go pumps best.
   if (phase === 'ride' && crouch && P.v) {
     const k = Math.sign(P.v), from = FLAT + 0.25 * R, to = FLAT + CURVE;
@@ -421,7 +453,7 @@ function drawRamp(v) {
     x.stroke(); x.lineCap = 'butt';
   }
   // The copings: steel tubes on the lips.
-  x.fillStyle = '#d9dde3'; x.strokeStyle = '#6c757d'; x.lineWidth = 1.5;
+  x.lineJoin = 'round'; x.fillStyle = '#d9dde3'; x.strokeStyle = '#6c757d'; x.lineWidth = 1.5;
   [-1, 1].forEach(k => { x.beginPath(); x.arc(sx(v, k * EDGE), sy(v, TOP), Math.max(3, S * 0.09), 0, 7); x.fill(); x.stroke(); });
 }
 function drawRider(v) {
@@ -484,18 +516,33 @@ function drawRider(v) {
   x.fillStyle = '#222'; x.beginPath(); x.arc((shoulder[0] + 0.11) * s, -(shoulder[1] + 0.15) * s, 0.018 * s + 0.5, 0, 7); x.fill();
   x.restore();
 }
-function drawHud(v) {
-  if (phase === 'menu') return;
-  // A strip at the top between the "‹ Pelit" and 🏆 chips.
+const strip = document.createElement('canvas'), st = strip.getContext('2d');
+// Draws the strip as the whole screen's width, so it lands on the same pixels as drawn in place.
+function drawStrip(y0) {
   const chip = document.getElementById('ai-pelit-tulokset-nappi');
   const side = Math.max(chip && chip.offsetWidth ? W - chip.getBoundingClientRect().left + 8 : 108, 80 + SAFE_L);
-  const y0 = wide ? SAFE_T + 6 : SAFE_T + 46, bx = wide ? side : 8, bw = W - 2 * bx;
-  x.fillStyle = 'rgba(30,32,52,.6)'; roundRect(bx, y0, bw, 34, 12); x.fill();
-  x.textBaseline = 'middle'; x.fillStyle = '#fff'; x.font = '700 16px system-ui,sans-serif';
-  x.textAlign = 'left'; x.fillText(`⏱ ${Math.ceil(timeLeft)}`, bx + 10, y0 + 17);
-  x.textAlign = 'right'; x.fillText(`${points} p`, bx + bw - 10, y0 + 17);
-  x.textAlign = 'center'; x.font = '600 13px system-ui,sans-serif';
-  x.fillText(`Ennätys ${best} p`, bx + bw / 2, y0 + 17);
+  const bx = wide ? side : 8, bw = W - 2 * bx, top = Math.floor(y0 * DPR);
+  strip.width = c.width; strip.height = Math.ceil(36 * DPR);
+  st.setTransform(DPR, 0, 0, DPR, 0, -top);
+  st.fillStyle = 'rgba(30,32,52,.6)'; roundRect(st, bx, y0, bw, 34, 12); st.fill();
+  st.textBaseline = 'middle'; st.fillStyle = '#fff'; st.font = '700 16px system-ui,sans-serif';
+  st.textAlign = 'left'; st.fillText(`⏱ ${Math.ceil(timeLeft)}`, bx + 10, y0 + 17);
+  st.textAlign = 'right'; st.fillText(`${points} p`, bx + bw - 10, y0 + 17);
+  st.textAlign = 'center'; st.font = '600 13px system-ui,sans-serif';
+  st.fillText(`Ennätys ${best} p`, bx + bw / 2, y0 + 17);
+}
+function drawHud(v) {
+  if (phase === 'menu') return;
+  // A strip at the top between the "‹ Pelit" and 🏆 chips. Its text was most of the drawing's
+  // time on the processor, so it is written only when it changes, and copied the rest of the time.
+  const y0 = wide ? SAFE_T + 6 : SAFE_T + 46;
+  const key = `${Math.ceil(timeLeft)}|${points}|${best}`;
+  if (key !== hudKey) { hudKey = key; drawStrip(y0); }
+  const top = Math.floor(y0 * DPR);
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.drawImage(strip, 0, top);
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.textBaseline = 'middle'; x.textAlign = 'center';
   // Pops: trick names, pumps and falls.
   let yy = wide ? y0 + 72 : Math.max(y0 + 70, sy(v, TOP + 3.6));
   pops.forEach(p => {
@@ -517,7 +564,7 @@ function drawHud(v) {
     x.fillText(msg, W / 2, wide ? v.ground - 8 : H - SAFE_B - 34);
   }
 }
-function roundRect(a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
+function roundRect(g, a, t, w, h, r) { g.beginPath(); g.moveTo(a + r, t); g.arcTo(a + w, t, a + w, t + h, r); g.arcTo(a + w, t + h, a, t + h, r); g.arcTo(a, t + h, a, t, r); g.arcTo(a, t, a + w, t, r); g.closePath(); }
 
 // ---- Sound: recorded sounds from the shared library (#205), the v1 beeps when one cannot play ----
 const S = window.AiPelitAanet;
@@ -552,16 +599,27 @@ function wheelSound() {
   wheels.set({ vol: on ? 0.15 + 0.6 * v : 0, rate: 0.7 + 0.6 * v });
 }
 
-// ---- Loop: fixed 1/60 s steps ----
-let lastT = performance.now(), acc = 0;
-function frame(t) {
-  acc += Math.min(0.1, (t - lastT) / 1000); lastT = t;
-  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
-  draw(); wheelSound();
+// ---- Loop: fixed 1/60 s steps, and only during a run ----
+// The menu stands still, so it asks for one picture when something changes and none after it (#414).
+let lastT = performance.now(), acc = 0, asked = false;
+function ask() {
+  if (asked) return;
+  asked = true;
   requestAnimationFrame(frame);
 }
+function frame(t) {
+  asked = false;
+  acc += Math.max(0, Math.min(0.1, (t - lastT) / 1000)); lastT = t;
+  while (acc >= 1 / 60) { step(1 / 60); acc -= 1 / 60; }
+  draw(); wheelSound();
+  if (phase !== 'menu') ask();
+}
+// A new size of the screen, however it came; a page coming back may have lost its pictures.
+new ResizeObserver(() => { resize(); ask(); }).observe(c);
+function back() { if (document.hidden) return; sceneDrawn = false; hudKey = ''; ask(); }
+document.addEventListener('visibilitychange', back);
+addEventListener('pageshow', back);
 showMenu();
-requestAnimationFrame(frame);
 </script>
 <script src="../../../scores.js" data-game="skuutti" data-order="high" data-corner="top-right"></script>
 <script src="../../../back.js"></script>
