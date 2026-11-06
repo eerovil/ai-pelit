@@ -1,8 +1,10 @@
 import shutil
 
+import pytest
+
 from conftest import ROOT, turn
 
-URL = "games/marjakori/v1/"
+URL = "games/marjakori/v2/"
 
 
 def open_game(site, context):
@@ -171,7 +173,7 @@ def test_active_round_fits_390px_and_landscape(site, context):
     a, b = centre(pair[0]), centre(pair[1])
     page.mouse.move(a["x"], a["y"]); page.mouse.down(); page.mouse.move(b["x"], b["y"], steps=3); page.mouse.up()
     page.wait_for_function(f"state.moves === {moves - 1}")
-    page.wait_for_timeout(500)
+    page.wait_for_function("!motion")
     pair, box, moves = page.evaluate("[Marjakori.legalMoves(state)[0], boardBox, state.moves]")
     a, b = centre(pair[0]), centre(pair[1])
     page.mouse.click(a["x"], a["y"]); page.mouse.click(b["x"], b["y"])
@@ -210,7 +212,7 @@ def test_idle_hint_finds_a_move_once_until_the_board_changes(site, context):
     page.evaluate("""() => {
       window.hintCalls = 0; const legal = Marjakori.legalMoves;
       Marjakori.legalMoves = function () { window.hintCalls++; return legal.apply(this, arguments); };
-      hintMove = null; lastAction = 0;
+      hintMove = null; lastAction = 0; ask();
     }""")
     page.wait_for_timeout(150)
     assert page.evaluate("window.hintCalls") == 1
@@ -393,4 +395,261 @@ def test_a_page_closed_during_the_winning_animation_still_owes_the_question(site
     page.evaluate(WIN_NOW)
     page.wait_for_function(MENU_UP)
     page.wait_for_selector("#ai-pelit-nimi")
+    assert page.errors == []
+
+
+COUNT_DRAWS = """() => {
+  window.draws = 0; const real = draw;
+  draw = () => { window.draws++; real(); };
+}"""
+HINT_UP = "!hint.classList.contains('hidden')"
+
+
+def settle(page):
+    page.wait_for_function(
+        "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))"
+    )
+
+
+def centre(page, i):
+    box = page.evaluate("boardBox")
+    return box["x"] + (i % 7 + .5) * box["size"], box["y"] + (i // 7 + .5) * box["size"]
+
+
+def pixels(page):
+    return page.evaluate("c.toDataURL()")
+
+
+def start_quiet(page, width=360, height=740):
+    page.set_viewport_size({"width": width, "height": height})
+    start_level(page, 2)
+    settle(page)
+
+
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844), (740, 360)])
+def test_a_menu_nobody_touches_draws_nothing(site, context, width, height):
+    page = open_game(site, context)
+    page.set_viewport_size({"width": width, "height": height})
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.wait_for_timeout(600)
+    assert page.evaluate("draws") == 0
+    assert page.errors == []
+
+
+def test_a_menu_over_a_saved_round_shows_the_board_and_draws_no_more(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.reload()
+    page.wait_for_function("window.boardBox && state && state.phase === 'play'")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    # Past the hint's five seconds: the menu covers the board, so no hint and no timer wakes it.
+    page.evaluate("lastAction = 0")
+    page.wait_for_timeout(600)
+    assert page.evaluate("[draws, hint.classList.contains('hidden')]") == [0, True]
+    page.click("#go")
+    page.wait_for_function(HINT_UP)
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("width,height", [(360, 740), (390, 844), (740, 360)])
+def test_a_level_nobody_touches_draws_nothing_before_or_during_the_hint(site, context, width, height):
+    page = open_game(site, context)
+    start_quiet(page, width, height)
+    page.evaluate(COUNT_DRAWS)
+    page.wait_for_timeout(600)
+    assert page.evaluate("draws") == 0
+    # The timer draws once as the five seconds end, then the hint moves by itself.
+    page.evaluate("lastAction = Date.now() - 4800; ask()")
+    page.wait_for_function(HINT_UP)
+    settle(page)
+    page.evaluate("draws = 0")
+    seen = page.evaluate("""async () => {
+      const seen = new Set();
+      for (let i = 0; i < 12; i++) {
+        seen.add(new DOMMatrix(getComputedStyle(hint).transform).m41.toFixed(1));
+        await new Promise(done => setTimeout(done, 50));
+      }
+      return seen.size;
+    }""")
+    assert seen > 3
+    assert page.evaluate("draws") == 0
+    assert page.errors == []
+
+
+def test_the_hint_marks_the_cell_it_names_and_never_takes_a_swipe(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate("lastAction = 0; ask()")
+    page.wait_for_function(HINT_UP)
+    box = page.evaluate("""() => {
+      hint.style.animation = 'none';
+      const r = hint.getBoundingClientRect(), i = hintMove[0];
+      return [r.left - boardBox.x - (i % 7) * boardBox.size, r.top - boardBox.y - Math.floor(i / 7) * boardBox.size, r.width - boardBox.size, r.height - boardBox.size];
+    }""")
+    assert [round(n, 1) for n in box] == [2.5, 2.5, -5, -5]
+    a, b, moves = page.evaluate("[hintMove[0], hintMove[1], state.moves]")
+    ax, ay = centre(page, a)
+    bx, by = centre(page, b)
+    page.mouse.move(ax, ay); page.mouse.down(); page.mouse.move(bx, by, steps=4); page.mouse.up()
+    page.wait_for_function(f"state.moves === {moves - 1}")
+    assert page.evaluate("hint.classList.contains('hidden')") is True
+    page.wait_for_function("!motion")
+    assert page.evaluate("hint.classList.contains('hidden')") is True
+    assert page.errors == []
+
+
+def test_a_tap_shows_at_once_and_a_swap_animates_to_its_end_then_stops(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    still = pixels(page)
+    page.evaluate(COUNT_DRAWS)
+    pair = page.evaluate("Marjakori.legalMoves(state)[0]")
+    page.mouse.click(*centre(page, pair[0]))
+    settle(page)
+    assert page.evaluate("selected") == pair[0]
+    assert pixels(page) != still
+    # The first tap also asks for full screen, which adds a draw of its own: count the next one.
+    page.evaluate("draws = 0")
+    page.mouse.click(*centre(page, pair[0]))
+    settle(page)
+    assert page.evaluate("[selected, draws]") == [-1, 1]
+    assert pixels(page) == still
+    page.mouse.click(*centre(page, pair[0]))
+    moves = page.evaluate("state.moves")
+    page.mouse.click(*centre(page, pair[1]))
+    page.wait_for_function(f"state.moves === {moves - 1} && !motion")
+    settle(page)
+    assert page.evaluate("draws") > 10
+    final = pixels(page)
+    page.evaluate("draws = 0")
+    page.wait_for_timeout(300)
+    assert page.evaluate("draws") == 0
+    page.evaluate("draw()")
+    assert pixels(page) == final
+    assert page.errors == []
+
+
+def test_a_refused_swap_slides_back_and_stops(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    still = pixels(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("""() => {
+      for (let a = 0; a < 48; a++) {
+        const next = Marjakori.clone(state);
+        if ((a + 1) % 7 && !Marjakori.trySwap(next, a, a + 1).ok) { play(a, a + 1); return; }
+      }
+    }""")
+    page.wait_for_function("draws > 3 && !motion")
+    settle(page)
+    assert pixels(page) == still
+    page.evaluate("draws = 0")
+    page.wait_for_timeout(300)
+    assert page.evaluate("draws") == 0
+    assert page.errors == []
+
+
+def test_turning_the_phone_redraws_in_the_same_moment_and_keeps_the_round(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    board = page.evaluate("JSON.stringify(state.board)")
+    page.evaluate("lastAction = 0; ask()")
+    page.wait_for_function(HINT_UP)
+    before = page.evaluate("hint.style.left")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function(f"hint.style.left !== '{before}'")
+    assert page.evaluate("""() => {
+      const blank = document.createElement('canvas'); blank.width = c.width; blank.height = c.height;
+      return [W, H, c.toDataURL() === blank.toDataURL(), JSON.stringify(state.board)];
+    }""") == [740, 360, False, board]
+    # A new size fills the canvas in the same call, before the browser can show it empty.
+    assert page.evaluate("""() => {
+      c.style.width = '700px'; resize();
+      const blank = document.createElement('canvas'); blank.width = c.width; blank.height = c.height;
+      const empty = c.toDataURL() === blank.toDataURL(); c.style.width = ''; return empty;
+    }""") is False
+    assert page.errors == []
+
+
+def test_coming_back_to_the_page_draws_the_board_again(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    still = pixels(page)
+    page.evaluate(COUNT_DRAWS)
+    # A phone may drop a canvas while the page is away: it must come back drawn.
+    page.evaluate("ctx.clearRect(0, 0, W, H); document.dispatchEvent(new Event('visibilitychange'))")
+    settle(page)
+    assert page.evaluate("draws") == 1
+    assert pixels(page) == still
+    assert page.errors == []
+
+
+def test_many_asks_in_one_moment_draw_once(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate(COUNT_DRAWS)
+    page.evaluate("ask(); ask(); ask()")
+    settle(page)
+    assert page.evaluate("draws") == 1
+    assert page.errors == []
+
+
+def test_turning_the_phone_during_a_swap_finishes_it_and_then_stops(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    moves = page.evaluate("state.moves")
+    page.evaluate("const m = Marjakori.legalMoves(state)[0]; play(m[0], m[1])")
+    assert page.evaluate("!!motion") is True
+    turn(page, {"width": 390, "height": 844})
+    page.wait_for_function(f"state.moves === {moves - 1} && !motion")
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    page.wait_for_timeout(300)
+    assert page.evaluate("[draws, W, H]") == [0, 390, 844]
+    assert page.errors == []
+
+
+def test_a_tap_during_a_swap_shows_when_the_swap_has_ended(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate("const m = Marjakori.legalMoves(state)[0]; play(m[0], m[1])")
+    x, y = centre(page, 0)
+    page.mouse.click(x, y)
+    page.wait_for_function("!motion")
+    settle(page)
+    shown = pixels(page)
+    assert page.evaluate("selected") == 0
+    page.evaluate("selected = -1; draw()")
+    assert pixels(page) != shown
+    assert page.errors == []
+
+
+def test_a_won_level_ends_in_a_still_menu_with_no_hint_waiting(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate(WIN_NOW)
+    page.wait_for_function(MENU_UP)
+    settle(page)
+    page.evaluate(COUNT_DRAWS)
+    # Past the moment the hint's timer would have ended: the win cancelled it.
+    page.evaluate("lastAction = 0")
+    page.wait_for_timeout(400)
+    assert page.evaluate("[draws, hint.classList.contains('hidden')]") == [0, True]
+    assert page.errors == []
+
+
+def test_a_new_level_after_a_win_starts_the_hint_clock_again(site, context):
+    page = open_game(site, context)
+    start_quiet(page)
+    page.evaluate(WIN_NOW)
+    page.wait_for_function(MENU_UP)
+    page.evaluate("document.querySelector('#ai-pelit-tulokset')?.remove()")
+    page.click("#go")
+    page.wait_for_function("state.level === 3 && state.phase === 'play' && menu.classList.contains('hidden')")
+    settle(page)
+    assert page.evaluate("hint.classList.contains('hidden')") is True
+    page.evaluate("lastAction = Date.now() - 4800; ask()")
+    page.wait_for_function(HINT_UP)
     assert page.errors == []

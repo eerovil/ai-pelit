@@ -1,5 +1,6 @@
 {
   "title": "Marjakori",
   "description": "Vaihda metsän kuviot paikkoja, tee vähintään kolmen rivejä ja kerää kori täyteen.",
-  "versions": [{"n": 1, "date": "2026-11-05", "note": "Ensimmäinen versio: pyyhkäise viereiset metsäkuviot vaihtoon, kerää tavoitteet rajatuilla siirroilla ja tee puuskia sekä kimalluksia.", "request": "Pwli jossa swipetetään kuviot ja match 3 tai enemmän samaa", "issue": "eerovil/ai-pelit#406"}]
+  "versions": [{"n": 1, "date": "2026-11-05", "note": "Ensimmäinen versio: pyyhkäise viereiset metsäkuviot vaihtoon, kerää tavoitteet rajatuilla siirroilla ja tee puuskia sekä kimalluksia.", "request": "Pwli jossa swipetetään kuviot ja match 3 tai enemmän samaa", "issue": "eerovil/ai-pelit#406"},
+    {"n": 2, "date": "2026-11-06", "note": "Peli piirtää ruudun vain, kun jokin muuttuu tai liikkuu, joten se kuluttaa vähemmän akkua ja lämmittää puhelinta vähemmän, kun ruudulla ei tapahdu mitään.", "request": "Pelin pitäisi kuluttaa vähemmän akkua ja kuumentaa puhelinta vähemmän, kun ruudulla ei tapahdu mitään. Marjakori piirtää nyt 60 kertaa sekunnissa myös valikossa ja aloitetulla tasolla, vaikka ruutu ei muutu. Tee sama korjaus kuin Pasianssi v2:ssa: piirrä vain, kun jokin muuttuu tai liikkuu. Pelin näkyvä toiminta ja animaatiot pysyvät ennallaan. Koskematon ruutu ei saa piirtää, ja jokaisen muutoksen pitää näkyä heti.", "issue": "eerovil/ai-pelit#413"}]
 }

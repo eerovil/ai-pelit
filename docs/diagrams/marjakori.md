@@ -50,8 +50,8 @@ flowchart TD
 
 ## Boxes
 
-- **Taso alkaa: 7 × 7 lauta, ei valmiita rivejä, vähintään yksi siirto**: `newLevel()` in `games/marjakori/v1/logiikka.js`, from a seed saved with the round, so a reload brings the same board.
-- **Pyyhkäise kuvio viereisen paikalle, tai napauta kahta vierekkäistä**: the swap fires once the finger has moved about a third of a tile, without waiting for it to lift (the canvas's pointer handlers in `games/marjakori/v1/index.html`).
+- **Taso alkaa: 7 × 7 lauta, ei valmiita rivejä, vähintään yksi siirto**: `newLevel()` in `games/marjakori/v2/logiikka.js`, from a seed saved with the round, so a reload brings the same board.
+- **Pyyhkäise kuvio viereisen paikalle, tai napauta kahta vierekkäistä**: the swap fires once the finger has moved about a third of a tile, without waiting for it to lift (the canvas's pointer handlers in `games/marjakori/v2/index.html`). The board is drawn only when something on it changes (`ask()` in `games/marjakori/v2/index.html`: a tap, a swap and its animation, a new level, a new canvas size, coming back to the page). After five seconds with no move, a timer draws once and shows the idle hint: `#hint`, a page element the browser wobbles by itself, so the canvas stays still. The hint waits while the menu covers the board.
 - **Kuviot palaavat, siirto ei kulu**: a swap that matches nothing costs nothing; the tiles slide back.
 - **Syntyy Puuska: tyhjentää rivinsä tai sarakkeensa**: four in a line.
 - **Syntyy Kimallus: poistaa kaikki yhtä lajia**: five in a line, or an L or T shape; swiped with a neighbour it takes every tile of that neighbour's kind.

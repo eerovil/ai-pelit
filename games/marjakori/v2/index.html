@@ -34,6 +34,26 @@
         height: 100%;
         touch-action: none;
       }
+      /* The idle hint is a page element, not canvas: the browser moves it by itself, so its
+         wobble needs no redraw of the board. */
+      #hint {
+        position: fixed;
+        box-sizing: border-box;
+        border: 3px solid #ffe36a;
+        pointer-events: none;
+        animation: hint 565ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+      }
+      #hint.hidden {
+        display: none;
+      }
+      @keyframes hint {
+        from {
+          transform: translateX(-3px);
+        }
+        to {
+          transform: translateX(3px);
+        }
+      }
       #menu {
         position: fixed;
         inset: 0;
@@ -129,6 +149,7 @@
   </head>
   <body>
     <canvas id="c"></canvas>
+    <div id="hint" class="hidden"></div>
     <div id="menu">
       <h1>🧺 Marjakori</h1>
       <p class="result" id="result"></p>
@@ -158,7 +179,8 @@
         result = document.getElementById('result'),
         progress = document.getElementById('progress'),
         go = document.getElementById('go'),
-        levels = document.getElementById('levels');
+        levels = document.getElementById('levels'),
+        hint = document.getElementById('hint');
       var KEY = 'ai-pelit:marjakori:',
         state = null,
         selected = -1,
@@ -167,6 +189,8 @@
         lastAction = Date.now(),
         motion = null,
         hintMove = null,
+        drawAsked = 0,
+        hintTimer = 0,
         W = 0,
         H = 0,
         DPR = 1,
@@ -197,16 +221,38 @@
           bottom: parseFloat(style.getPropertyValue('--safe-bottom')) || 0,
           left: parseFloat(style.getPropertyValue('--safe-left')) || 0,
         };
-        if (r.width === W && r.height === H && d === DPR) return;
+        if (r.width === W && r.height === H && d === DPR) {
+          ask();
+          return;
+        }
         DPR = d;
         W = r.width;
         H = r.height;
         c.width = W * DPR;
         c.height = H * DPR;
         ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        // A new size empties the canvas: fill it now, so no blank frame shows.
+        draw();
+      }
+      // The board is drawn only when something on it changes: redrawing it 60 times a second with
+      // nothing moving took 42.5 % of the test phone's processor in the menu (v1, #413).
+      function ask() {
+        if (!drawAsked) drawAsked = requestAnimationFrame(frame);
+      }
+      function frame() {
+        drawAsked = 0;
+        draw();
+        if (motion) ask();
       }
       addEventListener('resize', resize);
-      resize();
+      addEventListener('orientationchange', resize);
+      addEventListener('fullscreenchange', resize);
+      addEventListener('pageshow', resize);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) resize();
+      });
+      c.addEventListener('contextrestored', ask);
+      if (window.ResizeObserver) new ResizeObserver(resize).observe(c);
       function sound(name, o) {
         if (window.AiPelitAanet) AiPelitAanet.play(name, o || { vol: 0.18 });
       }
@@ -260,6 +306,7 @@
           })(i);
           levels.appendChild(b);
         }
+        ask();
       }
       function start(n) {
         state = Marjakori.newLevel(n || level, (Date.now() ^ ((n || level) * 7919)) >>> 0);
@@ -269,6 +316,7 @@
         menu.classList.add('hidden');
         saveRound();
         sound('valinta', { vol: 0.14 });
+        ask();
       }
       function cellAt(px, py) {
         if (!boardBox) return -1;
@@ -326,12 +374,31 @@
           selected = -1;
           motion = { before: before, a: a, b: b, at: Date.now(), back: true };
         }
+        ask();
+      }
+      // Shows the idle hint once the player has waited five seconds, and wakes the board at that
+      // moment if it is too early. It waits while the menu covers the board.
+      function placeHint(box) {
+        clearTimeout(hintTimer);
+        var wait = lastAction + 5000 - Date.now(),
+          playing = box && state.phase === 'play' && !motion && menu.classList.contains('hidden');
+        if (playing && wait > 0) hintTimer = setTimeout(ask, wait);
+        if (playing && wait <= 0 && !hintMove) hintMove = Marjakori.legalMoves(state)[0];
+        if (!playing || wait > 0 || !hintMove) {
+          hint.classList.add('hidden');
+          return;
+        }
+        hint.style.left = box.x + (hintMove[0] % 7) * box.size + 2.5 + 'px';
+        hint.style.top = box.y + Math.floor(hintMove[0] / 7) * box.size + 2.5 + 'px';
+        hint.style.width = hint.style.height = box.size - 5 + 'px';
+        hint.classList.remove('hidden');
       }
       function draw() {
-        requestAnimationFrame(draw);
-        resize();
         ctx.clearRect(0, 0, W, H);
-        if (!state || (state.phase !== 'play' && !motion)) return;
+        if (!state || (state.phase !== 'play' && !motion)) {
+          placeHint(null);
+          return;
+        }
         var now = Date.now(),
           m = null;
         if (motion) {
@@ -348,6 +415,7 @@
               motion = null;
               if (ended) {
                 finish();
+                placeHint(null);
                 return;
               }
             }
@@ -364,19 +432,7 @@
             : Math.max(safe.top + 52 + rows * 20, safe.top + (H - safe.top - safe.bottom - side) / 2 - 20),
           shown = m && m.frame ? Object.assign({}, state, { board: m.frame.board }) : state;
         boardBox = MarjakoriPiirto.draw(ctx, shown, { x: bx, y: by, w: side, h: side }, selected, m);
-        if (state.phase === 'play' && Date.now() - lastAction > 5000 && !motion) {
-          if (!hintMove) hintMove = Marjakori.legalMoves(state)[0];
-          if (hintMove) {
-            ctx.strokeStyle = '#ffe36a';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(
-              bx + (hintMove[0] % 7) * boardBox.size + 4 + Math.sin(Date.now() / 180) * 3,
-              by + Math.floor(hintMove[0] / 7) * boardBox.size + 4,
-              boardBox.size - 8,
-              boardBox.size - 8,
-            );
-          }
-        }
+        placeHint(boardBox);
         ctx.fillStyle = '#eff5dc';
         ctx.font = '700 17px system-ui';
         ctx.textAlign = land ? 'left' : 'center';
@@ -423,7 +479,7 @@
           ctx.fillText('Sekoitetaan…', W / 2, land ? safe.top + 30 : by + side / 2);
         }
       }
-      draw();
+      resize();
       c.addEventListener('pointerdown', function (e) {
         if (!state || state.phase !== 'play') return;
         pointer = { x: e.clientX, y: e.clientY, cell: cellAt(e.clientX, e.clientY) };
@@ -450,6 +506,7 @@
           if (selected < 0) selected = q;
           else if (selected !== q) play(selected, q);
           else selected = -1;
+          ask();
         }
         pointer = null;
       });
@@ -458,6 +515,7 @@
         else {
           menu.classList.add('hidden');
           selected = -1;
+          ask();
         }
       };
       openMenu('');
