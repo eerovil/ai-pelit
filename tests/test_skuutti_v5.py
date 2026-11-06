@@ -63,8 +63,10 @@ def begin(site, context, best=None):
     page = open_game(site, context, best)
     start(page)   # the tap on "Aja!" turns sound on
     page.evaluate(SPY)
-    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000)
-    page.wait_for_function("AiPelitAanet.play('lasku', { vol: 0 })", timeout=5000)
+    # polling: wait_for_function checks again on animation frames by default, and open_game
+    # stubbed those away, so a first check that came too early would never be repeated.
+    page.wait_for_function(f"{SOUNDS}.every(AiPelitAanet.ready)", timeout=10000, polling=50)
+    page.wait_for_function("AiPelitAanet.play('lasku', { vol: 0 })", timeout=5000, polling=50)
     page.evaluate("heard.splice(0)")
     return page
 
@@ -110,7 +112,7 @@ def test_the_wheels_roll_louder_with_speed_and_go_quiet_in_the_air(site, context
     page = begin(site, context)
     page.evaluate("P.s = 0; P.v = 3; wheelSound()")
     slow = page.evaluate("[wheels.vol, wheels.rate]")
-    page.wait_for_function("wheels.playing()", timeout=5000)
+    page.wait_for_function("wheels.playing()", timeout=5000, polling=50)
     page.evaluate("P.v = 9; wheelSound()")
     fast = page.evaluate("[wheels.vol, wheels.rate]")
     assert fast[0] > slow[0] > 0 and fast[1] > slow[1]
@@ -133,7 +135,7 @@ def test_without_the_library_it_still_plays_with_its_own_beeps(site, context):
 def test_after_a_run_ends_the_next_run_rolls_again_and_the_end_tune_plays_once(site, context):
     page = begin(site, context)
     page.evaluate("P.s = 0; P.v = 5; wheelSound()")
-    page.wait_for_function("wheels.playing()", timeout=5000)
+    page.wait_for_function("wheels.playing()", timeout=5000, polling=50)
     # The run ends while rolling: the wheels go quiet, one tune, nothing more on later steps.
     page.evaluate("points = 0; timeLeft = 0.01; step(1 / 60); for (let i = 0; i < 30; i++) step(1 / 60); wheelSound()")
     assert played(page) == ["tappio"]
