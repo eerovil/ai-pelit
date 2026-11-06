@@ -41,17 +41,41 @@ def test_every_player_can_putt_and_reload(golf_phones,n):
     pages=room(golf_phones,n);host=pages[0]
     # Another phone cannot play the host's turn.
     pages[-1].evaluate("R.send({t:'shot',round:roomRound,seq:round.seq,a:0,p:1})")
+    # Every phone shows who plays, in the ball's colour, clear of the course.
+    for p in pages:
+        assert p.locator('#who span').count()==n
+        assert p.locator('#who .on').inner_text()=='Testi1'
+        box=p.locator('#who').bounding_box();assert box['y']+box['height']<=p.evaluate('P(0,0)[1]-.12*scale')+1
+        for row in p.locator('#who span').all():
+            b=row.bounding_box();assert b['x']>=0 and b['x']+b['width']<=360
+    pages[1].evaluate("window.heard=[];const s=sound;sound=(n,v)=>{heard.push(n);s(n,v)}")
     for i,p in enumerate(pages):
         p.wait_for_function(f'round.turn==={i}')
         assert host.evaluate('round.players[round.turn].strokes')==0
         pull(p,-math.pi/2,.25)
         host.wait_for_function("round.phase==='roll'")
+        # The same shot arriving twice is still one stroke.
+        if i==1:p.evaluate("R.send({t:'shot',round:roomRound,seq:round.seq,a:0,p:1})")
         host.evaluate('runBall()')
     for p in pages:p.wait_for_function('round.turn===0&&round.players.every(p=>p.strokes===1)')
+    assert 'puu' in pages[1].evaluate('heard')
     guest=pages[1];guest.reload()
     guest.wait_for_function('round&&round.players.every(p=>p.strokes===1)')
     assert guest.evaluate('round.seq')==host.evaluate('round.seq')
     for p in pages:assert not p.errors
+
+
+def test_host_reload_sends_everyone_back_to_the_room(golf_phones):
+    host,guest=room(golf_phones,2)
+    pull(host,-math.pi/2,.25);host.evaluate('runBall()')
+    guest.wait_for_function('round.turn===1')
+    host.reload()
+    guest.wait_for_function('round===null&&!R.paused')
+    host.wait_for_function('R.isHost&&R.members.filter(p=>p.on).length===2')
+    host.click('#aipr-start')
+    for p in (host,guest):
+        p.wait_for_function("round&&round.phase==='aim'&&round.hole===0&&round.players.every(p=>p.strokes===0)")
+        assert not p.errors
 
 
 def test_skip_rejoin_delivery_once_and_next_round(golf_phones):

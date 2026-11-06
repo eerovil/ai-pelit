@@ -46,11 +46,16 @@ def test_controls_and_layout(site,browser,size):
     p.click('#play')
     # A short tap cannot count as a stroke, nor can a second finger steal a drag.
     p.tap('#c');assert p.evaluate('round.players[0].strokes')==0
+    w,h=size;p.mouse.move(w/2,h/2);p.mouse.down();p.mouse.move(w/2,h/2+40)
+    p.dispatch_event('#c','pointerdown',{'pointerId':2,'clientX':20,'clientY':200})
+    p.dispatch_event('#c','pointerup',{'pointerId':2,'clientX':20,'clientY':260})
+    assert p.evaluate('dragging.id')==1 and p.evaluate('round.players[0].strokes')==0
+    p.mouse.move(w/2,h/2+2);p.mouse.up();assert p.evaluate('round.players[0].strokes')==0
     pull(p,-math.pi/2,1)
     assert p.evaluate('round.players[0].strokes')==1
     p.evaluate('runBall()')
     assert p.evaluate("round.phase !== 'roll'")
-    p.evaluate("round.hole=8;round.players[0].scores=[2,2,3,3,3,3,3,3,4];round.phase='end';finishRecord();showCard()")
+    p.evaluate("round.hole=8;round.players[0].scores=[2,2,3,3,3,3,3,3,4];round.phase='end';finishRecord();showCard();for(let i=0;i<10;i++){const r=document.createElement('div');r.textContent=(i+1)+'. Testi 25';$('board').append(r);}")
     for sel in ['#next','#toMenu','#scoreRows']:
         b=p.locator(sel).bounding_box();assert b['y']>=0 and b['y']+b['height']<=size[1]
     assert not p.errors

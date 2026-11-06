@@ -55,11 +55,19 @@ function updateHUD() {
   var h=HOLES[round.hole],p=round.players[round.turn];
   $('hud').replaceChildren(); var strong=document.createElement('strong'); strong.textContent=h.name;
   $('hud').append(strong,document.createTextNode('Reikä '+(round.hole+1)+'/9 · Par '+h.par+' · Lyönnit '+p.strokes));
+  if(online) {
+    var who=document.createElement('div');who.id='who';
+    round.players.forEach(function(q,i){
+      var row=document.createElement('span'),dot=document.createElement('i'),name=document.createElement('b');
+      row.className=i===round.turn?'on':'';dot.style.background=colors[i];name.textContent=q.name;row.append(dot,name);who.append(row);
+    });
+    $('hud').append(who);
+  }
   $('hint').textContent=round.phase==='roll'?'Pallo vierii…':online?(mine()?'Sinun vuorosi · vedä ja päästä irti':p.name+' lyö'):'Vedä taaksepäin ja päästä irti';
   $('notice').textContent=round.notice||'';
   if(round.notice&&round.notice!==lastNotice){
     clearTimeout(noticeTimer);lastNotice=round.notice;var held=round;
-    noticeTimer=setTimeout(function(){if(round===held){round.notice='';lastNotice='';$('notice').textContent='';}},1500);
+    noticeTimer=setTimeout(function(){if(round===held){round.notice='';lastNotice='';$('notice').textContent='';sendState();}},1500);
   }
   $('power').firstElementChild.style.width=(aim?aim.p*100:0)+'%';
 }
@@ -142,7 +150,7 @@ function settle() {
     p.scores[round.hole]=p.strokes;
     var d=p.strokes-HOLES[round.hole].par;
     round.notice=p.strokes===1?'Yhdellä reikään!':d===0?'Par!':d===-1?'Birdie!':d===1?'Bogi':relative(d);
-    sound('onnistui',.2);
+    sound('naksu',.2); sound('onnistui',.2);
     // Per-hole progress is earned now, even if this round is never finished.
     if(!online) { var records=load('reiat',[]); if(!Array.isArray(records)) records=[];
       records[round.hole]=Math.min(records[round.hole]||7,p.strokes);save('reiat',records); }
@@ -174,6 +182,14 @@ function step(dt) {
     }
   }
 }
+// The host's own events play its sounds; a guest hears them from the state it is sent.
+function hearState(was,now) {
+  if(!was||was.hole!==now.hole) return;
+  if(was.phase==='aim'&&now.phase==='roll') sound('puu');
+  var a=was.players[was.turn],b=now.players[was.turn];
+  if(a&&b&&b.ball.holed&&!a.ball.holed) {sound('naksu',.2);sound('onnistui',.2);}
+  if(now.notice!==was.notice&&/^Veteen/.test(now.notice||'')) sound('loiskis');
+}
 function receive(m,from) {
   if(!online||!m||m.round!==roomRound) return;
   if(R.isHost) {
@@ -184,7 +200,7 @@ function receive(m,from) {
     }
   } else if(from===roomHost&&(m.t==='state'||m.t==='result')&&m.state) {
     var ownAim=dragging&&mine()?aim:null;
-    round=clone(m.state); aim=ownAim&&mine()&&round.phase==='aim'?ownAim:m.aim||null; accumulator=0;
+    var was=round;round=clone(m.state);hearState(was,round); aim=ownAim&&mine()&&round.phase==='aim'?ownAim:m.aim||null; accumulator=0;
     if(round.phase!=='aim'||!mine())dragging=null;
     if(round.phase==='end') {finishRecord();showCard();}
     else if(round.phase==='hole') showCard(); else showPlay();
