@@ -232,3 +232,67 @@ def test_a_first_frame_after_rest_moves_a_normal_step(site, browser):
     })""")
     assert 0 < y < 3 * 0.03
     ctx.close()
+
+
+def test_turning_the_phone_in_the_air_keeps_the_round_and_the_drawing(site, browser):
+    ctx, page = counted(site, browser)
+    page.evaluate("noise = 0; newRound(); launch({ v0: 5, vx: 0.6 })")
+    page.wait_for_function("draws > 3")
+    page.set_viewport_size({"width": 740, "height": 360})
+    page.wait_for_function("LAND")
+    assert page.evaluate("state") in ("air", "drop")
+    page.wait_for_function("state === 'result'", timeout=8000)
+    assert still(page)
+    assert canvas_drawn(page)
+    assert page.errors == []
+    ctx.close()
+
+
+def test_several_asks_in_one_frame_draw_once(site, browser):
+    ctx, page = counted(site, browser)
+    assert still(page)
+    page.evaluate("""() => new Promise(done => {
+      ask(); moveHand(1, 0); resize(); ask();
+      requestAnimationFrame(() => requestAnimationFrame(done));
+    })""")
+    assert page.evaluate("draws") == 1
+    ctx.close()
+
+
+def test_a_drag_the_browser_cancels_still_lets_the_camera_rest(site, browser):
+    ctx, page = counted(site, browser)
+    page.evaluate("""() => {
+      swipe = { lx: 0, ly: 0, pts: [] };
+      moveHand(0, -400); pos = add(hand(), mul(N, REST));
+      window.dispatchEvent(new Event('pointercancel'));
+    }""")
+    assert page.evaluate("swipe") is None
+    assert still(page)
+    assert page.evaluate("camY === camTarget() && camY > 0")
+    assert page.errors == []
+    ctx.close()
+
+
+def test_a_reload_after_a_catch_keeps_the_level_and_rests(site, browser):
+    ctx, page = counted(site, browser)
+    page.evaluate("noise = 0; newRound(); launch({ v0: 3 })")
+    page.wait_for_function("state === 'result'", timeout=8000)
+    page.reload()
+    page.wait_for_selector("#ai-pelit-tulokset-nappi")
+    page.evaluate(COUNT)
+    assert page.evaluate("level") == 2
+    assert still(page)
+    assert page.evaluate("draws") == 0
+    assert canvas_drawn(page)
+    assert page.errors == []
+    ctx.close()
+
+
+def test_a_390_px_phone_is_drawn_and_rests(site, browser):
+    ctx, page = counted(site, browser)
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_function("W === 390 && draws > 0")
+    assert canvas_drawn(page)
+    assert page.evaluate("c.width") == 390 * page.evaluate("DPR")
+    assert still(page)
+    ctx.close()
