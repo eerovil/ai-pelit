@@ -1168,3 +1168,16 @@ def test_the_trip_is_offered_after_rovaniemi_and_utsjoki(site, context):
         assert r == ["matka", "done", "drive", 9], r
         assert page.errors == []
         page.close()
+
+
+def test_lapland_has_long_straights_and_legs_1_to_8_keep_their_road(site, context):
+    page = open_game(site, context)
+    # The share of each leg's road that runs straight, and its longest straight in metres.
+    r = page.evaluate("""() => { const out = {}; for (let n = 1; n <= 11; n++) { const L = LEGS[n - 1], R = makeRoad(L);
+        let run = 0, best = 0, flat = 0; for (let i = 0; i < R.K.length; i++) { if (R.K[i] === 0) { run += SEG; flat += SEG; best = Math.max(best, run); } else run = 0; }
+        out[n] = [Math.round(flat / (R.K.length * SEG) * 100), Math.round(best)]; } return out; }""")
+    lap = [r[str(n)] for n in (9, 10, 11)]
+    south = [r[str(n)] for n in range(1, 9)]
+    assert all(b >= 500 for _, b in lap), r
+    assert min(p for p, _ in lap) > max(p for p, _ in south), r
+    assert page.errors == []

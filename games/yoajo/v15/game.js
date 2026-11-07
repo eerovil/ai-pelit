@@ -37,10 +37,10 @@ const LEGS = [
   { from: 'Oulu', to: 'Rovaniemi', len: 5200, weather: 'pyry', limit: 80, oncoming: 13, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 2, reindeer: 3, racers: 2, bad: 2, tired: 1.2, junctions: 3, seed: 88 },
   // v15 (#440): Lapland, on to Utsjoki (lappi.js). fuel: a tank to watch and a service station
   // instead of the rest area; herds: reindeer crossing in a herd; aurora: northern lights on a
-  // clear frosty night ('pakkanen'); fell: bare fells, hardly a tree.
-  { from: 'Rovaniemi', to: 'Sodankylä', len: 5400, weather: 'pakkanen', limit: 80, oncoming: 8, cars: 1, tractors: 0, walkers: 1, trucks: 3, cameras: 1, moose: 1, reindeer: 2, herds: 1, racers: 1, bad: 1, tired: 1.2, junctions: 2, fuel: true, aurora: true, seed: 99 },
-  { from: 'Sodankylä', to: 'Ivalo', len: 5600, weather: 'pyry', limit: 80, oncoming: 7, cars: 1, tractors: 0, walkers: 1, trucks: 3, cameras: 1, moose: 1, reindeer: 2, herds: 2, racers: 1, bad: 2, tired: 1.2, junctions: 2, fuel: true, seed: 110 },
-  { from: 'Ivalo', to: 'Utsjoki', len: 5800, weather: 'pakkanen', limit: 80, oncoming: 6, cars: 1, tractors: 0, walkers: 1, trucks: 2, cameras: 1, moose: 0, reindeer: 3, herds: 2, racers: 1, bad: 1, tired: 1.4, junctions: 2, fuel: true, aurora: true, fell: true, seed: 121 },
+  // clear frosty night ('pakkanen'); fell: bare fells, hardly a tree; straights: long empty straights (makeRoad).
+  { from: 'Rovaniemi', to: 'Sodankylä', len: 5400, weather: 'pakkanen', limit: 80, oncoming: 8, cars: 1, tractors: 0, walkers: 1, trucks: 3, cameras: 1, moose: 1, reindeer: 2, herds: 1, racers: 1, bad: 1, tired: 1.2, junctions: 2, fuel: true, aurora: true, straights: true, seed: 99 },
+  { from: 'Sodankylä', to: 'Ivalo', len: 5600, weather: 'pyry', limit: 80, oncoming: 7, cars: 1, tractors: 0, walkers: 1, trucks: 3, cameras: 1, moose: 1, reindeer: 2, herds: 2, racers: 1, bad: 2, tired: 1.2, junctions: 2, fuel: true, straights: true, seed: 110 },
+  { from: 'Ivalo', to: 'Utsjoki', len: 5800, weather: 'pakkanen', limit: 80, oncoming: 6, cars: 1, tractors: 0, walkers: 1, trucks: 2, cameras: 1, moose: 0, reindeer: 3, herds: 2, racers: 1, bad: 1, tired: 1.4, junctions: 2, fuel: true, aurora: true, fell: true, straights: true, seed: 121 },
 ];
 const WEATHER = {
   kuiva: { grip: 1, reach: 1 },
@@ -76,7 +76,9 @@ function makeRoad(L) {
   // towards where the road was heading so the road never loops.
   let i = Math.round(160 / SEG), th = 0;
   while (i < n) {
-    const straight = r() < 0.4, len = Math.round((straight ? 80 + r() * 260 : 140 + r() * 260) / SEG);
+    // v15 (#440's spec): Lapland's legs (`straights`) have long empty straights: more of them, and
+    // 2.5 times as long. The same random numbers are drawn, so legs 1–8 keep their road.
+    const lap = L.straights, straight = r() < (lap ? 0.6 : 0.4), len = Math.round((straight ? (80 + r() * 260) * (lap ? 2.5 : 1) : 140 + r() * 260) / SEG);
     let k = 0;
     if (!straight) { const rad = 170 + r() * 450; k = (r() < 0.5 ? 1 : -1) / rad; if (Math.abs(th) > 0.5) k = -Math.sign(th) / rad; }
     for (let j = 0; j < len && i < n; j++, i++) { const e = Math.min(1, j / 20, (len - j) / 20); K[i] = k * e; }
