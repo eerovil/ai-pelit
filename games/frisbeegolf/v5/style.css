@@ -6,6 +6,9 @@
 #controls{position:absolute;left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom));pointer-events:none;text-align:center;text-shadow:0 2px 4px #163e35}
 #powerLabel,#curveLabel{display:block;text-align:center;margin:5px 0;font-size:13px}
 #curveLabel{font-size:11px;color:#f4edcf}
-#notice{position:absolute;left:16px;right:16px;bottom:150px;text-align:center;font-size:12px;font-weight:700;text-shadow:0 2px 4px #163e35}
-/* Sideways the labels fit beside the score chip, so they sit low. */
-@media(orientation:landscape){#controls{bottom:calc(12px + env(safe-area-inset-bottom))}#notice{left:12px;right:auto;max-width:210px;text-align:left;bottom:110px}}
+/* The short notice sits under the map button: lower down it would cover the held disc on short phones. */
+#notice{position:absolute;left:16px;right:16px;top:150px;text-align:center;font-size:12px;font-weight:700;text-shadow:0 2px 4px #163e35}
+/* Sideways the labels sit low on the right, clear of the held disc in the middle and the score chip on the left. */
+@media(orientation:landscape){#controls{bottom:calc(12px + env(safe-area-inset-bottom));left:auto;width:min(290px,calc(50% - 100px));text-align:right}#controls>*{text-align:right!important}#notice{left:12px;right:auto;top:auto;max-width:210px;text-align:left;bottom:110px}}
+/* In a room the player list holds that spot, so the notice goes below its four rows. */
+@media(orientation:portrait){#roster:not(:empty)~#notice{top:270px}}

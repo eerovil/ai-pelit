@@ -90,9 +90,17 @@ def test_drag_turns_view_and_swipe_throws(site, browser, size):
     p.click('#map')
     assert p.evaluate('mapOpen')
     p.click('#map')
-    for sel in ['#powerLabel', '#curveLabel', '#turnLabel']:
-        b = p.locator(sel).bounding_box()
+    # The labels and the notice fit on screen and stay off the held disc and the map button.
+    assert p.locator('#notice').inner_text()
+    disc = {'x': size[0] * .5 - 60, 'y': size[1] * .72 - 44, 'width': 120, 'height': 88}
+    chip = p.locator('#map').bounding_box()
+    for sel in ['#powerLabel', '#curveLabel', '#turnLabel', '#notice']:
+        b = p.evaluate(f"(()=>{{const r=document.createRange();r.selectNodeContents(document.querySelector('{sel}'));"
+                       "const b=r.getBoundingClientRect();return {x:b.x,y:b.y,width:b.width,height:b.height};})()")
         assert b['y'] >= 0 and b['y'] + b['height'] <= size[1], sel
+        for other in [disc, chip]:
+            assert (b['x'] + b['width'] <= other['x'] or other['x'] + other['width'] <= b['x']
+                    or b['y'] + b['height'] <= other['y'] or other['y'] + other['height'] <= b['y']), (sel, b, other)
     # A tap on the disc, or a cancelled swipe, is never a throw.
     swipe(p, 0)
     assert p.evaluate('current().strokes') == 0
