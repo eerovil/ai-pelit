@@ -117,6 +117,11 @@ function act(b) {
   if (b.id === 'uudelleen') { newLeg(level); return; }
   if (b.id === 'seuraava') { sel = Math.min(maxLeg, level + 1); newLeg(sel); return; }
   if (b.id === 'valikko') { sel = level; preview(sel); return; }
+  // v15 (#440): the whole trip's totals (lappi.js), and back from them; the menu's list scrolls.
+  if (b.id === 'matka') { openTrip(); return; }
+  if (b.id === 'takaisin') { mode = tripFrom; return; }
+  if (b.id === 'ylos') { menuTop = Math.max(1, menuTop - 3); return; }
+  if (b.id === 'alas') { menuTop = Math.min(LEGS.length, menuTop + 3); return; }
   if (b.id.startsWith('osa-')) { const n = +b.id.slice(4); if (n <= maxLeg) { sel = n; preview(n); } }
 }
 // The menu shows the picked leg's road behind it, the car waiting at the start.
@@ -187,7 +192,7 @@ function engineSound() {
   const drive = mode === 'drive' && P;
   if (engine) engine.set(drive ? { vol: 0.25 + 0.15 * input.gas, rate: 0.6 + P.v / 30 } : { vol: 0 });
   if (rain) {
-    const wet = P && leg && leg.weather !== 'kuiva', snow = wet && leg.weather !== 'sade';
+    const wet = P && leg && leg.weather !== 'kuiva' && leg.weather !== 'pakkanen', snow = wet && leg.weather !== 'sade';
     rain.set(wet && (mode === 'drive' || mode === 'pause') ? { vol: snow ? 0.25 : 0.45, rate: snow ? 0.8 : 1 } : { vol: 0 });
   }
 }
@@ -228,6 +233,7 @@ function draw() {
   else if (mode === 'pause') pauseScreen();
   else if (mode === 'crash') crashScreen();
   else if (mode === 'done') doneScreen();
+  else if (mode === 'matka') tripScreen();
   if (no3d && mode !== 'menu') text('Tämä puhelin ei osaa piirtää 3D-kuvaa.', W / 2, H * 0.45, 15, '#fff');
   const chip = document.getElementById('ai-pelit-tulokset-nappi');
   if (chip) chip.style.display = mode === 'menu' || mode === 'done' ? '' : 'none';
@@ -285,6 +291,13 @@ function dashboard() {
     rr(lx - bw, by, bw, 9, 5); x.fillStyle = 'rgba(255,255,255,0.15)'; x.fill();
     rr(lx - bw, by, bw * (1 - P.tired), 9, 5); x.fillStyle = P.tired > 0.62 ? '#ff6a5a' : P.tired > 0.4 ? '#f2b630' : '#7fd38a'; x.fill();
   }
+  if (P.fuel != null) {
+    // v15 (#440): the tank on the Lapland legs, under alertness: red when low.
+    const bw = 58, by = sp.cy - sp.r * 0.45 + 54;
+    text('Tankki', lx - bw - 6, by + 5, 11, P.fuel < FUEL_LOW ? '#ff8a7a' : '#9fb0cc', 'right', 600);
+    rr(lx - bw, by, bw, 9, 5); x.fillStyle = 'rgba(255,255,255,0.15)'; x.fill();
+    rr(lx - bw, by, bw * clamp(P.fuel, 0, 1), 9, 5); x.fillStyle = P.fuel < FUEL_LOW ? '#ff6a5a' : P.fuel < 0.35 ? '#f2b630' : '#6fb7ff'; x.fill();
+  }
   text(`${points} p`, rx, sp.cy - sp.r * 0.45, 15, '#ffe08a', 'left', 800);
   const ly = sp.cy + sp.r * 0.25;
   x.beginPath(); x.arc(rx + 19, ly, 19, 0, TAU); x.fillStyle = '#d42a1e'; x.fill();
@@ -296,7 +309,13 @@ function dashboard() {
   const bay = !P.wrong && road.bays.find(b => b.s1 > P.s && b.s0 - P.s < 300);
   if (bay && mode === 'drive') {
     const d = Math.round((bay.s0 - BAY_IN - P.s) / 10) * 10;
-    fitText(P.rest > 0 ? 'Kahvitauko…' : d > 0 ? `P Levähdysalue ${d} m: oikealle ja pysähdy` : 'P Levähdysalue: oikealle ja pysähdy', W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#ffe08a');
+    // v15 (#440): on a Lapland leg it is the service station, fuel and coffee.
+    const at = P.s > bay.s0 && P.lat > EDGE + 0.5;
+    const hint = bay.station
+      ? (P.filling ? `Tankataan… ${Math.round(P.fuel * 100)} %` : at && P.fuel >= 1 ? (P.rest > 0 ? 'Kahvitauko…' : 'Tankki täynnä: jatka matkaa')
+        : d > 0 ? `⛽ Huoltoasema ${d} m: oikealle ja pysähdy` : '⛽ Huoltoasema: oikealle ja pysähdy')
+      : P.rest > 0 ? 'Kahvitauko…' : d > 0 ? `P Levähdysalue ${d} m: oikealle ja pysähdy` : 'P Levähdysalue: oikealle ja pysähdy';
+    fitText(hint, W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#ffe08a');
   }
   // v12 (#440): the police check ahead, with how far it is, and what to do there.
   const ck = !P.wrong && road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s < 320 && c.s - P.s > -8);
@@ -451,6 +470,7 @@ function lightsIcon(b) {
   fitText(on ? 'PITKÄT' : 'LÄHI', cx, b.y + b.h - 14, 12, b.w - 8, on ? '#fff' : '#cfd8ea');
 }
 
+let menuTop = 1, menuSel = 0;   // v15: the first leg the menu's list shows, and for which pick
 function menu() {
   x.fillStyle = 'rgba(4,6,12,0.55)'; x.fillRect(0, 0, W, H);
   const pad = 14, colW = LAND ? (W - SAFE_L - SAFE_R - 3 * pad) / 2 : W - 2 * pad, lx = SAFE_L + pad;
@@ -458,9 +478,24 @@ function menu() {
   text('Yöajo', lx + colW / 2, titleY, LAND ? 34 : 40, '#ffe08a', 'center', 900);
   fitText('Valtatie 4 pohjoiseen, yöllä', lx + colW / 2, titleY + 32, 15, colW, '#cfe0ff', 'center', 600);
   const listX = LAND ? lx + colW + pad : lx, listY = LAND ? SAFE_T + 50 : titleY + 58, listH = LAND ? H - listY - SAFE_B - 10 : H - listY - SAFE_B - 178;
-  const gapR = LAND ? 4 : 6, rowH = Math.min(48, (listH - 7 * gapR) / 8);
+  // v15 (#440): eleven legs. When they do not all fit at a row height a thumb can hit (MIN_ROW),
+  // the list shows a window of them between "▲" and "▼" rows, which move it three legs.
+  const gapR = LAND ? 4 : 6, N = LEGS.length, MIN_ROW = LAND ? 30 : 34, arrowH = LAND ? 24 : 28;
+  let rowH = Math.min(48, (listH - (N - 1) * gapR) / N), first = 1, k = N, y = listY;
+  if (rowH < MIN_ROW) {
+    const room = listH - 2 * (arrowH + gapR);
+    k = Math.max(3, Math.floor((room + gapR) / (MIN_ROW + gapR)));
+    rowH = Math.min(48, (room - (k - 1) * gapR) / k);
+    if (sel !== menuSel) { menuSel = sel; if (sel < menuTop || sel >= menuTop + k) menuTop = sel - Math.floor(k / 2); }
+    menuTop = Math.max(1, Math.min(N - k + 1, menuTop)); first = menuTop;
+    button('ylos', listX, y, colW, arrowH, '▲ aiemmat', { size: 13, locked: first === 1 });
+    y += arrowH + gapR;
+    button('alas', listX, y + k * (rowH + gapR), colW, arrowH, '▼ myöhemmät', { size: 13, locked: first + k - 1 >= N });
+  }
+  const listEnd = y + k * (rowH + gapR) + (k < N ? arrowH + gapR : 0) - gapR;
   LEGS.forEach((L, i) => {
-    const n = i + 1, y0 = listY + i * (rowH + gapR), locked = n > maxLeg;
+    const n = i + 1, y0 = y + (n - first) * (rowH + gapR), locked = n > maxLeg;
+    if (n < first || n >= first + k) return;
     const b = button(`osa-${n}`, listX, y0, colW, rowH, '', { locked, sel: n === sel });
     b.draw = () => {
       text(String(n), b.x + 18, b.y + b.h / 2, 16, locked ? '#777' : '#ffe08a', 'center', 800);
@@ -469,15 +504,18 @@ function menu() {
       if (bests[n] != null && !locked) text(`${bests[n]} p`, b.x + b.w - 12, b.y + b.h / 2 + 10, 11, '#9fb0cc', 'right', 600);
     };
   });
-  const L = LEGS[sel - 1], W0 = { kuiva: 'kuiva keli', sade: 'vesisade', lumi: 'lumisade', pyry: 'lumipyry' }[L.weather];
-  const infoY = LAND ? titleY + 70 : listY + 8 * (rowH + gapR) + 10;
-  // v7 (#266): a leg with bad stretches tells how to get over the potholes.
-  const tips = [L.bad ? 'Kuoppamerkin jälkeen hidasta alle 50 km/h.' : 'Pitkät pois, kun joku tulee vastaan.'];
+  const L = LEGS[sel - 1], W0 = { kuiva: 'kuiva keli', sade: 'vesisade', lumi: 'lumisade', pyry: 'lumipyry', pakkanen: 'pakkasyö' }[L.weather];
+  const infoY = LAND ? titleY + 70 : listEnd + 10;
+  // v7 (#266): a leg with bad stretches tells how to get over the potholes. v15: Lapland's fuel.
+  const tips = [L.fuel ? 'Tankkaa huoltoasemalla ja varo porolaumoja.' : L.bad ? 'Kuoppamerkin jälkeen hidasta alle 50 km/h.' : 'Pitkät pois, kun joku tulee vastaan.'];
   fitText(`Osa ${sel}: ${W0}, ${(L.len / 1000).toFixed(1).replace('.', ',')} km`, lx + colW / 2, infoY, 14, colW, '#cfe0ff', 'center', 600);
   tips.forEach((t, i) => fitText(t, lx + colW / 2, infoY + 22 + i * 19, 13, colW, '#9fb0cc', 'center', 500));
   // v4: one thumb or two, saved.
-  const sw = button('ohjaus', lx + colW * 0.1, infoY + 40, colW * 0.8, 36, '', { size: 14 });
+  // v15 (#440): beside it, the whole trip's totals.
+  const sw = button('ohjaus', lx, infoY + 40, colW * 0.6, 36, '', { size: 14 });
   sw.draw = () => fitText(controls === 'yksi' ? 'Ohjaus: yksi peukalo  ⇄' : 'Ohjaus: kaksi peukaloa  ⇄', sw.x + sw.w / 2, sw.y + sw.h / 2, 14, sw.w - 16, '#fff', 'center', 650);
+  const tr = button('matka', lx + colW * 0.63, infoY + 40, colW * 0.37, 36, '', { size: 14 });
+  tr.draw = () => fitText('🏁 Koko matka', tr.x + tr.w / 2, tr.y + tr.h / 2, 14, tr.w - 12, '#fff', 'center', 650);
   const by = LAND ? H - SAFE_B - 84 : H - SAFE_B - 82;
   const go = button('aja', lx + colW * 0.15, by, colW * 0.7, 62, 'Aja ▶', { size: 24 });
   for (const b of btns) drawBtn(b, b === go);
@@ -493,7 +531,7 @@ function pauseScreen() {
   endButtons([['jatka', 'Jatka'], ['uudelleen', 'Aloita alusta'], ['valikko', 'Valikko']], H * 0.38);
 }
 function crashScreen() {
-  const asleep = crashWhy.startsWith('Nukahdit');
+  const asleep = crashWhy.startsWith('Nukahdit'), dry = crashWhy.startsWith('Polttoaine');
   const cop = crashWhy.startsWith('Poliisi');
   const words = crashWhy.split(' '), lines = []; let line = '';
   for (const wd of words) { if ((line + ' ' + wd).length > 32) { lines.push(line.trim()); line = ''; } line += ' ' + wd; }
@@ -506,6 +544,7 @@ function crashScreen() {
     : crashWhy.startsWith('Väärä tie') ? ['Käänny opasteen nuolen suuntaan:', 'hidasta ja ohjaa ajoissa.']
     : crashWhy.includes('liian lujaa') ? ['Hidasta risteykseen alle 40 km/h', 'ja rampille alle 60 km/h.']
     : crashWhy.includes('puomi') ? ['Tasoristeyksessä odota,', 'kunnes puomit nousevat.']
+    : dry ? ['Tankkaa huoltoasemalla: aja oikealle', 'ja pysähdy pumpulle.']
     : crashWhy.startsWith('Rengas') ? ['Kuoppien kohdalla hidasta alle 50 km/h.']
     : crashWhy.includes('tietyö') ? ['Tietyössä aja vasenta kaistaa vihreällä.']
     : crashWhy.includes('erikoiskuljetu') ? ['Erikoiskuljetusta väistä reunaan,', 'alle 50 km/h.']
@@ -515,7 +554,7 @@ function crashScreen() {
   const textH = 74 + (lines.length - 1) * 21 + (hints.length ? 8 + hints.length * 18 : 0);
   const w = Math.min(340, W - 24), h = LAND ? H - 30 : Math.max(270, textH + 150), x0 = (W - w) / 2, y0 = LAND ? 15 : Math.min(H * 0.22, H - h - 10);
   panel(x0, y0, w, h);
-  text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Väärä tie') ? 'Väärä tie!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
+  text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Väärä tie') ? 'Väärä tie!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : dry ? 'Tankki tyhjä!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
   let ly = y0 + 74;
   lines.forEach((l, i) => text(l, W / 2, ly + i * 21, 15, '#e8eefc', 'center', 600));
   ly += (lines.length - 1) * 21;
@@ -539,18 +578,18 @@ function doneScreen() {
     ['Aikabonus', `+${r.bonus}`],
   ];
   if (leg.tired) rows.splice(6, 0, ['Kahvitauot', String(tally.tauko)]);
+  // The buttons: the next leg, "Koko matka" after Rovaniemi and after Utsjoki (#440's spec), again, menu.
+  const list = [], toRovaniemi = LEGS.findIndex(L => L.to === 'Rovaniemi') + 1;
+  if (level < LEGS.length) list.push(['seuraava', `Seuraava: ${LEGS[level].from} → ${LEGS[level].to}`]);
+  if (level === toRovaniemi || level === LEGS.length) list.push(['matka', '🏁 Koko matka']);   // v14: "Perillä Rovaniemellä!"
+  list.push(['uudelleen', 'Aja uudelleen'], ['valikko', 'Valikko']);
   const tx0 = LAND ? x0 + 16 : x0 + 22, tx1 = LAND ? x0 + w / 2 - 10 : x0 + w - 22, ty = LAND ? y0 + 96 : y0 + 104;
-  const rh = LAND ? Math.min(24, (H - 120 - (ty - y0)) / rows.length) : Math.min(24, (H - ty - 266) / rows.length);
+  const rh = LAND ? Math.min(24, (H - 120 - (ty - y0)) / rows.length) : Math.min(24, (y0 + h - 8 - ty - 266 - 62 * (list.length - 3)) / rows.length);   // v15: within the panel
   rows.forEach(([a, b], i) => { text(a, tx0, ty + i * rh, 14, '#cfd8ea', 'left', 500); text(b, tx1, ty + i * rh, 14, '#fff', 'right', 700); });
   const py = ty + rows.length * rh + 14;
   text(`${points} p`, cx, py, 28, '#ffffff', 'center', 900);
   text(r.record ? 'Uusi ennätys!' : `Ennätys ${r.best} p`, cx, py + 28, 14, r.record ? '#9ff0a8' : '#9fb0cc', 'center', 700);
   const hint = r.stars < 2 ? 'Aja tavoiteajassa saadaksesi toisen tähden.' : r.stars < 3 && tally.tukit ? 'Kolmas tähti: päästä ambulanssi heti ohi.' : r.stars < 3 ? 'Kolmas tähti: ei sakkoja, hurjastelua, häikäisyjä eikä liian läheisiä ohituksia.' : 'Täydellinen yöajo!';
-  const list = [];
-  if (level < LEGS.length) list.push(['seuraava', `Seuraava: ${LEGS[level].from} → ${LEGS[level].to}`]);
-  else list.push(['valikko', 'Perillä Rovaniemellä! Valikkoon']);
-  list.push(['uudelleen', 'Aja uudelleen']);
-  if (level < LEGS.length) list.push(['valikko', 'Valikko']);
   if (LAND) {
     const bx = x0 + w / 2 + 10, bw = w / 2 - 26;
     fitText(hint, bx + bw / 2, y0 + 40, 13, bw, '#cfe0ff', 'center', 500);

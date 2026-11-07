@@ -3,7 +3,7 @@
 // up from behind, a wide load coming the other way, a snowplough throwing snow, and black ice.
 // At most three of these kinds on a leg (ROAD_EVENTS). Everything is top-level, as in game.js.
 
-// The kinds on each leg, legs 1–8. Fog only on dry and rainy legs, the plough and black ice on snow.
+// The kinds on each leg, legs 1–11. Fog only on dry and rainy legs, the plough and black ice on snow.
 const ROAD_EVENTS = [
   [],
   ['tietyo', 'rikki', 'sumu'],
@@ -12,6 +12,10 @@ const ROAD_EVENTS = [
   ['aura', 'jaa', 'ambulanssi'],
   ['aura', 'jaa', 'rikki'],
   ['aura', 'jaa', 'erikois'],
+  ['aura', 'jaa', 'ambulanssi'],
+  // v15 (#440): Lapland's legs 9–11.
+  ['aura', 'jaa', 'rata'],            // the level crossing in Lapland too (#440's spec), on the line north from Rovaniemi
+  ['aura', 'jaa', 'rikki'],
   ['aura', 'jaa', 'ambulanssi'],
 ];
 
