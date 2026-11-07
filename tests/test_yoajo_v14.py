@@ -931,3 +931,29 @@ def test_the_level_crossing_waiting_is_20_through_the_barriers_ends_the_leg_and_
     r = page.evaluate(TURN, [4, "var x = road.rail[0]; P.s = x.s - 400;", 60, False, "P.s > x.s + 40", "null"])
     assert r["mode"] == "crash" and r["why"] == "Ajoit puomien läpi tasoristeyksessä.", r
     assert page.errors == []
+
+
+def test_a_restart_in_a_bend_or_on_the_wrong_road_starts_the_leg_with_its_turns_fresh(site, context):
+    # "Aloita alusta" in the pause menu and "Yritä uudelleen" both call newLeg(level) (ui.js).
+    page = open_game(site, context)
+    state = """() => ({ level, mode, wrong: P.wrong, into: P.into, signal: P.signal, s: P.s,
+      done: road.turns.map(J => !!J.done), told: road.turns.map(J => J.told || 0),
+      crossers: things.filter(t => t.arm).length })"""
+    # Mid-bend at leg 5's first (left) turn, then restart.
+    r = page.evaluate(TURN, [5, "", 0, False, "P.into && P.s > road.turns[0].a0 + 2", "null"])
+    assert r["mode"] == "drive", r
+    page.evaluate("() => newLeg(level)")
+    a = page.evaluate(state)
+    assert a["level"] == 5 and a["mode"] == "drive" and a["wrong"] is None and not a["into"], a
+    assert a["signal"] == 0 and not any(a["done"]) and not any(a["told"]) and a["crossers"] == 0, a
+    # On the wrong road past it, then restart.
+    r = page.evaluate(TURN, [5, "", 40, True, "P.wrong && P.s > P.wrong.s0 + 100", "null"])
+    assert r["mode"] == "drive" and r["wrong"], r
+    page.evaluate("() => newLeg(level)")
+    a = page.evaluate(state)
+    assert a["wrong"] is None and not a["into"] and a["signal"] == 0 and not any(a["done"]), a
+    assert a["s"] < 50, a
+    # The restarted leg drives through all its turns.
+    r = page.evaluate(TURN, [5, "", 0, False, PAST_TURNS, "null"])
+    assert r["mode"] == "drive" and not r["wrong"] and all(J["done"] for J in r["turns"]), r
+    assert page.errors == []
