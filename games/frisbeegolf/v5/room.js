@@ -1,7 +1,7 @@
 function sendState(to){if(!online||!R.isHost||!round)return;R.send({t:'state',round:roomRound,state:round},to);}
 function applyState(state){
   const previous=round,keep=previous&&previous.seq===state.seq&&myTurn();
-  if(!keep)aimDrag=null;
+  if(!keep)drag=aimDrag=null;
   round=state;
   if(previous&&round.seq>previous.seq){
     if(round.phase==='fly')sound('suhahdus');
@@ -28,7 +28,7 @@ function receive(m,from){
 if(R){
   R.turns(id=>!!(online&&round&&round.phase==='aim'&&current().id===id));
   R.on('start',s=>{
-    online=true;roomRound=s.round;roomHost=R.hostId;round=null;flight=preview=drag=aimDrag=null;
+    online=true;roomRound=s.round;roomHost=R.hostId;round=null;flight=drag=aimDrag=null;
     $('menu').hidden=$('card').hidden=true;
     if(R.isHost){round=fresh(s.players);resetAim();showPlay();sendState();}
     else{$('game').hidden=false;$('notice').textContent='Odotetaan rataa…';}
