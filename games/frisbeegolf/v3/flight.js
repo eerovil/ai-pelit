@@ -27,7 +27,8 @@ function fly(shot,h,shake=true) {
   const sy=ground(h,...start)+1.05;
   let safe=start.slice(), reason='grass', inBasket=false, hit=false, obstacle=null;
   const point=(t)=>{
-    const side=putt?0:range*(shot.curve*.22*t*t+d.turn*.012*Math.sin(Math.PI*t)+d.fade*.009*t*t*t);
+    // side is to the thrower's left; a positive curve goes right.
+    const side=putt?0:range*(-shot.curve*.22*t*t+d.turn*.012*Math.sin(Math.PI*t)+d.fade*.009*t*t*t);
     const x=start[0]+dx*range*t+dz*side+h.wind[0]*t*t*duration*.38;
     const z=start[1]+dz*range*t-dx*side+h.wind[1]*t*t*duration*.38;
     const endY=ground(h,x,z)+.05;

@@ -68,8 +68,8 @@ $('scene').addEventListener('pointerdown',e=>{
 });
 function moveAim(e){
   if(!aimDrag||e.pointerId!==aimDrag.id||!myTurn())return;
-  // A screen-width drag turns half a circle; moving the camera cannot move the target under the finger.
-  aim.angle=aimDrag.angle+(e.clientX-aimDrag.x)/$('scene').getBoundingClientRect().width*Math.PI;
+  // A screen-width drag turns half a circle, to the finger's side: the camera looks along +z, so +x is screen left.
+  aim.angle=aimDrag.angle-(e.clientX-aimDrag.x)/$('scene').getBoundingClientRect().width*Math.PI;
   refreshPreview();
 }
 $('scene').addEventListener('pointermove',moveAim);

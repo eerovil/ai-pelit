@@ -18,7 +18,7 @@ PLAN = """() => {
      const max=dist<10?12:DISCS[disc].range;
      for(let ai=-5;ai<=5;ai++)for(let pi=-4;pi<=4;pi++){
        const angle=base+ai*.035,power=clamp((dist+pi*.6)/max,.06,1);
-       const curve=dist<10?0:-DISCS[disc].fade*.009/.22;
+       const curve=dist<10?0:DISCS[disc].fade*.009/.22;
        const shot={disc,angle,power,curve,lie:lie.slice(),seed:12345+round.seq*7919};
        const f=fly(shot,h),c=f.holed?-1000:distance(f.lie,h.basket)+(f.penalty?100:0);
        if(c<cost){cost=c;best=shot;}if(c===-1000)return best;
@@ -52,6 +52,27 @@ def pull(p, power, curve=0):
     p.mouse.up()
 
 
+@pytest.mark.parametrize('on_map', [False, True])
+def test_aim_and_curve_follow_the_finger(site, browser, on_map):
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    if on_map:
+        p.click('#map')
+    # One fixed camera: in play it turns with the aim, which would hide where the line went.
+    p.evaluate('drawScene(0);window.fixedCamera=scene3d.camera.clone()')
+    line_end = '''()=>{const q=preview.path.at(-1);
+      return new scene3d.T.Vector3(q.x,q.y,q.z).project(fixedCamera).x;}'''
+    before = p.evaluate(line_end)
+    p.mouse.move(100, 240); p.mouse.down(); p.mouse.move(130, 240, steps=4); p.mouse.up()
+    assert p.evaluate(line_end) > before
+    p.evaluate('aim.curve=-1;refreshPreview()')
+    left = p.evaluate(line_end)
+    p.evaluate('aim.curve=1;refreshPreview()')
+    assert p.evaluate(line_end) > left
+    assert not p.errors
+    ctx.close()
+
+
 @pytest.mark.parametrize('size', [(360, 640), (360, 740), (390, 844), (740, 360)])
 def test_real_controls_and_layout(site, browser, size):
     ctx, p = open_game(site, browser, size)
@@ -62,7 +83,7 @@ def test_real_controls_and_layout(site, browser, size):
     # Facing follows a drag before release; taps and other pointers do not move it.
     initial = p.evaluate('aim.angle')
     p.mouse.move(100, 240); p.mouse.down(); p.mouse.move(160, 240, steps=4)
-    expected = initial + 60 / size[0] * math.pi
+    expected = initial - 60 / size[0] * math.pi
     assert p.evaluate('aim.angle') == pytest.approx(expected)
     assert p.evaluate('aimDrag!==null&&current().strokes===0')
     p.dispatch_event('#scene', 'pointerdown', {'pointerId': 42, 'clientX': 10, 'clientY': 240})
@@ -362,7 +383,7 @@ def test_real_room_page_frame_can_play(phones, size):
     old_angle = hgame.evaluate('aim.angle')
     host.mouse.move(scene['x'] + 100, scene['y'] + 180)
     host.mouse.down(); host.mouse.move(scene['x'] + 140, scene['y'] + 180, steps=4)
-    assert hgame.evaluate('aim.angle') == pytest.approx(old_angle + 40 / scene['width'] * math.pi)
+    assert hgame.evaluate('aim.angle') == pytest.approx(old_angle - 40 / scene['width'] * math.pi)
     host.mouse.up()
     b = hf.locator('#throwPad').bounding_box()
     x, y = b['x'] + b['width']/2, b['y']+24
