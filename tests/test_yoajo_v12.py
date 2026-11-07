@@ -455,6 +455,32 @@ def test_dazzling_a_police_car_is_a_stop_and_a_fine(site, context):
     assert page.errors == []
 
 
+def test_two_police_cars_fine_once_and_a_restart_mid_stop_starts_clean(site, context):
+    # Two police cars see the same 14 km/h over at once: one stop, one fine. Then a restart while
+    # the car is pulled over leaves no stop, no blue lights and no patrol on the new leg.
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = []; road.cams = []; road.checks = [];
+      cruiseFrom(add('auto', { s: P.s + 20, police: true, watch: true, habit: 14 }));
+      cruiseFrom(add('auto', { s: P.s + 60, police: true, watch: true, habit: 14 }));
+      let stopping = false;
+      for (let i = 0; i < 60 * 12 && mode === 'drive'; i++) {
+        if (!pstop && !stopping) { P.v = 114 / KMH; P.lat = LANE; P.vl = 0; } else { stopping = true; input.gas = 0; }
+        step(1 / 60);
+      }
+      const first = { sakot: tally.sakot, points, mode };
+      cruiseFrom(add('auto', { s: P.s + 20, police: true, watch: true, habit: 14 }));
+      for (let i = 0; i < 60 * 3 && !pstop; i++) { P.v = 114 / KMH; P.lat = LANE; P.vl = 0; step(1 / 60); }
+      const mid = !!pstop;
+      newLeg(2);
+      for (let i = 0; i < 30; i++) step(1 / 60);
+      return { first, mid, pstop: !!pstop, blue: blueLights(), patrol: things.some(t => t.kind === 'partio'),
+        sakot: tally.sakot, points, mode, brake: input.brake }; }""")
+    assert r["first"]["sakot"] == 1 and r["first"]["points"] == -150 and r["first"]["mode"] == "drive", r
+    assert r["mid"] and not r["pstop"] and not r["blue"] and not r["patrol"], r
+    assert r["sakot"] == 0 and r["points"] == 0 and r["mode"] == "drive", r
+    assert page.errors == []
+
+
 # The police check on leg n: everything else off the road, the car driven at 50 to it. stop:
 # whether the driver stops beside the officer.
 CHECK = """([n, stop]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; road.cams = [];
