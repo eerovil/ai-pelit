@@ -73,17 +73,23 @@ function herdLeg(evs, spot) {
 // stops, fines, moose and reindeer got past, fuel stops.
 const TRIP_KEYS = ['km', 'osuudet', 'poliisi', 'sakot', 'elaimet', 'tankkaus'];
 function tripStats() { const t = load('tilasto', {}) || {}; for (const k of TRIP_KEYS) t[k] = +t[k] || 0; return t; }
-// Once a leg ends (driven to the end, crashed, or left from the pause), what it added. A leg left
-// before 30 m adds nothing.
+// What the leg has added since the last call: when it ends (driven to the end, crashed, or left
+// from the pause), and when the page is hidden or left (the "‹ Pelit" chip, closing the app),
+// where nothing else runs. Each call adds only what is new since the one before (`tally.logged`),
+// so a page hidden and shown again counts nothing twice. A leg left before 30 m adds nothing.
 function tripLog() {
-  if (!tally || tally.logged || !P || !leg || P.s < 30) return;
-  tally.logged = true;
+  if (!tally || !P || !leg || P.s < 30) return;
+  const was = tally.logged || { m: 0, poliisi: 0, sakot: 0, elaimet: 0, tankkaus: 0, done: false };
+  const now = { m: Math.min(P.s, leg.len), poliisi: tally.poliisi || 0, sakot: tally.sakot || 0, elaimet: tally.elaimet || 0, tankkaus: tally.tankkaus || 0, done: was.done || mode === 'done' };
+  tally.logged = now;
   const t = tripStats();
-  t.km = Math.round((t.km + Math.min(P.s, leg.len) / 1000) * 10) / 10;
-  if (mode === 'done') t.osuudet++;
-  t.poliisi += tally.poliisi || 0; t.sakot += tally.sakot || 0; t.elaimet += tally.elaimet || 0; t.tankkaus += tally.tankkaus || 0;
+  t.km += Math.max(0, now.m - was.m) / 1000;   // unrounded, so many short visits add up; shown to 0.1 km
+  if (now.done && !was.done) t.osuudet++;
+  for (const k of ['poliisi', 'sakot', 'elaimet', 'tankkaus']) t[k] += Math.max(0, now[k] - was[k]);
   save('tilasto', t);
 }
+addEventListener('pagehide', tripLog);
+document.addEventListener('visibilitychange', () => { if (document.hidden) tripLog(); });
 // The best points and stars over every leg.
 function tripTotals() {
   let pts = 0, st = 0, legs = 0;

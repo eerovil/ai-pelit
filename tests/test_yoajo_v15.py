@@ -1181,3 +1181,23 @@ def test_lapland_has_long_straights_and_legs_1_to_8_keep_their_road(site, contex
     assert all(b >= 500 for _, b in lap), r
     assert min(p for p, _ in lap) > max(p for p, _ in south), r
     assert page.errors == []
+
+
+def test_a_leg_left_by_the_back_chip_still_counts_on_the_trip_once(site, context):
+    page = open_game(site, context)
+    # Driving 800 m with a fine and two animals, the page hidden and shown twice (a call, the home
+    # screen): each look adds only what is new.
+    r = page.evaluate("""() => { HOLD = true; localStorage.removeItem('ai-pelit:yoajo:tilasto'); maxLeg = 9;
+      newLeg(9); mode = 'drive'; P.s = 800; tally.sakot = 1; tally.elaimet = 2; tripLog(); tripLog();
+      const a = load('tilasto'); P.s = 1300; tally.elaimet = 3; tripLog(); return { a, b: load('tilasto') }; }""")
+    assert r["a"] == {"km": 0.8, "osuudet": 0, "poliisi": 0, "sakot": 1, "elaimet": 2, "tankkaus": 0}, r
+    assert round(r["b"]["km"], 3) == 1.3 and r["b"]["sakot"] == 1 and r["b"]["elaimet"] == 3, r
+    # Then on to 2 km and straight out to the shelf, as "‹ Pelit → Takaisin pelilistaan" does:
+    # pagehide logs the rest.
+    page.evaluate("() => { P.s = 2000; tally.poliisi = 1; }")
+    page.goto(f"{site.url}/")
+    page.goto(f"{site.url}{URL}")
+    page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    t = page.evaluate("() => tripStats()")
+    assert round(t["km"], 3) == 2.0 and t["poliisi"] == 1 and t["sakot"] == 1 and t["elaimet"] == 3 and t["osuudet"] == 0, t
+    assert page.errors == []
