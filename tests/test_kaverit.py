@@ -629,6 +629,29 @@ def touch(page, kind, box=None):
     cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
 
 
+def test_a_late_notification_state_mid_touch_on_a_390_px_phone_keeps_the_nickname_save(phones):
+    """The switch's late answer lands while a finger is on "Tallenna": the tap still saves (#443)."""
+    shelf = phones(None, None, player=A, width=390, height=844)
+    shelf.wait_for_selector(".card")
+    shelf.evaluate("""() => {
+      const real = navigator.serviceWorker.ready;
+      const late = new Promise(ok => { window.__pushGo = () => real.then(ok); });
+      Object.defineProperty(navigator.serviceWorker, 'ready', { get: () => late });
+    }""")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    shelf.fill(".friends-name", "Aino")
+    box = shelf.locator(".friends-form button").bounding_box()
+    shelf.evaluate("window.__saveBtn = document.querySelector('.friends-form button')")
+    touch(shelf, "touchStart", box)
+    shelf.evaluate("window.__pushGo()")
+    shelf.wait_for_function("!document.querySelector('.push-switch').disabled || document.querySelector('.push-note.warn')")
+    assert shelf.evaluate("window.__saveBtn.isConnected")
+    touch(shelf, "touchEnd")
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino"
+
+
 def test_a_refresh_mid_touch_on_a_390_px_phone_keeps_the_nickname_save(phones):
     phones.api.taken.add("aino")
     shelf = phones(None, None, player=A, width=390, height=844)
