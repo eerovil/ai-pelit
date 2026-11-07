@@ -55,8 +55,13 @@ function nextStage() {
   const keep = { v: P.v, fuel: P.fuel, tired: P.tired, lat: Math.abs(P.lat) < EDGE ? P.lat : LANE, high: P.high, dry: P.dry }, pts = points;
   endless.m += leg.len;
   endless.k++;
+  // newLeg() lets go of the controls; a finger held over the line keeps driving (the thumbs are
+  // still down, ui.js), and so does a held key.
+  const held = { left: input.left, right: input.right };
   newLeg();
   Object.assign(P, keep);
+  Object.assign(input, held);
+  if (typeof setThumbs === 'function') setThumbs();
   points = pts; lastPoints = pts;
   endless.fade = 1;
   say(`Etappi ${endless.k} · ${Math.floor(endless.m / 1000)} km`, true);

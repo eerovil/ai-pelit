@@ -1275,6 +1275,26 @@ def test_the_next_stage_keeps_the_speed_tank_alertness_and_points_behind_a_fade(
     assert page.errors == []
 
 
+def test_a_finger_held_over_the_stage_line_keeps_steering_and_the_gas(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; driven = 1; startEndless(977); things = []; events = []; road.cams = []; road.checks = []; road.holes = []; road.broken = []; road.works = []; road.rail = [];
+      const box = c.getBoundingClientRect(), ev = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: box.left + x, clientY: box.top + y, bubbles: true, cancelable: true }));
+      // The two thumbs (left steers, right drives), each slid from where it landed.
+      setControls('kaksi'); btns = []; draw();   // a drive frame's buttons, not the menu's
+      ev('pointerdown', 1, 60, 640); ev('pointermove', 1, 90, 640);
+      ev('pointerdown', 2, 300, 660); ev('pointermove', 2, 300, 620);
+      const before = { steer: input.steer, gas: input.gas };
+      P.s = leg.len - 0.2; P.v = 25; step(1 / 60);
+      const after = { k: endless.k, steer: input.steer, gas: input.gas };
+      ev('pointerup', 1, 90, 640); ev('pointerup', 2, 300, 620);
+      return { before, after, released: { steer: input.steer, gas: input.gas } }; }""")
+    b, a = r["before"], r["after"]
+    assert b["steer"] > 0 and b["gas"] > 0.35, r
+    assert a["k"] == 2 and abs(a["steer"] - b["steer"]) < 1e-9 and abs(a["gas"] - b["gas"]) < 1e-9, r
+    assert r["released"] == {"steer": 0, "gas": 0}, r
+    assert page.errors == []
+
+
 def test_the_run_scores_20_a_km_and_its_end_goes_to_the_loputon_list(site, context):
     page = open_game(site, context)
     r = page.evaluate("""() => { HOLD = true; driven = 1; localStorage.removeItem('ai-pelit:yoajo:loputon');
