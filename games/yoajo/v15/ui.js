@@ -578,17 +578,18 @@ function doneScreen() {
     ['Aikabonus', `+${r.bonus}`],
   ];
   if (leg.tired) rows.splice(6, 0, ['Kahvitauot', String(tally.tauko)]);
+  // The buttons: the next leg, "Koko matka" after Rovaniemi and after Utsjoki (#440's spec), again, menu.
+  const list = [], toRovaniemi = LEGS.findIndex(L => L.to === 'Rovaniemi') + 1;
+  if (level < LEGS.length) list.push(['seuraava', `Seuraava: ${LEGS[level].from} → ${LEGS[level].to}`]);
+  if (level === toRovaniemi || level === LEGS.length) list.push(['matka', '🏁 Koko matka']);   // v14: "Perillä Rovaniemellä!"
+  list.push(['uudelleen', 'Aja uudelleen'], ['valikko', 'Valikko']);
   const tx0 = LAND ? x0 + 16 : x0 + 22, tx1 = LAND ? x0 + w / 2 - 10 : x0 + w - 22, ty = LAND ? y0 + 96 : y0 + 104;
-  const rh = LAND ? Math.min(24, (H - 120 - (ty - y0)) / rows.length) : Math.min(24, (H - ty - 266) / rows.length);
+  const rh = LAND ? Math.min(24, (H - 120 - (ty - y0)) / rows.length) : Math.min(24, (y0 + h - 8 - ty - 266 - 62 * (list.length - 3)) / rows.length);   // v15: within the panel
   rows.forEach(([a, b], i) => { text(a, tx0, ty + i * rh, 14, '#cfd8ea', 'left', 500); text(b, tx1, ty + i * rh, 14, '#fff', 'right', 700); });
   const py = ty + rows.length * rh + 14;
   text(`${points} p`, cx, py, 28, '#ffffff', 'center', 900);
   text(r.record ? 'Uusi ennätys!' : `Ennätys ${r.best} p`, cx, py + 28, 14, r.record ? '#9ff0a8' : '#9fb0cc', 'center', 700);
   const hint = r.stars < 2 ? 'Aja tavoiteajassa saadaksesi toisen tähden.' : r.stars < 3 && tally.tukit ? 'Kolmas tähti: päästä ambulanssi heti ohi.' : r.stars < 3 ? 'Kolmas tähti: ei sakkoja, hurjastelua, häikäisyjä eikä liian läheisiä ohituksia.' : 'Täydellinen yöajo!';
-  const list = [];
-  if (level < LEGS.length) list.push(['seuraava', `Seuraava: ${LEGS[level].from} → ${LEGS[level].to}`]);
-  else list.push(['matka', '🏁 Koko matka']);   // v15: the trip's end (v14: "Perillä Rovaniemellä!")
-  list.push(['uudelleen', 'Aja uudelleen'], ['valikko', 'Valikko']);
   if (LAND) {
     const bx = x0 + w / 2 + 10, bw = w / 2 - 26;
     fitText(hint, bx + bw / 2, y0 + 40, 13, bw, '#cfe0ff', 'center', 500);

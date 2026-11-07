@@ -811,7 +811,7 @@ def test_events_from_the_legs_own_queue_get_their_random_number_and_the_waiting_
 # v14 (#440): the route turns. A driver alone on the leg: keeps its lane, takes each turn at
 # `kmh` (0: the speed the turn is meant for), steers into it once at its start unless `straight`,
 # and stops `stop` (an expression: metres to the stop line, or null) when asked. Sleep is off.
-TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; events = [];
+TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 11; newLeg(n); things = []; events = [];
   road.cams = []; road.checks = []; const seen = [], sig = {}; let out = {}; eval(setup);
   for (let i = 0; i < 60 * 240 && mode === 'drive' && !eval(until); i++) {
     P.tired = 0; const J = turnAhead(), jd = J ? J.a0 - P.s : 1e9;
@@ -926,13 +926,17 @@ RAIL_STOP = """(() => { if (x.on && x.t > 8 && out.queued === null) out.queued =
 
 def test_the_level_crossing_waiting_is_20_through_the_barriers_ends_the_leg_and_traffic_queues(site, context):
     page = open_game(site, context)
-    r = page.evaluate(TURN, [4, RAIL, 60, False, "P.s > x.s + 40", RAIL_STOP])
-    assert r["mode"] == "drive" and r["tally"]["juna"] == 1, r
-    assert "Juna tulee: puomit laskeutuvat" in r["seen"] and "Juna meni ohi +20" in r["seen"], r
-    # The car ahead stopped before the crossing while the train went by.
-    assert r["out"]["queued"] is not None and 3 < r["out"]["queued"] < 20, r
-    r = page.evaluate(TURN, [4, "var x = road.rail[0]; P.s = x.s - 400;", 60, False, "P.s > x.s + 40", "null"])
-    assert r["mode"] == "crash" and r["why"] == "Ajoit puomien läpi tasoristeyksessä.", r
+    # v15: leg 4 and Lapland's first leg (#440's spec: the level crossing on leg 4 and in Lapland).
+    rails = page.evaluate("() => { maxLeg = 11; const out = []; for (let n = 1; n <= 11; n++) { newLeg(n); out.push(road.rail.length); } return out; }")
+    assert rails == [0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0], rails
+    for n in (4, 9):
+        r = page.evaluate(TURN, [n, RAIL, 60, False, "P.s > x.s + 40", RAIL_STOP])
+        assert r["mode"] == "drive" and r["tally"]["juna"] == 1, (n, r)
+        assert "Juna tulee: puomit laskeutuvat" in r["seen"] and "Juna meni ohi +20" in r["seen"], (n, r)
+        # The car ahead stopped before the crossing while the train went by.
+        assert r["out"]["queued"] is not None and 3 < r["out"]["queued"] < 20, (n, r)
+        r = page.evaluate(TURN, [n, "var x = road.rail[0]; P.s = x.s - 400;", 60, False, "P.s > x.s + 40", "null"])
+        assert r["mode"] == "crash" and r["why"] == "Ajoit puomien läpi tasoristeyksessä.", (n, r)
     assert page.errors == []
 
 
@@ -1143,3 +1147,24 @@ def test_a_restart_gives_a_fresh_tank_and_station(site, context):
       return { start, filled, again: P.fuel, n: tally.tankkaus, dry: P.dry, fresh: !b2.filled, mode }; }""")
     assert r["filled"] == [1, 1] and r["again"] == r["start"] and r["n"] == 0 and not r["dry"] and r["fresh"], r
     assert page.errors == []
+
+
+DONE = """(n) => { HOLD = true; maxLeg = 11; newLeg(n); P.s = leg.len + 1; finish(); btns = []; draw();
+  return { ids: btns.map(b => b.id), bottom: Math.max(...btns.map(b => b.y + b.h)), W, H }; }"""
+
+
+def test_the_trip_is_offered_after_rovaniemi_and_utsjoki(site, context):
+    # #440's spec: "Koko matka" after Rovaniemi (leg 8) and after Utsjoki (leg 11); the next leg stays.
+    for w, h in ((360, 640), (390, 844), (740, 360)):
+        page = open_game(site, context)
+        page.set_viewport_size({"width": w, "height": h})
+        page.wait_for_function(f"W === {w} && H === {h}")
+        for n, ids in ((7, ["seuraava", "uudelleen", "valikko"]), (8, ["seuraava", "matka", "uudelleen", "valikko"]),
+                       (11, ["matka", "uudelleen", "valikko"])):
+            r = page.evaluate(DONE, n)
+            assert r["ids"] == ids and r["bottom"] <= h, (w, h, n, r)
+        page.evaluate(DONE, 8)
+        r = page.evaluate("() => { act({ id: 'matka' }); const m = mode; act({ id: 'takaisin' }); const m2 = mode; act({ id: 'seuraava' }); return [m, m2, mode, level]; }")
+        assert r == ["matka", "done", "drive", 9], r
+        assert page.errors == []
+        page.close()

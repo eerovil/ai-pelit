@@ -14,7 +14,7 @@ const ROAD_EVENTS = [
   ['aura', 'jaa', 'erikois'],
   ['aura', 'jaa', 'ambulanssi'],
   // v15 (#440): Lapland's legs 9–11.
-  ['aura', 'jaa', 'erikois'],
+  ['aura', 'jaa', 'rata'],            // the level crossing in Lapland too (#440's spec), on the line north from Rovaniemi
   ['aura', 'jaa', 'rikki'],
   ['aura', 'jaa', 'ambulanssi'],
 ];
