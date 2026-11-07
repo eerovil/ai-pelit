@@ -530,6 +530,37 @@ def test_a_taken_nickname_on_the_friends_page_keeps_the_field(phones):
     assert shelf.locator(".friends-name-error").count() == 0
 
 
+def press_save_across_a_refresh(page):
+    """Tap "Tallenna" with the friends list's answer landing between press and release (#431)."""
+    box = page.locator(".friends-form button").bounding_box()
+    page.evaluate("window.__saveBtn = document.querySelector('.friends-form button')")
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.evaluate("AiPelitKaverit.refresh()")
+    # The redraw waited: the button pressed is still the one on the page.
+    assert page.evaluate("window.__saveBtn.isConnected")
+    page.mouse.up()
+
+
+def test_a_refresh_mid_tap_keeps_the_nickname_save(phones):
+    phones.api.taken.add("aino")
+    shelf = phones(None, None, player=A)
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    shelf.fill(".friends-name", "Aino")
+    press_save_across_a_refresh(shelf)
+    shelf.wait_for_selector(".friends-name-error")
+    assert shelf.locator(".friends-name-error").inner_text() == "Nimimerkki Aino on jo käytössä. Valitse toinen."
+    assert shelf.locator(".friends-name").input_value() == "Aino"
+    assert shelf.evaluate("localStorage.getItem('ai-pelit:_pelaaja:nimi')") is None
+    shelf.fill(".friends-name", "Aino2")
+    press_save_across_a_refresh(shelf)
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino2"
+    assert shelf.locator(".friends-name-error").count() == 0
+
+
 def test_a_taken_nickname_in_the_room_asks_again_and_sends_nothing(phones):
     phones.api.taken.add("aino")
     host = phones(None, player=A)
