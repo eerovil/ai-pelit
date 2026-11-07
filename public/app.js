@@ -641,6 +641,22 @@
     ].filter(Boolean));
   }
   var friendsNote = '', nameError = '';
+  // The nickname form (#431): while a finger or mouse is down on it, a redraw (a friends-list answer) waits
+  // until the release, so the tap's "Tallenna" button is not swapped for a new one between press
+  // and release (the click would then go nowhere). A redraw while a save is under way keeps the
+  // form, with what was typed and its button disabled, until the server has answered.
+  var namePress = false, nameRedraw = false, nameSaving = false;
+  function nameRelease() {
+    if (!namePress) return;
+    // After the click: pointerup, mouseup and click come in one go, so wait one turn.
+    setTimeout(function () {
+      namePress = false;
+      if (nameRedraw && location.hash === '#/kaverit') { nameRedraw = false; renderFriends(); }
+      nameRedraw = false;
+    });
+  }
+  window.addEventListener('pointerup', nameRelease, true);
+  window.addEventListener('pointercancel', nameRelease, true);
   // Invites as phone notifications (#367): the switch, its state read once per visit to the page.
   var pushNow = null, pushError = '', pushBusy = false;
   function pushRow() {
@@ -670,6 +686,8 @@
     ]);
   }
   function renderFriends() {
+    // Every redraw waits while the nickname form is pressed (see namePress).
+    if (namePress) { nameRedraw = true; return; }
     document.title = 'Kaverit · AI-pelit';
     showSortPicker(false);
     var st = friends.state, parts = [
@@ -679,24 +697,28 @@
     // The nickname field while there is none, or the kept one is taken or rejected; it stays
     // until the server takes a name.
     var problem = friends.nameNote();
-    if (!friends.name() || problem || nameError) {
+    // A save under way keeps it too: the name is kept on the phone before the server answers.
+    if (!friends.name() || problem || nameError || nameSaving) {
       var input = el('input', { class: 'friends-name', maxlength: '16', placeholder: 'Nimimerkki', 'aria-label': 'Nimimerkki' });
       // A redraw (the friends list refreshing) keeps what was typed: a tap on "Tallenna" just as
       // the page is drawn again would otherwise save nothing (a flaky CI run on #389).
       var typed = view.querySelector('.friends-name');
       if (typed) input.value = typed.value;
       var save = el('button', { type: 'button', class: 'button', text: 'Tallenna' });
+      save.disabled = nameSaving;
       save.addEventListener('click', function () {
         var v = input.value.trim();
-        if (!v) return;
-        save.disabled = true;
+        if (!v || nameSaving) return;
+        nameSaving = save.disabled = true;
+        function done() { nameSaving = false; renderFriends(); }
         friends.setName(v).then(function (r) {
           nameError = friends.nameError(r, v);
           return friends.refresh();
-        }).then(renderFriends, renderFriends);
+        }).then(done, done);
       });
-      parts.push(el('p', { class: 'muted', text: problem || 'Valitse nimimerkki, niin kaverit tunnistavat sinut.' }),
-        el('div', { class: 'friends-form' }, [input, save]));
+      var form = el('div', { class: 'friends-form' }, [input, save]);
+      form.addEventListener('pointerdown', function () { namePress = true; });
+      parts.push(el('p', { class: 'muted', text: problem || 'Valitse nimimerkki, niin kaverit tunnistavat sinut.' }), form);
       if (nameError) parts.push(el('p', { class: 'friends-note friends-name-error', role: 'status', text: nameError }));
     }
     parts.push(el('p', { class: 'muted', text: 'Kaveriksi pääsee pelihuoneessa: napauta ➕ Kaveriksi toisen pelaajan nimen vieressä, ja hän hyväksyy. Kaverit näkevät, mitä pelaat, ja voivat kutsua sinut huoneeseensa.' }));

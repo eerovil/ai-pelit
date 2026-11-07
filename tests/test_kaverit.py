@@ -530,6 +530,118 @@ def test_a_taken_nickname_on_the_friends_page_keeps_the_field(phones):
     assert shelf.locator(".friends-name-error").count() == 0
 
 
+def press_save_across_a_refresh(page):
+    """Tap "Tallenna" with the friends list's answer landing between press and release (#431)."""
+    box = page.locator(".friends-form button").bounding_box()
+    page.evaluate("window.__saveBtn = document.querySelector('.friends-form button')")
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.evaluate("AiPelitKaverit.refresh()")
+    # The redraw waited: the button pressed is still the one on the page.
+    assert page.evaluate("window.__saveBtn.isConnected")
+    page.mouse.up()
+
+
+def test_a_refresh_mid_tap_keeps_the_nickname_save(phones):
+    phones.api.taken.add("aino")
+    shelf = phones(None, None, player=A)
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    shelf.fill(".friends-name", "Aino")
+    press_save_across_a_refresh(shelf)
+    shelf.wait_for_selector(".friends-name-error")
+    assert shelf.locator(".friends-name-error").inner_text() == "Nimimerkki Aino on jo käytössä. Valitse toinen."
+    assert shelf.locator(".friends-name").input_value() == "Aino"
+    assert shelf.evaluate("localStorage.getItem('ai-pelit:_pelaaja:nimi')") is None
+    shelf.fill(".friends-name", "Aino2")
+    press_save_across_a_refresh(shelf)
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino2"
+    assert shelf.locator(".friends-name-error").count() == 0
+
+
+def hold_name_saves(page):
+    """Holds each POST /api/players until released; the context's fake server then answers it."""
+    held = []
+    page.route(re.compile(r".*/api/players$"), lambda route: held.append(route) if route.request.method == "POST" else route.fallback())
+    return held
+
+
+def test_a_refresh_while_the_nickname_saves_keeps_the_form(phones):
+    phones.api.taken.add("aino")
+    shelf = phones(None, None, player=A)
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    held = hold_name_saves(shelf)
+    for name in ("Aino", "Aino2"):
+        shelf.fill(".friends-name", name)
+        shelf.locator(".friends-form button").click()
+        shelf.wait_for_function("document.querySelector('.friends-form button').disabled")
+        while not held:
+            shelf.wait_for_timeout(20)
+        # The friends list answers while the server has not yet answered the name.
+        shelf.evaluate("AiPelitKaverit.refresh()")
+        assert shelf.locator(".friends-name").input_value() == name
+        assert shelf.locator(".friends-form button").is_disabled()
+        # A second tap on the redrawn button sends nothing more.
+        shelf.locator(".friends-form button").click(force=True)
+        held.pop().fallback()
+        if name == "Aino":
+            shelf.wait_for_selector(".friends-name-error")
+            assert shelf.locator(".friends-name").input_value() == "Aino"
+            assert shelf.locator(".friends-form button").is_enabled()
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino2"
+    assert len([c for c in phones.api.calls if c[:2] == ("POST", "players")]) == 2
+
+
+def touch(page, kind, box=None):
+    cdp = page.context.new_cdp_session(page) if not hasattr(page, "cdp") else page.cdp
+    page.cdp = cdp
+    points = [{"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}] if box else []
+    cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
+
+
+def test_a_refresh_mid_touch_on_a_390_px_phone_keeps_the_nickname_save(phones):
+    phones.api.taken.add("aino")
+    shelf = phones(None, None, player=A, width=390, height=844)
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    for name in ("Aino", "Aino2"):
+        shelf.fill(".friends-name", name)
+        box = shelf.locator(".friends-form button").bounding_box()
+        shelf.evaluate("window.__saveBtn = document.querySelector('.friends-form button')")
+        touch(shelf, "touchStart", box)
+        shelf.evaluate("AiPelitKaverit.refresh()")
+        assert shelf.evaluate("window.__saveBtn.isConnected")
+        touch(shelf, "touchEnd")
+        if name == "Aino":
+            shelf.wait_for_selector(".friends-name-error")
+            assert shelf.locator(".friends-name").input_value() == "Aino"
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino2"
+
+
+def test_a_redraw_held_by_a_cancelled_touch_still_comes(phones):
+    shelf = phones(None, None, player=A)
+    shelf.wait_for_selector(".card")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    box = shelf.locator(".friends-form button").bounding_box()
+    # A friend request arrives while a finger rests on the form, then the touch is cancelled.
+    phones.api.names[B] = "Bertta"
+    phones.api.requests.add((B, pid_of(A)))
+    touch(shelf, "touchStart", box)
+    shelf.evaluate("AiPelitKaverit.refresh()")
+    assert shelf.locator(".friend").count() == 0
+    touch(shelf, "touchCancel")
+    shelf.wait_for_selector(".friend")
+    assert phones.api.names.get(A) is None
+
+
 def test_a_taken_nickname_in_the_room_asks_again_and_sends_nothing(phones):
     phones.api.taken.add("aino")
     host = phones(None, player=A)
