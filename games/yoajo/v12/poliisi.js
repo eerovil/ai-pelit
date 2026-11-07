@@ -140,7 +140,8 @@ function policeCheck(dt) {
 // Whether a police car sees the player now, for the rules that end the leg (unsafe overtaking,
 // the solid line): from unsafeOvertake in game.js.
 function policeSaw(why) { const cop = watcher(); if (cop) caught(why, cop); return !!cop; }
-function policeDazzled(t) { if (t.watch) fine(t, 'häikäisit poliisiautoa'); }
+// Only a police car that sees the player (policeSees: in range, not over a crest) stops them.
+function policeDazzled(t) { if (t.watch && policeSees(t)) fine(t, 'häikäisit poliisiautoa'); }
 
 // A fine: blue lights behind, the car pulls over onto the shoulder and stops, and STOP_TIME s later
 // the fine is written and the drive goes on.

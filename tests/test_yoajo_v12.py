@@ -481,6 +481,28 @@ def test_two_police_cars_fine_once_and_a_restart_mid_stop_starts_clean(site, con
     assert page.errors == []
 
 
+def test_a_police_car_dazzled_over_a_crest_does_not_stop_the_car(site, context):
+    # Oncoming at the dazzle distance, and ahead within 50 m, but behind a crest: the usual
+    # dazzle minus stays, the police do not stop or fine the car.
+    page = open_game(site, context)
+    js = """([ahead]) => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = []; road.cams = []; road.checks = [];
+      P.s = 300; P.lat = LANE; P.v = 20; P.high = true;
+      const Y = road.Y.slice(), bump = ahead ? [312, 324] : [330, 360];
+      for (let j = Math.floor(bump[0] / SEG); j < bump[1] / SEG; j++) road.Y[j] += 6;
+      const t = ahead ? add('auto', { s: 335, lat: LANE, v: 20, police: true, watch: true })
+                      : add('vastaan', { s: 400, lat: -LANE, v: -20, police: true, watch: true });
+      for (let i = 0; i < 60 * 4 && !pstop && mode === 'drive'; i++) {
+        P.high = true; P.lat = LANE; P.vl = 0; P.v = 20; if (ahead) { P.s = 300; t.s = 335; t.v = 20; } step(1 / 60);
+      }
+      const out = { seen: policeSees(t), pstop: !!pstop, mode, h: tally.haikaisyt, sakot: tally.sakot, points };
+      road.Y.set(Y); return out; }"""
+    for ahead in (False, True):
+        r = page.evaluate(js, [ahead])
+        assert not r["seen"] and not r["pstop"] and r["mode"] == "drive", (ahead, r)
+        assert r["h"] == 1 and r["sakot"] == 0 and r["points"] < 0 and r["points"] > -150, (ahead, r)
+    assert page.errors == []
+
+
 # The police check on leg n: everything else off the road, the car driven at 50 to it. stop:
 # whether the driver stops beside the officer.
 CHECK = """([n, stop, lat]) => { lat = lat === undefined ? LANE : lat; HOLD = true; maxLeg = 8; newLeg(n); things = []; road.cams = [];
