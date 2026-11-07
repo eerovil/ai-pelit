@@ -75,15 +75,21 @@ def test_a_3d_game_still_plays_offline_after_a_site_update(site, context):
     page.wait_for_function("window.drawn === true || window.noWebgl === true", timeout=15000)
     first = page.evaluate("caches.keys().then(k => k.find(n => n.startsWith('ai-pelit-shell-')))")
 
+    # The update happens under the game page, as in test_site.py (#420): the shelf reloads itself
+    # when the new worker takes over (#433), and that reload could abort the offline page load
+    # below. A game page never reloads for it.
+    page.evaluate("navigator.serviceWorker.addEventListener('controllerchange', () => { window.vaihtui = true; })")
     make_game(site.games, "toka", [game_page("toka")])
     site.build()
-    page.goto(site.url)
-    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-    # The new worker has taken over once the old shell cache is gone; the library's cache stays.
+    page.evaluate("navigator.serviceWorker.getRegistration().then(r => r.update())")
+    page.wait_for_function("window.vaihtui === true", timeout=15000)
+    # The new worker is active once it has dropped the old shell cache; the library's cache stays.
     page.wait_for_function(
-        f"caches.keys().then(k => !k.includes({first!r}) && k.some(n => n.startsWith('ai-pelit-shell-')))",
+        "navigator.serviceWorker.controller.state === 'activated' && caches.keys().then(k => "
+        f"!k.includes({first!r}) && k.some(n => n.startsWith('ai-pelit-shell-')))",
         timeout=15000,
     )
+    assert "ai-pelit-lib" in page.evaluate("caches.keys()")
     context.set_offline(True)
     try:
         page.goto(f"{site.url}games/kuutio/v1/")
