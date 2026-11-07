@@ -21,7 +21,7 @@ VERSIONS = [
     "games/orava/v6", "games/pallorata/v5", "games/pilkki/v6", "games/pituushyppy/v17",
     "games/puhelinkoppi/v9", "games/seivashyppy/v15", "games/skuutti/v5", "games/sormiskeitti/v10",
     "games/tikka/v7", "games/trampoliini/v11", "games/voimistelu/v13", "games/vuoristorata/v4",
-    "games/yoajo/v13", "games/last-signal/v16", "games/vauvan-syotto/v4",
+    "games/yoajo/v14", "games/last-signal/v16", "games/vauvan-syotto/v4",
 ]
 
 # The field events' newest versions, whose "📣 Kannusta" chime Eero found too loud (#355).

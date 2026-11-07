@@ -8,7 +8,7 @@ const ROAD_EVENTS = [
   [],
   ['tietyo', 'rikki', 'sumu'],
   ['ambulanssi', 'rikki', 'sumu'],
-  ['ambulanssi', 'erikois', 'sumu'],
+  ['ambulanssi', 'rata', 'sumu'],      // v14: a level crossing instead of the wide load (at most three kinds)
   ['aura', 'jaa', 'ambulanssi'],
   ['aura', 'jaa', 'rikki'],
   ['aura', 'jaa', 'erikois'],
@@ -35,6 +35,11 @@ const PLOUGH_V = 40 / KMH, CLOUD_BACK = 50;
 const ICE_LEN = 50, ICE_SIGN = 150, ICE_GRIP = 0.5;
 // Fog in the dips: inside it high beams reach FOG_HIGH metres, low beams at most FOG_LOW.
 const FOG_HALF = 70, FOG_EDGE = 25, FOG_HIGH = 30, FOG_LOW = 45;
+// v14 (#440): the level crossing. The lights start to flash as the player comes within RAIL_WARN
+// metres; the barriers come down from RAIL_DOWN0 to RAIL_DOWN1 s, the train (RAIL_TRAIN_LEN m, at
+// RAIL_TRAIN_V m/s from RAIL_FROM m off the road) goes by from RAIL_TRAIN0 s, and the barriers go
+// up from RAIL_UP0 to RAIL_UP1 s. Through them while they are down is a crash; waiting is +20.
+const RAIL_WARN = 220, RAIL_DOWN0 = 1.5, RAIL_DOWN1 = 4, RAIL_TRAIN0 = 6, RAIL_TRAIN_V = 46, RAIL_TRAIN_LEN = 100, RAIL_FROM = 160, RAIL_UP0 = 15, RAIL_UP1 = 17;
 
 // ---- Placing them on the leg (from newLeg, after the police) ----
 function roadLeg(evs) {
@@ -48,7 +53,7 @@ function roadLeg(evs) {
       !road.checks.some(c => near(a, b, c.s - 320, c.s + 60)) &&
       !road.taken.some(([x0, x1]) => near(a, b, x0, x1));
     if (!base || !fixed) return base;
-    return !road.signs.some(sg => sg.s >= a && sg.s <= b && (sg.kind !== 'raja' || (sg.s >= quiet0 && sg.s <= quiet1))) &&
+    return !road.signs.some(sg => sg.s >= a && sg.s <= b && sg.kind !== 'suunta' && (sg.kind !== 'raja' || (sg.s >= quiet0 && sg.s <= quiet1))) &&
       !road.bad.some(x => near(a, b, x.s0 - 40, x.s1 + 40)) &&
       !road.nopass.some(z => near(a, b, z.s0 - 20, z.s1 + 40)) &&
       !road.cams.some(c => near(a, b, c.s - 40, c.s + 40)) &&
@@ -62,9 +67,11 @@ function roadLeg(evs) {
     }
     return -1;
   }
+  // v14: a turn's blue signs (risteys.js) may stand there; turnSigns() moves them out after.
   // Fixed places first, then the traffic that meets the player along a stretch.
-  for (const kind of ['tietyo', 'rikki', 'erikois', 'aura', 'ambulanssi', 'jaa'].filter(k => kinds.includes(k))) {
-    if (kind === 'tietyo') {
+  for (const kind of ['tietyo', 'rata', 'rikki', 'erikois', 'aura', 'ambulanssi', 'jaa'].filter(k => kinds.includes(k))) {
+    if (kind === 'rata') railCrossing(road.railAt, r);   // its place kept in newLeg (game.js)
+    else if (kind === 'tietyo') {
       const s = place(220, TAPER + WORK_LEN + FAR_STOP + 50, true, -130, TAPER + WORK_LEN + FAR_STOP + 30); if (s < 0) continue;
       const w = { stop: s, s0: s + TAPER, s1: s + TAPER + WORK_LEN, far: s + TAPER + WORK_LEN + FAR_STOP, off: r() * WORK_CYCLE, waited: false, judged: false, told: false };
       road.works.push(w);
@@ -108,6 +115,45 @@ function roadLeg(evs) {
     const e = evs[i];
     if ((e.kind === 'takaa' || e.kind === 'ohittaja') && road.taken.some(([a, b]) => e.s > a - 500 && e.s < b + 100)) evs.splice(i, 1);
   }
+}
+
+// v14: the level crossing at s (from roadLeg), its warning sign 250 m before.
+function railCrossing(s, r) {
+  if (s < 0) return null;
+  const x = { s, on: false, done: false, t: 0, waited: false, judged: false, dir: r() < 0.5 ? -1 : 1, bellT: 0 };
+  road.rail.push(x);
+  road.signs.push({ s: s - 250, kind: 'tasoristeys' });
+  return x;
+}
+// How far down its barriers are, 0 (up) .. 1 (down).
+function railBarrier(x) {
+  if (!x.on) return 0;
+  const t = x.t;
+  return t < RAIL_DOWN0 ? 0 : t < RAIL_DOWN1 ? (t - RAIL_DOWN0) / (RAIL_DOWN1 - RAIL_DOWN0) : t < RAIL_UP0 ? 1 : clamp(1 - (t - RAIL_UP0) / (RAIL_UP1 - RAIL_UP0), 0, 1);
+}
+// Where the train's front is across the road, metres from the road's middle along its way; null
+// when there is no train.
+function railTrain(x) { return x.on && x.t >= RAIL_TRAIN0 ? -RAIL_FROM + (x.t - RAIL_TRAIN0) * RAIL_TRAIN_V : null; }
+// Shut: the barriers on their way down or down, or the train on the road.
+function railShut(x) { const h = railTrain(x); return railBarrier(x) > 0.25 || (h !== null && h > -6 && h - RAIL_TRAIN_LEN < 6); }
+// Everyone else stops before a crossing whose lights are on: the speed a vehicle may have at
+// most here (from move in game.js), queueing behind the ones already waiting.
+function railHold(t) {
+  if (!vehicle(t) || t.parked || t.arm) return t.v;
+  for (const x of road.rail) {
+    if (!x.on || x.t > RAIL_UP0 + 0.5) continue;
+    if (t.v >= 0 && t.s < x.s - 4 && t.s > x.s - 200) {
+      let line = x.s - 4 - t.len / 2;
+      for (const o of things) if (o !== t && o.v >= 0 && vehicle(o) && o.s > t.s && o.s < x.s - 3) line = Math.min(line, o.s - (o.len + t.len) / 2 - 2);
+      return Math.min(t.v, Math.sqrt(2 * 4 * Math.max(0, line - t.s)));
+    }
+    if (t.v < 0 && t.s > x.s + 4 && t.s < x.s + 200) {
+      let line = x.s + 4 + t.len / 2;
+      for (const o of things) if (o !== t && o.v < 0 && vehicle(o) && o.s < t.s && o.s > x.s + 3) line = Math.max(line, o.s + (o.len + t.len) / 2 + 2);
+      return Math.max(t.v, -Math.sqrt(2 * 4 * Math.max(0, t.s - line)));
+    }
+  }
+  return t.v;
 }
 
 // ---- On the road (from release in game.js) ----
@@ -239,6 +285,7 @@ function ambulance(t, dt) {
     }
   }
   if (t.plan === 'back') { t.v = top; t.lat += (LANE - t.lat) * Math.min(1, dt * 1.5); }
+  t.v = railHold(t);   // v14: it waits for a train too
   t.s += t.v * dt;
 }
 
@@ -285,6 +332,22 @@ function roadTick(dt) {
     const d = t.s - t.len / 2 - P.s;
     if (d > 0 && d < CLOUD_BACK && Math.abs(P.lat - t.lat) < 3.2) whiteout = Math.max(whiteout, CLOUD * (1 - d / CLOUD_BACK));
   }
+  // v14: the level crossing: the lights, the barriers and the train; through them is a crash.
+  for (const x of road.rail) {
+    if (!x.on && !x.done && P.s > x.s - RAIL_WARN && P.s < x.s) { x.on = true; x.t = 0; say('Juna tulee: puomit laskeutuvat', false); }
+    if (x.on) {
+      x.t += dt; x.bellT -= dt;
+      if (x.bellT <= 0 && Math.abs(P.s - x.s) < 300) { x.bellT = 0.7; if (typeof bellSound === 'function') bellSound(); }
+      if (x.t > RAIL_UP1) { x.on = false; x.done = true; }
+    }
+    const d = x.s - P.s;
+    if (railShut(x) && d > 0 && d < 60 && P.v < 1) x.waited = true;
+    if (railShut(x) && P.s + P.len / 2 > x.s - 2.5 && P.s - P.len / 2 < x.s + 2.5) return crash('Ajoit puomien läpi tasoristeyksessä.');
+    if (!x.judged && P.s - P.len / 2 > x.s + 2.5) {
+      x.judged = true;
+      if (x.waited) { tally.juna = (tally.juna || 0) + 1; score(20, 'Juna meni ohi'); }
+    }
+  }
   for (const x of road.ice) if (!x.told && P.s > x.s0 - 20 && P.s < x.s1) { x.told = true; say('Musta jää: ei jarrua eikä äkkiohjausta', false); }
   const fog = fogAt(P.s);
   for (const z of road.fog) if (!z.told && fog > 0.2 && Math.abs(P.s - z.s) < FOG_HALF + FOG_EDGE) { z.told = true; say('Sumua: lähivaloilla näkee paremmin', false); }
@@ -297,6 +360,12 @@ function roadHint() {
   if (amb) return '🚑 Ambulanssi takana: oikealle reunaan';
   const load = things.find(t => t.kind === 'erikois' && t.s - P.s < 400 && t.s > P.s);
   if (load) return '⚠ Erikoiskuljetus: oikeaan reunaan, alle 50 km/h';
+  const x = road.rail.find(x => x.s - P.s < RAIL_WARN + 30 && x.s - P.s > -3);
+  if (x) {
+    const d = Math.max(0, Math.round((x.s - P.s - 4) / 10) * 10);
+    if (x.on && x.t < RAIL_UP1 - 1) return `🚆 Tasoristeys ${d} m: puomit alhaalla, pysähdy`;
+    return `Tasoristeys ${d} m`;
+  }
   const w = road.works.find(w => w.stop - P.s < 300 && P.s < w.s1);
   if (w) {
     if (P.s > w.stop) return 'Tietyö: aja vasenta kaistaa';

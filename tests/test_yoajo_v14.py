@@ -8,7 +8,7 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v13/"
+URL = "games/yoajo/v14/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -21,7 +21,7 @@ URL = "games/yoajo/v13/"
 # keeps to low beams in fog.
 BOT = """(legs) => { maxLeg = 8; const out = [];
   for (const n of legs) { newLeg(n); HOLD = true;
-    for (let i = 0; i < 60 * 400 && mode === 'drive'; i++) {
+    for (let i = 0; i < 60 * 600 && mode === 'drive'; i++) {
       let want = LANE;
       const slow = things.filter(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro'
         && !t.parked && t.kind !== 'konstaapeli' && t.kind !== 'partio')
@@ -30,7 +30,7 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       const head = things.find(t => t.v < 0 && t.lat > 0.5 && t.s > P.s && t.s - P.s < 260);
       if (slow && !onc && !road.works.some(w => w.stop - P.s < 300 && P.s < w.far) && !road.broken.some(b => b.s - P.s < 250 && b.s > P.s - 10) && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
       if (slow && slow.kind === 'kavelija' && !onc) want = slow.lat > 0 ? 0 : LANE;
-      const beside = things.find(t => t.v >= 0 && vehicle(t) && !t.parked && t.kind !== 'takaa' && t.lat > 0 && t.lat < EDGE && t.s - P.s > -7 && t.s - P.s < 7);
+      const beside = things.find(t => t.v >= 0 && vehicle(t) && !t.parked && t.kind !== 'takaa' && t.lat > 0 && t.lat < EDGE && t.s - P.s > -3 - t.len / 2 && t.s - P.s < 3 + t.len / 2);
       if (beside && P.lat < 0.5) want = -LANE;
       if (head) want = 4.0;
       const deer = things.find(t => (t.kind === 'hirvi' || t.kind === 'poro') && t.s > P.s && t.s - P.s < 120 && Math.abs(t.lat) < 6);
@@ -51,23 +51,34 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       if (bk && !bkOnc && bk.s - P.s < 90) want = 0.3;
       const bkStop = bk && P.lat > 0.6 ? bk.s - 14 - P.s : 1e9;
       // An ambulance behind, a wide load ahead: to the right edge.
-      const amb = things.find(t => t.kind === 'ambulanssi' && t.plan !== 'back' && t.s < P.s && P.s - t.s < 150);
+      const amb = things.find(t => t.kind === 'ambulanssi' && t.plan !== 'back' && t.s - P.s < 20 && P.s - t.s < 150);
       const load = things.find(t => t.kind === 'erikois' && t.s - P.s < 400 && t.s - P.s > -12);
-      if (amb || load) want = 3.0;
+      // (Not while out overtaking: back behind the one passed first.)
+      if ((amb || load) && !(P.lat < 0.5 && (beside || slow && slow.s - P.s < 30 + slow.len / 2))) want = 3.0;
       const icy = road.ice.some(x => P.s > x.s0 - ICE_SIGN && P.s < x.s1);
       const ck = road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s > -3 && c.s - P.s < 250), stopIn = ck ? ck.s - 3 - P.s : 0;
+      // v14: no overtaking near a turn, slow for it and steer into it; at a left turn wait for a car
+      // coming from the road ahead; stop for a train at the level crossing.
+      const J = turnAhead(), jd = J ? J.a0 - P.s : 1e9;
+      if (jd < 300 && jd > -60 && !head && !amb && !load && !bk) want = Math.max(want, LANE);
+      const cross = J && J.kind === 'risteys' && J.dir < 0 && jd > 1 && things.some(t => t.arm === J && t.kind === 'risteava'
+        && t.s - J.a0 > J.C - 2 && (t.s - J.a0 - J.C) / Math.max(1, -t.v) < GAP_TIME + 1.5), crossStop = cross ? jd - 3 : 1e9;
+      const rx = road.rail.find(x => x.on && x.t < RAIL_UP0 + 0.5 && x.s - P.s > 0 && x.s - P.s < 250), railStop = rx ? rx.s - 10 - P.s : 1e9;
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
       input.left = err > 0.15; input.right = err < -0.15;
-      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200);
+      if (J && jd < 1 && P.s < J.a0 + TURN_EASE && !P.into && !cross) { input.left = J.dir < 0; input.right = J.dir > 0; }
+      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200,
+        jd < 400 ? turnCruise(P.s) * KMH - 4 : 200);
       input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
-        || (slow && want > 0 && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35)
+        || (slow && want > 0 && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < Math.max(35, 10 + (P.v - slow.v) ** 2 / 4))
         || (ck && (stopIn < 2 || P.v > Math.sqrt(2 * 3 * stopIn)))
         || (wait && (wd < 2 || P.v > Math.sqrt(2 * 3 * wd))) || (inq && P.v > inq.v - 0.3)
-        || bkStop < 2 || P.v > Math.sqrt(2 * 3 * Math.max(0, bkStop));
+        || bkStop < 2 || P.v > Math.sqrt(2 * 3 * Math.max(0, bkStop))
+        || crossStop < 2 || P.v > Math.sqrt(2 * 3 * Math.max(0, crossStop)) || railStop < 2 || P.v > Math.sqrt(2 * 3 * Math.max(0, railStop));
       P.high = !fogAt(P.s) && !fogAt(P.s + 60) && !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
       input.gas = input.brake || (rest && P.s > bay.s0 && P.lat > EDGE + 0.5) || merging ? 0 : 1; step(1 / 60);
     }
-    out.push({ n, mode, why: crashWhy, checks: road.checks.map(c => c.state), T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
+    out.push({ n, mode, why: crashWhy, at: Math.round(P.s), checks: road.checks.map(c => c.state), T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
   }
   return out; }"""
 
@@ -162,7 +173,8 @@ def test_gas_drives_forward_after_coffee_and_the_exit_returns_to_the_road(site, 
           return { mode, why: crashWhy, moved, kmh, coffee: tally.tauko,
             past: P.s > b.s1 + BAY_IN, lat: P.lat }; }""", n)
         assert r["coffee"] == 1 and r["moved"] > 5 and r["kmh"] > 10, (n, r)
-        assert r["mode"] == "drive" and r["past"] and r["lat"] < 3.5, (n, r)
+        # Hands off the wheel: on a bend (leg 5 from v14) the car drifts a little onto the shoulder.
+        assert r["mode"] == "drive" and r["past"] and r["lat"] < 4.0, (n, r)
     assert page.errors == []
 
 
@@ -364,7 +376,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v13")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v14")
 
 
 # ---- v12 (#440): the police ----
@@ -528,6 +540,7 @@ def test_a_police_car_dazzled_over_a_crest_does_not_stop_the_car(site, context):
 # whether the driver stops beside the officer.
 CHECK = """([n, stop, lat]) => { lat = lat === undefined ? LANE : lat; HOLD = true; maxLeg = 8; newLeg(n); things = []; road.cams = [];
   events = events.filter(e => e.kind === 'puhallus'); const c = road.checks[0]; P.s = c.s - 700;
+  road.turns = [];   // v14: no turn to take on the way (the road still bends there)
   const seen = [];
   for (let i = 0; i < 60 * 90 && mode === 'drive' && P.s < c.s + 120; i++) {
     const d = c.s - 3 - P.s; P.lat = lat; P.vl = 0;
@@ -586,7 +599,7 @@ DRIVE = """([n, setup, secs, each]) => { HOLD = true; maxLeg = 8; newLeg(n); thi
   return { mode, why: crashWhy, points, tally: Object.assign({}, tally), seen, out, lat: P.lat, s: P.s }; }"""
 
 PLANNED = {1: set(), 2: {"tietyo", "rikki", "sumu"}, 3: {"ambulanssi", "rikki", "sumu"},
-           4: {"ambulanssi", "erikois", "sumu"}, 5: {"aura", "jaa", "ambulanssi"}, 6: {"aura", "jaa", "rikki"},
+           4: {"ambulanssi", "rata", "sumu"}, 5: {"aura", "jaa", "ambulanssi"}, 6: {"aura", "jaa", "rikki"},
            7: {"aura", "jaa", "erikois"}, 8: {"aura", "jaa", "ambulanssi"}}
 
 
@@ -600,6 +613,7 @@ def test_road_events_are_on_the_legs_as_planned(site, context):
           if (road.broken.length && kinds.has('rikki')) got.push('rikki');
           if (road.fog.length) got.push('sumu');
           if (road.ice.length) got.push('jaa');
+          if (road.rail.length) got.push('rata');
           for (const k of ['ambulanssi', 'erikois', 'aura']) if (kinds.has(k)) got.push(k);
           const w = road.works[0];
           return { planned: ROAD_EVENTS[n - 1], got, works: road.works.length,
@@ -758,7 +772,7 @@ def test_events_never_share_a_stretch_and_a_restart_mid_event_starts_it_fresh(si
     assert r["tally"]["ambulanssi"] == 1 and r["tally"]["tukit"] == 0, r
     # A restart (the pause menu's "Aloita alusta") while the ambulance is blocked: it starts fresh.
     r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(3); things = []; events = []; road.cams = []; road.checks = [];
-      P.s = 400; P.lat = LANE; roadRelease({ kind: 'ambulanssi' });
+      P.s = road.broken[0].s - 300; P.lat = LANE; roadRelease({ kind: 'ambulanssi' });
       for (let i = 0; i < 60 * 20; i++) { P.vl = 0; P.v = 60 / KMH; P.lat = LANE; step(1 / 60); }
       const before = { tukit: tally.tukit, amb: things.some(t => t.kind === 'ambulanssi'), broken: road.broken.map(b => b.s), judged: road.broken.some(b => b.judged) };
       mode = 'pause'; act({ id: 'uudelleen' });
@@ -789,3 +803,178 @@ def test_events_from_the_legs_own_queue_get_their_random_number_and_the_waiting_
       return { r: e.r, beacon: things.find(t => t.kind === 'aura').beacon }; }""")
     assert 0 <= r2["r"] < 1 and 0 <= r2["beacon"] < 7, r2
     assert page.errors == []
+
+
+# v14 (#440): the route turns. A driver alone on the leg: keeps its lane, takes each turn at
+# `kmh` (0: the speed the turn is meant for), steers into it once at its start unless `straight`,
+# and stops `stop` (an expression: metres to the stop line, or null) when asked. Sleep is off.
+TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; events = [];
+  road.cams = []; road.checks = []; const seen = [], sig = {}; let out = {}; eval(setup);
+  for (let i = 0; i < 60 * 240 && mode === 'drive' && !eval(until); i++) {
+    P.tired = 0; const J = turnAhead(), jd = J ? J.a0 - P.s : 1e9;
+    const err = P.lat - LANE + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
+    input.left = err > 0.15; input.right = err < -0.15;
+    if (straight) { input.left = input.right = false; P.lat = LANE; P.vl = 0; }
+    else if (J && jd < 1 && P.s < J.a0 + TURN_EASE && !P.into) { input.left = J.dir < 0; input.right = J.dir > 0; }
+    const lim = kmh || Math.min(limitAt(P.s), turnCruise(P.s) * KMH - 4), d = eval(stop);
+    input.brake = P.v * KMH > lim + 2 || (d !== null && (d < 1 || P.v > Math.sqrt(2 * 3 * Math.max(0, d)))) ? 1 : 0;
+    input.gas = input.brake ? 0 : 1;
+    step(1 / 60);
+    if (J && jd > 0 && P.signal) sig[J.a0] = P.signal;
+    for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text);
+  }
+  return { mode, why: crashWhy, points, tally: Object.assign({}, tally), seen, out, s: P.s, wrong: !!P.wrong,
+    turns: road.turns.map(J => ({ a0: J.a0, a1: J.a1, dir: J.dir, kind: J.kind, done: J.done, signal: sig[J.a0] || 0 })) }; }"""
+PAST_TURNS = "P.s > road.turns[road.turns.length - 1].a1 + 150"
+
+
+def test_the_legs_turn_ramps_first_then_crossroads_with_signs_before(site, context):
+    page = open_game(site, context)
+    for n in range(1, 9):
+        r = page.evaluate("""(n) => { maxLeg = 8; newLeg(n); mode = 'menu';
+          return { turns: road.turns.map(J => [J.a0, J.dir, J.kind]), rail: road.rail.length,
+            signs: road.signs.filter(s => s.kind === 'suunta').map(s => [Math.round(s.s), s.dir]),
+            limits: road.turns.map(J => limitAt(J.a0)) }; }""", n)
+        assert 1 <= len(r["turns"]) <= 3, (n, r)
+        assert all(k == ("ramppi" if n <= 2 else "risteys") for _, _, k in r["turns"]), (n, r)
+        assert all(d == 1 for _, d, k in r["turns"] if k == "ramppi"), (n, r)
+        # Two blue signs before each, on its side: 600 m and 150 m (one may step past a police check).
+        for a0, d, _ in r["turns"]:
+            near = [s for s in r["signs"] if s[1] == d and 0 < a0 - s[0] <= 600]
+            assert len(near) == 2 and any(a0 - s[0] == 150 for s in near), (n, a0, r)
+        assert r["rail"] == (1 if n == 4 else 0), (n, r)
+    lefts = page.evaluate("""() => { maxLeg = 8; let k = 0; for (let n = 3; n <= 8; n++) { newLeg(n); k += road.turns.filter(J => J.dir < 0).length; } return k; }""")
+    assert lefts >= 3
+    assert page.errors == []
+
+
+def test_right_and_left_turns_at_the_right_speed_finish_the_leg_with_the_blinker_on_by_itself(site, context):
+    page = open_game(site, context)
+    for n in (1, 3, 5):
+        r = page.evaluate(TURN, [n, "", 0, False, PAST_TURNS, "null"])
+        assert r["mode"] == "drive" and not r["wrong"], (n, r)
+        assert all(J["done"] for J in r["turns"]), (n, r)
+        # The blinker came on before each turn, to its side, with no button.
+        assert all(J["signal"] == J["dir"] for J in r["turns"]), (n, r)
+        assert any(t.startswith("Käänny ") for t in r["seen"]), (n, r)
+    assert {J["dir"] for n in (3, 5) for J in page.evaluate(TURN, [n, "", 0, False, PAST_TURNS, "null"])["turns"]} == {1, -1}
+    # To the end of a leg with a crossroads: done, not crashed.
+    r = page.evaluate(TURN, [3, "", 0, False, "false", "null"])
+    assert r["mode"] == "done", r
+    assert page.errors == []
+
+
+def test_a_missed_turn_ends_the_leg_on_the_wrong_road(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(TURN, [3, "P.s = road.turns[0].a0 - 300;", 40, True, "false", "null"])
+    assert r["mode"] == "crash" and r["why"] == "Väärä tie: ajoit ohi käännöksen.", r
+    assert "Väärä tie!" in r["seen"] and r["wrong"], r
+    J = r["turns"][0]
+    assert J["a0"] + 240 < r["s"] < J["a0"] + 270, r
+    assert page.errors == []
+
+
+def test_a_crossroads_at_70_ends_in_the_ditch_and_a_ramp_takes_60(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(TURN, [3, "P.s = road.turns[0].a0 - 300; P.v = 70 / KMH;", 70, False, PAST_TURNS, "null"])
+    assert r["mode"] == "crash" and r["why"] == "Ajoit ojaan: liian lujaa risteykseen.", r
+    r = page.evaluate(TURN, [1, "P.s = road.turns[0].a0 - 300;", 60, False, PAST_TURNS, "null"])
+    assert r["mode"] == "drive" and r["turns"][0]["done"], r
+    assert page.errors == []
+
+
+# A left turn on leg 5, with the car from the road ahead set off so that it is `gap` s from the
+# crossing when the player rounds into the turn; `wait`: stop before the turn until it has gone by.
+LEFT = """var LJ = road.turns.find(J => J.dir < 0); P.s = LJ.a0 - 140; LJ.spawned = true; out = { went: false };"""
+LEFT_EACH = """(() => { const J = LJ;
+  if (!out.went && J.a0 - P.s < 12) { out.went = true; const t = (J.a0 + TURN_EASE - P.s) / Math.max(P.v, 1);
+    add('risteava', { s: J.a0 + J.C + ARM_V * (%s + t), lat: -LANE, v: -ARM_V, arm: J, colour: 1, high: false, passed: true }); }
+  const c = things.find(t => t.kind === 'risteava');
+  return %s && c && c.s - J.a0 > J.C - 2 ? J.a0 - 3 - P.s : null; })()"""
+PAST_LEFT = "P.s > LJ.a1 + 60"
+
+
+def test_a_left_turn_across_a_close_oncoming_car_is_50_off_and_waiting_is_20(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(TURN, [5, LEFT, 0, False, PAST_LEFT, LEFT_EACH % (2, "false")])
+    assert r["mode"] == "drive" and all(J["done"] for J in r["turns"] if J["dir"] < 0), r
+    assert "Käännyit vastaantulijan eteen -50" in r["seen"] and r["tally"]["hurjastelu"] == 1, r
+    # The same with the police watching ends the leg.
+    r = page.evaluate(TURN, [5, LEFT + "add('auto', { s: LJ.a0 + 20, lat: 13, v: 0, police: true, watch: true, parked: true, passed: true, yaw: Math.PI / 2 });",
+                             0, False, PAST_LEFT, LEFT_EACH % (2, "false")])
+    assert "Käännyit vastaantulijan eteen -50" in r["seen"], r
+    assert r["mode"] == "crash" and r["why"] == "Poliisi pysäytti: vaarallinen käännös.", r
+    # Waiting for it: +20, and no harm.
+    r = page.evaluate(TURN, [5, LEFT, 0, False, PAST_LEFT, LEFT_EACH % (2, "true")])
+    assert r["mode"] == "drive" and "Annoit tietä +20" in r["seen"] and r["tally"]["kaannos"] == 1, r
+    assert r["tally"]["hurjastelu"] == 0, r
+    # One far enough away is no harm either.
+    r = page.evaluate(TURN, [5, LEFT, 0, False, PAST_LEFT, LEFT_EACH % (9, "false")])
+    assert r["mode"] == "drive" and r["tally"]["hurjastelu"] == 0 and r["points"] >= 0, r
+    assert page.errors == []
+
+
+RAIL = """var x = road.rail[0]; P.s = x.s - 400; out = { queued: null };
+  var car = cruiseFrom(add('auto', { s: x.s - 300, lat: LANE, colour: 2, habit: 0, passed: true }));"""
+RAIL_STOP = """(() => { if (x.on && x.t > 8 && out.queued === null) out.queued = Math.round(x.s - car.s);
+  const rail = x.on && x.t < RAIL_UP0 + 0.5 ? x.s - 12 - P.s : 1e9, gap = car.s > P.s ? car.s - car.len / 2 - 8 - P.s : 1e9;
+  return Math.min(rail, gap) < 1e9 ? Math.min(rail, gap) : null; })()"""
+
+
+def test_the_level_crossing_waiting_is_20_through_the_barriers_ends_the_leg_and_traffic_queues(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(TURN, [4, RAIL, 60, False, "P.s > x.s + 40", RAIL_STOP])
+    assert r["mode"] == "drive" and r["tally"]["juna"] == 1, r
+    assert "Juna tulee: puomit laskeutuvat" in r["seen"] and "Juna meni ohi +20" in r["seen"], r
+    # The car ahead stopped before the crossing while the train went by.
+    assert r["out"]["queued"] is not None and 3 < r["out"]["queued"] < 20, r
+    r = page.evaluate(TURN, [4, "var x = road.rail[0]; P.s = x.s - 400;", 60, False, "P.s > x.s + 40", "null"])
+    assert r["mode"] == "crash" and r["why"] == "Ajoit puomien läpi tasoristeyksessä.", r
+    assert page.errors == []
+
+
+def test_a_restart_in_a_bend_or_on_the_wrong_road_starts_the_leg_with_its_turns_fresh(site, context):
+    # "Aloita alusta" in the pause menu and "Yritä uudelleen" both call newLeg(level) (ui.js).
+    page = open_game(site, context)
+    state = """() => ({ level, mode, wrong: P.wrong, into: P.into, signal: P.signal, s: P.s,
+      done: road.turns.map(J => !!J.done), told: road.turns.map(J => J.told || 0),
+      crossers: things.filter(t => t.arm).length })"""
+    # Mid-bend at leg 5's first (left) turn, then restart.
+    r = page.evaluate(TURN, [5, "", 0, False, "P.into && P.s > road.turns[0].a0 + 2", "null"])
+    assert r["mode"] == "drive", r
+    page.evaluate("() => newLeg(level)")
+    a = page.evaluate(state)
+    assert a["level"] == 5 and a["mode"] == "drive" and a["wrong"] is None and not a["into"], a
+    assert a["signal"] == 0 and not any(a["done"]) and not any(a["told"]) and a["crossers"] == 0, a
+    # On the wrong road past it, then restart.
+    r = page.evaluate(TURN, [5, "", 40, True, "P.wrong && P.s > P.wrong.s0 + 100", "null"])
+    assert r["mode"] == "drive" and r["wrong"], r
+    page.evaluate("() => newLeg(level)")
+    a = page.evaluate(state)
+    assert a["wrong"] is None and not a["into"] and a["signal"] == 0 and not any(a["done"]), a
+    assert a["s"] < 50, a
+    # The restarted leg drives through all its turns.
+    r = page.evaluate(TURN, [5, "", 0, False, PAST_TURNS, "null"])
+    assert r["mode"] == "drive" and not r["wrong"] and all(J["done"] for J in r["turns"]), r
+    assert page.errors == []
+
+
+def test_the_crossing_car_once_through_the_junction_is_an_oncoming_car_on_the_players_road(site, context):
+    r = open_game(site, context).evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(5); things = []; events = [];
+      road.cams = []; road.checks = [];
+      const J = road.turns.find(J => J.dir < 0 && J.kind === 'risteys');
+      P.s = J.a0 - 60; P.v = 0; P.lat = LANE; P.vl = 0;
+      const t = add('risteava', { s: J.a0 + 40, lat: -LANE, v: -ARM_V, arm: J, colour: 1, high: false, passed: true });
+      let through = null;
+      for (let i = 0; i < 60 * 20 && mode === 'drive'; i++) {
+        P.tired = 0; input.left = input.right = false; input.gas = 0; input.brake = 1; P.lat = LANE; P.vl = 0;
+        step(1 / 60);
+        if (t.kind === 'vastaan' && !through) { through = { arm: t.arm, s: t.s - J.a0, lat: t.lat }; break; }
+      }
+      const drawnOn = through && things.includes(t) ? 'road' : null;
+      // Now the player swerves into its lane: that is a crash, not a pass through it.
+      for (let i = 0; i < 60 * 10 && mode === 'drive'; i++) { P.tired = 0; input.brake = 1; P.lat = -LANE; P.vl = 0; step(1 / 60); }
+      return { through, drawnOn, mode, why: crashWhy, gap: Math.round(t.s - P.s) }; }""")
+    assert r["through"] and r["through"]["arm"] is None and r["through"]["s"] < -1, r
+    assert r["drawnOn"] == "road", r
+    assert r["mode"] == "crash" and r["why"] != "Väärä tie: ajoit ohi käännöksen.", r
