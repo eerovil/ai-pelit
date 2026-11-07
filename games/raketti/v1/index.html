@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#091522">
+<title>Raketti</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <header><span id="flight-tag">LENNONJOHTO / 01</span><button id="pause" aria-label="Keskeytä lento">Ⅱ</button></header>
+  <section id="telemetry" aria-label="Lentomittarit">
+    <div><span>KORKEUS</span><strong id="alt">0 m</strong></div>
+    <div><span>NOPEUS</span><strong id="speed">0 m/s</strong></div>
+    <div><span>POLTTOAINE</span><strong id="fuel">100 %</strong></div>
+    <div><span id="metric-a-label">RADAN ALIN</span><strong id="metric-a">—</strong></div>
+    <div><span id="metric-b-label">RADAN YLIN</span><strong id="metric-b">—</strong></div>
+    <div><span id="metric-c-label">NOKKA / KIERTO</span><strong id="metric-c">0° / 0°/s</strong></div>
+  </section>
+  <div id="scene"><canvas id="c" aria-label="Raketin lento ja avaruusasema"></canvas>
+    <div id="scene-label"><span id="phase-name">VALMIS LAUKAISUUN</span><span id="clock">T+ 00:00</span></div>
+    <nav id="views" aria-label="Näkymä"><button data-view="flight" class="selected">Lento</button><button data-view="map">Kartta</button><button data-view="dock">Asema</button></nav>
+  </div>
+  <section id="guidance" aria-live="polite"><span id="guide-step">01</span><p id="guide">Laukaisu → kiertorata → telakointi</p></section>
+  <section id="controls" aria-label="Käsiohjaus">
+    <div class="control-top"><label for="throttle">TEHO <b id="power">0 %</b></label><input id="throttle" type="range" min="0" max="100" step="0.1" value="0" aria-label="Moottorin teho"><button id="cut">SEIS</button><button id="stage">Irrota 1. vaihe</button></div>
+    <div class="control-bottom">
+      <div class="turn-pad"><span>KÄÄNNÄ · VASTAPAINE PYSÄYTTÄÄ</span><div><button data-hold="turn:-1" aria-label="Käännä vasemmalle">↶</button><button data-hold="turn:1" aria-label="Käännä oikealle">↷</button></div></div>
+      <div class="translation"><span>SIIRTOSUUTTIMET · ALUKSEN SUUNNAT</span><div><button data-hold="side:-1" aria-label="Siirrä aluksen vasemmalle">←</button><button data-hold="forward:1" aria-label="Siirrä eteen">↑</button><button data-hold="forward:-1" aria-label="Siirrä taakse">↓</button><button data-hold="side:1" aria-label="Siirrä aluksen oikealle">→</button></div></div>
+    </div>
+    <footer><span id="rcs">Suuttimien polttoaine 100 %</span><button id="warp">Aika ×1</button><button id="help">Ohje</button></footer>
+  </section>
+</main>
+<div id="overlay" class="overlay">
+  <section class="panel" id="menu">
+    <div class="eyebrow">MAA / MATALA KIERTORATA</div><h1>RAKETTI<span>Sinä olet ohjaaja.</span></h1>
+    <p class="intro">Laukaise. Saavuta kiertorata.<br>Kohtaa asema ja telakoidu käsin.</p>
+    <div class="mission-strip"><span><b>01</b> LAUKAISU</span><span><b>02</b> KIERTORATA</span><span><b>03</b> TELAKOINTI</span></div>
+    <p class="detail">Painovoima, polttoaine ja liikemäärä.<br>Ei autopilottia. Ei oikoteitä kiertoradalle.</p>
+    <div class="menu-actions"><button id="resume" hidden>Jatka tallennettua lentoa</button><button id="launch" class="primary">Laukaise raketti</button></div>
+    <div class="practice"><span>HARJOITTELE ERIKSEEN</span><div><button id="practice-orbit">Kiertorata</button><button id="practice-dock">Telakointi</button><button id="menu-help">Ohjeet</button></div></div>
+    <p id="achievements"></p>
+  </section>
+  <section class="panel" id="pause-panel" hidden><div class="eyebrow">LENNONJOHTO</div><h2>Lento tauolla</h2><p>Lento odottaa sinua. Tallennus tapahtuu myös automaattisesti, jos puhelin sallii sen.</p><button id="continue" class="primary">Jatka lentoa</button><button id="to-menu">Palaa alkuun</button></section>
+  <section class="panel" id="result" hidden><div class="eyebrow" id="result-label">LENTO PÄÄTTYI</div><h2 id="result-title"></h2><p id="result-reason"></p><p id="result-stats" class="detail"></p><button id="retry" class="primary">Uusi yritys</button><button id="result-menu">Palaa alkuun</button></section>
+  <section class="panel help-panel" id="help-panel" hidden><div class="eyebrow">LENTOKÄSIKIRJA · EI AUTOPILOTTIA</div><h2 id="help-title"></h2><div id="help-body"></div><div class="help-nav"><button id="help-prev">←</button><span id="help-page"></span><button id="help-next">→</button><button id="help-close" class="primary">Sulje</button></div></section>
+  <section class="panel" id="replace-panel" hidden><h2>Aloitetaanko uusi lento?</h2><p>Uusi lento korvaa keskeneräisen lennon tallennuksen.</p><button id="replace-yes" class="primary">Aloita uusi lento</button><button id="replace-no">Palaa takaisin</button></section>
+</div>
+<script src="physics.js"></script>
+<script src="draw.js"></script>
+<script src="ui.js"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
