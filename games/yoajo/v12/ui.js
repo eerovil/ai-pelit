@@ -163,6 +163,8 @@ function bumpSound() { S.play('tomahdys', { vol: 0.9, rate: 0.9 + Math.random() 
 // The tyres screech first, then the crash and the glass. Falling asleep ends in the ditch the
 // same way; a walker who had to jump aside and a burst tyre are no crash, only the screech.
 function crashSound(why) {
+  // v12: stopped by the police: only the siren.
+  if (/^Poliisi/.test(why || '')) return sirenSound();
   const hit = !/^(Vaaratilanne|Rengas)/.test(why || '');
   const screech = S.play('kitka', { vol: 0.7 });
   if (!hit) { if (!screech) noise(0.4, 0.4, 1600); return; }
@@ -170,6 +172,8 @@ function crashSound(why) {
   if (!S.play('kolari', { vol: 1, delay: d })) noise(0.7, 0.6, 700);
   S.play('lasi', { vol: 0.7, delay: d + 0.12 });
 }
+// v12 (#440): a police siren, quiet and short (the sound library has none): two tones in turn.
+function sirenSound() { for (let i = 0; i < 6; i++) setTimeout(() => tone(i % 2 ? 880 : 660, 0.32, 'triangle', 0.035), i * 340); }
 // A dazzled driver honks back (v5 only flashed the lights).
 function honkSound() { S.play('torvi', { vol: 0.45, delay: 0.15 }) || tone(420, 0.35, 'square', 0.04); }
 // A truck going by, close to the car: louder the faster they pass each other. No beep without it.
@@ -238,6 +242,15 @@ function dashboard() {
   }
   if (whiteout > 0) { x.fillStyle = `rgba(225,232,240,${Math.min(0.92, whiteout)})`; x.fillRect(0, 0, W, H); }
   if (flash > 0) { x.fillStyle = `rgba(255,255,255,${flash * 0.75})`; x.fillRect(0, 0, W, H); }
+  // v12: blue lights flashing at the screen's edges while the police stop the car.
+  if (blueLights()) {
+    const on = Math.sin(performance.now() / 1000 * 13) > 0, ew = Math.min(70, W * 0.16);
+    for (const [x0, lit] of [[0, on], [W - ew, !on]]) {
+      const g = x.createLinearGradient(x0 ? W : 0, 0, x0, 0);
+      g.addColorStop(0, `rgba(47,98,255,${lit ? 0.55 : 0.12})`); g.addColorStop(1, 'rgba(47,98,255,0)');
+      x.fillStyle = g; x.fillRect(x0, 0, ew, H);
+    }
+  }
   // Eyelids closing.
   const e = eyes();
   if (e > 0) { x.fillStyle = '#000'; x.fillRect(0, 0, W, H * 0.5 * e); x.fillRect(0, H - H * 0.5 * e, W, H * 0.5 * e); }
@@ -275,6 +288,14 @@ function dashboard() {
     const d = Math.round((bay.s0 - BAY_IN - P.s) / 10) * 10;
     fitText(P.rest > 0 ? 'Kahvitauko…' : d > 0 ? `P Levähdysalue ${d} m: oikealle ja pysähdy` : 'P Levähdysalue: oikealle ja pysähdy', W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#ffe08a');
   }
+  // v12 (#440): the police check ahead, with how far it is, and what to do there.
+  const ck = road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s < 320 && c.s - P.s > -8);
+  if (ck && mode === 'drive' && !bay) {
+    const d = Math.round((ck.s - P.s) / 10) * 10;
+    fitText(ck.state === 'blow' ? 'Puhalla…' : d > 10 ? `Puhalluskoe ${d} m: pysähdy poliisin kohdalle` : 'Pysähdy poliisin kohdalle', W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#bcd0ff');
+  }
+  // While a police car sees the car: a small sign under the speedometer.
+  if (P.seen && mode === 'drive') text('🚓 Poliisi näkee', W / 2, sp.cy + sp.r + 14, 12, '#a9c2ff', 'center', 700);
   // Messages: overtakes, fines, the lights.
   msgs.forEach((m, i) => {
     const a = clamp(2.2 - m.t, 0, 1), y0 = Math.max(H * 0.3, sp.cy + sp.r + 30) + i * 30 - m.t * 10;
@@ -438,11 +459,13 @@ function crashScreen() {
   const w = Math.min(340, W - 24), h = LAND ? H - 30 : 270, x0 = (W - w) / 2, y0 = LAND ? 15 : H * 0.22;
   panel(x0, y0, w, h);
   const asleep = crashWhy.startsWith('Nukahdit');
-  text(asleep ? 'Nukahdit!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
+  const cop = crashWhy.startsWith('Poliisi');
+  text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
   const words = crashWhy.split(' '); let line = '', ly = y0 + 74;
   for (const wd of words) { if ((line + ' ' + wd).length > 32) { text(line.trim(), W / 2, ly, 15, '#e8eefc', 'center', 600); ly += 21; line = ''; } line += ' ' + wd; }
   text(line.trim(), W / 2, ly, 15, '#e8eefc', 'center', 600);
   if (asleep) text('Pysähdy levähdysalueelle kahville.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
+  else if (cop) text(crashWhy.includes('puhallus') ? 'Pysähdy puhalluskokeessa poliisin kohdalle.' : 'Poliisin nähden: enintään 10 km/h yli, ei vaarallisia ohituksia.', W / 2, ly + 26, 12, '#9fb0cc', 'center', 500);
   else if (crashWhy.startsWith('Rengas')) text('Kuoppien kohdalla hidasta alle 50 km/h.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
   endButtons([['uudelleen', 'Yritä uudelleen'], ['valikko', 'Valikko']], y0 + h - 130);
 }

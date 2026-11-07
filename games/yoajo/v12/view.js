@@ -21,6 +21,7 @@ function init3d() {
     glowR: new THREE.SpriteMaterial({ map: glow, color: 0xff2a1a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
     glowO: new THREE.SpriteMaterial({ map: glow, color: 0xffa21a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
     glowY: new THREE.SpriteMaterial({ map: glow, color: 0xffd27a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+    glowB: new THREE.SpriteMaterial({ map: glow, color: 0x2f62ff, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
     lampW: new THREE.MeshBasicMaterial({ color: 0xfff6e0 }),
     lampR: new THREE.MeshBasicMaterial({ color: 0xff3020 }),
     tyre: new THREE.MeshLambertMaterial({ color: 0x111111 }),
@@ -98,6 +99,39 @@ function tractorMesh() {
   for (const x of [-0.5, 0.5]) { const a = sprite(mats.glowW, 0.7); a.position.set(x, 1.3, -2.95); g.add(a); f.push(a); }
   const beacon = sprite(mats.glowO, 1.6); beacon.position.set(0, 3.15, 0.1); g.add(beacon);
   g.userData = { front: f, rear: r, beacon, tri };
+  return g;
+}
+// v12 (#440): a Finnish police car: white, a blue and yellow chequered band down each side, and
+// a light bar on the roof whose blue lamps flash when its `blue` is on.
+function policeMesh() {
+  const { geo, mats } = V3, g = carMesh(0xeef1f4), blue = lam(0x1f4fb8), yellow = lam(0xe8c21c);
+  for (const x of [-0.91, 0.91]) for (let k = 0; k < 8; k++) g.add(part(geo.box, k % 2 ? yellow : blue, 0.04, 0.26, 0.5, x, 0.6, -1.75 + k * 0.5));
+  g.add(part(geo.box, mats.dark, 1.2, 0.12, 0.3, 0, 1.47, 0.1));
+  const lamps = [];
+  for (const x of [-0.42, 0.42]) {
+    g.add(part(geo.box, blue, 0.36, 0.13, 0.28, x, 1.49, 0.1));
+    const b = sprite(mats.glowB, 1.4); b.position.set(x, 1.55, 0.1); b.visible = false; g.add(b); lamps.push(b);
+  }
+  g.userData.blue = lamps;
+  return g;
+}
+// The officer at a police check: a dark uniform with a yellow vest, and a red baton light.
+function officerMesh() {
+  const { geo, mats } = V3, g = walkerMesh({ reflector: true });
+  g.add(part(geo.pole, lam(0xd9e23a), 0.235, 0.36, 0.235, 0, 1.25, 0));
+  g.add(part(geo.ball, lam(0x1b2433), 0.14, 0.06, 0.14, 0, 1.78, 0));
+  const beacon = sprite(mats.glowR, 0.7); beacon.position.set(-0.32, 1.25, -0.1); g.add(beacon);
+  g.userData.beacon = beacon;
+  return g;
+}
+// The police check's cones along the edge line, white bands catching the headlights.
+function checkCones(c) {
+  const g = new THREE.Group(), cone = new THREE.ConeGeometry(0.18, 0.7, 10), orange = lam(0xff5a14), band = lam(0xe8e8e8);
+  for (let s = c.s - 70; s <= c.s - 6; s += 8) {
+    const p = worldAt(s, EDGE - 0.15, 0.36);
+    g.add(part(cone, orange, 1, 1, 1, p[0], p[1], p[2]));
+    g.add(part(V3.geo.pole, band, 0.12, 0.08, 0.12, p[0], p[1] + 0.05, p[2]));
+  }
   return g;
 }
 function walkerMesh(t) {
@@ -180,6 +214,7 @@ function buildWorld() {
   }
   for (const b of road.bays) w.add(restStop(b, snowy));
   for (const J of road.junctions) w.add(junctionLamp(J));
+  for (const c of road.checks) w.add(checkCones(c));
   w.add(townLights());
   if (wx !== 'kuiva') w.add(V3.weather = weatherMesh(wx));
   else { V3.weather = null; w.add(starField()); }
@@ -338,10 +373,16 @@ function merge(parts) {
 
 // ---- Signs: drawn once on a canvas each, bright when the headlights reach them ----
 function signCanvas(sg) {
-  const c = document.createElement('canvas'), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki';
+  const c = document.createElement('canvas'), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi';
   c.width = wide ? 256 : 128; c.height = 128;
   const g = c.getContext('2d');
-  if (sg.kind === 'pnuoli') {
+  if (sg.kind === 'poliisi') {
+    // v12 (#440): before a police check, a portable sign: POLIISI over STOP.
+    g.fillStyle = '#1d3f8f'; g.fillRect(0, 0, 256, 128); g.strokeStyle = '#f2d21a'; g.lineWidth = 8; g.strokeRect(6, 6, 244, 116);
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 46px system-ui,sans-serif'; g.fillText('POLIISI', 128, 48);
+    g.fillStyle = '#ff5a4a'; g.font = 'bold 34px system-ui,sans-serif'; g.fillText('STOP', 128, 94);
+  } else if (sg.kind === 'pnuoli') {
     // v8 (#306): where the lane into the rest area begins: P and an arrow up and to the right.
     g.fillStyle = '#1d55a8'; g.fillRect(0, 0, 128, 128);
     g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(5, 5, 118, 118);
@@ -395,7 +436,7 @@ function signCanvas(sg) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 function signMesh(sg) {
-  const g = new THREE.Group(), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki';
+  const g = new THREE.Group(), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi';
   const mat = new THREE.MeshBasicMaterial({ map: signCanvas(sg), transparent: true, color: 0x111111 });
   const plate = new THREE.Mesh(V3.geo.plate, mat); plate.scale.set(wide ? 1.8 : 0.9, 0.9, 1); plate.position.y = 2.2;
   const post = part(V3.geo.pole, V3.mats.grey, 0.04, 2.2, 0.04, 0, 1.1, 0);
@@ -509,7 +550,9 @@ function placeAt(o, s, lat, back) {
 function meshFor(t) {
   let m = V3.meshes.get(t.id);
   if (m) return m;
-  if (t.kind === 'rekka' || (t.kind === 'vastaan' && t.truck)) m = truckMesh();
+  if (t.police) m = policeMesh();
+  else if (t.kind === 'konstaapeli') m = officerMesh();
+  else if (t.kind === 'rekka' || (t.kind === 'vastaan' && t.truck)) m = truckMesh();
   else if (t.kind === 'traktori') m = tractorMesh();
   else if (t.kind === 'kavelija') m = walkerMesh(t);
   else if (t.kind === 'hirvi' || t.kind === 'poro') m = deerMesh(t.kind === 'poro');
@@ -559,6 +602,8 @@ function draw3d(now) {
       (u.front || []).forEach(s => s.scale.setScalar(s.userData.size * k * (t.high ? 3.2 : 1)));
       (u.rear || []).forEach(s => s.scale.setScalar(s.userData.size * k));
       if (u.beacon) { const on = (Math.sin(time * 8 + t.beacon) + 1) / 2; u.beacon.material.opacity = 0.3 + on * 0.7; u.beacon.scale.setScalar(1.6 * k * (0.6 + on * 0.6)); }
+      // v12: the police light bar, its two blue lamps in turn.
+      if (u.blue) u.blue.forEach((b, i) => { const on = t.blue && Math.sin(time * 13 + i * Math.PI) > 0; b.visible = on; if (on) b.scale.setScalar(1.4 * k); });
       if (u.tri) u.tri.material.color.setScalar(0.12 + 0.88 * lit(t.s + 4, t.lat, 2.5)).multiply(new THREE.Color(0xff6a1a));
       if (t.v < 0 && t.s > P.s && t.s - P.s < 220 && (!near || t.s < near.s)) near = t;
     }

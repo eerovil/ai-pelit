@@ -1,4 +1,5 @@
-"""Yöajo v11 (#377): drive forward after coffee and let traffic pass the parked car.
+"""Yöajo v12 (#440): the police, and the police check from leg 3.
+Yöajo v11 (#377): drive forward after coffee and let traffic pass the parked car.
 Yöajo v8 (#306): the lights button on the left, a livelier gas pedal, a rest area with a lane
 of its own and signs, side roads with cars pulling out, no overtaking through a junction, and
 the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
@@ -11,18 +12,20 @@ URL = "games/yoajo/v12/"
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
 # oncoming cars and cars ahead, slows for moose and the speed limits (at most 90 on snow), gets
 # out of the way of an oncoming overtaker, leaves a car waiting at a side road alone, and stops
-# for coffee when sleepy, waiting behind a slow car before it turns into the rest area.
+# for coffee when sleepy, waiting behind a slow car before it turns into the rest area. v12: it
+# leaves parked police cars alone and stops beside the officer at a police check.
 BOT = """(legs) => { maxLeg = 8; const out = [];
   for (const n of legs) { newLeg(n); HOLD = true;
     for (let i = 0; i < 60 * 400 && mode === 'drive'; i++) {
       let want = LANE;
-      const slow = things.filter(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro')
+      const slow = things.filter(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro'
+        && !t.parked && t.kind !== 'konstaapeli' && t.kind !== 'partio')
         .sort((a, b) => a.s - b.s)[0];
       const onc = things.some(t => t.v < 0 && t.s > P.s - 5 && t.s - P.s < 330 && vehicle(t));
       const head = things.find(t => t.v < 0 && t.lat > 0.5 && t.s > P.s && t.s - P.s < 260);
       if (slow && !onc && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
       if (slow && slow.kind === 'kavelija' && !onc) want = slow.lat > 0 ? 0 : LANE;
-      const beside = things.find(t => t.v >= 0 && vehicle(t) && t.kind !== 'takaa' && t.lat > 0 && t.s - P.s > -7 && t.s - P.s < 7);
+      const beside = things.find(t => t.v >= 0 && vehicle(t) && t.kind !== 'takaa' && t.lat > 0 && t.lat < EDGE && t.s - P.s > -7 && t.s - P.s < 7);
       if (beside && P.lat < 0.5) want = -LANE;
       if (head) want = 4.0;
       const deer = things.find(t => (t.kind === 'hirvi' || t.kind === 'poro') && t.s > P.s && t.s - P.s < 120 && Math.abs(t.lat) < 6);
@@ -33,15 +36,17 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       const merging = P.lat > EDGE && inBay(P.s, P.lat) && things.some(t => vehicle(t) && t.v > 0 && t.lat > 0 && t.lat < EDGE
         && t.s - P.s > -30 && t.s - P.s < 25);
       if (merging) want = 7;
+      const ck = road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s > -3 && c.s - P.s < 250), stopIn = ck ? ck.s - 3 - P.s : 0;
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
       input.left = err > 0.15; input.right = err < -0.15;
       const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200);
       input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
-        || (slow && want === LANE && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35);
+        || (slow && want === LANE && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35)
+        || (ck && (stopIn < 2 || P.v > Math.sqrt(2 * 3 * stopIn)));
       P.high = !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
       input.gas = input.brake || (rest && P.s > bay.s0 && P.lat > EDGE + 0.5) || merging ? 0 : 1; step(1 / 60);
     }
-    out.push({ n, mode, why: crashWhy, T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
+    out.push({ n, mode, why: crashWhy, checks: road.checks.map(c => c.state), T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
   }
   return out; }"""
 
@@ -70,6 +75,9 @@ def test_every_leg_can_still_be_driven(site, context):
     assert all(r["tally"]["hurjastelu"] == 0 for r in legs), legs
     # The careful driver stops for coffee on every leg with a rest area.
     assert all(r["tally"]["tauko"] == 1 for r in legs if r["n"] >= 3), legs
+    # v12: never stopped by the police, and through every police check by stopping to blow.
+    assert all(r["tally"]["poliisi"] == 0 and r["tally"]["sakot"] == 0 for r in legs), legs
+    assert all(r["checks"] == (["done"] if r["n"] >= 3 else []) and r["tally"]["puhallus"] == len(r["checks"]) for r in legs), legs
     assert page.errors == []
 
 
@@ -336,3 +344,141 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
     opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v12")
+
+
+# ---- v12 (#440): the police ----
+
+# Leg n with only a police car on the road; the car is driven at kmh (until the police stop it)
+# for secs, then left alone (no gas) for `after` seconds.
+COP = """([n, cop, kmh, secs, after]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; events = []; road.cams = []; road.checks = [];
+  const seen = []; let stopped = false;
+  const c = eval('(' + cop + ')');
+  for (let i = 0; i < 60 * (secs + after) && mode === 'drive'; i++) {
+    if (i < 60 * secs && !pstop && !stopped) { P.v = kmh / KMH; P.lat = LANE; P.vl = 0; } else { input.gas = 0; input.steer = 0; }
+    if (pstop) stopped = true;
+    step(1 / 60);
+    for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text);
+  }
+  return { mode, why: crashWhy, points, stopped, lat: P.lat, v: P.v * KMH, tally: Object.assign({}, tally), seen }; }"""
+
+# A police car driving just ahead of the player at the player's own speed, so it keeps watching.
+AHEAD = "cruiseFrom(add('auto', { s: P.s + 20, police: true, watch: true, habit: %d }))"
+
+
+def test_police_cars_and_checks_are_on_the_legs_as_planned(site, context):
+    page = open_game(site, context)
+    for n in range(1, 9):
+        r = page.evaluate("""(n) => { maxLeg = 8; newLeg(n); mode = 'menu';
+          const cops = events.filter(e => e.kind === 'poliisi'), c = road.checks[0];
+          return { cops: cops.map(e => e.how), checks: road.checks.length,
+            zone: c ? [limitAt(c.s - 150), limitAt(c.s), bayWidth(c.s + 6)] : null,
+            onBad: c ? road.bad.some(b => c.s > b.s0 + 100 && c.s < b.s1 - 60) : false,
+            signs: c ? road.signs.filter(s => s.kind === 'poliisi' && s.s < c.s && c.s - s.s < 300).length : 0,
+            near: c ? road.bays.some(b => Math.abs(b.s0 - c.s) < 300) || road.cams.some(k => Math.abs(k.s - c.s) < 200)
+              || road.junctions.some(J => Math.abs(J.s - c.s) < 100) : false }; }""", n)
+        assert len(r["cops"]) == [0, 1, 1, 2, 2, 2, 3, 3][n - 1], (n, r)
+        assert r["checks"] == (1 if n >= 3 else 0), (n, r)
+        if r["checks"]:
+            # On a pothole stretch, under its 50 limit, with a shoulder widened for the police car.
+            assert r["onBad"] and r["zone"][0] == 50 and r["zone"][1] == 50, (n, r)
+            assert r["zone"][2] > 6 and r["signs"] == 1 and not r["near"], (n, r)
+    assert page.errors == []
+
+
+def test_12_over_in_police_sight_is_a_stop_and_a_fine_and_the_drive_goes_on(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(COP, [2, AHEAD % 12, 112, 3, 9])
+    assert r["mode"] == "drive" and r["stopped"], r
+    assert r["tally"]["sakot"] == 1 and r["tally"]["poliisi"] == 1 and r["points"] == -150, r
+    assert "Siniset vilkut: pysähdy tien sivuun" in r["seen"] and "Poliisi: ylinopeus 12 km/h, sakko -150" in r["seen"], r
+    # Pulled over onto the shoulder, and free to drive on.
+    assert r["lat"] > 3.5 and page.evaluate("pstop") is None, r
+    assert page.errors == []
+
+
+def test_8_over_in_police_sight_is_nothing(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(COP, [2, AHEAD % 8, 108, 6, 0])
+    assert r["mode"] == "drive" and not r["stopped"] and r["tally"]["sakot"] == 0 and r["points"] == 0, r
+    assert page.errors == []
+
+
+def test_20_over_in_police_sight_ends_the_leg(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(COP, [2, AHEAD % 22, 122, 3, 0])
+    assert r["mode"] == "crash" and r["why"] == "Poliisi pysäytti: 122 km/h, rajoitus 100.", r
+    # Out of sight it is only the old minus points.
+    r = page.evaluate(COP, [2, "null", 122, 3, 0])
+    assert r["mode"] == "drive" and r["tally"]["hurjastelu"] == 1 and r["points"] == -25, r
+    assert page.errors == []
+
+
+def test_a_police_car_does_not_see_over_a_crest(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = []; road.cams = []; road.checks = [];
+      const s0 = 300; P.s = s0; P.lat = LANE;
+      add('auto', { s: s0 + 150, lat: 13, v: 0, police: true, watch: true, parked: true, passed: true, yaw: Math.PI / 2 });
+      const run = () => { for (let i = 0; i < 60; i++) { P.s = s0; P.v = (limitAt(s0) + 25) / KMH; police(1 / 60); } return mode; };
+      const Y = road.Y.slice();
+      for (let j = Math.floor((s0 + 60) / SEG); j < (s0 + 90) / SEG; j++) road.Y[j] += 6;
+      const hidden = [policeSees(things[0]), run()];
+      road.Y.set(Y);
+      const open = [policeSees(things[0]), run(), crashWhy];
+      return { hidden, open }; }""")
+    assert r["hidden"] == [False, "drive"], r
+    assert r["open"][0] is True and r["open"][1] == "crash" and r["open"][2].startswith("Poliisi pysäytti: "), r
+    assert page.errors == []
+
+
+def test_an_unsafe_overtake_in_police_sight_ends_the_leg_and_out_of_sight_costs_50(site, context):
+    page = open_game(site, context)
+    setup = """() => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = []; road.cams = []; road.checks = []; road.nopass = [];
+      P.s = 300; P.lat = -LANE; P.v = 25;
+      add('vastaan', { s: 410, lat: -LANE, v: -25 });
+      %s
+      step(1 / 60); return { mode, why: crashWhy, points, h: tally.hurjastelu }; }"""
+    r = page.evaluate(setup % "add('auto', { s: 360, lat: 13, v: 0, police: true, watch: true, parked: true, passed: true });")
+    assert r["mode"] == "crash" and r["why"] == "Poliisi pysäytti: vaarallinen ohitus.", r
+    r = page.evaluate(setup % "")
+    assert r["mode"] == "drive" and r["points"] == -50 and r["h"] == 1, r
+    assert page.errors == []
+
+
+def test_dazzling_a_police_car_is_a_stop_and_a_fine(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = []; road.cams = []; road.checks = [];
+      P.s = 300; P.lat = LANE; P.v = 20; P.high = true;
+      add('vastaan', { s: 400, lat: -LANE, v: -20, police: true, watch: true });
+      for (let i = 0; i < 60 && !pstop; i++) { P.high = true; step(1 / 60); }
+      return { why: pstop && pstop.why, mode, h: tally.haikaisyt }; }""")
+    assert r["why"] == "häikäisit poliisiautoa" and r["mode"] == "drive" and r["h"] == 1, r
+    assert page.errors == []
+
+
+# The police check on leg n: everything else off the road, the car driven at 50 to it. stop:
+# whether the driver stops beside the officer.
+CHECK = """([n, stop]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; road.cams = [];
+  events = events.filter(e => e.kind === 'puhallus'); const c = road.checks[0]; P.s = c.s - 700;
+  const seen = [];
+  for (let i = 0; i < 60 * 90 && mode === 'drive' && P.s < c.s + 120; i++) {
+    const d = c.s - 3 - P.s; P.lat = LANE; P.vl = 0;
+    input.gas = c.state === 'done' || !stop ? 0.6 : 0.4;
+    input.brake = stop && c.state !== 'done' && (d < 1 || P.v > Math.sqrt(2 * 3 * Math.max(0, d))) ? 1 : 0;
+    if (input.brake) input.gas = 0;
+    P.v = Math.min(P.v, 50 / KMH);
+    step(1 / 60);
+    for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text);
+  }
+  return { at: Math.round(P.s - c.s), v: Math.round(P.v * KMH), mode, why: crashWhy, state: c.state, points, seen, puhallus: tally.puhallus, officer: things.some(t => t.kind === 'konstaapeli'),
+    blue: things.some(t => t.police && t.blue && t.parked) }; }"""
+
+
+def test_the_police_check_is_passed_by_stopping_and_ends_the_leg_when_driven_through(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(CHECK, [3, True])
+    assert r["mode"] == "drive" and r["state"] == "done" and r["puhallus"] == 1, r
+    assert r["officer"] and r["blue"], r
+    assert "Puhalluskoe: pysähdy poliisin kohdalle" in r["seen"] and "0,00 ‰ – hyvää matkaa! +20" in r["seen"], r
+    r = page.evaluate(CHECK, [3, False])
+    assert r["mode"] == "crash" and r["why"] == "Poliisi pysäytti: ajoit puhalluskokeen ohi.", r
+    assert page.errors == []
