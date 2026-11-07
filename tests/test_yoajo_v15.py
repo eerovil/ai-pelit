@@ -1109,7 +1109,7 @@ MENU = """(sel0) => { HOLD = true; maxLeg = 11; sel = sel0; preview(sel0); btns 
 
 
 def test_the_menu_shows_eleven_legs_at_both_sizes(site, context):
-    for w, h in ((360, 740), (360, 640), (740, 360)):
+    for w, h in ((360, 740), (360, 640), (390, 844), (740, 360)):
         page = open_game(site, context)
         page.set_viewport_size({"width": w, "height": h})
         page.wait_for_function(f"W === {w} && H === {h}")
@@ -1131,3 +1131,15 @@ def test_the_menu_shows_eleven_legs_at_both_sizes(site, context):
             assert r["b"] != r["a"] and "osa-11" in r["b"] or r["b"][0] == "osa-4", (w, h, r)
         assert page.errors == []
         page.close()
+
+
+def test_a_restart_gives_a_fresh_tank_and_station(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; newLeg(9); things = []; events = []; road.cams = []; road.checks = [];
+      const start = P.fuel, b = road.bays.find(b => b.station); P.s = b.s0 + 30; P.lat = 9; P.v = 0; P.fuel = 0.2;
+      for (let i = 0; i < 60 * 9; i++) step(1 / 60);
+      const filled = [P.fuel, tally.tankkaus]; P.fuel = 0.05; act({ id: 'uudelleen' });
+      const b2 = road.bays.find(b => b.station);
+      return { start, filled, again: P.fuel, n: tally.tankkaus, dry: P.dry, fresh: !b2.filled, mode }; }""")
+    assert r["filled"] == [1, 1] and r["again"] == r["start"] and r["n"] == 0 and not r["dry"] and r["fresh"], r
+    assert page.errors == []
