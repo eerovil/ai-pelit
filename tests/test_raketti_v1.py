@@ -408,8 +408,9 @@ def test_handbook_transfer_phase_and_burn_reach_station_orbit(site, context):
       const transferTime=Math.PI*Math.sqrt(a**3/MU);
       const lead=Math.PI-STATION_N*transferTime;
       const dv=Math.sqrt(MU/r1)*(Math.sqrt(2*r2/(r1+r2))-1);
-      ship.stationPhase=lead;ship.vx+=dv;
-      step(transferTime);const p=station();
+      // Keep the physical station clear of the deliberately unbraked reference intercept.
+      ship.stationPhase=lead+.01;ship.vx+=dv;
+      step(transferTime);const p=station({...ship,stationPhase:lead});
       return {lead:lead*180/Math.PI,dv,t:transferTime,alt:orbit().altitude,
         range:Math.hypot(ship.x-p.x,ship.y-p.y),phase:ship.phase};
     }""")
