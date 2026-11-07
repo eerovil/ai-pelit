@@ -561,6 +561,31 @@ def test_a_refresh_mid_tap_keeps_the_nickname_save(phones):
     assert shelf.locator(".friends-name-error").count() == 0
 
 
+def test_a_late_notification_state_keeps_the_nickname_form(phones):
+    """The switch's state waits on the service worker; when it lands late, it redraws only its row (#443)."""
+    shelf = phones(None, None, player=A)
+    shelf.wait_for_selector(".card")
+    shelf.evaluate("""() => {
+      const real = navigator.serviceWorker.ready;
+      const late = new Promise(ok => { window.__pushGo = () => real.then(ok); });
+      Object.defineProperty(navigator.serviceWorker, 'ready', { get: () => late });
+    }""")
+    shelf.click(".friends-link")
+    shelf.wait_for_selector(".friends-none")
+    shelf.fill(".friends-name", "Aino")
+    shelf.evaluate("window.__saveBtn = document.querySelector('.friends-form button')")
+    note = shelf.locator(".push-note").inner_text()
+    shelf.evaluate("window.__pushGo()")
+    shelf.wait_for_function("!document.querySelector('.push-switch').disabled || document.querySelector('.push-note.warn')")
+    assert shelf.evaluate("window.__saveBtn.isConnected")
+    assert shelf.evaluate("document.activeElement.classList.contains('friends-name')")
+    assert shelf.locator(".friends-name").input_value() == "Aino"
+    assert note
+    press_save_across_a_refresh(shelf)
+    shelf.wait_for_function("!document.querySelector('.friends-name')")
+    assert phones.api.names[A] == "Aino"
+
+
 def hold_name_saves(page):
     """Holds each POST /api/players until released; the context's fake server then answers it."""
     held = []
