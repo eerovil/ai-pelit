@@ -16,7 +16,7 @@ flowchart TD
   A2 --> B
   R2 --> A
   A[Reikä alkaa: koko rata näkyy, par kerrottu] --> B{Kenen vuoro?}
-  B --> C[Vedä mistä tahansa taaksepäin: suunta ja voima näkyvät]
+  B --> C[Vedä mistä tahansa taaksepäin: viiva näyttää suunnan ja voiman]
   C --> D{Veto vähintään 15 px?}
   D -- Ei --> C
   D -- Kyllä --> E[Päästä irti: pallo lähtee]
@@ -59,11 +59,11 @@ flowchart TD
 
 ## Boxes
 
-- **Miten pelataan?**: the menu in `games/minigolf/v1/index.html`: **Pelaa** (`newRound()`), **Jatka kierrosta** when a round alone was left unfinished (saved on release, after every stroke and when the page hides as `ai-pelit:minigolf:kierros`), **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`), the best total, and the top 10 as a short scrolling list (`#menuBoard`, filled by `menu()` from `AiPelitScores.list`), with **🏆 Tuloslista** for the whole list.
+- **Miten pelataan?**: the menu in `games/minigolf/v2/index.html`: **Pelaa** (`newRound()`), **Jatka kierrosta** when a round alone was left unfinished (saved on release, after every stroke and when the page hides as `ai-pelit:minigolf:kierros`), **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`), the best total, and the top 10 as a short scrolling list (`#menuBoard`, filled by `menu()` from `AiPelitScores.list`), with **🏆 Tuloslista** for the whole list.
 - **Huone: 2–6 puhelinta, jokainen eri värisellä pallolla**: `rooms.js` with `data-min="2" data-max="6"`; each player's ball gets its own colour in room order, and `updateHUD()` shows the players as a row of those colours with names (`#who`), the one on turn marked.
 - **Huoneen tekijä pyörittää kierrosta, vuorossa oleva lähettää lyönnin**: the host runs the physics and sends snapshots (as Curling does); the phone on turn sends `aim` while dragging and `shot` when it lets go. `turns()` makes the room wait only for the phone on turn; "Ohita vuoro" scores that player 7 on the hole.
-- **Reikä alkaa: koko rata näkyy, par kerrottu**: `nextHole()` in `games/minigolf/v1/game.js` reads the hole from `holes.js`; `fit()` scales it to the screen, turned 90° when the phone is sideways.
-- **Vedä mistä tahansa taaksepäin: suunta ja voima näkyvät**: `dragAim()`: the ball goes the opposite way to the finger's pull, the pull's length (up to 30 % of the screen's short side) is the power; a dotted line and a power bar show it. Turning the phone mid-pull keeps the aim: `fit()` marks the drag to re-anchor at the finger, and if the browser cancels the pointer in the turn the aim stays parked (`parkedAim`) until the next drag or tap; it never fires by itself.
+- **Reikä alkaa: koko rata näkyy, par kerrottu**: `nextHole()` in `games/minigolf/v2/game.js` reads the hole from `holes.js`; `fit()` scales it to the screen, turned 90° when the phone is sideways.
+- **Vedä mistä tahansa taaksepäin: viiva näyttää suunnan ja voiman**: `dragAim()`: the ball goes the opposite way to the finger's pull, the pull's length (up to 30 % of the screen's short side) is the power. Only the aim line shows it (`drawAimLine()` in `draw.js`, #438; no power bar since v2): an arrow from the ball that grows longer (`aimLineLength()`, 0.35–3.45 m), thicker and from pale yellow to red (`aimLineColor()`) as the pull grows. Turning the phone mid-pull keeps the aim: `fit()` marks the drag to re-anchor at the finger, and if the browser cancels the pointer in the turn the aim stays parked (`parkedAim`) until the next drag or tap; it never fires by itself.
 - **Pallo vierii: seinät kimmottavat, hiekka hidastaa, rinne kallistaa, tuulimylly torjuu**: `step(dt)` in `game.js` calls `golfStep()` in `golf.js`, fixed 1/240 s steps so a fast ball never passes through a wall.
 - **Pallo hyppää reiän yli ja vierii eteenpäin**: the ball drops only when it is over the cup slower than the capture speed (`CUP_SPEED`); a faster ball lips out.
 - **Reiän tulos 7, siirrytään eteenpäin**: the stroke limit of Finnish rata-minigolf: a ball not holed in six strokes scores 7.

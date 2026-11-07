@@ -4,7 +4,7 @@ import math
 import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
-from test_minigolf_v1 import pull, PLAN
+from test_minigolf_v2 import pull, PLAN
 
 @pytest.fixture
 def golf_phones(site,browser):
@@ -14,7 +14,7 @@ def golf_phones(site,browser):
         contexts.append(ctx)
         ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi',"+json.dumps(json.dumps(name))+")")
         p=ctx.new_page();p.errors=[];p.on('pageerror',lambda e:p.errors.append(str(e)))
-        relay.attach(p);p.goto(site.url+'games/minigolf/v1/');p.evaluate(PLAN)
+        relay.attach(p);p.goto(site.url+'games/minigolf/v2/');p.evaluate(PLAN)
         return p
     yield phone
     for c in contexts:
@@ -110,3 +110,14 @@ def test_skip_rejoin_delivery_once_and_next_round(golf_phones):
         assert not p.errors
     host.evaluate('R.stopRound()')
     for p in pages:p.wait_for_function('round===null')
+
+
+def test_others_see_the_pullers_power_line(golf_phones):
+    """#438: the line is the only power display, so every phone in the room draws it."""
+    host,guest=room(golf_phones,2)
+    guest.evaluate("window.lines=[];const d=drawAimLine;drawAimLine=(x,y,a,q)=>{lines.push(q);d(x,y,a,q)}")
+    assert guest.locator('#power').count()==0
+    host.mouse.move(180,370);host.mouse.down();host.mouse.move(180,520,steps=4)
+    guest.wait_for_function("aim&&aim.p===1&&lines.length&&lines[lines.length-1]===1")
+    host.mouse.up();host.wait_for_function("round.phase==='roll'")
+    guest.wait_for_function("aim===null")
