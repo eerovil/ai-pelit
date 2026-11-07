@@ -1,7 +1,7 @@
 function sendState(to){if(!online||!R.isHost||!round)return;R.send({t:'state',round:roomRound,state:round},to);}
 function applyState(state){
   const previous=round,keep=previous&&previous.seq===state.seq&&myTurn();
-  if(!keep)aimDrag=null;
+  if(!keep)drag=aimDrag=null;
   round=state;
   if(previous&&round.seq>previous.seq){
     if(round.phase==='fly')sound('suhahdus');

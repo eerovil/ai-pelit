@@ -46,7 +46,7 @@
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
 export const GAMES = {
-  frisbeegolf: { order: 'low', boards: /^v3$/, first: 'v3', minVersion: 3 }, // harder aiming; v1/v2 scores removed at owner's request (#338)
+  frisbeegolf: { order: 'low', boards: /^v[35]$/, first: 'v5', minVersion: 3 }, // swipe throw from v5 on 'v5'; v3-v4's harder aiming stays on 'v3'; v1/v2 scores removed at owner's request (#338)
   kiekkoammunta: { order: 'high', boards: /^(trap|skeet)$/, first: 'trap' }, // hits out of 25
   minigolf: { order: 'low', boards: /^main$/ }, // fewest strokes over nine holes
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm

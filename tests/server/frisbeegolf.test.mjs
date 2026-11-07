@@ -30,7 +30,10 @@ test('Frisbeegolf keeps the lowest harder-rules score and excludes old versions'
   const list = await call('GET', 'scores?game=frisbeegolf&board=v3&player=' + player);
   assert.equal(list.body.mine.score, -2);
   assert.equal(list.body.rows[0].version, 3);
-  assert.equal((await call('GET', 'scores/top')).body.games.frisbeegolf.board, 'v3');
+  // From v5 the swipe throw has its own list, shown first on the shelf.
+  assert.equal((await call('POST', 'scores', { ...score, board: 'v5', version: 5, score: 1 })).status, 200);
+  assert.equal((await call('GET', 'scores/top')).body.games.frisbeegolf.board, 'v5');
+  assert.equal((await call('GET', 'scores?game=frisbeegolf&board=v5&player=' + player)).body.mine.score, 1);
   assert.equal((await call('GET', 'scores?game=frisbeegolf&board=main')).status, 400);
   assert.equal((await call('POST', 'scores', { ...score, board: 'other', score: -3 })).status, 400);
   assert.equal((await call('POST', 'scores', { ...score, version: 4, score: -3 })).status, 200);

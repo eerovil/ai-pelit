@@ -8,9 +8,16 @@ function initScene(T){
     scene.add(new T.HemisphereLight('#fff6dc','#3f6446',2.1));
     const sun=new T.DirectionalLight('#ffe9bd',2.8);sun.position.set(-25,45,-15);sun.castShadow=true;
     sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-35;sun.shadow.camera.right=35;sun.shadow.camera.top=35;sun.shadow.camera.bottom=-35;sun.shadow.bias=-.001;sun.shadow.normalBias=.03;scene.add(sun);scene.add(sun.target);
-    const camera=new T.PerspectiveCamera(55,1,.1,350);
+    const camera=new T.PerspectiveCamera(55,1,.1,350);scene.add(camera);
+    // Camera-space held disc follows the pointer directly in the course view.
+    const heldFace=new T.MeshBasicMaterial({color:'#f4ca72',depthTest:false,fog:false});
+    const heldRim=new T.MeshBasicMaterial({color:'#aa782f',depthTest:false,fog:false});
+    const heldDisc=new T.Mesh(new T.CylinderGeometry(1,1,.12,48),[heldRim,heldFace,heldFace]);
+    heldDisc.renderOrder=50;heldDisc.frustumCulled=false;camera.add(heldDisc);
+    const stamp=new T.Mesh(new T.RingGeometry(.55,.59,40),new T.MeshBasicMaterial({color:'#fff2c0',side:T.DoubleSide,depthTest:false,fog:false}));
+    stamp.rotation.x=-Math.PI/2;stamp.position.y=.065;stamp.renderOrder=51;heldDisc.add(stamp);
     const sky=makeSky(T);scene.add(sky);
-    scene3d={T,renderer,scene,camera,sun,sky,hole:-1,group:null,
+    scene3d={T,renderer,scene,camera,sun,sky,heldDisc,heldFace,heldRim,hole:-1,group:null,
       position:new T.Vector3(),target:new T.Vector3(),moving:true,samples:0,elapsed:0,tuned:0,ghostKey:''};
     const observer=new ResizeObserver(()=>{const c=$('scene');renderer.setSize(c.clientWidth,c.clientHeight,false);camera.aspect=c.clientWidth/c.clientHeight;camera.updateProjectionMatrix();drag=aimDrag=null;dirty=true;askDraw();});observer.observe($('scene'));
     buildHole(round?round.hole:0);askDraw();
@@ -179,23 +186,7 @@ function buildHole(index){
   const fore=add(new T.CylinderGeometry(.06,.06,.53,7),skin,.22,0,0,arm);fore.rotation.z=Math.PI/2;
   add(new T.CylinderGeometry(.13,.13,.025,20),mat('#f4ca72'),.5,0,0,arm).rotation.x=Math.PI/2;
   const shadow=add(new T.CircleGeometry(.5,24),new T.MeshBasicMaterial({color:'#193a2d',transparent:true,opacity:.18}),0,.02,0,person);shadow.rotation.x=-Math.PI/2;
-  // The preview: a bright tape for the flight, its shadow on the ground and faint drop lines
-  // between them, so the eye can tell how high and where over the ground the disc will fly.
-  const tapeMat=(colour,extra={})=>new T.MeshBasicMaterial({color:colour,vertexColors:true,transparent:true,side:T.DoubleSide,depthWrite:false,...extra});
-  v.ghost=new T.Mesh(new T.BufferGeometry(),tapeMat('#ffffff'));v.ghost.renderOrder=3;
-  v.ghostShadow=new T.Mesh(new T.BufferGeometry(),tapeMat('#ffffff',{polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));v.ghostShadow.renderOrder=2;
-  v.ghostDrops=new T.LineSegments(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#fff3b4',transparent:true,opacity:.35,depthWrite:false}));
-  group.add(v.ghost,v.ghostShadow,v.ghostDrops);
   v.position.set(0,4,-8);v.target.set(0,1,20);v.camera.position.copy(v.position);v.moving=true;dirty=true;
-}
-function drawGhost(v,h){
-  const T=v.T,path=preview.path.filter((_,i,a)=>i%3===0||i===a.length-1);
-  for(const o of [v.ghost,v.ghostShadow,v.ghostDrops])o.geometry.dispose();
-  v.ghost.geometry=tape(T,path.map(q=>new T.Vector3(q.x,q.y+.02,q.z)),.16,'#fff3b4',.95,.6);
-  v.ghostShadow.geometry=tape(T,path.map(q=>new T.Vector3(q.x,ground(h,q.x,q.z)+.07,q.z)),.22,'#123020',.5,.2);
-  const drops=[];let last=-Infinity;
-  for(const q of path){if(q.t-last<.25)continue;last=q.t;drops.push(new T.Vector3(q.x,q.y,q.z),new T.Vector3(q.x,ground(h,q.x,q.z)+.07,q.z));}
-  v.ghostDrops.geometry=new T.BufferGeometry().setFromPoints(drops);
 }
 function drawScene(dt){
   const v=scene3d,{T,camera,renderer}=v;buildHole(round?round.hole:0);
@@ -203,25 +194,63 @@ function drawScene(dt){
   let eye,look;
   const flying=round?.phase==='fly'&&flight,disc=flying?flightPoint(flight,round.time):null;
   if(mapOpen){eye=new T.Vector3(0,h.length*.9+20,h.length*.5-5);look=new T.Vector3(0,0,h.length*.5);}
-  else if(disc){const sa=round.shot.angle;eye=new T.Vector3(disc.x-Math.sin(sa)*6,disc.y+3.5,disc.z-Math.cos(sa)*6);look=new T.Vector3(disc.x,disc.y,disc.z+2);}
-  else{const y=ground(h,...p.lie);eye=new T.Vector3(p.lie[0]-Math.sin(a)*10,y+5,p.lie[1]-Math.cos(a)*10);look=new T.Vector3(p.lie[0]+Math.sin(a)*9,y+.2,p.lie[1]+Math.cos(a)*9);}
-  const blend=dt?1-Math.exp(-dt*7):1;v.position.lerp(eye,blend);v.target.lerp(look,blend);
+  else if(disc){
+    // Chase camera: stay behind the disc along its travel direction and look at it.
+    // Dragging during the flight still orbits it, relative to the view at release.
+    if(v.chaseSeq!==round.seq){v.chaseSeq=round.seq;v.chaseYaw0=view.yaw;}
+    const before=flightPoint(flight,Math.max(0,round.time-.15));
+    const dx=disc.x-before.x,dz=disc.z-before.z;
+    const travel=Math.hypot(dx,dz)>.05?Math.atan2(dx,dz):v.chaseYaw0;
+    const yaw=travel+view.yaw-v.chaseYaw0,gy=ground(h,disc.x,disc.z);
+    eye=new T.Vector3(disc.x-Math.sin(yaw)*6,Math.max(disc.y+1.6,gy+1.2),disc.z-Math.cos(yaw)*6);
+    look=new T.Vector3(disc.x,disc.y,disc.z);
+  }
+  else{
+    const yaw=view.yaw,pitch=view.pitch*Math.PI/180,groundY=ground(h,...p.lie);
+    eye=new T.Vector3(p.lie[0],groundY+1.5,p.lie[1]);
+    look=eye.clone().add(new T.Vector3(Math.sin(yaw)*Math.cos(pitch)*10,Math.sin(pitch)*10,Math.cos(yaw)*Math.cos(pitch)*10));
+  }
+  // Follow smoothly in flight and when returning to the thrower; aiming drags stay direct.
+  const blend=drag?.type==='aim'||!dt?1:1-Math.exp(-dt*(disc?6:8));
+  v.position.lerp(eye,blend);v.target.lerp(look,blend);
   v.moving=v.position.distanceTo(eye)>.015||v.target.distanceTo(look)>.015;
   if(!v.moving){v.position.copy(eye);v.target.copy(look);}
-  camera.position.copy(v.position);camera.lookAt(v.target);v.sky.position.copy(v.position);
-  v.person.position.set(p.lie[0]-.5,ground(h,...p.lie),p.lie[1]-.2);v.person.rotation.y=a;
-  v.person.visible=!mapOpen;v.arm.rotation.y=drag?-1.8*aim.power:disc?Math.max(0,.8-round.time)*2:.2;
-  v.arm.children[1].visible=!disc;
-  v.disc.visible=v.discShadow.visible=!!disc; if(disc){v.disc.position.set(disc.x,disc.y,disc.z);v.disc.rotation.set(disc.tilt,round.time*18,disc.tilt);v.disc.material.color.setHex(DISCS[round.shot.disc].colour);
+  camera.position.copy(v.position);camera.lookAt(v.target);camera.updateMatrixWorld();v.sky.position.copy(v.position);
+  v.person.position.set(p.lie[0],ground(h,...p.lie),p.lie[1]);v.person.rotation.y=a;
+  v.person.visible=false;
+  v.arm.rotation.y=drag?.type==='swipe'?-1.8*aim.power:disc?Math.max(0,.8-round.time)*2:.2;
+  const handDisc=v.arm.children[1];
+  handDisc.visible=false;
+  v.disc.visible=v.discShadow.visible=!!disc; if(disc){v.disc.position.set(disc.x,disc.y,disc.z);v.disc.rotation.set(disc.tilt,round.time*18,disc.tilt);
+    const releaseBlend=Math.max(0,1-round.time/.22);
+    v.disc.scale.setScalar(1+((round.shot.releaseScale??1)-1)*releaseBlend);
+    if(round.shot.releaseRotation){
+      // Preserve the visible release bank. Spin about the disc normal, rather than
+      // blending into world-axis Euler rotations that reverse the bank on screen.
+      v.disc.quaternion.fromArray(round.shot.releaseRotation);
+      v.disc.rotateZ(disc.tilt-flight.path[0].tilt);
+      v.disc.rotateY(round.time*18);
+    }v.disc.material.color.setHex(DISCS[round.shot.disc].colour);
     const gy=ground(h,disc.x,disc.z),high=Math.max(0,disc.y-gy);v.discShadow.position.set(disc.x,gy+.07,disc.z);v.discShadow.scale.setScalar(1+high*.12);v.discShadow.material.opacity=.4/(1+high*.25);}
-  v.ghost.visible=v.ghostShadow.visible=v.ghostDrops.visible=!!(preview&&round?.phase==='aim');
-  if(preview){const key=JSON.stringify([round.hole,round.seq,aim]);if(key!==v.ghostKey){v.ghostKey=key;drawGhost(v,h);}}
   // The sun's shadow area follows what the camera looks at, so the flight keeps its shadows.
   v.sun.position.set(v.target.x-25,v.target.y+45,v.target.z-15);v.sun.target.position.copy(v.target);
   if(round){const b=new T.Vector3(h.basket[0],ground(h,...h.basket)+2.3,h.basket[1]).project(camera),rect=$('scene').getBoundingClientRect();
     $('basketLabel').hidden=b.z>1||Math.abs(b.x)>.9||Math.abs(b.y)>.9||mapOpen;
     $('basketLabel').style.left=(b.x+1)*rect.width/2+'px';$('basketLabel').style.top=(1-b.y)*rect.height/2+'px';
     $('basketLabel').textContent='Kori · '+Math.round(distance(p.lie,h.basket))+' m';}
+  v.heldDisc.visible=!!(round?.phase==='aim'&&!mapOpen);
+  if(v.heldDisc.visible){
+    const rect=$('scene').getBoundingClientRect();
+    const screen=heldDiscScreenPoint(rect),cx=screen.x-rect.left,cy=screen.y-rect.top;
+    const depth=1.5,halfHeight=Math.tan(camera.fov*Math.PI/360)*depth;
+    const x=cx/rect.width*2-1;
+    const y=1-cy/rect.height*2;
+    v.heldDisc.position.set(x*halfHeight*camera.aspect,y*halfHeight,-depth);
+    v.heldDisc.scale.setScalar(110/rect.height*halfHeight);
+    v.heldDisc.rotation.set(.65,0,aim.curve*Math.PI/4);
+    v.heldFace.color.setHex(DISCS[aim.disc].colour);
+    v.heldRim.color.setHex(DISCS[aim.disc].colour).multiplyScalar(.6);
+  }
   renderer.render(v.scene,camera);tune(dt);
 }
 function tune(dt){
@@ -229,3 +258,4 @@ function tune(dt){
   v.samples++;v.elapsed+=dt;
   if(v.elapsed>2){if(v.samples/v.elapsed<40){if(!v.tuned)v.renderer.setPixelRatio(1);else v.renderer.shadowMap.enabled=false;v.tuned++;}else v.tuned=2;v.elapsed=v.samples=0;}
 }
+
