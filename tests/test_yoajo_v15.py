@@ -1,4 +1,6 @@
-"""Yöajo v13 (#440): roadworks with a light, fog, a broken-down car, an ambulance, a wide load, a
+"""Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
+service station, and the whole trip's totals ("Koko matka").
+Yöajo v13 (#440): roadworks with a light, fog, a broken-down car, an ambulance, a wide load, a
 snowplough and black ice, and a crash screen tall enough for its hint.
 Yöajo v12 (#440): the police, and the police check from leg 3.
 Yöajo v11 (#377): drive forward after coffee and let traffic pass the parked car.
@@ -8,7 +10,7 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v14/"
+URL = "games/yoajo/v15/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -19,7 +21,7 @@ URL = "games/yoajo/v14/"
 # green at roadworks and drives their open lane, rounds a broken-down car with room when nobody is
 # coming, moves right for an ambulance and for a wide load (under 50), drives 60 on black ice, and
 # keeps to low beams in fog.
-BOT = """(legs) => { maxLeg = 8; const out = [];
+BOT = """(legs) => { maxLeg = 11; const out = [];
   for (const n of legs) { newLeg(n); HOLD = true;
     for (let i = 0; i < 60 * 600 && mode === 'drive'; i++) {
       let want = LANE;
@@ -35,7 +37,8 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       if (head) want = 4.0;
       const deer = things.find(t => (t.kind === 'hirvi' || t.kind === 'poro') && t.s > P.s && t.s - P.s < 120 && Math.abs(t.lat) < 6);
       const bay = road.bays.find(b => P.s > b.s0 - 5 && P.s < b.s1 - 10);
-      const rest = bay && P.tired > 0.15;
+      // v15: on a Lapland leg it fills the tank there too.
+      const rest = bay && (P.tired > 0.15 || (bay.station && P.fuel < 0.98));
       if (rest && !(slow && slow.lat > 0 && slow.s - P.s < 25)) want = 7;
       // Traffic now passes while parked: yield before merging back into its lane.
       const merging = P.lat > EDGE && inBay(P.s, P.lat) && things.some(t => vehicle(t) && t.v > 0 && t.lat > 0 && t.lat < EDGE
@@ -376,7 +379,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v14")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v15")
 
 
 # ---- v12 (#440): the police ----
@@ -808,7 +811,7 @@ def test_events_from_the_legs_own_queue_get_their_random_number_and_the_waiting_
 # v14 (#440): the route turns. A driver alone on the leg: keeps its lane, takes each turn at
 # `kmh` (0: the speed the turn is meant for), steers into it once at its start unless `straight`,
 # and stops `stop` (an expression: metres to the stop line, or null) when asked. Sleep is off.
-TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; events = [];
+TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 11; newLeg(n); things = []; events = [];
   road.cams = []; road.checks = []; const seen = [], sig = {}; let out = {}; eval(setup);
   for (let i = 0; i < 60 * 240 && mode === 'drive' && !eval(until); i++) {
     P.tired = 0; const J = turnAhead(), jd = J ? J.a0 - P.s : 1e9;
@@ -923,13 +926,17 @@ RAIL_STOP = """(() => { if (x.on && x.t > 8 && out.queued === null) out.queued =
 
 def test_the_level_crossing_waiting_is_20_through_the_barriers_ends_the_leg_and_traffic_queues(site, context):
     page = open_game(site, context)
-    r = page.evaluate(TURN, [4, RAIL, 60, False, "P.s > x.s + 40", RAIL_STOP])
-    assert r["mode"] == "drive" and r["tally"]["juna"] == 1, r
-    assert "Juna tulee: puomit laskeutuvat" in r["seen"] and "Juna meni ohi +20" in r["seen"], r
-    # The car ahead stopped before the crossing while the train went by.
-    assert r["out"]["queued"] is not None and 3 < r["out"]["queued"] < 20, r
-    r = page.evaluate(TURN, [4, "var x = road.rail[0]; P.s = x.s - 400;", 60, False, "P.s > x.s + 40", "null"])
-    assert r["mode"] == "crash" and r["why"] == "Ajoit puomien läpi tasoristeyksessä.", r
+    # v15: leg 4 and Lapland's first leg (#440's spec: the level crossing on leg 4 and in Lapland).
+    rails = page.evaluate("() => { maxLeg = 11; const out = []; for (let n = 1; n <= 11; n++) { newLeg(n); out.push(road.rail.length); } return out; }")
+    assert rails == [0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0], rails
+    for n in (4, 9):
+        r = page.evaluate(TURN, [n, RAIL, 60, False, "P.s > x.s + 40", RAIL_STOP])
+        assert r["mode"] == "drive" and r["tally"]["juna"] == 1, (n, r)
+        assert "Juna tulee: puomit laskeutuvat" in r["seen"] and "Juna meni ohi +20" in r["seen"], (n, r)
+        # The car ahead stopped before the crossing while the train went by.
+        assert r["out"]["queued"] is not None and 3 < r["out"]["queued"] < 20, (n, r)
+        r = page.evaluate(TURN, [n, "var x = road.rail[0]; P.s = x.s - 400;", 60, False, "P.s > x.s + 40", "null"])
+        assert r["mode"] == "crash" and r["why"] == "Ajoit puomien läpi tasoristeyksessä.", (n, r)
     assert page.errors == []
 
 
@@ -978,3 +985,219 @@ def test_the_crossing_car_once_through_the_junction_is_an_oncoming_car_on_the_pl
     assert r["through"] and r["through"]["arm"] is None and r["through"]["s"] < -1, r
     assert r["drawnOn"] == "road", r
     assert r["mode"] == "crash" and r["why"] != "Väärä tie: ajoit ohi käännöksen.", r
+
+
+# ---- v15 (#440): Lapland ----
+
+def test_the_lapland_legs_can_be_driven_with_a_stop_for_fuel(site, context):
+    page = open_game(site, context)
+    legs = page.evaluate(BOT, [9, 10, 11])
+    assert all(r["mode"] == "done" for r in legs), [(r["n"], r["why"], r["at"]) for r in legs]
+    for r in legs:
+        t = r["tally"]
+        assert t["tankkaus"] == 1 and t["tauko"] == 1 and t["hurjastelu"] == 0 and t["poliisi"] == 0, (r["n"], t)
+        # Moose and reindeer got past are counted for the trip's totals.
+        assert t["elaimet"] >= 3, (r["n"], t)
+    assert page.errors == []
+
+
+FUEL = """([n, kmh]) => { HOLD = true; maxLeg = 11; newLeg(n); things = []; events = []; road.cams = []; road.checks = []; road.holes = []; road.turns = [];
+  const st = road.bays.find(b => b.station), start = P.fuel;
+  for (let i = 0; i < 60 * 600 && mode === 'drive' && P.s < st.s0; i++) {
+    if (!P.dry) P.v = (kmh || limitAt(P.s)) / KMH; P.lat = LANE; P.vl = 0; step(1 / 60); }
+  return { mode, why: crashWhy, start, fuel: P.fuel, at: Math.round(P.s), s0: st.s0, low: msgs.map(m => m.text) }; }"""
+
+
+def test_the_tank_reaches_the_station_at_the_limits_but_not_at_full_speed(site, context):
+    page = open_game(site, context)
+    for n in (9, 10, 11):
+        r = page.evaluate(FUEL, [n, 0])
+        assert r["mode"] == "drive" and 0.1 < r["fuel"] < 0.35 and r["start"] < 1, (n, r)
+        r = page.evaluate(FUEL, [n, 130])
+        assert r["mode"] == "crash" and r["why"] == "Polttoaine loppui." and r["at"] < r["s0"], (n, r)
+    # The warning names how far the station is.
+    r = page.evaluate("""() => { HOLD = true; newLeg(9); things = []; events = []; road.cams = []; road.checks = [];
+      const st = road.bays.find(b => b.station); P.s = st.s0 - 900; P.fuel = FUEL_LOW + 0.0001; P.v = 80 / KMH; P.lat = LANE;
+      for (let i = 0; i < 60; i++) { P.v = 80 / KMH; step(1 / 60); } return msgs.map(m => m.text); }""")
+    assert any(t.startswith("Tankki vähissä: huoltoasema 0,9 km") for t in r), r
+    assert page.errors == []
+
+
+def test_the_pump_fills_the_tank_and_only_lapland_has_one(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { const out = []; maxLeg = 11;
+      for (let n = 1; n <= 11; n++) { newLeg(n); out.push([n, P.fuel, road.bays.filter(b => b.station).length,
+        road.signs.filter(s => s.kind === 'huolto').map(s => s.text), road.signs.filter(s => s.kind === 'levahdys').length]); }
+      return out; }""")
+    for n, fuel, stations, huolto, rest in r:
+        if n <= 8:
+            assert fuel is None and stations == 0 and huolto == [], r
+        else:
+            assert 0 < fuel < 1 and stations == 1 and huolto == ["500 m", "100 m"] and rest == 0, r
+    r = page.evaluate("""() => { HOLD = true; newLeg(10); things = []; events = []; road.cams = []; road.checks = [];
+      const b = road.bays.find(b => b.station); P.s = b.s0 + 30; P.lat = 9; P.v = 0; P.fuel = 0.3; P.tired = 0;
+      const seen = [];
+      for (let i = 0; i < 60 * 9; i++) { step(1 / 60); if (i === 60) seen.push(P.filling); }
+      btns = []; draw(); return { fuel: P.fuel, filling: seen[0], n: tally.tankkaus, msgs: msgs.map(m => m.text), mode }; }""")
+    assert r["fuel"] == 1 and r["filling"] and r["n"] == 1 and "Tankki täynnä" in r["msgs"] and r["mode"] == "drive", r
+    assert page.errors == []
+
+
+def test_the_lapland_legs_open_in_turn_and_an_old_save_opens_the_first(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; driven = 7; newLeg(8); P.s = leg.len + 1; finish();
+      return { maxLeg, taso: load('taso'), ajettu: load('ajettu'), buttons: btns.map(b => b.id) }; }""")
+    assert r["maxLeg"] == 9 and r["taso"] == 9 and r["ajettu"] == 8, r
+    # A phone that drove to Rovaniemi in v14 (taso stopped at 8) gets Lapland's first leg.
+    page.evaluate("""() => { localStorage.setItem('ai-pelit:yoajo:taso', '8'); localStorage.setItem('ai-pelit:yoajo:ajettu', '8'); }""")
+    page.reload(); page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    assert page.evaluate("[maxLeg, level, load('taso')]") == [9, 9, 9]
+    # One that had not, keeps its legs.
+    page.evaluate("""() => { localStorage.setItem('ai-pelit:yoajo:taso', '8'); localStorage.setItem('ai-pelit:yoajo:ajettu', '7'); }""")
+    page.reload(); page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    assert page.evaluate("[maxLeg, level]") == [8, 8]
+    # The last leg's end offers the whole trip; "Takaisin" comes back to it.
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; newLeg(11); P.s = leg.len + 1; finish(); btns = []; draw();
+      const ids = btns.map(b => b.id); act({ id: 'matka' }); const m1 = mode; btns = []; draw();
+      const back = btns.map(b => b.id); act({ id: 'takaisin' }); return { ids, m1, back, m2: mode }; }""")
+    assert r["ids"] == ["matka", "uudelleen", "valikko"] and r["m1"] == "matka" and r["back"] == ["takaisin"] and r["m2"] == "done", r
+    assert page.errors == []
+
+
+def test_the_trip_adds_up_and_keeps_what_was_driven(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; localStorage.removeItem('ai-pelit:yoajo:tilasto');
+      stars = { 1: 3, 2: 2, 9: 1 }; bests = { 1: 800, 2: 650, 9: 400 };
+      const tot = tripTotals();
+      // A leg crashed 1.5 km in: its km count, not as a leg driven to the end.
+      newLeg(9); things = []; events = []; road.cams = []; road.checks = []; P.s = 1500; tally.elaimet = 2; crash('Kolari!');
+      const a = load('tilasto');
+      // A leg driven to the end.
+      newLeg(1); P.s = leg.len + 1; tally.sakot = 1; finish();
+      const b = load('tilasto');
+      // Leaving a leg from the pause menu before 30 m adds nothing.
+      newLeg(2); P.s = 10; act({ id: 'valikko' });
+      return { tot, a, b, c: load('tilasto') }; }""")
+    assert r["tot"] == {"pts": 1850, "st": 6, "legs": 3, "of": 33}, r
+    assert r["a"] == {"km": 1.5, "osuudet": 0, "poliisi": 0, "sakot": 0, "elaimet": 2, "tankkaus": 0}, r
+    assert r["b"]["osuudet"] == 1 and r["b"]["sakot"] == 1 and r["b"]["km"] >= 1.5 + 3, r
+    assert r["c"] == r["b"], r
+    assert page.errors == []
+
+
+def test_reindeer_herds_cross_one_after_another_and_stand_longer(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { const out = []; maxLeg = 11;
+      for (let n = 1; n <= 11; n++) { newLeg(n); const h = events.filter(e => e.herd != null);
+        out.push({ n, herd: h.length, holds: h.map(e => e.hold), sides: [...new Set(h.map(e => e.side))].length }); }
+      return out; }""")
+    for x in r:
+        herds = {9: 1, 10: 2, 11: 2}.get(x["n"], 0)
+        assert 3 * herds <= x["herd"] <= 5 * herds, x
+        assert all(h >= 2 for h in x["holds"]), x
+    # Each reindeer of a herd waits its own while on the road, longer than a lone one's 1.6 s.
+    r = page.evaluate("""() => { HOLD = true; newLeg(10); things = []; road.cams = []; road.checks = []; road.holes = [];
+      const e = events.find(e => e.herd === 0); events = events.filter(x => x.herd != null && x.s === e.s);
+      P.s = e.s - 20; P.v = 0; P.lat = LANE; let most = 0;
+      for (let i = 0; i < 60 * 3 && events.length; i++) { P.v = 30 / KMH; step(1 / 60); }
+      P.v = 0; for (let i = 0; i < 60 * 15; i++) { P.v = 0; step(1 / 60); most = Math.max(most, things.filter(t => t.kind === 'poro').length); }
+      return { most, n: events.length, mode }; }""")
+    assert r["most"] >= 3 and r["mode"] == "drive", r
+    assert page.errors == []
+
+
+MENU = """(sel0) => { HOLD = true; maxLeg = 11; sel = sel0; preview(sel0); btns = []; draw();
+  const rows = btns.filter(b => b.id.startsWith('osa-')), ohj = btns.find(b => b.id === 'ohjaus'), mat = btns.find(b => b.id === 'matka');
+  return { rows: rows.map(b => [b.id, b.y, b.h]), ids: btns.map(b => b.id), bottom: Math.max(...btns.filter(b => !['ohjaus', 'matka', 'aja'].includes(b.id)).map(b => b.y + b.h)),
+    ohj: ohj && [ohj.x, ohj.y, ohj.w], mat: mat && [mat.x, mat.y, mat.w], W, H }; }"""
+
+
+def test_the_menu_shows_eleven_legs_at_both_sizes(site, context):
+    for w, h in ((360, 740), (360, 640), (390, 844), (740, 360)):
+        page = open_game(site, context)
+        page.set_viewport_size({"width": w, "height": h})
+        page.wait_for_function(f"W === {w} && H === {h}")
+        for sel0 in (1, 11, 6):
+            r = page.evaluate(MENU, sel0)
+            ids = [x[0] for x in r["rows"]]
+            assert f"osa-{sel0}" in ids, (w, h, sel0, r)
+            assert all(x[2] >= 30 for x in r["rows"]), (w, h, r)
+            assert r["mat"] and r["ohj"][0] + r["ohj"][2] < r["mat"][0] and r["mat"][0] + r["mat"][2] <= r["W"], (w, h, r)
+            if h > w:
+                assert r["bottom"] < r["ohj"][1], (w, h, r)
+            if len(ids) < 11:
+                assert "ylos" in r["ids"] and "alas" in r["ids"], (w, h, r)
+        # The arrows move the window.
+        r = page.evaluate("""() => { sel = 1; preview(1); btns = []; draw(); const a = btns.filter(b => b.id.startsWith('osa-')).map(b => b.id);
+          if (!btns.some(b => b.id === 'alas')) return { a, b: a };
+          act({ id: 'alas' }); btns = []; draw(); return { a, b: btns.filter(b => b.id.startsWith('osa-')).map(b => b.id) }; }""")
+        if len(r["a"]) < 11:
+            assert r["b"] != r["a"] and "osa-11" in r["b"] or r["b"][0] == "osa-4", (w, h, r)
+        assert page.errors == []
+        page.close()
+
+
+def test_a_restart_gives_a_fresh_tank_and_station(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; newLeg(9); things = []; events = []; road.cams = []; road.checks = [];
+      const start = P.fuel, b = road.bays.find(b => b.station); P.s = b.s0 + 30; P.lat = 9; P.v = 0; P.fuel = 0.2;
+      for (let i = 0; i < 60 * 9; i++) step(1 / 60);
+      const filled = [P.fuel, tally.tankkaus]; P.fuel = 0.05; act({ id: 'uudelleen' });
+      const b2 = road.bays.find(b => b.station);
+      return { start, filled, again: P.fuel, n: tally.tankkaus, dry: P.dry, fresh: !b2.filled, mode }; }""")
+    assert r["filled"] == [1, 1] and r["again"] == r["start"] and r["n"] == 0 and not r["dry"] and r["fresh"], r
+    assert page.errors == []
+
+
+DONE = """(n) => { HOLD = true; maxLeg = 11; newLeg(n); P.s = leg.len + 1; finish(); btns = []; draw();
+  return { ids: btns.map(b => b.id), bottom: Math.max(...btns.map(b => b.y + b.h)), W, H }; }"""
+
+
+def test_the_trip_is_offered_after_rovaniemi_and_utsjoki(site, context):
+    # #440's spec: "Koko matka" after Rovaniemi (leg 8) and after Utsjoki (leg 11); the next leg stays.
+    for w, h in ((360, 640), (390, 844), (740, 360)):
+        page = open_game(site, context)
+        page.set_viewport_size({"width": w, "height": h})
+        page.wait_for_function(f"W === {w} && H === {h}")
+        for n, ids in ((7, ["seuraava", "uudelleen", "valikko"]), (8, ["seuraava", "matka", "uudelleen", "valikko"]),
+                       (11, ["matka", "uudelleen", "valikko"])):
+            r = page.evaluate(DONE, n)
+            assert r["ids"] == ids and r["bottom"] <= h, (w, h, n, r)
+        page.evaluate(DONE, 8)
+        r = page.evaluate("() => { act({ id: 'matka' }); const m = mode; act({ id: 'takaisin' }); const m2 = mode; act({ id: 'seuraava' }); return [m, m2, mode, level]; }")
+        assert r == ["matka", "done", "drive", 9], r
+        assert page.errors == []
+        page.close()
+
+
+def test_lapland_has_long_straights_and_legs_1_to_8_keep_their_road(site, context):
+    page = open_game(site, context)
+    # The share of each leg's road that runs straight, and its longest straight in metres.
+    r = page.evaluate("""() => { const out = {}; for (let n = 1; n <= 11; n++) { const L = LEGS[n - 1], R = makeRoad(L);
+        let run = 0, best = 0, flat = 0; for (let i = 0; i < R.K.length; i++) { if (R.K[i] === 0) { run += SEG; flat += SEG; best = Math.max(best, run); } else run = 0; }
+        out[n] = [Math.round(flat / (R.K.length * SEG) * 100), Math.round(best)]; } return out; }""")
+    lap = [r[str(n)] for n in (9, 10, 11)]
+    south = [r[str(n)] for n in range(1, 9)]
+    assert all(b >= 500 for _, b in lap), r
+    assert min(p for p, _ in lap) > max(p for p, _ in south), r
+    assert page.errors == []
+
+
+def test_a_leg_left_by_the_back_chip_still_counts_on_the_trip_once(site, context):
+    page = open_game(site, context)
+    # Driving 800 m with a fine and two animals, the page hidden and shown twice (a call, the home
+    # screen): each look adds only what is new.
+    r = page.evaluate("""() => { HOLD = true; localStorage.removeItem('ai-pelit:yoajo:tilasto'); maxLeg = 9;
+      newLeg(9); mode = 'drive'; P.s = 800; tally.sakot = 1; tally.elaimet = 2; tripLog(); tripLog();
+      const a = load('tilasto'); P.s = 1300; tally.elaimet = 3; tripLog(); return { a, b: load('tilasto') }; }""")
+    assert r["a"] == {"km": 0.8, "osuudet": 0, "poliisi": 0, "sakot": 1, "elaimet": 2, "tankkaus": 0}, r
+    assert round(r["b"]["km"], 3) == 1.3 and r["b"]["sakot"] == 1 and r["b"]["elaimet"] == 3, r
+    # Then on to 2 km and straight out to the shelf, as "‹ Pelit → Takaisin pelilistaan" does:
+    # pagehide logs the rest.
+    page.evaluate("() => { P.s = 2000; tally.poliisi = 1; }")
+    page.goto(f"{site.url}/")
+    page.goto(f"{site.url}{URL}")
+    page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    t = page.evaluate("() => tripStats()")
+    assert round(t["km"], 3) == 2.0 and t["poliisi"] == 1 and t["sakot"] == 1 and t["elaimet"] == 3 and t["osuudet"] == 0, t
+    assert page.errors == []

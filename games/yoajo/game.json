@@ -99,6 +99,13 @@
       "note": "Reitti kääntyy: liittymät ja risteykset, joissa pitää kääntyä opasteen mukaan (vilkku menee päälle itsestään), ja tasoristeys puomeineen ja junineen.",
       "request": "Autopeliin lisää. Tuleeko ideoita",
       "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 15,
+      "date": "2026-11-08",
+      "note": "Kolme uutta osuutta Lappiin Utsjoelle asti poroineen ja revontulineen, polttoaine ja huoltoasemat Lapin osuuksilla, ja Koko matka -yhteenveto.",
+      "request": "Autopeliin lisää. Tuleeko ideoita",
+      "issue": "eerovil/ai-pelit#440"
     }
   ]
 }
