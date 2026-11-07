@@ -252,6 +252,12 @@ function dashboard() {
       x.fillStyle = g; x.fillRect(x0, 0, ew, H);
     }
   }
+  // v13 (#440): an ambulance behind: its blue lights flash in the mirror, a strip along the top.
+  if (mode === 'drive' && things.some(t => t.kind === 'ambulanssi' && t.plan !== 'back' && t.s < P.s && P.s - t.s < 120)) {
+    const on = Math.sin(performance.now() / 1000 * 15) > 0, g = x.createLinearGradient(0, 0, 0, 46);
+    g.addColorStop(0, `rgba(47,98,255,${on ? 0.6 : 0.15})`); g.addColorStop(1, 'rgba(47,98,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, W, 46);
+  }
   // Eyelids closing.
   const e = eyes();
   if (e > 0) { x.fillStyle = '#000'; x.fillRect(0, 0, W, H * 0.5 * e); x.fillRect(0, H - H * 0.5 * e, W, H * 0.5 * e); }
@@ -295,6 +301,9 @@ function dashboard() {
     const d = Math.round((ck.s - P.s) / 10) * 10;
     fitText(ck.state === 'blow' ? 'Puhalla…' : d > 10 ? `Puhalluskoe ${d} m: pysähdy poliisin kohdalle` : 'Pysähdy poliisin kohdalle', W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#bcd0ff');
   }
+  // v13: what to do at the road events ahead (roadHint() in tie.js).
+  const rhint = mode === 'drive' && !bay && !ck ? roadHint() : '';
+  if (rhint) fitText(rhint, W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#ffd27a');
   // While a police car sees the car: a small sign under the speedometer.
   if (P.seen && mode === 'drive') text('🚓 Poliisi näkee', W / 2, sp.cy + sp.r + 14, 12, '#a9c2ff', 'center', 700);
   // Messages: overtakes, fines, the lights.
@@ -457,18 +466,28 @@ function pauseScreen() {
   endButtons([['jatka', 'Jatka'], ['uudelleen', 'Aloita alusta'], ['valikko', 'Valikko']], H * 0.38);
 }
 function crashScreen() {
-  const w = Math.min(340, W - 24), h = LAND ? H - 30 : 270, x0 = (W - w) / 2, y0 = LAND ? 15 : H * 0.22;
-  panel(x0, y0, w, h);
   const asleep = crashWhy.startsWith('Nukahdit');
   const cop = crashWhy.startsWith('Poliisi');
+  const words = crashWhy.split(' '), lines = []; let line = '';
+  for (const wd of words) { if ((line + ' ' + wd).length > 32) { lines.push(line.trim()); line = ''; } line += ' ' + wd; }
+  lines.push(line.trim());
+  const hints = asleep ? ['Pysähdy levähdysalueelle kahville.']
+    : cop && crashWhy.includes('puhallus') ? ['Pysähdy puhalluskokeessa poliisin kohdalle.']
+    : cop ? ['Poliisin nähden enintään 10 km/h yli', 'ja vain turvallisia ohituksia.']
+    : crashWhy.startsWith('Rengas') ? ['Kuoppien kohdalla hidasta alle 50 km/h.']
+    : crashWhy.includes('tietyö') ? ['Tietyössä aja vasenta kaistaa vihreällä.']
+    : crashWhy.includes('erikoiskuljetu') ? ['Erikoiskuljetusta väistä reunaan,', 'alle 50 km/h.']
+    : [];
+  // v13: tall enough for the reason and the hint above the buttons (v12: a fixed 270 px, where a
+  // two-line reason and a two-line hint ran under "Yritä uudelleen").
+  const textH = 74 + (lines.length - 1) * 21 + (hints.length ? 8 + hints.length * 18 : 0);
+  const w = Math.min(340, W - 24), h = LAND ? H - 30 : Math.max(270, textH + 150), x0 = (W - w) / 2, y0 = LAND ? 15 : Math.min(H * 0.22, H - h - 10);
+  panel(x0, y0, w, h);
   text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
-  const words = crashWhy.split(' '); let line = '', ly = y0 + 74;
-  for (const wd of words) { if ((line + ' ' + wd).length > 32) { text(line.trim(), W / 2, ly, 15, '#e8eefc', 'center', 600); ly += 21; line = ''; } line += ' ' + wd; }
-  text(line.trim(), W / 2, ly, 15, '#e8eefc', 'center', 600);
-  if (asleep) text('Pysähdy levähdysalueelle kahville.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
-  else if (cop && crashWhy.includes('puhallus')) text('Pysähdy puhalluskokeessa poliisin kohdalle.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
-  else if (cop) { text('Poliisin nähden enintään 10 km/h yli', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500); text('ja vain turvallisia ohituksia.', W / 2, ly + 44, 13, '#9fb0cc', 'center', 500); }
-  else if (crashWhy.startsWith('Rengas')) text('Kuoppien kohdalla hidasta alle 50 km/h.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
+  let ly = y0 + 74;
+  lines.forEach((l, i) => text(l, W / 2, ly + i * 21, 15, '#e8eefc', 'center', 600));
+  ly += (lines.length - 1) * 21;
+  hints.forEach((l, i) => text(l, W / 2, ly + 26 + i * 18, 13, '#9fb0cc', 'center', 500));
   endButtons([['uudelleen', 'Yritä uudelleen'], ['valikko', 'Valikko']], y0 + h - 130);
 }
 function doneScreen() {
@@ -494,7 +513,7 @@ function doneScreen() {
   const py = ty + rows.length * rh + 14;
   text(`${points} p`, cx, py, 28, '#ffffff', 'center', 900);
   text(r.record ? 'Uusi ennätys!' : `Ennätys ${r.best} p`, cx, py + 28, 14, r.record ? '#9ff0a8' : '#9fb0cc', 'center', 700);
-  const hint = r.stars < 2 ? 'Aja tavoiteajassa saadaksesi toisen tähden.' : r.stars < 3 ? 'Kolmas tähti: ei sakkoja, hurjastelua, häikäisyjä eikä liian läheisiä ohituksia.' : 'Täydellinen yöajo!';
+  const hint = r.stars < 2 ? 'Aja tavoiteajassa saadaksesi toisen tähden.' : r.stars < 3 && tally.tukit ? 'Kolmas tähti: päästä ambulanssi heti ohi.' : r.stars < 3 ? 'Kolmas tähti: ei sakkoja, hurjastelua, häikäisyjä eikä liian läheisiä ohituksia.' : 'Täydellinen yöajo!';
   const list = [];
   if (level < LEGS.length) list.push(['seuraava', `Seuraava: ${LEGS[level].from} → ${LEGS[level].to}`]);
   else list.push(['valikko', 'Perillä Rovaniemellä! Valikkoon']);

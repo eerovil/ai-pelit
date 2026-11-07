@@ -1,4 +1,6 @@
-"""Yöajo v12 (#440): the police, and the police check from leg 3.
+"""Yöajo v13 (#440): roadworks with a light, fog, a broken-down car, an ambulance, a wide load, a
+snowplough and black ice, and a crash screen tall enough for its hint.
+Yöajo v12 (#440): the police, and the police check from leg 3.
 Yöajo v11 (#377): drive forward after coffee and let traffic pass the parked car.
 Yöajo v8 (#306): the lights button on the left, a livelier gas pedal, a rest area with a lane
 of its own and signs, side roads with cars pulling out, no overtaking through a junction, and
@@ -6,14 +8,17 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v12/"
+URL = "games/yoajo/v13/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
 # oncoming cars and cars ahead, slows for moose and the speed limits (at most 90 on snow), gets
 # out of the way of an oncoming overtaker, leaves a car waiting at a side road alone, and stops
 # for coffee when sleepy, waiting behind a slow car before it turns into the rest area. v12: it
-# leaves parked police cars alone and stops beside the officer at a police check.
+# leaves parked police cars alone and stops beside the officer at a police check. v13: it waits for
+# green at roadworks and drives their open lane, rounds a broken-down car with room when nobody is
+# coming, moves right for an ambulance and for a wide load (under 50), drives 60 on black ice, and
+# keeps to low beams in fog.
 BOT = """(legs) => { maxLeg = 8; const out = [];
   for (const n of legs) { newLeg(n); HOLD = true;
     for (let i = 0; i < 60 * 400 && mode === 'drive'; i++) {
@@ -21,11 +26,11 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       const slow = things.filter(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro'
         && !t.parked && t.kind !== 'konstaapeli' && t.kind !== 'partio')
         .sort((a, b) => a.s - b.s)[0];
-      const onc = things.some(t => t.v < 0 && t.s > P.s - 5 && t.s - P.s < 330 && vehicle(t));
+      const onc = things.some(t => t.v < 0 && t.s + t.len / 2 > P.s - 5 && t.s - P.s < 330 && vehicle(t));
       const head = things.find(t => t.v < 0 && t.lat > 0.5 && t.s > P.s && t.s - P.s < 260);
-      if (slow && !onc && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
+      if (slow && !onc && !road.works.some(w => w.stop - P.s < 300 && P.s < w.far) && !road.broken.some(b => b.s - P.s < 250 && b.s > P.s - 10) && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
       if (slow && slow.kind === 'kavelija' && !onc) want = slow.lat > 0 ? 0 : LANE;
-      const beside = things.find(t => t.v >= 0 && vehicle(t) && t.kind !== 'takaa' && t.lat > 0 && t.lat < EDGE && t.s - P.s > -7 && t.s - P.s < 7);
+      const beside = things.find(t => t.v >= 0 && vehicle(t) && !t.parked && t.kind !== 'takaa' && t.lat > 0 && t.lat < EDGE && t.s - P.s > -7 && t.s - P.s < 7);
       if (beside && P.lat < 0.5) want = -LANE;
       if (head) want = 4.0;
       const deer = things.find(t => (t.kind === 'hirvi' || t.kind === 'poro') && t.s > P.s && t.s - P.s < 120 && Math.abs(t.lat) < 6);
@@ -36,14 +41,30 @@ BOT = """(legs) => { maxLeg = 8; const out = [];
       const merging = P.lat > EDGE && inBay(P.s, P.lat) && things.some(t => vehicle(t) && t.v > 0 && t.lat > 0 && t.lat < EDGE
         && t.s - P.s > -30 && t.s - P.s < 25);
       if (merging) want = 7;
+      // v13: roadworks: stop for red (or a green about to end), then the open (left) lane.
+      const w = road.works.find(w => P.s > w.stop - 200 && P.s < w.far + 10), wd = w ? w.stop - 3 - P.s : 0;
+      const wait = w && wd > -2 && (!worksGreen(w) || WORK_GREEN - (T + w.off) % WORK_CYCLE < 2.5);
+      if (w && P.s > w.stop - 8 && P.s < w.s1 + 4) want = -LANE;
+      const inq = w && P.s < w.s1 && things.find(t => t.v >= 0 && vehicle(t) && !t.parked && t.s > P.s && t.s - P.s < 14 + t.len / 2);
+      // A broken-down car: round it close to the centre line, or wait behind it while a car comes.
+      const bk = road.broken.find(b => b.s - P.s < 150 && b.s - P.s > -6), bkOnc = bk && P.s < bk.s - 12 && things.some(t => t.v < 0 && vehicle(t) && t.s > P.s - 5 && t.s - P.s < 260);
+      if (bk && !bkOnc && bk.s - P.s < 90) want = 0.3;
+      const bkStop = bk && P.lat > 0.6 ? bk.s - 14 - P.s : 1e9;
+      // An ambulance behind, a wide load ahead: to the right edge.
+      const amb = things.find(t => t.kind === 'ambulanssi' && t.plan !== 'back' && t.s < P.s && P.s - t.s < 150);
+      const load = things.find(t => t.kind === 'erikois' && t.s - P.s < 400 && t.s - P.s > -12);
+      if (amb || load) want = 3.0;
+      const icy = road.ice.some(x => P.s > x.s0 - ICE_SIGN && P.s < x.s1);
       const ck = road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s > -3 && c.s - P.s < 250), stopIn = ck ? ck.s - 3 - P.s : 0;
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
       input.left = err > 0.15; input.right = err < -0.15;
-      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200);
+      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200);
       input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
-        || (slow && want === LANE && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35)
-        || (ck && (stopIn < 2 || P.v > Math.sqrt(2 * 3 * stopIn)));
-      P.high = !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
+        || (slow && want > 0 && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < 35)
+        || (ck && (stopIn < 2 || P.v > Math.sqrt(2 * 3 * stopIn)))
+        || (wait && (wd < 2 || P.v > Math.sqrt(2 * 3 * wd))) || (inq && P.v > inq.v - 0.3)
+        || bkStop < 2 || P.v > Math.sqrt(2 * 3 * Math.max(0, bkStop));
+      P.high = !fogAt(P.s) && !fogAt(P.s + 60) && !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
       input.gas = input.brake || (rest && P.s > bay.s0 && P.lat > EDGE + 0.5) || merging ? 0 : 1; step(1 / 60);
     }
     out.push({ n, mode, why: crashWhy, checks: road.checks.map(c => c.state), T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
@@ -343,7 +364,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v12")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v13")
 
 
 # ---- v12 (#440): the police ----
@@ -553,4 +574,161 @@ def test_the_blue_lights_flash_on_both_edges_in_turn(site, context):
         dark = "right" if lit == "left" else "left"
         assert phase[lit][2] > 0 and phase[lit][3] > 100, (lit, r)
         assert 0 < phase[dark][3] < phase[lit][3], (lit, r)
+    assert page.errors == []
+
+
+# v13: leg n with no other traffic; setup runs once, each before every step (it holds the car's
+# speed and line), and `out` is returned.
+DRIVE = """([n, setup, secs, each]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; events = []; road.cams = []; road.checks = [];
+  const seen = []; let out = null; eval(setup);
+  for (let i = 0; i < 60 * secs && mode === 'drive'; i++) { P.vl = 0; eval(each); step(1 / 60);
+    for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text); }
+  return { mode, why: crashWhy, points, tally: Object.assign({}, tally), seen, out, lat: P.lat, s: P.s }; }"""
+
+PLANNED = {1: {"tietyo"}, 2: {"tietyo", "rikki", "sumu"}, 3: {"ambulanssi", "rikki", "sumu"},
+           4: {"ambulanssi", "erikois", "sumu"}, 5: {"aura", "jaa", "ambulanssi"}, 6: {"aura", "jaa", "rikki"},
+           7: {"aura", "jaa", "erikois"}, 8: {"aura", "jaa", "ambulanssi"}}
+
+
+def test_road_events_are_on_the_legs_as_planned(site, context):
+    page = open_game(site, context)
+    for n in range(1, 9):
+        r = page.evaluate("""(n) => { maxLeg = 8; newLeg(n); mode = 'menu';
+          const kinds = new Set(events.map(e => e.kind));
+          const got = [];
+          if (road.works.length) got.push('tietyo');
+          if (road.broken.length && kinds.has('rikki')) got.push('rikki');
+          if (road.fog.length) got.push('sumu');
+          if (road.ice.length) got.push('jaa');
+          for (const k of ['ambulanssi', 'erikois', 'aura']) if (kinds.has(k)) got.push(k);
+          const w = road.works[0];
+          return { planned: ROAD_EVENTS[n - 1], got, works: road.works.length,
+            zone: w ? [limitAt(w.stop - 60), limitAt(w.s0 + 20)] : null,
+            near: w ? road.bays.some(b => b.s1 > w.stop - 300 && b.s0 < w.far + 100) || road.checks.some(c => Math.abs(c.s - w.s0) < 400) : false,
+            signs: road.signs.filter(s => s.kind === 'liukas' && s.ice).length, ice: road.ice.length }; }""", n)
+        assert set(r["planned"]) == PLANNED[n] and len(r["planned"]) <= 3, (n, r)
+        # Fog lies only where the leg has a dip deep enough: every other kind is always there.
+        assert set(r["got"]) - {"sumu"} == PLANNED[n] - {"sumu"}, (n, r)
+        assert r["works"] <= 1 and r["signs"] == r["ice"], (n, r)
+        if r["works"]:
+            assert r["zone"] == [50, 50] and not r["near"], (n, r)
+    assert page.errors == []
+
+
+WORKS = """var w = road.works[0]; P.s = w.stop - 120; P.lat = LANE;
+  var greenIn = (x) => { T = (WORK_CYCLE - w.off + WORK_CYCLE * 4 - x) % WORK_CYCLE; };"""
+
+
+def test_roadworks_red_light_costs_50_waiting_for_green_is_20_and_the_cones_end_the_leg(site, context):
+    page = open_game(site, context)
+    left = "P.v = 40 / KMH; P.lat = P.s > w.stop - 20 && P.s < w.s1 + 5 ? -LANE : LANE;"
+    # Through on red, in the open lane.
+    r = page.evaluate(DRIVE, [1, WORKS + " greenIn(15);", 20, left])
+    assert r["mode"] == "drive" and r["tally"]["punaiset"] == 1 and r["tally"]["hurjastelu"] == 1, r
+    assert "Punaisia päin -50" in r["seen"] and "Tietyö: yksi kaista, odota vihreää" in r["seen"], r
+    # Stopped at the line until green, then through.
+    wait = "if (P.s < w.stop - 4 && !worksGreen(w)) P.v = Math.min(40 / KMH, Math.max(0, w.stop - 4 - P.s)); else P.v = 40 / KMH;" \
+           " P.lat = P.s > w.stop - 20 && P.s < w.s1 + 5 ? -LANE : LANE;"
+    r = page.evaluate(DRIVE, [1, WORKS + " greenIn(15);", 40, wait])
+    assert r["mode"] == "drive" and r["tally"]["tietyo"] == 1 and r["tally"]["punaiset"] == 0 and r["points"] >= 20, r
+    assert "Odotit vihreää +20" in r["seen"], r
+    # On green, but in the shut lane: into the roadworks.
+    r = page.evaluate(DRIVE, [1, WORKS + " greenIn(-1);", 20, "P.v = 40 / KMH; P.lat = LANE;"])
+    assert r["mode"] == "crash" and r["why"] == "Ajoit tietyömaalle.", r
+    assert page.errors == []
+
+
+def test_oncoming_cars_queue_at_the_far_line_and_come_through_on_their_turn(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(DRIVE, [1, WORKS + """ greenIn(5); P.s = w.stop - 400;
+      for (const k of [0, 1, 2]) cruiseFrom(add('vastaan', { s: w.far + 60 + k * 15, lat: -LANE, habit: 0, passed: true }));
+      out = { gaps: [], through: 0, inWorks: 0 };""", 30, """P.v = 0;
+      const q = things.filter(t => t.kind === 'vastaan').sort((a, b) => a.s - b.s);
+      if (q.every(t => t.v > -0.5) && !out.gaps.length) out.gaps = q.slice(1).map((t, i) => +(t.s - q[i].s).toFixed(1));
+      for (const t of q) { if (t.s < w.stop - 10 && !t.counted) { t.counted = true; out.through++; }
+        if (t.s > w.s0 && t.s < w.s1 && !worksOpen(w) && !t.inWorks) out.inWorks++; }"""])
+    # Waiting nose to tail, not on top of each other, then all through on their own green.
+    assert len(r["out"]["gaps"]) == 2 and all(5 < g < 9 for g in r["out"]["gaps"]), r
+    assert r["out"]["through"] == 3 and r["out"]["inWorks"] == 0, r
+    assert page.errors == []
+
+
+BROKEN = """var b = road.broken[0]; P.s = b.s - 150; things = [];
+  add('auto', { s: b.s, lat: BROKEN_LAT, v: 0, broken: true, parked: true, passed: true });"""
+
+
+def test_a_broken_down_car_close_and_fast_is_minus_40_and_with_room_plus_20(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(DRIVE, [2, BROKEN, 12, "P.v = 60 / KMH; P.lat = 1.0;"])
+    assert r["mode"] == "drive" and r["tally"]["lahelta"] == 1 and "Liian läheltä rikkinäistä autoa -40" in r["seen"], r
+    r = page.evaluate(DRIVE, [2, BROKEN, 18, "P.v = 40 / KMH; P.lat = 0.3;"])
+    assert r["mode"] == "drive" and r["tally"]["lahelta"] == 0 and "Väljä ohitus +20" in r["seen"], r
+    # Straight on in the lane is a crash into it.
+    r = page.evaluate(DRIVE, [2, BROKEN, 18, "P.v = 40 / KMH; P.lat = LANE;"])
+    assert r["mode"] == "crash", r
+    assert page.errors == []
+
+
+AMB = """P.s = 400; P.lat = LANE; roadRelease({ kind: 'ambulanssi' });
+  out = { amb: things.find(t => t.kind === 'ambulanssi') };"""
+
+
+def test_letting_the_ambulance_by_is_30_and_blocking_it_is_minus_50(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(DRIVE, [3, AMB, 25, "P.v = 60 / KMH; P.lat = things.some(t => t.kind === 'ambulanssi' && t.plan !== 'catch' && t.plan !== 'back') ? 3.0 : LANE;"])
+    assert r["mode"] == "drive" and r["tally"]["ambulanssi"] == 1 and r["tally"]["tukit"] == 0, r
+    assert "Ambulanssi takana: väistä oikealle" in r["seen"] and "Päästit ambulanssin ohi +30" in r["seen"], r
+    assert r["out"]["amb"]["plan"] == "back" and r["out"]["amb"]["s"] > r["s"], r
+    r = page.evaluate(DRIVE, [3, AMB, 25, "P.v = 60 / KMH; P.lat = LANE;"])
+    assert r["mode"] == "drive" and r["tally"]["tukit"] == 1 and r["tally"]["ambulanssi"] == 0, r
+    assert "Tukit ambulanssin -50" in r["seen"], r
+    assert page.errors == []
+
+
+LOAD = """P.s = 400; P.lat = LANE; roadRelease({ kind: 'erikois' });"""
+
+
+def test_a_wide_load_passed_fast_ends_the_leg_and_slow_on_the_edge_is_20(site, context):
+    page = open_game(site, context)
+    r = page.evaluate(DRIVE, [4, LOAD, 30, "P.v = 45 / KMH; P.lat = 3.0;"])
+    assert r["mode"] == "drive" and r["tally"]["erikois"] == 1, r
+    assert "Erikoiskuljetus vastaan: oikeaan reunaan ja alle 50" in r["seen"] and "Väistit erikoiskuljetusta +20" in r["seen"], r
+    r = page.evaluate(DRIVE, [4, LOAD, 30, "P.v = 70 / KMH; P.lat = 3.0;"])
+    assert r["mode"] == "crash" and r["why"] == "Vaaratilanne: ohitit erikoiskuljetuksen liian kovaa.", r
+    assert page.errors == []
+
+
+def test_the_plough_throws_snow_black_ice_halves_grip_and_fog_shortens_high_beams(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(5); things = []; events = []; road.cams = []; road.checks = [];
+      P.s = 600; P.lat = LANE; P.v = 40 / KMH; roadRelease({ kind: 'aura' });
+      const a = things.find(t => t.kind === 'aura'); a.s = P.s + 20; whiteout = 0; roadTick(1 / 60);
+      const near = whiteout; a.s = P.s + 200; whiteout = 0; roadTick(1 / 60);
+      const x = road.ice[0];
+      return { near, far: whiteout, grip: [gripAt(x.s0 + 5), gripAt(x.s0 - 30)] }; }""")
+    assert r["near"] > 0.3 and r["far"] == 0, r
+    assert r["grip"] == [0.5, 1], r
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = []; mode = 'drive';
+      const z = road.fog[0]; P.s = z.s;
+      const out = { fog: fogAt(P.s), high: fogReach(true, 200), low: fogReach(false, 80) };
+      P.high = true; whiteout = 0; roadTick(1 / 60); out.white = whiteout;
+      P.s = z.s + 400; out.clear = [fogAt(P.s), fogReach(true, 200)];
+      return out; }""")
+    assert r["fog"] == 1 and r["high"] == 30 and r["low"] == 45 and r["white"] > 0.3, r
+    assert r["clear"] == [0, 200], r
+    assert page.errors == []
+
+
+def test_a_long_reason_and_its_hint_fit_above_the_crash_screen_buttons(site, context):
+    page = open_game(site, context)
+    for size in ((360, 640), (360, 740)):
+        page.set_viewport_size({"width": size[0], "height": size[1]})
+        r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(4); resize();
+          mode = 'crash'; crashWhy = 'Vaaratilanne: ohitit erikoiskuljetuksen liian kovaa.';
+          const ys = [], real = text;
+          text = (s, x, y, ...rest) => { ys.push([s, y]); return real(s, x, y, ...rest); };
+          btns = []; draw(); text = real;
+          const b = btns.find(b => b.id === 'uudelleen');
+          return { hint: ys.filter(([s]) => s.startsWith('Erikoiskuljetusta') || s.startsWith('alle 50')).map(([, y]) => y), top: b.y, H }; }""")
+        assert len(r["hint"]) == 2 and max(r["hint"]) + 8 < r["top"], (size, r)
     assert page.errors == []

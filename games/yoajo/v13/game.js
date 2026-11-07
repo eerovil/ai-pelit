@@ -77,7 +77,8 @@ function makeRoad(L) {
     Y[j] = hill * (0.55 * Math.sin(s / w1 * TAU + p1) + 0.45 * Math.sin(s / w2 * TAU + p2)) - hill * (0.55 * Math.sin(p1) + 0.45 * Math.sin(p2));
     th += K[j] * SEG; x += Math.sin(th) * SEG; z -= Math.cos(th) * SEG;
   }
-  road = { len: L.len, total, n, X, Y, Z, TH, K, limits: [], signs: [], holes: [], bays: [], cams: [], bad: [], junctions: [], nopass: [], checks: [], pads: [] };
+  road = { len: L.len, total, n, X, Y, Z, TH, K, limits: [], signs: [], holes: [], bays: [], cams: [], bad: [], junctions: [], nopass: [], checks: [], pads: [],
+    works: [], broken: [], ice: [], fog: [], taken: [] };   // v13: tie.js's road events
   return road;
 }
 function idx(s) { const f = clamp(s / SEG, 0, road.n - 1.001), i = Math.floor(f); return [i, f - i]; }
@@ -194,13 +195,16 @@ function newLeg(n) {
   road.junctions.sort((a, b) => a.s - b.s);
   // v12 (#440): the police and the police check (poliisi.js), placed by their own random numbers.
   if (typeof policeLeg === 'function') policeLeg(evs);
+  // v13 (#440): roadworks, fog, a broken-down car, an ambulance, a wide load, a plough, black ice (tie.js).
+  if (typeof roadLeg === 'function') roadLeg(evs);
   events = evs.sort((a, b) => a.s - b.s);
   road.signs.sort((a, b) => a.s - b.s);
 
   P = { s: 6, lat: LANE, v: 60 / KMH, vl: 0, len: 4.5, wid: 1.8, high: false, brake: false, steer: 0,
     damage: 0, tired: 0, blink: 0, blinkT: 6, rest: 0, gap: [], highRun: 0, nudge: 0, overT: 0, unsafe: false, seen: false, copT: 0 };
   things = []; T = 0; points = 0; msgs = []; crashWhy = ''; result = null; flash = whiteout = shake = cloudIn = 0;
-  tally = { ohitukset: 0, valot: 0, haikaisyt: 0, sakot: 0, lahelta: 0, kuopat: 0, tauko: 0, pitkat: 0, pitkatP: 0, hurjastelu: 0, poliisi: 0, puhallus: 0 };
+  tally = { ohitukset: 0, valot: 0, haikaisyt: 0, sakot: 0, lahelta: 0, kuopat: 0, tauko: 0, pitkat: 0, pitkatP: 0, hurjastelu: 0, poliisi: 0, puhallus: 0,
+    tukit: 0, punaiset: 0, tietyo: 0, ambulanssi: 0, erikois: 0 };
   input.left = input.right = false; input.steer = input.gas = input.brake = 0;
   mode = 'drive';
   if (window.AiPelitScores) AiPelitScores.board(`osa-${level}`, `${leg.from} – ${leg.to}`);
@@ -212,14 +216,17 @@ function parTime() {
   let t = 0;
   const snowy = leg.weather === 'lumi' || leg.weather === 'pyry';
   for (let s = 0; s < leg.len; s += 20) t += 20 / (Math.min(limitAt(s), snowy ? 90 : 120) / KMH);
-  return Math.round(t * 1.2 + (leg.tired ? 15 : 0));
+  // v13: the wait at each roadworks' light.
+  return Math.round(t * 1.2 + (leg.tired ? 15 : 0) + road.works.length * 13);
 }
-const reachOf = high => (high ? HIGH : LOW) * WEATHER[leg.weather].reach;
+// v13: shorter in fog (fogReach() in tie.js).
+const reachOf = high => { const r = (high ? HIGH : LOW) * WEATHER[leg.weather].reach; return typeof fogReach === 'function' ? fogReach(high, r) : r; };
 function say(text, good) { msgs.push({ text, good, t: 0 }); if (msgs.length > 3) msgs.shift(); }
 function score(n, text) { points += n; if (text) say(`${text} ${n > 0 ? '+' : ''}${n}`, n > 0); }
 
 // ---- What is on the road ----
-const SIZE = { konstaapeli: [0.5, 0.5], auto: [4.4, 1.8], vastaan: [4.4, 1.8], rekka: [17, 2.55], traktori: [7.5, 2.4], kavelija: [0.5, 0.5], hirvi: [2.4, 0.9], poro: [1.6, 0.6], ohittaja: [4.4, 1.8], takaa: [4.4, 1.8] };
+const SIZE = { konstaapeli: [0.5, 0.5], auto: [4.4, 1.8], vastaan: [4.4, 1.8], rekka: [17, 2.55], traktori: [7.5, 2.4], kavelija: [0.5, 0.5], hirvi: [2.4, 0.9], poro: [1.6, 0.6], ohittaja: [4.4, 1.8], takaa: [4.4, 1.8],
+  ambulanssi: [6, 2.1], erikois: [16, 4.6], aura: [9, 2.6] };
 function add(kind, o) {
   const [len, wid] = SIZE[kind] || [4.4, 1.8];
   const t = Object.assign({ kind, s: 0, lat: LANE, v: 0, vl: 0, len, wid, high: false, flashT: 0, passed: false, id: add.n = (add.n || 0) + 1 }, o);
@@ -251,6 +258,7 @@ function release(e) {
     case 'liittyja': return add('liittyja', { s: e.j.s, lat: e.side * 9, v: 0, side: e.side, dir: e.dir, careless: e.careless,
       plan: 'wait', turn: 0, yaw: e.side * Math.PI / 2, passed: true, colour: Math.floor(r * 5), habit: r < 0.5 ? -15 + r * 20 : -5 + (r - 0.5) * 16 });
     case 'poliisi': case 'puhallus': return policeRelease(e);
+    case 'tietyo': case 'rikki': case 'ambulanssi': case 'erikois': case 'aura': return roadRelease(e);
     case 'hirvi': case 'poro': {
       // It steps out of the forest so that it is on the road about four seconds of driving away.
       const lead = Math.max(55, P.v * 4.2);
@@ -294,7 +302,8 @@ function drive(dt) {
   if (pstop) policeHold(dt);
   policeCheck(dt);
   if (mode !== 'drive') return;
-  const W = WEATHER[leg.weather], grip = W.grip, k = curveAt(P.s);
+  // v13: black ice halves the grip (gripAt() in tie.js).
+  const W = WEATHER[leg.weather], grip = W.grip * gripAt(P.s), k = curveAt(P.s);
   // Speed: v3 has a gas pedal: as much pull as the thumb asks, up to 130 at full; off the gas
   // the engine slows the car a little. The brake by how far the thumb slides down. The
   // shoulder and gravel drag.
@@ -343,6 +352,8 @@ function drive(dt) {
   reckless(dt);
   police(dt);
   if (mode !== 'drive') return;
+  roadTick(dt);
+  if (mode !== 'drive') return;
   holes();
   cameras();
   tiredness(dt);
@@ -371,6 +382,7 @@ function move(t, dt) {
   if (t.kind === 'liittyja') return joiner(t, dt);
   if (t.kind === 'konstaapeli') return;
   if (t.kind === 'partio') { patrol(t, dt); t.s += t.v * dt; return; }
+  if (t.kind === 'ambulanssi') return ambulance(t, dt);
   if (t.kind === 'takaa') {
     // Catch up, overtake in the oncoming lane when nobody is coming, cut back in ahead.
     const clear = !things.some(o => o.v < 0 && o.s > t.s && o.s < t.s + 320);
@@ -420,6 +432,8 @@ function move(t, dt) {
     if (t.kind !== 'ohittaja') t.high = t.s - P.s > 330 && !t.truck;
     if (t.flashT > 0) { t.flashT -= dt; t.high = Math.floor(t.flashT * 6) % 2 === 0; }
   }
+  // v13: waiting at roadworks, round a broken-down car, aside for a wide load or an ambulance.
+  roadMove(t, dt);
   t.s += t.v * dt;
 }
 
@@ -475,7 +489,7 @@ function meet(t, dt) {
       // overtaken back by the player: nothing special
     } else if (P.unsafe) {
       // v4 (#181): an overtake made unsafely (an oncoming car within 180 m while out) earns nothing.
-    } else { tally.ohitukset++; score(t.kind === 'rekka' ? 60 : t.kind === 'traktori' ? 40 : 50, 'Ohitus'); }
+    } else { tally.ohitukset++; score(t.kind === 'rekka' || t.kind === 'aura' ? 60 : t.kind === 'traktori' ? 40 : 50, 'Ohitus'); }
   }
   if (!t.passed && t.v < 0 && t.kind === 'kavelija' && P.s > t.s) {
     t.passed = true;
@@ -515,6 +529,8 @@ function reckless(dt) {
   } else P.overT = 0;
 }
 function unsafeOvertake() {
+  // v13: in roadworks the open lane is the left one.
+  if (worksAt(P.s)) { P.unsafe = P.crossed = false; return; }
   if (P.lat < 0) for (const t of things) {
     if (t.v < 0 && vehicle(t) && !t.cutIn && t.s > P.s && t.s - P.s < ONCOMING_GAP) {
       t.cutIn = true; tally.hurjastelu++; score(-50, 'Vaarallinen ohitus'); P.unsafe = true;
@@ -530,7 +546,8 @@ function unsafeOvertake() {
 // are needed there: driving on them earns nothing, and nobody is reminded.
 function streetLit(s) { return s >= road.len - 300 || limitAt(s) === 60; }
 function highBeams(dt) {
-  if (streetLit(P.s)) { P.nudge = 0; return; }
+  // v13: nothing for high beams in fog, where they only light the fog.
+  if (streetLit(P.s) || fogAt(P.s) > 0.3) { P.nudge = 0; return; }
   if (P.high) {
     P.highRun += P.v * dt;
     tally.pitkat += P.v * dt;
@@ -638,7 +655,7 @@ function crash(why) {
 }
 
 function finish() {
-  const par = parTime(), fast = T <= par, clean = !tally.sakot && !tally.haikaisyt && !tally.lahelta && !tally.hurjastelu;
+  const par = parTime(), fast = T <= par, clean = !tally.sakot && !tally.haikaisyt && !tally.lahelta && !tally.hurjastelu && !tally.tukit;
   const bonus = Math.max(0, Math.round((par - T) * 10));
   points += bonus;
   const st = fast ? (clean ? 3 : 2) : 1;
