@@ -18,6 +18,8 @@ v11 (#377) lets the car drive forward out of the rest area along its lane, and t
 
 v12 (#440) adds the police and the police check, drawn in `yoajo-matka.md`: `games/yoajo/v12/poliisi.js` places them in `newLeg()` from their own random numbers (so everything v11 placed stays put), `drive()` calls `policeHold()`, `policeCheck()` and `police()`, `unsafeOvertake()` and `lights()` tell the police what they saw, and `bayWidth()` widens the shoulder for the check's police car (`road.pads`) as for the rest area.
 
+v13 (#440) adds the road events, also drawn in `yoajo-matka.md`: `games/yoajo/v13/tie.js` places them in `newLeg()` after the police (`roadLeg()`, its own random numbers again), `drive()` calls `roadTick()`, `move()` calls `roadMove()` for every car (and `ambulance()` for the ambulance), the grip is multiplied by `gripAt()`, the beams' reach goes through `fogReach()`, and `unsafeOvertake()` does not count the open lane of roadworks as overtaking. `crashScreen()` in `ui.js` grows its panel to fit the reason and the hint above the buttons (v12: a fixed 270 px, where a two-line reason ran under them).
+
 ```mermaid
 flowchart TD
   A[Valitse osuus, Aja] --> B[Aja: ohjaa, kaasuta, jarruta, valot]
