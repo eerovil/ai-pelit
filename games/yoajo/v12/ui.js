@@ -465,7 +465,8 @@ function crashScreen() {
   for (const wd of words) { if ((line + ' ' + wd).length > 32) { text(line.trim(), W / 2, ly, 15, '#e8eefc', 'center', 600); ly += 21; line = ''; } line += ' ' + wd; }
   text(line.trim(), W / 2, ly, 15, '#e8eefc', 'center', 600);
   if (asleep) text('Pysähdy levähdysalueelle kahville.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
-  else if (cop) text(crashWhy.includes('puhallus') ? 'Pysähdy puhalluskokeessa poliisin kohdalle.' : 'Poliisin nähden: enintään 10 km/h yli, ei vaarallisia ohituksia.', W / 2, ly + 26, 12, '#9fb0cc', 'center', 500);
+  else if (cop && crashWhy.includes('puhallus')) text('Pysähdy puhalluskokeessa poliisin kohdalle.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
+  else if (cop) { text('Poliisin nähden enintään 10 km/h yli', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500); text('ja vain turvallisia ohituksia.', W / 2, ly + 44, 13, '#9fb0cc', 'center', 500); }
   else if (crashWhy.startsWith('Rengas')) text('Kuoppien kohdalla hidasta alle 50 km/h.', W / 2, ly + 26, 13, '#9fb0cc', 'center', 500);
   endButtons([['uudelleen', 'Yritä uudelleen'], ['valikko', 'Valikko']], y0 + h - 130);
 }
