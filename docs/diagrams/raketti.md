@@ -27,14 +27,18 @@ flowchart TD
     N --> O[Tallenna lento puhelimeen, jos tallennus sallitaan]
     O --> S
     J --> O
-    E --> P{Moottori ja suuttimet pois, yli 150 km ja yli 5 km asemasta, hidas kierto?}
-    P -- Kyllä --> Q[Valinnainen ajan nopeutus, samat fysiikan välivaiheet]
-    P -- Ei --> R[Aika normaaliksi]
-    Q --> F
-    R --> F
+    E --> P{Porttiin enintään 20 m?}
+    P -- Kyllä --> R[Aika normaaliksi, ei itsestään nopeutusta]
+    P -- Ei --> U{Moottori ja suuttimet pois, yli 150 km ja yli 5 km asemasta, hidas kierto?}
+    U -- Kyllä --> Q[Valitse ×1, ×2, ×5, ×10 tai ×100]
+    U -- Ei --> V[Valitse ×1, ×2 tai ×5 myös ohjatessa]
+    Q --> W[Samat fysiikan välivaiheet, rajoita valittua nopeutta heti]
+    V --> W
+    R --> W
+    W --> F
     class A,B,C,D,S blue
     class E,N violet
-    class F,J,P,Q,R teal
+    class F,J,P,Q,R,U,V,W teal
     class G,M,X rose
     class H,I,K,L green
     class O amber
@@ -51,7 +55,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valitse lento tai harjoitus**: `games/raketti/v1/ui.js` tarjoaa täyden laukaisun sekä erilliset kiertorata- ja telakointiharjoitukset. `physics.js:freshFlight()` antaa harjoitukselle valmiin lähtötilan, ei ohjausta lennon aikana.
+- **Valitse lento tai harjoitus**: `games/raketti/v2/ui.js` tarjoaa täyden laukaisun sekä erilliset kiertorata- ja telakointiharjoitukset. `physics.js:freshFlight()` antaa harjoitukselle valmiin lähtötilan, ei ohjausta lennon aikana.
 - **Keskeneräinen lento?**: `ui.js:activeSaved()` ja `requestFlight()` suojaavat olemassa olevan lennon. Uusi lento vaatii vahvistuksen ennen tallennuksen korvaamista.
 - **Vahvista uuden lennon aloitus**: `ui.js` näyttää `replace-panel`-ruudun. Peruuttaminen säilyttää aiemman lennon.
 - **Laukaisu tai harjoituksen lähtötila**: `ui.js:startFlight()` käynnistää laukaisun täydellä teholla tai harjoituksen päämoottori sammutettuna.
@@ -68,6 +72,9 @@ flowchart TD
 - **Lento keskeytyy ja syy näytetään**: `physics.js:endFlight()` katkaisee moottorin, vapauttaa ohjauksen ja tallentaa. `ui.js:showResult()` kertoo syyn ja tarjoaa uuden yrityksen.
 - **Tauko, ohje tai puhelin piiloon: vapauta suuttimet**: `ui.js:showPanel()` ja `suspendFlight()` pysäyttävät ajan, vapauttavat kaikki painetut suuttimet ja hiljentävät moottorin. Myös `pointercancel` ja kadonnut osoittimen kaappaus vapauttavat painalluksen.
 - **Tallenna lento puhelimeen, jos tallennus sallitaan**: `physics.js:saveFlight()` säilyttää ajan, paikan, nopeuden, asennon, kierron, polttoaineet ja vaiheen avaimella `ai-pelit:raketti:lento`. `ui.js:frame()` tallentaa kahden sekunnin välein. Tallennuksen estyminen ei pysäytä peliä. Saavutukset käyttävät erillistä `ai-pelit:raketti:saavutukset`-avainta.
-- **Moottori ja suuttimet pois, yli 150 km ja yli 5 km asemasta, hidas kierto?**: `physics.js:canWarp()` vaatii myös käynnissä olevan lennon ja alle 0,01 rad/s kierron. `ui.js` palauttaa ajan normaaliksi ohjausta käytettäessä.
-- **Valinnainen ajan nopeutus, samat fysiikan välivaiheet**: `ui.js:frame()` käyttää `physics.js:advanceFlight()`-funktiota: pelaajan valitsemaa ×10 tai ×100 aikaa käytetään vain kun `canWarp()` sallii sen, ja peruutus vaikuttaa saman ruudun jäljellä olevaan aikaan heti. Fysiikan askelia ei hypätä yli.
-- **Aika normaaliksi**: `ui.js:frame()` ja `physics.js:tick()` palauttavat ×1-ajan, kun ehdot eivät enää täyty tai asema on lähellä.
+- **Porttiin enintään 20 m?**: `physics.js:maxWarp()` laskee nokan etäisyyden porttiin `approach()`-funktiolla. Enintään 20 metrin etäisyydellä suurin nopeus on ×1. Raja on toteutusoletus turvalliseen loppulähestymiseen.
+- **Moottori ja suuttimet pois, yli 150 km ja yli 5 km asemasta, hidas kierto?**: `physics.js:maxWarp()` sallii ×100 asti vain käynnissä olevassa vapaassa lennossa, kun kaikki ehdot ja alle 0,01 rad/s kierto täyttyvät. Muulloin yli 20 m portista suurin nopeus on ×5 myös nousussa ja ohjatessa.
+- **Valitse ×1, ×2, ×5, ×10 tai ×100**: `ui.js` kierrättää ajan painikkeella sallitut nopeudet. Moottorin tai suuttimien käyttö rajoittaa ×10/×100-ajan ×5:een; ×2 ja ×5 säilyvät. Käsky ei ohjaa alusta pelaajan puolesta.
+- **Valitse ×1, ×2 tai ×5 myös ohjatessa**: `ui.js` näyttää samassa painikkeessa ohjatun lennon kolme nopeutta. Vaiheen irrotus katkaisee tehon mutta säilyttää ×2/×5-ajan. Tauko, uusi lento ja tallennuksen jatkaminen alkavat ×1-ajalla.
+- **Samat fysiikan välivaiheet, rajoita valittua nopeutta heti**: `physics.js:advanceFlight()` käyttää joka välivaiheella `limitWarp()`-rajaa ja samoja `flightStepLimit()`-askelia kuin normaaliaikainen `step()`. Raja vaikuttaa saman ruudun jäljellä olevaan aikaan; voimat, polttoaine ja törmäykset lasketaan edelleen jokaisella askeleella.
+- **Aika normaaliksi, ei itsestään nopeutusta**: `physics.js:limitWarp()` vain laskee valittua nopeutta. `ui.js` kertoo 20 m:n rajan ajan painikkeen vieressä ja poistaa nopeutuspainikkeen käytöstä rajan sisällä. Loittoneminen ei nosta nopeutta itsestään.

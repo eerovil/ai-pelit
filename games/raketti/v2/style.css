@@ -266,6 +266,10 @@ footer span {
   font-size:8px;
   color:#99b0be;
 }
+#footer-info {
+  display:grid;
+  gap:2px;
+}
 footer button {
   min-height:28px;
   font-size:10px;

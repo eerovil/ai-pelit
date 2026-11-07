@@ -85,11 +85,18 @@ function atmosphere(x, y, vx, vy) {
   const ax = vx - SPIN * y, ay = vy + SPIN * x;
   return { rho, ax, ay, speed: Math.hypot(ax, ay), q: 0.5 * rho * (ax * ax + ay * ay) };
 }
-function canWarp() {
-  if (!ship || ship.phase !== 'flight') return false;
-  return Math.hypot(ship.x, ship.y) > EARTH + 150000 && ship.throttle === 0 &&
-    !held.turn && !held.forward && !held.side && Math.abs(ship.omega) < 0.01 && approach().range > 5000;
+// Only wall-clock speed changes; forces, fuel use and integration steps do not.
+const DOCK_REALTIME_RANGE = 20;
+function maxWarp() {
+  if (!ship || ship.phase !== 'flight') return 1;
+  const range = approach().range;
+  if (range <= DOCK_REALTIME_RANGE) return 1;
+  const coasting = Math.hypot(ship.x, ship.y) > EARTH + 150000 && ship.throttle === 0 &&
+    !held.turn && !held.forward && !held.side && Math.abs(ship.omega) < 0.01 && range > 5000;
+  return coasting ? 100 : 5;
 }
+function canWarp(rate = 10) { return maxWarp() >= rate; }
+function limitWarp() { warp = Math.min(warp, maxWarp()); }
 function clearHeld() { held.turn = held.forward = held.side = 0; }
 function endFlight(reason, success = false) {
   ship.phase = success ? 'docked' : 'crashed'; ship.reason = reason;
@@ -128,7 +135,7 @@ function loadFlight() {
 function stageRocket() {
   if (!ship || paused || ship.phase !== 'flight' || ship.stage !== 0) return false;
   if (orbit().altitude < 1000) return false;
-  ship.fuel[0] = 0; ship.stage = 1; ship.throttle = 0; warp = 1;
+  ship.fuel[0] = 0; ship.stage = 1; ship.throttle = 0; limitWarp();
   saveFlight(); return true;
 }
 function acceleration(x, y, vx, vy, fx, fy, m, s) {
@@ -235,13 +242,16 @@ function tick(dt) {
   if (stationContact(oldPoints, vehiclePoints(s, p))) {
     endFlight('Törmäys asemaan. Kohdista nokka porttiin ja hidasta alle 0,25 m/s.');
   }
-  if (before.altitude > 0 && near.range < 5000) warp = 1;
+  limitWarp();
+}
+function flightStepLimit() {
+  return approach().range < 1000 || ship.throttle > 0 || held.turn || held.forward || held.side ? 0.02 : 0.25;
 }
 function step(seconds) {
   if (!ship || paused || ship.phase !== 'flight' || !Number.isFinite(seconds) || seconds <= 0) return;
   let left = seconds;
   while (left > 1e-9 && ship.phase === 'flight') {
-    const limit = approach().range < 1000 || ship.throttle > 0 || held.turn || held.forward || held.side ? 0.02 : 0.25;
+    const limit = flightStepLimit();
     const dt = Math.min(left, limit); tick(dt); left -= dt;
   }
 }
@@ -252,9 +262,9 @@ function advanceFlight(realSeconds) {
   if (!Number.isFinite(realSeconds) || realSeconds <= 0 || paused) return;
   let left = realSeconds;
   while (left > 1e-9 && ship && ship.phase === 'flight') {
-    if (warp !== 1 && !canWarp()) warp = 1;
+    limitWarp();
     const rate = warp;
-    const simulated = Math.min(left * rate, 0.25);
+    const simulated = Math.min(left * rate, flightStepLimit());
     step(simulated);
     left -= simulated / rate;
   }
