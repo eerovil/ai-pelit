@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id), KEY='ai-pelit:frisbeegolf:';
 const R=window.AiPelitRooms;
-let round=null, online=false, roomRound='', roomHost='', aim={angle:0,disc:1,power:.6,curve:0}, drag=null;
+window.AiPelitScores?.board('v3','Frisbeegolf v3+');
+let round=null, online=false, roomRound='', roomHost='', aim={angle:0,disc:1,power:.6,curve:0}, drag=null, aimDrag=null;
 let flight=null, preview=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, dirty=true, askName=false;
 function load(k,d){try{const v=localStorage.getItem(KEY+k);return v===null?d:JSON.parse(v);}catch(e){return d;}}
 function save(k,v){try{localStorage.setItem(KEY+k,JSON.stringify(v));}catch(e){}}
@@ -11,15 +12,23 @@ function current(){return round.players[round.turn];}
 function hasTurn(){return !!(round&&round.phase==='aim'&&(!online||current().id===R.me));}
 function myTurn(){return hasTurn()&&(!online||!R.paused);}
 function fresh(players=[{id:'me',name:'Sinä'}]){
-  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shot:null,notice:'',order:players.map((_,i)=>i),
+  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shot:null,notice:'',rules:3,order:players.map((_,i)=>i),
     players:players.map(p=>({id:p.id,name:p.name,lie:[0,0],strokes:0,scores:[],done:false}))};
 }
 function resetAim(){
   if(!round)return;const h=HOLES[round.hole],p=current(),dist=distance(p.lie,h.basket);
   aim={angle:Math.atan2(h.basket[0]-p.lie[0],h.basket[1]-p.lie[1]),disc:dist<10?2:dist>65?0:1,power:.65,curve:0};
-  drag=null;mapOpen=false;refreshPreview();
+  drag=aimDrag=null;mapOpen=false;refreshPreview();
 }
-function refreshPreview(){preview=round&&round.phase==='aim'?fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false):null;dirty=true;askDraw();}
+function refreshPreview(){
+  preview=null;
+  if(round&&round.phase==='aim'){
+    const f=fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false),duration=f.duration/3;
+    // Show the opening curve without revealing the landing place or its marker.
+    preview={duration,path:[...f.path.filter(p=>p.t<duration),{...flightPoint(f,duration),t:duration}]};
+  }
+  dirty=true;askDraw();
+}
 function newRound(){online=false;round=fresh();flight=null;resetAim();showPlay();keepRound();}
 function resumeRound(){const r=load('kierros',null);if(!validSaved(r))return;online=false;round=r;flight=null;resetAim();if(round.phase==='hole')showCard();else showPlay();}
 function validSaved(r){return r&&Number.isInteger(r.hole)&&r.hole>=0&&r.hole<9&&['aim','hole'].includes(r.phase)&&Array.isArray(r.players)&&r.players.length===1&&r.players[0].lie?.every(Number.isFinite)&&r.players[0].scores?.length===(r.phase==='hole'?r.hole+1:r.hole)&&Number.isFinite(r.players[0].strokes);}
@@ -28,7 +37,7 @@ function keepRound(){if(!round||online||round.phase==='end')return;
   if(round.phase==='fly')return;
   save('kierros',round);
 }
-function menu(){keepRound();round=null;online=false;flight=preview=drag=null;mapOpen=false;
+function menu(){keepRound();round=null;online=false;flight=preview=drag=aimDrag=null;mapOpen=false;
   $('menu').hidden=false;$('game').hidden=true;$('card').hidden=true;
   $('resume').hidden=!validSaved(load('kierros',null));
   const best=load('ennatys',null);$('best').textContent=best===null?'Ensimmäinen kierros odottaa':'Ennätys: '+relative(best)+' · '+(best+COURSE_PAR)+' heittoa';
@@ -39,7 +48,7 @@ function startShot(input){
   if(!Number.isFinite(input.angle)||!Number.isFinite(input.power)||!Number.isFinite(input.curve)||!Number.isInteger(input.disc)||input.disc<0||input.disc>2||input.power<.015||input.power>1||Math.abs(input.curve)>1)return false;
   keepRound();round.shot={angle:input.angle,power:input.power,curve:input.curve,disc:input.disc,lie:current().lie.slice(),seed:12345+round.seq*7919};
   round.phase='fly';round.time=0;round.seq++;round.notice='';current().strokes++;
-  flight=fly(round.shot,HOLES[round.hole]);preview=null;drag=null;mapOpen=false;
+  flight=fly(round.shot,HOLES[round.hole]);preview=null;drag=aimDrag=null;mapOpen=false;
   sound('suhahdus');renderUI();askDraw();if(online)sendState();return true;
 }
 function nextThrower(){
@@ -79,7 +88,8 @@ function finishRecord(){
   const total=p.scores.reduce((a,b)=>a+b,0)-COURSE_PAR,best=load('ennatys',null);
   save('ennatys',best===null?total:Math.min(best,total));save('kierroksia',load('kierroksia',0)+1);
   if(!online)save('kierros',null);
-  askName=window.AiPelitScores?.submit(total,true)===true;
+  // A saved round begun under v1/v2 rules stays a personal result, never a v3 leaderboard entry.
+  askName=round.rules===3&&window.AiPelitScores?.submit(total,true)===true;
 }
 function step(dt){
   if(!round||round.phase!=='fly'||document.hidden||(online&&R.paused))return;
@@ -92,5 +102,5 @@ function tick(t){frame=0;const dt=lastFrame?Math.min((t-lastFrame)/1000,.05):0;l
   if(scene3d){drawScene(dt);dirty=false;}
   if(round?.phase==='fly'||drag||scene3d?.moving)askDraw();
 }
-document.addEventListener('visibilitychange',()=>{drag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;refreshPreview();}});
+document.addEventListener('visibilitychange',()=>{drag=aimDrag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;refreshPreview();}});
 window.addEventListener('pagehide',keepRound);

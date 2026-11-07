@@ -3,10 +3,10 @@ import json
 import math
 
 import pytest
-from conftest import ROOT, turn
+from conftest import ROOT, turn, GPU_ARGS
 from test_rooms_lib import Relay
 
-URL = 'games/frisbeegolf/v2/'
+URL = 'games/frisbeegolf/v3/'
 PLAN = """() => {
  window.finishFlight=()=>{for(let i=0;i<1500&&round.phase==='fly';i++)step(.05);};
  window.planThrow=()=>{
@@ -18,7 +18,7 @@ PLAN = """() => {
      const max=dist<10?12:DISCS[disc].range;
      for(let ai=-5;ai<=5;ai++)for(let pi=-4;pi<=4;pi++){
        const angle=base+ai*.035,power=clamp((dist+pi*.6)/max,.06,1);
-       const curve=dist<10?0:-DISCS[disc].fade*.009/.22;
+       const curve=dist<10?0:DISCS[disc].fade*.009/.22;
        const shot={disc,angle,power,curve,lie:lie.slice(),seed:12345+round.seq*7919};
        const f=fly(shot,h),c=f.holed?-1000:distance(f.lie,h.basket)+(f.penalty?100:0);
        if(c<cost){cost=c;best=shot;}if(c===-1000)return best;
@@ -52,13 +52,51 @@ def pull(p, power, curve=0):
     p.mouse.up()
 
 
+@pytest.mark.parametrize('on_map', [False, True])
+def test_aim_and_curve_follow_the_finger(site, browser, on_map):
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    if on_map:
+        p.click('#map')
+    # One fixed camera: in play it turns with the aim, which would hide where the line went.
+    p.evaluate('drawScene(0);window.fixedCamera=scene3d.camera.clone()')
+    line_end = '''()=>{const q=preview.path.at(-1);
+      return new scene3d.T.Vector3(q.x,q.y,q.z).project(fixedCamera).x;}'''
+    before = p.evaluate(line_end)
+    p.mouse.move(100, 240); p.mouse.down(); p.mouse.move(130, 240, steps=4); p.mouse.up()
+    assert p.evaluate(line_end) > before
+    p.evaluate('aim.curve=-1;refreshPreview()')
+    left = p.evaluate(line_end)
+    p.evaluate('aim.curve=1;refreshPreview()')
+    assert p.evaluate(line_end) > left
+    assert not p.errors
+    ctx.close()
+
+
 @pytest.mark.parametrize('size', [(360, 640), (360, 740), (390, 844), (740, 360)])
 def test_real_controls_and_layout(site, browser, size):
     ctx, p = open_game(site, browser, size)
-    for sel in ['#play', '#friends', '#scores']:
+    for sel in ['#play', '#friends', '#scores', '.instructions']:
         b = p.locator(sel).bounding_box()
         assert b['y'] >= 0 and b['y'] + b['height'] <= size[1], sel
     p.click('#play')
+    # Facing follows a drag before release; taps and other pointers do not move it.
+    initial = p.evaluate('aim.angle')
+    p.mouse.move(100, 240); p.mouse.down(); p.mouse.move(160, 240, steps=4)
+    expected = initial - 60 / size[0] * math.pi
+    assert p.evaluate('aim.angle') == pytest.approx(expected)
+    assert p.evaluate('aimDrag!==null&&current().strokes===0')
+    p.dispatch_event('#scene', 'pointerdown', {'pointerId': 42, 'clientX': 10, 'clientY': 240})
+    p.dispatch_event('#scene', 'pointermove', {'pointerId': 42, 'clientX': 300, 'clientY': 240})
+    p.dispatch_event('#throwPad', 'pointerdown', {'pointerId': 42, 'clientX': 180, 'clientY': 520})
+    p.dispatch_event('#scene', 'pointercancel', {'pointerId': 42})
+    assert p.evaluate('aim.angle') == pytest.approx(expected)
+    assert p.evaluate('aimDrag.id===1&&drag===null')
+    p.dispatch_event('#scene', 'pointercancel', {'pointerId': 1})
+    p.mouse.up()
+    assert p.evaluate('aimDrag===null&&round.phase==="aim"&&current().strokes===0')
+    p.mouse.click(100, 240)
+    assert p.evaluate('aim.angle') == pytest.approx(expected)
     p.click('#discs button:nth-child(3)')
     assert p.evaluate('aim.disc') == 2
     p.click('#map')
@@ -108,7 +146,22 @@ def test_flight_catches_determinism_ghost_and_hazards(site, browser):
     assert result['ob']['lie'][0] <= 20
     assert result['tree']['reason'] == 'tree'
     p.click('#play')
-    assert p.evaluate('JSON.stringify(preview)===JSON.stringify(fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false))')
+    for disc in range(3):
+        result = p.evaluate("""disc=>{
+          aim.disc=disc;aim.power=.9;aim.curve=.5;refreshPreview();drawScene(0);
+          const full=fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false);
+          const end=preview.path.at(-1),want=flightPoint(full,full.duration/3);
+          const vertices=scene3d.ghost.geometry.getAttribute('position');
+          return {fraction:preview.duration/full.duration,error:Math.hypot(end.x-want.x,end.y-want.y,end.z-want.z),
+            lastTime:end.t,limit:preview.duration,marker:!!scene3d.endRing,
+            drawn:[vertices.getX(vertices.count-1),vertices.getY(vertices.count-1),vertices.getZ(vertices.count-1)],
+            expected:[want.x,want.y+.02,want.z],landingExposed:'lie' in preview};
+        }""", disc)
+        assert result['fraction'] == pytest.approx(1/3)
+        assert result['error'] < 1e-8
+        assert result['lastTime'] == result['limit']
+        assert result['drawn'] == pytest.approx(result['expected'], abs=1e-5)
+        assert not result['marker'] and not result['landingExposed']
     assert not p.errors
     ctx.close()
 
@@ -136,6 +189,7 @@ def test_collision_lie_allows_next_throw_away(site, browser, kind):
 
 def test_complete_nine_holes_and_second_round(site, browser):
     ctx, p = open_game(site, browser)
+    p.evaluate("localStorage.setItem('ai-pelit:_tulokset:lahetetyt',JSON.stringify({'frisbeegolf|main':{score:-30,level:0}}))")
     p.click('#play')
     scores = []
     for hole in range(9):
@@ -157,7 +211,7 @@ def test_complete_nine_holes_and_second_round(site, browser):
     assert p.evaluate("load('kierroksia',0)") == 1
     assert len(p.evaluate("load('vaylat',[])")) == 9
     assert p.evaluate("load('ennatys',null)") == sum(scores) - 30
-    assert p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['frisbeegolf|main'].score") == sum(scores) - 30
+    assert p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['frisbeegolf|v3'].score") == sum(scores) - 30
     assert p.evaluate("[-2,0,5].map(n=>AiPelitScores.scoreText('frisbeegolf',n))") == ['−2', 'E', '+5']
     for sel in ['#next', '#toMenu', '#scoreRows']:
         b = p.locator(sel).bounding_box()
@@ -325,6 +379,12 @@ def test_real_room_page_frame_can_play(phones, size):
         r = hf.locator(sel).bounding_box()
         assert (m['x'] + m['width'] <= r['x'] or r['x'] + r['width'] <= m['x']
                 or m['y'] + m['height'] <= r['y'] or r['y'] + r['height'] <= m['y']), sel
+    scene = hf.locator('#scene').bounding_box()
+    old_angle = hgame.evaluate('aim.angle')
+    host.mouse.move(scene['x'] + 100, scene['y'] + 180)
+    host.mouse.down(); host.mouse.move(scene['x'] + 140, scene['y'] + 180, steps=4)
+    assert hgame.evaluate('aim.angle') == pytest.approx(old_angle - 40 / scene['width'] * math.pi)
+    host.mouse.up()
     b = hf.locator('#throwPad').bounding_box()
     x, y = b['x'] + b['width']/2, b['y']+24
     host.mouse.move(x,y); host.mouse.down(); host.mouse.move(x,y+45,steps=4); host.mouse.up()
@@ -332,3 +392,68 @@ def test_real_room_page_frame_can_play(phones, size):
     hgame.evaluate('finishFlight()')
     ggame.wait_for_function('round.turn===1&&round.players[0].strokes===1')
     assert not host.errors and not guest.errors
+
+    hgame.evaluate("round.phase='end';round.hole=8;round.players.forEach(p=>p.scores=[3,3,3,3,4,3,4,3,4]);showCard();")
+    for sel in ['#cardTitle', '#scoreRows', '#next']:
+        r = hf.locator(sel).bounding_box()
+        assert (m['x'] + m['width'] <= r['x'] or r['x'] + r['width'] <= m['x']
+                or m['y'] + m['height'] <= r['y'] or r['y'] + r['height'] <= m['y']), sel
+
+
+def test_legacy_round_keeps_personal_result_without_new_board_score(site, browser):
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    p.evaluate("""delete round.rules;round.hole=8;round.players[0].scores=[2,2,2,2,2,2,2,2,2];
+      round.phase='end';finishRecord();showCard();""")
+    assert p.evaluate("load('ennatys',null)") == -12
+    assert p.evaluate("load('kierroksia',0)") == 1
+    assert not p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono')||'{}')['frisbeegolf|v3']")
+    assert 'Vanha kierros, ei tuloslistalle' in p.locator('#cardTotal').inner_text()
+    assert not p.errors
+    ctx.close()
+
+
+def test_room_speaking_label_clears_landscape_roster(site, _playwright):
+    site.build(ROOT / 'games')
+    browser = _playwright.chromium.launch(args=GPU_ARGS + [
+        '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'])
+    relay, contexts = Relay(), []
+    def phone(name):
+        ctx = browser.new_context(viewport={'width': 740, 'height': 360}, is_mobile=True, has_touch=True)
+        contexts.append(ctx)
+        ctx.grant_permissions(['microphone'])
+        ctx.add_init_script('window.__aiPelitHuoneSivu=true;')
+        ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi'," + json.dumps(json.dumps(name)) + ")")
+        p = ctx.new_page()
+        relay.attach(p)
+        p.goto(site.url + URL)
+        p.click('#friends')
+        return p
+    try:
+        host = phone('Testi1'); host.click('#aipr-create'); host.wait_for_url('**/huone/**')
+        host.wait_for_function("document.getElementById('game')?.contentWindow?.AiPelitRooms?.isHost")
+        code = host.locator('#code b').inner_text()
+        guest = phone('Testi2'); guest.fill('#aipr-codeIn', code); guest.click('#aipr-joinBtn')
+        guest.wait_for_url('**/huone/**')
+        for p in (host, guest):
+            p.wait_for_function('AiPelitRoomShell.state.voice.calls===1', timeout=15000)
+        host.frame_locator('#game').locator('#aipr-start').click()
+        host.frame_locator('#game').locator('#discs').wait_for(state='visible')
+        mic = guest.locator('#aipr-mic').bounding_box()
+        guest.mouse.move(mic['x'] + mic['width']/2, mic['y'] + mic['height']/2)
+        guest.mouse.down()
+        label = host.locator('#aipr-talk')
+        label.wait_for(state='visible')
+        host.wait_for_function("document.getElementById('aipr-talk').textContent.includes('Testi2')")
+        bubble = label.bounding_box()
+        roster = host.frame_locator('#game').locator('#roster').bounding_box()
+        hud = host.frame_locator('#game').locator('#hud').bounding_box()
+        assert hud['y'] + hud['height'] <= bubble['y']
+        assert bubble['y'] + bubble['height'] <= roster['y']
+        assert 'Testi2' in label.inner_text()
+        guest.mouse.up()
+        label.wait_for(state='hidden')
+    finally:
+        for ctx in contexts:
+            ctx.close()
+        browser.close()
