@@ -720,15 +720,51 @@ def test_the_plough_throws_snow_black_ice_halves_grip_and_fog_shortens_high_beam
 
 
 def test_a_long_reason_and_its_hint_fit_above_the_crash_screen_buttons(site, context):
+    # The wide load's reason, and the police screen whose second hint line ran under
+    # "Yritä uudelleen" in v12 upright (found on the v12 live check, #440).
     page = open_game(site, context)
-    for size in ((360, 640), (360, 740)):
+    cases = (("Vaaratilanne: ohitit erikoiskuljetuksen liian kovaa.", ["Erikoiskuljetusta", "alle 50"]),
+             ("Poliisi pysäytti: vaarallinen ohitus.", ["Poliisin nähden", "ja vain turvallisia"]))
+    for size in ((360, 640), (360, 740), (740, 360)):
         page.set_viewport_size({"width": size[0], "height": size[1]})
-        r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(4); resize();
-          mode = 'crash'; crashWhy = 'Vaaratilanne: ohitit erikoiskuljetuksen liian kovaa.';
-          const ys = [], real = text;
-          text = (s, x, y, ...rest) => { ys.push([s, y]); return real(s, x, y, ...rest); };
-          btns = []; draw(); text = real;
-          const b = btns.find(b => b.id === 'uudelleen');
-          return { hint: ys.filter(([s]) => s.startsWith('Erikoiskuljetusta') || s.startsWith('alle 50')).map(([, y]) => y), top: b.y, H }; }""")
-        assert len(r["hint"]) == 2 and max(r["hint"]) + 8 < r["top"], (size, r)
+        for why, starts in cases:
+            r = page.evaluate("""([why, starts]) => { HOLD = true; maxLeg = 8; newLeg(4); resize();
+              mode = 'crash'; crashWhy = why;
+              const ys = [], real = text;
+              text = (s, x, y, ...rest) => { ys.push([s, y]); return real(s, x, y, ...rest); };
+              btns = []; draw(); text = real;
+              const b = btns.find(b => b.id === 'uudelleen');
+              return { hint: ys.filter(([s]) => starts.some(t => String(s).startsWith(t))).map(([, y]) => y), top: b.y, H }; }""",
+                [why, starts])
+            assert len(r["hint"]) == 2 and max(r["hint"]) + 8 < r["top"], (size, why, r)
+    assert page.errors == []
+
+
+def test_events_never_share_a_stretch_and_a_restart_mid_event_starts_it_fresh(site, context):
+    page = open_game(site, context)
+    # Two at once: the placed events keep apart on every leg, so only fog can join another.
+    for n in range(1, 9):
+        r = page.evaluate("""(n) => { maxLeg = 8; newLeg(n); mode = 'menu';
+          const t = road.taken.slice().sort((a, b) => a[0] - b[0]);
+          return { overlap: t.some((x, i) => i > 0 && x[0] < t[i - 1][1]), n: t.length }; }""", n)
+        assert not r["overlap"], (n, r)
+    # Fog and the ambulance together: the ambulance still gets by and scores in the fog.
+    r = page.evaluate(DRIVE, [2, "const z = road.fog[0]; P.s = z.s - 120; P.lat = LANE; roadRelease({ kind: 'ambulanssi' });"
+                      + " out = { fog: [] };", 25,
+                      "P.v = 60 / KMH; out.fog.push(fogAt(P.s)); P.lat = things.some(t => t.kind === 'ambulanssi' && t.plan === 'behind') ? 3.0 : P.lat;"])
+    assert r["mode"] == "drive" and r["tally"]["ambulanssi"] == 1 and max(r["out"]["fog"]) == 1, r
+    # Another order: already on the edge when it arrives, it goes straight by.
+    r = page.evaluate(DRIVE, [3, AMB, 25, "P.v = 60 / KMH; P.lat = 3.0;"])
+    assert r["tally"]["ambulanssi"] == 1 and r["tally"]["tukit"] == 0, r
+    # A restart (the pause menu's "Aloita alusta") while the ambulance is blocked: it starts fresh.
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(3); things = []; events = []; road.cams = []; road.checks = [];
+      P.s = 400; P.lat = LANE; roadRelease({ kind: 'ambulanssi' });
+      for (let i = 0; i < 60 * 20; i++) { P.vl = 0; P.v = 60 / KMH; P.lat = LANE; step(1 / 60); }
+      const before = { tukit: tally.tukit, amb: things.some(t => t.kind === 'ambulanssi'), broken: road.broken.map(b => b.s), judged: road.broken.some(b => b.judged) };
+      mode = 'pause'; act({ id: 'uudelleen' });
+      return { before, amb: things.some(t => t.kind === 'ambulanssi'), tukit: tally.tukit || 0, points, mode,
+        broken: road.broken.map(b => [b.s, b.judged]), s: P.s }; }""")
+    assert r["before"]["tukit"] == 1 and r["before"]["amb"] and r["before"]["judged"], r
+    assert not r["amb"] and r["tukit"] == 0 and r["points"] == 0, r
+    assert [b[0] for b in r["broken"]] == r["before"]["broken"] and not any(b[1] for b in r["broken"]), r
     assert page.errors == []
