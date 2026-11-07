@@ -19,7 +19,7 @@ function initScene(T){
     const sky=makeSky(T);scene.add(sky);
     scene3d={T,renderer,scene,camera,sun,sky,heldDisc,heldFace,heldRim,hole:-1,group:null,
       position:new T.Vector3(),target:new T.Vector3(),moving:true,samples:0,elapsed:0,tuned:0,ghostKey:''};
-    const observer=new ResizeObserver(()=>{const c=$('scene');renderer.setSize(c.clientWidth,c.clientHeight,false);camera.aspect=c.clientWidth/c.clientHeight;camera.updateProjectionMatrix();drag=aimDrag=null;dirty=true;askDraw();});observer.observe($('scene'));
+    const observer=new ResizeObserver(()=>{const c=$('scene');renderer.setSize(c.clientWidth,c.clientHeight,false);camera.aspect=c.clientWidth/c.clientHeight;camera.updateProjectionMatrix();drag=aimDrag=null;askDraw();});observer.observe($('scene'));
     buildHole(round?round.hole:0);askDraw();
   }catch(e){$('error').hidden=false;}
 }
@@ -173,20 +173,7 @@ function buildHole(index){
   // A soft blob under the flying disc shows its height, also far from the sun's shadow area.
   v.discShadow=new T.Mesh(new T.CircleGeometry(.2,20),new T.MeshBasicMaterial({color:'#12301f',transparent:true,opacity:.35,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
   v.discShadow.rotation.x=-Math.PI/2;group.add(v.discShadow);
-  // A simple backhand figure gives immediate feedback while a throw is pulled back.
-  const person=new T.Group();group.add(person);v.person=person;
-  const shirt=mat('#f4d180'),pants=mat('#2c4f52'),skin=mat('#e4ad83'),cap=mat('#c4473f'),shoe=mat('#f2efe6');
-  add(new T.CapsuleGeometry(.19,.37,3,8),shirt,0,1.03,0,person);
-  add(new T.SphereGeometry(.15,12,8),skin,0,1.52,0,person);
-  add(new T.SphereGeometry(.155,12,6,0,Math.PI*2,0,Math.PI/2),cap,0,1.55,0,person);
-  add(new T.BoxGeometry(.2,.03,.14),cap,0,1.57,.14,person);
-  for(const x of [-.12,.12]){add(new T.CylinderGeometry(.075,.06,.65,7),pants,x,.38,0,person);add(new T.BoxGeometry(.12,.08,.24),shoe,x,.04,.04,person);}
-  add(new T.CylinderGeometry(.055,.05,.5,7),skin,-.24,1.02,0,person).rotation.z=-.2;
-  const arm=new T.Group();arm.position.set(.22,1.22,0);person.add(arm);v.arm=arm;
-  const fore=add(new T.CylinderGeometry(.06,.06,.53,7),skin,.22,0,0,arm);fore.rotation.z=Math.PI/2;
-  add(new T.CylinderGeometry(.13,.13,.025,20),mat('#f4ca72'),.5,0,0,arm).rotation.x=Math.PI/2;
-  const shadow=add(new T.CircleGeometry(.5,24),new T.MeshBasicMaterial({color:'#193a2d',transparent:true,opacity:.18}),0,.02,0,person);shadow.rotation.x=-Math.PI/2;
-  v.position.set(0,4,-8);v.target.set(0,1,20);v.camera.position.copy(v.position);v.moving=true;dirty=true;
+  v.position.set(0,4,-8);v.target.set(0,1,20);v.camera.position.copy(v.position);v.moving=true;
 }
 function drawScene(dt){
   const v=scene3d,{T,camera,renderer}=v;buildHole(round?round.hole:0);
@@ -216,11 +203,6 @@ function drawScene(dt){
   v.moving=v.position.distanceTo(eye)>.015||v.target.distanceTo(look)>.015;
   if(!v.moving){v.position.copy(eye);v.target.copy(look);}
   camera.position.copy(v.position);camera.lookAt(v.target);camera.updateMatrixWorld();v.sky.position.copy(v.position);
-  v.person.position.set(p.lie[0],ground(h,...p.lie),p.lie[1]);v.person.rotation.y=a;
-  v.person.visible=false;
-  v.arm.rotation.y=drag?.type==='swipe'?-1.8*aim.power:disc?Math.max(0,.8-round.time)*2:.2;
-  const handDisc=v.arm.children[1];
-  handDisc.visible=false;
   v.disc.visible=v.discShadow.visible=!!disc; if(disc){v.disc.position.set(disc.x,disc.y,disc.z);v.disc.rotation.set(disc.tilt,round.time*18,disc.tilt);
     const releaseBlend=Math.max(0,1-round.time/.22);
     v.disc.scale.setScalar(1+((round.shot.releaseScale??1)-1)*releaseBlend);

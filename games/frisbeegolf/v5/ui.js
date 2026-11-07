@@ -96,7 +96,7 @@ $('scene').addEventListener('pointerdown',e=>{
     fullSpeed:rect.height*.0028,fullLength:rect.height*.4};
   $('scene').setPointerCapture(e.pointerId);
   if(pulling){aim.curve=0;aim.power=0;}
-  refreshPreview();renderPull();
+  askDraw();renderPull();
 });
 function movePull(e){
   if(!drag||e.pointerId!==drag.id)return;
@@ -122,7 +122,7 @@ function movePull(e){
     const sideways=putting?Math.sign(dx)*Math.max(0,Math.abs(dx)-3):dx;
     aim.curve=dy<0?clamp(Math.atan2(sideways,-dy)/(Math.PI/6),-1,1):0;
   }
-  refreshPreview();renderPull();
+  askDraw();renderPull();
 }
 $('scene').addEventListener('pointermove',movePull);
 $('scene').addEventListener('pointerup',e=>{
@@ -136,13 +136,13 @@ $('scene').addEventListener('pointerup',e=>{
     // A guest's throw goes to the host, which runs the round; alone or as host it starts here.
     if(online&&!R.isHost)R.send({t:'shot',round:roomRound,seq:round.seq,...aim,...launch});
     else startShot({...aim,...launch});
-  }else refreshPreview();
+  }else askDraw();
   renderPull();
 });
 function cancelDrag(e){
   if(drag?.id!==e.pointerId)return;
   if(drag.type==='swipe'){aim.power=drag.power;aim.curve=drag.curve;}
-  drag=null;refreshPreview();renderPull();
+  drag=null;askDraw();renderPull();
 }
 $('scene').addEventListener('pointercancel',cancelDrag);
 $('scene').addEventListener('lostpointercapture',cancelDrag);

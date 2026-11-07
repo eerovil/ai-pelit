@@ -5,7 +5,7 @@ window.AiPelitScores?.board('v5','Frisbeegolf v5+');
 // First-person camera: yaw follows the aim, pitch is the player's look up or down, degrees.
 let view={yaw:0,pitch:-5};
 let round=null, online=false, roomRound='', roomHost='', aim={pitch:12,angle:0,disc:1,power:.6,curve:0}, drag=null, aimDrag=null;
-let flight=null, preview=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, dirty=true, askName=false;
+let flight=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, askName=false;
 function load(k,d){try{const v=localStorage.getItem(KEY+k);return v===null?d:JSON.parse(v);}catch(e){return d;}}
 function save(k,v){try{localStorage.setItem(KEY+k,JSON.stringify(v));}catch(e){}}
 function sound(name,vol=.25){window.AiPelitAanet?.play(name,{vol});}
@@ -33,9 +33,8 @@ function resetAim(){
   const pitch=dist<10?Math.atan2(ground(h,...h.basket)+1-ground(h,...p.lie)-1.5,Math.max(.1,dist))*180/Math.PI:12;
   aim={pitch:clamp(pitch,-65,50),angle:Math.atan2(h.basket[0]-p.lie[0],h.basket[1]-p.lie[1]),disc:1,power:dist<10?clamp(.22+dist*.085,.25,1):.65,curve:0};
   view={yaw:aim.angle,pitch:-5};
-  drag=aimDrag=null;mapOpen=false;refreshPreview();
+  drag=aimDrag=null;mapOpen=false;askDraw();
 }
-function refreshPreview(){preview=null;dirty=true;askDraw();}
 function newRound(){online=false;round=fresh();flight=null;resetAim();showPlay();keepRound();}
 function resumeRound(){const r=load('kierros',null);if(!validSaved(r))return;online=false;round=r;flight=null;resetAim();if(round.phase==='hole')showCard();else showPlay();}
 function validSaved(r){return r&&Number.isInteger(r.hole)&&r.hole>=0&&r.hole<9&&['aim','hole'].includes(r.phase)&&Array.isArray(r.players)&&r.players.length===1&&r.players[0].lie?.every(Number.isFinite)&&r.players[0].scores?.length===(r.phase==='hole'?r.hole+1:r.hole)&&Number.isFinite(r.players[0].strokes);}
@@ -44,11 +43,11 @@ function keepRound(){if(!round||online||round.phase==='end')return;
   if(round.phase==='fly')return;
   save('kierros',round);
 }
-function menu(){keepRound();round=null;online=false;flight=preview=drag=aimDrag=null;mapOpen=false;
+function menu(){keepRound();round=null;online=false;flight=drag=aimDrag=null;mapOpen=false;
   $('menu').hidden=false;$('game').hidden=true;$('card').hidden=true;
   $('resume').hidden=!validSaved(load('kierros',null));
   const best=load('ennatys',null);$('best').textContent=best===null?'Ensimmäinen kierros odottaa':'Ennätys: '+relative(best)+' · '+(best+COURSE_PAR)+' heittoa';
-  if(scene3d)buildHole(0);dirty=true;askDraw();
+  if(scene3d)buildHole(0);askDraw();
 }
 function startShot(input){
   if(!round||round.phase!=='aim')return false;
@@ -63,7 +62,7 @@ function startShot(input){
     origin:swipe?input.origin.slice():undefined,velocity:swipe?input.velocity.slice():undefined,
     releaseScale:Number.isFinite(input.releaseScale)?clamp(input.releaseScale,.2,5):undefined,releaseRotation:rotation};
   round.phase='fly';round.time=0;round.seq++;round.notice='';current().strokes++;
-  flight=fly(round.shot,HOLES[round.hole]);preview=null;drag=aimDrag=null;mapOpen=false;
+  flight=fly(round.shot,HOLES[round.hole]);drag=aimDrag=null;mapOpen=false;
   sound('suhahdus');renderUI();askDraw();if(online)sendState();return true;
 }
 function nextThrower(){
@@ -110,12 +109,11 @@ function step(dt){
   if(!round||round.phase!=='fly'||document.hidden||(online&&R.paused))return;
   round.time+=Math.max(0,Math.min(dt,.05));
   if(flight&&round.time>=flight.duration){if(!online||R.isHost)settleShot();else round.time=flight.duration;}
-  dirty=true;
 }
 function askDraw(){if(!frame&&!document.hidden)frame=requestAnimationFrame(tick);}
-function tick(t){frame=0;if(drag?.type==='swipe'&&performance.now()-drag.lastMoved>160&&aim.power>0){aim.power=0;refreshPreview();renderPull();}const dt=lastFrame?Math.min((t-lastFrame)/1000,.05):0;lastFrame=t;step(dt);
-  if(scene3d){drawScene(dt);dirty=false;}
+function tick(t){frame=0;if(drag?.type==='swipe'&&performance.now()-drag.lastMoved>160&&aim.power>0){aim.power=0;askDraw();renderPull();}const dt=lastFrame?Math.min((t-lastFrame)/1000,.05):0;lastFrame=t;step(dt);
+  if(scene3d)drawScene(dt);
   if(round?.phase==='fly'||drag||scene3d?.moving)askDraw();
 }
-document.addEventListener('visibilitychange',()=>{drag=aimDrag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;refreshPreview();}});
+document.addEventListener('visibilitychange',()=>{drag=aimDrag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;askDraw();}});
 window.addEventListener('pagehide',keepRound);

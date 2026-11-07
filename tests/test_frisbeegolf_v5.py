@@ -249,6 +249,66 @@ def test_complete_nine_holes_and_second_round(site, browser):
     ctx.close()
 
 
+SWIPE_PLAN = """() => {
+  // Try swipes without throwing: each candidate runs the real gesture code up to the launch,
+  // is cancelled, and its launch is flown on the side. The best one's aim and swipe are returned.
+  const c=document.getElementById('scene'),r=c.getBoundingClientRect(),x=r.left+r.width*.5,y=r.top+r.height*.72;
+  const h=HOLES[round.hole],lie=current().lie,dist=distance(lie,h.basket);
+  const base=Math.atan2(h.basket[0]-lie[0],h.basket[1]-lie[1]),keep=[view.yaw,view.pitch,aim.angle];
+  let t=performance.now();
+  Object.defineProperty(performance,'now',{value:()=>t,configurable:true,writable:true});
+  c.setPointerCapture=c.releasePointerCapture=()=>{};
+  const send=(type,px,py)=>c.dispatchEvent(new PointerEvent(type,{pointerId:1,clientX:px,clientY:py,bubbles:true,cancelable:true,pointerType:'touch',isPrimary:true}));
+  let best=null,cost=Infinity;
+  try{
+    const powers=dist<10?[.15,.25,.35,.45,.55,.7,.85,1]:Array.from({length:19},(_,i)=>.1+i*.05);
+    for(let ai=-6;ai<=6&&cost>-1000;ai++)for(const power of powers){
+      const yaw=base+ai*.03;view.yaw=aim.angle=yaw;view.pitch=-5;drawScene(0);
+      send('pointerdown',x,y);t+=10;send('pointermove',x,y-power*r.height*.4);
+      const launch=makeSwipeLaunch(),shot={pitch:launch.pitch,angle:launch.angle,power:aim.power,curve:aim.curve,disc:1,
+        lie:lie.slice(),seed:12345+round.seq*7919,origin:launch.origin,velocity:launch.velocity};
+      send('pointercancel',x,y);
+      const f=fly(shot,h),k=f.holed?-1000:distance(f.lie,h.basket)+(f.penalty?100:0);
+      if(k<cost){cost=k;best={yaw,power};}
+      if(k===-1000)break;
+    }
+  }finally{delete performance.now;delete c.setPointerCapture;delete c.releasePointerCapture;
+    [view.yaw,view.pitch,aim.angle]=keep;drawScene(0);}
+  return best;
+}"""
+
+
+def test_complete_nine_holes_by_swiping(site, browser):
+    """The course can be finished with the one disc by swiping alone, and the round goes to the v5 list."""
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    scores = []
+    for hole in range(9):
+        for _ in range(8):
+            if p.evaluate("round.phase!=='aim'"):
+                break
+            p.wait_for_function("round.phase==='aim'&&!scene3d.moving")
+            plan = p.evaluate(SWIPE_PLAN)
+            p.evaluate('(y)=>{view.yaw=aim.angle=y;view.pitch=-5;drawScene(0);}', plan['yaw'])
+            strokes = p.evaluate('current().strokes')
+            swipe(p, plan['power'])
+            assert p.evaluate('current().strokes') == strokes + 1
+            assert p.evaluate('round.shot.disc') == 1 and p.evaluate('!!round.shot.velocity')
+            p.evaluate('finishFlight()')
+        assert p.evaluate('current().done'), (hole, p.evaluate('round'))
+        scores.append(p.evaluate('current().strokes'))
+        assert scores[-1] <= p.evaluate('HOLES[round.hole].par+1'), hole
+        if hole < 8:
+            p.click('#next')
+    assert p.evaluate('round.phase') == 'end'
+    assert p.locator('#ai-pelit-nimi').is_visible()
+    total = sum(scores) - 30
+    assert p.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))['frisbeegolf|v5'].score") == total
+    assert p.evaluate("load('ennatys',null)") == total
+    assert not p.errors
+    ctx.close()
+
+
 def test_reload_rotate_and_midflight_save(site, browser):
     ctx, p = open_game(site, browser)
     p.click('#play')
