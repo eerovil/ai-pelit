@@ -5,7 +5,7 @@
 
 // The kinds on each leg, legs 1–8. Fog only on dry and rainy legs, the plough and black ice on snow.
 const ROAD_EVENTS = [
-  ['tietyo'],
+  [],
   ['tietyo', 'rikki', 'sumu'],
   ['ambulanssi', 'rikki', 'sumu'],
   ['ambulanssi', 'erikois', 'sumu'],
@@ -38,7 +38,7 @@ const FOG_HALF = 70, FOG_EDGE = 25, FOG_HIGH = 30, FOG_LOW = 45;
 
 // ---- Placing them on the leg (from newLeg, after the police) ----
 function roadLeg(evs) {
-  const r = rng(leg.seed * 19 + 7), kinds = ROAD_EVENTS[level - 1] || [];
+  const r = rng(leg.seed * 19 + 7), kinds = ROAD_EVENTS[level - 1] || [], n0 = evs.length;
   const near = (a, b, x0, x1) => b > x0 && a < x1;
   // A stretch with nothing else on it: no rest area, police check or other road event; a fixed
   // one also no sign but a speed limit's (none inside [quiet0, quiet1]), potholes, junction,
@@ -93,6 +93,9 @@ function roadLeg(evs) {
     }
   }
   road.ice.sort((a, b) => a.s0 - b.s0);
+  // newLeg() gave every earlier event its random number before this ran; these get theirs here
+  // (a waiting car's habit, a colour, a beacon's phase).
+  for (let i = n0; i < evs.length; i++) if (evs[i].r === undefined) evs[i].r = r();
   // Fog in the deepest dips, at most two, 600 m apart.
   if (kinds.includes('sumu')) {
     const dips = [];

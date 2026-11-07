@@ -585,7 +585,7 @@ DRIVE = """([n, setup, secs, each]) => { HOLD = true; maxLeg = 8; newLeg(n); thi
     for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text); }
   return { mode, why: crashWhy, points, tally: Object.assign({}, tally), seen, out, lat: P.lat, s: P.s }; }"""
 
-PLANNED = {1: {"tietyo"}, 2: {"tietyo", "rikki", "sumu"}, 3: {"ambulanssi", "rikki", "sumu"},
+PLANNED = {1: set(), 2: {"tietyo", "rikki", "sumu"}, 3: {"ambulanssi", "rikki", "sumu"},
            4: {"ambulanssi", "erikois", "sumu"}, 5: {"aura", "jaa", "ambulanssi"}, 6: {"aura", "jaa", "rikki"},
            7: {"aura", "jaa", "erikois"}, 8: {"aura", "jaa", "ambulanssi"}}
 
@@ -623,24 +623,24 @@ def test_roadworks_red_light_costs_50_waiting_for_green_is_20_and_the_cones_end_
     page = open_game(site, context)
     left = "P.v = 40 / KMH; P.lat = P.s > w.stop - 20 && P.s < w.s1 + 5 ? -LANE : LANE;"
     # Through on red, in the open lane.
-    r = page.evaluate(DRIVE, [1, WORKS + " greenIn(15);", 20, left])
+    r = page.evaluate(DRIVE, [2, WORKS + " greenIn(15);", 20, left])
     assert r["mode"] == "drive" and r["tally"]["punaiset"] == 1 and r["tally"]["hurjastelu"] == 1, r
     assert "Punaisia päin -50" in r["seen"] and "Tietyö: yksi kaista, odota vihreää" in r["seen"], r
     # Stopped at the line until green, then through.
     wait = "if (P.s < w.stop - 4 && !worksGreen(w)) P.v = Math.min(40 / KMH, Math.max(0, w.stop - 4 - P.s)); else P.v = 40 / KMH;" \
            " P.lat = P.s > w.stop - 20 && P.s < w.s1 + 5 ? -LANE : LANE;"
-    r = page.evaluate(DRIVE, [1, WORKS + " greenIn(15);", 40, wait])
+    r = page.evaluate(DRIVE, [2, WORKS + " greenIn(15);", 40, wait])
     assert r["mode"] == "drive" and r["tally"]["tietyo"] == 1 and r["tally"]["punaiset"] == 0 and r["points"] >= 20, r
     assert "Odotit vihreää +20" in r["seen"], r
     # On green, but in the shut lane: into the roadworks.
-    r = page.evaluate(DRIVE, [1, WORKS + " greenIn(-1);", 20, "P.v = 40 / KMH; P.lat = LANE;"])
+    r = page.evaluate(DRIVE, [2, WORKS + " greenIn(-1);", 20, "P.v = 40 / KMH; P.lat = LANE;"])
     assert r["mode"] == "crash" and r["why"] == "Ajoit tietyömaalle.", r
     assert page.errors == []
 
 
 def test_oncoming_cars_queue_at_the_far_line_and_come_through_on_their_turn(site, context):
     page = open_game(site, context)
-    r = page.evaluate(DRIVE, [1, WORKS + """ greenIn(5); P.s = w.stop - 400;
+    r = page.evaluate(DRIVE, [2, WORKS + """ greenIn(5); P.s = w.stop - 400;
       for (const k of [0, 1, 2]) cruiseFrom(add('vastaan', { s: w.far + 60 + k * 15, lat: -LANE, habit: 0, passed: true }));
       out = { gaps: [], through: 0, inWorks: 0 };""", 30, """P.v = 0;
       const q = things.filter(t => t.kind === 'vastaan').sort((a, b) => a.s - b.s);
@@ -767,4 +767,25 @@ def test_events_never_share_a_stretch_and_a_restart_mid_event_starts_it_fresh(si
     assert r["before"]["tukit"] == 1 and r["before"]["amb"] and r["before"]["judged"], r
     assert not r["amb"] and r["tukit"] == 0 and r["points"] == 0, r
     assert [b[0] for b in r["broken"]] == r["before"]["broken"] and not any(b[1] for b in r["broken"]), r
+    assert page.errors == []
+
+
+def test_events_from_the_legs_own_queue_get_their_random_number_and_the_waiting_car_comes_through(site, context):
+    # Review of #442: newLeg() handed out e.r before roadLeg() added its events, so the car
+    # waiting at the roadworks got a NaN habit and vanished on its first step.
+    page = open_game(site, context)
+    r = page.evaluate(DRIVE, [2, """var real = (newLeg(2), events.filter(e => e.kind === 'tietyo' || e.kind === 'rikki'));
+      var w = road.works[0]; events = real; P.s = real.find(e => e.kind === "tietyo").s; P.lat = LANE;
+      out = { r: real.map(e => e.r), finite: true, seen: false, through: false, inWorks: 0, colour: null };""", 60, """P.v = 0;
+      const c = things.find(t => t.kind === 'vastaan' && !t.escort);
+      if (c) { out.seen = true; if (![c.s, c.v, c.lat].every(Number.isFinite)) out.finite = false;
+        if (c.s < w.stop - 10) out.through = true;
+        if (c.s > w.s0 && c.s < w.s1 && !worksOpen(w) && !c.inWorks) out.inWorks++; }
+      const b = things.find(t => t.broken); if (b) out.colour = b.colour;"""])
+    assert all(isinstance(x, float) and 0 <= x < 1 for x in r["out"]["r"]), r
+    assert r["out"]["seen"] and r["out"]["finite"] and r["out"]["through"] and r["out"]["inWorks"] == 0, r["out"]
+    r2 = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(5);
+      const e = events.find(e => e.kind === 'aura'); release(e);
+      return { r: e.r, beacon: things.find(t => t.kind === 'aura').beacon }; }""")
+    assert 0 <= r2["r"] < 1 and 0 <= r2["beacon"] < 7, r2
     assert page.errors == []
