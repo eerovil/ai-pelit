@@ -1,5 +1,20 @@
 {
   "title": "Raketti",
   "description": "Laukaise kaksivaiheinen raketti, lennä kiertoradalle ja telakoidu avaruusasemaan. Realistinen 2D-lento ilman autopilottia.",
-  "versions": [{"n": 1, "date": "2026-11-07", "note": "Ensimmäinen versio: käsin ohjattu laukaisu, kiertoratalento ja telakointi sekä harjoitukset.", "request": "Avaruus raketti peli. Liftoff, orbit, docking. Mahdollisimman realistinen. 2d. No autopilot. Approved spec: Earth launch to low orbit and docking, manual touch controls, real-duration launch, coasting time acceleration and resumable saves.", "issue": "eerovil/ai-pelit#435"}]
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-07",
+      "note": "Ensimmäinen versio: käsin ohjattu laukaisu, kiertoratalento ja telakointi sekä harjoitukset.",
+      "request": "Avaruus raketti peli. Liftoff, orbit, docking. Mahdollisimman realistinen. 2d. No autopilot. Approved spec: Earth launch to low orbit and docking, manual touch controls, real-duration launch, coasting time acceleration and resumable saves.",
+      "issue": "eerovil/ai-pelit#435"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-07",
+      "note": "Ajan nopeutus ×2 ja ×5 toimii myös moottorin ja ohjauksen aikana; portin lähellä palataan normaaliaikaan.",
+      "request": "Yksi lento kestää aika kauan. Nopeutus myös muulloin kuin vapaassa lennossa. Approved: selectable ×1/×2/×5 during thrust and steering, ×10/×100 for coasting, same physics/manual controls/saves; return to ×1 near docking contact, explained on screen.",
+      "issue": "eerovil/ai-pelit#435"
+    }
+  ]
 }

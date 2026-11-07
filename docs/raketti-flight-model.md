@@ -1,6 +1,6 @@
 # Raketti flight model
 
-Raketti v1 follows the approved manual, two-dimensional launch → orbit → docking mission. The player chose maximum realism, a 2D view, and no autopilot. Earth, a coplanar station at 400 km, two stages, coasting time acceleration and resumable flight were assumptions in the approved scope. The practice starts are an implementation assumption: they make the three stages learnable without repeatedly spending eight minutes on launch, and never earn full-flight achievements.
+Raketti v2 follows the approved manual, two-dimensional launch → orbit → docking mission. The player chose maximum realism, a 2D view, and no autopilot. Earth, a coplanar station at 400 km, two stages, coasting time acceleration and resumable flight were assumptions in the approved scope. The practice starts are an implementation assumption: they make the three stages learnable without repeatedly spending eight minutes on launch, and never earn full-flight achievements.
 
 The mission starts on a rotating Earth. The station starts at −0.20336 radians from the launch meridian, a launch window that brings the handbook ascent close to the station near its next apoapsis; a different manual ascent still needs the player to correct phasing. Nothing steers, stages, fires an engine or matches station velocity for the player. Instruments calculate the current orbit and explain the next task; the test-only scripted pilot is never shipped with the game.
 
@@ -18,10 +18,16 @@ The fictional launch vehicle starts at 500 tonnes. Stage 1 carries 295 tonnes pr
 
 ## Numerical and physical limits
 
-Velocity Verlet uses at most 0.25 s coasting steps, reduced to 0.02 s under thrust, during turning or within 1 km of the station. Time acceleration still runs every substep. It is available only above 150 km, beyond 5 km from the station, with engines and thrusters off and angular speed below 0.01 rad/s. Near a station it returns to real time.
+Velocity Verlet uses at most 0.25 s coasting steps, reduced to 0.02 s under thrust, during turning or within 1 km of the station. Time acceleration still runs every substep. The player can choose ×1, ×2 and ×5 during launch, thrust and steering. ×10 and ×100 remain available only above 150 km, beyond 5 km from the station, with engines and thrusters off and angular speed below 0.01 rad/s. Outside those coasting conditions a higher selected rate drops to ×5, not back up automatically. Within 20 m of the port it returns to real time; this cutoff is an implementation assumption for final contact, stated on screen. Pausing and resuming use ×1. Existing v1 saves and achievements use the same keys and shape unchanged.
 
 This is a planar, spherical-Earth two-body simulation, not a validated aerospace training simulator. It omits the Moon, non-spherical gravity, lift, propellant slosh and real engine operating limits. The atmosphere is a scale-height exponential with an altitude cutoff. Passive aerodynamic stability, dynamic-pressure failure and a heat proxy are deliberately simplified. Graphics enlarge the craft; the instruments and collision model use metres. The craft has no re-entry heat shield.
 
 ## Flight verification
 
-`tests/test_raketti_v1.py` contains a test-only pilot which operates the same DOM controls as a player. Its reference launch starts nearly vertical, aims about 20° from vertical at 10 km, 40° at 40 km, 65° at 100 km and 80° at 200 km, stages manually, and performs orbital insertion. This is a feasibility check rather than an autopilot available to the player. The full non-practice mission test continues that launch through a coast, main-engine rendezvous and RCS docking in both orientations, using only the manual DOM controls and physics steps. Separate checks exercise repeat practice docking, high-speed and tail-first contacts, an orbit period, fuel consumption, immediate warp cancellation, saves, offline play and touch layouts.
+`tests/test_raketti_v2.py` contains a test-only pilot which operates the same DOM controls as a player. Its reference launch starts nearly vertical, aims about 20° from vertical at 10 km, 40° at 40 km, 65° at 100 km and 80° at 200 km, stages manually, and performs orbital insertion. This is a feasibility check rather than an autopilot available to the player. The full non-practice mission test continues that launch through a coast, main-engine rendezvous and RCS docking in both orientations, using only the manual DOM controls and physics steps. Separate checks exercise repeat practice docking, high-speed and tail-first contacts, an orbit period, fuel consumption, immediate warp cancellation, saves, offline play and touch layouts.
+
+## Faster flight (v2)
+
+Chosen by the owner: acceleration also while not coasting; selectable ×1/×2/×5 under thrust and steering; ×10/×100 for coasting; manual controls, unchanged physics and existing saves; real time near docking contact, with the limit visible.
+
+Assumed (change if the build shows better; say so in the pull request): the final-contact cutoff is 20 m nose-to-port distance; disallowed ×10/×100 is capped at ×5; manual staging preserves ×2/×5. The time button cycles through the currently permitted rates.
