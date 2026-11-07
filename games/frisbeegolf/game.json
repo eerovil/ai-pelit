@@ -29,6 +29,13 @@
       "note": "Arvioviivan maavarjo helpottaa korkeuden hahmottamista ja puistoradan grafiikka on aiempaa viimeistellympää.",
       "request": "Frisbeegolf on vielä vähän huono. Ainakin arvioviiva tarvitsee oman varjon. Lisäksi jos grafiikoita saisi vähän parannettua",
       "issue": "eerovil/ai-pelit#429"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-07",
+      "note": "Uusi heitto: pyyhkäise kiekkoa ensimmäisen persoonan näkymässä, kallista kaarteeseen ja seuraa kiekkoa lennossa; aina sama kiekko ja uusi tuloslista.",
+      "request": "Kontrollit ei ole hyvät kyllä. Voisi olla first person. Ei pysty nyt ylös alas suuntaamaan. Prototyyppi tarvitaan. (Prototyypin kautta valittu: ruutua raahaamalla katse, kiekon pyyhkäisy heittää, aina sama kiekko, kamera seuraa kiekkoa. Julkaistaan ensimmäisen persoonan näkymällä ja uudella v5-tuloslistalla.)",
+      "issue": "eerovil/ai-pelit#429"
     }
   ]
 }

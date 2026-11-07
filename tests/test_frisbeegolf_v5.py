@@ -6,7 +6,7 @@ import pytest
 from conftest import ROOT, turn, GPU_ARGS
 from test_rooms_lib import Relay
 
-URL = 'games/frisbeegolf/v4/'
+URL = 'games/frisbeegolf/v5/'
 PLAN = """() => {
  window.finishFlight=()=>{for(let i=0;i<1500&&round.phase==='fly';i++)step(.05);};
  window.planThrow=()=>{
