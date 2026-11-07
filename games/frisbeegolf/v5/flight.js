@@ -18,26 +18,55 @@ function fly(shot,h,shake=true) {
   const d=DISCS[shot.disc], start=shot.lie;
   let seed=(shot.seed||1)>>>0;
   const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
-  const angle=shot.angle+(shake?(rand()-.5)*.014:0);
-  const range=throwRange(h,start,shot.disc,shot.power)*(shake?1+(rand()-.5)*.018:1);
+  const direct=Array.isArray(shot.velocity)&&Array.isArray(shot.origin);
+  const angle=shot.angle+(!direct&&shake?(rand()-.5)*.014:0);
+  const range=throwRange(h,start,shot.disc,shot.power)*(!direct&&shake?1+(rand()-.5)*.018:1);
   const putt=distance(start,h.basket)<10;
-  const duration=putt?.5+range/6:1+range/(d.speed*1.8+4);
-  const speed=range/duration, arc=putt?.25:1+range*.022*d.glide/4;
-  const dx=Math.sin(angle), dz=Math.cos(angle), path=[];
-  const sy=ground(h,...start)+1.05;
-  let safe=start.slice(), reason='grass', inBasket=false, hit=false, obstacle=null;
-  const point=(t)=>{
-    // side is to the thrower's left; a positive curve goes right.
-    const side=putt?0:range*(-shot.curve*.22*t*t+d.turn*.012*Math.sin(Math.PI*t)+d.fade*.009*t*t*t);
-    const x=start[0]+dx*range*t+dz*side+h.wind[0]*t*t*duration*.38;
-    const z=start[1]+dz*range*t-dx*side+h.wind[1]*t*t*duration*.38;
-    const endY=ground(h,x,z)+.05;
-    return {x,z,y:sy*(1-t)+endY*t+4*arc*t*(1-t),t:t*duration,tilt:shot.curve*.7+t*d.fade*.04};
+  const pitch=clamp(shot.pitch??12,-65,65)*Math.PI/180,g=direct?4.5:putt?.65:4.5;
+  const speed=direct?Math.hypot(...shot.velocity):putt?.8+shot.power*7.5:Math.sqrt(Math.max(.05,range)*g/Math.sin(24*Math.PI/180));
+  const velocity=direct?shot.velocity:[Math.sin(angle)*speed*Math.cos(pitch),speed*Math.sin(pitch),Math.cos(angle)*speed*Math.cos(pitch)];
+  const origin=direct?shot.origin:[start[0],ground(h,...start)+1.5,start[1]];
+  const vx=Math.hypot(velocity[0],velocity[2]),vy=velocity[1];
+  const duration=(vy+Math.sqrt(vy*vy+2*g*Math.max(4,origin[1]-ground(h,...start)+4+h.hill*2)))/g;
+  const dx=velocity[0]/Math.max(.01,vx),dz=velocity[2]/Math.max(.01,vx),path=[];
+  let safe=start.slice(),reason='grass',inBasket=false,hit=false,obstacle=null;
+  // Prototype tuning, not measured aerodynamic coefficients. Fade depends on speed,
+  // so a low flight can hit the ground before a strong low-speed finish develops.
+  const dragRate=.16,fadeSpeed=5+d.speed*.9;
+  // Bank pull starts strong and dies out (time constant bankTau), and sideways drift is
+  // damped, so a late fade can overcome the curve.
+  const bankPull=10,bankTau=1.4,bankDamp=.4;
+  let fadeOffset=0,fadeVelocity=0,bankOffset=0,bankVelocity=0,previousTime=0;
+  const point=t=>{
+    const elapsed=t*duration;
+    const forwardSpeed=direct?vx*Math.exp(-dragRate*elapsed):vx;
+    const travel=direct?vx*(1-Math.exp(-dragRate*elapsed))/dragRate:vx*elapsed;
+    const progress=travel/Math.max(range,1);
+    // Smooth response: fast discs retain a gentle finish instead of a hard zero-fade cutoff.
+    const slow=(.04+.96/(1+(forwardSpeed/fadeSpeed)**4))*(1-Math.exp(-elapsed/.7));
+    if(direct){
+      const dt=elapsed-previousTime;
+      const acceleration=-forwardSpeed*(.03+d.fade*.06)*slow;
+      fadeOffset+=fadeVelocity*dt+.5*acceleration*dt*dt;
+      fadeVelocity+=acceleration*dt;
+      const bankAcceleration=bankPull*shot.curve*Math.exp(-elapsed/bankTau)-bankDamp*bankVelocity;
+      bankOffset+=bankVelocity*dt+.5*bankAcceleration*dt*dt;
+      bankVelocity+=bankAcceleration*dt;previousTime=elapsed;
+    }
+    const fade=direct?fadeOffset:range*d.fade*.009*progress**3;
+    // Positive tilt pulls screen-left; zero tilt adds no sideways pull.
+    const bankCurve=direct?bankOffset:-shot.curve*range*.22*progress*progress;
+    const turn=direct?0:range*d.turn*.012*Math.sin(Math.PI*progress);
+    const side=fade+bankCurve+turn;
+    return {x:origin[0]+dx*travel+dz*side+h.wind[0]*elapsed*elapsed*.03,
+      z:origin[2]+dz*travel-dx*side+h.wind[1]*elapsed*elapsed*.03,
+      y:origin[1]+vy*elapsed-.5*g*elapsed*elapsed,t:elapsed,tilt:shot.curve*.7*(direct?Math.exp(-elapsed/(2*bankTau)):1)+(direct?-slow*(.15+d.fade*.08):progress*d.fade*.04)};
   };
   // No step travels more than 12 cm, including fast throws past the basket and thin trunks.
-  const steps=Math.max(60,Math.ceil(range/.12));
+  const steps=Math.max(60,Math.ceil(vx*duration/.12));
   for(let i=0;i<=steps;i++) {
     const p=point(i/steps);path.push(p);
+    if(i>0&&p.y<=ground(h,p.x,p.z)+.05){p.y=ground(h,p.x,p.z)+.05;break;}
     if(catches(h,p,speed)) {reason='basket';inBasket=true;break;}
     const bh=ground(h,...h.basket);
     if(!hit&&Math.hypot(p.x-h.basket[0],p.z-h.basket[1])<.38&&p.y-bh>=.5&&p.y-bh<=1.3) {

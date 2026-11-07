@@ -1,8 +1,11 @@
 const $=id=>document.getElementById(id), KEY='ai-pelit:frisbeegolf:';
 const R=window.AiPelitRooms;
-window.AiPelitScores?.board('v3','Frisbeegolf v3+');
-let round=null, online=false, roomRound='', roomHost='', aim={angle:0,disc:1,power:.6,curve:0}, drag=null, aimDrag=null;
-let flight=null, preview=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, dirty=true, askName=false;
+// The swipe throw (v5) plays differently from the throw pad, so it keeps its own list.
+window.AiPelitScores?.board('v5','Frisbeegolf v5+');
+// First-person camera: yaw follows the aim, pitch is the player's look up or down, degrees.
+let view={yaw:0,pitch:-5};
+let round=null, online=false, roomRound='', roomHost='', aim={pitch:12,angle:0,disc:1,power:.6,curve:0}, drag=null, aimDrag=null;
+let flight=null, mapOpen=false, scene3d=null, lastFrame=0, frame=0, askName=false;
 function load(k,d){try{const v=localStorage.getItem(KEY+k);return v===null?d:JSON.parse(v);}catch(e){return d;}}
 function save(k,v){try{localStorage.setItem(KEY+k,JSON.stringify(v));}catch(e){}}
 function sound(name,vol=.25){window.AiPelitAanet?.play(name,{vol});}
@@ -12,22 +15,25 @@ function current(){return round.players[round.turn];}
 function hasTurn(){return !!(round&&round.phase==='aim'&&(!online||current().id===R.me));}
 function myTurn(){return hasTurn()&&(!online||!R.paused);}
 function fresh(players=[{id:'me',name:'Sinä'}]){
-  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shot:null,notice:'',rules:3,order:players.map((_,i)=>i),
+  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shot:null,notice:'',rules:5,order:players.map((_,i)=>i),
     players:players.map(p=>({id:p.id,name:p.name,lie:[0,0],strokes:0,scores:[],done:false}))};
 }
 function resetAim(){
-  if(!round)return;const h=HOLES[round.hole],p=current(),dist=distance(p.lie,h.basket);
-  aim={angle:Math.atan2(h.basket[0]-p.lie[0],h.basket[1]-p.lie[1]),disc:dist<10?2:dist>65?0:1,power:.65,curve:0};
-  drag=aimDrag=null;mapOpen=false;refreshPreview();
-}
-function refreshPreview(){
-  preview=null;
-  if(round&&round.phase==='aim'){
-    const f=fly({...aim,lie:current().lie,seed:1},HOLES[round.hole],false),duration=f.duration/3;
-    // Show the opening curve without revealing the landing place or its marker.
-    preview={duration,path:[...f.path.filter(p=>p.t<duration),{...flightPoint(f,duration),t:duration}]};
+  if(!round)return;const h=HOLES[round.hole],p=current();
+  const minimumDistance=2,landingDistance=distance(p.lie,h.basket);
+  if(landingDistance<minimumDistance){
+    // Preserve the approach side; a lie exactly at the basket falls back toward the tee.
+    const dx=landingDistance>.001?p.lie[0]-h.basket[0]:-h.basket[0];
+    const dz=landingDistance>.001?p.lie[1]-h.basket[1]:-h.basket[1];
+    const length=Math.hypot(dx,dz);
+    p.lie=[h.basket[0]+(length?dx/length:0)*minimumDistance,h.basket[1]+(length?dz/length:-1)*minimumDistance];
+    round.notice='Heittopaikka vähintään 2 metrin päässä korista';
   }
-  dirty=true;askDraw();
+  const dist=distance(p.lie,h.basket);
+  const pitch=dist<10?Math.atan2(ground(h,...h.basket)+1-ground(h,...p.lie)-1.5,Math.max(.1,dist))*180/Math.PI:12;
+  aim={pitch:clamp(pitch,-65,50),angle:Math.atan2(h.basket[0]-p.lie[0],h.basket[1]-p.lie[1]),disc:1,power:dist<10?clamp(.22+dist*.085,.25,1):.65,curve:0};
+  view={yaw:aim.angle,pitch:-5};
+  drag=aimDrag=null;mapOpen=false;askDraw();
 }
 function newRound(){online=false;round=fresh();flight=null;resetAim();showPlay();keepRound();}
 function resumeRound(){const r=load('kierros',null);if(!validSaved(r))return;online=false;round=r;flight=null;resetAim();if(round.phase==='hole')showCard();else showPlay();}
@@ -37,18 +43,26 @@ function keepRound(){if(!round||online||round.phase==='end')return;
   if(round.phase==='fly')return;
   save('kierros',round);
 }
-function menu(){keepRound();round=null;online=false;flight=preview=drag=aimDrag=null;mapOpen=false;
+function menu(){keepRound();round=null;online=false;flight=drag=aimDrag=null;mapOpen=false;
   $('menu').hidden=false;$('game').hidden=true;$('card').hidden=true;
   $('resume').hidden=!validSaved(load('kierros',null));
   const best=load('ennatys',null);$('best').textContent=best===null?'Ensimmäinen kierros odottaa':'Ennätys: '+relative(best)+' · '+(best+COURSE_PAR)+' heittoa';
-  if(scene3d)buildHole(0);dirty=true;askDraw();
+  if(scene3d)buildHole(0);askDraw();
 }
 function startShot(input){
   if(!round||round.phase!=='aim')return false;
   if(!Number.isFinite(input.angle)||!Number.isFinite(input.power)||!Number.isFinite(input.curve)||!Number.isInteger(input.disc)||input.disc<0||input.disc>2||input.power<.015||input.power>1||Math.abs(input.curve)>1)return false;
-  keepRound();round.shot={angle:input.angle,power:input.power,curve:input.curve,disc:input.disc,lie:current().lie.slice(),seed:12345+round.seq*7919};
+  // A swipe throw carries its release point and velocity; a guest's message is checked before use.
+  const numbers=(a,n,max)=>Array.isArray(a)&&a.length===n&&a.every(x=>Number.isFinite(x)&&Math.abs(x)<=max);
+  const lie=current().lie,h=HOLES[round.hole];
+  const swipe=numbers(input.velocity,3,40)&&Math.hypot(...input.velocity)<=40&&numbers(input.origin,3,1e4)
+    &&Math.hypot(input.origin[0]-lie[0],input.origin[2]-lie[1])<=3&&Math.abs(input.origin[1]-ground(h,...lie)-1.5)<=3;
+  const rotation=numbers(input.releaseRotation,4,1.01)?input.releaseRotation.slice():undefined;
+  keepRound();round.shot={pitch:clamp(Number.isFinite(input.pitch)?input.pitch:12,-65,50),angle:input.angle,power:input.power,curve:input.curve,disc:input.disc,lie:lie.slice(),seed:12345+round.seq*7919,
+    origin:swipe?input.origin.slice():undefined,velocity:swipe?input.velocity.slice():undefined,
+    releaseScale:Number.isFinite(input.releaseScale)?clamp(input.releaseScale,.2,5):undefined,releaseRotation:rotation};
   round.phase='fly';round.time=0;round.seq++;round.notice='';current().strokes++;
-  flight=fly(round.shot,HOLES[round.hole]);preview=null;drag=aimDrag=null;mapOpen=false;
+  flight=fly(round.shot,HOLES[round.hole]);drag=aimDrag=null;mapOpen=false;
   sound('suhahdus');renderUI();askDraw();if(online)sendState();return true;
 }
 function nextThrower(){
@@ -88,19 +102,18 @@ function finishRecord(){
   const total=p.scores.reduce((a,b)=>a+b,0)-COURSE_PAR,best=load('ennatys',null);
   save('ennatys',best===null?total:Math.min(best,total));save('kierroksia',load('kierroksia',0)+1);
   if(!online)save('kierros',null);
-  // A saved round begun under v1/v2 rules stays a personal result, never a v3 leaderboard entry.
-  askName=round.rules===3&&window.AiPelitScores?.submit(total,true)===true;
+  // A saved round begun before the swipe throw (rules 1-3) stays a personal result, never a v5 list entry.
+  askName=round.rules===5&&window.AiPelitScores?.submit(total,true)===true;
 }
 function step(dt){
   if(!round||round.phase!=='fly'||document.hidden||(online&&R.paused))return;
   round.time+=Math.max(0,Math.min(dt,.05));
   if(flight&&round.time>=flight.duration){if(!online||R.isHost)settleShot();else round.time=flight.duration;}
-  dirty=true;
 }
 function askDraw(){if(!frame&&!document.hidden)frame=requestAnimationFrame(tick);}
-function tick(t){frame=0;const dt=lastFrame?Math.min((t-lastFrame)/1000,.05):0;lastFrame=t;step(dt);
-  if(scene3d){drawScene(dt);dirty=false;}
+function tick(t){frame=0;if(drag?.type==='swipe'&&performance.now()-drag.lastMoved>160&&aim.power>0){aim.power=0;askDraw();renderPull();}const dt=lastFrame?Math.min((t-lastFrame)/1000,.05):0;lastFrame=t;step(dt);
+  if(scene3d)drawScene(dt);
   if(round?.phase==='fly'||drag||scene3d?.moving)askDraw();
 }
-document.addEventListener('visibilitychange',()=>{drag=aimDrag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;refreshPreview();}});
+document.addEventListener('visibilitychange',()=>{drag=aimDrag=null;if(document.hidden){keepRound();if(frame)cancelAnimationFrame(frame);frame=0;}else{lastFrame=0;askDraw();}});
 window.addEventListener('pagehide',keepRound);

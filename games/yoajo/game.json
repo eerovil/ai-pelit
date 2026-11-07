@@ -78,6 +78,20 @@
       "note": "Levähdysalueelta pääsee ajamaan eteenpäin takaisin tielle, eikä takaa tuleva traktori tai auto enää jää odottamaan pysäköidyn auton taakse.",
       "request": "Yö ajo. Kahvitauolta lähtiessä voisi saada liikkua myös eteenpäin. Jos juuri vierellä on traktori niin ei pääse liikkeelle",
       "issue": "eerovil/ai-pelit#377"
+    },
+    {
+      "n": 12,
+      "date": "2026-11-07",
+      "note": "Tiellä on poliisiautoja: ne pysäyttävät ja sakottavat 10–19 km/h ylinopeudesta tai häikäisystä, ja hurjastelu, vaarallinen ohitus tai sulkuviivan ylitys poliisin nähden päättää osuuden; osuudelta 3 alkaen tiellä on myös puhalluskoe.",
+      "request": "Autopeliin lisää. Tuleeko ideoita",
+      "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 13,
+      "date": "2026-11-08",
+      "note": "Tiellä on uusia tilanteita: tietyö liikennevaloineen, sumu notkoissa, rikkinäinen auto varoituskolmioineen, ambulanssi takana, erikoiskuljetus vastaan, aura-auto ja musta jää.",
+      "request": "Autopeliin lisää. Tuleeko ideoita",
+      "issue": "eerovil/ai-pelit#440"
     }
   ]
 }
