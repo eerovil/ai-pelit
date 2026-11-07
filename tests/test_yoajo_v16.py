@@ -1,4 +1,5 @@
-"""Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
+"""Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
+Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
 service station, and the whole trip's totals ("Koko matka").
 Yöajo v13 (#440): roadworks with a light, fog, a broken-down car, an ambulance, a wide load, a
 snowplough and black ice, and a crash screen tall enough for its hint.
@@ -1108,7 +1109,7 @@ def test_reindeer_herds_cross_one_after_another_and_stand_longer(site, context):
 
 MENU = """(sel0) => { HOLD = true; maxLeg = 11; sel = sel0; preview(sel0); btns = []; draw();
   const rows = btns.filter(b => b.id.startsWith('osa-')), ohj = btns.find(b => b.id === 'ohjaus'), mat = btns.find(b => b.id === 'matka');
-  return { rows: rows.map(b => [b.id, b.y, b.h]), ids: btns.map(b => b.id), bottom: Math.max(...btns.filter(b => !['ohjaus', 'matka', 'aja'].includes(b.id)).map(b => b.y + b.h)),
+  return { rows: rows.map(b => [b.id, b.y, b.h]), ids: btns.map(b => b.id), bottom: Math.max(...btns.filter(b => !['ohjaus', 'matka', 'aja', 'loputon'].includes(b.id)).map(b => b.y + b.h)),
     ohj: ohj && [ohj.x, ohj.y, ohj.w], mat: mat && [mat.x, mat.y, mat.w], W, H }; }"""
 
 
@@ -1201,3 +1202,148 @@ def test_a_leg_left_by_the_back_chip_still_counts_on_the_trip_once(site, context
     t = page.evaluate("() => tripStats()")
     assert round(t["km"], 3) == 2.0 and t["poliisi"] == 1 and t["sakot"] == 1 and t["elaimet"] == 3 and t["osuudet"] == 0, t
     assert page.errors == []
+
+
+# ---- v16: the endless night ----
+
+# The careful driver on the endless night: the run from its first stage until it reaches stage
+# `stages` + 1 or ends.
+ENDLESS_BOT = BOT.replace("""(legs) => { maxLeg = 11; const out = [];
+  for (const n of legs) { newLeg(n); HOLD = true;""", """([stages, seed]) => { driven = 1; const out = [];
+  { startEndless(seed); HOLD = true; const n = 0;""").replace(
+    "i < 60 * 600 && mode === 'drive'", "i < 60 * 3000 && mode === 'drive' && endless.k <= stages").replace(
+    "out.push({ n, mode,", "out.push({ k: endless.k, why: crashWhy, km: endlessMetres() / 1000, fuel: P.fuel, tired: P.tired, mode,").replace(
+    # Waiting at the roadworks' red in its own lane, not creeping into the open lane before green
+    # (a stage may start just before the works, where the legs never put them).
+    "if (w && P.s > w.stop - 8 && P.s < w.s1 + 4) want = -LANE;", "if (w && P.s > w.stop - 8 && P.s < w.s1 + 4 && !(wait && wd > -2)) want = -LANE;")
+assert ENDLESS_BOT != BOT and "startEndless" in ENDLESS_BOT and "endless.k <= stages" in ENDLESS_BOT
+
+
+def test_the_endless_night_opens_once_leg_1_is_driven(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { driven = 0; btns = []; draw(); const lo = btns.find(b => b.id === 'loputon');
+      act(lo); const a = { locked: lo.locked, mode, endless };
+      driven = 1; btns = []; draw(); const lo2 = btns.find(b => b.id === 'loputon');
+      const boards = []; AiPelitScores.board = (id, label) => boards.push([id, label]);
+      act(lo2); return { a, locked: lo2.locked, mode, k: endless && endless.k, stage: leg.endless, fuel: P.fuel, boards, from: leg.from, to: leg.to }; }""")
+    assert r["a"] == {"locked": True, "mode": "menu", "endless": None}, r
+    assert r["locked"] is False and r["mode"] == "drive" and r["k"] == 1 and r["stage"] is True and r["fuel"] == 1, r
+    assert r["boards"] == [["loputon", "Loputon yö"]] and r["from"] != r["to"], r
+    assert page.errors == []
+
+
+def test_each_stage_is_a_little_harder_and_a_station_comes_every_other_stage(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { endless = { k: 1, seed: 1234, back: 1, m: 0, paid: 0, fade: 0, over: null };
+      const out = [];
+      for (let k = 1; k <= 14; k++) { endless.k = k; newLeg(); out.push({ k, len: leg.len, oncoming: leg.oncoming, trucks: leg.trucks, moose: leg.moose,
+        police: leg.police, turns: leg.turns, weather: leg.weather, stations: road.bays.filter(b => b.station).length,
+        realTurns: road.turns.length, cops: things.length >= 0 ? events.filter(e => e.kind === 'partio' || e.kind === 'poliisi').length : 0,
+        from: leg.from, to: leg.to }); }
+      endless = null; return out; }""")
+    a, b = r[0], r[1]
+    assert b["oncoming"] > a["oncoming"] and b["trucks"] > a["trucks"] and b["moose"] > a["moose"], (a, b)
+    assert a["weather"] == "kuiva" and b["weather"] == "sade", (a, b)
+    for key in ("oncoming", "trucks", "moose", "police", "turns", "len"):
+        vals = [x[key] for x in r]
+        assert vals == sorted(vals) and vals[-1] > vals[0], (key, vals)
+    # A station on the even stages only; each stage starts where the last one ended, no place twice.
+    assert [x["stations"] for x in r] == [k % 2 == 0 and 1 or 0 for k in range(1, 15)], r
+    assert all(r[i]["from"] == r[i - 1]["to"] for i in range(1, len(r))), r
+    assert len({x["to"] for x in r}) == len(r), r
+    assert all(x["realTurns"] >= 1 for x in r), r
+    assert all(2800 <= x["len"] <= 3900 for x in r), r
+    assert page.errors == []
+
+
+def test_the_next_stage_keeps_the_speed_tank_alertness_and_points_behind_a_fade(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; driven = 1; startEndless(977); things = []; events = []; road.cams = []; road.checks = []; road.holes = []; road.broken = []; road.works = []; road.rail = [];
+      const len1 = leg.len, to1 = leg.to; P.s = leg.len - 0.2; P.v = 25; P.fuel = 0.6; P.tired = 0.3; P.high = true; points = 345; endless.paid = 3;
+      step(1 / 60);
+      const a = { k: endless.k, s: P.s, v: P.v, fuel: P.fuel, tired: P.tired, high: P.high, points, fade: endless.fade, msgs: msgs.map(m => m.text), from: leg.from, to1, mode,
+        km: endlessMetres() };
+      btns = []; draw();
+      for (let i = 0; i < 80; i++) { P.v = 25; step(1 / 60); }
+      return { a, len1, fade: endless.fade, mode, seen: msgs.map(m => m.text) }; }""")
+    a = r["a"]
+    assert a["k"] == 2 and a["mode"] == "drive" and a["s"] < 10 and a["from"] == a["to1"], r
+    assert abs(a["v"] - 25) < 0.5 and abs(a["fuel"] - 0.6) < 0.01 and abs(a["tired"] - 0.3) < 0.01 and a["high"] is True, r
+    assert a["points"] == 345 and a["fade"] > 0.9, r
+    assert f"Etappi 2 · {r['len1'] // 1000} km" in a["msgs"], r
+    assert r["fade"] == 0 and r["mode"] == "drive", r
+    assert page.errors == []
+
+
+def test_the_run_scores_20_a_km_and_its_end_goes_to_the_loputon_list(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; driven = 1; localStorage.removeItem('ai-pelit:yoajo:loputon');
+      const sent = []; AiPelitScores.submit = p => sent.push(p);
+      startEndless(977); road.turns = []; things = []; events = []; road.cams = []; road.checks = []; road.holes = []; road.broken = []; road.works = []; road.rail = [];
+      const seen = [];
+      for (let i = 0; i < 60 * 200 && P.s < 2100; i++) { P.v = 13; P.lat = LANE; P.vl = 0; step(1 / 60); for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text); }
+      const a = { points, msgs: seen };
+      crash('Ajoit ojaan.');
+      const b = { mode, sent: sent.slice(), best: load('loputon'), over: endless.over };
+      btns = []; draw(); const ids = btns.map(x => x.id);
+      act({ id: 'uudelleen' }); const c = { mode, k: endless.k, points, s: P.s };
+      points = 5; crash('Ajoit ojaan.');
+      const d = { sent: sent.slice(), best: load('loputon'), record: endless.over.record };
+      act({ id: 'valikko' });
+      return { a, b, ids, c, d, after: { mode, endless, level, board: leg.endless } }; }""")
+    assert r["a"]["points"] == 40 and "2 km +20" in r["a"]["msgs"], r
+    b = r["b"]
+    assert b["mode"] == "crash" and b["sent"] == [40] and b["best"]["p"] == 40 and b["best"]["k"] == 1 and 2.0 <= b["best"]["km"] <= 2.2, r
+    assert b["over"]["record"] is True, r
+    assert r["ids"] == ["uudelleen", "valikko"], r
+    assert r["c"] == {"mode": "drive", "k": 1, "points": 0, "s": 6}, r
+    # A worse run is sent too, but the best stays.
+    assert r["d"]["sent"] == [40, 5] and r["d"]["best"]["p"] == 40 and r["d"]["record"] is False, r
+    assert r["after"]["mode"] == "menu" and r["after"]["endless"] is None and r["after"]["board"] is not True, r
+    assert page.errors == []
+
+
+def test_an_empty_tank_and_a_missed_turn_end_the_run(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; driven = 1; startEndless(977); road.turns = []; things = []; events = []; road.cams = []; road.checks = []; road.holes = []; road.broken = []; road.works = []; road.rail = [];
+      P.s = 500; P.fuel = 0.002; let seen = [];
+      for (let i = 0; i < 60 * 60 && mode === 'drive'; i++) { if (!P.dry) P.v = 13; P.lat = LANE; P.vl = 0; step(1 / 60);
+        for (const m of msgs) if (!seen.includes(m.text)) seen.push(m.text); }
+      return { mode, why: crashWhy, seen, over: !!endless.over }; }""")
+    assert r["mode"] == "crash" and r["why"] == "Polttoaine loppui." and r["over"], r
+    assert "Tankki vähissä: huoltoasema seuraavalla etapilla" in r["seen"], r
+    r = page.evaluate("""() => { HOLD = true; startEndless(977); things = []; events = []; road.cams = []; road.checks = []; road.holes = []; road.broken = []; road.works = []; road.rail = []; const J = road.turns[0];
+      P.s = J.a0 - 150; for (let i = 0; i < 60 * 40 && mode === 'drive'; i++) { P.v = 14; P.lat = LANE; P.vl = 0; input.left = input.right = false; step(1 / 60); }
+      return { mode, why: crashWhy, over: !!endless.over }; }""")
+    assert r["mode"] == "crash" and r["why"].startswith("Väärä tie") and r["over"], r
+    assert page.errors == []
+
+
+def test_the_careful_driver_gets_through_four_stages_filling_up_on_the_way(site, context):
+    page = open_game(site, context)
+    # A fixed run (seed 977): on random runs the bot sometimes misses a tractor behind a walker or
+    # cuts in too soon after an overtake, as it would on the legs with other seeds.
+    r = page.evaluate(ENDLESS_BOT, [4, 977])[0]
+    assert r["mode"] == "drive" and r["k"] == 5, r
+    # 12.8 km on a tank that lasts 12 km at 80: it filled up, and had coffee there.
+    assert r["km"] > 12.5 and r["fuel"] > 0.5 and r["tired"] < 0.4 and r["tally"]["hurjastelu"] == 0, r
+    assert page.errors == []
+
+
+def test_the_menu_and_the_end_screen_fit_at_every_size(site, context):
+    for w, h in ((360, 740), (360, 640), (390, 844), (740, 360)):
+        page = open_game(site, context)
+        page.set_viewport_size({"width": w, "height": h})
+        page.wait_for_function(f"W === {w} && H === {h}")
+        r = page.evaluate("""() => { driven = 1; btns = []; draw(); const box = id => { const b = btns.find(x => x.id === id); return b && [b.x, b.y, b.w, b.h]; };
+          const m = { aja: box('aja'), lo: box('loputon'), ohj: box('ohjaus'), W, H };
+          startEndless(); crash('Ajoit ojaan.'); btns = []; draw();
+          return { m, end: btns.map(b => [b.id, b.x, b.y, b.w, b.h]) }; }""")
+        m = r["m"]
+        assert m["aja"][0] + m["aja"][2] < m["lo"][0] and m["lo"][0] + m["lo"][2] <= m["W"] and m["lo"][1] + m["lo"][3] <= m["H"], (w, h, r)
+        assert m["lo"][1] > m["ohj"][1] + m["ohj"][3] or m["lo"][0] > m["ohj"][0] + m["ohj"][2], (w, h, r)
+        ids = [e[0] for e in r["end"]]
+        assert ids == ["uudelleen", "valikko"], (w, h, r)
+        assert all(0 <= e[1] and e[1] + e[3] <= w and 0 <= e[2] and e[2] + e[4] <= h for e in r["end"]), (w, h, r)
+        assert page.errors == []
+        page.close()

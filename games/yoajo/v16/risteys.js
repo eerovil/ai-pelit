@@ -29,9 +29,10 @@ const STRAIGHT_ON = ['Lahti', 'Heinola', 'Mikkeli', 'Jämsä', 'Viitasaari', 'Ko
 // ---- Placing the turns (from newLeg, right after makeRoad) ----
 // Each turn bends the road itself: TURN_BEFORE metres made straight, the bend, TURN_AFTER metres
 // straight, and the road beyond as it was. Then the road is laid out again from its bends.
+// v16: a stage of the endless night says how many turns it has (leg.turns).
 function turnLeg() {
   road.turns = [];
-  const r = rng(leg.seed * 23 + 9), n = TURNS[level - 1] || 0, kind = level <= 2 ? 'ramppi' : 'risteys', span = (leg.len - 1300) / Math.max(1, n);
+  const r = rng(leg.seed * 23 + 9), n = leg.turns != null ? leg.turns : TURNS[level - 1] || 0, kind = level <= 2 ? 'ramppi' : 'risteys', span = (leg.len - 1300) / Math.max(1, n);
   for (let k = 0; k < n; k++) {
     const a0 = Math.round((750 + span * (k + 0.4 + r() * 0.2)) / SEG) * SEG, { R, angle } = TURN_KIND[kind];
     // A ramp leaves to the right; a crossroads turns back towards where the trip heads, else by turns.
