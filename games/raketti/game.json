@@ -1,0 +1,5 @@
+{
+  "title": "Raketti",
+  "description": "Laukaise kaksivaiheinen raketti, lennä kiertoradalle ja telakoidu avaruusasemaan. Realistinen 2D-lento ilman autopilottia.",
+  "versions": [{"n": 1, "date": "2026-11-07", "note": "Ensimmäinen versio: käsin ohjattu laukaisu, kiertoratalento ja telakointi sekä harjoitukset.", "request": "Avaruus raketti peli. Liftoff, orbit, docking. Mahdollisimman realistinen. 2d. No autopilot. Approved spec: Earth launch to low orbit and docking, manual touch controls, real-duration launch, coasting time acceleration and resumable saves.", "issue": "eerovil/ai-pelit#435"}]
+}
