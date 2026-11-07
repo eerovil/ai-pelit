@@ -6,7 +6,7 @@ import pytest
 from conftest import ROOT, turn, GPU_ARGS
 from test_rooms_lib import Relay
 
-URL = 'games/frisbeegolf/v3/'
+URL = 'games/frisbeegolf/v4/'
 PLAN = """() => {
  window.finishFlight=()=>{for(let i=0;i<1500&&round.phase==='fly';i++)step(.05);};
  window.planThrow=()=>{
@@ -154,7 +154,7 @@ def test_flight_catches_determinism_ghost_and_hazards(site, browser):
           const vertices=scene3d.ghost.geometry.getAttribute('position');
           return {fraction:preview.duration/full.duration,error:Math.hypot(end.x-want.x,end.y-want.y,end.z-want.z),
             lastTime:end.t,limit:preview.duration,marker:!!scene3d.endRing,
-            drawn:[vertices.getX(vertices.count-1),vertices.getY(vertices.count-1),vertices.getZ(vertices.count-1)],
+            drawn:[(vertices.getX(vertices.count-2)+vertices.getX(vertices.count-1))/2,vertices.getY(vertices.count-1),(vertices.getZ(vertices.count-2)+vertices.getZ(vertices.count-1))/2],
             expected:[want.x,want.y+.02,want.z],landingExposed:'lie' in preview};
         }""", disc)
         assert result['fraction'] == pytest.approx(1/3)
@@ -162,6 +162,46 @@ def test_flight_catches_determinism_ghost_and_hazards(site, browser):
         assert result['lastTime'] == result['limit']
         assert result['drawn'] == pytest.approx(result['expected'], abs=1e-5)
         assert not result['marker'] and not result['landingExposed']
+    assert not p.errors
+    ctx.close()
+
+
+@pytest.mark.parametrize('on_map', [False, True])
+def test_preview_shadow_tracks_terrain_and_hides_after_release(site, browser, on_map):
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    if on_map:
+        p.click('#map')
+    for hole in [0, 5, 7]:
+        result = p.evaluate("""hole => {
+          round.hole=hole;current().lie=[0,0];resetAim();
+          aim.power=.85;aim.curve=-.6;mapOpen=MAP_OPEN;refreshPreview();drawScene(0);
+          scene3d.renderer.shadowMap.enabled=false;drawScene(0);
+          const v=scene3d,h=HOLES[hole],a=v.ghostShadow.geometry.attributes.position;
+          const path=preview.path.filter((_,i,a)=>i%3===0||i===a.length-1);
+          let error=0;
+          for(let i=0;i<path.length;i++){
+            const q=path[i];error=Math.max(error,
+              Math.abs((a.getX(i*2)+a.getX(i*2+1))/2-q.x),
+              Math.abs((a.getZ(i*2)+a.getZ(i*2+1))/2-q.z),
+              Math.abs(a.getY(i*2)-ground(h,q.x,q.z)-.07));
+          }
+          return {error,count:a.count,expected:path.length*2,
+            visible:v.ghost.visible&&v.ghostShadow.visible&&v.ghostDrops.visible,
+            raised:preview.path.some(q=>q.y-ground(h,q.x,q.z)>.8)};
+        }""".replace('MAP_OPEN', 'true' if on_map else 'false'), hole)
+        assert result['error'] < 1e-5
+        assert result['count'] == result['expected']
+        assert result['visible'] and result['raised']
+    before = p.evaluate('Array.from(scene3d.ghostShadow.geometry.attributes.position.array)')
+    p.evaluate('aim.curve=.6;refreshPreview();drawScene(0)')
+    assert p.evaluate('Array.from(scene3d.ghostShadow.geometry.attributes.position.array)') != before
+    p.evaluate('startShot(aim);drawScene(0)')
+    assert p.evaluate('!scene3d.ghost.visible&&!scene3d.ghostShadow.visible&&!scene3d.ghostDrops.visible')
+    p.evaluate('finishFlight();drawScene(0)')
+    assert p.evaluate('scene3d.ghostShadow.visible')
+    p.evaluate('menu();drawScene(0)')
+    assert not p.evaluate('scene3d.ghostShadow.visible')
     assert not p.errors
     ctx.close()
 
