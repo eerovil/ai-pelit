@@ -108,16 +108,20 @@ def test_docking_practice_can_be_completed_twice_with_controls(site, context):
     assert page.errors == []
 
 
-def test_free_orbit_conserves_energy_and_period(site, context):
+@pytest.mark.parametrize('start_delay', [0, .02])
+def test_free_orbit_conserves_energy_and_period(site, context, start_delay):
     page = open_game(site, context)
     start(page, 'practice-orbit')
+    # A rendered frame may have advanced the orbit before the test cancels RAF.
+    page.evaluate('delay => step(delay)', start_delay)
     result = page.evaluate("""() => {
-      const initial=orbit(),energy0=ship.vx**2/2-MU/initial.r;
+      const initial=orbit(),x0=ship.x,y0=ship.y;
+      const energy0=(ship.vx**2+ship.vy**2)/2-MU/initial.r;
       const period=TAU*Math.sqrt(initial.r**3/MU);
       held.turn=held.forward=held.side=0;
       step(period);
       const o=orbit(),energy=(ship.vx**2+ship.vy**2)/2-MU/o.r;
-      return {drift:Math.abs(o.r-initial.r),position:Math.hypot(ship.x,ship.y-initial.r),
+      return {drift:Math.abs(o.r-initial.r),position:Math.hypot(ship.x-x0,ship.y-y0),
         energy:Math.abs((energy-energy0)/energy0),phase:ship.phase};
     }""")
     assert result['phase'] == 'flight'
