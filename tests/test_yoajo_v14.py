@@ -957,3 +957,24 @@ def test_a_restart_in_a_bend_or_on_the_wrong_road_starts_the_leg_with_its_turns_
     r = page.evaluate(TURN, [5, "", 0, False, PAST_TURNS, "null"])
     assert r["mode"] == "drive" and not r["wrong"] and all(J["done"] for J in r["turns"]), r
     assert page.errors == []
+
+
+def test_the_crossing_car_once_through_the_junction_is_an_oncoming_car_on_the_players_road(site, context):
+    r = open_game(site, context).evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(5); things = []; events = [];
+      road.cams = []; road.checks = [];
+      const J = road.turns.find(J => J.dir < 0 && J.kind === 'risteys');
+      P.s = J.a0 - 60; P.v = 0; P.lat = LANE; P.vl = 0;
+      const t = add('risteava', { s: J.a0 + 40, lat: -LANE, v: -ARM_V, arm: J, colour: 1, high: false, passed: true });
+      let through = null;
+      for (let i = 0; i < 60 * 20 && mode === 'drive'; i++) {
+        P.tired = 0; input.left = input.right = false; input.gas = 0; input.brake = 1; P.lat = LANE; P.vl = 0;
+        step(1 / 60);
+        if (t.kind === 'vastaan' && !through) { through = { arm: t.arm, s: t.s - J.a0, lat: t.lat }; break; }
+      }
+      const drawnOn = through && things.includes(t) ? 'road' : null;
+      // Now the player swerves into its lane: that is a crash, not a pass through it.
+      for (let i = 0; i < 60 * 10 && mode === 'drive'; i++) { P.tired = 0; input.brake = 1; P.lat = -LANE; P.vl = 0; step(1 / 60); }
+      return { through, drawnOn, mode, why: crashWhy, gap: Math.round(t.s - P.s) }; }""")
+    assert r["through"] and r["through"]["arm"] is None and r["through"]["s"] < -1, r
+    assert r["drawnOn"] == "road", r
+    assert r["mode"] == "crash" and r["why"] != "Väärä tie: ajoit ohi käännöksen.", r

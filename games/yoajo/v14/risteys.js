@@ -182,7 +182,8 @@ function crosser(t, dt) {
   if ((inside || t.yieldT > 0) && along > J.C + 6) v = Math.min(v, Math.sqrt(2 * 5 * Math.max(0, along - J.C - 10)));
   t.v += clamp(-v - t.v, -2.5 * dt, 6 * dt);
   t.s += t.v * dt;
-  if (t.s < J.a0 - 2) { t.kind = 'vastaan'; t.habit = 0; t.base = cruise(t); }
+  // Past the crossing it is on the player's road: no longer on the arm, so it is hit and drawn there.
+  if (t.s < J.a0 - 2) { t.kind = 'vastaan'; t.arm = null; t.habit = 0; t.base = cruise(t); }
 }
 // What the screen shows for the next turn: { dir, d, to } from SIGN_FAR metres before, or null.
 function turnHint() {
