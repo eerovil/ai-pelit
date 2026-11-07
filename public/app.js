@@ -659,10 +659,16 @@
   window.addEventListener('pointercancel', nameRelease, true);
   // Invites as phone notifications (#367): the switch, its state read once per visit to the page.
   var pushNow = null, pushError = '', pushBusy = false;
+  // An answer about the switch redraws only its own row (#443): redrawing the whole page swapped the
+  // nickname form under a finger about to tap "Tallenna", and took the focus from a nickname being typed.
+  function drawPushRow() {
+    var row = location.hash === '#/kaverit' && view.querySelector('.push-row');
+    if (row) row.replaceWith(pushRow());
+  }
   function pushRow() {
     if (pushNow === null) {
       pushNow = 'wait';
-      friends.push.state().then(function (st) { pushNow = st; if (location.hash === '#/kaverit') renderFriends(); });
+      friends.push.state().then(function (st) { pushNow = st; drawPushRow(); });
     }
     var on = pushNow === 'on', can = pushNow === 'on' || pushNow === 'off';
     var sw = el('button', { type: 'button', role: 'switch', class: 'push-switch' + (on ? ' on' : ''), 'aria-checked': on ? 'true' : 'false',
@@ -670,10 +676,10 @@
     sw.disabled = pushBusy || !can;
     sw.addEventListener('click', function () {
       pushBusy = true; pushError = '';
-      renderFriends();
+      drawPushRow();
       friends.push.set(!on).then(function (r) {
         pushBusy = false; pushNow = r.state; pushError = r.error;
-        if (location.hash === '#/kaverit') renderFriends();
+        drawPushRow();
       });
     });
     var problem = pushError || friends.push.note(pushNow);

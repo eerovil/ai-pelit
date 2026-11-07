@@ -63,7 +63,11 @@ function carMesh(colour, mine) {
     const b = sprite(mats.glowR, mine ? 0.55 : 0.75); b.position.set(x, 0.72, 2.3); g.add(b); r.push(b);
   }
   g.userData = { front: f, rear: r };
-  if (mine) f.forEach(s => s.visible = false);   // the player's own beam is the spot light
+  if (mine) {
+    f.forEach(s => s.visible = false);   // the player's own beam is the spot light
+    // v14 (#440): the blinkers, front and back at each corner, orange: [left, right].
+    g.userData.blink = [-1, 1].map(side => [-2.3, 2.3].map(z => { const o = sprite(V3.mats.glowO, 0.8); o.position.set(side * 0.86, 0.72, z); o.visible = false; g.add(o); return o; }));
+  }
   return g;
 }
 function truckMesh() {
@@ -295,6 +299,8 @@ function buildWorld() {
   V3.fogBase = { far: V3.scene.fog.far, colour: new THREE.Color(sky) };
   V3.moon.intensity = snowy ? 1.1 : 0.55;
   w.add(groundMesh(snowy, wet));
+  // v14 (#440): the road straight on at each turn, and a crossroads' crossing road.
+  for (const J of road.turns || []) for (const a of J.arms) w.add(armMesh(J, a, snowy, wet, wx === 'pyry'));
   // v8: in a blizzard too, where only the junctions' no-overtaking lines show (v1–v7: no lines at all).
   w.add(markings(snowy, wx === 'pyry'));
   w.add(trees(snowy));
@@ -320,9 +326,122 @@ function buildWorld() {
   V3.works = road.works.map(worksMesh); V3.works.forEach(m => w.add(m));
   V3.triangles = road.broken.map(triangleMesh); V3.triangles.forEach(m => w.add(m));
   for (const x of road.ice) w.add(iceMesh(x));
+  // v14: the level crossings.
+  V3.rails = road.rail.map(railMesh); V3.rails.forEach(m => w.add(m));
   w.add(townLights());
   if (wx !== 'kuiva') w.add(V3.weather = weatherMesh(wx));
   else { V3.weather = null; w.add(starField()); }
+}
+
+// v14 (#440): the roads at a turn (risteys.js). A road from one end of a drawn line to the other:
+// asphalt, gravel shoulders, edge lines and a dashed yellow middle, left out where it lies on the
+// route itself.
+function armMesh(J, [x0, z0, x1, z1], snowy, wet, buried) {
+  const pos = [], col = [], C = hex => new THREE.Color(hex), len = Math.hypot(x1 - x0, z1 - z0);
+  const fx = (x1 - x0) / len, fz = (z1 - z0) / len, rx = -fz, rz = fx, y = J.y;
+  const asphalt = C(snowy ? '#7c838d' : wet ? '#1b1c1f' : '#2c2d30'), gravel = C(snowy ? '#b9c2cc' : '#4a443b'), white = C('#e8e8e2'), yellow = C('#e7b723');
+  const quad = (a0, a1, l0, l1, up, c) => {
+    const P4 = [[a0, l0], [a0, l1], [a1, l0], [a1, l1]].map(([a, l]) => [x0 + fx * a + rx * l, y + up, z0 + fz * a + rz * l]);
+    pos.push(...P4[0], ...P4[1], ...P4[2], ...P4[1], ...P4[3], ...P4[2]);   // facing up
+    for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b);
+  };
+  for (let a = 0; a < len; a += 4) {
+    const b = Math.min(len, a + 4), mx = x0 + fx * (a + 2), mz = z0 + fz * (a + 2);
+    const onRoute = routeNear(mx, mz, null, 3.2);
+    quad(a, b, -EDGE - 1.1, EDGE + 1.1, -0.01, gravel);
+    quad(a, b, -EDGE, EDGE, 0.02, asphalt);
+    if (onRoute || buried) continue;
+    if (!snowy) for (const l of [-EDGE + 0.1, EDGE - 0.1]) quad(a, b, l - 0.06, l + 0.06, 0.05, white);
+    if (!snowy && a % 12 < 4) quad(a, a + 3, -0.06, 0.06, 0.05, yellow);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+}
+// Whether a point is within d metres of the route's middle, away from route place s (null: anywhere
+// near a turn). Only near turns, where the route comes round.
+function routeNear(x, z, s, d) {
+  for (const J of road.turns || []) {
+    if (s !== null && (s < J.a0 - 260 || s > J.a1 + 260)) continue;
+    for (let q = J.a0 - 200; q <= J.a1 + 200; q += 2) {
+      if (s !== null && Math.abs(q - s) < 30) continue;
+      const p = worldAt(q, 0); if (Math.hypot(p[0] - x, p[2] - z) < d + EDGE) return true;
+    }
+  }
+  return false;
+}
+// The flat field round a turn: { y, w } (w = 1 within 24 m of its roads, none past 44), or null.
+function turnFlat(x, z) {
+  for (const J of road.turns || []) {
+    if (Math.hypot(x - J.x, z - J.z) > ARM_LEN + 120) continue;
+    const d = armDist(x, z);
+    if (d < 44) return { y: J.y, w: clamp((44 - d) / 20, 0, 1) };
+  }
+  return null;
+}
+// A ground column at a turn: on the inside of its bend no wider than its radius (else the rows fold
+// over the middle), widening again with the distance from the bend.
+function turnCol(s, lat) {
+  for (const J of road.turns || []) {
+    const d = s < J.a0 ? J.a0 - s : s > J.a1 ? s - J.a1 : 0;
+    if (d < 80 && lat * J.dir > 0) return Math.sign(lat) * Math.min(Math.abs(lat), Math.max(J.R * 0.85, d));
+  }
+  return lat;
+}
+
+// v14: how level the ground is for a railway across the road here, 0..1.
+function railFlat(s) { let w = 0; for (const x of road.rail) w = Math.max(w, clamp((16 - Math.abs(s - x.s)) / 6, 0, 1)); return w; }
+// A level crossing: the railway across the road, St Andrew's crosses with their red lights, a
+// barrier on each side over the lane coming in, and the train. Drawn in the crossing's own frame:
+// x across the road (as lat), z along it (towards the start).
+function railMesh(x) {
+  const g = new THREE.Group(), { geo, mats } = V3, p = worldAt(x.s, 0), far = RAIL_FROM + RAIL_TRAIN_LEN + 20;
+  g.position.set(...p); g.rotation.y = -headingAt(x.s);
+  const steel = new THREE.MeshLambertMaterial({ color: 0x9aa0a8, emissive: 0x15171a }), stone = lam(0x55524c), wood = lam(0x3a2a1c);
+  for (const side of [-1, 1]) g.add(part(geo.box, stone, far - 4.6, 0.3, 3.2, side * (far + 4.6) / 2, -0.05, 0));
+  g.add(part(geo.box, lam(0x25262a), 9.4, 0.06, 2.6, 0, 0.04, 0));
+  for (const z of [-0.72, 0.72]) g.add(part(geo.box, steel, far * 2, 0.12, 0.08, 0, 0.14, z));
+  const n = Math.floor((far - 5) / 0.9) * 2, sl = new THREE.InstancedMesh(geo.box, wood, n), m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(0.24, 0.1, 2.4);
+  let i = 0;
+  for (let a = 5; a < far && i < n; a += 0.9) for (const side of [-1, 1]) if (i < n) m.compose(new THREE.Vector3(side * a, 0.06, 0), q, sc), sl.setMatrixAt(i++, m);
+  g.add(sl);
+  // A cross and a barrier on each side: right of the road before the rails for the player, left of
+  // it past the rails for the oncoming. The barrier turns about its post, up at 1.45 rad.
+  const lamps = [], bars = [], white = new THREE.MeshLambertMaterial({ color: 0xf2f2ee, emissive: 0x202020 }), red = lam(0xd42a1e);
+  for (const side of [1, -1]) {
+    const z = side * 5, cx = side * 5.8, face = side > 0 ? 0 : Math.PI;
+    const cross = new THREE.Group(); cross.position.set(cx, 0, z); cross.rotation.y = face; g.add(cross);
+    cross.add(part(geo.pole, mats.grey, 0.05, 3.0, 0.05, 0, 1.5, 0));
+    for (const r of [0.6, -0.6]) { const b = part(geo.box, side > 0 ? white : white, 1.5, 0.2, 0.04, 0, 2.75, -0.06); b.rotation.z = r; cross.add(b); const e = part(geo.box, red, 1.52, 0.06, 0.05, 0, 2.75, -0.07); e.rotation.z = r; cross.add(e); }
+    for (const lx of [-0.3, 0.3]) { const l = sprite(mats.glowR, 0.9); l.position.set(lx, 2.05, -0.12); l.visible = false; cross.add(l); lamps.push(l); }
+    const piv = new THREE.Group(); piv.position.set(side * 5.0, 1.0, z + side * 0.6); g.add(piv);
+    g.add(part(geo.box, mats.grey, 0.25, 1.1, 0.25, side * 5.0, 0.55, z + side * 0.6));
+    for (let k = 0; k < 4; k++) piv.add(part(geo.box, k % 2 ? red : white, 1.0, 0.1, 0.08, -side * (0.5 + k), 0, 0));
+    const bl = sprite(mats.glowR, 0.4); bl.position.set(-side * 3.8, 0.1, 0); piv.add(bl);
+    piv.userData.side = side; bars.push(piv);
+  }
+  // The train: a locomotive and four cars, RAIL_TRAIN_LEN metres, lit windows, a headlight.
+  const train = new THREE.Group(), carLen = RAIL_TRAIN_LEN / 5, win = new THREE.MeshBasicMaterial({ color: 0xffd98a });
+  for (let k = 0; k < 5; k++) {
+    const c = new THREE.Group(); c.position.x = -(k + 0.5) * carLen;
+    c.add(part(geo.box, lam(k ? 0x3c5a8a : 0xb8262a), carLen - 0.8, 3.4, 3.1, 0, 2.3, 0));
+    c.add(part(geo.box, lam(0x1a1a1a), carLen - 4, 0.6, 2.6, 0, 0.5, 0));
+    if (k) for (const z of [-1.56, 1.56]) c.add(part(geo.box, win, carLen - 3, 0.7, 0.04, 0, 2.8, z));
+    train.add(c);
+  }
+  const head = sprite(mats.glowW, 4); head.position.set(0.3, 2.0, 0); train.add(head);
+  train.visible = false; g.add(train);
+  g.userData = { x, lamps, bars, train };
+  return g;
+}
+// The crossing as it is now (from draw3d).
+function railFrame(g, time) {
+  const { x, lamps, bars, train } = g.userData, b = railBarrier(x), on = (time % 1.1) < 0.55;
+  lamps.forEach((l, i) => { l.visible = x.on && (i % 2 ? on : !on); });
+  bars.forEach(p => { p.rotation.z = -p.userData.side * (1 - b) * 1.45; });
+  const h = railTrain(x);
+  train.visible = h !== null && h < RAIL_FROM + RAIL_TRAIN_LEN;
+  if (train.visible) { train.position.x = x.dir * h; train.rotation.y = x.dir > 0 ? 0 : Math.PI; }
 }
 
 // The ground across the road: the road (slightly crowned), gravel shoulders, ditches, then the
@@ -357,8 +476,14 @@ function groundMesh(snowy, wet) {
   for (let r = 0; r <= rows; r++) {
     const s = r * 4, bay = bayWidth(s), sides = sideRoads(s);
     for (let j = 0; j < n; j++) {
-      const lat = COLS[j], p = worldAt(s, lat), o = (r * n + j) * 3, a = Math.abs(lat);
+      const lat = turnCol(s, COLS[j]), p = worldAt(s, lat), o = (r * n + j) * 3, a = Math.abs(lat);
       p[1] += groundAt(s, lat, bay, sides);
+      // v14: flat fields round a turn, level with the roads that meet there.
+      const fl = turnFlat(p[0], p[2]);
+      if (fl && a > 4.6) p[1] = lerp(p[1], fl.y - 0.12, fl.w);
+      // ...and level along a railway.
+      const rf = railFlat(s);
+      if (rf && a > 4.6) p[1] = lerp(p[1], p[1] - groundAt(s, lat, bay, sides) - 0.12, rf);
       pos[o] = p[0]; pos[o + 1] = p[1]; pos[o + 2] = p[2];
       if (a === 1.75) t.copy(rut);                               // wheel tracks worn darker
       else if (a <= 3.5 || paved(lat, bay, sides)) t.copy(asphalt);
@@ -394,7 +519,9 @@ function markings(snowy, buried) {
   }
   // v8 (#306): no edge line across a side road's mouth or along the rest area's lane; there the
   // lane is parted from the road by a dashed line, and the paving has its own edge line.
-  const open = (s, side) => road.junctions.some(J => Math.abs(s + 6 - J.s) < 9 && (J.side === side || J.both)) || (side > 0 && bayWidth(s + 6) > 0);
+  // v14: none where the road straight on or a crossing road leaves it either.
+  const open = (s, side) => road.junctions.some(J => Math.abs(s + 6 - J.s) < 9 && (J.side === side || J.both)) || (side > 0 && bayWidth(s + 6) > 0) ||
+    ((road.turns || []).some(J => s > J.a0 - 30 && s < J.a1 + 30) && [0, 4, 8, 12].some(d => { const q = worldAt(s + d, side * EDGE); return armDist(q[0], q[2]) < EDGE + 0.6; }));
   const r = rng(5);
   for (let s = 0; s < road.total; s += 12) {
     if (buried) { if (noPass(s + 6) && r() < 0.6) strip(s, s + 12, 0, 0.14, yellow); continue; }
@@ -416,6 +543,10 @@ function markings(snowy, buried) {
   m.userData.markings = true;
   return m;
 }
+// Inside a turn's corner, where the camera looks across while the car turns: open ground (v14).
+function inCorner(x, z) {
+  return road.turns.some(J => { const c = worldAt(J.a0, J.dir * J.R); return Math.hypot(x - c[0], z - c[2]) < J.R + 6; });
+}
 // Spruces, a few thousand, one draw.
 function trees(snowy) {
   const r = rng(9), spots = [];
@@ -425,6 +556,9 @@ function trees(snowy) {
     if (side > 0 && road.bays.some(b => s > b.s0 - 40 && s < b.s1 + 40) && near < 22) continue;
     if (s > road.len - 380 && near < 24) continue;                   // the town at the end
     if (road.junctions.some(J => Math.abs(s - J.s) < 10 && (J.side === side || J.both))) continue;   // a side road (v8)
+    // v14: none on the roads at a turn, nor on the route where it comes back past itself.
+    if (road.rail.some(x => Math.abs(s - x.s) < 9)) continue;   // v14: the railway
+    if (road.turns && road.turns.length) { const q = worldAt(s, side * near); if (armDist(q[0], q[2]) < 10 || routeNear(q[0], q[2], s, 9) || inCorner(q[0], q[2])) continue; }
     spots.push([s, side * near, 0.7 + r() * 0.8, r() * TAU]);
   }
   const parts = [], g1 = new THREE.CylinderGeometry(0.12, 0.16, 1.4, 5).translate(0, 0.7, 0);
@@ -447,6 +581,9 @@ function posts(snowy) {
   for (let s = 20; s < road.total; s += snowy ? 25 : 50) for (const side of [-1, 1]) {
     // v8: none on the rest area's paving or in a side road's mouth.
     if (side > 0 && bayWidth(s) > 0 || road.junctions.some(J => Math.abs(s - J.s) < 8 && (J.side === side || J.both))) continue;
+    // v14: none across the mouth of the road straight on or a crossing road.
+    if (road.rail.some(x => Math.abs(s - x.s) < 6)) continue;
+    if (road.turns && road.turns.length) { const q = worldAt(s, side * 5); if (armDist(q[0], q[2]) < 7 || routeNear(q[0], q[2], s, 6)) continue; }
     list.push([s, side]);
   }
   const pole = new THREE.InstancedMesh(V3.geo.box, new THREE.MeshLambertMaterial({ color: snowy ? 0xd8423a : 0xe6e6e0 }), list.length);
@@ -478,10 +615,32 @@ function merge(parts) {
 
 // ---- Signs: drawn once on a canvas each, bright when the headlights reach them ----
 function signCanvas(sg) {
-  const c = document.createElement('canvas'), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi';
+  const c = document.createElement('canvas'), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi' || sg.kind === 'suunta';
   c.width = wide ? 256 : 128; c.height = 128;
   const g = c.getContext('2d');
-  if (sg.kind === 'poliisi') {
+  if (sg.kind === 'suunta') {
+    // v14 (#440): a blue direction sign: the turn's way with an arrow, the road number in a red
+    // box, and under it where the road straight on goes.
+    g.fillStyle = '#1d55a8'; g.fillRect(0, 0, 256, 128); g.strokeStyle = '#fff'; g.lineWidth = 5; g.strokeRect(5, 5, 246, 118);
+    g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.textBaseline = 'middle';
+    const right = sg.dir > 0, ax = right ? 226 : 30;
+    g.lineWidth = 7; g.lineCap = 'round'; g.beginPath();
+    if (sg.ramp) { g.moveTo(ax - 10 * sg.dir, 58); g.lineTo(ax + 4 * sg.dir, 30); } else { g.moveTo(right ? ax - 20 : ax + 20, 44); g.lineTo(ax, 44); }
+    g.stroke(); g.beginPath();
+    if (sg.ramp) { g.moveTo(ax + 12 * sg.dir, 22); g.lineTo(ax - 6 * sg.dir, 24); g.lineTo(ax + 8 * sg.dir, 40); }
+    else { g.moveTo(ax + 6 * sg.dir, 44); g.lineTo(ax - 8 * sg.dir, 32); g.lineTo(ax - 8 * sg.dir, 56); }
+    g.closePath(); g.fill();
+    g.font = 'bold 34px system-ui,sans-serif'; g.textAlign = right ? 'right' : 'left';
+    const tx = right ? 186 : 70; g.fillText(sg.to, tx, 46);
+    const nw = 30, nx = right ? 22 : 204;
+    g.fillStyle = '#d42a1e'; g.fillRect(nx, 30, nw, 30); g.fillStyle = '#fff'; g.font = 'bold 24px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('4', nx + nw / 2, 46);
+    g.font = 'bold 26px system-ui,sans-serif'; g.fillText(`↑ ${sg.on}`, 128, 94);
+  } else if (sg.kind === 'tasoristeys') {
+    // v14: a level crossing: the warning triangle with a gate.
+    g.fillStyle = '#d42a1e'; g.beginPath(); g.moveTo(64, 4); g.lineTo(124, 118); g.lineTo(4, 118); g.closePath(); g.fill();
+    g.fillStyle = '#f7c81b'; g.beginPath(); g.moveTo(64, 24); g.lineTo(110, 108); g.lineTo(18, 108); g.closePath(); g.fill();
+    g.fillStyle = '#111'; g.fillRect(36, 70, 56, 8); g.fillRect(36, 84, 56, 8); g.fillRect(40, 66, 6, 36); g.fillRect(82, 66, 6, 36);
+  } else if (sg.kind === 'poliisi') {
     // v12 (#440): before a police check, a portable sign: POLIISI over STOP.
     g.fillStyle = '#1d3f8f'; g.fillRect(0, 0, 256, 128); g.strokeStyle = '#f2d21a'; g.lineWidth = 8; g.strokeRect(6, 6, 244, 116);
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -547,13 +706,14 @@ function signCanvas(sg) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 function signMesh(sg) {
-  const g = new THREE.Group(), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi';
+  const g = new THREE.Group(), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi' || sg.kind === 'suunta';
   const mat = new THREE.MeshBasicMaterial({ map: signCanvas(sg), transparent: true, color: 0x111111 });
   const plate = new THREE.Mesh(V3.geo.plate, mat); plate.scale.set(wide ? 1.8 : 0.9, 0.9, 1); plate.position.y = 2.2;
   const post = part(V3.geo.pole, V3.mats.grey, 0.04, 2.2, 0.04, 0, 1.1, 0);
   g.add(plate, post);
   // v8: beside the rest area's paving, not on it.
-  const lat = Math.max(5.4, EDGE + bayWidth(sg.s) + 1.2), p = worldAt(sg.s, lat); g.position.set(...p); g.rotation.y = -headingAt(sg.s);
+  // v14: a direction sign for a left turn stands on the left.
+  const lat = (sg.kind === 'suunta' && sg.dir < 0 ? -1 : 1) * Math.max(5.4, EDGE + bayWidth(sg.s) + 1.2), p = worldAt(sg.s, lat); g.position.set(...p); g.rotation.y = -headingAt(sg.s);
   g.userData = { s: sg.s, lat, mat };
   return g;
 }
@@ -655,7 +815,9 @@ function lit(s, lat, far) {
   if (side > 0) return 0;
   return clamp(1.3 - d / reach, 0, 1);
 }
-function placeAt(o, s, lat, back) {
+function placeAt(o, s, lat, back, arm) {
+  // v14: a car on the road straight on at a turn (risteys.js), along it.
+  if (arm) { const p = armAt(arm, s - arm.a0, lat); o.position.set(...p); o.rotation.y = -arm.th + (back ? Math.PI : 0); return; }
   const p = worldAt(s, lat); o.position.set(...p); o.rotation.y = -headingAt(s) + (back ? Math.PI : 0);
 }
 function meshFor(t) {
@@ -691,15 +853,21 @@ function draw3d(now) {
 
   // The player's car, turned a little with its sideways speed.
   const car = V3.carMesh, yaw = Math.atan2(P.vl, Math.max(P.v, 3));
-  placeAt(car, P.s, P.lat); car.rotation.y -= yaw;
+  { const p = carAt(P.s, P.lat); car.position.set(...p); car.rotation.y = -carHeading(P.s) - yaw; }
+  // v14 (#440): the blinker, BLINK_T s on and off.
+  const blinkOn = P.signal && mode === 'drive' && (time % (BLINK_T * 2)) < BLINK_T;
+  car.userData.blink.forEach((pair, i) => pair.forEach(o => { o.visible = blinkOn && (i ? P.signal > 0 : P.signal < 0); }));
   car.userData.rear.forEach(s => { s.material.opacity = input.brake && mode === 'drive' ? 1 : 0.55; s.scale.setScalar(input.brake ? 0.95 : 0.55); });
   // Camera behind and above, shaken by potholes and the shoulder.
-  const sh = shake * 0.12, cp = worldAt(P.s - CAM_BACK, P.lat * 0.85, CAM_UP), ct = worldAt(P.s + CAM_LOOK, P.lat * 0.6, 0);
+  // v14: through a tight turn the camera looks less far ahead, at the bend and not across its corner.
+  const inTurn = (road.turns || []).some(J => P.s + CAM_LOOK > J.a0 && P.s - 10 < J.a1) && !P.wrong;
+  const look = inTurn ? CAM_LOOK / (1 + 2.5 * Math.abs(headingAt(P.s + CAM_LOOK) - headingAt(P.s))) : CAM_LOOK;
+  const sh = shake * 0.12, cp = carAt(P.s - CAM_BACK, P.lat * 0.85, CAM_UP), ct = carAt(P.s + look, P.lat * 0.6, 0);
   camera.position.set(cp[0] + (Math.random() - 0.5) * sh, cp[1] + (Math.random() - 0.5) * sh, cp[2]);
   camera.lookAt(ct[0], ct[1], ct[2]);
 
   // Headlights: a spot for both, reaching far and narrow on high beams.
-  const reach = reachOf(P.high), bp = worldAt(P.s + 2.2, P.lat, 0.75), bt = worldAt(P.s + (P.high ? 70 : 26), P.lat + P.vl * 0.6, P.high ? 0.6 : -0.3);
+  const reach = reachOf(P.high), bp = carAt(P.s + 2.2, P.lat, 0.75), bt = carAt(P.s + (P.high ? 70 : 26), P.lat + P.vl * 0.6, P.high ? 0.6 : -0.3);
   beam.position.set(...bp); beam.target.position.set(...bt);
   beam.distance = reach * 1.3; beam.angle = P.high ? 0.5 : 0.62; beam.intensity = BEAM * (P.high ? 2.2 : 1); beam.decay = 1;
 
@@ -708,7 +876,7 @@ function draw3d(now) {
   for (const t of things) {
     const m = meshFor(t); seen.add(t.id);
     const back = t.v < 0 || (t.kind === 'kavelija' && t.v < 0) || ((t.kind === 'hirvi' || t.kind === 'poro') ? false : false);
-    placeAt(m, t.s, t.lat, back);
+    placeAt(m, t.s, t.lat, back, t.arm);
     if (t.yaw) m.rotation.y += t.yaw;   // v8: a car at a side road faces the road, then turns onto it
     const u = m.userData;
     if (t.kind === 'hirvi' || t.kind === 'poro') {
@@ -728,7 +896,7 @@ function draw3d(now) {
       // v12: the police light bar, its two blue lamps in turn.
       if (u.blue) u.blue.forEach((b, i) => { const on = t.blue && Math.sin(time * 13 + i * Math.PI) > 0; b.visible = on; if (on) b.scale.setScalar(1.4 * k); });
       if (u.tri) u.tri.material.color.setScalar(0.12 + 0.88 * lit(t.s + 4, t.lat, 2.5)).multiply(new THREE.Color(0xff6a1a));
-      if (t.v < 0 && t.s > P.s && t.s - P.s < 220 && (!near || t.s < near.s)) near = t;
+      if (t.v < 0 && !t.arm && t.s > P.s && t.s - P.s < 220 && (!near || t.s < near.s)) near = t;
     }
   }
   for (const [id, m] of V3.meshes) if (!seen.has(id)) { scene.remove(m); dispose(m); V3.meshes.delete(id); }
@@ -746,6 +914,7 @@ function draw3d(now) {
     const go = l.mine ? worksGreen(wm.userData.w) : worksOpen(wm.userData.w);
     l.red.visible = !go; l.green.visible = go;
   }
+  for (const rm of V3.rails || []) railFrame(rm, time);
   for (const tm of V3.triangles || []) { const u = tm.userData; u.tri.material.color.setScalar(0.1 + 0.9 * lit(u.s, u.lat, 2.8)).multiply(new THREE.Color(0xff2a1a)); }
   // Fog in a dip: the view closes in, and lights up grey on high beams.
   if (V3.fogBase) {
@@ -773,7 +942,7 @@ function draw3d(now) {
       else { a[o] = x; a[o + 1] = y; a[o + 2] = z; a[o + 3] = x + 0.05; a[o + 4] = y + 0.7; a[o + 5] = z + 0.6; }
     }
     wm.geometry.attributes.position.needsUpdate = true;
-    const p = worldAt(P.s, P.lat, 0); wm.position.set(p[0], p[1], p[2]); wm.rotation.y = -headingAt(P.s);
+    const p = carAt(P.s, P.lat, 0); wm.position.set(p[0], p[1], p[2]); wm.rotation.y = -carHeading(P.s);
     if (u.snow) wm.material.opacity = P.high ? 0.95 : 0.6;
   }
   V3.world.children.forEach(o => { if (o.userData.sky) o.position.copy(camera.position); });

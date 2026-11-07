@@ -25,15 +25,16 @@ const BAY_IN = 40, BAY_W = 8, NOPASS_BEFORE = 110, NOPASS_AFTER = 30;
 // Each number is how many of that thing the leg has; weather 'kuiva', 'sade', 'lumi' or 'pyry'.
 // tired: how fast the driver gets sleepy (0 = not at all); a leg with it has a rest area.
 // junctions (v8, #306): side roads where a car waits to pull out.
+// v14 (#440): 400 m longer for each turn (risteys.js's TURNS), so everything v13 had still fits.
 const LEGS = [
-  { from: 'Helsinki', to: 'Järvenpää', len: 2600, weather: 'kuiva', limit: 100, oncoming: 9, cars: 2, tractors: 2, walkers: 1, trucks: 0, cameras: 0, moose: 0, racers: 0, bad: 0, tired: 0, junctions: 2, seed: 11 },
-  { from: 'Järvenpää', to: 'Lahti', len: 3000, weather: 'sade', limit: 100, oncoming: 11, cars: 2, tractors: 1, walkers: 3, trucks: 2, cameras: 1, moose: 0, racers: 0, bad: 0, tired: 0, junctions: 2, seed: 22 },
-  { from: 'Lahti', to: 'Heinola', len: 3200, weather: 'sade', limit: 80, oncoming: 11, cars: 2, tractors: 1, walkers: 2, trucks: 2, cameras: 2, moose: 0, racers: 1, bad: 1, tired: 0.6, junctions: 3, seed: 33 },
-  { from: 'Heinola', to: 'Jyväskylä', len: 3400, weather: 'kuiva', limit: 100, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 3, cameras: 1, moose: 2, racers: 1, bad: 1, tired: 0.8, junctions: 3, seed: 44 },
-  { from: 'Jyväskylä', to: 'Äänekoski', len: 3400, weather: 'lumi', limit: 80, oncoming: 11, cars: 1, tractors: 2, walkers: 2, trucks: 2, cameras: 1, moose: 2, racers: 1, bad: 1, tired: 0.8, junctions: 3, seed: 55 },
-  { from: 'Äänekoski', to: 'Pihtipudas', len: 3600, weather: 'lumi', limit: 80, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 3, cameras: 2, moose: 3, racers: 2, bad: 2, tired: 1, junctions: 3, seed: 66 },
-  { from: 'Pihtipudas', to: 'Oulu', len: 3800, weather: 'pyry', limit: 80, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 3, racers: 2, bad: 2, tired: 1, junctions: 3, seed: 77 },
-  { from: 'Oulu', to: 'Rovaniemi', len: 4000, weather: 'pyry', limit: 80, oncoming: 13, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 2, reindeer: 3, racers: 2, bad: 2, tired: 1.2, junctions: 3, seed: 88 },
+  { from: 'Helsinki', to: 'Järvenpää', len: 3000, weather: 'kuiva', limit: 100, oncoming: 9, cars: 2, tractors: 2, walkers: 1, trucks: 0, cameras: 0, moose: 0, racers: 0, bad: 0, tired: 0, junctions: 2, seed: 11 },
+  { from: 'Järvenpää', to: 'Lahti', len: 3400, weather: 'sade', limit: 100, oncoming: 11, cars: 2, tractors: 1, walkers: 3, trucks: 2, cameras: 1, moose: 0, racers: 0, bad: 0, tired: 0, junctions: 2, seed: 22 },
+  { from: 'Lahti', to: 'Heinola', len: 3600, weather: 'sade', limit: 80, oncoming: 11, cars: 2, tractors: 1, walkers: 2, trucks: 2, cameras: 2, moose: 0, racers: 1, bad: 1, tired: 0.6, junctions: 3, seed: 33 },
+  { from: 'Heinola', to: 'Jyväskylä', len: 3800, weather: 'kuiva', limit: 100, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 3, cameras: 1, moose: 2, racers: 1, bad: 1, tired: 0.8, junctions: 3, seed: 44 },
+  { from: 'Jyväskylä', to: 'Äänekoski', len: 4200, weather: 'lumi', limit: 80, oncoming: 11, cars: 1, tractors: 2, walkers: 2, trucks: 2, cameras: 1, moose: 2, racers: 1, bad: 1, tired: 0.8, junctions: 3, seed: 55 },
+  { from: 'Äänekoski', to: 'Pihtipudas', len: 4400, weather: 'lumi', limit: 80, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 3, cameras: 2, moose: 3, racers: 2, bad: 2, tired: 1, junctions: 3, seed: 66 },
+  { from: 'Pihtipudas', to: 'Oulu', len: 5000, weather: 'pyry', limit: 80, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 3, racers: 2, bad: 2, tired: 1, junctions: 3, seed: 77 },
+  { from: 'Oulu', to: 'Rovaniemi', len: 5200, weather: 'pyry', limit: 80, oncoming: 13, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 2, reindeer: 3, racers: 2, bad: 2, tired: 1.2, junctions: 3, seed: 88 },
 ];
 const WEATHER = {
   kuiva: { grip: 1, reach: 1 },
@@ -78,7 +79,7 @@ function makeRoad(L) {
     th += K[j] * SEG; x += Math.sin(th) * SEG; z -= Math.cos(th) * SEG;
   }
   road = { len: L.len, total, n, X, Y, Z, TH, K, limits: [], signs: [], holes: [], bays: [], cams: [], bad: [], junctions: [], nopass: [], checks: [], pads: [],
-    works: [], broken: [], ice: [], fog: [], taken: [] };   // v13: tie.js's road events
+    works: [], broken: [], ice: [], fog: [], taken: [], rail: [], turns: [] };   // v13: tie.js's road events; v14: level crossings, turns
   return road;
 }
 function idx(s) { const f = clamp(s / SEG, 0, road.n - 1.001), i = Math.floor(f); return [i, f - i]; }
@@ -107,6 +108,8 @@ function newLeg(n) {
   level = clamp(n || level, 1, maxLeg);
   leg = LEGS[level - 1];
   makeRoad(leg);
+  // v14 (#440): the route turns at exits and crossroads (risteys.js); it bends the road first.
+  if (typeof turnLeg === 'function') turnLeg();
   const r = rng(leg.seed * 7 + 1);
   // Speed limits: the leg's own, now and then 60 at a village or 100 on a good stretch, and 50
   // into the town at the end. A sign stands where each one starts.
@@ -124,7 +127,9 @@ function newLeg(n) {
   road.signs.push({ s: leg.len - 70, kind: 'kaupunki', text: leg.to });
 
   // Places for the rest, spread over the leg so that two never fall on the same stretch.
-  const used = [];
+  // v14: nothing else on a turn's stretch, signs and all (risteys.js).
+  const used = (road.turns || []).map(J => [J.a0 - 250, J.a1 + 120]);
+  for (const u of used) road.taken.push([u[0], u[1] + 30]);
   const free = (a, b) => used.every(([u0, u1]) => b < u0 || a > u1);
   function spot(span, from, to, rr = r) {
     for (let k = 0; k < 60; k++) { const s = from + rr() * (to - from - span); if (free(s - 40, s + span + 40)) { used.push([s, s + span]); return s; } }
@@ -132,11 +137,19 @@ function newLeg(n) {
   }
   const evs = [];
   const end = leg.len - 320;
+  // v14: a leg with a level crossing (tie.js) keeps its 360 m first, by its own random numbers.
+  road.railAt = -1;
+  if (typeof ROAD_EVENTS === 'object' && (ROAD_EVENTS[level - 1] || []).includes('rata')) {
+    const x = spot(360, 600, end - 100, rng(leg.seed * 29 + 3));
+    if (x > 0) { road.railAt = Math.round(x + 300); road.taken.push([x, x + 360]); }
+  }
   // A rest area with coffee (#181 "Kuskia väsyttää") about halfway, where the driver gets sleepy.
   // v8 (#306 "P paikka pitää olla selkeämpi. Tie siihen ja merkkejä"): signs at 500 m and
   // 100 m, and an exit sign where the lane into it begins (v1–v7: one sign, 60 m before).
   if (leg.tired) {
-    const s = spot(140, leg.len * 0.4, leg.len * 0.62);
+    let s = spot(140, leg.len * 0.4, leg.len * 0.62);
+    // v14: a turn may stand there (risteys.js): then somewhere wider.
+    if (s < 0) s = spot(140, leg.len * 0.3, leg.len * 0.8);
     if (s > 0) {
       const b = { s0: s + 60, s1: s + 140 };
       road.bays.push(b);
@@ -197,14 +210,17 @@ function newLeg(n) {
   if (typeof policeLeg === 'function') policeLeg(evs);
   // v13 (#440): roadworks, fog, a broken-down car, an ambulance, a wide load, a plough, black ice (tie.js).
   if (typeof roadLeg === 'function') roadLeg(evs);
+  // v14: a blue direction sign inside a road event's stretch steps out of it (risteys.js).
+  if (typeof turnSigns === 'function') turnSigns();
   events = evs.sort((a, b) => a.s - b.s);
   road.signs.sort((a, b) => a.s - b.s);
 
   P = { s: 6, lat: LANE, v: 60 / KMH, vl: 0, len: 4.5, wid: 1.8, high: false, brake: false, steer: 0,
-    damage: 0, tired: 0, blink: 0, blinkT: 6, rest: 0, gap: [], highRun: 0, nudge: 0, overT: 0, unsafe: false, seen: false, copT: 0 };
+    damage: 0, tired: 0, blink: 0, blinkT: 6, rest: 0, gap: [], highRun: 0, nudge: 0, overT: 0, unsafe: false, seen: false, copT: 0,
+    signal: 0, into: false, wrong: null };   // v14: the blinker, steering into a turn, on the wrong road
   things = []; T = 0; points = 0; msgs = []; crashWhy = ''; result = null; flash = whiteout = shake = cloudIn = 0;
   tally = { ohitukset: 0, valot: 0, haikaisyt: 0, sakot: 0, lahelta: 0, kuopat: 0, tauko: 0, pitkat: 0, pitkatP: 0, hurjastelu: 0, poliisi: 0, puhallus: 0,
-    tukit: 0, punaiset: 0, tietyo: 0, ambulanssi: 0, erikois: 0 };
+    tukit: 0, punaiset: 0, tietyo: 0, ambulanssi: 0, erikois: 0, kaannos: 0, juna: 0 };
   input.left = input.right = false; input.steer = input.gas = input.brake = 0;
   mode = 'drive';
   if (window.AiPelitScores) AiPelitScores.board(`osa-${level}`, `${leg.from} – ${leg.to}`);
@@ -217,7 +233,8 @@ function parTime() {
   const snowy = leg.weather === 'lumi' || leg.weather === 'pyry';
   for (let s = 0; s < leg.len; s += 20) t += 20 / (Math.min(limitAt(s), snowy ? 90 : 120) / KMH);
   // v13: the wait at each roadworks' light.
-  return Math.round(t * 1.2 + (leg.tired ? 15 : 0) + road.works.length * 13);
+  // v14: slowing for each turn, and the wait at a level crossing.
+  return Math.round(t * 1.2 + (leg.tired ? 15 : 0) + road.works.length * 13 + (road.turns || []).length * 10 + (road.rail || []).length * 20);
 }
 // v13: shorter in fog (fogReach() in tie.js).
 const reachOf = high => { const r = (high ? HIGH : LOW) * WEATHER[leg.weather].reach; return typeof fogReach === 'function' ? fogReach(high, r) : r; };
@@ -270,7 +287,9 @@ function release(e) {
 // most 80), slower on a slippery road.
 function cruise(t) {
   const lim = limitAt(clamp(t.s, 0, road.len)), heavy = t.kind === 'rekka' || t.truck;
-  return (Math.min(lim, heavy ? 80 : 200) + t.habit) / KMH * Math.min(1, WEATHER[leg.weather].grip + 0.25);
+  const v = (Math.min(lim, heavy ? 80 : 200) + t.habit) / KMH * Math.min(1, WEATHER[leg.weather].grip + 0.25);
+  // v14: slower towards a turn and round it (risteys.js), as the route turns for everyone.
+  return typeof turnCruise === 'function' ? Math.min(v, turnCruise(t.s)) : v;
 }
 function cruiseFrom(t) { t.base = cruise(t); t.v = t.v < 0 || t.kind === 'vastaan' ? -t.base : t.base; return t; }
 function vehicle(t) { return t.kind !== 'kavelija' && t.kind !== 'hirvi' && t.kind !== 'poro' && t.kind !== 'konstaapeli'; }
@@ -303,7 +322,8 @@ function drive(dt) {
   policeCheck(dt);
   if (mode !== 'drive') return;
   // v13: black ice halves the grip (gripAt() in tie.js).
-  const W = WEATHER[leg.weather], grip = W.grip * gripAt(P.s), k = curveAt(P.s);
+  // v14: on the wrong road (risteys.js) the road straight on has no bends.
+  const W = WEATHER[leg.weather], grip = W.grip * gripAt(P.s), k = P.wrong ? 0 : curveAt(P.s);
   // Speed: v3 has a gas pedal: as much pull as the thumb asks, up to 130 at full; off the gas
   // the engine slows the car a little. The brake by how far the thumb slides down. The
   // shoulder and gravel drag.
@@ -334,7 +354,8 @@ function drive(dt) {
   P.s += P.v * dt;
   if (Math.abs(P.lat) > EDGE && P.v > 8) shake = Math.max(shake, 0.25);
 
-  if (Math.abs(P.lat) > DITCH && !inBay(P.s, P.lat)) return crash('Ajoit ojaan.');
+  if (Math.abs(P.lat) > DITCH && !inBay(P.s, P.lat)) return crash(typeof ditchWhy === 'function' ? ditchWhy() : 'Ajoit ojaan.');
+  if (P.wrong) return wrongRoad(dt);
   // v8: the rest area's kerb keeps the car on its paving, and its narrowing lane leads it back.
   if (inBay(P.s, P.lat)) P.lat = Math.min(P.lat, EDGE + bayWidth(P.s) - 0.6);
 
@@ -346,7 +367,9 @@ function drive(dt) {
   // car comes within 180 m earns nothing.
   unsafeOvertake();
   if (mode !== 'drive') return;
-  for (const t of things) if (meet(t, dt)) return;
+  for (const t of things) if (!t.arm && meet(t, dt)) return;
+  // v14: the next turn: its signs, the blinker, going straight on, a left turn across a car.
+  if (typeof turnTick === 'function') { turnTick(dt); if (mode !== 'drive' || P.wrong) return; }
   lights(dt);
   highBeams(dt);
   reckless(dt);
@@ -381,8 +404,9 @@ function move(t, dt) {
   }
   if (t.kind === 'liittyja') return joiner(t, dt);
   if (t.kind === 'konstaapeli') return;
-  if (t.kind === 'partio') { patrol(t, dt); t.s += t.v * dt; return; }
+  if (t.kind === 'partio') { patrol(t, dt); if (typeof railHold === 'function') t.v = railHold(t); t.s += t.v * dt; return; }
   if (t.kind === 'ambulanssi') return ambulance(t, dt);
+  if (t.kind === 'risteava') return crosser(t, dt);
   if (t.kind === 'takaa') {
     // Catch up, overtake in the oncoming lane when nobody is coming, cut back in ahead.
     const clear = !things.some(o => o.v < 0 && o.s > t.s && o.s < t.s + 320);
@@ -434,6 +458,8 @@ function move(t, dt) {
   }
   // v13: waiting at roadworks, round a broken-down car, aside for a wide load or an ambulance.
   roadMove(t, dt);
+  // v14: stopping before a level crossing whose lights are on (tie.js).
+  if (typeof railHold === 'function') t.v = railHold(t);
   t.s += t.v * dt;
 }
 
@@ -625,7 +651,8 @@ function tiredness(dt) {
   if (bay && P.lat > EDGE + 0.5 && P.v < 15 / KMH) {
     P.rest += dt;
     if (!(input.gas > 0)) P.v = Math.max(0, P.v - 6 * dt);
-    if (P.rest > 1.4 && P.tired > 0) { P.tired = 0; tally.tauko++; T += 10; score(30, 'Kahvitauko'); P.blink = 0; }
+    // v14: not again while still in the same stop (v13 gave a second coffee when it crept on).
+    if (P.rest > 1.4 && P.tired > 0.1) { P.tired = 0; tally.tauko++; T += 10; score(30, 'Kahvitauko'); P.blink = 0; }
     return;
   }
   P.rest = 0;
