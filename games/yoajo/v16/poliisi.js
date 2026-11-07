@@ -27,10 +27,11 @@ let pstop = null;      // the stop for a fine in progress: { t, why, cop, car }
 
 // ---- Placing them on the leg (from newLeg, before the events are sorted) ----
 // Their own random numbers, so everything v11 placed stays where it was.
+// v16: a stage of the endless night says how many police cars it has (leg.police).
 function policeLeg(evs) {
   pstop = null;
   if (P) P.seen = false;
-  const r = rng(leg.seed * 17 + 3), n = POLICE_CARS[level - 1] || 0, end = leg.len - 320;
+  const r = rng(leg.seed * 17 + 3), n = leg.police != null ? leg.police : POLICE_CARS[level - 1] || 0, end = leg.len - 320;
   // Kinds in turn: a parked radar at a side road first (the easiest to see coming), then one
   // coming the other way, then one driving ahead.
   for (let k = 0; k < n; k++) {

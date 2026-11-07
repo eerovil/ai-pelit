@@ -114,9 +114,11 @@ function act(b) {
   if (b.id === 'jatka') { mode = 'drive'; return; }
   if (b.id === 'aja') { newLeg(sel); return; }
   if (b.id === 'ohjaus') { setControls(controls === 'yksi' ? 'kaksi' : 'yksi'); return; }
-  if (b.id === 'uudelleen') { newLeg(level); return; }
+  // v16 (#440): the endless night (loputon.js): start a run, run again, and back to the legs.
+  if (b.id === 'loputon') { if (endlessOpen()) startEndless(); return; }
+  if (b.id === 'uudelleen') { if (endless) startEndless(); else newLeg(level); return; }
   if (b.id === 'seuraava') { sel = Math.min(maxLeg, level + 1); newLeg(sel); return; }
-  if (b.id === 'valikko') { sel = level; preview(sel); return; }
+  if (b.id === 'valikko') { leaveEndless(); sel = level; preview(sel); return; }
   // v15 (#440): the whole trip's totals (lappi.js), and back from them; the menu's list scrolls.
   if (b.id === 'matka') { openTrip(); return; }
   if (b.id === 'takaisin') { mode = tripFrom; return; }
@@ -269,20 +271,23 @@ function dashboard() {
   // Eyelids closing.
   const e = eyes();
   if (e > 0) { x.fillStyle = '#000'; x.fillRect(0, 0, W, H * 0.5 * e); x.fillRect(0, H - H * 0.5 * e, W, H * 0.5 * e); }
+  endlessFade();   // v16: between two stages of the endless night (loputon.js)
 
   // The end screens cover the rest; only the road shows under them.
   if (mode === 'crash' || mode === 'done') return;
   // Top: where to and how far along, then v5's speedometer in the middle (#206) with the time,
   // the distance and alertness on its left and the points and the limit on its right.
   const top = SAFE_T + 10, left = Math.max(SAFE_L + 92, LAND ? 100 : 92), right = W - SAFE_R - 62;
-  fitText(`${leg.from} → ${leg.to}`, (left + right) / 2, top + 10, 15, right - left, '#e8eefc');
+  // v16: in the endless night the stage's number too, and the run's km in place of the time.
+  fitText(endless ? `${endless.k}. ${leg.from} → ${leg.to}` : `${leg.from} → ${leg.to}`, (left + right) / 2, top + 10, 15, right - left, '#e8eefc');
   rr(left, top + 24, right - left, 7, 4); x.fillStyle = 'rgba(255,255,255,0.18)'; x.fill();
   rr(left, top + 24, (right - left) * clamp(P.s / leg.len, 0, 1), 7, 4); x.fillStyle = '#f2b630'; x.fill();
   const lim = limitAt(P.s), kmh = Math.round(P.v * KMH), over = kmh > lim + 5;
   const sp = speedoBox();
   speedometer(sp, P.v * KMH, kmh, lim, over);
   const lx = sp.cx - sp.r - 14, rx = sp.cx + sp.r + 14, par = parTime();
-  text(`${mmss(T)} / ${mmss(par)}`, lx, sp.cy - sp.r * 0.45, 14, T > par ? '#ff9a8a' : '#cfe0ff', 'right', 600);
+  if (endless) text(`Yht. ${(endlessMetres() / 1000).toFixed(1).replace('.', ',')} km`, lx, sp.cy - sp.r * 0.45, 14, '#cfe0ff', 'right', 600);
+  else text(`${mmss(T)} / ${mmss(par)}`, lx, sp.cy - sp.r * 0.45, 14, T > par ? '#ff9a8a' : '#cfe0ff', 'right', 600);
   text(`${Math.max(0, (leg.len - P.s) / 1000).toFixed(1).replace('.', ',')} km`, lx, sp.cy - sp.r * 0.45 + 20, 13, '#9fb0cc', 'right', 600);
   if (leg.tired) {
     // Alertness: full when rested, empty when the driver falls asleep.
@@ -517,7 +522,14 @@ function menu() {
   const tr = button('matka', lx + colW * 0.63, infoY + 40, colW * 0.37, 36, '', { size: 14 });
   tr.draw = () => fitText('🏁 Koko matka', tr.x + tr.w / 2, tr.y + tr.h / 2, 14, tr.w - 12, '#fff', 'center', 650);
   const by = LAND ? H - SAFE_B - 84 : H - SAFE_B - 82;
-  const go = button('aja', lx + colW * 0.15, by, colW * 0.7, 62, 'Aja ▶', { size: 24 });
+  // v16 (#440): beside "Aja", the endless night, open once leg 1 is driven, with the best run.
+  const go = button('aja', lx, by, colW * 0.56, 62, 'Aja ▶', { size: 24 });
+  const lo = button('loputon', lx + colW * 0.59, by, colW * 0.41, 62, '', { locked: !endlessOpen() });
+  lo.draw = () => {
+    const best = endlessBest(), open = endlessOpen();
+    fitText(open ? '🌌 Loputon yö' : '🔒 Loputon yö', lo.x + lo.w / 2, lo.y + lo.h / 2 - 8, 15, lo.w - 12, open ? '#fff' : '#888', 'center', 700);
+    fitText(!open ? 'Aja ensin osa 1' : best ? `Ennätys ${best.p} p` : 'Etappi kerrallaan', lo.x + lo.w / 2, lo.y + lo.h / 2 + 12, 11, lo.w - 12, '#9fb0cc', 'center', 600);
+  };
   for (const b of btns) drawBtn(b, b === go);
 }
 function endButtons(list, y0) {
@@ -553,8 +565,11 @@ function crashScreen() {
   // two-line reason and a two-line hint ran under "Yritä uudelleen").
   const textH = 74 + (lines.length - 1) * 21 + (hints.length ? 8 + hints.length * 18 : 0);
   const w = Math.min(340, W - 24), h = LAND ? H - 30 : Math.max(270, textH + 150), x0 = (W - w) / 2, y0 = LAND ? 15 : Math.min(H * 0.22, H - h - 10);
+  const title = asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Väärä tie') ? 'Väärä tie!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : dry ? 'Tankki tyhjä!' : 'Kolari!';
+  // v16: the end of an endless night's run, with its km and points (loputon.js).
+  if (endless) return endlessScreen(title, lines, dry ? ['Huoltoasema on joka toisella etapilla.'] : hints);
   panel(x0, y0, w, h);
-  text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Väärä tie') ? 'Väärä tie!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : dry ? 'Tankki tyhjä!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
+  text(title, W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
   let ly = y0 + 74;
   lines.forEach((l, i) => text(l, W / 2, ly + i * 21, 15, '#e8eefc', 'center', 600));
   ly += (lines.length - 1) * 21;

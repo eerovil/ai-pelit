@@ -118,12 +118,16 @@ let mode = 'menu';     // 'menu', 'drive', 'pause', 'crash', 'done'
 let T = 0;             // seconds driven this leg
 let points = 0, tally = null, msgs = [], crashWhy = '', result = null;
 let flash = 0, whiteout = 0, shake = 0, cloudIn = 0;
+// v16 (#440): the endless night's run (loputon.js), null on the legs.
+let endless = null;
 
 function newLeg(n) {
   // v15: a leg left half-way (from the pause) still counts on the trip's totals (lappi.js).
   if (typeof tripLog === 'function') tripLog();
-  level = clamp(n || level, 1, maxLeg);
-  leg = LEGS[level - 1];
+  // v16: a stage of the endless night is a leg of its own (endlessStage() in loputon.js); `level`
+  // is then the leg whose police, turns and road events it takes (leg.tpl).
+  if (endless) { leg = endlessStage(endless.k); level = leg.tpl; }
+  else { level = clamp(n || level, 1, maxLeg); leg = LEGS[level - 1]; }
   makeRoad(leg);
   // v14 (#440): the route turns at exits and crossroads (risteys.js); it bends the road first.
   if (typeof turnLeg === 'function') turnLeg();
@@ -140,8 +144,8 @@ function newLeg(n) {
     if (!v) continue;                     // snow on an 80 road before leg 5: no change at all
     lim.push({ s, v }); lim.push({ s: s + 400 + r() * 300, v: leg.limit });
   }
-  lim.push({ s: leg.len - 260, v: 50 });
-  road.signs.push({ s: leg.len - 70, kind: 'kaupunki', text: leg.to });
+  // v16: a stage of the endless night ends on the open road, not in a town.
+  if (!leg.endless) { lim.push({ s: leg.len - 260, v: 50 }); road.signs.push({ s: leg.len - 70, kind: 'kaupunki', text: leg.to }); }
 
   // Places for the rest, spread over the leg so that two never fall on the same stretch.
   // v14: nothing else on a turn's stretch, signs and all (risteys.js).
@@ -163,7 +167,8 @@ function newLeg(n) {
   // A rest area with coffee (#181 "Kuskia väsyttää") about halfway, where the driver gets sleepy.
   // v8 (#306 "P paikka pitää olla selkeämpi. Tie siihen ja merkkejä"): signs at 500 m and
   // 100 m, and an exit sign where the lane into it begins (v1–v7: one sign, 60 m before).
-  if (leg.tired) {
+  // v16: in the endless night a service station only every other stage (leg.noBay).
+  if (leg.tired && !leg.noBay) {
     let s = spot(140, leg.len * 0.4, leg.len * 0.62);
     // v14: a turn may stand there (risteys.js): then somewhere wider.
     if (s < 0) s = spot(140, leg.len * 0.3, leg.len * 0.8);
@@ -245,7 +250,7 @@ function newLeg(n) {
   if (typeof fuelLeg === 'function') fuelLeg();
   input.left = input.right = false; input.steer = input.gas = input.brake = 0;
   mode = 'drive';
-  if (window.AiPelitScores) AiPelitScores.board(`osa-${level}`, `${leg.from} – ${leg.to}`);
+  if (window.AiPelitScores) { if (leg.endless) AiPelitScores.board('loputon', 'Loputon yö'); else AiPelitScores.board(`osa-${level}`, `${leg.from} – ${leg.to}`); }
   if (typeof onLeg === 'function') onLeg();
 }
 // The target time: the leg driven at the speed limits (at most 90 on snow), plus a little for
@@ -329,6 +334,7 @@ function toggleLights() { if (mode === 'drive') P.high = !P.high; if (typeof cli
 function step(dt) {
   if (mode === 'drive') drive(dt);
   else if (mode === 'crash' || mode === 'done') { if (P) { P.v = Math.max(0, P.v - 9 * dt); P.s += P.v * dt; } }
+  if (endless && endless.fade > 0) endless.fade = Math.max(0, endless.fade - dt);   // v16: between stages
   for (const m of msgs) m.t += dt;
   msgs = msgs.filter(m => m.t < 2.2);
   flash = Math.max(0, flash - dt * 2.5);
@@ -409,6 +415,8 @@ function drive(dt) {
   if (mode !== 'drive') return;
   // v15: the tank, and the animals got past (lappi.js).
   if (typeof lappiTick === 'function') { lappiTick(dt); if (mode !== 'drive') return; }
+  // v16: the endless night's km points (loputon.js).
+  if (endless) endlessTick(dt);
   if (P.s >= leg.len) finish();
 }
 
@@ -687,7 +695,8 @@ function tiredness(dt) {
   P.rest = 0;
   // It grows with the road driven: the eyes start closing before the rest area, and without
   // the break the driver falls asleep after it, before the town.
-  const b = road.bays[0], full = b ? b.s1 + leg.len * 0.16 : leg.len * 1.5;
+  // v16: in the endless night it carries over the stages (leg.awake metres to asleep, from rested).
+  const b = road.bays[0], full = leg.awake || (b ? b.s1 + leg.len * 0.16 : leg.len * 1.5);
   P.tired = Math.min(1, P.tired + P.v * dt / full / (tally.tauko ? 2.5 : 1));
   if (P.blink > 0) { P.blink -= dt; return; }
   P.blinkT -= dt;
@@ -706,12 +715,15 @@ function crash(why) {
   mode = 'crash'; crashWhy = why; shake = 1.2;
   P.v = Math.min(P.v, 6);
   if (typeof tripLog === 'function') tripLog();   // v15: the trip's totals (lappi.js)
+  if (endless) endlessOver();                       // v16: the run ends (loputon.js)
   if (typeof crashSound === 'function') crashSound(why);
   if (typeof onEnd === 'function') onEnd();
   return true;
 }
 
 function finish() {
+  // v16: in the endless night the next stage follows at once (loputon.js).
+  if (endless) return nextStage();
   const par = parTime(), fast = T <= par, clean = !tally.sakot && !tally.haikaisyt && !tally.lahelta && !tally.hurjastelu && !tally.tukit;
   const bonus = Math.max(0, Math.round((par - T) * 10));
   points += bonus;

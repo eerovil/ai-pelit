@@ -106,6 +106,13 @@
       "note": "Kolme uutta osuutta Lappiin Utsjoelle asti poroineen ja revontulineen, polttoaine ja huoltoasemat Lapin osuuksilla, ja Koko matka -yhteenveto.",
       "request": "Autopeliin lisää. Tuleeko ideoita",
       "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 16,
+      "date": "2026-11-08",
+      "note": "Loputon yö: etappi toisensa perään yhä vaikeampana, nopeus, tankki ja vireys mukana, ja oma tuloslista.",
+      "request": "Autopeliin lisää. Tuleeko ideoita",
+      "issue": "eerovil/ai-pelit#440"
     }
   ]
 }

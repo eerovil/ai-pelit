@@ -12,13 +12,16 @@
 // warning; an empty tank gives no pull, and the car rolls to a stop (FUEL_ROLL m/s² more drag).
 const FUEL_V = 80 / KMH, FUEL_TANK = 1.1, FUEL_MARGIN = 1.3, FUEL_FILL = 0.1, FUEL_LOW = 0.15, FUEL_ROLL = 1.5;
 // How much of the tank a metre takes at speed v (m/s).
-function burnRate(v) { return (0.4 + 0.6 * (v / FUEL_V) ** 2) / (leg.len * FUEL_TANK); }
+// v16: in the endless night a full tank is leg.tankM metres at FUEL_V (the stages are short).
+function burnRate(v) { return (0.4 + 0.6 * (v / FUEL_V) ** 2) / (leg.tankM || leg.len * FUEL_TANK); }
 // The station: the leg's rest area, which game.js marks `station` on a leg with fuel.
 const stationAhead = () => road.bays.find(b => b.station && b.s1 > P.s);
 // From newLeg, once P is made: the tank as the leg starts (null on a leg without fuel).
 function fuelLeg() {
   P.fuel = null; P.dry = false; P.filling = false; P.lowTold = false;
   const st = road.bays.find(b => b.station);
+  // v16: the endless night starts full; nextStage() carries the tank on (loputon.js).
+  if (leg.endless) { P.fuel = 1; return; }
   if (!leg.fuel || !st) return;
   let need = 0;
   for (let s = 0; s < st.s0; s += 20) need += 20 * burnRate(limitAt(s) / KMH);
@@ -44,7 +47,7 @@ function lappiTick(dt) {
   if (P.fuel < FUEL_LOW && !P.lowTold) {
     P.lowTold = true;
     const next = stationAhead();
-    say(next ? `Tankki vähissä: huoltoasema ${Math.max(0.1, (next.s0 - P.s) / 1000).toFixed(1).replace('.', ',')} km` : 'Tankki vähissä!', false);
+    say(next ? `Tankki vähissä: huoltoasema ${Math.max(0.1, (next.s0 - P.s) / 1000).toFixed(1).replace('.', ',')} km` : leg.endless ? 'Tankki vähissä: huoltoasema seuraavalla etapilla' : 'Tankki vähissä!', false);
   }
   if (P.fuel <= 0) {
     if (!P.dry) say('Polttoaine loppui!', false);
