@@ -7,8 +7,9 @@
 // over, overtaking unsafely or crossing the solid line, they end the leg. Out of their sight the
 // old rules stand (minus points, cameras).
 
-// Police cars per leg, legs 1–8; a police check on every leg from the third.
-const POLICE_CARS = [0, 1, 1, 2, 2, 2, 3, 3], CHECK_FROM = 3;
+// Police cars per leg, legs 1–11; a police check on every leg from the third.
+// v15: Lapland's legs 9–11, emptier roads.
+const POLICE_CARS = [0, 1, 1, 2, 2, 2, 3, 3, 2, 1, 1], CHECK_FROM = 3;
 // How far a police car sees the player, metres: ahead of it and behind it (its mirror), less in
 // rain and snow (the leg's reach), and never over a crest or round a wooded bend. A parked one
 // watches the traffic coming at it with its radar, and a little past.

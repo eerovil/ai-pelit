@@ -35,13 +35,23 @@ const LEGS = [
   { from: 'Äänekoski', to: 'Pihtipudas', len: 4400, weather: 'lumi', limit: 80, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 3, cameras: 2, moose: 3, racers: 2, bad: 2, tired: 1, junctions: 3, seed: 66 },
   { from: 'Pihtipudas', to: 'Oulu', len: 5000, weather: 'pyry', limit: 80, oncoming: 12, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 3, racers: 2, bad: 2, tired: 1, junctions: 3, seed: 77 },
   { from: 'Oulu', to: 'Rovaniemi', len: 5200, weather: 'pyry', limit: 80, oncoming: 13, cars: 2, tractors: 1, walkers: 2, trucks: 4, cameras: 2, moose: 2, reindeer: 3, racers: 2, bad: 2, tired: 1.2, junctions: 3, seed: 88 },
+  // v15 (#440): Lapland, on to Utsjoki (lappi.js). fuel: a tank to watch and a service station
+  // instead of the rest area; herds: reindeer crossing in a herd; aurora: northern lights on a
+  // clear frosty night ('pakkanen'); fell: bare fells, hardly a tree.
+  { from: 'Rovaniemi', to: 'Sodankylä', len: 5400, weather: 'pakkanen', limit: 80, oncoming: 8, cars: 1, tractors: 0, walkers: 1, trucks: 3, cameras: 1, moose: 1, reindeer: 2, herds: 1, racers: 1, bad: 1, tired: 1.2, junctions: 2, fuel: true, aurora: true, seed: 99 },
+  { from: 'Sodankylä', to: 'Ivalo', len: 5600, weather: 'pyry', limit: 80, oncoming: 7, cars: 1, tractors: 0, walkers: 1, trucks: 3, cameras: 1, moose: 1, reindeer: 2, herds: 2, racers: 1, bad: 2, tired: 1.2, junctions: 2, fuel: true, seed: 110 },
+  { from: 'Ivalo', to: 'Utsjoki', len: 5800, weather: 'pakkanen', limit: 80, oncoming: 6, cars: 1, tractors: 0, walkers: 1, trucks: 2, cameras: 1, moose: 0, reindeer: 3, herds: 2, racers: 1, bad: 1, tired: 1.4, junctions: 2, fuel: true, aurora: true, fell: true, seed: 121 },
 ];
 const WEATHER = {
   kuiva: { grip: 1, reach: 1 },
   sade: { grip: 0.85, reach: 0.85 },
   lumi: { grip: 0.62, reach: 0.75 },
   pyry: { grip: 0.55, reach: 0.6 },
+  // v15: a clear frosty night in Lapland: the stars out, packed snow on the road.
+  pakkanen: { grip: 0.7, reach: 1 },
 };
+// v15: snow on the ground (and the 'liukas' sign): snowfall, a blizzard or Lapland's frost.
+const snowyLeg = L => L.weather === 'lumi' || L.weather === 'pyry' || L.weather === 'pakkanen';
 
 // ---- Saves (ai-pelit:yoajo:<name>, shared by every version) ----
 const KEY = 'ai-pelit:yoajo:';
@@ -52,6 +62,9 @@ let stars = load('tahdet', {}) || {};                                    // leg 
 let bests = load('pisteet', {}) || {};                                   // leg -> best points
 let level = maxLeg;
 let driven = clamp(Math.floor(load('ajettu', 0)) || 0, 0, LEGS.length); // legs driven to the end at least once
+// v15 (#440): 'taso' stopped at 8 while Rovaniemi was the end, so a driver who got there opens
+// Lapland's first leg now.
+if (driven >= maxLeg && maxLeg < LEGS.length) { maxLeg = Math.min(LEGS.length, driven + 1); save('taso', maxLeg); level = maxLeg; }
 
 // ---- The road of a leg ----
 const SEG = 2;                       // the road is sampled every 2 m
@@ -105,6 +118,8 @@ let points = 0, tally = null, msgs = [], crashWhy = '', result = null;
 let flash = 0, whiteout = 0, shake = 0, cloudIn = 0;
 
 function newLeg(n) {
+  // v15: a leg left half-way (from the pause) still counts on the trip's totals (lappi.js).
+  if (typeof tripLog === 'function') tripLog();
   level = clamp(n || level, 1, maxLeg);
   leg = LEGS[level - 1];
   makeRoad(leg);
@@ -151,10 +166,11 @@ function newLeg(n) {
     // v14: a turn may stand there (risteys.js): then somewhere wider.
     if (s < 0) s = spot(140, leg.len * 0.3, leg.len * 0.8);
     if (s > 0) {
-      const b = { s0: s + 60, s1: s + 140 };
+      // v15: on a leg with fuel (Lapland) the rest area is a service station: fuel and coffee.
+      const b = { s0: s + 60, s1: s + 140, station: !!leg.fuel }, kind = leg.fuel ? 'huolto' : 'levahdys';
       road.bays.push(b);
-      if (b.s0 - 500 > 30) road.signs.push({ s: b.s0 - 500, kind: 'levahdys', text: '500 m' });
-      road.signs.push({ s: b.s0 - 100, kind: 'levahdys', text: '100 m' }, { s: b.s0 - BAY_IN - 4, kind: 'pnuoli' });
+      if (b.s0 - 500 > 30) road.signs.push({ s: b.s0 - 500, kind, text: '500 m' });
+      road.signs.push({ s: b.s0 - 100, kind, text: '100 m' }, { s: b.s0 - BAY_IN - 4, kind: 'pnuoli' });
     }
   }
   for (let k = 0; k < leg.bad; k++) {
@@ -179,7 +195,9 @@ function newLeg(n) {
     const poro = k >= (leg.moose || 0);
     road.signs.push({ s, kind: poro ? 'poro' : 'hirvi' }); evs.push({ s: s + 230 + r() * 60, kind: poro ? 'poro' : 'hirvi', side: r() < 0.5 ? -1 : 1, stop: r() < 0.6 });
   }
-  if (leg.weather === 'lumi' || leg.weather === 'pyry') road.signs.push({ s: 120, kind: 'liukas' });
+  // v15 (#440): a reindeer herd crossing (lappi.js), by its own random numbers.
+  if (leg.herds && typeof herdLeg === 'function') herdLeg(evs, spot);
+  if (snowyLeg(leg)) road.signs.push({ s: 120, kind: 'liukas' });
   // Traffic: where each one is met. Slow ones ahead are placed so the player reaches them there.
   const ahead = (kind, n) => { for (let k = 0; k < n; k++) { const s = spot(160, 250, end - 150); if (s > 0) evs.push({ s, kind }); } };
   ahead('traktori', leg.tractors); ahead('auto', leg.cars); ahead('rekka', leg.trucks); ahead('kavelija', leg.walkers);
@@ -220,7 +238,9 @@ function newLeg(n) {
     signal: 0, into: false, wrong: null };   // v14: the blinker, steering into a turn, on the wrong road
   things = []; T = 0; points = 0; msgs = []; crashWhy = ''; result = null; flash = whiteout = shake = cloudIn = 0;
   tally = { ohitukset: 0, valot: 0, haikaisyt: 0, sakot: 0, lahelta: 0, kuopat: 0, tauko: 0, pitkat: 0, pitkatP: 0, hurjastelu: 0, poliisi: 0, puhallus: 0,
-    tukit: 0, punaiset: 0, tietyo: 0, ambulanssi: 0, erikois: 0, kaannos: 0, juna: 0 };
+    tukit: 0, punaiset: 0, tietyo: 0, ambulanssi: 0, erikois: 0, kaannos: 0, juna: 0, elaimet: 0, tankkaus: 0 };   // v15: animals got past, fuel stops
+  // v15: the tank on a Lapland leg (lappi.js).
+  if (typeof fuelLeg === 'function') fuelLeg();
   input.left = input.right = false; input.steer = input.gas = input.brake = 0;
   mode = 'drive';
   if (window.AiPelitScores) AiPelitScores.board(`osa-${level}`, `${leg.from} – ${leg.to}`);
@@ -234,7 +254,8 @@ function parTime() {
   for (let s = 0; s < leg.len; s += 20) t += 20 / (Math.min(limitAt(s), snowy ? 90 : 120) / KMH);
   // v13: the wait at each roadworks' light.
   // v14: slowing for each turn, and the wait at a level crossing.
-  return Math.round(t * 1.2 + (leg.tired ? 15 : 0) + road.works.length * 13 + (road.turns || []).length * 10 + (road.rail || []).length * 20);
+  // v15: filling the tank at the service station.
+  return Math.round(t * 1.2 + (leg.tired ? 15 : 0) + road.works.length * 13 + (road.turns || []).length * 10 + (road.rail || []).length * 20 + (leg.fuel ? 10 : 0));
 }
 // v13: shorter in fog (fogReach() in tie.js).
 const reachOf = high => { const r = (high ? HIGH : LOW) * WEATHER[leg.weather].reach; return typeof fogReach === 'function' ? fogReach(high, r) : r; };
@@ -279,7 +300,9 @@ function release(e) {
     case 'hirvi': case 'poro': {
       // It steps out of the forest so that it is on the road about four seconds of driving away.
       const lead = Math.max(55, P.v * 4.2);
-      return add(e.kind, { s: P.s + lead + 25, lat: e.side * (e.kind === 'poro' ? 7 : 9), v: 0, dir: -e.side, stop: e.stop, wait: 0, walk: e.kind === 'poro' ? 2.6 : 2.0, start: true });
+      // v15: a herd's reindeer one after another, a few metres apart along the road and across it.
+      const k = e.herd || 0;
+      return add(e.kind, { s: P.s + lead + 25 + k * 3.2, lat: e.side * ((e.kind === 'poro' ? 7 : 9) + k * 1.4), v: 0, dir: -e.side, stop: e.stop, hold: e.hold, wait: 0, walk: e.kind === 'poro' ? 2.6 : 2.0, start: true });
     }
   }
 }
@@ -328,7 +351,8 @@ function drive(dt) {
   // the engine slows the car a little. The brake by how far the thumb slides down. The
   // shoulder and gravel drag.
   const top = 130 / KMH, offRoad = Math.abs(P.lat) > EDGE + 0.2 && !inBay(P.s, P.lat);
-  const brake = clamp(+input.brake || 0, 0, 1), gas = clamp(+input.gas || 0, 0, 1);
+  // v15: an empty tank (lappi.js) gives no pull.
+  const brake = clamp(+input.brake || 0, 0, 1), gas = P.dry ? 0 : clamp(+input.gas || 0, 0, 1);
   P.gas = gas;
   if (brake > 0) P.v = Math.max(0, P.v - (8 * grip + 1.5) * brake * dt);
   else {
@@ -381,6 +405,8 @@ function drive(dt) {
   cameras();
   tiredness(dt);
   if (mode !== 'drive') return;
+  // v15: the tank, and the animals got past (lappi.js).
+  if (typeof lappiTick === 'function') { lappiTick(dt); if (mode !== 'drive') return; }
   if (P.s >= leg.len) finish();
 }
 
@@ -398,7 +424,8 @@ function noPass(s) { return road.nopass.some(z => s > z.s0 && s < z.s1); }
 function move(t, dt) {
   if (t.kind === 'hirvi' || t.kind === 'poro') {
     // Across the road at a walk; some stop on it, as moose do, and then go on.
-    if (t.stop && Math.abs(t.lat) < 2.2 && t.wait < 1.6) { t.wait += dt; return; }
+    // v15: a reindeer in a herd stands longer (t.hold, lappi.js).
+    if (t.stop && Math.abs(t.lat) < 2.2 && t.wait < (t.hold || 1.6)) { t.wait += dt; return; }
     t.lat += t.dir * t.walk * dt;
     return;
   }
@@ -528,7 +555,7 @@ function meet(t, dt) {
     t.whoosh = true; if (typeof truckSound === 'function') truckSound(Math.abs(t.v - P.v));
   }
   // An oncoming truck in snow blows a cloud over the windscreen as it passes.
-  if (t.v < 0 && t.truck && !t.cloud && t.s < P.s + 6 && (leg.weather === 'lumi' || leg.weather === 'pyry')) { t.cloud = true; cloudIn = 0.25; }
+  if (t.v < 0 && t.truck && !t.cloud && t.s < P.s + 6 && snowyLeg(leg)) { t.cloud = true; cloudIn = 0.25; }
   if (t.kind === 'takaa' && !t.honk && t.plan !== 'catch' && Math.abs(t.s - P.s) < 6) { t.honk = true; say('Hurjastelija ohitti!', false); }
   return false;
 }
@@ -676,6 +703,7 @@ function crash(why) {
   if (mode !== 'drive') return true;
   mode = 'crash'; crashWhy = why; shake = 1.2;
   P.v = Math.min(P.v, 6);
+  if (typeof tripLog === 'function') tripLog();   // v15: the trip's totals (lappi.js)
   if (typeof crashSound === 'function') crashSound(why);
   if (typeof onEnd === 'function') onEnd();
   return true;
@@ -694,6 +722,7 @@ function finish() {
   // 'taso' stops at the last leg, so the legs driven are kept apart for the high-score lists.
   if (level > driven) { driven = level; save('ajettu', driven); }
   mode = 'done';
+  if (typeof tripLog === 'function') tripLog();   // v15: the trip's totals (lappi.js)
   if (typeof legDoneSound === 'function') legDoneSound();
   // Every leg driven to the end goes to its list, even at zero or below after fines: it still
   // counts as a leg driven.

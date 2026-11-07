@@ -6,8 +6,8 @@
 // turn crosses the lane of a car coming from the road ahead: turning within 4 s of it is unsafe.
 // Everything is top-level, as in game.js.
 
-// How many turns each leg has, legs 1–8. Legs 1–2 turn off the motorway, the rest at crossroads.
-const TURNS = [1, 1, 1, 1, 2, 2, 3, 3];
+// How many turns each leg has, legs 1–11. Legs 1–2 turn off the motorway, the rest at crossroads.
+const TURNS = [1, 1, 1, 1, 2, 2, 3, 3, 1, 1, 1];   // v15: Lapland's legs 9–11
 // A crossroads turns a quarter round on a radius of 28 m: above about 40 km/h on a dry road the car
 // slides wide (game.js's bend rule). An exit ramp bends 0.6 rad on 70 m: fine at 50–60.
 const TURN_KIND = { ramppi: { R: 70, angle: 0.6 }, risteys: { R: 28, angle: Math.PI / 2 } };
@@ -23,8 +23,8 @@ const ARM_LEN = 320, STUB_LEN = 70;
 const GAP_TIME = 4, ARM_V = 50 / KMH;
 // The blinker blinks BLINK_T s on, as long off; it comes on within BLINK_FROM metres of the turn.
 const BLINK_T = 0.4, BLINK_FROM = 150;
-// Where the road straight on leads, legs 1–8: the second line of the blue signs.
-const STRAIGHT_ON = ['Lahti', 'Heinola', 'Mikkeli', 'Jämsä', 'Viitasaari', 'Kokkola', 'Kemi', 'Kemijärvi'];
+// Where the road straight on leads, legs 1–11: the second line of the blue signs.
+const STRAIGHT_ON = ['Lahti', 'Heinola', 'Mikkeli', 'Jämsä', 'Viitasaari', 'Kokkola', 'Kemi', 'Kemijärvi', 'Pelkosenniemi', 'Kittilä', 'Karigasniemi'];
 
 // ---- Placing the turns (from newLeg, right after makeRoad) ----
 // Each turn bends the road itself: TURN_BEFORE metres made straight, the bend, TURN_AFTER metres

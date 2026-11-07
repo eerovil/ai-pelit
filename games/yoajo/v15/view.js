@@ -291,27 +291,33 @@ function buildWorld() {
   for (const m of V3.meshes.values()) { V3.scene.remove(m); dispose(m); }
   V3.meshes.clear();
   const w = new THREE.Group(); V3.world = w; V3.built = road; V3.scene.add(w);
-  const wx = leg.weather, snowy = wx === 'lumi' || wx === 'pyry', wet = wx === 'sade';
+  // v15 (#440): Lapland's frosty nights ('pakkanen') are clear, but the snow lies on everything:
+  // `fallen` dresses the ground, `snowy` (falling snow) the sky and the fog.
+  const wx = leg.weather, snowy = wx === 'lumi' || wx === 'pyry', wet = wx === 'sade', fallen = snowy || wx === 'pakkanen';
   // The night: overcast or clear, the fog closing in faster in snow and rain.
   const sky = snowy ? 0x0b0f16 : wet ? 0x06080c : 0x04060c;
   V3.scene.background = new THREE.Color(sky);
   V3.scene.fog = new THREE.Fog(sky, 25, wx === 'pyry' ? 160 : snowy ? 230 : wet ? 300 : 420);
   V3.fogBase = { far: V3.scene.fog.far, colour: new THREE.Color(sky) };
-  V3.moon.intensity = snowy ? 1.1 : 0.55;
-  w.add(groundMesh(snowy, wet));
+  V3.moon.intensity = fallen ? 1.1 : 0.55;
+  w.add(groundMesh(fallen, wet));
   // v14 (#440): the road straight on at each turn, and a crossroads' crossing road.
-  for (const J of road.turns || []) for (const a of J.arms) w.add(armMesh(J, a, snowy, wet, wx === 'pyry'));
+  for (const J of road.turns || []) for (const a of J.arms) w.add(armMesh(J, a, fallen, wet, wx === 'pyry'));
   // v8: in a blizzard too, where only the junctions' no-overtaking lines show (v1–v7: no lines at all).
-  w.add(markings(snowy, wx === 'pyry'));
-  w.add(trees(snowy));
-  w.add(posts(snowy));
+  w.add(markings(fallen, wx === 'pyry'));
+  w.add(trees(fallen, leg.fell ? 0.25 : 1));
+  w.add(posts(fallen));
+  // v15: the fells round Utsjoki, and the northern lights on a clear Lapland night.
+  if (leg.fell) w.add(fells());
+  V3.aurora = leg.aurora && !snowy ? aurora() : null;
+  if (V3.aurora) w.add(V3.aurora);
   V3.signs = road.signs.map(signMesh); V3.signs.forEach(m => w.add(m));
   V3.camMeshes = road.cams.map(c => cameraMesh(c)); V3.camMeshes.forEach(m => w.add(m));
   // v7 (#266): each pothole lies on the road's surface, with a pale rim of broken asphalt that the
   // headlights catch. v1–v6 drew a black disc at a flat 3 cm, under the crowned road for every
   // hole within 1.25 m of the centre line, so those were not seen at all.
-  const holeMat = new THREE.MeshLambertMaterial({ color: snowy ? 0x3a3e45 : 0x050506 });
-  const rimMat = new THREE.MeshLambertMaterial({ color: snowy ? 0x9aa1aa : 0xb4b6ba, emissive: snowy ? 0x000000 : 0x1c1c1e });
+  const holeMat = new THREE.MeshLambertMaterial({ color: fallen ? 0x3a3e45 : 0x050506 });
+  const rimMat = new THREE.MeshLambertMaterial({ color: fallen ? 0x9aa1aa : 0xb4b6ba, emissive: fallen ? 0x000000 : 0x1c1c1e });
   for (const h of road.holes) {
     const p = worldAt(h.s, h.lat, groundAt(h.s, h.lat, false) + 0.012);
     const rim = new THREE.Mesh(new THREE.RingGeometry(h.r, h.r + 0.22, 14).rotateX(-Math.PI / 2), rimMat);
@@ -319,7 +325,7 @@ function buildWorld() {
     const m = new THREE.Mesh(new THREE.CircleGeometry(h.r, 12).rotateX(-Math.PI / 2), holeMat);
     m.position.set(...p); w.add(m);
   }
-  for (const b of road.bays) w.add(restStop(b, snowy));
+  for (const b of road.bays) w.add(restStop(b, fallen));
   for (const J of road.junctions) w.add(junctionLamp(J));
   for (const c of road.checks) w.add(checkCones(c));
   // v13 (#440): the road events' fixed parts.
@@ -329,7 +335,7 @@ function buildWorld() {
   // v14: the level crossings.
   V3.rails = road.rail.map(railMesh); V3.rails.forEach(m => w.add(m));
   w.add(townLights());
-  if (wx !== 'kuiva') w.add(V3.weather = weatherMesh(wx));
+  if (wx !== 'kuiva' && wx !== 'pakkanen') w.add(V3.weather = weatherMesh(wx));
   else { V3.weather = null; w.add(starField()); }
 }
 
@@ -548,10 +554,11 @@ function inCorner(x, z) {
   return road.turns.some(J => { const c = worldAt(J.a0, J.dir * J.R); return Math.hypot(x - c[0], z - c[2]) < J.R + 6; });
 }
 // Spruces, a few thousand, one draw.
-function trees(snowy) {
+function trees(snowy, dense = 1) {
   const r = rng(9), spots = [];
   for (let s = -40; s < road.total; s += 3.2) for (const side of [-1, 1]) {
     if (r() < 0.25) continue;
+    if (dense < 1 && r() > dense) continue;   // v15: the bare fells (dense 0.25)
     const near = 10 + Math.pow(r(), 1.6) * 55;
     if (side > 0 && road.bays.some(b => s > b.s0 - 40 && s < b.s1 + 40) && near < 22) continue;
     if (s > road.len - 380 && near < 24) continue;                   // the town at the end
@@ -615,7 +622,7 @@ function merge(parts) {
 
 // ---- Signs: drawn once on a canvas each, bright when the headlights reach them ----
 function signCanvas(sg) {
-  const c = document.createElement('canvas'), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi' || sg.kind === 'suunta';
+  const c = document.createElement('canvas'), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'huolto' || sg.kind === 'kaupunki' || sg.kind === 'poliisi' || sg.kind === 'suunta';
   c.width = wide ? 256 : 128; c.height = 128;
   const g = c.getContext('2d');
   if (sg.kind === 'suunta') {
@@ -665,7 +672,7 @@ function signCanvas(sg) {
     g.fillStyle = '#d42a1e'; g.beginPath(); g.arc(64, 64, 62, 0, TAU); g.fill();
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(64, 64, 46, 0, TAU); g.fill();
     g.fillStyle = '#111'; g.font = 'bold 50px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(sg.v), 64, 68);
-  } else if (sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki') {
+  } else if (sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'huolto' || sg.kind === 'kaupunki') {
     g.fillStyle = sg.kind === 'kaupunki' ? '#ffffff' : '#1d55a8'; g.fillRect(0, 0, 256, 128);
     g.strokeStyle = sg.kind === 'kaupunki' ? '#111' : '#ffffff'; g.lineWidth = 6; g.strokeRect(5, 5, 246, 118);
     g.fillStyle = sg.kind === 'kaupunki' ? '#111' : '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -675,6 +682,10 @@ function signCanvas(sg) {
     } else if (sg.kind === 'levahdys') {
       g.font = 'bold 72px system-ui,sans-serif'; g.fillText('P', 60, 68);
       g.font = 'bold 26px system-ui,sans-serif'; g.fillText('☕ Kahvi', 170, 50); g.fillText(sg.text || '100 m', 170, 88);
+    } else if (sg.kind === 'huolto') {
+      // v15 (#440): the service station on a Lapland leg: a fuel pump, coffee and how far.
+      g.fillRect(34, 34, 40, 64); g.fillRect(74, 50, 14, 6); g.fillRect(84, 50, 6, 40); g.fillStyle = '#1d55a8'; g.fillRect(41, 42, 26, 18); g.fillStyle = '#fff';
+      g.font = 'bold 26px system-ui,sans-serif'; g.fillText('☕ Kahvi', 172, 50); g.fillText(sg.text || '100 m', 172, 88);
     } else { g.font = `bold ${sg.text.length > 8 ? 34 : 42}px system-ui,sans-serif`; g.fillText(sg.text, 128, 66); }
   } else {
     // Finnish warning signs: a yellow triangle in a red border.
@@ -706,7 +717,7 @@ function signCanvas(sg) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 function signMesh(sg) {
-  const g = new THREE.Group(), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'kaupunki' || sg.kind === 'poliisi' || sg.kind === 'suunta';
+  const g = new THREE.Group(), wide = sg.kind === 'kamera' || sg.kind === 'levahdys' || sg.kind === 'huolto' || sg.kind === 'kaupunki' || sg.kind === 'poliisi' || sg.kind === 'suunta';
   const mat = new THREE.MeshBasicMaterial({ map: signCanvas(sg), transparent: true, color: 0x111111 });
   const plate = new THREE.Mesh(V3.geo.plate, mat); plate.scale.set(wide ? 1.8 : 0.9, 0.9, 1); plate.position.y = 2.2;
   const post = part(V3.geo.pole, V3.mats.grey, 0.04, 2.2, 0.04, 0, 1.1, 0);
@@ -734,7 +745,9 @@ function restStop(b, snowy) {
     const c = document.createElement('canvas'); c.width = c.height = 128;
     const x = c.getContext('2d');
     x.fillStyle = '#1d55a8'; x.fillRect(0, 0, 128, 128); x.strokeStyle = '#fff'; x.lineWidth = 8; x.strokeRect(6, 6, 116, 116);
-    x.fillStyle = '#fff'; x.font = 'bold 96px system-ui,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('P', 64, 70);
+    x.fillStyle = '#fff'; x.font = 'bold 96px system-ui,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    if (b.station) { x.fillRect(30, 26, 44, 76); x.fillRect(74, 44, 14, 7); x.fillRect(84, 44, 7, 46); x.fillStyle = '#1d55a8'; x.fillRect(38, 36, 28, 22); }
+    else x.fillText('P', 64, 70);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     const pole = new THREE.Group(), q = worldAt(b.s0, 13);
     const plate = new THREE.Mesh(V3.geo.plate, new THREE.MeshBasicMaterial({ map: t, color: 0xb0b0b0 })); plate.scale.set(2, 2, 1); plate.position.y = 6;
@@ -749,6 +762,22 @@ function restStop(b, snowy) {
   house.position.set(...p); house.rotation.y = -headingAt(s) + Math.PI / 2;
   g.add(house);
   for (const sx of [b.s0, b.s1]) { const q = worldAt(sx, 9.5), l = sprite(V3.mats.glowY, 3.2); l.position.set(q[0], q[1] + 6, q[2]); g.add(l); g.add(part(V3.geo.pole, V3.mats.grey, 0.06, 6, 0.06, q[0], q[1] + 3, q[2])); }
+  // v15 (#440): a service station: a lit canopy over two pumps beside the bay's paving.
+  if (b.station) {
+    const cs = (b.s0 + b.s1) / 2 + 8, cp = worldAt(cs, EDGE + 5.5), canopy = new THREE.Group();
+    canopy.add(part(V3.geo.box, lam(snowy ? 0xe6edf3 : 0xdedede), 12, 0.6, 7, 0, 4.6, 0));
+    canopy.add(part(V3.geo.box, new THREE.MeshBasicMaterial({ color: 0x1d55a8 }), 12.1, 0.5, 7.1, 0, 4.1, 0));
+    canopy.add(part(V3.geo.box, new THREE.MeshBasicMaterial({ color: 0xfff4dc }), 10, 0.05, 5, 0, 3.82, 0));
+    for (const z of [-2.6, 2.6]) for (const xx of [-5.5, 5.5]) canopy.add(part(V3.geo.box, V3.mats.grey, 0.25, 4, 0.25, xx, 2, z));
+    for (const xx of [-2.4, 2.4]) {
+      canopy.add(part(V3.geo.box, lam(0xd8d8d8), 0.8, 1.6, 0.5, xx, 0.8, 0));
+      canopy.add(part(V3.geo.box, new THREE.MeshBasicMaterial({ color: 0x3d8bff }), 0.6, 0.35, 0.52, xx, 1.25, 0));
+    }
+    for (const xx of [-3, 0, 3]) { const l = sprite(V3.mats.glowW, 3); l.position.set(xx, 3.6, 0); canopy.add(l); }
+    const pool = new THREE.PointLight(0xfff0d8, 22, 20, 1.2); pool.position.set(0, 3.5, 0); canopy.add(pool);
+    canopy.position.set(...cp); canopy.rotation.y = -headingAt(cs);
+    g.add(canopy);
+  }
   return g;
 }
 // v8 (#306): a street light over each side road's mouth, as on the main roads, so the junction
@@ -779,6 +808,58 @@ function townLights() {
     const q = worldAt(s, side * (22 + r() * 30)), l = sprite(V3.mats.glowY, 1.4 + r()); l.position.set(q[0], q[1] + 1.5 + r() * 4, q[2]); g.add(l);
   }
   return g;
+}
+// v15 (#440): the fells round Utsjoki: wide white rounded tops 150–380 m off the road on both
+// sides, lit faintly by the moon.
+function fells() {
+  const r = rng(leg.seed * 7 + 5), mat = new THREE.MeshLambertMaterial({ color: 0xd9e2ec });
+  const g = new THREE.Group();
+  for (let s = 100; s < road.total; s += 160 + r() * 120) for (const side of [-1, 1]) {
+    if (r() < 0.3) continue;
+    const off = 150 + r() * 230, p = worldAt(s, side * off), rad = 70 + r() * 90, hgt = 25 + r() * 45;
+    const m = new THREE.Mesh(V3.geo.fell || (V3.geo.fell = new THREE.SphereGeometry(1, 18, 8, 0, TAU, 0, Math.PI / 2)), mat);
+    m.scale.set(rad, hgt, rad * (0.7 + r() * 0.6)); m.position.set(p[0], p[1] - 4, p[2]);
+    g.add(m);
+  }
+  return g;
+}
+// v15: the northern lights: three green curtains low over the horizon ahead, waving slowly (the
+// vertices move each frame in draw3d). They follow the camera, as the stars do.
+function aurora() {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 64;
+  const x = c.getContext('2d'), gr = x.createLinearGradient(0, 64, 0, 0);
+  gr.addColorStop(0, 'rgba(60,255,140,0)'); gr.addColorStop(0.12, 'rgba(70,255,150,0.95)'); gr.addColorStop(0.45, 'rgba(60,220,140,0.45)');
+  gr.addColorStop(0.8, 'rgba(120,90,220,0.18)'); gr.addColorStop(1, 'rgba(120,90,220,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 4, 64);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false, opacity: 0.8 });
+  const a0 = worldAt(0, 0), a1 = worldAt(road.len, 0), dir = Math.atan2(a1[2] - a0[2], a1[0] - a0[0]);
+  const g = new THREE.Group(), M = 48, ribbons = [];
+  for (const [k, rad, y0, hh, span] of [[0, 560, 70, 190, 1.3], [1, 600, 110, 160, 1.0], [2, 520, 50, 140, 0.8]]) {
+    const pos = new Float32Array((M + 1) * 6), uv = new Float32Array((M + 1) * 4), idx = [];
+    for (let i = 0; i <= M; i++) {
+      uv.set([i / M, 0, i / M, 1], i * 4);
+      if (i < M) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
+    const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; g.add(m);
+    ribbons.push({ geo, pos, k, rad, y0, hh, span, mid: dir + (k - 1) * 0.35, M });
+  }
+  g.userData = { sky: true, ribbons };
+  auroraWave(g, 0);
+  return g;
+}
+function auroraWave(g, time) {
+  for (const R of g.userData.ribbons) {
+    const { pos, rad, y0, hh, span, mid, M, k } = R;
+    for (let i = 0; i <= M; i++) {
+      const u = i / M, a = mid + (u - 0.5) * span + 0.04 * Math.sin(time * 0.3 + u * 9 + k);
+      const rr = rad + 40 * Math.sin(time * 0.25 + u * 6 + k * 2), h = hh * (0.7 + 0.3 * Math.sin(time * 0.4 + u * 11 + k));
+      const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
+      pos.set([cx, y0, cz, cx, y0 + h, cz], i * 6);
+    }
+    R.geo.attributes.position.needsUpdate = true;
+  }
 }
 function starField() {
   const r = rng(4), n = 500, a = new Float32Array(n * 3);
@@ -945,6 +1026,7 @@ function draw3d(now) {
     const p = carAt(P.s, P.lat, 0); wm.position.set(p[0], p[1], p[2]); wm.rotation.y = -carHeading(P.s);
     if (u.snow) wm.material.opacity = P.high ? 0.95 : 0.6;
   }
+  if (V3.aurora) auroraWave(V3.aurora, time);
   V3.world.children.forEach(o => { if (o.userData.sky) o.position.copy(camera.position); });
   R.render(scene, camera);
 }
