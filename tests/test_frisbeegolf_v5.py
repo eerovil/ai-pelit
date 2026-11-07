@@ -480,3 +480,30 @@ def test_room_speaking_label_clears_landscape_roster(site, _playwright):
         for ctx in contexts:
             ctx.close()
         browser.close()
+
+
+def test_host_drops_a_bad_swipe_path_but_keeps_the_throw(site, browser):
+    """A guest's swipe arrives as numbers; too fast, released far away or not numbers, the
+    host flies the plain aimed throw instead of trusting the path."""
+    ctx, p = open_game(site, browser)
+    p.click('#play')
+    p.wait_for_function("round.phase==='aim'")
+    result = p.evaluate("""() => {
+      const base={angle:0,power:.5,curve:0,disc:1}, eye=ground(HOLES[0],0,0)+1.5, out=[];
+      for (const extra of [
+        {origin:[0,eye,0],velocity:[0,5,20]},
+        {origin:[0,eye,0],velocity:[0,5,60]},
+        {origin:[9,eye,0],velocity:[0,5,20]},
+        {origin:[0,eye+9,0],velocity:[0,5,20]},
+        {origin:[0,eye,0],velocity:[0,'5',20]},
+        {origin:[0,eye,0],velocity:[0,5]},
+      ]) {
+        const ok=startShot({...base,...extra});
+        out.push([ok,!!round.shot.velocity]);
+        round.phase='aim';current().strokes=0;
+      }
+      return out;
+    }""")
+    assert result == [[True, True]] + [[True, False]] * 5
+    assert not p.errors
+    ctx.close()
