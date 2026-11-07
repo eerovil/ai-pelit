@@ -129,7 +129,7 @@ function preview(n) { newLeg(n); mode = 'menu'; P.v = 0; }
 // and glass, and the tune at the end of a leg. Each falls back to v5's beep while its file is not
 // there (the first open offline). Sound starts with the first tap (aanet.js listens for it).
 const S = AiPelitAanet;
-S.load(['moottori', 'sade', 'naksu', 'tomahdys', 'kamera', 'virhe', 'torvi', 'suhahdus', 'kitka', 'kolari', 'lasi', 'voitto']);
+S.load(['moottori', 'sade', 'naksu', 'tomahdys', 'kamera', 'virhe', 'torvi', 'suhahdus', 'kitka', 'kolari', 'lasi', 'voitto', 'kello']);
 let ac = null, engine = null, rain = null;
 function unlock() {
   if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
@@ -175,6 +175,8 @@ function crashSound(why) {
 // v12 (#440): a police siren, quiet and short (the sound library has none): two tones in turn.
 function sirenSound() { for (let i = 0; i < 6; i++) setTimeout(() => tone(i % 2 ? 880 : 660, 0.32, 'triangle', 0.035), i * 340); }
 // A dazzled driver honks back (v5 only flashed the lights).
+// v14 (#440): the level crossing's bell, quiet.
+function bellSound() { S.play('kello', { vol: 0.25 }) || tone(1250, 0.1, 'triangle', 0.03); }
 function honkSound() { S.play('torvi', { vol: 0.45, delay: 0.15 }) || tone(420, 0.35, 'square', 0.04); }
 // A truck going by, close to the car: louder the faster they pass each other. No beep without it.
 function truckSound(rel) { S.play('suhahdus', { vol: clamp(0.35 + rel / 50, 0.35, 0.9), rate: 0.7 }); }
@@ -234,7 +236,7 @@ function draw() {
 function dashboard() {
   // Oncoming high beams dazzle: a glare where their lights are.
   for (const t of things) {
-    if (!(t.v < 0 && t.high && t.s > P.s + 5 && t.s - P.s < 260)) continue;
+    if (!(t.v < 0 && t.high && !t.arm && t.s > P.s + 5 && t.s - P.s < 260)) continue;
     const p = screenOf(t.s - t.len / 2, t.lat, 0.8); if (!p) continue;
     const k = 1 - (t.s - P.s) / 260, r = 24 + k * k * 220, g = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
     g.addColorStop(0, `rgba(255,250,235,${0.15 + k * 0.55})`); g.addColorStop(1, 'rgba(255,250,235,0)');
@@ -290,20 +292,27 @@ function dashboard() {
   text(String(lim), rx + 19, ly + 1, 14, '#111', 'center', 800);
   if (mode === 'drive') driveButtons();
   // A hint at the rest area, with how far it is (v8, #306; v1–v7: only while sleepy, no distance).
-  const bay = road.bays.find(b => b.s1 > P.s && b.s0 - P.s < 300);
+  // v14: on the wrong road only "Väärä tie!" shows; the hints ahead belong to the right road.
+  const bay = !P.wrong && road.bays.find(b => b.s1 > P.s && b.s0 - P.s < 300);
   if (bay && mode === 'drive') {
     const d = Math.round((bay.s0 - BAY_IN - P.s) / 10) * 10;
     fitText(P.rest > 0 ? 'Kahvitauko…' : d > 0 ? `P Levähdysalue ${d} m: oikealle ja pysähdy` : 'P Levähdysalue: oikealle ja pysähdy', W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#ffe08a');
   }
   // v12 (#440): the police check ahead, with how far it is, and what to do there.
-  const ck = road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s < 320 && c.s - P.s > -8);
+  const ck = !P.wrong && road.checks.find(c => c.live && c.state !== 'done' && c.s - P.s < 320 && c.s - P.s > -8);
   if (ck && mode === 'drive' && !bay) {
     const d = Math.round((ck.s - P.s) / 10) * 10;
     fitText(ck.state === 'blow' ? 'Puhalla…' : d > 10 ? `Puhalluskoe ${d} m: pysähdy poliisin kohdalle` : 'Pysähdy poliisin kohdalle', W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#bcd0ff');
   }
   // v13: what to do at the road events ahead (roadHint() in tie.js).
-  const rhint = mode === 'drive' && !bay && !ck ? roadHint() : '';
+  const rhint = mode === 'drive' && !P.wrong && !bay && !ck ? roadHint() : '';
   if (rhint) fitText(rhint, W / 2, H - SAFE_B - (LAND ? 160 : 180), 15, W - 40, '#ffd27a');
+  // v14 (#440): the next turn: a blue sign with its arrow and how far; the blinker by the speedometer.
+  turnPill(H - SAFE_B - (LAND ? 160 : 180) - 34);
+  if (P.signal && mode === 'drive' && (performance.now() / 1000 % (BLINK_T * 2)) < BLINK_T) {
+    const bx = sp.cx + P.signal * (sp.r + 2), by = sp.cy + sp.r * 0.85, d = P.signal;
+    x.beginPath(); x.moveTo(bx + d * 14, by); x.lineTo(bx, by - 10); x.lineTo(bx, by + 10); x.closePath(); x.fillStyle = '#4cd964'; x.fill();
+  }
   // While a police car sees the car: a small sign under the speedometer.
   if (P.seen && mode === 'drive') text('🚓 Poliisi näkee', W / 2, sp.cy + sp.r + 14, 12, '#a9c2ff', 'center', 700);
   // Messages: overtakes, fines, the lights.
@@ -317,6 +326,24 @@ function dashboard() {
     else drawBtn(b, false);
   }
   if (mode === 'drive') thumbGuides();
+}
+// v14 (#440): the turn ahead, from SIGN_FAR metres before (turnHint() in risteys.js): a blue pill with
+// an arrow, "Käänny vasemmalle 450 m"; on the wrong road a red one.
+function turnPill(y) {
+  if (mode !== 'drive' || typeof turnHint !== 'function') return;
+  const h = turnHint(); if (!h) return;
+  const label = h.wrong ? 'Väärä tie!' : h.d > 0 ? `Käänny ${h.dir > 0 ? 'oikealle' : 'vasemmalle'} ${h.d} m` : `Käänny ${h.dir > 0 ? 'oikealle' : 'vasemmalle'}: ${h.to}`;
+  x.font = '700 15px system-ui,sans-serif';
+  const tw = Math.min(W - 80, x.measureText(label).width), pw = tw + 58, px = (W - pw) / 2;
+  rr(px, y - 15, pw, 30, 15); x.fillStyle = h.wrong ? 'rgba(170,30,24,0.92)' : 'rgba(29,85,168,0.92)'; x.fill();
+  x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 2; x.stroke();
+  if (!h.wrong) {
+    // The arrow: up, then bent to the turn's side.
+    const ax = px + 20, d = h.dir;
+    x.strokeStyle = '#fff'; x.lineWidth = 3; x.lineCap = 'round'; x.beginPath(); x.moveTo(ax, y + 9); x.lineTo(ax, y - 1); x.lineTo(ax + d * 8, y - 1); x.stroke();
+    x.fillStyle = '#fff'; x.beginPath(); x.moveTo(ax + d * 14, y - 1); x.lineTo(ax + d * 7, y - 7); x.lineTo(ax + d * 7, y + 5); x.closePath(); x.fill();
+  }
+  fitText(label, px + (h.wrong ? pw / 2 : 36 + tw / 2), y, 15, tw, '#fff', 'center', 700);
 }
 // v5 (#206: "nopeusmittari yläreunaan, samannäköinen kuin auton nopeusmittari"): a round dial
 // at the top middle, 0–200 km/h, ticks every 10 and numbers every 20, a red needle, the speed in
@@ -473,7 +500,12 @@ function crashScreen() {
   lines.push(line.trim());
   const hints = asleep ? ['Pysähdy levähdysalueelle kahville.']
     : cop && crashWhy.includes('puhallus') ? ['Pysähdy puhalluskokeessa poliisin kohdalle.']
+    : cop && crashWhy.includes('käännös') ? ['Vasemmalle kääntyessä anna tietä', 'vastaantulijalle.']
     : cop ? ['Poliisin nähden enintään 10 km/h yli', 'ja vain turvallisia ohituksia.']
+    // v14 (#440): the turns and the level crossing.
+    : crashWhy.startsWith('Väärä tie') ? ['Käänny opasteen nuolen suuntaan:', 'hidasta ja ohjaa ajoissa.']
+    : crashWhy.includes('liian lujaa') ? ['Hidasta risteykseen alle 40 km/h', 'ja rampille alle 60 km/h.']
+    : crashWhy.includes('puomi') ? ['Tasoristeyksessä odota,', 'kunnes puomit nousevat.']
     : crashWhy.startsWith('Rengas') ? ['Kuoppien kohdalla hidasta alle 50 km/h.']
     : crashWhy.includes('tietyö') ? ['Tietyössä aja vasenta kaistaa vihreällä.']
     : crashWhy.includes('erikoiskuljetu') ? ['Erikoiskuljetusta väistä reunaan,', 'alle 50 km/h.']
@@ -483,7 +515,7 @@ function crashScreen() {
   const textH = 74 + (lines.length - 1) * 21 + (hints.length ? 8 + hints.length * 18 : 0);
   const w = Math.min(340, W - 24), h = LAND ? H - 30 : Math.max(270, textH + 150), x0 = (W - w) / 2, y0 = LAND ? 15 : Math.min(H * 0.22, H - h - 10);
   panel(x0, y0, w, h);
-  text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
+  text(asleep ? 'Nukahdit!' : cop ? 'Poliisi pysäytti!' : crashWhy.startsWith('Vaara') ? 'Vaaratilanne!' : crashWhy.startsWith('Väärä tie') ? 'Väärä tie!' : crashWhy.startsWith('Rengas') ? 'Rengas rikki!' : 'Kolari!', W / 2, y0 + 36, 28, '#ff8a7a', 'center', 900);
   let ly = y0 + 74;
   lines.forEach((l, i) => text(l, W / 2, ly + i * 21, 15, '#e8eefc', 'center', 600));
   ly += (lines.length - 1) * 21;

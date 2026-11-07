@@ -92,6 +92,13 @@
       "note": "Tiellä on uusia tilanteita: tietyö liikennevaloineen, sumu notkoissa, rikkinäinen auto varoituskolmioineen, ambulanssi takana, erikoiskuljetus vastaan, aura-auto ja musta jää.",
       "request": "Autopeliin lisää. Tuleeko ideoita",
       "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 14,
+      "date": "2026-11-08",
+      "note": "Reitti kääntyy: liittymät ja risteykset, joissa pitää kääntyä opasteen mukaan (vilkku menee päälle itsestään), ja tasoristeys puomeineen ja junineen.",
+      "request": "Autopeliin lisää. Tuleeko ideoita",
+      "issue": "eerovil/ai-pelit#440"
     }
   ]
 }

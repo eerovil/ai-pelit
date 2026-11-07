@@ -55,10 +55,12 @@ function placeCheck(evs, r) {
   const spots = road.bad.map(x => x.s0 + CHECK_IN).filter(s => s > 600 && s < leg.len - 400 &&
     !road.cams.some(c => near(s - 260, s + 60, c.s)) &&
     !road.junctions.some(J => near(s - 160, s + 60, J.s)) &&
-    !road.signs.some(sg => sg.kind !== 'raja' && sg.kind !== 'kuoppa' && near(s - 160, s + 40, sg.s)) &&
+    !road.signs.some(sg => sg.kind !== 'raja' && sg.kind !== 'kuoppa' && sg.kind !== 'suunta' && near(s - 160, s + 40, sg.s)) &&
     !evs.some(e => (e.kind === 'hirvi' || e.kind === 'poro' || e.kind === 'kavelija') && near(s - 260, s + 40, e.s)));
   if (!spots.length) return null;
   const s = spots[Math.floor(r() * spots.length)], c = { s, state: 'wait', t: 0, live: false, told: false };
+  // v14: a turn's far direction sign (risteys.js) there moves on past the check.
+  for (const sg of road.signs) if (sg.kind === 'suunta' && near(s - 160, s + 40, sg.s)) sg.s = s + 50;
   road.checks.push(c);
   road.pads.push({ s0: s - 6, s1: s + 16 });
   road.signs.push({ s: s - CHECK_IN + 50, kind: 'poliisi' });

@@ -3,7 +3,7 @@
 The plan for Yöajo's next versions (#440): what the police do, how fuel works, the new things on
 the road, the exits and junctions where the route turns, the three new Lapland legs to Utsjoki, the endless night and the whole-trip summary.
 One leg's own rules (lights, overtaking, moose, cameras, coffee) are in `yoajo.md`; this diagram
-shows only what is added around them. v12 (police and the police check) and v13 (road events) are built; v14–v16 are the approved plan, and their boxes are rewritten to the code as each is built. Paths name the version that adds each.
+shows only what is added around them. v12 (police and the police check), v13 (road events) and v14 (turns and the level crossing) are built; v15–v16 are the approved plan, and their boxes are rewritten to the code as each is built. Paths name the version that adds each.
 
 ```mermaid
 flowchart TD
@@ -39,6 +39,9 @@ flowchart TD
   KR -- Liian kovaa --> X
   KR -- Ajoit ohi --> KR2[Väärä tie: osuus päättyy]
   KR2 --> X
+  KR -- Vasemmalle vastaantulijan eteen --> KR3[Käännyit vastaantulijan eteen -50, hurjastelu]
+  KR3 -- Poliisi näki --> PX
+  KR -- Odotit vastaantulijan ohi --> KR4[Annoit tietä +20]
   C -- Tasoristeys --> TR{Puomit alhaalla?}
   TR -- Odotit --> TR1[Juna menee ohi +20]
   TR -- Ajoit päin --> X[Kolari: osuus päättyy]
@@ -54,8 +57,8 @@ flowchart TD
   X --> A
   class A,B,LY,P0,SU,EK,AU,MJ,FA,KR1 blue
   class C,P,PK,TV,RA,AM,TR,F,KR amber
-  class PK1,TV1,RA1,AM1,TR1,EK1 teal
-  class PX,PS,TV2,RA2,AM2,FX,X,KR2 rose
+  class PK1,TV1,RA1,AM1,TR1,EK1,KR4 teal
+  class PX,PS,TV2,RA2,AM2,FX,X,KR2,KR3 rose
   class Z,S,KM,LT green
 ```
 
@@ -87,10 +90,14 @@ flowchart TD
 - **Erikoiskuljetus vastaan**: v13 (legs 4, 7): two escort cars with orange beacons and between them a 16 m house 4.6 m wide (`loadMesh()`), half over the centre line, at 40 km/h; cars behind it follow at its speed. From 400 m "Erikoiskuljetus vastaan: oikeaan reunaan ja alle 50". Over 50 km/h as it goes by: "Vaaratilanne: ohitit erikoiskuljetuksen liian kovaa." and the leg ends; otherwise +20 (`tally.erikois`).
 - **Aura-auto**: v13 (legs 5–8): a snowplough at 40 km/h with orange beacons ahead in the player's lane; within 50 m behind it (`CLOUD_BACK`) its snow cloud whitens the screen, thickest close up. Overtaking it is worth 60.
 - **Musta jää**: v13 `iceAt()` and `gripAt()` (legs 5–8): up to two 50 m shiny patches, each after a "Liukas ajorata" sign 150 m before it; grip halves on them. "Musta jää: ei jarrua eikä äkkiohjausta".
-- **Käännyitkö opastetusta?**: v14 `risteys.js`: 1–3 turns a leg along the real route, an exit ramp off the motorway (legs 1–2) or a crossroads where Valtatie 4 turns (from leg 3). Blue direction signs at 600 m and 150 m and an arrow on the screen show the way; the straight-on road is a real side road.
-- **Vilkku syttyy itsestään, matka jatkuu**: v14 `autoBlink()` (Eero's choice: no signal buttons): the blinker lights from the steering as the car turns. A left turn in front of an oncoming car within 4 s is −50 and reckless.
-- **Väärä tie: osuus päättyy**: v14 `wrongWay()` (Eero's choice): 250 m down the wrong road ends the leg on the crash screen, "Väärä tie: ajoit ohi käännöksen."; in the endless night it ends the run.
-- **Tasoristeys**: v14 (leg 4 and Lapland): a level crossing with lights and barriers; a train passes in 6 s.
+- **Risteys tai liittymä, jossa käännytään**: v14 `turnLeg()` in `games/yoajo/v14/risteys.js`, right after `makeRoad()`: 1, 1, 1, 1, 2, 2, 3, 3 turns on legs 1–8 (`TURNS`), an exit ramp to the right off the motorway on legs 1–2 (0.6 rad on 70 m) and a crossroads where Valtatie 4 turns a quarter round on 28 m from leg 3. Each bends the road itself, with 140 m straight before and 100 m after on level ground; the road straight on is drawn as a side road of its own (`frameTurn()`), and no trees grow inside the corner (`inCorner()` in `view.js`). Each leg is 400 m longer per turn (`LEGS` in `game.js`) and nothing else is placed within 250 m before a turn or 120 m after it, so everything v13 had still fits. Blue direction signs 600 m and 150 m before, on the turn's side (`suunta`); the far one steps out of a road event's stretch (`turnSigns()`) or a police check (`placeCheck()` in `poliisi.js`). From 600 m "Käänny oikealle/vasemmalle … m", and an arrow pill on the screen (`turnHint()`). Traffic cars slow for the turn too (`turnCruise()`).
+- **Käännyitkö opastetusta?**: v14 `turnTick()`: decided `TURN_EASE` (8 m) into the turn: the car has turned if it steered towards it within the last 33 m (`P.into`).
+- **Vilkku syttyy itsestään, matka jatkuu**: v14 `turnTick()` (Eero's choice: no signal buttons): within 150 m the blinker comes on by itself, to the turn's side, once the car slows under 60 km/h (a crossroads) or 80 (a ramp), steers into it, or reaches it; off once round. Going too fast: off the road in a turn's bend is "Ajoit ojaan: liian lujaa risteykseen." over 35 km/h, "… rampille." over 55 (`ditchWhy()`).
+- **Väärä tie: osuus päättyy**: v14 `wrongRoad()` (Eero's choice): straight on past a turn, "Väärä tie!" and a red pill; the car drives on down the side road and 250 m on (`WRONG_LEN`) the leg ends, "Väärä tie: ajoit ohi käännöksen.", with a hint on the crash screen.
+- **Käännyit vastaantulijan eteen -50, hurjastelu**: v14: at a left turn a car comes from the road ahead (`crosser()`), set off so that it reaches the crossing about when the player does. Turning while it is under 4 s (`GAP_TIME`) from the crossing is −50 and counts as reckless (`tally.hurjastelu`); the car brakes and honks. A police car that sees it (`policeSaw()`) ends the leg, "Poliisi pysäytti: vaarallinen käännös.".
+- **Annoit tietä +20**: v14: stopped before the turn while that car came, then turned after it: +20 (`tally.kaannos`).
+- **Tasoristeys**: v14 `railCrossing()` and `roadTick()` in `tie.js` (leg 4, `ROAD_EVENTS`; the Lapland legs in v15): its 360 m are kept first in `newLeg()` (`road.railAt`). 220 m before (`RAIL_WARN`) "Juna tulee: puomit laskeutuvat", the lights blink and a bell rings, the barriers come down from 1.5 s to 4 s, a train goes by from 6 s and they lift at 15–17 s. Cars queue before it. Driving between the barriers while they are down: "Ajoit puomien läpi tasoristeyksessä.", the leg ends.
+- **Juna menee ohi +20**: v14: stopped within 60 m before it while the barriers were down: +20 "Juna meni ohi" (`tally.juna`) once over.
 - **Polttoainetta?**: v15 `fuel()` in `tie.js` (Eero's choice: only on the Lapland legs and in the endless night): a gauge beside the speedometer; a Lapland leg starts with enough to reach its station at the limits; use grows with the speed squared. In the endless night fuel carries over between stages.
 - **Huoltoasema: pysähdy mittarille, tankki täyttyy**: v15: a service station with pumps and coffee on each Lapland leg, and every other stage in the endless night; stopping at a pump fills 10 % a second. The rest areas on legs 1–8 stay as they are.
 - **Koko matka: tähdet, pisteet, km, sakot, hirvet**: v15 `tripScreen()` in `ui.js`: the best points and stars per leg summed, plus lifetime counters saved as `ai-pelit:yoajo:tilasto` (km driven, legs driven, police stops, fines, moose and reindeer avoided). Shown from the menu, and after Rovaniemi and Utsjoki.

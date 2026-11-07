@@ -20,6 +20,8 @@ v12 (#440) adds the police and the police check, drawn in `yoajo-matka.md`: `gam
 
 v13 (#440) adds the road events, also drawn in `yoajo-matka.md`: `games/yoajo/v13/tie.js` places them in `newLeg()` after the police (`roadLeg()`, its own random numbers again), `drive()` calls `roadTick()`, `move()` calls `roadMove()` for every car (and `ambulance()` for the ambulance), the grip is multiplied by `gripAt()`, the beams' reach goes through `fogReach()`, and `unsafeOvertake()` does not count the open lane of roadworks as overtaking. `crashScreen()` in `ui.js` grows its panel to fit the reason and the hint above the buttons (v12: a fixed 270 px, where a two-line reason ran under them).
 
+v14 (#440) adds the turns and the level crossing, drawn in `yoajo-matka.md`: `games/yoajo/v14/risteys.js` bends the road at each turn in `newLeg()` right after `makeRoad()` (`turnLeg()`), before anything else is placed; the level crossing's stretch is kept next, then the rest as before, each leg 400 m longer per turn. `drive()` calls `turnTick()`, and on the wrong road `wrongRoad()` instead of the rest; `move()` hands the car from the road ahead to `crosser()`, and the traffic's speed is capped by `turnCruise()`. `draw3d()` in `view.js` looks less far ahead in a turn, so the camera follows the bend.
+
 ```mermaid
 flowchart TD
   A[Valitse osuus, Aja] --> B[Aja: ohjaa, kaasuta, jarruta, valot]
