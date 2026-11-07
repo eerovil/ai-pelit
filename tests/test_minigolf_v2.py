@@ -205,20 +205,31 @@ def test_rotate_while_aiming_preserves_direction_and_power(site,browser):
     assert not p.errors;ctx.close()
 
 
-def test_aim_line_alone_shows_the_power(site,browser):
+
+@pytest.mark.parametrize('size',[(360,740),(390,844),(740,360)])
+def test_aim_line_alone_shows_the_power(site,browser,size):
     """#438: no power bar; the aim line grows longer, thicker and redder with the pull."""
-    ctx,p=open_game(site,browser);p.click('#play')
+    ctx,p=open_game(site,browser,size);p.click('#play')
     assert p.locator('#power').count()==0
-    w,h=360,740;p.mouse.move(w/2,h/2);p.mouse.down()
-    p.mouse.move(w/2,h/2+30,steps=2);soft=p.evaluate('aim.p')
-    p.screenshot(path='/var/tmp/minigolf438_soft.png')
-    p.mouse.move(w/2,h/2+200,steps=3);hard=p.evaluate('aim.p')
-    p.screenshot(path='/var/tmp/minigolf438_hard.png')
+    p.evaluate("window.lines=[];const d=drawAimLine;drawAimLine=(x,y,a,q)=>{lines.push(q);d(x,y,a,q)}")
+    w,h=size;p.mouse.move(w/2,h/2);p.mouse.down()
+    # Pull straight back from the cup on screen: down upright, left on its side.
+    back=(0,1) if h>w else (-1,0)
+    p.mouse.move(w/2+back[0]*25,h/2+back[1]*25,steps=2);soft=p.evaluate('aim.p')
+    if size==(360,740):p.screenshot(path='/var/tmp/minigolf438_soft.png')
+    assert p.evaluate('lines[lines.length-1]')==pytest.approx(soft)
+    p.mouse.move(w/2+back[0]*150,h/2+back[1]*150,steps=3);hard=p.evaluate('aim.p')
+    if size==(360,740):p.screenshot(path='/var/tmp/minigolf438_hard.png')
+    if size==(740,360):p.screenshot(path='/var/tmp/minigolf438_side.png')
     assert soft<.3 and hard==1
+    assert p.evaluate('lines[lines.length-1]')==1
     assert p.evaluate('aimLineLength(%s)<aimLineLength(%s)'%(soft,hard))
     assert p.evaluate("aimLineColor(0)")=='rgb(255,242,188)' and p.evaluate("aimLineColor(1)")=='rgb(238,74,52)'
-    # The full-power line reaches well up the course and stays on it.
-    tip=p.evaluate("(()=>{const b=round.players[0].ball;return [b.y-aimLineLength(1)]})()")[0]
-    assert 0<tip<4
-    p.mouse.up();assert not p.errors
+    # The full-power arrow points at the cup and its tip stays on the course and the screen.
+    tip=p.evaluate("(()=>{const b=round.players[0].ball,t=[b.x+Math.cos(aim.a)*aimLineLength(1),b.y+Math.sin(aim.a)*aimLineLength(1)];return [t[0],t[1],...P(...t)]})()")
+    assert 0<tip[0]<4 and 0<tip[1]<4 and 0<tip[2]<w and 0<tip[3]<h
+    # Letting go clears the line; nothing draws it until the next pull.
+    p.mouse.up();p.evaluate('runBall()');n=p.evaluate('lines.length');p.evaluate('draw()')
+    assert p.evaluate('aim')is None and p.evaluate('lines.length')==n
+    assert not p.errors
     ctx.close()

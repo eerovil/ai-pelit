@@ -110,3 +110,14 @@ def test_skip_rejoin_delivery_once_and_next_round(golf_phones):
         assert not p.errors
     host.evaluate('R.stopRound()')
     for p in pages:p.wait_for_function('round===null')
+
+
+def test_others_see_the_pullers_power_line(golf_phones):
+    """#438: the line is the only power display, so every phone in the room draws it."""
+    host,guest=room(golf_phones,2)
+    guest.evaluate("window.lines=[];const d=drawAimLine;drawAimLine=(x,y,a,q)=>{lines.push(q);d(x,y,a,q)}")
+    assert guest.locator('#power').count()==0
+    host.mouse.move(180,370);host.mouse.down();host.mouse.move(180,520,steps=4)
+    guest.wait_for_function("aim&&aim.p===1&&lines.length&&lines[lines.length-1]===1")
+    host.mouse.up();host.wait_for_function("round.phase==='roll'")
+    guest.wait_for_function("aim===null")
