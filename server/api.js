@@ -46,7 +46,8 @@
 // Which games keep lists, which way is better, and which lists ('boards') each has.
 // A game or list not here gets a 400.
 export const GAMES = {
-  frisbeegolf: { order: 'low', boards: /^v[35]$/, first: 'v5', minVersion: 3 }, // swipe throw from v5 on 'v5'; v3-v4's harder aiming stays on 'v3'; v1/v2 scores removed at owner's request (#338)
+  frisbeegolf: { order: 'low', boards: /^v[35]$/, first: 'v5', minVersion: 3, // swipe throw from v5 on 'v5'; v3-v4's harder aiming stays on 'v3'; v1/v2 scores removed at owner's request (#338)
+    boardVersions: { v3: [3, 4], v5: [5, Infinity] } }, // each list takes only the versions played by its rules (#429)
   kiekkoammunta: { order: 'high', boards: /^(trap|skeet)$/, first: 'trap' }, // hits out of 25
   minigolf: { order: 'low', boards: /^main$/ }, // fewest strokes over nine holes
   sormiskeitti: { order: 'high', boards: /^main$/ }, // highest ollie, cm
@@ -249,6 +250,8 @@ async function addScore(env, body) {
   if (!GAMES[game].boards.test(String(board || ''))) return fail(400, 'bad board');
   if (!Number.isInteger(version) || version < 1) return fail(400, 'bad version');
   if (version < (GAMES[game].minVersion || 1)) return fail(400, 'old version');
+  const range = GAMES[game].boardVersions?.[board];
+  if (range && (version < range[0] || version > range[1])) return fail(400, 'wrong version for this board');
   if (!Number.isFinite(score)) return fail(400, 'bad score');
   // The level reached, shown beside the score; optional, as older versions do not send it.
   let level = body.level === undefined || body.level === null ? null : Number(body.level);

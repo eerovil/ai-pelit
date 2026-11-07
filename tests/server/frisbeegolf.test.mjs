@@ -37,6 +37,15 @@ test('Frisbeegolf keeps the lowest harder-rules score and excludes old versions'
   assert.equal((await call('GET', 'scores?game=frisbeegolf&board=main')).status, 400);
   assert.equal((await call('POST', 'scores', { ...score, board: 'other', score: -3 })).status, 400);
   assert.equal((await call('POST', 'scores', { ...score, version: 4, score: -3 })).status, 200);
+  // Each list takes only scores played by its own rules (#429).
+  for (const [board, version] of [['v5', 3], ['v5', 4], ['v3', 5], ['v3', 6]]) {
+    const r = await call('POST', 'scores', { ...score, board, version, score: -40 });
+    assert.equal(r.status, 400, board + ' v' + version);
+    assert.equal(r.body.error, 'wrong version for this board');
+  }
+  assert.equal((await call('POST', 'scores', { ...score, board: 'v5', version: 6, score: 0 })).status, 200);
+  assert.equal((await call('GET', 'scores?game=frisbeegolf&board=v3&player=' + player)).body.mine.score, -3);
+  assert.equal((await call('GET', 'scores?game=frisbeegolf&board=v5&player=' + player)).body.mine.score, 0);
 });
 
 test('Frisbeegolf cleanup deletes only v1/v2 rows and is safe to repeat', () => {
