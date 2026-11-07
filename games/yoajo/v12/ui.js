@@ -245,8 +245,9 @@ function dashboard() {
   // v12: blue lights flashing at the screen's edges while the police stop the car.
   if (blueLights()) {
     const on = Math.sin(performance.now() / 1000 * 13) > 0, ew = Math.min(70, W * 0.16);
-    for (const [x0, lit] of [[0, on], [W - ew, !on]]) {
-      const g = x.createLinearGradient(x0 ? W : 0, 0, x0, 0);
+    // Each edge's gradient runs from the screen's edge inwards, ew wide.
+    for (const [x0, edge, inner, lit] of [[0, 0, ew, on], [W - ew, W, W - ew, !on]]) {
+      const g = x.createLinearGradient(edge, 0, inner, 0);
       g.addColorStop(0, `rgba(47,98,255,${lit ? 0.55 : 0.12})`); g.addColorStop(1, 'rgba(47,98,255,0)');
       x.fillStyle = g; x.fillRect(x0, 0, ew, H);
     }

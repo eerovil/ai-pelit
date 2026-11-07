@@ -483,11 +483,11 @@ def test_two_police_cars_fine_once_and_a_restart_mid_stop_starts_clean(site, con
 
 # The police check on leg n: everything else off the road, the car driven at 50 to it. stop:
 # whether the driver stops beside the officer.
-CHECK = """([n, stop]) => { HOLD = true; maxLeg = 8; newLeg(n); things = []; road.cams = [];
+CHECK = """([n, stop, lat]) => { lat = lat === undefined ? LANE : lat; HOLD = true; maxLeg = 8; newLeg(n); things = []; road.cams = [];
   events = events.filter(e => e.kind === 'puhallus'); const c = road.checks[0]; P.s = c.s - 700;
   const seen = [];
   for (let i = 0; i < 60 * 90 && mode === 'drive' && P.s < c.s + 120; i++) {
-    const d = c.s - 3 - P.s; P.lat = LANE; P.vl = 0;
+    const d = c.s - 3 - P.s; P.lat = lat; P.vl = 0;
     input.gas = c.state === 'done' || !stop ? 0.6 : 0.4;
     input.brake = stop && c.state !== 'done' && (d < 1 || P.v > Math.sqrt(2 * 3 * Math.max(0, d))) ? 1 : 0;
     if (input.brake) input.gas = 0;
@@ -505,6 +505,30 @@ def test_the_police_check_is_passed_by_stopping_and_ends_the_leg_when_driven_thr
     assert r["mode"] == "drive" and r["state"] == "done" and r["puhallus"] == 1, r
     assert r["officer"] and r["blue"], r
     assert "Puhalluskoe: pysähdy poliisin kohdalle" in r["seen"] and "0,00 ‰ – hyvää matkaa! +20" in r["seen"], r
+    # Stopped beside the officer but in the oncoming lane: no blow, no +20.
+    r = page.evaluate(CHECK, [3, True, -3.5])
+    assert r["mode"] == "drive" and r["state"] == "wait" and r["puhallus"] == 0 and r["points"] <= 0, r
+    assert not any("hyvää matkaa" in m for m in r["seen"]), r
     r = page.evaluate(CHECK, [3, False])
     assert r["mode"] == "crash" and r["why"] == "Poliisi pysäytti: ajoit puhalluskokeen ohi.", r
+    assert page.errors == []
+
+
+def test_the_blue_lights_flash_on_both_edges_in_turn(site, context):
+    # Both screen edges turn blue while the police stop the car, the left and the right in turn.
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 8; newLeg(2); things = []; events = [];
+      const real = performance.now.bind(performance), out = [];
+      pstop = { t: 0, why: 'testi', cop: null, car: null };
+      for (const ms of [30, 270]) {     // sin(t*13) > 0, then < 0: the left lit, then the right
+        performance.now = () => ms; draw();
+        const px = (sx) => Array.from(x.getImageData(Math.round(sx * DPR), Math.round(H * 0.5 * DPR), 1, 1).data);
+        out.push({ left: px(2), right: px(W - 3), mid: px(W / 2) });
+      }
+      performance.now = real; pstop = null;
+      return out; }""")
+    for phase, lit in ((r[0], "left"), (r[1], "right")):
+        dark = "right" if lit == "left" else "left"
+        assert phase[lit][2] > 0 and phase[lit][3] > 100, (lit, r)
+        assert 0 < phase[dark][3] < phase[lit][3], (lit, r)
     assert page.errors == []

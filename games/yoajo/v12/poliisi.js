@@ -17,7 +17,8 @@ const SEE_AHEAD = 250, SEE_BEHIND = 120, RADAR = 200, RADAR_PAST = 60;
 // or more for half a second: the leg ends.
 const FINE_OVER = 10, POLICE_FINE = 150, STOP_TIME = 3, STOP_LAT = 4.1;
 // The police check, CHECK_IN metres into a pothole stretch (under its 50 limit): stop within the
-// window beside the officer (under 5 km/h for BLOW_STILL s), blow for BLOW_TIME s.
+// window beside the officer, in the right half of the road (their side; under 5 km/h for
+// BLOW_STILL s), blow for BLOW_TIME s.
 const CHECK_IN = 200, BLOW_STILL = 1.5, BLOW_TIME = 2;
 const OFFICER_LAT = 3.3, CHECK_CAR_LAT = 7.2;
 
@@ -127,7 +128,7 @@ function policeCheck(dt) {
     if (!c.told && d < 300) { c.told = true; say('Puhalluskoe: pysähdy poliisin kohdalle', false); }
     if (c.state === 'wait') {
       if (d < -6) return caught('Poliisi pysäytti: ajoit puhalluskokeen ohi.', null);
-      if (d <= 10 && d >= -3 && P.v * KMH < 5) { c.t += dt; if (c.t >= BLOW_STILL) { c.state = 'blow'; c.t = 0; say('Puhalla…', true); } }
+      if (d <= 10 && d >= -3 && P.lat > 0 && P.v * KMH < 5) { c.t += dt; if (c.t >= BLOW_STILL) { c.state = 'blow'; c.t = 0; say('Puhalla…', true); } }
       else c.t = 0;
     } else if (c.state === 'blow') {
       // Held still while blowing.
