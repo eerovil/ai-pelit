@@ -4,7 +4,7 @@ import math
 import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
-from test_minigolf_v1 import pull, PLAN
+from test_minigolf_v2 import pull, PLAN
 
 @pytest.fixture
 def golf_phones(site,browser):
@@ -14,7 +14,7 @@ def golf_phones(site,browser):
         contexts.append(ctx)
         ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi',"+json.dumps(json.dumps(name))+")")
         p=ctx.new_page();p.errors=[];p.on('pageerror',lambda e:p.errors.append(str(e)))
-        relay.attach(p);p.goto(site.url+'games/minigolf/v1/');p.evaluate(PLAN)
+        relay.attach(p);p.goto(site.url+'games/minigolf/v2/');p.evaluate(PLAN)
         return p
     yield phone
     for c in contexts:
