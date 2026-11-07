@@ -74,7 +74,6 @@ function updateHUD() {
     clearTimeout(noticeTimer);lastNotice=round.notice;var held=round;
     noticeTimer=setTimeout(function(){if(round===held){round.notice='';lastNotice='';$('notice').textContent='';sendState();}},1500);
   }
-  $('power').firstElementChild.style.width=(aim?aim.p*100:0)+'%';
 }
 // A touch hides the notice on this phone only; the host's timer still ends it for the room.
 function hideNotice() { if(round&&round.notice){hiddenNotice=round.notice;$('notice').textContent='';} }

@@ -44,10 +44,29 @@ function draw() {
   var players=round?round.players:[{ball:golfBall(h.tee)}];
   players.forEach(function(p,i){var b=p.ball;if(b.holed||b.water)return;var active=!round||i===round.turn;ctx.globalAlpha=active?1:.35;circle(b.x+.035,b.y+.05,BALL_RADIUS*1.2,'#264936');circle(b.x,b.y,BALL_RADIUS,colors[i],'#ffffff',1);if(active)circle(b.x-.025,b.y-.03,.025,'white');ctx.globalAlpha=1;});
   if(round&&aim&&round.phase==='aim') {
-    var b=round.players[round.turn].ball,dist=Math.min(3.5,Math.pow(aim.p*MAX_SPEED,2)/1.1),v=[Math.cos(aim.a),Math.sin(aim.a)];
-    ctx.setLineDash([4,6]);path([[b.x,b.y],[b.x+v[0]*dist,b.y+v[1]*dist]],null,'#fff2bc',2);ctx.setLineDash([]);
-    var q=P(b.x,b.y);ctx.strokeStyle='#ffdb83';ctx.lineWidth=2;ctx.beginPath();ctx.arc(...q,13+aim.p*7,0,2*Math.PI);ctx.stroke();
+    var b=round.players[round.turn].ball;drawAimLine(b.x,b.y,aim.a,aim.p);
   }
+}
+// The aim line alone shows the power (#438): it grows longer, thicker and from pale yellow to red.
+function aimLineColor(p) {
+  var stops=[[0,[255,242,188]],[.55,[255,198,90]],[1,[238,74,52]]],i=p<=.55?0:1,a=stops[i],b=stops[i+1],t=(p-a[0])/(b[0]-a[0]);
+  return 'rgb('+a[1].map((c,k)=>Math.round(c+(b[1][k]-c)*t)).join(',')+')';
+}
+function aimLineLength(p) { return .35+p*3.1; }
+function drawAimLine(x,y,a,power) {
+  var p=Math.max(0,Math.min(1,power)),len=aimLineLength(p),v=[Math.cos(a),Math.sin(a)];
+  var start=P(x+v[0]*BALL_RADIUS*1.4,y+v[1]*BALL_RADIUS*1.4),end=P(x+v[0]*len,y+v[1]*len);
+  var dx=end[0]-start[0],dy=end[1]-start[1],d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d,width=3+p*5,head=8+p*8;
+  var tip=[end[0]-ux*head*.6,end[1]-uy*head*.6],color=aimLineColor(p);
+  ctx.lineCap='round';
+  [['rgba(20,50,36,.45)',width+4],[color,width]].forEach(function(s){
+    ctx.strokeStyle=s[0];ctx.lineWidth=s[1];ctx.beginPath();ctx.moveTo(...start);ctx.lineTo(...tip);ctx.stroke();
+  });
+  ctx.fillStyle=color;ctx.strokeStyle='rgba(20,50,36,.45)';ctx.lineWidth=2;ctx.beginPath();
+  ctx.moveTo(end[0]+ux*head*.4,end[1]+uy*head*.4);
+  ctx.lineTo(end[0]-ux*head*.7-uy*head*.6,end[1]-uy*head*.7+ux*head*.6);
+  ctx.lineTo(end[0]-ux*head*.7+uy*head*.6,end[1]-uy*head*.7-ux*head*.6);
+  ctx.closePath();ctx.stroke();ctx.fill();ctx.lineCap='butt';
 }
 function askDraw() { if(!raf&&!document.hidden) raf=requestAnimationFrame(frame); }
 function frame(now) {

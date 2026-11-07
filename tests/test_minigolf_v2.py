@@ -203,3 +203,22 @@ def test_rotate_while_aiming_preserves_direction_and_power(site,browser):
     p.mouse.up();p.mouse.click(370,180)
     assert p.evaluate('round.players[0].strokes')==1
     assert not p.errors;ctx.close()
+
+
+def test_aim_line_alone_shows_the_power(site,browser):
+    """#438: no power bar; the aim line grows longer, thicker and redder with the pull."""
+    ctx,p=open_game(site,browser);p.click('#play')
+    assert p.locator('#power').count()==0
+    w,h=360,740;p.mouse.move(w/2,h/2);p.mouse.down()
+    p.mouse.move(w/2,h/2+30,steps=2);soft=p.evaluate('aim.p')
+    p.screenshot(path='/var/tmp/minigolf438_soft.png')
+    p.mouse.move(w/2,h/2+200,steps=3);hard=p.evaluate('aim.p')
+    p.screenshot(path='/var/tmp/minigolf438_hard.png')
+    assert soft<.3 and hard==1
+    assert p.evaluate('aimLineLength(%s)<aimLineLength(%s)'%(soft,hard))
+    assert p.evaluate("aimLineColor(0)")=='rgb(255,242,188)' and p.evaluate("aimLineColor(1)")=='rgb(238,74,52)'
+    # The full-power line reaches well up the course and stays on it.
+    tip=p.evaluate("(()=>{const b=round.players[0].ball;return [b.y-aimLineLength(1)]})()")[0]
+    assert 0<tip<4
+    p.mouse.up();assert not p.errors
+    ctx.close()
