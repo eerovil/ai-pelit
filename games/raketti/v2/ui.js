@@ -49,7 +49,7 @@ function frame(now) {
   if (paused || !ship || ship.phase !== 'flight') return;
   const dt = lastFrame ? Math.max(0, Math.min(0.2, (now - lastFrame) / 1000)) : 0;
   lastFrame = now;
-  if (warp !== 1 && !canWarp()) warp = 1;
+  limitWarp();
   advanceFlight(dt); saveElapsed += dt;
   if (saveElapsed >= 2) { saveFlight(); saveElapsed = 0; }
   if (now - lastUi >= 80) { updateUi(); lastUi = now; }
@@ -105,6 +105,7 @@ function guidance() {
   return ['02', `Asema ${Math.abs(lead).toFixed(1)}° ${lead >= 0 ? 'edellä' : 'jäljessä'}, ${distance(d.range)}. ${lead >= 0 ? 'Alempi rata saavuttaa asemaa.' : 'Ylempi rata antaa aseman saavuttaa sinut.'} Kohtaaminen: Ohje → 4.`];
 }
 function updateUi() {
+  limitWarp();
   const s = ship || freshFlight(), o = orbit(s), d = approach(s);
   text('alt', distance(o.altitude));
   text('speed', `${Math.round(o.speed).toLocaleString('fi-FI')} m/s`);
@@ -125,12 +126,13 @@ function updateUi() {
   $('throttle').value = s.throttle * 100;
   text('rcs', `Suuttimien polttoaine ${Math.round(s.rcs / RCS_FULL * 100)} %`);
   text('warp', `Aika ×${warp}`);
+  text('warp-note', d.range <= DOCK_REALTIME_RANGE ? 'Porttiin enintään 20 m: ×1' : maxWarp() === 100 ? 'Vapaa lento: ×2/×5/×10/×100' : 'Myös ohjaten ja moottorilla: ×2/×5');
   const live = ship && ship.phase === 'flight' && !paused;
   $('stage').disabled = !live || s.stage !== 0 || o.altitude < 1000;
   text('stage', s.stage === 0 ? 'Irrota 1. vaihe' : '2. vaihe käytössä');
   $('throttle').disabled = !live || s.fuel[s.stage] === 0;
   $('cut').disabled = !live;
-  $('warp').disabled = !live || (warp === 1 && !canWarp());
+  $('warp').disabled = !live || maxWarp() === 1;
   for (const b of document.querySelectorAll('[data-hold]')) {
     const rotational = b.dataset.hold.startsWith('turn:');
     b.disabled = !live || (s.rcs === 0 && (!rotational || s.throttle === 0));
@@ -142,9 +144,10 @@ const HELP = [
   ['Sinä lennät koko matkan', `<p>Tavoite: laukaisu Maasta, vakaa kiertorata ja telakointi 400 km:n korkeudella lentävään asemaan. Yläilmakehään nouseminen ei vielä ole kiertorata.</p><ul><li>TEHO säätää päämoottoria. SEIS katkaisee sen.</li><li>↶ ↷ antavat kääntävää voimaa. Vapautus ei pysäytä kiertoa: paina vastakkaiseen suuntaan.</li><li>↑ ↓ ← → käyttävät pieniä siirtosuuttimia aluksen omissa suunnissa. Ne kuluttavat erillistä polttoainetta.</li><li>Ⅱ pysäyttää ajan. Puhelimen lukitus ja ohjeen avaaminen pysäyttävät myös lennon.</li></ul>`],
   ['01 / Laukaisu', `<p>Pidä aluksi teho täysillä. Nouse lähes pystysuoraan 1–3 km, kallista sitten hitaasti oikealle. Tavoittele noin 20° pystystä 10 km:ssä, 40° 40 km:ssä, 65° 100 km:ssä ja 80° 200 km:ssä. Tämä on lähtöohje, ei automaattinen lentorata.</p><p>Liian nopea kallistus vie raketin tiheään ilmaan. Liian pitkä pystynousu kuluttaa polttoaineen ilman tarvittavaa vaakavauhtia. Kun 1. vaihe tyhjenee, irrota se ja nosta 2. vaiheen teho. Se ei käynnisty itsestään.</p>`],
   ['02 / Rakenna kiertorata', `<p>400 km:n ympyräradalla tarvitaan noin 7 670 m/s vaakavauhtia. Mittarit näyttävät inertiaalisen nopeuden sekä radan alimman ja ylimmän korkeuden.</p><p>Nosta radan ylin noin 400 km:iin ja katkaise moottori. Lähellä radan ylintä kiihdytä vaakasuoraan liikesuuntaan, kunnes myös radan alin on yli 150 km. Negatiivinen alin tarkoittaa, että rata leikkaa maan. Kartta näyttää lentoradan ilman tulevia moottoripolttoja.</p>`],
-  ['02 / Kohtaa liikkuva asema', `<p>Pelkkä sama korkeus ei riitä: aseman on oltava samassa paikassa samaan aikaan. Alempi rata kiertää nopeammin ja saavuttaa edellä olevan aseman. Jos asema on jäljessä, ylemmällä radalla se saavuttaa sinut. Älä yritä lentää suoraan asemaa kohti: suora oikaisu voi viedä ilmakehään.</p><p>Esimerkki 250 km:n ympyräradalta: kun asema on noin 3° edellä, kiihdytä liikesuuntaan noin 43 m/s. Siirtoradan ylin nousee 400 km:iin. Noin 45 minuutin kuluttua, ylimmässä pisteessä, kiihdytä vielä noin 43 m/s tasataksesi radat. Tarkista todellinen kohtaaminen kartalta. Tämä arvio ei korjaa lentoa puolestasi.</p><p>Aika ×10 ja ×100 toimivat vain ilmakehän yläpuolella, moottori ja suuttimet pois, hitaalla kierrolla ja yli 5 km asemasta. Aika palautuu ×1:een lähestyessäsi.</p>`],
+  ['02 / Kohtaa liikkuva asema', `<p>Pelkkä sama korkeus ei riitä: aseman on oltava samassa paikassa samaan aikaan. Alempi rata kiertää nopeammin ja saavuttaa edellä olevan aseman. Jos asema on jäljessä, ylemmällä radalla se saavuttaa sinut. Älä yritä lentää suoraan asemaa kohti: suora oikaisu voi viedä ilmakehään.</p><p>Esimerkki 250 km:n ympyräradalta: kun asema on noin 3° edellä, kiihdytä liikesuuntaan noin 43 m/s. Siirtoradan ylin nousee 400 km:iin. Noin 45 minuutin kuluttua, ylimmässä pisteessä, kiihdytä vielä noin 43 m/s tasataksesi radat. Tarkista todellinen kohtaaminen kartalta. Tämä arvio ei korjaa lentoa puolestasi.</p>`],
   ['03 / Telakoi hitaasti', `<p>Asema-näkymässä oikea on aseman liikesuunta ja ylös poispäin Maasta. Lähesty vasemmalta portin vihreää linjaa pitkin, nokka oikealle. Aluksen suunnat voivat erota näytön suunnista.</p><ul><li>Keltainen viiva näyttää liikkeen asemaan nähden. Jarruta vastakkaisella suuttimella.</li><li>Renkaan etäisyys alle 1,2 m, nopeusero enintään 0,25 m/s.</li><li>Nokan suuntaero enintään 5° ja kiertoero enintään 0,6°/s.</li><li>Portti lukittuu kosketuksesta. Aseman runko ja aurinkopaneelit ovat törmäysesteitä.</li></ul>`],
-  ['Lentomalli ja tallennus', `<p>Fysiikka käyttää metrejä, sekunteja ja kiloja: pallomainen pyörivä Maa, etäisyyden neliössä heikkenevä painovoima, ilmanvastus, muuttuva massa sekä päämoottorin ja siirtosuuttimien liikemäärä. Raketti on kuvitteellinen kaksivaiheinen kantoraketti.</p><p>Rajaukset: yksi ratataso, yksinkertaistettu ilmakehä ja aerodynamiikka; ei Kuuta, nostetta, polttoaineen loiskumista eikä lämpökilpeä. Alukset ovat kuvassa suurennettuja. Tallennus säilyttää lennon; jatkaminen alkaa tauolta. Harjoitukset eivät kirjaa koko lennon saavutuksia.</p>`]
+  ['Lentomalli ja tallennus', `<p>Fysiikka käyttää metrejä, sekunteja ja kiloja: pallomainen pyörivä Maa, etäisyyden neliössä heikkenevä painovoima, ilmanvastus, muuttuva massa sekä päämoottorin ja siirtosuuttimien liikemäärä. Raketti on kuvitteellinen kaksivaiheinen kantoraketti.</p><p>Rajaukset: yksi ratataso, yksinkertaistettu ilmakehä ja aerodynamiikka; ei Kuuta, nostetta, polttoaineen loiskumista eikä lämpökilpeä. Alukset ovat kuvassa suurennettuja. Tallennus säilyttää lennon; jatkaminen alkaa tauolta. Harjoitukset eivät kirjaa koko lennon saavutuksia.</p>`],
+  ['Ajan nopeutus', `<p>Aika-painike kiertää nopeudet ×1, ×2 ja ×5 myös nousussa, moottorin käydessä ja suuttimia käyttäessä. Sama fysiikka ja polttoaineenkulutus jatkuvat; reagoimiseen jää vähemmän aikaa. ×10 ja ×100 toimivat vain ilmakehän yläpuolella, moottori ja suuttimet pois, hitaalla kierrolla ja yli 5 km asemasta. Ohjaus tai näiden ehtojen päättyminen rajoittaa nopeuden ×5:een. Viimeiset 20 m porttiin lennetään aina ×1-ajalla; nopeutus ei käynnisty uudelleen itsestään.</p>`]
 ];
 function openHelp() {
   helpReturn = panelName || 'pause-panel';
@@ -172,12 +175,13 @@ $('continue').onclick = play;
 $('to-menu').onclick = mainMenu; $('result-menu').onclick = mainMenu;
 $('retry').onclick = () => startFlight(lastKind);
 $('throttle').oninput = () => {
-  if (!paused && ship && ship.phase === 'flight') { ship.throttle = +$('throttle').value / 100; warp = 1; updateUi(); }
+  if (!paused && ship && ship.phase === 'flight') { ship.throttle = +$('throttle').value / 100; limitWarp(); updateUi(); }
 };
 $('cut').onclick = () => { if (ship) { ship.throttle = 0; updateUi(); updateSound(); } };
 $('stage').onclick = () => { stageRocket(); updateUi(); draw(); };
 $('warp').onclick = () => {
-  if (warp !== 1 || canWarp()) warp = warp === 1 ? 10 : warp === 10 ? 100 : 1;
+  const rates = [1, 2, 5, 10, 100].filter(rate => canWarp(rate));
+  warp = rates[(rates.indexOf(warp) + 1) % rates.length];
   updateUi();
 };
 for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => { view = b.dataset.view; updateUi(); draw(); };
@@ -189,11 +193,11 @@ function applyPointers() {
 for (const b of document.querySelectorAll('[data-hold]')) {
   b.onpointerdown = e => {
     if (paused || !ship || ship.phase !== 'flight' || b.disabled) return;
-    e.preventDefault(); soundReady(); warp = 1;
+    e.preventDefault(); soundReady();
     const [key, value] = b.dataset.hold.split(':');
     pointers.set(e.pointerId, { key, value: +value, button: b });
     try { b.setPointerCapture(e.pointerId); } catch (_) { /* Window handlers release the finger if capture is unavailable. */ }
-    applyPointers();
+    applyPointers(); limitWarp(); updateUi();
   };
   const release = e => { pointers.delete(e.pointerId); applyPointers(); };
   b.onpointerup = b.onpointercancel = b.onlostpointercapture = release;

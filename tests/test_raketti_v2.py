@@ -5,7 +5,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = 'games/raketti/v1/'
+URL = 'games/raketti/v2/'
 
 
 def open_game(site, context):
@@ -245,20 +245,110 @@ def test_no_fuel_means_no_free_thrust_and_staging_is_manual(site, context):
     assert page.errors == []
 
 
-def test_warp_restrictions_and_near_station_cancellation(site, context):
+def test_warp_choices_follow_controls_without_losing_manoeuvre_speed(site, context):
     page = open_game(site, context)
     start(page, 'practice-orbit')
-    assert page.evaluate('canWarp()')
+    for rate in [2, 5, 10, 100, 1]:
+        page.locator('#warp').click()
+        assert page.locator('#warp').inner_text() == f'Aika ×{rate}'
+    for _ in range(4):
+        page.locator('#warp').click()
+    turn = page.locator('[data-hold="turn:1"]')
+    forward = page.locator('[data-hold="forward:1"]')
+    turn.dispatch_event('pointerdown', {'pointerId': 21})
+    forward.dispatch_event('pointerdown', {'pointerId': 22})
+    assert page.evaluate('warp === 5 && held.turn === 1 && held.forward === 1 && !canWarp(10)')
+    # A second press and cancellation must retain both time and the other thumb.
+    turn.dispatch_event('pointercancel', {'pointerId': 21})
+    assert page.evaluate('warp === 5 && held.turn === 0 && held.forward === 1')
+    forward.dispatch_event('pointerup', {'pointerId': 22})
+    page.locator('#throttle').evaluate("el => { el.value = '30'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+    assert page.evaluate('warp === 5 && ship.throttle === .3 && maxWarp() === 5')
+    for rate in [1, 2, 5]:
+        page.locator('#warp').click()
+        assert page.evaluate('warp') == rate
+    # Main-engine cutoff and staging must not silently speed the simulation up.
+    page.locator('#cut').click()
+    assert page.evaluate('warp') == 5
+    assert page.errors == []
+
+
+@pytest.mark.parametrize('rate', [2, 5])
+@pytest.mark.parametrize('kind', ['launch', 'orbit'])
+def test_accelerated_power_and_steering_match_normal_physics(site, context, rate, kind):
+    page = open_game(site, context)
+    start(page, 'launch' if kind == 'launch' else 'practice-orbit')
+    result = page.evaluate("""({rate,kind}) => {
+      ship.throttle=kind==='launch'?1:.6; held.turn=1; held.forward=1; held.side=-1;
+      const initial=JSON.stringify(ship), startT=ship.t;
+      warp=rate; advanceFlight(.4); const fast=structuredClone(ship);
+      ship=JSON.parse(initial);warp=1;step(.4*rate);const normal=structuredClone(ship);
+      return {fast,normal,elapsed:fast.t-startT};
+    }""", {'rate': rate, 'kind': kind})
+    for key in ('x', 'y', 'vx', 'vy', 't', 'omega', 'rcs'):
+        assert result['fast'][key] == pytest.approx(result['normal'][key], abs=1e-5)
+    assert result['fast']['fuel'] == pytest.approx(result['normal']['fuel'], abs=1e-5)
+    assert result['elapsed'] == pytest.approx(.4 * rate)
+    assert result['fast']['phase'] == result['normal']['phase'] == 'flight'
+    assert result['fast']['fuel'][0 if kind == 'launch' else 1] < (295000 if kind == 'launch' else 18000)
+    assert page.errors == []
+
+
+@pytest.mark.parametrize('order', ['speed-first', 'thrust-first'])
+def test_launch_throttle_and_staging_keep_selected_speed(site, context, order):
+    page = open_game(site, context)
+    start(page)
+    if order == 'thrust-first':
+        page.locator('#throttle').evaluate("el => { el.value = '70'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
     page.locator('#warp').click()
-    assert page.evaluate('warp') == 10
-    page.locator('[data-hold="forward:1"]').dispatch_event('pointerdown', {'pointerId': 21})
-    assert page.evaluate('warp===1 && !canWarp()')
-    page.locator('[data-hold="forward:1"]').dispatch_event('pointerup', {'pointerId': 21})
-    assert page.evaluate('canWarp()')
+    page.locator('#warp').click()
+    if order == 'speed-first':
+        page.locator('#throttle').evaluate("el => { el.value = '70'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+    assert page.evaluate('warp === 5 && ship.throttle === .7')
+    page.evaluate('ship.y=EARTH+2000;updateUi()')
+    page.locator('#stage').click()
+    assert page.evaluate('warp === 5 && ship.stage === 1 && ship.throttle === 0')
+    page.locator('#throttle').evaluate("el => { el.value = '50'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+    assert page.evaluate('warp === 5 && ship.throttle === .5')
+    page.locator('#pause').click()
+    page.reload()
+    page.locator('#resume').click()
+    assert page.evaluate('paused && warp === 1 && ship.stage === 1 && ship.throttle === .5')
+    assert page.errors == []
+
+
+@pytest.mark.parametrize('input_kind', ['throttle', 'turn', 'forward', 'side'])
+def test_high_coasting_speed_is_capped_when_a_control_is_used(site, context, input_kind):
+    page = open_game(site, context)
+    start(page, 'practice-orbit')
+    page.evaluate('warp=100;updateUi()')
+    if input_kind == 'throttle':
+        page.locator('#throttle').evaluate("el => { el.value = '10'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+    else:
+        page.locator(f'[data-hold="{input_kind}:1"]').dispatch_event('pointerdown', {'pointerId': 31})
+    assert page.evaluate('warp === 5 && maxWarp() === 5')
+    assert page.locator('#warp').inner_text() == 'Aika ×5'
+    assert page.errors == []
+
+
+def test_docking_limit_is_visible_and_cancels_within_the_frame(site, context):
+    page = open_game(site, context)
+    start(page, 'practice-dock')
+    page.locator('#warp').click()
+    page.locator('#warp').click()
+    assert page.evaluate('warp') == 5
     result = page.evaluate("""() => {
-      ship=freshFlight('dock');warp=100;step(.1);return {warp,can:canWarp()};
+      const p=station();ship.x=p.px-30;ship.y=p.py;ship.vx=p.pvx+5;
+      advanceFlight(.2);updateUi();return {t:ship.t,warp,range:approach().range,phase:ship.phase};
     }""")
-    assert result == {'warp': 1, 'can': False}
+    assert result['warp'] == 1 and .4 < result['t'] < .65, result
+    assert 18 < result['range'] <= 20 and result['phase'] == 'flight', result
+    assert page.locator('#warp').is_disabled()
+    assert page.locator('#warp-note').inner_text() == 'Porttiin enintään 20 m: ×1'
+    # Departing the safety zone never turns acceleration back on without a tap.
+    page.evaluate('ship.x-=50;advanceFlight(.1);updateUi()')
+    assert page.evaluate('warp') == 1
+    assert page.locator('#warp').is_enabled()
     assert page.errors == []
 
 
@@ -270,11 +360,11 @@ def test_phone_screens_help_and_controls_fit(site, browser, width, height):
         box = page.locator(selector).bounding_box()
         assert box and box['y'] >= 0 and box['y'] + box['height'] <= height, (selector, box)
     page.locator('#menu-help').tap()
-    for i in range(6):
+    for i in range(7):
         box = page.locator('#help-panel').bounding_box()
         assert box and box['y'] >= 0 and box['y'] + box['height'] <= height, (i, box)
         assert page.locator('#help-close').is_visible()
-        if i < 5:
+        if i < 6:
             page.locator('#help-next').tap()
     page.locator('#help-close').tap()
     start(page, 'practice-dock')
@@ -319,8 +409,8 @@ def test_warp_cancellation_does_not_consume_rest_of_accelerated_frame(site, cont
       ship.x=p.px-6000;ship.vx=p.pvx+1000;warp=100;
       advanceFlight(.2);return {t:ship.t,warp,phase:ship.phase,range:approach().range};
     }""")
-    assert result['warp'] == 1 and result['t'] < 2, result
-    assert result['range'] > 4000 and result['phase'] == 'flight'
+    assert result['warp'] == 5 and result['t'] < 3, result
+    assert result['range'] > 3000 and result['phase'] == 'flight'
     assert page.errors == []
 
 
