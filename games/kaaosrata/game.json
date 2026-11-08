@@ -50,6 +50,13 @@
       "note": "Kolmen uuden radan esteet ovat haastavampia: kapeat hihnat, vaihtuvat kulkuaukot ja tarkemmat laskeutumiset; uudistetuilla radoilla on uudet ennätykset ja tuloslistat.",
       "request": "Uudet radat ovat liian helppoja, erityisesti liukuhihnoilla voi vain hyppiä. Valittu: vaikeammat kolmen uuden radan asettelut, oppiessa useita putoamisia ja lyhyet välietappipalautukset sekä uudet ennätykset ja tuloslistat vanhat tallennukset säilyttäen. Puomipuisto pysyy ennallaan.",
       "issue": "eerovil/ai-pelit#454"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-08",
+      "note": "Kolmen uuden radan esteet ovat vaikeampia: nopeammat hihnat, portit, puomit ja heilurit, kapeammat sillat, lyhyemmin pysyvät laatat ja kapeammat hyppykivet; uudistetuilla radoilla on uudet ennätykset ja tuloslistat.",
+      "request": "Liian helppo vielä. Valittu: esteet ovat liian helppoja (nopeammat ja kapeammat esteet, leveämmät välit, enemmän esteitä).",
+      "issue": "eerovil/ai-pelit#454"
     }
   ]
 }

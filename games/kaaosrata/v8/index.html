@@ -891,11 +891,13 @@ function showMenu(result, cls) {
   document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja kuusi muuta';
   const stats = document.getElementById('stats');
   stats.textContent = 'Kisat ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
-  const oldBest = course.id === 'main' ? null : load('ennatys:' + course.id, null);
-  if (Number.isFinite(oldBest)) {
+  // The newest earlier layout's record (v7's, else v6's) stays visible under this one's.
+  const older = course.id === 'main' ? [] : [[course.id + '7', 'v7'], [course.id, 'v6']];
+  const oldOne = older.map(([k, v]) => [load('ennatys:' + k, null), v]).find(([s]) => Number.isFinite(s));
+  if (oldOne) {
     const old = document.createElement('span');
     old.style.display = 'block'; old.style.fontSize = '12px';
-    old.textContent = 'Vanhan radan ennätys (v6): ' + fmt(oldBest); stats.appendChild(old);
+    old.textContent = 'Vanhan radan ennätys (' + oldOne[1] + '): ' + fmt(oldOne[0]); stats.appendChild(old);
   }
   menu.classList.remove('hidden');
 }
