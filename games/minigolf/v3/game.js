@@ -6,6 +6,7 @@ var raf=0,lastFrame=0,accumulator=0,lastSend=0,rollingSound=null,lastNoise=0;
 var $=id=>document.getElementById(id);
 var noticeTimer=0,lastNotice='',hiddenNotice='',askName=false;
 var PAR=HOLES.reduce((n,h)=>n+h.par,0);
+var MIN_POWER=.10;
 function load(key,fallback) { try { var x=localStorage.getItem('ai-pelit:minigolf:'+key); return x===null?fallback:JSON.parse(x); } catch(e) { return fallback; } }
 function save(key,v) { try { localStorage.setItem('ai-pelit:minigolf:'+key,JSON.stringify(v)); } catch(e) {} }
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -18,8 +19,20 @@ function keepRound() { if(round&&!online) save('kierros',round); }
 function mine() { return round&&(!online||round.players[round.turn].id===R.me); }
 function authority() { return !online||R.isHost; }
 function canAim() { return round&&round.phase==='aim'&&mine()&&(!online||!R.paused); }
-function fresh(players) {
-  return {hole:0,turn:0,seq:0,phase:'aim',time:0,shotTime:0,
+function nextId(ring,id) { var i=ring.indexOf(id);return ring[(i+1+ring.length)%ring.length]; }
+function roomRotation(players) {
+  var ids=players.map(p=>p.id),saved=load('aloittaja:'+R.code,null);
+  var old=saved&&Array.isArray(saved.ring)?saved.ring.filter((id,i,a)=>typeof id==='string'&&a.indexOf(id)===i):[];
+  var ring=old.filter(id=>ids.includes(id));ids.forEach(id=>{if(!ring.includes(id))ring.push(id);});
+  return {ring:ring,starter:saved&&ring.includes(saved.next)?saved.next:ring[0]};
+}
+function keepNextStarter(r) {
+  if(online&&R&&R.code&&r.rotation&&r.rotation.length) save('aloittaja:'+R.code,{ring:r.rotation,next:nextId(r.rotation,r.starterId)});
+}
+function fresh(players,rotation) {
+  var ring=rotation&&rotation.ring||players.map(p=>p.id),starter=rotation&&rotation.starter||ring[0];
+  var turn=Math.max(0,players.findIndex(p=>p.id===starter));
+  return {hole:0,turn:turn,starterId:players[turn].id,rotation:ring,seq:0,phase:'aim',time:0,shotTime:0,
     players:players.map(p=>({id:p.id,name:p.name,scores:[],ball:golfBall(HOLES[0].tee),strokes:0})),notice:'Reikä 1/9 · Suora · Par 2'};
 }
 function newRound() {
@@ -131,7 +144,10 @@ function showCard() {
 }
 function nextHole() {
   if(!round||round.phase!=='hole'||!authority()) return;
-  round.hole++; round.turn=0; round.seq++; round.phase='aim'; round.shotTime=0;
+  round.hole++;
+  if(online) { round.starterId=nextId(round.rotation,round.starterId);round.turn=round.players.findIndex(p=>p.id===round.starterId);keepNextStarter(round); }
+  else { round.turn=0;round.starterId=round.players[0].id; }
+  round.seq++; round.phase='aim'; round.shotTime=0;
   round.players.forEach(p=>{p.strokes=0;p.ball=golfBall(HOLES[round.hole].tee);});
   round.notice='Reikä '+(round.hole+1)+'/9 · '+HOLES[round.hole].name+' · Par '+HOLES[round.hole].par;
   keepRound(); showPlay(); sendState();
@@ -171,6 +187,7 @@ function settle() {
 function shoot(a,p,seq,id) {
   if(!round||round.phase!=='aim'||!authority()||(online&&R.paused)||seq!==round.seq||id!==round.players[round.turn].id) return false;
   if(!Number.isFinite(a)||!Number.isFinite(p)||p<=0||p>1) return false;
+  p=Math.max(MIN_POWER,p);
   var player=round.players[round.turn],b=player.ball;
   round.origin=[b.x,b.y]; player.strokes++; b.vx=Math.cos(a)*p*MAX_SPEED; b.vy=Math.sin(a)*p*MAX_SPEED;
   round.phase='roll'; round.shotTime=0; round.notice=''; aim=dragging=null;
@@ -206,7 +223,7 @@ function receive(m,from) {
     if(!round) return;
     if(m.t==='shot') shoot(m.a,m.p,m.seq,from);
     if(m.t==='aim'&&round.phase==='aim'&&from===round.players[round.turn].id&&m.seq===round.seq&&Number.isFinite(m.a)&&Number.isFinite(m.p)) {
-      aim={a:m.a,p:Math.max(0,Math.min(1,m.p))};sendState();updateHUD();askDraw();
+      aim={a:m.a,p:m.p>0?Math.max(MIN_POWER,Math.min(1,m.p)):0};sendState();updateHUD();askDraw();
     }
   } else if(from===roomHost&&(m.t==='state'||m.t==='result')&&m.state) {
     var ownAim=dragging&&mine()?aim:null;
@@ -220,7 +237,7 @@ if(R) {
   R.turns(id=>!!(round&&online&&round.phase==='aim'&&round.players[round.turn].id===id));
   R.on('start',function(s) {
     R.extra(null);online=true;roomRound=s.round;roomHost=R.hostId;round=null;aim=dragging=null;accumulator=0; stopSound();
-    if(R.isHost) { round=fresh(s.players);showPlay();sendState(); }
+    if(R.isHost) { round=fresh(s.players,roomRotation(s.players));keepNextStarter(round);showPlay();sendState(); }
     else { $('menu').style.display='none';$('card').style.display='none';$('notice').textContent='Odotetaan rataa…'; }
 
   });

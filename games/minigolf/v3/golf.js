@@ -1,6 +1,6 @@
 'use strict';
 // Pure simulation shared by play and the course-solvability tests.
-var BALL_RADIUS=.11, CUP_RADIUS=.18, CUP_SPEED=1.4, MAX_SPEED=4.6, FIXED_DT=1/240;
+var BALL_RADIUS=.11, CUP_RADIUS=.18, CUP_SPEED=2.3, MAX_SPEED=4.6, FIXED_DT=1/240;
 function inRect(x,y,r) { return x>=r[0] && y>=r[1] && x<=r[0]+r[2] && y<=r[1]+r[3]; }
 function golfBall(tee) { return {x:tee[0],y:tee[1],vx:0,vy:0,holed:false,water:false}; }
 function wallHit(b,x1,y1,x2,y2,r,bounce) {

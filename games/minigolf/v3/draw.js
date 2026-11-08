@@ -90,8 +90,8 @@ function dragAim(e) {
   if(dragging.reanchor){dragging.x=p[0];dragging.y=p[1];dragging.base=aim?{a:aim.a,p:aim.p}:null;dragging.reanchor=false;}
   var base=dragging.base?screenVector(Math.cos(dragging.base.a)*dragging.base.p*Math.min(W,H)*.3,Math.sin(dragging.base.a)*dragging.base.p*Math.min(W,H)*.3):[0,0];
   var dx=dragging.x-p[0]+base[0],dy=dragging.y-p[1]+base[1],len=Math.hypot(dx,dy),v=worldVector(dx,dy);
-  aim={a:Math.atan2(v[1],v[0]),p:Math.min(1,len/(Math.min(W,H)*.3)),length:len};
-  if(online&&performance.now()-dragging.sent>100){if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim.a,p:aim.p});dragging.sent=performance.now();}
+  aim=len?{a:Math.atan2(v[1],v[0]),p:Math.max(MIN_POWER,Math.min(1,len/(Math.min(W,H)*.3))),length:len}:null;
+  if(aim&&online&&performance.now()-dragging.sent>100){if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim.a,p:aim.p});dragging.sent=performance.now();}
   updateHUD();askDraw();
 }
 canvas.addEventListener('pointerdown',function(e){hideNotice();if(!canAim()||dragging)return;var p=pointer(e);dragging={id:e.pointerId,x:p[0],y:p[1],sent:0,base:parkedAim&&aim?{a:aim.a,p:aim.p}:null};if(!parkedAim)aim=null;parkedAim=false;canvas.setPointerCapture(e.pointerId);});
@@ -101,7 +101,7 @@ canvas.addEventListener('pointerup',function(e){
   // A resize preserves the existing world-space aim until the finger next moves.
   if(!aim)dragAim(e);
   var shot=aim;dragging=null;aim=null;
-  if(shot&&shot.length>=15&&canAim()) {
+  if(shot&&shot.length>0&&canAim()) {
     if(authority())shoot(shot.a,shot.p,round.seq,round.players[round.turn].id);
     else R.send({t:'shot',round:roomRound,seq:round.seq,a:shot.a,p:shot.p});
   } else if(online) {if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:0,p:0});}
