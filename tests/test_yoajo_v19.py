@@ -13,7 +13,7 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v18/"
+URL = "games/yoajo/v19/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -461,7 +461,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v18")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v19")
 
 
 # ---- v12 (#440): the police ----
