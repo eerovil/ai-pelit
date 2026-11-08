@@ -209,7 +209,8 @@ function onJunction(s, lat) {
 // for the crash screen's tip).
 let crashTurn = null;
 function ditchWhy() {
-  const J = !P.wrong && turnAt(P.s - 4);
+  // v19: also on the way out of a crossroads, where the paving let the car run wide first.
+  const J = !P.wrong && (turnAt(P.s - 4) || (road.turns || []).find(J => J.kind === 'risteys' && P.s > J.a1 && P.s < J.a1 + JUNCTION_NEAR + 4));
   crashTurn = null;
   if (!J || P.v * KMH <= turnSafe(J)) return 'Ajoit ojaan.';
   const way = turnWay(J);

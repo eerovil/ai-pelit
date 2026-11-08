@@ -84,3 +84,17 @@ def test_the_turn_pill_shows_the_safe_speed_on_the_way_in(site, context):
     assert r["kuiva"] == ["Käänny vasemmalle 450 m · alle 30"], r
     assert r["pyry"] == ["Käänny vasemmalle 450 m · alle 25"], r
     assert page.errors == []
+
+
+def test_running_wide_off_the_paving_after_the_bend_still_names_the_turn(site, context):
+    # Seen while taking screenshots: the paving let the car run wide past the bend's end, and the
+    # ditch there said only "Ajoit ojaan." with no speed tip.
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; newLeg(5); leg.weather = 'kuiva'; things = []; events = [];
+      const J = road.turns.find(j => j.dir < 0); J.spawned = true; J.done = true; P.into = true;
+      P.s = J.a1 + 20; P.lat = 9; P.vl = 3; P.v = 45 / KMH; input.steer = 0; input.gas = 0; input.brake = 0;
+      for (let i = 0; i < 600 && mode === 'drive'; i++) step(1 / 60);
+      return { mode, why: crashWhy, s: P.s - J.a1, turn: crashTurn }; }""")
+    assert r["mode"] == "crash" and r["why"] == "Ajoit ojaan: liian lujaa vasempaan käännökseen.", r
+    assert r["turn"] == {"way": "vasen", "safe": 30}, r
+    assert page.errors == []
