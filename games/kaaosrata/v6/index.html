@@ -7,7 +7,7 @@
 <title>Kaaosrata</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#2b1b54;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
-  canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+  canvas{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none}
   #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
   #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(36,20,72,.86);text-align:center;touch-action:manipulation}
   #menu.hidden{display:none}
@@ -21,15 +21,20 @@
   #multi:active{box-shadow:0 1px 0 #3a7894}
   #stats{margin:0;font-size:14px;color:#d6c8f0}
   .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#c9b8ea;max-width:310px}
+  .course-picker{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;font-weight:800;font-size:20px}
+  .course-picker button{padding:4px 15px;min-width:44px;min-height:44px;font-size:28px}
+  #course-name{min-width:145px}
+  @media (max-height:680px) and (orientation:portrait){#menu{gap:8px}#menu h1{font-size:32px}.help{font-size:12px}}
   /* Sideways (#95): the words on the left, the two buttons side by side on the right. */
   @media (orientation:landscape) and (max-height:560px){
-    #menu{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);grid-template-rows:repeat(5,auto);align-content:center;justify-items:center;column-gap:32px;row-gap:8px;
+    #menu{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);grid-template-rows:repeat(6,auto);align-content:center;justify-items:center;column-gap:32px;row-gap:8px;
       padding:calc(env(safe-area-inset-top,0px) + 40px) calc(env(safe-area-inset-right,0px) + 28px) calc(env(safe-area-inset-bottom,0px) + 16px) calc(env(safe-area-inset-left,0px) + 28px)}
     #menu h1{grid-area:1/1;font-size:36px}
-    #result{grid-area:2/1;font-size:22px}
-    #foe{grid-area:3/1;margin:0}
-    #stats{grid-area:4/1}
-    .help{grid-area:5/1;margin:0;max-width:340px}
+    #course-picker{grid-area:2/1}
+    #result{grid-area:3/1;font-size:22px}
+    #foe{grid-area:4/1;margin:0}
+    #stats{grid-area:5/1}
+    .help{grid-area:6/1;margin:0;max-width:340px}
     .help .more{display:none}
     #go{grid-area:1/2/3/3;align-self:end;width:100%}
     #multi{grid-area:3/2/5/3;align-self:start;width:100%}
@@ -41,6 +46,7 @@
 <div id="safe"></div>
 <div id="menu">
   <h1>🤸 Kaaosrata</h1>
+  <div id="course-picker" class="course-picker"><button id="course-prev" aria-label="Edellinen rata">‹</button><span id="course-name"></span><button id="course-next" aria-label="Seuraava rata">›</button></div>
   <p id="result"></p>
   <p id="foe"></p>
   <button id="go">Juokse!</button>
@@ -55,6 +61,7 @@
      and with the loudest sounds quieter -->
 <!-- v5 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="radat.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -73,45 +80,29 @@ const COLORS = ['#ff5d8f', '#4cc9f0', '#80ed99', '#ffd166', '#b388eb', '#ff9f1c'
 // ---------- The course, in metres ----------
 // It runs up the screen from y = 0 to the finish; x is across, the floor 10 m wide. Around it is
 // nothing: off a floor you fall, and come back at the last checkpoint.
-const FIN = 140, LIMIT = 150;
-const FLOORS = [
-  { x0: -5, x1: 5, y0: -4, y1: 37 },          // start, the spinning bars, checkpoint 1
-  { x0: -5, x1: 5, y0: 59.8, y1: 87 },        // checkpoint 2, the sliding walls, checkpoint 3
-  { x0: -5, x1: 5, y0: 109, y1: 112 },        // checkpoint 4
-  { x0: -3, x1: 3, y0: 112, y1: 130 },        // the narrow bridge under the hammers
-  { x0: -5, x1: 5, y0: 130, y1: 148 },        // the finish
-];
-// Stepping stones over the gap, 1.8 m apart; the middle row is one platform sliding sideways.
-const STONE_ROWS = [[38.8, [-3.4, 0, 3.4]], [43, [-1.7, 1.7]], [47.2, [-4.2, 4.2]], [51.4, [-1.7, 1.7]], [55.6, [-3.4, 0, 3.4]]];
-STONE_ROWS.forEach(([y, xs], i) => xs.forEach(cx => {
-  const hw = i === 2 ? 0.8 : 1.2;
-  FLOORS.push({ x0: cx - hw, x1: cx + hw, y0: y, y1: y + 2.4, stone: true });
-}));
-const MOV = { y0: 47.2, y1: 49.6, hw: 1.6, a: 2.5, w: 1.1 };
-const movX = t => MOV.a * Math.sin(MOV.w * t);
-// Spinning discs that carry you round; hop from one to the next.
-const DISCS = [{ x: -1.5, y: 91, r: 3.2, w: 0.9 }, { x: 2, y: 98, r: 3, w: -1.1 }, { x: -1, y: 105, r: 3.2, w: 1.2 }];
-// Low spinning bars: jump over, or get swept away. Each has a solid hub.
-const SWEEPERS = [{ x: 0, y: 18, len: 5.4, w: 1.5, ph: 0 }, { x: 0, y: 28, len: 5.4, w: -1.9, ph: 1.2 }];
-const BAR_H = 0.55;
-// Walls sliding sideways: two blocks a row, always a gap somewhere. Too tall to jump.
-const PUSHERS = [{ y: 67.5, w: 1.3, ph: 0 }, { y: 72.5, w: -1.0, ph: 2 }, { y: 77.5, w: 1.7, ph: 4 }];
-const BLOCK_HW = 1.7, BLOCK_HD = 0.4, BLOCK_A = 2.2;
-const blockX = (p, t, k) => (k ? 2.6 : -2.6) + BLOCK_A * Math.sin(p.w * t + p.ph);
-const BUMPERS = [{ x: -3, y: 81.5 }, { x: 0, y: 82.5 }, { x: 3, y: 81.5 }];
-// Big balls swinging across the bridge: they knock you off it.
-const HAMMERS = [{ y: 116, w: 1.6, ph: 0 }, { y: 121, w: 1.3, ph: 2.2 }, { y: 126, w: 1.9, ph: 4.1 }];
-const HAM_R = 1.0, HAM_A = 3.8;
-const hamX = (h, t) => HAM_A * Math.sin(h.w * t + h.ph);
-// Where you come back after a fall, and the line to cross to get there.
-const CPS = [0, 35.5, 61.4, 85.5, 110.5, FIN + 1.5];
-const SECTIONS = [[12, 'PUOMIT'], [37, 'KIVET'], [63, 'SEINÄT'], [87, 'LEVYT'], [112, 'HEILURIT']];
+let course, FIN, LIMIT, FLOORS, MOV, DISCS, SWEEPERS, PUSHERS, BUMPERS, HAMMERS, CPS, SECTIONS, PATH, BELTS, TILES, FLOORS_FAR_FIRST;
+const BAR_H = 0.55, BLOCK_HW = 1.7, BLOCK_HD = 0.4, BLOCK_A = 2.2, HAM_R = 1.0, HAM_A = 3.8;
+const movX = t => MOV ? MOV.a * Math.sin(MOV.w * t) : 0;
+const blockX = (p,t,k) => (k ? 2.6 : -2.6) + BLOCK_A * Math.sin(p.w*t+p.ph);
+const hamX = (h,t) => HAM_A * Math.sin(h.w*t+h.ph);
+const recordKey = () => course.id === 'main' ? 'ennatys' : 'ennatys:' + course.id;
+function useCourse(id) {
+  course = RADAT.find(c => c.id === id) || RADAT[0];
+  ({fin:FIN,limit:LIMIT,floors:FLOORS,mov:MOV,discs:DISCS,sweepers:SWEEPERS,pushers:PUSHERS,bumpers:BUMPERS,hammers:HAMMERS,cps:CPS,sections:SECTIONS,path:PATH,belts:BELTS,tiles:TILES} = course);
+  FLOORS_FAR_FIRST = FLOORS.slice().sort((a,b) => b.y0-a.y0);
+  best = load(recordKey(), null);
+  if (window.AiPelitScores) AiPelitScores.board(course.id, course.name);
+}
+const tilePhase = (tile,t) => ((t+tile.ph)%tile.period+tile.period)%tile.period;
+const tileOn = (tile,t) => tilePhase(tile,t) < tile.on;
 
 // What is under a point: the floor's own movement {vx, vy}, or null over nothing.
 const STILL = { vx: 0, vy: 0 };
 function groundAt(px, py, t) {
+  for (const b of BELTS) if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) return {vx:b.vx,vy:b.vy};
+  for (const b of TILES) if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1 && tileOn(b,t)) return STILL;
   for (const f of FLOORS) if (px >= f.x0 && px <= f.x1 && py >= f.y0 && py <= f.y1) return STILL;
-  if (py >= MOV.y0 && py <= MOV.y1 && Math.abs(px - movX(t)) <= MOV.hw) return { vx: MOV.a * MOV.w * Math.cos(MOV.w * t), vy: 0 };
+  if (MOV && py >= MOV.y0 && py <= MOV.y1 && Math.abs(px - movX(t)) <= MOV.hw) return { vx: MOV.a * MOV.w * Math.cos(MOV.w * t), vy: 0 };
   for (const d of DISCS) {
     const dx = px - d.x, dy = py - d.y;
     if (dx * dx + dy * dy <= d.r * d.r) return { vx: -d.w * dy, vy: d.w * dx };
@@ -169,6 +160,7 @@ function soloRace() {
   for (let i = 0; i < 7; i++) {
     rs.push(runner('b' + i, FOES[(level - 1 + i) % FOES.length], COLORS[i + 1], 'cpu', true, skill - 0.1 + 0.03 * i));
   }
+  useCourse(course.id);
   newRace('solo', '', rs);
 }
 function newRace(mode, round, runners) {
@@ -316,14 +308,6 @@ function bumps() {
 // ---------- The computer's runners ----------
 // A path of points up the course; at each a bot picks its own spot, jumps where the floor ends
 // ahead or a bar comes at it, and wanders off when stuck against a wall.
-const PATH = [
-  { y: 10, x: 0, s: 3 }, { y: 22, x: 0, s: 4 }, { y: 35.5, x: 0, s: 3 },
-  { y: 40, xs: STONE_ROWS[0][1] }, { y: 44.2, xs: STONE_ROWS[1][1] }, { y: 48.4, mov: true },
-  { y: 52.6, xs: STONE_ROWS[3][1] }, { y: 56.8, xs: STONE_ROWS[4][1] }, { y: 61.4, x: 0, s: 3 },
-  { y: 66, x: 0, s: 3 }, { y: 68.6, gap: 0 }, { y: 73.6, gap: 1 }, { y: 78.6, gap: 2 }, { y: 85.5, x: 0, s: 2.5 },
-  { y: 91, x: -1.5, s: 1.2 }, { y: 98, x: 2, s: 1.2 }, { y: 105, x: -1, s: 1.2 }, { y: 110.5, x: 0, s: 2 },
-  { y: 121, x: 0, s: 1.2 }, { y: 132, x: 0, s: 2 }, { y: FIN + 4, x: 0, s: 3 },
-];
 // The middle of the widest-enough gap between a row's walls, nearest to px.
 function gapX(p, t, px) {
   const l = blockX(p, t, 0), rr = blockX(p, t, 1);
@@ -349,6 +333,11 @@ function think(r, dt, t) {
   const dx = tx - r.x, dy = n.y - r.y, d = Math.hypot(dx, dy) || 1;
   const sp = 0.62 + 0.38 * Math.max(0, Math.min(1, a.skill));
   r.ix = dx / d * sp; r.iy = dy / d * sp;
+  if (n.tiles !== undefined && r.z <= 0 && r.y < TILES[n.tiles*4].y0) {
+    const tile = TILES[n.tiles*4], arrival = Math.max(0,(tile.y0-r.y)/Math.max(2,SPEED*sp));
+    const phase = tilePhase(tile,t+arrival);
+    if (tile.y0-r.y < 1.2 && phase > tile.on-1) { r.ix *= 0.2; r.iy = 0; r.vy = 0; return; }
+  }
   // Hold back under the hammers until the near one has swung past.
   for (const h of HAMMERS) {
     const ahead = h.y - r.y;
@@ -399,6 +388,8 @@ R.on('start', s => {
     rs.push(runner('b' + k, FOES[k], COLORS[i % COLORS.length], R.isHost ? 'cpu' : 'net', true, 0.45 + 0.08 * k));
   }
   newRace('net', s.round, rs);
+  race.courseReady = R.isHost;
+  if (!R.isHost) race.phase = 'sync';
   race.adopt = !R.isHost; // a guest reloaded mid-race takes its player back from the host
   if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
 });
@@ -409,7 +400,7 @@ function unpack(r, a) {
   [r.x, r.y, r.z, r.vx, r.vy, r.vz, r.fin, r.fall, r.cp, r.stun] = a;
   r.best = Math.max(r.best, a[11]);
 }
-function hostState() { return { t: 's', round: race.round, ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack) }; }
+function hostState() { return { t: 's', c: course.id, round: race.round, ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack) }; }
 R.on('message', (m, from) => {
   if (!race || race.mode !== 'net' || m.round !== race.round) return;
   if (R.isHost) {
@@ -420,7 +411,9 @@ R.on('message', (m, from) => {
     }
     return;
   }
+  if (from !== R.hostId) return;
   if (m.t === 's') {
+    if (!race.courseReady) { useCourse(m.c); race.courseReady = true; race.phase = m.ph; race.cdT = m.cd; race.clock = m.clock; }
     if (race.phase === 'cd') race.cdT = m.cd;
     if (m.ph === 'run' && race.phase === 'cd') { race.phase = 'run'; race.clock = m.clock; }
     if (race.phase === 'run' && Math.abs(race.clock - m.clock) > 0.2) race.clock = m.clock;
@@ -433,7 +426,7 @@ R.on('message', (m, from) => {
     });
     if (m.ph === 'run') race.adopt = false;
   }
-  if (m.t === 'end') finish(m.res);
+  if (m.t === 'end') { useCourse(m.c); finish(m.res); }
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
 R.on('continue', ids => { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) r.kind = 'cpu'; }); });
@@ -446,7 +439,7 @@ function hostTick(dt) {
   race.sendT -= dt;
   if (race.sendT <= 0) { race.sendT = 1 / 12; R.send(hostState()); }
   if (race.phase === 'run' && over()) {
-    const m = { t: 'end', round: race.round, res: standings() };
+    const m = { t: 'end', c: course.id, round: race.round, res: standings() };
     R.deliver(m);
     R.endRound();
     finish(m.res);
@@ -474,7 +467,7 @@ function finish(res) {
     races++;
     if (t !== null && (best === null || t < best)) best = t;
     if (race.mode === 'solo' && won) { wins++; level++; }
-    save('kisat', races); save('ennatys', best); save('voitot', wins); save('taso', level);
+    save('kisat', races); save(recordKey(), best); save('voitot', wins); save('taso', level);
     if (t !== null && window.AiPelitScores) AiPelitScores.submit(t);
   }
   race.mine = mine; race.time = t; race.won = won;
@@ -504,7 +497,7 @@ function tick(dt) {
   beep = Math.max(0, beep - dt);
   texts.forEach(t => { t.t += dt; }); texts = texts.filter(t => t.t < 1.2);
   if (race.phase === 'done') { race.doneT += dt; if (race.doneT > 3.5) afterResults(); return; }
-  if (race.phase === 'wait' || (race.mode === 'net' && R.paused)) return;
+  if (race.phase === 'sync' || race.phase === 'wait' || (race.mode === 'net' && R.paused)) return;
   const host = race.mode === 'solo' || R.isHost;
   if (race.phase === 'cd') {
     const before = Math.ceil(3 - race.cdT);
@@ -549,6 +542,24 @@ function whoosh(t) {
   });
 }
 
+function drawNewGround(t) {
+  for (const b of BELTS) {
+    slab(b.x0,b.y0,b.x1,b.y1,'#314d69','#172d43');
+    x.save(); x.beginPath(); x.rect(sx(b.x0),sy(b.y1),(b.x1-b.x0)*sc,(b.y1-b.y0)*sc); x.clip();
+    x.fillStyle='#ffd166'; x.textAlign='center'; x.font='900 '+Math.round(sc*0.8)+'px system-ui';
+    for(let yy=b.y0-2;yy<b.y1+2;yy+=1.8) for(let xx=b.x0;xx<b.x1+2;xx+=2) {
+      const offset=(t*Math.abs(b.vx||b.vy))%1.8;
+      x.fillText(b.vx ? (b.vx>0?'›':'‹') : '⌄',sx(xx+(b.vx?Math.sign(b.vx)*offset:0)),sy(yy+(b.vy?-offset:0)));
+    }
+    x.restore();
+  }
+  for (const tile of TILES) {
+    if (!tileOn(tile,t)) continue;
+    const flash=tilePhase(tile,t)>tile.on-0.6;
+    slab(tile.x0+0.04,tile.y0+0.04,tile.x1-0.04,tile.y1-0.04,flash?(Math.floor(t*10)%2?'#ff695c':'#ffbd69'):'#90e6a0','#366d68');
+  }
+}
+
 // ---------- Drawing ----------
 const LIFT = 0.55; // how far up the screen one metre of height shows
 let sx, sy;
@@ -589,7 +600,7 @@ function slab(x0, y0, x1, y1, top, side) {
   x.fillStyle = top; rr(a, yt, b - a, yb - yt, 8); x.fill();
 }
 // Far floors first, so a nearer one covers the far one's front face.
-const FLOORS_FAR_FIRST = FLOORS.slice().sort((a, b) => b.y0 - a.y0);
+
 function drawCourse(t) {
   for (const f of FLOORS_FAR_FIRST) {
     slab(f.x0, f.y0, f.x1, f.y1, f.stone ? '#ffd166' : f.y0 >= 112 && f.y0 < 130 ? '#ff99c8' : '#a0e7e5', f.stone ? '#c98f1b' : '#5f8fb0');
@@ -599,10 +610,13 @@ function drawCourse(t) {
       for (let y = Math.ceil(f.y0 / 3) * 3; y < f.y1; y += 3) { const py = sy(y); if (py > -10 && py < H + 10) x.fillRect(sx(f.x0) + 4, py - 3, (f.x1 - f.x0) * sc - 8, 6); }
     }
   }
+  if (MOV) {
   const mx = movX(t);
   slab(mx - MOV.hw, MOV.y0, mx + MOV.hw, MOV.y1, '#ff9f1c', '#b0630b');
   x.fillStyle = 'rgba(0,0,0,.25)'; x.textAlign = 'center'; x.font = '900 ' + Math.round(sc * 0.7) + 'px system-ui';
   x.fillText('⇆', sx(mx), sy((MOV.y0 + MOV.y1) / 2) + sc * 0.25);
+  }
+  drawNewGround(t);
   for (const d of DISCS) {
     const px = sx(d.x), py = sy(d.y), rp = d.r * sc;
     if (py + rp < -20 || py - rp > H + 20) continue;
@@ -746,7 +760,8 @@ function drawHudSide() {
 function drawHud() {
   if (wide) drawHudSide();
   else drawHudTop();
-  if (race && race.phase === 'cd') big(race.cdT < 3 ? String(Math.ceil(3 - race.cdT)) : '', '#fff');
+  if (race && race.phase === 'sync') small('Odotetaan isäntää…', '#fff');
+  else if (race && race.phase === 'cd') { small(course.name, '#ffd166', -76); big(race.cdT < 3 ? String(Math.ceil(3 - race.cdT)) : '', '#fff'); }
   else if (race && race.phase === 'run' && race.clock < 0.9) big('MENE!', '#ffd166');
   else if (race && me && me.fin !== null && race.phase === 'run') big(place(me) + '. maalissa!', '#7ee081');
   else if (race && race.phase === 'wait') big('Odota…', '#fff');
@@ -863,17 +878,37 @@ function drawResults() {
 function showMenu(result, cls) {
   const r = document.getElementById('result');
   r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('course-name').textContent = course.name;
   document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja kuusi muuta';
   document.getElementById('stats').textContent = 'Kisat ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
   menu.classList.remove('hidden');
 }
 document.getElementById('go').addEventListener('click', () => { unlock(); soloRace(); });
 document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+useCourse(load('rata','main'));
 resize();
 showMenu();
+
+function chooseCourse(delta) {
+  useCourse(RADAT[(RADAT.indexOf(course)+delta+RADAT.length)%RADAT.length].id);
+  save('rata',course.id); showMenu(); updateRoomCourse();
+}
+document.getElementById('course-prev').onclick = () => chooseCourse(-1);
+document.getElementById('course-next').onclick = () => chooseCourse(1);
+const roomPicker = document.createElement('div'); roomPicker.className = 'course-picker'; roomPicker.id='room-course';
+const roomPrev = document.createElement('button'), roomName = document.createElement('span'), roomNext = document.createElement('button');
+roomPrev.textContent='‹'; roomNext.textContent='›';
+roomPrev.setAttribute('aria-label','Edellinen rata'); roomNext.setAttribute('aria-label','Seuraava rata');
+roomPrev.onclick=()=>{if(R.isHost) chooseCourse(-1);}; roomNext.onclick=()=>{if(R.isHost) chooseCourse(1);};
+roomPicker.append(roomPrev,roomName,roomNext);
+function updateRoomCourse() { roomPicker.hidden = !R.isHost; roomPicker.style.display=R.isHost?'flex':'none'; roomName.textContent=course.name; }
+R.on('peers',updateRoomCourse); R.on('lobby',updateRoomCourse);
+R.extra(roomPicker); updateRoomCourse();
+
 requestAnimationFrame(frame);
 </script>
 <script src="../../../scores.js" data-game="kaaosrata" data-order="low" data-corner="top-right"></script>
+<script>AiPelitScores.board(course.id,course.name);</script>
 <script src="../../../back.js"></script>
 </body>
 </html>
