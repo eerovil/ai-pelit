@@ -185,12 +185,12 @@ def room_of(site, browser, names):
         guest.fill("#aipr-codeIn", code)
         guest.click("#aipr-joinBtn")
     host.wait_for_function(f"AiPelitRooms.members.filter(m => m.on).length === {len(names)}")
-    return host, guests, contexts
+    return host, guests, contexts, relay
 
 
 @pytest.mark.alone
 def test_friends_compare_points_and_equal_points_share_a_place(site, browser):
-    host, guests, contexts = room_of(site, browser, ["Eero", "Aino", "Ville"])
+    host, guests, contexts, _ = room_of(site, browser, ["Eero", "Aino", "Ville"])
     try:
         host.click("#aipr-start")
         for page in [host, *guests]:
@@ -204,6 +204,57 @@ def test_friends_compare_points_and_equal_points_share_a_place(site, browser):
         assert guests[1].locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
         assert "240 p" in host.locator("#tulokset").inner_text()
         assert all(page.errors == [] for page in [host, *guests])
+    finally:
+        for ctx in contexts:
+            ctx.close()
+
+
+@pytest.mark.alone
+def test_an_away_friend_keeps_points_but_the_computer_earns_no_more(site, browser):
+    host, [guest], contexts, relay = room_of(site, browser, ["Eero", "Aino"])
+    try:
+        host.click("#aipr-start")
+        for page in [host, guest]:
+            page.wait_for_function("net && net.cfg && game.mode === 'ride'", timeout=10000)
+
+        guest_id = guest.evaluate("AiPelitRooms.me")
+        guest.evaluate("game.car.score = 80")
+        host.wait_for_function(
+            "([id]) => net.cars.find(k => k.id === id).score === 80",
+            arg=[guest_id],
+        )
+
+        relay.drop(guest)
+        host.wait_for_function("AiPelitRooms.waiting.length === 1")
+        host.click("#aipr-goOn")
+        host.wait_for_function(
+            "([id]) => net.cars.find(k => k.id === id).kind === 'cpu'",
+            arg=[guest_id],
+        )
+        cpu_start = host.evaluate("id => net.cars.find(k => k.id === id).s", guest_id)
+        host.wait_for_function(
+            "([id, start]) => net.cars.find(k => k.id === id).s > start + 1",
+            arg=[guest_id, cpu_start],
+            timeout=8000,
+        )
+        assert host.evaluate("id => net.cars.find(k => k.id === id).score", guest_id) == 80
+
+        relay.back(guest)
+        host.wait_for_function(
+            "([id]) => net.cars.find(k => k.id === id).kind === 'net'",
+            arg=[guest_id],
+            timeout=8000,
+        )
+        guest.wait_for_function("AiPelitRooms.connected && game.mode === 'ride'", timeout=8000)
+        round_ = guest.evaluate("net.round")
+        guest.reload()
+        guest.wait_for_function(
+            "([round]) => net && net.round === round && game.mode === 'ride' && game.car.score === 80",
+            arg=[round_],
+            timeout=10000,
+        )
+        assert host.evaluate("id => net.cars.find(k => k.id === id).score", guest_id) == 80
+        assert host.errors == guest.errors == []
     finally:
         for ctx in contexts:
             ctx.close()

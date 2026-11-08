@@ -17,7 +17,6 @@ const ENERGY_BACK = 0.05;     // regained per second
 const LIFT_OFF = -0.4;        // felt vertical g below which the car leaves the track
 const SIDE_MAX = 1.35;        // felt sideways g above which it tips over
 const GRACE = 0.25;           // seconds over a limit before it goes
-const SIGN_AHEAD = 45;        // metres from a sign to the place it warns of
 const KEY = 'ai-pelit:vuoristorata:';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -212,43 +211,7 @@ function buildTrack(plan) {
     o.wlo = lo; o.whi = hi;
   }
   const track = { S, pieces, len: S[S.length - 1].s, finish: S[pieces[pieces.length - 1].i0].s };
-  track.zones = zones(track);
   return track;
-}
-
-// The places worth a sign: a run of samples whose speed limit bites (max under 110 km/h, or a
-// minimum above 0). The sign's number is the speed at the zone's start that keeps every sample of
-// it inside its limits, if the car only rolls (gravity in, a little friction out).
-function zones(track) {
-  const S = track.S, out = [];
-  const tight = o => o.whi < 30 * 30 || o.wlo > 1;
-  for (let i = 0; i < S.length; i++) {
-    if (!tight(S[i]) || S[i].kind === 'lift' || S[i].kind === 'brake') continue;
-    let j = i;
-    while (j + 1 < S.length && (tight(S[j + 1]) || (j + 8 < S.length && tight(S[j + 8]) && S[j + 1].piece === S[i].piece))) j++;
-    const y0 = S[i].y;
-    let wmax = Infinity, wmin = 0;
-    for (let k = i; k <= j; k++) {
-      const drop = 2 * G * (S[k].y - y0), loss = 1.4 * (S[k].s - S[i].s);
-      if (S[k].whi < 30 * 30) wmax = Math.min(wmax, S[k].whi + drop + loss * 0.6);
-      if (S[k].wlo > 1) wmin = Math.max(wmin, S[k].wlo + drop + loss);
-    }
-    const z = { i0: i, i1: j, s0: S[i].s, s1: S[j].s, kind: S[i].kind };
-    if (wmin > 1) z.min = Math.ceil(Math.sqrt(wmin) * 3.6 / 5) * 5 + 5;
-    if (wmax < 30 * 30) z.max = Math.floor(Math.sqrt(Math.max(0, wmax)) * 3.6 / 5) * 5;
-    if (z.min && z.max && z.max < z.min) z.max = undefined;
-    if (z.min || z.max) {
-      const prev = out[out.length - 1];
-      // Two zones close together read as one sign: keep the stricter numbers.
-      if (prev && z.s0 - prev.s1 < 20) {
-        prev.i1 = z.i1; prev.s1 = z.s1;
-        if (z.max) prev.max = prev.max ? Math.min(prev.max, z.max) : z.max;
-        if (z.min) prev.min = Math.max(prev.min || 0, z.min);
-      } else out.push(z);
-    }
-    i = j;
-  }
-  return out;
 }
 
 // The sample at distance s, and a point between samples.
@@ -261,11 +224,11 @@ function lerpS(track, s, key) { const p = at(track, s); return p.a[key] + (p.b[k
 // ---- One car on the track ----
 function newCar() {
   return { s: 4, v: 0, energy: 1, boost: false, brake: false, t: 0, over: 0, gv: 1, gs: 0, fin: null,
-    derail: null, check: 4, took: new Set(), warn: 0, hands: false, ready: true, score: 0, combo: 0,
+    hands: false, ready: true, score: 0, combo: 0,
     thrillIndex: 0, thrillStates: [] };
 }
 
-// Rolls the car dt seconds. Returns what happened: 'derail' (and why), 'finish', 'pickup' or null.
+// Rolls the car dt seconds. Returns what happened: 'derail' (and why), 'finish' or null.
 function rideStep(track, car, dt) {
   if (car.fin !== null) {
     // Past the line: the brakes stop it in the station.
@@ -295,16 +258,8 @@ function rideStep(track, car, dt) {
   car.gv = o.va + o.vb * w;
   car.gs = o.sa + o.sb * w;
   const bad = car.gv < LIFT_OFF ? 'air' : Math.abs(car.gs) > SIDE_MAX ? 'side' : null;
-  // How close to a limit, 0..1, for the shaking and the warning sound.
-  car.warn = Math.max(clamp((LIFT_OFF + 0.6 - car.gv) / 0.6, 0, 1), clamp((Math.abs(car.gs) - SIDE_MAX + 0.45) / 0.45, 0, 1));
   car.over = bad ? car.over + dt : 0;
   if (bad && car.over > GRACE) return { what: 'derail', why: o.kind === 'loop' && o.u[1] < 0 ? 'loop' : bad };
-  // A safe place to come back to: the start of the piece before a zone, never inside one.
-  const z = track.zones.find(q => car.s >= q.s0 - SIGN_AHEAD - 5 && car.s <= q.s1);
-  if (!z && car.v > 0) car.check = car.s;
-  for (const pk of track.pickups || []) {
-    if (!car.took.has(pk.id) && Math.abs(pk.s - car.s) < 1.2) { car.took.add(pk.id); car.energy = Math.min(1, car.energy + 0.4); return { what: 'pickup' }; }
-  }
   if (car.s >= track.finish) { car.fin = car.t; return { what: 'finish' }; }
   return null;
 }
@@ -351,35 +306,18 @@ function buildThrills(track) {
   track.maxScore = out.length * 100;
 }
 
-// ---- The level as a whole: track, pickups, the computer's time for the stars ----
+// ---- The level as a whole ----
 const levels = {};
 function makeLevel(level) {
   if (levels[level]) return levels[level];
   const track = buildTrack(levelPlan(level));
-  track.pickups = [];
   buildThrills(track);
-  // Prove the automatic rider reaches the station when the level is first made.
-  const car = newCar();
-  let falls = 0;
-  for (let k = 0; k < 400 * 60 && car.fin === null; k++) {
-    const before = car.over;
-    autoStep(track, car, 1 / 60);
-    if (before > 0 && car.over === 0) falls++;
-  }
-  track.ideal = car.fin ?? 999;
-  track.botFalls = falls;
   return (levels[level] = track);
 }
 
 function starsFor(track, score) {
   const share = track.maxScore ? score / track.maxScore : 0;
   return share >= 0.9 ? 3 : share >= 0.65 ? 2 : 1;
-}
-
-function fmtTime(t) {
-  if (t === null || t === undefined) return '–';
-  const m = Math.floor(t / 60), s = t - m * 60;
-  return m + '.' + (s < 10 ? '0' : '') + s.toFixed(1);
 }
 
 // ---- The game: menu, ride, end ----
@@ -731,7 +669,7 @@ function guestState(m) {
     game.car.score = Math.max(game.car.score, a[6] || 0);
     // Back after a reload, or the computer rode for me while I was away: carry on from there.
     if ((first && m.ph === 'run' && a[0] > game.car.s + 5) || (a[4] && game.mode === 'ride')) {
-      game.car.s = a[0]; game.car.v = Math.max(5, a[1]); game.car.t = m.clock; game.car.check = a[0];
+      game.car.s = a[0]; game.car.v = Math.max(5, a[1]); game.car.t = m.clock;
     }
     if (a[2] !== null && game.car.fin === null) {
       game.car.s = Math.max(game.car.s, game.track.finish);
@@ -747,7 +685,7 @@ function guestState(m) {
 }
 function cpuTakes(k) {
   k.kind = 'cpu';
-  k.car = Object.assign(newCar(), { s: k.s, v: Math.max(5, k.v), t: net.clock, check: k.s });
+  k.car = Object.assign(newCar(), { s: k.s, v: Math.max(5, k.v), t: net.clock });
 }
 function standings() {
   return net.cars.map(synced).slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
