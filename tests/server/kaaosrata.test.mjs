@@ -24,3 +24,26 @@ test('Kaaosrata keeps old main scores and separate times for all four courses', 
   env.DB.raw.prepare("UPDATE players SET status='approved' WHERE id=?").run(player);
   assert.equal((await call('GET','scores/top')).body.games.kaaosrata.board,'main');
 });
+
+test('Kaaosrata v7 separates redesigned courses from v6 while preserving main and old lists', async () => {
+  const env={DB:makeD1(),ADMIN_KEY:'test'}, player='d'.repeat(32);
+  const call=async(method,path,body)=>{
+    const response=await handle(new Request('https://pelit.test/api/'+path,{
+      method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})
+    }),env);
+    return {status:response.status,body:await response.json()};
+  };
+  await call('POST','players',{id:player,name:'Testi454v7'});
+  const score={player,game:'kaaosrata',version:6,score:30};
+  for(const board of ['hihna','laatat','finaali']) {
+    assert.equal((await call('POST','scores',{...score,board})).status,200);
+    assert.equal((await call('POST','scores',{...score,version:7,board:board+'7',score:60})).status,200);
+    assert.equal((await call('POST','scores',{...score,version:7,board})).status,400);
+    assert.equal((await call('POST','scores',{...score,board:board+'7'})).status,400);
+    assert.equal((await call('GET','scores?game=kaaosrata&board='+board+'&player='+player)).body.mine.score,30);
+    assert.equal((await call('GET','scores?game=kaaosrata&board='+board+'7&player='+player)).body.mine.score,60);
+  }
+  for(const version of [1,5,6,7]) {
+    assert.equal((await call('POST','scores',{...score,board:'main',version})).status,200);
+  }
+});

@@ -62,7 +62,7 @@
     // Fastest time in seconds, one list per race (100 m hurdles is 'main'); level: 'taso', the level the player is on.
     aitajuoksu: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('aitajuoksu', 'taso'); } },
     // Fastest run through the obstacle course in seconds; level: 'taso', the level the player is on.
-    kaaosrata: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('kaaosrata', 'taso'); } },
+    kaaosrata: { order: 'low', lists: [['main', 'Puomipuisto'], ['hihna7', 'Hihnatehdas'], ['laatat7', 'Laattalaakso'], ['finaali7', 'Kaaosfinaali'], ['hihna', 'Hihnatehdas v6'], ['laatat', 'Laattalaakso v6'], ['finaali', 'Kaaosfinaali v6']], score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('kaaosrata', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
     trampoliini: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('trampoliini', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
