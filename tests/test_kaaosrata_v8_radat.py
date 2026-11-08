@@ -6,7 +6,7 @@ import pytest
 from conftest import ROOT, ROOMS_IN_GAME
 from test_rooms_lib import Relay
 
-URL = 'games/kaaosrata/v7/'
+URL = 'games/kaaosrata/v8/'
 COURSES = ['main', 'hihna', 'laatat', 'finaali']
 
 
