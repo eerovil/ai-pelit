@@ -1,4 +1,5 @@
-"""Yöajo v18 (#440): left turns cross the opposing lane inside the junction.
+"""Yöajo v19 (#451): forgiving crossroads turns (tests in test_yoajo_v19_risteys.py).
+Yöajo v18 (#440): left turns cross the opposing lane inside the junction.
 Yöajo v17 (#440): stars from driving points; time is only a high-score bonus.
 Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
 Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
@@ -13,7 +14,7 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v18/"
+URL = "games/yoajo/v19/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -461,7 +462,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v18")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v19")
 
 
 # ---- v12 (#440): the police ----
@@ -963,7 +964,8 @@ def test_a_missed_turn_ends_the_leg_on_the_wrong_road(site, context):
 def test_a_crossroads_at_70_ends_in_the_ditch_and_a_ramp_takes_60(site, context):
     page = open_game(site, context)
     r = page.evaluate(TURN, [3, "P.s = road.turns[0].a0 - 300; P.v = 70 / KMH;", 70, False, PAST_TURNS, "null"])
-    assert r["mode"] == "crash" and r["why"] == "Ajoit ojaan: liian lujaa risteykseen.", r
+    # v19 (#451): the message names the kind of turn.
+    assert r["mode"] == "crash" and r["why"] in ("Ajoit ojaan: liian lujaa vasempaan käännökseen.", "Ajoit ojaan: liian lujaa oikeaan käännökseen."), r
     r = page.evaluate(TURN, [1, "P.s = road.turns[0].a0 - 300;", 60, False, PAST_TURNS, "null"])
     assert r["mode"] == "drive" and r["turns"][0]["done"], r
     assert page.errors == []

@@ -417,8 +417,16 @@ def test_candidates_that_arrive_while_the_servers_are_read_are_kept(phones):
     for p in (host, a):
         p.wait_for_function("AiPelitRooms.voice.calls === 1", timeout=20000)
     # Both phones know the other's own (host) candidates, not only addresses learnt from checks.
+    # The call may come up on the checks alone before the other's candidates have come through the
+    # room (once on a slow CI runner, #452), so they get a few seconds; a dropped one never comes.
     for p in (host, a):
-        assert p.evaluate(HOST_CANDIDATES) >= 1
+        n = 0
+        for _ in range(50):
+            n = p.evaluate(HOST_CANDIDATES)
+            if n >= 1:
+                break
+            p.wait_for_timeout(100)
+        assert n >= 1
 
 
 # The phone holds the sound back until a tap on the page, as Chrome does on a phone with no tap yet.

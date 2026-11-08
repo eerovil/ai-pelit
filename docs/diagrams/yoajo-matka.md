@@ -3,7 +3,7 @@
 The plan for Yöajo's next versions (#440): what the police do, how fuel works, the new things on
 the road, the exits and junctions where the route turns, the three new Lapland legs to Utsjoki, the endless night and the whole-trip summary.
 One leg's own rules (lights, overtaking, moose, cameras, coffee) are in `yoajo.md`; this diagram
-shows only what is added around them. v12 (police and the police check), v13 (road events), v14 (turns and the level crossing) and v15 (Lapland, fuel and the trip's totals) and v16 (the endless night) are built. Paths name the version that adds each.
+shows only what is added around them. v12 (police and the police check), v13 (road events), v14 (turns and the level crossing) and v15 (Lapland, fuel and the trip's totals) and v16 (the endless night) are built; v19 (#451) makes the crossroads turns forgiving. Paths name the version that adds each.
 
 ```mermaid
 flowchart TD
@@ -35,10 +35,14 @@ flowchart TD
   C -- Aura-auto --> AU[Lumipilvi takana: ohita vasta kun näet eteen]
   C -- Musta jää --> MJ[Kiiltävä kohta: pito puolet, ei jarrua eikä äkkiohjausta]
   C -- Risteys tai liittymä, jossa käännytään --> KR{Käännyitkö opastetusta?}
-  KR -- Vasemmalle omalta kaistalta --> KV[Risteyksen sisällä vastakkaisen kaistan yli, noin 20 km/h]
+  KR -- Vasemmalle omalta kaistalta --> KV[Risteyksen sisällä vastakkaisen kaistan yli, alle 30 km/h]
   KV --> KR1
   KR -- Kyllä, hiljaa --> KR1[Vilkku syttyy itsestään, matka jatkuu]
-  KR -- Liian kovaa --> X
+  KR -- Liian kovaa --> KL[Auto valuu kaarteen ulkoreunalle, sitä enemmän mitä kovempaa]
+  KL --> KA{Vielä risteyksen asfaltilla?}
+  KA -- Kyllä --> KR1
+  KA -- Ei, ojassa --> KX[Ajoit ojaan: liian lujaa vasempaan käännökseen, hidasta alle 30 km/h]
+  KX --> X
   KR -- Ajoit ohi --> KR2[Väärä tie: osuus päättyy]
   KR2 --> X
   KR -- Vasemmalle vastaantulijan eteen --> KR3[Käännyit vastaantulijan eteen -50, hurjastelu]
@@ -59,10 +63,10 @@ flowchart TD
   S --> KM[Koko matka: tähdet, pisteet, km, sakot, hirvet]
   LY -- Kolari, nukahdus, poliisi, tankki tyhjä tai väärä tie --> LT[Loppui: km ja pisteet listalle loputon]
   X --> A
-  class A,B,LY,P0,SU,EK,AU,MJ,FA,KR1,KV,PO blue
-  class C,P,PK,TV,RA,AM,TR,F,KR amber
+  class A,B,LY,P0,SU,EK,AU,MJ,FA,KR1,KV,PO,KL blue
+  class C,P,PK,TV,RA,AM,TR,F,KR,KA amber
   class PK1,TV1,RA1,AM1,TR1,EK1,KR4 teal
-  class PX,PS,TV2,RA2,AM2,FX,X,KR2,KR3 rose
+  class PX,PS,TV2,RA2,AM2,FX,X,KR2,KR3,KX rose
   class Z,S,KM,LT green
 ```
 
@@ -95,9 +99,12 @@ flowchart TD
 - **Aura-auto**: v13 (legs 5–8): a snowplough at 40 km/h with orange beacons ahead in the player's lane; within 50 m behind it (`CLOUD_BACK`) its snow cloud whitens the screen, thickest close up. Overtaking it is worth 60.
 - **Musta jää**: v13 `iceAt()` and `gripAt()` (legs 5–8): up to two 50 m shiny patches, each after a "Liukas ajorata" sign 150 m before it; grip halves on them. "Musta jää: ei jarrua eikä äkkiohjausta".
 - **Risteys tai liittymä, jossa käännytään**: v14 `turnLeg()` in `games/yoajo/v14/risteys.js`, right after `makeRoad()`: 1, 1, 1, 1, 2, 2, 3, 3 turns on legs 1–8 (`TURNS`), an exit ramp to the right off the motorway on legs 1–2 (0.6 rad on 70 m) and a crossroads where Valtatie 4 turns a quarter round on 28 m from leg 3. v18 (#440 owner correction) replaces the early left ramp with an 8 m corner and 2 m easing, so the right-hand lane crosses the opposing lane only within the cross-road mouth and joins the right-hand lane of the left-going road. The incoming road remains straight up to this compact junction; `LEFT_SPEED` is 18 km/h for traffic and braking advice says 20 km/h. Right turns and motorway ramps retain their geometry. Each bends the road itself, with 140 m straight before and 100 m after on level ground; the road straight on is drawn as a side road of its own (`frameTurn()`), and no trees grow inside the corner (`inCorner()` in `view.js`). Each leg is 400 m longer per turn (`LEGS` in `game.js`) and nothing else is placed within 250 m before a turn or 120 m after it, so everything v13 had still fits. Blue direction signs 600 m and 150 m before, on the turn's side (`suunta`); the far one steps out of a road event's stretch (`turnSigns()`) or a police check (`placeCheck()` in `poliisi.js`). From 600 m "Käänny oikealle/vasemmalle … m", and an arrow pill on the screen (`turnHint()`). Traffic cars slow for the turn too (`turnCruise()`).
-- **Risteyksen sisällä vastakkaisen kaistan yli, noin 20 km/h**: v18 `turnLeg()` in `games/yoajo/v18/risteys.js` uses an 8 m left corner with 2 m easing; the player stays on the incoming right-hand lane until crossing the opposing lane within the cross-road mouth and leaves on the outgoing right-hand lane. `turnCruise()` slows traffic to 18 km/h; the warning advises 20 km/h.
+- **Risteyksen sisällä vastakkaisen kaistan yli, alle 30 km/h**: v18 `turnLeg()` in `games/yoajo/v18/risteys.js` uses an 8 m left corner with 2 m easing; the player stays on the incoming right-hand lane until crossing the opposing lane within the cross-road mouth and leaves on the outgoing right-hand lane. `turnCruise()` slows traffic to 18 km/h. v19 (#451): the player's advice is 30 km/h (`turnSafe()` in `games/yoajo/v19/risteys.js`), shown on the turn pill the whole way in.
+- **Auto valuu kaarteen ulkoreunalle, sitä enemmän mitä kovempaa**: v19 (#451) `drive()` in `games/yoajo/v19/game.js` with `turnPush()` in `risteys.js`: inside a crossroads turn's bend the outward push is `steerMax(v) × (v / safe)²` (`steerMax` = full steering's sideways speed), where `safe` is the turn's safe speed (left 30 km/h, right 50 km/h, times `min(1, grip + 0.25)` as in `turnCruise()`), with no 1.8× slide step. Because the bend is short, a player who steers in within 0.4 s drifts about 1.5 m wide at the safe speed and still makes a dry left turn at 35 km/h and a right one at 60 (`tests/test_yoajo_v19_risteys.py` drives every crossroads turn of legs 3–8 at its safe speed half a second late, and a dry left one at 35 and 50). Ramps and ordinary bends keep the v18 rule.
+- **Vielä risteyksen asfaltilla?**: v19 `onJunction()` in `games/yoajo/v19/risteys.js`, used by `drive()` in `game.js`: within a crossroads turn (30 m before its start to 30 m after its end) the car is in the ditch only once it is more than `DITCH` (5.6 m) from the bend's line and also more than `DITCH` from every drawn road of the junction (`armDist()`). The junction's paving does not slow the car as gravel does, and the car can go at most 12 m wide there.
+- **Ajoit ojaan: liian lujaa vasempaan käännökseen, hidasta alle 30 km/h**: v19 `ditchWhy()` (in a turn's bend, or up to 34 m past a crossroads bend, where the paving let the car run wide) and the crash screen in `ui.js`: the message and tip name the kind of turn and its weather-adjusted safe speed ("vasempaan käännökseen", "oikeaan käännökseen", "rampille"), rounded to the nearest 5 km/h (a blizzard: 25 left, 40 right). The blue turn pill shows "· alle <N>" (e.g. "Käänny vasemmalle 450 m · alle 30") the whole way from 600 m, not only once.
 - **Käännyitkö opastetusta?**: v14 `turnTick()`: decided `TURN_EASE` (8 m) into the turn: the car has turned if it steered towards it within the last 33 m (`P.into`).
-- **Vilkku syttyy itsestään, matka jatkuu**: v14 `turnTick()` (Eero's choice: no signal buttons): within 150 m the blinker comes on by itself, to the turn's side, once the car slows under 60 km/h (a crossroads) or 80 (a ramp), steers into it, or reaches it; off once round. Going too fast: off the road in a turn's bend is "Ajoit ojaan: liian lujaa risteykseen." over 23 km/h for v18 left turns or 35 for right turns, "… rampille." over 55 (`ditchWhy()`).
+- **Vilkku syttyy itsestään, matka jatkuu**: v14 `turnTick()` (Eero's choice: no signal buttons): within 150 m the blinker comes on by itself, to the turn's side, once the car slows under 60 km/h (a crossroads) or 80 (a ramp), steers into it, or reaches it; off once round. Going too fast: off the road in a turn's bend over its safe speed (`turnSafe()`) is "Ajoit ojaan: liian lujaa vasempaan käännökseen." / "… oikeaan käännökseen." / "… rampille." (`ditchWhy()`, v19; v14–v18 said "risteykseen").
 - **Väärä tie: osuus päättyy**: v14 `wrongRoad()` (Eero's choice): straight on past a turn, "Väärä tie!" and a red pill; the car drives on down the side road and 250 m on (`WRONG_LEN`) the leg ends, "Väärä tie: ajoit ohi käännöksen.", with a hint on the crash screen.
 - **Käännyit vastaantulijan eteen -50, hurjastelu**: v14: at a left turn a car comes from the road ahead (`crosser()`), set off so that it reaches the crossing about when the player does. Turning while it is under 4 s (`GAP_TIME`) from the crossing is −50 and counts as reckless (`tally.hurjastelu`); the car brakes and honks. Once through the crossing it leaves the side road (`t.arm = null`) and is an ordinary oncoming car on the player's road, drawn and hit there. A police car that sees it (`policeSaw()`) ends the leg, "Poliisi pysäytti: vaarallinen käännös.". v18: `crosser()` in `games/yoajo/v18/risteys.js` keeps the straight-through car at its normal speed while the player waits; only `yieldT`, set after an unsafe turn, requests emergency braking. `J.done` remains the branch-choice checkpoint eight metres into the turn, rather than the geometric end of the corner.
 - **Annoit tietä +20**: v14: stopped before the turn while that car came, then turned after it: +20 (`tally.kaannos`).

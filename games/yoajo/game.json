@@ -127,6 +127,13 @@
       "note": "Vasemmalle käännytään omalta kaistalta risteyksen sisällä.",
       "request": "Korjaa vasemmalle kääntyminen: vastaantulijoiden kaistalle ei pidä ajaa ennen risteystä.",
       "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 19,
+      "date": "2026-11-08",
+      "note": "Risteyksissä kääntyminen on armollisempaa: asfaltti on tietä ja nopeusohje näkyy koko ajan.",
+      "request": "Risteykseen ajaminen menee todella herkästi ojaan",
+      "issue": "eerovil/ai-pelit#451"
     }
   ]
 }

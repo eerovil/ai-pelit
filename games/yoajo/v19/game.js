@@ -360,7 +360,9 @@ function drive(dt) {
   // Speed: v3 has a gas pedal: as much pull as the thumb asks, up to 130 at full; off the gas
   // the engine slows the car a little. The brake by how far the thumb slides down. The
   // shoulder and gravel drag.
-  const top = 130 / KMH, offRoad = Math.abs(P.lat) > EDGE + 0.2 && !inBay(P.s, P.lat);
+  // v19 (#451): a junction's drawn paving is road (onJunction() in risteys.js), not gravel.
+  const junction = typeof onJunction === 'function' && onJunction(P.s, P.lat);
+  const top = 130 / KMH, offRoad = Math.abs(P.lat) > EDGE + 0.2 && !inBay(P.s, P.lat) && !junction;
   // v15: an empty tank (lappi.js) gives no pull.
   const brake = clamp(+input.brake || 0, 0, 1), gas = P.dry ? 0 : clamp(+input.gas || 0, 0, 1);
   P.gas = gas;
@@ -379,16 +381,22 @@ function drive(dt) {
   // v3: by how far the thumb slides, from a gentle drift to a sharper turn than v1's buttons.
   const steer = clamp((+input.steer || 0) + (input.right ? 1 : 0) - (input.left ? 1 : 0), -1, 1);
   P.steer = steer;
-  const want = steer * (2.6 + Math.min(P.v, 25) * 0.15);
+  const steerMax = 2.6 + Math.min(P.v, 25) * 0.15, want = steer * steerMax;
   P.vl += (want - P.vl) * Math.min(1, dt * 7 * grip);
-  let push = -k * P.v * P.v * 0.55;
-  const lim = 4.5 * grip;
-  if (Math.abs(k) * P.v * P.v > lim) push *= 1.8;          // too fast for the bend: it slides wide
+  // v19 (#451): a crossroads bend pushes wide smoothly with speed (turnPush() in risteys.js).
+  let push = typeof turnPush === 'function' ? turnPush(P.s, P.v, steerMax) : null;
+  if (push === null) {
+    push = -k * P.v * P.v * 0.55;
+    const lim = 4.5 * grip;
+    if (Math.abs(k) * P.v * P.v > lim) push *= 1.8;          // too fast for the bend: it slides wide
+  }
   P.lat += (P.vl + push) * dt;
+  // v19: wide on a junction's paving, no further than the drawing follows.
+  if (junction) P.lat = clamp(P.lat, -12, 12);
   P.s += P.v * dt;
   if (Math.abs(P.lat) > EDGE && P.v > 8) shake = Math.max(shake, 0.25);
 
-  if (Math.abs(P.lat) > DITCH && !inBay(P.s, P.lat)) return crash(typeof ditchWhy === 'function' ? ditchWhy() : 'Ajoit ojaan.');
+  if (Math.abs(P.lat) > DITCH && !inBay(P.s, P.lat) && !(typeof onJunction === 'function' && onJunction(P.s, P.lat))) return crash(typeof ditchWhy === 'function' ? ditchWhy() : 'Ajoit ojaan.');
   if (P.wrong) return wrongRoad(dt);
   // v8: the rest area's kerb keeps the car on its paving, and its narrowing lane leads it back.
   if (inBay(P.s, P.lat)) P.lat = Math.min(P.lat, EDGE + bayWidth(P.s) - 0.6);
