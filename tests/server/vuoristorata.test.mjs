@@ -42,4 +42,8 @@ test('Vuoristorata keeps old low times and ranks v5 thrill points high', async (
     assert.equal(response.status, 400);
     assert.equal(response.body.error, 'wrong version for this board');
   }
+
+  const malformed = await call('POST', 'scores', { ...fresh, player: a, board: ['elamys-1'], score: 999 });
+  assert.equal(malformed.status, 400);
+  assert.equal(malformed.body.error, 'bad board');
 });

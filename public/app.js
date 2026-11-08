@@ -260,7 +260,8 @@
     // A no. 1 kept from a list the shelf no longer shows (Puhelinkoppi's withdrawn streak list,
     // #9) is not shown as this one's.
     if (!(g && g.boards) && t.board && t.board !== 'main') return '';
-    return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(5) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
+    var prefix = g && g.boardPrefix || 'taso-';
+    return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(prefix.length) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
   }
 
   function loadTops() {
@@ -313,7 +314,8 @@
     function fill() {
       var mine = ++asked;
       box.replaceChildren(el('p', { class: 'muted', text: 'Haetaan…' }));
-      scores.list(slug, lists ? listId : picker ? 'taso-' + course : 'main').then(function (b) {
+      var prefix = scores.games[slug].boardPrefix || 'taso-';
+      scores.list(slug, lists ? listId : picker ? prefix + course : 'main').then(function (b) {
         if (mine !== asked) return;
         var rows = b.rows.map(function (r) { return scores.row(slug, r, r.me); });
         if (b.mine && !b.rows.some(function (r) { return r.me; })) {

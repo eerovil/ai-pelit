@@ -246,11 +246,12 @@ async function rankOf(env, game, board, score, at) {
 }
 
 async function addScore(env, body) {
-  const { player, game, board } = body;
+  const { player, game } = body;
+  const board = typeof body.board === 'string' ? body.board : '';
   const version = Number(body.version), score = Number(body.score);
   if (!ID.test(String(player || ''))) return fail(400, 'bad player');
   if (!Object.hasOwn(GAMES, game)) return fail(400, 'no list for this game');
-  if (!GAMES[game].boards.test(String(board || ''))) return fail(400, 'bad board');
+  if (!GAMES[game].boards.test(board)) return fail(400, 'bad board');
   if (!Number.isInteger(version) || version < 1) return fail(400, 'bad version');
   if (version < (GAMES[game].minVersion || 1)) return fail(400, 'old version');
   const range = GAMES[game].boardVersions?.[board];

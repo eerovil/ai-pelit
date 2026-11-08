@@ -104,7 +104,7 @@
     },
     // v5: most thrill points on 'elamys-N'. Versions 1–4 keep fastest times on 'taso-N'.
     vuoristorata: {
-      order: 'high', score: function (s) { return s + ' p'; }, boards: true,
+      order: 'high', score: function (s) { return s + ' p'; }, boards: true, boardPrefix: 'elamys-',
       level: function () { return saved('vuoristorata', 'taso') - 1; },
       levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' ajettu'; },
     },

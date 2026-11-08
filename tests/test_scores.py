@@ -314,8 +314,13 @@ def test_vuoristorata_keeps_low_old_times_and_high_v5_points_in_the_phone_queue(
     site.build(ROOT / "games")
     page = context.new_page()
     page.goto(site.url + VUORISTORATA)
-    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi459'))")
-    page.evaluate("AiPelitScores.board('taso-1'); AiPelitScores.submit(70); AiPelitScores.submit(65)")
+    page.evaluate("""() => {
+      localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi459'));
+      localStorage.setItem('ai-pelit:_tulokset:jono', JSON.stringify({
+        'vuoristorata|taso-1': {game: 'vuoristorata', board: 'taso-1', version: 4, score: 65}
+      }));
+    }""")
+    page.reload()
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')).length === 1")
     page.evaluate("AiPelitScores.board('elamys-1'); AiPelitScores.submit(400); AiPelitScores.submit(520)")
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')).length === 2")
@@ -404,6 +409,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
         ("sormiskeitti", "main", b): {"score": 58, "version": 5},
         ("hiihto", "taso-1", a): {"score": 71.5, "version": 2, "level": 3},
         ("hiihto", "taso-2", b): {"score": 95, "version": 2, "level": 2},
+        ("vuoristorata", "elamys-1", a): {"score": 520, "version": 5, "level": 2},
         # Puhelinkoppi's shelf list is its level list again; the withdrawn v3/v4 streak list does not show.
         ("puhelinkoppi", "main", a): {"score": 40, "version": 2},
         ("puhelinkoppi", "putki", b): {"score": 70, "version": 3},
@@ -413,6 +419,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
     assert page.locator('.top-score[data-top="sormiskeitti"]').inner_text() == "🏆 Aino · 64 cm"
     assert page.locator('.top-score[data-top="hiihto"]').inner_text() == "🏆 Taso 1: Aino · 1.11,5"
+    assert page.locator('.top-score[data-top="vuoristorata"]').inner_text() == "🏆 Taso 1: Aino · 520 p"
     assert page.locator('.top-score[data-top="voimistelu"]').is_hidden()
     assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == "🏆 Aino · taso 40"
     assert page.locator("#ai-pelit-tulokset-nappi").count() == 0  # no chip on the shelf
@@ -437,6 +444,10 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     page.fill(".score-list .board", "11")
     page.dispatch_event(".score-list .board", "change")
     page.wait_for_selector(".score-list .tulos:has-text('11 rataa läpi')")
+
+    page.goto(site.url + "#/vuoristorata")
+    page.wait_for_selector(".score-list .tulos:has-text('Aino')")
+    assert "520 p" in page.locator(".score-list").inner_text()
 
     # Offline the cards keep the last no. 1 they saw.
     fake.online = False
