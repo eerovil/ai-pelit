@@ -19,7 +19,7 @@ def open_game(site, context):
     return page
 
 
-@pytest.mark.parametrize('size', [(360, 640), (360, 740), (740, 360)])
+@pytest.mark.parametrize('size', [(360, 640), (360, 740), (390, 740), (740, 360)])
 def test_every_course_fits_and_rotation_keeps_the_round(site, browser, size):
     ctx = browser.new_context(viewport={'width': size[0], 'height': size[1]}, has_touch=True)
     try:
