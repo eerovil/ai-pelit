@@ -4,7 +4,7 @@ import math
 import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
-from test_minigolf_v2 import pull, PLAN
+from test_minigolf_v3 import pull, PLAN
 
 @pytest.fixture
 def golf_phones(site,browser):
@@ -14,7 +14,7 @@ def golf_phones(site,browser):
         contexts.append(ctx)
         ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi',"+json.dumps(json.dumps(name))+")")
         p=ctx.new_page();p.errors=[];p.on('pageerror',lambda e:p.errors.append(str(e)))
-        relay.attach(p);p.goto(site.url+'games/minigolf/v2/');p.evaluate(PLAN)
+        relay.attach(p);p.goto(site.url+'games/minigolf/v3/');p.evaluate(PLAN)
         return p
     yield phone
     for c in contexts:
@@ -39,6 +39,8 @@ def room(phone,n):
 @pytest.mark.parametrize('n',[2,3,6])
 def test_every_player_can_putt_and_reload(golf_phones,n):
     pages=room(golf_phones,n);host=pages[0]
+    host.tap('#c')
+    assert host.evaluate("round.players[0].strokes===0&&round.phase==='aim'")
     # Another phone cannot play the host's turn.
     pages[-1].evaluate("R.send({t:'shot',round:roomRound,seq:round.seq,a:0,p:1})")
     # Every phone shows who plays, in the ball's colour, clear of the course.
@@ -76,6 +78,36 @@ def test_host_reload_sends_everyone_back_to_the_room(golf_phones):
     for p in (host,guest):
         p.wait_for_function("round&&round.phase==='aim'&&round.hole===0&&round.players.every(p=>p.strokes===0)")
         assert not p.errors
+
+
+@pytest.mark.parametrize('n',[2,3])
+def test_starting_player_rotates_each_hole_and_next_round(golf_phones,n):
+    pages=room(golf_phones,n);host=pages[0]
+    assert host.evaluate('[round.hole,round.starterId===round.players[0].id,round.turn]')==[0,True,0]
+    # Finish each hole by state, but enter the next one through the game's real control.
+    for hole in range(1,9):
+        host.evaluate("""round.players.forEach(p=>p.scores[round.hole]=3);
+          round.phase='hole';showCard();sendState();""")
+        host.click('#next')
+        expected=hole%n
+        for p in pages:p.wait_for_function(f'round.hole==={hole}&&round.turn==={expected}')
+        assert host.evaluate(f'round.starterId===round.players[{expected}].id')
+        if n==3 and hole==1:host.screenshot(path='/var/tmp/minigolf453_rotation.png')
+    # The next full round continues with the player after hole 9's starter.
+    host.evaluate("""round.players.forEach(p=>p.scores[8]=3);round.phase='end';
+      finishRecord();R.deliver({t:'result',round:roomRound,state:round});R.endRound();showCard();sendState();""")
+    for p in pages:
+        p.wait_for_function("round&&round.phase==='end'")
+        p.click('#next')
+    host.wait_for_function("R.isHost&&!R.canStop")
+    if n==2:
+        host.reload()
+        pages[1].wait_for_function('round===null')
+        host.wait_for_function('R.isHost&&R.members.filter(p=>p.on).length===2')
+    host.click('#aipr-start')
+    expected=9%n
+    for p in pages:p.wait_for_function(f"round&&round.hole===0&&round.turn==={expected}&&round.starterId===round.players[{expected}].id")
+    for p in pages:assert not p.errors
 
 
 def test_skip_rejoin_delivery_once_and_next_round(golf_phones):
@@ -121,3 +153,14 @@ def test_others_see_the_pullers_power_line(golf_phones):
     guest.wait_for_function("aim&&aim.p===1&&lines.length&&lines[lines.length-1]===1")
     host.mouse.up();host.wait_for_function("round.phase==='roll'")
     guest.wait_for_function("aim===null")
+
+
+def test_host_clamps_a_guests_tiny_visible_putt(golf_phones):
+    host,guest=room(golf_phones,2)
+    # Move to the guest's turn without changing the behavior under test.
+    host.evaluate("round.turn=1;round.seq++;sendState();askDraw=()=>{}")
+    guest.wait_for_function('round.turn===1')
+    guest.evaluate("R.send({t:'shot',round:roomRound,seq:round.seq,a:0,p:.01})")
+    host.wait_for_function("round.phase==='roll'")
+    assert host.evaluate("[round.players[1].strokes,round.players[1].ball.vx,round.players[1].ball.vy]")==pytest.approx([1,.1*4.6,0])
+    guest.wait_for_function("round.phase==='roll'&&round.players[1].strokes===1")
