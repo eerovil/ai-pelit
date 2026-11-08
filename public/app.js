@@ -257,10 +257,10 @@
       var named = g.lists.filter(function (l) { return l[0] === t.board; })[0];
       return named ? '🏆 ' + named[1] + ': ' + t.name + ' · ' + scores.scoreText(slug, t.score) : '';
     }
-    // A no. 1 kept from a list the shelf no longer shows (Puhelinkoppi's withdrawn streak list,
-    // #9) is not shown as this one's.
-    if (!(g && g.boards) && t.board && t.board !== 'main') return '';
     var prefix = g && g.boardPrefix || 'taso-';
+    // A no. 1 kept from a list the shelf no longer shows is not shown as this one's. This also
+    // hides Vuoristorata v1-v4's cached `taso-N` time after v5 switched to `elamys-N` points.
+    if (g && g.boards ? !t.board || !t.board.startsWith(prefix) : t.board && t.board !== 'main') return '';
     return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(prefix.length) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
   }
 

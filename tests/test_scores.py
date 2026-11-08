@@ -576,17 +576,19 @@ def test_piano_a_score_v9_left_offline_is_sent_as_v10_after_the_cut(site, contex
 
 
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
-    """Puhelinkoppi's v3/v4 streak list was withdrawn (#9): its no. 1 kept on the phone must not read as a level."""
+    """Withdrawn named lists and Vuoristorata's old time board must not masquerade as current results."""
     site.build(ROOT / "games")
     fake.online = False
     page = context.new_page()
     page.goto(site.url)
     page.evaluate("""localStorage.setItem('ai-pelit:_tulokset:ykkoset', JSON.stringify({
         puhelinkoppi: { board: 'putki', name: 'Bertta', score: 7, version: 3 },
+        vuoristorata: { board: 'taso-1', name: 'Bertta', score: 65, version: 4 },
         sormiskeitti: { board: 'main', name: 'Aino', score: 64, version: 5 } }))""")
     page.reload()
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
     assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == ""
+    assert page.locator('.top-score[data-top="vuoristorata"]').inner_text() == ""
 
 
 @pytest.mark.games("tikka")
