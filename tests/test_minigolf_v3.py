@@ -3,7 +3,7 @@ import math
 import pytest
 from conftest import ROOT, turn
 
-URL = 'games/minigolf/v2/'
+URL = 'games/minigolf/v3/'
 PLAN = """() => {
  window.planShot = (hole, start, target) => {
    const h=HOLES[hole], goal=target||h.cup, base=Math.atan2(goal[1]-start.y,goal[0]-start.x);
@@ -44,15 +44,20 @@ def test_controls_and_layout(site,browser,size):
     for sel in ['#play','#friends','#scores']:
         b=p.locator(sel).bounding_box();assert b['y']>=0 and b['y']+b['height']<=size[1]
     p.click('#play')
-    # A short tap cannot count as a stroke, nor can a second finger steal a drag.
+    # A tap cannot count as a stroke, nor can a second finger steal a drag.
     p.tap('#c');assert p.evaluate('round.players[0].strokes')==0
     w,h=size;p.mouse.move(w/2,h/2);p.mouse.down();p.mouse.move(w/2,h/2+40)
     p.dispatch_event('#c','pointerdown',{'pointerId':2,'clientX':20,'clientY':200})
     p.dispatch_event('#c','pointerup',{'pointerId':2,'clientX':20,'clientY':260})
     assert p.evaluate('dragging.id')==1 and p.evaluate('round.players[0].strokes')==0
-    p.mouse.move(w/2,h/2+2);p.mouse.up();assert p.evaluate('round.players[0].strokes')==0
+    p.mouse.move(w/2,h/2+1)
+    assert p.evaluate('aim&&aim.p===MIN_POWER&&aim.length>0')
+    if size==(360,740):p.screenshot(path='/var/tmp/minigolf453_tiny.png')
+    p.mouse.up();assert p.evaluate('round.players[0].strokes')==1
+    p.evaluate('runBall()')
+    assert p.evaluate('Math.hypot(round.players[0].ball.x-HOLES[0].tee[0],round.players[0].ball.y-HOLES[0].tee[1])>.1')
     pull(p,-math.pi/2,1)
-    assert p.evaluate('round.players[0].strokes')==1
+    assert p.evaluate('round.players[0].strokes')==2
     p.evaluate('runBall()')
     assert p.evaluate("round.phase !== 'roll'")
     p.evaluate("round.hole=8;round.players[0].scores=[2,2,3,3,3,3,3,3,4];round.phase='end';finishRecord();showCard();for(let i=0;i<10;i++){const r=document.createElement('div');r.textContent=(i+1)+'. Testi 25';$('board').append(r);}")
@@ -103,15 +108,26 @@ def test_tap_hides_the_notice_without_a_stroke(site,browser):
     assert not p.errors;ctx.close()
 
 
+def test_pointer_release_keeps_scaled_power_above_the_minimum(site,browser):
+    ctx,p=open_game(site,browser);p.click('#play')
+    p.evaluate('askDraw=()=>{}')
+    for requested,effective in [(.01,.1),(.4,.4),(1,1)]:
+        p.evaluate("round=fresh([{id:'solo',name:'Sinä'}]);showPlay()")
+        pull(p,-math.pi/2,requested)
+        assert p.evaluate('round.players[0].strokes')==1
+        assert p.evaluate('Math.hypot(round.players[0].ball.vx,round.players[0].ball.vy)')==pytest.approx(effective*4.6,rel=.02)
+    assert not p.errors;ctx.close()
+
+
 def test_cup_water_walls_and_limit(site,browser):
     ctx,p=open_game(site,browser)
     p.click('#play')
     assert p.evaluate("""() => {
-      let h=HOLES[0],b=golfBall([2,1.35]);b.vy=-.8;
-      for(let i=0;i<100;i++)golfStep(b,h,FIXED_DT,i*FIXED_DT);
+      let h=HOLES[0],firm=golfBall(h.cup);firm.vy=-2.2;golfStep(firm,h,FIXED_DT,0);
+      let over=golfBall(h.cup);over.vy=-2.4;golfStep(over,h,FIXED_DT,0);
       let fast=golfBall([2,1.35]);fast.vy=-4.6;
       for(let i=0;i<30;i++)golfStep(fast,h,FIXED_DT,i*FIXED_DT);
-      return b.holed&&!fast.holed;
+      return firm.holed&&!over.holed&&!fast.holed;
     }""")
     p.evaluate("round.hole=5;round.players[0].ball=golfBall([2,5]);round.notice='';showPlay()")
     pull(p,-math.pi/2,.45);p.evaluate('runBall()')

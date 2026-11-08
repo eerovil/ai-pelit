@@ -2,5 +2,6 @@
   "title": "Minigolf",
   "description": "Yhdeksän reiän minigolf: tähtää vetämällä, kierrä esteet ja puttaa. Yksin tai kavereiden kanssa.",
   "versions": [{"n":1,"date":"2026-11-06","note":"Ensimmäinen versio: yhdeksän reikää, lyönti vetämällä, hiekka, rinteet, vesi ja tuulimylly; yksin tai 2–6 puhelimella vuorotellen.","request":"Mini golf.","issue":"eerovil/ai-pelit#340"},
-    {"n":2,"date":"2026-11-07","note":"Voimapalkki poistettu: tähtäysviivan pituus ja väri näyttävät nyt lyönnin voiman.","request":"Minigolf: poista voima mittari, viiva näyttää voiman","issue":"eerovil/ai-pelit#438"}]
+    {"n":2,"date":"2026-11-07","note":"Voimapalkki poistettu: tähtäysviivan pituus ja väri näyttävät nyt lyönnin voiman.","request":"Minigolf: poista voima mittari, viiva näyttää voiman","issue":"eerovil/ai-pelit#438"},
+    {"n":3,"date":"2026-11-08","note":"Pienenkin tähtäysnuolen voi nyt lyödä minimivoimalla, reikä hyväksyy vauhdikkaamman putin ja aloitusvuoro kiertää.","request":"Minigolfissa on oltoa kun ihan pientä lyöntiä ei voi tehdä. Elikkä sinne pitää antaa tehdä myös pieni lyönti, jolloin se on minimivoimakkuudella. Toinen juttu on, että minigolfissa on liian... Yrkkä se rajaa, että kuinka nopeasti saa mennä sinne reikään. Se pallo pitää mennä ihan liian hitaasti. Ja tuosta lyöntijutusta vielä, että silloin kun sinne tulee se muoli näkyville, niin silloin pitää pystyä tekemään se lyönti. Sen pitää mennä sen pallon eteenpäin sillä. Ja joka kierrokselle aina pitäisi sen vuoronvaihtoa, että kuka aloittaa.","issue":"eerovil/ai-pelit#453"}]
 }
