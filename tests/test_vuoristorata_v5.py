@@ -5,7 +5,7 @@ import shutil
 
 from conftest import ROOT
 
-URL = "games/vuoristorata/v4/"
+URL = "games/vuoristorata/v5/"
 KEY = "ai-pelit:vuoristorata:"
 NAMES = ["valinta", "onnistui", "rullaus", "ketju", "nousu", "voitto", "kolari", "kirkuna", "jarru"]
 
@@ -182,4 +182,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/vuoristorata/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/vuoristorata/v5")
