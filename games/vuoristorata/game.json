@@ -1,6 +1,6 @@
 {
   "title": "Vuoristorata",
-  "description": "Aja vuoristoradan junaa etupenkistä: vauhtia ja jarrua, ettei juna suistu mutkassa, mäen harjalla tai silmukassa. Yksin tai kavereiden kanssa kilpaa.",
+  "description": "Nouse vuoristoradan etupenkkiin: juna ajaa itse, ja sinä keräät pisteet nostamalla kädet jännittävissä kohdissa. Yksin tai kavereiden kanssa.",
   "versions": [
     {
       "n": 1,
@@ -29,6 +29,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-08",
+      "note": "Juna ajaa nyt itse, ja pelaaja kerää pisteitä nostamalla kädet pudotuksissa, hypyissä, silmukoissa ja kierteissä.",
+      "request": "Vuoristoratapeli ei ole kiva pelata. Keksitkö siihen parannuksia",
+      "issue": "eerovil/ai-pelit#459"
     }
   ]
 }
