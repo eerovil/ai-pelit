@@ -53,7 +53,7 @@
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <p id="stats"></p>
   <p class="help">Ohjaa vetämällä peukaloa ruudulla, hyppää oikean alakulman napista.
-    <span class="more">Hyppää pyörivien puomien ja kuilujen yli, väistä liukuseiniä ja heilureita ja tönäise muita.</span>
+    <span class="more">Hyppää kuilujen yli ja tähtää laskeutuminen. Väistä korkeat portit ja heilurit.</span>
     Ensimmäinen maalissa voittaa!</p>
 </div>
 <script src="../../../rooms.js" data-game="kaaosrata" data-min="2" data-max="8"></script>
@@ -83,15 +83,16 @@ const COLORS = ['#ff5d8f', '#4cc9f0', '#80ed99', '#ffd166', '#b388eb', '#ff9f1c'
 let course, FIN, LIMIT, FLOORS, MOV, DISCS, SWEEPERS, PUSHERS, BUMPERS, HAMMERS, CPS, SECTIONS, PATH, BELTS, TILES, FLOORS_FAR_FIRST;
 const BAR_H = 0.55, BLOCK_HW = 1.7, BLOCK_HD = 0.4, BLOCK_A = 2.2, HAM_R = 1.0, HAM_A = 3.8;
 const movX = t => MOV ? MOV.a * Math.sin(MOV.w * t) : 0;
-const blockX = (p,t,k) => (k ? 2.6 : -2.6) + BLOCK_A * Math.sin(p.w*t+p.ph);
+const blockX = (p,t,k) => (k ? 2.6 : -2.6) + (p.a ?? BLOCK_A) * Math.sin(p.w*t+p.ph);
 const hamX = (h,t) => HAM_A * Math.sin(h.w*t+h.ph);
-const recordKey = () => course.id === 'main' ? 'ennatys' : 'ennatys:' + course.id;
+const boardId = () => course.board || course.id;
+const recordKey = () => course.id === 'main' ? 'ennatys' : 'ennatys:' + boardId();
 function useCourse(id) {
   course = RADAT.find(c => c.id === id) || RADAT[0];
   ({fin:FIN,limit:LIMIT,floors:FLOORS,mov:MOV,discs:DISCS,sweepers:SWEEPERS,pushers:PUSHERS,bumpers:BUMPERS,hammers:HAMMERS,cps:CPS,sections:SECTIONS,path:PATH,belts:BELTS,tiles:TILES} = course);
   FLOORS_FAR_FIRST = FLOORS.slice().sort((a,b) => b.y0-a.y0);
   best = load(recordKey(), null);
-  if (window.AiPelitScores) AiPelitScores.board(course.id, course.name);
+  if (window.AiPelitScores) AiPelitScores.board(boardId(), course.name);
 }
 const tilePhase = (tile,t) => ((t+tile.ph)%tile.period+tile.period)%tile.period;
 const tileOn = (tile,t) => tilePhase(tile,t) < tile.on;
@@ -180,7 +181,7 @@ function knock(r, kx, ky, vz, stun) {
 }
 function respawn(r) {
   const y = CPS[r.cp];
-  Object.assign(r, { x: -3 + Math.random() * 6, y, z: 0, vx: 0, vy: 0, vz: 0, fall: 0, stun: 0, jq: 0 });
+  Object.assign(r, { x: -3 + Math.random() * 6, y, z: 0, vx: 0, vy: 0, vz: 0, fall: 0, stun: 0, jq: 0, coyote: 0 });
   r.ai.k = 0; r.ai.tx = null; r.ai.stuck = 0; r.ai.wander = 0;
 }
 
@@ -196,6 +197,9 @@ function move(r, dt, t) {
   const g = groundAt(r.x, r.y, t);
   if (down && g) { r.x += g.vx * dt; r.y += g.vy * dt; r.off = 0; }
   else if (down) r.off += dt;
+  // The redesigned courses grant one jump from real ground, including a short edge grace.
+  // Touching z=0 over a pit must not recharge another jump in mid-air.
+  if (course.id !== 'main') r.coyote = down && g ? 0.12 : Math.max(0,(r.coyote || 0)-dt);
   // Run towards where the thumb points; harder to steer in the air or knocked about.
   let ix = r.ix, iy = r.iy;
   const m = Math.hypot(ix, iy);
@@ -203,8 +207,8 @@ function move(r, dt, t) {
   const acc = r.stun > 0 ? 3 : down ? 30 : 9;
   const k = Math.min(1, acc * dt);
   r.vx += (ix * SPEED - r.vx) * k; r.vy += (iy * SPEED - r.vy) * k;
-  if (r.jq > 0 && down && r.off < 0.12 && r.stun <= 0 && race.phase === 'run') {
-    r.vz = JUMP_V; r.jq = 0; r.off = 0;
+  if (r.jq > 0 && down && (course.id === 'main' ? r.off < 0.12 : r.coyote > 0) && r.stun <= 0 && race.phase === 'run') {
+    r.vz = JUMP_V; r.jq = 0; r.off = 0; r.coyote = 0;
     if (r === me) S.play('hyppy', { vol: 0.6 }) || tone(380, 0.09, 'triangle', 0.05, 700);
   }
   r.x += r.vx * dt; r.y += r.vy * dt;
@@ -263,7 +267,7 @@ function hits(r, t) {
     if (d < 1e-6) { nx = r.x < bx ? -1 : 1; ny = 0; d = 0; r.x = bx + nx * (BLOCK_HW + RAD); }
     else { nx /= d; ny /= d; r.x += nx * (RAD - d); r.y += ny * (RAD - d); }
     // A wall moving into you pushes you along with it.
-    const bv = BLOCK_A * p.w * Math.cos(p.w * t + p.ph) * (nx || 0);
+    const bv = (p.a ?? BLOCK_A) * p.w * Math.cos(p.w * t + p.ph) * (nx || 0);
     if (bv > 0) r.vx = nx * (bv + 1.5);
     const vn = r.vx * nx + r.vy * ny;
     if (vn < 0) { r.vx -= vn * nx; r.vy -= vn * ny; }
@@ -311,8 +315,9 @@ function bumps() {
 // The middle of the widest-enough gap between a row's walls, nearest to px.
 function gapX(p, t, px) {
   const l = blockX(p, t, 0), rr = blockX(p, t, 1);
-  const gaps = [[-5, l - BLOCK_HW], [l + BLOCK_HW, rr - BLOCK_HW], [rr + BLOCK_HW, 5]]
-    .map(([a, b]) => [Math.max(-5, a), Math.min(5, b)]).filter(([a, b]) => b - a > 1.2);
+  const edge = p.lane ?? 5;
+  const gaps = [[-edge, l - BLOCK_HW], [l + BLOCK_HW, rr - BLOCK_HW], [rr + BLOCK_HW, edge]]
+    .map(([a, b]) => [Math.max(-edge, a), Math.min(edge, b)]).filter(([a, b]) => b - a > 1.2);
   if (!gaps.length) return px;
   return gaps.map(([a, b]) => (a + b) / 2).sort((a, b) => Math.abs(a - px) - Math.abs(b - px))[0];
 }
@@ -333,8 +338,12 @@ function think(r, dt, t) {
   const dx = tx - r.x, dy = n.y - r.y, d = Math.hypot(dx, dy) || 1;
   const sp = 0.62 + 0.38 * Math.max(0, Math.min(1, a.skill));
   r.ix = dx / d * sp; r.iy = dy / d * sp;
-  if (n.tiles !== undefined && r.z <= 0 && r.y < TILES[n.tiles*4].y0) {
-    const tile = TILES[n.tiles*4], arrival = Math.max(0,(tile.y0-r.y)/Math.max(2,SPEED*sp));
+  if (course.id !== 'main' && r.z <= 0) {
+    const g = groundAt(r.x,r.y,t);
+    if (g && g.vx) r.ix = Math.max(-1,Math.min(1,r.ix-g.vx/SPEED));
+  }
+  if (n.tiles !== undefined && r.z <= 0 && r.y < TILES[n.tiles].y0) {
+    const tile = TILES[n.tiles], arrival = Math.max(0,(tile.y0-r.y)/Math.max(2,SPEED*sp));
     const phase = tilePhase(tile,t+arrival);
     if (tile.y0-r.y < 1.2 && phase > tile.on-1) { r.ix *= 0.2; r.iy = 0; r.vy = 0; return; }
   }
@@ -880,7 +889,16 @@ function showMenu(result, cls) {
   r.textContent = result || ''; r.className = cls || '';
   document.getElementById('course-name').textContent = course.name;
   document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja kuusi muuta';
-  document.getElementById('stats').textContent = 'Kisat ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
+  const stats = document.getElementById('stats');
+  stats.textContent = 'Kisat ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
+  // The newest earlier layout's record (v7's, else v6's) stays visible under this one's.
+  const older = course.id === 'main' ? [] : [[course.id + '7', 'v7'], [course.id, 'v6']];
+  const oldOne = older.map(([k, v]) => [load('ennatys:' + k, null), v]).find(([s]) => Number.isFinite(s));
+  if (oldOne) {
+    const old = document.createElement('span');
+    old.style.display = 'block'; old.style.fontSize = '12px';
+    old.textContent = 'Vanhan radan ennätys (' + oldOne[1] + '): ' + fmt(oldOne[0]); stats.appendChild(old);
+  }
   menu.classList.remove('hidden');
 }
 document.getElementById('go').addEventListener('click', () => { unlock(); soloRace(); });
@@ -908,7 +926,7 @@ R.extra(roomPicker); updateRoomCourse();
 requestAnimationFrame(frame);
 </script>
 <script src="../../../scores.js" data-game="kaaosrata" data-order="low" data-corner="top-right"></script>
-<script>AiPelitScores.board(course.id,course.name);</script>
+<script>AiPelitScores.board(boardId(),course.name);</script>
 <script src="../../../back.js"></script>
 </body>
 </html>
