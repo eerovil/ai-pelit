@@ -70,6 +70,8 @@ def test_belts_carry_a_runner_and_tiles_warn_then_drop_them(site, context):
 def test_best_computer_finishes_each_course_in_ten_seeded_races(site, context):
     page = open_game(site, context)
     results = page.evaluate('''() => {
+      const final=RADAT.find(c=>c.id==='finaali');
+      if (!final.mov || ['stones','sweepers','pushers','bumpers','discs','belts','tiles','hammers'].some(k=>!final[k].length)) throw Error('The final must include every obstacle type');
       const all=[];
       for(const course of RADAT) {
         useCourse(course.id);const times=[];

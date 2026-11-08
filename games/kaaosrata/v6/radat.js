@@ -75,7 +75,7 @@ l.path.push(point(78),point(92),point(105,0,0.5),point(121),point(128)); grid(l,
 l.cps=[0,33,77,120,144,151.5];
 l.sections=[[16,'LAATAT'],[51,'KIVET'],[94,'HEILURIT'],[128,'LAATAT']];
 const f=base('finaali','Kaaosfinaali',180,190);
-f.floors=[floor(-4,77),floor(99,116),floor(128,141),floor(141,166,2.5),floor(166,188)];
+f.floors=[floor(-4,77),floor(99,116),floor(128,132),floor(139,141),floor(141,166,2.5),floor(166,188)];
 f.sweepers=[{x:0,y:19,len:5.4,w:1.7,ph:0},{x:0,y:31,len:5.4,w:-1.9,ph:1.2}];
 f.belts=[{...floor(43,53),vx:0,vy:-2.5},{...floor(58,72),vx:-2.4,vy:0}];
 f.pushers=[{y:65,w:1.2,ph:1}];
@@ -84,7 +84,9 @@ f.discs=[{x:-1.5,y:81,r:3.2,w:0.9},{x:2,y:88,r:3,w:-1.1},{x:-1,y:95,r:3.2,w:1.2}
 f.mov={y0:84,y1:86.4,hw:1.6,a:2.5,w:1.1};
 f.hammers=[{y:147,w:1.6,ph:0},{y:154,w:1.3,ph:2.2},{y:161,w:1.9,ph:4.1}];
 f.path=[point(10),point(25),point(38),point(55),point(63),{y:66.2,gap:0},point(75),point(81,-1.5,0.6),point(88,2,0.6),point(95,-1,0.6),point(102),point(114)];
-grid(f,116); f.path.push(point(131),point(140),point(153,0,0.5),point(168),point(184));
+f.stones=[[132.8,[0]],[136.8,[0]]];
+f.stones.forEach(([y,xs])=>xs.forEach(cx=>f.floors.push({x0:cx-1.2,x1:cx+1.2,y0:y,y1:y+2.4,stone:true})));
+grid(f,116); f.path.push(point(131),{y:134,xs:[0]},{y:138,xs:[0]},point(140),point(153,0,0.5),point(168),point(184));
 f.cps=[0,38,75,102,131,168,181.5];
 f.sections=[[12,'PUOMIT'],[41,'HIHNAT'],[77,'LEVYT'],[114,'LAATAT'],[141,'HEILURIT']];
 return [main,h,l,f];
