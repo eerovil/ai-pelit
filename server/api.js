@@ -60,7 +60,8 @@ export const GAMES = {
   // Fastest time, seconds: 'main' is 100 m hurdles (v1-v2), the rest are v3's '<200|400>-aidat' and
   // '<100|200|400>-tasainen' (no hurdles).
   aitajuoksu: { order: 'low', boards: /^(main|(200|400)-aidat|(100|200|400)-tasainen)$/ },
-  kaaosrata: { order: 'low', boards: /^(main|hihna|laatat|finaali)$/, first: 'main' }, // fastest obstacle course, seconds
+  kaaosrata: { order: 'low', boards: /^(main|hihna|laatat|finaali|hihna7|laatat7|finaali7)$/, first: 'main',
+    boardVersions: { hihna: [6, 6], laatat: [6, 6], finaali: [6, 6], hihna7: [7, Infinity], laatat7: [7, Infinity], finaali7: [7, Infinity] } }, // fastest obstacle course, seconds
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
