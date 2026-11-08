@@ -71,6 +71,10 @@ def test_no_input_finishes_without_a_crash_and_unlocks_the_next_level(site, brow
         assert page.evaluate("game.result.stars") == 1
         assert page.locator("#aika").inner_text() == "0 p"
         assert page.evaluate(f"JSON.parse(localStorage.getItem({json.dumps(KEY + 'taso')}))") == 2
+        page.click("#uudestaan")
+        page.wait_for_function("game.mode === 'ride'", timeout=8000)
+        assert page.evaluate("game.car.score") == 0
+        assert page.evaluate("game.car.thrillIndex") == 0
         assert page.errors == []
     finally:
         ctx.close()
