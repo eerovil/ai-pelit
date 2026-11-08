@@ -113,6 +113,13 @@
       "note": "Loputon yö: etappi toisensa perään yhä vaikeampana, nopeus, tankki ja vireys mukana, ja oma tuloslista.",
       "request": "Autopeliin lisää. Tuleeko ideoita",
       "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 17,
+      "date": "2026-11-08",
+      "note": "Tähdet ajopisteistä, aikabonus vain tuloslistaan, ja kuoppakohdissa tien oma nopeusrajoitus säilyy.",
+      "request": "Tähtien pitää riippua pisteistä. Ajan pitää vaikuttaa vain parhaiden pisteiden tavoitteluun. Poista kuoppakohtien automaattinen 50 km/h nopeusrajoitus.",
+      "issue": "eerovil/ai-pelit#440"
     }
   ]
 }

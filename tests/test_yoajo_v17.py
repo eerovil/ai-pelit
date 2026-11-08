@@ -1,4 +1,5 @@
-"""Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
+"""Yöajo v17 (#440): stars from driving points; time is only a high-score bonus.
+Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
 Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
 service station, and the whole trip's totals ("Koko matka").
 Yöajo v13 (#440): roadworks with a light, fog, a broken-down car, an ambulance, a wide load, a
@@ -11,7 +12,7 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v16/"
+URL = "games/yoajo/v17/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -71,7 +72,8 @@ BOT = """(legs) => { maxLeg = 11; const out = [];
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
       input.left = err > 0.15; input.right = err < -0.15;
       if (J && jd < 1 && P.s < J.a0 + TURN_EASE && !P.into && !cross) { input.left = J.dir < 0; input.right = J.dir > 0; }
-      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200,
+      const bad = road.bad.some(b => P.s > b.s0 - 30 && P.s < b.s1);
+      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200, bad ? 50 : 200,
         jd < 400 ? turnCruise(P.s) * KMH - 4 : 200);
       input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
         || (slow && want > 0 && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < Math.max(35, 10 + (P.v - slow.v) ** 2 / 4))
@@ -82,7 +84,7 @@ BOT = """(legs) => { maxLeg = 11; const out = [];
       P.high = !fogAt(P.s) && !fogAt(P.s + 60) && !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
       input.gas = input.brake || (rest && P.s > bay.s0 && P.lat > EDGE + 0.5) || merging ? 0 : 1; step(1 / 60);
     }
-    out.push({ n, mode, why: crashWhy, at: Math.round(P.s), checks: road.checks.map(c => c.state), T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
+    out.push({ n, mode, why: crashWhy, at: Math.round(P.s), checks: road.checks.map(c => c.state), T, par: parTime(), points, drivingPoints: result && result.drivingPoints, tally: Object.assign({}, tally), stars: result && result.stars });
   }
   return out; }"""
 
@@ -108,12 +110,87 @@ def test_every_leg_can_still_be_driven(site, context):
     page = open_game(site, context)
     legs = page.evaluate(BOT, list(range(1, 9)))
     assert all(r["mode"] == "done" for r in legs), [(r["n"], r["why"]) for r in legs]
+    assert all(r["stars"] == 3 for r in legs), [(r["n"], r["drivingPoints"], r["stars"]) for r in legs]
     assert all(r["tally"]["hurjastelu"] == 0 for r in legs), legs
     # The careful driver stops for coffee on every leg with a rest area.
     assert all(r["tally"]["tauko"] == 1 for r in legs if r["n"] >= 3), legs
     # v12: never stopped by the police, and through every police check by stopping to blow.
     assert all(r["tally"]["poliisi"] == 0 and r["tally"]["sakot"] == 0 for r in legs), legs
     assert all(r["checks"] == (["done"] if r["n"] >= 3 else []) and r["tally"]["puhallus"] == len(r["checks"]) for r in legs), legs
+    assert page.errors == []
+
+
+def test_stars_follow_driving_points_without_a_time_or_clean_driving_gate(site, context):
+    page = open_game(site, context)
+    cases = page.evaluate("""() => { HOLD = true; maxLeg = 11; const cases = [];
+      for (let n = 1; n <= LEGS.length; n++) {
+        const [two, three] = starTargets(n);
+        for (const [p, seconds, dirty] of [[-50, 10, false], [two - 1, 10, false], [two, 10, false],
+          [three - 1, 10, false], [three, 10, false], [three, 10, true], [three - 1, -10, false], [three, -10, false]]) {
+          newLeg(n); T = parTime() + seconds; points = p;
+          if (dirty) Object.assign(tally, { sakot:1, haikaisyt:1, lahelta:1, hurjastelu:1, tukit:1 });
+          finish(); cases.push({ n, p, seconds, dirty, two, three, points, mode, result: {...result}, saved:load('tahdet')[n] });
+        }
+      } return cases; }""")
+    for r in cases:
+        expected_points = r["p"] + (100 if r["seconds"] < 0 else 0)
+        expected_stars = 3 if r["p"] >= r["three"] else 2 if r["p"] >= r["two"] else 1
+        assert r["mode"] == "done" and r["points"] == expected_points, r
+        assert r["result"]["bonus"] == (100 if r["seconds"] < 0 else 0), r
+        assert r["result"]["drivingPoints"] == r["p"], r
+        assert r["result"]["stars"] == expected_stars and r["saved"] >= expected_stars, r
+    assert page.errors == []
+
+
+def test_existing_stars_scores_and_progress_are_kept(site, context):
+    page = open_game(site, context)
+    before = page.evaluate("""() => {
+      const bests = {1:starTargets(1)[1], 2:starTargets(2)[0], 3:0};
+      save('tahdet', {1:1, 2:1, 3:3}); save('pisteet', bests); save('taso', 4); save('ajettu', 3);
+      save('loputon', {p:123, km:6, k:2}); return bests;
+    }""")
+    page.reload()
+    page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    r = page.evaluate("({stars, bests, maxLeg, driven, saved:load('tahdet'), endless:load('loputon')})")
+    assert r["stars"] == r["saved"] == {"1":1, "2":1, "3":3}, r
+    assert r["bests"] == before and r["maxLeg"] == 4 and r["driven"] == 3, r
+    assert r["endless"] == {"p":123, "km":6, "k":2}, r
+    assert page.errors == []
+
+
+def test_potholes_leave_posted_limits_and_their_signs_unchanged(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; const out = [], original = roadLeg;
+      // Isolate the base road limits from independently placed roadworks' temporary limits.
+      roadLeg = () => {};
+      try {
+        for (let n = 3; n <= 11; n++) {
+          const L = LEGS[n - 1], count = L.bad;
+          try {
+            L.bad = 0; newLeg(n);
+            const before = JSON.stringify(road.limits), signs = JSON.stringify(road.signs.filter(s => s.kind === 'raja'));
+            L.bad = count; newLeg(n);
+            out.push({ n, bad:road.bad.length, same:before === JSON.stringify(road.limits),
+              sameSigns:signs === JSON.stringify(road.signs.filter(s => s.kind === 'raja')),
+              warnings:road.signs.filter(s => s.kind === 'kuoppa').length });
+          } finally { L.bad = count; }
+        }
+      } finally { roadLeg = original; } return out; }""")
+    assert all(x["bad"] > 0 and x["warnings"] == x["bad"] and x["same"] and x["sameSigns"] for x in r), r
+    assert page.errors == []
+
+
+def test_potholes_still_advise_slowing_down_and_damage_fast_driving(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; newLeg(3);
+      let h = road.holes[0]; P.s = h.s; P.lat = LANE; h.lat = LANE - 0.75; P.v = 50 / KMH; holes();
+      const safe = { points, damage:P.damage, hits:tally.kuopat, messages:msgs.map(m => m.text) };
+      newLeg(3);
+      for (const h of road.holes.slice(0, 4)) { P.s = h.s; P.lat = LANE; h.lat = LANE - 0.75; P.v = 80 / KMH; holes(); }
+      return { safe, mode, why:crashWhy, damage:P.damage, hits:tally.kuopat }; }""")
+    assert r["safe"]["points"] == 0 and r["safe"]["damage"] == 0 and r["safe"]["hits"] == 0, r
+    assert "Kuoppia: hidasta alle 50 km/h" in r["safe"]["messages"], r
+    assert r["mode"] == "crash" and r["why"] == "Rengas puhkesi kuoppaan." and r["damage"] == 4 and r["hits"] == 4, r
     assert page.errors == []
 
 
@@ -380,7 +457,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v16")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v17")
 
 
 # ---- v12 (#440): the police ----
@@ -416,8 +493,8 @@ def test_police_cars_and_checks_are_on_the_legs_as_planned(site, context):
         assert len(r["cops"]) == [0, 1, 1, 2, 2, 2, 3, 3][n - 1], (n, r)
         assert r["checks"] == (1 if n >= 3 else 0), (n, r)
         if r["checks"]:
-            # On a pothole stretch, under its 50 limit, with a shoulder widened for the police car.
-            assert r["onBad"] and r["zone"][0] == 50 and r["zone"][1] == 50, (n, r)
+            # Potholes no longer set a 50 limit; the officer still has a widened shoulder.
+            assert r["onBad"] and all(v > 50 for v in r["zone"][:2]), (n, r)
             assert r["zone"][2] > 6 and r["signs"] == 1 and not r["near"], (n, r)
     assert page.errors == []
 
@@ -820,7 +897,8 @@ TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 11
     input.left = err > 0.15; input.right = err < -0.15;
     if (straight) { input.left = input.right = false; P.lat = LANE; P.vl = 0; }
     else if (J && jd < 1 && P.s < J.a0 + TURN_EASE && !P.into) { input.left = J.dir < 0; input.right = J.dir > 0; }
-    const lim = kmh || Math.min(limitAt(P.s), turnCruise(P.s) * KMH - 4), d = eval(stop);
+    const bad = road.bad.some(b => P.s > b.s0 - 30 && P.s < b.s1);
+    const lim = kmh || Math.min(limitAt(P.s), turnCruise(P.s) * KMH - 4, bad ? 50 : 200), d = eval(stop);
     input.brake = P.v * KMH > lim + 2 || (d !== null && (d < 1 || P.v > Math.sqrt(2 * 3 * Math.max(0, d)))) ? 1 : 0;
     input.gas = input.brake ? 0 : 1;
     step(1 / 60);
@@ -994,6 +1072,7 @@ def test_the_lapland_legs_can_be_driven_with_a_stop_for_fuel(site, context):
     page = open_game(site, context)
     legs = page.evaluate(BOT, [9, 10, 11])
     assert all(r["mode"] == "done" for r in legs), [(r["n"], r["why"], r["at"]) for r in legs]
+    assert all(r["stars"] == 3 for r in legs), [(r["n"], r["drivingPoints"], r["stars"]) for r in legs]
     for r in legs:
         t = r["tally"]
         assert t["tankkaus"] == 1 and t["tauko"] == 1 and t["hurjastelu"] == 0 and t["poliisi"] == 0, (r["n"], t)

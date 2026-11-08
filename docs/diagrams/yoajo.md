@@ -26,6 +26,8 @@ v15 (#440) drives on into Lapland, drawn in `yoajo-matka.md`: `games/yoajo/v15/l
 
 v16 (#440) adds the endless night, drawn in `yoajo-matka.md`: `games/yoajo/v16/loputon.js` (loaded after `lappi.js`) makes each stage for `newLeg()` while `endless` is set (`endlessStage()`), `finish()` drives on into the next stage (`nextStage()`) and `crash()` ends the run (`endlessOver()`), whose points go to the list `loputon`.
 
+v17 (#440) awards stars from driving points alone, before the time bonus. Time adds its existing bonus to the leaderboard score only; it cannot change the stars. Previously earned stars and high scores stay saved. The assumed score targets are calibrated without a time bonus: after removing potholes' forced speed limit, leg 6's three-star target is 350 points (the careful driver earns 395), and leg 8's is 525 (the driver earns 605).
+
 ```mermaid
 flowchart TD
   A[Valitse osuus, Aja] --> B[Aja: ohjaa, kaasuta, jarruta, valot]
@@ -53,9 +55,9 @@ flowchart TD
   F -- Ei --> F2[Liian läheltä -40]
   C -- Hirvi tai poro --> G{Jarrutit tai väistit?}
   G -- Ei --> X[Kolari: osuus päättyy]
-  C -- Huono tie --> HW[Kuoppamerkki, 50-rajoitus, varoitus ruudulla]
+  C -- Huono tie --> HW[Kuoppamerkki ja hidastusohje, tien rajoitus säilyy]
   HW --> H{Hitaasti kuoppien yli?}
-  H -- Alle 55 km/h --> H0[Kuopat eivät tee mitään]
+  H -- Enintään 55 km/h --> H0[Kuopat eivät tee mitään]
   H -- Ei --> H1[Kuoppa -15, neljäs kova isku puhkaisee renkaan]
   H1 --> X
   X -- Rengas rikki --> XH[Ohje: hidasta alle 50 km/h]
@@ -76,14 +78,15 @@ flowchart TD
   B --> Y{Ojaan tai kolari?}
   Y -- Kyllä --> X
   B --> Z[Perillä kaupungissa]
-  Z --> S[Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä]
-  S --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
+  Z --> S[Tähdet ajopisteistä: perillä 1, pisterajoista 2 tai 3]
+  S --> AB[Aikabonus: +10 p sekunnilta alle tavoiteajan]
+  AB --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
   X --> A
   class A,B,E2,L,P2,M,N,HW,XH,J,J3,VP,WO,VL,VT,VW blue
   class C,D,E,F,G,H,K,V,Y,P,R,J1,VC amber
   class D1,E1,F1,K2,V1,P1,H0 teal
   class D2,F2,H1,K1,V2,X,E3,R1,J2 rose
-  class Z,S,T green
+  class Z,AB,S,T green
 ```
 
 ## Colours
@@ -104,13 +107,14 @@ flowchart TD
 - **Väljä ohitus +20**: walkers keep to the left edge facing traffic, or now and then the right edge; a third have no reflector and show only in the beam. Passing with under a metre of room above 40 km/h costs −40; touching one ends the leg as a near miss ("Vaaratilanne").
 - **Jarrutit tai väistit?**: a moose (or a reindeer on the last leg) steps out of the forest about four seconds of driving ahead, after a warning sign; some stop on the road. Its eyes shine in the beam (`deerMesh()` in `view.js`).
 - **Kuoppa -15, neljäs kova isku puhkaisee renkaan**: `holes()`: a bad stretch after an "Epätasainen tie" sign has potholes; below 50 km/h (v1–v6; up to 55 km/h from v7) they do nothing, above it they jolt the car; the fourth hit above 70 km/h bursts a tyre.
-- **Kuoppamerkki, 50-rajoitus, varoitus ruudulla**: v7 (#266 "Mitä kuopille mahtaa?", Eero's choice: show and explain, same difficulty). `newLeg()` in `games/yoajo/v7/game.js` puts a 50 limit 40 m after each bad stretch's sign, over all its holes, and the limit it was 290 m after the sign (other limit changes inside the stretch go; the stretch is kept in `road.bad`). `holes()` says "Kuoppia: hidasta alle 50 km/h" once per stretch. `buildWorld()` in `view.js` lays each hole on the crowned road with a pale rim the headlights catch (v1–v6 drew them at a flat height, under the asphalt within 1.25 m of the centre line). The menu's tip on a leg with bad stretches is "Kuoppamerkin jälkeen hidasta alle 50 km/h." (`menu()` in `ui.js`).
-- **Kuopat eivät tee mitään**: v7: up to 55 km/h (`HOLE_SAFE`, the 50 limit and a little), a hole does nothing; v1–v6 under 50.
+- **Kuoppamerkki ja hidastusohje, tien rajoitus säilyy**: v7 (#266 "Mitä kuopille mahtaa?", Eero's choice: show and explain, same difficulty). v7 originally added a 50 km/h limit over each pothole stretch. In v17 the owner explicitly removed that limit: `newLeg()` in `games/yoajo/v17/game.js` leaves the road’s own speed-limit changes and signs intact while keeping `road.bad`, potholes and their warning signs. `holes()` says "Kuoppia: hidasta alle 50 km/h" once per stretch. `buildWorld()` in `view.js` lays each hole on the crowned road with a pale rim the headlights catch (v1–v6 drew them at a flat height, under the asphalt within 1.25 m of the centre line). The menu's tip on a leg with bad stretches is "Kuoppamerkin jälkeen hidasta alle 50 km/h." (`menu()` in `ui.js`).
+- **Kuopat eivät tee mitään**: v7: up to 55 km/h (`HOLE_SAFE`, independently of the posted speed limit), a hole does nothing; v1–v6 under 50.
 - **Ohje: hidasta alle 50 km/h**: v7: the burst-tyre screen (`crashScreen()` in `ui.js`) adds "Kuoppien kohdalla hidasta alle 50 km/h." under the reason.
 - **Yli rajoituksen +5?**: `cameras()`: a camera stands 340 m after its sign; over the limit by more than 5 km/h it flashes and fines −150, otherwise +25.
 - **Ohittaja omalla kaistalla: väistä pientareelle**: two kinds of reckless drivers (`move()`): one from behind with high beams on, overtaking when nobody comes and cutting in; one oncoming, pulling out from behind a truck into the player's lane with its high beams on.
 - **Kahvitauko: vireys täyteen, +10 s**: `tiredness()` (#181 "Kuskia väsyttää"), from leg 3. Sleepiness grows with the road driven; past 40 % the eyes close for a moment now and then (black lids in `dashboard()`), longer as it grows. Stopping in the rest area's bay (a sign, then a paved bay and a lit kiosk on the right) wakes the driver; without a stop they fall asleep after the rest area, before the town.
-- **Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä**: (v4 adds the reckless-driving count to the third star) `finish()`: one star for arriving, two within the target time (`parTime()`: the leg at the speed limits, at most 90 on snow, plus 20 %), three also with no fines, no dazzling and no close passes. Time under the target gives 10 points a second.
+- **Aikabonus: +10 p sekunnilta alle tavoiteajan**: `finish()` in `games/yoajo/v17/game.js` adds `max(0, round((parTime() - T) * 10))` to the driving points, as before. Stars are already decided from driving points and never use the bonus.
+- **Tähdet ajopisteistä: perillä 1, pisterajoista 2 tai 3**: v17 (#440, owner choice): `starsForPoints(level, drivingPoints)` before the time bonus. `STAR_POINTS` gives each leg its two- and three-star score targets, reachable without a time bonus. Fines, dazzling, unsafe passes, reckless driving and blocking an ambulance affect stars only through point deductions. `starTargetText()` in `games/yoajo/v17/ui.js` shows the selected leg's targets below the menu title and on the results screen. `tahdet` keeps the best stars, never taking away an earned star. Old `pisteet` records include the bonus, so they are preserved without guessing their driving points.
 - **Seuraava osuus aukeaa, ennätys tuloslistalle**: stars and best points per leg are saved (`tahdet`, `pisteet`), and the furthest leg driven to the end as `ajettu` (`taso`, the furthest leg open, stops at 8; at 11 from v15, and `server/api.js` takes `osa-1` to `osa-11`, and from v16 `loputon`, the endless night's list). The points of every leg driven to the end, even at zero or below after fines, go to the leg's high-score list `osa-N` (`public/scores.js`, `server/api.js`), with `ajettu` shown beside them. `buildWorld()` and `dispose()` in `view.js` free the old leg's 3D pictures and the passed traffic, so driving leg after leg does not fill the phone's memory. This game keeps its own score entry; the shared registry’s new `minigolf` entry (#340, lowest stroke total on `main`) does not change it. Kiekkoammunta v1 adds independent `trap` and `skeet` score entries (Trap first, N/25); this box’s existing behavior is unchanged. Frisbeegolf v1 adds its own `main` entry to these registries: lowest strokes against par wins, displayed as `E`, `−2` or `+5`; this box keeps its existing behavior. Frisbeegolf now uses its separate `v3` leaderboard; versions 1–2 are not accepted there (#338). From v5 (#429) its rounds go to a new `v5` list, the shelf's first, and the `v3` list stays for v3–v4.
 - **Vaarallinen ohitus -50, ei ohituspisteitä**: v4 `unsafeOvertake()` in `game.js`, judged before any pass is scored in the same moment: being past the centre line while an oncoming car is within 180 m costs 50, once a car, and every vehicle passed before the car is back in its lane earns nothing (`P.unsafe`). v12 (#440): if a police car sees it (`policeSaw()` in `poliisi.js`), the unsafe overtake, or crossing a junction's solid line, ends the leg instead.
 - **+5 joka 100 m, ei katuvaloissa**: v4 `highBeams()`: every 100 m on high beams earns 5 points, announced every 500 m and shown on the end screen as "Pitkillä ajettu". Not under street lights (`streetLit()`: the town at the end and the villages). After 6 s on low beams with an empty road ahead, a reminder.
