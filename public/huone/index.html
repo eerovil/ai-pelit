@@ -11,6 +11,9 @@
      in the frame under the room bar. Switching games changes only the frame. rooms.js draws the 🎤 chip here, over
      the frame, where it sits in the game alone: a finger on it stays through a switch (#394). */
   html, body { margin: 0; height: 100%; background: #000; color: #eef2f7; font: 14px system-ui, sans-serif; overflow: hidden; }
+  /* No text selection on a long press (#457), as in every game (back.js); text fields still edit. */
+  :where(html, html *) { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+  :where(input, textarea, [contenteditable]:not([contenteditable="false"]), [contenteditable]:not([contenteditable="false"]) *) { -webkit-user-select: text !important; user-select: text !important; -webkit-touch-callout: default !important; }
   :root { --bar: 44px; }
   @media (orientation: landscape) and (max-height: 500px) { :root { --bar: 34px; } }
   #bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; box-sizing: border-box;

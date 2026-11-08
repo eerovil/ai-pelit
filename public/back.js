@@ -174,11 +174,27 @@
     } catch (e) {}
   }
   playMediaOnTaps(window);
+  // No text selection in any game (#457): on an iPhone, holding a button down (Raketti's thrusters)
+  // started selecting the page's text and showed the copy callout. Safari reads only the prefixed
+  // -webkit-user-select, which several versions leave out. !important, so no game's own rule
+  // makes ordinary text selectable again (issue: "everywhere"); text fields (a nickname, a room
+  // code) and editable elements still edit and select: the later rule of the same weight wins.
+  // Ottelu's event frames, which have no back.js, get it from the match page as each loads.
+  function noSelect(doc) {
+    if (!doc || doc.getElementById('ai-pelit-ei-valintaa')) return;
+    var st = doc.createElement('style');
+    st.id = 'ai-pelit-ei-valintaa';
+    st.textContent =
+      ':where(html,html *){-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}' +
+      ':where(input,textarea,[contenteditable]:not([contenteditable="false"]),[contenteditable]:not([contenteditable="false"]) *){-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}';
+    (doc.head || doc.documentElement).appendChild(st);
+  }
+  noSelect(document);
   // Ottelu plays its events in a frame without back.js; each frame that loads follows this page.
   function watchFrame(f) {
     if (f.__aiPelitAani) return;
     f.__aiPelitAani = true;
-    var put = function () { try { installSound(f.contentWindow); playMediaOnTaps(f.contentWindow); } catch (e) {} };
+    var put = function () { try { noSelect(f.contentDocument); installSound(f.contentWindow); playMediaOnTaps(f.contentWindow); } catch (e) {} };
     f.addEventListener('load', put);
     put();
   }
