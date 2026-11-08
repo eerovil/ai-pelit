@@ -12,7 +12,7 @@ the unsafe-overtake rule within 130 m (v4–v7: 180 m)."""
 
 from conftest import ROOT, turn
 
-URL = "games/yoajo/v17/"
+URL = "games/yoajo/v18/"
 
 # A careful driver: keeps to the lane, overtakes only when nobody is coming and never starts an
 # overtake with a solid centre line within 250 m (once out, it goes on), dips the high beams for
@@ -457,7 +457,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v17")
+    opens_and_plays_with_the_quiet_library(real, context, "games/yoajo/v18")
 
 
 # ---- v12 (#440): the police ----
@@ -1446,3 +1446,59 @@ def test_the_menu_and_the_end_screen_fit_at_every_size(site, context):
         assert all(0 <= e[1] and e[1] + e[3] <= w and 0 <= e[2] and e[2] + e[4] <= h for e in r["end"]), (w, h, r)
         assert page.errors == []
         page.close()
+
+
+def test_left_turn_crosses_the_opposing_lane_only_inside_the_junction(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD=true; maxLeg=11; const out=[];
+      for(let n=3;n<=11;n++) {newLeg(n); for(const J of road.turns.filter(j=>j.dir<0)) {
+        const early=[],outside=[]; for(let s=J.a0;s<=J.a1;s+=0.2) {
+          const q=worldAt(s,LANE), dx=q[0]-J.x,dz=q[2]-J.z;
+          const along=dx*J.fx+dz*J.fz, lat=dx*J.rx+dz*J.rz;
+          if(lat<0 && lat>-EDGE && along<J.C-EDGE) early.push({along,lat});
+          if(Math.abs(lat)>EDGE && Math.abs(along-J.C)>EDGE)outside.push({along,lat});
+        } const e=worldAt(J.a1,LANE),endLane=(e[0]-J.x)*J.fx+(e[2]-J.z)*J.fz-J.C;
+        out.push({n,early,outside,endLane});
+      }} return out; }""")
+    assert r and all(not x['early'] and not x['outside'] and 0 < x['endLane'] < 3.5 for x in r), r
+
+
+def test_oncoming_traffic_keeps_priority_over_a_car_waiting_to_turn_left(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {HOLD=true;maxLeg=11;newLeg(5);const J=road.turns.find(j=>j.dir<0);
+      P.s=J.a0+1;P.v=0; const t=add('risteava',{s:J.a0+J.C+15,lat:-LANE,v:-ARM_V,arm:J});
+      for(let i=0;i<60;i++)crosser(t,1/60);
+      return {s:t.s-J.a0,speed:-t.v,expected:J.C+15-ARM_V}; }""")
+    assert abs(r['s']-r['expected']) < 0.01 and abs(r['speed']-50/3.6)<0.01,r
+
+
+def test_the_car_stays_in_picture_through_a_compact_left_turn(site, context):
+    page = open_game(site, context)
+    for width,height in ((390,844),(740,360)):
+        page.set_viewport_size({"width":width,"height":height})
+        page.evaluate("() => {HOLD=true;maxLeg=11;newLeg(5);}")
+        page.wait_for_function("!!V3")
+        r=page.evaluate("""() => {const J=road.turns.find(j=>j.dir<0),out=[];P.lat=LANE;
+          for(let s=J.a0-15;s<J.a1+15;s+=1) {P.s=s;draw3d(performance.now());
+            out.push(screenOf(P.s,P.lat,1));}return {out,W,H};}""")
+        assert all(q and 0.1*r['W']<q['x']<0.9*r['W'] and 0.1*r['H']<q['y']<0.9*r['H'] for q in r['out']), r
+
+
+def test_a_thumb_turns_left_from_its_own_lane_through_the_junction(site, context):
+    page = open_game(site, context)
+    page.set_viewport_size({"width":390,"height":844})
+    r=page.evaluate("""() => {HOLD=true;maxLeg=11;newLeg(5);setControls('yksi');
+      things=[];events=[];road.cams=[];road.checks=[];road.holes=[];
+      const J=road.turns.find(j=>j.dir<0);J.spawned=true;
+      P.s=J.a0-6;P.v=14/KMH;P.lat=LANE;P.vl=0;draw();
+      const home=stickHome(),box=c.getBoundingClientRect();
+      const ev=(type,dx,dy)=>c.dispatchEvent(new PointerEvent(type,{pointerId:71,clientX:box.left+home.x+dx,clientY:box.top+home.y+dy,bubbles:true,cancelable:true}));
+      ev('pointerdown',0,0);let minLat=LANE;
+      for(let i=0;i<900 && mode==='drive' && P.s<J.a1+5;i++) {
+        const strength=2.6+Math.min(P.v,25)*0.15;
+        const steer=clamp((curveAt(P.s)*P.v*P.v*0.55-2*(P.lat-LANE)-0.8*P.vl)/strength,-1,1);
+        ev('pointermove',Math.sign(steer)*Math.pow(Math.abs(steer),1/1.4)*STICK,8);
+        step(1/60);minLat=Math.min(minLat,P.lat);
+      }ev('pointerup',0,0);
+      return {mode,why:crashWhy,wrong:!!P.wrong,done:J.done,s:P.s,end:J.a1,minLat,lat:P.lat};}""")
+    assert r['mode']=='drive' and not r['wrong'] and r['done'] and r['s']>r['end'] and r['minLat']>0,r

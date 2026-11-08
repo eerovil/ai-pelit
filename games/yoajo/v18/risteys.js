@@ -8,8 +8,10 @@
 
 // How many turns each leg has, legs 1–11. Legs 1–2 turn off the motorway, the rest at crossroads.
 const TURNS = [1, 1, 1, 1, 2, 2, 3, 3, 1, 1, 1];   // v15: Lapland's legs 9–11
-// A crossroads turns a quarter round on a radius of 28 m: above about 40 km/h on a dry road the car
+// A left crossroads has an 8 m corner inside the junction, taken at about 18 km/h.
+// The wider right-hand corner turns a quarter round on a radius of 28 m: above about 40 km/h on a dry road the car
 // slides wide (game.js's bend rule). An exit ramp bends 0.6 rad on 70 m: fine at 50–60.
+const LEFT_RADIUS = 8, LEFT_EASE = 2, LEFT_SPEED = 18;
 const TURN_KIND = { ramppi: { R: 70, angle: 0.6 }, risteys: { R: 28, angle: Math.PI / 2 } };
 // The bend comes on over TURN_EASE metres; by its end the driver has turned or gone straight on.
 const TURN_EASE = 8;
@@ -39,10 +41,14 @@ function turnLeg() {
     const th = road.TH[Math.round(a0 / SEG)];
     let dir = kind === 'ramppi' ? 1 : (k + level) % 2 ? -1 : 1;
     if (kind === 'risteys' && Math.abs(th) > 0.5) dir = -Math.sign(th);
-    const len = angle * R + TURN_EASE, a1 = a0 + Math.round(len / SEG) * SEG;
+    // The old 28 m left arc crossed the opposing lane long before the cross-road mouth.
+    // Keep the crossing inside that mouth, entering from the right-hand approach lane.
+    const radius = kind === 'risteys' && dir < 0 ? LEFT_RADIUS : R;
+    const ease = kind === 'risteys' && dir < 0 ? LEFT_EASE : TURN_EASE;
+    const len = angle * radius + ease, a1 = a0 + Math.round(len / SEG) * SEG;
     for (let i = Math.round((a0 - TURN_BEFORE) / SEG); i <= Math.round((a1 + TURN_AFTER) / SEG) && i < road.n; i++) {
-      const s = i * SEG, e = clamp(Math.min((s - a0) / TURN_EASE, (a1 - s) / TURN_EASE), 0, 1);
-      road.K[i] = s > a0 && s < a1 ? dir / R * e : 0;
+      const s = i * SEG, e = clamp(Math.min((s - a0) / ease, (a1 - s) / ease), 0, 1);
+      road.K[i] = s > a0 && s < a1 ? dir / radius * e : 0;
     }
     // The arc's curvature sums a little short of `angle` on the grid: scale it to turn exactly.
     let sum = 0; for (let i = Math.round(a0 / SEG); i <= Math.round(a1 / SEG); i++) sum += road.K[i] * SEG;
@@ -54,7 +60,7 @@ function turnLeg() {
       road.Y[i] = lerp(road.Y[i], y0, w * w * (3 - 2 * w));
     }
     layOut();
-    road.turns.push({ a0, a1, dir, kind, R, to: leg.to, on: STRAIGHT_ON[level - 1] || '', told: 0, done: false, spawned: false, waited: false, unsafe: false });
+    road.turns.push({ a0, a1, dir, kind, R: radius, to: leg.to, on: STRAIGHT_ON[level - 1] || '', told: 0, done: false, spawned: false, waited: false, unsafe: false });
   }
   for (const J of road.turns) {
     frameTurn(J);
@@ -113,7 +119,7 @@ function armDist(px, pz) {
 function turnCruise(s) {
   let v = 1e9;
   for (const J of road.turns || []) {
-    const safe = (J.kind === 'risteys' ? 30 : 50) / KMH * Math.min(1, WEATHER[leg.weather].grip + 0.25);
+    const safe = (J.kind === 'risteys' ? (J.dir < 0 ? LEFT_SPEED : 30) : 50) / KMH * Math.min(1, WEATHER[leg.weather].grip + 0.25);
     const d = s < J.a0 ? J.a0 - s : s > J.a1 ? s - J.a1 : 0;
     v = Math.min(v, Math.sqrt(safe * safe + 2 * 2.5 * d));
   }
@@ -127,7 +133,7 @@ function turnTick(dt) {
   P.signal = 0;
   if (!J) return;
   const d = J.a0 - P.s, side = J.dir > 0 ? 'oikealle' : 'vasemmalle';
-  if (J.told < 1 && d < SIGN_FAR) { J.told = 1; say(`Käänny ${side} ${Math.round(d / 10) * 10} m`, true); }
+  if (J.told < 1 && d < SIGN_FAR) { J.told = 1; say(`Käänny ${side} ${Math.round(d / 10) * 10} m${J.kind === 'risteys' && J.dir < 0 ? ' · hidasta 20 km/h' : ''}`, true); }
   // The car coming from the road ahead at a left turn, released so that it is there about when the player is.
   // It sets off as far up its road as it takes the player to reach the turn at the speed the turn
   // is taken at (turnCruise), so the two meet there unless one of them waits.
@@ -171,16 +177,16 @@ function wrongRoad(dt) {
 // Off the road in a turn's bend is too fast for it.
 function ditchWhy() {
   const J = !P.wrong && turnAt(P.s - 4);
-  return J && P.v * KMH > (J.kind === 'risteys' ? 35 : 55) ? `Ajoit ojaan: liian lujaa ${J.kind === 'risteys' ? 'risteykseen' : 'rampille'}.` : 'Ajoit ojaan.';
+  return J && P.v * KMH > (J.kind === 'risteys' ? (J.dir < 0 ? LEFT_SPEED + 5 : 35) : 55) ? `Ajoit ojaan: liian lujaa ${J.kind === 'risteys' ? 'risteykseen' : 'rampille'}.` : 'Ajoit ojaan.';
 }
 // The car from the road ahead at a left turn (from move in game.js). It stops at the crossing
-// while the player's car is in it, and once through the crossing it is an ordinary oncoming car.
+// only as an emergency response to an unsafe turn; normal oncoming traffic keeps priority.
+// Once through the crossing it is an ordinary oncoming car.
 function crosser(t, dt) {
   const J = t.arm, along = t.s - J.a0;
   let v = ARM_V;
-  const inside = !P.wrong && P.s > J.a0 - 2 && P.s < J.a1 + 4;
   if (t.yieldT > 0) t.yieldT -= dt;
-  if ((inside || t.yieldT > 0) && along > J.C + 6) v = Math.min(v, Math.sqrt(2 * 5 * Math.max(0, along - J.C - 10)));
+  if (t.yieldT > 0 && along > J.C + 6) v = Math.min(v, Math.sqrt(2 * 5 * Math.max(0, along - J.C - 10)));
   t.v += clamp(-v - t.v, -2.5 * dt, 6 * dt);
   t.s += t.v * dt;
   // Past the crossing it is on the player's road: no longer on the arm, so it is hit and drawn there.
