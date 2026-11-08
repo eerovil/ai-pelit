@@ -108,6 +108,17 @@ def test_tap_hides_the_notice_without_a_stroke(site,browser):
     assert not p.errors;ctx.close()
 
 
+def test_pointer_release_keeps_scaled_power_above_the_minimum(site,browser):
+    ctx,p=open_game(site,browser);p.click('#play')
+    p.evaluate('askDraw=()=>{}')
+    for requested,effective in [(.01,.1),(.4,.4),(1,1)]:
+        p.evaluate("round=fresh([{id:'solo',name:'Sinä'}]);showPlay()")
+        pull(p,-math.pi/2,requested)
+        assert p.evaluate('round.players[0].strokes')==1
+        assert p.evaluate('Math.hypot(round.players[0].ball.vx,round.players[0].ball.vy)')==pytest.approx(effective*4.6,rel=.02)
+    assert not p.errors;ctx.close()
+
+
 def test_cup_water_walls_and_limit(site,browser):
     ctx,p=open_game(site,browser)
     p.click('#play')

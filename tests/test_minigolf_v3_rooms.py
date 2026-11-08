@@ -92,6 +92,9 @@ def test_starting_player_rotates_each_hole_and_next_round(golf_phones,n):
         expected=hole%n
         for p in pages:p.wait_for_function(f'round.hole==={hole}&&round.turn==={expected}')
         assert host.evaluate(f'round.starterId===round.players[{expected}].id')
+        if n==3 and hole==4:
+            pages[1].reload()
+            pages[1].wait_for_function(f'round&&round.hole===4&&round.turn==={expected}&&round.starterId===round.players[{expected}].id')
         if n==3 and hole==1:host.screenshot(path='/var/tmp/minigolf453_rotation.png')
     # The next full round continues with the player after hole 9's starter.
     host.evaluate("""round.players.forEach(p=>p.scores[8]=3);round.phase='end';
@@ -100,10 +103,9 @@ def test_starting_player_rotates_each_hole_and_next_round(golf_phones,n):
         p.wait_for_function("round&&round.phase==='end'")
         p.click('#next')
     host.wait_for_function("R.isHost&&!R.canStop")
-    if n==2:
-        host.reload()
-        pages[1].wait_for_function('round===null')
-        host.wait_for_function('R.isHost&&R.members.filter(p=>p.on).length===2')
+    host.reload()
+    for p in pages[1:]:p.wait_for_function('round===null')
+    host.wait_for_function(f'R.isHost&&R.members.filter(p=>p.on).length==={n}')
     host.click('#aipr-start')
     expected=9%n
     for p in pages:p.wait_for_function(f"round&&round.hole===0&&round.turn==={expected}&&round.starterId===round.players[{expected}].id")
