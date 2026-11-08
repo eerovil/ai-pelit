@@ -897,7 +897,8 @@ TURN = """([n, setup, kmh, straight, until, stop]) => { HOLD = true; maxLeg = 11
     input.left = err > 0.15; input.right = err < -0.15;
     if (straight) { input.left = input.right = false; P.lat = LANE; P.vl = 0; }
     else if (J && jd < 1 && P.s < J.a0 + TURN_EASE && !P.into) { input.left = J.dir < 0; input.right = J.dir > 0; }
-    const lim = kmh || Math.min(limitAt(P.s), turnCruise(P.s) * KMH - 4), d = eval(stop);
+    const bad = road.bad.some(b => P.s > b.s0 - 30 && P.s < b.s1);
+    const lim = kmh || Math.min(limitAt(P.s), turnCruise(P.s) * KMH - 4, bad ? 50 : 200), d = eval(stop);
     input.brake = P.v * KMH > lim + 2 || (d !== null && (d < 1 || P.v > Math.sqrt(2 * 3 * Math.max(0, d)))) ? 1 : 0;
     input.gas = input.brake ? 0 : 1;
     step(1 / 60);

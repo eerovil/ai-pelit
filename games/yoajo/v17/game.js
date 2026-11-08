@@ -53,7 +53,7 @@ const WEATHER = {
 // v17 (#440): finishing earns one star; driving points alone decide two or three.
 // Targets are per leg, reachable through good driving without the time bonus.
 const STAR_POINTS = [[150, 225], [225, 325], [175, 250], [175, 275], [250, 375],
-  [275, 400], [325, 475], [425, 600], [275, 375], [325, 475], [300, 425]];
+  [275, 350], [325, 475], [425, 525], [275, 375], [325, 475], [300, 425]];
 const starTargets = n => STAR_POINTS[n - 1];
 const starsForPoints = (n, p) => p >= starTargets(n)[1] ? 3 : p >= starTargets(n)[0] ? 2 : 1;
 // v15: snow on the ground (and the 'liukas' sign): snowfall, a blizzard or Lapland's frost.

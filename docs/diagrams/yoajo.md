@@ -26,7 +26,7 @@ v15 (#440) drives on into Lapland, drawn in `yoajo-matka.md`: `games/yoajo/v15/l
 
 v16 (#440) adds the endless night, drawn in `yoajo-matka.md`: `games/yoajo/v16/loputon.js` (loaded after `lappi.js`) makes each stage for `newLeg()` while `endless` is set (`endlessStage()`), `finish()` drives on into the next stage (`nextStage()`) and `crash()` ends the run (`endlessOver()`), whose points go to the list `loputon`.
 
-v17 (#440) awards stars from driving points alone, before the time bonus. Time adds its existing bonus to the leaderboard score only; it cannot change the stars. Previously earned stars and high scores stay saved.
+v17 (#440) awards stars from driving points alone, before the time bonus. Time adds its existing bonus to the leaderboard score only; it cannot change the stars. Previously earned stars and high scores stay saved. The assumed score targets are calibrated without a time bonus: after removing potholes' forced speed limit, leg 6's three-star target is 350 points (the careful driver earns 395), and leg 8's is 525 (the driver earns 605).
 
 ```mermaid
 flowchart TD
