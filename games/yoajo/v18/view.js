@@ -512,6 +512,8 @@ function markings(snowy, buried) {
   const pos = [], col = [], white = new THREE.Color('#e8e8e2'), yellow = new THREE.Color('#e7b723');
   function strip(s0, s1, lat, w, c) {
     for (let s = s0; s < s1; s += 4) {
+      // A junction is open paving, not a marked bend through the opposing lane.
+      if (road.turns.some(J => J.kind === 'risteys' && J.dir < 0 && s + 4 > J.a0 && s < J.a1)) continue;
       const e = Math.min(s + 4, s1), a = worldAt(s, lat - w / 2, 0.06), b = worldAt(s, lat + w / 2, 0.06), d = worldAt(e, lat - w / 2, 0.06), f = worldAt(e, lat + w / 2, 0.06);
       pos.push(...a, ...b, ...d, ...b, ...f, ...d);
       for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b);
@@ -943,7 +945,16 @@ function draw3d(now) {
   // v14: through a tight turn the camera looks less far ahead, at the bend and not across its corner.
   const inTurn = (road.turns || []).some(J => P.s + CAM_LOOK > J.a0 && P.s - 10 < J.a1) && !P.wrong;
   const look = inTurn ? CAM_LOOK / (1 + 2.5 * Math.abs(headingAt(P.s + CAM_LOOK) - headingAt(P.s))) : CAM_LOOK;
-  const sh = shake * 0.12, cp = carAt(P.s - CAM_BACK, P.lat * 0.85, CAM_UP), ct = carAt(P.s + look, P.lat * 0.6, 0);
+  const sh = shake * 0.12;
+  let cp = carAt(P.s - CAM_BACK, P.lat * 0.85, CAM_UP), ct = carAt(P.s + look, P.lat * 0.6, 0);
+  // The compact left corner is shorter than the camera's trailing distance. Follow the car's
+  // heading there; sampling the old approach behind it would put the car outside the picture.
+  const compact = !P.wrong && road.turns.some(J => J.dir < 0 && J.kind === 'risteys' && P.s > J.a0 - CAM_BACK && P.s < J.a1 + CAM_BACK);
+  if (compact) {
+    const q = carAt(P.s, P.lat), th = carHeading(P.s), fx = Math.sin(th), fz = -Math.cos(th);
+    cp = [q[0] - fx * CAM_BACK, q[1] + CAM_UP, q[2] - fz * CAM_BACK];
+    ct = [q[0] + fx * 12, q[1], q[2] + fz * 12];
+  }
   camera.position.set(cp[0] + (Math.random() - 0.5) * sh, cp[1] + (Math.random() - 0.5) * sh, cp[2]);
   camera.lookAt(ct[0], ct[1], ct[2]);
 
