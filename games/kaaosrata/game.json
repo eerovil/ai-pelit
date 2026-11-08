@@ -36,6 +36,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-08",
+      "note": "Kolme uutta rataa: Hihnatehdas, Laattalaakso ja Kaaosfinaali; valitse rata valikosta, ja jokaisella radalla on oma ennätys ja tuloslista.",
+      "request": "Kaosrataan lisää kenttiä.",
+      "issue": "eerovil/ai-pelit#454"
     }
   ]
 }

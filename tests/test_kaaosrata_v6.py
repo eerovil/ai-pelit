@@ -4,7 +4,7 @@ import json
 
 from conftest import ROOT
 
-URL = "games/kaaosrata/v5/"
+URL = "games/kaaosrata/v6/"
 NAMES = ['valinta', 'hyppy', 'potku', 'putoaminen', 'osuma', 'tomahdys', 'voitto', 'suhahdus']
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -181,4 +181,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/kaaosrata/v5")
+    opens_and_plays_with_the_quiet_library(real, context, "games/kaaosrata/v6")
