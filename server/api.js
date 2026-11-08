@@ -76,12 +76,13 @@ export const GAMES = {
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
   ottelu: { order: 'high', boards: /^lajit-[2-7]$/, first: 'lajit-5' }, // most combined-event points, one list per number of events
   yoajo: { order: 'high', boards: /^(osa-([1-9]|1[01])|loputon)$/, first: 'osa-1' }, // most points on one leg of the night drive ('osa-N'), or in one endless night (v16, 'loputon')
-  vuoristorata: { order: 'low', boards: /^taso-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest ride per level, seconds
+  vuoristorata: { order: 'high', boards: /^(elamys|taso)-[1-9][0-9]{0,2}$/, first: 'elamys-1' }, // v5 thrill points; v1-v4 'taso-N' keeps fastest times
   pilkki: { order: 'high', boards: /^main$/ }, // biggest catch in a five-minute ice-fishing contest, grams
   marjakori: { order: 'high', boards: /^main$/ }, // sum of each level's best score
 };
 
 const ID = /^[a-f0-9]{32}$/;
+const scoreOrder = (game, board) => game === 'vuoristorata' && board.startsWith('taso-') ? 'low' : GAMES[game].order;
 const NAME_MAX = 16;
 export const NEW_PER_DAY = 5;
 export const PENDING_MAX = 30;
@@ -233,7 +234,7 @@ async function getPlayer(env, id) {
 // The place of a score made at `at` on the list: 1 + how many approved players are ahead of it,
 // in the list's own order (better score first, then the earlier one on a tie).
 async function rankOf(env, game, board, score, at) {
-  const better = GAMES[game].order === 'low' ? '<' : '>';
+  const better = scoreOrder(game, board) === 'low' ? '<' : '>';
   const r = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM scores s JOIN players p ON p.id = s.player
      WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
@@ -252,6 +253,7 @@ async function addScore(env, body) {
   if (version < (GAMES[game].minVersion || 1)) return fail(400, 'old version');
   const range = GAMES[game].boardVersions?.[board];
   if (range && (version < range[0] || version > range[1])) return fail(400, 'wrong version for this board');
+  if (game === 'vuoristorata' && ((board.startsWith('taso-') && version > 4) || (board.startsWith('elamys-') && version < 5))) return fail(400, 'wrong version for this board');
   if (!Number.isFinite(score)) return fail(400, 'bad score');
   // The level reached, shown beside the score; optional, as older versions do not send it.
   let level = body.level === undefined || body.level === null ? null : Number(body.level);
@@ -261,7 +263,7 @@ async function addScore(env, body) {
   if (game === 'piano' && version < 10 && level > 5) level = 5;
   const known = await env.DB.prepare('SELECT 1 FROM players WHERE id = ?').bind(player).first();
   if (!known) return fail(404, 'unknown player');
-  const better = GAMES[game].order === 'low' ? '<' : '>';
+  const better = scoreOrder(game, board) === 'low' ? '<' : '>';
   // Keep the player's best score on each list, and the highest level they have reached, which
   // may rise in a round that does not beat the best score.
   const beats = `excluded.score ${better} scores.score`;
@@ -290,7 +292,7 @@ async function tops(env) {
     const r = await env.DB.prepare(
       `SELECT p.name, s.score, ${GAME_LEVEL} AS level, s.version FROM scores s JOIN players p ON p.id = s.player
        WHERE s.game = ? AND s.board = ? AND p.status = 'approved'
-       ORDER BY s.score ${g.order === 'low' ? 'ASC' : 'DESC'}, s.at ASC LIMIT 1`
+       ORDER BY s.score ${scoreOrder(game, board) === 'low' ? 'ASC' : 'DESC'}, s.at ASC LIMIT 1`
     ).bind(game, board).first();
     if (r) games[game] = { board, name: r.name, score: r.score, level: r.level, version: r.version };
   }
@@ -302,7 +304,7 @@ async function list(env, url) {
   const player = url.searchParams.get('player') || '';
   if (!Object.hasOwn(GAMES, game)) return fail(400, 'no list for this game');
   if (!GAMES[game].boards.test(board)) return fail(400, 'bad board');
-  const order = GAMES[game].order === 'low' ? 'ASC' : 'DESC';
+  const order = scoreOrder(game, board) === 'low' ? 'ASC' : 'DESC';
   // Player ids are each phone's secret: never sent back, only "is this row mine".
   const { results } = await env.DB.prepare(
     `SELECT p.name, s.score, s.version, s.at, ${GAME_LEVEL} AS level, s.player = ? AS me

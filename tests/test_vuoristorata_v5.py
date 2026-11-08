@@ -1,184 +1,210 @@
-"""Vuoristorata v2 (#234): recorded sounds from the shared library public/lib/aanet-2/."""
+"""Vuoristorata v5 (#459): an automatic ride scored by one hands-up hold control."""
 
 import json
 import shutil
 
+import pytest
+
 from conftest import ROOT
+from test_rooms_lib import Relay
 
 URL = "games/vuoristorata/v5/"
 KEY = "ai-pelit:vuoristorata:"
-NAMES = ["valinta", "onnistui", "rullaus", "ketju", "nousu", "voitto", "kolari", "kirkuna", "jarru"]
-
-# Every AiPelitAanet.play() call, with whether it played, in window.heard.
-SPY = """() => {
-  window.heard = [];
-  const real = AiPelitAanet.play;
-  AiPelitAanet.play = (name, o) => { const ok = real(name, o); heard.push([name, ok]); return ok; };
-}"""
 
 
 def build(site):
-    # Only this game is built: other games' half-made versions cannot break the build.
     shutil.copytree(ROOT / "games" / "vuoristorata", site.games / "vuoristorata")
     site.build()
 
 
-def open_page(site, browser, saves=None, no_sound_files=False):
-    build(site)
-    ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
-                              service_workers="block")
-    if no_sound_files:
-        ctx.route("**/*.mp3", lambda route: route.abort())
-    for k, v in (saves or {}).items():
-        ctx.add_init_script(f"localStorage.setItem({json.dumps(KEY + k)}, {json.dumps(json.dumps(v))})")
+def open_page(site, browser, saves=None, viewport=None, name=None, relay=None):
+    if not (site.games / "vuoristorata").exists():
+        build(site)
+    ctx = browser.new_context(viewport=viewport or {"width": 360, "height": 740}, is_mobile=True,
+                              has_touch=True, service_workers="block")
+    for save_name, value in (saves or {}).items():
+        ctx.add_init_script(f"localStorage.setItem({json.dumps(KEY + save_name)}, {json.dumps(json.dumps(value))})")
+    if name:
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
     page = ctx.new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
+    if relay:
+        relay.attach(page)
     page.goto(site.url + URL)
     page.wait_for_function("window.drawn === true || window.noWebgl === true", timeout=20000)
-    page.evaluate(SPY)
     return ctx, page
 
 
-def played(page):
-    return [n for n, ok in page.evaluate("heard.splice(0)") if ok]
-
-
-def riding(page):
-    # The first tap turns sound on; then wait until every sound is loaded and plays.
+def start(page):
     page.click("#aja")
-    page.wait_for_function(f"{json.dumps(NAMES)}.every(AiPelitAanet.ready)", timeout=10000)
-    page.wait_for_function("AiPelitAanet.play('valinta', { vol: 0 })", timeout=5000)
     page.wait_for_function("game.mode === 'ride'", timeout=8000)
-    played(page)
 
 
-def test_the_count_down_and_the_start_sound(site, browser):
+def finish_fast(page):
+    page.evaluate("""() => {
+      for (let n = 0; n < 120000 && game.mode === 'ride'; n++) step(1 / 120);
+    }""")
+    page.wait_for_function("game.mode === 'done'", timeout=5000)
+
+
+def test_menu_has_one_control_and_explains_the_ride(site, browser):
     ctx, page = open_page(site, browser)
     try:
-        riding(page)
-        page.evaluate("game.mode = 'count'; game.count = 1.01; step(0.02)")
-        assert played(page) == ["valinta"]
-        page.evaluate("game.count = 0.001; step(0.01)")
-        assert played(page) == ["onnistui"]
+        assert "Juna ajaa itse" in page.locator("#menu .help").inner_text()
+        assert page.locator("#aja").inner_text() == "Kyytiin!"
+        start(page)
+        assert page.locator("#kadet").is_visible()
+        assert page.locator("#jarru").count() == 0
+        assert page.locator("#vauhti").count() == 0
         assert page.errors == []
     finally:
         ctx.close()
 
 
-def test_the_chain_clanks_on_the_lift_and_the_wheels_rumble_by_speed(site, browser):
+def test_no_input_finishes_without_a_crash_and_unlocks_the_next_level(site, browser):
     ctx, page = open_page(site, browser)
     try:
-        riding(page)
-        on_lift = page.evaluate("""() => { const o = game.track.S.find(o => o.kind === 'lift');
-            game.car.s = o.s + 1; game.car.v = 7; sound(game.car); return [chainL.vol, rumble.vol, rumble.rate]; }""")
-        assert on_lift[0] > 0
-        page.wait_for_function("chainL.playing() && rumble.playing()", timeout=5000)
-        slow, fast = page.evaluate("""() => { const o = game.track.S.find(o => o.kind === 'straight' && o.s > 150);
-            game.car.s = o.s; game.car.v = 5; sound(game.car); const a = [chainL.vol, rumble.rate];
-            game.car.v = 25; sound(game.car); return [a, [chainL.vol, rumble.rate]]; }""")
-        assert slow[0] == 0 and fast[0] == 0
-        assert fast[1] > slow[1]
-        # The beeps stand aside while the recorded rumble plays.
-        assert page.evaluate("sound(game.car); rumble.playing()")
+        start(page)
+        finish_fast(page)
+        assert page.evaluate("game.result.score") == 0
+        assert page.evaluate("game.result.stars") == 1
+        assert page.locator("#aika").inner_text() == "0 p"
+        assert page.evaluate(f"JSON.parse(localStorage.getItem({json.dumps(KEY + 'taso')}))") == 2
         assert page.errors == []
     finally:
         ctx.close()
 
 
-def test_riders_scream_into_a_drop_and_the_brakes_hiss(site, browser):
+def test_a_fresh_press_scores_timing_and_the_held_part(site, browser):
     ctx, page = open_page(site, browser)
     try:
-        riding(page)
-        page.evaluate("""() => { const o = game.track.S.find(o => o.kind === 'drop');
-            game.car.s = o.s; game.car.v = 10; game.car.brake = false; sound(game.car); sound(game.car); }""")
-        assert played(page) == ["kirkuna"]
-        page.evaluate("game.car.brake = true; sound(game.car); sound(game.car); game.car.brake = false; sound(game.car);"
-                      " game.car.brake = true; sound(game.car)")
-        assert played(page) == ["jarru", "jarru"]
+        start(page)
+        page.evaluate("""() => {
+          const z = game.track.thrills[0];
+          game.car.s = z.s0 - game.car.v * 0.05;
+          game.car.ready = true;
+        }""")
+        page.locator("#kadet").dispatch_event("pointerdown", {"pointerId": 7, "pointerType": "touch"})
+        page.evaluate("""() => {
+          const z = game.track.thrills[0];
+          for (let n = 0; n < 20000 && game.car.s <= z.s1 + 1; n++) step(1 / 120);
+        }""")
+        page.locator("#kadet").dispatch_event("pointerup", {"pointerId": 7, "pointerType": "touch"})
+        points = page.evaluate("game.car.thrillStates[0].points")
+        assert points >= 80
+        assert page.evaluate("game.car.score") == points
         assert page.errors == []
     finally:
         ctx.close()
 
 
-def test_a_bolt_a_crash_and_the_finish(site, browser):
+def test_holding_before_the_prompt_does_not_claim_a_section(site, browser):
     ctx, page = open_page(site, browser)
-    try:
-        riding(page)
-        page.evaluate("""() => { const pk = game.track.pickups[0];
-            game.car.s = pk.s - 0.3; game.car.v = 2; step(1 / 60); }""")
-        assert "nousu" in played(page)
-        page.evaluate("crash('side')")
-        assert played(page) == ["kolari"]
-        assert page.evaluate("rumble === null && chainL === null")
-        page.wait_for_function("game.mode === 'ride'", timeout=8000)
-        page.evaluate("auto = true; game.car.s = game.track.finish - 30; game.car.check = game.car.s")
-        page.wait_for_function("game.mode === 'done'", timeout=20000)
-        assert "voitto" in played(page)
-        assert page.errors == []
-    finally:
-        ctx.close()
-
-
-def test_without_the_sound_files_it_still_plays_with_its_beeps(site, browser):
-    # The sound files fail: every sound is the game's own beep, and the ride goes on.
-    ctx, page = open_page(site, browser, no_sound_files=True)
     try:
         page.click("#aja")
+        page.locator("#kadet").dispatch_event("pointerdown", {"pointerId": 8, "pointerType": "touch"})
         page.wait_for_function("game.mode === 'ride'", timeout=8000)
-        page.evaluate("auto = true; game.car.s = game.track.finish - 30; game.car.check = game.car.s")
-        page.wait_for_function("game.mode === 'done'", timeout=20000)
-        assert played(page) == []
-        assert page.evaluate("!rumble?.playing()") is True
+        page.evaluate("""() => {
+          const z = game.track.thrills[0];
+          for (let n = 0; n < 30000 && game.car.s <= z.s1 + 1; n++) step(1 / 120);
+        }""")
+        assert page.evaluate("game.car.thrillStates[0].claimed") is False
+        assert page.evaluate("game.car.score") == 0
         assert page.errors == []
     finally:
         ctx.close()
 
 
-def test_v1_saves_are_read_as_they_are(site, browser):
-    ctx, page = open_page(site, browser, saves={"taso": 4, "valittu": 3, "ajat": {"3": 71.4}, "tahdet": {"3": 2}})
+def test_old_progress_and_times_survive_while_points_are_new(site, browser):
+    saves = {"taso": 4, "valittu": 3, "ajat": {"3": 71.4}, "pisteet": {"3": 420}, "tahdet": {"3": 2}}
+    ctx, page = open_page(site, browser, saves=saves)
     try:
         assert page.locator("#taso").inner_text() == "Taso 3"
-        assert "1.11.4" in page.locator("#ennatys").inner_text()
+        assert "420 p" in page.locator("#ennatys").inner_text()
+        assert page.evaluate(f"JSON.parse(localStorage.getItem({json.dumps(KEY + 'ajat')}))['3']") == 71.4
         assert page.errors == []
     finally:
         ctx.close()
 
 
-def test_two_at_once_a_restart_and_back_to_the_menu(site, browser):
+def test_generated_levels_have_scoring_sections_and_finish_automatically(site, browser):
     ctx, page = open_page(site, browser)
     try:
-        riding(page)
-        # Braking as the car goes over into a drop: both sound, once each.
-        page.evaluate("""() => { const o = game.track.S.find(o => o.kind === 'drop');
-            game.car.s = o.s; game.car.v = 10; game.car.brake = true; sound(game.car); sound(game.car); }""")
-        assert sorted(played(page)) == ["jarru", "kirkuna"]
-        # A derail quiets the rumble; once the car is back on the track it rumbles again, and the
-        # next drop screams again.
-        page.evaluate("game.car.brake = false; crash('air')")
-        assert played(page) == ["kolari"]
-        page.wait_for_function("game.mode === 'ride'", timeout=8000)
-        page.evaluate("game.car.v = 15; sound(game.car)")
-        assert page.evaluate("rumble.vol") > 0
-        page.evaluate("""() => { const o = game.track.S.filter(o => o.kind === 'drop').at(-1);
-            game.car.s = o.s; game.car.v = 10; sound(game.car); }""")
-        assert played(page) == ["kirkuna"]
-        # A new ride after the menu starts quiet and counts down again.
-        # Back to the menu the way the player goes: the loops are stopped, not left running silent.
-        loops = page.evaluate("window.oldLoops = [rumble, chainL]; [rumble.playing(), chainL.playing()]")
-        assert loops == [True, True]
-        page.evaluate("document.getElementById('valikkoon').click()")
-        assert page.evaluate("game.mode") == "menu"
-        assert page.evaluate("rumble === null && chainL === null && oldLoops.every(l => !l.playing())")
-        page.evaluate("startRide()")
-        assert played(page) == ["valinta"]
+        results = page.evaluate("""() => {
+          const out = [];
+          for (let level = 1; level <= 20; level++) {
+            const tr = makeLevel(level), car = newCar();
+            for (let n = 0; n < 120000 && car.fin === null; n++) autoStep(tr, car, 1 / 120);
+            out.push([tr.thrills.length, tr.maxScore, car.fin, car.s, tr.finish]);
+          }
+          return out;
+        }""")
+        assert all(n >= 1 and maximum == n * 100 for n, maximum, *_ in results)
+        assert all(fin is not None and pos >= finish for _, _, fin, pos, finish in results)
         assert page.errors == []
     finally:
         ctx.close()
 
 
-# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
-from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401
+def test_the_control_and_result_fit_sideways(site, browser):
+    ctx, page = open_page(site, browser, viewport={"width": 740, "height": 360})
+    try:
+        start(page)
+        button = page.locator("#kadet").bounding_box()
+        assert button and button["x"] >= 0 and button["x"] + button["width"] <= 740
+        assert button["y"] >= 0 and button["y"] + button["height"] <= 360
+        finish_fast(page)
+        assert page.locator("#loppu").evaluate("e => e.scrollHeight <= e.clientHeight")
+        assert page.errors == []
+    finally:
+        ctx.close()
+
+
+def room_of(site, browser, names):
+    build(site)
+    relay = Relay()
+    pages, contexts = [], []
+    for player_name in names:
+        ctx, page = open_page(site, browser, name=player_name, relay=relay)
+        contexts.append(ctx)
+        pages.append(page)
+    host, guests = pages[0], pages[1:]
+    host.click("#kaverit")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost")
+    code = host.evaluate("AiPelitRooms.code")
+    for guest in guests:
+        guest.click("#kaverit")
+        guest.fill("#aipr-codeIn", code)
+        guest.click("#aipr-joinBtn")
+    host.wait_for_function(f"AiPelitRooms.members.filter(m => m.on).length === {len(names)}")
+    return host, guests, contexts
+
+
+@pytest.mark.alone
+def test_friends_compare_points_and_equal_points_share_a_place(site, browser):
+    host, guests, contexts = room_of(site, browser, ["Eero", "Aino", "Ville"])
+    try:
+        host.click("#aipr-start")
+        for page in [host, *guests]:
+            page.wait_for_function("net && net.cfg && game.mode === 'ride'", timeout=10000)
+        for page, score in zip([host, *guests], [120, 240, 240]):
+            page.evaluate("score => { game.car.score = score; game.car.s = game.track.finish - 2; }", score)
+        for page in [host, *guests]:
+            page.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
+        assert host.locator("#loppu-otsikko").inner_text() == "3. sija"
+        assert guests[0].locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
+        assert guests[1].locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
+        assert "240 p" in host.locator("#tulokset").inner_text()
+        assert all(page.errors == [] for page in [host, *guests])
+    finally:
+        for ctx in contexts:
+            ctx.close()
+
+
+# #337 and #355: no crowd noise, and the shared sounds Eero found loud stay soft.
+from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: E402,F401
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):

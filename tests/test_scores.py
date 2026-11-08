@@ -17,6 +17,7 @@ PUHELINKOPPI = "games/puhelinkoppi/v9/"
 SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v12/"
 PIANO = "games/piano/v11/"
+VUORISTORATA = "games/vuoristorata/v5/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
@@ -78,7 +79,7 @@ class FakeApi:
             old = self.scores.get(k)
             old_level = (old or {}).get("level")
             # Like the server: the best score stays, using each game's configured direction.
-            low = body["game"] in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
+            low = body["game"] in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata"} or (body["game"] == "vuoristorata" and body["board"].startswith("taso-"))
             beats = not old or (body["score"] < old["score"] if low else body["score"] > old["score"])
             self.scores[k] = {"score": body["score"], "version": body["version"]} if beats else {"score": old["score"], "version": old["version"]}
             if body.get("level") or old_level:
@@ -87,10 +88,10 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = {"hiihto": "taso-1", "tikka": "mokki2", "pasianssi": "veto1"}.get(game, "main")
+                first = {"hiihto": "taso-1", "tikka": "mokki2", "pasianssi": "veto1", "vuoristorata": "elamys-1"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
-                low = game in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
+                low = game in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata"}
                 cur = games.get(game)
                 if not cur or (sc["score"] < cur["score"] if low else sc["score"] > cur["score"]):
                     games[game] = {"board": board, "name": self.players[player]["name"], "level": sc.get("level"), **sc}
@@ -109,7 +110,7 @@ class FakeApi:
                     rows.append({"name": p["name"], **s, "me": player == q.get("player")})
                 if player == q.get("player"):
                     mine = {**p, **s}
-            low = q["game"] in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
+            low = q["game"] in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata"} or (q["game"] == "vuoristorata" and q.get("board", "").startswith("taso-"))
             rows.sort(key=lambda r: r["score"] if low else -r["score"])
             for i, r in enumerate(rows):
                 r["rank"] = i + 1
@@ -305,6 +306,21 @@ def test_the_admin_never_approves_a_name_they_did_not_see(site, context, fake):
     page.wait_for_selector("#msg:has-text('Pelaaja vaihtoi nimeään')")
     page.wait_for_selector(".player:has-text('Rumanimi')")
     assert fake.players["a" * 32]["status"] == "pending"
+
+
+@pytest.mark.games("vuoristorata")
+@pytest.mark.alone
+def test_vuoristorata_keeps_low_old_times_and_high_v5_points_in_the_phone_queue(site, context, fake):
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + VUORISTORATA)
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi459'))")
+    page.evaluate("AiPelitScores.board('taso-1'); AiPelitScores.submit(70); AiPelitScores.submit(65)")
+    page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')).length === 1")
+    page.evaluate("AiPelitScores.board('elamys-1'); AiPelitScores.submit(400); AiPelitScores.submit(520)")
+    page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')).length === 2")
+    rows = {(game, board): row["score"] for (game, board, _), row in fake.scores.items()}
+    assert rows == {("vuoristorata", "taso-1"): 65, ("vuoristorata", "elamys-1"): 520}
 
 
 @pytest.mark.games("hiihto")

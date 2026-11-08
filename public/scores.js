@@ -102,9 +102,9 @@
       level: function () { return saved('yoajo', 'ajettu'); },
       levelText: function (n) { return n + (n === 1 ? ' osuus' : ' osuutta') + ' ajettu'; },
     },
-    // Fastest ride, one list per level ('taso-N'); level: levels finished ('taso' is the first unfinished one).
+    // v5: most thrill points on 'elamys-N'. Versions 1–4 keep fastest times on 'taso-N'.
     vuoristorata: {
-      order: 'low', score: minutes, boards: true,
+      order: 'high', score: function (s) { return s + ' p'; }, boards: true,
       level: function () { return saved('vuoristorata', 'taso') - 1; },
       levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' ajettu'; },
     },
@@ -114,6 +114,7 @@
     marjakori: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('marjakori', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
+  function orderFor(game, b) { return game === 'vuoristorata' && /^taso-/.test(b) ? 'low' : (GAMES[game] && GAMES[game].order) || 'high'; }
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
   function levelText(game, n) { var c = GAMES[game]; return c && c.levelText ? c.levelText(n) : 'taso ' + n; }
   function levelOf(game) { var c = GAMES[game], n = c && c.level ? c.level() : 0; return n >= 1 ? n : null; }
@@ -167,7 +168,7 @@
         return p.then(function (go) {
           if (!go) return false;
           var q = queue[key], lvl = levelOf(q.game) || 0, had = load(SENT, {})[key];
-          var qBetter = GAMES[q.game] && GAMES[q.game].order === 'low' ? function (a, b) { return a < b; } : function (a, b) { return a > b; };
+          var qBetter = orderFor(q.game, q.board) === 'low' ? function (a, b) { return a < b; } : function (a, b) { return a > b; };
           if (had && !qBetter(q.score, had.score) && lvl <= (had.level || 0)) {
             // Nothing new for the server: neither a better score nor a higher level than it has.
             var left = load(QUEUE, {});
@@ -371,7 +372,7 @@
     open: function () { open(); },
     // The nickname question a submit(score, true) put off: it counts as asked only now that it shows.
     prompt: function () { save(K + 'kysytty', true); open(); },
-    board: function (id, label) { board = id; boardLabel = label || ''; },
+    board: function (id, label) { board = id; boardLabel = label || ''; ORDER = orderFor(GAME, board); better = function (a, b) { return ORDER === 'low' ? a < b : a > b; }; },
     format: function (f) { fmt = f; },
     // For the shelf: which games keep lists, and their lists.
     games: GAMES,
