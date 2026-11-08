@@ -8,6 +8,9 @@
   --accent-text: #1b1e2b;
 }
 * { box-sizing: border-box; }
+/* No text selection on a long press (#457), as in every game (back.js); text fields still edit. */
+:where(html, html *) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+:where(input, textarea, [contenteditable]:not([contenteditable="false"])) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, sans-serif; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: inherit; }
