@@ -174,11 +174,26 @@
     } catch (e) {}
   }
   playMediaOnTaps(window);
+  // No text selection in any game (#457): on an iPhone, holding a button down (Raketti's thrusters)
+  // started selecting the page's text and showed the copy callout. Safari reads only the prefixed
+  // -webkit-user-select, which several versions leave out. :where() keeps it weaker than any
+  // game's own rule, and text fields (a nickname, a room code) can still be edited and selected.
+  // Ottelu's event frames, which have no back.js, get it from the match page as each loads.
+  function noSelect(doc) {
+    if (!doc || doc.getElementById('ai-pelit-ei-valintaa')) return;
+    var st = doc.createElement('style');
+    st.id = 'ai-pelit-ei-valintaa';
+    st.textContent =
+      ':where(html,html *){-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
+      ':where(input,textarea,[contenteditable]:not([contenteditable="false"])){-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}';
+    (doc.head || doc.documentElement).appendChild(st);
+  }
+  noSelect(document);
   // Ottelu plays its events in a frame without back.js; each frame that loads follows this page.
   function watchFrame(f) {
     if (f.__aiPelitAani) return;
     f.__aiPelitAani = true;
-    var put = function () { try { installSound(f.contentWindow); playMediaOnTaps(f.contentWindow); } catch (e) {} };
+    var put = function () { try { noSelect(f.contentDocument); installSound(f.contentWindow); playMediaOnTaps(f.contentWindow); } catch (e) {} };
     f.addEventListener('load', put);
     put();
   }
@@ -208,17 +223,6 @@
   // The chip opens a small menu (#336, Eero's choice): a big back button and the game volume. No
   // new chip, so nothing in a published version is covered (Jään alla v2 and Orava v2–v4 lay their
   // sideways HUD out right beside this one).
-  // No text selection in any game (#457): on an iPhone, holding a button down (Raketti's thrusters)
-  // started selecting the page's text and showed the copy callout. Safari reads only the prefixed
-  // -webkit-user-select, which several versions leave out. :where() keeps it weaker than any
-  // game's own rule, and text fields (a nickname, a room code) can still be edited and selected.
-  var noSelect = document.createElement('style');
-  noSelect.id = 'ai-pelit-ei-valintaa';
-  noSelect.textContent =
-    ':where(html,html *){-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
-    ':where(input,textarea,[contenteditable]:not([contenteditable="false"])){-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}';
-  (document.head || document.documentElement).appendChild(noSelect);
-
   var box = document.createElement('div');
   box.id = 'ai-pelit-kulma';
   box.style.cssText = [

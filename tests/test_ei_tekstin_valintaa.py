@@ -62,3 +62,46 @@ def test_the_shelf_and_the_room_page_select_no_text(site, context):
     assert page.evaluate("getSelection().toString()") == ""
     page.goto(f"{site.url}huone/")
     assert page.evaluate(STYLE, "body")[:2] == ["none", "none"]
+
+
+FRAME = '<p id="f">Lajin teksti</p><button id="fb">Hyppää</button><input id="fi" value="x">'
+
+
+def test_frames_without_back_js_select_no_text_after_each_load(site, context):
+    """Ottelu's events play in frames without back.js (#168): each frame, two at once, one added
+    after the page loaded, and a frame that loads its next event, all get the rule."""
+    script = (
+        "window.addFrame = () => { const f = document.createElement('iframe');"
+        f" f.srcdoc = {FRAME!r}; document.body.appendChild(f); return document.querySelectorAll('iframe').length; }};"
+    )
+    body = f'<iframe id="eka" srcdoc=\'{FRAME}\'></iframe>'
+    make_game(site.games, "pomppu", [game_page("v1", body=body, script=script)])
+    site.build()
+    page = context.new_page()
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{site.url}games/pomppu/v1/")
+    page.wait_for_selector("#ai-pelit-back")
+    page.evaluate("addFrame()")
+
+    def frames_ok():
+        return page.evaluate("""() => [...document.querySelectorAll('iframe')].map(f => {
+          const d = f.contentDocument, s = sel => getComputedStyle(d.querySelector(sel)).webkitUserSelect;
+          return d.querySelector('#f') ? [s('#f'), s('#fb'), s('#fi'), d.querySelectorAll('#ai-pelit-ei-valintaa').length] : null;
+        })""")
+
+    page.wait_for_function("[...document.querySelectorAll('iframe')].every(f => f.contentDocument?.getElementById('ai-pelit-ei-valintaa') && f.contentDocument?.querySelector('#f'))")
+    assert frames_ok() == [["none", "none", "text", 1]] * 2
+    # The next event loads in the same frame: the new document gets the rule too.
+    page.evaluate(f"document.getElementById('eka').srcdoc = {FRAME!r} + '<p>seuraava</p>'")
+    page.wait_for_function("document.getElementById('eka').contentDocument.body?.textContent.includes('seuraava') && document.getElementById('eka').contentDocument.getElementById('ai-pelit-ei-valintaa')")
+    assert frames_ok() == [["none", "none", "text", 1]] * 2
+    page.frame_locator("#eka").locator("#f").dblclick()
+    assert page.evaluate("document.getElementById('eka').contentWindow.getSelection().toString()") == ""
+
+
+def test_a_reload_keeps_one_rule(site, context):
+    page = open_game(site, context)
+    page.reload()
+    page.wait_for_selector("#ai-pelit-back")
+    assert page.evaluate("document.querySelectorAll('#ai-pelit-ei-valintaa').length") == 1
+    assert page.evaluate(STYLE, "#nappi")[1] == "none"
