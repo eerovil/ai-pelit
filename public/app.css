@@ -9,8 +9,8 @@
 }
 * { box-sizing: border-box; }
 /* No text selection on a long press (#457), as in every game (back.js); text fields still edit. */
-:where(html, html *) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-:where(input, textarea, [contenteditable]:not([contenteditable="false"])) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+:where(html, html *) { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+:where(input, textarea, [contenteditable]:not([contenteditable="false"]), [contenteditable]:not([contenteditable="false"]) *) { -webkit-user-select: text !important; user-select: text !important; -webkit-touch-callout: default !important; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, sans-serif; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: inherit; }

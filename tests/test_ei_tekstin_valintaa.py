@@ -10,7 +10,10 @@ from conftest import game_page, make_game
 BODY = (
     '<p id="teksti">Pitkä teksti jota ei saa valita</p><button id="nappi">Suutin</button>'
     '<input id="nimi" value="Nimimerkki"><textarea id="viesti">Viesti</textarea>'
-    '<p id="oma" style="user-select:text;-webkit-user-select:text">Pelin oma valittava teksti</p>'
+    '<p id="oma" style="user-select:text;-webkit-user-select:text">Pelin oma tyyli rivissä</p>'
+    '<style>#oma2, .oma3 { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }</style>'
+    '<p id="oma2">Pelin oma sääntö</p><div class="oma3"><span id="oma3">Lapsi</span></div>'
+    '<div id="muokattava" contenteditable="true">Muokattava <b id="lihava">teksti</b></div>'
 )
 
 STYLE = """sel => {
@@ -41,14 +44,24 @@ def test_a_game_page_selects_no_text(site, context):
     assert "-webkit-user-select:none" in css and "-webkit-touch-callout:none" in css
 
 
-def test_text_fields_and_a_games_own_rule_still_select(site, context):
+def test_a_games_own_rule_does_not_make_text_selectable(site, context):
+    """The issue asks for no selection everywhere: a game's own user-select:text (inline, by id,
+    by class, inherited by a child) loses to the shared rule."""
     page = open_game(site, context)
-    for sel in ("#nimi", "#viesti", "#oma"):
-        assert page.evaluate(STYLE, sel)[0] == "text", sel
+    for sel in ("#oma", "#oma2", "#oma3"):
+        assert page.evaluate(STYLE, sel)[:2] == ["none", "none"], sel
+        page.dblclick(sel)
+        assert page.evaluate("getSelection().toString()") == "", sel
+
+
+def test_text_fields_and_editable_elements_still_select(site, context):
+    page = open_game(site, context)
+    for sel in ("#nimi", "#viesti", "#muokattava", "#lihava"):
+        assert page.evaluate(STYLE, sel)[:2] == ["text", "text"], sel
     page.fill("#nimi", "Testi")
     assert page.input_value("#nimi") == "Testi"
-    page.dblclick("#oma")
-    assert page.evaluate("getSelection().toString()").strip() != ""
+    page.dblclick("#lihava")
+    assert page.evaluate("getSelection().toString()").strip() == "teksti"
 
 
 def test_the_shelf_and_the_room_page_select_no_text(site, context):
