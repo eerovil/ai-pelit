@@ -213,6 +213,7 @@ function fitText(t, x0, y0, size, maxW, colour, align, weight) {
 }
 const mmss = t => { const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${s < 10 ? '0' : ''}${s}`; };
 const starText = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+const starTargetText = n => { const [two, three] = starTargets(n); return `Ajopisteet: ★★ ${two} · ★★★ ${three}`; };
 function panel(x0, y0, w, h) { rr(x0, y0, w, h, 16); x.fillStyle = 'rgba(8,12,22,0.88)'; x.fill(); x.strokeStyle = 'rgba(160,190,255,0.25)'; x.lineWidth = 1.5; x.stroke(); }
 function drawBtn(b, primary) {
   const on = b.id === 'lights' && P && P.high;
@@ -481,7 +482,7 @@ function menu() {
   const pad = 14, colW = LAND ? (W - SAFE_L - SAFE_R - 3 * pad) / 2 : W - 2 * pad, lx = SAFE_L + pad;
   const titleY = SAFE_T + (LAND ? 34 : 56);
   text('Yöajo', lx + colW / 2, titleY, LAND ? 34 : 40, '#ffe08a', 'center', 900);
-  fitText('Valtatie 4 pohjoiseen, yöllä', lx + colW / 2, titleY + 32, 15, colW, '#cfe0ff', 'center', 600);
+  fitText(starTargetText(sel), lx + colW / 2, titleY + 32, 15, colW, '#cfe0ff', 'center', 600);
   const listX = LAND ? lx + colW + pad : lx, listY = LAND ? SAFE_T + 50 : titleY + 58, listH = LAND ? H - listY - SAFE_B - 10 : H - listY - SAFE_B - 178;
   // v15 (#440): eleven legs. When they do not all fit at a row height a thumb can hit (MIN_ROW),
   // the list shows a window of them between "▲" and "▼" rows, which move it three legs.
@@ -583,13 +584,14 @@ function doneScreen() {
   fitText(`Perillä: ${leg.to}!`, cx, y0 + 30, 24, (LAND ? w / 2 : w) - 30, '#ffe08a', 'center', 900);
   text(starText(r.stars), cx, y0 + 66, 32, '#ffd24a', 'center', 700);
   const rows = [
-    ['Aika', `${mmss(r.time)} (tavoite ${mmss(r.par)})`],
+    ['Ajopisteet', `${r.drivingPoints} p`],
     ['Ohitukset', String(tally.ohitukset)],
     ['Lähivaloille ajoissa', String(tally.valot)],
     ['Häikäisyt', String(tally.haikaisyt)],
     ['Sakot', String(tally.sakot)],
     ['Hurjastelu', String(tally.hurjastelu)],
     ['Pitkillä ajettu', `${(tally.pitkat / 1000).toFixed(1).replace('.', ',')} km (+${tally.pitkatP})`],
+    ['Aika', `${mmss(r.time)} (tavoite ${mmss(r.par)})`],
     ['Aikabonus', `+${r.bonus}`],
   ];
   if (leg.tired) rows.splice(6, 0, ['Kahvitauot', String(tally.tauko)]);
@@ -604,7 +606,7 @@ function doneScreen() {
   const py = ty + rows.length * rh + 14;
   text(`${points} p`, cx, py, 28, '#ffffff', 'center', 900);
   text(r.record ? 'Uusi ennätys!' : `Ennätys ${r.best} p`, cx, py + 28, 14, r.record ? '#9ff0a8' : '#9fb0cc', 'center', 700);
-  const hint = r.stars < 2 ? 'Aja tavoiteajassa saadaksesi toisen tähden.' : r.stars < 3 && tally.tukit ? 'Kolmas tähti: päästä ambulanssi heti ohi.' : r.stars < 3 ? 'Kolmas tähti: ei sakkoja, hurjastelua, häikäisyjä eikä liian läheisiä ohituksia.' : 'Täydellinen yöajo!';
+  const hint = starTargetText(level);
   if (LAND) {
     const bx = x0 + w / 2 + 10, bw = w / 2 - 26;
     fitText(hint, bx + bw / 2, y0 + 40, 13, bw, '#cfe0ff', 'center', 500);

@@ -113,6 +113,13 @@
       "note": "Loputon yö: etappi toisensa perään yhä vaikeampana, nopeus, tankki ja vireys mukana, ja oma tuloslista.",
       "request": "Autopeliin lisää. Tuleeko ideoita",
       "issue": "eerovil/ai-pelit#440"
+    },
+    {
+      "n": 17,
+      "date": "2026-11-08",
+      "note": "Osuuksien tähdet määräytyvät ajopisteistä, aikabonus vaikuttaa vain tuloslistan pisteisiin, ja tähtien pisterajat näkyvät pelissä.",
+      "request": "Tähtien pitää riippua pisteistä. Ajan pitää vaikuttaa vain parhaiden pisteiden tavoitteluun.",
+      "issue": "eerovil/ai-pelit#440"
     }
   ]
 }

@@ -1,4 +1,5 @@
-"""Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
+"""Yöajo v17 (#440): stars from driving points; time is only a high-score bonus.
+Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
 Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
 service station, and the whole trip's totals ("Koko matka").
 Yöajo v13 (#440): roadworks with a light, fog, a broken-down car, an ambulance, a wide load, a
@@ -82,7 +83,7 @@ BOT = """(legs) => { maxLeg = 11; const out = [];
       P.high = !fogAt(P.s) && !fogAt(P.s + 60) && !things.some(t => t.v < 0 && vehicle(t) && t.s > P.s && t.s - P.s < 320) && !things.some(t => t.v > 0 && vehicle(t) && t.s > P.s && t.s - P.s < 70);
       input.gas = input.brake || (rest && P.s > bay.s0 && P.lat > EDGE + 0.5) || merging ? 0 : 1; step(1 / 60);
     }
-    out.push({ n, mode, why: crashWhy, at: Math.round(P.s), checks: road.checks.map(c => c.state), T, par: parTime(), points, tally: Object.assign({}, tally), stars: result && result.stars });
+    out.push({ n, mode, why: crashWhy, at: Math.round(P.s), checks: road.checks.map(c => c.state), T, par: parTime(), points, drivingPoints: result && result.drivingPoints, tally: Object.assign({}, tally), stars: result && result.stars });
   }
   return out; }"""
 
@@ -108,12 +109,51 @@ def test_every_leg_can_still_be_driven(site, context):
     page = open_game(site, context)
     legs = page.evaluate(BOT, list(range(1, 9)))
     assert all(r["mode"] == "done" for r in legs), [(r["n"], r["why"]) for r in legs]
+    assert all(r["stars"] == 3 for r in legs), [(r["n"], r["drivingPoints"], r["stars"]) for r in legs]
     assert all(r["tally"]["hurjastelu"] == 0 for r in legs), legs
     # The careful driver stops for coffee on every leg with a rest area.
     assert all(r["tally"]["tauko"] == 1 for r in legs if r["n"] >= 3), legs
     # v12: never stopped by the police, and through every police check by stopping to blow.
     assert all(r["tally"]["poliisi"] == 0 and r["tally"]["sakot"] == 0 for r in legs), legs
     assert all(r["checks"] == (["done"] if r["n"] >= 3 else []) and r["tally"]["puhallus"] == len(r["checks"]) for r in legs), legs
+    assert page.errors == []
+
+
+def test_stars_follow_driving_points_without_a_time_or_clean_driving_gate(site, context):
+    page = open_game(site, context)
+    cases = page.evaluate("""() => { HOLD = true; maxLeg = 11; const cases = [];
+      for (let n = 1; n <= LEGS.length; n++) {
+        const [two, three] = starTargets(n);
+        for (const [p, seconds, dirty] of [[-50, 10, false], [two - 1, 10, false], [two, 10, false],
+          [three - 1, 10, false], [three, 10, false], [three, 10, true], [three - 1, -10, false], [three, -10, false]]) {
+          newLeg(n); T = parTime() + seconds; points = p;
+          if (dirty) Object.assign(tally, { sakot:1, haikaisyt:1, lahelta:1, hurjastelu:1, tukit:1 });
+          finish(); cases.push({ n, p, seconds, dirty, two, three, points, mode, result: {...result}, saved:load('tahdet')[n] });
+        }
+      } return cases; }""")
+    for r in cases:
+        expected_points = r["p"] + (100 if r["seconds"] < 0 else 0)
+        expected_stars = 3 if r["p"] >= r["three"] else 2 if r["p"] >= r["two"] else 1
+        assert r["mode"] == "done" and r["points"] == expected_points, r
+        assert r["result"]["bonus"] == (100 if r["seconds"] < 0 else 0), r
+        assert r["result"]["drivingPoints"] == r["p"], r
+        assert r["result"]["stars"] == expected_stars and r["saved"] >= expected_stars, r
+    assert page.errors == []
+
+
+def test_existing_stars_scores_and_progress_are_kept(site, context):
+    page = open_game(site, context)
+    before = page.evaluate("""() => {
+      const bests = {1:starTargets(1)[1], 2:starTargets(2)[0], 3:0};
+      save('tahdet', {1:1, 2:1, 3:3}); save('pisteet', bests); save('taso', 4); save('ajettu', 3);
+      save('loputon', {p:123, km:6, k:2}); return bests;
+    }""")
+    page.reload()
+    page.wait_for_function("typeof newLeg === 'function' && mode === 'menu'")
+    r = page.evaluate("({stars, bests, maxLeg, driven, saved:load('tahdet'), endless:load('loputon')})")
+    assert r["stars"] == r["saved"] == {"1":1, "2":1, "3":3}, r
+    assert r["bests"] == before and r["maxLeg"] == 4 and r["driven"] == 3, r
+    assert r["endless"] == {"p":123, "km":6, "k":2}, r
     assert page.errors == []
 
 
@@ -994,6 +1034,7 @@ def test_the_lapland_legs_can_be_driven_with_a_stop_for_fuel(site, context):
     page = open_game(site, context)
     legs = page.evaluate(BOT, [9, 10, 11])
     assert all(r["mode"] == "done" for r in legs), [(r["n"], r["why"], r["at"]) for r in legs]
+    assert all(r["stars"] == 3 for r in legs), [(r["n"], r["drivingPoints"], r["stars"]) for r in legs]
     for r in legs:
         t = r["tally"]
         assert t["tankkaus"] == 1 and t["tauko"] == 1 and t["hurjastelu"] == 0 and t["poliisi"] == 0, (r["n"], t)

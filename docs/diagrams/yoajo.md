@@ -26,6 +26,8 @@ v15 (#440) drives on into Lapland, drawn in `yoajo-matka.md`: `games/yoajo/v15/l
 
 v16 (#440) adds the endless night, drawn in `yoajo-matka.md`: `games/yoajo/v16/loputon.js` (loaded after `lappi.js`) makes each stage for `newLeg()` while `endless` is set (`endlessStage()`), `finish()` drives on into the next stage (`nextStage()`) and `crash()` ends the run (`endlessOver()`), whose points go to the list `loputon`.
 
+v17 (#440) awards stars from driving points alone, before the time bonus. Time adds its existing bonus to the leaderboard score only; it cannot change the stars. Previously earned stars and high scores stay saved.
+
 ```mermaid
 flowchart TD
   A[Valitse osuus, Aja] --> B[Aja: ohjaa, kaasuta, jarruta, valot]
@@ -76,14 +78,15 @@ flowchart TD
   B --> Y{Ojaan tai kolari?}
   Y -- Kyllä --> X
   B --> Z[Perillä kaupungissa]
-  Z --> S[Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä]
-  S --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
+  Z --> S[Tähdet ajopisteistä: perillä 1, pisterajoista 2 tai 3]
+  S --> AB[Aikabonus: +10 p sekunnilta alle tavoiteajan]
+  AB --> T[Seuraava osuus aukeaa, ennätys tuloslistalle]
   X --> A
   class A,B,E2,L,P2,M,N,HW,XH,J,J3,VP,WO,VL,VT,VW blue
   class C,D,E,F,G,H,K,V,Y,P,R,J1,VC amber
   class D1,E1,F1,K2,V1,P1,H0 teal
   class D2,F2,H1,K1,V2,X,E3,R1,J2 rose
-  class Z,S,T green
+  class Z,AB,S,T green
 ```
 
 ## Colours
@@ -110,7 +113,8 @@ flowchart TD
 - **Yli rajoituksen +5?**: `cameras()`: a camera stands 340 m after its sign; over the limit by more than 5 km/h it flashes and fines −150, otherwise +25.
 - **Ohittaja omalla kaistalla: väistä pientareelle**: two kinds of reckless drivers (`move()`): one from behind with high beams on, overtaking when nobody comes and cutting in; one oncoming, pulling out from behind a truck into the player's lane with its high beams on.
 - **Kahvitauko: vireys täyteen, +10 s**: `tiredness()` (#181 "Kuskia väsyttää"), from leg 3. Sleepiness grows with the road driven; past 40 % the eyes close for a moment now and then (black lids in `dashboard()`), longer as it grows. Stopping in the rest area's bay (a sign, then a paved bay and a lit kiosk on the right) wakes the driver; without a stop they fall asleep after the rest area, before the town.
-- **Tähdet: perillä, tavoiteajassa, ilman sakkoja, hurjastelua ja häikäisyjä**: (v4 adds the reckless-driving count to the third star) `finish()`: one star for arriving, two within the target time (`parTime()`: the leg at the speed limits, at most 90 on snow, plus 20 %), three also with no fines, no dazzling and no close passes. Time under the target gives 10 points a second.
+- **Aikabonus: +10 p sekunnilta alle tavoiteajan**: `finish()` in `games/yoajo/v17/game.js` adds `max(0, round((parTime() - T) * 10))` to the driving points, as before. Stars are already decided from driving points and never use the bonus.
+- **Tähdet ajopisteistä: perillä 1, pisterajoista 2 tai 3**: v17 (#440, owner choice): `starsForPoints(level, drivingPoints)` before the time bonus. `STAR_POINTS` gives each leg its two- and three-star score targets, reachable without a time bonus. Fines, dazzling, unsafe passes, reckless driving and blocking an ambulance affect stars only through point deductions. `starTargetText()` in `games/yoajo/v17/ui.js` shows the selected leg's targets below the menu title and on the results screen. `tahdet` keeps the best stars, never taking away an earned star. Old `pisteet` records include the bonus, so they are preserved without guessing their driving points.
 - **Seuraava osuus aukeaa, ennätys tuloslistalle**: stars and best points per leg are saved (`tahdet`, `pisteet`), and the furthest leg driven to the end as `ajettu` (`taso`, the furthest leg open, stops at 8; at 11 from v15, and `server/api.js` takes `osa-1` to `osa-11`, and from v16 `loputon`, the endless night's list). The points of every leg driven to the end, even at zero or below after fines, go to the leg's high-score list `osa-N` (`public/scores.js`, `server/api.js`), with `ajettu` shown beside them. `buildWorld()` and `dispose()` in `view.js` free the old leg's 3D pictures and the passed traffic, so driving leg after leg does not fill the phone's memory. This game keeps its own score entry; the shared registry’s new `minigolf` entry (#340, lowest stroke total on `main`) does not change it. Kiekkoammunta v1 adds independent `trap` and `skeet` score entries (Trap first, N/25); this box’s existing behavior is unchanged. Frisbeegolf v1 adds its own `main` entry to these registries: lowest strokes against par wins, displayed as `E`, `−2` or `+5`; this box keeps its existing behavior. Frisbeegolf now uses its separate `v3` leaderboard; versions 1–2 are not accepted there (#338). From v5 (#429) its rounds go to a new `v5` list, the shelf's first, and the `v3` list stays for v3–v4.
 - **Vaarallinen ohitus -50, ei ohituspisteitä**: v4 `unsafeOvertake()` in `game.js`, judged before any pass is scored in the same moment: being past the centre line while an oncoming car is within 180 m costs 50, once a car, and every vehicle passed before the car is back in its lane earns nothing (`P.unsafe`). v12 (#440): if a police car sees it (`policeSaw()` in `poliisi.js`), the unsafe overtake, or crossing a junction's solid line, ends the leg instead.
 - **+5 joka 100 m, ei katuvaloissa**: v4 `highBeams()`: every 100 m on high beams earns 5 points, announced every 500 m and shown on the end screen as "Pitkillä ajettu". Not under street lights (`streetLit()`: the town at the end and the villages). After 6 s on low beams with an empty road ahead, a reminder.

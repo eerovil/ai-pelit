@@ -50,6 +50,12 @@ const WEATHER = {
   // v15: a clear frosty night in Lapland: the stars out, packed snow on the road.
   pakkanen: { grip: 0.7, reach: 1 },
 };
+// v17 (#440): finishing earns one star; driving points alone decide two or three.
+// Targets are per leg, reachable through good driving without the time bonus.
+const STAR_POINTS = [[150, 225], [225, 325], [175, 250], [175, 275], [250, 375],
+  [275, 400], [325, 475], [425, 600], [275, 375], [325, 475], [300, 425]];
+const starTargets = n => STAR_POINTS[n - 1];
+const starsForPoints = (n, p) => p >= starTargets(n)[1] ? 3 : p >= starTargets(n)[0] ? 2 : 1;
 // v15: snow on the ground (and the 'liukas' sign): snowfall, a blizzard or Lapland's frost.
 const snowyLeg = L => L.weather === 'lumi' || L.weather === 'pyry' || L.weather === 'pakkanen';
 
@@ -724,12 +730,12 @@ function crash(why) {
 function finish() {
   // v16: in the endless night the next stage follows at once (loputon.js).
   if (endless) return nextStage();
-  const par = parTime(), fast = T <= par, clean = !tally.sakot && !tally.haikaisyt && !tally.lahelta && !tally.hurjastelu && !tally.tukit;
+  const par = parTime();
+  const drivingPoints = points, st = starsForPoints(level, drivingPoints);
   const bonus = Math.max(0, Math.round((par - T) * 10));
   points += bonus;
-  const st = fast ? (clean ? 3 : 2) : 1;
   const prevBest = bests[level];
-  result = { stars: st, bonus, par, time: T, record: !(prevBest >= points), best: Math.max(points, prevBest || -1e9) };
+  result = { stars: st, drivingPoints, bonus, par, time: T, record: !(prevBest >= points), best: Math.max(points, prevBest || -1e9) };
   stars[level] = Math.max(stars[level] || 0, st); save('tahdet', stars);
   if (result.record) { bests[level] = points; save('pisteet', bests); }
   if (level === maxLeg && maxLeg < LEGS.length) { maxLeg++; save('taso', maxLeg); }
