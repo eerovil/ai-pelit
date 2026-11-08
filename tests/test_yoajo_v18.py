@@ -1,4 +1,5 @@
-"""Yöajo v17 (#440): stars from driving points; time is only a high-score bonus.
+"""Yöajo v18 (#440): left turns cross the opposing lane inside the junction.
+Yöajo v17 (#440): stars from driving points; time is only a high-score bonus.
 Yöajo v16 (#440): the endless night, stage after stage, each harder, with its own list.
 Yöajo v15 (#440): three Lapland legs on to Utsjoki with reindeer herds, a tank to fill at a
 service station, and the whole trip's totals ("Koko matka").
@@ -29,7 +30,9 @@ BOT = """(legs) => { maxLeg = 11; const out = [];
       let want = LANE;
       const slow = things.filter(t => t.v >= 0 && !(t.kind === 'liittyja' && t.plan === 'wait') && t.lat > -1 && t.s > P.s - 3 && t.s - P.s < 50 && t.kind !== 'takaa' && t.kind !== 'hirvi' && t.kind !== 'poro'
         && !t.parked && t.kind !== 'konstaapeli' && t.kind !== 'partio')
-        .sort((a, b) => a.s - b.s)[0];
+        // A faster car can hide a much slower tractor farther ahead. Follow the vehicle whose
+        // braking point is nearest, rather than just the nearest centre position.
+        .sort((a, b) => (a.s - a.len/2 - Math.max(0,P.v-a.v)**2/8) - (b.s - b.len/2 - Math.max(0,P.v-b.v)**2/8))[0];
       const onc = things.some(t => t.v < 0 && t.s + t.len / 2 > P.s - 5 && t.s - P.s < 330 && vehicle(t));
       const head = things.find(t => t.v < 0 && t.lat > 0.5 && t.s > P.s && t.s - P.s < 260);
       if (slow && !onc && !road.works.some(w => w.stop - P.s < 300 && P.s < w.far) && !road.broken.some(b => b.s - P.s < 250 && b.s > P.s - 10) && slow.kind !== 'kavelija' && (P.lat < 0.5 || ![0, 50, 100, 150, 200, 250].some(k => noPass(P.s + k)))) want = -LANE;
@@ -65,7 +68,8 @@ BOT = """(legs) => { maxLeg = 11; const out = [];
       // v14: no overtaking near a turn, slow for it and steer into it; at a left turn wait for a car
       // coming from the road ahead; stop for a train at the level crossing.
       const J = turnAhead(), jd = J ? J.a0 - P.s : 1e9;
-      if (jd < 300 && jd > -60 && !head && !amb && !load && !bk) want = Math.max(want, LANE);
+      // Do not cut into a vehicle still alongside just to prepare for a turn.
+      if (jd < 300 && jd > -60 && !head && !amb && !load && !bk && !(P.lat < 0.5 && (beside || slow))) want = Math.max(want, LANE);
       const cross = J && J.kind === 'risteys' && J.dir < 0 && jd > 1 && things.some(t => t.arm === J && t.kind === 'risteava'
         && t.s - J.a0 > J.C - 2 && (t.s - J.a0 - J.C) / Math.max(1, -t.v) < GAP_TIME + 1.5), crossStop = cross ? jd - 3 : 1e9;
       const rx = road.rail.find(x => x.on && x.t < RAIL_UP0 + 0.5 && x.s - P.s > 0 && x.s - P.s < 250), railStop = rx ? rx.s - 10 - P.s : 1e9;
