@@ -133,7 +133,8 @@ function turnTick(dt) {
   P.signal = 0;
   if (!J) return;
   const d = J.a0 - P.s, side = J.dir > 0 ? 'oikealle' : 'vasemmalle';
-  if (J.told < 1 && d < SIGN_FAR) { J.told = 1; say(`Käänny ${side} ${Math.round(d / 10) * 10} m${J.kind === 'risteys' && J.dir < 0 ? ' · hidasta 20 km/h' : ''}`, true); }
+  // v19 (#451): the speed is on the turn pill the whole way (turnHint), not in this one message.
+  if (J.told < 1 && d < SIGN_FAR) { J.told = 1; say(`Käänny ${side} ${Math.round(d / 10) * 10} m`, true); }
   // The car coming from the road ahead at a left turn, released so that it is there about when the player is.
   // It sets off as far up its road as it takes the player to reach the turn at the speed the turn
   // is taken at (turnCruise), so the two meet there unless one of them waits.
@@ -174,10 +175,46 @@ function wrongRoad(dt) {
   for (const t of things) if (t.arm === w.J && t.s > w.J.a0 && meet(t, dt)) return;
   if (P.s - w.s0 >= WRONG_LEN) crash('Väärä tie: ajoit ohi käännöksen.');
 }
-// Off the road in a turn's bend is too fast for it.
+// v19 (#451 "Risteykseen ajaminen menee todella herkästi ojaan"): the speed a player may take a turn
+// at, km/h, in this weather (as turnCruise scales the traffic's). Shown on the
+// turn pill and named on the crash screen. Rounded to the nearest 5 (down to 5 gave 20 in a
+// blizzard, needlessly slow).
+const TURN_SAFE = { vasen: 30, oikea: 50, ramppi: 55 };
+function turnWay(J) { return J.kind === 'ramppi' ? 'ramppi' : J.dir < 0 ? 'vasen' : 'oikea'; }
+function turnSafe(J) {
+  return Math.round(TURN_SAFE[turnWay(J)] * Math.min(1, WEATHER[leg.weather].grip + 0.25) / 5) * 5;
+}
+// v19 (#451): in a crossroads bend the car is pushed wide smoothly with speed, instead of v18's
+// v²/R push that slid at once past about 22 km/h in the 8 m left corner. At the safe speed the push
+// matches full steering, but the bend is short: a player who steers in within half a second drifts
+// about 1.5 m wide at the safe speed and still makes a dry left turn at about 35 km/h. Null outside
+// a crossroads bend (ramps and the road's own bends keep the v²/R rule).
+function turnPush(s, v, steerMax) {
+  const J = !P.wrong && turnAt(s);
+  if (!J || J.kind !== 'risteys') return null;
+  const e = clamp(curveAt(s) * J.R * J.dir, 0, 1), safe = turnSafe(J) / KMH;
+  return -J.dir * e * steerMax * (v / safe) * (v / safe);
+}
+// v19 (#451): the junction's drawn paving is road: within JUNCTION_NEAR metres of a crossroads
+// bend the car is in the ditch only once it is off every road drawn there too.
+const JUNCTION_NEAR = 30;
+function onJunction(s, lat) {
+  if (P && P.wrong) return false;
+  const J = (road.turns || []).find(J => J.kind === 'risteys' && s > J.a0 - JUNCTION_NEAR && s < J.a1 + JUNCTION_NEAR);
+  if (!J) return false;
+  const q = worldAt(s, lat);
+  return armDist(q[0], q[2]) < DITCH;
+}
+// Off the road in a turn's bend is too fast for it. v19: names the kind of turn (crashTurn keeps it
+// for the crash screen's tip).
+let crashTurn = null;
 function ditchWhy() {
   const J = !P.wrong && turnAt(P.s - 4);
-  return J && P.v * KMH > (J.kind === 'risteys' ? (J.dir < 0 ? LEFT_SPEED + 5 : 35) : 55) ? `Ajoit ojaan: liian lujaa ${J.kind === 'risteys' ? 'risteykseen' : 'rampille'}.` : 'Ajoit ojaan.';
+  crashTurn = null;
+  if (!J || P.v * KMH <= turnSafe(J)) return 'Ajoit ojaan.';
+  const way = turnWay(J);
+  crashTurn = { way, safe: turnSafe(J) };
+  return `Ajoit ojaan: liian lujaa ${way === 'ramppi' ? 'rampille' : way === 'vasen' ? 'vasempaan käännökseen' : 'oikeaan käännökseen'}.`;
 }
 // The car from the road ahead at a left turn (from move in game.js). It stops at the crossing
 // only as an emergency response to an unsafe turn; normal oncoming traffic keeps priority.
@@ -197,7 +234,7 @@ function turnHint() {
   if (P.wrong) return { wrong: true };
   const J = turnAhead();
   if (!J || J.a0 - P.s > SIGN_FAR) return null;
-  return { dir: J.dir, d: Math.max(0, Math.round((J.a0 - P.s) / 10) * 10), to: J.to, kind: J.kind };
+  return { dir: J.dir, d: Math.max(0, Math.round((J.a0 - P.s) / 10) * 10), to: J.to, kind: J.kind, safe: turnSafe(J) };
 }
 // Where the player's car (and the camera) is in the world: on the wrong road, along it.
 function carAt(s, lat, up) { return P && P.wrong ? armAt(P.wrong.J, s - P.wrong.J.a0, lat, up) : worldAt(s, lat, up); }

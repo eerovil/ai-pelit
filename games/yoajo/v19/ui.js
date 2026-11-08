@@ -357,7 +357,8 @@ function dashboard() {
 function turnPill(y) {
   if (mode !== 'drive' || typeof turnHint !== 'function') return;
   const h = turnHint(); if (!h) return;
-  const label = h.wrong ? 'Väärä tie!' : h.d > 0 ? `Käänny ${h.dir > 0 ? 'oikealle' : 'vasemmalle'} ${h.d} m` : `Käänny ${h.dir > 0 ? 'oikealle' : 'vasemmalle'}: ${h.to}`;
+  // v19 (#451): the turn's safe speed stays on the pill on the way in.
+  const label = h.wrong ? 'Väärä tie!' : h.d > 0 ? `Käänny ${h.dir > 0 ? 'oikealle' : 'vasemmalle'} ${h.d} m · alle ${h.safe}` : `Käänny ${h.dir > 0 ? 'oikealle' : 'vasemmalle'}: ${h.to}`;
   x.font = '700 15px system-ui,sans-serif';
   const tw = Math.min(W - 80, x.measureText(label).width), pw = tw + 58, px = (W - pw) / 2;
   rr(px, y - 15, pw, 30, 15); x.fillStyle = h.wrong ? 'rgba(170,30,24,0.92)' : 'rgba(29,85,168,0.92)'; x.fill();
@@ -555,7 +556,8 @@ function crashScreen() {
     : cop ? ['Poliisin nähden enintään 10 km/h yli', 'ja vain turvallisia ohituksia.']
     // v14 (#440): the turns and the level crossing.
     : crashWhy.startsWith('Väärä tie') ? ['Käänny opasteen nuolen suuntaan:', 'hidasta ja ohjaa ajoissa.']
-    : crashWhy.includes('liian lujaa') ? ['Hidasta risteykseen alle 40 km/h', 'ja rampille alle 60 km/h.']
+    // v19 (#451): the speed for the kind of turn it was, in this weather (v14–v18: always "alle 40").
+    : crashWhy.includes('liian lujaa') && typeof crashTurn !== 'undefined' && crashTurn ? [`Hidasta ${crashTurn.way === 'ramppi' ? 'rampille' : crashTurn.way === 'vasen' ? 'vasempaan käännökseen' : 'oikeaan käännökseen'}`, `alle ${crashTurn.safe} km/h.`]
     : crashWhy.includes('puomi') ? ['Tasoristeyksessä odota,', 'kunnes puomit nousevat.']
     : dry ? ['Tankkaa huoltoasemalla: aja oikealle', 'ja pysähdy pumpulle.']
     : crashWhy.startsWith('Rengas') ? ['Kuoppien kohdalla hidasta alle 50 km/h.']
