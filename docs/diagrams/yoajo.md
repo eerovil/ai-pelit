@@ -55,9 +55,9 @@ flowchart TD
   F -- Ei --> F2[Liian läheltä -40]
   C -- Hirvi tai poro --> G{Jarrutit tai väistit?}
   G -- Ei --> X[Kolari: osuus päättyy]
-  C -- Huono tie --> HW[Kuoppamerkki, 50-rajoitus, varoitus ruudulla]
+  C -- Huono tie --> HW[Kuoppamerkki ja hidastusohje, tien rajoitus säilyy]
   HW --> H{Hitaasti kuoppien yli?}
-  H -- Alle 55 km/h --> H0[Kuopat eivät tee mitään]
+  H -- Enintään 55 km/h --> H0[Kuopat eivät tee mitään]
   H -- Ei --> H1[Kuoppa -15, neljäs kova isku puhkaisee renkaan]
   H1 --> X
   X -- Rengas rikki --> XH[Ohje: hidasta alle 50 km/h]
@@ -107,8 +107,8 @@ flowchart TD
 - **Väljä ohitus +20**: walkers keep to the left edge facing traffic, or now and then the right edge; a third have no reflector and show only in the beam. Passing with under a metre of room above 40 km/h costs −40; touching one ends the leg as a near miss ("Vaaratilanne").
 - **Jarrutit tai väistit?**: a moose (or a reindeer on the last leg) steps out of the forest about four seconds of driving ahead, after a warning sign; some stop on the road. Its eyes shine in the beam (`deerMesh()` in `view.js`).
 - **Kuoppa -15, neljäs kova isku puhkaisee renkaan**: `holes()`: a bad stretch after an "Epätasainen tie" sign has potholes; below 50 km/h (v1–v6; up to 55 km/h from v7) they do nothing, above it they jolt the car; the fourth hit above 70 km/h bursts a tyre.
-- **Kuoppamerkki, 50-rajoitus, varoitus ruudulla**: v7 (#266 "Mitä kuopille mahtaa?", Eero's choice: show and explain, same difficulty). `newLeg()` in `games/yoajo/v7/game.js` puts a 50 limit 40 m after each bad stretch's sign, over all its holes, and the limit it was 290 m after the sign (other limit changes inside the stretch go; the stretch is kept in `road.bad`). `holes()` says "Kuoppia: hidasta alle 50 km/h" once per stretch. `buildWorld()` in `view.js` lays each hole on the crowned road with a pale rim the headlights catch (v1–v6 drew them at a flat height, under the asphalt within 1.25 m of the centre line). The menu's tip on a leg with bad stretches is "Kuoppamerkin jälkeen hidasta alle 50 km/h." (`menu()` in `ui.js`).
-- **Kuopat eivät tee mitään**: v7: up to 55 km/h (`HOLE_SAFE`, the 50 limit and a little), a hole does nothing; v1–v6 under 50.
+- **Kuoppamerkki ja hidastusohje, tien rajoitus säilyy**: v7 (#266 "Mitä kuopille mahtaa?", Eero's choice: show and explain, same difficulty). v7 originally added a 50 km/h limit over each pothole stretch. In v17 the owner explicitly removed that limit: `newLeg()` in `games/yoajo/v17/game.js` leaves the road’s own speed-limit changes and signs intact while keeping `road.bad`, potholes and their warning signs. `holes()` says "Kuoppia: hidasta alle 50 km/h" once per stretch. `buildWorld()` in `view.js` lays each hole on the crowned road with a pale rim the headlights catch (v1–v6 drew them at a flat height, under the asphalt within 1.25 m of the centre line). The menu's tip on a leg with bad stretches is "Kuoppamerkin jälkeen hidasta alle 50 km/h." (`menu()` in `ui.js`).
+- **Kuopat eivät tee mitään**: v7: up to 55 km/h (`HOLE_SAFE`, independently of the posted speed limit), a hole does nothing; v1–v6 under 50.
 - **Ohje: hidasta alle 50 km/h**: v7: the burst-tyre screen (`crashScreen()` in `ui.js`) adds "Kuoppien kohdalla hidasta alle 50 km/h." under the reason.
 - **Yli rajoituksen +5?**: `cameras()`: a camera stands 340 m after its sign; over the limit by more than 5 km/h it flashes and fines −150, otherwise +25.
 - **Ohittaja omalla kaistalla: väistä pientareelle**: two kinds of reckless drivers (`move()`): one from behind with high beams on, overtaking when nobody comes and cutting in; one oncoming, pulling out from behind a truck into the player's lane with its high beams on.

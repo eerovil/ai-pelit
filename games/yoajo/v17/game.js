@@ -190,11 +190,7 @@ function newLeg(n) {
     const s = spot(280, 400, end); if (s < 0) continue;
     road.signs.push({ s, kind: 'kuoppa' });
     for (let h = s + 110; h < s + 280; h += 7 + r() * 12) road.holes.push({ s: h, lat: (r() * 2 - 1) * 3, r: 0.45 + r() * 0.35 });
-    // v7 (#266 "Mitä kuopille mahtaa?"): a 50 limit over the potholes, under which they do no
-    // harm, and the limit it was after them. Any other limit change inside the stretch goes.
-    const after = limitAt(s + 290);
-    for (let i = lim.length - 1; i >= 0; i--) if (lim[i].s >= s && lim[i].s <= s + 290) lim.splice(i, 1);
-    lim.push({ s: s + 40, v: 50 }, { s: s + 290, v: after }); lim.sort((a, b) => a.s - b.s);
+    // v17 (#440): potholes advise slowing down, without changing the posted speed limit.
     road.bad.push({ s0: s, s1: s + 290, told: false });
   }
   const fixed = used.slice();   // v8: junctions keep clear of the rest area and the bad stretches only
@@ -586,7 +582,7 @@ function roadEmpty() {
 }
 // v4 (#181: "hurjastelusta pitää antaa miinusta"): driving 20 km/h or more over the limit for
 // over a second costs 25 points, and 25 more every 5 s it goes on; being in the oncoming lane
-// while an oncoming car is within 180 m costs 50, once a car. Both cost the third star.
+// while an oncoming car is within 130 m costs 50, once a car. Both reduce the driving points.
 // v8 (#306 "Vaarallinen ohitus on hieman liian herkkä"): within 130 m (v4–v7: 180 m). Crossing
 // a junction's solid centre line costs 30, once until back in the lane, and counts as reckless.
 const RECKLESS_OVER = 20, RECKLESS_EVERY = 5, ONCOMING_GAP = 130;
@@ -653,8 +649,8 @@ function lights(dt) {
 }
 
 // Potholes on a bad stretch: slow through them, or they jolt the car and, hit hard enough, burst
-// a tyre. v7 (#266): at the stretch's sign the driver is told how, and up to 55 km/h (the 50
-// limit and a little) they do nothing (v1–v6: under 50).
+// a tyre. At the stretch's sign the driver is advised to slow below 50 km/h; up to 55 km/h
+// they do nothing. v17 keeps this safe speed separate from the posted road limit.
 const HOLE_SAFE = 55;
 function holes() {
   for (const b of road.bad) if (!b.told && P.s >= b.s0 - 30 && P.s < b.s1) { b.told = true; say(`Kuoppia: hidasta alle ${HOLE_SAFE - 5} km/h`, false); }

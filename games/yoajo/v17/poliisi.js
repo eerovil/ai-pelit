@@ -17,7 +17,7 @@ const SEE_AHEAD = 250, SEE_BEHIND = 120, RADAR = 200, RADAR_PAST = 60;
 // Over the limit by more than FINE_OVER (11–19) for a second: a fine. RECKLESS_OVER (20, game.js)
 // or more for half a second: the leg ends.
 const FINE_OVER = 10, POLICE_FINE = 150, STOP_TIME = 3, STOP_LAT = 4.1;
-// The police check, CHECK_IN metres into a pothole stretch (under its 50 limit): stop within the
+// The police check, CHECK_IN metres into a pothole stretch: stop within the
 // window beside the officer, in the right half of the road (their side; under 5 km/h for
 // BLOW_STILL s), blow for BLOW_TIME s.
 const CHECK_IN = 200, BLOW_STILL = 1.5, BLOW_TIME = 2;
@@ -49,9 +49,9 @@ function policeLeg(evs) {
   }
   if (level >= CHECK_FROM) placeCheck(evs, r);
 }
-// The check stands on a pothole stretch (v7), which already has its 50 limit from 40 m in to its
-// end: the officer CHECK_IN metres into it, their car just past them on a widened shoulder, a
-// POLIISI sign where the 50 starts. Kept clear of cameras, junctions, signs and moose there.
+// The check stands on a pothole stretch: the officer CHECK_IN metres into it, their car just
+// past them on a widened shoulder, a POLIISI sign 150 m before. v17 leaves the road's posted
+// limit in place; the driver still has to stop for the officer. Clear of cameras and junctions.
 function placeCheck(evs, r) {
   const near = (a, b, x) => x >= a && x <= b;
   const spots = road.bad.map(x => x.s0 + CHECK_IN).filter(s => s > 600 && s < leg.len - 400 &&

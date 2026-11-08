@@ -72,7 +72,8 @@ BOT = """(legs) => { maxLeg = 11; const out = [];
       const err = P.lat - want + (P.vl - curveAt(P.s) * P.v * P.v * 0.55) * 0.35;
       input.left = err > 0.15; input.right = err < -0.15;
       if (J && jd < 1 && P.s < J.a0 + TURN_EASE && !P.into && !cross) { input.left = J.dir < 0; input.right = J.dir > 0; }
-      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200,
+      const bad = road.bad.some(b => P.s > b.s0 - 30 && P.s < b.s1);
+      const lim = Math.min(limitAt(P.s + 40), limitAt(P.s), (leg.weather === 'lumi' || leg.weather === 'pyry') ? 90 : 200, icy ? 60 : 200, load ? 38 : 200, bk ? 38 : 200, bad ? 50 : 200,
         jd < 400 ? turnCruise(P.s) * KMH - 4 : 200);
       input.brake = P.v * 3.6 > lim + 3 || (deer && P.v > 4) || (rest && P.v > 2) || (head && P.v > 12)
         || (slow && want > 0 && slow.kind !== 'kavelija' && P.v > slow.v - 0.5 && slow.s - P.s < Math.max(35, 10 + (P.v - slow.v) ** 2 / 4))
@@ -154,6 +155,42 @@ def test_existing_stars_scores_and_progress_are_kept(site, context):
     assert r["stars"] == r["saved"] == {"1":1, "2":1, "3":3}, r
     assert r["bests"] == before and r["maxLeg"] == 4 and r["driven"] == 3, r
     assert r["endless"] == {"p":123, "km":6, "k":2}, r
+    assert page.errors == []
+
+
+def test_potholes_leave_posted_limits_and_their_signs_unchanged(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; const out = [], original = roadLeg;
+      // Isolate the base road limits from independently placed roadworks' temporary limits.
+      roadLeg = () => {};
+      try {
+        for (let n = 3; n <= 11; n++) {
+          const L = LEGS[n - 1], count = L.bad;
+          try {
+            L.bad = 0; newLeg(n);
+            const before = JSON.stringify(road.limits), signs = JSON.stringify(road.signs.filter(s => s.kind === 'raja'));
+            L.bad = count; newLeg(n);
+            out.push({ n, bad:road.bad.length, same:before === JSON.stringify(road.limits),
+              sameSigns:signs === JSON.stringify(road.signs.filter(s => s.kind === 'raja')),
+              warnings:road.signs.filter(s => s.kind === 'kuoppa').length });
+          } finally { L.bad = count; }
+        }
+      } finally { roadLeg = original; } return out; }""")
+    assert all(x["bad"] > 0 and x["warnings"] == x["bad"] and x["same"] and x["sameSigns"] for x in r), r
+    assert page.errors == []
+
+
+def test_potholes_still_advise_slowing_down_and_damage_fast_driving(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { HOLD = true; maxLeg = 11; newLeg(3);
+      let h = road.holes[0]; P.s = h.s; P.lat = LANE; h.lat = LANE - 0.75; P.v = 50 / KMH; holes();
+      const safe = { points, damage:P.damage, hits:tally.kuopat, messages:msgs.map(m => m.text) };
+      newLeg(3);
+      for (const h of road.holes.slice(0, 4)) { P.s = h.s; P.lat = LANE; h.lat = LANE - 0.75; P.v = 80 / KMH; holes(); }
+      return { safe, mode, why:crashWhy, damage:P.damage, hits:tally.kuopat }; }""")
+    assert r["safe"]["points"] == 0 and r["safe"]["damage"] == 0 and r["safe"]["hits"] == 0, r
+    assert "Kuoppia: hidasta alle 50 km/h" in r["safe"]["messages"], r
+    assert r["mode"] == "crash" and r["why"] == "Rengas puhkesi kuoppaan." and r["damage"] == 4 and r["hits"] == 4, r
     assert page.errors == []
 
 
@@ -456,8 +493,8 @@ def test_police_cars_and_checks_are_on_the_legs_as_planned(site, context):
         assert len(r["cops"]) == [0, 1, 1, 2, 2, 2, 3, 3][n - 1], (n, r)
         assert r["checks"] == (1 if n >= 3 else 0), (n, r)
         if r["checks"]:
-            # On a pothole stretch, under its 50 limit, with a shoulder widened for the police car.
-            assert r["onBad"] and r["zone"][0] == 50 and r["zone"][1] == 50, (n, r)
+            # Potholes no longer set a 50 limit; the officer still has a widened shoulder.
+            assert r["onBad"] and all(v > 50 for v in r["zone"][:2]), (n, r)
             assert r["zone"][2] > 6 and r["signs"] == 1 and not r["near"], (n, r)
     assert page.errors == []
 

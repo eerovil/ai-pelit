@@ -117,8 +117,8 @@
     {
       "n": 17,
       "date": "2026-11-08",
-      "note": "Osuuksien tähdet määräytyvät ajopisteistä, aikabonus vaikuttaa vain tuloslistan pisteisiin, ja tähtien pisterajat näkyvät pelissä.",
-      "request": "Tähtien pitää riippua pisteistä. Ajan pitää vaikuttaa vain parhaiden pisteiden tavoitteluun.",
+      "note": "Tähdet ajopisteistä, aikabonus vain tuloslistaan, ja kuoppakohdissa tien oma nopeusrajoitus säilyy.",
+      "request": "Tähtien pitää riippua pisteistä. Ajan pitää vaikuttaa vain parhaiden pisteiden tavoitteluun. Poista kuoppakohtien automaattinen 50 km/h nopeusrajoitus.",
       "issue": "eerovil/ai-pelit#440"
     }
   ]
