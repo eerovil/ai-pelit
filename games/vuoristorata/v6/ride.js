@@ -734,9 +734,10 @@ function guestState(m) {
       return;
     }
     k.at = a[3] ?? k.at;
-    k.handbackAck = !!a[4];
-    // Back after a reload, or the computer rode for me while I was away: carry on from there.
-    if (a[10] || (first && m.ph === 'run' && a[0] > game.car.s + 5) || (a[4] && game.mode !== 'done')) {
+    // A connected phone owns and advances its own crash clock. It accepts the host's copy once
+    // after a reload, or once when taking its car back from the computer, never on ordinary echoes.
+    const restore = (first && m.ph === 'run') || (a[4] && !k.handbackAck);
+    if (restore && game.mode !== 'done') {
       game.car.s = a[0]; game.car.v = a[10] ? a[1] : Math.max(5, a[1]); game.car.t = m.clock;
       game.car.energy = a[6] ?? 1; game.car.took = new Set(a[7] || []);
       game.car.over = a[8] || 0; game.car.check = a[9] ?? a[0];
@@ -746,6 +747,7 @@ function guestState(m) {
         quiet();
       } else if (game.mode === 'crash') game.mode = 'ride';
     }
+    k.handbackAck = !!a[4];
     if (a[2] !== null && game.car.fin === null) {
       game.car.s = Math.max(game.car.s, game.track.finish);
       // The computer took me to the finish: my place stands, but it is not my time.

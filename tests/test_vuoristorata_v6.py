@@ -330,6 +330,39 @@ def test_three_phones_race_the_same_track_and_the_first_in_wins(site, browser):
             c.close()
 
 
+def test_a_connected_guest_owns_its_crash_clock_despite_delayed_host_echoes(site, browser):
+    relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
+    guest = guests[0]
+    try:
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        guest.evaluate("""() => {
+            game.car.s = 120; game.car.v = 12; game.car.check = 80; crash('air');
+        }""")
+        host.wait_for_function("net.cars.find(k => k.kind === 'net').crash?.[0] > 1.2", timeout=5000)
+        delayed = host.evaluate("hostState()")
+        guest.wait_for_function("game.crashT > .45", timeout=3000)
+        before = guest.evaluate("game.crashT")
+        guest.evaluate("m => guestState(m)", delayed)
+        assert guest.evaluate("game.mode") == "crash"
+        assert guest.evaluate("game.crashT") >= before - .02
+
+        guest.wait_for_function("game.mode === 'ride'", timeout=4000)
+        assert guest.evaluate("game.car.s") < 90
+        guest.evaluate("auto = true")
+        start = guest.evaluate("game.car.s")
+        # The same old crash echo cannot put the connected driver back into recovery.
+        guest.evaluate("m => guestState(m)", delayed)
+        guest.wait_for_timeout(300)
+        assert guest.evaluate("game.mode") == "ride"
+        guest.wait_for_function("s => game.car.s > s + 1", arg=start, timeout=4000)
+        assert guest.errors == [] and host.errors == []
+    finally:
+        for c in ctxs:
+            c.close()
+
+
 def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
     relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
     guest = guests[0]
