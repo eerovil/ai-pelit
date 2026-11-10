@@ -20,6 +20,7 @@ const ENERGY_BACK = 0.05;     // regained per second
 const LIFT_OFF = -0.4;        // felt vertical g below which the car leaves the track
 const SIDE_MAX = 1.35;        // felt sideways g above which it tips over
 const GRACE = 0.25;           // seconds over a limit before it goes
+const CRASH_WAIT = 1.6;       // the clock keeps running this long before recovery
 const SIGN_AHEAD = 45;        // metres from a sign to the place it warns of
 const KEY = 'ai-pelit:vuoristorata:';
 const $ = id => document.getElementById(id);
@@ -367,6 +368,7 @@ function starsFor(track, t) { return t <= track.ideal * 1.08 ? 3 : t <= track.id
 
 function fmtTime(t) {
   if (t === null || t === undefined) return '–';
+  t = Math.round(t * 10) / 10;
   const m = Math.floor(t / 60), s = t - m * 60;
   return m + '.' + (s < 10 ? '0' : '') + s.toFixed(1);
 }
@@ -448,7 +450,7 @@ function step(dt) {
   } else if (game.mode === 'crash') {
     game.crashT += dt;
     car.t += dt;   // the clock runs on while the car is put back
-    if (game.crashT > 1.6) { respawn(game.track, car); game.mode = 'ride'; }
+    if (game.crashT > CRASH_WAIT) { respawn(game.track, car); game.mode = 'ride'; }
   } else if (game.mode === 'done') {
     rideStep(game.track, car, dt);
   }
@@ -638,26 +640,30 @@ const LATE = 40;
 let net = null, lastEnd = null;
 const meK = () => net.cars.find(k => k.kind === 'me');
 const r2 = n => Math.round(n * 100) / 100;
+const crashState = () => game.mode === 'crash'
+  ? [r2(Math.max(0, CRASH_WAIT - game.crashT)), game.crashWhy,
+    r2(game.crashFrom?.s ?? game.car.s), r2(game.crashFrom?.v ?? game.car.v)]
+  : null;
 
 function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'cd', sendT: 0, clock: 0, firstFin: null, res: null, order: '',
     soloLevel: net ? net.soloLevel : game.level, heard: false,
     cars: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
-      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4 })) };
+      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null })) };
   show(null);
   if (s.host && !s.over) { net.cfg = { level: game.level }; netLevel(); startRide(); }
   else { game.mode = 'netwait'; $('odota').classList.remove('hidden'); document.body.classList.add('riding'); }
   window.dispatchEvent(new Event('rata'));
 }
 function netLevel() { setLevel(net.cfg.level, true); }
-function copyCarState(k, car) {
+function copyCarState(k, car, crash) {
   k.s = car.s; k.v = car.v; k.energy = car.energy; k.took = [...car.took];
-  k.over = car.over; k.check = car.check;
+  k.over = car.over; k.check = car.check; k.crash = crash;
 }
 const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0,
-  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s)];
+  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0];
 function synced(k) {
-  if (k.kind === 'me') copyCarState(k, game.car);
+  if (k.kind === 'me') copyCarState(k, game.car, crashState());
   return k;
 }
 function hostState() {
@@ -674,12 +680,20 @@ function netTick(dt) {
     if (k.kind === 'me') continue;
     if (k.kind === 'cpu' && RM.isHost) {
       if (net.phase === 'run' && k.fin === null) {
-        const e = botStep(game.track, k.car, dt, 0.97);
-        if (e && e.what === 'derail') respawn(game.track, k.car);
-        copyCarState(k, k.car);
+        let rideDt = dt;
+        if (k.crash) {
+          const waited = Math.min(rideDt, Math.max(0, k.crash[0]));
+          k.crash[0] -= waited; k.car.t += waited; rideDt -= waited;
+          if (k.crash[0] <= 1e-6) { respawn(game.track, k.car); k.crash = null; }
+        }
+        if (!k.crash && rideDt > 1e-6) {
+          const e = botStep(game.track, k.car, rideDt, 0.97);
+          if (e && e.what === 'derail') k.crash = [CRASH_WAIT, e.why, k.car.s, k.car.v];
+        }
+        copyCarState(k, k.car, k.crash);
         if (k.car.fin !== null) { k.fin = r2(k.car.fin); k.cpuFin = true; arrive(k); }
       }
-    } else if (net.phase === 'run' && k.fin === null) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
+    } else if (net.phase === 'run' && k.fin === null && !k.crash) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
   }
   // The places, for the HUD: finished by their time on the race clock, the rest by how far they are.
   const list = net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s));
@@ -716,15 +730,21 @@ function guestState(m) {
     if (!k) return;
     if (k.kind !== 'me') {
       k.s = a[0]; k.v = a[1]; k.fin = a[2]; k.at = a[3];
-      k.energy = a[6] ?? 1; k.took = a[7] || []; k.over = a[8] || 0; k.check = a[9] ?? a[0];
+      k.energy = a[6] ?? 1; k.took = a[7] || []; k.over = a[8] || 0; k.check = a[9] ?? a[0]; k.crash = a[10] || null;
       return;
     }
     k.at = a[3] ?? k.at;
+    k.handbackAck = !!a[4];
     // Back after a reload, or the computer rode for me while I was away: carry on from there.
-    if ((first && m.ph === 'run' && a[0] > game.car.s + 5) || (a[4] && game.mode === 'ride')) {
-      game.car.s = a[0]; game.car.v = Math.max(5, a[1]); game.car.t = m.clock;
+    if (a[10] || (first && m.ph === 'run' && a[0] > game.car.s + 5) || (a[4] && game.mode !== 'done')) {
+      game.car.s = a[0]; game.car.v = a[10] ? a[1] : Math.max(5, a[1]); game.car.t = m.clock;
       game.car.energy = a[6] ?? 1; game.car.took = new Set(a[7] || []);
       game.car.over = a[8] || 0; game.car.check = a[9] ?? a[0];
+      if (a[10]) {
+        game.mode = 'crash'; game.crashT = clamp(CRASH_WAIT - a[10][0], 0, CRASH_WAIT);
+        game.crashWhy = a[10][1] || 'air'; game.crashFrom = { s: a[10][2] ?? a[0], v: a[10][3] ?? a[1] };
+        quiet();
+      } else if (game.mode === 'crash') game.mode = 'ride';
     }
     if (a[2] !== null && game.car.fin === null) {
       game.car.s = Math.max(game.car.s, game.track.finish);
@@ -816,13 +836,16 @@ if (RM) {
     if (RM.isHost) {
       const k = net.cars.find(o => o.id === from);
       if (!k || k.kind !== 'net' || m.t !== 'p') return;
-      // Given back by the computer: the phone's own car counts again once it has caught up.
+      // Given back by the computer: ignore messages sent before the phone restored the accepted
+      // snapshot, then let its own car count again once it has caught up.
+      if (k.handback && !m.c[11]) return;
       if (k.handback && m.c[0] < k.s - 1) return;
       k.handback = false;
       // A finish the host has heard stands, whatever a reloaded phone sends after it.
       if (k.fin === null) {
         k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2];
         k.energy = m.c[6] ?? 1; k.took = m.c[7] || []; k.over = m.c[8] || 0; k.check = m.c[9] ?? m.c[0];
+        k.crash = m.c[10] || null;
       }
       arrive(k);
       return;

@@ -184,20 +184,40 @@ def test_the_buttons_boost_and_brake_while_held(page):
     page.click("#aja")
     page.wait_for_function("game.mode === 'ride'", timeout=8000)
     page.evaluate("game.car.s = 120; game.car.v = 10")
+    pointer = 5
     for sel, flag in [("#vauhti", "boost"), ("#jarru", "brake")]:
         box = page.locator(sel).bounding_box()
         x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
-        page.dispatch_event(sel, "pointerdown", {"pointerId": 5, "clientX": x, "clientY": y, "isPrimary": True})
-        page.wait_for_function(f"game.car.{flag} === true", timeout=2000)
-        page.dispatch_event(sel, "pointercancel", {"pointerId": 5, "clientX": x, "clientY": y, "isPrimary": True})
-        page.wait_for_function(f"game.car.{flag} === false", timeout=2000)
+        for event in ["pointerup", "pointercancel", "lostpointercapture"]:
+            pointer += 1
+            page.dispatch_event(sel, "pointerdown", {"pointerId": pointer, "clientX": x, "clientY": y,
+                                                       "isPrimary": True})
+            page.wait_for_function(f"game.car.{flag} === true", timeout=2000)
+            page.dispatch_event(sel, event, {"pointerId": pointer, "clientX": x, "clientY": y,
+                                              "isPrimary": True})
+            page.wait_for_function(f"game.car.{flag} === false", timeout=2000)
     # Braking wins if both thumbs are down, and losing focus releases both controls.
-    page.dispatch_event("#vauhti", "pointerdown", {"pointerId": 6, "isPrimary": True})
-    page.dispatch_event("#jarru", "pointerdown", {"pointerId": 7, "isPrimary": False})
+    page.dispatch_event("#vauhti", "pointerdown", {"pointerId": 20, "isPrimary": True})
+    page.dispatch_event("#jarru", "pointerdown", {"pointerId": 21, "isPrimary": False})
     page.evaluate("readInput(game.car)")
     assert page.evaluate("[game.car.boost, game.car.brake]") == [False, True]
     page.evaluate("dispatchEvent(new Event('blur')); readInput(game.car)")
     assert page.evaluate("[game.car.boost, game.car.brake, held.boost.size, held.brake.size]") == [False, False, 0, 0]
+    # Moving the game to a background tab releases both thumbs too.
+    page.dispatch_event("#vauhti", "pointerdown", {"pointerId": 22, "isPrimary": True})
+    page.dispatch_event("#jarru", "pointerdown", {"pointerId": 23, "isPrimary": False})
+    page.evaluate("""() => {
+        Object.defineProperty(document, 'hidden', {configurable: true, value: true});
+        document.dispatchEvent(new Event('visibilitychange'));
+        readInput(game.car);
+        Object.defineProperty(document, 'hidden', {configurable: true, value: false});
+    }""")
+    assert page.evaluate("[game.car.boost, game.car.brake, held.boost.size, held.brake.size]") == [False, False, 0, 0]
+
+
+@pytest.mark.parametrize("seconds, shown", [(9.96, "0.10.0"), (59.96, "1.00.0"), (119.96, "2.00.0")])
+def test_time_is_rounded_before_it_is_split_into_minutes(page, seconds, shown):
+    assert page.evaluate("seconds => fmtTime(seconds)", seconds) == shown
 
 
 def test_saves_are_kept_and_the_level_can_be_picked(site, browser):
@@ -343,6 +363,49 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
         host.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
         assert host.locator("#tulokset li").count() == 2
         assert host.errors == []
+    finally:
+        for c in ctxs:
+            c.close()
+
+
+def test_a_derailment_penalty_survives_computer_takeover_and_handback(site, browser):
+    relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
+    guest = guests[0]
+    try:
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        guest.evaluate("""() => {
+            game.car.s = 120; game.car.v = 12; game.car.check = 80;
+            crash('air'); game.crashT = .05;
+        }""")
+        host.wait_for_function("""() => { const k = net.cars.find(k => k.kind === 'net');
+            return k.crash && k.crash[0] > 1.3 && k.check === 80; }""", timeout=8000)
+        relay.drop(guest)
+        host.wait_for_function("AiPelitRooms.paused", timeout=8000)
+        host.click("#aipr-goOn")
+        host.wait_for_function("net.cars.some(k => k.kind === 'cpu' && k.crash && k.crash[0] > .8)", timeout=5000)
+        held = host.evaluate("""() => { const k = net.cars.find(k => k.kind === 'cpu');
+            return {s:k.car.s, left:k.crash[0]}; }""")
+        host.wait_for_function("left => net.cars.find(k => k.kind === 'cpu').crash[0] < left - .2",
+                               arg=held["left"], timeout=5000)
+        assert host.evaluate("s => Math.abs(net.cars.find(k => k.kind === 'cpu').car.s - s)", held["s"]) < 0.1
+
+        # Returning during the penalty gets the accepted crash, not a fresh moving car.
+        relay.back(guest)
+        host.wait_for_function("net.cars.some(k => k.kind === 'net' && !k.handback)", timeout=8000)
+        guest.wait_for_function("AiPelitRooms.connected && game.mode === 'crash'", timeout=8000)
+        restored = guest.evaluate("""() => ({left:CRASH_WAIT - game.crashT, s:game.car.s,
+            check:game.car.check, from:game.crashFrom.s})""")
+        assert restored["left"] > 0.35
+        assert restored["check"] == pytest.approx(80, abs=.01)
+        assert restored["from"] == pytest.approx(120, abs=.05)
+        guest.wait_for_timeout(250)
+        assert guest.evaluate("game.mode") == "crash"
+        assert guest.evaluate("game.car.s") == pytest.approx(restored["s"], abs=.05)
+        guest.wait_for_function("game.mode === 'ride'", timeout=5000)
+        assert guest.evaluate("game.car.s") < 90
+        assert guest.errors == [] and host.errors == []
     finally:
         for c in ctxs:
             c.close()

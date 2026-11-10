@@ -61,5 +61,5 @@ flowchart TD
 - **Pelaa kavereiden kanssa: isäntä valitsee tason**: `public/rooms.js` remains the room entry and the host still chooses the level.
 - **Jokainen ajaa samaa rataa omilla ohjaimillaan**: `netStart()`, `netTick()` and room snapshots restore v4-style position, speed and finish-time synchronization while each connected phone drives locally.
 - **HUD näyttää kilpailijoiden järjestyksen**: unfinished racers are ordered by distance and finished racers by time, using the compact room HUD.
-- **Poissa olevan junaa ajaa tietokone**: after continue-without, `botStep()` safely drives that member from the accepted position. Returning or reloading restores the accepted race state without creating a second result.
+- **Poissa olevan junaa ajaa tietokone**: after continue-without, `botStep()` safely drives that member from the accepted position. The room snapshot also carries an active derailment and its remaining 1.6-second penalty, so computer takeover, hand-back or reload cannot skip recovery; returning still creates no second result.
 - **Nopein aika voittaa**: room results sort by finish time; unfinished racers show no time. The round ends when everyone finishes or 40 seconds after the first finish.
