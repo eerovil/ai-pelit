@@ -259,7 +259,7 @@
     }
     var prefix = g && g.boardPrefix || 'taso-';
     // A no. 1 kept from a list the shelf no longer shows is not shown as this one's. This also
-    // hides Vuoristorata v1-v4's cached `taso-N` time after v5 switched to `elamys-N` points.
+    // hides Vuoristorata v5's cached `elamys-N` points after v6 returned to `taso-N` times.
     if (g && g.boards ? !t.board || !t.board.startsWith(prefix) : t.board && t.board !== 'main') return '';
     return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(prefix.length) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
   }
