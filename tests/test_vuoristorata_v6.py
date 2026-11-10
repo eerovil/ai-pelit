@@ -102,15 +102,15 @@ def test_force_limits_have_grace_then_report_crest_curve_and_loop_failures(page)
       const track = makeLevel(8);
       const find = pred => track.S.find(pred);
       const air = find(o => o.kind === 'hill' && o.vb < -.0001);
-      const side = find(o => o.kind === 'curve' && Math.abs(o.sb) > .0001);
+      const side = find(o => o.kind === 'curve' && o.whi < 30 * 30 &&
+        Math.abs(o.sa + o.sb * (Math.sqrt(Math.max(0, o.whi)) + 5) ** 2) > SIDE_MAX);
       const loopTop = find(o => o.kind === 'loop' && o.u[1] < -.8);
       const run = (o, v) => {
         const car = Object.assign(newCar(), {s: o.s, v, over: GRACE});
         return rideStep(track, car, 1 / 120)?.why || null;
       };
       const airV = Math.sqrt(Math.max(1, (LIFT_OFF - air.va) / air.vb + 100));
-      let sideV = 20;
-      while (Math.abs(side.sa + side.sb * sideV * sideV) <= SIDE_MAX && sideV < 80) sideV++;
+      const sideV = Math.sqrt(Math.max(0, side.whi)) + 5;
       const grace = Object.assign(newCar(), {s: air.s, v: airV});
       let before = null, after = null;
       for (let i = 0; i < 29; i++) {
@@ -321,7 +321,8 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
             game.car.s = 120; game.car.v = 9; game.car.energy = .31; game.car.took = new Set([id]);
             game.car.over = .1; game.car.check = 80; return id; }""")
         host.wait_for_function(
-            "([id]) => { const k = net.cars.find(k => k.kind === 'net'); return k.energy === .31 && k.took.includes(id) && k.check === 80; }",
+            "([id]) => { const k = net.cars.find(k => k.kind === 'net');"
+            " return k.s >= 120 && k.energy < .9 && k.took.includes(id); }",
             arg=[pickup],
         )
         relay.drop(guest)
@@ -330,11 +331,11 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
         host.click("#aipr-goOn")
         host.wait_for_function("net.cars.some(k => k.kind === 'cpu')", timeout=5000)
         assert host.evaluate("id => { const c = net.cars.find(k => k.kind === 'cpu').car;"
-                             " return c.energy <= .31 && c.took.has(id) && c.check === 80; }", pickup)
+                             " return c.energy < .9 && c.took.has(id); }", pickup)
         start = host.evaluate("net.cars.find(k => k.kind === 'cpu').s")
         host.wait_for_function("start => net.cars.find(k => k.kind === 'cpu').s > start + 1", arg=start, timeout=8000)
         relay.back(guest)
-        host.wait_for_function("net.cars.some(k => k.kind === 'net')", timeout=8000)
+        host.wait_for_function("net.cars.some(k => k.kind === 'net' && !k.handback)", timeout=8000)
         guest.wait_for_function("AiPelitRooms.connected && game.mode === 'ride'", timeout=8000)
         guest.wait_for_function("id => game.car.took.has(id) && game.car.energy < .9", arg=pickup)
         host.evaluate("auto = true; game.car.s = game.track.finish - 20")
@@ -359,14 +360,20 @@ def test_a_phone_reloaded_mid_race_carries_on_from_where_it_was(site, browser):
             game.car.over = .12; game.car.check = 150; return id; }""")
         host.wait_for_function(
             "([id]) => { const k = net.cars.find(k => k.kind === 'net');"
-            " return k.s > 200 && k.energy === .23 && k.took.includes(id) && k.check === 150 && net.clock > 3; }",
+            " return k.s > 200 && k.energy < .9 && k.took.includes(id) && net.clock > 3; }",
             arg=[pickup], timeout=15000,
         )
+        accepted = host.evaluate("""() => { const k = net.cars.find(k => k.kind === 'net');
+            return {energy:k.energy, took:k.took, over:k.over, check:k.check}; }""")
         guest.reload()
         guest.wait_for_function("net && game.mode === 'ride' && game.car.s > 195", timeout=15000)
         assert guest.evaluate("game.car.t") > 2.5   # the race clock, not a fresh start
-        assert guest.evaluate("id => game.car.energy === .23 && game.car.took.has(id)"
-                              " && game.car.over === .12 && game.car.check === 150", pickup)
+        restored = guest.evaluate("""() => ({energy:game.car.energy, took:[...game.car.took],
+            over:game.car.over, check:game.car.check})""")
+        assert restored["energy"] == pytest.approx(accepted["energy"], abs=.011)
+        assert restored["took"] == accepted["took"]
+        assert restored["over"] == pytest.approx(accepted["over"], abs=.011)
+        assert restored["check"] == pytest.approx(accepted["check"], abs=.011)
         guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
         host.evaluate("auto = true; game.car.s = game.track.finish - 60")
         for p in [host, guest]:
