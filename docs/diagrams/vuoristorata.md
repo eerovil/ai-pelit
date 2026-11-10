@@ -19,7 +19,7 @@ flowchart TD
   G -- Kyllä --> J[Aika, tähdet ja ennätys]
   J --> K[Tallennus, seuraava taso ja nopeimman ajan tuloslista]
   K --> L[Uudestaan, Seuraava taso tai Valikkoon]
-  D --> M[Hiljaiset äänet, vauhdin FOV ja jarrutärinä]
+  D --> M[Hiljaiset äänet, vauhdin FOV ja varoitustärinä]
   A --> N[Pelaa kavereiden kanssa: isäntä valitsee tason]
   N --> O[Jokainen ajaa samaa rataa omilla ohjaimillaan]
   O --> P[HUD näyttää kilpailijoiden järjestyksen]
@@ -57,7 +57,7 @@ flowchart TD
 - **Paluu viimeiseen turvalliseen kohtaan**: `rideStep()` records `car.check` outside danger zones and `respawn()` returns there after 1.6 seconds with rolling speed and at least half boost energy.
 - **Aika, tähdet ja ennätys**: `finishRide()` compares elapsed time with the computer benchmark, awards one to three stars, and shows the fastest saved time. Finishing unlocks the next level.
 - **Tallennus, seuraava taso ja nopeimman ajan tuloslista**: v6 records `ajat`, reuses `tahdet`, and submits seconds to low-is-better `taso-N` boards. Version 5 `pisteet` and `elamys-N` results remain stored as history and are never reinterpreted as times.
-- **Hiljaiset äänet, vauhdin FOV ja jarrutärinä**: the current quiet `aanet-5` integration keeps rolling, chain, drop, brake, pickup, collision, start and finish feedback. Speed still controls camera field of view; warning shake returns near a force limit.
+- **Hiljaiset äänet, vauhdin FOV ja varoitustärinä**: the current quiet `aanet-5` integration keeps rolling, chain, drop, brake, pickup, collision, start and finish feedback. Speed still controls camera field of view; warning shake returns near a force limit.
 - **Pelaa kavereiden kanssa: isäntä valitsee tason**: `public/rooms.js` remains the room entry and the host still chooses the level.
 - **Jokainen ajaa samaa rataa omilla ohjaimillaan**: `netStart()`, `netTick()` and room snapshots restore v4-style position, speed and finish-time synchronization while each connected phone drives locally.
 - **HUD näyttää kilpailijoiden järjestyksen**: unfinished racers are ordered by distance and finished racers by time, using the compact room HUD.

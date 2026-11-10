@@ -97,6 +97,35 @@ def test_every_sign_tells_the_truth(page):
     assert bad[1] == []
 
 
+def test_force_limits_have_grace_then_report_crest_curve_and_loop_failures(page):
+    failures = page.evaluate("""() => {
+      const track = makeLevel(8);
+      const find = pred => track.S.find(pred);
+      const air = find(o => o.kind === 'hill' && o.vb < -.0001);
+      const side = find(o => o.kind === 'curve' && Math.abs(o.sb) > .0001);
+      const loopTop = find(o => o.kind === 'loop' && o.u[1] < -.8);
+      const run = (o, v) => {
+        const car = Object.assign(newCar(), {s: o.s, v, over: GRACE});
+        return rideStep(track, car, 1 / 120)?.why || null;
+      };
+      const airV = Math.sqrt(Math.max(1, (LIFT_OFF - air.va) / air.vb + 100));
+      let sideV = 20;
+      while (Math.abs(side.sa + side.sb * sideV * sideV) <= SIDE_MAX && sideV < 80) sideV++;
+      const grace = Object.assign(newCar(), {s: air.s, v: airV});
+      let before = null, after = null;
+      for (let i = 0; i < 29; i++) {
+        grace.s = air.s; grace.v = airV; before = rideStep(track, grace, 1 / 120);
+      }
+      for (let i = 0; i < 2 && !after; i++) {
+        grace.s = air.s; grace.v = airV; after = rideStep(track, grace, 1 / 120);
+      }
+      return {air: run(air, airV), side: run(side, sideV), loop: run(loopTop, 0),
+              graceBefore: before?.what || null, graceAfter: after?.what || null};
+    }""")
+    assert failures == {"air": "air", "side": "side", "loop": "loop",
+                        "graceBefore": None, "graceAfter": "derail"}
+
+
 def test_loops_come_from_level_two_and_signs_warn_of_them(page):
     kinds = page.evaluate("[1, 2, 3, 4].map(l => [...new Set(makeLevel(l).pieces.map(p => p.kind))])")
     assert "loop" not in kinds[0]
@@ -117,12 +146,16 @@ def test_the_reckless_and_the_lazy_do_not_get_round(page):
 def test_a_derail_puts_the_car_back_before_the_place_it_flew_off(page):
     page.click("#aja")
     page.wait_for_function("game.mode === 'ride'", timeout=8000)
-    s0 = page.evaluate("(() => { const z = game.track.zones.find(z => z.max && z.s0 > 150); game.car.check = z.s0 - 60;"
-                       " game.car.s = z.s0 - 1; game.car.v = (z.max + 45) / 3.6; return z.s0; })()")
+    s0, check, t0 = page.evaluate("(() => { const z = game.track.zones.find(z => z.max && z.s0 > 150); game.car.check = z.s0 - 60;"
+                                  " game.car.energy = .2; game.car.s = z.s0 - 1; game.car.v = (z.max + 45) / 3.6;"
+                                  " return [z.s0, game.car.check, game.car.t]; })()")
     page.wait_for_function("game.mode === 'crash'", timeout=5000)
     assert page.locator("#toast").inner_text().startswith("Liian")
     page.wait_for_function("game.mode === 'ride'", timeout=8000)
     assert page.evaluate("game.car.s") < s0
+    assert page.evaluate("game.car.s") == pytest.approx(check, abs=2)
+    assert page.evaluate("game.car.t") >= t0 + 1.5
+    assert page.evaluate("game.car.energy") >= .5
     assert page.errors == []
 
 
@@ -284,13 +317,28 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
         host.click("#aipr-start")
         for p in [host, guest]:
             p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        pickup = guest.evaluate("""() => { const id = game.track.pickups[0].id;
+            game.car.s = 120; game.car.v = 9; game.car.energy = .31; game.car.took = new Set([id]);
+            game.car.over = .1; game.car.check = 80; return id; }""")
+        host.wait_for_function(
+            "([id]) => { const k = net.cars.find(k => k.kind === 'net'); return k.energy === .31 && k.took.includes(id) && k.check === 80; }",
+            arg=[pickup],
+        )
         relay.drop(guest)
         host.wait_for_function("AiPelitRooms.paused", timeout=8000)
         # The host carries on without Aino: the computer takes her car to the finish.
         host.click("#aipr-goOn")
         host.wait_for_function("net.cars.some(k => k.kind === 'cpu')", timeout=5000)
-        host.evaluate("net.cars.find(k => k.kind === 'cpu').car.s = game.track.finish - 20")
+        assert host.evaluate("id => { const c = net.cars.find(k => k.kind === 'cpu').car;"
+                             " return c.energy <= .31 && c.took.has(id) && c.check === 80; }", pickup)
+        start = host.evaluate("net.cars.find(k => k.kind === 'cpu').s")
+        host.wait_for_function("start => net.cars.find(k => k.kind === 'cpu').s > start + 1", arg=start, timeout=8000)
+        relay.back(guest)
+        host.wait_for_function("net.cars.some(k => k.kind === 'net')", timeout=8000)
+        guest.wait_for_function("AiPelitRooms.connected && game.mode === 'ride'", timeout=8000)
+        guest.wait_for_function("id => game.car.took.has(id) && game.car.energy < .9", arg=pickup)
         host.evaluate("auto = true; game.car.s = game.track.finish - 20")
+        guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
         host.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
         assert host.locator("#tulokset li").count() == 2
         assert host.errors == []
@@ -306,11 +354,19 @@ def test_a_phone_reloaded_mid_race_carries_on_from_where_it_was(site, browser):
         host.click("#aipr-start")
         for p in [host, guest]:
             p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
-        guest.evaluate("auto = true; game.car.s = 200; game.car.check = 200")
-        host.wait_for_function("net.cars.find(k => k.kind === 'net').s > 200 && net.clock > 3", timeout=15000)
+        pickup = guest.evaluate("""() => { const id = game.track.pickups[0].id;
+            auto = true; game.car.s = 200; game.car.energy = .23; game.car.took = new Set([id]);
+            game.car.over = .12; game.car.check = 150; return id; }""")
+        host.wait_for_function(
+            "([id]) => { const k = net.cars.find(k => k.kind === 'net');"
+            " return k.s > 200 && k.energy === .23 && k.took.includes(id) && k.check === 150 && net.clock > 3; }",
+            arg=[pickup], timeout=15000,
+        )
         guest.reload()
         guest.wait_for_function("net && game.mode === 'ride' && game.car.s > 195", timeout=15000)
         assert guest.evaluate("game.car.t") > 2.5   # the race clock, not a fresh start
+        assert guest.evaluate("id => game.car.energy === .23 && game.car.took.has(id)"
+                              " && game.car.over === .12 && game.car.check === 150", pickup)
         guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
         host.evaluate("auto = true; game.car.s = game.track.finish - 60")
         for p in [host, guest]:
@@ -372,16 +428,49 @@ def test_the_faster_ride_wins_even_when_its_finish_is_heard_later(site, browser)
             c.close()
 
 
-def test_a_finished_phone_reloaded_while_others_ride_keeps_its_time_and_place(site, browser):
+def test_room_ends_forty_seconds_after_the_first_finish(site, browser):
     relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
     guest = guests[0]
     try:
         host.click("#aipr-start")
         for p in [host, guest]:
             p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
+        host.evaluate("auto = true; game.car.s = game.track.finish - 5")
+        host.wait_for_function("game.car.fin !== null && net.firstFin !== null", timeout=10000)
+        host.evaluate("net.clock = net.firstFin + LATE + .1; netTick(0)")
+        for p in [host, guest]:
+            p.wait_for_selector("#loppu:not(.hidden)", timeout=10000)
+        assert host.locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
+        assert guest.locator("#aika").inner_text() == "Et ehtinyt maaliin"
+        assert "–" in guest.locator("#tulokset").inner_text()
+    finally:
+        for c in ctxs:
+            c.close()
+
+
+def test_a_finished_phone_reloaded_while_others_ride_keeps_its_time_and_place(site, browser):
+    relay, host, guests, ctxs = room_of(site, browser, ["Eero", "Aino"])
+    guest = guests[0]
+    try:
+        count_save = """() => {
+          window.name = window.name || '0';
+          if (window.__countingRideSave) return;
+          window.__countingRideSave = true;
+          const real = Storage.prototype.setItem;
+          Storage.prototype.setItem = function(k, v) {
+            if (k === 'ai-pelit:vuoristorata:ajat') window.name = String((+window.name || 0) + 1);
+            return real.call(this, k, v);
+          };
+        }"""
+        guest.evaluate(count_save)
+        guest.add_init_script(count_save)
+        host.click("#aipr-start")
+        for p in [host, guest]:
+            p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
         guest.evaluate("auto = true; game.car.s = game.track.finish - 5")
         guest.wait_for_function("game.car.fin !== null", timeout=10000)
         fin = guest.evaluate("game.car.fin")
+        assert guest.evaluate("window.name") == "1"
         host.wait_for_function("net.cars.find(k => k.kind === 'net').fin !== null", timeout=8000)
         guest.reload()
         guest.wait_for_function("net && game.car.fin !== null", timeout=15000)
@@ -393,6 +482,7 @@ def test_a_finished_phone_reloaded_while_others_ride_keeps_its_time_and_place(si
             p.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
         assert guest.locator("#loppu-otsikko").inner_text() == "Voitit kisan!"
         assert host.locator("#loppu-otsikko").inner_text() == "2. sija"
+        assert guest.evaluate("window.name") == "1"
         assert guest.errors == []
     finally:
         for c in ctxs:
