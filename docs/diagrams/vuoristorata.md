@@ -48,7 +48,7 @@ flowchart TD
 
 ## Boxes
 
-- **Valikko: taso, paras aika, Aja!**: planned `games/vuoristorata/v6/index.html` and `menuText()` in `ride.js` show the selected unlocked level, its fastest saved time and stars. Existing `taso`, `valittu`, `ajat` and `tahdet` saves remain compatible.
+- **Valikko: taso, paras aika, Aja!**: `games/vuoristorata/v6/index.html` and `menuText()` in `ride.js` show the selected unlocked level, its fastest saved time and stars. Existing `taso`, `valittu`, `ajat` and `tahdet` saves remain compatible.
 - **Siemenestä rakennetaan rata, nopeusrajat ja energiat**: `levelPlan()`, `buildTrack()`, `zones()` and `makeLevel()` restore the v4 course calculation, signs, boost-energy pickups and computer benchmark while retaining the same seeded tracks.
 - **Pelaaja pitää Vauhtia tai Jarrua**: two large hold controls feed `readInput()` and `rideStep()`. Pointer-up, pointer-cancel and lost capture always release their control; simultaneous touches remain supported.
 - **HUD näyttää nopeuden ja seuraavan minimi- tai maksimirajan**: `hud()` shows km/h, the next sign and its distance. The speed turns red when it is wrong near the warned section.

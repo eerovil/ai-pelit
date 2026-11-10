@@ -738,7 +738,7 @@ function guestState(m) {
     // after a reload, or once when taking its car back from the computer, never on ordinary echoes.
     const restore = (first && m.ph === 'run') || (a[4] && !k.handbackAck);
     if (restore && game.mode !== 'done') {
-      game.car.s = a[0]; game.car.v = a[10] ? a[1] : Math.max(5, a[1]); game.car.t = m.clock;
+      game.car.s = a[0]; game.car.v = a[1]; game.car.t = m.clock;
       game.car.energy = a[6] ?? 1; game.car.took = new Set(a[7] || []);
       game.car.over = a[8] || 0; game.car.check = a[9] ?? a[0];
       if (a[10]) {
@@ -762,7 +762,7 @@ function guestState(m) {
 }
 function cpuTakes(k) {
   k.kind = 'cpu';
-  k.car = Object.assign(newCar(), { s: k.s, v: Math.max(5, k.v), t: net.clock, energy: k.energy ?? 1,
+  k.car = Object.assign(newCar(), { s: k.s, v: k.v, t: net.clock, energy: k.energy ?? 1,
     took: new Set(k.took || []), over: k.over || 0, check: k.check ?? k.s });
 }
 function standings() {

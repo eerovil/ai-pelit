@@ -371,26 +371,34 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
         for p in [host, guest]:
             p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
         pickup = guest.evaluate("""() => { const id = game.track.pickups[0].id;
-            game.car.s = 120; game.car.v = 9; game.car.energy = .31; game.car.took = new Set([id]);
+            game.car.s = 120; game.car.v = .8; game.car.energy = .31; game.car.took = new Set([id]);
             game.car.over = .1; game.car.check = 80; return id; }""")
         host.wait_for_function(
             "([id]) => { const k = net.cars.find(k => k.kind === 'net');"
-            " return k.s >= 120 && k.energy < .9 && k.took.includes(id); }",
+            " return k.s >= 120 && k.v > 0 && k.v < 2 && k.energy < .9 && k.took.includes(id); }",
             arg=[pickup],
         )
+        accepted_speed = host.evaluate("""() => { net.phase = 'hold';
+            return net.cars.find(k => k.kind === 'net').v; }""")
         relay.drop(guest)
         host.wait_for_function("AiPelitRooms.paused", timeout=8000)
         # The host carries on without Aino: the computer takes her car to the finish.
         host.click("#aipr-goOn")
         host.wait_for_function("net.cars.some(k => k.kind === 'cpu')", timeout=5000)
+        assert host.evaluate("net.cars.find(k => k.kind === 'cpu').car.v") == pytest.approx(accepted_speed, abs=.011)
         assert host.evaluate("id => { const c = net.cars.find(k => k.kind === 'cpu').car;"
                              " return c.energy < .9 && c.took.has(id); }", pickup)
+        host.evaluate("net.phase = 'run'")
         start = host.evaluate("net.cars.find(k => k.kind === 'cpu').s")
         host.wait_for_function("start => net.cars.find(k => k.kind === 'cpu').s > start + 1", arg=start, timeout=8000)
+        host.evaluate("""() => { const k = net.cars.find(k => k.kind === 'cpu');
+            net.phase = 'hold'; k.car.v = .75; copyCarState(k, k.car, k.crash); }""")
         relay.back(guest)
         host.wait_for_function("net.cars.some(k => k.kind === 'net' && !k.handback)", timeout=8000)
         guest.wait_for_function("AiPelitRooms.connected && game.mode === 'ride'", timeout=8000)
+        assert guest.evaluate("game.car.v") < 2.5
         guest.wait_for_function("id => game.car.took.has(id) && game.car.energy < .9", arg=pickup)
+        host.evaluate("net.phase = 'run'")
         host.evaluate("auto = true; game.car.s = game.track.finish - 20")
         guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
         host.wait_for_selector("#loppu:not(.hidden)", timeout=20000)
@@ -452,24 +460,34 @@ def test_a_phone_reloaded_mid_race_carries_on_from_where_it_was(site, browser):
         for p in [host, guest]:
             p.wait_for_function("net && game.mode === 'ride'", timeout=10000)
         pickup = guest.evaluate("""() => { const id = game.track.pickups[0].id;
-            auto = true; game.car.s = 200; game.car.energy = .23; game.car.took = new Set([id]);
-            game.car.over = .12; game.car.check = 150; return id; }""")
+            rideStep = (track, car, dt) => { car.t += dt; return null; };
+            auto = false; game.car.s = 200; game.car.v = .75; game.car.energy = .23;
+            game.car.took = new Set([id]); game.car.over = .12; game.car.check = 150;
+            return id; }""")
         host.wait_for_function(
             "([id]) => { const k = net.cars.find(k => k.kind === 'net');"
-            " return k.s > 200 && k.energy < .9 && k.took.includes(id) && net.clock > 3; }",
+            " return k.s > 100 && k.v > 0 && k.v < 2 && k.energy < .9 && k.took.includes(id) && net.clock > 3; }",
             arg=[pickup], timeout=15000,
         )
         accepted = host.evaluate("""() => { const k = net.cars.find(k => k.kind === 'net');
-            return {energy:k.energy, took:k.took, over:k.over, check:k.check}; }""")
+            return {s:k.s, v:k.v, energy:k.energy, took:k.took, over:k.over, check:k.check}; }""")
+        guest.add_init_script("""document.addEventListener('DOMContentLoaded', () => {
+            window.__realRideStep = rideStep;
+            rideStep = (track, car, dt) => { car.t += dt; return null; };
+        });""")
         guest.reload()
-        guest.wait_for_function("net && game.mode === 'ride' && game.car.s > 195", timeout=15000)
+        guest.wait_for_function("s => net && game.mode === 'ride' && Math.abs(game.car.s - s) < 10",
+                                arg=accepted["s"], timeout=15000)
         assert guest.evaluate("game.car.t") > 2.5   # the race clock, not a fresh start
-        restored = guest.evaluate("""() => ({energy:game.car.energy, took:[...game.car.took],
+        restored = guest.evaluate("""() => ({v:game.car.v, energy:game.car.energy, took:[...game.car.took],
             over:game.car.over, check:game.car.check})""")
+        assert restored["v"] < 3
+        assert restored["v"] == pytest.approx(accepted["v"], abs=1.2)
         assert restored["energy"] == pytest.approx(accepted["energy"], abs=.011)
         assert restored["took"] == accepted["took"]
         assert restored["over"] == pytest.approx(accepted["over"], abs=.011)
         assert restored["check"] == pytest.approx(accepted["check"], abs=.011)
+        guest.evaluate("() => { rideStep = window.__realRideStep; }")
         guest.evaluate("auto = true; game.car.s = game.track.finish - 20")
         host.evaluate("auto = true; game.car.s = game.track.finish - 60")
         for p in [host, guest]:
