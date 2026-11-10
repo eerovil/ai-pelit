@@ -17,7 +17,7 @@ PUHELINKOPPI = "games/puhelinkoppi/v9/"
 SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v12/"
 PIANO = "games/piano/v11/"
-VUORISTORATA = "games/vuoristorata/v5/"
+VUORISTORATA = "games/vuoristorata/v6/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.
@@ -88,10 +88,10 @@ class FakeApi:
         if path == "scores/top":
             games = {}
             for (game, board, player), sc in self.scores.items():
-                first = {"hiihto": "taso-1", "tikka": "mokki2", "pasianssi": "veto1", "vuoristorata": "elamys-1"}.get(game, "main")
+                first = {"hiihto": "taso-1", "tikka": "mokki2", "pasianssi": "veto1", "vuoristorata": "taso-1"}.get(game, "main")
                 if board != first or self.players[player]["status"] != "approved":
                     continue
-                low = game in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata"}
+                low = game in {"hiihto", "pasianssi", "aitajuoksu", "kaaosrata", "vuoristorata"}
                 cur = games.get(game)
                 if not cur or (sc["score"] < cur["score"] if low else sc["score"] > cur["score"]):
                     games[game] = {"board": board, "name": self.players[player]["name"], "level": sc.get("level"), **sc}
@@ -310,7 +310,7 @@ def test_the_admin_never_approves_a_name_they_did_not_see(site, context, fake):
 
 @pytest.mark.games("vuoristorata")
 @pytest.mark.alone
-def test_vuoristorata_keeps_low_old_times_and_high_v5_points_in_the_phone_queue(site, context, fake):
+def test_vuoristorata_keeps_low_times_and_high_v5_points_in_the_phone_queue(site, context, fake):
     site.build(ROOT / "games")
     page = context.new_page()
     page.goto(site.url + VUORISTORATA)
@@ -322,10 +322,14 @@ def test_vuoristorata_keeps_low_old_times_and_high_v5_points_in_the_phone_queue(
     }""")
     page.reload()
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')).length === 1")
+    # A cached v5 page still uses the shared current scores.js: its points must remain high-is-better.
     page.evaluate("AiPelitScores.board('elamys-1'); AiPelitScores.submit(400); AiPelitScores.submit(520)")
     page.wait_for_function("Object.keys(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt') || '{}')).length === 2")
+    # The current v6 board returns to low-is-better times.
+    page.evaluate("AiPelitScores.board('taso-1'); AiPelitScores.submit(70); AiPelitScores.submit(60)")
+    page.wait_for_function("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:lahetetyt'))['vuoristorata|taso-1'].score === 60")
     rows = {(game, board): row["score"] for (game, board, _), row in fake.scores.items()}
-    assert rows == {("vuoristorata", "taso-1"): 65, ("vuoristorata", "elamys-1"): 520}
+    assert rows == {("vuoristorata", "taso-1"): 60, ("vuoristorata", "elamys-1"): 520}
 
 
 @pytest.mark.games("hiihto")
@@ -409,7 +413,8 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
         ("sormiskeitti", "main", b): {"score": 58, "version": 5},
         ("hiihto", "taso-1", a): {"score": 71.5, "version": 2, "level": 3},
         ("hiihto", "taso-2", b): {"score": 95, "version": 2, "level": 2},
-        ("vuoristorata", "elamys-1", a): {"score": 520, "version": 5, "level": 2},
+        ("vuoristorata", "taso-1", a): {"score": 65, "version": 6, "level": 2},
+        ("vuoristorata", "taso-1", b): {"score": 70, "version": 6, "level": 1},
         # Puhelinkoppi's shelf list is its level list again; the withdrawn v3/v4 streak list does not show.
         ("puhelinkoppi", "main", a): {"score": 40, "version": 2},
         ("puhelinkoppi", "putki", b): {"score": 70, "version": 3},
@@ -419,7 +424,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
     assert page.locator('.top-score[data-top="sormiskeitti"]').inner_text() == "🏆 Aino · 64 cm"
     assert page.locator('.top-score[data-top="hiihto"]').inner_text() == "🏆 Taso 1: Aino · 1.11,5"
-    assert page.locator('.top-score[data-top="vuoristorata"]').inner_text() == "🏆 Taso 1: Aino · 520 p"
+    assert page.locator('.top-score[data-top="vuoristorata"]').inner_text() == "🏆 Taso 1: Aino · 1.05,0"
     assert page.locator('.top-score[data-top="voimistelu"]').is_hidden()
     assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == "🏆 Aino · taso 40"
     assert page.locator("#ai-pelit-tulokset-nappi").count() == 0  # no chip on the shelf
@@ -447,7 +452,7 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
 
     page.goto(site.url + "#/vuoristorata")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
-    assert "520 p" in page.locator(".score-list").inner_text()
+    assert "1.05,0" in page.locator(".score-list").inner_text()
 
     # Offline the cards keep the last no. 1 they saw.
     fake.online = False
@@ -576,14 +581,14 @@ def test_piano_a_score_v9_left_offline_is_sent_as_v10_after_the_cut(site, contex
 
 
 def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
-    """Withdrawn named lists and Vuoristorata's old time board must not masquerade as current results."""
+    """Withdrawn named lists and Vuoristorata's v5 point board must not masquerade as current results."""
     site.build(ROOT / "games")
     fake.online = False
     page = context.new_page()
     page.goto(site.url)
     page.evaluate("""localStorage.setItem('ai-pelit:_tulokset:ykkoset', JSON.stringify({
         puhelinkoppi: { board: 'putki', name: 'Bertta', score: 7, version: 3 },
-        vuoristorata: { board: 'taso-1', name: 'Bertta', score: 65, version: 4 },
+        vuoristorata: { board: 'elamys-1', name: 'Bertta', score: 520, version: 5 },
         sormiskeitti: { board: 'main', name: 'Aino', score: 64, version: 5 } }))""")
     page.reload()
     page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')

@@ -14,7 +14,7 @@ function setup() {
   return { env, call };
 }
 
-test('Vuoristorata keeps old low times and ranks v5 thrill points high', async () => {
+test('Vuoristorata ranks v1-v4 and v6 times low while keeping v5 thrill points high', async () => {
   const { env, call } = setup(), a = 'a'.repeat(32), b = 'b'.repeat(32);
   for (const [id, name] of [[a, 'Testi459A'], [b, 'Testi459B']]) {
     await call('POST', 'players', { id, name });
@@ -24,6 +24,10 @@ test('Vuoristorata keeps old low times and ranks v5 thrill points high', async (
   assert.equal((await call('POST', 'scores', { ...old, player: a, score: 70 })).status, 200);
   assert.equal((await call('POST', 'scores', { ...old, player: a, score: 65 })).status, 200);
   assert.equal((await call('GET', 'scores?game=vuoristorata&board=taso-1&player=' + a)).body.mine.score, 65);
+  const restored = { game: 'vuoristorata', board: 'taso-1', version: 6 };
+  assert.equal((await call('POST', 'scores', { ...restored, player: b, score: 63 })).status, 200);
+  const times = await call('GET', 'scores?game=vuoristorata&board=taso-1&player=' + b);
+  assert.deepEqual(times.body.rows.map(r => r.score), [63, 65]);
 
   const fresh = { game: 'vuoristorata', board: 'elamys-1', version: 5 };
   assert.equal((await call('POST', 'scores', { ...fresh, player: a, score: 420 })).status, 200);
@@ -31,12 +35,13 @@ test('Vuoristorata keeps old low times and ranks v5 thrill points high', async (
   assert.equal((await call('POST', 'scores', { ...fresh, player: b, score: 480 })).status, 200);
   const list = await call('GET', 'scores?game=vuoristorata&board=elamys-1&player=' + a);
   assert.deepEqual(list.body.rows.map(r => r.score), [510, 480]);
-  assert.equal((await call('GET', 'scores/top')).body.games.vuoristorata.score, 510);
-  assert.equal((await call('GET', 'scores/top')).body.games.vuoristorata.board, 'elamys-1');
+  assert.equal((await call('GET', 'scores/top')).body.games.vuoristorata.score, 63);
+  assert.equal((await call('GET', 'scores/top')).body.games.vuoristorata.board, 'taso-1');
 
   for (const body of [
     { ...old, player: a, version: 5, score: 60 },
     { ...fresh, player: a, version: 4, score: 999 },
+    { ...fresh, player: a, version: 6, score: 999 },
   ]) {
     const response = await call('POST', 'scores', body);
     assert.equal(response.status, 400);

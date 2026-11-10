@@ -102,9 +102,10 @@
       level: function () { return saved('yoajo', 'ajettu'); },
       levelText: function (n) { return n + (n === 1 ? ' osuus' : ' osuutta') + ' ajettu'; },
     },
-    // v5: most thrill points on 'elamys-N'. Versions 1–4 keep fastest times on 'taso-N'.
+    // v6+: fastest time on 'taso-N', as in v1-v4. v5's 'elamys-N' thrill points stay accepted
+    // from a cached v5 page and keep their high-is-better order.
     vuoristorata: {
-      order: 'high', score: function (s) { return s + ' p'; }, boards: true, boardPrefix: 'elamys-',
+      order: 'low', score: minutes, boards: true,
       level: function () { return saved('vuoristorata', 'taso') - 1; },
       levelText: function (n) { return n + (n === 1 ? ' rata' : ' rataa') + ' ajettu'; },
     },
@@ -114,7 +115,10 @@
     marjakori: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('marjakori', 'taso'); } },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
-  function orderFor(game, b) { return game === 'vuoristorata' && /^taso-/.test(b) ? 'low' : (GAMES[game] && GAMES[game].order) || 'high'; }
+  function orderFor(game, b) {
+    if (game === 'vuoristorata') return /^elamys-/.test(b) ? 'high' : 'low';
+    return (GAMES[game] && GAMES[game].order) || 'high';
+  }
   function scoreText(game, s) { return GAMES[game] ? GAMES[game].score(s) : String(s); }
   function levelText(game, n) { var c = GAMES[game]; return c && c.levelText ? c.levelText(n) : 'taso ' + n; }
   function levelOf(game) { var c = GAMES[game], n = c && c.level ? c.level() : 0; return n >= 1 ? n : null; }

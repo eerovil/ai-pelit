@@ -78,7 +78,7 @@ export const GAMES = {
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
   ottelu: { order: 'high', boards: /^lajit-[2-7]$/, first: 'lajit-5' }, // most combined-event points, one list per number of events
   yoajo: { order: 'high', boards: /^(osa-([1-9]|1[01])|loputon)$/, first: 'osa-1' }, // most points on one leg of the night drive ('osa-N'), or in one endless night (v16, 'loputon')
-  vuoristorata: { order: 'high', boards: /^(elamys|taso)-[1-9][0-9]{0,2}$/, first: 'elamys-1' }, // v5 thrill points; v1-v4 'taso-N' keeps fastest times
+  vuoristorata: { order: 'high', boards: /^(elamys|taso)-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest times in v1-v4 and v6+; v5 thrill points stay on 'elamys-N'
   pilkki: { order: 'high', boards: /^main$/ }, // biggest catch in a five-minute ice-fishing contest, grams
   marjakori: { order: 'high', boards: /^main$/ }, // sum of each level's best score
 };
@@ -256,7 +256,7 @@ async function addScore(env, body) {
   if (version < (GAMES[game].minVersion || 1)) return fail(400, 'old version');
   const range = GAMES[game].boardVersions?.[board];
   if (range && (version < range[0] || version > range[1])) return fail(400, 'wrong version for this board');
-  if (game === 'vuoristorata' && ((board.startsWith('taso-') && version > 4) || (board.startsWith('elamys-') && version < 5))) return fail(400, 'wrong version for this board');
+  if (game === 'vuoristorata' && ((board.startsWith('taso-') && version === 5) || (board.startsWith('elamys-') && version !== 5))) return fail(400, 'wrong version for this board');
   if (!Number.isFinite(score)) return fail(400, 'bad score');
   // The level reached, shown beside the score; optional, as older versions do not send it.
   let level = body.level === undefined || body.level === null ? null : Number(body.level);

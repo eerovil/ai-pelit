@@ -1,10 +1,13 @@
+// Vuoristorata v6 restores v1-v4's manual speed-limit ride; v5 was the automatic hands-up ride.
 // Vuoristorata v1 (#180): the ride itself, in plain numbers. index.html draws it with three.js.
 // v2 (#234): recorded sounds from the shared library lib/aanet-2/, the old beeps kept as a fallback.
 //
 // A track is a line of samples every DS metres, built from pieces (a lift hill, drops, hills,
-// curves, loops, helices) like a turtle. In v5 the train drives itself safely. The player holds
-// one Kädet ylös button through the exciting pieces; a fresh, well-timed press and a long hold
-// earn points, but a miss never interrupts the ride.
+// curves, loops, helices) like a turtle: each piece sets the pitch, the turn and the bank along
+// its length. The car moves along the track by its distance s: gravity along the slope, rolling
+// friction and air, plus the player's boost and brake. The track holds the car only while the
+// forces stay sane: too fast over a crest lifts it off, too fast in a curve tips it over, too slow
+// at the top of a loop drops it. Each such place gets a sign before it (max or min km/h).
 'use strict';
 
 const G = 9.81;
@@ -17,9 +20,12 @@ const ENERGY_BACK = 0.05;     // regained per second
 const LIFT_OFF = -0.4;        // felt vertical g below which the car leaves the track
 const SIDE_MAX = 1.35;        // felt sideways g above which it tips over
 const GRACE = 0.25;           // seconds over a limit before it goes
+const CRASH_WAIT = 1.6;       // the clock keeps running this long before recovery
+const SIGN_AHEAD = 45;        // metres from a sign to the place it warns of
 const KEY = 'ai-pelit:vuoristorata:';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const kmh = v => Math.round(v * 3.6);
 
 // ---- Saves (rule 5: ai-pelit:vuoristorata:*) ----
 function load(name, d) { try { const v = localStorage.getItem(KEY + name); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
@@ -211,7 +217,43 @@ function buildTrack(plan) {
     o.wlo = lo; o.whi = hi;
   }
   const track = { S, pieces, len: S[S.length - 1].s, finish: S[pieces[pieces.length - 1].i0].s };
+  track.zones = zones(track);
   return track;
+}
+
+// The places worth a sign: a run of samples whose speed limit bites (max under 110 km/h, or a
+// minimum above 0). The sign's number is the speed at the zone's start that keeps every sample of
+// it inside its limits, if the car only rolls (gravity in, a little friction out).
+function zones(track) {
+  const S = track.S, out = [];
+  const tight = o => o.whi < 30 * 30 || o.wlo > 1;
+  for (let i = 0; i < S.length; i++) {
+    if (!tight(S[i]) || S[i].kind === 'lift' || S[i].kind === 'brake') continue;
+    let j = i;
+    while (j + 1 < S.length && (tight(S[j + 1]) || (j + 8 < S.length && tight(S[j + 8]) && S[j + 1].piece === S[i].piece))) j++;
+    const y0 = S[i].y;
+    let wmax = Infinity, wmin = 0;
+    for (let k = i; k <= j; k++) {
+      const drop = 2 * G * (S[k].y - y0), loss = 1.4 * (S[k].s - S[i].s);
+      if (S[k].whi < 30 * 30) wmax = Math.min(wmax, S[k].whi + drop + loss * 0.6);
+      if (S[k].wlo > 1) wmin = Math.max(wmin, S[k].wlo + drop + loss);
+    }
+    const z = { i0: i, i1: j, s0: S[i].s, s1: S[j].s, kind: S[i].kind };
+    if (wmin > 1) z.min = Math.ceil(Math.sqrt(wmin) * 3.6 / 5) * 5 + 5;
+    if (wmax < 30 * 30) z.max = Math.floor(Math.sqrt(Math.max(0, wmax)) * 3.6 / 5) * 5;
+    if (z.min && z.max && z.max < z.min) z.max = undefined;
+    if (z.min || z.max) {
+      const prev = out[out.length - 1];
+      // Two zones close together read as one sign: keep the stricter numbers.
+      if (prev && z.s0 - prev.s1 < 20) {
+        prev.i1 = z.i1; prev.s1 = z.s1;
+        if (z.max) prev.max = prev.max ? Math.min(prev.max, z.max) : z.max;
+        if (z.min) prev.min = Math.max(prev.min || 0, z.min);
+      } else out.push(z);
+    }
+    i = j;
+  }
+  return out;
 }
 
 // The sample at distance s, and a point between samples.
@@ -224,11 +266,10 @@ function lerpS(track, s, key) { const p = at(track, s); return p.a[key] + (p.b[k
 // ---- One car on the track ----
 function newCar() {
   return { s: 4, v: 0, energy: 1, boost: false, brake: false, t: 0, over: 0, gv: 1, gs: 0, fin: null,
-    hands: false, ready: true, score: 0, combo: 0,
-    thrillIndex: 0, thrillStates: [] };
+    derail: null, check: 4, took: new Set(), warn: 0 };
 }
 
-// Rolls the car dt seconds. Returns what happened: 'derail' (and why), 'finish' or null.
+// Rolls the car dt seconds. Returns what happened: 'derail' (and why), 'finish', 'pickup' or null.
 function rideStep(track, car, dt) {
   if (car.fin !== null) {
     // Past the line: the brakes stop it in the station.
@@ -258,10 +299,26 @@ function rideStep(track, car, dt) {
   car.gv = o.va + o.vb * w;
   car.gs = o.sa + o.sb * w;
   const bad = car.gv < LIFT_OFF ? 'air' : Math.abs(car.gs) > SIDE_MAX ? 'side' : null;
+  // How close to a limit, 0..1, for the shaking and the warning sound.
+  car.warn = Math.max(clamp((LIFT_OFF + 0.6 - car.gv) / 0.6, 0, 1), clamp((Math.abs(car.gs) - SIDE_MAX + 0.45) / 0.45, 0, 1));
   car.over = bad ? car.over + dt : 0;
   if (bad && car.over > GRACE) return { what: 'derail', why: o.kind === 'loop' && o.u[1] < 0 ? 'loop' : bad };
+  // A safe place to come back to: the start of the piece before a zone, never inside one.
+  const z = track.zones.find(q => car.s >= q.s0 - SIGN_AHEAD - 5 && car.s <= q.s1);
+  if (!z && car.v > 0) car.check = car.s;
+  for (const pk of track.pickups) {
+    if (!car.took.has(pk.id) && Math.abs(pk.s - car.s) < 1.2) { car.took.add(pk.id); car.energy = Math.min(1, car.energy + 0.4); return { what: 'pickup' }; }
+  }
   if (car.s >= track.finish) { car.fin = car.t; return { what: 'finish' }; }
   return null;
+}
+
+// Back on the track after a derail: at the last safe place, rolling.
+function respawn(track, car) {
+  car.s = car.check;
+  car.v = 7;
+  car.over = 0;
+  car.energy = Math.max(car.energy, 0.5);
 }
 
 // The computer's driving: looks 60 m ahead and brakes when, rolling on, it would pass a place too
@@ -280,104 +337,52 @@ function botStep(track, car, dt, skill = 1) {
   return rideStep(track, car, dt);
 }
 
-// The automatic rider uses a generous safety margin. A numerical edge case changes speed in
-// place instead of throwing the player's train off the track.
-function autoStep(track, car, dt) {
-  const e = botStep(track, car, dt, 0.9);
-  if (!e || e.what !== 'derail') return e;
-  const o = at(track, car.s).a;
-  car.v = o.kind === 'loop' && o.u[1] < 0 ? Math.max(car.v, 13) : Math.max(5, car.v * 0.72);
-  car.over = 0;
-  return null;
-}
-
-function buildThrills(track) {
-  const labels = { drop: 'Pudotus!', hill: 'Ilmaa!', loop: 'Silmukka!', helix: 'Kierre!' };
-  const out = [];
-  for (const p of track.pieces) {
-    if (!labels[p.kind]) continue;
-    let s0 = track.S[p.i0].s, s1 = track.S[p.i1].s;
-    if (s1 - s0 < 8) continue;
-    const prev = out[out.length - 1];
-    if (prev && s0 - prev.s1 < 18) { prev.s1 = s1; prev.label += ' + ' + labels[p.kind]; continue; }
-    out.push({ s0, s1, cue: Math.max(4, s0 - 24), label: labels[p.kind] });
-  }
-  track.thrills = out;
-  track.maxScore = out.length * 100;
-}
-
-// ---- The level as a whole ----
+// ---- The level as a whole: track, pickups, the computer's time for the stars ----
 const levels = {};
 function makeLevel(level) {
   if (levels[level]) return levels[level];
   const track = buildTrack(levelPlan(level));
-  buildThrills(track);
+  // Energy pickups: on low, gentle stretches every 110 m or so.
+  const rnd = rng(level * 31 + 7);
+  track.pickups = [];
+  let next = 90;
+  for (const o of track.S) {
+    if (o.s < next || o.kind === 'lift' || o.kind === 'brake' || o.s > track.finish - 20) continue;
+    if (track.zones.some(z => o.s > z.s0 - SIGN_AHEAD && o.s < z.s1 + 5)) continue;
+    track.pickups.push({ id: track.pickups.length, s: o.s });
+    next = o.s + 90 + rnd() * 60;
+  }
+  // The computer rides it once: its time sets the stars.
+  const car = newCar();
+  let falls = 0;
+  for (let k = 0; k < 400 * 60 && car.fin === null; k++) {
+    const e = botStep(track, car, 1 / 60);
+    if (e && e.what === 'derail') { falls++; respawn(track, car); }
+  }
+  track.ideal = car.fin ?? 999;
+  track.botFalls = falls;
   return (levels[level] = track);
 }
 
-function starsFor(track, score) {
-  const share = track.maxScore ? score / track.maxScore : 0;
-  return share >= 0.9 ? 3 : share >= 0.65 ? 2 : 1;
+function starsFor(track, t) { return t <= track.ideal * 1.08 ? 3 : t <= track.ideal * 1.3 ? 2 : 1; }
+
+function fmtTime(t) {
+  if (t === null || t === undefined) return '–';
+  t = Math.round(t * 10) / 10;
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return m + '.' + (s < 10 ? '0' : '') + s.toFixed(1);
 }
 
 // ---- The game: menu, ride, end ----
 const game = {
-  mode: 'menu',          // menu | count | ride | done | netwait
-  level: 1, track: null, car: null, count: 0, result: null, demo: 0,
+  mode: 'menu',          // menu | count | ride | crash | done | netwait
+  level: 1, track: null, car: null, count: 0, crashT: 0, crashWhy: '', result: null, demo: 0,
 };
 let maxLevel = Math.max(1, +load('taso', 1) || 1);
 game.level = clamp(+load('valittu', maxLevel) || 1, 1, maxLevel);
 
-function bests() { return load('pisteet', {}); }
+function bests() { return load('ajat', {}); }
 function starsOf() { return load('tahdet', {}); }
-
-function resetThrills(car) {
-  car.hands = false; car.ready = true; car.score = 0; car.combo = 0; car.thrillIndex = 0;
-  car.thrillStates = game.track.thrills.map(() => ({ claimed: false, timing: 0, held: 0, total: 0, done: false, points: 0 }));
-  document.body.classList.remove('hands-up');
-  $('kadet')?.classList.remove('down');
-}
-
-function pressHands() {
-  const car = game.car;
-  if (!car || car.hands) return;
-  car.hands = true;
-  document.body.classList.add('hands-up');
-  $('kadet')?.classList.add('down');
-  if (game.mode !== 'ride' || !car.ready) { car.ready = false; return; }
-  const z = game.track.thrills[car.thrillIndex], st = car.thrillStates[car.thrillIndex];
-  if (!z || !st || car.s < z.cue || car.s > z.s1) { car.ready = false; return; }
-  if (st.claimed) { car.ready = false; return; }
-  st.claimed = true;
-  const err = Math.abs(z.s0 - car.s) / Math.max(6, Math.abs(car.v));
-  st.timing = err <= 0.6 ? Math.round(60 - err / 0.6 * 40) : 0;
-  car.ready = false;
-  toast(st.timing >= 50 ? 'Täydellinen!' : st.timing ? 'Hyvä!' : 'Pidä ylhäällä!');
-}
-
-function releaseHands() {
-  const car = game.car;
-  if (!car) return;
-  car.hands = false; car.ready = true;
-  document.body.classList.remove('hands-up');
-  $('kadet')?.classList.remove('down');
-}
-
-function scoreThrills(car, dt) {
-  const z = game.track.thrills[car.thrillIndex], st = car.thrillStates[car.thrillIndex];
-  if (!z || !st) return;
-  if (car.s >= z.s0 && car.s <= z.s1) {
-    st.total += dt;
-    if (st.claimed && car.hands) st.held += dt;
-  }
-  if (car.s <= z.s1 || st.done) return;
-  const sustain = st.total > 0 ? Math.round(40 * Math.min(1, st.held / st.total)) : 0;
-  st.points = st.timing + sustain; st.done = true;
-  car.score += st.points;
-  car.combo = st.points >= 80 ? car.combo + 1 : 0;
-  toast(`+${st.points}${car.combo >= 2 ? ` · ${car.combo}× putki` : ''}`);
-  car.thrillIndex++;
-}
 
 // In a room the host's level is ridden even if this phone has not unlocked it (it stays locked
 // for riding alone).
@@ -386,9 +391,8 @@ function setLevel(n, any) {
   if (!net) save('valittu', game.level);
   game.track = makeLevel(game.level);
   game.car = newCar();
-  resetThrills(game.car);
   game.demo = 0;
-  if (window.AiPelitScores) AiPelitScores.board('elamys-' + game.level, 'Taso ' + game.level);
+  if (window.AiPelitScores) AiPelitScores.board('taso-' + game.level, 'Taso ' + game.level);
   window.dispatchEvent(new Event('rata'));
   menuText();
 }
@@ -396,7 +400,6 @@ function setLevel(n, any) {
 function startRide() {
   unlockAudio();
   game.car = newCar();
-  resetThrills(game.car);
   game.mode = 'count'; game.count = 3; game.result = null;
   document.body.classList.add('riding');
   show(null);
@@ -405,25 +408,19 @@ function startRide() {
 
 function finishRide() {
   game.mode = 'done';
-  releaseHands();
-  while (game.car.thrillIndex < game.track.thrills.length) {
-    const z = game.track.thrills[game.car.thrillIndex], st0 = game.car.thrillStates[game.car.thrillIndex];
-    if (!st0.done) { st0.done = true; st0.points = st0.timing; game.car.score += st0.points; }
-    game.car.thrillIndex++;
-  }
-  const score = game.car.score, tr = game.track, st = starsFor(tr, score);
-  const B = bests(), S = starsOf(), lv = game.level, prev = B[lv], record = prev === undefined || score > prev;
+  const t = game.car.fin, tr = game.track, st = starsFor(tr, t);
+  const B = bests(), S = starsOf(), lv = game.level, prev = B[lv], record = prev === undefined || t < prev;
   // A race with friends is saved once, however often its end is heard.
   if (!net || RM.once(net.round)) {
-    if (record) { B[lv] = score; save('pisteet', B); }
+    if (record) { B[lv] = Math.round(t * 100) / 100; save('ajat', B); }
     if (st > (S[lv] || 0)) { S[lv] = st; save('tahdet', S); }
     if (lv === maxLevel) { maxLevel++; save('taso', maxLevel); }
-    if (window.AiPelitScores) AiPelitScores.submit(score);
+    if (window.AiPelitScores) AiPelitScores.submit(Math.round(t * 10) / 10);
   }
-  game.result = { score, max: tr.maxScore, stars: st, record, prev };
+  game.result = { t, stars: st, record, prev };
   quiet();
   sfx('voitto', 0.8) || (beep(784, 0.18, 'triangle', 0.1), setTimeout(() => beep(1047, 0.3, 'triangle', 0.1), 160));
-  if (net) { const k = meK(); k.fin = Math.round(game.car.fin * 100) / 100; k.score = score; k.s = game.car.s; if (RM.isHost) arrive(k); net.sendT = 0; toast('Maalissa! Odotetaan muita…'); return; }
+  if (net) { const k = meK(); k.fin = Math.round(t * 100) / 100; k.s = game.car.s; if (RM.isHost) arrive(k); net.sendT = 0; toast('Maalissa! Odotetaan muita…'); return; }
   endScreen();
 }
 
@@ -440,14 +437,20 @@ function step(dt) {
     if (Math.ceil(game.count) !== was && game.count > 0) sfx('valinta', 0.7) || beep(440, 0.12, 'triangle', 0.08);
     if (game.count <= 0 && (!net || RM.isHost)) go();
   } else if (game.mode === 'ride') {
+    readInput(car);
     const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
     for (let i = 0; i < n && game.mode === 'ride'; i++) {
-      const e = autoStep(game.track, car, h);
-      scoreThrills(car, h);
+      const e = auto ? botStep(game.track, car, h) : rideStep(game.track, car, h);
       if (!e) continue;
-      if (e.what === 'finish') finishRide();
+      if (e.what === 'derail') crash(e.why);
+      else if (e.what === 'finish') finishRide();
+      else if (e.what === 'pickup') sfx('nousu', 0.6) || (beep(988, 0.08, 'square', 0.06), setTimeout(() => beep(1319, 0.12, 'square', 0.06), 70));
     }
     sound(car);
+  } else if (game.mode === 'crash') {
+    game.crashT += dt;
+    car.t += dt;   // the clock runs on while the car is put back
+    if (game.crashT > CRASH_WAIT) { respawn(game.track, car); game.mode = 'ride'; }
   } else if (game.mode === 'done') {
     rideStep(game.track, car, dt);
   }
@@ -461,16 +464,39 @@ function go() {
   if (net) { net.phase = 'run'; net.clock = 0; }
 }
 
-// ---- Input: one held button ----
-function bindHands(el) {
-  const on = e => { e.preventDefault(); unlockAudio(); pressHands(); try { el.setPointerCapture?.(e.pointerId); } catch (_) {} };
-  const off = () => releaseHands();
+function crash(why) {
+  game.mode = 'crash'; game.crashT = 0; game.crashWhy = why;
+  game.crashFrom = { s: game.car.s, v: game.car.v };
+  toast(why === 'loop' ? 'Liian hiljaa silmukkaan!' : why === 'air' ? 'Liian kovaa mäen harjalle!' : 'Liian kovaa mutkaan!');
+  quiet();
+  sfx('kolari', 0.9) || noise(0.5);
+}
+
+// ---- Input: two held buttons, any number of fingers ----
+const held = { boost: new Set(), brake: new Set() };
+let auto = false;   // tests and the demo: the computer drives
+function readInput(car) {
+  if (auto) return;
+  car.brake = held.brake.size > 0;
+  car.boost = held.boost.size > 0 && !car.brake;
+}
+function releaseControls() {
+  held.boost.clear();
+  held.brake.clear();
+  $('vauhti')?.classList.remove('down');
+  $('jarru')?.classList.remove('down');
+}
+function bindHold(el, which) {
+  const on = e => { e.preventDefault(); unlockAudio(); held[which].add(e.pointerId); el.classList.add('down'); el.setPointerCapture?.(e.pointerId); };
+  const off = e => { held[which].delete(e.pointerId); if (!held[which].size) el.classList.remove('down'); };
   el.addEventListener('pointerdown', on);
   el.addEventListener('pointerup', off);
   el.addEventListener('pointercancel', off);
   el.addEventListener('lostpointercapture', off);
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
+addEventListener('blur', releaseControls);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseControls(); });
 
 // ---- Screens and HUD ----
 function show(id) {
@@ -487,15 +513,14 @@ function menuText() {
   $('taso').textContent = 'Taso ' + lv;
   $('edel').disabled = lv <= 1 || !!net;
   $('seur').disabled = lv >= maxLevel || !!net;
-  $('ennatys').textContent = b !== undefined ? `${starText(st)}  Ennätys ${b} p` : lv === 1 ? 'Aja maaliin, niin seuraava taso aukeaa.' : 'Uusi rata!';
+  $('ennatys').textContent = b !== undefined ? `${starText(st)}  Paras aika ${fmtTime(b)}` : lv === 1 ? 'Aja rata maaliin, niin seuraava taso aukeaa.' : 'Uusi rata!';
 }
 function endScreen() {
   const r = game.result;
   $('loppu-otsikko').textContent = 'Maalissa!';
-  $('aika').textContent = `${r.score} p`;
+  $('aika').textContent = fmtTime(r.t);
   $('tahdet').textContent = starText(r.stars);
-  const pct = r.max ? Math.round(r.score / r.max * 100) : 0;
-  $('loppu-teksti').textContent = `${pct} % · ${r.record ? (r.prev === undefined ? 'Ensimmäinen tuloksesi!' : 'Uusi ennätys!') : `Ennätys ${r.prev} p`}`;
+  $('loppu-teksti').textContent = r.record ? (r.prev === undefined ? 'Ensimmäinen aikasi tällä radalla!' : 'Uusi ennätys!') : `Ennätys ${fmtTime(r.prev)}`;
   $('seuraava').classList.toggle('hidden', game.level >= maxLevel);
   $('uudestaan').classList.remove('hidden');
   $('huoneeseen').classList.add('hidden');
@@ -505,19 +530,27 @@ function endScreen() {
 
 let lastHud = '';
 function hud() {
-  if (game.mode !== 'ride' && game.mode !== 'count' && game.mode !== 'done') return;
+  if (game.mode !== 'ride' && game.mode !== 'crash' && game.mode !== 'count' && game.mode !== 'done') return;
   const car = game.car, tr = game.track;
-  const z = tr.thrills[car.thrillIndex];
-  let prompt = '';
-  if (game.mode === 'ride' && z && car.s >= z.cue && car.s <= z.s1) {
-    prompt = car.s < z.s0 ? `🙌 ${z.label}` : car.hands ? '🙌 Pidä ylhäällä!' : '🙌 Kädet ylös!';
+  const z = tr.zones.find(q => q.s1 >= car.s && q.s0 - car.s < 120);
+  let sign = '';
+  if (z) {
+    const d = Math.max(0, Math.round(z.s0 - car.s));
+    sign = (z.min ? `<b class="min">${z.min}</b>` : '') + (z.max ? `<b class="max">${z.max}</b>` : '') + (d > 0 ? `<span>${d} m</span>` : '');
   }
-  const key = [car.score, prompt, car.combo, Math.floor(car.t * 10), game.mode, net && net.order].join('|');
+  const v = Math.max(0, kmh(car.v));
+  // Red while the speed is wrong for the sign just ahead (the sign's number is for its start).
+  const near = z && car.s >= z.s0 - 25 && car.s <= z.s0 + 3;
+  const slow = near && z.min && v < z.min, fast = near && z.max && v > z.max;
+  const key = [v, sign, slow, fast, Math.floor(car.t * 10), Math.round(car.energy * 50), game.mode, net && net.order].join('|');
   if (key === lastHud) return;
   lastHud = key;
-  $('pisteet').textContent = `${car.score} p`;
-  $('kehote').textContent = prompt;
-  $('putki').textContent = car.combo >= 2 ? `${car.combo}× putki` : '';
+  $('nopeus').innerHTML = `${v}<small> km/h</small>`;
+  $('nopeus').className = slow || fast ? 'huono' : '';
+  $('merkki').innerHTML = sign;
+  $('kello').textContent = fmtTime(car.fin ?? car.t);
+  $('vauhti').style.setProperty('--e', car.energy.toFixed(3));
+  $('vauhti').classList.toggle('tyhja', car.energy < 0.03);
   $('lahto').textContent = game.mode === 'count' ? Math.max(1, Math.ceil(game.count)) : '';
   $('kisa').innerHTML = net && net.order ? net.order : '';
 }
@@ -535,7 +568,7 @@ function toast(text) {
 // Recorded sounds from the shared library (#234); each falls back to v1's own beep when it did not
 // play (not loaded yet, offline on the very first open). The limit warning's whine is still our own.
 const SFX = window.AiPelitAanet;
-SFX?.load(['valinta', 'onnistui', 'rullaus', 'ketju', 'voitto', 'kirkuna']);
+SFX?.load(['valinta', 'onnistui', 'rullaus', 'ketju', 'nousu', 'voitto', 'kolari', 'kirkuna', 'jarru']);
 function sfx(name, vol) { return !!SFX && SFX.play(name, { vol }); }
 let ac = null, hum = null;
 function unlockAudio() {
@@ -550,11 +583,18 @@ function beep(f, len, type = 'sine', vol = 0.08) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
   o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + len + 0.02);
 }
+function noise(len) {
+  if (!ac) return;
+  const n = ac.sampleRate * len, buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = ac.createBufferSource(), g = ac.createGain();
+  src.buffer = buf; g.gain.value = 0.25; src.connect(g); g.connect(ac.destination); src.start();
+}
 // The wheels' rumble rises with the speed; the chain clanks on the lift; the riders scream at the
-// top of each drop.
+// top of each drop; the brakes hiss when pressed; a whine warns of a limit.
 // The rumble and the chain are the library's loops, turned up or down while riding. Until a
 // recorded sound plays, v1's own sawtooth hum and square-wave clacks stand in for it.
-let clackT = 0, rumble = null, chainL = null, lastPiece = -1;
+let clackT = 0, rumble = null, chainL = null, lastPiece = -1, braking = false;
 function sound(car) {
   if (!ac) return;
   if (!hum) {
@@ -571,45 +611,59 @@ function sound(car) {
   chainL?.set({ vol: onLift ? 0.6 : 0 });
   hum.o.frequency.setTargetAtTime(40 + v * 4, t, 0.1);
   hum.g.gain.setTargetAtTime(riding && !real ? Math.min(0.05, v * 0.002) : 0, t, 0.1);
-  hum.wg.gain.setTargetAtTime(0, t, 0.05);
+  hum.wg.gain.setTargetAtTime(riding && car.warn > 0.3 ? 0.015 * car.warn : 0, t, 0.05);
   if (onLift && !chainL?.playing() && (clackT -= 1 / 60) <= 0) { clackT = 0.18; beep(180, 0.03, 'square', 0.05); }
   // Screams once as the car goes over into a drop.
   const piece = o.piece ?? -1;
   if (riding && piece !== lastPiece && o.kind === 'drop' && car.v > 0) sfx('kirkuna', 0.6);
   lastPiece = piece;
+  // The brakes hiss once each time the button goes down at speed.
+  const b = riding && car.brake && v > 2;
+  if (b && !braking) sfx('jarru', 0.5);
+  braking = b;
 }
 function quiet() {
   if (hum && ac) { hum.g.gain.setTargetAtTime(0, ac.currentTime, 0.05); hum.wg.gain.setTargetAtTime(0, ac.currentTime, 0.05); }
-  // The loops end with the ride or menu; sound() makes new ones when it rolls on.
+  // The loops end with the ride (a crash, the finish, the menu); sound() makes new ones when it rolls on.
   rumble?.stop(); chainL?.stop(); rumble = chainL = null;
+  braking = false;
 }
 
 // ---- Racing friends ----
 // Everyone in the room rides the host's level at once, each phone its own car; the others show as
 // trains in their own colours on the same track (they ride through each other). The host runs the
 // start, the end (everyone in, or 40 s after the first) and the computer's car for a friend who is
-// away, and sends the ride ten times a second. The highest score wins.
+// away, and sends the race ten times a second. The first to the finish wins.
 const RM = window.AiPelitRooms;
 const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
 const LATE = 40;
 let net = null, lastEnd = null;
 const meK = () => net.cars.find(k => k.kind === 'me');
 const r2 = n => Math.round(n * 100) / 100;
+const crashState = () => game.mode === 'crash'
+  ? [r2(Math.max(0, CRASH_WAIT - game.crashT)), game.crashWhy,
+    r2(game.crashFrom?.s ?? game.car.s), r2(game.crashFrom?.v ?? game.car.v)]
+  : null;
 
 function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'cd', sendT: 0, clock: 0, firstFin: null, res: null, order: '',
     soloLevel: net ? net.soloLevel : game.level, heard: false,
     cars: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
-      s: 4, v: 0, fin: null, at: null, score: 0 })) };
+      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null })) };
   show(null);
   if (s.host && !s.over) { net.cfg = { level: game.level }; netLevel(); startRide(); }
   else { game.mode = 'netwait'; $('odota').classList.remove('hidden'); document.body.classList.add('riding'); }
   window.dispatchEvent(new Event('rata'));
 }
 function netLevel() { setLevel(net.cfg.level, true); }
-const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.score || 0];
+function copyCarState(k, car, crash) {
+  k.s = car.s; k.v = car.v; k.energy = car.energy; k.took = [...car.took];
+  k.over = car.over; k.check = car.check; k.crash = crash;
+}
+const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0,
+  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0];
 function synced(k) {
-  if (k.kind === 'me') { k.s = game.car.s; k.v = game.car.v; k.score = game.car.score; }
+  if (k.kind === 'me') copyCarState(k, game.car, crashState());
   return k;
 }
 function hostState() {
@@ -626,14 +680,24 @@ function netTick(dt) {
     if (k.kind === 'me') continue;
     if (k.kind === 'cpu' && RM.isHost) {
       if (net.phase === 'run' && k.fin === null) {
-        autoStep(game.track, k.car, dt);
-        k.s = k.car.s; k.v = k.car.v;
+        let rideDt = dt;
+        if (k.crash) {
+          const waited = Math.min(rideDt, Math.max(0, k.crash[0]));
+          k.crash[0] -= waited; k.car.t += waited; rideDt -= waited;
+          if (k.crash[0] <= 1e-6) { respawn(game.track, k.car); k.crash = null; }
+        }
+        if (!k.crash && rideDt > 1e-6) {
+          const e = botStep(game.track, k.car, rideDt, 0.97);
+          if (e && e.what === 'derail') k.crash = [CRASH_WAIT, e.why, k.car.s, k.car.v];
+        }
+        copyCarState(k, k.car, k.crash);
         if (k.car.fin !== null) { k.fin = r2(k.car.fin); k.cpuFin = true; arrive(k); }
       }
-    } else if (net.phase === 'run' && k.fin === null) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
+    } else if (net.phase === 'run' && k.fin === null && !k.crash) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
   }
-  const list = net.cars.map(synced).slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  net.order = list.map(k => `<span style="color:${k.color}">${k.kind === 'me' ? 'Sinä' : esc(k.name)} ${k.score} p</span>`).join('');
+  // The places, for the HUD: finished by their time on the race clock, the rest by how far they are.
+  const list = net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s));
+  net.order = list.map((k, i) => `<span style="color:${k.color}">${i + 1}. ${k.kind === 'me' ? 'Sinä' : esc(k.name)}</span>`).join('');
   net.sendT -= dt;
   if (RM.isHost) {
     if (net.phase === 'run' && (net.cars.every(k => k.fin !== null) || (net.firstFin !== null && net.clock > net.firstFin + LATE))) {
@@ -647,7 +711,7 @@ function netTick(dt) {
     if (net.sendT <= 0) { net.sendT = 0.1; RM.send(hostState()); }
     return;
   }
-  if ((game.mode === 'ride' || game.mode === 'done') && net.sendT <= 0 && !net.res) {
+  if ((game.mode === 'ride' || game.mode === 'crash' || game.mode === 'done') && net.sendT <= 0 && !net.res) {
     net.sendT = 0.1; RM.send({ t: 'p', round: net.round, c: pack(synced(meK())) });
   }
 }
@@ -664,17 +728,30 @@ function guestState(m) {
   m.c.forEach((a, i) => {
     const k = net.cars[i];
     if (!k) return;
-    if (k.kind !== 'me') { k.s = a[0]; k.v = a[1]; k.fin = a[2]; k.at = a[3]; k.score = a[6] || 0; return; }
-    k.at = a[3] ?? k.at;
-    game.car.score = Math.max(game.car.score, a[6] || 0);
-    // Back after a reload, or the computer rode for me while I was away: carry on from there.
-    if ((first && m.ph === 'run' && a[0] > game.car.s + 5) || (a[4] && game.mode === 'ride')) {
-      game.car.s = a[0]; game.car.v = Math.max(5, a[1]); game.car.t = m.clock;
+    if (k.kind !== 'me') {
+      k.s = a[0]; k.v = a[1]; k.fin = a[2]; k.at = a[3];
+      k.energy = a[6] ?? 1; k.took = a[7] || []; k.over = a[8] || 0; k.check = a[9] ?? a[0]; k.crash = a[10] || null;
+      return;
     }
+    k.at = a[3] ?? k.at;
+    // A connected phone owns and advances its own crash clock. It accepts the host's copy once
+    // after a reload, or once when taking its car back from the computer, never on ordinary echoes.
+    const restore = (first && m.ph === 'run') || (a[4] && !k.handbackAck);
+    if (restore && game.mode !== 'done') {
+      game.car.s = a[0]; game.car.v = a[1]; game.car.t = m.clock;
+      game.car.energy = a[6] ?? 1; game.car.took = new Set(a[7] || []);
+      game.car.over = a[8] || 0; game.car.check = a[9] ?? a[0];
+      if (a[10]) {
+        game.mode = 'crash'; game.crashT = clamp(CRASH_WAIT - a[10][0], 0, CRASH_WAIT);
+        game.crashWhy = a[10][1] || 'air'; game.crashFrom = { s: a[10][2] ?? a[0], v: a[10][3] ?? a[1] };
+        quiet();
+      } else if (game.mode === 'crash') game.mode = 'ride';
+    }
+    k.handbackAck = !!a[4];
     if (a[2] !== null && game.car.fin === null) {
       game.car.s = Math.max(game.car.s, game.track.finish);
       // The computer took me to the finish: my place stands, but it is not my time.
-      if (a[5]) { game.car.fin = a[2]; game.mode = 'done'; game.result = { score: a[6] || 0, max: game.track.maxScore, stars: 1, cpu: true }; }
+      if (a[5]) { game.car.fin = a[2]; game.mode = 'done'; game.result = { t: a[2], stars: 0, cpu: true }; }
       // My own finish, heard again after a reload: the same time, saved once (RM.once).
       else { game.car.fin = game.car.t = a[2]; finishRide(); }
     }
@@ -685,25 +762,25 @@ function guestState(m) {
 }
 function cpuTakes(k) {
   k.kind = 'cpu';
-  k.car = Object.assign(newCar(), { s: k.s, v: Math.max(5, k.v), t: net.clock });
+  k.car = Object.assign(newCar(), { s: k.s, v: k.v, t: net.clock, energy: k.energy ?? 1,
+    took: new Set(k.took || []), over: k.over || 0, check: k.check ?? k.s });
 }
 function standings() {
-  return net.cars.map(synced).slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
-    .map(k => ({ id: k.id, name: k.name, fin: k.fin, score: k.score, color: k.color }));
+  return net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s))
+    .map(k => ({ id: k.id, name: k.name, fin: k.fin, color: k.color }));
 }
 function netEnd(res) {
   if (!net || net.res) return;
   net.res = res; net.phase = 'done';
   if (RM.isHost) lastEnd = { t: 'end', round: net.round, res };
-  if (game.mode !== 'done') { game.mode = 'done'; game.result = game.result || { score: 0, max: game.track.maxScore, stars: 1 }; }
+  if (game.mode !== 'done') { game.mode = 'done'; game.result = game.result || { t: null, stars: 0 }; }
   quiet();
   const i = res.findIndex(o => o.id === RM.me), r = res[i], mine = game.result && !game.result.cpu ? game.result : null;
-  const rank = r ? 1 + res.filter(o => o.score > r.score).length : -1;
-  $('loppu-otsikko').textContent = rank === 1 ? 'Voitit kisan!' : rank > 1 ? `${rank}. sija` : 'Kisa päättyi';
-  $('aika').textContent = r ? `${r.score} p` : 'Ei tulosta';
-  $('tahdet').textContent = mine ? starText(mine.stars) : '';
+  $('loppu-otsikko').textContent = i === 0 ? 'Voitit kisan!' : i > 0 ? `${i + 1}. sija` : 'Kisa päättyi';
+  $('aika').textContent = r && r.fin !== null ? fmtTime(r.fin) : 'Et ehtinyt maaliin';
+  $('tahdet').textContent = mine && mine.t !== null ? starText(mine.stars) : '';
   $('loppu-teksti').textContent = game.result && game.result.cpu ? 'Tietokone ajoi puolestasi maaliin.' : mine && mine.record ? 'Uusi ennätys tällä radalla!' : '';
-  $('tulokset').innerHTML = res.map(o => `<li style="color:${o.color}">${1 + res.filter(x => x.score > o.score).length}. ${o.id === RM.me ? 'Sinä' : esc(o.name)} <b>${o.score} p</b></li>`).join('');
+  $('tulokset').innerHTML = res.map((o, j) => `<li style="color:${o.color}">${j + 1}. ${o.id === RM.me ? 'Sinä' : esc(o.name)} <b>${o.fin === null ? '–' : fmtTime(o.fin)}</b></li>`).join('');
   $('seuraava').classList.add('hidden');
   $('uudestaan').classList.add('hidden');
   $('huoneeseen').classList.remove('hidden');
@@ -711,11 +788,10 @@ function netEnd(res) {
 }
 function backRoom() {
   const res = net.res, i = res.findIndex(o => o.id === RM.me), r = res[i];
-  RM.note(res.map(o => `${1 + res.filter(x => x.score > o.score).length}. ${o.id === RM.me ? 'Sinä' : o.name} ${o.score} p`).join(' · '));
-  const rank = r ? 1 + res.filter(o => o.score > r.score).length : -1;
-  const text = i < 0 ? 'Kisa päättyi' : `${rank}. sija · ${r.score} p`;
+  RM.note(res.map((o, j) => `${j + 1}. ${o.id === RM.me ? 'Sinä' : o.name} ${o.fin === null ? '–' : fmtTime(o.fin)}`).join(' · '));
+  const text = i < 0 ? 'Kisa päättyi' : r.fin === null ? 'Et ehtinyt maaliin' : `${i + 1}. sija · ${fmtTime(r.fin)}`;
   toSolo();
-  RM.backToRoom(text, rank === 1 ? 'win' : 'lose');
+  RM.backToRoom(text, i === 0 ? 'win' : 'lose');
 }
 function toSolo() {
   if (!net) return;
@@ -762,11 +838,17 @@ if (RM) {
     if (RM.isHost) {
       const k = net.cars.find(o => o.id === from);
       if (!k || k.kind !== 'net' || m.t !== 'p') return;
-      // Given back by the computer: the phone's own car counts again once it has caught up.
+      // Given back by the computer: ignore messages sent before the phone restored the accepted
+      // snapshot, then let its own car count again once it has caught up.
+      if (k.handback && !m.c[11]) return;
       if (k.handback && m.c[0] < k.s - 1) return;
       k.handback = false;
       // A finish the host has heard stands, whatever a reloaded phone sends after it.
-      if (k.fin === null) { k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2]; k.score = m.c[6] || 0; }
+      if (k.fin === null) {
+        k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2];
+        k.energy = m.c[6] ?? 1; k.took = m.c[7] || []; k.over = m.c[8] || 0; k.check = m.c[9] ?? m.c[0];
+        k.crash = m.c[10] || null;
+      }
       arrive(k);
       return;
     }
@@ -796,7 +878,8 @@ function wire() {
   $('huoneeseen').addEventListener('click', backRoom);
   $('kaverit').addEventListener('click', () => { unlockAudio(); RM && RM.open(); roomControls(); });
   if (!RM) $('kaverit').classList.add('hidden');
-  bindHands($('kadet'));
+  bindHold($('vauhti'), 'boost');
+  bindHold($('jarru'), 'brake');
   setLevel(game.level);
   show('menu');
   let last = performance.now();
