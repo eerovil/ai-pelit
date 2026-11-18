@@ -31,17 +31,6 @@ def test_catalog_exposes_only_newest_games_room_capacity(tmp_path):
     assert "room" not in catalog["yksin"]
 
 
-def test_a_version_kept_out_of_ottelu_says_so_in_the_catalog(tmp_path):
-    # #303: Ottelu plays each event's newest version, except one whose game.json entry says not to.
-    make_game(tmp_path, "kuula", [game_page("a"), game_page("b")])
-    meta = json.loads((tmp_path / "kuula" / "game.json").read_text())
-    # Only an older entry may say so now (#346); the catalog passes it on as it is.
-    meta["versions"][0]["ottelu"] = False
-    (tmp_path / "kuula" / "game.json").write_text(json.dumps(meta))
-    versions = build.build_catalog(tmp_path)["games"][0]["versions"]
-    assert ["ottelu" in v for v in versions] == [True, False] and versions[0]["ottelu"] is False
-
-
 def test_versions_of_the_same_day_go_by_their_merge_time(tmp_path):
     # #279: 28 games updated on one day sat in reverse alphabetical order under Päivitetyt.
     games = tmp_path / "games"
@@ -227,6 +216,52 @@ def test_a_published_version_may_not_be_deleted_in_part(repo):
     assert "delete it whole" in problems("main", cwd=str(repo))[0]
 
 
+def test_a_removed_game_may_go_whole(repo):
+    # #469: Eero removed Ottelu; a game named in scripts/removed_games.py goes, folders and game.json.
+    make_game(repo / "games", "vanha", [game_page("x")])
+    publish(repo, "vanha")
+    import shutil
+    shutil.rmtree(repo / "games" / "vanha")
+    assert problems("main", cwd=str(repo), removed={"vanha": "#469"}) == []
+
+
+def test_any_other_game_may_not_be_removed(repo):
+    import shutil
+    shutil.rmtree(repo / "games" / "peli")
+    found = problems("main", cwd=str(repo), removed={"vanha": "#469"})
+    assert any("newer version folder" in p for p in found)
+    assert any("a published game cannot be removed" in p for p in found)
+
+
+def test_a_removed_game_may_not_go_in_part(repo):
+    # Only its game.json gone, its folder left: still refused.
+    (repo / "games" / "peli" / "game.json").unlink()
+    assert any("cannot be removed" in p for p in problems("main", cwd=str(repo), removed={"peli": "#469"}))
+    # Its folder gone, its game.json left: the folder needs a newer one, as for any game.
+    git(repo, "checkout", "--", "games/peli/game.json")
+    import shutil
+    shutil.rmtree(repo / "games" / "peli" / "v1")
+    assert any("newer version folder" in p for p in problems("main", cwd=str(repo), removed={"peli": "#469"}))
+
+
+def test_the_real_removed_games_are_gone():
+    from removed_games import REMOVED
+    assert "ottelu" in REMOVED
+    assert not any((ROOT / "games" / s).exists() for s in REMOVED)
+
+
+def test_a_removed_game_goes_to_the_shelf_and_cannot_come_back(tmp_path):
+    games = tmp_path / "games"
+    make_game(games, "peli", [game_page("a")])
+    catalog = build.build(games, ROOT / "public", tmp_path / "out", removed={"vanha": "#469"})
+    assert catalog["removed"] == ["vanha"] and [g["slug"] for g in catalog["games"]] == ["peli"]
+    rules = [line.split() for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
+    assert ["/games/vanha", "/", "302"] in rules and ["/games/vanha/*", "/", "302"] in rules
+    make_game(games, "vanha", [game_page("b")])
+    with pytest.raises(build.GameError, match="cannot come back"):
+        build.build(games, ROOT / "public", tmp_path / "out", removed={"vanha": "#469"})
+
+
 def test_an_old_number_is_never_used_again(repo):
     make_game(repo / "games", "peli", [game_page("a"), game_page("b"), game_page("c")])
     publish(repo, "v3")
@@ -261,8 +296,10 @@ def test_only_the_newest_version_is_served_and_the_older_ones_go_to_it(tmp_path)
     assert ["/games/peli/v2", "/games/peli/v3/", "302"] in rules
     assert ["/games/peli/v2/index.html", "/games/peli/v3/", "302"] in rules
     assert not any(r[0].startswith("/games/peli/v3") for r in rules)
-    # Pages allows only 100 rules with a * or a :placeholder; these are all plain ones.
-    assert not any("*" in r[0] or ":" in r[0] for r in rules)
+    # Pages allows only 100 rules with a * or a :placeholder; these are all plain ones, but for
+    # one per removed game (#469).
+    stars = [r for r in rules if "*" in r[0] or ":" in r[0]]
+    assert stars == [[f"/games/{slug}/*", "/", "302"] for slug in sorted(build.REMOVED)]
 
 
 def test_a_skipped_number_goes_to_the_newest_too(tmp_path):
@@ -276,19 +313,6 @@ def test_a_skipped_number_goes_to_the_newest_too(tmp_path):
     rules = [line.split() for line in (tmp_path / "out" / "_redirects").read_text().splitlines() if not line.startswith("#")]
     for n in (1, 2, 3, 4):
         assert [f"/games/koppi/v{n}/", "/games/koppi/v5/", "302"] in rules
-
-
-def test_the_newest_version_cannot_be_kept_out_of_ottelu(tmp_path):
-    # With only the newest kept (#346), Ottelu would fall back to an older version that is gone.
-    make_game(tmp_path, "hyppy", [game_page("a"), game_page("b")])
-    meta = json.loads((tmp_path / "hyppy" / "game.json").read_text())
-    meta["versions"][0]["ottelu"] = False  # an older one may have said so; that is history
-    (tmp_path / "hyppy" / "game.json").write_text(json.dumps(meta))
-    build.load_game(tmp_path / "hyppy")
-    meta["versions"][1]["ottelu"] = False
-    (tmp_path / "hyppy" / "game.json").write_text(json.dumps(meta))
-    with pytest.raises(build.GameError, match="cannot be kept out of Ottelu"):
-        build.load_game(tmp_path / "hyppy")
 
 
 def test_the_real_redirects_fit_cloudflare_pages(tmp_path):

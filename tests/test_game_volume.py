@@ -91,15 +91,16 @@ def test_every_sound_of_the_game_goes_through_the_volume(site, context):
 
 
 def test_a_frame_without_back_js_follows_the_page_around_it(site, context):
-    # Ottelu loads each event's page into a frame of its own, without back.js.
+    # A game that loads each part into a frame of its own, without back.js (as Ottelu, removed in
+    # #469, did its events).
     event = "<body><script>window.ready = true;<\\/script></body>"
     frame = f"<script>const f = document.createElement('iframe'); f.srcdoc = '{event}'; document.body.appendChild(f);</script>"
-    make_game(site.games, "ottelu", [game_page("v1", body=frame)])
+    make_game(site.games, "kehys", [game_page("v1", body=frame)])
     site.build()
     context.add_init_script("localStorage.setItem('ai-pelit:_aani:voimakkuus', '20')")
     context.add_init_script(SPY)
     page = context.new_page()
-    page.goto(f"{site.url}games/ottelu/v1/")
+    page.goto(f"{site.url}games/kehys/v1/")
     page.wait_for_selector("#ai-pelit-back")
     inner = page.frames[1]
     inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani")
@@ -178,7 +179,7 @@ def test_the_menu_adds_nothing_to_the_corner_fits_every_corner_and_goes_up(site,
 
 
 def test_removed_frames_let_their_sound_go(site, context):
-    # Ottelu makes a new frame for each event and removes the old one.
+    # A game that makes a new frame for each part (as Ottelu did) and removes the old one.
     script = """window.nextEvent = () => new Promise(done => {
       document.querySelectorAll('iframe').forEach(f => f.remove());
       const f = document.createElement('iframe');
@@ -186,10 +187,10 @@ def test_removed_frames_let_their_sound_go(site, context):
       f.onload = () => { const c = new f.contentWindow.AudioContext(); c.createOscillator().connect(c.destination); setTimeout(done, 0); };
       document.body.appendChild(f);
     });"""
-    make_game(site.games, "ottelu", [game_page("v1", script=script)])
+    make_game(site.games, "kehys", [game_page("v1", script=script)])
     site.build()
     page = context.new_page()
-    page.goto(f"{site.url}games/ottelu/v1/")
+    page.goto(f"{site.url}games/kehys/v1/")
     page.wait_for_selector("#ai-pelit-back")
     for _ in range(4):
         page.evaluate("nextEvent()")

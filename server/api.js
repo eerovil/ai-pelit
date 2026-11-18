@@ -76,7 +76,6 @@ export const GAMES = {
   kuula: { order: 'high', boards: /^main$/ }, // longest shot put in metres
   seivashyppy: { order: 'high', boards: /^main$/ }, // highest pole vault cleared in metres
   korkeushyppy: { order: 'high', boards: /^main$/ }, // highest bar cleared in a meet, metres
-  ottelu: { order: 'high', boards: /^lajit-[2-7]$/, first: 'lajit-5' }, // most combined-event points, one list per number of events
   yoajo: { order: 'high', boards: /^(osa-([1-9]|1[01])|loputon)$/, first: 'osa-1' }, // most points on one leg of the night drive ('osa-N'), or in one endless night (v16, 'loputon')
   vuoristorata: { order: 'high', boards: /^(elamys|taso)-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest times in v1-v4 and v6+; v5 thrill points stay on 'elamys-N'
   pilkki: { order: 'high', boards: /^main$/ }, // biggest catch in a five-minute ice-fishing contest, grams

@@ -57,7 +57,9 @@ self.addEventListener('activate', function (event) {
 });
 
 // The cached files of a version that is no longer its game's newest (#346): the site has sent
-// its address on to the newest since, so the copy would only keep the phone on an old game.
+// its address on to the newest since, so the copy would only keep the phone on an old game. A game
+// the catalog names as removed (#469) loses all its files. Only a slug named there: a new game an
+// older catalog does not list yet keeps its files.
 function pruneGames() {
   return caches.open(SHELL_CACHE)
     .then(function (shell) { return shell.match('catalog.json'); })
@@ -66,10 +68,13 @@ function pruneGames() {
       if (!catalog) return;
       var newest = {};
       catalog.games.forEach(function (g) { newest[g.slug] = g.versions[g.versions.length - 1].n; });
+      var removed = catalog.removed || [];
       return caches.open(GAMES_CACHE).then(function (cache) {
         return cache.keys().then(function (keys) {
           return Promise.all(keys.map(function (req) {
-            var m = new URL(req.url).pathname.slice(GAMES_PREFIX.length).match(/^([^/]+)\/v(\d+)\//);
+            var path = new URL(req.url).pathname.slice(GAMES_PREFIX.length);
+            if (removed.indexOf(path.split('/')[0]) >= 0) return cache.delete(req);
+            var m = path.match(/^([^/]+)\/v(\d+)\//);
             if (m && newest[m[1]] !== undefined && Number(m[2]) !== newest[m[1]]) return cache.delete(req);
           }));
         });
@@ -116,10 +121,36 @@ function cachedFile(request, name) {
 
 // An older version's page goes to the game's newest (#346), as the site's _redirects does, but from
 // the cached catalog, so an old home-screen shortcut opens the newest offline too. The query
-// (?huone=) goes along.
+// (?huone=) goes along. A removed game's page (#469) goes to the shelf, and its other files come
+// from the network, never from the cache.
+// The removed games are read once per worker: a build that removes another one is a new worker.
+var removedGames = null;
+function removedList() {
+  if (!removedGames) {
+    removedGames = caches.open(SHELL_CACHE)
+      .then(function (shell) { return shell.match('catalog.json'); })
+      .then(function (r) { return r ? r.json() : null; })
+      .then(function (catalog) { return (catalog && catalog.removed) || []; })
+      .catch(function () { return []; });
+    removedGames.then(function (list) { if (!list.length) removedGames = null; });
+  }
+  return removedGames;
+}
+
 function gameFile(request, url) {
-  var m = url.pathname.slice(GAMES_PREFIX.length).match(/^([^/]+)\/v(\d+)\/(index\.html)?$/);
-  if (!m || request.mode !== 'navigate') return cachedFile(request, GAMES_CACHE);
+  var path = url.pathname.slice(GAMES_PREFIX.length);
+  var m = path.match(/^([^/]+)\/v(\d+)\/(index\.html)?$/);
+  return removedList().then(function (removed) {
+    if (removed.indexOf(path.split('/')[0]) >= 0) {
+      if (request.mode === 'navigate') return Response.redirect(new URL('./', self.registration.scope).href, 302);
+      return fetch(request);
+    }
+    if (!m || request.mode !== 'navigate') return cachedFile(request, GAMES_CACHE);
+    return gameNavigation(request, url, m);
+  });
+}
+
+function gameNavigation(request, url, m) {
   return caches.open(SHELL_CACHE)
     .then(function (shell) { return shell.match('catalog.json'); })
     .then(function (r) { return r ? r.json() : null; })
