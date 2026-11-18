@@ -1,0 +1,13 @@
+{
+  "title": "Shakki",
+  "description": "Klassinen shakki: pelaa konetta vastaan viidellä tasolla tai kaveria vastaan omilla puhelimilla.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-18",
+      "note": "Ensimmäinen versio: shakki konetta vastaan viidellä tasolla, jotka aukeavat voitto kerrallaan, tai kaveria vastaan huoneessa, lailliset siirrot näkyvät, keskeneräinen peli ja tilastot tallentuvat.",
+      "request": "Shakki",
+      "issue": "eerovil/ai-pelit#465"
+    }
+  ]
+}
