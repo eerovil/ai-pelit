@@ -297,9 +297,12 @@ function afterHostMove() {
 function receive(m, from) {
   if (!online || !m || m.round !== roomRound) return;
   if (R.isHost) {
-    if (!game || result) return;
-    if (m.t === 'move' && from === sideId() && m.ply === derived.uci.length && !R.paused) {
-      var mv = findMove(derived.pos, m.m);
+    if (!game) return;
+    if (result) { if (m.t === 'move') sendState(from); return; }
+    if (m.t === 'move') {
+      // A move the host cannot take (not that phone's turn, an old ply, the round paused, not legal)
+      // sends the game back as it is, so the guest drops the move it showed already.
+      var mv = from === sideId() && m.ply === derived.uci.length && !R.paused ? findMove(derived.pos, m.m) : null;
       if (mv) { play(mv); afterHostMove(); updateHUD(); askDraw(); }
       else sendState(from);
     }
@@ -386,7 +389,7 @@ $('resign').onclick = function () {
   setTimeout(updateHUD, 3100);
 };
 $('again').onclick = function () {
-  if (online) { var t = resultText(result, game.mine); R.backToRoom(t.title + ' ' + t.sub, t.kind === 'win' ? 'win' : 'lose'); }
+  if (online) { var t = resultText(result, game.mine); R.backToRoom(t.title + ' ' + t.sub, t.kind === 'draw' ? '' : t.kind); }
   else newSoloGame();
 };
 $('endMenu').onclick = menu;

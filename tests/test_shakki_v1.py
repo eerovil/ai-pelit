@@ -248,6 +248,23 @@ def test_levels_open_one_at_a_time(site, context):
     assert page.errors == []
 
 
+def test_captured_pieces_come_from_the_moves(site, context):
+    page = open_game(site, context)
+    page.click("#play")
+    # White promotes on b8 by taking a knight, then the new queen is taken.
+    set_moves(page, ["a2a4", "b7b5", "a4b5", "a7a6", "b5a6", "c8b7", "a6b7", "h7h6", "b7a8q", "d8c8", "a8b8", "c8b8"])
+    caps = page.evaluate("capturedBy(derived)")
+    # White took a pawn, a pawn, a bishop, a rook and a knight; black took the promoted queen.
+    assert sorted(caps["w"]) == sorted(["p", "p", "b", "r", "n"])
+    assert caps["w"][0] == "r"
+    assert caps["b"] == ["Q"]
+    # A promotion that takes nothing adds nothing to either row.
+    set_moves(page, ["a2a4", "b7b5", "a4b5", "a7a6", "b5a6", "c8b7", "a6b7", "b8c6", "b7b8q"])
+    caps = page.evaluate("capturedBy(derived)")
+    assert sorted(caps["w"]) == ["b", "p", "p"] and caps["b"] == []
+    assert page.errors == []
+
+
 @pytest.mark.parametrize("size", [{"width": 360, "height": 640}, {"width": 360, "height": 740},
                                   {"width": 390, "height": 844}, {"width": 740, "height": 360}])
 def test_menu_and_board_fit_every_screen(site, context, size):

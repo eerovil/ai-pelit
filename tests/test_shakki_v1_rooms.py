@@ -132,6 +132,10 @@ def test_mate_ends_the_round(phones):
     assert guest.locator("#endTitle").inner_text() == "Voitit!"
     assert host.locator("#endTitle").inner_text() == "Hävisit"
     assert host.locator("#endSub").inner_text() == "Shakkimatti."
+    # Back in the room the result line takes the win or loss colour.
+    guest.click("#again")
+    guest.wait_for_selector("#aipr-result.win")
+    assert guest.locator("#aipr-result").inner_text() == "Voitit! Shakkimatti."
     for p in (host, guest):
         assert p.errors == []
 
@@ -144,6 +148,9 @@ def test_an_away_friends_turn_is_played_by_the_computer_and_they_come_back(phone
     guest.evaluate("R.leave()")
     host.wait_for_function("R.paused")
     assert host.locator("#status").inner_text() == "Peli odottaa…"
+    # A move that reaches the host while the round waits is sent back, not kept.
+    host.evaluate("receive({t: 'move', round: roomRound, ply: 1, m: 'e7e5'}, game.black.id)")
+    assert host.evaluate("derived.uci.length") == 1
     host.click("#aipr-goOn")
     host.wait_for_function("derived.uci.length === 2")
     assert host.locator("#lastMove").inner_text() == "Kone siirsi pelaajan Testi2 puolesta."
@@ -156,5 +163,30 @@ def test_an_away_friends_turn_is_played_by_the_computer_and_they_come_back(phone
     tap(guest, "g8")
     tap(guest, "f6")
     host.wait_for_function("derived.uci.length === 4")
+    for p in (host, guest):
+        assert p.errors == []
+
+
+def test_a_draw_and_a_move_after_the_end(phones):
+    host, guest = room(phones)
+    # Stalemate after black's move: f7... the fastest known stalemate, played to its last move by taps.
+    moves = ["e2e3", "a7a5", "d1h5", "a8a6", "h5a5", "h7h5", "h2h4", "a6h6", "a5c7", "f7f6", "c7d7", "e8f7",
+             "d7b7", "d8d3", "b7b8", "d3h7", "b8c8", "f7g6"]
+    host.evaluate("ms => { game.moves = ms; derived = playGame(ms); sendState(); updateHUD(); askDraw(); }", moves)
+    guest.wait_for_function("derived.uci.length === 18")
+    tap(host, "c8")
+    tap(host, "e6")
+    for p in (host, guest):
+        p.wait_for_selector("#end:not(.hidden)")
+        assert p.locator("#endTitle").inner_text() == "Tasapeli"
+    assert guest.evaluate("load('kaverit', null)") == {"v": 0, "h": 0, "t": 1}
+    # A move that arrives after the end is answered with the ended game.
+    guest.evaluate("R.send({t: 'move', round: roomRound, ply: 19, m: 'h7h8'})")
+    guest.wait_for_timeout(300)
+    assert host.evaluate("derived.uci.length") == 19 and guest.evaluate("derived.uci.length") == 19
+    # A draw's line in the room is neither the win nor the loss colour.
+    guest.click("#again")
+    guest.wait_for_selector("#aipr-result:not(:empty)")
+    assert guest.evaluate("document.getElementById('aipr-result').className") == ""
     for p in (host, guest):
         assert p.errors == []

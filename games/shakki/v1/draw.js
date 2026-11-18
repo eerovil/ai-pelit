@@ -180,18 +180,13 @@ function roundRect(c, x, y, w, h, r) {
   c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
 }
 
-// The pieces each side has taken, beside its name, with the material lead.
+// The pieces each side has taken, beside its name, with the material lead: read from the moves
+// played, so a promoted pawn that is taken later counts as the piece it became.
 function capturedBy(g) {
-  var left = { w: {}, b: {} }, out = { w: [], b: [] }, start = parseFen(START_FEN).b;
-  start.forEach(function (p) { if (p) left[colorOf(p)][p] = (left[colorOf(p)][p] || 0) + 1; });
-  if (g) g.pos.b.forEach(function (p) { if (p) left[colorOf(p)][p] = (left[colorOf(p)][p] || 0) - 1; });
-  // A promoted pawn is counted as the piece it became, so take the extras back off.
+  var out = { w: [], b: [] }, order = 'QRBNP';
+  if (g) g.moves.forEach(function (m) { if (m.cap) out[other(colorOf(m.cap))].push(m.cap); });
   ['w', 'b'].forEach(function (c) {
-    var taker = other(c);
-    'QRBNP'.split('').forEach(function (u) {
-      var p = c === 'w' ? u : u.toLowerCase(), n = left[c][p] || 0;
-      for (var i = 0; i < n; i++) out[taker].push(p);
-    });
+    out[c].sort(function (x, y) { return order.indexOf(x.toUpperCase()) - order.indexOf(y.toUpperCase()); });
   });
   return out;
 }
