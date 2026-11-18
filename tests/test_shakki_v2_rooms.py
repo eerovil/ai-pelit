@@ -1,4 +1,4 @@
-"""Shakki v1 (#465) with a friend: the host's phone keeps the game, both play by taps."""
+"""Shakki v2 (#465) with a friend: the host's phone keeps the game, both play by taps."""
 
 import json
 
@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT
 from test_rooms_lib import Relay
-from test_shakki_v1 import tap
+from test_shakki_v2 import tap
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def phones(site, browser):
         p.errors = []
         p.on("pageerror", lambda e: p.errors.append(str(e)))
         relay.attach(p)
-        p.goto(site.url + "games/shakki/v1/")
+        p.goto(site.url + "games/shakki/v2/")
         p.wait_for_function("view.s > 0")
         return p
 

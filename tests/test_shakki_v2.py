@@ -1,10 +1,10 @@
-"""Shakki v1 (#465): the rules, the computer's levels, taps on the board, saves and layout."""
+"""Shakki v2 (#465): the rules, the computer's levels, taps on the board, saves and layout."""
 
 import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/shakki/v1/"
+URL = "games/shakki/v2/"
 
 
 def open_game(site, context, size=None):
