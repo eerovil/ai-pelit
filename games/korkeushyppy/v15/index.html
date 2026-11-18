@@ -72,8 +72,8 @@
 <!-- v7 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v9 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v12 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-9/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-9/korkeus.js"></script>
+<script src="../../../lib/yleisurheilu-10/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-10/korkeus.js"></script>
 <script src="../../../outfits.js" data-game="korkeushyppy" data-share="yleisurheilu"></script>
 <!-- v8 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -117,6 +117,17 @@ const LIE = [[0.6, 0.82], [0.38, 0.8], [0, 0.98], [-0.32, 1.25], [-0.72, 1.3]]; 
 const SAMPLES = [[0, 1, 0, 0.11], [0, 1, 0.5, 0.1], [1, 2, 0, 0.1], [1, 2, 0.33, 0.1], [1, 2, 0.67, 0.1],
   [2, 3, 0, 0.11], [2, 3, 0.5, 0.09], [3, 4, 0, 0.07], [3, 4, 0.5, 0.06], [3, 4, 1, 0.06]];
 const ss = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+// v15 (#469): a back-first flop, drawn only. Two more points for the drawing only (5 the middle of the
+// back, 6 the hand): the bar still meets points 0–4. Lying back over the bar the head leads; the
+// arch lifts the hips with the knees bent and the shins hanging; the kick drops the hips into a
+// V, legs up, so the body never stands upright head-down.
+const NK = {
+  UP: [[0.05, 0.78], [0.02, 0.52], [0, -0.02], [0.28, -0.35], [0.05, -0.95], [0.01, 0.25], [0.22, 0.72]],
+  LAY: [[0.70, 0.32], [0.48, 0.22], [0, -0.12], [-0.45, -0.10], [-0.86, -0.25], [0.24, 0.08], [0.08, -0.06]],
+  ARCH: [[0.58, -0.20], [0.44, -0.03], [0, 0.14], [-0.40, -0.02], [-0.66, -0.40], [0.23, 0.13], [0.72, -0.12]],
+  KICK: [[0.62, -0.20], [0.42, -0.15], [0, -0.10], [-0.40, 0.04], [-0.78, 0.20], [0.21, -0.08], [0.52, -0.34]],
+  LIE: [[0.62, 0.78], [0.42, 0.80], [0.02, 0.95], [-0.30, 1.15], [-0.62, 1.30], [0.22, 0.86], [0.45, 0.74]],
+};
 function pose(f, t) {
   const L = ss(t / T_LAY), A = f.archT === null ? 0 : ss((t - f.archT) / T_ARCH), K = f.kickT === null ? 0 : ss((t - f.kickT) / T_KICK);
   const th = ROT * Math.max(0, t - T_LAY * 0.8), co = Math.cos(th), si = Math.sin(th);
@@ -125,6 +136,18 @@ function pose(f, t) {
     px += (ARCH[i][0] - px) * A; py += (ARCH[i][1] - py) * A;
     px += (KICK[i][0] - px) * K; py += (KICK[i][1] - py) * K;
     // The body turns over the bar, head down and feet up, after it has laid out.
+    return [px * co + py * si, py * co - px * si];
+  });
+}
+// v15 (#469): the body as drawn only; the bar still meets pose()'s points, as before. The same
+// timing, the new shapes, and the turn stops at about 26° so the jumper falls onto the upper back.
+function drawPose(f, t) {
+  const L = ss(t / T_LAY), A = f.archT === null ? 0 : ss((t - f.archT) / T_ARCH), K = f.kickT === null ? 0 : ss((t - f.kickT) / T_KICK);
+  const th = Math.min(0.35, ROT * Math.max(0, t - T_LAY * 0.8)), co = Math.cos(th), si = Math.sin(th);
+  return NK.UP.map((u, i) => {
+    let px = u[0] + (NK.LAY[i][0] - u[0]) * L, py = u[1] + (NK.LAY[i][1] - u[1]) * L;
+    px += (NK.ARCH[i][0] - px) * A; py += (NK.ARCH[i][1] - py) * A;
+    px += (NK.KICK[i][0] - px) * K; py += (NK.KICK[i][1] - py) * K;
     return [px * co + py * si, py * co - px * si];
   });
 }
@@ -246,7 +269,7 @@ AU.load(['valinta', 'askel', 'askel2', 'ponnistus', 'suhahdus', 'rima', 'onnistu
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-9/korkeus.js): the bar rises; at each height everyone
+// in its bar-height format (lib/yleisurheilu-10/korkeus.js): the bar rises; at each height everyone
 // still in takes a first attempt in the drawn order, then those who failed a second, then a third;
 // a pass is allowed, three failures in a row and you are out. K.comp is the meet: a jumper is {id,
 // name, p, bot, skill (the height the computer clears half the time), first (the height index it
@@ -632,59 +655,86 @@ let outfit = AiPelitOutfits.setup({
   },
 });
 function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
-// The jumper in the air (and lying on the mat after), from the same points that meet the bar.
+// The jumper in the air (and lying on the mat after): drawFlop draws it from drawPose (#469); the
+// bar still meets pose()'s points.
 function drawFlyer(a, s, o, name) {
+  return drawFlop(a, s, o, name);
+}
+
+// v15 (#469): the flyer drawn as a body: a curved back, a neck, the head turned with the body
+// (face up once the jumper has turned its back to the bar), arms, bent knees.
+function drawFlop(a, s, o, name) {
   const f = a.f, t = Math.min(f.t, 2.5);
-  let { joints, cx, cy } = points(f, t);
-  // After landing the jumper settles on the upper back, legs over, on the mat.
+  let { cx, cy } = points(f, t);
+  let joints = drawPose(f, t).map(q => [cx + q[0], cy + q[1]]);
+  let lie = 0;
   if (f.done && cx > -0.3) {
-    const u = ss(a.phase === 'land' ? a.t / 0.3 : 0);
-    joints = joints.map((j, i) => [j[0] + (cx + LIE[i][0] - j[0]) * u, j[1] + (LIE[i][1] - j[1]) * u]);
+    lie = ss(a.phase === 'land' ? a.t / 0.3 : 0);
+    joints = joints.map((j, i) => [j[0] + (cx + NK.LIE[i][0] - j[0]) * lie, j[1] + (NK.LIE[i][1] - j[1]) * lie]);
   }
-  const lift = (1 - ss(t / 0.25)) * depth(-f.d) * 0.35;   // from the curve's last step to the bar's line
+  const lift = (1 - ss(t / 0.25)) * depth(-f.d) * 0.35;
   const P = j => [sx(j[0]), groundY - j[1] * s + lift * s];
-  const [hd, sh, hp, kn, ft] = joints.map(P);
+  const [hd, sh, hp, kn, ft, mid, hand] = joints.map(P);
   const lw = Math.max(2.5, 0.11 * s);
+  const A = f.archT === null ? 0 : ss((t - f.archT) / T_ARCH), K = f.kickT === null ? 0 : ss((t - f.kickT) / T_KICK);
   x.lineCap = 'round'; x.lineJoin = 'round';
   x.fillStyle = 'rgba(0,0,0,.2)'; x.beginPath(); x.ellipse(sx(cx), cy > 0.8 && cx > -0.3 ? sy(0.7) : groundY, 0.35 * s, 0.06 * s, 0, 0, 7); x.fill();
-  // A dark edge first, so the body reads against the crowd.
-  x.strokeStyle = 'rgba(10,20,40,.45)'; x.lineWidth = lw * 2.1 + 4;
-  x.beginPath(); x.moveTo(hd[0], hd[1]); x.lineTo(sh[0], sh[1]); x.lineTo(hp[0], hp[1]); x.lineTo(kn[0], kn[1]); x.lineTo(ft[0], ft[1]); x.stroke();
-  x.fillStyle = 'rgba(10,20,40,.45)'; x.beginPath(); x.arc(hd[0], hd[1], 0.13 * s + 2, 0, 7); x.fill();
   const legSkin = o.halloween ? o.bottom : o.skin;
+  // The back bends through the middle point: a curve from the hips to the shoulders.
+  const ctl = [2 * mid[0] - (hp[0] + sh[0]) / 2, 2 * mid[1] - (hp[1] + sh[1]) / 2];
+  const back = () => { x.beginPath(); x.moveTo(...hp); x.quadraticCurveTo(...ctl, ...sh); };
+  // The neck and head: along the line from the shoulders to the head joint.
+  const ux = hd[0] - sh[0], uy = hd[1] - sh[1], ul = Math.hypot(ux, uy) || 1;
+  const hr = 0.13 * s, hc = [hd[0], hd[1]];
+  // Turned at the take-off: the face is towards the runner's front first, up after it.
+  const turned = ss(t / 0.18);
+  // The head's pose: thrown back in the arch (looking for the mat), chin to the chest at the kick.
+  const nod = (-0.55 * A * (1 - K) + 0.7 * K) * (1 - lie);
+  const ang = Math.atan2(uy, ux) + Math.PI / 2;   // the head's up along the neck
+  const edge = (pts, w) => { x.strokeStyle = 'rgba(10,20,40,.45)'; x.lineWidth = w + 4; x.beginPath(); x.moveTo(...pts[0]); pts.slice(1).forEach(q => x.lineTo(...q)); x.stroke(); };
+  edge([hp, kn, ft], lw); edge([sh, hc], lw); back(); x.strokeStyle = 'rgba(10,20,40,.45)'; x.lineWidth = lw * 2.3 + 4; x.stroke();
+  x.fillStyle = 'rgba(10,20,40,.45)'; x.beginPath(); x.arc(hc[0], hc[1], hr + 2, 0, 7); x.fill();
   const line = (pts, c2, w) => {
     x.strokeStyle = c2; x.lineWidth = w; x.beginPath(); x.moveTo(...pts[0]); pts.slice(1).forEach(q => x.lineTo(...q)); x.stroke();
-    // A skeleton's bones, pale along each dark limb.
     if (o.bones && c2 !== o.skin) { x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.3); x.stroke(); }
   };
-  // A cape hangs from the shoulders below the arched back.
   if (o.cape) {
-    x.fillStyle = o.cape; x.beginPath(); x.moveTo(sh[0], sh[1]);
-    x.lineTo((sh[0] + hp[0]) / 2 - 0.1 * s, Math.max(sh[1], hp[1]) + 0.45 * s); x.lineTo(hp[0], hp[1]); x.closePath(); x.fill();
+    x.fillStyle = o.cape; x.beginPath(); x.moveTo(...sh);
+    x.quadraticCurveTo(mid[0], Math.max(sh[1], hp[1]) + 0.5 * s, hp[0], hp[1]); x.quadraticCurveTo(...ctl, ...sh); x.fill();
   }
-  // The far leg a little behind the near one.
-  const off = [0.08 * s, -0.05 * s];
+  // The far arm and the far leg, darker, a little behind.
+  const off = [0.06 * s, -0.05 * s];
+  const elbow = (a1, b1, bend) => { const mx = (a1[0] + b1[0]) / 2, my = (a1[1] + b1[1]) / 2, dx = b1[0] - a1[0], dy = b1[1] - a1[1]; return [mx - dy * bend, my + dx * bend]; };
+  line([sh, elbow(sh, hand, -0.25), [hand[0] + off[0], hand[1] + off[1]]], shade(o.skin, 0.84), lw * 0.85);
   line([hp, [kn[0] + off[0], kn[1] + off[1]], [ft[0] + off[0], ft[1] + off[1]]], shade(legSkin, 0.84), lw);
-  x.strokeStyle = o.top; x.lineWidth = lw * 2.1;
-  x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(sh[0], sh[1]); x.stroke();
-  if (o.bones) {
-    // A skeleton's ribs and spine, pale on the dark suit.
-    x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.35);
-    const ux = sh[0] - hp[0], uy = sh[1] - hp[1], l = Math.hypot(ux, uy) || 1, nx = -uy / l * lw * 0.9, ny = ux / l * lw * 0.9;
-    x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(sh[0], sh[1]);
-    [0.45, 0.62, 0.79].forEach(k => { const rx = hp[0] + ux * k, ry = hp[1] + uy * k; x.moveTo(rx - nx, ry - ny); x.lineTo(rx + nx, ry + ny); });
-    x.stroke();
-  }
-  x.strokeStyle = o.bottom; x.lineWidth = lw * 1.6;
-  x.beginPath(); x.moveTo(hp[0], hp[1]); x.lineTo(hp[0] + (kn[0] - hp[0]) * 0.35, hp[1] + (kn[1] - hp[1]) * 0.35); x.stroke();
-  line([hp, kn, ft], legSkin, lw);
-  x.fillStyle = o.shoe; x.beginPath(); x.arc(ft[0], ft[1], Math.max(2, 0.06 * s), 0, 7); x.fill();
-  // Arms along the body towards the hips.
-  line([sh, [sh[0] + (hp[0] - sh[0]) * 0.55 + 0.05 * s, sh[1] + (hp[1] - sh[1]) * 0.55 + 0.08 * s]], o.skin, lw);
-  if (o.head) AiPelitOutfits.head(x, o.head, hd[0], hd[1], 0.13 * s, hd[0] >= sh[0] ? 1 : -1);
+  x.fillStyle = o.farShoe || shade(o.shoe, 0.6); x.beginPath(); x.arc(ft[0] + off[0], ft[1] + off[1], Math.max(2, 0.06 * s), 0, 7); x.fill();
+  back(); x.strokeStyle = o.top; x.lineWidth = lw * 2.3; x.stroke();
+  if (o.stripe) { back(); x.strokeStyle = o.stripe; x.lineWidth = lw * 0.5; x.stroke(); }
+  if (o.bones) { back(); x.strokeStyle = o.skin; x.lineWidth = Math.max(1, lw * 0.35); x.stroke(); }
+  // Shorts over the top of the near thigh.
+  x.strokeStyle = o.bottom; x.lineWidth = lw * 1.7;
+  x.beginPath(); x.moveTo(...hp); x.lineTo(hp[0] + (kn[0] - hp[0]) * 0.38, hp[1] + (kn[1] - hp[1]) * 0.38); x.stroke();
+  line([hp, kn, ft], legSkin, lw * 1.05);
+  x.fillStyle = o.shoe; x.beginPath(); x.ellipse(ft[0], ft[1], Math.max(2, 0.08 * s), Math.max(1.5, 0.045 * s), Math.atan2(ft[1] - kn[1], ft[0] - kn[0]) + Math.PI / 2, 0, 7); x.fill();
+  // The neck, the near arm (elbow bent out), its hand.
+  line([sh, [sh[0] + ux * 0.45, sh[1] + uy * 0.45]], o.skin, lw * 1.1);
+  const nh = elbow(sh, hand, 0.25);
+  line([sh, nh, hand], o.skin, lw * 0.9);
+  x.fillStyle = o.skin; x.beginPath(); x.arc(hand[0], hand[1], lw * 0.7, 0, 7); x.fill();
+  // The head, from the side, turned with the body. Facing: the runner's front before the turn;
+  // after it the face is towards the sky side of the back.
+  const face = turned < 0.5 ? 1 : -1;
+  const tilt = ang + nod * (face < 0 ? -1 : 1);
+  if (o.head) AiPelitOutfits.head(x, o.head, hc[0], hc[1], hr, face, tilt);
   else {
-    x.fillStyle = o.skin; x.beginPath(); x.arc(hd[0], hd[1], 0.13 * s, 0, 7); x.fill();
-    x.fillStyle = o.hair || 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hd[0], hd[1], 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
+    x.save(); x.translate(...hc); x.rotate(tilt); x.scale(face, 1);
+    x.fillStyle = o.skin; x.beginPath(); x.arc(0, 0, hr, 0, 7); x.fill();
+    x.fillStyle = o.hair || 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(-hr * 0.08, -hr * 0.05, hr * 1.02, Math.PI * 0.85, Math.PI * 1.85); x.closePath(); x.fill();
+    x.fillStyle = 'rgba(20,20,30,.85)'; x.beginPath(); x.arc(hr * 0.5, -hr * 0.05, Math.max(1, hr * 0.13), 0, 7); x.fill();
+    x.fillStyle = shade(o.skin, 0.9); x.beginPath(); x.arc(hr * 0.98, hr * 0.15, hr * 0.16, 0, 7); x.fill();
+    x.strokeStyle = 'rgba(0,0,0,.5)'; x.lineWidth = Math.max(1, hr * 0.1);
+    x.beginPath(); x.moveTo(hr * 0.5, hr * 0.5); x.lineTo(hr * 0.8, hr * 0.45); x.stroke();
+    x.restore();
   }
   if (name && !a.mine && a.phase === 'air') {
     x.font = '600 13px system-ui'; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
@@ -693,6 +743,15 @@ function drawFlyer(a, s, o, name) {
   }
 }
 // A runner seen from the side, running to the right, heights in metres from the feet.
+// v15 (#469): the head's turn for the attempt's phase (AiPelitOutfits.headPose): a bob on the
+// run-up, chin up at the take-off, back in the air, then a cheer after a good attempt or the chin down.
+function headTilt(a) {
+  const P = window.AiPelitOutfits && AiPelitOutfits.headPose;
+  if (!P || !a) return 0;
+  const t = performance.now() / 1000;
+  const st = a.phase === 'run' ? 'run' : a.phase === 'land' && a.t < 2.5 ? (a.mark === 'O' ? 'cheer' : 'land') : 'idle';
+  return P(st, t).tilt;
+}
 function drawAthlete(a, px, base, s, o, name) {
   if (px < -80 || px > SW + 80) return;
   const lw = Math.max(2.5, 0.11 * s);
@@ -747,11 +806,7 @@ function drawAthlete(a, px, base, s, o, name) {
   x.beginPath(); x.moveTo(hipX, hipY); x.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); x.stroke();
   limb(neckX, neckY + 0.05 * s, arm, 0.3 * s, o.skin); bone(o.skin);
   const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
-  if (o.head) AiPelitOutfits.head(x, o.head, hx, hy, 0.13 * s, 1);
-  else {
-    x.fillStyle = o.skin; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
-    x.fillStyle = o.hair || 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
-  }
+  AiPelitOutfits.sideHead(x, o, hx, hy, 0.13 * s, 1, headTilt(a));
   if (s > 18 && name) {
     x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
     x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';

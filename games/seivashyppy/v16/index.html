@@ -72,8 +72,8 @@
 <!-- v8 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v10 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v13 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-9/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-9/korkeus.js"></script>
+<script src="../../../lib/yleisurheilu-10/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-10/korkeus.js"></script>
 <script src="../../../outfits.js" data-game="seivashyppy" data-share="yleisurheilu"></script>
 <!-- v9 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -175,7 +175,7 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-9/korkeus.js). The real rules: the bar rises 10 cm at a
+// in its bar-height format (lib/yleisurheilu-10/korkeus.js). The real rules: the bar rises 10 cm at a
 // time; at each height everyone still trying takes a first attempt in the drawn order, then those
 // who failed a second, then a third. A vaulter may pass any height, even after failing at it; three
 // failures in a row and they are out. K.comp is the meet: a vaulter is {id, name, p, bot, skill (the
@@ -618,11 +618,8 @@ function drawBody(shX, shY, ang, tuck, s, o, arms) {
   if (arms) line([[shX, shY], arms], o.skin, lw);
   const hx = shX + dir[0] * 0.18 * s, hy = shY - dir[1] * 0.18 * s;
   // A costume's head turns with the body, so the witch's hat points away from it upside down too.
-  if (o.head) { x.save(); x.translate(hx, hy); x.rotate(ang); AiPelitOutfits.head(x, o.head, 0, 0, 0.13 * s, 1); x.restore(); }
-  else {
-    x.fillStyle = o.skin; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
-    if (o.hair) { x.fillStyle = o.hair; x.beginPath(); x.arc(hx, hy, 0.13 * s, Math.PI * 0.9 + ang, Math.PI * 1.9 + ang); x.fill(); }
-  }
+  // v16 (#469): the head goes back a little in the air, on top of turning with the body.
+  AiPelitOutfits.sideHead(x, o, hx, hy, 0.13 * s, 1, ang + AiPelitOutfits.headPose('air').tilt);
   return [hipX, hipY];
 }
 // Where the vaulter is on the pole tau s after the plant (metres): the hips rise as the run lifts them;
@@ -679,6 +676,15 @@ let outfit = AiPelitOutfits.setup({
 });
 function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
 // A vaulter running to the right with the pole, its tip lowering as the box comes near.
+// v16 (#469): the head's turn for the attempt's phase (AiPelitOutfits.headPose): a bob on the
+// run-up, chin up at the take-off, back in the air, then a cheer after a good attempt or the chin down.
+function headTilt(a) {
+  const P = window.AiPelitOutfits && AiPelitOutfits.headPose;
+  if (!P || !a) return 0;
+  const t = performance.now() / 1000;
+  const st = a.phase === 'run' ? 'run' : a.phase === 'land' && a.t < 2.5 ? (a.res === 'O' ? 'cheer' : 'land') : 'idle';
+  return P(st, t).tilt;
+}
 function drawRunner(a, px, base, s, o, name) {
   if (px < -80 || px > SW + 80) return;
   const lw = Math.max(2.5, 0.11 * s);
@@ -736,11 +742,7 @@ function drawRunner(a, px, base, s, o, name) {
   drawPole(tipX, tipY, endX, endY, 0, s);
   x.fillStyle = o.skin; x.beginPath(); x.arc(hand[0], hand[1], 0.05 * s, 0, 7); x.fill();
   const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
-  if (o.head) AiPelitOutfits.head(x, o.head, hx, hy, 0.13 * s, 1);
-  else {
-    x.fillStyle = o.skin; x.beginPath(); x.arc(hx, hy, 0.13 * s, 0, 7); x.fill();
-    x.fillStyle = o.hair || 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); x.fill();
-  }
+  AiPelitOutfits.sideHead(x, o, hx, hy, 0.13 * s, 1, headTilt(a));
   if (s > 18 && name) {
     x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
     x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';

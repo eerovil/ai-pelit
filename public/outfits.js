@@ -35,6 +35,8 @@
   var script = document.currentScript;
   var GAME = (script && script.getAttribute('data-game')) || '';
   var SHARE = (script && script.getAttribute('data-share')) || '';
+  // The athletics events (#469) show the shared front figure in the picker; other games their own.
+  var FIGURE = SHARE === 'yleisurheilu';
   var OWN = 'ai-pelit:_asut:' + GAME;
   var KEY = SHARE ? 'ai-pelit:_asut:' + SHARE : OWN;
   // The games whose own earlier choice a group takes over, in order (#311): those that had
@@ -104,10 +106,13 @@
   function current() { return byId(load(KEY, '')) || outfits[0] || null; }
 
   // ---- Costume heads: drawn at (x, y), radius r, the face towards +x (or -x when face < 0) ----
-  function head(ctx, kind, x, y, r, face) {
+  // face 'front' draws it seen from the front (frontHead); tilt turns it (radians, #469).
+  function head(ctx, kind, x, y, r, face, tilt) {
+    if (face === 'front') { frontHead(ctx, { head: kind }, x, y, r, { tilt: tilt || 0 }); return; }
     var f = face < 0 ? -1 : 1;
     ctx.save();
     ctx.translate(x, y);
+    if (tilt) ctx.rotate(tilt);
     ctx.scale(f, 1);
     var c = ctx;
     function circle(cx, cy, rr, col) { c.fillStyle = col; c.beginPath(); c.arc(cx, cy, rr, 0, 7); c.fill(); }
@@ -247,7 +252,235 @@
       .forEach(function (type) { e.addEventListener(type, function (ev) { ev.stopPropagation(); }, { passive: true }); });
   }
   function close() { if (panel) { panel.remove(); panel = null; } }
+  // ---- Seen from the front (#469): heads with poses, and a whole athlete ----
+  // A head seen from the front at (x, y), radius r. opt: tilt (radians), lx -1…1 (turned left …
+  // right), ly -1…1 (looking up … down), mouth 'smile' | 'open' | 'o'.
+  function frontHead(ctx, L, x, y, r, opt) {
+    opt = opt || {};
+    var kind = L.head || null, c = ctx;
+    var fx = (opt.lx || 0) * r * 0.3, fy = (opt.ly || 0) * r * 0.22;
+    c.save(); c.translate(x, y); if (opt.tilt) c.rotate(opt.tilt);
+    function circle(cx, cy, rr, col) { c.fillStyle = col; c.beginPath(); c.arc(cx, cy, rr, 0, 7); c.fill(); }
+    function ell(cx, cy, rx, ry, col) { c.fillStyle = col; c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, 7); c.fill(); }
+    function tri(a, b, cc, col) { c.fillStyle = col; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.lineTo(cc[0], cc[1]); c.closePath(); c.fill(); }
+    function eyes(col, s, dy) {
+      var er = Math.max(1, r * (s || 0.12));
+      [-1, 1].forEach(function (d) {
+        circle(fx + d * r * 0.36, fy - r * 0.05 + (dy || 0), er, col);
+        if (er > 2) circle(fx + d * r * 0.36 + er * 0.35 + (opt.lx || 0) * er * 0.3, fy - r * 0.05 - er * 0.35 + (dy || 0), er * 0.35, 'rgba(255,255,255,.8)');
+      });
+    }
+    function mouth(col) {
+      var m = opt.mouth || 'smile';
+      if (m === 'open') { ell(fx, fy + r * 0.42, r * 0.22, r * 0.17, '#5a1f1f'); ell(fx, fy + r * 0.5, r * 0.12, r * 0.06, '#e07a7a'); return; }
+      if (m === 'o') { ell(fx, fy + r * 0.45, r * 0.1, r * 0.12, '#5a1f1f'); return; }
+      c.strokeStyle = col || 'rgba(0,0,0,.55)'; c.lineWidth = Math.max(1, r * 0.1); c.lineCap = 'round';
+      c.beginPath(); c.arc(fx, fy + r * 0.18, r * 0.32, 0.2 * Math.PI, 0.8 * Math.PI); c.stroke();
+    }
+    if (kind === 'pumpkin') {
+      ell(0, 0, r * 1.25, r * 1.1, '#e8711a');
+      c.strokeStyle = '#b8520c'; c.lineWidth = Math.max(1, r * 0.1);
+      [-0.45, 0, 0.45].forEach(function (k) { c.beginPath(); c.ellipse(r * k + fx * 0.3, 0, r * 0.42, r * 1.05, 0, 0, 7); c.stroke(); });
+      c.fillStyle = '#3f6b22'; c.fillRect(-r * 0.12, -r * 1.4, r * 0.24, r * 0.4);
+      [-1, 1].forEach(function (d) { tri([fx + d * r * 0.2, fy - r * 0.05], [fx + d * r * 0.65, fy - r * 0.05], [fx + d * r * 0.42, fy - r * 0.45], '#ffd23f'); });
+      c.fillStyle = '#ffd23f'; c.beginPath();
+      c.moveTo(fx - r * 0.6, fy + r * 0.25); c.lineTo(fx + r * 0.6, fy + r * 0.25); c.lineTo(fx + r * 0.45, fy + r * 0.62);
+      c.lineTo(fx + r * 0.2, fy + r * 0.45); c.lineTo(fx, fy + r * 0.64); c.lineTo(fx - r * 0.2, fy + r * 0.45); c.lineTo(fx - r * 0.45, fy + r * 0.62);
+      c.closePath(); c.fill();
+    } else if (kind === 'witch') {
+      c.fillStyle = '#2a2a2a'; c.fillRect(-r * 1.05, -r * 0.3, r * 2.1, r * 1.35);
+      circle(0, 0, r, '#9fd17a');
+      eyes('#1b1b1b', 0.13);
+      tri([fx, fy + r * 0.0], [fx - r * 0.13, fy + r * 0.32], [fx + r * 0.13, fy + r * 0.32], '#86bf5e');
+      mouth('#3d5a26');
+      ell(0, -r * 0.62, r * 1.6, r * 0.24, '#1b1426');
+      tri([-r * 0.75, -r * 0.65], [r * 0.75, -r * 0.65], [r * 0.25, -r * 2.5], '#1b1426');
+      c.fillStyle = '#8a4fd1'; c.fillRect(-r * 0.68, -r * 1.0, r * 1.36, r * 0.28);
+    } else if (kind === 'ghost') {
+      circle(0, 0, r * 1.08, '#f4f4f8');
+      [-1, 1].forEach(function (d) { ell(fx + d * r * 0.36, fy - r * 0.2, r * 0.16, r * 0.26, '#1b1b24'); });
+      ell(fx, fy + r * 0.42, r * 0.15, r * 0.2, '#1b1b24');
+    } else if (kind === 'skull') {
+      circle(0, -r * 0.08, r, '#ece6d6');
+      c.fillStyle = '#ece6d6'; c.fillRect(-r * 0.5, r * 0.35, r * 1.0, r * 0.55);
+      [-1, 1].forEach(function (d) { circle(fx + d * r * 0.38, fy - r * 0.1, r * 0.26, '#141414'); });
+      tri([fx, fy + r * 0.15], [fx - r * 0.12, fy + r * 0.38], [fx + r * 0.12, fy + r * 0.38], '#141414');
+      c.strokeStyle = '#141414'; c.lineWidth = Math.max(1, r * 0.07); c.beginPath();
+      for (var i = 0; i < 5; i++) { var tx = fx + r * (-0.36 + i * 0.18); c.moveTo(tx, r * 0.55); c.lineTo(tx, r * 0.86); }
+      c.stroke();
+    } else if (kind === 'vampire') {
+      [-1, 1].forEach(function (d) { tri([d * r * 0.7, r * 0.6], [d * r * 1.45, -r * 0.45], [d * r * 0.4, r * 1.0], '#9b1024'); });
+      circle(0, 0, r, '#e8e0ec');
+      c.fillStyle = '#121212'; c.beginPath(); c.arc(0, -r * 0.05, r * 1.04, Math.PI * 1.0, Math.PI * 2.0);
+      c.lineTo(r * 0.85, -r * 0.3); c.lineTo(0, -r * 0.45); c.lineTo(-r * 0.85, -r * 0.3); c.closePath(); c.fill();
+      eyes('#c4102a', 0.13);
+      c.strokeStyle = '#7a0d1c'; c.lineWidth = Math.max(1, r * 0.08);
+      c.beginPath(); c.moveTo(fx - r * 0.3, fy + r * 0.45); c.lineTo(fx + r * 0.3, fy + r * 0.45); c.stroke();
+      [-1, 1].forEach(function (d) { tri([fx + d * r * 0.08, fy + r * 0.47], [fx + d * r * 0.22, fy + r * 0.47], [fx + d * r * 0.15, fy + r * 0.7], '#fff'); });
+    } else if (kind === 'mummy') {
+      circle(0, 0, r, '#e9dfc4');
+      c.strokeStyle = '#bfae86'; c.lineWidth = Math.max(1, r * 0.12);
+      c.save(); c.beginPath(); c.arc(0, 0, r, 0, 7); c.clip(); c.beginPath();
+      for (var k = -3; k <= 3; k++) { c.moveTo(-r * 1.2, k * r * 0.32 - r * 0.2); c.lineTo(r * 1.2, k * r * 0.32 + r * 0.1); }
+      c.stroke(); c.restore();
+      c.fillStyle = '#2a2018'; c.fillRect(fx - r * 0.7, fy - r * 0.2, r * 1.4, r * 0.28);
+      eyes('#e8ff6a', 0.09, r * 0.04);
+    } else if (kind === 'harry' || kind === 'ron' || kind === 'hermione') {
+      var skin = { harry: '#f1c9a5', ron: '#f6d4bb', hermione: '#efc39e' }[kind];
+      var hair = { harry: '#1d1712', ron: '#d4611c', hermione: '#6b3f1f' }[kind];
+      if (kind === 'hermione') [[-0.85, -0.2, 0.6], [0.85, -0.2, 0.6], [-0.95, 0.5, 0.55], [0.95, 0.5, 0.55], [-0.5, -0.75, 0.55], [0.5, -0.75, 0.55], [0, -0.9, 0.5]].forEach(function (p) { circle(r * p[0], r * p[1], r * p[2], hair); });
+      else circle(0, -r * 0.12, r * 1.04, hair);
+      c.fillStyle = '#9b1b1b'; c.fillRect(-r * 0.7, r * 0.82, r * 1.4, r * 0.32);
+      c.fillStyle = '#e8b730'; c.fillRect(-r * 0.7, r * 0.93, r * 1.4, r * 0.08);
+      circle(0, r * 0.04, r * 0.92, skin);
+      c.fillStyle = hair; c.beginPath(); c.arc(0, -r * 0.05, r * 0.98, Math.PI * 1.05, Math.PI * 1.95);
+      c.lineTo(r * 0.5, -r * 0.45); c.lineTo(r * 0.1, -r * 0.55); c.lineTo(-r * 0.3, -r * 0.4); c.closePath(); c.fill();
+      if (kind === 'harry') for (var j = 0; j < 5; j++) { var a = Math.PI * (1.1 + j * 0.2); tri([Math.cos(a) * r * 0.75, Math.sin(a) * r * 0.75], [Math.cos(a + 0.3) * r * 0.85, Math.sin(a + 0.3) * r * 0.85], [Math.cos(a + 0.1) * r * 1.25, Math.sin(a + 0.1) * r * 1.25], hair); }
+      eyes('#2a1e14', 0.11);
+      mouth('#9a4a3a');
+      if (kind === 'harry') {
+        c.strokeStyle = '#1a1a1a'; c.lineWidth = Math.max(1, r * 0.08);
+        [-1, 1].forEach(function (d) { c.beginPath(); c.arc(fx + d * r * 0.36, fy - r * 0.05, r * 0.24, 0, 7); c.stroke(); });
+        c.beginPath(); c.moveTo(fx - r * 0.12, fy - r * 0.07); c.lineTo(fx + r * 0.12, fy - r * 0.07); c.stroke();
+        c.strokeStyle = '#c0392b'; c.lineWidth = Math.max(1, r * 0.07);
+        c.beginPath(); c.moveTo(fx + r * 0.1, -r * 0.62); c.lineTo(fx - r * 0.02, -r * 0.5); c.lineTo(fx + r * 0.1, -r * 0.47); c.lineTo(fx - r * 0.02, -r * 0.34); c.stroke();
+      } else if (kind === 'ron') {
+        [-1, 1].forEach(function (d) { for (var q = 0; q < 3; q++) circle(fx + d * r * (0.42 + q * 0.1), fy + r * (0.18 + (q % 2) * 0.08), Math.max(0.6, r * 0.05), '#c47a4a'); });
+      }
+    } else {
+      // A plain head: ears, the face, hair on top and down the sides.
+      var sk = L.skin || '#f0c5a0';
+      [-1, 1].forEach(function (d) { circle(d * r * 0.95 - fx * 0.4, r * 0.08, r * 0.2, sk); });
+      circle(0, 0, r, sk);
+      if (L.hair) {
+        c.fillStyle = L.hair; c.beginPath(); c.arc(0, 0, r * 1.04, Math.PI * 0.97, Math.PI * 2.03);
+        c.quadraticCurveTo(r * 0.7, -r * 0.55, fx * 0.5 + r * 0.1, -r * 0.5); c.quadraticCurveTo(-r * 0.6, -r * 0.6, -r * 1.02, -r * 0.05); c.closePath(); c.fill();
+      }
+      eyes('rgba(20,20,30,.85)', 0.11);
+      mouth();
+    }
+    c.restore();
+  }
+  // An outfit as the front figure wears it: the athletics 'perus' kit has no top of its own (each
+  // event colours it), so the figure gets a red singlet and brown hair.
+  function dress(o) { return o.top ? o : Object.assign({}, o, { top: '#e63946', hair: '#3b2a1a' }); }
+  // A whole figure from the front, feet at (fx, fy), h tall. L: the outfit's palette (skin, hair,
+  // top, bottom, shoe, cape, head, stripe, bones, halloween). p: up 0…1 (arms down … up in a V),
+  // step -1…1, look { lx, ly, tilt, mouth } for frontHead, wave (one arm waving, its phase).
+  function figure(x, L, fx, fy, h, p) {
+    p = p || {};
+    var up = p.up || 0, step = p.step || 0, mix = function (a, b, k) { return a + (b - a) * k; };
+    var lw = Math.max(2, h * 0.075), hr = h * 0.125, hy = fy - h + hr;
+    var sh = fy - h * 0.72, hip = fy - h * 0.43, hw = h * 0.14;
+    var legSkin = L.halloween ? L.bottom : L.skin;
+    x.save(); x.lineCap = 'round'; x.lineJoin = 'round';
+    if (L.cape) { x.fillStyle = L.cape; x.beginPath(); x.moveTo(fx - hw * 0.9, sh); x.lineTo(fx + hw * 0.9, sh); x.lineTo(fx + hw * 1.45, fy - h * 0.12); x.quadraticCurveTo(fx, fy - h * 0.08, fx - hw * 1.45, fy - h * 0.12); x.closePath(); x.fill(); }
+    var lift = function (d) { return Math.max(0, step * d) * h * 0.08; };
+    [-1, 1].forEach(function (d) {
+      x.strokeStyle = legSkin; x.lineWidth = lw * 1.15;
+      x.beginPath(); x.moveTo(fx + d * h * 0.065, hip); x.lineTo(fx + d * h * 0.08, fy - h * 0.05 - lift(d)); x.stroke();
+      if (L.bones) { x.strokeStyle = L.skin; x.lineWidth = Math.max(1, lw * 0.3); x.stroke(); }
+      x.fillStyle = L.shoe; x.beginPath(); x.ellipse(fx + d * h * 0.095, fy - h * 0.025 - lift(d), h * 0.065, h * 0.032, 0, 0, 7); x.fill();
+    });
+    // Shorts, then the shirt: wider at the shoulders.
+    x.fillStyle = L.bottom; x.beginPath();
+    x.moveTo(fx - h * 0.125, hip - h * 0.04); x.lineTo(fx + h * 0.125, hip - h * 0.04); x.lineTo(fx + h * 0.14, hip + h * 0.1); x.lineTo(fx + h * 0.01, hip + h * 0.1); x.lineTo(fx, hip + h * 0.05); x.lineTo(fx - h * 0.01, hip + h * 0.1); x.lineTo(fx - h * 0.14, hip + h * 0.1); x.closePath(); x.fill();
+    x.fillStyle = L.top; x.beginPath();
+    x.moveTo(fx - hw, sh + h * 0.02); x.quadraticCurveTo(fx - hw, sh - h * 0.015, fx - hw * 0.6, sh - h * 0.02); x.lineTo(fx + hw * 0.6, sh - h * 0.02);
+    x.quadraticCurveTo(fx + hw, sh - h * 0.015, fx + hw, sh + h * 0.02); x.lineTo(fx + h * 0.12, hip + h * 0.01); x.lineTo(fx - h * 0.12, hip + h * 0.01); x.closePath(); x.fill();
+    if (L.stripe) { x.fillStyle = L.stripe; x.fillRect(fx - h * 0.02, sh - h * 0.02, h * 0.04, hip - sh + h * 0.03); }
+    if (L.bones) { x.strokeStyle = L.skin; x.lineWidth = Math.max(1, lw * 0.3); x.beginPath(); x.moveTo(fx, sh); x.lineTo(fx, hip); for (var k = 0; k < 3; k++) { var ry = sh + (hip - sh) * (0.25 + k * 0.2); x.moveTo(fx - hw * 0.6, ry); x.lineTo(fx + hw * 0.6, ry); } x.stroke(); }
+    // The neck, then the arms (down, up in a V, or one waving).
+    x.strokeStyle = L.skin; x.lineWidth = lw * 1.1; x.beginPath(); x.moveTo(fx, sh); x.lineTo(fx, hy + hr * 0.7); x.stroke();
+    [-1, 1].forEach(function (d) {
+      var u = p.wave && d === 1 ? 1 : up, wv = p.wave && d === 1 ? Math.sin(p.wave) * 0.35 : 0;
+      var ex = fx + d * mix(h * 0.2, h * 0.25, u), ey = mix(sh + h * 0.15, sh - h * 0.1, u);
+      var hx = fx + d * mix(h * 0.21, h * 0.32 + wv * h * 0.2, u), hy2 = mix(fy - h * 0.46, sh - h * 0.3, u);
+      x.strokeStyle = L.skin; x.lineWidth = lw;
+      x.beginPath(); x.moveTo(fx + d * (hw - lw * 0.4), sh + lw * 0.3); x.lineTo(ex, ey); x.lineTo(hx, hy2); x.stroke();
+      if (L.bones) { x.strokeStyle = '#1a1a1e'; x.lineWidth = Math.max(1, lw * 0.25); x.stroke(); }
+      x.fillStyle = L.skin; x.beginPath(); x.arc(hx, hy2, lw * 0.75, 0, 7); x.fill();
+    });
+    x.restore();
+    frontHead(x, L, fx, hy, hr, p.look);
+  }
+
+  // ---- The picker ----
+  var panel = null;
+  function el(tag, css, text) {
+    var e = document.createElement(tag);
+    if (css) e.style.cssText = css;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  // Like back.js: the game never sees a touch meant for the picker.
+  function shield(e) {
+    ['pointerdown', 'pointerup', 'pointermove', 'touchstart', 'touchend', 'touchmove', 'mousedown', 'mouseup', 'click', 'keydown', 'keyup']
+      .forEach(function (type) { e.addEventListener(type, function (ev) { ev.stopPropagation(); }, { passive: true }); });
+  }
+  function close() { if (panel) { panel.remove(); panel = null; } }
+
+  // A head seen from the side at (x, y), radius r, face towards +x (or -x when face < 0), turned by
+  // tilt (radians, #469): the outfit's costume head, or a plain one with hair, an eye, an ear and a
+  // nose, so the turn shows. L: the palette (skin, hair, head).
+  function sideHead(ctx, L, x, y, r, face, tilt) {
+    if (L.head) { head(ctx, L.head, x, y, r, face, tilt); return; }
+    var c = ctx, f = face < 0 ? -1 : 1, sk = L.skin || '#f0c5a0';
+    c.save(); c.translate(x, y); if (tilt) c.rotate(tilt); c.scale(f, 1);
+    c.fillStyle = sk; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill();
+    c.beginPath(); c.arc(r * 0.95, r * 0.12, r * 0.17, 0, 7); c.fill();
+    c.fillStyle = L.hair || 'rgba(0,0,0,.25)'; c.beginPath(); c.arc(-r * 0.2, -r * 0.3, r, Math.PI * 0.9, Math.PI * 1.9); c.fill();
+    c.fillStyle = 'rgba(0,0,0,.12)'; c.beginPath(); c.arc(-r * 0.12, r * 0.08, r * 0.2, 0, 7); c.fill();
+    c.fillStyle = 'rgba(20,20,30,.85)'; c.beginPath(); c.arc(r * 0.5, -r * 0.08, Math.max(0.8, r * 0.12), 0, 7); c.fill();
+    c.restore();
+  }
+
+  // How a head seen from the side moves (#469), as a tilt in radians for a face towards +x (negate
+  // it for a face towards -x): a small bob with the stride on the run-up, chin up at take-off, the
+  // head back in the air, chin down on landing, and a cheer that rocks. t: seconds, for the motion.
+  function headPose(state, t) {
+    t = t || 0;
+    if (state === 'run') return { tilt: Math.sin(t * 9) * 0.07 };
+    if (state === 'takeoff') return { tilt: -0.18 };
+    if (state === 'air') return { tilt: -0.3 };
+    if (state === 'land') return { tilt: 0.32 };
+    if (state === 'cheer') return { tilt: -0.28 + Math.sin(t * 6) * 0.14 };
+    return { tilt: Math.sin(t * 1.3) * 0.05 };
+  }
+
   var BTN = 'border:0;border-radius:10px;padding:10px 14px;font:600 15px system-ui,sans-serif;touch-action:manipulation;box-shadow:none;transform:none;text-shadow:none;';
+
+  // The outfit now, big and alive (#469), at the top of the picker. The athletics events' figure
+  // looks around, cheers, tilts its head and waves; a game with its own figure (Orava's squirrel)
+  // has it hop. It stops when the picker closes.
+  function preview() {
+    var pv = el('canvas', 'width:100%;height:150px;display:block;border-radius:12px;flex:none;background:linear-gradient(#2d4f86,#3f8a4c)');
+    pv.id = 'ai-pelit-asut-esikatselu';
+    var t0 = performance.now();
+    function frame() {
+      if (!panel || !pv.isConnected) return;
+      var dpr = Math.min(window.devicePixelRatio || 1, 3), w = pv.clientWidth || 300, h = 150;
+      if (pv.width !== Math.round(w * dpr)) { pv.width = Math.round(w * dpr); pv.height = Math.round(h * dpr); }
+      var g = pv.getContext('2d');
+      if (!g) return;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+      var t = (performance.now() - t0) / 1000, o = current(), ph = t % 6;
+      try {
+        if (FIGURE) {
+          var look = ph < 1.5 ? { lx: Math.sin(t * 2) * 0.8, mouth: 'smile' } : ph < 3 ? { ly: -0.7, tilt: Math.sin(t * 3) * 0.2, mouth: 'open' }
+            : ph < 4.5 ? { tilt: 0.3, lx: 0.4, mouth: 'o' } : { ly: 0.5, lx: -0.5, mouth: 'smile' };
+          figure(g, dress(o), w / 2, h - 8, h - 22, { up: ph >= 1.5 && ph < 3 ? 1 : 0, wave: ph >= 4.5 ? t * 9 : 0, look: look });
+        } else if (o) {
+          var hop = Math.abs(Math.sin(t * 3.2)) * 14;
+          g.translate(w / 2 - 72 * 0.85, h - 6 - 80 * 1.7 - hop); g.scale(1.7, 1.7);
+          drawFn(g, o, 72, 80);
+        }
+      } catch (e) {}
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    return pv;
+  }
 
   function card(o, picked, grid) {
     var b = el('button', 'box-shadow:none;transform:none;text-shadow:none;margin:0;height:auto;width:auto;display:flex;flex-direction:column;align-items:center;gap:2px;border:3px solid ' + (picked ? '#ffd45c' : 'transparent') +
@@ -255,14 +488,17 @@
     b.className = 'asu' + (picked ? ' valittu' : '');
     b.setAttribute('data-asu', o.id);
     // A low, wide screen gets smaller cards, so every group fits without scrolling.
-    var cw = innerHeight < 500 ? 52 : 72, ch = innerHeight < 500 ? 50 : 80;
+    var cw = innerHeight < 500 ? 52 : 72, ch = innerHeight < 500 ? 50 : (FIGURE ? 70 : 80);
     var cv = el('canvas', 'width:' + cw + 'px;height:' + ch + 'px;display:block');
     var dpr = Math.min(window.devicePixelRatio || 1, 3);
     cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
     var ctx = cv.getContext('2d');
-    if (ctx && drawFn) {
+    if (ctx && (FIGURE || drawFn)) {
       ctx.scale(dpr, dpr);
-      try { drawFn(ctx, o, cw, ch); } catch (e) {}
+      try {
+        if (FIGURE) figure(ctx, dress(o), cw / 2, ch * 0.96, ch * 0.88, { look: { lx: 0.3, mouth: 'smile' } });
+        else drawFn(ctx, o, cw, ch);
+      } catch (e) {}
     }
     b.appendChild(cv);
     b.appendChild(el('span', 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' + (innerHeight < 500 ? ';font-size:11px' : ''), (o.emoji && innerHeight >= 500 ? o.emoji + ' ' : '') + o.name));
@@ -314,6 +550,7 @@
     box.appendChild(top);
     if (season() && innerHeight >= 500) box.appendChild(el('div', 'color:#ffb35c;font-size:13px', 'Hyvää Halloweenia! Pukeudu kurpitsaksi, noidaksi tai haamuksi.'));
     var low = innerHeight < 500;
+    if (!low && (FIGURE || drawFn)) box.appendChild(preview());
     var grid = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(' + (low ? 58 : 82) + 'px,1fr));gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
     box.appendChild(grid);
     fill(grid);
@@ -351,5 +588,10 @@
     tylypahka: TYLYPAHKA,
     season: season,
     head: head,
+    frontHead: frontHead,
+    figure: figure,
+    dress: dress,
+    headPose: headPose,
+    sideHead: sideHead,
   };
 })();

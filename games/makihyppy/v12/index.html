@@ -24,6 +24,8 @@
   #cont.hidden{display:none}
   #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
   #multi:active{box-shadow:0 1px 0 #3a7894}
+  #asu{font-size:16px;padding:9px 18px;background:#3d5a80;color:#fff;box-shadow:0 3px 0 #24364f}
+  #asu:active{box-shadow:0 1px 0 #24364f}
   #stats{margin:0;font-size:14px;color:#b9cfe0}
   .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
   /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
@@ -38,10 +40,11 @@
     #stats{grid-row:4}
     .help{grid-row:5;margin:0}
     #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
-    #go,#cont,#multi{grid-column:2;justify-self:stretch}
+    #go,#cont,#multi,#asu{grid-column:2;justify-self:stretch}
     #go{grid-row:1 / span 2;align-self:center}
     #cont{grid-row:3;align-self:center}
-    #multi{grid-row:4 / span 2;align-self:start;padding:12px 14px;white-space:nowrap}
+    #multi{grid-row:4;align-self:start;padding:12px 14px;white-space:nowrap}
+    #asu{grid-row:5;align-self:start}
   }
 </style>
 </head>
@@ -55,6 +58,7 @@
   <button id="go">Mäkiviikolle!</button>
   <button id="cont" class="hidden">Jatka mäkiviikkoa</button>
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <button id="asu">👕 Asu</button>
   <p id="stats"></p>
   <p class="help">Napauta, niin lähdet. Ponnista nokalta napauttamalla juuri ennen reunaa (vihreä).
     Ilmassa pidä asento vihreällä Taakse- ja Eteen-napeilla. Juuri ennen alastuloa napauta: telemark.
@@ -62,10 +66,12 @@
     Pisteet lasketaan yhteen kaikista hypyistä.</p>
 </div>
 <script src="../../../rooms.js" data-game="makihyppy" data-min="2" data-max="8"></script>
+<!-- v12 (#469): outfits, the athletics events' one shared choice -->
+<script src="../../../outfits.js" data-game="makihyppy" data-share="yleisurheilu"></script>
 <!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v10 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-9/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-10/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -420,7 +426,9 @@ const K = AiPelitKisa.meet({
   live: ['p', 'fin'], watch: watchFrom, none: 'ei pisteitä',
   // The week's points go on their own high-score list (a meet saved by v1 on v1's).
   started: () => { menu.classList.add('hidden'); scoreList(); },
-  look: () => ({ skin: '#f1c7a3', bottom: '#1b1b2f', shoe: '#222', hair: '#5a3a1e' }),
+  // v12 (#469): everyone in their own outfit on the podium, as in the air.
+  fit: () => outfit.id,
+  look: r => kit(r.fit, r.col),
   chime: i => {
     if (S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 })) return;
     tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06); if (i === 0) setTimeout(() => tone(1047, 0.35, 'sine', 0.06), 140);
@@ -863,7 +871,26 @@ function crowd(sx, sy, s) {
 // The jumper from the side, facing right: the feet at (fx, fy) in pixels, the skis at angle ang
 // (radians, up positive), the body's joints as angles from the skis (radians): ankle to knee,
 // knee to hip, hip to shoulder, shoulder to hand; z pixels a metre.
-function skier(fx, fy, ang, p, z, col, label, mine, vee) {
+// v12 (#469): the jumper wears an outfit (kit): the suit in its top colour, the legs in its bottom
+// colour, and a costume's head in place of the helmet. Without one (the computer, 'perus', a friend
+// on an older version) the suit is the colour the meet gave them, as before.
+const PLAIN = { skin: '#f1c7a3', hair: '#5a3a1e', bottom: null, shoe: '#222', cape: null, head: null };
+function kit(id, col) {
+  const o = id && window.AiPelitOutfits ? AiPelitOutfits.get(id) : null;
+  return !o || !o.top ? Object.assign({}, PLAIN, { top: col }) : o;
+}
+let outfit = AiPelitOutfits.setup({
+  outfits: AiPelitOutfits.yleisurheilu,
+  change(o) {
+    outfit = o; showAsu();
+    // The kept solo week wears it too; a room's host is told when the next round starts.
+    if (K.comp && !K.isNet()) K.comp.throwers.forEach(t => { if (t.p === 'me') t.fit = o.id; });
+  },
+});
+function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
+function skier(fx, fy, ang, p, z, col, label, mine, vee, o) {
+  o = o || kit(null, col);
+  const suit = o.top || col, legCol = o.bottom || suit;
   const dir = a2 => [Math.cos(ang + a2), -Math.sin(ang + a2)];
   const at = (o, a2, l) => { const d = dir(a2); return [o[0] + d[0] * l * z, o[1] + d[1] * l * z]; };
   x.lineCap = 'round'; x.lineJoin = 'round';
@@ -884,25 +911,36 @@ function skier(fx, fy, ang, p, z, col, label, mine, vee) {
   const sh = at(hip, p.torso, 0.62), hd = at(sh, p.torso + (p.head || 0), 0.2);
   const lw = Math.max(2.4, 0.13 * z);
   // The far leg and arm, darker.
-  x.strokeStyle = shade(col); x.lineWidth = lw;
+  x.strokeStyle = shade(legCol); x.lineWidth = lw;
   x.beginPath(); x.moveTo(f1[0], f1[1]); x.lineTo(k1[0], k1[1]); x.lineTo(h1[0], h1[1]); x.stroke();
+  x.strokeStyle = shade(suit);
   const el1 = at(sh, p.arm2 !== undefined ? p.arm2 : p.arm, 0.3), hn1 = at(el1, (p.arm2 !== undefined ? p.arm2 : p.arm) + (p.elbow || 0), 0.28);
   x.beginPath(); x.moveTo(sh[0], sh[1]); x.lineTo(el1[0], el1[1]); x.lineTo(hn1[0], hn1[1]); x.stroke();
-  // The body: the suit in the jumper's colour.
-  x.strokeStyle = col; x.lineWidth = lw * 1.9;
+  // The body: the suit in the jumper's colour (a cape flies behind it).
+  if (o.cape) {
+    const back = dir(p.torso + 2.4);
+    x.fillStyle = o.cape; x.beginPath(); x.moveTo(sh[0], sh[1]);
+    x.lineTo(sh[0] + back[0] * 0.55 * z, sh[1] + back[1] * 0.55 * z); x.lineTo(hip[0], hip[1]); x.closePath(); x.fill();
+  }
+  x.strokeStyle = suit; x.lineWidth = lw * 1.9;
   x.beginPath(); x.moveTo(hip[0], hip[1]); x.lineTo(sh[0], sh[1]); x.stroke();
-  x.lineWidth = lw * 1.25;
+  x.strokeStyle = legCol; x.lineWidth = lw * 1.25;
   x.beginPath(); x.moveTo(f0[0], f0[1]); x.lineTo(k0[0], k0[1]); x.lineTo(h0[0], h0[1]); x.stroke();
   // The boots, and the near ski over them.
-  x.fillStyle = '#222'; [f0, f1].forEach(f => { x.beginPath(); x.arc(f[0], f[1], Math.max(2, 0.08 * z), 0, 7); x.fill(); });
+  x.fillStyle = o.shoe || '#222'; [f0, f1].forEach(f => { x.beginPath(); x.arc(f[0], f[1], Math.max(2, 0.08 * z), 0, 7); x.fill(); });
   ski(0, '#223', f0);
   const el = at(sh, p.arm, 0.3), hn = at(el, p.arm + (p.elbow || 0), 0.28);
-  x.strokeStyle = col; x.lineWidth = lw;
+  x.strokeStyle = suit; x.lineWidth = lw;
   x.beginPath(); x.moveTo(sh[0], sh[1]); x.lineTo(el[0], el[1]); x.lineTo(hn[0], hn[1]); x.stroke();
-  // The helmet and the goggles.
-  x.fillStyle = col; x.beginPath(); x.arc(hd[0], hd[1], Math.max(3.5, 0.15 * z), 0, 7); x.fill();
-  const g = dir(p.torso + (p.head || 0) - 1.3);
-  x.fillStyle = '#ffd166'; x.beginPath(); x.arc(hd[0] + g[0] * 0.09 * z, hd[1] + g[1] * 0.09 * z, Math.max(1.6, 0.06 * z), 0, 7); x.fill();
+  if (o.head) {
+    // A costume's head, its top along the neck, the face forward.
+    AiPelitOutfits.head(x, o.head, hd[0], hd[1], Math.max(3.5, 0.15 * z), 1, Math.PI / 2 - (ang + p.torso + (p.head || 0)));
+  } else {
+    // The helmet and the goggles.
+    x.fillStyle = suit; x.beginPath(); x.arc(hd[0], hd[1], Math.max(3.5, 0.15 * z), 0, 7); x.fill();
+    const g = dir(p.torso + (p.head || 0) - 1.3);
+    x.fillStyle = '#ffd166'; x.beginPath(); x.arc(hd[0] + g[0] * 0.09 * z, hd[1] + g[1] * 0.09 * z, Math.max(1.6, 0.06 * z), 0, 7); x.fill();
+  }
   if (label) {
     x.font = (mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
     x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
@@ -974,7 +1012,16 @@ function drawJumper(a, s, sx, sy) {
     x.fillStyle = 'rgba(255,255,255,.8)';
     for (let i = 0; i < 8; i++) { const u = i / 7 - 0.5, r = Math.min(1, a.t) * z; x.beginPath(); x.arc(px - u * r * 2, py - Math.abs(Math.sin(i * 1.7 + a.t * 3)) * r * 0.6, Math.max(2, 0.12 * z), 0, 7); x.fill(); }
   }
-  skier(px, py, ang, p, z, col, a.phase === 'land' ? '' : name, a.mine, vee);
+  // v12 (#469): the head's pose for the phase (AiPelitOutfits.headPose; its tilt turns clockwise,
+  // the pose's angles counter-clockwise): a bob in the in-run, back in the air, then a cheer after
+  // a landing on two feet or a telemark, the chin down after a fall.
+  if (window.AiPelitOutfits && AiPelitOutfits.headPose) {
+    const land = a.res ? a.res.landing : 'two';
+    const st = a.phase === 'inrun' ? 'run' : a.phase === 'fly' && !a.fallen ? 'air'
+      : a.phase === 'land' && a.t < 2.5 ? (land === 'fall' || land === 'hand' ? 'land' : 'cheer') : 'idle';
+    p = Object.assign({}, p, { head: (p.head || 0) - AiPelitOutfits.headPose(st, performance.now() / 1000).tilt });
+  }
+  skier(px, py, ang, p, z, col, a.phase === 'land' ? '' : name, a.mine, vee, kit(t && t.fit, col));
 }
 
 const LAND_TEXT = { tele: ['Telemark!', '#7ee081'], early: ['Telemark liian aikaisin', '#ffd166'], two: ['Alastulo tasajalkaa', '#ffd166'],
@@ -1195,7 +1242,11 @@ function showMenu(result, cls) {
   if (kept) cont.textContent = 'Jatka mäkiviikkoa (' + roundText(kept) + ')';
   menu.classList.remove('hidden');
 }
-function soloComp(saved) { K.solo(saved); menu.classList.add('hidden'); scoreList(); }
+function soloComp(saved) {
+  // A kept week, or an outfit changed since, wears the outfit picked now (v12, #469).
+  if (saved) saved.throwers.forEach(t => { if (t.p === 'me') t.fit = outfit.id; });
+  K.solo(saved); menu.classList.add('hidden'); scoreList();
+}
 // The high-score list: the week's from the start (the menu's 🏆 too), v1's for a meet saved by v1.
 // Set again at each turn, so a guest's list follows the host's meet once it arrives. v9 (#387):
 // the two-hill week has its own list ('viikko2'); a four-hill week saved by v8 goes on 'viikko'.
@@ -1212,6 +1263,8 @@ document.getElementById('cont').addEventListener('click', () => {
   if (kept) soloComp(kept); else showMenu();
 });
 document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+document.getElementById('asu').addEventListener('click', () => AiPelitOutfits.open());
+showAsu();
 resize();
 showMenu();
 requestAnimationFrame(frame);

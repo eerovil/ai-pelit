@@ -73,7 +73,7 @@
 <!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v9 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-9/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-10/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -590,6 +590,17 @@ function handAt(a, s, sx, base = groundY) {
   }
   return [J.neckX + 0.13 * s * J.fs, J.neckY - 0.02 * s];
 }
+// v11 (#469): the head's turn for the attempt's phase (AiPelitOutfits.headPose): a bob on the
+// run-up, chin up at the take-off, back in the air, then a cheer after a good attempt or the chin down.
+function headTilt(a) {
+  const P = window.AiPelitOutfits && AiPelitOutfits.headPose;
+  if (!P || !a) return 0;
+  const t = performance.now() / 1000;
+  // The glide is the run-up; the putter watches the shot fly, chin up.
+  const st = a.phase === 'move' ? 'run' : a.phase === 'push' || a.phase === 'fly' ? 'takeoff'
+    : a.phase === 'land' && a.t < 2.5 ? (a.why ? 'land' : 'cheer') : 'idle';
+  return P(st, t).tilt;
+}
 function drawPutter(a, s, sx, base, col, name, o = null, g = x) {
   o = o || plain(col);
   const J = joints(a, s, sx, base), { p, fs, hipX, hipY, neckX, neckY } = J;
@@ -634,11 +645,7 @@ function drawPutter(a, s, sx, base, col, name, o = null, g = x) {
   g.strokeStyle = o.skin; g.lineWidth = lw;
   g.beginPath(); g.moveTo(sh[0], sh[1]); g.lineTo(elbow[0], elbow[1]); g.lineTo(hand[0], hand[1]); g.stroke();
   const hx = neckX + Math.sin(p.lean) * 0.16 * s * fs, hy = neckY - Math.cos(p.lean) * 0.16 * s;
-  if (o.head) AiPelitOutfits.head(g, o.head, hx, hy, 0.13 * s, fs < 0 ? -1 : 1);
-  else {
-    g.fillStyle = o.skin; g.beginPath(); g.arc(hx, hy, 0.13 * s, 0, 7); g.fill();
-    g.fillStyle = o.hair; g.beginPath(); g.arc(hx - 0.03 * s * fs, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); g.fill();
-  }
+  AiPelitOutfits.sideHead(g, o, hx, hy, 0.13 * s, fs < 0 ? -1 : 1, headTilt(a) * (fs < 0 ? -1 : 1));
   // The shot in the hand until it is put (or the turn is a foul before it).
   if (!a.shot && !a.bare) ball(hand[0], hand[1], s, g);
   // The player's own name only while someone else's turn or the result shows: the texts say it's theirs.
