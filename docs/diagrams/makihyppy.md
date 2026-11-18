@@ -76,6 +76,8 @@ v10 (#395) plays as v9 on `public/lib/yleisurheilu-9/`: the friends watching no 
 
 v9 (#387) halves the week: a new week has two hills (Lahti, Kuopio), still two rounds on each, so at most four jumps for the podium instead of eight. A week left unfinished by v8 goes on as its four hills. The shorter week has its own best (`viikko2-ennatys`) and its own high-score list (`viikko2`, "Mäkiviikko"); the four-hill list stays as "Mäkiviikko, 4 mäkeä".
 
+v12 (#469) plays exactly as v11 and adds "👕 Asu", the athletics events' shared outfit choice (`outfits.js` with `data-share="yleisurheilu"`, `asut.md`): `skier()` draws the suit in the outfit's top colour, the legs in its bottom colour, a cape behind, and a costume's head in place of the helmet; the outfit goes to the meet with `fit`, so every jumper wears their own on the podium (`look: r => kit(r.fit, r.col)`). The head bobs in the in-run, goes back in the air and cheers after a landing on two feet or a telemark (`AiPelitOutfits.headPose()` added to the head angle in `drawJumper()`). It runs on `public/lib/yleisurheilu-10/`.
+
 ## Colours
 
 - **blue**: what the player sees and does

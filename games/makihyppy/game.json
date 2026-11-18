@@ -78,6 +78,13 @@
       "note": "Ponnistus ja alastulo lasketaan nyt täsmälleen sillä hetkellä, kun sormi osuu ruutuun, eikä edellisen piirretyn kuvan kohdalta.",
       "request": "Fair timing should be build for all games like this",
       "issue": "eerovil/ai-pelit#404"
+    },
+    {
+      "n": 12,
+      "date": "2026-11-18",
+      "note": "Hyppääjä pukeutuu valittuun asuun (👕 Asu), pää liikkuu hypyssä ja palkintopallilla on uudet edestä piirretyt urheilijat.",
+      "request": "Hahmonvalintaan ja ylkonäköön parannuksia. Joissain tapauksissa hahmo ei näy myös palkintopallilla oikein. Hahmoilla saisi olla eri pään asentoja. Korkeushypyssä on erittäin omituinen asento",
+      "issue": "eerovil/ai-pelit#469"
     }
   ]
 }

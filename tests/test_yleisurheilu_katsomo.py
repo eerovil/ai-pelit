@@ -3,8 +3,8 @@ before the athlete, in a stadium behind the boards, and a spectator's tap on the
 figure there on every phone.
 
 The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
-games/pituushyppy/v17, games/keihas/v16, games/kuula/v10, games/korkeushyppy/v14,
-games/seivashyppy/v15, games/moukari/v12, games/makihyppy/v11.
+games/pituushyppy/v18, games/keihas/v17, games/kuula/v11, games/korkeushyppy/v15,
+games/seivashyppy/v16, games/moukari/v13, games/makihyppy/v12.
 """
 
 import json
@@ -14,16 +14,16 @@ from test_yleisurheilu_vuorot import MARK, on_turn, room
 
 # Each event and the function that draws its athlete on the runway or in the circle.
 EVENTS = {
-    "pituushyppy/v17": "drawJumper",
-    "keihas/v16": "drawAthlete",
-    "kuula/v10": "drawPutter",
-    "korkeushyppy/v14": "drawAthlete",
-    "seivashyppy/v15": "drawRunner",
-    "moukari/v12": "drawThrower",
-    "makihyppy/v11": "drawJumper",
+    "pituushyppy/v18": "drawJumper",
+    "keihas/v17": "drawAthlete",
+    "kuula/v11": "drawPutter",
+    "korkeushyppy/v15": "drawAthlete",
+    "seivashyppy/v16": "drawRunner",
+    "moukari/v13": "drawThrower",
+    "makihyppy/v12": "drawJumper",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
-STADIUM = {"pituushyppy/v17", "keihas/v16", "kuula/v10", "korkeushyppy/v14", "seivashyppy/v15"}
+STADIUM = {"pituushyppy/v18", "keihas/v17", "kuula/v11", "korkeushyppy/v15", "seivashyppy/v16"}
 
 
 def watching(site, browser, path):
@@ -109,7 +109,7 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
         p.context.close()
 
 
-@pytest.mark.parametrize("path", ["pituushyppy/v17", "moukari/v12"])
+@pytest.mark.parametrize("path", ["pituushyppy/v18", "moukari/v13"])
 def test_both_watching_tap_at_once_and_a_reloaded_phone_gets_the_spots(site, browser, path):
     relay, pages, athlete, fans = watching(site, browser, path)
     fan, host = fans
@@ -142,7 +142,7 @@ def xs(page):
     return page.evaluate("Object.fromEntries(K.fanSpots.map(f => [f.id, f.x]))")
 
 
-@pytest.mark.parametrize("path", ["pituushyppy/v17", "korkeushyppy/v14"])
+@pytest.mark.parametrize("path", ["pituushyppy/v18", "korkeushyppy/v15"])
 def test_nobody_moves_as_the_turn_goes_round_or_a_new_meet_starts(site, browser, path):
     relay, pages, athlete, fans = watching(site, browser, path)
     host = pages[0]

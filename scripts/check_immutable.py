@@ -11,6 +11,9 @@ Only each game's newest version is kept (#346, Eero's choice). A new version is 
 folder moved to the next number (`git mv`) and changed there, so the old folder goes whole: a
 published folder may be deleted, all of it, once the game has a newer folder. A new folder takes
 a number above every one the game has had, as phones may keep an old version's files cached.
+
+A game the owner removed (scripts/removed_games.py, Ottelu in #469) may go, but only whole: every
+folder and its game.json.
 """
 
 import json
@@ -18,6 +21,8 @@ import os
 import re
 import subprocess
 import sys
+
+from removed_games import REMOVED
 
 VERSION_FILE = re.compile(r"^games/([^/]+)/(v\d+)/")
 
@@ -31,8 +36,10 @@ def folders_now(slug: str, cwd: str | None) -> set[int]:
     return {int(n[1:]) for n in os.listdir(d) if re.fullmatch(r"v\d+", n)} if os.path.isdir(d) else set()
 
 
-def problems(base: str, cwd: str | None = None) -> list[str]:
+def problems(base: str, cwd: str | None = None, removed=REMOVED) -> list[str]:
     found = []
+    # A removed game goes whole: nothing of it is left under games/<slug>/.
+    gone = {s for s in removed if not os.path.exists(f"{cwd or '.'}/games/{s}")}
     published = set(
         line for line in git("ls-tree", "-r", "--name-only", base, "--", "games", cwd=cwd).splitlines()
     )
@@ -44,6 +51,8 @@ def problems(base: str, cwd: str | None = None) -> list[str]:
         if m and m.group(0) in published_dirs:
             slug, n = m.group(1), int(m.group(2)[1:])
             if status == "D" and not os.path.isdir(f"{cwd or '.'}/{m.group(0)}"):
+                if slug in gone:
+                    continue
                 if not any(k > n for k in folders_now(slug, cwd)):
                     found.append(f"{path}: {slug} {m.group(2)} may go only when the game has a newer version folder")
                 continue
@@ -58,6 +67,8 @@ def problems(base: str, cwd: str | None = None) -> list[str]:
                 with open(path if cwd is None else f"{cwd}/{path}") as f:
                     new = json.load(f)["versions"]
             except FileNotFoundError:
+                if path.split("/")[1] in gone:
+                    continue
                 found.append(f"{path}: a published game cannot be removed")
                 continue
             if new[: len(old)] != old:

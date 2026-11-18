@@ -100,6 +100,13 @@
       "note": "Ponnistus lasketaan nyt täsmälleen sillä hetkellä, kun sormi osuu ruutuun, eikä edellisen piirretyn kuvan kohdalta.",
       "request": "Fair timing should be build for all games like this",
       "issue": "eerovil/ai-pelit#404"
+    },
+    {
+      "n": 15,
+      "date": "2026-11-18",
+      "note": "Uusi floppihyppy, päät kääntyvät hypyn mukaan ja palkintopallilla on uudet edestä piirretyt urheilijat.",
+      "request": "Hahmonvalintaan ja ylkonäköön parannuksia. Joissain tapauksissa hahmo ei näy myös palkintopallilla oikein. Hahmoilla saisi olla eri pään asentoja. Korkeushypyssä on erittäin omituinen asento",
+      "issue": "eerovil/ai-pelit#469"
     }
   ]
 }

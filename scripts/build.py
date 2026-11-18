@@ -20,6 +20,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from removed_games import REMOVED
+
 ROOT = Path(__file__).resolve().parent.parent
 BACK_SCRIPT = '<script src="../../../back.js"></script>'
 # The chip may sit in another corner: <script src="../../../back.js" data-corner="bottom-left">.
@@ -94,11 +96,6 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
             raise GameError(f"{slug} v{i}: note is missing")
     # Only the newest version has a folder (#346); the older entries are its history.
     i = last
-    # Ottelu plays each event's newest version that does not say "ottelu": false, and no older one
-    # is left to fall back on: the site would send it to this one anyway.
-    if versions[-1].get("ottelu") is False:
-        raise GameError(f"{slug} v{i}: the newest version cannot be kept out of Ottelu (\"ottelu\": false); "
-                        "make a new Ottelu version that plays it or leaves it out (#346)")
     page = game_dir / f"v{i}" / "index.html"
     if not page.is_file():
         raise GameError(f"{slug} v{i}: v{i}/index.html is missing")
@@ -137,12 +134,7 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
         **({"room": {"max": room_max}} if room_script else {}),
         # A new picture gets a new name, so no phone keeps showing an old one from its cache.
         "thumb": f"thumbs/{slug}-{hashlib.sha256(thumb.read_bytes()).hexdigest()[:8]}.webp",
-        "versions": [
-            # "ottelu": false keeps an event version out of Ottelu, which plays each event's newest (#303).
-            {"n": v["n"], "date": v["date"], "note": v["note"], "issue": v.get("issue"),
-             **({"ottelu": False} if v.get("ottelu") is False else {})}
-            for v in versions
-        ],
+        "versions": [{"n": v["n"], "date": v["date"], "note": v["note"], "issue": v.get("issue")} for v in versions],
     }
 
 
@@ -162,8 +154,12 @@ def merged_at(version_dir: Path) -> float:
     return float(out.stdout.strip() or "inf")
 
 
-def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
+def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR, removed=REMOVED) -> dict:
     games = [load_game(d, lib_dir=lib_dir) for d in sorted(games_dir.iterdir()) if d.is_dir()]
+    back = {g["slug"] for g in games} & set(removed)
+    if back:
+        raise GameError(f"{', '.join(sorted(back))}: a removed game (scripts/removed_games.py) cannot come back; "
+                        "phones send its address to the shelf")
     # Newest version first, so a fresh game or version is at the top of the shelf (and under
     # Päivitetyt, #279). Versions merged on the same day go by their merge time: by slug alone,
     # 28 games updated on one day sat in reverse alphabetical order, today's new ones low.
@@ -174,7 +170,8 @@ def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
         raise GameError(f"{', '.join(sorted(taken))}: a game's slug is a group's address (GROUPS in scripts/build.py)")
     used = {g["group"] for g in games if "group" in g}
     groups = [{"slug": k, **v} for k, v in GROUPS.items() if k in used]
-    return {"games": games, "groups": groups}
+    # Games removed whole (#469): sw.js drops their cached files and sends their pages to the shelf.
+    return {"games": games, "groups": groups, "removed": sorted(removed)}
 
 
 def redirects(catalog: dict) -> str:
@@ -193,11 +190,14 @@ def redirects(catalog: dict) -> str:
         for n in range(1, last):
             at = f"/games/{g['slug']}/v{n}"
             lines += [f"{at} {to} 302", f"{at}/ {to} 302", f"{at}/index.html {to} 302"]
+    # A removed game's every address goes to the shelf (#469): a link or a home-screen shortcut.
+    for slug in catalog.get("removed", []):
+        lines += [f"/games/{slug} / 302", f"/games/{slug}/* / 302"]
     return "\n".join(lines) + "\n"
 
 
-def build(games_dir: Path, public_dir: Path, out_dir: Path) -> dict:
-    catalog = build_catalog(games_dir, public_dir / "lib")
+def build(games_dir: Path, public_dir: Path, out_dir: Path, removed=REMOVED) -> dict:
+    catalog = build_catalog(games_dir, public_dir / "lib", removed)
     if out_dir.exists():
         shutil.rmtree(out_dir)
     shutil.copytree(public_dir, out_dir)
