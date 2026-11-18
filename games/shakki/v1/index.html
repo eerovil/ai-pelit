@@ -39,13 +39,14 @@ p{line-height:1.45;color:#dccdb4;margin:6px 0}
 .seg{display:grid;gap:6px}
 #levels{grid-template-columns:repeat(5,1fr)}#colors{grid-template-columns:repeat(3,1fr)}
 .seg button{min-height:42px;padding:6px 2px;font-size:13px;background:#4a3a2e;color:#f4ead7;border:1px solid #7a6450}
+.seg button{position:relative}.seg button.locked{opacity:.5}.seg button.locked::after{content:"🔒";position:absolute;top:-7px;right:-3px;font-size:12px}
 .seg button.on{background:#e9c98b;color:#2a211b;border-color:#e9c98b}
 .actions{display:grid;gap:9px;margin-top:16px}
 #levelInfo{font-size:13px;color:#e9c98b;min-height:18px;margin-top:8px}
 #end{background:#2a211b99}
 #end .box{background:#3a2d24f5;border:1px solid #7a6450;border-radius:18px;padding:18px 18px 16px;max-width:360px;text-align:center}
 #endTitle.win{color:#ffd76a}#endTitle.lose{color:#ff9d8a}
-#endStats{font-size:13px;color:#cdb898}
+#endStats{font-size:13px;color:#cdb898;white-space:pre-line}
 #promo{background:#2a211b99}
 #promo .box{background:#3a2d24f5;border:1px solid #7a6450;border-radius:18px;padding:16px;max-width:340px;text-align:center}
 #promoPieces{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}

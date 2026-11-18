@@ -159,6 +159,8 @@ def test_play_by_taps_computer_answers_and_the_game_is_saved(site, context):
 
 def test_black_mates_by_taps_and_the_win_is_counted_once(site, context):
     page = open_game(site, context)
+    # Keskitaso is open once Helppo has been beaten.
+    page.evaluate("save('tilasto:0', {v: 1, h: 0, t: 0}); save('tilasto:1', {v: 1, h: 0, t: 0}); menu()")
     page.click("#levels button[data-l='2']")
     page.click("#colors button[data-c='b']")
     page.click("#play")
@@ -177,7 +179,11 @@ def test_black_mates_by_taps_and_the_win_is_counted_once(site, context):
     assert page.locator("#end").is_hidden()
     page.click("#showEnd")
     assert page.locator("#end").is_visible()
+    assert "🔓 Uusi taso auki: Vaikea!" in page.locator("#endStats").inner_text()
     page.click("#endMenu")
+    # The win opened Vaikea and chose it; Keskitaso keeps the win.
+    assert page.locator("#levelInfo").inner_text() == "Vaikea: Ei vielä pelattuja pelejä."
+    page.click("#levels button[data-l='2']")
     assert "1 voittoa" in page.locator("#levelInfo").inner_text()
     assert page.locator("#resume").is_hidden()
     page.click("#play")
@@ -204,7 +210,41 @@ def test_promotion_picker_and_resign_twice(site, context):
     page.click("#resign")
     page.wait_for_selector("#end:not(.hidden)")
     assert page.locator("#endSub").inner_text() == "Luovutit."
-    assert page.evaluate("load('tilasto:2', null)") == {"v": 0, "h": 1, "t": 0}
+    assert page.evaluate("load('tilasto:0', null)") == {"v": 0, "h": 1, "t": 0}
+    assert page.errors == []
+
+
+def test_levels_open_one_at_a_time(site, context):
+    page = open_game(site, context)
+    # At first only Aloittelija is open, and it is the one chosen.
+    assert page.evaluate("[0, 1, 2, 3, 4].map(unlocked)") == [True, False, False, False, False]
+    assert page.locator("#levels button.locked").count() == 4
+    assert page.locator("#levels button.on").get_attribute("data-l") == "0"
+    page.click("#levels button[data-l='3']")
+    assert page.locator("#levels button.on").get_attribute("data-l") == "0"
+    assert page.locator("#levelInfo").inner_text() == "🔒 Vaikea aukeaa, kun voitat tason Keskitaso."
+    # A loss opens nothing.
+    page.click("#colors button[data-c='w']")
+    page.click("#play")
+    page.click("#resign"); page.click("#resign")
+    page.wait_for_selector("#end:not(.hidden)")
+    assert "Uusi taso" not in page.locator("#endStats").inner_text()
+    assert not page.evaluate("unlocked(1)")
+    # A win against Aloittelija opens Helppo, says so, and chooses it.
+    page.click("#again")
+    set_moves(page, ["e2e4", "e7e5", "f1c4", "b8c6", "d1h5", "g8f6"])
+    tap(page, "h5")
+    tap(page, "f7")
+    page.wait_for_selector("#end:not(.hidden)")
+    assert page.locator("#endTitle").inner_text() == "Voitit!"
+    assert "🔓 Uusi taso auki: Helppo!" in page.locator("#endStats").inner_text()
+    page.click("#endMenu")
+    assert page.locator("#levels button.on").get_attribute("data-l") == "1"
+    assert page.locator("#levels button.locked").count() == 3
+    # It stays open after a reload; a second win at Aloittelija opens nothing more.
+    page.reload()
+    page.wait_for_function("view.s > 0")
+    assert page.evaluate("[levelNow(), unlocked(1), unlocked(2)]") == [1, True, False]
     assert page.errors == []
 
 

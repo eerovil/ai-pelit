@@ -10,7 +10,7 @@ var $ = function (id) { return document.getElementById(id); };
 var game = null, derived = null, result = null;
 var online = false, roomRound = 0, roomHost = '';
 var selected = -1, drag = null, anim = null, thinking = false, aiTimer = 0, pendingPromo = null;
-var resignArmed = 0, endHidden = false, notice = '', ended = false;
+var resignArmed = 0, endHidden = false, notice = '', ended = false, opened = -1;
 
 if (S) S.load(['puu', 'osuma', 'valinta', 'naksu', 'voitto', 'tappio', 'onnistui', 'virhe']);
 function sound(name, vol) { if (S) S.play(name, { vol: vol }); }
@@ -32,7 +32,18 @@ function movesFrom(sq) {
 }
 
 // ---- Starting, saving, ending ----
-function levelNow() { var l = load('taso', 2); return Number.isInteger(l) && l >= 0 && l < LEVELS.length ? l : 2; }
+// Only Aloittelija is open at first; a win against a level opens the next one.
+function unlocked(l) {
+  if (l === 0) return true;
+  var s = load('tilasto:' + (l - 1), null);
+  return !!(s && Number(s.v) > 0);
+}
+function topUnlocked() { var l = 0; while (l + 1 < LEVELS.length && unlocked(l + 1)) l++; return l; }
+function levelNow() {
+  var l = load('taso', 0);
+  if (!Number.isInteger(l) || l < 0 || l >= LEVELS.length) l = 0;
+  return unlocked(l) ? l : topUnlocked();
+}
 function newSoloGame() {
   var pick = load('vari', 'w'), mine = pick === 'arvo' ? (Math.random() < 0.5 ? 'w' : 'b') : pick === 'b' ? 'b' : 'w';
   var level = levelNow(), cpu = { id: 'kone', name: 'Kone · ' + LEVELS[level].name }, me = { id: 'solo', name: 'Sinä' };
@@ -50,7 +61,7 @@ function resumeSolo() {
 function startGame(g, isOnline) {
   clearTimeout(aiTimer); thinking = false;
   online = isOnline; game = g; derived = playGame(g.moves); result = null;
-  selected = -1; drag = null; anim = null; pendingPromo = null; endHidden = false; notice = ''; resignArmed = 0; ended = false;
+  selected = -1; drag = null; anim = null; pendingPromo = null; endHidden = false; notice = ''; resignArmed = 0; ended = false; opened = -1;
   if (!derived) { game.moves = []; derived = playGame([]); }
   if (g.result) result = g.result;
   else { var st = gameStatus(derived); if (st.over) result = st; }
@@ -133,7 +144,9 @@ function finish(again) {
     if (R.isHost) { game.result = result; sendState(); R.deliver({ t: 'result', round: roomRound, g: snapshot() }); R.endRound(); }
     if (R.once(roomRound)) bump('kaverit', t.kind);
   } else if (!again) {
+    var next = game.level + 1, opens = t.kind === 'win' && next < LEVELS.length && !unlocked(next);
     bump('tilasto:' + game.level, t.kind);
+    if (opens) { opened = next; save('taso', next); }
     keepSolo();
   } else keepSolo();
   if (!again) sound(t.kind === 'win' ? 'voitto' : t.kind === 'lose' ? 'tappio' : 'onnistui', t.kind === 'draw' ? 0.2 : 0.3);
@@ -163,7 +176,10 @@ function menu() {
   $('menu').classList.remove('hidden'); $('end').classList.add('hidden'); $('promo').classList.add('hidden');
   $('pa').classList.add('hidden'); $('pb').classList.add('hidden');
   var lv = levelNow(), col = load('vari', 'w');
-  Array.prototype.forEach.call(document.querySelectorAll('#levels button'), function (b) { b.classList.toggle('on', Number(b.dataset.l) === lv); });
+  Array.prototype.forEach.call(document.querySelectorAll('#levels button'), function (b) {
+    var l = Number(b.dataset.l);
+    b.classList.toggle('on', l === lv); b.classList.toggle('locked', !unlocked(l));
+  });
   Array.prototype.forEach.call(document.querySelectorAll('#colors button'), function (b) { b.classList.toggle('on', b.dataset.c === col); });
   $('levelInfo').textContent = LEVELS[lv].name + ': ' + statsText(load('tilasto:' + lv, null));
   var s = load('peli', null);
@@ -206,7 +222,8 @@ function showEnd() {
   $('endTitle').textContent = t.title; $('endSub').textContent = t.sub;
   $('endTitle').className = t.kind;
   $('endStats').textContent = online ? 'Kaveripelit: ' + statsText(load('kaverit', null))
-    : LEVELS[game.level].name + ': ' + statsText(load('tilasto:' + game.level, null));
+    : LEVELS[game.level].name + ': ' + statsText(load('tilasto:' + game.level, null)) +
+      (opened >= 0 ? '\n🔓 Uusi taso auki: ' + LEVELS[opened].name + '!' : '');
   $('again').textContent = online ? 'Takaisin huoneeseen' : 'Uusi peli';
   $('endMenu').classList.toggle('hidden', online);
   $('end').classList.toggle('hidden', endHidden);
@@ -346,7 +363,15 @@ if (R) {
 
 // ---- Buttons ----
 Array.prototype.forEach.call(document.querySelectorAll('#levels button'), function (b) {
-  b.onclick = function () { save('taso', Number(b.dataset.l)); sound('valinta', 0.12); menu(); };
+  b.onclick = function () {
+    var l = Number(b.dataset.l);
+    if (!unlocked(l)) {
+      sound('virhe', 0.12);
+      $('levelInfo').textContent = '🔒 ' + LEVELS[l].name + ' aukeaa, kun voitat tason ' + LEVELS[l - 1].name + '.';
+      return;
+    }
+    save('taso', l); sound('valinta', 0.12); menu();
+  };
 });
 Array.prototype.forEach.call(document.querySelectorAll('#colors button'), function (b) {
   b.onclick = function () { save('vari', b.dataset.c); sound('valinta', 0.12); menu(); };
