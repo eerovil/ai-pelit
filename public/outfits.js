@@ -366,7 +366,8 @@
   function dress(o) { return o.top ? o : Object.assign({}, o, { top: '#e63946', hair: '#3b2a1a' }); }
   // A whole figure from the front, feet at (fx, fy), h tall. L: the outfit's palette (skin, hair,
   // top, bottom, shoe, cape, head, stripe, bones, halloween). p: up 0…1 (arms down … up in a V),
-  // step -1…1, look { lx, ly, tilt, mouth } for frontHead, wave (one arm waving, its phase).
+  // step -1…1, look { lx, ly, tilt, mouth } for frontHead, wave (one arm waving, its phase),
+  // reach [[x, y], [x, y]] (the left and the right hand held at those points, elbows bent out).
   function figure(x, L, fx, fy, h, p) {
     p = p || {};
     var up = p.up || 0, step = p.step || 0, mix = function (a, b, k) { return a + (b - a) * k; };
@@ -396,6 +397,10 @@
       var u = p.wave && d === 1 ? 1 : up, wv = p.wave && d === 1 ? Math.sin(p.wave) * 0.35 : 0;
       var ex = fx + d * mix(h * 0.2, h * 0.25, u), ey = mix(sh + h * 0.15, sh - h * 0.1, u);
       var hx = fx + d * mix(h * 0.21, h * 0.32 + wv * h * 0.2, u), hy2 = mix(fy - h * 0.46, sh - h * 0.3, u);
+      if (p.reach) {
+        var rh = p.reach[d < 0 ? 0 : 1], ax = fx + d * (hw - lw * 0.4), ay = sh + lw * 0.3;
+        hx = rh[0]; hy2 = rh[1]; ex = (ax + hx) / 2 + d * h * 0.03; ey = (ay + hy2) / 2 + h * 0.05;
+      }
       x.strokeStyle = L.skin; x.lineWidth = lw;
       x.beginPath(); x.moveTo(fx + d * (hw - lw * 0.4), sh + lw * 0.3); x.lineTo(ex, ey); x.lineTo(hx, hy2); x.stroke();
       if (L.bones) { x.strokeStyle = '#1a1a1e'; x.lineWidth = Math.max(1, lw * 0.25); x.stroke(); }
