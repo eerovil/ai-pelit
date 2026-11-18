@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2a211b"><title>Shakki</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#2a211b;color:#f4ead7;font:16px system-ui,sans-serif}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;min-height:44px;padding:9px 16px;background:#e9c98b;color:#2a211b;font-weight:750;touch-action:manipulation}
+button.secondary{background:#4a3a2e;color:#f4ead7;border:1px solid #7a6450}
+#c{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;touch-action:none}
+.hidden{display:none!important}
+/* The panels beside the board; draw.js's layout() sets their boxes. */
+.panel-side{position:fixed;display:flex;flex-direction:column;pointer-events:none;padding:0 12px;min-width:0}
+.panel-side button{pointer-events:auto}
+.name{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pa{justify-content:flex-end;padding-bottom:34px;padding-left:max(12px,env(safe-area-inset-left))}
+#pb{padding-top:36px;padding-bottom:calc(env(safe-area-inset-bottom) + 10px)}
+#status,#paStatusText{font-size:16px;font-weight:700;margin-top:6px;min-height:22px}
+#status.check,#paStatusText.check{color:#ff8a76}
+#lastMove,.lastMove{font-size:13px;color:#cdbca0;margin-top:2px;min-height:18px}
+.buttons{display:flex;gap:8px;justify-content:flex-end;margin-top:auto}
+.buttons button{min-height:42px;padding:8px 14px;font-size:15px}
+body.land #pa{justify-content:flex-start;padding-top:calc(env(safe-area-inset-top) + 56px);padding-bottom:0}
+body.land #pb{padding-top:calc(env(safe-area-inset-top) + 56px);padding-right:max(12px,env(safe-area-inset-right))}
+body.land #paStatus{margin-top:auto;margin-bottom:76px}
+body.land .buttons{flex-direction:column;align-items:stretch}
+#paStatus{display:none}body.land #paStatus{display:block}
+body.land #pb #status,body.land #pb #lastMove{display:none}
+/* Menu, promotion and end screens */
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:calc(env(safe-area-inset-top) + 50px) 20px calc(env(safe-area-inset-bottom) + 20px);background:#2a211bf2;overflow:hidden}
+.box{width:100%;max-width:440px}
+.eyebrow{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#cdb898}
+h1{font-size:46px;letter-spacing:-1px;margin:4px 0 6px}
+h2{font-size:30px;margin:2px 0 4px}
+p{line-height:1.45;color:#dccdb4;margin:6px 0}
+.label{font-size:13px;color:#cdb898;margin:12px 0 6px}
+.seg{display:grid;gap:6px}
+#levels{grid-template-columns:repeat(5,1fr)}#colors{grid-template-columns:repeat(3,1fr)}
+.seg button{min-height:42px;padding:6px 2px;font-size:13px;background:#4a3a2e;color:#f4ead7;border:1px solid #7a6450}
+.seg button.on{background:#e9c98b;color:#2a211b;border-color:#e9c98b}
+.actions{display:grid;gap:9px;margin-top:16px}
+#levelInfo{font-size:13px;color:#e9c98b;min-height:18px;margin-top:8px}
+#end{background:#2a211b99}
+#end .box{background:#3a2d24f5;border:1px solid #7a6450;border-radius:18px;padding:18px 18px 16px;max-width:360px;text-align:center}
+#endTitle.win{color:#ffd76a}#endTitle.lose{color:#ff9d8a}
+#endStats{font-size:13px;color:#cdb898}
+#promo{background:#2a211b99}
+#promo .box{background:#3a2d24f5;border:1px solid #7a6450;border-radius:18px;padding:16px;max-width:340px;text-align:center}
+#promoPieces{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+#promoPieces button{padding:4px;background:#efdcb6;aspect-ratio:1}
+#promoPieces canvas{width:100%;height:100%;display:block}
+@media (max-height:680px) and (orientation:portrait){h1{font-size:38px}.label{margin:8px 0 4px}.actions{margin-top:10px}}
+@media (orientation:landscape){
+  .overlay{padding:calc(env(safe-area-inset-top) + 40px) 50px 14px}
+  #menu .box{max-width:720px;display:grid;grid-template-columns:1fr 1fr;gap:4px 28px;align-items:center}
+  h1{font-size:36px}.label{margin:6px 0 4px}.actions{margin-top:0;gap:7px}
+  .actions button{min-height:40px;padding:6px 12px}
+  #menu p.tip{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Shakkilauta. Napauta nappulaa ja sitten ruutua, johon se siirtyy."></canvas>
+<div id="pa" class="panel-side hidden">
+  <div class="name" id="oppoName"></div>
+  <div id="paStatus"></div>
+</div>
+<div id="pb" class="panel-side hidden">
+  <div class="name" id="meName"></div>
+  <div id="status"></div><div id="lastMove"></div>
+  <div class="buttons"><button id="showEnd" class="secondary hidden">Tulos</button><button id="toMenu" class="secondary">Valikko</button><button id="resign" class="secondary">Luovuta</button></div>
+</div>
+<section id="menu" class="overlay"><div class="box">
+  <div>
+    <div class="eyebrow">Kuninkaiden peli</div>
+    <h1>♚ Shakki</h1>
+    <p class="tip">Napauta nappulaa: laillisten siirtojen ruudut näkyvät. Napauta ruutua tai vedä nappula sinne.</p>
+    <div class="label">Koneen taso</div>
+    <div class="seg" id="levels"><button data-l="0">Aloit&shy;telija</button><button data-l="1">Helppo</button><button data-l="2">Keski&shy;taso</button><button data-l="3">Vaikea</button><button data-l="4">Mestari</button></div>
+    <div id="levelInfo"></div>
+  </div>
+  <div>
+    <div class="label">Sinun värisi</div>
+    <div class="seg" id="colors"><button data-c="w">⚪ Valkea</button><button data-c="b">⚫ Musta</button><button data-c="arvo">🎲 Arvo</button></div>
+    <div class="actions">
+      <button id="play">Pelaa konetta vastaan</button>
+      <button id="resume" class="secondary hidden">Jatka peliä</button>
+      <button id="friends" class="secondary">👥 Pelaa kaverin kanssa</button>
+    </div>
+  </div>
+</div></section>
+<section id="promo" class="overlay hidden"><div class="box">
+  <div class="eyebrow">Sotilas pääsi päätyyn</div><h2>Korota</h2>
+  <div id="promoPieces"></div>
+  <button id="promoCancel" class="secondary">Peru</button>
+</div></section>
+<section id="end" class="overlay hidden"><div class="box">
+  <h2 id="endTitle"></h2><p id="endSub"></p><p id="endStats"></p>
+  <div class="actions"><button id="again">Uusi peli</button><button id="peek" class="secondary">Katso lautaa</button><button id="endMenu" class="secondary">Valikko</button></div>
+</div></section>
+<script src="../../../rooms.js" data-game="shakki" data-min="2" data-max="2" data-voice-corner="bottom-left"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="engine.js"></script><script src="draw.js"></script><script src="game.js"></script>
+<script src="../../../back.js"></script>
+</body></html>
