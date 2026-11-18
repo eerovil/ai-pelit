@@ -10,7 +10,7 @@ import json
 
 from conftest import ROOT
 
-URL = "games/korkeushyppy/v15/"
+URL = "games/korkeushyppy/v16/"
 
 
 def test_every_jump_ends_as_in_v14(site, context):

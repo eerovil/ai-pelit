@@ -7,7 +7,7 @@ friends with `fit`, and drawn on the podium; the computer's jumpers keep the pla
 from test_makihyppy_v12_viikko import HELPERS, open_game as open_week
 import yleisurheilu_asut as A
 
-URL = "games/makihyppy/v12/"
+URL = "games/makihyppy/v13/"
 
 
 def test_picking_saves_for_every_event(site, context):

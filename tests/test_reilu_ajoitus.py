@@ -11,19 +11,19 @@ pytestmark = pytest.mark.games(
 
 # Each with the key that makes the judged action, and the function that judges it.
 GAMES = [
-    ("games/moukari/v13", "ArrowLeft", "press"),
-    ("games/seivashyppy/v16", "ArrowLeft", "press"),
-    ("games/pituushyppy/v18", "ArrowLeft", "press"),
-    ("games/kuula/v11", "ArrowLeft", "press"),
-    ("games/korkeushyppy/v15", "ArrowLeft", "press"),
-    ("games/keihas/v17", "ArrowLeft", "press"),
-    ("games/makihyppy/v12", " ", "action"),
+    ("games/moukari/v14", "ArrowLeft", "press"),
+    ("games/seivashyppy/v17", "ArrowLeft", "press"),
+    ("games/pituushyppy/v19", "ArrowLeft", "press"),
+    ("games/kuula/v12", "ArrowLeft", "press"),
+    ("games/korkeushyppy/v16", "ArrowLeft", "press"),
+    ("games/keihas/v18", "ArrowLeft", "press"),
+    ("games/makihyppy/v13", " ", "action"),
 ]
 LETTING_GO = [
-    ("games/seivashyppy/v16", "holdPtr", "letGo"),
-    ("games/pituushyppy/v18", "aimPtr", "release"),
-    ("games/kuula/v11", "aimPtr", "release"),
-    ("games/keihas/v17", "aimPtr", "release"),
+    ("games/seivashyppy/v17", "holdPtr", "letGo"),
+    ("games/pituushyppy/v19", "aimPtr", "release"),
+    ("games/kuula/v12", "aimPtr", "release"),
+    ("games/keihas/v18", "aimPtr", "release"),
 ]
 
 
@@ -169,7 +169,7 @@ def test_piano_a_long_frame_is_run_through_whole(real, context):
 
 
 def test_makihyppy_a_short_hold_steers_until_the_finger_lifts(real, context):
-    page = opened(real, context, "games/makihyppy/v12", "typeof catchUp === 'function'")
+    page = opened(real, context, "games/makihyppy/v13", "typeof catchUp === 'function'")
     got = page.evaluate(
         """() => {
           requestAnimationFrame = () => 0;
