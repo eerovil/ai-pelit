@@ -91,6 +91,8 @@ v14 (#399): passing many heights takes two taps, and the bar rises 20 cm at a ti
 
 v16 (#469) plays exactly as v15; only the drawing is new. The head bobs in the run-up, goes back over the bar and cheers after a clearance (`headTilt(a)` → `AiPelitOutfits.headPose()`, drawn by `AiPelitOutfits.sideHead()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
 
+v17 (#469) plays exactly as v16 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+
 ## Colours
 
 - **blue**: what the player sees and does

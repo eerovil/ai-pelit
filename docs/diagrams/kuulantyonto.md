@@ -66,6 +66,8 @@ v9 (#395) plays as v8 on `public/lib/yleisurheilu-9/`: the friends watching no l
 
 v11 (#469) plays exactly as v10; only the drawing is new. The head moves through the glide and the put (`headTilt(a)` → `AiPelitOutfits.headPose()`, mirrored by the facing, drawn by `AiPelitOutfits.sideHead()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
 
+v12 (#469) plays exactly as v11 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+
 ## Colours
 
 - **blue**: what the player sees and does

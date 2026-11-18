@@ -107,6 +107,13 @@
       "note": "Uusi floppihyppy, päät kääntyvät hypyn mukaan ja palkintopallilla on uudet edestä piirretyt urheilijat.",
       "request": "Hahmonvalintaan ja ylkonäköön parannuksia. Joissain tapauksissa hahmo ei näy myös palkintopallilla oikein. Hahmoilla saisi olla eri pään asentoja. Korkeushypyssä on erittäin omituinen asento",
       "issue": "eerovil/ai-pelit#469"
+    },
+    {
+      "n": 16,
+      "date": "2026-11-18",
+      "note": "Palkintojenjaossa mitalit ripustava toimitsija pitelee nauhaa omilla käsillään.",
+      "request": "Se joka laittaa mitalit kaulaan tuossa, niin ne kädet ei ole ne samat kädet kuin mitkä sillä normaalisti on. Millä se laittaa ne mitalit, niin se on vähän oudon näköinen.",
+      "issue": "eerovil/ai-pelit#469"
     }
   ]
 }

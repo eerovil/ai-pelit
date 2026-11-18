@@ -77,6 +77,8 @@ v16 (#395) plays as v15 on `public/lib/yleisurheilu-9/`: the friends watching no
 
 v18 (#469) plays exactly as v17; only the drawing is new. The head bobs in the run-up, looks up at take-off, goes back in the air and cheers after a valid jump (`headTilt(a)` → `AiPelitOutfits.headPose()`, drawn by `AiPelitOutfits.sideHead()` in `figure()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
 
+v19 (#469) plays exactly as v18 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+
 ## Colours
 
 - **blue**: what the player sees and does
