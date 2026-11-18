@@ -160,8 +160,10 @@ def test_an_away_friends_turn_is_played_by_the_computer_and_they_come_back(phone
     guest.click("#friends")
     guest.click("#aipr-again")
     guest.wait_for_function("game && derived && derived.uci.length === 3 && game.mine === 'b'")
-    tap(guest, "g8")
-    tap(guest, "f6")
+    # The computer's move for black is random (g8f6 itself, or f7f6 blocking it): play g8f6 when legal.
+    frm, to = ("g8", "f6") if guest.evaluate("!!findMove(derived.pos, 'g8f6')") else ("b8", "c6")
+    tap(guest, frm)
+    tap(guest, to)
     host.wait_for_function("derived.uci.length === 4")
     for p in (host, guest):
         assert p.errors == []
