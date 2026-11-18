@@ -88,5 +88,67 @@ def test_the_official_hangs_the_medal_with_its_own_arms(site, context, event):
     for t in ("2.7", "3.8", "4.9"):
         assert len(out[t]) == 1 and out[t][0], (t, out[t])
         (lx, ly), (rx, ry) = out[t][0]
-        assert lx < rx and abs(ly - ry) < 1, out[t][0]
+        assert lx < rx and abs(ly - ry) < 4, out[t][0]  # a far hand may stop at arm's length
     assert out["6.5"] == [], "the official leaves after the gold"
+
+
+@pytest.mark.parametrize("event", EVENTS)
+def test_the_players_outfit_reaches_the_podium_rows(site, context, event):
+    """#469: the bar-height format (korkeus.js) gave its rows no `fit`, so a high jumper or a pole
+    vaulter stood on the podium in the plain kit instead of their outfit."""
+    import yleisurheilu_asut as A
+    page = A.open_game(site, context, "games/" + event + "/", {A.SHARED: "noita"})
+    page.wait_for_function("typeof K !== 'undefined' && window.AiPelitOutfits", timeout=5000)
+    page.click("#go")
+    page.wait_for_function("K.comp && K.results", timeout=5000)
+    mine = page.evaluate("K.results().filter(r => r.p === 'me').map(r => r.fit)")
+    assert mine == ["noita"]
+    assert page.errors == []
+
+
+SWEEP = """([w, h]) => {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d'), box = { left: 8, top: 44, w: w - 16, bottom: h - 8 };
+  const res = [];
+  for (let i = 0; i < 12; i++) res.push({ id: 'a' + i, p: null, name: 'U' + i, col: '#e63946', best: 10 - i * 0.3,
+    place: i + 1, marks: [10 - i * 0.3], fin: true, fit: null });
+  const real = AiPelitOutfits.figure, out = [];
+  let hands = null;
+  AiPelitOutfits.figure = function (c, L, fx, fy, hh, p) {
+    if (L.top === '#1f2f55') {
+      const lw = Math.max(2, hh * 0.075), sh = d => [fx + d * (hh * 0.14 - lw * 0.4), fy - hh * 0.72 + lw * 0.3];
+      // Without reach, the hands hang at the sides (figure()'s arms down).
+      const at = p && p.reach || [[fx - hh * 0.21, fy - hh * 0.46], [fx + hh * 0.21, fy - hh * 0.46]];
+      hands = { h: hh, at, rel: at.map(([ax, ay]) => [ax - fx, ay - fy]), arm: Math.max(...[-1, 1].map((d, k) => Math.hypot(at[k][0] - sh(d)[0], at[k][1] - sh(d)[1]))) };
+    }
+    return real.apply(this, arguments);
+  };
+  for (let t = 2.2; t < 5.6; t += 0.01) {
+    hands = null; K.ending = { t, res, at: 0, place: 1, mark: 10, fin: true }; K.drawPodium(x, box);
+    out.push(hands);
+  }
+  AiPelitOutfits.figure = real; K.ending = null;
+  return out;
+}"""
+
+
+@pytest.mark.parametrize("size", [[360, 740], [740, 360]])
+def test_the_officials_arms_never_stretch_or_snap(site, context, size):
+    """#469 helper checks: the hands rise to the ribbon and drop back smoothly, and the ribbon is
+    carried no higher than the official's arms reach."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + "games/pituushyppy/v19/")
+    page.wait_for_function("typeof K !== 'undefined' && K.drawPodium && window.AiPelitOutfits", timeout=5000)
+    seen = page.evaluate(SWEEP, size)
+    on = [s for s in seen if s]
+    assert len(on) > 200
+    assert max(s["arm"] / s["h"] for s in on) <= 0.451
+    for a, b in zip(seen, seen[1:]):
+        if a and b:
+            # A hand on the ribbon stays put while the official walks, and a hand at its side walks
+            # with it, so one of the two frames sees it move smoothly. Raising or dropping the hands
+            # eases over about 0.12 s, at most 0.09 h per 0.01 s; the old switch on and off
+            # the ribbon moved them about 0.8 h in one step.
+            step = min(max(abs(a[w][k][i] - b[w][k][i]) for k in (0, 1) for i in (0, 1)) for w in ("at", "rel"))
+            assert step < 0.12 * a["h"], (a, b)

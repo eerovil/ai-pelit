@@ -117,7 +117,8 @@
         F.c = c;
         return F.standings(c).map(t => {
           const s = score(c, t);
-          return { id: t.id, p: t.p, name: t.name, col: t.col, best: s.h, at: s.at, total: s.total, place: F.placeOf(c, t), out: t.out, fin: true, marks: [] };
+          return { id: t.id, p: t.p, name: t.name, col: t.col, best: s.h, at: s.at, total: s.total, place: F.placeOf(c, t), out: t.out, fin: true, marks: [],
+            fit: t.fit || null }; // #469: the podium dresses each in their outfit, as in kisa.js
         });
       },
       endText(e, K) {

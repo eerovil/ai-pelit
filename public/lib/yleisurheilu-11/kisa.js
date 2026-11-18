@@ -319,6 +319,9 @@
     });
     // #469: the official looks at the medallist whose medal it hangs.
     const offLook = off && off.now ? { lx: groups[off.now[0]].length && bx[off.now[0]] > off.ox ? 0.7 : -0.7, ly: 0.2 } : { lx: 0 };
+    // The official's size, shoulders (as AiPelitOutfits.figure() draws them) and arm's reach.
+    const ofh = fh * 1.02, olw = Math.max(2, ofh * 0.075), ARM = ofh * 0.45;
+    const shoulder = d => [off.ox + d * (ofh * 0.14 - olw * 0.4), off.oy - ofh * 0.72 + olw * 0.3];
     // The medal: carried over the head on its ribbon, lowered to the neck, then it swings still.
     // A shared place's medals go on one after another, each in its share of the block's time.
     there.forEach(p => {
@@ -328,12 +331,24 @@
       const hi = Math.min(fh * 0.55, p.neck - pa.t - 36), u = p.u;
       p.lift = u < 0.45 ? mix(hi, hi * 0.8, ease(u / 0.45)) : mix(hi * 0.8, 0, ease((u - 0.45) / 0.35));
       p.w = mix(fh * 0.13, fh * 0.065, ease((u - 0.6) / 0.3)); p.drop = mix(fh * 0.24, fh * 0.19, ease((u - 0.6) / 0.3));
-      // The official holds the ribbon's ends with its own hands (#469) until the medal is on.
+      // The official holds the ribbon's ends with its own hands (#469) until the medal is on: the
+      // hands rise from its sides to the ribbon and drop back (hold), and the ribbon is carried no
+      // higher than its arms (ARM from each shoulder) reach, so they never stretch.
       p.hands = off && off.now && off.now[0] === p.i && off.now[1] === p.j && u > 0 && u < 0.85;
+      if (!p.hands) return;
+      [-1, 1].forEach(d => {
+        const [sx, sy] = shoulder(d), dx = Math.abs(p.fx + d * p.w - sx);
+        p.lift = Math.max(0, Math.min(p.lift, p.neck - (dx < ARM ? sy - Math.sqrt(ARM * ARM - dx * dx) : sy)));
+      });
+      const hold = p.hold = ease(Math.min(u / 0.12, (0.85 - u) / 0.13));
+      p.at = [-1, 1].map(d => {
+        const [sx, sy] = shoulder(d), hx = mix(off.ox + d * ofh * 0.21, p.fx + d * p.w, hold), hy = mix(off.oy - ofh * 0.46, p.neck - p.lift, hold);
+        const k = Math.min(1, ARM / (Math.hypot(hx - sx, hy - sy) || 1)); // walking on, it lets go rather than stretch
+        return [sx + (hx - sx) * k, sy + (hy - sy) * k];
+      });
     });
-    const held = there.find(p => p.hands), handR = Math.max(1.5, fh * 1.02 * 0.056);
-    const reach = held && [[held.fx - held.w, held.neck - held.lift], [held.fx + held.w, held.neck - held.lift]];
-    if (off) { x.globalAlpha = off.a; front(x, off.ox, off.oy, fh * 1.02, OFF, 0, 0, offLook, reach); x.globalAlpha = 1; }
+    const held = there.find(p => p.hands), handR = Math.max(1.5, ofh * 0.056), reach = held && held.at;
+    if (off) { x.globalAlpha = off.a; front(x, off.ox, off.oy, ofh, OFF, 0, 0, offLook, reach); x.globalAlpha = 1; }
     there.forEach(p => {
       const fh = p.sh, { u, jump, neck, lift, w, drop, hands } = p, r = Math.max(4, fh * 0.055);
       const up = p.i === 0 ? ease((t - CHEER) / 0.3) : ease((t - CHEER - 0.15) / 0.3);
@@ -350,9 +365,9 @@
       if (u > 0) {
         const swing = u > 0.8 ? Math.sin((u - 0.8) * 14) * fh * 0.04 * Math.max(0, 1 - (u - 0.8) * 1.2) : 0;
         medalAt(x, p.i, p.fx, neck - lift, w, drop, r, swing);
-        if (hands) {
+        if (hands && p.hold > 0.5) {
           x.fillStyle = OFF.skin;
-          [-1, 1].forEach(d => { x.beginPath(); x.arc(p.fx + d * w, neck - lift, handR, 0, 7); x.fill(); });
+          p.at.forEach(([hx, hy]) => { x.beginPath(); x.arc(hx, hy, handR, 0, 7); x.fill(); });
         }
       }
     });
