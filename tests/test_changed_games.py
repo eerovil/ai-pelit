@@ -73,6 +73,7 @@ def selection(tmp_path, *changes: str | tuple[str, str]) -> tuple[list[str], str
     (repo / "scripts").mkdir()
     shutil.copy(ROOT / "tests" / "conftest.py", repo / "tests")
     shutil.copy(ROOT / "scripts" / "build.py", repo / "scripts")
+    shutil.copy(ROOT / "scripts" / "removed_games.py", repo / "scripts")
     for slug in ("alpha", "beta-gamma", "delta"):
         for v in (1, 2, 3):
             (repo / "games" / slug / f"v{v}").mkdir(parents=True)
