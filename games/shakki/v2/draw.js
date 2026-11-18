@@ -129,6 +129,7 @@ function draw() {
   var g = current(), pos = g ? g.pos : parseFen(START_FEN), last = g && g.moves.length ? g.moves[g.moves.length - 1] : null;
   var targets = selected >= 0 ? movesFrom(selected) : [];
   var checkSq = g && !gameOver() && inCheck(pos) ? kingSq(pos, pos.turn) : (g && result && result.why === 'matti' ? kingSq(pos, pos.turn) : -1);
+  if (why && !result && checkSq < 0) checkSq = why.king;
   for (var sq = 0; sq < 64; sq++) {
     var xy = squareXY(sq), light = ((sq & 7) + (sq >> 3)) % 2 === 0;
     c.fillStyle = light ? COLORS.light : COLORS.dark; c.fillRect(xy[0], xy[1], cell, cell);
@@ -157,7 +158,7 @@ function draw() {
     var p = pos.b[sq]; if (!p) continue;
     if (moving && sq === moving.to) continue;
     if (drag && drag.moved && sq === drag.from) continue;
-    xy = squareXY(sq); drawPiece(c, p, xy[0], xy[1], cell);
+    xy = squareXY(sq); drawPiece(c, p, xy[0] + shakeOf(sq, now), xy[1], cell);
   }
   // Where the selected piece can go: a dot on an empty square, a ring around a piece.
   targets.forEach(function (m) {
@@ -174,6 +175,14 @@ function draw() {
   } else anim = null;
   if (drag && drag.moved && pos.b[drag.from]) drawPiece(c, pos.b[drag.from], drag.x - cell * 0.6, drag.y - cell * 0.9, cell * 1.2);
   drawCaptured(c, g);
+}
+// A refused move's reason (#465 v2): the enemy pieces to blame shake from side to side.
+function shakeOf(sq, now) {
+  if (!why || result || why.shake.indexOf(sq) < 0) return 0;
+  var t = now - why.t0;
+  if (t > SHAKE_MS) return 0;
+  askDraw();
+  return Math.sin(t / 28) * view.cell * 0.09 * (1 - t / SHAKE_MS);
 }
 function roundRect(c, x, y, w, h, r) {
   c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);

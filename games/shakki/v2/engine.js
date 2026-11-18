@@ -198,6 +198,47 @@ function findMove(pos, uci) {
   return null;
 }
 
+function attackersOf(pos, sq, by) {
+  // Every square of `by`'s pieces that attacks sq: a piece moved onto sq one by one.
+  var out = [], keep = pos.b[sq], turn = pos.turn, ep = pos.ep;
+  pos.b[sq] = by === 'w' ? 'p' : 'P'; pos.turn = by; pos.ep = -1;
+  pseudoMoves(pos, true).forEach(function (m) { if (m.to === sq && out.indexOf(m.from) < 0) out.push(m.from); });
+  pos.b[sq] = keep; pos.turn = turn; pos.ep = ep;
+  return out;
+}
+// Why the piece on `from` cannot go to `to`, when the reason is the king's safety (#465 v2): the
+// piece would leave its king attacked, the king is in check, or the king would step onto or
+// across an attacked square. { text, shake: [the enemy pieces to blame], king } or null: a move
+// against a piece's own way of moving needs no reason (Eero's choice), and a legal one none.
+function whyIllegal(pos, from, to) {
+  var b = pos.b, p = b[from], c = pos.turn, opp = other(c);
+  if (!p || colorOf(p) !== c || from === to) return null;
+  if (b[to] && colorOf(b[to]) === c) return null;
+  if (legalMoves(pos).some(function (m) { return m.from === from && m.to === to; })) return null;
+  var u = p.toUpperCase(), king = kingSq(pos, c), checked = inCheck(pos, c);
+  function res(text, shake, k) { return { text: text, shake: shake, king: k }; }
+  var pseudo = pseudoMoves(pos).filter(function (m) { return m.from === from && m.to === to; })[0];
+  if (pseudo) {
+    var undo = makeMove(pos, pseudo), att = attackersOf(pos, kingSq(pos, c), opp);
+    unmakeMove(pos, pseudo, undo);
+    if (u === 'K') return res('Kuningas ei voi mennä uhatulle ruudulle.', att, to);
+    if (checked) return res('Shakki! Torju se ensin.', attackersOf(pos, king, opp), king);
+    return res('Nappula on sidottu: kuningas jäisi uhatuksi.', att, king);
+  }
+  // Castling refused because of an attack (the other castling rules are the king's own moves).
+  var home = c === 'w' ? 60 : 4, df = (to & 7) - (from & 7);
+  if (u === 'K' && from === home && to >> 3 === home >> 3 && Math.abs(df) === 2) {
+    var right = df > 0 ? 'k' : 'q', rookSq = df > 0 ? home + 3 : home - 4;
+    if (c === 'w') right = right.toUpperCase();
+    var path = df > 0 ? [home + 1, home + 2] : [home - 1, home - 2, home - 3];
+    if (pos.castle.indexOf(right) < 0 || b[rookSq] !== (c === 'w' ? 'R' : 'r') || path.some(function (s) { return b[s]; })) return null;
+    if (checked) return res('Shakissa ei voi linnoittautua.', attackersOf(pos, home, opp), home);
+    var pass = df > 0 ? home + 1 : home - 1;
+    return res('Linnoitus ei käy: kuningas kulkisi uhatun ruudun yli.', attackersOf(pos, pass, opp), pass);
+  }
+  return null;
+}
+
 // Short algebraic notation with the Finnish piece letters (K kuningas, D daami, T torni,
 // L lähetti, R ratsu), as Finnish chess books write it.
 var FI_LETTER = { K: 'K', Q: 'D', R: 'T', B: 'L', N: 'R', P: '' };

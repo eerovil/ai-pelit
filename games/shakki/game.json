@@ -12,8 +12,8 @@
     {
       "n": 2,
       "date": "2026-11-18",
-      "note": "Laiton siirto kertoo syynsä: miksi nappula ei voi mennä sinne ja mikä on tiellä.",
-      "request": "Uusi versio: kun yrittää tehdä laittoman siirron niin näkyisi syy jotenkin",
+      "note": "Kuninkaan turvallisuuden takia kielletty siirto kertoo syynsä, ja sen aiheuttava vastustajan nappula tärisee.",
+      "request": "Uusi versio: kun yrittää tehdä laittoman siirron niin näkyisi syy jotenkin. Vain shakkiin liittyvät, vähän epäselvät jutut näkyvät, ja vastustajan nappula, joka aiheuttaa sen, värisee; nappuloiden liikkumissääntöjä ei tarvitse neuvoa.",
       "issue": "eerovil/ai-pelit#465"
     }
   ]

@@ -11,6 +11,9 @@ var game = null, derived = null, result = null;
 var online = false, roomRound = 0, roomHost = '';
 var selected = -1, drag = null, anim = null, thinking = false, aiTimer = 0, pendingPromo = null;
 var resignArmed = 0, endHidden = false, notice = '', ended = false, opened = -1;
+// Why the last tried move was refused, when it was the king's safety (#465 v2):
+// { text, shake, king, at, t0 } or null. The pieces to blame shake, the text shows under the board.
+var why = null, whyTimer = 0, WHY_MS = 4000, SHAKE_MS = 700;
 
 if (S) S.load(['puu', 'osuma', 'valinta', 'naksu', 'voitto', 'tappio', 'onnistui', 'virhe']);
 function sound(name, vol) { if (S) S.play(name, { vol: vol }); }
@@ -81,12 +84,26 @@ function play(m, quiet) {
   game.moves = derived.uci.concat([moveUci(m)]);
   derived = playGame(game.moves);
   anim = { from: m.from, to: m.to, t0: performance.now(), dur: 170 };
-  selected = -1; drag = null; resignArmed = 0;
+  selected = -1; drag = null; resignArmed = 0; why = null; clearTimeout(whyTimer); showWhy();
   if (!quiet) { sound(cap ? 'osuma' : 'puu', 0.3); if (/[+#]$/.test(text)) sound('naksu', 0.2); }
   var st = gameStatus(derived);
   if (st.over) result = st;
   return text;
 }
+
+// A move the rules refuse: say why, and show what stands in the way.
+function explain(from, to) {
+  var r = whyIllegal(derived.pos, from, to);
+  if (!r) return false;
+  r.at = to; r.t0 = performance.now(); why = r;
+  sound('virhe', 0.1);
+  clearTimeout(whyTimer);
+  whyTimer = setTimeout(clearWhy, WHY_MS);
+  showWhy(); askDraw();
+  return true;
+}
+function clearWhy() { if (!why) return; why = null; clearTimeout(whyTimer); showWhy(); askDraw(); }
+function showWhy() { updateHUD(); }
 
 function tryMove(m) {
   if (!myTurn()) return false;
@@ -207,11 +224,13 @@ function updateHUD() {
   $('status').textContent = st;
   $('status').classList.toggle('check', !result && inCheck(pos) && pos.turn === game.mine);
   var n = derived.texts.length;
-  $('lastMove').textContent = notice || (n ? 'Edellinen: ' + Math.ceil(n / 2) + '.' + (n % 2 ? ' ' : ' … ') + derived.texts[n - 1] : 'Valkea aloittaa.');
+  var whyLine = why && !result;
+  $('lastMove').classList.toggle('why', !!whyLine);
+  $('lastMove').textContent = whyLine ? '⚠ ' + why.text : notice || (n ? 'Edellinen: ' + Math.ceil(n / 2) + '.' + (n % 2 ? ' ' : ' … ') + derived.texts[n - 1] : 'Valkea aloittaa.');
   // Sideways the status sits in the left panel, under the opponent.
   var a = document.createElement('div'), b = document.createElement('div');
   a.className = $('status').className; a.textContent = $('status').textContent; b.textContent = $('lastMove').textContent;
-  a.id = 'paStatusText'; b.className = 'lastMove'; $('paStatus').replaceChildren(a, b);
+  a.id = 'paStatusText'; b.className = whyLine ? 'lastMove why' : 'lastMove'; $('paStatus').replaceChildren(a, b);
   $('resign').textContent = resignArmed > Date.now() ? 'Varmasti?' : 'Luovuta';
   $('resign').classList.toggle('hidden', !!result);
   $('showEnd').classList.toggle('hidden', !result || !endHidden);
@@ -259,10 +278,17 @@ canvas.addEventListener('pointerdown', function (e) {
   var target = movesFrom(selected).filter(function (m) { return m.to === sq; })[0];
   if (target) { tryMove(target); return; }
   var p = derived.pos.b[sq];
+  if (selected >= 0 && !(p && colorOf(p) === game.mine) && explain(selected, sq)) { selected = -1; askDraw(); return; }
+  if (why) clearWhy();
   if (p && colorOf(p) === game.mine) {
     selected = sq; drag = { from: sq, x: xy[0], y: xy[1], sx: xy[0], sy: xy[1], moved: false };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     sound('valinta', 0.12);
+    // A piece with no move at all because of its king: say why at once, there are no dots to try.
+    if (!movesFrom(sq).length) {
+      var held = pseudoMoves(derived.pos).filter(function (m) { return m.from === sq; })[0];
+      if (held) explain(sq, held.to);
+    }
   } else selected = -1;
   askDraw();
 });
@@ -280,6 +306,7 @@ function endDrag(e) {
     var xy = pointXY(e), sq = squareAt(xy[0], xy[1]);
     var target = movesFrom(d.from).filter(function (m) { return m.to === sq; })[0];
     if (target) { tryMove(target); return; }
+    if (sq >= 0 && sq !== d.from && explain(d.from, sq)) selected = -1;
   }
   askDraw();
 }
