@@ -89,6 +89,8 @@ v13 (#395) plays as v12 on `public/lib/yleisurheilu-9/`: the friends watching no
 
 v14 (#399): passing many heights takes two taps, and the bar rises 20 cm at a time up to 30 cm over the level's base, then 10 cm (`heightsFor()`, before always 10 cm), except in Ottelu's frame (`inMatch`), which keeps the old steps because the match already takes every second height. `cpuPlan()` now reads the heights themselves, as the steps are no longer even.
 
+v16 (#469) plays exactly as v15; only the drawing is new. The head bobs in the run-up, goes back over the bar and cheers after a clearance (`headTilt(a)` → `AiPelitOutfits.headPose()`, drawn by `AiPelitOutfits.sideHead()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
+
 ## Colours
 
 - **blue**: what the player sees and does

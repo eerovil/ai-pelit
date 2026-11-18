@@ -64,6 +64,8 @@ v8 (#373) plays as v7 on `public/lib/yleisurheilu-8/`: the friends watching run 
 
 v9 (#395) plays as v8 on `public/lib/yleisurheilu-9/`: the friends watching no longer run. The row only slides with the background, a little slower than it, and stops when it stops; legs move only on a tapped walk.
 
+v11 (#469) plays exactly as v10; only the drawing is new. The head moves through the glide and the put (`headTilt(a)` → `AiPelitOutfits.headPose()`, mirrored by the facing, drawn by `AiPelitOutfits.sideHead()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
+
 ## Colours
 
 - **blue**: what the player sees and does

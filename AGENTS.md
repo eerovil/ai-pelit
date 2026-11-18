@@ -42,17 +42,12 @@ player sees is Finnish unless the request says otherwise.
 - A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
   own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
   group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
-- Ottelu (#168), the athletics match, plays its events' newest versions in a frame, unchanged
-  (#303, Eero's choice), read from `catalog.json`, so a new event version joins the match with no
-  new Ottelu version, and Ottelu's tests (`tests/test_ottelu_v<N>.py`) run on that version's pull
-  request too. `LAJIT` in its `index.html` names fallback versions for when the catalog cannot be
-  read; an old one there is sent on to the newest by the site (#346).
-  A new event version must still play in the match: keep `kisa.js`'s options and the race's
-  functions that Ottelu's `laji.js` and `aita.js` change, or, when it cannot, make a new Ottelu
-  version in the same pull request that plays it. `"ottelu": false` no longer helps: no older
-  version is left for the match to fall back on, so the build refuses it on a newest version
-  (#346). Alone, each next event loads in a
-  fresh page: a second frame in the same page took no taps on Eero's phone (see docs/making-games.md).
+- Ottelu (#168), the athletics match, was removed whole (#469, Eero's choice): nobody played it.
+  `scripts/removed_games.py` names it, so `check_immutable.py` let its folders go,
+  `catalog.json` lists it under `removed`, `_redirects` and `public/sw.js` send its addresses to
+  the shelf, and its slug may not come back. Removing another game is a decision of Eero's, named
+  there with its issue. An event version needs nothing for Ottelu any more; the events' code for
+  its frame stays as history.
 
 How to make a game that plays well (controls, difficulty, saves, layout, tests), from what Eero
 asked to change in past versions: [docs/making-games.md](docs/making-games.md). Read it before you
@@ -111,7 +106,7 @@ request, with the version that taught it (#181, Eero's choice).
 6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (rising, never reused),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
    (the issue text) and `issue` (`eerovil/ai-pelit#<n>`). An older entry may still carry
-   `"ottelu": false` as history; a new one may not (see "What a request means").
+   `"ottelu": false` as history (Ottelu is gone, #469); a new one needs none.
 
 ## Online extras
 
@@ -149,7 +144,7 @@ high-score lists (#25), then play counts (#26).
     game in a frame under a slim room bar (code, players); the page draws the 🎤 chip over the frame, where it sits in the game alone, so a finger on it stays through a game switch (#394). The game's `rooms.js` talks through
     the page's connection, so a game switch reloads only the frame and the calls stay up; leaving
     the room sends the phone to the game's own page. A game needs nothing for it. A game inside
-    another frame (Ottelu's events) keeps the room in its own page, and so do the tests:
+    another frame keeps the room in its own page, and so do the tests:
     `tests/conftest.py` sets `window.__aiPelitHuoneSivu = false` on every page
     (`ROOMS_IN_GAME`); `tests/test_huone_sivu.py` turns it on.
   - `on('start', s => …)` on every phone: `s.players` (`[{id, name}]`, the connected phones in
@@ -216,12 +211,15 @@ high-score lists (#25), then play counts (#26).
   `AiPelitOutfits.head()` draws their heads. An outfit is a palette (`skin`, `hair`, `top`,
   `bottom`, `cape`, `head`) the game's own drawing reads. The choice is saved per game
   (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
-  `get(id)`. Trampoliini v6 is the model. An athletics event (and Ottelu) adds
+  `get(id)`. Trampoliini v6 is the model. An athletics event adds
   `data-share="yleisurheilu"` and passes `outfits: AiPelitOutfits.yleisurheilu` (#311): one
-  choice and one set of kits for every event, so the match wears the same outfit throughout;
-  Pituushyppy v10 is the model.
+  choice and one set of kits for every event; Pituushyppy v10 is the model. From #469 such a
+  game's picker shows the shared front-facing figure (`AiPelitOutfits.figure()`) and a moving
+  preview; other games' pickers show their own `draw`. `AiPelitOutfits.headPose(state, t)`
+  gives an event's side-view head its tilt for `run`, `takeoff`, `air`, `land`, `cheer` and `idle`,
+  and `sideHead()` draws it (Pituushyppy v18 is the model).
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-9/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-10/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
@@ -230,7 +228,7 @@ high-score lists (#25), then play counts (#26).
   (#176): the top three on the podium, the medals hung around their necks, the final standings
   under it; it stays until the player taps it away (the game passes its taps to `K.skip()`).
   Like `lib/three-r*/`, a folder never changes once published: a fix goes in the next one
-  (`yleisurheilu-10/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
+  (`yleisurheilu-11/`), used by the next versions. From `yleisurheilu-5/` (#297) the meet waits with
   friends only for the phone on turn (rooms.js `turns()`), a friend may leave and come back
   ("Palaa kierrokseen"), the host skips an away friend's turn, and the game draws the friends not
   on turn as cheering spectators with `K.drawFans(ctx, box)`. From `yleisurheilu-7/` (#341) they stay in
@@ -242,7 +240,9 @@ high-score lists (#25), then play counts (#26).
   spectator climbs onto their shoulders (a column at most four high), so `K.tapFans(px, py)` takes
   the tap's y too. From `yleisurheilu-9/` (#395) nobody runs after it (Eero's choice): the whole row only
   slides with the background, a little slower than it (0.8 of its speed), and stops when it stops, so it may
-  leave the screen until the next turn; legs move only on a tapped walk. Moukarinheitto, seen from above, stays on `yleisurheilu-7/`. The bar-height format (high jump, pole vault)
+  leave the screen until the next turn; legs move only on a tapped walk. From `yleisurheilu-10/` (#469) the podium and the spectators are
+  `AiPelitOutfits.figure()`, facing out, with heads that look around and cheer. Moukarinheitto, seen
+  from above, uses it too, with no `scroll`, so its row stays where it is. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose

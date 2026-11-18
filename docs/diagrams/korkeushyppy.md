@@ -85,6 +85,8 @@ v12 (#395) plays as v11 on `public/lib/yleisurheilu-9/`: the friends watching no
 
 v13 (#399): passing many heights takes two taps, and the bar rises twice as fast: `heightsFor()` steps 10, 5 and 3 cm (before 5, 3 and 2), except in Ottelu's frame (`inMatch`), which keeps the old steps because the match already takes every second height.
 
+v15 (#469) plays exactly as v14; only the drawing is new. The flop is drawn from drawing-only keyframes (`NK`, `drawPose()`, `drawFlop()`), while `pose()`, `SAMPLES`, `flyStep()` and `jumpResult()`, which decide the result, are unchanged. The head turns with `AiPelitOutfits.headPose()` through `headTilt(a)` and `AiPelitOutfits.sideHead()`. It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure (`yleisurheilu-kirjasto.md`).
+
 ## Colours
 
 - **blue**: what the player sees and does

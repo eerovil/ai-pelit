@@ -75,6 +75,8 @@ v15 (#373) plays as v14 on `public/lib/yleisurheilu-8/`: the friends watching ru
 
 v16 (#395) plays as v15 on `public/lib/yleisurheilu-9/`: the friends watching no longer run. The row only slides with the background, a little slower than it, and stops when it stops; legs move only on a tapped walk.
 
+v18 (#469) plays exactly as v17; only the drawing is new. The head bobs in the run-up, looks up at take-off, goes back in the air and cheers after a valid jump (`headTilt(a)` → `AiPelitOutfits.headPose()`, drawn by `AiPelitOutfits.sideHead()` in `figure()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
+
 ## Colours
 
 - **blue**: what the player sees and does
