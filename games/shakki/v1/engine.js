@@ -30,17 +30,30 @@ function parseFen(fen) {
     half: Number(parts[4] || 0), full: Number(parts[5] || 1) };
 }
 
-// The board part of a FEN plus turn, castling and en passant: equal keys are the same position
-// for the repetition rule.
-function posKey(pos) {
+function boardFen(pos) {
   var s = '', run = 0;
   for (var i = 0; i < 64; i++) {
     if (pos.b[i]) { if (run) s += run; run = 0; s += pos.b[i]; } else run++;
     if ((i & 7) === 7) { if (run) s += run; run = 0; if (i < 63) s += '/'; }
   }
-  return s + ' ' + pos.turn + ' ' + (pos.castle || '-') + ' ' + (pos.ep >= 0 ? sqName(pos.ep) : '-');
+  return s + ' ' + pos.turn + ' ' + (pos.castle || '-');
 }
-function toFen(pos) { return posKey(pos) + ' ' + pos.half + ' ' + pos.full; }
+// True when the side to move has a legal en passant capture (its king safe after it).
+function epLegal(pos) {
+  if (pos.ep < 0) return false;
+  var c = pos.turn;
+  return pseudoMoves(pos, true).some(function (m) {
+    if (m.flag !== 'ep') return false;
+    var u = makeMove(pos, m), ok = !inCheck(pos, c);
+    unmakeMove(pos, m, u);
+    return ok;
+  });
+}
+// Equal keys are the same position for the repetition rule: the board, turn, castling, and the
+// en passant square only when that capture can really be made (a pawn's double step alone
+// changes nothing).
+function posKey(pos) { return boardFen(pos) + ' ' + (epLegal(pos) ? sqName(pos.ep) : '-'); }
+function toFen(pos) { return boardFen(pos) + ' ' + (pos.ep >= 0 ? sqName(pos.ep) : '-') + ' ' + pos.half + ' ' + pos.full; }
 function clonePos(pos) {
   return { b: pos.b.slice(), turn: pos.turn, castle: pos.castle, ep: pos.ep, half: pos.half, full: pos.full };
 }

@@ -48,6 +48,24 @@ def test_move_generation_matches_known_counts(site, context):
     assert page.errors == []
 
 
+def test_repetition_ignores_an_en_passant_square_nobody_can_take(site, context):
+    page = open_game(site, context)
+    # After e2e4 the position stands three times; the first time e3 is an en passant square no
+    # black pawn can use, so it is the same position all three times.
+    moves = ["e2e4", "g8f6", "g1f3", "f6g8", "f3g1", "g8f6", "g1f3", "f6g8", "f3g1"]
+    st = page.evaluate("ms => { const g = playGame(ms); return [gameStatus(g).why, gameStatus(playGame(ms.slice(0, -1))).over]; }", moves)
+    assert st == ["toisto", False]
+    # A real en passant chance keeps the first one apart: black's d4 pawn can take on e3.
+    moves = ["d2d3", "d7d5", "a2a3", "d5d4", "e2e4", "g8f6", "g1f3", "f6g8", "f3g1", "g8f6", "g1f3", "f6g8", "f3g1"]
+    assert page.evaluate("ms => gameStatus(playGame(ms)).over", moves) is False
+    # The FEN keeps the double step's square as it is.
+    assert page.evaluate("toFen(playGame(['e2e4']).pos)").split(" ")[3] == "e3"
+    # An en passant capture that would leave the king in check does not count either.
+    assert page.evaluate("epLegal(parseFen('8/8/8/K2pP2r/8/8/8/7k w - d6 0 1'))") is False
+    assert page.evaluate("epLegal(parseFen('8/8/8/3pP3/8/8/8/K6k w - d6 0 1'))") is True
+    assert page.errors == []
+
+
 def test_game_endings_and_finnish_notation(site, context):
     page = open_game(site, context)
     r = page.evaluate("""() => {
