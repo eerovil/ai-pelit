@@ -153,7 +153,7 @@ def test_turning_the_phone_with_the_picker_open_keeps_it_and_the_choice(lib_page
     assert last["y"] + last["height"] <= 360
     page.set_viewport_size({"width": 360, "height": 740})
     page.wait_for_timeout(100)
-    assert page.locator("#ai-pelit-asut canvas").first.bounding_box()["height"] == 80
+    assert page.locator("#ai-pelit-asut .asu canvas").first.bounding_box()["height"] == 80
     assert page.locator("#ai-pelit-asut").count() == 1
     assert errors == []
 
@@ -212,3 +212,57 @@ def test_a_group_takes_over_the_first_earlier_choice_in_its_fixed_order(site, br
     page = shared_page(site, browser, "laji-d", {"ai-pelit:_asut:keihas": "ei-ole", "ai-pelit:_asut:kuula": "kulta"})
     assert page.evaluate("AiPelitOutfits.current().id") == "kulta"
     page.context.close()
+
+
+INKED = """sel => { const c = document.querySelector(sel), g = c.getContext('2d');
+  const d = g.getImageData(0, 0, c.width, c.height).data; let n = 0;
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; }"""
+
+PIXELS = """sel => { const c = document.querySelector(sel);
+  return Array.from(c.getContext('2d').getImageData(0, 0, c.width, c.height).data).join(); }"""
+
+
+def test_the_athletics_picker_shows_the_shared_figure_alive(site, browser):
+    # #469: data-share="yleisurheilu" draws AiPelitOutfits.figure() on the cards and in a moving
+    # preview at the top, never the game's own draw.
+    site.build()
+    (site.root / "laji-f").mkdir(exist_ok=True)
+    (site.root / "laji-f" / "index.html").write_text(SHARED_PAGE.replace(
+        "draw: function () {}", "draw: function () { window.ownDraws = (window.ownDraws || 0) + 1; }") % "laji-f")
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site.url + "laji-f/")
+    page.evaluate("AiPelitOutfits.open()")
+    assert page.locator("#ai-pelit-asut .asu").count() == 16
+    assert page.evaluate(INKED, "[data-asu=suomi] canvas") > 300
+    page.wait_for_timeout(300)
+    assert page.evaluate(INKED, "#ai-pelit-asut-esikatselu") > 1000
+    first = page.evaluate(PIXELS, "#ai-pelit-asut-esikatselu")
+    page.wait_for_timeout(1700)
+    assert page.evaluate(PIXELS, "#ai-pelit-asut-esikatselu") != first, "the preview stood still"
+    assert page.evaluate("window.ownDraws || 0") == 0
+    # The preview stops with the picker.
+    page.click("#ai-pelit-asut-valmis")
+    assert page.locator("#ai-pelit-asut-esikatselu").count() == 0
+    # Sideways and low there is no room for it; the cards fit instead.
+    page.set_viewport_size({"width": 740, "height": 360})
+    page.evaluate("AiPelitOutfits.open()")
+    assert page.locator("#ai-pelit-asut-esikatselu").count() == 0
+    assert page.locator("#ai-pelit-asut .asu").count() == 16
+    assert errors == []
+    ctx.close()
+
+
+def test_a_game_with_its_own_figure_keeps_it_in_the_picker(lib_page):
+    # Orava, Trampoliini and Voimistelu keep their own figure (#469): no data-share, so the cards
+    # and the hopping preview come from the game's draw (here a red or blue box).
+    page, errors = lib_page
+    page.evaluate("AiPelitOutfits.open()")
+    red = page.evaluate("""() => { const c = document.querySelector('[data-asu=perus] canvas');
+      const d = c.getContext('2d').getImageData(c.width / 2, c.height / 2, 1, 1).data; return [d[0], d[1], d[2]]; }""")
+    assert red == [255, 0, 0]
+    page.wait_for_timeout(300)
+    assert page.evaluate(INKED, "#ai-pelit-asut-esikatselu") > 1000
+    assert errors == []
