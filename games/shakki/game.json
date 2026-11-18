@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: shakki konetta vastaan viidellä tasolla, jotka aukeavat voitto kerrallaan, tai kaveria vastaan huoneessa, lailliset siirrot näkyvät, keskeneräinen peli ja tilastot tallentuvat.",
       "request": "Shakki",
       "issue": "eerovil/ai-pelit#465"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-18",
+      "note": "Kuninkaan turvallisuuden takia kielletty siirto kertoo syynsä, ja sen aiheuttava vastustajan nappula tärisee.",
+      "request": "Uusi versio: kun yrittää tehdä laittoman siirron niin näkyisi syy jotenkin. Vain shakkiin liittyvät, vähän epäselvät jutut näkyvät, ja vastustajan nappula, joka aiheuttaa sen, värisee; nappuloiden liikkumissääntöjä ei tarvitse neuvoa.",
+      "issue": "eerovil/ai-pelit#465"
     }
   ]
 }

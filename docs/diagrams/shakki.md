@@ -19,7 +19,10 @@ flowchart TD
   B{Kenen vuoro?}
   B -- Pelaajan --> C[Napauta omaa nappulaa: lailliset ruudut merkitään]
   C --> D[Napauta ruutua tai vedä nappula sinne]
-  D --> P{Sotilas päätyyn?}
+  D --> W{Kuningas vaarassa?}
+  W -- Kyllä --> W2[Siirto ei käy: syy näkyy, syyllinen nappula tärisee]
+  W2 --> C
+  W -- Ei --> P{Sotilas päätyyn?}
   P -- Kyllä --> P2[Valitse daami, torni, lähetti tai ratsu]
   P -- Ei --> M
   P2 --> M
@@ -35,8 +38,8 @@ flowchart TD
   T -- Yksin --> T1[Tilasto tasolle kerran, voitto avaa seuraavan tason]
   T -- Kaverin kanssa --> T2[Tulos kummallekin kerran, takaisin huoneeseen]
   class R,R2,K2,T2 violet
-  class S,B,P,E,T amber
-  class A,A2,C,D,P2,M blue
+  class S,B,P,E,T,W amber
+  class A,A2,C,D,P2,M,W2 blue
   class K teal
   class F,T1 green
   class L rose
@@ -53,7 +56,7 @@ flowchart TD
 
 ## Boxes
 
-- **Miten pelataan?**: the menu in `games/shakki/v1/index.html`, drawn by `menu()` in `game.js`: the computer's level (five buttons, saved as `ai-pelit:shakki:taso`, Aloittelija by default; only Aloittelija is open at first, and `unlocked(l)` opens a level once the level before it has a win in its `tilasto:<level>`; a tap on a locked one 🔒 says which win opens it and chooses nothing, and a saved level that is not open falls back to the highest open one in `levelNow()`), the player's colour (Valkea, Musta or Arvo, saved as `ai-pelit:shakki:vari`), the chosen level's wins, losses and draws (`tilasto:<level>`), **Pelaa konetta vastaan** (`newSoloGame()`), **Jatka peliä** when a game alone was left unfinished (`ai-pelit:shakki:peli`, checked by `validSave()`), and **👥 Pelaa kaverin kanssa** (`AiPelitRooms.open()`).
+- **Miten pelataan?**: the menu in `games/shakki/v2/index.html`, drawn by `menu()` in `game.js`: the computer's level (five buttons, saved as `ai-pelit:shakki:taso`, Aloittelija by default; only Aloittelija is open at first, and `unlocked(l)` opens a level once the level before it has a win in its `tilasto:<level>`; a tap on a locked one 🔒 says which win opens it and chooses nothing, and a saved level that is not open falls back to the highest open one in `levelNow()`), the player's colour (Valkea, Musta or Arvo, saved as `ai-pelit:shakki:vari`), the chosen level's wins, losses and draws (`tilasto:<level>`), **Pelaa konetta vastaan** (`newSoloGame()`), **Jatka peliä** when a game alone was left unfinished (`ai-pelit:shakki:peli`, checked by `validSave()`), and **👥 Pelaa kaverin kanssa** (`AiPelitRooms.open()`).
 - **Uusi peli: avattu taso ja väri valikosta**: `newSoloGame()`; Arvo picks white or black at random. The board turns so the player's colour is at the bottom (`flipped()` in `draw.js`). Playing black, the computer moves first.
 - **Tallennettu peli jatkuu samasta asemasta**: `keepSolo()` saves the moves from the start (UCI strings), the level and the colours after every move and on `pagehide`; `resumeSolo()` replays them with `playGame()` in `engine.js`. A save that no longer replays is dropped. An ended game deletes its save.
 - **Huone: 2 puhelinta, valkea vaihtuu joka pelissä**: `rooms.js` with `data-min="2" data-max="2"` and the voice chip at `bottom-left`, off the board. The host saves who had white under `ai-pelit:shakki:valkea:<room code>` and gives white to the other player next game.
@@ -61,6 +64,7 @@ flowchart TD
 - **Kenen vuoro?**: `derived.pos.turn` against the player's colour; `myTurn()` is false while the computer thinks or the room is paused.
 - **Napauta omaa nappulaa: lailliset ruudut merkitään**: `pointerdown` on the canvas selects the player's own piece (`selected`); `draw()` marks its legal moves from `legalMoves()` with a dot on an empty square and a ring on a capture, and the last move and a king in check on the board.
 - **Napauta ruutua tai vedä nappula sinne**: a tap on a marked square (`pointerdown`), or lifting a dragged piece on one (`pointerup`), calls `tryMove()`.
+- **Kuningas vaarassa?** and **Siirto ei käy: syy näkyy, syyllinen nappula tärisee** (v2): a tap or drag on a square the selected piece may not go to asks `whyIllegal()` in `engine.js`. It answers only when the king's safety refuses the move: the piece is pinned (its move is in `pseudoMoves()` but leaves the king attacked), the king is in check and the move does not answer it, the king would step onto an attacked square, or castling (rights kept, nothing between) is refused in check, across an attacked square or onto one (the square crossed is blamed first). Then `explain()` in `game.js` shows the reason under the board (`#lastMove.why`, and sideways in `#paStatus`) for `WHY_MS` (4 s), plays `virhe` quietly, the attacking pieces (`attackersOf()`) shake for `SHAKE_MS` (0.7 s, `shakeOf()` in `draw.js`) and the king in danger glows like a check. A piece that has no move at all for that reason says it as soon as it is chosen. A new game, the menu, or a guest's board replaced by the host's state clears it, and a drag says nothing while the room waits (`myTurn()`). A move against a piece's own way of moving (a knight's L, a piece in the way, castling after the king moved) is refused quietly, as in v1 (Eero's choice). The next tap, or a move, clears it.
 - **Sotilas päätyyn?** and **Valitse daami, torni, lähetti tai ratsu**: a move with a promotion opens `#promo` (`askPromotion()`), four drawn pieces and Peru.
 - **Kone miettii tasonsa mukaan**: `maybeComputer()` waits 380 ms for the slide, then `computerMove()` in `engine.js`: alpha-beta search with captures searched to the end, material and piece-square tables. `LEVELS` sets each level's depth, random error and time limit: Aloittelija 1 move with large error and a 25 % random move, Helppo 1 with smaller error and 8 %, Keskitaso 2, Vaikea 3, Mestari up to 5 moves; each stops itself at 0.3–1.6 s.
 - **Ohita vuoro: kone siirtää kaverin puolesta**: the room's "Ohita vuoro" (`on('skip')`) makes the host play one Keskitaso move for the away player, with the notice "Kone siirsi pelaajan … puolesta."
