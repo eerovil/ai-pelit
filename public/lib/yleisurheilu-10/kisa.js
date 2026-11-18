@@ -232,33 +232,10 @@
       bones: g.bones, stripe: g.stripe, halloween: g.halloween };
   }
   // A figure from the front, its feet at (fx, fy), h tall; up: 0 arms down … 1 arms up; step -1…1
-  // lifts one foot or the other as it walks (yleisurheilu-7).
+  // lifts one foot or the other as it walks. Drawn by outfits.js (#469), which every event using
+  // this folder loads.
   function front(x, fx, fy, h, L, up, step = 0, look) {
-    if (window.AiPelitOutfits && window.AiPelitOutfits.figure) { window.AiPelitOutfits.figure(x, L, fx, fy, h, { up, step, look }); return; }
-    const lw = Math.max(2, h * 0.085), hip = fy - h * 0.47, sh = fy - h * 0.77, hw = h * 0.15;
-    x.lineCap = 'round'; x.lineJoin = 'round';
-    if (L.cape) { x.fillStyle = L.cape; x.beginPath(); x.moveTo(fx - hw, sh); x.lineTo(fx + hw, sh); x.lineTo(fx + hw * 1.3, hip + h * 0.12); x.lineTo(fx - hw * 1.3, hip + h * 0.12); x.fill(); }
-    x.strokeStyle = L.skin; x.lineWidth = lw;
-    const lift = d => Math.max(0, step * d) * h * 0.09;
-    [-1, 1].forEach(d => { x.beginPath(); x.moveTo(fx + d * h * 0.06, hip); x.lineTo(fx + d * h * 0.085, fy - h * 0.04 - lift(d)); x.stroke(); });
-    x.fillStyle = L.shoe; [-1, 1].forEach(d => { x.beginPath(); x.ellipse(fx + d * h * 0.1, fy - h * 0.02 - lift(d), h * 0.06, h * 0.03, 0, 0, 7); x.fill(); });
-    x.fillStyle = L.bottom; rr(x, fx - h * 0.13, hip - h * 0.04, h * 0.26, h * 0.15, h * 0.03); x.fill();
-    x.fillStyle = L.top; rr(x, fx - hw, sh - h * 0.02, hw * 2, hip - sh + h * 0.03, h * 0.05); x.fill();
-    // Arms: down at the sides, or up in a V.
-    x.strokeStyle = L.skin; x.lineWidth = lw * 0.9;
-    [-1, 1].forEach(d => {
-      const ex = fx + d * mix(h * 0.2, h * 0.24, up), ey = mix(sh + h * 0.14, sh - h * 0.12, up);
-      const hx = fx + d * mix(h * 0.2, h * 0.3, up), hy = mix(fy - h * 0.48, sh - h * 0.3, up);
-      x.beginPath(); x.moveTo(fx + d * (hw - lw * 0.3), sh + lw * 0.4); x.lineTo(ex, ey); x.lineTo(hx, hy); x.stroke();
-    });
-    const hy = fy - h * 0.89, hr = h * 0.105;
-    x.strokeStyle = L.skin; x.lineWidth = lw; x.beginPath(); x.moveTo(fx, sh); x.lineTo(fx, hy + hr * 0.6); x.stroke();
-    if (L.head && window.AiPelitOutfits && window.AiPelitOutfits.head) { window.AiPelitOutfits.head(x, L.head, fx, hy, hr, 1); return; }
-    x.fillStyle = L.skin; x.beginPath(); x.arc(fx, hy, hr, 0, 7); x.fill();
-    x.fillStyle = L.hair; x.beginPath(); x.arc(fx, hy - hr * 0.15, hr * 1.02, Math.PI * 1.02, Math.PI * 1.98); x.fill();
-    x.fillStyle = 'rgba(0,0,0,.6)'; [-1, 1].forEach(d => { x.beginPath(); x.arc(fx + d * hr * 0.38, hy + hr * 0.1, Math.max(1, hr * 0.12), 0, 7); x.fill(); });
-    x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = Math.max(1, hr * 0.12);
-    x.beginPath(); x.arc(fx, hy + hr * 0.3, hr * 0.35, 0.2 * Math.PI, 0.8 * Math.PI); x.stroke();
+    window.AiPelitOutfits.figure(x, L, fx, fy, h, { up, step, look });
   }
   // A medal on its ribbon: the ribbon's two ends at (fx ± w, ty), the disc below them.
   function medalAt(x, i, fx, ty, w, drop, r, swing) {
