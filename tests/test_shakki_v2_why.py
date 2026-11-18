@@ -25,6 +25,9 @@ def why(page, moves, frm, to, fen=None):
     # Castling in check, and across an attacked square.
     ([], "4k3/8/8/8/8/8/8/r3K2R w K - 0 1", "e1", "g1", ["Shakissa ei voi linnoittautua.", ["a1"], "e1"]),
     ([], "4k3/8/8/8/8/8/5r2/4K2R w K - 0 1", "e1", "g1", ["Linnoitus ei käy: kuningas kulkisi uhatun ruudun yli.", ["f2"], "f1"]),
+    ([], "4k1r1/8/8/8/8/8/8/4K2R w K - 0 1", "e1", "g1", ["Linnoitus ei käy: kuningas päätyisi uhatulle ruudulle.", ["g8"], "g1"]),
+    ([], "2r1k3/8/8/8/8/8/8/R3K3 w Q - 0 1", "e1", "c1", ["Linnoitus ei käy: kuningas päätyisi uhatulle ruudulle.", ["c8"], "c1"]),
+    (["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6", "d2d3", "f8c5", "c1g5", "d7d6", "b1c3", "c8g4", "d1d2", "d8d7"], None, "e8", "g8", None),
     # Black's pinned knight, the board seen from black's side.
     (["e2e4", "d7d6", "d2d4", "b8c6", "f1b5"], None, "c6", "d4", ["Nappula on sidottu: kuningas jäisi uhatuksi.", ["b5"], "e8"]),
     # A piece's own way of moving needs no reason (Eero's choice), nor does a legal move.
@@ -93,6 +96,15 @@ def test_a_wrong_tap_or_drag_says_why_only_for_the_king(site, context):
     # The reason fades by itself.
     page.wait_for_function("why === null")
     assert page.locator("#lastMove").inner_text() == before
+    # A reason does not follow the player into the next game.
+    tap(page, "b1")
+    tap(page, "c3")
+    assert page.evaluate("why !== null")
+    page.click("#toMenu")
+    assert page.evaluate("why") is None
+    page.click("#play")
+    assert page.evaluate("[why, derived.uci.length]") == [None, 0]
+    assert "why" not in page.get_attribute("#lastMove", "class")
     assert page.errors == []
 
 

@@ -65,6 +65,7 @@ function startGame(g, isOnline) {
   clearTimeout(aiTimer); thinking = false;
   online = isOnline; game = g; derived = playGame(g.moves); result = null;
   selected = -1; drag = null; anim = null; pendingPromo = null; endHidden = false; notice = ''; resignArmed = 0; ended = false; opened = -1;
+  why = null; clearTimeout(whyTimer);
   if (!derived) { game.moves = []; derived = playGame([]); }
   if (g.result) result = g.result;
   else { var st = gameStatus(derived); if (st.over) result = st; }
@@ -190,6 +191,7 @@ function menu() {
   clearTimeout(aiTimer); thinking = false;
   if (R) R.extra(null);
   game = null; derived = null; result = null; online = false; selected = -1; drag = null; anim = null; pendingPromo = null;
+  why = null; clearTimeout(whyTimer);
   $('menu').classList.remove('hidden'); $('end').classList.add('hidden'); $('promo').classList.add('hidden');
   $('pa').classList.add('hidden'); $('pb').classList.add('hidden');
   var lv = levelNow(), col = load('vari', 'w');
@@ -306,7 +308,7 @@ function endDrag(e) {
     var xy = pointXY(e), sq = squareAt(xy[0], xy[1]);
     var target = movesFrom(d.from).filter(function (m) { return m.to === sq; })[0];
     if (target) { tryMove(target); return; }
-    if (sq >= 0 && sq !== d.from && explain(d.from, sq)) selected = -1;
+    if (sq >= 0 && sq !== d.from && myTurn() && explain(d.from, sq)) selected = -1;
   }
   askDraw();
 }
@@ -349,7 +351,7 @@ function hearState(g) {
   var had = derived.uci, grew = next.uci.length === had.length + 1 && had.every(function (u, i) { return u === next.uci[i]; });
   game.white = g.white; game.black = g.black; game.mine = mine;
   if (grew) play(next.moves[next.moves.length - 1]);
-  else if (next.uci.join() !== had.join()) { game.moves = g.moves; derived = next; selected = -1; anim = null; }
+  else if (next.uci.join() !== had.join()) { game.moves = g.moves; derived = next; selected = -1; anim = null; why = null; clearTimeout(whyTimer); }
   // A guest's own winning move ends the game here only once the host has it too.
   result = g.result || null;
   if (result && !ended) finish();

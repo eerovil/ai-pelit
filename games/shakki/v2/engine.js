@@ -233,8 +233,10 @@ function whyIllegal(pos, from, to) {
     var path = df > 0 ? [home + 1, home + 2] : [home - 1, home - 2, home - 3];
     if (pos.castle.indexOf(right) < 0 || b[rookSq] !== (c === 'w' ? 'R' : 'r') || path.some(function (s) { return b[s]; })) return null;
     if (checked) return res('Shakissa ei voi linnoittautua.', attackersOf(pos, home, opp), home);
-    var pass = df > 0 ? home + 1 : home - 1;
-    return res('Linnoitus ei käy: kuningas kulkisi uhatun ruudun yli.', attackersOf(pos, pass, opp), pass);
+    // The square the king crosses, then the one it lands on: the first one attacked is to blame.
+    var pass = df > 0 ? home + 1 : home - 1, crossed = attackersOf(pos, pass, opp);
+    if (crossed.length) return res('Linnoitus ei käy: kuningas kulkisi uhatun ruudun yli.', crossed, pass);
+    return res('Linnoitus ei käy: kuningas päätyisi uhatulle ruudulle.', attackersOf(pos, to, opp), to);
   }
   return null;
 }
