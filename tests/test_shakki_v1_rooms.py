@@ -160,8 +160,10 @@ def test_an_away_friends_turn_is_played_by_the_computer_and_they_come_back(phone
     guest.click("#friends")
     guest.click("#aipr-again")
     guest.wait_for_function("game && derived && derived.uci.length === 3 && game.mine === 'b'")
-    tap(guest, "g8")
-    tap(guest, "f6")
+    # The computer's move for black is random; move the knight it left at home.
+    frm, to = ("b8", "c6") if guest.evaluate("derived.uci[1]").startswith("g8") else ("g8", "f6")
+    tap(guest, frm)
+    tap(guest, to)
     host.wait_for_function("derived.uci.length === 4")
     for p in (host, guest):
         assert p.errors == []
