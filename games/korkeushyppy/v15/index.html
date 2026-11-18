@@ -140,7 +140,7 @@ function pose(f, t) {
   });
 }
 // v15 (#469): the body as drawn only; the bar still meets pose()'s points, as before. The same
-// timing, the new shapes, and the turn stops at about 26° so the jumper falls onto the upper back.
+// timing, the new shapes, and the turn stops at 0.35 rad (about 20°) so the jumper falls onto the upper back.
 function drawPose(f, t) {
   const L = ss(t / T_LAY), A = f.archT === null ? 0 : ss((t - f.archT) / T_ARCH), K = f.kickT === null ? 0 : ss((t - f.kickT) / T_KICK);
   const th = Math.min(0.35, ROT * Math.max(0, t - T_LAY * 0.8)), co = Math.cos(th), si = Math.sin(th);
@@ -689,7 +689,8 @@ function drawFlop(a, s, o, name) {
   // Turned at the take-off: the face is towards the runner's front first, up after it.
   const turned = ss(t / 0.18);
   // The head's pose: thrown back in the arch (looking for the mat), chin to the chest at the kick.
-  const nod = (-0.55 * A * (1 - K) + 0.7 * K) * (1 - lie);
+  // On the mat, a cheer after a clear or the chin down (headTilt), as the jumper settles.
+  const nod = (-0.55 * A * (1 - K) + 0.7 * K) * (1 - lie) + headTilt(a) * lie;
   const ang = Math.atan2(uy, ux) + Math.PI / 2;   // the head's up along the neck
   const edge = (pts, w) => { x.strokeStyle = 'rgba(10,20,40,.45)'; x.lineWidth = w + 4; x.beginPath(); x.moveTo(...pts[0]); pts.slice(1).forEach(q => x.lineTo(...q)); x.stroke(); };
   edge([hp, kn, ft], lw); edge([sh, hc], lw); back(); x.strokeStyle = 'rgba(10,20,40,.45)'; x.lineWidth = lw * 2.3 + 4; x.stroke();
@@ -744,7 +745,8 @@ function drawFlop(a, s, o, name) {
 }
 // A runner seen from the side, running to the right, heights in metres from the feet.
 // v15 (#469): the head's turn for the attempt's phase (AiPelitOutfits.headPose): a bob on the
-// run-up, chin up at the take-off, back in the air, then a cheer after a good attempt or the chin down.
+// run-up; in the air drawFlop turns the head itself (back in the arch, chin in at the kick); on the
+// mat a cheer after a clear or the chin down.
 function headTilt(a) {
   const P = window.AiPelitOutfits && AiPelitOutfits.headPose;
   if (!P || !a) return 0;

@@ -581,7 +581,7 @@ function drawPole(x0, y0, x1, y1, bend, s) {
   x.beginPath(); x.moveTo(x0, y0); x.quadraticCurveTo(cx, cy, x1, y1); x.stroke();
 }
 // A body by its shoulders and an angle (0 head up, π head down), the legs bent by tuck (0 straight).
-function drawBody(shX, shY, ang, tuck, s, o, arms) {
+function drawBody(shX, shY, ang, tuck, s, o, arms, tilt = 0) {
   const lw = Math.max(2.5, 0.11 * s), dir = [Math.sin(ang), Math.cos(ang)];  // from shoulders to hips, in screen terms
   const hipX = shX - dir[0] * 0.55 * s, hipY = shY + dir[1] * 0.55 * s;
   const knee = [hipX - Math.sin(ang - tuck) * 0.46 * s, hipY + Math.cos(ang - tuck) * 0.46 * s];
@@ -618,8 +618,8 @@ function drawBody(shX, shY, ang, tuck, s, o, arms) {
   if (arms) line([[shX, shY], arms], o.skin, lw);
   const hx = shX + dir[0] * 0.18 * s, hy = shY - dir[1] * 0.18 * s;
   // A costume's head turns with the body, so the witch's hat points away from it upside down too.
-  // v16 (#469): the head goes back a little in the air, on top of turning with the body.
-  AiPelitOutfits.sideHead(x, o, hx, hy, 0.13 * s, 1, ang + AiPelitOutfits.headPose('air').tilt);
+  // v16 (#469): the head's pose for the phase (tilt), on top of turning with the body.
+  AiPelitOutfits.sideHead(x, o, hx, hy, 0.13 * s, 1, ang + tilt);
   return [hipX, hipY];
 }
 // Where the vaulter is on the pole tau s after the plant (metres): the hips rise as the run lifts them;
@@ -635,7 +635,7 @@ function drawOnPole(a, sx, sy, s, o) {
   const p = posePole(a, a.tau);
   drawPole(sx(0), sy(-0.15), sx(p.hand[0]), sy(p.hand[1]), p.bend, s);
   const shX = sx(p.hand[0]) + Math.sin(p.body) * 0.1 * s, shY = sy(p.hand[1]) + (Math.cos(p.body) > 0 ? 0.22 : -0.1) * s;
-  drawBody(shX, shY, p.body, 0.3 + 0.9 * a.sw * (1 - Math.min(1, a.tau / T_POLE)), s, o, [sx(p.hand[0]), sy(p.hand[1])]);
+  drawBody(shX, shY, p.body, 0.3 + 0.9 * a.sw * (1 - Math.min(1, a.tau / T_POLE)), s, o, [sx(p.hand[0]), sy(p.hand[1])], AiPelitOutfits.headPose('takeoff').tilt);
 }
 function drawFlying(a, sx, sy, s, o) {
   const f = a.fly;
@@ -645,7 +645,8 @@ function drawFlying(a, sx, sy, s, o) {
   // Over the bar face down-ish, then onto the back on the mat.
   const ang = f.down ? Math.PI * 1.5 : f.b0 + (Math.PI * 1.5 - f.b0) * f.rot;
   const shX = sx(f.hx) + Math.sin(ang) * 0.55 * s, shY = sy(f.hy) - Math.cos(ang) * 0.55 * s;
-  drawBody(shX, shY, ang, f.down ? 0.8 : 0.2, s, o);
+  // In the air the head goes back; on the mat a cheer after a clear, or the chin down.
+  drawBody(shX, shY, ang, f.down ? 0.8 : 0.2, s, o, null, a.phase === 'land' ? headTilt(a) : AiPelitOutfits.headPose('air').tilt);
 }
 // v7 (#311): outfits, one choice for every athletics event (outfits.js data-share). Everyone
 // without one (the computer, a friend on an older version) wears v5's kit in the shirt colour the
@@ -677,7 +678,8 @@ let outfit = AiPelitOutfits.setup({
 function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
 // A vaulter running to the right with the pole, its tip lowering as the box comes near.
 // v16 (#469): the head's turn for the attempt's phase (AiPelitOutfits.headPose): a bob on the
-// run-up, chin up at the take-off, back in the air, then a cheer after a good attempt or the chin down.
+// run-up, chin up on the pole (drawOnPole), back in the air (drawFlying), then a cheer after a clear
+// or the chin down.
 function headTilt(a) {
   const P = window.AiPelitOutfits && AiPelitOutfits.headPose;
   if (!P || !a) return 0;
