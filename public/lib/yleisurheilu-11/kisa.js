@@ -281,31 +281,48 @@
     // by side and a little smaller), hopping up from the ground, then on the block. Index i is the
     // block: 0 gold, 1 silver, 2 bronze; j a medallist's spot on it, n how many share it.
     const groups = [[], [], []];
+    const share = n => { const sh = n === 1 ? fh : fh * Math.max(0.5, 1.25 / n); return { sh, gap: Math.min(bw / n, sh * 0.62) }; };
     res.forEach(r => { const m = medalOf(r); if (m >= 0) groups[m].push(r); });
     const there = [];
     groups.forEach((g, i) => g.forEach((r, j) => {
       const n = g.length, k = clamp01((t - HOP_T[i] - j * 0.12) / HOP);
       if (k <= 0) return;
-      const sh = n === 1 ? fh : fh * Math.max(0.5, 1.25 / n), gap = Math.min(bw / n, sh * 0.62);
+      const { sh, gap } = share(n);
       there.push({ r, i, j, n, sh, fx: bx[i] + (j - (n - 1) / 2) * gap,
         fy: mix(gy + 6, top(i), ease(k)) - Math.sin(Math.PI * k) * sh * 0.35, k, L: lookOf(o, r) });
     }));
-    // The official walks over the podium from block to block, standing on the block beside the
-    // medallists' (the gold one for the bronze and the silver, the silver one for the gold), and
-    // hangs the medals of a shared place one after another within the block's time.
-    const SPOT = [[cx - bw * 0.58, top(1)], [cx - bw * 0.42, top(0)], [cx + bw * 0.42, top(0)]];
+    // The official walks over the podium from block to block and hangs the medals of a shared place
+    // one after another within the block's time. From yleisurheilu-11 (#469 review) it steps up
+    // onto the medallist's block, at its near side (SIDE: left of the gold and the bronze, right of
+    // the silver), close enough for its own arms to reach the ribbon; behind the row when the place
+    // is shared, beside each medallist in turn. It walks on the blocks' tops, stepping up or down
+    // at their edges (floorAt: silver, gold, bronze from the left), never through a block.
+    const SIDE = [-1, 1, -1];
+    const spotOf = (i, j) => {
+      const n = groups[i].length, { gap } = share(n);
+      return bx[i] + (j - (n - 1) / 2) * gap + SIDE[i] * (n < 2 ? fh * 0.34 : gap * 0.4);
+    };
+    const floorAt = px => {
+      const u = (px - (cx - 1.5 * bw)) / bw;
+      return top(1) + (top(0) - top(1)) * ease((u - 1) / 0.06 + 0.5) + (top(2) - top(0)) * ease((u - 2) / 0.06 + 0.5);
+    };
     const offAt = () => {
       const seq = [2, 1, 0].filter(i => groups[i].length);
       if (!seq.length || t < MEDAL_T[seq[0]] - 0.4 || t > MEDAL_T[seq[seq.length - 1]] + HANG + 0.5) return null;
-      let [ox, oy] = SPOT[seq[0]], now = null;
-      seq.forEach(i => {
-        const k = ease((t - (MEDAL_T[i] - 0.5)) / 0.45);
-        if (k > 0) { ox = mix(ox, SPOT[i][0], k); oy = mix(oy, SPOT[i][1], k); }
+      let ox = spotOf(seq[0], 0), now = null;
+      const go = (tx, k) => { if (k > 0) ox = mix(ox, tx, k); };
+      seq.forEach((i, q) => {
+        // To the next block once the last medal's ribbon is let go (at 0.85 of its share), so it
+        // never walks off holding it; there by the time this block's first medal starts.
+        const from = q ? Math.max(MEDAL_T[i] - 0.5, MEDAL_T[seq[q - 1]] + HANG * (1 - 0.15 / groups[seq[q - 1]].length)) : MEDAL_T[i] - 0.5;
+        go(spotOf(i, 0), ease((t - from) / (MEDAL_T[i] - 0.05 - from)));
+        // Between two medals of a shared place: the last hands let go at 0.85 of a share.
+        for (let j = 1; j < groups[i].length; j++) go(spotOf(i, j), ease(((t - MEDAL_T[i]) / HANG * groups[i].length - (j - 0.15)) / 0.25));
         if (t >= MEDAL_T[i] && t < MEDAL_T[i] + HANG) now = [i, Math.floor((t - MEDAL_T[i]) / HANG * groups[i].length)];
       });
       const last = seq[seq.length - 1], away = ease((t - (MEDAL_T[last] + HANG)) / 0.5);
       const come = ease((t - (MEDAL_T[seq[0]] - 0.4)) / 0.3);
-      return { ox, oy, now, a: Math.min(come, 1 - away) };
+      return { ox, oy: floorAt(ox), now, a: Math.min(come, 1 - away) };
     };
     const off = offAt();
     const OFF = { skin: '#e6b994', hair: '#d9d9d9', top: '#1f2f55', bottom: '#5b6270', shoe: '#222', cape: null, head: null };
@@ -318,7 +335,7 @@
       x.fillText(String(i + 1), bx[i], y0 + bh[i] * 0.5 + Math.min(28, bh[i] * 0.6) * 0.38);
     });
     // #469: the official looks at the medallist whose medal it hangs.
-    const offLook = off && off.now ? { lx: groups[off.now[0]].length && bx[off.now[0]] > off.ox ? 0.7 : -0.7, ly: 0.2 } : { lx: 0 };
+    const offLook = off && off.now ? { lx: bx[off.now[0]] + (off.now[1] - (groups[off.now[0]].length - 1) / 2) * share(groups[off.now[0]].length).gap > off.ox ? 0.7 : -0.7, ly: 0.2 } : { lx: 0 };
     // The official's size, shoulders (as AiPelitOutfits.figure() draws them) and arm's reach.
     const ofh = fh * 1.02, olw = Math.max(2, ofh * 0.075), ARM = ofh * 0.45;
     const shoulder = d => [off.ox + d * (ofh * 0.14 - olw * 0.4), off.oy - ofh * 0.72 + olw * 0.3];
@@ -340,7 +357,9 @@
         const [sx, sy] = shoulder(d), dx = Math.abs(p.fx + d * p.w - sx);
         p.lift = Math.max(0, Math.min(p.lift, p.neck - (dx < ARM ? sy - Math.sqrt(ARM * ARM - dx * dx) : sy)));
       });
-      const hold = p.hold = ease(Math.min(u / 0.12, (0.85 - u) / 0.13));
+      // The hands rise over about 0.1 s and drop back over as long, however short the share.
+      const sec = HANG / p.n, ramp = Math.min(0.11, 0.85 * sec / 2) / sec;
+      const hold = p.hold = ease(Math.min(u / ramp, (0.85 - u) / ramp));
       p.at = [-1, 1].map(d => {
         const [sx, sy] = shoulder(d), hx = mix(off.ox + d * ofh * 0.21, p.fx + d * p.w, hold), hy = mix(off.oy - ofh * 0.46, p.neck - p.lift, hold);
         const k = Math.min(1, ARM / (Math.hypot(hx - sx, hy - sy) || 1)); // walking on, it lets go rather than stretch

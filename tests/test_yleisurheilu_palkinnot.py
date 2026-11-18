@@ -106,16 +106,17 @@ def test_the_players_outfit_reaches_the_podium_rows(site, context, event):
     assert page.errors == []
 
 
-SWEEP = """([w, h]) => {
+SWEEP = """([w, h, places]) => {
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const x = cv.getContext('2d'), box = { left: 8, top: 44, w: w - 16, bottom: h - 8 };
   const res = [];
   for (let i = 0; i < 12; i++) res.push({ id: 'a' + i, p: null, name: 'U' + i, col: '#e63946', best: 10 - i * 0.3,
-    place: i + 1, marks: [10 - i * 0.3], fin: true, fit: null });
+    place: (places || [])[i] || i + 1, marks: [10 - i * 0.3], fin: true, fit: null });
   const real = AiPelitOutfits.figure, out = [];
-  let hands = null;
+  let hands = null, others = [];
   AiPelitOutfits.figure = function (c, L, fx, fy, hh, p) {
-    if (L.top === '#1f2f55') {
+    if (L.top !== '#1f2f55') others.push(fx);
+    else {
       const lw = Math.max(2, hh * 0.075), sh = d => [fx + d * (hh * 0.14 - lw * 0.4), fy - hh * 0.72 + lw * 0.3];
       // Without reach, the hands hang at the sides (figure()'s arms down).
       const at = p && p.reach || [[fx - hh * 0.21, fy - hh * 0.46], [fx + hh * 0.21, fy - hh * 0.46]];
@@ -124,23 +125,24 @@ SWEEP = """([w, h]) => {
     return real.apply(this, arguments);
   };
   for (let t = 2.2; t < 5.6; t += 0.01) {
-    hands = null; K.ending = { t, res, at: 0, place: 1, mark: 10, fin: true }; K.drawPodium(x, box);
-    out.push(hands);
+    hands = null; others = []; K.ending = { t, res, at: 0, place: 1, mark: 10, fin: true }; K.drawPodium(x, box);
+    out.push(hands && Object.assign(hands, { others }));
   }
   AiPelitOutfits.figure = real; K.ending = null;
   return out;
 }"""
 
 
+@pytest.mark.parametrize("places", [None, [1, 2, 3, 3], [1, 1, 3]])
 @pytest.mark.parametrize("size", [[360, 740], [740, 360]])
-def test_the_officials_arms_never_stretch_or_snap(site, context, size):
+def test_the_officials_arms_never_stretch_or_snap(site, context, size, places):
     """#469 helper checks: the hands rise to the ribbon and drop back smoothly, and the ribbon is
     carried no higher than the official's arms reach."""
     site.build(ROOT / "games")
     page = context.new_page()
     page.goto(site.url + "games/pituushyppy/v19/")
     page.wait_for_function("typeof K !== 'undefined' && K.drawPodium && window.AiPelitOutfits", timeout=5000)
-    seen = page.evaluate(SWEEP, size)
+    seen = page.evaluate(SWEEP, [*size, places])
     on = [s for s in seen if s]
     assert len(on) > 200
     assert max(s["arm"] / s["h"] for s in on) <= 0.451
@@ -152,3 +154,28 @@ def test_the_officials_arms_never_stretch_or_snap(site, context, size):
             # the ribbon moved them about 0.8 h in one step.
             step = min(max(abs(a[w][k][i] - b[w][k][i]) for k in (0, 1) for i in (0, 1)) for w in ("at", "rel"))
             assert step < 0.12 * a["h"], (a, b)
+
+
+@pytest.mark.parametrize("places", [[1, 2, 3, 3], [1, 1, 3], [1, 2, 2, 2]])
+def test_the_official_reaches_every_medallist_of_a_shared_place(site, context, places):
+    """#471 review: medallists sharing a place stand side by side, and the official steps along to
+    each, so its hands reach the ribbon rather than stop short at arm's length."""
+    site.build(ROOT / "games")
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site.url + "games/korkeushyppy/v16/")
+    page.wait_for_function("typeof K !== 'undefined' && K.drawPodium && window.AiPelitOutfits", timeout=5000)
+    MEDAL_T, HANG = [4.6, 3.5, 2.4], 0.9
+    for size in ([360, 740], [740, 360]):
+        seen = page.evaluate(SWEEP, [*size, places])
+        for i in {p - 1 for p in places}:
+            n = places.count(i + 1)
+            for j in range(n):
+                # The middle of this medallist's share: the hands hold the ribbon's two ends, either
+                # side of a medallist's middle, rather than one stopping short at arm's length.
+                s = seen[round((MEDAL_T[i] + (j + 0.5) * HANG / n - 2.2) / 0.01)]
+                mid = (s["at"][0][0] + s["at"][1][0]) / 2
+                assert min(abs(mid - fx) for fx in s["others"]) < 0.5, (size, i, j, s)
+                assert abs(s["at"][0][1] - s["at"][1][1]) < 0.5, (size, i, j, s)
+    assert errors == []
