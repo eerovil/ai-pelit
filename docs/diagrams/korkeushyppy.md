@@ -87,6 +87,8 @@ v13 (#399): passing many heights takes two taps, and the bar rises twice as fast
 
 v15 (#469) plays exactly as v14; only the drawing is new. The flop is drawn from drawing-only keyframes (`NK`, `drawPose()`, `drawFlop()`), while `pose()`, `SAMPLES`, `flyStep()` and `jumpResult()`, which decide the result, are unchanged. The head turns with `AiPelitOutfits.headPose()` through `headTilt(a)` and `AiPelitOutfits.sideHead()`. It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure (`yleisurheilu-kirjasto.md`).
 
+v16 (#469) plays exactly as v15 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+
 ## Colours
 
 - **blue**: what the player sees and does

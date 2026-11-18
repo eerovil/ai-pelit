@@ -27,7 +27,10 @@ tapped walk. `yleisurheilu-10/` (#469, the seven field events' next versions, Mo
 them) draws the podium, the official and the spectators as the shared front-facing figure
 (`AiPelitOutfits.figure()` in `public/outfits.js`), each in their own outfit, with heads that look
 around: down while the medal is hung, the winner up after the cheer, the others towards the winner.
-The next change goes in `yleisurheilu-11/`.
+`yleisurheilu-11/` (#469, the same seven events' next versions: Korkeushyppy v16, Pituushyppy v19,
+Seiväshyppy v17, Keihäs v18, Kuula v12, Moukari v14, Mäkihyppy v13) has the official hang each medal
+with its own arms (`figure()`'s `reach`), not with two extra arms beside its own.
+The next change goes in `yleisurheilu-12/`.
 
 ```mermaid
 flowchart TD
@@ -37,7 +40,7 @@ flowchart TD
     G3[Toisen puhelimen suoritus näkyy]
     G4[Kenttä, HUD ja tulostaulun paikka]
   end
-  subgraph Kirjasto[public/lib/yleisurheilu-10/: kisa.js, korkeus.js]
+  subgraph Kirjasto[public/lib/yleisurheilu-11/: kisa.js, korkeus.js]
     K1[meet: 12 kilpailijaa, tietokone täyttää]
     K2[Muoto: rounds 3 + 3 kierrosta]
     K3{Kenen vuoro?}

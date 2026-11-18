@@ -29,6 +29,8 @@ v12 (#404) plays as v11, but a tap is judged at its own moment, not at the last 
 
 v13 (#469) plays exactly as v12 on `public/lib/yleisurheilu-10/`: the podium and the friends watching are the shared front-facing figure. It passes no `scroll`, so the row stays where it is, as on `yleisurheilu-7/`.
 
+v14 (#469) plays exactly as v13 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+
 ```mermaid
 flowchart TD
   M[Valikko: Kisaan!, Jatka kisaa tai kaverit] --> K[Kisa: 12 heittäjää, arvottu järjestys]

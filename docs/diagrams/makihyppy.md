@@ -78,6 +78,8 @@ v9 (#387) halves the week: a new week has two hills (Lahti, Kuopio), still two r
 
 v12 (#469) plays exactly as v11 and adds "👕 Asu", the athletics events' shared outfit choice (`outfits.js` with `data-share="yleisurheilu"`, `asut.md`): `skier()` draws the suit in the outfit's top colour, the legs in its bottom colour, a cape behind, and a costume's head in place of the helmet; the outfit goes to the meet with `fit`, so every jumper wears their own on the podium (`look: r => kit(r.fit, r.col)`). The head bobs in the in-run, goes back in the air and cheers after a landing on two feet or a telemark (`AiPelitOutfits.headPose()` added to the head angle in `drawJumper()`). It runs on `public/lib/yleisurheilu-10/`.
 
+v13 (#469) plays exactly as v12 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+
 ## Colours
 
 - **blue**: what the player sees and does
