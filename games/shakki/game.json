@@ -15,6 +15,13 @@
       "note": "Kuninkaan turvallisuuden takia kielletty siirto kertoo syynsä, ja sen aiheuttava vastustajan nappula tärisee.",
       "request": "Uusi versio: kun yrittää tehdä laittoman siirron niin näkyisi syy jotenkin. Vain shakkiin liittyvät, vähän epäselvät jutut näkyvät, ja vastustajan nappula, joka aiheuttaa sen, värisee; nappuloiden liikkumissääntöjä ei tarvitse neuvoa.",
       "issue": "eerovil/ai-pelit#465"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-19",
+      "note": "Harjoittelutila: rajaton peruminen ja näkyvät uhkaajat ja puolustajat; se ei vaikuta tilastoihin eikä tasoihin.",
+      "request": "Uusi versio: opettelumoodi. Sillä ei pääse eteenpäin pelissä. Siinä on rajaton peruminen, ja tieto siitä, kuka uhkaa ketäkin ja montako puolustajaa ja uhkaajaa milläkin nappulalla on.",
+      "issue": "eerovil/ai-pelit#465"
     }
   ]
 }

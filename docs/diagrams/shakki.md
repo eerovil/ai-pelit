@@ -4,13 +4,16 @@ How a game of Shakki plays (#465). A flat board seen from above, the player's ow
 bottom. Alone the player meets the computer at one of five levels; with a friend, two phones play
 each other through the shared room library (see `moninpeli.md`), the host's phone keeping the
 game. A tap on a piece shows where it may go; a tap on one of those squares, or a drag there,
-moves it.
+moves it. Harjoittele (v3) is the same game alone with unlimited undo and the threats on the board,
+and it counts for nothing.
 
 ```mermaid
 flowchart TD
   S{Miten pelataan?}
   S -- Pelaa konetta vastaan --> A[Uusi peli: avattu taso ja väri valikosta]
   S -- Jatka peliä --> A2[Tallennettu peli jatkuu samasta asemasta]
+  S -- Harjoittele --> H[Harjoituspeli: uhkaajat ja puolustajat näkyvät]
+  H --> B
   S -- Pelaa kaverin kanssa --> R[Huone: 2 puhelinta, valkea vaihtuu joka pelissä]
   R --> R2[Huoneen tekijän puhelin pitää pelin, toinen lähettää siirtonsa]
   A --> B
@@ -19,6 +22,7 @@ flowchart TD
   B{Kenen vuoro?}
   B -- Pelaajan --> C[Napauta omaa nappulaa: lailliset ruudut merkitään]
   C --> D[Napauta ruutua tai vedä nappula sinne]
+  C -. harjoitus .-> HR[Punainen ruutu: siirto menettää nappulan]
   D --> W{Kuningas vaarassa?}
   W -- Kyllä --> W2[Siirto ei käy: syy näkyy, syyllinen nappula tärisee]
   W2 --> C
@@ -34,12 +38,14 @@ flowchart TD
   E -- Ei --> B
   E -- Matti, patti, toisto, 50 siirtoa, materiaali --> F[Tulos]
   L[Luovuta, kahdesti napauttaen] --> F
+  U[Peru: takaisin ennen omaa siirtoa] -. harjoitus .-> B
   F --> T{Yksin vai kaverin kanssa?}
+  T -- Harjoitus --> T3[Ei tilastoihin eikä avaa tasoja, Peru siirto toimii]
   T -- Yksin --> T1[Tilasto tasolle kerran, voitto avaa seuraavan tason]
   T -- Kaverin kanssa --> T2[Tulos kummallekin kerran, takaisin huoneeseen]
   class R,R2,K2,T2 violet
   class S,B,P,E,T,W amber
-  class A,A2,C,D,P2,M,W2 blue
+  class A,A2,C,D,P2,M,W2,H,HR,U,T3 blue
   class K teal
   class F,T1 green
   class L rose
@@ -56,7 +62,11 @@ flowchart TD
 
 ## Boxes
 
-- **Miten pelataan?**: the menu in `games/shakki/v2/index.html`, drawn by `menu()` in `game.js`: the computer's level (five buttons, saved as `ai-pelit:shakki:taso`, Aloittelija by default; only Aloittelija is open at first, and `unlocked(l)` opens a level once the level before it has a win in its `tilasto:<level>`; a tap on a locked one 🔒 says which win opens it and chooses nothing, and a saved level that is not open falls back to the highest open one in `levelNow()`), the player's colour (Valkea, Musta or Arvo, saved as `ai-pelit:shakki:vari`), the chosen level's wins, losses and draws (`tilasto:<level>`), **Pelaa konetta vastaan** (`newSoloGame()`), **Jatka peliä** when a game alone was left unfinished (`ai-pelit:shakki:peli`, checked by `validSave()`), and **👥 Pelaa kaverin kanssa** (`AiPelitRooms.open()`).
+- **Miten pelataan?**: the menu in `games/shakki/v3/index.html`, drawn by `menu()` in `game.js`: the computer's level (five buttons, saved as `ai-pelit:shakki:taso`, Aloittelija by default; only Aloittelija is open at first, and `unlocked(l)` opens a level once the level before it has a win in its `tilasto:<level>`; a tap on a locked one 🔒 says which win opens it and chooses nothing, and a saved level that is not open falls back to the highest open one in `levelNow()`), the player's colour (Valkea, Musta or Arvo, saved as `ai-pelit:shakki:vari`), the chosen level's wins, losses and draws (`tilasto:<level>`), **Pelaa konetta vastaan** (`newSoloGame()`), **Jatka peliä** when a game alone was left unfinished (`ai-pelit:shakki:peli`, checked by `validSave()`), and **👥 Pelaa kaverin kanssa** (`AiPelitRooms.open()`).
+- **Harjoituspeli: uhkaajat ja puolustajat näkyvät** (v3): **🎓 Harjoittele** in the menu calls `newSoloGame(true)`, a game alone against the chosen level with `practice: true`, saved under its own key `harjoitus` beside the normal game's `peli` (`soloKey()` in `game.js`), so starting one never replaces an unfinished normal game; the menu shows each waiting game behind its own button, **Jatka peliä** and **🎓 Jatka harjoitusta** (`resumeSolo(practice)`); the name line says "🎓 Harjoitus" and Luovuta gives way to **↶ Peru**. `drawGuards()` in `draw.js` puts a badge "attackers:defenders" (`guardInfo()` in `engine.js`, from `attackersOf()` and `epTakers()` (a pawn that may take it en passant), pins ignored; a king attacks only an unguarded piece and takes back only after the one attacker took) on every piece but a king that is attacked, and a frame on a piece the other side wins material by taking (`hanging()`: `captureGain()` takes and takes back on that square with the cheapest legal piece, en passant included (`takenSq()`), each side free to stop, and a trade within `EVEN` = 50 points, a bishop for a knight, wins nothing): red on the player's own, green on the opponent's (Eero's choice). A tapped piece (`inspect`: any opponent's piece, or the player's own when it is not their turn; the selected piece on their turn) gets red lines from its attackers and green ones from its defenders, and the line under the board names them (`infoText()`; a selected piece's refused capture still gives the v2 reason first), with what it threatens and, when it is lost, the trade in pawns (`threat()`: "⚠ Sotilas h6 lyö sen: menetät 3, saat takaisin 1", or "Voit voittaa sen: …").
+- **Punainen ruutu: siirto menettää nappulan** (v3, practice only): for the selected piece `risks()` in `game.js` asks `exposedBy()` in `engine.js` about each of its moves: the moved piece lost at once on its new square (`landsBadly()`: the other side wins more by taking it than the move took, an en passant pawn included, beyond `EVEN`), or another own piece, not the king, safe before and hanging after (the defence the move takes away). Such a move's dot or ring is red, the pieces it would leave hanging get a dashed orange frame, and the line under the board says "Varo punaisia ruutuja: …".
+- **Peru: takaisin ennen omaa siirtoa** (v3, practice only): `undo()` cuts the moves back to the player's turn before their last move (`undoTarget()`), as many times as there are moves, also from the end card (**↶ Peru siirto**, which takes the result away), stops the computer's thinking and saves.
+- **Ei tilastoihin eikä avaa tasoja, Peru siirto toimii** (v3): `finish()` counts no `tilasto:<level>` and opens no level for a practice game; the end card says "Harjoituspeli: ei tilastoihin eikä avaa tasoja." and the game stays saved (`keepSolo()` keeps an ended practice game under `harjoitus`, and forgets only an ended normal one), so it can be undone even after a reload.
 - **Uusi peli: avattu taso ja väri valikosta**: `newSoloGame()`; Arvo picks white or black at random. The board turns so the player's colour is at the bottom (`flipped()` in `draw.js`). Playing black, the computer moves first.
 - **Tallennettu peli jatkuu samasta asemasta**: `keepSolo()` saves the moves from the start (UCI strings), the level and the colours after every move and on `pagehide`; `resumeSolo()` replays them with `playGame()` in `engine.js`. A save that no longer replays is dropped. An ended game deletes its save.
 - **Huone: 2 puhelinta, valkea vaihtuu joka pelissä**: `rooms.js` with `data-min="2" data-max="2"` and the voice chip at `bottom-left`, off the board. The host saves who had white under `ai-pelit:shakki:valkea:<room code>` and gives white to the other player next game.

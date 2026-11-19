@@ -161,9 +161,14 @@ function draw() {
     xy = squareXY(sq); drawPiece(c, p, xy[0] + shakeOf(sq, now), xy[1], cell);
   }
   // Where the selected piece can go: a dot on an empty square, a ring around a piece.
+  var risky = game && game.practice ? risks() : { moves: {}, all: [] };
+  risky.all.forEach(function (s) {
+    var q = squareXY(s); c.save(); c.setLineDash([cell * 0.12, cell * 0.08]);
+    c.strokeStyle = '#ff9a2e'; c.lineWidth = cell * 0.08; c.strokeRect(q[0] + cell * 0.08, q[1] + cell * 0.08, cell * 0.84, cell * 0.84); c.restore();
+  });
   targets.forEach(function (m) {
     var t = squareXY(m.to), cx = t[0] + cell / 2, cy = t[1] + cell / 2;
-    c.fillStyle = c.strokeStyle = COLORS.dot;
+    c.fillStyle = c.strokeStyle = risky.moves[m.to] ? 'rgba(215, 50, 30, 0.75)' : COLORS.dot;
     if (m.cap && m.flag !== 'ep') { c.lineWidth = cell * 0.08; c.beginPath(); c.arc(cx, cy, cell * 0.44, 0, Math.PI * 2); c.stroke(); }
     else { c.beginPath(); c.arc(cx, cy, cell * 0.15, 0, Math.PI * 2); c.fill(); }
   });
@@ -173,6 +178,7 @@ function draw() {
     drawPiece(c, pos.b[moving.to], a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e, cell);
     askDraw();
   } else anim = null;
+  if (g && game && game.practice && !moving) drawGuards(c, pos);
   if (drag && drag.moved && pos.b[drag.from]) drawPiece(c, pos.b[drag.from], drag.x - cell * 0.6, drag.y - cell * 0.9, cell * 1.2);
   drawCaptured(c, g);
 }
@@ -183,6 +189,42 @@ function shakeOf(sq, now) {
   if (t > SHAKE_MS) return 0;
   askDraw();
   return Math.sin(t / 28) * view.cell * 0.09 * (1 - t / SHAKE_MS);
+}
+// Practice (#465 v3): threatened pieces carry their attackers (red) and defenders (green) as a badge,
+// a piece the other side wins material by taking gets a frame (red: yours, green: the opponent's),
+// and the tapped one gets lines to them all.
+function drawGuards(c, pos) {
+  var cell = view.cell, focus = inspect >= 0 ? inspect : selected;
+  if (!result) {
+    for (var sq = 0; sq < 64; sq++) {
+      if (!pos.b[sq] || pos.b[sq].toUpperCase() === 'K') continue;
+      var g = guardInfo(pos, sq); if (!g.attackers.length) continue;
+      var xy = squareXY(sq), bad = hanging(pos, sq);
+      // Red: a piece of yours you would lose; green: one of the opponent's you can win (Eero's choice).
+      if (bad) { c.strokeStyle = colorOf(pos.b[sq]) === game.mine ? 'rgba(220, 40, 30, 0.9)' : 'rgba(40, 170, 70, 0.95)'; c.lineWidth = cell * 0.07; c.strokeRect(xy[0] + cell * 0.05, xy[1] + cell * 0.05, cell * 0.9, cell * 0.9); }
+      var bw = cell * 0.62, bh = cell * 0.26, bx = xy[0] + (cell - bw) / 2, by = xy[1] + cell - bh - 1;
+      c.fillStyle = 'rgba(30, 22, 16, 0.82)'; roundRect(c, bx, by, bw, bh, bh / 2); c.fill();
+      c.font = '800 ' + Math.round(bh * 0.8) + 'px system-ui, sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'center';
+      c.fillStyle = '#ff8f80'; c.fillText(g.attackers.length, bx + bw * 0.27, by + bh / 2 + 1);
+      c.fillStyle = '#d8cbb4'; c.fillText(':', bx + bw / 2, by + bh / 2);
+      c.fillStyle = '#8fe39b'; c.fillText(g.defenders.length, bx + bw * 0.73, by + bh / 2 + 1);
+    }
+  }
+  if (focus >= 0 && pos.b[focus]) {
+    var f = guardInfo(pos, focus), to = squareXY(focus);
+    f.defenders.forEach(function (s) { arrow(c, squareXY(s), to, 'rgba(60, 170, 80, 0.85)'); });
+    f.attackers.forEach(function (s) { arrow(c, squareXY(s), to, 'rgba(225, 45, 35, 0.9)'); });
+    c.strokeStyle = '#ffe28a'; c.lineWidth = cell * 0.06; c.strokeRect(to[0] + 2, to[1] + 2, cell - 4, cell - 4);
+  }
+}
+function arrow(c, a, b, color) {
+  var cell = view.cell, ax = a[0] + cell / 2, ay = a[1] + cell / 2, bx = b[0] + cell / 2, by = b[1] + cell / 2;
+  var ang = Math.atan2(by - ay, bx - ax), ex = bx - Math.cos(ang) * cell * 0.32, ey = by - Math.sin(ang) * cell * 0.32;
+  c.strokeStyle = c.fillStyle = color; c.lineWidth = cell * 0.11; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(ax, ay); c.lineTo(ex, ey); c.stroke();
+  c.beginPath(); c.moveTo(ex + Math.cos(ang) * cell * 0.16, ey + Math.sin(ang) * cell * 0.16);
+  c.lineTo(ex + Math.cos(ang + 2.4) * cell * 0.2, ey + Math.sin(ang + 2.4) * cell * 0.2);
+  c.lineTo(ex + Math.cos(ang - 2.4) * cell * 0.2, ey + Math.sin(ang - 2.4) * cell * 0.2); c.closePath(); c.fill();
 }
 function roundRect(c, x, y, w, h, r) {
   c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);

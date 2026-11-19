@@ -19,6 +19,8 @@ button.secondary{background:#4a3a2e;color:#f4ead7;border:1px solid #7a6450}
 #status,#paStatusText{font-size:16px;font-weight:700;margin-top:6px;min-height:22px}
 #status.check,#paStatusText.check{color:#ff8a76}
 #lastMove,.lastMove{font-size:13px;color:#cdbca0;margin-top:2px;min-height:18px}
+#lastMove.info,.lastMove.info{color:#f4ead7;font-size:13px;line-height:1.3}
+#undo:disabled{opacity:.45}
 #lastMove.why,.lastMove.why{color:#ffb4a6;font-weight:650;font-size:14px;line-height:1.3}
 .buttons{display:flex;gap:8px;justify-content:flex-end;margin-top:auto}
 .buttons button{min-height:42px;padding:8px 14px;font-size:15px}
@@ -72,7 +74,7 @@ p{line-height:1.45;color:#dccdb4;margin:6px 0}
 <div id="pb" class="panel-side hidden">
   <div class="name" id="meName"></div>
   <div id="status"></div><div id="lastMove"></div>
-  <div class="buttons"><button id="showEnd" class="secondary hidden">Tulos</button><button id="toMenu" class="secondary">Valikko</button><button id="resign" class="secondary">Luovuta</button></div>
+  <div class="buttons"><button id="showEnd" class="secondary hidden">Tulos</button><button id="toMenu" class="secondary">Valikko</button><button id="undo" class="secondary hidden">↶ Peru</button><button id="resign" class="secondary">Luovuta</button></div>
 </div>
 <section id="menu" class="overlay"><div class="box">
   <div>
@@ -88,7 +90,9 @@ p{line-height:1.45;color:#dccdb4;margin:6px 0}
     <div class="seg" id="colors"><button data-c="w">⚪ Valkea</button><button data-c="b">⚫ Musta</button><button data-c="arvo">🎲 Arvo</button></div>
     <div class="actions">
       <button id="play">Pelaa konetta vastaan</button>
+      <button id="practice" class="secondary">🎓 Harjoittele</button>
       <button id="resume" class="secondary hidden">Jatka peliä</button>
+      <button id="resumePractice" class="secondary hidden">🎓 Jatka harjoitusta</button>
       <button id="friends" class="secondary">👥 Pelaa kaverin kanssa</button>
     </div>
   </div>
@@ -100,7 +104,7 @@ p{line-height:1.45;color:#dccdb4;margin:6px 0}
 </div></section>
 <section id="end" class="overlay hidden"><div class="box">
   <h2 id="endTitle"></h2><p id="endSub"></p><p id="endStats"></p>
-  <div class="actions"><button id="again">Uusi peli</button><button id="peek" class="secondary">Katso lautaa</button><button id="endMenu" class="secondary">Valikko</button></div>
+  <div class="actions"><button id="again">Uusi peli</button><button id="endUndo" class="secondary hidden">↶ Peru siirto</button><button id="peek" class="secondary">Katso lautaa</button><button id="endMenu" class="secondary">Valikko</button></div>
 </div></section>
 <script src="../../../rooms.js" data-game="shakki" data-min="2" data-max="2" data-voice-corner="bottom-left"></script>
 <script src="../../../lib/aanet-5/aanet.js"></script>

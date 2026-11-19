@@ -2,7 +2,7 @@
 
 import pytest
 
-from test_shakki_v2 import open_game, set_moves, tap
+from test_shakki_v3 import open_game, set_moves, tap
 
 PIN = ["e2e4", "e7e5", "d2d4", "f8b4", "c2c3", "d8h4"]  # white's f2 pawn is pinned by the queen on h4
 

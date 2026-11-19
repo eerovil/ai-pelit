@@ -210,6 +210,87 @@ function attackersOf(pos, sq, by) {
 // piece would leave its king attacked, the king is in check, or the king would step onto or
 // across an attacked square. { text, shake: [the enemy pieces to blame], king } or null: a move
 // against a piece's own way of moving needs no reason (Eero's choice), and a legal one none.
+// Practice mode (#465 v3): who threatens a piece and who guards it. Attackers are the other side's
+// pieces that could take it now, defenders its own side's pieces that could take back (pins ignored).
+function guardInfo(pos, sq) {
+  var p = pos.b[sq]; if (!p) return null;
+  var c = colorOf(p);
+  var att = attackersOf(pos, sq, other(c)), def = attackersOf(pos, sq, c);
+  // A pawn that just moved two squares can also be taken en passant, by the side to move.
+  epTakers(pos, sq).forEach(function (s) { if (att.indexOf(s) < 0) att.push(s); });
+  // A king takes only onto a square nobody guards: it attacks only an unguarded piece, and takes
+  // back only when the piece that took was the one attacker.
+  function king(s) { return pos.b[s].toUpperCase() === 'K'; }
+  return { attackers: att.filter(function (s) { return !king(s) || !def.length; }),
+           defenders: def.filter(function (s) { return !king(s) || att.length <= 1; }) };
+}
+// What the side to move wins by taking the piece on sq, both sides then taking back on sq with
+// their cheapest legal piece and each free to stop (0: taking it does not pay). Legal moves only,
+// so a pinned attacker does not count, and a piece behind another joins once the first has taken.
+// A trade within this many points is even: a bishop (330) for a knight (320) wins nothing.
+var EVEN = 50;
+// The square a capture takes its piece from: en passant takes the pawn beside its own square.
+function takenSq(pos, m) { return m.flag === 'ep' ? m.to + (pos.turn === 'w' ? 8 : -8) : m.to; }
+// The side to move's pawns that may take the pawn on sq en passant now (pins ignored).
+function epTakers(pos, sq) {
+  return pseudoMoves(pos, true).filter(function (m) { return m.flag === 'ep' && takenSq(pos, m) === sq; })
+    .map(function (m) { return m.from; });
+}
+function cheapestTaker(pos, sq) {
+  var c = pos.turn, best = null;
+  pseudoMoves(pos, true).forEach(function (m) {
+    if (takenSq(pos, m) !== sq || (m.promo && m.promo.toUpperCase() !== 'Q')) return;
+    var q = pos.b[m.from].toUpperCase(), v = q === 'K' ? 1e5 : VALUE[q];
+    if (best && v >= best.v) return;
+    var u = makeMove(pos, m), ok = !inCheck(pos, c); unmakeMove(pos, m, u);
+    if (ok) best = { m: m, v: v };
+  });
+  return best && best.m;
+}
+function captureGain(pos, sq) {
+  var p = pos.b[sq], m = p && cheapestTaker(pos, sq);
+  if (!m) return 0;
+  // The trade goes on where the taker stands (beside sq after en passant).
+  var u = makeMove(pos, m), g = VALUE[p.toUpperCase()] - captureGain(pos, m.to); unmakeMove(pos, m, u);
+  return Math.max(0, g);
+}
+// A piece the other side wins material by taking now (not just one with more attackers than
+// defenders: a pawn attacked by a rook and a queen and guarded by a pawn is safe).
+function hanging(pos, sq) { return !!threat(pos, sq); }
+// How the piece on sq is lost: { from: who takes it first, lose: its value, back: what its side
+// gets back }, or null when taking it does not pay.
+function threat(pos, sq) {
+  var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return null;
+  // En passant stays possible only when it already is the other side's turn.
+  var turn = pos.turn, ep = pos.ep, out = null;
+  if (turn !== other(colorOf(p))) { pos.turn = other(colorOf(p)); pos.ep = -1; }
+  var g = captureGain(pos, sq);
+  if (g > EVEN) { var lose = VALUE[p.toUpperCase()]; out = { from: cheapestTaker(pos, sq).from, lose: lose, back: lose - g }; }
+  pos.turn = turn; pos.ep = ep;
+  return out;
+}
+// The mover's own pieces (not the king, not the moved one) that m leaves hanging when they were
+// not before (the defence the move takes away), and whether the moved piece itself is lost at once.
+function exposedBy(pos, m) {
+  var c = pos.turn, before = [], out = [];
+  for (var sq = 0; sq < 64; sq++) {
+    var p = pos.b[sq];
+    if (p && colorOf(p) === c && p.toUpperCase() !== 'K' && sq !== m.from && !hanging(pos, sq)) before.push(sq);
+  }
+  var u = makeMove(pos, m);
+  before.forEach(function (sq) { if (sq !== m.to && pos.b[sq] && hanging(pos, sq)) out.push(sq); });
+  // An en passant capture took a pawn from beside the square. (A castled rook needs no check: it
+  // lands on the square the king crossed, which castling already requires unattacked.)
+  var bad = landsBadly(pos, m.to, u.took || (m.flag === 'ep' ? 'p' : ''));
+  unmakeMove(pos, m, u);
+  return { others: out, self: bad };
+}
+// The moved piece on its new square (the other side to move): taking it wins them more than the
+// move itself took.
+function landsBadly(pos, sq, took) {
+  var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return false;
+  return captureGain(pos, sq) > (took ? VALUE[took.toUpperCase()] : 0) + EVEN;
+}
 function whyIllegal(pos, from, to) {
   var b = pos.b, p = b[from], c = pos.turn, opp = other(c);
   if (!p || colorOf(p) !== c || from === to) return null;
