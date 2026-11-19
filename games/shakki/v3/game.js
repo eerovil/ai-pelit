@@ -367,12 +367,13 @@ function risks() {
   if (!game || !game.practice || selected < 0 || !derived) return { moves: {}, all: [] };
   var key = selected + ':' + derived.uci.join();
   if (riskCache.key === key) return riskCache;
-  var r = { key: key, moves: {}, all: [] };
+  var r = { key: key, moves: {}, all: [], self: 0 };
   movesFrom(selected).forEach(function (m) {
     var ex = exposedBy(derived.pos, m);
-    if (!ex.length) return;
+    if (!ex.others.length && !ex.self) return;
     r.moves[m.to] = ex;
-    ex.forEach(function (s) { if (r.all.indexOf(s) < 0) r.all.push(s); });
+    if (ex.self) r.self++;
+    ex.others.forEach(function (s) { if (r.all.indexOf(s) < 0) r.all.push(s); });
   });
   riskCache = r; return r;
 }
@@ -385,9 +386,11 @@ function infoText(pos, sq) {
   var t = targetsOf(pos, sq);
   head += t.length ? '. Uhkaa itse: ' + list(t) + '.' : '.';
   if (sq === selected) {
-    var r = risks(), n = movesFrom(sq).length, bad = Object.keys(r.moves).length;
-    if (bad) head += ' Varo: ' + (bad === n ? 'jos ' + NAME[pos.b[sq].toUpperCase()].toLowerCase() + ' lähtee' : 'siirto punaiseen ruutuun') +
-      ' jättää ' + list(r.all) + ' ilman riittävää puolustusta.';
+    var r = risks(), n = movesFrom(sq).length, name = NAME[pos.b[sq].toUpperCase()].toLowerCase();
+    if (r.self || r.all.length) head += ' Varo punaisia ruutuja:';
+    if (r.self) head += ' siellä ' + name + ' menetetään heti.';
+    if (r.all.length) head += (r.self ? ' Tai' : '') + ' ' + (Object.keys(r.moves).length === n && !r.self ? 'jos ' + name + ' lähtee, ' : '') +
+      list(r.all) + ' jää ilman riittävää puolustusta.';
   }
   return head;
 }

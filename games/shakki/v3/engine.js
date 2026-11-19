@@ -228,8 +228,19 @@ function exposedBy(pos, m) {
   }
   var u = makeMove(pos, m);
   before.forEach(function (sq) { if (sq !== m.to && pos.b[sq] && hanging(pos, sq)) out.push(sq); });
+  var bad = landsBadly(pos, m.to, u.took);
   unmakeMove(pos, m, u);
-  return out;
+  return { others: out, self: bad };
+}
+// The moved piece on its new square loses material at once: the other side takes it and wins more
+// than it gave, by the cheapest attacker (a defended piece) or for free (an undefended one).
+function landsBadly(pos, sq, took) {
+  var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return false;
+  var g = guardInfo(pos, sq), att = g.attackers.filter(function (s) { return !(g.defenders.length && pos.b[s].toUpperCase() === 'K'); });
+  if (!att.length) return false;
+  var cheapest = Math.min.apply(null, att.map(function (s) { return VALUE[pos.b[s].toUpperCase()]; }));
+  var lose = VALUE[p.toUpperCase()] - (g.defenders.length ? cheapest : 0), got = took ? VALUE[took.toUpperCase()] : 0;
+  return lose > got;
 }
 function whyIllegal(pos, from, to) {
   var b = pos.b, p = b[from], c = pos.turn, opp = other(c);
