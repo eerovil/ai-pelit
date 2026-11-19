@@ -217,6 +217,20 @@ function guardInfo(pos, sq) {
   var c = colorOf(p);
   return { attackers: attackersOf(pos, sq, other(c)), defenders: attackersOf(pos, sq, c) };
 }
+// The mover's own pieces (not the king, not the moved one) that m leaves outnumbered, with more
+// attackers than defenders, when they were not before: the defence the move takes away.
+function hanging(pos, sq) { var g = guardInfo(pos, sq); return g.attackers.length > g.defenders.length; }
+function exposedBy(pos, m) {
+  var c = pos.turn, before = [], out = [];
+  for (var sq = 0; sq < 64; sq++) {
+    var p = pos.b[sq];
+    if (p && colorOf(p) === c && p.toUpperCase() !== 'K' && sq !== m.from && !hanging(pos, sq)) before.push(sq);
+  }
+  var u = makeMove(pos, m);
+  before.forEach(function (sq) { if (sq !== m.to && pos.b[sq] && hanging(pos, sq)) out.push(sq); });
+  unmakeMove(pos, m, u);
+  return out;
+}
 function whyIllegal(pos, from, to) {
   var b = pos.b, p = b[from], c = pos.turn, opp = other(c);
   if (!p || colorOf(p) !== c || from === to) return null;

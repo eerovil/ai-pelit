@@ -161,9 +161,14 @@ function draw() {
     xy = squareXY(sq); drawPiece(c, p, xy[0] + shakeOf(sq, now), xy[1], cell);
   }
   // Where the selected piece can go: a dot on an empty square, a ring around a piece.
+  var risky = game && game.practice ? risks() : { moves: {}, all: [] };
+  risky.all.forEach(function (s) {
+    var q = squareXY(s); c.save(); c.setLineDash([cell * 0.12, cell * 0.08]);
+    c.strokeStyle = '#ff9a2e'; c.lineWidth = cell * 0.08; c.strokeRect(q[0] + cell * 0.08, q[1] + cell * 0.08, cell * 0.84, cell * 0.84); c.restore();
+  });
   targets.forEach(function (m) {
     var t = squareXY(m.to), cx = t[0] + cell / 2, cy = t[1] + cell / 2;
-    c.fillStyle = c.strokeStyle = COLORS.dot;
+    c.fillStyle = c.strokeStyle = risky.moves[m.to] ? 'rgba(215, 50, 30, 0.75)' : COLORS.dot;
     if (m.cap && m.flag !== 'ep') { c.lineWidth = cell * 0.08; c.beginPath(); c.arc(cx, cy, cell * 0.44, 0, Math.PI * 2); c.stroke(); }
     else { c.beginPath(); c.arc(cx, cy, cell * 0.15, 0, Math.PI * 2); c.fill(); }
   });

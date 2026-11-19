@@ -361,6 +361,21 @@ function targetsOf(pos, sq) {
   pseudoMoves(pos, true).forEach(function (m) { if (m.from === sq && m.cap && out.indexOf(m.to) < 0) out.push(m.to); });
   pos.turn = keep; pos.ep = ep; return out;
 }
+// Practice: for the selected piece, which of its moves leave which own pieces without enough defence.
+var riskCache = { key: '', moves: {}, all: [] };
+function risks() {
+  if (!game || !game.practice || selected < 0 || !derived) return { moves: {}, all: [] };
+  var key = selected + ':' + derived.uci.join();
+  if (riskCache.key === key) return riskCache;
+  var r = { key: key, moves: {}, all: [] };
+  movesFrom(selected).forEach(function (m) {
+    var ex = exposedBy(derived.pos, m);
+    if (!ex.length) return;
+    r.moves[m.to] = ex;
+    ex.forEach(function (s) { if (r.all.indexOf(s) < 0) r.all.push(s); });
+  });
+  riskCache = r; return r;
+}
 function infoText(pos, sq) {
   var g = guardInfo(pos, sq), list = function (a) { return a.map(function (s) { return shortName(pos, s); }).join(', '); };
   var head = pieceName(pos, sq) + (colorOf(pos.b[sq]) === game.mine ? '' : ' (vastustajan)') + ': ';
@@ -368,7 +383,13 @@ function infoText(pos, sq) {
   head += ', puolustajia ' + g.defenders.length + (g.defenders.length ? ' (' + list(g.defenders) + ')' : '');
   if (g.attackers.length > g.defenders.length) head += ' ⚠';
   var t = targetsOf(pos, sq);
-  return head + (t.length ? '. Uhkaa itse: ' + list(t) + '.' : '.');
+  head += t.length ? '. Uhkaa itse: ' + list(t) + '.' : '.';
+  if (sq === selected) {
+    var r = risks(), n = movesFrom(sq).length, bad = Object.keys(r.moves).length;
+    if (bad) head += ' Varo: ' + (bad === n ? 'jos ' + NAME[pos.b[sq].toUpperCase()].toLowerCase() + ' lähtee' : 'siirto punaiseen ruutuun') +
+      ' jättää ' + list(r.all) + ' ilman riittävää puolustusta.';
+  }
+  return head;
 }
 
 // ---- Playing with a friend (rooms.js); the host's phone keeps the game ----
