@@ -210,6 +210,13 @@ function attackersOf(pos, sq, by) {
 // piece would leave its king attacked, the king is in check, or the king would step onto or
 // across an attacked square. { text, shake: [the enemy pieces to blame], king } or null: a move
 // against a piece's own way of moving needs no reason (Eero's choice), and a legal one none.
+// Practice mode (#465 v3): who threatens a piece and who guards it. Attackers are the other side's
+// pieces that could take it now, defenders its own side's pieces that could take back (pins ignored).
+function guardInfo(pos, sq) {
+  var p = pos.b[sq]; if (!p) return null;
+  var c = colorOf(p);
+  return { attackers: attackersOf(pos, sq, other(c)), defenders: attackersOf(pos, sq, c) };
+}
 function whyIllegal(pos, from, to) {
   var b = pos.b, p = b[from], c = pos.turn, opp = other(c);
   if (!p || colorOf(p) !== c || from === to) return null;
