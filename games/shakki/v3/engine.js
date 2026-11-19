@@ -215,7 +215,12 @@ function attackersOf(pos, sq, by) {
 function guardInfo(pos, sq) {
   var p = pos.b[sq]; if (!p) return null;
   var c = colorOf(p);
-  return { attackers: attackersOf(pos, sq, other(c)), defenders: attackersOf(pos, sq, c) };
+  var att = attackersOf(pos, sq, other(c)), def = attackersOf(pos, sq, c);
+  // A king takes only onto a square nobody guards: it attacks only an unguarded piece, and takes
+  // back only when the piece that took was the one attacker.
+  function king(s) { return pos.b[s].toUpperCase() === 'K'; }
+  return { attackers: att.filter(function (s) { return !king(s) || !def.length; }),
+           defenders: def.filter(function (s) { return !king(s) || att.length <= 1; }) };
 }
 // What the side to move wins by taking the piece on sq, both sides then taking back on sq with
 // their cheapest legal piece and each free to stop (0: taking it does not pay). Legal moves only,
@@ -262,7 +267,9 @@ function exposedBy(pos, m) {
   }
   var u = makeMove(pos, m);
   before.forEach(function (sq) { if (sq !== m.to && pos.b[sq] && hanging(pos, sq)) out.push(sq); });
-  var bad = landsBadly(pos, m.to, u.took);
+  // An en passant capture took a pawn from beside the square. (A castled rook needs no check: it
+  // lands on the square the king crossed, which castling already requires unattacked.)
+  var bad = landsBadly(pos, m.to, u.took || (m.flag === 'ep' ? 'p' : ''));
   unmakeMove(pos, m, u);
   return { others: out, self: bad };
 }

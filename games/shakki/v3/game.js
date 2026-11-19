@@ -78,7 +78,8 @@ function startGame(g, isOnline) {
 }
 function keepSolo() {
   if (online || !game) return;
-  if (result) forget('peli');
+  // An ended practice game stays saved, so it can still be undone after a reload.
+  if (result && !game.practice) forget('peli');
   else save('peli', { moves: derived.uci, mine: game.mine, level: game.level, white: game.white, black: game.black, practice: !!game.practice });
 }
 
@@ -290,6 +291,8 @@ canvas.addEventListener('pointerdown', function (e) {
   // Practice: a tap on any piece shows who threatens and guards it; the opponent's piece is only looked at.
   if (game.practice && sq >= 0) {
     var tp = derived.pos.b[sq], tgt = movesFrom(selected).some(function (m) { return m.to === sq; });
+    // A refused capture still says why (v2), before the tap turns into a look at the piece.
+    if (tp && !tgt && selected >= 0 && myTurn() && colorOf(tp) !== game.mine && explain(selected, sq)) { selected = -1; inspect = -1; updateHUD(); askDraw(); return; }
     if (tp && !tgt && !(colorOf(tp) === game.mine && myTurn())) { inspect = inspect === sq ? -1 : sq; selected = -1; if (why) clearWhy(); updateHUD(); askDraw(); return; }
     inspect = tp && !tgt ? sq : -1;
   }
@@ -390,7 +393,7 @@ function infoText(pos, sq) {
   var t = targetsOf(pos, sq);
   head += t.length ? '. Uhkaa itse: ' + list(t) + '.' : '.';
   if (sq === selected) {
-    var r = risks(), n = movesFrom(sq).length, name = NAME[pos.b[sq].toUpperCase()].toLowerCase();
+    var r = risks(), n = movesFrom(sq).map(function (m) { return m.to; }).filter(function (t, i, a) { return a.indexOf(t) === i; }).length, name = NAME[pos.b[sq].toUpperCase()].toLowerCase();
     if (r.self || r.all.length) head += ' Varo punaisia ruutuja:';
     if (r.self) head += ' siellä ' + name + ' menetetään heti.';
     if (r.all.length) head += (r.self ? ' Tai' : '') + ' ' + (Object.keys(r.moves).length === n && !r.self ? 'jos ' + name + ' lähtee, ' : '') +

@@ -124,3 +124,72 @@ def test_practice_fits_sideways(site, context):
     assert box and box["x"] >= 0 and box["y"] >= 0 and box["x"] + box["width"] <= 740 and box["y"] + box["height"] <= 360
     assert page.evaluate("document.scrollingElement.scrollHeight") <= 360
     assert page.errors == []
+
+
+def test_en_passant_and_king_counts(site, context):
+    page = open_game(site, context)
+    # exd6 en passant takes a pawn; the knight takes back a pawn: even, not red.
+    got = page.evaluate("""() => {
+      const pos = playGame(['d7d5'], '4k3/3p4/8/4P3/2n5/8/8/4K3 b - - 0 1').pos;
+      const m = legalMoves(pos).find(m => m.flag === 'ep');
+      return exposedBy(pos, m).self;
+    }""")
+    assert got is False
+    counts = page.evaluate("""() => {
+      const c = (fen, s) => { const g = guardInfo(playGame([], fen).pos, sqIndex(s)); return [g.attackers.map(sqName), g.defenders.map(sqName)]; };
+      return [c('3r4/8/8/3B4/4K3/8/8/7k w - - 0 1', 'd5'), c('3r2b1/8/8/3B4/4K3/8/8/7k w - - 0 1', 'd5'),
+              c('8/8/4p3/3n4/4K3/8/8/k7 w - - 0 1', 'd5')];
+    }""")
+    # The king takes back after the one attacker took; not when a second one guards the square.
+    assert counts[0] == [["d8"], ["e4"]]
+    assert sorted(counts[1][0]) == ["d8", "g8"] and counts[1][1] == []
+    # The king does not attack a guarded piece.
+    assert counts[2] == [[], ["e6"]]
+    assert page.errors == []
+
+
+def test_practice_refused_capture_still_says_why(site, context):
+    from test_shakki_v3 import set_moves, tap
+    page = open_game(site, context)
+    page.click("#colors button[data-c='b']")
+    page.click("#practice")
+    page.wait_for_function("derived.uci.length === 1 && !thinking")
+    set_moves(page, ["e2e4", "b8c6", "d2d4", "f7f6", "d1h5"])
+    tap(page, "c6")
+    tap(page, "d4")
+    assert page.locator("#lastMove").inner_text() == "⚠ Shakki! Torju se ensin."
+    assert page.errors == []
+
+
+def test_ended_practice_game_can_be_undone_after_a_reload(site, context):
+    from test_shakki_v3 import set_moves, tap
+    page = open_game(site, context)
+    page.click("#colors button[data-c='b']")
+    page.click("#practice")
+    page.wait_for_function("derived.uci.length === 1 && !thinking")
+    set_moves(page, ["f2f3", "e7e5", "g2g4"])
+    tap(page, "d8")
+    tap(page, "h4")
+    page.wait_for_selector("#end:not(.hidden)")
+    page.reload()
+    page.wait_for_function("view.s > 0")
+    assert page.locator("#resume").inner_text().startswith("Jatka harjoitusta")
+    page.click("#resume")
+    page.wait_for_selector("#end:not(.hidden)")
+    page.click("#endUndo")
+    assert page.evaluate("derived.uci") == ["f2f3", "e7e5", "g2g4"]
+    assert page.errors == []
+
+
+def test_promotion_moves_count_as_one_square(site, context):
+    # A pawn whose only square is b8 (four promotions): its warning says "jos sotilas lähtee".
+    page = open_game(site, context)
+    page.evaluate("""() => startGame({moves: [], mine: 'w', level: 0, white: {id: 'solo', name: 'Sinä'},
+      black: {id: 'kone', name: 'Kone'}, practice: true}, false)""")
+    text = page.evaluate("""() => {
+      derived = playGame([], '2N4r/1P4k1/8/8/8/8/8/6K1 w - - 0 1'); game.moves = [];
+      selected = sqIndex('b7'); riskCache.key = '';
+      return infoText(derived.pos, selected);
+    }""")
+    assert "jos sotilas lähtee, Rc8 jää ilman riittävää puolustusta" in text
+    assert page.errors == []
