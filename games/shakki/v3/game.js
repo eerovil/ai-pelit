@@ -382,7 +382,7 @@ function infoText(pos, sq) {
   var head = pieceName(pos, sq) + (colorOf(pos.b[sq]) === game.mine ? '' : ' (vastustajan)') + ': ';
   head += g.attackers.length ? 'uhkaajia ' + g.attackers.length + ' (' + list(g.attackers) + ')' : 'ei uhattu';
   head += ', puolustajia ' + g.defenders.length + (g.defenders.length ? ' (' + list(g.defenders) + ')' : '');
-  if (g.attackers.length > g.defenders.length) head += ' ⚠';
+  if (hanging(pos, sq)) head += ' ⚠';
   var t = targetsOf(pos, sq);
   head += t.length ? '. Uhkaa itse: ' + list(t) + '.' : '.';
   if (sq === selected) {

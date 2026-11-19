@@ -217,9 +217,33 @@ function guardInfo(pos, sq) {
   var c = colorOf(p);
   return { attackers: attackersOf(pos, sq, other(c)), defenders: attackersOf(pos, sq, c) };
 }
-// The mover's own pieces (not the king, not the moved one) that m leaves outnumbered, with more
-// attackers than defenders, when they were not before: the defence the move takes away.
-function hanging(pos, sq) { var g = guardInfo(pos, sq); return g.attackers.length > g.defenders.length; }
+// What the side to move wins by taking the piece on sq, both sides then taking back on sq with
+// their cheapest legal piece and each free to stop (0: taking it does not pay). Legal moves only,
+// so a pinned attacker does not count, and a piece behind another joins once the first has taken.
+function captureGain(pos, sq) {
+  var p = pos.b[sq]; if (!p) return 0;
+  var c = pos.turn, best = null;
+  pseudoMoves(pos, true).forEach(function (m) {
+    if (m.to !== sq || m.flag === 'ep' || (m.promo && m.promo.toUpperCase() !== 'Q')) return;
+    var q = pos.b[m.from].toUpperCase(), v = q === 'K' ? 1e5 : VALUE[q];
+    if (best && v >= best.v) return;
+    var u = makeMove(pos, m), ok = !inCheck(pos, c); unmakeMove(pos, m, u);
+    if (ok) best = { m: m, v: v };
+  });
+  if (!best) return 0;
+  var u = makeMove(pos, best.m), g = VALUE[p.toUpperCase()] - captureGain(pos, sq); unmakeMove(pos, best.m, u);
+  return Math.max(0, g);
+}
+// A piece the other side wins material by taking now (not just one with more attackers than
+// defenders: a pawn attacked by a rook and a queen and guarded by a pawn is safe).
+function hanging(pos, sq) {
+  var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return false;
+  var turn = pos.turn, ep = pos.ep; pos.turn = other(colorOf(p)); pos.ep = -1;
+  var g = captureGain(pos, sq); pos.turn = turn; pos.ep = ep;
+  return g > 0;
+}
+// The mover's own pieces (not the king, not the moved one) that m leaves hanging when they were
+// not before (the defence the move takes away), and whether the moved piece itself is lost at once.
 function exposedBy(pos, m) {
   var c = pos.turn, before = [], out = [];
   for (var sq = 0; sq < 64; sq++) {
@@ -232,15 +256,11 @@ function exposedBy(pos, m) {
   unmakeMove(pos, m, u);
   return { others: out, self: bad };
 }
-// The moved piece on its new square loses material at once: the other side takes it and wins more
-// than it gave, by the cheapest attacker (a defended piece) or for free (an undefended one).
+// The moved piece on its new square (the other side to move): taking it wins them more than the
+// move itself took.
 function landsBadly(pos, sq, took) {
   var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return false;
-  var g = guardInfo(pos, sq), att = g.attackers.filter(function (s) { return !(g.defenders.length && pos.b[s].toUpperCase() === 'K'); });
-  if (!att.length) return false;
-  var cheapest = Math.min.apply(null, att.map(function (s) { return VALUE[pos.b[s].toUpperCase()]; }));
-  var lose = VALUE[p.toUpperCase()] - (g.defenders.length ? cheapest : 0), got = took ? VALUE[took.toUpperCase()] : 0;
-  return lose > got;
+  return captureGain(pos, sq) > (took ? VALUE[took.toUpperCase()] : 0);
 }
 function whyIllegal(pos, from, to) {
   var b = pos.b, p = b[from], c = pos.turn, opp = other(c);

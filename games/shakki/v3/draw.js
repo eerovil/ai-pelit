@@ -198,7 +198,7 @@ function drawGuards(c, pos) {
     for (var sq = 0; sq < 64; sq++) {
       if (!pos.b[sq] || pos.b[sq].toUpperCase() === 'K') continue;
       var g = guardInfo(pos, sq); if (!g.attackers.length) continue;
-      var xy = squareXY(sq), bad = g.attackers.length > g.defenders.length;
+      var xy = squareXY(sq), bad = hanging(pos, sq);
       if (bad) { c.strokeStyle = 'rgba(220, 40, 30, 0.9)'; c.lineWidth = cell * 0.07; c.strokeRect(xy[0] + cell * 0.05, xy[1] + cell * 0.05, cell * 0.9, cell * 0.9); }
       var bw = cell * 0.62, bh = cell * 0.26, bx = xy[0] + (cell - bw) / 2, by = xy[1] + cell - bh - 1;
       c.fillStyle = 'rgba(30, 22, 16, 0.82)'; roundRect(c, bx, by, bw, bh, bh / 2); c.fill();
