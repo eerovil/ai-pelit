@@ -199,7 +199,8 @@ function drawGuards(c, pos) {
       if (!pos.b[sq] || pos.b[sq].toUpperCase() === 'K') continue;
       var g = guardInfo(pos, sq); if (!g.attackers.length) continue;
       var xy = squareXY(sq), bad = hanging(pos, sq);
-      if (bad) { c.strokeStyle = 'rgba(220, 40, 30, 0.9)'; c.lineWidth = cell * 0.07; c.strokeRect(xy[0] + cell * 0.05, xy[1] + cell * 0.05, cell * 0.9, cell * 0.9); }
+      // Red: a piece of yours you would lose; green: one of the opponent's you can win (Eero's choice).
+      if (bad) { c.strokeStyle = colorOf(pos.b[sq]) === game.mine ? 'rgba(220, 40, 30, 0.9)' : 'rgba(40, 170, 70, 0.95)'; c.lineWidth = cell * 0.07; c.strokeRect(xy[0] + cell * 0.05, xy[1] + cell * 0.05, cell * 0.9, cell * 0.9); }
       var bw = cell * 0.62, bh = cell * 0.26, bx = xy[0] + (cell - bw) / 2, by = xy[1] + cell - bh - 1;
       c.fillStyle = 'rgba(30, 22, 16, 0.82)'; roundRect(c, bx, by, bw, bh, bh / 2); c.fill();
       c.font = '800 ' + Math.round(bh * 0.8) + 'px system-ui, sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'center';
