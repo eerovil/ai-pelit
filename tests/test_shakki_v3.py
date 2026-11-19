@@ -4,7 +4,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/shakki/v2/"
+URL = "games/shakki/v3/"
 
 
 def open_game(site, context, size=None):
