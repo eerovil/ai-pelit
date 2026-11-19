@@ -21,9 +21,6 @@ button.secondary{background:#4a3a2e;color:#f4ead7;border:1px solid #7a6450}
 #lastMove,.lastMove{font-size:13px;color:#cdbca0;margin-top:2px;min-height:18px}
 #lastMove.info,.lastMove.info{color:#f4ead7;font-size:13px;line-height:1.3}
 #undo:disabled{opacity:.45}
-/* PROTOTYPE: the style switch */
-#proto{position:fixed;top:calc(env(safe-area-inset-top) + 6px);left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:5;background:#000a;padding:4px;border-radius:12px}
-#proto button{min-height:30px;padding:3px 9px;font-size:12px;background:#4a3a2e;color:#f4ead7}#proto button.on{background:#e9c98b;color:#2a211b}
 #lastMove.why,.lastMove.why{color:#ffb4a6;font-weight:650;font-size:14px;line-height:1.3}
 .buttons{display:flex;gap:8px;justify-content:flex-end;margin-top:auto}
 .buttons button{min-height:42px;padding:8px 14px;font-size:15px}
@@ -79,7 +76,6 @@ p{line-height:1.45;color:#dccdb4;margin:6px 0}
   <div id="status"></div><div id="lastMove"></div>
   <div class="buttons"><button id="showEnd" class="secondary hidden">Tulos</button><button id="toMenu" class="secondary">Valikko</button><button id="undo" class="secondary hidden">↶ Peru</button><button id="resign" class="secondary">Luovuta</button></div>
 </div>
- <div id="proto"><button data-s="a">A Merkit</button><button data-s="b">B Napauta</button><button data-s="c">C Molemmat</button></div>
 <section id="menu" class="overlay"><div class="box">
   <div>
     <div class="eyebrow">Kuninkaiden peli</div>

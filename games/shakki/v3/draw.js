@@ -191,10 +191,11 @@ function shakeOf(sq, now) {
   return Math.sin(t / 28) * view.cell * 0.09 * (1 - t / SHAKE_MS);
 }
 // Practice (#465 v3): threatened pieces carry their attackers (red) and defenders (green) as a badge,
-// a piece with more attackers than defenders gets a red ring, and the tapped one gets lines to them all.
+// a piece the other side wins material by taking gets a frame (red: yours, green: the opponent's),
+// and the tapped one gets lines to them all.
 function drawGuards(c, pos) {
   var cell = view.cell, focus = inspect >= 0 ? inspect : selected;
-  if ((infoStyle === 'a' || infoStyle === 'c') && !result) {
+  if (!result) {
     for (var sq = 0; sq < 64; sq++) {
       if (!pos.b[sq] || pos.b[sq].toUpperCase() === 'K') continue;
       var g = guardInfo(pos, sq); if (!g.attackers.length) continue;
@@ -209,7 +210,7 @@ function drawGuards(c, pos) {
       c.fillStyle = '#8fe39b'; c.fillText(g.defenders.length, bx + bw * 0.73, by + bh / 2 + 1);
     }
   }
-  if ((infoStyle === 'b' || infoStyle === 'c') && focus >= 0 && pos.b[focus]) {
+  if (focus >= 0 && pos.b[focus]) {
     var f = guardInfo(pos, focus), to = squareXY(focus);
     f.defenders.forEach(function (s) { arrow(c, squareXY(s), to, 'rgba(60, 170, 80, 0.85)'); });
     f.attackers.forEach(function (s) { arrow(c, squareXY(s), to, 'rgba(225, 45, 35, 0.9)'); });

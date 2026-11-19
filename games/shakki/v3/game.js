@@ -16,8 +16,6 @@ var resignArmed = 0, endHidden = false, notice = '', ended = false, opened = -1;
 var why = null, whyTimer = 0, WHY_MS = 4000, SHAKE_MS = 700;
 // Practice mode (#465 v3): game.practice is true; a tapped piece's threats show (inspect = its square).
 var inspect = -1;
-// PROTOTYPE: how the threats show. 'a' badges on every threatened piece, 'b' lines on a tapped piece, 'c' both.
-var infoStyle = (location.hash.match(/tyyli=([abc])/) || [])[1] || 'c';
 
 if (S) S.load(['puu', 'osuma', 'valinta', 'naksu', 'voitto', 'tappio', 'onnistui', 'virhe']);
 function sound(name, vol) { if (S) S.play(name, { vol: vol }); }
@@ -497,15 +495,6 @@ Array.prototype.forEach.call(document.querySelectorAll('#colors button'), functi
 $('play').onclick = function () { newSoloGame(false); };
 $('practice').onclick = function () { newSoloGame(true); };
 $('undo').onclick = undo; $('endUndo').onclick = undo;
-// PROTOTYPE: the style switch.
-Array.prototype.forEach.call(document.querySelectorAll('#proto button'), function (b) {
-  b.classList.toggle('on', b.dataset.s === infoStyle);
-  b.onclick = function () {
-    infoStyle = b.dataset.s; location.hash = 'tyyli=' + infoStyle;
-    Array.prototype.forEach.call(document.querySelectorAll('#proto button'), function (x) { x.classList.toggle('on', x === b); });
-    askDraw();
-  };
-});
 $('resume').onclick = resumeSolo;
 $('friends').onclick = function () { if (R) R.open(); };
 $('toMenu').onclick = function () { keepSolo(); menu(); };

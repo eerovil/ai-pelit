@@ -78,3 +78,49 @@ def test_bishop_for_knight_is_even(site, context):
     # A bishop taking a guarded knight is even, not red.
     assert risk(page, "6k1/8/4p3/3n4/8/1B6/8/6K1 w - - 0 1", "b3", "d5") == [False, []]
     assert page.errors == []
+
+
+def test_practice_counts_nothing_and_undoes_without_limit(site, context):
+    from test_shakki_v3 import set_moves, tap
+    page = open_game(site, context)
+    page.click("#colors button[data-c='b']")
+    page.click("#practice")
+    assert page.evaluate("game.practice") is True
+    assert page.locator("#resign").is_hidden() and page.locator("#undo").is_visible()
+    assert "🎓 Harjoitus" in page.locator("#meName").inner_text()
+    page.wait_for_function("derived.uci.length === 1 && !thinking")
+    # Undo goes back past the computer's first move too: nothing of the player's to take back yet.
+    assert page.locator("#undo").is_disabled()
+    set_moves(page, ["f2f3", "e7e5", "g2g4"])
+    # A tap on the opponent's piece shows who threatens and guards it.
+    tap(page, "g4")
+    assert page.locator("#lastMove").inner_text().startswith("Sotilas g4 (vastustajan):")
+    tap(page, "d8")
+    tap(page, "h4")
+    page.wait_for_selector("#end:not(.hidden)")
+    assert page.locator("#endTitle").inner_text() == "Voitit!"
+    assert page.locator("#endStats").inner_text() == "Harjoituspeli: ei tilastoihin eikä avaa tasoja."
+    assert page.evaluate("load('tilasto:0', null)") is None and not page.evaluate("unlocked(1)")
+    # Undo from the end card: the mate is taken back, then the move before it, and so on.
+    page.click("#endUndo")
+    assert page.locator("#end").is_hidden() and page.evaluate("result") is None
+    assert page.evaluate("derived.uci") == ["f2f3", "e7e5", "g2g4"]
+    page.click("#undo")
+    assert page.evaluate("derived.uci") == ["f2f3"]
+    assert page.locator("#undo").is_disabled()
+    # The practice game is saved as one, and the menu says so.
+    page.click("#toMenu")
+    assert page.locator("#resume").inner_text().startswith("Jatka harjoitusta")
+    page.click("#resume")
+    assert page.evaluate("game.practice") is True
+    assert page.errors == []
+
+
+def test_practice_fits_sideways(site, context):
+    page = open_game(site, context, {"width": 740, "height": 360})
+    page.click("#practice")
+    page.wait_for_function("!thinking")
+    box = page.locator("#undo").bounding_box()
+    assert box and box["x"] >= 0 and box["y"] >= 0 and box["x"] + box["width"] <= 740 and box["y"] + box["height"] <= 360
+    assert page.evaluate("document.scrollingElement.scrollHeight") <= 360
+    assert page.errors == []
