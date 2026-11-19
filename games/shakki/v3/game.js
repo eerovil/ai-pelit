@@ -382,7 +382,13 @@ function infoText(pos, sq) {
   var head = pieceName(pos, sq) + (colorOf(pos.b[sq]) === game.mine ? '' : ' (vastustajan)') + ': ';
   head += g.attackers.length ? 'uhkaajia ' + g.attackers.length + ' (' + list(g.attackers) + ')' : 'ei uhattu';
   head += ', puolustajia ' + g.defenders.length + (g.defenders.length ? ' (' + list(g.defenders) + ')' : '');
-  if (hanging(pos, sq)) head += colorOf(pos.b[sq]) === game.mine ? ' ⚠' : ' – voit voittaa sen';
+  var th = threat(pos, sq);
+  if (th) {
+    var pawns = function (v) { return Math.round(v / 100); }, taker = pieceName(pos, th.from);
+    head += colorOf(pos.b[sq]) === game.mine
+      ? '. ⚠ ' + taker + ' lyö sen: menetät ' + pawns(th.lose) + (th.back ? ', saat takaisin ' + pawns(th.back) : ' etkä saa mitään takaisin')
+      : '. Voit voittaa sen: ' + taker + ' lyö, saat ' + pawns(th.lose) + (th.back ? ', menetät takaisin ' + pawns(th.back) : ' etkä menetä mitään');
+  }
   var t = targetsOf(pos, sq);
   head += t.length ? '. Uhkaa itse: ' + list(t) + '.' : '.';
   if (sq === selected) {

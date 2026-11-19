@@ -220,8 +220,7 @@ function guardInfo(pos, sq) {
 // What the side to move wins by taking the piece on sq, both sides then taking back on sq with
 // their cheapest legal piece and each free to stop (0: taking it does not pay). Legal moves only,
 // so a pinned attacker does not count, and a piece behind another joins once the first has taken.
-function captureGain(pos, sq) {
-  var p = pos.b[sq]; if (!p) return 0;
+function cheapestTaker(pos, sq) {
   var c = pos.turn, best = null;
   pseudoMoves(pos, true).forEach(function (m) {
     if (m.to !== sq || m.flag === 'ep' || (m.promo && m.promo.toUpperCase() !== 'Q')) return;
@@ -230,17 +229,26 @@ function captureGain(pos, sq) {
     var u = makeMove(pos, m), ok = !inCheck(pos, c); unmakeMove(pos, m, u);
     if (ok) best = { m: m, v: v };
   });
-  if (!best) return 0;
-  var u = makeMove(pos, best.m), g = VALUE[p.toUpperCase()] - captureGain(pos, sq); unmakeMove(pos, best.m, u);
+  return best && best.m;
+}
+function captureGain(pos, sq) {
+  var p = pos.b[sq], m = p && cheapestTaker(pos, sq);
+  if (!m) return 0;
+  var u = makeMove(pos, m), g = VALUE[p.toUpperCase()] - captureGain(pos, sq); unmakeMove(pos, m, u);
   return Math.max(0, g);
 }
 // A piece the other side wins material by taking now (not just one with more attackers than
 // defenders: a pawn attacked by a rook and a queen and guarded by a pawn is safe).
-function hanging(pos, sq) {
-  var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return false;
-  var turn = pos.turn, ep = pos.ep; pos.turn = other(colorOf(p)); pos.ep = -1;
-  var g = captureGain(pos, sq); pos.turn = turn; pos.ep = ep;
-  return g > 0;
+function hanging(pos, sq) { return !!threat(pos, sq); }
+// How the piece on sq is lost: { from: who takes it first, lose: its value, back: what its side
+// gets back }, or null when taking it does not pay.
+function threat(pos, sq) {
+  var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return null;
+  var turn = pos.turn, ep = pos.ep, out = null; pos.turn = other(colorOf(p)); pos.ep = -1;
+  var g = captureGain(pos, sq);
+  if (g > 0) { var lose = VALUE[p.toUpperCase()]; out = { from: cheapestTaker(pos, sq).from, lose: lose, back: lose - g }; }
+  pos.turn = turn; pos.ep = ep;
+  return out;
 }
 // The mover's own pieces (not the king, not the moved one) that m leaves hanging when they were
 // not before (the defence the move takes away), and whether the moved piece itself is lost at once.

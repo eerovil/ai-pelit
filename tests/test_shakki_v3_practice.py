@@ -34,3 +34,32 @@ def test_move_warnings(site, context, fen, frm, to, want):
     page = open_game(site, context)
     assert risk(page, fen, frm, to) == want
     assert page.errors == []
+
+
+MOVES = ["e2e4", "a7a6", "g1f3", "h7h6", "d2d4", "b7b6", "c1g5", "a6a5"]  # the h6 pawn attacks the g5 bishop
+
+
+def test_info_line_says_what_the_trade_loses(site, context):
+    page = open_game(site, context)
+    page.evaluate("""ms => startGame({moves: ms, mine: 'w', level: 0, white: {id: 'solo', name: 'Sinä'},
+      black: {id: 'kone', name: 'Kone'}, practice: true}, false)""", MOVES)
+    texts = page.evaluate("""() => ['g5', 'e4', 'h6'].map(s => infoText(derived.pos, sqIndex(s)))""")
+    # The bishop: a pawn takes it, the knight takes back a pawn.
+    assert "⚠ Sotilas h6 lyö sen: menetät 3, saat takaisin 1" in texts[0]
+    # The e4 pawn is safe: no warning.
+    assert "⚠" not in texts[1] and "Voit voittaa" not in texts[1]
+    # Black's h6 pawn is guarded by g7: taking it with the bishop does not pay.
+    assert "Voit voittaa" not in texts[2]
+    assert page.errors == []
+
+
+def test_info_line_says_what_you_can_win(site, context):
+    page = open_game(site, context)
+    page.evaluate("""ms => startGame({moves: ms, mine: 'w', level: 0, white: {id: 'solo', name: 'Sinä'},
+      black: {id: 'kone', name: 'Kone'}, practice: true}, false)""",
+                  ["e2e4", "e7e5", "g1f3", "f8c5", "f1c4", "h7h5", "f3e5", "d8e7"])
+    f7, e5 = page.evaluate("""() => ['f7', 'e5'].map(s => infoText(derived.pos, sqIndex(s)))""")
+    # The king cannot take back on f7 (the c4 bishop guards it), and the queen would be lost.
+    assert "Voit voittaa sen: Ratsu e5 lyö, saat 1 etkä menetä mitään" in f7
+    assert "⚠ Daami e7 lyö sen: menetät 3 etkä saa mitään takaisin" in e5
+    assert page.errors == []
