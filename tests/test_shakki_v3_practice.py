@@ -63,3 +63,18 @@ def test_info_line_says_what_you_can_win(site, context):
     assert "Voit voittaa sen: Ratsu e5 lyö, saat 1 etkä menetä mitään" in f7
     assert "⚠ Daami e7 lyö sen: menetät 3 etkä saa mitään takaisin" in e5
     assert page.errors == []
+
+
+def test_bishop_for_knight_is_even(site, context):
+    # Eero's position: Nxc8 is a discovered check from the d2 queen, so only the king takes back:
+    # a bishop for a knight, even, not green. Nxb7 is the same discovered check, and then nothing
+    # can take back: the pawn is won. Black wins the d6 knight with the f8 bishop.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const pos = playGame([], 'rnb2b2/1pqk4/2pN2pr/P6p/P1B2P1B/8/2PQ1RPP/3R2K1 w - - 0 1').pos;
+      return ['c8', 'b7', 'd6'].map(s => hanging(pos, sqIndex(s)));
+    }""")
+    assert got == [False, True, True]
+    # A bishop taking a guarded knight is even, not red.
+    assert risk(page, "6k1/8/4p3/3n4/8/1B6/8/6K1 w - - 0 1", "b3", "d5") == [False, []]
+    assert page.errors == []

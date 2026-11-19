@@ -220,6 +220,8 @@ function guardInfo(pos, sq) {
 // What the side to move wins by taking the piece on sq, both sides then taking back on sq with
 // their cheapest legal piece and each free to stop (0: taking it does not pay). Legal moves only,
 // so a pinned attacker does not count, and a piece behind another joins once the first has taken.
+// A trade within this many points is even: a bishop (330) for a knight (320) wins nothing.
+var EVEN = 50;
 function cheapestTaker(pos, sq) {
   var c = pos.turn, best = null;
   pseudoMoves(pos, true).forEach(function (m) {
@@ -246,7 +248,7 @@ function threat(pos, sq) {
   var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return null;
   var turn = pos.turn, ep = pos.ep, out = null; pos.turn = other(colorOf(p)); pos.ep = -1;
   var g = captureGain(pos, sq);
-  if (g > 0) { var lose = VALUE[p.toUpperCase()]; out = { from: cheapestTaker(pos, sq).from, lose: lose, back: lose - g }; }
+  if (g > EVEN) { var lose = VALUE[p.toUpperCase()]; out = { from: cheapestTaker(pos, sq).from, lose: lose, back: lose - g }; }
   pos.turn = turn; pos.ep = ep;
   return out;
 }
@@ -268,7 +270,7 @@ function exposedBy(pos, m) {
 // move itself took.
 function landsBadly(pos, sq, took) {
   var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return false;
-  return captureGain(pos, sq) > (took ? VALUE[took.toUpperCase()] : 0);
+  return captureGain(pos, sq) > (took ? VALUE[took.toUpperCase()] : 0) + EVEN;
 }
 function whyIllegal(pos, from, to) {
   var b = pos.b, p = b[from], c = pos.turn, opp = other(c);
