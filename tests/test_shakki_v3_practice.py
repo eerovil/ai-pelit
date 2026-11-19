@@ -110,8 +110,8 @@ def test_practice_counts_nothing_and_undoes_without_limit(site, context):
     assert page.locator("#undo").is_disabled()
     # The practice game is saved as one, and the menu says so.
     page.click("#toMenu")
-    assert page.locator("#resume").inner_text().startswith("Jatka harjoitusta")
-    page.click("#resume")
+    assert page.locator("#resumePractice").inner_text().startswith("🎓 Jatka harjoitusta")
+    page.click("#resumePractice")
     assert page.evaluate("game.practice") is True
     assert page.errors == []
 
@@ -173,8 +173,8 @@ def test_ended_practice_game_can_be_undone_after_a_reload(site, context):
     page.wait_for_selector("#end:not(.hidden)")
     page.reload()
     page.wait_for_function("view.s > 0")
-    assert page.locator("#resume").inner_text().startswith("Jatka harjoitusta")
-    page.click("#resume")
+    assert page.locator("#resumePractice").inner_text().startswith("🎓 Jatka harjoitusta")
+    page.click("#resumePractice")
     page.wait_for_selector("#end:not(.hidden)")
     page.click("#endUndo")
     assert page.evaluate("derived.uci") == ["f2f3", "e7e5", "g2g4"]
@@ -192,4 +192,56 @@ def test_promotion_moves_count_as_one_square(site, context):
       return infoText(derived.pos, selected);
     }""")
     assert "jos sotilas lähtee, Rc8 jää ilman riittävää puolustusta" in text
+    assert page.errors == []
+
+
+def test_practice_never_replaces_an_unfinished_game(site, context):
+    from test_shakki_v3 import set_moves
+    page = open_game(site, context)
+    page.click("#colors button[data-c='w']")
+    page.click("#play")
+    set_moves(page, ["e2e4", "e7e5", "g1f3"])
+    page.click("#toMenu")
+    page.click("#practice")
+    page.wait_for_function("!thinking")
+    set_moves(page, ["d2d4", "d7d5"])
+    page.click("#toMenu")
+    # Both games wait in the menu, each behind its own button, and fit it.
+    assert page.locator("#resume").inner_text().startswith("Jatka peliä")
+    assert page.locator("#resumePractice").inner_text().startswith("🎓 Jatka harjoitusta")
+    page.click("#resume")
+    assert page.evaluate("derived.uci.slice(0, 3)") == ["e2e4", "e7e5", "g1f3"] and not page.evaluate("game.practice")
+    page.click("#toMenu")
+    page.click("#resumePractice")
+    assert page.evaluate("derived.uci") == ["d2d4", "d7d5"] and page.evaluate("game.practice") is True
+    page.click("#toMenu")
+    assert page.errors == []
+    # The menu with both buttons fits upright and sideways (a new page reads the same saves).
+    for size in ({"width": 360, "height": 640}, {"width": 740, "height": 360}):
+        p = open_game(site, context, size)
+        assert p.locator("#resume").is_visible() and p.locator("#resumePractice").is_visible()
+        assert p.evaluate("document.scrollingElement.scrollHeight") <= size["height"]
+        box = p.locator("#resumePractice").bounding_box()
+        assert box["y"] + box["height"] <= size["height"]
+        assert p.errors == []
+
+
+def test_en_passant_takes_a_pawn_that_moved_two(site, context):
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const fen = '4k3/8/8/8/4p3/8/3P4/4K3 w - - 0 1', pos = playGame([], fen).pos;
+      const m = legalMoves(pos).find(m => sqName(m.from) === 'd2' && sqName(m.to) === 'd4');
+      const warn = exposedBy(pos, m).self;
+      const after = playGame(['d2d4'], fen).pos, g = guardInfo(after, sqIndex('d4')), t = threat(after, sqIndex('d4'));
+      return [warn, g.attackers.map(sqName), t && sqName(t.from), targetsOf(after, sqIndex('e4')).map(sqName)];
+    }""")
+    # d2d4 next to the e4 pawn: exd3 en passant wins it, so the move is red, and so is the pawn.
+    assert got == [True, ["e4"], "e4", ["d4"]]
+    # With no black pawn beside it, the same move is safe.
+    safe = page.evaluate("""() => {
+      const fen = '4k3/8/8/8/7p/8/3P4/4K3 w - - 0 1', pos = playGame([], fen).pos;
+      const m = legalMoves(pos).find(m => sqName(m.from) === 'd2' && sqName(m.to) === 'd4');
+      return exposedBy(pos, m).self;
+    }""")
+    assert safe is False
     assert page.errors == []

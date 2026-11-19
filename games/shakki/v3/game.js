@@ -60,9 +60,12 @@ function validSave(s) {
   return s && Array.isArray(s.moves) && (s.mine === 'w' || s.mine === 'b') && Number.isInteger(s.level) &&
     s.level >= 0 && s.level < LEVELS.length && s.white && s.black && playGame(s.moves) !== null;
 }
-function resumeSolo() {
-  var s = load('peli', null);
-  if (!validSave(s)) { forget('peli'); menu(); return; }
+// A practice game keeps its own save (#465 v3), so starting one never replaces an unfinished game.
+function soloKey(practice) { return practice ? 'harjoitus' : 'peli'; }
+function resumeSolo(practice) {
+  var key = soloKey(practice === true), s = load(key, null);
+  if (!validSave(s)) { forget(key); menu(); return; }
+  if (practice === true) s.practice = true;
   startGame(s, false);
 }
 function startGame(g, isOnline) {
@@ -79,8 +82,8 @@ function startGame(g, isOnline) {
 function keepSolo() {
   if (online || !game) return;
   // An ended practice game stays saved, so it can still be undone after a reload.
-  if (result && !game.practice) forget('peli');
-  else save('peli', { moves: derived.uci, mine: game.mine, level: game.level, white: game.white, black: game.black, practice: !!game.practice });
+  if (result && !game.practice) forget(soloKey(false));
+  else save(soloKey(game.practice), { moves: derived.uci, mine: game.mine, level: game.level, white: game.white, black: game.black, practice: !!game.practice });
 }
 
 // A move by either side, from a tap, the computer or the host's state.
@@ -207,9 +210,11 @@ function menu() {
   });
   Array.prototype.forEach.call(document.querySelectorAll('#colors button'), function (b) { b.classList.toggle('on', b.dataset.c === col); });
   $('levelInfo').textContent = LEVELS[lv].name + ': ' + statsText(load('tilasto:' + lv, null));
-  var s = load('peli', null);
-  $('resume').classList.toggle('hidden', !validSave(s));
-  if (validSave(s)) $('resume').textContent = (s.practice ? 'Jatka harjoitusta · ' : 'Jatka peliä · ') + LEVELS[s.level].name + ' · siirto ' + (Math.floor(s.moves.length / 2) + 1);
+  ['peli', 'harjoitus'].forEach(function (key) {
+    var s = load(key, null), b = $(key === 'peli' ? 'resume' : 'resumePractice');
+    b.classList.toggle('hidden', !validSave(s));
+    if (validSave(s)) b.textContent = (key === 'peli' ? 'Jatka peliä · ' : '🎓 Jatka harjoitusta · ') + LEVELS[s.level].name + ' · siirto ' + (Math.floor(s.moves.length / 2) + 1);
+  });
   askDraw();
 }
 function showPlay() {
@@ -357,9 +362,10 @@ function pieceName(pos, sq) { return NAME[pos.b[sq].toUpperCase()] + ' ' + sqNam
 function shortName(pos, sq) { var u = pos.b[sq].toUpperCase(); return (u === 'P' ? '' : FI_LETTER[u]) + sqName(sq); }
 // What a piece's own captures reach: the other side's pieces it could take now (pins ignored).
 function targetsOf(pos, sq) {
+  // En passant counts only when it is this piece's side's turn; it takes the pawn beside.
   var keep = pos.turn, ep = pos.ep, out = [];
-  pos.turn = colorOf(pos.b[sq]); pos.ep = -1;
-  pseudoMoves(pos, true).forEach(function (m) { if (m.from === sq && m.cap && out.indexOf(m.to) < 0) out.push(m.to); });
+  if (keep !== colorOf(pos.b[sq])) { pos.turn = colorOf(pos.b[sq]); pos.ep = -1; }
+  pseudoMoves(pos, true).forEach(function (m) { var t = takenSq(pos, m); if (m.from === sq && m.cap && out.indexOf(t) < 0) out.push(t); });
   pos.turn = keep; pos.ep = ep; return out;
 }
 // Practice: for the selected piece, which of its moves leave which own pieces without enough defence.
@@ -498,7 +504,8 @@ Array.prototype.forEach.call(document.querySelectorAll('#colors button'), functi
 $('play').onclick = function () { newSoloGame(false); };
 $('practice').onclick = function () { newSoloGame(true); };
 $('undo').onclick = undo; $('endUndo').onclick = undo;
-$('resume').onclick = resumeSolo;
+$('resume').onclick = function () { resumeSolo(false); };
+$('resumePractice').onclick = function () { resumeSolo(true); };
 $('friends').onclick = function () { if (R) R.open(); };
 $('toMenu').onclick = function () { keepSolo(); menu(); };
 $('resign').onclick = function () {

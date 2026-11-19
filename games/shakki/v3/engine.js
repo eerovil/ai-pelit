@@ -216,6 +216,8 @@ function guardInfo(pos, sq) {
   var p = pos.b[sq]; if (!p) return null;
   var c = colorOf(p);
   var att = attackersOf(pos, sq, other(c)), def = attackersOf(pos, sq, c);
+  // A pawn that just moved two squares can also be taken en passant, by the side to move.
+  epTakers(pos, sq).forEach(function (s) { if (att.indexOf(s) < 0) att.push(s); });
   // A king takes only onto a square nobody guards: it attacks only an unguarded piece, and takes
   // back only when the piece that took was the one attacker.
   function king(s) { return pos.b[s].toUpperCase() === 'K'; }
@@ -227,10 +229,17 @@ function guardInfo(pos, sq) {
 // so a pinned attacker does not count, and a piece behind another joins once the first has taken.
 // A trade within this many points is even: a bishop (330) for a knight (320) wins nothing.
 var EVEN = 50;
+// The square a capture takes its piece from: en passant takes the pawn beside its own square.
+function takenSq(pos, m) { return m.flag === 'ep' ? m.to + (pos.turn === 'w' ? 8 : -8) : m.to; }
+// The side to move's pawns that may take the pawn on sq en passant now (pins ignored).
+function epTakers(pos, sq) {
+  return pseudoMoves(pos, true).filter(function (m) { return m.flag === 'ep' && takenSq(pos, m) === sq; })
+    .map(function (m) { return m.from; });
+}
 function cheapestTaker(pos, sq) {
   var c = pos.turn, best = null;
   pseudoMoves(pos, true).forEach(function (m) {
-    if (m.to !== sq || m.flag === 'ep' || (m.promo && m.promo.toUpperCase() !== 'Q')) return;
+    if (takenSq(pos, m) !== sq || (m.promo && m.promo.toUpperCase() !== 'Q')) return;
     var q = pos.b[m.from].toUpperCase(), v = q === 'K' ? 1e5 : VALUE[q];
     if (best && v >= best.v) return;
     var u = makeMove(pos, m), ok = !inCheck(pos, c); unmakeMove(pos, m, u);
@@ -241,7 +250,8 @@ function cheapestTaker(pos, sq) {
 function captureGain(pos, sq) {
   var p = pos.b[sq], m = p && cheapestTaker(pos, sq);
   if (!m) return 0;
-  var u = makeMove(pos, m), g = VALUE[p.toUpperCase()] - captureGain(pos, sq); unmakeMove(pos, m, u);
+  // The trade goes on where the taker stands (beside sq after en passant).
+  var u = makeMove(pos, m), g = VALUE[p.toUpperCase()] - captureGain(pos, m.to); unmakeMove(pos, m, u);
   return Math.max(0, g);
 }
 // A piece the other side wins material by taking now (not just one with more attackers than
@@ -251,7 +261,9 @@ function hanging(pos, sq) { return !!threat(pos, sq); }
 // gets back }, or null when taking it does not pay.
 function threat(pos, sq) {
   var p = pos.b[sq]; if (!p || p.toUpperCase() === 'K') return null;
-  var turn = pos.turn, ep = pos.ep, out = null; pos.turn = other(colorOf(p)); pos.ep = -1;
+  // En passant stays possible only when it already is the other side's turn.
+  var turn = pos.turn, ep = pos.ep, out = null;
+  if (turn !== other(colorOf(p))) { pos.turn = other(colorOf(p)); pos.ep = -1; }
   var g = captureGain(pos, sq);
   if (g > EVEN) { var lose = VALUE[p.toUpperCase()]; out = { from: cheapestTaker(pos, sq).from, lose: lose, back: lose - g }; }
   pos.turn = turn; pos.ep = ep;
