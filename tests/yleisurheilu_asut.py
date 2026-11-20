@@ -10,11 +10,21 @@ from conftest import ROOT, turn
 
 SHARED = "ai-pelit:_asut:yleisurheilu"
 
+# The page's clock moved to 10 December 2026, still running, so every run sees the picker with the
+# five Christmas costumes (#473), its fullest. test_outfits_lib.py checks the other months.
+DECEMBER = """(() => {
+  const R = Date, shift = new R(2026, 11, 10, 12).getTime() - R.now();
+  function D(...a) { return new.target ? (a.length ? new R(...a) : new R(R.now() + shift)) : new R(R.now() + shift).toString(); }
+  D.now = () => R.now() + shift; D.parse = R.parse; D.UTC = R.UTC; D.prototype = R.prototype;
+  window.Date = D;
+})();"""
+
 
 def open_game(site, context, url, store=None):
     site.build(ROOT / "games")
     for k, v in (store or {}).items():
         context.add_init_script(f"localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))})")
+    context.add_init_script(DECEMBER)
     page = context.new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
@@ -30,8 +40,9 @@ def picking_saves_for_every_event(site, context, url, slug):
     page = open_game(site, context, url)
     assert page.text_content("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    # The athletics set (seven kits), the six Halloween costumes and the three Tylypahka ones (#321).
-    assert page.locator("#ai-pelit-asut .asu").count() == 16
+    # The athletics set (seven kits), the six Halloween costumes and the three Tylypahka ones (#321),
+    # and the five Christmas ones in November and December (#473).
+    assert page.locator("#ai-pelit-asut .asu").count() == 21
     page.click("[data-asu=noita]")
     page.click("#ai-pelit-asut-valmis")
     assert page.locator("#ai-pelit-asut").count() == 0
@@ -85,7 +96,7 @@ def menu_fits(site, context, url, size):
     page.click("#asu")
     done = page.locator("#ai-pelit-asut-valmis").bounding_box()
     assert done["y"] >= 0 and done["y"] + done["height"] <= h
-    # Sideways all sixteen cards fit with no scrolling, the Tylypahka ones last (#321); upright
+    # Sideways all 21 cards fit with no scrolling, the Tylypahka ones last (#321); upright
     # the list scrolls.
     if w > h:
         last = page.locator("#ai-pelit-asut .asu").last.bounding_box()

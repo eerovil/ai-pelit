@@ -2,8 +2,8 @@
 
 import json
 import shutil
-
 from conftest import ROOT
+from yleisurheilu_asut import DECEMBER
 
 URL = "games/aitajuoksu/v12/"
 SHARED = "ai-pelit:_asut:yleisurheilu"
@@ -21,6 +21,7 @@ def open_game(site, browser, store=None):
     ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
     for k, v in (store or {}).items():
         ctx.add_init_script(f"localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))})")
+    ctx.add_init_script(DECEMBER)
     page = ctx.new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
@@ -32,7 +33,8 @@ def test_picking_saves_it_for_every_event_and_the_runner_wears_it(site, browser)
     page = open_game(site, browser)
     assert page.inner_text("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    assert page.locator("#ai-pelit-asut [data-asu]").count() == 16  # 7 kits, 6 Halloween, 3 Tylypahka (#321)
+    # 7 kits, 6 Halloween, 3 Tylypahka (#321), and 5 Christmas costumes in November and December (#473)
+    assert page.locator("#ai-pelit-asut [data-asu]").count() == 21
     page.click("[data-asu=punainen]")
     page.click("#ai-pelit-asut-valmis")
     assert page.evaluate(f"localStorage.getItem('{SHARED}')") == '"punainen"'

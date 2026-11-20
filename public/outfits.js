@@ -17,6 +17,12 @@
 // `head` (null, or a costume head that head() draws). A game reads what it needs and ignores the
 // rest; outfit.halloween is true for a Halloween costume, outfit.tylypahka for a Tylypahka one.
 //
+// The Christmas costumes (#473: Joulupukki, Tonttu, Poro, Lumiukko, Piparkakku; outfit.joulu) are
+// offered only in November and December, first from 3 November (pass `joulu: false` to leave them
+// out; Orava gets none unless it passes `joulu: true`, as its v6 squirrel draws no costume head for
+// them). Outside the season current() wears the game's default instead, but the saved choice is
+// kept, so the costume is back next November; get(id) finds them all year, for a friend in a room.
+//
 // The choice is saved per game on the phone (ai-pelit:_asut:<slug>), so every version of a game
 // shares it. AiPelitOutfits.current() is the outfit now; .get(id) is any outfit by id (for a
 // friend's figure in a room: send current().id with the player); .open() shows the picker.
@@ -64,6 +70,16 @@
   ];
   HALLOWEEN.forEach(function (o) { o.halloween = true; });
 
+  // ---- The Christmas costumes (#473), in the picker in November and December ----
+  var JOULU = [
+    { id: 'joulupukki', name: 'Joulupukki', emoji: '🎅', skin: '#f3c9a8', hair: '#f4f4f4', top: '#c8202f', bottom: '#c8202f', shoe: '#1a1a1a', cape: null, head: 'pukki' },
+    { id: 'tonttu', name: 'Tonttu', emoji: '🧝', skin: '#f3c9a8', hair: '#8a5a2b', top: '#d42a2a', bottom: '#6f6f78', shoe: '#3a2a1a', cape: null, head: 'tonttu' },
+    { id: 'poro', name: 'Poro', emoji: '🦌', skin: '#8a5a36', hair: '#6b4428', top: '#8a5a36', bottom: '#6b4428', shoe: '#2a1d12', cape: null, head: 'poro' },
+    { id: 'lumiukko', name: 'Lumiukko', emoji: '⛄', skin: '#f6f8fc', hair: '#f6f8fc', top: '#f6f8fc', bottom: '#e6ebf4', shoe: '#d6dde9', cape: null, head: 'lumiukko', stripe: '#d42a2a' },
+    { id: 'piparkakku', name: 'Piparkakku', emoji: '🍪', skin: '#b8733a', hair: '#b8733a', top: '#b8733a', bottom: '#a8652f', shoe: '#ffffff', cape: null, head: 'pipari', stripe: '#ffffff' },
+  ];
+  JOULU.forEach(function (o) { o.joulu = true; });
+
   // ---- The Tylypahka costumes (#321): a black school robe (the cape) over the house jumper ----
   // `scarf`, `fur`, `tail`, `belly` and `leg` are for Orava's squirrel, whose fur takes each one's
   // hair colour; head() draws the hair, glasses and scarf in the games with a person.
@@ -98,12 +114,24 @@
     return (m === 10 && day >= 20) || (m === 11 && day <= 2);
   }
 
+  // The Christmas season (#473): November and December, by the phone's own date.
+  function jouluSeason(d) {
+    d = d || new Date();
+    var m = d.getMonth() + 1;
+    return m === 11 || m === 12;
+  }
+
   var outfits = [], drawFn = null, changeFn = null;
   function byId(id) {
     for (var i = 0; i < outfits.length; i++) if (outfits[i].id === id) return outfits[i];
     return null;
   }
-  function current() { return byId(load(KEY, '')) || outfits[0] || null; }
+  // A Christmas costume is worn only in its season; the saved choice stays for the next one.
+  function current() {
+    var o = byId(load(KEY, ''));
+    if (o && o.joulu && !jouluSeason()) o = null;
+    return o || outfits[0] || null;
+  }
 
   // ---- Costume heads: drawn at (x, y), radius r, the face towards +x (or -x when face < 0) ----
   // face 'front' draws it seen from the front (frontHead); tilt turns it (radians, #469).
@@ -175,6 +203,53 @@
       c.stroke(); c.restore();
       c.fillStyle = '#2a2018'; c.fillRect(r * 0.2, -r * 0.3, r * 0.8, r * 0.26);
       circle(r * 0.55, -r * 0.17, Math.max(1, r * 0.1), '#e8ff6a');
+    } else if (kind === 'pukki') {
+      // Joulupukki: a red cap with a white trim, its tip and bobble hanging back, a white beard.
+      circle(0, 0, r, '#f3c9a8');
+      c.fillStyle = '#f4f4f4'; c.beginPath(); c.moveTo(-r * 0.2, r * 0.05); c.quadraticCurveTo(r * 0.2, r * 1.6, r * 1.05, r * 0.15); c.lineTo(r * 0.6, r * 0.3); c.closePath(); c.fill();
+      circle(r * 0.5, -r * 0.1, Math.max(1, r * 0.12), '#2a1e14');
+      circle(r * 0.95, r * 0.12, r * 0.17, '#e07a6a');
+      c.fillStyle = '#c8202f'; c.beginPath(); c.moveTo(-r * 0.95, -r * 0.35); c.quadraticCurveTo(-r * 0.1, -r * 1.75, r * 0.95, -r * 0.35); c.closePath(); c.fill();
+      tri([-r * 0.6, -r * 1.05], [-r * 0.05, -r * 1.25], [-r * 1.3, -r * 0.55], '#c8202f');
+      circle(-r * 1.3, -r * 0.5, r * 0.24, '#f4f4f4');
+      c.fillStyle = '#f4f4f4'; c.beginPath(); c.ellipse(0, -r * 0.38, r * 1.02, r * 0.2, -0.05, 0, 7); c.fill();
+    } else if (kind === 'tonttu') {
+      // Tonttu: a tall pointed red cap leaning back, rosy cheeks.
+      circle(0, 0, r, '#f3c9a8');
+      circle(r * 0.5, -r * 0.08, Math.max(1, r * 0.12), '#2a1e14');
+      circle(r * 0.45, r * 0.32, r * 0.18, 'rgba(230,90,90,.55)');
+      c.fillStyle = '#8a5a2b'; c.fillRect(-r * 0.95, -r * 0.35, r * 0.55, r * 0.75);
+      tri([-r * 0.95, -r * 0.4], [r * 0.9, -r * 0.4], [-r * 0.9, -r * 2.3], '#d42a2a');
+      circle(-r * 0.9, -r * 2.3, r * 0.22, '#f4f4f4');
+      c.fillStyle = '#f4f4f4'; c.fillRect(-r * 1.0, -r * 0.55, r * 1.95, r * 0.22);
+    } else if (kind === 'poro') {
+      // Poro: a brown head with a long muzzle, a red nose, an ear and branching antlers.
+      c.strokeStyle = '#d8c39a'; c.lineWidth = Math.max(1, r * 0.16); c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(-r * 0.1, -r * 0.8); c.lineTo(-r * 0.4, -r * 1.9); c.moveTo(-r * 0.25, -r * 1.35); c.lineTo(r * 0.15, -r * 1.75);
+      c.moveTo(-r * 0.35, -r * 1.7); c.lineTo(-r * 0.85, -r * 2.0); c.stroke();
+      circle(0, 0, r, '#8a5a36');
+      c.fillStyle = '#9c6a42'; c.beginPath(); c.ellipse(r * 0.75, r * 0.25, r * 0.6, r * 0.42, 0.1, 0, 7); c.fill();
+      circle(r * 1.3, r * 0.2, r * 0.24, '#e0242a');
+      circle(r * 0.35, -r * 0.2, Math.max(1, r * 0.12), '#1a120c');
+      c.fillStyle = '#6b4428'; c.beginPath(); c.ellipse(-r * 0.55, -r * 0.6, r * 0.18, r * 0.38, -0.7, 0, 7); c.fill();
+    } else if (kind === 'lumiukko') {
+      // Lumiukko: a snowball head, coal eye, a carrot nose and a black top hat.
+      circle(0, 0, r, '#f6f8fc');
+      circle(r * 0.45, -r * 0.15, Math.max(1, r * 0.13), '#1a1a1a');
+      tri([r * 0.8, r * 0.0], [r * 0.8, r * 0.3], [r * 1.6, r * 0.15], '#f07a1a');
+      [0.3, 0.5, 0.7].forEach(function (k) { circle(r * k, r * 0.55 - Math.abs(k - 0.5) * r * 0.3, Math.max(0.6, r * 0.07), '#1a1a1a'); });
+      c.fillStyle = '#1a1a1a'; c.fillRect(-r * 1.0, -r * 0.82, r * 2.0, r * 0.2);
+      c.fillRect(-r * 0.62, -r * 1.85, r * 1.24, r * 1.08);
+      c.fillStyle = '#d42a2a'; c.fillRect(-r * 0.62, -r * 1.0, r * 1.24, r * 0.18);
+    } else if (kind === 'pipari') {
+      // Piparkakku: a gingerbread head with white icing: an eye and a smile, a wavy edge.
+      circle(0, 0, r, '#b8733a');
+      circle(r * 0.5, -r * 0.15, Math.max(1, r * 0.13), '#ffffff');
+      c.strokeStyle = '#ffffff'; c.lineWidth = Math.max(1, r * 0.1); c.lineCap = 'round';
+      c.beginPath(); c.arc(r * 0.4, r * 0.05, r * 0.42, 0.1 * Math.PI, 0.6 * Math.PI); c.stroke();
+      c.beginPath(); c.arc(0, 0, r * 0.84, 0, 7); c.setLineDash([r * 0.18, r * 0.14]); c.stroke(); c.setLineDash([]);
+      circle(r * 0.62, r * 0.32, r * 0.1, '#e0242a');
     } else if (kind === 'harry' || kind === 'ron' || kind === 'hermione') {
       wizard(c, kind, r, circle, tri);
     } else {
@@ -325,6 +400,54 @@
       c.stroke(); c.restore();
       c.fillStyle = '#2a2018'; c.fillRect(fx - r * 0.7, fy - r * 0.2, r * 1.4, r * 0.28);
       eyes('#e8ff6a', 0.09, r * 0.04);
+    } else if (kind === 'pukki') {
+      circle(0, 0, r, '#f3c9a8');
+      eyes('#2a1e14', 0.11);
+      c.fillStyle = '#f4f4f4'; c.beginPath(); c.moveTo(-r * 0.92, r * 0.05); c.quadraticCurveTo(fx, r * 1.75, r * 0.92, r * 0.05);
+      c.quadraticCurveTo(fx, r * 0.55, -r * 0.92, r * 0.05); c.fill();
+      ell(fx - r * 0.18, fy + r * 0.3, r * 0.22, r * 0.1, '#f4f4f4'); ell(fx + r * 0.18, fy + r * 0.3, r * 0.22, r * 0.1, '#f4f4f4');
+      circle(fx, fy + r * 0.18, r * 0.15, '#e07a6a');
+      c.fillStyle = '#c8202f'; c.beginPath(); c.moveTo(-r * 0.95, -r * 0.4); c.quadraticCurveTo(0, -r * 1.7, r * 0.95, -r * 0.4); c.closePath(); c.fill();
+      tri([r * 0.1, -r * 1.05], [r * 0.6, -r * 0.85], [r * 1.25, -r * 0.35], '#c8202f');
+      circle(r * 1.25, -r * 0.3, r * 0.22, '#f4f4f4');
+      ell(0, -r * 0.42, r * 1.05, r * 0.2, '#f4f4f4');
+    } else if (kind === 'tonttu') {
+      [-1, 1].forEach(function (d) { circle(d * r * 0.95 - fx * 0.4, r * 0.08, r * 0.2, '#f3c9a8'); });
+      circle(0, 0, r, '#f3c9a8');
+      [-1, 1].forEach(function (d) { circle(fx + d * r * 0.5, fy + r * 0.25, r * 0.16, 'rgba(230,90,90,.5)'); });
+      eyes('#2a1e14', 0.11);
+      mouth('#9a4a3a');
+      tri([-r * 0.95, -r * 0.45], [r * 0.95, -r * 0.45], [r * 0.55, -r * 2.35], '#d42a2a');
+      circle(r * 0.55, -r * 2.35, r * 0.22, '#f4f4f4');
+      c.fillStyle = '#f4f4f4'; c.fillRect(-r * 1.0, -r * 0.6, r * 2.0, r * 0.22);
+    } else if (kind === 'poro') {
+      c.strokeStyle = '#d8c39a'; c.lineWidth = Math.max(1, r * 0.15); c.lineCap = 'round';
+      [-1, 1].forEach(function (d) {
+        c.beginPath(); c.moveTo(d * r * 0.4, -r * 0.75); c.lineTo(d * r * 0.85, -r * 1.85);
+        c.moveTo(d * r * 0.6, -r * 1.25); c.lineTo(d * r * 1.2, -r * 1.4); c.moveTo(d * r * 0.75, -r * 1.6); c.lineTo(d * r * 0.4, -r * 2.0); c.stroke();
+        c.fillStyle = '#6b4428'; c.beginPath(); c.ellipse(d * r * 1.0, -r * 0.35, r * 0.4, r * 0.17, d * 0.4, 0, 7); c.fill();
+      });
+      circle(0, 0, r, '#8a5a36');
+      ell(fx, fy + r * 0.4, r * 0.55, r * 0.42, '#9c6a42');
+      eyes('#1a120c', 0.12, -r * 0.08);
+      circle(fx, fy + r * 0.28, r * 0.24, '#e0242a');
+      if (r > 6) circle(fx + r * 0.07, fy + r * 0.21, r * 0.07, 'rgba(255,255,255,.7)');
+      mouth('#3a2414');
+    } else if (kind === 'lumiukko') {
+      circle(0, 0, r, '#f6f8fc');
+      eyes('#1a1a1a', 0.12);
+      tri([fx - r * 0.1, fy + r * 0.08], [fx + r * 0.1, fy + r * 0.08], [fx + r * 0.05, fy + r * 0.6], '#f07a1a');
+      [-0.3, -0.1, 0.1, 0.3].forEach(function (k) { circle(fx + r * k, fy + r * (0.62 - Math.abs(k) * 0.4), Math.max(0.6, r * 0.06), '#1a1a1a'); });
+      c.fillStyle = '#1a1a1a'; c.fillRect(-r * 1.05, -r * 0.85, r * 2.1, r * 0.2);
+      c.fillRect(-r * 0.65, -r * 1.9, r * 1.3, r * 1.1);
+      c.fillStyle = '#d42a2a'; c.fillRect(-r * 0.65, -r * 1.02, r * 1.3, r * 0.18);
+    } else if (kind === 'pipari') {
+      circle(0, 0, r, '#b8733a');
+      c.strokeStyle = '#ffffff'; c.lineWidth = Math.max(1, r * 0.09); c.lineCap = 'round';
+      c.beginPath(); c.arc(0, 0, r * 0.84, 0, 7); c.setLineDash([r * 0.18, r * 0.14]); c.stroke(); c.setLineDash([]);
+      eyes('#ffffff', 0.12);
+      mouth('#ffffff');
+      [-1, 1].forEach(function (d) { circle(fx + d * r * 0.55, fy + r * 0.25, r * 0.1, '#e0242a'); });
     } else if (kind === 'harry' || kind === 'ron' || kind === 'hermione') {
       var skin = { harry: '#f1c9a5', ron: '#f6d4bb', hermione: '#efc39e' }[kind];
       var hair = { harry: '#1d1712', ron: '#d4611c', hermione: '#6b3f1f' }[kind];
@@ -459,7 +582,9 @@
   // looks around, cheers, tilts its head and waves; a game with its own figure (Orava's squirrel)
   // has it hop. It stops when the picker closes.
   function preview() {
-    var pv = el('canvas', 'width:100%;height:150px;display:block;border-radius:12px;flex:none;background:linear-gradient(#2d4f86,#3f8a4c)');
+    // position:static: a game's own canvas{position:fixed} (Mäkihyppy, Voimistelu) must not lift it
+    // out of the picker, where it lay over the ready button (#473).
+    var pv = el('canvas', 'position:static;width:100%;height:150px;display:block;border-radius:12px;flex:none;background:linear-gradient(#2d4f86,#3f8a4c)');
     pv.id = 'ai-pelit-asut-esikatselu';
     var t0 = performance.now();
     function frame() {
@@ -487,14 +612,17 @@
     return pv;
   }
 
+  // A low sideways screen whose cards would not fit gets smaller ones (#473: the athletics' seven
+  // kits and four groups in the Christmas season).
+  var tight = false;
   function card(o, picked, grid) {
     var b = el('button', 'box-shadow:none;transform:none;text-shadow:none;margin:0;height:auto;width:auto;display:flex;flex-direction:column;align-items:center;gap:2px;border:3px solid ' + (picked ? '#ffd45c' : 'transparent') +
-      ';border-radius:12px;background:' + (o.halloween ? '#2b2140' : '#2a3358') + ';color:#fff;padding:4px 2px 6px;font:600 13px system-ui,sans-serif;touch-action:manipulation;min-width:0');
+      ';border-radius:12px;background:' + (o.halloween ? '#2b2140' : o.joulu ? '#1f4030' : '#2a3358') + ';color:#fff;padding:4px 2px 6px;font:600 13px system-ui,sans-serif;touch-action:manipulation;min-width:0');
     b.className = 'asu' + (picked ? ' valittu' : '');
     b.setAttribute('data-asu', o.id);
     // A low, wide screen gets smaller cards, so every group fits without scrolling.
-    var cw = innerHeight < 500 ? 52 : 72, ch = innerHeight < 500 ? 50 : (FIGURE ? 70 : 80);
-    var cv = el('canvas', 'width:' + cw + 'px;height:' + ch + 'px;display:block');
+    var cw = innerHeight < 500 ? (tight ? 44 : 52) : 72, ch = innerHeight < 500 ? (tight ? 38 : 50) : (FIGURE ? 70 : 80);
+    var cv = el('canvas', 'position:static;width:' + cw + 'px;height:' + ch + 'px;display:block');
     var dpr = Math.min(window.devicePixelRatio || 1, 3);
     cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
     var ctx = cv.getContext('2d');
@@ -518,9 +646,12 @@
 
   function fill(grid) {
     grid.textContent = '';
-    var now = current(), own = [], costumes = [], school = [];
-    outfits.forEach(function (o) { (o.halloween ? costumes : o.tylypahka ? school : own).push(o); });
-    var groups = season() ? [['🎃 Halloween', costumes], ['Tavalliset', own], ['⚡ Tylypahka', school]]
+    var now = current(), own = [], costumes = [], school = [], xmas = [];
+    outfits.forEach(function (o) { (o.halloween ? costumes : o.tylypahka ? school : o.joulu ? xmas : own).push(o); });
+    var joulu = ['🎄 Joulu', jouluSeason() ? xmas : []];
+    // 1–2 November are in both seasons: Halloween keeps its last two days first (#473).
+    var groups = season() ? [['🎃 Halloween', costumes], joulu, ['Tavalliset', own], ['⚡ Tylypahka', school]]
+      : jouluSeason() ? [joulu, ['Tavalliset', own], ['⚡ Tylypahka', school], ['🎃 Halloween', costumes]]
       : [['Tavalliset', own], ['⚡ Tylypahka', school], ['🎃 Halloween', costumes]];
     groups.forEach(function (g) {
       if (!g[1].length) return;
@@ -554,13 +685,18 @@
     top.appendChild(done);
     box.appendChild(top);
     if (season() && innerHeight >= 500) box.appendChild(el('div', 'color:#ffb35c;font-size:13px', 'Hyvää Halloweenia! Pukeudu kurpitsaksi, noidaksi tai haamuksi.'));
+    else if (jouluSeason() && innerHeight >= 500 && outfits.some(function (o) { return o.joulu; })) box.appendChild(el('div', 'color:#9fe0a8;font-size:13px', 'Hyvää joulua! Pukeudu joulupukiksi, tontuksi tai poroksi.'));
     var low = innerHeight < 500;
     if (!low && (FIGURE || drawFn)) box.appendChild(preview());
-    var grid = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(' + (low ? 58 : 82) + 'px,1fr));gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
+    tight = false;
+    function columns() { grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(' + (low ? (tight ? 50 : 58) : 82) + 'px,1fr))'; }
+    var grid = el('div', 'display:grid;gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
+    columns();
     box.appendChild(grid);
     fill(grid);
     panel.onclick = function (e) { if (e.target === panel) close(); };
     document.body.appendChild(panel);
+    if (low && grid.scrollHeight > grid.clientHeight + 1) { tight = true; columns(); fill(grid); }
   }
 
   // Turning the phone with the picker open lays it out again for the new shape.
@@ -576,6 +712,8 @@
       opts = opts || {};
       outfits = (opts.outfits || []).slice();
       if (opts.halloween !== false) outfits = outfits.concat(HALLOWEEN);
+      // Orava v6's squirrel draws costume heads only for Halloween ones, so it gets none (#473, Eero's choice).
+      if (opts.joulu === true || (opts.joulu !== false && GAME !== 'orava')) outfits = outfits.concat(JOULU);
       if (opts.tylypahka !== false) outfits = outfits.concat(TYLYPAHKA);
       drawFn = opts.draw || null;
       changeFn = opts.change || null;
@@ -589,6 +727,8 @@
     close: close,
     isOpen: function () { return !!panel; },
     halloween: HALLOWEEN,
+    joulu: JOULU,
+    jouluSeason: jouluSeason,
     yleisurheilu: YLEISURHEILU,
     tylypahka: TYLYPAHKA,
     season: season,
