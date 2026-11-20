@@ -5,6 +5,7 @@ draws its own athlete in kit(fit, col), and sends the outfit to the meet with `f
 """
 
 import json
+from datetime import date
 
 from conftest import ROOT, turn
 
@@ -30,8 +31,9 @@ def picking_saves_for_every_event(site, context, url, slug):
     page = open_game(site, context, url)
     assert page.text_content("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    # The athletics set (seven kits), the six Halloween costumes and the three Tylypahka ones (#321).
-    assert page.locator("#ai-pelit-asut .asu").count() == 16
+    # The athletics set (seven kits), the six Halloween costumes and the three Tylypahka ones (#321),
+    # and the five Christmas ones in November and December (#473).
+    assert page.locator("#ai-pelit-asut .asu").count() == (21 if date.today().month in (11, 12) else 16)
     page.click("[data-asu=noita]")
     page.click("#ai-pelit-asut-valmis")
     assert page.locator("#ai-pelit-asut").count() == 0

@@ -208,7 +208,9 @@ high-score lists (#25), then play counts (#26).
   `AiPelitOutfits.setup({ outfits, draw, change })` with its own everyday outfits (the first is the
   default) and a "👕 Asu" menu button that calls `AiPelitOutfits.open()`. The six Halloween
   costumes are added by the library, always available, first in the picker around Halloween;
-  `AiPelitOutfits.head()` draws their heads. An outfit is a palette (`skin`, `hair`, `top`,
+  `AiPelitOutfits.head()` draws their heads. The five Christmas costumes (#473) are in the picker
+  only in November and December, first from 3 November, and not in Orava (Eero's choice); a saved
+  one waits out the rest of the year while the game's default is worn. An outfit is a palette (`skin`, `hair`, `top`,
   `bottom`, `cape`, `head`) the game's own drawing reads. The choice is saved per game
   (`ai-pelit:_asut:<slug>`); in a room, send `current().id` with the player and draw others with
   `get(id)`. Trampoliini v6 is the model. An athletics event adds

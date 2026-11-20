@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from datetime import date
 
 from conftest import ROOT
 
@@ -32,7 +33,8 @@ def test_picking_saves_it_for_every_event_and_the_runner_wears_it(site, browser)
     page = open_game(site, browser)
     assert page.inner_text("#asu") == "👕 Asu: Perus"
     page.click("#asu")
-    assert page.locator("#ai-pelit-asut [data-asu]").count() == 16  # 7 kits, 6 Halloween, 3 Tylypahka (#321)
+    # 7 kits, 6 Halloween, 3 Tylypahka (#321), and 5 Christmas costumes in November and December (#473)
+    assert page.locator("#ai-pelit-asut [data-asu]").count() == (21 if date.today().month in (11, 12) else 16)
     page.click("[data-asu=punainen]")
     page.click("#ai-pelit-asut-valmis")
     assert page.evaluate(f"localStorage.getItem('{SHARED}')") == '"punainen"'

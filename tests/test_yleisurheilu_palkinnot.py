@@ -1,7 +1,7 @@
 """The podium of yleisurheilu-10 and -11 in every athletics event, for every outfit (#469).
 
 Every event's newest version draws its medal ceremony with the shared front-facing figure. Each
-outfit (the athletics kits, the Halloween costumes and the Tylypahka robes) stands on it, through
+outfit (the athletics kits, the Halloween and Christmas costumes and the Tylypahka robes) stands on it, through
 the hops, the medals and the cheer, upright and sideways, with no page error.
 """
 
@@ -53,8 +53,8 @@ def test_every_outfit_stands_on_the_podium(site, context, event):
     page.wait_for_function("typeof K !== 'undefined' && K.drawPodium && window.AiPelitOutfits", timeout=5000)
     for size in ([360, 740], [740, 360]):
         out = page.evaluate(DRAW, size)
-        assert len(out["ids"]) == 16, out["ids"]
-        assert out["top"] == 16, "an outfit never stood on the podium"
+        assert len(out["ids"]) == 21, out["ids"]  # Christmas (#473) is in the list all year
+        assert out["top"] == 21, "an outfit never stood on the podium"
     assert errors == []
 
 

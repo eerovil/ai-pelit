@@ -34,7 +34,7 @@ def test_the_costumes_follow_the_games_own_outfits_and_the_first_is_the_default(
     page, errors = lib_page
     ids = page.evaluate("AiPelitOutfits.list().map(o => o.id)")
     assert ids == ["perus", "sini", "kurpitsa", "noita", "haamu", "luuranko", "vampyyri", "muumio",
-                   "harry", "ron", "hermione"]
+                   "joulupukki", "tonttu", "poro", "lumiukko", "piparkakku", "harry", "ron", "hermione"]
     assert page.evaluate("AiPelitOutfits.current().id") == "perus"
     assert page.evaluate("AiPelitOutfits.get('noita').halloween") is True
     assert page.evaluate("AiPelitOutfits.get('ei-ole').id") == "perus"   # a friend's unknown outfit
@@ -53,9 +53,10 @@ def test_picking_saves_per_game_and_tells_the_game(lib_page):
     assert errors == []
 
 
-@pytest.mark.parametrize("day,first", [("2026-10-31T12:00:00", "🎃 Halloween"), ("2026-11-02T12:00:00", "🎃 Halloween"),
-                                       ("2026-06-15T12:00:00", "Tavalliset"), ("2026-11-03T12:00:00", "Tavalliset")])
-def test_costumes_come_first_around_halloween_and_stay_all_year(site, browser, day, first):
+@pytest.mark.parametrize("day,first,cards", [("2026-10-31T12:00:00", "🎃 Halloween", 11), ("2026-11-02T12:00:00", "🎃 Halloween", 16),
+                                             ("2026-06-15T12:00:00", "Tavalliset", 11), ("2026-11-03T12:00:00", "🎄 Joulu", 16),
+                                             ("2026-12-24T12:00:00", "🎄 Joulu", 16), ("2027-01-01T12:00:00", "Tavalliset", 11)])
+def test_costumes_come_first_around_halloween_and_stay_all_year(site, browser, day, first, cards):
     site.build()
     (site.root / "koe").mkdir(exist_ok=True)
     (site.root / "koe" / "index.html").write_text(PAGE)
@@ -66,11 +67,13 @@ def test_costumes_come_first_around_halloween_and_stay_all_year(site, browser, d
     page.evaluate("AiPelitOutfits.open()")
     headings = page.locator("#ai-pelit-asut .asu").first.evaluate("b => b.previousElementSibling.textContent")
     assert headings == first
-    assert page.locator("#ai-pelit-asut .asu").count() == 11
+    assert page.locator("#ai-pelit-asut .asu").count() == cards
     ctx.close()
 
 
 @pytest.mark.parametrize("day,order", [("2026-10-31T12:00:00", ["🎃 Halloween", "Tavalliset", "⚡ Tylypahka"]),
+                                       ("2026-11-01T12:00:00", ["🎃 Halloween", "🎄 Joulu", "Tavalliset", "⚡ Tylypahka"]),
+                                       ("2026-12-01T12:00:00", ["🎄 Joulu", "Tavalliset", "⚡ Tylypahka", "🎃 Halloween"]),
                                        ("2026-06-15T12:00:00", ["Tavalliset", "⚡ Tylypahka", "🎃 Halloween"])])
 def test_harry_ron_and_hermione_have_a_group_of_their_own(site, browser, day, order):
     # #321: the Tylypahka costumes follow the game's own outfits all year, and every game gets them.
@@ -179,7 +182,7 @@ def test_a_shared_choice_is_one_for_the_whole_group(site, browser):
     site.build()
     page = shared_page(site, browser, "laji-a", {"ai-pelit:_asut:laji-a": "kulta"})
     assert page.evaluate("AiPelitOutfits.current().id") == "kulta"
-    assert page.evaluate("AiPelitOutfits.list().filter(o => !o.halloween && !o.tylypahka).map(o => o.id)") \
+    assert page.evaluate("AiPelitOutfits.list().filter(o => !o.halloween && !o.tylypahka && !o.joulu).map(o => o.id)") \
         == ["perus", "suomi", "musta", "punainen", "vihrea", "kulta", "neon"]
     page.evaluate("AiPelitOutfits.open()")
     page.click("[data-asu=noita]")
@@ -233,6 +236,7 @@ def test_the_athletics_picker_shows_the_shared_figure_alive(site, browser):
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
+    page.clock.set_fixed_time("2026-06-15T12:00:00")
     page.goto(site.url + "laji-f/")
     page.evaluate("AiPelitOutfits.open()")
     assert page.locator("#ai-pelit-asut .asu").count() == 16
@@ -266,3 +270,89 @@ def test_a_game_with_its_own_figure_keeps_it_in_the_picker(lib_page):
     page.wait_for_timeout(300)
     assert page.evaluate(INKED, "#ai-pelit-asut-esikatselu") > 1000
     assert errors == []
+
+
+def christmas_page(site, browser, day, game="koe", size=(360, 740), store=None):
+    site.build()
+    (site.root / game).mkdir(exist_ok=True)
+    (site.root / game / "index.html").write_text(PAGE.replace('data-game="koe"', f'data-game="{game}"'))
+    ctx = browser.new_context(viewport={"width": size[0], "height": size[1]}, is_mobile=True, has_touch=True)
+    for k, v in (store or {}).items():
+        ctx.add_init_script(f"localStorage.setItem('{k}', '\"{v}\"')")
+    page = ctx.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.clock.set_fixed_time(day)
+    page.goto(site.url + game + "/")
+    return page
+
+
+def test_christmas_costumes_are_picked_in_december_and_wait_over_the_summer(site, browser):
+    # #473: the five Christmas costumes, in the picker in November and December only.
+    page = christmas_page(site, browser, "2026-12-10T12:00:00")
+    page.evaluate("AiPelitOutfits.open()")
+    assert page.inner_text("#ai-pelit-asut").count("Hyvää joulua!") == 1
+    xmas = page.evaluate("AiPelitOutfits.list().filter(o => o.joulu).map(o => [o.id, o.name, o.head])")
+    assert xmas == [["joulupukki", "Joulupukki", "pukki"], ["tonttu", "Tonttu", "tonttu"], ["poro", "Poro", "poro"],
+                    ["lumiukko", "Lumiukko", "lumiukko"], ["piparkakku", "Piparkakku", "pipari"]]
+    page.click("[data-asu=joulupukki]")
+    assert page.evaluate("AiPelitOutfits.current().id") == "joulupukki"
+    assert page.errors == []
+    page.context.close()
+    # In January the game's default is worn, the choice is kept, and a friend's Poro is still found.
+    page = christmas_page(site, browser, "2027-01-02T12:00:00", store={"ai-pelit:_asut:koe": "joulupukki"})
+    assert page.evaluate("AiPelitOutfits.current().id") == "perus"
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:koe')") == '"joulupukki"'
+    assert page.evaluate("AiPelitOutfits.get('poro').head") == "poro"
+    page.evaluate("AiPelitOutfits.open()")
+    assert page.locator("[data-asu=joulupukki]").count() == 0
+    assert "joulua" not in page.inner_text("#ai-pelit-asut")
+    page.context.close()
+    # Next November it is back.
+    page = christmas_page(site, browser, "2027-11-05T12:00:00", store={"ai-pelit:_asut:koe": "joulupukki"})
+    assert page.evaluate("AiPelitOutfits.current().id") == "joulupukki"
+    page.context.close()
+
+
+def test_orava_gets_no_christmas_costumes(site, browser):
+    # #473, Eero's choice: Orava v6's squirrel draws no costume head for them.
+    page = christmas_page(site, browser, "2026-12-24T12:00:00", game="orava")
+    assert page.evaluate("AiPelitOutfits.list().some(o => o.joulu)") is False
+    page.evaluate("AiPelitOutfits.open()")
+    assert "🎄 Joulu" not in page.inner_text("#ai-pelit-asut")
+    page.context.close()
+
+
+def test_the_christmas_heads_draw_from_the_side_and_the_front(lib_page):
+    page, errors = lib_page
+    seen = page.evaluate("""() => ['pukki', 'tonttu', 'poro', 'lumiukko', 'pipari'].map(k => [1, 'front'].map(face => {
+      const c = document.createElement('canvas'); c.width = c.height = 120;
+      const g = c.getContext('2d'); AiPelitOutfits.head(g, k, 60, 70, 20, face);
+      const d = g.getImageData(0, 0, 120, 120).data, cols = new Set();
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] === 255) cols.add('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join(''));
+      return [...cols];
+    }))""")
+    look = {"pukki": ["#c8202f", "#f4f4f4"], "tonttu": ["#d42a2a", "#f4f4f4"], "poro": ["#8a5a36", "#e0242a", "#d8c39a"],
+            "lumiukko": ["#f6f8fc", "#f07a1a", "#1a1a1a"], "pipari": ["#b8733a", "#ffffff"]}
+    for (kind, cols), faces in zip(look.items(), seen):
+        for face in faces:
+            assert all(c in face for c in cols), (kind, cols, face)
+    # The whole front figure too, as the athletics podium draws it.
+    assert page.evaluate("""() => { const c = document.createElement('canvas'); c.width = 80; c.height = 120;
+      const g = c.getContext('2d'); AiPelitOutfits.joulu.forEach(o => AiPelitOutfits.figure(g, o, 40, 115, 100, { up: 1 })); return true; }""")
+    assert errors == []
+
+
+@pytest.mark.parametrize("size", [(360, 640), (740, 360), (640, 360)])
+def test_the_christmas_cards_fit_on_the_screen(site, browser, size):
+    page = christmas_page(site, browser, "2026-12-10T12:00:00", size=size)
+    page.evaluate("AiPelitOutfits.open()")
+    assert page.locator("#ai-pelit-asut .asu").count() == 16
+    for k in ["joulupukki", "piparkakku", "hermione", "muumio"]:
+        # Upright the grid scrolls inside the picker, as before; sideways every card fits at once.
+        if size[1] > size[0]:
+            page.locator(f"[data-asu={k}]").scroll_into_view_if_needed()
+        box = page.locator(f"[data-asu={k}]").bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= size[0] and box["y"] + box["height"] <= size[1], (k, box)
+    assert page.errors == []
+    page.context.close()
