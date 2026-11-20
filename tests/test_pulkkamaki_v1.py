@@ -107,7 +107,7 @@ def test_the_view_choice_is_saved(site, context):
     assert page.errors == []
 
 
-@pytest.mark.parametrize("width,height", [(360, 640), (740, 360)])
+@pytest.mark.parametrize("width,height", [(360, 640), (390, 844), (740, 360)])
 def test_menu_and_end_fit_without_scrolling(site, context, width, height):
     page = open_game(site, context, width, height)
     for b in page.locator("#menu button").all():
@@ -164,4 +164,46 @@ def test_the_record_and_opened_hills_survive_a_reload(site, context):
     assert [hills.nth(i).is_disabled() for i in range(3)] == [False, False, True]
     assert "3100" in hills.nth(0).inner_text()
     assert page.evaluate("hillN") == 2
+    assert page.errors == []
+
+
+# Each hill run through by the computer's best sledder and by a sled nobody touches, in game time.
+RUNS = """() => [1, 2, 3].map(n => {
+  const h = buildHill(n), out = [];
+  for (const brain of [cpuBrain(CPU_SKILL[2], 11), null]) {
+    const sl = newSled('t', 't'); placeSled(h, sl, 0); sl.cpu = brain;
+    let t = 0;
+    for (; t < 150 && !sl.fin; t += DT) { if (brain) cpuDrive(h, sl, DT); step(h, sl, DT); }
+    out.push([sl.fin, Math.round(t), sl.points]);
+  }
+  return out;
+})"""
+
+
+def test_every_hill_can_be_finished_and_doing_nothing_scores_little(site, context):
+    page = open_game(site, context)
+    runs = page.evaluate(RUNS)
+    opens = page.evaluate("HILLS.map(h => h.open)")
+    for n, (best, idle) in enumerate(runs, 1):
+        assert best[0], (n, runs)   # a good run reaches the bottom
+        assert 30 <= best[1] <= 120, (n, runs)   # about a minute down
+        assert idle[2] < best[2] / 4, (n, runs)
+        if n < 3:
+            assert best[2] >= opens[n], (n, runs)   # the next hill can be opened
+    assert page.errors == []
+
+
+def test_a_second_run_after_a_finished_one_starts_fresh(site, context):
+    page = open_game(site, context)
+    page.evaluate("() => { AiPelitScores.submit = () => {}; }")
+    go(page)
+    first = page.evaluate(FINISH)
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    page.click("#again")
+    page.wait_for_function("mode === 'run'", timeout=8000)
+    assert page.evaluate("[me.points, me.fin, me.streak, me.gifts.length, me.s < 10]") == [0, False, 0, 0, True]
+    assert page.evaluate("sleds.every(s => !s.fin && s.points === 0)")
+    page.evaluate(FINISH)
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    assert page.evaluate("+localStorage.getItem('ai-pelit:pulkkamaki:ennatys-1')") >= first
     assert page.errors == []
