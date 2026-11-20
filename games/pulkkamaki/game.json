@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: kolme mäkeä, kääntyvä pulkka, voltit, piruetit ja Teräsmies ilmassa, lahjapaketit ja moninpeli.",
       "request": "Keksitään uusi jouluaiheinen peli joka olisi moninpeli",
       "issue": "eerovil/ai-pelit#475"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-21",
+      "note": "Kesken jääneen otteen pisteet säilyvät, kun puhelin palaa huoneeseen tai tietokone ottaa pulkan, eikä pulkka kaadu.",
+      "request": "Pulkkamäki v1:n katselmoinnin korjaukset: ote irtoaa ja pisteet säilyvät, kun pulkka vaihtaa ohjaajaa ilmassa.",
+      "issue": "eerovil/ai-pelit#475"
     }
   ]
 }

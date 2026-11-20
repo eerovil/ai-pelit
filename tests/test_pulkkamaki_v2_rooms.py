@@ -1,4 +1,4 @@
-"""Pulkkamäki v1 with friends (#475): everyone down the same hill at once, the host keeps the end."""
+"""Pulkkamäki v2 with friends (#475): everyone down the same hill at once, the host keeps the end."""
 import json
 import shutil
 
@@ -7,7 +7,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/pulkkamaki/v1/"
+URL = "games/pulkkamaki/v2/"
 # My sled straight to just above the finish line, so the run ends in seconds.
 NEAR_END = "(() => { me.s = hill.len - 4; me.x = centreX(hill, me.s); me.y = groundAt(hill, me.s, me.x); me.v = 12; me.yaw = 0; me.air = false; })()"
 # The host's computer sledders the same way.
@@ -241,3 +241,41 @@ def test_three_phones_share_one_result_and_the_next_round_starts_fresh(sledders)
         assert p.evaluate("net.sleds.every(r => !r.sl.fin && r.sl.points === 0 && r.own === 0)")
     for p in pages:
         assert p.errors == []
+
+
+# A grab held high in the air, long enough to count, with a flip already done in the same jump.
+IN_A_GRAB = "(() => { me.s = 120; me.x = centreX(hill, 120); me.y = groundAt(hill, 120, me.x) + 40; me.vy = 8; me.air = true; me.jump = [{ type: 'front', pts: 300 }]; me.grab = true; me.grabT = 0.6; })()"
+
+
+def test_a_phone_reloaded_in_the_middle_of_a_grab_keeps_its_points_and_lands(sledders):
+    # v2 (#475): the finger holding the grab is gone with the old page, so the grab is let go when
+    # the phone comes back, and counts; before, the sled could never let go and fell on landing.
+    host, guest = room(sledders)
+    start([host, guest])
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    guest.evaluate(IN_A_GRAB)
+    host.wait_for_function(f"recOf({gid}).sl.grab && recOf({gid}).sl.air")
+    guest.reload()
+    guest.wait_for_function("mode === 'run' && me", timeout=15000)
+    assert guest.evaluate("!me.grab && me.jump.map(j => j.type).join()") == "front,grab"
+    guest.wait_for_function("!me.air", timeout=15000)
+    assert guest.evaluate("[me.fallT, me.points > 0]") == [0, True]
+    assert host.errors == guest.errors == []
+
+
+def test_the_computer_taking_a_sled_mid_grab_lets_go_and_keeps_its_points(sledders):
+    # v2 (#475): the computer never grabs nor lets go, so a grab it took over always fell.
+    host, guest = room(sledders)
+    start([host, guest])
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    guest.evaluate(IN_A_GRAB)
+    host.wait_for_function(f"recOf({gid}).sl.grab && recOf({gid}).sl.air")
+    sledders.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1", timeout=10000)
+    host.click("#aipr-goOn")
+    host.wait_for_function(f"recOf({gid}).drive && !AiPelitRooms.paused")
+    assert host.evaluate(f"(sl => !sl.grab && sl.jump.map(j => j.type).slice(0, 2).join())(recOf({gid}).sl)") == "front,grab"
+    host.wait_for_function(f"!recOf({gid}).sl.air", timeout=15000)
+    assert host.evaluate(f"(recOf({gid}).sl.pop || {{}}).text") != "Päästä irti ennen alastuloa!"
+    assert host.evaluate(f"recOf({gid}).sl.points") > 0
+    assert host.errors == guest.errors == []

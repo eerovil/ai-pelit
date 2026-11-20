@@ -1,5 +1,5 @@
 'use strict';
-// Pulkkamäki v1: sledding with friends, everyone down the same hill at once (#475).
+// Pulkkamäki v2: sledding with friends, everyone down the same hill at once (#475).
 //
 // Every phone slides its own sled on its own clock and sends it to the host ten times a second.
 // The host slides the computer's sledders, keeps the run's clock and end (everyone down, or LATE
@@ -110,7 +110,7 @@ function guestState(m) {
     if (rec.kind !== 'me' && rec.o !== k.o) { rec.o = k.o; rec.sl.outfit = outfitOf(k.o); }
     if (rec.kind === 'me') {
       // The host has had my sled (the computer drove it, or I was away): carry on from its state.
-      if (fresh || k.w > rec.own) { rec.own = k.w; unpack(rec.sl, k.a); }
+      if (fresh || k.w > rec.own) { rec.own = k.w; unpack(rec.sl, k.a); handOver(rec.sl); }
       if (k.a[12]) rec.hostFin = true;
     } else unpack(rec.sl, k.a);
   });
@@ -262,7 +262,7 @@ if (RM) {
     if (net && !net.res) {
       const rec = recOf(id);
       // The phone carries on from its last state the host heard (or the computer's, if it drove).
-      if (rec && rec.kind === 'net') { if (rec.lastA && !rec.drive) unpack(rec.sl, rec.lastA); rec.own++; }
+      if (rec && rec.kind === 'net') { if (rec.lastA && !rec.drive) unpack(rec.sl, rec.lastA); handOver(rec.sl); rec.own++; }
       RM.send(hostState(), id);
     }
     // A phone back after the end it already confirmed (a reload): the library does not send it
@@ -273,13 +273,14 @@ if (RM) {
     if (!net || net.res) return;
     for (const rec of net.sleds) if (ids.includes(rec.id) && rec.kind === 'net' && !rec.drive && !rec.sl.fin) {
       rec.drive = true; rec.cpu = true; rec.own++; rec.lastA = null;   // the phone's last state is past
+      handOver(rec.sl);
       rec.sl.cpu = cpuBrain(CPU_SKILL[1], rec.sl.s * 7 + 3);
     }
   });
   RM.on('back', id => {
     const rec = recOf(id);
     if (!rec || !rec.drive) return;
-    rec.drive = false; rec.own++; rec.sl.cpu = null;
+    rec.drive = false; rec.own++; rec.sl.cpu = null; handOver(rec.sl);
   });
   RM.on('lobby', toSolo);
   RM.on('leave', () => { toSolo(); });

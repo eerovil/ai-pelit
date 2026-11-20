@@ -1,11 +1,11 @@
-"""Pulkkamäki v1 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
+"""Pulkkamäki v2 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
 import shutil
 
 import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v1/"
+URL = "games/pulkkamaki/v2/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
@@ -212,11 +212,31 @@ def test_a_second_run_after_a_finished_one_starts_fresh(site, context):
 def test_the_score_chip_opens_the_chosen_hills_list_right_away(site, context):
     asked = []
     context.route("**/api/scores?*", lambda route: (asked.append(route.request.url), route.fulfill(
-        status=200, content_type="application/json", body='{"scores": [], "me": null}')))
+        status=200, content_type="application/json", body='{"rows": [], "mine": null}')))
     page = open_game(site, context)
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_function("document.getElementById('ai-pelit-tulokset')")
-    assert "Kotimäki" in page.locator("#ai-pelit-tulokset").inner_text()
+    box = page.locator("#ai-pelit-tulokset")
+    box.get_by_text("Listalla ei ole vielä ketään.").wait_for(timeout=5000)
+    assert "Kotimäki" in box.inner_text()
+    assert "Ei verkkoyhteyttä" not in box.inner_text()
     assert any("board=maki-1" in u for u in asked), asked
     assert not any("board=main" in u for u in asked), asked
+    assert page.errors == []
+
+
+def test_a_handover_lets_go_of_a_grab_and_counts_it_only_when_long_enough(site, context):
+    # v2 (#475): one rule for a sled changing hands in the air, safe to repeat.
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("mode === 'run'", timeout=8000)
+    got = page.evaluate("""() => {
+      const air = t => { me.air = true; me.fallT = 0; me.jump = [{ type: 'front', pts: 300 }]; me.grab = true; me.grabT = t; };
+      // Then it lands: a grab still held would be a fall that loses the jump's points.
+      const landed = () => { const p0 = me.points; land(hill, me); return [me.fallT, me.points > p0]; };
+      air(0.1); handOver(me); const short = [me.grab, me.grabT, me.jump.map(j => j.type).join(), ...landed()];
+      air(0.6); handOver(me); handOver(me); const long = [me.grab, me.grabT, me.jump.map(j => j.type).join(), ...landed()];
+      return [short, long];
+    }""")
+    assert got == [[False, 0, "front", 0, True], [False, 0, "front,grab", 0, True]]
     assert page.errors == []
