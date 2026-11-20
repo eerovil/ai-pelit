@@ -49,6 +49,7 @@
   <div class="col">
     <div id="hills" class="col"></div>
     <button id="go" class="big">Laske!</button>
+    <button id="friends">👥 Pelaa kavereiden kanssa</button>
     <div class="row"><button id="view">📷 Silmistä</button><button id="asu">👕 Asu</button></div>
   </div>
 </div>
@@ -64,11 +65,13 @@
     <button id="toMenu">Valikkoon</button>
   </div>
 </div>
+<script src="../../../rooms.js" data-game="pulkkamaki" data-min="2" data-max="6"></script>
 <script src="../../../outfits.js" data-game="pulkkamaki"></script>
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="world.js"></script>
 <script src="draw3d.js"></script>
 <script src="ui.js"></script>
+<script src="net.js"></script>
 <script type="module">
 import('../../../lib/three-r187/three.module.js').then(m => {
   try { init3d(m); } catch (e) { no3d = true; }

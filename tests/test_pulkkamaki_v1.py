@@ -1,0 +1,135 @@
+"""Pulkkamäki v1 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
+import shutil
+
+import pytest
+
+from conftest import ROOT, turn
+
+URL = "games/pulkkamaki/v1/"
+# A touch on the play area, as a finger makes it.
+TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
+  { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
+# The rest of my run at once, driven by the computer's best sledder, then the end screen.
+FINISH = """() => {
+  me.cpu = cpuBrain(CPU_SKILL[2], 7);
+  for (let i = 0; i < 120 * 240 && !me.fin; i++) { cpuDrive(hill, me, DT); step(hill, me, DT); }
+  me.cpu = null; endT = 0.05;
+  return me.points;
+}"""
+
+
+def open_game(site, context, width=360, height=740):
+    if not (site.games / "pulkkamaki").exists():
+        shutil.copytree(ROOT / "games" / "pulkkamaki", site.games / "pulkkamaki")
+        site.build()
+    page = context.new_page()
+    page.set_viewport_size({"width": width, "height": height})
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    return page
+
+
+def go(page):
+    page.click("#go")
+    page.wait_for_function("mode === 'run'", timeout=8000)
+
+
+def test_the_menu_opens_the_first_hill_only(site, context):
+    page = open_game(site, context)
+    assert page.evaluate("!!V3")
+    hills = page.locator("#hills button")
+    assert hills.count() == 3
+    assert [hills.nth(i).is_disabled() for i in range(3)] == [False, True, True]
+    assert "🔒" in hills.nth(1).inner_text()
+    assert page.locator("#friends").is_visible()
+    assert page.errors == []
+
+
+def test_the_sled_keeps_its_heading_when_the_finger_lifts(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate(TOUCH, ["pointerdown", 150, 500])
+    page.evaluate(TOUCH, ["pointermove", 260, 500])
+    page.wait_for_timeout(700)
+    held = page.evaluate("me.yaw")
+    assert held > 0.4
+    page.evaluate(TOUCH, ["pointerup", 260, 500])
+    page.wait_for_timeout(600)
+    # It is not turned back down the hill by itself (Eero's choice).
+    assert page.evaluate("me.yaw") == pytest.approx(held, abs=0.15)
+    assert page.errors == []
+
+
+def test_a_swipe_in_the_air_is_a_flip_that_scores(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("(() => { const k = hill.kicks[0]; me.s = k.s - 25; me.x = k.x; me.y = groundAt(hill, me.s, me.x); me.v = 13; me.yaw = 0; })()")
+    page.wait_for_function("me.air", timeout=6000)
+    page.evaluate(TOUCH, ["pointerdown", 180, 500])
+    page.evaluate(TOUCH, ["pointermove", 180, 430])
+    page.evaluate(TOUCH, ["pointerup", 180, 430])
+    assert page.evaluate("me.trick && me.trick.type") == "front"
+    page.wait_for_function("!me.air && me.pop", timeout=6000)
+    assert page.evaluate("me.pop.text").startswith("Etuvoltti")
+    assert page.evaluate("me.points") >= 300
+    assert page.errors == []
+
+
+def test_a_whole_run_saves_the_record_and_can_open_the_next_hill(site, context):
+    page = open_game(site, context)
+    page.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
+    go(page)
+    pts = page.evaluate(FINISH)
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    assert page.locator("#end").is_visible()
+    assert page.locator("#endPts").inner_text() == f"{pts} p"
+    assert page.locator("#endList li").count() == 4
+    assert page.evaluate("+localStorage.getItem('ai-pelit:pulkkamaki:ennatys-1')") == pts
+    assert page.evaluate("sent") == [pts]
+    opened = pts >= page.evaluate("HILLS[1].open")
+    assert page.evaluate("+localStorage.getItem('ai-pelit:pulkkamaki:auki')") == (2 if opened else 0)
+    assert page.locator("#toMenu").is_visible()
+    page.click("#toMenu")
+    assert page.locator("#hills button").nth(1).is_disabled() == (not opened)
+    assert page.errors == []
+
+
+def test_the_view_choice_is_saved(site, context):
+    page = open_game(site, context)
+    assert page.locator("#view").inner_text() == "📷 Silmistä"
+    page.click("#view")
+    assert page.locator("#view").inner_text() == "📷 Takaa"
+    page.reload()
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    assert page.evaluate("V3.view") == "back"
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("width,height", [(360, 640), (740, 360)])
+def test_menu_and_end_fit_without_scrolling(site, context, width, height):
+    page = open_game(site, context, width, height)
+    for b in page.locator("#menu button").all():
+        box = b.bounding_box()
+        assert box["y"] >= 0 and box["y"] + box["height"] <= height, b.inner_text()
+    go(page)
+    page.evaluate(FINISH)
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    for b in page.locator("#end button").all():
+        box = b.bounding_box()
+        assert box["y"] >= 0 and box["y"] + box["height"] <= height, b.inner_text()
+    assert page.errors == []
+
+
+def test_turning_the_phone_keeps_the_run(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_timeout(500)
+    s = page.evaluate("me.s")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_timeout(500)
+    assert page.evaluate("mode") == "run"
+    assert page.evaluate("me.s") > s
+    assert page.evaluate("LAND")
+    assert page.errors == []

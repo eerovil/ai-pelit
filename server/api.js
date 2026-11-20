@@ -80,6 +80,7 @@ export const GAMES = {
   vuoristorata: { order: 'high', boards: /^(elamys|taso)-[1-9][0-9]{0,2}$/, first: 'taso-1' }, // fastest times in v1-v4 and v6+; v5 thrill points stay on 'elamys-N'
   pilkki: { order: 'high', boards: /^main$/ }, // biggest catch in a five-minute ice-fishing contest, grams
   marjakori: { order: 'high', boards: /^main$/ }, // sum of each level's best score
+  pulkkamaki: { order: 'high', boards: /^maki-[1-3]$/, first: 'maki-1' }, // most points in one run down a hill (#475)
 };
 
 const ID = /^[a-f0-9]{32}$/;

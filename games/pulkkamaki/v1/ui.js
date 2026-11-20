@@ -104,6 +104,7 @@ function onMyEvent(e, pts) {
 // ---- The run ----
 let mode = 'menu', hill = buildHill(hillN), me = null, sleds = [], countT = 0, endT = 0, runT = 0;
 let result = null;
+let net = null;   // the run with friends (net.js), null alone
 function soloRun() {
   hill = buildHill(hillN);
   me = newSled('me', 'Sinä', { outfit, onEvent: onMyEvent });
@@ -135,17 +136,21 @@ function soloEnd() {
     for (let t = 0; !sl.fin && t < 240; t += DT) { cpuDrive(hill, sl, DT); step(hill, sl, DT); }
   }
   const rows = sleds.map(sl => ({ id: sl.id, name: sl.name, points: sl.points, me: sl === me })).sort((a, b) => b.points - a.points);
-  const pts = me.points, n = hillN, was = best(n);
   // Saved at once, alone (design, #475).
+  result = { rows, pts: me.points, ...saveRun(hillN, me.points) };
+  showEnd();
+}
+// A run's points on hill n: the record, the next hill opened, the high-score list.
+function saveRun(n, pts) {
+  const was = best(n);
   if (pts > was) save('ennatys-' + n, pts);
   let opened = 0;
   if (n < 3 && n === open && pts >= HILLS[n].open) { open = n + 1; save('auki', open); opened = n + 1; }
-  if (pts > 0 && window.AiPelitScores) { setBoard(); AiPelitScores.submit(pts); }
+  if (pts > 0 && window.AiPelitScores) { setBoard(n); AiPelitScores.submit(pts); }
   if (tutorial && pts >= 300) { tutorial = false; save('osattu', true); }
-  result = { rows, pts, record: pts > was, was, opened };
-  showEnd();
+  return { record: pts > was, was, opened };
 }
-function setBoard() { if (window.AiPelitScores) AiPelitScores.board('maki-' + hillN, HILLS[hillN - 1].name); }
+function setBoard(n) { n = n || hillN; if (window.AiPelitScores) AiPelitScores.board('maki-' + n, HILLS[n - 1].name); }
 
 // ---- The finger ----
 // On the snow: how far the finger has moved sideways from where it touched down steers the sled.
@@ -232,14 +237,18 @@ function showEnd() {
   hideAll(); $('end').hidden = false;
   const r = result;
   $('endPts').textContent = r.pts + ' p';
-  $('endNote').textContent = r.record ? (r.was ? 'Uusi ennätys!' : 'Ensimmäinen lasku tällä mäellä!') : 'Ennätys ' + r.was + ' p';
+  $('endNote').textContent = r.helped ? 'Tietokone laski puolestasi, tulos ei jää talteen'
+    : r.net && !r.fin ? 'Aika loppui ennen maalia' + (r.record ? ' · uusi ennätys!' : '')
+    : r.record ? (r.was ? 'Uusi ennätys!' : 'Ensimmäinen lasku tällä mäellä!') : 'Ennätys ' + r.was + ' p';
+  $('again').textContent = r.net ? 'Takaisin huoneeseen' : 'Uudestaan';
+  $('toMenu').hidden = !!r.net;
   $('endOpen').hidden = !r.opened;
   if (r.opened) $('endOpen').textContent = '🔓 ' + HILLS[r.opened - 1].name + ' aukesi!';
   const list = $('endList'); list.innerHTML = '';
   r.rows.forEach((row, i) => {
     const li = document.createElement('li');
     if (row.me) li.className = 'me';
-    li.innerHTML = '<span>' + (i + 1) + '. ' + esc(row.name) + (row.cpu ? ' 🤖' : '') + '</span><b>' + row.points + ' p</b>';
+    li.innerHTML = '<span>' + (i + 1) + '. ' + esc(row.name) + (row.cpu || row.helped ? ' 🤖' : '') + '</span><b>' + row.points + ' p</b>';
     list.appendChild(li);
   });
   sfx(r.rows[0] && r.rows[0].me ? 'onnistui' : 'valinta', { vol: 0.3 });
@@ -252,7 +261,8 @@ $('view').addEventListener('click', () => {
 });
 viewLabel();
 $('asu').addEventListener('click', () => { if (window.AiPelitOutfits) AiPelitOutfits.open(); });
-$('again').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); soloRun(); });
+$('again').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (result && result.net) backRoom(); else soloRun(); });
+$('friends').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (window.AiPelitRooms) AiPelitRooms.open(); });
 $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); showMenu(); });
 
 // ---- The HUD (the 2D canvas over the 3D one) ----
@@ -269,6 +279,7 @@ function drawHUD() {
     cx.fillStyle = g; cx.fillRect(0, 0, W, H);
     if (no3d) shadowText('Tämä puhelin ei osaa piirtää 3D-kuvaa.', W / 2, H * 0.3, 15, '#fff', 'center', 600);
   }
+  if (mode === 'netwait') shadowText('Odotetaan muita…', W / 2, H * 0.4, 20, '#fff', 'center', 800);
   if (mode === 'menu' || mode === 'end' || !me) return;
   const top = SAFE_T + 14, right = W - SAFE_R - 14;
   // Points and streak, top right (the "‹ Pelit" chip is top left).
@@ -319,6 +330,10 @@ function drawHUD() {
     shadowText(n > 0 ? String(n) : 'MENOKSI!', W / 2, H * 0.35, n > 0 ? 64 : 44, '#fff', 'center', 900);
   } else if (runT < 0.8) shadowText('MENOKSI!', W / 2, H * 0.35, 44, '#fff', 'center', 900);
   if (me.fin) shadowText('Maalissa!', W / 2, H * 0.42, 30, '#ffd84a', 'center', 900);
+  // With friends: the clock started by the first one down.
+  const late = net ? lateLeft() : null;
+  if (late !== null) shadowText(me.fin ? 'Odotetaan muita… ' + late + ' s' : 'Maali sulkeutuu ' + late + ' s', W / 2, H * (me.fin ? 0.49 : 0.27), 17, me.fin ? '#fff' : '#ff9a9a', 'center', 800);
+  if (net && window.AiPelitRooms && AiPelitRooms.paused) shadowText('Odotetaan kaveria…', W / 2, H * 0.55, 18, '#fff', 'center', 800);
 }
 
 // ---- The main loop ----
@@ -329,7 +344,11 @@ function wake() { still = 0; if (!raf) { last = 0; raf = requestAnimationFrame(f
 function frame(now) {
   raf = 0;
   const dt = last ? Math.min(0.1, (now - last) / 1000) : 1 / 60; last = now;
-  if (mode === 'count') {
+  if (net) {
+    // With friends (net.js): the host's clock, everyone's sleds.
+    if (mode === 'run') { checkHolds(performance.now()); steerInput(); tune(dt * 1000); }
+    netTick(dt);
+  } else if (mode === 'count') {
     countT -= dt;
     if (countT <= 0) { mode = 'run'; runT = 0; }
   } else if (mode === 'run') {
@@ -344,10 +363,11 @@ function frame(now) {
     tune(dt * 1000);
   }
   sounds(dt);
-  const moving = mode === 'run' || mode === 'count';
+  const moving = mode === 'run' || mode === 'count' || mode === 'netwait';
   render3d(hill, sleds, me, dt, !moving);
   drawHUD();
   if (moving || still++ < 2 || !V3) raf = requestAnimationFrame(frame);
 }
 resize();
-showMenu();
+if (!(window.AiPelitRooms && AiPelitRooms.inRoom)) showMenu();
+else hideAll();
