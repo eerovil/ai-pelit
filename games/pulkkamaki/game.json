@@ -1,0 +1,13 @@
+{
+  "title": "Pulkkamäki",
+  "description": "Jouluinen pulkkamäki iltavaloissa: käännä pulkkaa, hyppää hyppyreistä ja tee ilmassa voltteja ja piruetteja, yksin tai kavereiden kanssa samaan aikaan.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-20",
+      "note": "Ensimmäinen versio: kolme mäkeä, kääntyvä pulkka, voltit, piruetit ja Teräsmies ilmassa, lahjapaketit ja moninpeli.",
+      "request": "Keksitään uusi jouluaiheinen peli joka olisi moninpeli",
+      "issue": "eerovil/ai-pelit#475"
+    }
+  ]
+}

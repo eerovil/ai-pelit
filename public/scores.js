@@ -109,6 +109,12 @@
     pilkki: { order: 'high', score: function (s) { return fixed(s / 1000, 2) + ' kg'; }, level: function () { return saved('pilkki', 'taso'); } },
     // Sum of the best score from each cleared level; level: the first unopened level.
     marjakori: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('marjakori', 'taso'); } },
+    // Most points in one run down a hill, one list per hill ('maki-N'); level: hills open ('auki').
+    pulkkamaki: {
+      order: 'high', score: function (s) { return s + ' p'; }, boards: true,
+      level: function () { return saved('pulkkamaki', 'auki'); },
+      levelText: function (n) { return n + (n === 1 ? ' mäki' : ' mäkeä') + ' auki'; },
+    },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function orderFor(game, b) {
