@@ -28,6 +28,8 @@ let open = clamp(Math.floor(load('auki', 1)) || 1, 1, 3);   // hills opened
 let hillN = clamp(Math.floor(load('maki', 1)) || 1, 1, open);
 const best = n => Math.max(0, Math.floor(load('ennatys-' + n, 0)) || 0);
 let tutorial = !load('osattu', false);
+camView = load('kamera', 'fp') === 'back' ? 'back' : 'fp';
+function viewLabel() { $('view').textContent = camView === 'fp' ? '📷 Silmistä' : '📷 Takaa'; }
 
 // ---- Outfits (#158): our own winter wear, the Christmas costumes first in November and December ----
 const OUTFITS = [
@@ -244,6 +246,11 @@ function showEnd() {
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]); }
 $('go').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); soloRun(); });
+$('view').addEventListener('click', () => {
+  camView = camView === 'fp' ? 'back' : 'fp'; save('kamera', camView); if (V3) V3.view = camView;
+  sfx('valinta', { vol: 0.3 }); viewLabel();
+});
+viewLabel();
 $('asu').addEventListener('click', () => { if (window.AiPelitOutfits) AiPelitOutfits.open(); });
 $('again').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); soloRun(); });
 $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); showMenu(); });

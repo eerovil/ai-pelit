@@ -4,7 +4,7 @@
 // init3d(THREE); a phone that cannot draw 3D plays on with the HUD over a plain picture.
 // A hill place (s, x, y) is world (centreX(s) + x, y, -s).
 
-let THREE = null, V3 = null, no3d = false;
+let THREE = null, V3 = null, no3d = false, camView = 'fp';   // 'fp' through the eyes, 'back' behind
 
 function init3d(T) {
   THREE = T;
@@ -12,7 +12,7 @@ function init3d(T) {
   const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(64, 1, 0.1, 900);
+  const camera = new THREE.PerspectiveCamera(64, 1, 0.05, 900);
   // An evening: blue light from the sky, a moon low ahead, the lights warm and bright.
   const hemi = new THREE.HemisphereLight(0xb4c8f0, 0x34406a, 1.9);
   const moon = new THREE.DirectionalLight(0xdfe8ff, 1.3);
@@ -20,7 +20,7 @@ function init3d(T) {
   scene.fog = new THREE.Fog(0x22325a, 50, 330);
   const sky = skyDome();
   scene.add(sky);
-  V3 = { renderer, scene, camera, moon, sky, hill: null, world: null, rigs: new Map(), w: 0, h: 0, v: new THREE.Vector3(), cam: null, snow: null, santa: null, t: 0 };
+  V3 = { renderer, scene, camera, moon, sky, hill: null, world: null, rigs: new Map(), w: 0, h: 0, v: new THREE.Vector3(), cam: null, snow: null, santa: null, t: 0, view: camView };
   V3.snow = snowfall(); scene.add(V3.snow);
   V3.santa = santaSleigh(); scene.add(V3.santa);
 }
@@ -398,22 +398,12 @@ function render3d(hill, sleds, me, dt, still) {
     m.visible = !me || !me.gifts.includes(+id);
     if (!still) { m.rotation.y = V3.t * 1.2 + m.userData.ph; m.position.y = m.userData.y0 + Math.sin(V3.t * 2 + m.userData.ph) * 0.12; }
   }
-  // The camera: behind the sled along its heading (not turning with a spin or flip), a little above.
-  const cam = V3.camera, d = me || { s: 0, x: 0, y: baseAt(hill, 0), yaw: 0, air: false };
-  const dir = Math.atan2(centreX(hill, d.s + 0.6) - centreX(hill, d.s - 0.6), 1.2) + d.yaw * 0.6;
-  const back = LAND ? 6.4 : 8.6, up = LAND ? 2.6 : 3.7;
-  const bs = d.s - Math.cos(dir) * back, bx = d.x - Math.sin(dir) * back;
-  const want = hillPoint(hill, bs, bx, Math.max(d.y, groundAt(hill, d.s, d.x)) + up);
-  want[1] = Math.max(want[1], groundAt(hill, bs, bx) + 1.4);
-  if (!V3.cam) V3.cam = want.slice();
-  const k = still ? 1 : Math.min(1, dt * 6);
-  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? Math.min(1, dt * 3.5) || 1 : k);
-  cam.position.set(...V3.cam);
-  const ls = d.s + 9, lx = d.x + Math.sin(dir) * 9;
-  cam.lookAt(...hillPoint(hill, ls, lx, Math.max(d.y - 1.5, groundAt(hill, ls, lx)) + 0.6));
-  cam.fov = LAND ? 58 : 66; cam.updateProjectionMatrix();
+  const cam = V3.camera;
+  let dir;
+  if (me && V3.view === 'fp') dir = eyeCamera(hill, me, cam);
+  else dir = chaseCamera(hill, me, cam, dt, still);
   // A present right by the camera would fill the screen: it is left out until the camera has passed.
-  for (const id in V3.gifts.userData.byId) { const m = V3.gifts.userData.byId[id]; if (m.visible && m.getWorldPosition(V3.v).distanceTo(cam.position) < 4.5) m.visible = false; }
+  for (const id in V3.gifts.userData.byId) { const m = V3.gifts.userData.byId[id]; if (m.visible && m.getWorldPosition(V3.v).distanceTo(cam.position) < (V3.view === 'fp' ? 1.2 : 4.5)) m.visible = false; }
   V3.sky.position.copy(cam.position);
   V3.moon.position.set(cam.position.x - 60, cam.position.y + 80, cam.position.z - 120); V3.moon.target.position.copy(cam.position);
   // Snow: falls and drifts, wrapping round a box in front of the camera.
@@ -437,6 +427,46 @@ function render3d(hill, sleds, me, dt, still) {
   }
   R.render(V3.scene, cam);
   return true;
+}
+
+// The camera behind the sled along its heading (not turning with a spin or flip), a little above.
+function chaseCamera(hill, me, cam, dt, still) {
+  if (me) showRider(me, true);
+  const d = me || { s: 0, x: 0, y: baseAt(hill, 0), yaw: 0, air: false };
+  const dir = Math.atan2(centreX(hill, d.s + 0.6) - centreX(hill, d.s - 0.6), 1.2) + d.yaw * 0.6;
+  const back = LAND ? 6.4 : 8.6, up = LAND ? 2.6 : 3.7;
+  const bs = d.s - Math.cos(dir) * back, bx = d.x - Math.sin(dir) * back;
+  const want = hillPoint(hill, bs, bx, Math.max(d.y, groundAt(hill, d.s, d.x)) + up);
+  want[1] = Math.max(want[1], groundAt(hill, bs, bx) + 1.4);
+  if (!V3.cam) V3.cam = want.slice();
+  const k = still ? 1 : Math.min(1, dt * 6);
+  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? Math.min(1, dt * 3.5) || 1 : k);
+  cam.position.set(...V3.cam);
+  const ls = d.s + 9, lx = d.x + Math.sin(dir) * 9;
+  cam.lookAt(...hillPoint(hill, ls, lx, Math.max(d.y - 1.5, groundAt(hill, ls, lx)) + 0.6));
+  cam.fov = LAND ? 58 : 66; cam.updateProjectionMatrix();
+  return dir;
+}
+
+// Through the rider's own eyes (#475): the camera sits in the head and turns with the sled, so a
+// flip turns the whole view over and a spin round. The rider's body is hidden; the legs, the boots
+// and the sled's nose stay in sight. A fall only shakes the view, not rolls it.
+function eyeCamera(hill, me, cam) {
+  const rig = rigFor(me), u = rig.userData;
+  showRider(me, false);
+  u.pivot.rotation.z = me.tilt * 0.6 + (me.fallT > 0 ? Math.sin(me.fallT * 18) * 0.12 : 0);
+  rig.updateMatrixWorld(true);
+  u.P.head.getWorldPosition(cam.position);
+  u.pivot.getWorldQuaternion(cam.quaternion);
+  cam.translateY(0.22); cam.translateZ(0.12);
+  cam.rotateX(-0.26);   // eyes a little down the track
+  cam.fov = LAND ? 64 : 78; cam.updateProjectionMatrix();
+  V3.cam = null;   // the chase camera starts afresh when the view changes back
+  return Math.atan2(centreX(hill, me.s + 0.6) - centreX(hill, me.s - 0.6), 1.2) + me.yaw;
+}
+function showRider(sl, on) {
+  const P = rigFor(sl).userData.P;
+  P.torso.visible = on;
 }
 
 // A slow phone: measured over the first seconds of a run, below 27 frames a second it draws fewer
