@@ -133,3 +133,35 @@ def test_turning_the_phone_keeps_the_run(site, context):
     assert page.evaluate("me.s") > s
     assert page.evaluate("LAND")
     assert page.errors == []
+
+
+def test_landing_mid_trick_or_into_a_spruce_is_a_fall(site, context):
+    page = open_game(site, context)
+    go(page)
+    # A flip barely begun when the snow comes: a fall, no points, the streak gone.
+    got = page.evaluate("""() => {
+      me.streak = 3; me.air = true; me.trick = { type: 'front', t: 0.1 }; me.y = groundAt(hill, me.s, me.x);
+      land(hill, me); return [me.fallT > 0, me.points, me.streak, me.pop.bad];
+    }""")
+    assert got == [True, 0, 0, True]
+    # Steered into a spruce on the snow.
+    got = page.evaluate("""() => {
+      me.fallT = 0; me.hitWait = {};
+      const o = hill.obst.find(o => o.kind === 'kuusi');
+      me.s = o.s - 0.3; me.x = o.x; me.y = groundAt(hill, me.s, me.x); me.air = false; me.v = 8; me.yaw = 0;
+      step(hill, me, DT); return [me.fallT > 0, me.pop.text];
+    }""")
+    assert got == [True, "Kuusi!"]
+    assert page.errors == []
+
+
+def test_the_record_and_opened_hills_survive_a_reload(site, context):
+    page = open_game(site, context)
+    page.evaluate("() => { localStorage.setItem('ai-pelit:pulkkamaki:ennatys-1', '3100'); localStorage.setItem('ai-pelit:pulkkamaki:auki', '2'); localStorage.setItem('ai-pelit:pulkkamaki:maki', '2'); }")
+    page.reload()
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    hills = page.locator("#hills button")
+    assert [hills.nth(i).is_disabled() for i in range(3)] == [False, False, True]
+    assert "3100" in hills.nth(0).inner_text()
+    assert page.evaluate("hillN") == 2
+    assert page.errors == []

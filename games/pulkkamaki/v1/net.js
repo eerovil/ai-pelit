@@ -52,9 +52,7 @@ function coast(hill, sl, dt) {
   else sl.y = gy;
   if (sl.trick) {
     sl.trick.t += dt;
-    const T = TRICKS[sl.trick.type], p = Math.min(1, sl.trick.t / T.dur), e = p * p * (3 - 2 * p);
-    sl.flip = sl.trick.type === 'front' ? e * TAU : sl.trick.type === 'back' ? -e * TAU : 0;
-    sl.spin = sl.trick.type === 'spinL' ? e * TAU : sl.trick.type === 'spinR' ? -e * TAU : 0;
+    trickPose(sl);
   }
   sl.tilt += ((sl.air ? 0 : -sl.steer * 0.25) - sl.tilt) * Math.min(1, dt * 6);
   sl.roll = sl.fallT > 0 ? (1 - sl.fallT / FALL_T) * TAU * 1.5 : 0;
@@ -63,7 +61,7 @@ function coast(hill, sl, dt) {
 
 // ---- The start ----
 function netStart(s) {
-  net = { round: s.round, hill: 0, ph: 'wait', cd: 3, clock: 0, firstFin: null, res: null, sendT: 0, sleds: [], ended: false };
+  net = { round: s.round, hill: 0, ph: 'wait', cd: 3, clock: 0, firstFin: null, res: null, sendT: 0, sleds: [] };
   hideAll();
   sleds = []; me = null; result = null;
   for (const p of pointers.values()) p.used = true;
@@ -88,26 +86,25 @@ function addRec(r, i) {
   const sl = newSled(r.id, r.name, { outfit: r.kind === 'me' ? outfit : outfitOf(r.o) });
   placeSled(hill, sl, LANES[i % LANES.length]);
   if (r.kind === 'me') sl.onEvent = onMyEvent;
-  const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, sl };
+  const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, lastT: 0, lastA: null, sl };
   net.sleds.push(rec);
   sleds.push(sl);
   return rec;
 }
 function hostState() {
-  return { t: 's', round: net.round, hill: net.hill, ph: net.ph, cd: r2(net.cd), clock: r2(net.clock),
+  return { t: 's', round: net.round, hill: net.hill, ph: net.ph, cd: r2(net.cd), clock: r2(net.clock), ff: net.firstFin,
     sk: net.sleds.map(r => ({ id: r.id, n: r.name, c: r.kind === 'cpu' ? 1 : 0, o: r.o, w: r.own, m: r.cpu ? 1 : 0, a: pack(r.sl) })) };
 }
 
 // ---- A guest hears the host ----
 function guestState(m) {
   if (net.res) return;
-  if (!net.hill) { net.hill = m.hill; hill = buildHill(m.hill); setBoard(); }
+  if (!net.hill) { net.hill = m.hill; hill = buildHill(m.hill); setBoard(m.hill); }
   m.sk.forEach((k, i) => {
     let rec = recOf(k.id);
     const fresh = !rec;
     if (fresh) rec = addRec({ id: k.id, name: k.n, kind: k.id === RM.me ? 'me' : k.c ? 'cpu' : 'net', o: k.o }, i);
     if (rec.kind !== 'me' && rec.o !== k.o) { rec.o = k.o; rec.sl.outfit = outfitOf(k.o); }
-    rec.cpu = !!k.m;
     if (rec.kind === 'me') {
       // The host has had my sled (the computer drove it, or I was away): carry on from its state.
       if (fresh || k.w > rec.own) { rec.own = k.w; unpack(rec.sl, k.a); rec.sl.jump = []; }
@@ -115,7 +112,7 @@ function guestState(m) {
     } else unpack(rec.sl, k.a);
   });
   if (!me) me = myRec() ? myRec().sl : null;
-  net.ph = m.ph; net.cd = m.cd; net.clock = m.clock;
+  net.ph = m.ph; net.cd = m.cd; net.clock = m.clock; net.firstFin = m.ff === undefined ? null : m.ff;
   if (!me) return;   // not in this round's list (joined late): the room says so
   if (m.ph === 'count') { if (mode === 'netwait' || mode === 'count') { mode = 'count'; countT = m.cd; } }
   else if (m.ph === 'run' && (mode === 'netwait' || mode === 'count')) { mode = 'run'; runT = m.clock; }
@@ -140,7 +137,8 @@ function netTick(dt) {
       const sl = rec.sl;
       if (rec.kind === 'me') advance(hill, sl, dt);
       else if (host && (rec.kind === 'cpu' || rec.drive)) { cpuDrive(hill, sl, dt); advance(hill, sl, dt); }
-      else coast(hill, sl, dt);
+      // A phone silent for half a second (dropping, not yet noticed by the room) stays where it was.
+      else if (!host || rec.kind !== 'net' || performance.now() - rec.lastT < 500) coast(hill, sl, dt);
     }
   }
   net.sendT -= dt;
@@ -188,7 +186,7 @@ function netEnd(res) {
   if (row && !row.m && RM.once(net.round)) saved = saveRun(net.hill || hillN, row.p);
   result = {
     net: true, rows: res.map(o => ({ id: o.id, name: o.id === RM.me ? 'Sinä' : o.n, points: o.p, me: o.id === RM.me, cpu: !!o.b, helped: !!o.m, fin: !!o.f })),
-    pts: row ? row.p : 0, place: i + 1, fin: row ? !!row.f : false, helped: row ? !!row.m : false, ...saved,
+    pts: row ? row.p : 0, fin: row ? !!row.f : false, helped: row ? !!row.m : false, ...saved,
   };
   showEnd();
 }
@@ -248,6 +246,7 @@ if (RM) {
       // host's last take-over.
       if (!rec || rec.kind !== 'net' || rec.drive || net.res || !(m.w >= rec.own)) return;
       unpack(rec.sl, m.a);
+      rec.lastT = performance.now(); rec.lastA = m.a;
       if (m.o && m.o !== rec.o) { rec.o = m.o; rec.sl.outfit = outfitOf(m.o); }
       return;
     }
@@ -257,7 +256,8 @@ if (RM) {
   RM.on('hello', id => {
     if (net && !net.res) {
       const rec = recOf(id);
-      if (rec && rec.kind === 'net') rec.own++;   // the phone carries on from the host's state
+      // The phone carries on from its last state the host heard (or the computer's, if it drove).
+      if (rec && rec.kind === 'net') { if (rec.lastA && !rec.drive) unpack(rec.sl, rec.lastA); rec.own++; }
       RM.send(hostState(), id);
     }
     // A phone back after the end it already confirmed (a reload): the library does not send it
@@ -266,7 +266,7 @@ if (RM) {
   });
   RM.on('continue', ids => {
     if (!net || net.res) return;
-    for (const rec of net.sleds) if (ids.includes(rec.id) && rec.kind === 'net' && !rec.drive) {
+    for (const rec of net.sleds) if (ids.includes(rec.id) && rec.kind === 'net' && !rec.drive && !rec.sl.fin) {
       rec.drive = true; rec.cpu = true; rec.own++;
       rec.sl.cpu = cpuBrain(CPU_SKILL[1], rec.sl.s * 7 + 3);
     }

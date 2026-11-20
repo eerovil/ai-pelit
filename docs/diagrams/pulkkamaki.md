@@ -15,7 +15,7 @@ flowchart TD
   D -- Hyppyri --> E[Ilmassa: pyyhkäisyt tekevät temput]
   D -- Kuusi, kivi tai lumiukko --> F[Kaatuminen: vauhti pois, putki katkeaa]
   D -- Lahjapaketti --> G[Lisäpisteitä]
-  E --> H{Laskeutuiko pulkka suorana, temppu valmiina?}
+  E --> H{Temppu valmiina ja ote irti alastulossa?}
   H -- Kyllä --> I[Pisteet: temppu kertaa putki]
   H -- Ei --> F
   F --> C
@@ -51,7 +51,7 @@ flowchart TD
 - **Huone: tekijä valitsee mäen, Aloita kierros**: `rooms.js` with `data-min="2" data-max="6"`; under the player list (`roomControls()` in `net.js`, `RM.extra()`) the host picks one of its open hills, the others see "Huoneen tekijä (<nimi>) valitsee mäen.". The host makes a sled for each player and computer sledders up to four sleds; every phone builds the same hill from the host's hill number (`buildHill(n)` is fixed per hill) and takes the sleds from the host's first message.
 - **Sormi vetää vasemmalle tai oikealle: pulkka kääntyy**: on the snow, how far the finger is from where it touched down sets how fast the sled turns (`steerOf()` in `ui.js`); when the finger lifts the sled keeps the heading it has (Eero's choice: no steering by itself), also through the course's bends, at most about 75° from the course (`MAX_YAW`). After a fall it points down the course again. Gravity gives the speed, and turning hard brakes a little.
 - **Ilmassa: pyyhkäisyt tekevät temput**: in the air a swipe starts a trick: up a front flip, down a back flip, left or right a spin; holding a finger still is a grab (Superman) that scores while held. A trick plays out over a set time, and the next one may follow once it is done.
-- **Laskeutuiko pulkka suorana, temppu valmiina?**: landing mid-trick, mid-grab or more than a set angle askew is a fall. A generous margin, so a near miss lands (docs/making-games.md, "Be generous with timing").
+- **Temppu valmiina ja ote irti alastulossa?**: `land()` in `world.js`: landing with a grab still held, or with a trick less than `LAND_DONE` (80 %) done, is a fall; a trick at least that far done counts as finished. There is no separate angle check. A generous margin, so a near miss lands (docs/making-games.md, "Be generous with timing").
 - **Pisteet: temppu kertaa putki**: each trick has its points; several in one jump multiply them, and landing clean jumps in a row raises the streak (putki), which a fall resets.
 - **Kaatuminen: vauhti pois, putki katkeaa**: the sled tips and the rider rolls in the snow for about a second; the trick in the air scores nothing.
 - **Lahjapaketti**: presents float above some jumps and lie by the track; each one caught adds points.

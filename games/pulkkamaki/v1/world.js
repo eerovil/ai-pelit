@@ -122,7 +122,7 @@ function newSled(id, name, opts) {
     id, name, s: 2, x: 0, y: 0, v: 0, yaw: 0, vy: 0, vxb: 0, air: false, airT: 0,
     steer: 0, flip: 0, spin: 0, roll: 0, tilt: 0,
     trick: null, queue: null, grab: false, grabT: 0, jump: [], points: 0, streak: 0,
-    fallT: 0, hitWait: {}, gifts: [], fin: false, finT: 0, t: 0, pop: null, kickId: -1,
+    fallT: 0, hitWait: {}, gifts: [], fin: false, t: 0, pop: null,
   }, opts || {});
 }
 function placeSled(hill, sl, lane) {
@@ -188,6 +188,13 @@ function land(hill, sl) {
   sl.jump = [];
 }
 
+// The sled's turn for the trick going on; returns how far it has gone, 0 to 1.
+function trickPose(sl) {
+  const T = TRICKS[sl.trick.type], p = Math.min(1, sl.trick.t / T.dur), e = p * p * (3 - 2 * p);
+  sl.flip = sl.trick.type === 'front' ? e * TAU : sl.trick.type === 'back' ? -e * TAU : 0;
+  sl.spin = sl.trick.type === 'spinL' ? e * TAU : sl.trick.type === 'spinR' ? -e * TAU : 0;
+  return p;
+}
 const DT = 1 / 120;
 const TURN_RATE = 1.4, MAX_YAW = 1.3;   // rad/s at the finger's full reach; the widest heading
 // One step of a sled: gravity down the slope, the snow's friction, steering, the jumps, the air.
@@ -210,10 +217,7 @@ function step(hill, sl, dt) {
     sl.y += sl.vy * dt;
     if (sl.trick) {
       sl.trick.t += dt;
-      const T = TRICKS[sl.trick.type], p = Math.min(1, sl.trick.t / T.dur), e = p * p * (3 - 2 * p);
-      sl.flip = sl.trick.type === 'front' ? e * TAU : sl.trick.type === 'back' ? -e * TAU : 0;
-      sl.spin = sl.trick.type === 'spinL' ? e * TAU : sl.trick.type === 'spinR' ? -e * TAU : 0;
-      if (p >= 1) trickDone(sl);
+      if (trickPose(sl) >= 1) trickDone(sl);
     }
     if (sl.grab) sl.grabT += dt;
     const gy = groundAt(hill, sl.s, sl.x);
@@ -235,7 +239,7 @@ function step(hill, sl, dt) {
     sl.v = Math.max(sl.fin ? 0 : 0.6, sl.v + a * dt);
     // The banks push a sled back towards the track.
     sl.vxb += -gx * G * 0.8 * dt; sl.vxb *= Math.max(0, 1 - dt * 2.5);
-    const ps = sl.s, px = sl.x, py = sl.y;
+    const py = sl.y;
     sl.s += sl.v * Math.cos(sl.yaw) * dt;
     sl.x += (sl.v * Math.sin(sl.yaw) + sl.vxb) * dt;
     const gy = groundAt(hill, sl.s, sl.x);
@@ -246,7 +250,6 @@ function step(hill, sl, dt) {
       sl.v = sp * Math.cos(Math.atan(climb));
       sl.vy = sp * Math.sin(-ang);
       sl.air = true; sl.airT = 0; sl.y = py + sl.vy * dt; sl.jump = []; sl.grabT = 0;
-      sl.kickId = kickIndex(hill, ps, px);
       if (sl.onEvent) sl.onEvent('jump');
     } else {
       sl.y = gy;
@@ -279,14 +282,10 @@ function step(hill, sl, dt) {
       if (sl.onEvent) sl.onEvent('gift', p);
     }
   }
-  if (!sl.fin && sl.s >= hill.len) { sl.fin = true; sl.finT = sl.t; if (sl.onEvent) sl.onEvent('finish'); }
+  if (!sl.fin && sl.s >= hill.len) { sl.fin = true; if (sl.onEvent) sl.onEvent('finish'); }
   // The lean shown in the drawing: into the turn on the snow, a roll while falling.
   sl.tilt += ((sl.air ? 0 : -steer * 0.25) - sl.tilt) * Math.min(1, dt * 6);
   sl.roll = sl.fallT > 0 ? (1 - sl.fallT / FALL_T) * TAU * 1.5 : 0;
-}
-function kickIndex(hill, s, x) {
-  for (const k of hill.kicks) if (s >= k.s - 0.5 && s <= k.s + k.len + 0.5 && Math.abs(x - k.x) <= k.w / 2 + 0.3) return k.i;
-  return -1;
 }
 // Steps a sled by `dt`, in fixed steps.
 function advance(hill, sl, dt) {

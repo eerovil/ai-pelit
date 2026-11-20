@@ -91,9 +91,31 @@ def test_two_phones_go_down_together_and_get_one_result(sledders):
     gp = guest.evaluate("me.points")
     assert guest.evaluate("result.pts") == gp
     assert guest.evaluate("+(localStorage.getItem('ai-pelit:pulkkamaki:ennatys-1') || 0)") == gp
+    first = json.dumps(host.evaluate("net.round"))
     # Back to the room screen, ready for the next run.
     guest.click("#again")
     guest.wait_for_function("document.getElementById('aipr-room') && !document.getElementById('aipr-room').hidden")
+    host.click("#again")
+    # A second run: a new round number, fresh sleds, the old round's messages ignored.
+    host.click("#aipr-start")
+    for p in (host, guest):
+        p.wait_for_function(f"net && net.round !== {first} && (mode === 'count' || mode === 'run') && me && me.points === 0 && !me.fin", timeout=10000)
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    fake = "(round) => { net.sendT = 1e9; const r = recOf(AiPelitRooms.me); const a = pack(r.sl); a[10] = 9999; AiPelitRooms.send({ t: 'p', round, w: r.own, a }); }"
+    guest.evaluate(fake, json.loads(first))
+    host.wait_for_timeout(400)
+    assert host.evaluate(f"recOf({gid}).sl.points") == 0
+    guest.evaluate(fake, guest.evaluate("net.round"))
+    host.wait_for_function(f"recOf({gid}).sl.points === 9999", timeout=3000)
+    assert host.errors == guest.errors == []
+
+
+def test_a_guest_sees_the_finish_clock_after_the_first_is_down(sledders):
+    host, guest = room(sledders)
+    start([host, guest])
+    host.evaluate(NEAR_END)
+    host.wait_for_function("net.firstFin !== null", timeout=10000)
+    guest.wait_for_function("lateLeft() !== null && lateLeft() <= 30", timeout=5000)
     assert host.errors == guest.errors == []
 
 
