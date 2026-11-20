@@ -93,56 +93,82 @@ function hillPoint(hill, s, x, y) { return [centreX(hill, s) + x, y, -s]; }
 function buildWorld(hill) {
   if (V3.world) { V3.scene.remove(V3.world); V3.world.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
   const world = new THREE.Group();
-  world.add(terrain(hill), kickers(hill), spruces(hill), rocksAndSnowmen(hill), lanterns(hill), finishArch(hill));
+  world.add(terrain(hill), oldTracks(hill), kickers(hill), spruces(hill), rocksAndSnowmen(hill), lanterns(hill), finishArch(hill));
   V3.gifts = gifts(hill); world.add(V3.gifts);
   V3.scene.add(world);
   V3.world = world; V3.hill = hill; V3.trails = new Map();
 }
 
-// The snow (#475): the track groomed into fine lengthwise ridges with old sled and ski tracks
-// across them, as on a ski slope; the deep snow beside it rough and untouched. Each is a texture
-// drawn once on a canvas, laid on in metres so it repeats down the hill.
+// The snow (#475): soft, uneven, with no pattern that repeats or shimmers (a tiled stripe pattern
+// looked bad on the phone); the tracks are real lines laid down the hill (oldTracks, layTrail).
+// The texture is drawn once on a canvas: large soft patches of light and shade, and a fine grain.
 function snowTexture(groomed) {
   const n = 512, cv = document.createElement('canvas'); cv.width = cv.height = n;
   const g = cv.getContext('2d'), r = rng(groomed ? 7 : 11);
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, n, n);
-  // Sparkle and unevenness.
-  for (let k = 0; k < 9000; k++) {
-    const v = 225 + Math.floor(r() * 30);
-    g.fillStyle = `rgba(${v - 8},${v - 4},${v},${0.35 + r() * 0.4})`;
-    const w = groomed ? 1 + r() * 2 : 2 + r() * 5;
-    g.fillRect(r() * n, r() * n, w, w);
-  }
-  if (groomed) {
-    // The groomer's corduroy: ridges running down the hill (texture's v), a few cm apart.
-    for (let x = 0; x < n; x += 21.333) {
-      const gr = g.createLinearGradient(x, 0, x + 21.333, 0);
-      gr.addColorStop(0, 'rgba(90,110,165,.38)'); gr.addColorStop(0.3, 'rgba(150,165,210,.2)');
-      gr.addColorStop(0.6, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(90,110,165,.38)');
-      g.fillStyle = gr; g.fillRect(x, 0, 21.333, n);
+  // Soft patches, drawn three times over with wrapping so the tile has no edges.
+  for (let k = 0; k < (groomed ? 60 : 90); k++) {
+    const x = r() * n, y = r() * n, rad = 30 + r() * 90, dark = r() < 0.5;
+    for (const ox of [-n, 0, n]) for (const oy of [-n, 0, n]) {
+      const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
+      gr.addColorStop(0, dark ? `rgba(185,198,230,${groomed ? 0.16 : 0.26})` : 'rgba(255,255,255,.3)');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
     }
   }
-  // Old tracks: pairs of runner grooves wandering down, a darker edge and a bright one.
-  const tracks = groomed ? 4 : 0;
-  for (let k = 0; k < tracks; k++) {
-    const x0 = r() * n, amp = 4 + r() * 18, ph = r() * TAU, gap = 30;
-    const waves = 1;   // whole waves per tile, so the tile repeats seamlessly
-    for (const off of [0, gap]) {
-      for (const [dx, colr, wd] of [[0, 'rgba(70,90,150,.45)', 6], [5, 'rgba(255,255,255,.8)', 3]]) {
-        g.strokeStyle = colr; g.lineWidth = wd; g.beginPath();
-        for (let y = -4; y <= n + 4; y += 8) {
-          const x = (x0 + off + dx + amp * Math.sin(y / n * TAU * waves + ph) + n) % n;
-          if (y === -4) g.moveTo(x, y); else g.lineTo(x, y);
-        }
-        g.stroke();
-      }
-    }
+  for (let k = 0; k < 4000; k++) {
+    const v = 232 + Math.floor(r() * 23);
+    g.fillStyle = `rgba(${v - 6},${v - 3},${v},.5)`;
+    g.fillRect(r() * n, r() * n, 2, 2);
   }
   const t = new THREE.CanvasTexture(cv);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = Math.min(8, V3 ? V3.renderer.capabilities.getMaxAnisotropy() : 4);
   return t;
+}
+
+// Grooves in the snow: for each runner a dark line with a bright rim beside it, along a path of
+// [s, x, yaw] points. Returns positions for an indexed strip, four points across per path point.
+function groovePoint(hill, pos, k, S0, X0, yaw, w) {
+  for (let r = 0; r < 2; r++) for (let e = 0; e < 2; e++) {
+    const o = (r ? 1 : -1) * 0.27 + (e ? w : -w), X = X0 + o * Math.cos(yaw), S = S0 - o * Math.sin(yaw);
+    const p = hillPoint(hill, S, X, groundAt(hill, S, X) + 0.025), q = (k * 4 + r * 2 + e) * 3;
+    pos[q] = p[0]; pos[q + 1] = p[1]; pos[q + 2] = p[2];
+  }
+}
+function grooveIndex(n) {
+  const idx = [];
+  for (let i = 0; i < n - 1; i++) for (let r = 0; r < 2; r++) {
+    const a = i * 4 + r * 2, b = a + 4;
+    idx.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  return idx;
+}
+const grooveMat = (op) => new THREE.MeshBasicMaterial({ color: 0x7a8ec0, transparent: true, opacity: op, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+
+// Earlier sledders' tracks: long, gently wandering lines down the whole track, none alike.
+function oldTracks(hill) {
+  const r = rng(hill.n * 977 + 5), paths = [];
+  for (let t = 0; t < 14; t++) {
+    const x0 = (r() * 2 - 1) * (hill.width / 2 - 1.5), a1 = 1 + r() * 3, k1 = 0.02 + r() * 0.04, p1 = r() * TAU;
+    const a2 = r() * 1.2, k2 = 0.08 + r() * 0.1, p2 = r() * TAU, s0 = r() * hill.len * 0.5, s1 = s0 + hill.len * (0.3 + r() * 0.7);
+    const xAt = s => clamp(x0 + a1 * Math.sin(s * k1 + p1) + a2 * Math.sin(s * k2 + p2), -hill.width / 2 + 0.5, hill.width / 2 - 0.5);
+    const pts = [];
+    for (let s = s0; s < Math.min(s1, hill.len + 40); s += 1) pts.push([s, xAt(s), Math.atan(xAt(s + 0.5) - xAt(s - 0.5))]);
+    if (pts.length > 2) paths.push(pts);
+  }
+  const total = paths.reduce((a, p) => a + p.length, 0), pos = new Float32Array(total * 12), idx = [];
+  let k = 0;
+  for (const p of paths) {
+    const base = k;
+    p.forEach(([S, X, yaw], i) => groovePoint(hill, pos, k++, S, X, yaw, i === 0 || i === p.length - 1 ? 0 : 0.05));
+    for (const v of grooveIndex(p.length)) idx.push(v + base * 4);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return new THREE.Mesh(g, grooveMat(0.32));
 }
 
 // The track packed smooth, the banks rising beside it, deep snow beyond.
@@ -152,7 +178,7 @@ function terrain(hill) {
   const s0 = -40, s1 = hill.total, ds = 2, rows = Math.floor((s1 - s0) / ds) + 1, cols = xs.length;
   const pos = new Float32Array(rows * cols * 3), col = new Float32Array(rows * cols * 3), uv = new Float32Array(rows * cols * 2);
   const c = new THREE.Color(), track = new THREE.Color('#eef3ff'), soft = new THREE.Color('#cfdaf4');
-  const TILE = 6;   // metres one texture tile covers
+  const TILE = 14;   // metres one texture tile covers
   for (let i = 0; i < rows; i++) {
     const s = s0 + i * ds, cx = centreX(hill, s), b = baseAt(hill, Math.max(0, s)) + (s < 0 ? -s * 0.1 : 0);
     for (let j = 0; j < cols; j++) {
@@ -181,23 +207,17 @@ function terrain(hill) {
   return new THREE.Mesh(g, mats);
 }
 
-// Each sled's own runner tracks in the snow behind it, two grooves, as long as the run.
+// Each sled's own runner tracks in the snow behind it, as long as the run.
 const TRAIL_MAX = 1400, TRAIL_STEP = 0.5;
 function trailFor(sl) {
   let tr = V3.trails.get(sl.id);
   if (!tr) {
-    const pos = new Float32Array(TRAIL_MAX * 2 * 2 * 3), g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const idx = [];
-    // Two ribbons (left and right runner): between each point and the next, a quad of each, so
-    // drawing the first n - 1 segments draws only the points laid so far.
-    for (let i = 0; i < TRAIL_MAX - 1; i++) for (let r = 0; r < 2; r++) {
-      const a = (r * TRAIL_MAX + i) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
-    g.setIndex(idx); g.setDrawRange(0, 0);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x6f84b8, transparent: true, opacity: 0.7, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 12), 3));
+    g.setIndex(grooveIndex(TRAIL_MAX)); g.setDrawRange(0, 0);
+    const m = new THREE.Mesh(g, grooveMat(0.6));
     m.frustumCulled = false;
-    tr = { mesh: m, n: 0, last: null };
+    tr = { mesh: m, n: 0, last: null, gap: false };
     V3.trails.set(sl.id, tr); V3.world.add(m);
   }
   return tr;
@@ -208,19 +228,11 @@ function layTrail(hill, sl) {
   if (!tr.gap && tr.last && Math.hypot(sl.s - tr.last[0], sl.x - tr.last[1]) < TRAIL_STEP) return;
   if (tr.n >= TRAIL_MAX - 3) return;
   const pos = tr.mesh.geometry.attributes.position.array;
-  const put = (S0, X0, yaw, w) => {
-    const i = tr.n++;
-    for (let r = 0; r < 2; r++) for (let e = 0; e < 2; e++) {
-      const o = (r ? 1 : -1) * 0.27 + (e ? w : -w), X = X0 + o * Math.cos(yaw), S = S0 - o * Math.sin(yaw);
-      const p = hillPoint(hill, S, X, groundAt(hill, S, X) + 0.025), k = ((r * TRAIL_MAX + i) * 2 + e) * 3;
-      pos[k] = p[0]; pos[k + 1] = p[1]; pos[k + 2] = p[2];
-    }
-  };
-  // Over a gap (a jump), the old end and the new start are laid again with no width, so the quads
-  // across the gap have no area.
-  if (tr.gap && tr.last) { put(tr.last[0], tr.last[1], tr.last[2], 0); put(sl.s, sl.x, sl.yaw, 0); }
+  // Over a gap (a jump), the old end and the new start are laid again with no width, so the
+  // pieces across the gap have no area.
+  if (tr.gap && tr.last) { groovePoint(hill, pos, tr.n++, ...tr.last, 0); groovePoint(hill, pos, tr.n++, sl.s, sl.x, sl.yaw, 0); }
   tr.gap = false;
-  put(sl.s, sl.x, sl.yaw, 0.06);
+  groovePoint(hill, pos, tr.n++, sl.s, sl.x, sl.yaw, 0.06);
   tr.last = [sl.s, sl.x, sl.yaw];
   const g = tr.mesh.geometry;
   g.attributes.position.needsUpdate = true;
