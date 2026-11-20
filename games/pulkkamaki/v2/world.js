@@ -146,6 +146,15 @@ function setGrab(sl, on) {
   return true;
 }
 
+// A sled changes hands (a phone back after a reload or a drop, the computer taking an away phone's
+// sled, or giving it back): a grab belongs to the finger holding it, so it is let go here. A grab
+// held long enough counts like any finished trick; the jump's other tricks are kept, and a flip
+// or spin still turning finishes by itself. Safe to repeat: a released sled is left as it is.
+function handOver(sl) {
+  if (sl.grab) setGrab(sl, false);
+  sl.grab = false; sl.grabT = 0;
+}
+
 function trickDone(sl) {
   const tr = sl.trick, T = TRICKS[tr.type];
   sl.jump.push({ type: tr.type, pts: T.pts });

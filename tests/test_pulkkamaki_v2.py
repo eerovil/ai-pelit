@@ -242,3 +242,18 @@ def test_a_new_players_first_score_is_sent_with_one_hill_open(site, context):
     page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'", timeout=8000)
     assert [(s["game"], s["board"], s["level"]) for s in sent] == [("pulkkamaki", "maki-1", 1)]
     assert page.errors == []
+
+
+def test_a_handover_lets_go_of_a_grab_and_counts_it_only_when_long_enough(site, context):
+    # v2 (#475): one rule for a sled changing hands in the air, safe to repeat.
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("mode === 'run'", timeout=8000)
+    got = page.evaluate("""() => {
+      const air = t => { me.air = true; me.fallT = 0; me.jump = [{ type: 'front', pts: 300 }]; me.grab = true; me.grabT = t; };
+      air(0.1); handOver(me); const short = [me.grab, me.grabT, me.jump.map(j => j.type).join(), me.fallT];
+      air(0.6); handOver(me); handOver(me); const long = [me.grab, me.grabT, me.jump.map(j => j.type).join(), me.fallT];
+      return [short, long];
+    }""")
+    assert got == [[False, 0, "front", 0], [False, 0, "front,grab", 0]]
+    assert page.errors == []
