@@ -1,4 +1,5 @@
 """Pulkkamäki v1 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
+import json
 import shutil
 
 import pytest
@@ -212,11 +213,32 @@ def test_a_second_run_after_a_finished_one_starts_fresh(site, context):
 def test_the_score_chip_opens_the_chosen_hills_list_right_away(site, context):
     asked = []
     context.route("**/api/scores?*", lambda route: (asked.append(route.request.url), route.fulfill(
-        status=200, content_type="application/json", body='{"scores": [], "me": null}')))
+        status=200, content_type="application/json", body='{"rows": [], "mine": null}')))
     page = open_game(site, context)
     page.click("#ai-pelit-tulokset-nappi")
     page.wait_for_function("document.getElementById('ai-pelit-tulokset')")
-    assert "Kotimäki" in page.locator("#ai-pelit-tulokset").inner_text()
+    box = page.locator("#ai-pelit-tulokset")
+    box.get_by_text("Listalla ei ole vielä ketään.").wait_for(timeout=5000)
+    assert "Kotimäki" in box.inner_text()
+    assert "Ei verkkoyhteyttä" not in box.inner_text()
     assert any("board=maki-1" in u for u in asked), asked
     assert not any("board=main" in u for u in asked), asked
+    assert page.errors == []
+
+
+def test_a_new_players_first_score_is_sent_with_one_hill_open(site, context):
+    # The game saves 'auki' only once a second hill opens; the first score still says 1 open.
+    sent = []
+    def api(route):
+        req = route.request
+        if req.method == "POST" and req.url.endswith("/api/scores"):
+            sent.append(json.loads(req.post_data))
+        route.fulfill(status=200, content_type="application/json", body='{"status": "ok"}')
+    context.route("**/api/**", api)
+    page = open_game(site, context)
+    assert page.evaluate("localStorage.getItem('ai-pelit:pulkkamaki:auki')") is None
+    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi'));"
+                  "AiPelitScores.submit(120)")
+    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'", timeout=8000)
+    assert [(s["game"], s["board"], s["level"]) for s in sent] == [("pulkkamaki", "maki-1", 1)]
     assert page.errors == []

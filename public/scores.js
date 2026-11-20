@@ -110,9 +110,10 @@
     // Sum of the best score from each cleared level; level: the first unopened level.
     marjakori: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('marjakori', 'taso'); } },
     // Most points in one run down a hill, one list per hill ('maki-N'); level: hills open ('auki').
+    // The game saves 'auki' only once a second hill opens, so a new player has 1 open.
     pulkkamaki: {
       order: 'high', score: function (s) { return s + ' p'; }, boards: true,
-      level: function () { return saved('pulkkamaki', 'auki'); },
+      level: function () { return Math.max(1, saved('pulkkamaki', 'auki')); },
       levelText: function (n) { return n + (n === 1 ? ' mäki' : ' mäkeä') + ' auki'; },
     },
   };
