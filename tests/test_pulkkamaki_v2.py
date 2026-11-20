@@ -1,5 +1,4 @@
-"""Pulkkamäki v1 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
-import json
+"""Pulkkamäki v2 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
 import shutil
 
 import pytest
@@ -226,24 +225,6 @@ def test_the_score_chip_opens_the_chosen_hills_list_right_away(site, context):
     assert page.errors == []
 
 
-def test_a_new_players_first_score_is_sent_with_one_hill_open(site, context):
-    # The game saves 'auki' only once a second hill opens; the first score still says 1 open.
-    sent = []
-    def api(route):
-        req = route.request
-        if req.method == "POST" and req.url.endswith("/api/scores"):
-            sent.append(json.loads(req.post_data))
-        route.fulfill(status=200, content_type="application/json", body='{"status": "ok"}')
-    context.route("**/api/**", api)
-    page = open_game(site, context)
-    assert page.evaluate("localStorage.getItem('ai-pelit:pulkkamaki:auki')") is None
-    page.evaluate("localStorage.setItem('ai-pelit:_pelaaja:nimi', JSON.stringify('Testi'));"
-                  "AiPelitScores.submit(120)")
-    page.wait_for_function("localStorage.getItem('ai-pelit:_tulokset:jono') === '{}'", timeout=8000)
-    assert [(s["game"], s["board"], s["level"]) for s in sent] == [("pulkkamaki", "maki-1", 1)]
-    assert page.errors == []
-
-
 def test_a_handover_lets_go_of_a_grab_and_counts_it_only_when_long_enough(site, context):
     # v2 (#475): one rule for a sled changing hands in the air, safe to repeat.
     page = open_game(site, context)
@@ -251,9 +232,11 @@ def test_a_handover_lets_go_of_a_grab_and_counts_it_only_when_long_enough(site, 
     page.wait_for_function("mode === 'run'", timeout=8000)
     got = page.evaluate("""() => {
       const air = t => { me.air = true; me.fallT = 0; me.jump = [{ type: 'front', pts: 300 }]; me.grab = true; me.grabT = t; };
-      air(0.1); handOver(me); const short = [me.grab, me.grabT, me.jump.map(j => j.type).join(), me.fallT];
-      air(0.6); handOver(me); handOver(me); const long = [me.grab, me.grabT, me.jump.map(j => j.type).join(), me.fallT];
+      // Then it lands: a grab still held would be a fall that loses the jump's points.
+      const landed = () => { const p0 = me.points; land(hill, me); return [me.fallT, me.points > p0]; };
+      air(0.1); handOver(me); const short = [me.grab, me.grabT, me.jump.map(j => j.type).join(), ...landed()];
+      air(0.6); handOver(me); handOver(me); const long = [me.grab, me.grabT, me.jump.map(j => j.type).join(), ...landed()];
       return [short, long];
     }""")
-    assert got == [[False, 0, "front", 0], [False, 0, "front,grab", 0]]
+    assert got == [[False, 0, "front", 0, True], [False, 0, "front,grab", 0, True]]
     assert page.errors == []

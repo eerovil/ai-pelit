@@ -669,3 +669,15 @@ def test_pasianssi_shows_the_fastest_draw_one_time_first_and_draw_three_separate
     page.wait_for_selector(".score-list .tulos:has-text('Cecilia')")
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "3 korttia"
     assert "Aino" not in page.locator(".score-list").inner_text()
+
+
+def test_pulkkamaki_s_level_is_one_hill_open_before_its_first_save(site, context):
+    # Pulkkamäki saves 'auki' only once a second hill opens (#475), so a new player's first score
+    # still goes with "1 mäki auki". Read on any game's page: the level lives in scores.js alone.
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + SORMISKEITTI)
+    level = "AiPelitScores.games.pulkkamaki.level()"
+    assert page.evaluate(level) == 1
+    page.evaluate("localStorage.setItem('ai-pelit:pulkkamaki:auki', '3')")
+    assert page.evaluate(level) == 3

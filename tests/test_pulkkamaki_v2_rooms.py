@@ -1,4 +1,4 @@
-"""Pulkkamäki v1 with friends (#475): everyone down the same hill at once, the host keeps the end."""
+"""Pulkkamäki v2 with friends (#475): everyone down the same hill at once, the host keeps the end."""
 import json
 import shutil
 
