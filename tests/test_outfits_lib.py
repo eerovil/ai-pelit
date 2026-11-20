@@ -369,3 +369,18 @@ def test_a_games_fixed_canvas_style_leaves_the_picker_in_place(site, browser):
     assert page.evaluate("AiPelitOutfits.isOpen()") is False
     assert page.errors == []
     page.context.close()
+
+
+@pytest.mark.parametrize("game,option,has", [("koe", "joulu: false", False), ("orava", "joulu: true", True)])
+def test_a_game_can_leave_the_christmas_costumes_out_or_ask_for_them(site, browser, game, option, has):
+    # #473: `joulu: false` leaves them out of any game; a later Orava may ask for them.
+    site.build()
+    (site.root / game).mkdir(exist_ok=True)
+    (site.root / game / "index.html").write_text(PAGE.replace('data-game="koe"', f'data-game="{game}"')
+                                                 .replace("change: function", option + ", change: function"))
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    page = ctx.new_page()
+    page.clock.set_fixed_time("2026-12-10T12:00:00")
+    page.goto(site.url + game + "/")
+    assert page.evaluate("AiPelitOutfits.list().some(o => o.joulu)") is has
+    ctx.close()

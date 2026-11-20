@@ -496,7 +496,7 @@
     var up = p.up || 0, step = p.step || 0, mix = function (a, b, k) { return a + (b - a) * k; };
     var lw = Math.max(2, h * 0.075), hr = h * 0.125, hy = fy - h + hr;
     var sh = fy - h * 0.72, hip = fy - h * 0.43, hw = h * 0.14;
-    var legSkin = L.halloween || L.joulu ? L.bottom : L.skin;
+    var legSkin = L.halloween ? L.bottom : L.skin;
     x.save(); x.lineCap = 'round'; x.lineJoin = 'round';
     if (L.cape) { x.fillStyle = L.cape; x.beginPath(); x.moveTo(fx - hw * 0.9, sh); x.lineTo(fx + hw * 0.9, sh); x.lineTo(fx + hw * 1.45, fy - h * 0.12); x.quadraticCurveTo(fx, fy - h * 0.08, fx - hw * 1.45, fy - h * 0.12); x.closePath(); x.fill(); }
     var lift = function (d) { return Math.max(0, step * d) * h * 0.08; };
