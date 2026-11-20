@@ -96,38 +96,135 @@ function buildWorld(hill) {
   world.add(terrain(hill), kickers(hill), spruces(hill), rocksAndSnowmen(hill), lanterns(hill), finishArch(hill));
   V3.gifts = gifts(hill); world.add(V3.gifts);
   V3.scene.add(world);
-  V3.world = world; V3.hill = hill;
+  V3.world = world; V3.hill = hill; V3.trails = new Map();
 }
 
-// The snow: the track packed smooth, the banks rising beside it, deep snow beyond.
+// The snow (#475): the track groomed into fine lengthwise ridges with old sled and ski tracks
+// across them, as on a ski slope; the deep snow beside it rough and untouched. Each is a texture
+// drawn once on a canvas, laid on in metres so it repeats down the hill.
+function snowTexture(groomed) {
+  const n = 512, cv = document.createElement('canvas'); cv.width = cv.height = n;
+  const g = cv.getContext('2d'), r = rng(groomed ? 7 : 11);
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, n, n);
+  // Sparkle and unevenness.
+  for (let k = 0; k < 9000; k++) {
+    const v = 225 + Math.floor(r() * 30);
+    g.fillStyle = `rgba(${v - 8},${v - 4},${v},${0.35 + r() * 0.4})`;
+    const w = groomed ? 1 + r() * 2 : 2 + r() * 5;
+    g.fillRect(r() * n, r() * n, w, w);
+  }
+  if (groomed) {
+    // The groomer's corduroy: ridges running down the hill (texture's v), a few cm apart.
+    for (let x = 0; x < n; x += 21.333) {
+      const gr = g.createLinearGradient(x, 0, x + 21.333, 0);
+      gr.addColorStop(0, 'rgba(90,110,165,.38)'); gr.addColorStop(0.3, 'rgba(150,165,210,.2)');
+      gr.addColorStop(0.6, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(90,110,165,.38)');
+      g.fillStyle = gr; g.fillRect(x, 0, 21.333, n);
+    }
+  }
+  // Old tracks: pairs of runner grooves wandering down, a darker edge and a bright one.
+  const tracks = groomed ? 4 : 0;
+  for (let k = 0; k < tracks; k++) {
+    const x0 = r() * n, amp = 4 + r() * 18, ph = r() * TAU, gap = 30;
+    const waves = 1;   // whole waves per tile, so the tile repeats seamlessly
+    for (const off of [0, gap]) {
+      for (const [dx, colr, wd] of [[0, 'rgba(70,90,150,.45)', 6], [5, 'rgba(255,255,255,.8)', 3]]) {
+        g.strokeStyle = colr; g.lineWidth = wd; g.beginPath();
+        for (let y = -4; y <= n + 4; y += 8) {
+          const x = (x0 + off + dx + amp * Math.sin(y / n * TAU * waves + ph) + n) % n;
+          if (y === -4) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+    }
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Math.min(8, V3 ? V3.renderer.capabilities.getMaxAnisotropy() : 4);
+  return t;
+}
+
+// The track packed smooth, the banks rising beside it, deep snow beyond.
 function terrain(hill) {
   const xs = [];
   for (let x = -70; x <= 70; x += x < -14 || x > 14 ? 5 : 1) xs.push(x);
   const s0 = -40, s1 = hill.total, ds = 2, rows = Math.floor((s1 - s0) / ds) + 1, cols = xs.length;
-  const pos = new Float32Array(rows * cols * 3), col = new Float32Array(rows * cols * 3), c = new THREE.Color();
-  const track = new THREE.Color('#e9f0ff'), soft = new THREE.Color('#c9d6f2');
+  const pos = new Float32Array(rows * cols * 3), col = new Float32Array(rows * cols * 3), uv = new Float32Array(rows * cols * 2);
+  const c = new THREE.Color(), track = new THREE.Color('#eef3ff'), soft = new THREE.Color('#cfdaf4');
+  const TILE = 6;   // metres one texture tile covers
   for (let i = 0; i < rows; i++) {
     const s = s0 + i * ds, cx = centreX(hill, s), b = baseAt(hill, Math.max(0, s)) + (s < 0 ? -s * 0.1 : 0);
     for (let j = 0; j < cols; j++) {
       const x = xs[j], k = (i * cols + j) * 3;
       pos[k] = cx + x; pos[k + 1] = b + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1); pos[k + 2] = -s;
-      const edge = clamp((Math.abs(x) - hill.width / 2) / 4, 0, 1);
-      c.copy(track).lerp(soft, edge);
-      // Sled tracks in the packed snow: faint stripes down the hill.
-      if (edge === 0 && Math.abs(Math.round(x) - x) < 0.01 && (Math.round(x) + 100) % 3 === 0) c.multiplyScalar(0.93);
+      c.copy(track).lerp(soft, clamp((Math.abs(x) - hill.width / 2) / 4, 0, 1));
       col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
+      uv[(i * cols + j) * 2] = x / TILE; uv[(i * cols + j) * 2 + 1] = s / TILE;
     }
   }
-  const idx = [];
+  // Two groups: the groomed track (with its banks) and the deep snow, each with its own texture.
+  const groomed = [], deep = [], edge = hill.width / 2 + 3;
   for (let i = 0; i < rows - 1; i++) for (let j = 0; j < cols - 1; j++) {
     const a = i * cols + j, b = a + 1, d = a + cols, e = d + 1;
-    idx.push(a, d, b, b, d, e);
+    (Math.max(Math.abs(xs[j]), Math.abs(xs[j + 1])) <= edge ? groomed : deep).push(a, b, d, b, e, d);   // wound to face up
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setIndex(idx); g.computeVertexNormals();
-  return new THREE.Mesh(g, lambert());
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(groomed.concat(deep));
+  g.addGroup(0, groomed.length, 0); g.addGroup(groomed.length, deep.length, 1);
+  g.computeVertexNormals();
+  if (!V3.snowTex) V3.snowTex = [snowTexture(true), snowTexture(false)];
+  const mats = V3.snowTex.map(t => new THREE.MeshLambertMaterial({ vertexColors: true, map: t }));
+  return new THREE.Mesh(g, mats);
+}
+
+// Each sled's own runner tracks in the snow behind it, two grooves, as long as the run.
+const TRAIL_MAX = 1400, TRAIL_STEP = 0.5;
+function trailFor(sl) {
+  let tr = V3.trails.get(sl.id);
+  if (!tr) {
+    const pos = new Float32Array(TRAIL_MAX * 2 * 2 * 3), g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const idx = [];
+    // Two ribbons (left and right runner): between each point and the next, a quad of each, so
+    // drawing the first n - 1 segments draws only the points laid so far.
+    for (let i = 0; i < TRAIL_MAX - 1; i++) for (let r = 0; r < 2; r++) {
+      const a = (r * TRAIL_MAX + i) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+    g.setIndex(idx); g.setDrawRange(0, 0);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x6f84b8, transparent: true, opacity: 0.7, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    m.frustumCulled = false;
+    tr = { mesh: m, n: 0, last: null };
+    V3.trails.set(sl.id, tr); V3.world.add(m);
+  }
+  return tr;
+}
+function layTrail(hill, sl) {
+  const tr = trailFor(sl);
+  if (sl.air || sl.s < 1 || sl.fin && sl.v < 0.5) { tr.gap = true; return; }
+  if (!tr.gap && tr.last && Math.hypot(sl.s - tr.last[0], sl.x - tr.last[1]) < TRAIL_STEP) return;
+  if (tr.n >= TRAIL_MAX - 3) return;
+  const pos = tr.mesh.geometry.attributes.position.array;
+  const put = (S0, X0, yaw, w) => {
+    const i = tr.n++;
+    for (let r = 0; r < 2; r++) for (let e = 0; e < 2; e++) {
+      const o = (r ? 1 : -1) * 0.27 + (e ? w : -w), X = X0 + o * Math.cos(yaw), S = S0 - o * Math.sin(yaw);
+      const p = hillPoint(hill, S, X, groundAt(hill, S, X) + 0.025), k = ((r * TRAIL_MAX + i) * 2 + e) * 3;
+      pos[k] = p[0]; pos[k + 1] = p[1]; pos[k + 2] = p[2];
+    }
+  };
+  // Over a gap (a jump), the old end and the new start are laid again with no width, so the quads
+  // across the gap have no area.
+  if (tr.gap && tr.last) { put(tr.last[0], tr.last[1], tr.last[2], 0); put(sl.s, sl.x, sl.yaw, 0); }
+  tr.gap = false;
+  put(sl.s, sl.x, sl.yaw, 0.06);
+  tr.last = [sl.s, sl.x, sl.yaw];
+  const g = tr.mesh.geometry;
+  g.attributes.position.needsUpdate = true;
+  g.setDrawRange(0, Math.max(0, tr.n - 1) * 12);
 }
 
 // A jump: a ramp of snow rising as u², its sides and its lip, with a row of lights on the lip.
@@ -390,7 +487,7 @@ function render3d(hill, sleds, me, dt, still) {
   if (V3.hill !== hill) { buildWorld(hill); V3.cam = null; }
   V3.t += dt;
   const live = new Set();
-  for (const sl of sleds) { const rig = rigFor(sl); poseRig(rig, hill, sl); rig.visible = rig.userData.shadow.visible = true; live.add(sl.id); }
+  for (const sl of sleds) { layTrail(hill, sl); const rig = rigFor(sl); poseRig(rig, hill, sl); rig.visible = rig.userData.shadow.visible = true; live.add(sl.id); }
   for (const [id, rig] of V3.rigs) if (!live.has(id)) { V3.scene.remove(rig, rig.userData.shadow); V3.rigs.delete(id); }
   // Presents this phone has taken are gone; the rest bob and turn.
   for (const id in V3.gifts.userData.byId) {
@@ -433,7 +530,7 @@ function render3d(hill, sleds, me, dt, still) {
 function chaseCamera(hill, me, cam, dt, still) {
   if (me) showRider(me, true);
   const d = me || { s: 0, x: 0, y: baseAt(hill, 0), yaw: 0, air: false };
-  const dir = Math.atan2(centreX(hill, d.s + 0.6) - centreX(hill, d.s - 0.6), 1.2) + d.yaw * 0.6;
+  const dir = courseDir(hill, d.s) + d.yaw * 0.6;
   const back = LAND ? 6.4 : 8.6, up = LAND ? 2.6 : 3.7;
   const bs = d.s - Math.cos(dir) * back, bx = d.x - Math.sin(dir) * back;
   const want = hillPoint(hill, bs, bx, Math.max(d.y, groundAt(hill, d.s, d.x)) + up);
@@ -462,7 +559,7 @@ function eyeCamera(hill, me, cam) {
   cam.rotateX(-0.26);   // eyes a little down the track
   cam.fov = LAND ? 64 : 78; cam.updateProjectionMatrix();
   V3.cam = null;   // the chase camera starts afresh when the view changes back
-  return Math.atan2(centreX(hill, me.s + 0.6) - centreX(hill, me.s - 0.6), 1.2) + me.yaw;
+  return courseDir(hill, me.s) + me.yaw;
 }
 function showRider(sl, on) {
   const P = rigFor(sl).userData.P;

@@ -96,6 +96,8 @@ function buildHill(n) {
   return hill;
 }
 
+// Which way the course itself heads at `s` (radians from straight down the s axis).
+function courseDir(hill, s) { return Math.atan2(centreX(hill, s + 0.6) - centreX(hill, s - 0.6), 1.2); }
 function centreX(hill, s) { let v = 0; for (const [a, k, p] of hill.bend) v += a * Math.sin(s * k + p); return v; }
 function baseAt(hill, s) {
   const b = hill.base, i = clamp(Math.floor(s), 0, hill.total - 1), f = clamp(s - i, 0, 1);
@@ -187,15 +189,18 @@ function land(hill, sl) {
 }
 
 const DT = 1 / 120;
+const TURN_RATE = 1.4, MAX_YAW = 1.3;   // rad/s at the finger's full reach; the widest heading
 // One step of a sled: gravity down the slope, the snow's friction, steering, the jumps, the air.
 function step(hill, sl, dt) {
   sl.t += dt;
   if (sl.pop) sl.pop.t += dt;
-  const wasFall = sl.fallT > 0;
   if (sl.fallT > 0) sl.fallT = Math.max(0, sl.fallT - dt);
   const steer = sl.fin || sl.fallT > 0 ? 0 : sl.steer;
   for (const id in sl.hitWait) if ((sl.hitWait[id] -= dt) <= 0) delete sl.hitWait[id];
 
+  // The sled keeps its own heading (#475, Eero's choice: no steering by itself). `yaw` is measured
+  // from the course, so where the course bends the yaw changes by as much the other way.
+  const cd0 = courseDir(hill, sl.s);
   if (sl.air) {
     sl.airT += dt;
     sl.vy -= G * dt;
@@ -214,9 +219,10 @@ function step(hill, sl, dt) {
     const gy = groundAt(hill, sl.s, sl.x);
     if (sl.y <= gy) { sl.y = gy; land(hill, sl); }
   } else {
-    // Steering: the sled turns towards the finger's way; turning hard brakes a little.
-    const target = steer * 0.62;
-    sl.yaw += (target - sl.yaw) * Math.min(1, dt * (wasFall ? 2 : 5));
+    // Steering: the finger turns the sled, as fast as it is drawn aside, and the sled keeps the way
+    // it was turned to when the finger lifts. After a fall it is set pointing down the course again.
+    if (sl.fallT > 0) sl.yaw *= Math.max(0, 1 - dt * 3);
+    else sl.yaw = clamp(sl.yaw + steer * TURN_RATE * dt, -MAX_YAW, MAX_YAW);
     // Slopes measured behind the sled, so a lip just ahead does not count as a drop yet.
     const e = 0.15, g0 = groundAt(hill, sl.s, sl.x);
     const gs = (g0 - groundAt(hill, sl.s - e, sl.x)) / e;
@@ -246,6 +252,7 @@ function step(hill, sl, dt) {
       sl.y = gy;
     }
   }
+  sl.yaw -= courseDir(hill, sl.s) - cd0;
   // The trees, rocks and snowmen: low enough to hit them is a fall.
   if (sl.fallT <= 0 && !sl.fin) {
     for (const o of hill.obst) {
@@ -327,7 +334,9 @@ function cpuDrive(hill, sl, dt) {
     const xAt = sl.x + Math.tan(sl.yaw) * ds;
     if (Math.abs(xAt - o.x) < o.r + 1.4) { tx = o.x + (sl.x >= o.x ? 1 : -1) * (o.r + 2.4); break; }
   }
-  sl.steer = clamp((tx - sl.x) / 5 - sl.yaw * 0.8, -1, 1);
+  // The computer steers like a player: towards a heading that takes it to its line, and back.
+  const want = clamp((tx - sl.x) / 6, -0.6, 0.6);
+  sl.steer = clamp((want - sl.yaw) * 3, -1, 1);
 }
 const CPU_SKILL = [
   { max: 1, err: 0.22, aim: 0.6 },
