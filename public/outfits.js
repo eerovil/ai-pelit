@@ -582,7 +582,9 @@
   // looks around, cheers, tilts its head and waves; a game with its own figure (Orava's squirrel)
   // has it hop. It stops when the picker closes.
   function preview() {
-    var pv = el('canvas', 'width:100%;height:150px;display:block;border-radius:12px;flex:none;background:linear-gradient(#2d4f86,#3f8a4c)');
+    // position:static: a game's own canvas{position:fixed} (Mäkihyppy, Voimistelu) must not lift it
+    // out of the picker, where it lay over the ready button (#473).
+    var pv = el('canvas', 'position:static;width:100%;height:150px;display:block;border-radius:12px;flex:none;background:linear-gradient(#2d4f86,#3f8a4c)');
     pv.id = 'ai-pelit-asut-esikatselu';
     var t0 = performance.now();
     function frame() {
@@ -610,14 +612,17 @@
     return pv;
   }
 
+  // A low sideways screen whose cards would not fit gets smaller ones (#473: the athletics' seven
+  // kits and four groups in the Christmas season).
+  var tight = false;
   function card(o, picked, grid) {
     var b = el('button', 'box-shadow:none;transform:none;text-shadow:none;margin:0;height:auto;width:auto;display:flex;flex-direction:column;align-items:center;gap:2px;border:3px solid ' + (picked ? '#ffd45c' : 'transparent') +
       ';border-radius:12px;background:' + (o.halloween ? '#2b2140' : o.joulu ? '#1f4030' : '#2a3358') + ';color:#fff;padding:4px 2px 6px;font:600 13px system-ui,sans-serif;touch-action:manipulation;min-width:0');
     b.className = 'asu' + (picked ? ' valittu' : '');
     b.setAttribute('data-asu', o.id);
     // A low, wide screen gets smaller cards, so every group fits without scrolling.
-    var cw = innerHeight < 500 ? 52 : 72, ch = innerHeight < 500 ? 50 : (FIGURE ? 70 : 80);
-    var cv = el('canvas', 'width:' + cw + 'px;height:' + ch + 'px;display:block');
+    var cw = innerHeight < 500 ? (tight ? 44 : 52) : 72, ch = innerHeight < 500 ? (tight ? 38 : 50) : (FIGURE ? 70 : 80);
+    var cv = el('canvas', 'position:static;width:' + cw + 'px;height:' + ch + 'px;display:block');
     var dpr = Math.min(window.devicePixelRatio || 1, 3);
     cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
     var ctx = cv.getContext('2d');
@@ -683,11 +688,15 @@
     else if (jouluSeason() && innerHeight >= 500 && outfits.some(function (o) { return o.joulu; })) box.appendChild(el('div', 'color:#9fe0a8;font-size:13px', 'Hyvää joulua! Pukeudu joulupukiksi, tontuksi tai poroksi.'));
     var low = innerHeight < 500;
     if (!low && (FIGURE || drawFn)) box.appendChild(preview());
-    var grid = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(' + (low ? 58 : 82) + 'px,1fr));gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
+    tight = false;
+    function columns() { grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(' + (low ? (tight ? 50 : 58) : 82) + 'px,1fr))'; }
+    var grid = el('div', 'display:grid;gap:' + (low ? 4 : 6) + 'px;overflow:auto;min-height:0');
+    columns();
     box.appendChild(grid);
     fill(grid);
     panel.onclick = function (e) { if (e.target === panel) close(); };
     document.body.appendChild(panel);
+    if (low && grid.scrollHeight > grid.clientHeight + 1) { tight = true; columns(); fill(grid); }
   }
 
   // Turning the phone with the picker open lays it out again for the new shape.

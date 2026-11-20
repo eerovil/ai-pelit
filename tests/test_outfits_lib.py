@@ -356,3 +356,16 @@ def test_the_christmas_cards_fit_on_the_screen(site, browser, size):
         assert box["x"] >= 0 and box["x"] + box["width"] <= size[0] and box["y"] + box["height"] <= size[1], (k, box)
     assert page.errors == []
     page.context.close()
+
+
+def test_a_games_fixed_canvas_style_leaves_the_picker_in_place(site, browser):
+    # #473: Mäkihyppy and Voimistelu style every canvas position:fixed; the preview then lay over
+    # "Valmis" once the Christmas group made the picker taller.
+    page = christmas_page(site, browser, "2026-12-10T12:00:00")
+    page.add_style_tag(content="canvas{position:fixed;left:0;top:0;right:0;bottom:0;width:100%;height:100%}")
+    page.evaluate("AiPelitOutfits.open()")
+    page.click("[data-asu=noita]")
+    page.click("#ai-pelit-asut-valmis")
+    assert page.evaluate("AiPelitOutfits.isOpen()") is False
+    assert page.errors == []
+    page.context.close()
