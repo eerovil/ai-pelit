@@ -72,7 +72,7 @@ flowchart TD
 - **Onko 1.–2.11.?**: both seasons at once: `season()` is still true, so Halloween stays first for its last two days.
 - **Joulu, Tavalliset, Tylypahka, Halloween; 🎄-tervehdys**: the group "🎄 Joulu" first, cards on a dark green background, and the line "Hyvää joulua! Pukeudu joulupukiksi, tontuksi tai poroksi." on a tall screen.
 - **Halloween, Joulu, Tavalliset, Tylypahka; 🎃-tervehdys**: 1–2 November only.
-- **Halloween, Tavalliset, Tylypahka**: `fill()` in `public/outfits.js`; on a low sideways screen each group's name is a small cell before its cards, so all of them fit without scrolling.
+- **Halloween, Tavalliset, Tylypahka**: `fill()` in `public/outfits.js`; on a low sideways screen each group's name is a small cell before its cards, so all of them fit without scrolling. When they still would not (#473: the athletics' seven kits with four groups), `open()` lays them out again with smaller cards (`tight`). The picker's canvases are `position:static`, so a game's own `canvas{position:fixed}` (Mäkihyppy, Voimistelu) leaves them in place.
 - **Onko 20.10.–2.11.?**: `season()` in `public/outfits.js`. Upright the cards scroll inside the picker; sideways every group fits at once (`tests/test_outfits_lib.py`).
 - **data-share yleisurheilu?**: `FIGURE` in `public/outfits.js` (#469): `SHARE === 'yleisurheilu'`.
 - **Kortit ja liikkuva esikatselu: pelin oma piirto**: `fill()` draws each card with the game's `draw`, and `preview()` puts a 150 px canvas (`#ai-pelit-asut-esikatselu`) at the top where the game's own figure hops in the outfit the player taps; Orava, Trampoliini and Voimistelu keep their own figure (Eero's choice, #469). On a low sideways screen the preview is left out.
