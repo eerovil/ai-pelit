@@ -371,3 +371,5 @@ function frame(now) {
 resize();
 if (!(window.AiPelitRooms && AiPelitRooms.inRoom)) showMenu();
 else hideAll();
+// scores.js loads after this file: name the list once it is there, so its 🏆 chip opens this hill's.
+addEventListener('DOMContentLoaded', () => setBoard(net && net.hill || hillN));

@@ -25,7 +25,8 @@ const r2 = n => Math.round(n * 100) / 100;
 function pack(sl) {
   return [r2(sl.s), r2(sl.x), r2(sl.y), r2(sl.v), r2(sl.yaw), r2(sl.vy), sl.air ? 1 : 0,
     sl.trick ? TRICK_IDS.indexOf(sl.trick.type) + 1 : 0, sl.trick ? r2(sl.trick.t) : 0, sl.grab ? 1 : 0,
-    sl.points, sl.streak, sl.fin ? 1 : 0, r2(sl.fallT), r2(sl.steer), sl.gifts.slice()];
+    sl.points, sl.streak, sl.fin ? 1 : 0, r2(sl.fallT), r2(sl.steer), sl.gifts.slice(),
+    sl.jump.map(j => [j.type, j.pts]), sl.queue || 0, r2(sl.grabT)];
 }
 function unpack(sl, a) {
   sl.s = a[0]; sl.x = a[1]; sl.y = a[2]; sl.v = a[3]; sl.yaw = a[4]; sl.vy = a[5]; sl.air = !!a[6];
@@ -33,6 +34,8 @@ function unpack(sl, a) {
   else { sl.trick = null; sl.flip = 0; sl.spin = 0; }
   sl.grab = !!a[9]; sl.points = a[10]; sl.streak = a[11]; sl.fin = !!a[12]; sl.fallT = a[13]; sl.steer = a[14];
   if (Array.isArray(a[15])) sl.gifts = a[15];
+  // What this jump has earned so far (tricks done, one waiting, the grab's time), scored on landing.
+  if (Array.isArray(a[16])) { sl.jump = a[16].map(([type, pts]) => ({ type, pts })); sl.queue = a[17] || null; sl.grabT = a[18] || 0; }
 }
 function outfitOf(id) {
   return (window.AiPelitOutfits && id && AiPelitOutfits.get(id)) || OUTFITS.find(o => o.id === id) || OUTFITS[0];
@@ -107,7 +110,7 @@ function guestState(m) {
     if (rec.kind !== 'me' && rec.o !== k.o) { rec.o = k.o; rec.sl.outfit = outfitOf(k.o); }
     if (rec.kind === 'me') {
       // The host has had my sled (the computer drove it, or I was away): carry on from its state.
-      if (fresh || k.w > rec.own) { rec.own = k.w; unpack(rec.sl, k.a); rec.sl.jump = []; }
+      if (fresh || k.w > rec.own) { rec.own = k.w; unpack(rec.sl, k.a); }
       if (k.a[12]) rec.hostFin = true;
     } else unpack(rec.sl, k.a);
   });
@@ -169,18 +172,20 @@ function standings() {
     .map(r => ({ id: r.id, n: r.name, p: r.sl.points, f: r.sl.fin ? 1 : 0, m: r.cpu ? 1 : 0, b: r.kind === 'cpu' ? 1 : 0 }));
 }
 function hostEnd() {
-  const m = { t: 'end', round: net.round, res: standings() };
+  const m = { t: 'end', round: net.round, hill: net.hill, res: standings() };
   RM.send(hostState());
   RM.deliver(m);
   RM.endRound();
-  netEnd(m.res);
+  netEnd(m.res, m.hill);
 }
 // The result, on every phone: shown, and saved once for a sled the computer never drove. It
 // overrides the phone's own idea of its run (a finish the clock beat counts as not finished).
-function netEnd(res) {
+function netEnd(res, hillOf) {
   if (!net || net.res) return;
   net.res = res; net.ph = 'done';
-  if (RM.isHost) lastEnd = { t: 'end', round: net.round, res };
+  // A phone back only after the end has not heard the hill yet: the result names it.
+  if (hillOf && !net.hill) { net.hill = hillOf; setBoard(hillOf); }
+  if (RM.isHost) lastEnd = { t: 'end', round: net.round, hill: net.hill, res };
   const i = res.findIndex(o => o.id === RM.me), row = res[i];
   let saved = { record: false, was: best(net.hill || hillN), opened: 0 };
   if (row && !row.m && RM.once(net.round)) saved = saveRun(net.hill || hillN, row.p);
@@ -251,7 +256,7 @@ if (RM) {
       return;
     }
     if (m.t === 's') guestState(m);
-    if (m.t === 'end') netEnd(m.res);
+    if (m.t === 'end') netEnd(m.res, m.hill);
   });
   RM.on('hello', id => {
     if (net && !net.res) {
@@ -267,7 +272,7 @@ if (RM) {
   RM.on('continue', ids => {
     if (!net || net.res) return;
     for (const rec of net.sleds) if (ids.includes(rec.id) && rec.kind === 'net' && !rec.drive && !rec.sl.fin) {
-      rec.drive = true; rec.cpu = true; rec.own++;
+      rec.drive = true; rec.cpu = true; rec.own++; rec.lastA = null;   // the phone's last state is past
       rec.sl.cpu = cpuBrain(CPU_SKILL[1], rec.sl.s * 7 + 3);
     }
   });

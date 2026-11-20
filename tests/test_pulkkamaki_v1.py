@@ -207,3 +207,16 @@ def test_a_second_run_after_a_finished_one_starts_fresh(site, context):
     page.wait_for_function("mode === 'end'", timeout=8000)
     assert page.evaluate("+localStorage.getItem('ai-pelit:pulkkamaki:ennatys-1')") >= first
     assert page.errors == []
+
+
+def test_the_score_chip_opens_the_chosen_hills_list_right_away(site, context):
+    asked = []
+    context.route("**/api/scores?*", lambda route: (asked.append(route.request.url), route.fulfill(
+        status=200, content_type="application/json", body='{"scores": [], "me": null}')))
+    page = open_game(site, context)
+    page.click("#ai-pelit-tulokset-nappi")
+    page.wait_for_function("document.getElementById('ai-pelit-tulokset')")
+    assert "Kotimäki" in page.locator("#ai-pelit-tulokset").inner_text()
+    assert any("board=maki-1" in u for u in asked), asked
+    assert not any("board=main" in u for u in asked), asked
+    assert page.errors == []

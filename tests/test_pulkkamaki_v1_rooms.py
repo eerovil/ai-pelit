@@ -155,3 +155,89 @@ def test_the_computer_takes_an_away_phone_and_its_result_is_not_saved(sledders):
     assert "Tietokone" in guest.locator("#endNote").inner_text()
     assert guest.evaluate("localStorage.getItem('ai-pelit:pulkkamaki:ennatys-1')") is None
     assert host.errors == guest.errors == []
+
+
+def test_a_phone_back_after_the_computer_drove_carries_on_from_the_computers_run(sledders):
+    host, guest = room(sledders)
+    start([host, guest])
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    host.wait_for_function(f"recOf({gid}).lastA")
+    sledders.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1", timeout=10000)
+    host.click("#aipr-goOn")
+    host.wait_for_function(f"recOf({gid}).drive && !AiPelitRooms.paused")
+    host.wait_for_function(f"recOf({gid}).sl.s > 60", timeout=20000)
+    sledders.relay.back(guest)
+    host.wait_for_function(f"!recOf({gid}).drive", timeout=15000)
+    # The host keeps the computer's run, and the phone takes it up from there.
+    driven = host.evaluate(f"recOf({gid}).sl.s")
+    assert driven > 60
+    guest.wait_for_function(f"me.s > {driven - 5}", timeout=10000)
+    assert host.errors == guest.errors == []
+
+
+def test_a_phone_in_the_air_reloaded_keeps_what_the_jump_has_earned(sledders):
+    host, guest = room(sledders)
+    start([host, guest])
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    # A flip done high in the air, not yet landed: its points come on landing.
+    guest.evaluate("(() => { me.s = 120; me.x = centreX(hill, 120); me.y = groundAt(hill, 120, me.x) + 60; me.vy = 15; me.air = true; me.jump = [{ type: 'front', pts: 300 }]; })()")
+    host.wait_for_function(f"recOf({gid}).sl.jump.length === 1 && recOf({gid}).sl.air")
+    guest.reload()
+    guest.wait_for_function("mode === 'run' && me", timeout=15000)
+    assert guest.evaluate("me.air && me.jump.length === 1 && me.points === 0")
+    guest.wait_for_function("!me.air", timeout=15000)
+    assert guest.evaluate("me.points") > 0
+    assert host.errors == guest.errors == []
+
+
+def test_a_phone_back_only_after_the_end_saves_on_the_hosts_hill(sledders):
+    host, guest = room(sledders)
+    host.evaluate("open = 2; roomControls()")
+    host.locator("#pulkka-room button").nth(1).click()
+    assert host.evaluate("hillN") == 2
+    start([host, guest])
+    assert guest.evaluate("hill.n") == 2
+    gid = guest.evaluate("AiPelitRooms.me")
+    guest.evaluate(NEAR_END)
+    host.wait_for_function(f"recOf({json.dumps(gid)}).sl.fin", timeout=10000)
+    pts = host.evaluate(f"recOf({json.dumps(gid)}).sl.points")
+    # Gone before the end, and back on a fresh page only once the host has the result.
+    sledders.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1", timeout=10000)
+    host.click("#aipr-goOn")
+    host.evaluate(NEAR_END)
+    host.evaluate(CPU_NEAR_END)
+    host.wait_for_function("mode === 'end'", timeout=15000)
+    guest.reload()
+    guest.wait_for_function("V3 || no3d", timeout=20000)
+    sledders.relay.blocked.discard(gid)
+    guest.wait_for_function("mode === 'end' && net && net.hill === 2", timeout=20000)
+    assert guest.evaluate("+localStorage.getItem('ai-pelit:pulkkamaki:ennatys-2')") == pts
+    assert guest.evaluate("localStorage.getItem('ai-pelit:pulkkamaki:ennatys-1')") is None
+    assert host.errors == guest.errors == []
+
+
+def test_three_phones_share_one_result_and_the_next_round_starts_fresh(sledders):
+    pages = room(sledders, 3)
+    start(pages)
+    ids = pages[0].evaluate("net.sleds.map(r => r.id)")
+    assert len(ids) == 4   # three phones and one of the computer's
+    for p in pages:
+        assert p.evaluate("net.sleds.map(r => r.id)") == ids
+        p.evaluate(NEAR_END)
+    pages[0].evaluate(CPU_NEAR_END)
+    for p in pages:
+        p.wait_for_function("mode === 'end'", timeout=15000)
+    rows = [p.evaluate("result.rows.map(r => [r.id, r.points])") for p in pages]
+    assert rows[0] == rows[1] == rows[2]
+    first = json.dumps(pages[0].evaluate("net.round"))
+    for p in pages:
+        p.click("#again")
+    pages[0].click("#aipr-start")
+    for p in pages:
+        p.wait_for_function(f"net && net.round !== {first} && me && !me.fin && me.points === 0", timeout=10000)
+        assert p.evaluate("net.sleds.map(r => r.id)") == ids
+        assert p.evaluate("net.sleds.every(r => !r.sl.fin && r.sl.points === 0 && r.own === 0)")
+    for p in pages:
+        assert p.errors == []
