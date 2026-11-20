@@ -1,0 +1,463 @@
+'use strict';
+// Pulkkamäki v1: the hill on a Christmas evening, in 3D (three.js, the site's shared copy, #99).
+// It only reads the hill and the sleds (world.js). index.html imports three.js and calls
+// init3d(THREE); a phone that cannot draw 3D plays on with the HUD over a plain picture.
+// A hill place (s, x, y) is world (centreX(s) + x, y, -s).
+
+let THREE = null, V3 = null, no3d = false;
+
+function init3d(T) {
+  THREE = T;
+  const gl = document.getElementById('g');
+  const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(64, 1, 0.1, 900);
+  // An evening: blue light from the sky, a moon low ahead, the lights warm and bright.
+  const hemi = new THREE.HemisphereLight(0xb4c8f0, 0x34406a, 1.9);
+  const moon = new THREE.DirectionalLight(0xdfe8ff, 1.3);
+  scene.add(hemi, moon, moon.target);
+  scene.fog = new THREE.Fog(0x22325a, 50, 330);
+  const sky = skyDome();
+  scene.add(sky);
+  V3 = { renderer, scene, camera, moon, sky, hill: null, world: null, rigs: new Map(), w: 0, h: 0, v: new THREE.Vector3(), cam: null, snow: null, santa: null, t: 0 };
+  V3.snow = snowfall(); scene.add(V3.snow);
+  V3.santa = santaSleigh(); scene.add(V3.santa);
+}
+
+// Vertex colours are linear: fill them from THREE.Color('#hex').
+function colorArray(n, pick) {
+  const a = new Float32Array(n * 3), c = new THREE.Color();
+  for (let i = 0; i < n; i++) { c.set(pick(i)); a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  return a;
+}
+// Several shapes in one geometry with a colour each, so a spruce is one draw for all of them.
+function merge(parts) {
+  const geos = parts.map(([g, hex]) => { g = g.index ? g.toNonIndexed() : g; g.setAttribute('color', new THREE.BufferAttribute(colorArray(g.attributes.position.count, () => hex), 3)); return g; });
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'color']) {
+    const n = geos.reduce((s, g) => s + g.attributes[name].array.length, 0), a = new Float32Array(n);
+    let o = 0; for (const g of geos) { a.set(g.attributes[name].array, o); o += g.attributes[name].array.length; }
+    out.setAttribute(name, new THREE.BufferAttribute(a, 3));
+  }
+  return out;
+}
+const lambert = () => new THREE.MeshLambertMaterial({ vertexColors: true });
+
+function skyDome() {
+  const g = new THREE.SphereGeometry(700, 24, 12), p = g.attributes.position, c = new THREE.Color(), top = new THREE.Color('#0d1534'), low = new THREE.Color('#5a5f9a');
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(p.count * 3), 3));
+  for (let i = 0; i < p.count; i++) { c.copy(low).lerp(top, clamp(p.getY(i) / 260, 0, 1)); g.attributes.color.setXYZ(i, c.r, c.g, c.b); }
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  m.renderOrder = -2;
+  // Stars and the moon.
+  const r = rng(5), n = 260, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = r() * TAU, e = 0.12 + r() * 1.3, d = 650;
+    pos[i * 3] = Math.cos(e) * Math.sin(a) * d; pos[i * 3 + 1] = Math.sin(e) * d; pos[i * 3 + 2] = Math.cos(e) * Math.cos(a) * d;
+  }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  m.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, fog: false, depthWrite: false })));
+  const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(16, 24), new THREE.MeshBasicMaterial({ color: 0xf6f1d8, fog: false, depthWrite: false }));
+  moonDisc.position.set(-180, 170, -620); moonDisc.lookAt(0, 0, 0);
+  m.add(moonDisc);
+  return m;
+}
+
+// Snow falling round the camera: the flakes wrap round a box that moves with it.
+function snowfall() {
+  const n = 700, pos = new Float32Array(n * 3), r = rng(9);
+  for (let i = 0; i < n; i++) { pos[i * 3] = (r() - 0.5) * 50; pos[i * 3 + 1] = r() * 26; pos[i * 3 + 2] = -r() * 70; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.13, transparent: true, opacity: 0.9, depthWrite: false }));
+  p.frustumCulled = false;
+  return p;
+}
+
+// Santa's sleigh and reindeer, a dark shape crossing the sky now and then, Rudolf's nose lit.
+function santaSleigh() {
+  const parts = [], box = (w, h, d, x, y, z, col) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); parts.push([g, col]); };
+  box(3, 1.4, 1.6, 0, 0, 0, '#3a1420'); box(3.6, 0.2, 0.2, 0.2, -0.9, 0.6, '#2a2030'); box(3.6, 0.2, 0.2, 0.2, -0.9, -0.6, '#2a2030');
+  box(1.2, 1.3, 1, -0.4, 1.0, 0, '#2a2030');
+  for (let i = 0; i < 4; i++) { box(1.8, 0.8, 0.6, 4 + i * 2.6, 0.3 + (i % 2) * 0.3, (i % 2 ? 0.6 : -0.6), '#2c2226'); box(0.4, 0.8, 0.3, 4.9 + i * 2.6, 1.0 + (i % 2) * 0.3, (i % 2 ? 0.6 : -0.6), '#2c2226'); }
+  const m = new THREE.Mesh(merge(parts), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a2a, fog: false }));
+  nose.position.set(13.1, 1.5, 0.6); m.add(nose);
+  m.visible = false; m.scale.setScalar(1.6);
+  return m;
+}
+
+// ---- The hill ----
+function hillPoint(hill, s, x, y) { return [centreX(hill, s) + x, y, -s]; }
+
+function buildWorld(hill) {
+  if (V3.world) { V3.scene.remove(V3.world); V3.world.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  const world = new THREE.Group();
+  world.add(terrain(hill), kickers(hill), spruces(hill), rocksAndSnowmen(hill), lanterns(hill), finishArch(hill));
+  V3.gifts = gifts(hill); world.add(V3.gifts);
+  V3.scene.add(world);
+  V3.world = world; V3.hill = hill;
+}
+
+// The snow: the track packed smooth, the banks rising beside it, deep snow beyond.
+function terrain(hill) {
+  const xs = [];
+  for (let x = -70; x <= 70; x += x < -14 || x > 14 ? 5 : 1) xs.push(x);
+  const s0 = -40, s1 = hill.total, ds = 2, rows = Math.floor((s1 - s0) / ds) + 1, cols = xs.length;
+  const pos = new Float32Array(rows * cols * 3), col = new Float32Array(rows * cols * 3), c = new THREE.Color();
+  const track = new THREE.Color('#e9f0ff'), soft = new THREE.Color('#c9d6f2');
+  for (let i = 0; i < rows; i++) {
+    const s = s0 + i * ds, cx = centreX(hill, s), b = baseAt(hill, Math.max(0, s)) + (s < 0 ? -s * 0.1 : 0);
+    for (let j = 0; j < cols; j++) {
+      const x = xs[j], k = (i * cols + j) * 3;
+      pos[k] = cx + x; pos[k + 1] = b + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1); pos[k + 2] = -s;
+      const edge = clamp((Math.abs(x) - hill.width / 2) / 4, 0, 1);
+      c.copy(track).lerp(soft, edge);
+      // Sled tracks in the packed snow: faint stripes down the hill.
+      if (edge === 0 && Math.abs(Math.round(x) - x) < 0.01 && (Math.round(x) + 100) % 3 === 0) c.multiplyScalar(0.93);
+      col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
+    }
+  }
+  const idx = [];
+  for (let i = 0; i < rows - 1; i++) for (let j = 0; j < cols - 1; j++) {
+    const a = i * cols + j, b = a + 1, d = a + cols, e = d + 1;
+    idx.push(a, d, b, b, d, e);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return new THREE.Mesh(g, lambert());
+}
+
+// A jump: a ramp of snow rising as u², its sides and its lip, with a row of lights on the lip.
+function kickers(hill) {
+  const pos = [], col = [], c = new THREE.Color(), lights = [];
+  const tri = (a, b, d, hex) => { c.set(hex); for (const p of [a, b, d]) { pos.push(...p); col.push(c.r, c.g, c.b); } };
+  const quad = (a, b, d, e, hex) => { tri(a, b, d, hex); tri(b, e, d, hex); };
+  for (const k of hill.kicks) {
+    const N = 10, L = k.x - k.w / 2, R = k.x + k.w / 2;
+    const top = (u, x) => { const s = k.s + u * k.len; return hillPoint(hill, s, x, baseAt(hill, s) + k.h * u * u); };
+    const bot = (u, x) => { const s = k.s + u * k.len; return hillPoint(hill, s, x, baseAt(hill, s) - 0.05); };
+    for (let i = 0; i < N; i++) {
+      const u0 = i / N, u1 = (i + 1) / N;
+      quad(top(u0, L), top(u0, R), top(u1, L), top(u1, R), '#f4f8ff');
+      quad(bot(u0, L), top(u0, L), bot(u1, L), top(u1, L), '#b7c6e8');
+      quad(top(u0, R), bot(u0, R), top(u1, R), bot(u1, R), '#b7c6e8');
+    }
+    quad(top(1, L), top(1, R), bot(1, L), bot(1, R), '#9fb0d8');
+    for (let i = 0; i <= 6; i++) lights.push(top(1, L + (R - L) * i / 6).map((v, j) => j === 1 ? v + 0.12 : v));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  m.add(glowPoints(lights, i => ['#ff4848', '#ffd23a', '#48ff7a', '#4aa8ff'][i % 4], 0.5));
+  return m;
+}
+
+// Little lights that glow: a bright dot with a soft halo.
+function glowPoints(pts, colour, size) {
+  const n = pts.length, pos = new Float32Array(n * 3);
+  pts.forEach((p, i) => pos.set(p, i * 3));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(colorArray(n, colour), 3));
+  const grp = new THREE.Group();
+  grp.add(new THREE.Points(g, new THREE.PointsMaterial({ vertexColors: true, size, fog: false })));
+  grp.add(new THREE.Points(g, new THREE.PointsMaterial({ vertexColors: true, size: size * 3.2, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })));
+  return grp;
+}
+
+function spruceGeometry() {
+  const parts = [];
+  const trunk = new THREE.CylinderGeometry(0.18, 0.25, 1, 6); trunk.translate(0, 0.5, 0); parts.push([trunk, '#4a3222']);
+  [[2.2, 2.2, 1.6], [1.8, 2.0, 2.6], [1.3, 1.8, 3.6], [0.8, 1.6, 4.5]].forEach(([r, h, y], i) => {
+    const g = new THREE.ConeGeometry(r, h, 8); g.translate(0, y, 0); parts.push([g, i % 2 ? '#1f5a3e' : '#24664a']);
+    const sn = new THREE.ConeGeometry(r * 0.72, h * 0.32, 8); sn.translate(0, y + h * 0.36, 0); parts.push([sn, '#e8eefc']);
+  });
+  return merge(parts);
+}
+
+// Spruces: thick beyond the banks, a few on the track to steer round. Some carry string lights.
+function spruces(hill) {
+  const r = rng(hill.n * 101), list = [];
+  for (const o of hill.obst) if (o.kind === 'kuusi') list.push([o.s, o.x, 1]);
+  for (let s = -30; s < hill.total; s += 3) {
+    for (const side of [-1, 1]) {
+      if (r() < 0.55) list.push([s + r() * 3, side * (hill.width / 2 + 3 + r() * 6), 0.8 + r() * 0.6]);
+      if (r() < 0.5) list.push([s + r() * 3, side * (hill.width / 2 + 10 + r() * 50), 0.9 + r() * 0.9]);
+    }
+  }
+  const m = new THREE.InstancedMesh(spruceGeometry(), lambert(), list.length), o = new THREE.Object3D(), lights = [];
+  list.forEach(([s, x, k], i) => {
+    const [X, Y, Z] = hillPoint(hill, s, x, baseAt(hill, Math.max(0, s)) + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1) - 0.1);
+    o.position.set(X, Y, Z); o.scale.setScalar(k); o.rotation.y = r() * TAU; o.updateMatrix(); m.setMatrixAt(i, o.matrix);
+    if (Math.abs(x) < 26 && r() < 0.45) {
+      for (let j = 0; j < 14; j++) {
+        const h = 1.2 + j * 0.24, a = j * 2.1, rad = (2.2 - j * 0.12) * k * 0.95;
+        lights.push([X + Math.cos(a) * rad, Y + h * k, Z + Math.sin(a) * rad]);
+      }
+    }
+  });
+  const g = new THREE.Group();
+  g.add(m, glowPoints(lights, i => ['#ff5050', '#ffd84a', '#5cff8a', '#5ab4ff', '#ff8af0'][(i * 7) % 5], 0.32));
+  return g;
+}
+
+function rocksAndSnowmen(hill) {
+  const parts = [];
+  for (const o of hill.obst) {
+    const y = baseAt(hill, o.s) + bankAt(hill, o.x), [X, , Z] = hillPoint(hill, o.s, o.x, 0);
+    if (o.kind === 'kivi') {
+      const g = new THREE.DodecahedronGeometry(0.9); g.scale(1, 0.65, 1); g.translate(X, y + 0.35, Z); parts.push([g, '#5d6475']);
+      const cap = new THREE.SphereGeometry(0.75, 8, 4, 0, TAU, 0, Math.PI / 2); cap.scale(1, 0.4, 1); cap.translate(X, y + 0.7, Z); parts.push([cap, '#eef3ff']);
+    } else if (o.kind === 'lumiukko') {
+      [[0.55, 0.5], [0.42, 1.2], [0.3, 1.75]].forEach(([r, h]) => { const g = new THREE.SphereGeometry(r, 10, 8); g.translate(X, y + h, Z); parts.push([g, '#f6f9ff']); });
+      const nose = new THREE.ConeGeometry(0.06, 0.32, 6); nose.rotateX(Math.PI / 2); nose.translate(X, y + 1.78, Z + 0.4); parts.push([nose, '#ff7a1a']);
+      const hat = new THREE.CylinderGeometry(0.22, 0.22, 0.34, 10); hat.translate(X, y + 2.15, Z); parts.push([hat, '#1a1a22']);
+      const brim = new THREE.CylinderGeometry(0.34, 0.34, 0.04, 12); brim.translate(X, y + 1.98, Z); parts.push([brim, '#1a1a22']);
+      const sc = new THREE.TorusGeometry(0.33, 0.07, 6, 12); sc.rotateX(Math.PI / 2); sc.translate(X, y + 1.5, Z); parts.push([sc, '#d42a2a']);
+    }
+  }
+  return parts.length ? new THREE.Mesh(merge(parts), lambert()) : new THREE.Group();
+}
+
+// Lanterns along both edges every 24 m: a post and a warm light.
+function lanterns(hill) {
+  const parts = [], lights = [];
+  for (let s = 10; s < hill.len + 40; s += 24) {
+    for (const side of [-1, 1]) {
+      const x = side * (hill.width / 2 + 1.2), y = baseAt(hill, s) + bankAt(hill, x), [X, , Z] = hillPoint(hill, s, x, 0);
+      const g = new THREE.CylinderGeometry(0.06, 0.08, 1.6, 6); g.translate(X, y + 0.8, Z); parts.push([g, '#2a2a33']);
+      const b = new THREE.BoxGeometry(0.3, 0.36, 0.3); b.translate(X, y + 1.75, Z); parts.push([b, '#3a3a44']);
+      lights.push([X, y + 1.75, Z]);
+    }
+  }
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(merge(parts), lambert()), glowPoints(lights, () => '#ffc85a', 0.7));
+  return g;
+}
+
+// The finish: two posts and a banner, "MAALI", with lights.
+function finishArch(hill) {
+  const s = hill.len, y = baseAt(hill, s), half = hill.width / 2 + 0.5, parts = [], lights = [];
+  for (const side of [-1, 1]) {
+    const [X, , Z] = hillPoint(hill, s, side * half, 0), g = new THREE.CylinderGeometry(0.18, 0.18, 5, 8); g.translate(X, y + 2.5, Z); parts.push([g, '#b02030']);
+  }
+  const grp = new THREE.Group();
+  grp.add(new THREE.Mesh(merge(parts), lambert()));
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#b02030'; cx.fillRect(0, 0, 512, 96);
+  cx.fillStyle = '#fff'; cx.font = '700 64px system-ui,sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText('MAALI', 256, 52);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const banner = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2 * 96 / 512), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, fog: false }));
+  const [X, , Z] = hillPoint(hill, s, 0, 0);
+  banner.position.set(X, y + 4.6, Z); grp.add(banner);
+  for (let i = 0; i <= 16; i++) lights.push([X - half + i * half / 8, y + 5.35, Z + 0.05]);
+  grp.add(glowPoints(lights, i => (i % 2 ? '#ffd84a' : '#ffffff'), 0.4));
+  return grp;
+}
+
+// Presents: a wrapped box with a ribbon, floating and turning. Each phone hides those it took.
+function gifts(hill) {
+  const grp = new THREE.Group(), cols = ['#d42a2a', '#2a7ad4', '#2aa85a', '#d4a82a', '#a82ad4'];
+  grp.userData.byId = {};
+  for (const gf of hill.gifts) {
+    const k = gf.big ? 1.4 : 0.9, col = cols[gf.id % cols.length], parts = [];
+    const b = new THREE.BoxGeometry(0.7 * k, 0.6 * k, 0.7 * k); parts.push([b, col]);
+    const r1 = new THREE.BoxGeometry(0.72 * k, 0.62 * k, 0.14 * k); parts.push([r1, '#fff3c0']);
+    const r2 = new THREE.BoxGeometry(0.14 * k, 0.62 * k, 0.72 * k); parts.push([r2, '#fff3c0']);
+    const bow = new THREE.TorusGeometry(0.14 * k, 0.05 * k, 6, 10); bow.translate(0, 0.38 * k, 0); parts.push([bow, '#fff3c0']);
+    const m = new THREE.Mesh(merge(parts), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x222222 }));
+    const [X, , Z] = hillPoint(hill, gf.s, gf.x, 0);
+    m.position.set(X, baseAt(hill, gf.s) + bankAt(hill, gf.x) + gf.up, Z);
+    m.userData.y0 = m.position.y; m.userData.ph = gf.id * 1.7;
+    grp.add(m); grp.userData.byId[gf.id] = m;
+  }
+  return grp;
+}
+
+// ---- A sled and its rider ----
+// The pulkka is a red plastic sled; the rider sits in it, dressed in the outfit's palette.
+function makeRig(o) {
+  const rig = new THREE.Group(), pivot = new THREE.Group(), lean = new THREE.Group(), sled = new THREE.Group(), rider = new THREE.Group();
+  rig.rotation.order = 'YXZ';   // heading first, then the slope, so a turned sled still tips along itself
+  rig.add(pivot); pivot.add(lean); lean.add(sled, rider);
+  const mat = hex => new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.14, 1.15), mat('#d0202c')); body.position.y = 0.07; sled.add(body);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.32, 0.18), mat('#d0202c')); nose.position.set(0, 0.2, -0.6); nose.rotation.x = -0.5; sled.add(nose);
+  for (const sx of [-1, 1]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 1.1), mat('#a8141f')); rail.position.set(sx * 0.31, 0.17, 0); sled.add(rail); }
+  const rope = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.02, 4, 10, Math.PI), mat('#f2e3b0')); rope.position.set(0, 0.36, -0.68); sled.add(rope);
+  // Rider: legs forward along the sled, the body upright, arms to the sides holding on.
+  const P = {};
+  P.legs = new THREE.Group(); rider.add(P.legs);
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.09, 0.72, 7), mat(o.bottom)); leg.rotation.x = Math.PI / 2; leg.position.set(sx * 0.12, 0.25, -0.18); P.legs.add(leg);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.2), mat(o.shoe || '#222')); boot.position.set(sx * 0.12, 0.27, -0.58); P.legs.add(boot);
+  }
+  P.torso = new THREE.Group(); P.torso.position.set(0, 0.22, 0.22); rider.add(P.torso);
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.21, 0.55, 9), mat(o.top || '#2f6fd0')); t.position.y = 0.3; P.torso.add(t);
+  if (o.stripe) { const st = new THREE.Mesh(new THREE.CylinderGeometry(0.195, 0.205, 0.08, 9), mat(o.stripe)); st.position.y = 0.2; P.torso.add(st); }
+  P.arms = [];
+  for (const sx of [-1, 1]) {
+    const arm = new THREE.Group(); arm.position.set(sx * 0.21, 0.52, 0); P.torso.add(arm);
+    const a = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 6), mat(o.top || '#2f6fd0')); a.position.y = -0.25; arm.add(a);
+    const mitt = new THREE.Mesh(new THREE.SphereGeometry(0.075, 7, 5), mat(o.mitt || o.stripe || '#e8e8e8')); mitt.position.y = -0.52; arm.add(mitt);
+    arm.rotation.z = sx * 0.35; arm.rotation.x = -0.2;
+    P.arms.push(arm);
+  }
+  P.head = new THREE.Group(); P.head.position.y = 0.72; P.torso.add(P.head);
+  dressHead(P.head, o, mat);
+  rig.userData = { pivot, lean, sled, rider, P, outfit: o.id };
+  // A soft dark shadow under the sled, on the snow, so the height of a jump shows.
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(0.75, 16), new THREE.MeshBasicMaterial({ color: 0x0a1030, transparent: true, opacity: 0.35, depthWrite: false }));
+  sh.rotation.x = -Math.PI / 2; rig.userData.shadow = sh;
+  return rig;
+}
+// The head: a face and a beanie, or the costume's own (the Christmas costumes, #473).
+function dressHead(h, o, mat) {
+  const face = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 9), mat(o.skin || '#f0c8a0')); h.add(face);
+  const eye = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.018, 5, 4), eye); e.position.set(sx * 0.055, 0.02, -0.14); h.add(e); }
+  const cap = (col, r, y) => { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 6, 0, TAU, 0, Math.PI / 2), mat(col)); c.position.y = y; h.add(c); return c; };
+  const kind = o.head;
+  if (kind === 'pukki' || kind === 'tonttu') {
+    cap('#ffffff', 0.165, 0.02).scale.y = 0.35;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.15, kind === 'tonttu' ? 0.42 : 0.3, 10), mat('#d42a2a')); cone.position.set(0, 0.2, 0.03); cone.rotation.x = 0.35; h.add(cone);
+    const bob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), mat('#ffffff')); bob.position.set(0, kind === 'tonttu' ? 0.4 : 0.33, 0.1); h.add(bob);
+    if (kind === 'pukki') { const beard = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 7, 0, TAU, Math.PI / 2, Math.PI / 2), mat('#f4f4f4')); beard.position.set(0, -0.04, -0.05); beard.scale.set(1, 1.4, 0.9); h.add(beard); }
+  } else if (kind === 'poro') {
+    for (const sx of [-1, 1]) {
+      const a = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.28, 5), mat('#5a3a1e')); a.position.set(sx * 0.1, 0.22, 0); a.rotation.z = -sx * 0.4; h.add(a);
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.14, 5), mat('#5a3a1e')); b.position.set(sx * 0.17, 0.3, 0); b.rotation.z = sx * 0.6; h.add(b);
+    }
+    const n = new THREE.Mesh(new THREE.SphereGeometry(0.04, 7, 5), new THREE.MeshBasicMaterial({ color: 0xff2020 })); n.position.set(0, -0.02, -0.16); h.add(n);
+  } else if (kind === 'lumiukko') {
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.025, 12), mat('#1a1a22')); brim.position.y = 0.12; h.add(brim);
+    const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 12), mat('#1a1a22')); hat.position.y = 0.23; h.add(hat);
+    const n = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.14, 6), mat('#ff7a1a')); n.rotation.x = -Math.PI / 2; n.position.set(0, -0.01, -0.2); h.add(n);
+  } else if (kind === 'pipari') {
+    const sm = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 4, 10, Math.PI), mat('#ffffff')); sm.rotation.z = Math.PI; sm.position.set(0, -0.04, -0.14); h.add(sm);
+  } else {
+    cap(o.pipo || o.hair || '#d42a2a', 0.16, 0.02);
+    const bob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 5), mat(o.tupsu || '#ffffff')); bob.position.y = 0.18; h.add(bob);
+  }
+}
+
+// Places a sled's rig: its place and heading on the hill, then the trick's turn, the lean, the pose.
+function poseRig(rig, hill, sl, look) {
+  const u = rig.userData, ds = 0.6;
+  const [X, Y, Z] = hillPoint(hill, sl.s, sl.x, sl.y);
+  rig.position.set(X, Y, Z);
+  // The course's own heading here, and the sled's yaw from it.
+  const dir = Math.atan2(centreX(hill, sl.s + ds) - centreX(hill, sl.s - ds), 2 * ds);
+  rig.rotation.set(0, 0, 0);
+  rig.rotation.y = -(dir + sl.yaw);
+  // Nose follows the snow's slope on the ground; in the air the flight's.
+  const slope = sl.air ? Math.atan2(sl.vy, Math.max(1, sl.v)) * 0.6 : Math.atan(groundAt(hill, sl.s + 0.5, sl.x) - groundAt(hill, sl.s - 0.5, sl.x));
+  u.slope = (u.slope === undefined ? slope : u.slope + (slope - u.slope) * 0.25);
+  rig.rotation.x = u.slope;
+  u.pivot.position.y = 0.45; u.lean.position.y = -0.45;
+  u.pivot.rotation.set(-sl.flip, sl.spin, sl.tilt + sl.roll);   // a front flip takes the nose down
+  const P = u.P, grab = sl.grab;
+  // Teräsmies: the rider lies stretched out over the sled, arms forward holding its nose.
+  const gk = (u.gk || 0) + ((grab ? 1 : 0) - (u.gk || 0)) * 0.3; u.gk = gk;
+  P.torso.rotation.x = -1.35 * gk; P.torso.position.y = 0.22 + 0.3 * gk; P.torso.position.z = 0.22 - 0.1 * gk;
+  P.legs.rotation.x = 0.0; P.legs.position.y = 0.32 * gk; P.legs.position.z = 0.5 * gk;
+  P.arms.forEach((a, i) => { const sx = i ? 1 : -1; a.rotation.x = -0.2 - 2.6 * gk + (sl.air && !grab ? -0.9 : 0); a.rotation.z = sx * (0.35 - 0.2 * gk); });
+  // Shadow: on the snow under the sled.
+  const gy = groundAt(hill, sl.s, sl.x), sh = u.shadow;
+  sh.position.set(X, gy + 0.04, Z);
+  const k = clamp(1 - (sl.y - gy) / 8, 0.3, 1); sh.scale.setScalar(k); sh.material.opacity = 0.35 * k;
+}
+
+function rigFor(sl) {
+  let rig = V3.rigs.get(sl.id);
+  const o = sl.outfit || {};
+  if (rig && rig.userData.outfit !== o.id) { V3.scene.remove(rig, rig.userData.shadow); V3.rigs.delete(sl.id); rig = null; }
+  if (!rig) { rig = makeRig(o); V3.scene.add(rig, rig.userData.shadow); V3.rigs.set(sl.id, rig); }
+  return rig;
+}
+
+// ---- Each frame ----
+function render3d(hill, sleds, me, dt, still) {
+  if (!V3) return false;
+  const R = V3.renderer, cv = R.domElement, w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight;
+  if (w !== V3.w || h !== V3.h) { V3.w = w; V3.h = h; R.setSize(w, h, false); V3.camera.aspect = w / h; V3.camera.updateProjectionMatrix(); }
+  if (V3.hill !== hill) { buildWorld(hill); V3.cam = null; }
+  V3.t += dt;
+  const live = new Set();
+  for (const sl of sleds) { const rig = rigFor(sl); poseRig(rig, hill, sl); rig.visible = rig.userData.shadow.visible = true; live.add(sl.id); }
+  for (const [id, rig] of V3.rigs) if (!live.has(id)) { V3.scene.remove(rig, rig.userData.shadow); V3.rigs.delete(id); }
+  // Presents this phone has taken are gone; the rest bob and turn.
+  for (const id in V3.gifts.userData.byId) {
+    const m = V3.gifts.userData.byId[id];
+    m.visible = !me || !me.gifts.includes(+id);
+    if (!still) { m.rotation.y = V3.t * 1.2 + m.userData.ph; m.position.y = m.userData.y0 + Math.sin(V3.t * 2 + m.userData.ph) * 0.12; }
+  }
+  // The camera: behind the sled along its heading (not turning with a spin or flip), a little above.
+  const cam = V3.camera, d = me || { s: 0, x: 0, y: baseAt(hill, 0), yaw: 0, air: false };
+  const dir = Math.atan2(centreX(hill, d.s + 0.6) - centreX(hill, d.s - 0.6), 1.2) + d.yaw * 0.6;
+  const back = LAND ? 6.4 : 8.6, up = LAND ? 2.6 : 3.7;
+  const bs = d.s - Math.cos(dir) * back, bx = d.x - Math.sin(dir) * back;
+  const want = hillPoint(hill, bs, bx, Math.max(d.y, groundAt(hill, d.s, d.x)) + up);
+  want[1] = Math.max(want[1], groundAt(hill, bs, bx) + 1.4);
+  if (!V3.cam) V3.cam = want.slice();
+  const k = still ? 1 : Math.min(1, dt * 6);
+  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? Math.min(1, dt * 3.5) || 1 : k);
+  cam.position.set(...V3.cam);
+  const ls = d.s + 9, lx = d.x + Math.sin(dir) * 9;
+  cam.lookAt(...hillPoint(hill, ls, lx, Math.max(d.y - 1.5, groundAt(hill, ls, lx)) + 0.6));
+  cam.fov = LAND ? 58 : 66; cam.updateProjectionMatrix();
+  // A present right by the camera would fill the screen: it is left out until the camera has passed.
+  for (const id in V3.gifts.userData.byId) { const m = V3.gifts.userData.byId[id]; if (m.visible && m.getWorldPosition(V3.v).distanceTo(cam.position) < 4.5) m.visible = false; }
+  V3.sky.position.copy(cam.position);
+  V3.moon.position.set(cam.position.x - 60, cam.position.y + 80, cam.position.z - 120); V3.moon.target.position.copy(cam.position);
+  // Snow: falls and drifts, wrapping round a box in front of the camera.
+  if (!still) {
+    const p = V3.snow.geometry.attributes.position, a = p.array;
+    for (let i = 0; i < a.length; i += 3) {
+      a[i + 1] -= dt * (1.4 + (i % 7) * 0.12); a[i] += Math.sin(V3.t + i) * dt * 0.3;
+      if (a[i + 1] < -6) a[i + 1] += 30;
+    }
+    p.needsUpdate = true;
+  }
+  V3.snow.position.set(cam.position.x, cam.position.y - 8, cam.position.z + 8);
+  V3.snow.rotation.y = -dir;
+  // Santa crosses the sky every 25 s or so, far ahead.
+  const st = V3.t % 26, sa = V3.santa;
+  sa.visible = st < 12;
+  if (sa.visible) {
+    const f = st / 12;
+    sa.position.set(cam.position.x + 320 - f * 640, cam.position.y + 95 + Math.sin(f * 9) * 4, cam.position.z - 380);
+    sa.rotation.y = Math.PI;
+  }
+  R.render(V3.scene, cam);
+  return true;
+}
+
+// A slow phone: measured over the first seconds of a run, below 27 frames a second it draws fewer
+// pixels, half a step at a time down to one per screen pixel (Hiihto v7's `tune()`).
+function tune(ms) {
+  if (!V3 || V3.tuned || ms > 500) return;
+  V3.tt = (V3.tt || 0) + ms; V3.tn = (V3.tn || 0) + 1;
+  if (V3.tt < 2500) return;
+  const fps = 1000 * V3.tn / V3.tt, R = V3.renderer, pr = R.getPixelRatio();
+  V3.tt = V3.tn = 0;
+  if (V3.warm !== true) { V3.warm = true; return; }
+  if (fps >= 27) V3.tuned = true;
+  else if (pr > 1.01) { R.setPixelRatio(Math.max(1, pr - 0.5)); V3.w = 0; }
+  else V3.tuned = true;
+}
+
+// Where a hill point shows on the screen, for the names over friends' sleds; null behind the camera.
+function screenOf(hill, s, x, y) {
+  if (!V3 || !V3.w) return null;
+  const v = V3.v.set(...hillPoint(hill, s, x, y));
+  const d = V3.camera.position.distanceTo(v);
+  v.project(V3.camera);
+  return v.z > 1 ? null : { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, d };
+}

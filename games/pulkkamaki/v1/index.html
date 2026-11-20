@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pulkkamäki</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1b2a4a;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+  #g{pointer-events:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  .screen{position:fixed;top:0;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 56px) calc(env(safe-area-inset-right,0px) + 18px) calc(env(safe-area-inset-bottom,0px) + 18px) calc(env(safe-area-inset-left,0px) + 18px);
+    box-sizing:border-box;background:linear-gradient(rgba(10,16,48,.55),rgba(10,16,48,.25) 40%,rgba(10,16,48,.6))}
+  .screen[hidden]{display:none}
+  h1{margin:0;font-size:38px;font-weight:900;letter-spacing:.5px;text-shadow:0 3px 0 #b02030,0 6px 14px rgba(0,0,0,.4)}
+  .sub{margin:-4px 0 4px;font-size:14px;opacity:.9;text-align:center;max-width:320px;line-height:1.35}
+  .col{display:flex;flex-direction:column;gap:10px;align-items:stretch;width:100%;max-width:330px}
+  button{font:700 17px system-ui,sans-serif;border:0;border-radius:14px;padding:13px 16px;color:#fff;background:rgba(255,255,255,.16);touch-action:manipulation}
+  button.big{background:#c8202f;font-size:21px;padding:15px;box-shadow:0 4px 0 #8a1420}
+  button.hill{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;padding:11px 14px}
+  button.hill small{font-weight:500;font-size:13px;opacity:.85}
+  button.hill.on{background:rgba(255,216,74,.28);outline:2px solid #ffd84a}
+  button:disabled{opacity:.55}
+  .row{display:flex;gap:10px}
+  .row button{flex:1}
+  #endPts{font-size:44px;font-weight:900;margin:0}
+  #endNote,#endOpen{margin:0;font-size:16px;font-weight:700;color:#ffd84a}
+  #endList{list-style:none;margin:0;padding:0;width:100%;max-width:330px}
+  #endList li{display:flex;justify-content:space-between;padding:6px 10px;border-radius:10px;font-size:16px}
+  #endList li.me{background:rgba(255,216,74,.22);font-weight:700}
+  body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 14px);gap:10px 28px}
+  body.land .screen>.head{flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  body.land h1{font-size:32px}
+  body.land #hills{gap:7px}
+  body.land button.hill{padding:8px 12px}
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu" class="screen" hidden>
+  <div class="head">
+    <h1>Pulkkamäki</h1>
+    <p class="sub">Vedä sormea sivulle: pulkka kääntyy. Hyppyristä ilmaan ja pyyhkäise temppu. Laskeudu suorana!</p>
+  </div>
+  <div class="col">
+    <div id="hills" class="col"></div>
+    <button id="go" class="big">Laske!</button>
+    <div class="row"><button id="asu">👕 Asu</button></div>
+  </div>
+</div>
+<div id="end" class="screen" hidden>
+  <div class="head">
+    <p id="endPts"></p>
+    <p id="endNote"></p>
+    <p id="endOpen" hidden></p>
+  </div>
+  <div class="col">
+    <ol id="endList"></ol>
+    <button id="again" class="big">Uudestaan</button>
+    <button id="toMenu">Valikkoon</button>
+  </div>
+</div>
+<script src="../../../outfits.js" data-game="pulkkamaki"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="world.js"></script>
+<script src="draw3d.js"></script>
+<script src="ui.js"></script>
+<script type="module">
+import('../../../lib/three-r187/three.module.js').then(m => {
+  try { init3d(m); } catch (e) { no3d = true; }
+  wake();
+}, () => { no3d = true; wake(); });
+</script>
+<script src="../../../scores.js" data-game="pulkkamaki" data-order="high" data-corner="bottom-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
