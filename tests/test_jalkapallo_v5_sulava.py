@@ -603,8 +603,11 @@ def test_a_paused_match_goes_on_from_where_the_guest_drew_it(site, browser, firs
     # Host first, the guest's clock ran on while the host's stood, and its tracks then drew past the newest spot for
     # up to 2 s (measured before the fix: 110 frames, the first 20 of them 0.28-0.43 s past it). With the fix the
     # guest's clock goes slower until the host's spots catch up: past them by 0.25 s at 0.3 s, 0.05 s at 0.52 s.
+    # Past it by more than two spots' gap (0.1 s) counts: the bug drew 0.28-0.43 s past it, while under a full
+    # suite's load the slowed clock was still 0.02-0.05 s past it at 0.86-0.93 s (job af1befa4a4cc), a frame's
+    # worth of the library's own short guess.
     ahead = [(round(t - go_at, 2), round(d - c, 3)) for t, _, _, d, c in rec
-             if t > go_at + 0.75 and d is not None and c is not None and d > c + 0.02
+             if t > go_at + 0.75 and d is not None and c is not None and d > c + 0.1
              and not any(st <= t <= st + 0.35 for st in stalls)]
     assert len(ahead) <= 3, ahead
     errors = [e for p in (host, guest, ville) for e in p.errors]
