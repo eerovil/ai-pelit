@@ -470,3 +470,91 @@ def test_computer_seals_keep_ukkonen_and_go_for_whoever_holds_it(site, context):
     assert n >= 30, r
     assert r["flee"] == n and r["chase"] == n and r["giver"] == n, r
     assert r["pass"] >= n - 4, r
+
+
+# ---- v2: the 3D picture and the pause button (#478) ----
+
+def ice_brightness(page, x, y):
+    """Mean brightness of a 9 × 9 patch of the screen around (x, y), from a real screenshot."""
+    from io import BytesIO
+    from PIL import Image
+    img = Image.open(BytesIO(page.screenshot(clip={"x": x - 4, "y": y - 4, "width": 9, "height": 9}))).convert("L")
+    return sum(img.tobytes()) / (img.width * img.height)
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+def test_the_floe_and_every_seal_are_drawn_in_3d_on_the_screen(site, context, size):
+    w, h = size
+    page = open_game(site, context, w, h)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    go(page)
+    page.evaluate("""() => {
+      const ps = Array.from({ length: 8 }, (_, i) => ({ id: i ? 'c' + i : 'me', name: 'n' + i, hat: i, kind: i ? 'cpu' : 'me' }));
+      world = newWorld(1, ps, 2); me = world.seals[0]; brains = world.seals.map(() => null);
+    }""")
+    page.wait_for_timeout(300)
+    r = page.evaluate("""() => {
+      const p = world.parts[0], b = playBox();
+      return { gl: getComputedStyle(document.getElementById('g')).display,
+               seals: world.seals.map(s => J3D.project(s.x, 0, s.y)),
+               floe: [J3D.project(p.x - p.r0, 0, p.y), J3D.project(p.x + p.r0, 0, p.y), J3D.project(p.x, 0, p.y - p.r0), J3D.project(p.x, 0, p.y + p.r0)],
+               mid: J3D.project(p.x, 0, p.y), box: [b.x0, b.y0, b.x1, b.y1] };
+    }""")
+    assert r["gl"] == "block"
+    x0, y0, x1, y1 = r["box"]
+    for x, y in r["seals"] + r["floe"]:
+        assert x0 - 1 <= x <= x1 + 1 and y0 - 1 <= y <= y1 + 1, (x, y, r["box"])
+    # The ice shows white-ish beside its middle, where no seal stands at the start (they ring the edge).
+    mx, my = r["mid"]
+    assert ice_brightness(page, mx, my) > 170
+    assert page.errors == []
+
+
+def test_a_phone_without_3d_plays_on_the_2d_drawing(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    page.evaluate("J3D.ready = false; J3D.failed = true")
+    go(page)
+    page.wait_for_timeout(300)
+    assert page.evaluate("getComputedStyle(document.getElementById('g')).display") == "none"
+    mx, my = page.evaluate("() => { const p = world.parts[0]; return [X(p.x), Y(p.y)]; }")
+    assert ice_brightness(page, mx, my) > 170
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+def test_pause_stops_the_round_and_quit_ends_the_match(site, context, size):
+    page = open_game(site, context, *size)
+    assert not page.is_visible("#pauseBtn")      # not on the menu
+    go(page)
+    btn = page.locator("#pauseBtn").bounding_box()
+    assert btn["x"] + btn["width"] <= size[0] and btn["y"] >= 0
+    page.evaluate("me.stars = 1; saveMatch()")
+    page.tap("#pauseBtn")
+    t0 = page.evaluate("world.t")
+    page.wait_for_timeout(500)
+    assert page.evaluate("[mode, world.t]") == ["pause", t0]
+    assert page.is_visible("#resume") and page.is_visible("#quit")
+    page.tap("#resume")
+    page.wait_for_function(f"mode === 'play' && world.t > {t0}")
+    assert page.evaluate("me.stars") == 1
+    page.tap("#pauseBtn")
+    page.tap("#quit")
+    assert page.evaluate("mode") == "menu" and page.is_visible("#menu")
+    assert not page.is_visible("#pauseBtn")
+    # The quit match does not come back on the next open.
+    assert page.evaluate("localStorage.getItem('ai-pelit:jaalautta:kesken1')") is None
+    page.reload()
+    page.wait_for_function("typeof mode !== 'undefined' && mode === 'menu'")
+    assert page.errors == []
+
+
+def test_leaving_the_app_pauses_a_round_alone(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("""() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange')); }""")
+    assert page.evaluate("mode") == "pause"
+    assert page.errors == []

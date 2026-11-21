@@ -1,6 +1,6 @@
 # Jäälautta: one round on the ice floe
 
-How a match of Jäälautta plays (v1, #478). Up to eight round, belly-sliding seals
+How a match of Jäälautta plays (v1, #478; drawn in 3D from v2). Up to eight round, belly-sliding seals
 stand on a floating ice floe seen from above, and each tries to shove the others into the sea.
 The last one still on the ice wins the round; the first to win three rounds wins the match.
 Alone the player meets three computer seals; in a room 2–8 phones play the same floe, and
@@ -12,6 +12,9 @@ flowchart TD
   R[Huone: tekijä valitsee lautan, Aloita kierros] --> B
   B --> C[Tatti liu'uttaa hyljettä, liukas jää pitää vauhdin]
   C --> D{Töni-nappi?}
+  C -- ⏸, yksin --> PA[Tauko: Jatka tai Lopeta peli]
+  PA -- Jatka --> C
+  PA -- Lopeta peli --> A
   D -- Kyllä, ei jäähyllä --> E[Syöksy: iso vauhti hetkeksi, jäähy 1,2 s]
   D -- Ei --> F{Törmäys?}
   E --> F
@@ -44,7 +47,7 @@ flowchart TD
   N -- Kyllä --> O{Yksin vai huoneessa?}
   O -- Yksin --> P[Voitto avaa seuraavan lautan]
   O -- Huoneessa --> Q[Tulokset kaikille, takaisin huoneeseen]
-  class A,B,C blue
+  class A,B,C,PA blue
   class D,F,H,K,N,O,S,V,Y amber
   class E,G,T,X teal
   class I,L,U,W,Z rose
@@ -63,8 +66,9 @@ flowchart TD
 
 ## Boxes
 
-- **Valitse lautta, Pelaa!**: the menu offers five floes (`FLOES` in `games/jaalautta/v1/world.js`); the next opens when the player wins a match alone on the newest open one, saved as `ai-pelit:jaalautta:auki`. The last floe picked is `ai-pelit:jaalautta:lautta`, the hat colour `ai-pelit:jaalautta:hattu`. "👥 Pelaa kavereiden kanssa" opens the room. A match alone is saved as `ai-pelit:jaalautta:kesken1` (floe, stars, next erä) when it starts and after each erä, never mid-erä; a reload plays that erä again from the start, and a save that does not read is dropped and the menu shows.
-- **Huone: tekijä valitsee lautan, Aloita kierros**: `rooms.js` with `data-min="2" data-max="8"`; the host picks one of its own open floes under the player list (`RM.extra()`, `games/jaalautta/v1/net.js`). The host runs the only real world for every seal and sends it 15 times a second; computer seals fill up to four, and with seven or eight seals the floe is a quarter bigger. A guest sends its stick and lunge count 20 times a second, moves its own seal at once and is eased to the host's position.
+- **Valitse lautta, Pelaa!**: the menu offers five floes (`FLOES` in `games/jaalautta/v2/world.js`); the next opens when the player wins a match alone on the newest open one, saved as `ai-pelit:jaalautta:auki`. The last floe picked is `ai-pelit:jaalautta:lautta`, the hat colour `ai-pelit:jaalautta:hattu`. "👥 Pelaa kavereiden kanssa" opens the room. A match alone is saved as `ai-pelit:jaalautta:kesken1` (floe, stars, next erä) when it starts and after each erä, never mid-erä; a reload plays that erä again from the start, and a save that does not read is dropped and the menu shows.
+- **Huone: tekijä valitsee lautan, Aloita kierros**: `rooms.js` with `data-min="2" data-max="8"`; the host picks one of its own open floes under the player list (`RM.extra()`, `games/jaalautta/v2/net.js`). The host runs the only real world for every seal and sends it 15 times a second; computer seals fill up to four, and with seven or eight seals the floe is a quarter bigger. A guest sends its stick and lunge count 20 times a second, moves its own seal at once and is eased to the host's position.
+- **Tauko: Jatka tai Lopeta peli**: alone, a ⏸ button in the top right corner (v2) stops the erä (`pauseGame()` in `games/jaalautta/v2/ui.js`), as does leaving the app (`visibilitychange`). "Jatka" plays on from where it stopped; "Lopeta peli" drops `ai-pelit:jaalautta:kesken1`, so the match does not come back, and shows the menu; nothing is counted. In a room there is no ⏸: the host ends a round from the "‹ Pelit" chip (#392).
 - **Tatti liu'uttaa hyljettä, liukas jää pitää vauhdin**: a finger anywhere but the button is a floating stick: where it touched down is the middle, and its direction and distance (up to 56 px) push the seal that way. On ice the seal keeps sliding after the finger lifts and slows only a little, so turning takes time.
 - **Töni-nappi?**: the round "Töni" button in the lower right corner, fired on touch-down because timing is the game. It works only while the erä is on: a press during the countdown or between erät does nothing; a guest's press that reaches the host between erät is counted, never used, and the guest counts on from the host's number. `resetEra()` drops any press left pending.
 - **Syöksy: iso vauhti hetkeksi, jäähy 1,2 s**: the seal lunges the way the stick points (or the way it faces, with no stick), counted even while the cooldown runs but done only once it is over; the button's ring fills back over the cooldown.
@@ -72,7 +76,7 @@ flowchart TD
 - **Lumipallo tai railo**: on the third floe big snowballs roll across and shove whoever they hit; on the fourth, holes open in the ice: cracks flash for 1.5 s, then the hole is open water for 4 s.
 - **Tehoste: Jätti, Pikkuinen, Ukkonen tai Lohkare**: a gull flies a lantern in and lights a ring on the ice 6 s into the erä, and again 6 s after each ring is gone; it glows 4 s (`POWERS` in `world.js`). The first seal in gets one at random: Jätti (big, heavy, 8 s), Pikkuinen (small, light, 8 s), both easing back to the seal's own size over their last second (`sized()`), Ukkonen (a 5 s cloud passed on by any touch; at its end every other seal is stunned 1.5 s), Lohkare (an 8 s ice block passed on by any touch; its last holder is pressed through the ice). A fuse passes on no sooner than 0.5 s after it arrived, never straight back to the seal that gave it (`passFuse()`), and only one is on the floe at a time. A computer seal keeps Ukkonen and runs from the others, who come to take it (not the one that just gave it); it passes Lohkare on to the nearest seal it may, and the others keep away from it (`decide()` in `ai.js`). The same four effects as the original's, with this game's own names and look.
 - **Keskipiste jään ulkopuolella?**: a seal falls only when its centre leaves the ice (or is over an open hole), so half over the edge it still has a moment to scramble back; past that, a slow one wobbles on the edge (below) before it goes in.
-- **Hiljaa yli reunan, railo ei alla?**: when a seal's centre leaves the ice slower than `TEETER_V` (6.5; a seal walking at full stick goes about 6, a lunge or a hard shove faster), it starts wobbling there instead of falling (`teeter()` in `games/jaalautta/v1/world.js`). Not over an open hole (straight in), and not where the edge has melted under about one and a half seal widths (straight in). The owner asked for this on #478, as in the genre's model.
+- **Hiljaa yli reunan, railo ei alla?**: when a seal's centre leaves the ice slower than `TEETER_V` (6.5; a seal walking at full stick goes about 6, a lunge or a hard shove faster), it starts wobbling there instead of falling (`teeter()` in `games/jaalautta/v2/world.js`). Not over an open hole (straight in), and not where the edge has melted under about one and a half seal widths (straight in). The owner asked for this on #478, as in the genre's model.
 - **Huojuu reunalla 1,6 s: Hakkaa Töniä!**: the seal rocks over the water and stays put; the stick does nothing, and each Töni press is a dot filled over it (`wobble()`), never a lunge. "Hakkaa Töniä!" shows above the button, which throbs, and a creak (`narina`) plays. A computer seal presses at a pace its floe's skill gives (`cpuThink()` in `ai.js`), and other computer seals come to tip it in. In a room the host counts the presses; a guest's own seal is drawn where the host has it.
 - **5 painallusta ajoissa**: `TEETER_N` presses within `TEETER_T` (1.6 s) put the seal back just inside the edge, sliding inwards at 4, with the `onnistui` chime.
 - **Aika loppuu, joku koskee, tainnuksissa tai jää sulaa**: the time running out; another seal coming at it at all (one standing by is only moved off; `nudge()`, a fuse still passes on the touch) or a snowball; the ice under it melting away. A seal stunned by Ukkonen cannot press, so it goes in when its time ends.
