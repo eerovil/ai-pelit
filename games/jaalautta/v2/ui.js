@@ -1,5 +1,5 @@
 'use strict';
-// Jäälautta v1: the screen, the fingers, the menus, the saves and the sounds, and the main loop.
+// Jäälautta v2: the screen, the fingers, the menus, the saves and the sounds, and the main loop.
 
 const c = document.getElementById('c'), cx = c.getContext('2d');
 let W = 360, H = 640, DPR = 1, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, LAND = false;
@@ -13,6 +13,8 @@ function resize() {
   SAFE_L = parseFloat(cs.paddingLeft) || 0; SAFE_R = parseFloat(cs.paddingRight) || 0;
   LAND = W > H;
   document.body.classList.toggle('land', LAND);
+  // Upright under 360 px the star row needs the whole width, so ⏸ sits under it (see drawHUD).
+  document.body.classList.toggle('narrow', !LAND && W < 360);
   wake();
 }
 addEventListener('resize', resize);
@@ -185,7 +187,19 @@ function lunge() {
 
 // ---- Menus (DOM, over the canvas) ----
 const $ = id => document.getElementById(id);
-function hideAll() { for (const id of ['menu', 'end']) $(id).hidden = true; }
+function hideAll() { for (const id of ['menu', 'end', 'pause']) $(id).hidden = true; }
+// ⏸ pauses a game alone; from there "Lopeta peli" ends the match and goes to the menu.
+// In a room the "‹ Pelit" chip's menu already ends a round (#392), so the button is only for solo.
+function pauseGame() {
+  if (mode !== 'play' || !world) return;
+  mode = 'pause'; stick = null; if (me) { me.ix = 0; me.iy = 0; }
+  sfx('valinta', { vol: 0.3 }); $('pause').hidden = false; wake();
+}
+$('pauseBtn').addEventListener('click', pauseGame);
+$('resume').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); $('pause').hidden = true; mode = 'play'; last = 0; wake(); });
+$('quit').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); drop('kesken1'); showMenu(); });
+// Leaving the app mid-erä pauses too, so the seal is not pushed in while the phone is away.
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 function showMenu() {
   mode = 'menu'; world = null; me = null; seen = null;
   hideAll(); $('menu').hidden = false;
@@ -233,9 +247,13 @@ $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); show
 
 // ---- Drawing ----
 // The play area: portrait leaves the lower part for the thumbs; sideways the floe sits in the middle.
-function view(w) {
+function playBox() {
   let x0 = SAFE_L + 8, x1 = W - SAFE_R - 8, y0 = SAFE_T + 58, y1 = H - SAFE_B - 128;
   if (LAND) { y0 = SAFE_T + 44; y1 = H - SAFE_B - 8; x0 = SAFE_L + 120; x1 = W - SAFE_R - 120; }
+  return { x0, x1, y0, y1 };
+}
+function view(w) {
+  const { x0, x1, y0, y1 } = playBox();
   let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
   for (const p of w.parts) { bx0 = Math.min(bx0, p.x - p.r0); bx1 = Math.max(bx1, p.x + p.r0); by0 = Math.min(by0, p.y - p.r0); by1 = Math.max(by1, p.y + p.r0); }
   const m = 1.2, s = Math.min((x1 - x0) / (bx1 - bx0 + 2 * m), (y1 - y0) / (by1 - by0 + 2 * m));
@@ -335,14 +353,33 @@ function drawSnow(w) {
 function drawSeal(w, sl) {
   const R = radiusOf(sl) * V.s;
   if (sl.out) {
-    // In the water: a head bobbing where it went in, with rings.
+    // In the water: a head bobbing where it went in, with rings. Lohkare's end comes first: the block
+    // drops onto the seal, which squashes flat, shards fly, and both sink through the ice.
     const t = sl.out, x = X(sl.outX), y = Y(sl.outY);
-    cx.strokeStyle = 'rgba(220,240,255,' + Math.max(0, 0.7 - t * 0.3) + ')'; cx.lineWidth = 2;
-    for (let k = 0; k < 3; k++) { const rr = (t * 30 + k * 12) % 50; cx.beginPath(); cx.ellipse(x, y, rr, rr * 0.6, 0, 0, TAU); cx.stroke(); }
-    if (sl.crushed && t < 1.2) {
-      cx.fillStyle = 'rgba(200,235,255,' + (1 - t / 1.2) + ')';
-      cx.fillRect(x - R, y - R - (1.2 - t) * 30, R * 2, R * 2);
+    if (sl.crushed && t < CRUSH_T) {
+      const s = R * 2.2;
+      if (t < CRUSH_DROP) {
+        const k = t / CRUSH_DROP;
+        cx.fillStyle = '#8a93a3'; cx.beginPath(); cx.ellipse(x, y, R, R * (1 - 0.3 * k * k), 0, 0, TAU); cx.fill();
+        cx.fillStyle = '#bfe6ff'; cx.fillRect(x - s / 2, y - s / 2 - (1 - k * k) * 70, s, s);
+        cx.strokeStyle = '#7fb4d8'; cx.lineWidth = 2; cx.strokeRect(x - s / 2, y - s / 2 - (1 - k * k) * 70, s, s);
+        return;
+      }
+      const k = Math.min(1, (t - CRUSH_DROP) / (CRUSH_T - CRUSH_DROP - 0.2)), d = t - CRUSH_DROP;
+      cx.fillStyle = '#0d3a66'; cx.beginPath(); cx.arc(x, y, R * 1.25, 0, TAU); cx.fill();
+      cx.fillStyle = '#8a93a3'; cx.beginPath(); cx.ellipse(x, y, R * 1.2 * (1 - k * 0.6), R * 0.4 * (1 - k), 0, 0, TAU); cx.fill();
+      const b = s * (1 - k * 0.7), sh = (1 - k) * Math.sin(t * 60) * 2;
+      cx.globalAlpha = 1 - k; cx.fillStyle = '#bfe6ff'; cx.fillRect(x - b / 2 + sh, y - b / 2, b, b);
+      for (let i = 0; i < 8; i++) {
+        const a = i * TAU / 8 + sl.i, r = R + d * (40 + (i % 3) * 12);
+        cx.fillRect(x + Math.cos(a) * r - 3, y + Math.sin(a) * r - 3, 6, 6);
+      }
+      cx.globalAlpha = 1;
+      return;
     }
+    const tw = sl.crushed ? t - CRUSH_T : t;
+    cx.strokeStyle = 'rgba(220,240,255,' + Math.max(0, 0.7 - tw * 0.3) + ')'; cx.lineWidth = 2;
+    for (let k = 0; k < 3; k++) { const rr = (tw * 30 + k * 12) % 50; cx.beginPath(); cx.ellipse(x, y, rr, rr * 0.6, 0, 0, TAU); cx.stroke(); }
     cx.fillStyle = '#7a7f8a'; cx.beginPath(); cx.arc(x, y + Math.sin(clock * 3 + sl.i) * 2, V.s * 0.45, 0, TAU); cx.fill();
     cx.fillStyle = HATS[sl.hat % HATS.length].c; cx.beginPath(); cx.arc(x, y - V.s * 0.2 + Math.sin(clock * 3 + sl.i) * 2, V.s * 0.28, Math.PI, TAU); cx.fill();
     return;
@@ -375,6 +412,12 @@ function drawSeal(w, sl) {
   cx.fillStyle = HATS[sl.hat % HATS.length].c; cx.beginPath(); cx.arc(R * 0.6, 0, R * 0.38, 0, TAU); cx.fill();
   cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(R * 0.6, 0, R * 0.14, 0, TAU); cx.fill();
   cx.restore();
+  drawMarks(w, sl, x, y, R, false);
+}
+// What floats over a seal: stun stars, the wobble's press dots, the fuse, the name. In 3D the fuse
+// itself is a model, so only its seconds are written here.
+function drawMarks(w, sl, x, y, R, d3) {
+  const tee = sl.teeter > 0;
   if (sl.stun > 0) {
     cx.fillStyle = '#ffe14a'; cx.font = '700 ' + Math.round(R) + 'px system-ui'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
     for (let k = 0; k < 3; k++) { const b = clock * 5 + k * 2.1; cx.fillText('✦', x + Math.cos(b) * R, y - R * 1.1 + Math.sin(b) * R * 0.3); }
@@ -386,7 +429,10 @@ function drawSeal(w, sl) {
     cx.strokeStyle = 'rgba(20,50,90,.6)'; cx.lineWidth = 1; cx.stroke();
   }
   // The fuse over it: a thunder cloud or a hanging ice block, with its seconds left.
-  if (sl.fuse) {
+  if (sl.fuse && d3) {
+    const f = sl.fuse;
+    shadowText((f.k === 'ukko' ? '⚡' : '') + Math.ceil(f.t), x, y - R - 30, 15, f.k === 'ukko' ? '#ffe14a' : '#dff4ff', 'center', 900);
+  } else if (sl.fuse) {
     const fy = y - R - 22, f = sl.fuse;
     if (f.k === 'ukko') {
       cx.fillStyle = '#5a6070'; for (const [dx, rr] of [[-9, 8], [0, 11], [9, 8]]) { cx.beginPath(); cx.arc(x + dx, fy, rr, 0, TAU); cx.fill(); }
@@ -416,7 +462,7 @@ function drawHUD(w) {
   // Upright: rows of four along the top, right of the "‹ Pelit" chip. Sideways: one column in the
   // left margin under it, so the top bar stays free for the room's 🎤 chip.
   const n = w.seals.length, top = SAFE_T + 14;
-  const x0 = SAFE_L + 92, x1 = W - SAFE_R - 12, cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
+  const x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 || net ? 12 : 52), cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
   w.seals.forEach((s, i) => {
     const x = LAND ? SAFE_L + 14 : x0 + (i % 4) * cw, y = LAND ? SAFE_T + 50 + i * 22 : top + Math.floor(i / 4) * 20;
     cx.globalAlpha = s.out ? 0.5 : 1;
@@ -480,15 +526,28 @@ function drawHUD(w) {
 let tutorial = !load('osattu', false);
 function draw(dt) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  drawSea();
   // In the menus an empty floe floats behind.
   const w = world || menuWorld();
   V = view(w);
-  drawFloe(w);
-  drawRing(w);
-  drawSnow(w);
-  for (const sl of w.seals) if (sl.out) drawSeal(w, sl);
-  for (const sl of w.seals) if (!sl.out) drawSeal(w, sl);
+  if (window.J3D && J3D.ready) {
+    // The scene in 3D underneath; this canvas keeps only what floats over it.
+    J3D.show(true);
+    cx.clearRect(0, 0, W, H);
+    J3D.render(w, clock, playBox(), me);
+    if (w.ring && w.ring.come <= 0) { const [rx, ry] = J3D.project(w.ring.x, 0.9, w.ring.y); shadowText('?', rx, ry, 22, '#ffd84a', 'center', 900); }
+    for (const sl of w.seals) if (!sl.out) {
+      const R = radiusOf(sl), [sx, sy] = J3D.project(sl.x, R * 1.4, sl.y), [ex] = J3D.project(sl.x + R, R * 1.4, sl.y);
+      drawMarks(w, sl, sx, sy, Math.abs(ex - sx), true);
+    }
+  } else {
+    if (window.J3D && J3D.show) J3D.show(false);
+    drawSea();
+    drawFloe(w);
+    drawRing(w);
+    drawSnow(w);
+    for (const sl of w.seals) if (sl.out) drawSeal(w, sl);
+    for (const sl of w.seals) if (!sl.out) drawSeal(w, sl);
+  }
   if (mode === 'netwait') shadowText('Odotetaan muita…', W / 2, H * 0.4, 20, '#fff', 'center', 800);
   if (world && (mode === 'play' || mode === 'netplay')) drawHUD(world);
 }
@@ -519,7 +578,8 @@ function frame(now) {
   if (me) { if (me.got !== gotSeen) { gotSeen = me.got; me.gotT = 0; } me.gotT = (me.gotT || 0) + dt; }
   soundsOf(mode === 'play' || mode === 'netplay' ? world : null);
   draw(dt);
-  document.body.classList.toggle('playing', mode === 'play' || mode === 'netplay' || mode === 'netwait');
+  document.body.classList.toggle('playing', mode === 'play' || mode === 'pause' || mode === 'netplay' || mode === 'netwait');
+  document.body.classList.toggle('solo', mode === 'play' && !net);
   const moving = mode === 'play' || mode === 'netplay' || mode === 'netwait' || mode === 'menu' || mode === 'end';
   if (moving || still++ < 2) raf = requestAnimationFrame(frame);
 }

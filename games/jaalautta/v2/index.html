@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Jäälautta</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b2f55;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  body.playing #ai-pelit-tulokset-nappi{display:none}
+  .screen{position:fixed;top:0;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 52px) calc(env(safe-area-inset-right,0px) + 18px) calc(env(safe-area-inset-bottom,0px) + 18px) calc(env(safe-area-inset-left,0px) + 18px);
+    box-sizing:border-box;background:linear-gradient(rgba(6,24,52,.6),rgba(6,24,52,.25) 40%,rgba(6,24,52,.65))}
+  .screen[hidden]{display:none}
+  h1{margin:0;font-size:40px;font-weight:900;letter-spacing:.5px;text-shadow:0 3px 0 #2a6fa8,0 6px 14px rgba(0,0,0,.4)}
+  .sub{margin:-4px 0 4px;font-size:14px;opacity:.92;text-align:center;max-width:320px;line-height:1.35}
+  .col{display:flex;flex-direction:column;gap:9px;align-items:stretch;width:100%;max-width:330px}
+  button{font:700 17px system-ui,sans-serif;border:0;border-radius:14px;padding:13px 16px;color:#fff;background:rgba(255,255,255,.16);touch-action:manipulation}
+  button.big{background:#e0283a;font-size:21px;padding:15px;box-shadow:0 4px 0 #9a1424}
+  button.floe{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;padding:10px 14px}
+  button.floe small{font-weight:500;font-size:13px;opacity:.85;text-align:right}
+  button.floe.on{background:rgba(255,216,74,.28);outline:2px solid #ffd84a}
+  button:disabled{opacity:.55}
+  #wins{margin:0;font-size:14px;font-weight:700;color:#ffd84a;text-align:center;min-height:0}
+  #wins:empty{display:none}
+  #endTitle{font-size:32px;font-weight:900;margin:0;text-align:center}
+  #endNote,#endOpen{margin:0;font-size:16px;font-weight:700;color:#ffd84a;text-align:center}
+  #endList{list-style:none;margin:0;padding:0;width:100%;max-width:330px}
+  #endList li{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:10px;font-size:16px}
+  #endList li.me{background:rgba(255,216,74,.22);font-weight:700}
+  #endList li i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+  #endList li b{color:#ffd84a;letter-spacing:1px}
+  #endList .dim{opacity:.3}
+  #pauseBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(env(safe-area-inset-right,0px) + 6px);width:40px;height:40px;padding:0;border-radius:12px;font-size:18px;background:rgba(6,24,52,.55);display:none;z-index:5}
+  body.solo #pauseBtn{display:block}
+  body.narrow #pauseBtn{top:calc(env(safe-area-inset-top,0px) + 36px)}
+  body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 12px);gap:8px 28px}
+  body.land .screen>.head{flex:0 0 280px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  body.land h1{font-size:32px}
+  body.land #floes{gap:5px}
+  body.land button.floe{padding:6px 12px}
+  body.land button.big{padding:11px}
+  body.land .col{gap:6px}
+  body.land #menu .col button:not(.floe){padding:9px 14px}
+</style>
+</head>
+<body>
+<canvas id="g" style="pointer-events:none"></canvas>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu" class="screen" hidden>
+  <div class="head">
+    <h1>Jäälautta</h1>
+    <p class="sub">Tönäise muut hylkeet mereen ja pysy itse jäällä. Viimeinen jäällä voittaa erän, kolme erää voittaa ottelun.</p>
+    <p id="wins"></p>
+  </div>
+  <div class="col">
+    <div id="floes" class="col"></div>
+    <button id="go" class="big">Pelaa!</button>
+    <button id="friends">👥 Pelaa kavereiden kanssa</button>
+    <button id="hat">🎩 Hattu</button>
+  </div>
+</div>
+<button id="pauseBtn" aria-label="Tauko">⏸</button>
+<div id="pause" class="screen" hidden>
+  <div class="head"><p style="margin:0;font-size:32px;font-weight:900">Tauko</p></div>
+  <div class="col">
+    <button id="resume" class="big">Jatka</button>
+    <button id="quit">Lopeta peli</button>
+  </div>
+</div>
+<div id="end" class="screen" hidden>
+  <div class="head">
+    <p id="endTitle"></p>
+    <p id="endNote"></p>
+    <p id="endOpen" hidden></p>
+  </div>
+  <div class="col">
+    <ol id="endList"></ol>
+    <button id="again" class="big">Uusi ottelu</button>
+    <button id="toMenu">Valitse lautta</button>
+  </div>
+</div>
+<script src="../../../rooms.js" data-game="jaalautta" data-min="2" data-max="8"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="world.js"></script>
+<script src="ai.js"></script>
+<script>
+// three.js for the 3D picture (#478 v2), loaded beside the game; the 2D drawing stays as the fallback.
+window.J3D_LIB = import('../../../lib/three-r187/three.module.js');
+</script>
+<script src="three3d.js"></script>
+<script src="ui.js"></script>
+<script src="net.js"></script>
+<script src="../../../scores.js" data-game="jaalautta" data-order="high" data-corner="bottom-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
