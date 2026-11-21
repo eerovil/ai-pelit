@@ -153,3 +153,59 @@ def test_a_new_rally_puts_a_friend_on_their_spot_at_once(site, browser):
     xs = host.evaluate("window.__xs")
     assert all(abs(abs(v) - 2.2) < 0.05 for v in xs), [round(v, 2) for v in xs if abs(abs(v) - 2.2) >= 0.05]
     assert not host.errors + guest.errors
+
+
+def test_a_new_rally_puts_everyone_on_their_spot_at_once_on_a_third_phone(site, browser):
+    """A guest that only watches starts every track again at the new rally, so the host, the friend and the
+    computer's player are drawn on their serving spots from its first frame, and nobody slides there."""
+    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    me = index(aino)
+    aino.evaluate("""() => { const send = AiPelitRooms.send.bind(AiPelitRooms);
+      AiPelitRooms.send = (m, to) => setTimeout(() => send(m, to), 120); }""")
+    aino.evaluate("setInterval(() => { if (state === 'point') window.__run = false; }, 4); window.__run = true")
+    ville.wait_for_function(f"Math.abs(players[{me}].x) > 3.6", timeout=5000)
+    ville.evaluate("""() => { window.__seen = []; let was = state; const d = window.draw;
+      window.draw = () => { if (state === 'serve' && was !== 'serve') window.__on = true; was = state;
+        if (window.__on && window.__seen.length < 30) window.__seen.push(players.map(p => p.x)); d(); }; }""")
+    host.evaluate("""() => { window.__spots = null; const nr = window.newRally;
+      window.newRally = () => { nr(); window.__spots = players.map(p => p.x); };
+      server = mine; state = 'point'; pauseT = 0.4; msg = null; }""")
+    ville.wait_for_function("window.__seen.length >= 30", timeout=5000)
+    spots, seen = host.evaluate("window.__spots"), ville.evaluate("window.__seen")
+    mine = index(ville)
+    for frame in seen:
+        off = [(i, round(x, 2), spots[i]) for i, x in enumerate(frame) if i != mine and abs(x - spots[i]) > 0.05]
+        assert not off, (off, seen)
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+# On a phone: each time a message changes whose clock player `i`'s spot carries (the computer took over a friend,
+# or gave them back), the spot it brought and where the next frame drew them.
+SWITCH = """(i) => { window.__sw = []; const p = players[i]; let src = p.src, want = null; const d = window.draw;
+  AiPelitRooms.on('message', m => { if (m.t !== 's' || p.src === src) return; src = p.src; want = [src, m.p[i][0]]; });
+  window.draw = () => { d(); if (want) { window.__sw.push([...want, p.x]); want = null; } }; }"""
+
+
+def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_host_says(site, browser):
+    """A friend's phone drops mid-match: the host's computer plays for them, so their row carries the host's clock
+    and no longer the friend's; when the phone is back, the friend's again. A third phone starts the track again
+    at each change, drawing the row's spot from the next frame, not a guess from the other clock."""
+    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    me = index(aino)
+    aino.evaluate("window.__run = true")
+    ville.wait_for_function(f"players[{me}].src === 'f' && Math.abs(players[{me}].x) > 3", timeout=5000)
+    ville.evaluate(SWITCH, me)
+    host.relay.drop(aino)
+    host.wait_for_selector("#aipr-goOn", state="visible", timeout=10000)
+    host.click("#aipr-goOn")
+    host.wait_for_function(f"players[{me}].kind === 'cpu'")
+    ville.wait_for_function("window.__sw.some(s => s[0] === 'h')", timeout=5000)
+    host.relay.back(aino)
+    host.wait_for_function(f"players[{me}].kind === 'remote' && players[{me}].ts !== null", timeout=20000)
+    ville.wait_for_function("window.__sw.some(s => s[0] === 'f')", timeout=5000)
+    sw = ville.evaluate("window.__sw")
+    assert [s[0] for s in sw][:2] == ["h", "f"], sw
+    assert all(abs(drawn - said) < 0.01 for _, said, drawn in sw), sw
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors

@@ -457,8 +457,7 @@ function clampSide(p) {
 }
 function stepPlayer(p, dt) {
   if (p.kind === 'remote') {
-    // Another phone moves it: the rules take where it last said it is; the drawing glides (asDrawn()).
-    if (p.tx !== null) p.x = p.tx;
+    // Another phone moves it: the rules take where it last said it is (set as heard); the drawing glides (asDrawn()).
   } else {
     p.x += (p.vx || 0) * dt;
     clampSide(p);
@@ -617,7 +616,7 @@ function applySnapshot(s) {
     const p = players[i];
     if (!p || p === mine) return;
     if (q[3] > p.hits) { p.arms = 0.3; slap(p, q[1] > 0.05 && Math.hypot(s.b[2], s.b[3]) > 8.5); }
-    p.tx = q[0]; p.x = q[0]; p.y = q[1]; p.vx = q[4]; p.hits = q[3]; if (q[2]) p.arms = Math.max(p.arms, 0.1);
+    p.x = q[0]; p.y = q[1]; p.vx = q[4]; p.hits = q[3]; if (q[2]) p.arms = Math.max(p.arms, 0.1);
     const own = Number.isFinite(q[5]);
     heardSpot(p, own ? q[5] : stampOf(s), own ? 'f' : 'h');
   });
@@ -688,7 +687,7 @@ R.on('message', (m, from) => {
       // would pull them back. Their first spot sent after it says so (j); half a second at most, if it is lost.
       if (m.j) p.fresh = true;
       else if (!p.fresh && state === 'serve' && stateT < 0.5) return;
-      p.tx = m.x; p.x = m.x; p.y = m.y; p.vy = m.vy; p.intent = m.i === 'over' ? 'over' : 'set';
+      p.x = m.x; p.y = m.y; p.vy = m.vy; p.intent = m.i === 'over' ? 'over' : 'set';
       p.ts = stampOf(m); heardSpot(p, p.ts, 'f');
     }
     if (m.t === 'toss') toss(p);
