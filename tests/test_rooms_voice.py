@@ -490,6 +490,23 @@ def test_two_talking_with_the_sound_held_back_still_fit_and_a_tap_clears_the_hin
     b.mouse.up()
 
 
+def test_a_player_that_paused_on_an_error_plays_again_with_no_tap_hint(phones):
+    # #512: Chromium sometimes fails a call's player with a decode error as the sound starts; the
+    # player paused, the room asked for a tap ("Napauta ruutua") and stayed silent until its next
+    # check a second later. Only a refusal to play asks for a tap, and the player starts again.
+    host, a, b = room_of_three(phones)
+    hold(a)
+    host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
+    host.wait_for_function("[...document.querySelectorAll('audio')].every(e => !e.paused)")
+    host.evaluate("""(() => { window.__plays = 0; const p0 = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () { __plays++; return p0.call(this); };
+      const e = document.querySelectorAll('audio')[0]; e.pause(); e.dispatchEvent(new Event('error')); })()""")
+    assert "Napauta" not in host.locator("#aipr-talk").inner_text()
+    host.wait_for_function("__plays > 0 && [...document.querySelectorAll('audio')].every(e => !e.paused)", timeout=900)
+    assert "Napauta" not in host.locator("#aipr-talk").inner_text()
+    a.mouse.up()
+
+
 @pytest.mark.parametrize("kind", ["offer", "answer"])
 def test_a_call_whose_setup_was_lost_is_made_again(phones, kind):
     phones.relay.lose_rtc[kind] = 1
