@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Eukonkanto</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3a2a;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (AGENTS.md rule 4). */
+  canvas{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;display:block;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(16,40,28,.9);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:38px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #stats{margin:0;font-size:14px;color:#b9d8c4}
+  #asu{font-size:16px;padding:9px 18px;background:#2c5a45;color:#fff;box-shadow:0 3px 0 #15301f}
+  #asu:active{box-shadow:0 1px 0 #15301f}
+  /* The shared outfit picker's buttons are not the menu's. */
+  #ai-pelit-asut button{box-shadow:none;transform:none}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9cdb6;max-width:320px}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,290px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5;margin:0}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#multi,#asu{grid-column:2;justify-self:stretch}
+    #go{grid-row:1/3;align-self:end}
+    #multi{grid-row:3/4;align-self:center;padding:12px 14px;white-space:nowrap}
+    #asu{grid-row:4/6;align-self:start;padding:8px 14px}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🏃 Eukonkanto</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Juokse!</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <button id="asu">👕 Asu</button>
+  <p id="stats"></p>
+  <p class="help">Kanna eukko 253,5 metrin radan läpi: paina jalkoja vuorotellen, hyppää hirsien yli ja kahlaa vesiesteen läpi.
+    Kun eukko alkaa luisua, paina ✋ Pidä kiinni. Pudotus maksaa 15 sekuntia.</p>
+</div>
+<script src="../../../rooms.js" data-game="eukonkanto" data-min="2" data-max="6"></script>
+<script src="../../../outfits.js" data-game="eukonkanto" data-share="yleisurheilu"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+// Saves: shared by every version of this game.
+const KEY = 'ai-pelit:eukonkanto:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+let level = load('taso', 1), wins = load('voitot', 0), races = load('juoksut', 0);
+
+const FOES = ['Kalle ja Kaisa', 'Pekka ja Pirjo', 'Ville ja Veera', 'Jussi ja Jenni', 'Teemu ja Taina', 'Antti ja Aino', 'Mikko ja Maija', 'Taisto ja Tuula'];
+const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
+// The one carried on each couple's back (an "eukko"), dressed by lane.
+const WIVES = [
+  { skin: '#f2c9a0', hair: '#7a3b12', top: '#f4a261', bottom: '#264653' },
+  { skin: '#f6d2b0', hair: '#e8c547', top: '#e76f51', bottom: '#2a2a40' },
+  { skin: '#e2b48c', hair: '#2b1a10', top: '#8ecae6', bottom: '#3d405b' },
+  { skin: '#f4cfae', hair: '#b5651d', top: '#c77dff', bottom: '#1d3557' },
+  { skin: '#d9a77c', hair: '#111111', top: '#90be6d', bottom: '#4a2c2a' },
+  { skin: '#f7d6bd', hair: '#d4a373', top: '#ffd166', bottom: '#5a3e85' },
+];
+
+// The course, in metres, as at the Sonkajärvi world championships: 253.5 m, two dry obstacles
+// (logs here) and a water pit about a metre deep.
+const TRACK = 253.5, LOGS = [62, 196], LOG_H = 0.5, POOL = [118, 134], POOL_D = 0.8, SLOPE = 2;
+// Running with someone on your back: each step on the other foot adds speed, more the slower you
+// go; the track slows you. Tapping 8 times a second holds about 5.6 m/s.
+const VMAX = 7.5, STEP = 0.95, VW = 2.4, GRAV = 20, JUMP_V = 4.3, CLEAR = 0.3;
+const HIT_KEEP = 0.4, STUMBLE = 0.5;
+// The carried one slips (s, 0..1) faster the faster you run and the more they have slipped; a
+// landing and a knock on a log add to it. "Pidä kiinni" pulls them back up by HOLD. At 1 they fall:
+// the couple stops for DOWN_T s and every drop adds PENALTY s to the time (one owner: fin).
+const HOLD = 0.4, DOWN_T = 1.8, PENALTY = 15, LAND_SLIP = 0.16, HIT_SLIP = 0.45;
+// With friends the race ends when everyone is in, or LATE s after the first couple is; the ones
+// still out get an estimated time ('arvio').
+const LATE = 30;
+const SET_AT = 0.9, FS_SHOW = 2.4, CPU_JUMPY = 0.04;
+const fmt = t => t.toFixed(2).replace('.', ',') + ' s';
+
+// How deep the water is at x (0 outside the pit, sloping in and out).
+function depth(m) {
+  if (m <= POOL[0] || m >= POOL[1]) return 0;
+  return Math.min(POOL_D, (m - POOL[0]) * POOL_D / SLOPE, (POOL[1] - m) * POOL_D / SLOPE);
+}
+// Wading is where the water is over 0.2 m deep: from WET[0] to WET[1], the step's events at the edges.
+const WET = [POOL[0] + 0.2 * SLOPE / POOL_D, POOL[1] - 0.2 * SLOPE / POOL_D];
+const wading = r => r.x >= WET[0] && r.x < WET[1];
+
+// The scene is drawn from SX and SW wide. Upright it is the whole width with the pads under it;
+// on its side the pads are columns at the left and right edges, under the thumbs.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, ctrlTop, ctrlH, trackTop, trackEnd, laneH, sc, sv;
+let land = false, SX = 0, SW = 0, side = 0, hudTop = 0, standH = 70;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  const b = c.getBoundingClientRect();
+  W = Math.round(b.width) || innerWidth; H = Math.round(b.height) || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  if (land) {
+    side = Math.max(110, Math.min(160, W * 0.17));
+    SX = safeL + side; SW = W - SX - safeR - side;
+    ctrlTop = H; ctrlH = 0;
+  } else {
+    SX = 0; SW = W;
+    ctrlH = Math.max(176, Math.min(236, H * 0.3));
+    ctrlTop = H - safeB - ctrlH;
+  }
+  layout();
+}
+function layout() {
+  const n = race ? race.runners.length : 4;
+  if (land) {
+    hudTop = safeT + 6; standH = 44;
+    trackTop = hudTop + 72 + standH; trackEnd = H - safeB;
+    laneH = (trackEnd - 8 - trackTop) / n;
+  } else {
+    hudTop = safeT + 44; standH = 70;
+    trackTop = safeT + 196; trackEnd = ctrlTop;
+    laneH = (ctrlTop - 14 - trackTop) / n;
+  }
+  sc = SW / 13; sv = Math.min(laneH * 0.5, 46);
+}
+addEventListener('resize', resize);
+addEventListener('fullscreenchange', resize);
+if (window.ResizeObserver) new ResizeObserver(() => { const b = c.getBoundingClientRect(); if (Math.round(b.width) !== W || Math.round(b.height) !== H) resize(); }).observe(c);
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+const S = AiPelitAanet;
+S.load(['pilli', 'lahto', 'askel', 'askel2', 'ponnistus', 'puu', 'loiskis', 'tomahdys', 'naksu', 'onnistui']);
+function whistle() {
+  if (S.play('pilli', { vol: 0.8 })) return;
+  tone(2400, 0.18, 'sine', 0.07, 2000); setTimeout(() => tone(2400, 0.4, 'sine', 0.07, 2100), 200);
+}
+function bang() { if (!S.play('lahto')) { tone(140, 0.25, 'sawtooth', 0.14, 40); tone(900, 0.06, 'square', 0.08, 200); } }
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The race ----------
+// kind: 'me' (this phone's taps), 'cpu' (moved here by the computer), 'net' (another phone's).
+function runner(id, name, color, wife, kind, rate, asu) {
+  return { id, name, color, wife, kind, asu: asu || null, rate: rate || 7, x: 0, y: 0, vy: 0, v: 0, foot: 0, stum: 0, hits: 0, down: 0,
+    fin: null, ph: 0, card: 0, s: 0, drops: 0, downT: 0, holdT: 0, ck: null,
+    tr: AiPelitSulava.track({ keys: ['x', 'y', 's'], jump: 6 }),
+    ai: { t: 0.2 + Math.random() * 0.15, err: 0, log: -1, th: 0.5, jumpy: null } };
+}
+let race = null, me = null, texts = [], warn = 0, flash = { 1: 0, 2: 0, 3: 0, 4: 0 };
+
+// The computer's next moment to pull its carried one back up: usually somewhere in the middle,
+// now and then too late (a drop), less often the higher the level.
+function aiHoldAt(r) {
+  const miss = race && race.mode === 'solo' ? Math.max(0.006, 0.025 - 0.003 * (level - 1)) : 0.015;
+  return Math.random() < miss ? 1.5 : 0.32 + Math.random() * 0.5;
+}
+
+// Solo: you in lane 2 against three couples of your level.
+function soloRace() {
+  const base = Math.min(9.6, 6.3 + 0.35 * (level - 1));
+  const foes = [0, 1, 2].map(i => FOES[(level - 1 + i) % FOES.length]);
+  const rs = [
+    runner('a', foes[0], COLORS[0], 0, 'cpu', base + 0.3),
+    runner('me', 'Sinä', COLORS[1], 1, 'me', 0, outfit.id),
+    runner('b', foes[1], COLORS[2], 2, 'cpu', base),
+    runner('c', foes[2], COLORS[3], 3, 'cpu', base - 0.5),
+  ];
+  newRace('solo', '', rs);
+}
+function newRace(mode, round, runners) {
+  race = { mode, round, runners, phase: 'cd', cdT: 0, gunAt: 0, clock: 0, doneT: 0, firstFin: null, adopt: false, sendT: 0, results: null, fs: null, fsT: 0 };
+  me = runners.find(r => r.kind === 'me') || null;
+  runners.forEach(r => { r.ai.th = aiHoldAt(r); });
+  texts = []; warn = 0;
+  countdown();
+  layout();
+  menu.classList.add('hidden');
+}
+
+// "Paikoillenne… Valmiit…" with a new moment for the gun. Now and then a computer couple in a race
+// alone is too eager and goes before it.
+function countdown() {
+  race.phase = 'cd'; race.cdT = 0; race.gunAt = 2.1 + Math.random() * 1.1; race.fs = null;
+  race.runners.forEach(r => {
+    r.ai.jumpy = race.mode === 'solo' && r.kind === 'cpu' && r.card < 2 && Math.random() < CPU_JUMPY
+      ? SET_AT + 0.2 + Math.random() * (race.gunAt - SET_AT - 0.3) : null;
+  });
+}
+function falseStart(r) {
+  if (race.mode === 'net' && !R.isHost) { R.send({ t: 'f', round: race.round }); return; } // the host decides
+  if (race.phase !== 'cd' || r.card >= 2) return;
+  r.card++;
+  race.phase = 'false'; race.fsT = 0; race.fs = { id: r.id, card: r.card };
+  whistle();
+}
+function afterFalse() {
+  if (race.mode === 'solo' && me.card >= 2) {
+    race = null;
+    showMenu('🟥 Varaslähtö – hylätty', 'lose');
+    return;
+  }
+  countdown();
+}
+
+// Whether a couple can run, jump or hold now (on the ground, not stumbling, not picking up).
+const busy = r => r.fin !== null || r.y > 0 || r.stum > 0 || r.downT > 0 || r.card >= 2;
+function step(r, foot) {
+  if (r.card >= 2) return;
+  if (!race || race.phase !== 'run' || busy(r)) {
+    if (r === me && race && race.phase === 'cd') { if (race.cdT > SET_AT) falseStart(me); else warn = 1; }
+    return;
+  }
+  const wet = wading(r), top = wet ? VW : VMAX;
+  if (foot !== r.foot) { if (r.v < top) r.v = Math.min(top, r.v + STEP * (wet ? 0.6 : 1) * (1 - r.v / top)); }
+  else r.v = Math.max(0, r.v - 0.3); // the same foot twice is a stumble, not a stride
+  r.foot = foot;
+  if (r === me) {
+    if (wet) S.play('loiskis', { vol: 0.25, rate: 1.2 + Math.random() * 0.3 }) || tone(300, 0.05, 'triangle', 0.03);
+    else S.play(foot === 1 ? 'askel' : 'askel2', { vol: 0.6, rate: 0.85 + 0.1 * r.v / VMAX }) || tone(foot === 1 ? 170 : 210, 0.03, 'triangle', 0.05);
+  }
+}
+function jump(r) {
+  if (!race || race.phase !== 'run' || busy(r) || r.vy > 0 || depth(r.x) > 0.05) return;
+  r.vy = JUMP_V;
+  if (r === me) S.play('ponnistus', { vol: 0.8 }) || tone(330, 0.07, 'triangle', 0.05, 520);
+}
+function hold(r) {
+  if (!race || race.phase !== 'run' || r.fin !== null || r.downT > 0 || r.card >= 2) return;
+  r.s = Math.max(0, r.s - HOLD); r.holdT = 0.25;
+  if (r === me) S.play('naksu', { vol: 0.4 }) || tone(520, 0.04, 'triangle', 0.04);
+}
+function drop(r) {
+  r.drops++; r.downT = DOWN_T; r.v = 0; r.s = 0; r.vy = 0; r.y = 0;
+  r.ai.th = aiHoldAt(r); // a computer's missed grab is one drop, not every one after it
+  if (r === me) {
+    S.play('tomahdys', { vol: 0.7 }) || tone(120, 0.2, 'sawtooth', 0.08, 60);
+    texts.push({ s: 'Pudotus! +' + PENALTY + ' s', t: 0 });
+  }
+}
+
+// One couple's physics for dt seconds of the race clock.
+// The step is walked through event by event, in time order (#506): the line, a log crossed, the
+// wading's start or end, a landing and her fall. In each piece the speed, the climb and the slip's
+// rate are fixed from the couple's state at its start; the earliest event inside the time left
+// ends the piece, the couple is moved to that moment (exactly onto the log, edge or line), the
+// event is applied, and the rest of the step is a new piece. An event counts only while it is
+// strictly ahead, so each one comes once; a tie goes to the line, then the logs, then the fall.
+const EPS = 1e-9;
+function move(r, dt, clock) {
+  r.holdT = Math.max(0, r.holdT - dt);
+  if (r.fin !== null) { r.v = Math.max(0, r.v - 3 * dt); r.x += r.v * dt; r.ph += r.v * dt * 1.5; return; }
+  if (r.downT > 0) { r.downT = Math.max(0, r.downT - dt); return; }
+  r.stum = Math.max(0, r.stum - dt);
+  const x0 = r.x;
+  let left = dt;
+  // At most 7 events (the line, two logs, two edges, a landing, a fall) and the last piece: the cap
+  // holds whatever the floats do, and only time past it would be lost.
+  for (let n = 0; n < 8 && left > 0; n++) {
+    const wet = wading(r), air = r.y > 0 || r.vy > 0, v = r.v;
+    const loss = air ? 0.3 : 1.2 + 0.15 * v + (wet && v > VW ? 6 * (v - VW) : 0);
+    // The slip grows with speed and with itself; the water and the air hold it up a little.
+    const rate = (0.04 + 0.034 * v) * (1 + r.s) * (wet ? 0.6 : 1) * (air ? 0.5 : 1);
+    let t = left, ev = null, to = null;
+    // An event at the very end of the step, or a hair past it by rounding (EPS), still counts in this
+    // step: otherwise the couple would end the step exactly on it, no longer strictly before it, and it
+    // would never come. Among events the first named keeps a tie.
+    const at = (tt, e, x) => { if (ev === null ? tt <= left + EPS : tt < t) { t = Math.max(0, tt); ev = e; to = x; } };
+    if (v > 0) {
+      if (r.x < TRACK) at((TRACK - r.x) / v, 'line', TRACK);
+      LOGS.forEach((lx, i) => { if (r.x < lx && !(r.down >> i & 1)) at((lx - r.x) / v, 'log' + i, lx); });
+      if (r.x < WET[0]) at((WET[0] - r.x) / v, 'in', WET[0]);
+      else if (r.x < WET[1]) at((WET[1] - r.x) / v, 'out', WET[1]);
+    }
+    // The landing is the root after the take-off, never t = 0.
+    if (air) at((r.vy + Math.sqrt(r.vy * r.vy + 2 * GRAV * Math.max(0, r.y))) / GRAV, 'land', null);
+    at((1 - r.s) / rate, 'fall', null);
+    r.x = to !== null ? to : r.x + v * t;
+    if (air) { r.y += r.vy * t - GRAV * t * t / 2; r.vy -= GRAV * t; }
+    r.s += rate * t;
+    r.v = Math.max(0, v - loss * t);
+    left -= t;
+    if (ev === 'fall') { r.ph += (r.x - x0) * 1.5; drop(r); return; } // she fell here, before anything later
+    if (ev === 'land') { r.y = 0; r.vy = 0; r.s += LAND_SLIP; }
+    else if (ev === 'in') { if (r === me) S.play('loiskis', { vol: 0.6 }) || tone(200, 0.2, 'sine', 0.05, 90); }
+    else if (ev && ev.startsWith('log')) {
+      const i = +ev.slice(3);
+      if (r.y < CLEAR) { // the height as it crosses the log, not at the end of the step
+        r.down |= 1 << i; r.v *= HIT_KEEP; r.stum = STUMBLE; r.hits++; r.s += HIT_SLIP;
+        if (r === me) { S.play('puu', { vol: 0.8 }) || tone(160, 0.18, 'sawtooth', 0.09, 70); texts.push({ s: 'Kompastus!', t: 0 }); }
+      }
+    } else if (ev === 'line') {
+      // The time includes the penalties: the couple's own phone adds them here, once, and every reader
+      // (results, record, high-score list) takes fin as it is.
+      r.fin = Math.round((clock - left + PENALTY * r.drops) * 100) / 100;
+      r.finClock = clock;
+      if (race.firstFin === null) race.firstFin = clock;
+      if (r === me && !S.play('onnistui', { vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      break;
+    }
+  }
+  r.ph += (r.x - x0) * 1.5;
+  // A log or a landing at the very end of the step (or past the piece cap) that filled the meter
+  // leaves no time for the fall's own event: she falls here, before any tap can pull her up.
+  if (r.fin === null && r.s >= 1) drop(r);
+}
+
+// The computer taps at its own rate, jumps the logs at a distance that misses now and then, and
+// pulls its carried one up at a moment of its own.
+function think(r, dt) {
+  if (race.phase === 'cd' && r.ai.jumpy !== null && race.cdT >= r.ai.jumpy) { r.ai.jumpy = null; falseStart(r); }
+  if (r.fin !== null || r.card >= 2 || race.phase !== 'run') return;
+  const a = r.ai;
+  if (r.s >= a.th && r.downT <= 0) { hold(r); a.th = aiHoldAt(r); }
+  a.t -= dt;
+  while (a.t <= 0) { step(r, r.foot === 1 ? 2 : 1); a.t += (0.85 + Math.random() * 0.3) / r.rate; }
+  const i = LOGS.findIndex(lx => lx > r.x);
+  if (i < 0) return;
+  if (a.log !== i) { a.log = i; a.err = (Math.random() + Math.random() - 1) * Math.max(0.35, 1.7 - 0.13 * r.rate); }
+  if (LOGS[i] - r.x <= Math.max(0.2, r.v * 0.22 + a.err)) jump(r);
+}
+
+// Finished couples by time, ahead of everyone still running, who go by how far they are.
+const ahead = (o, r) => o.fin !== null ? r.fin === null || o.fin < r.fin : r.fin === null && (o.card < 2 && r.card >= 2 || o.x > r.x);
+const out = r => r.fin !== null || r.card >= 2;
+const place = r => 1 + race.runners.filter(o => o !== r && ahead(o, r)).length;
+
+// A couple still out when the race ends: the clock, the way left at its speed (the water at
+// wading speed), the pick-up still to go and its penalties.
+function estimate(r, clock) {
+  const left = Math.max(0, TRACK - r.x), wet = Math.max(0, Math.min(POOL[1], TRACK) - Math.max(POOL[0], r.x));
+  return Math.round((clock + r.downT + (left - wet) / Math.max(r.v, 3) + wet / 2.2 + PENALTY * r.drops) * 100) / 100;
+}
+// The results: each row says whether its time is estimated (est). Everyone by time, red cards last.
+function standings(clock) {
+  return race.runners.map(r => {
+    const dq = r.card >= 2, est = !dq && r.fin === null;
+    return { id: r.id, name: r.name, color: r.color, dq, est, drops: r.drops, fin: dq ? null : est ? estimate(r, clock) : r.fin };
+  }).sort((a, b) => a.dq - b.dq || (a.fin === null) - (b.fin === null) || (a.fin || 0) - (b.fin || 0));
+}
+
+// ---------- Playing with friends ----------
+// The host runs the gun and the computer's couples and sends everyone the race; each phone runs
+// its own couple and sends it to the host. Others are drawn from lib/sulava-1, a moment back.
+R.on('start', s => {
+  const rs = s.players.map((p, i) => runner(p.id, p.name, COLORS[i % COLORS.length], i % WIVES.length, p.id === R.me ? 'me' : 'net', 7.6, p.id === R.me ? outfit.id : null));
+  newRace('net', s.round, rs);
+  race.adopt = !R.isHost; // a guest reloaded mid-race takes its couple back from the host
+  if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
+});
+const r2 = n => Math.round(n * 100) / 100;
+// A couple as sent. [6] says the computer runs it now; [10] is its card, which only the host gives.
+// [14] asks the couple's phone to take the host's copy: the computer ran it while that phone was away.
+const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum), r.card, r2(r.s), r.drops, r2(r.downT), r.give ? 1 : 0];
+function unpack(r, a) {
+  r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; r.vy = a[7]; r.foot = a[8]; r.stum = a[9];
+  r.s = a[11] || 0; r.drops = a[12] || 0; r.downT = a[13] || 0;
+}
+function hostState() {
+  const now = AiPelitSulava.now();
+  return { t: 's', round: race.round, ph: race.phase, cd: race.cdT, clock: race.clock, fs: race.fs, r: race.runners.map(pack),
+    o: race.runners.map(r => r.asu || ''), ck: race.runners.map(r => r.kind === 'net' && r.ck !== null ? r.ck : now) };
+}
+R.on('message', (m, from) => {
+  if (!race || race.mode !== 'net' || m.round !== race.round) return;
+  if (R.isHost) {
+    const r = race.runners.find(o => o.id === from);
+    if (m.t === 'p' && r && typeof m.o === 'string') r.asu = m.o;
+    if (m.t === 'p' && r && r.kind === 'net' && Array.isArray(m.r)) {
+      // A phone back from away may still send where it was when it left: keep the computer's
+      // run until the phone has taken it (its spot no longer behind, its finish not undone).
+      if (r.give && (m.r[0] < r.x - 0.5 || (r.fin !== null && m.r[5] === null))) return;
+      r.give = false;
+      unpack(r, m.r);
+      r.ck = typeof m.ck === 'number' ? m.ck : null;
+      r.tr.push(r.ck, r);
+      if (r.fin !== null && race.firstFin === null) race.firstFin = race.clock;
+    }
+    if (m.t === 'f' && r && race.phase === 'cd' && race.cdT > SET_AT) falseStart(r);
+    return;
+  }
+  if (m.t === 's') {
+    if (race.phase === 'cd' || race.phase === 'false') {
+      race.cdT = m.cd; race.fs = m.fs || null;
+      if (m.ph === 'false' && race.phase === 'cd') whistle();
+      if (m.ph === 'run') { race.phase = 'run'; race.clock = m.clock; if (m.clock < 0.5) bang(); }
+      else if (m.ph === 'cd' || m.ph === 'false') race.phase = m.ph;
+    }
+    m.r.forEach((a, i) => {
+      const r = race.runners[i];
+      if (!r) return;
+      if (m.o && r !== me && typeof m.o[i] === 'string') r.asu = m.o[i];
+      r.card = a[10] || 0;
+      // My own couple is mine, unless the computer ran it while I was away.
+      if (r === me && !a[6] && !a[14] && !(race.adopt && a[0] > me.x)) return;
+      unpack(r, a);
+      if (r !== me) r.tr.push(m.ck ? m.ck[i] : null, r);
+    });
+    if (m.ph === 'run') race.adopt = false;
+  }
+  if (m.t === 'end') finish(m.res);
+});
+R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
+function takeOver(ids) { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) { r.kind = 'cpu'; r.give = false; r.ai.th = aiHoldAt(r); } }); }
+function giveBack(id) { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') { r.kind = 'net'; r.give = true; } }); }
+R.on('continue', takeOver);
+R.on('back', giveBack);
+// The host lost the round (it reloaded) or ended it: the race is gone for everyone, nothing saved.
+R.on('lobby', () => { race = null; });
+R.on('leave', () => { race = null; showMenu(); });
+R.on('menu', () => { race = null; showMenu(); });
+
+function hostTick(dt) {
+  race.sendT -= dt;
+  if (race.sendT <= 0) { race.sendT = 1 / 12; R.send(hostState()); }
+  const all = race.runners.every(out);
+  if (race.phase === 'run' && (all || (race.firstFin !== null && race.clock > race.firstFin + LATE))) {
+    const m = { t: 'end', round: race.round, res: standings(race.clock) };
+    R.deliver(m);
+    R.endRound();
+    finish(m.res);
+  }
+}
+function guestTick(dt) {
+  race.sendT -= dt;
+  const was = me.sentFin;
+  if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !was))) {
+    race.sendT = 1 / 12; me.sentFin = me.fin !== null;
+    R.send({ t: 'p', round: race.round, r: pack(me), o: me.asu || '', ck: AiPelitSulava.now() });
+  }
+}
+
+// ---------- The end ----------
+// The result is the phone's own row in the results (the host's, with friends): its time, and
+// whether it is estimated. Only a real time, not an estimate, is saved and sent.
+function finish(res) {
+  if (!race || race.phase === 'done') return;
+  race.phase = 'done'; race.doneT = 0; race.results = res;
+  const mine = res.findIndex(r => race.mode === 'solo' ? r.id === 'me' : r.id === R.me);
+  const row = mine >= 0 ? res[mine] : null;
+  const real = row && !row.dq && !row.est && row.fin !== null;
+  const counted = race.mode === 'solo' || R.once(race.round);
+  if (counted && real) {
+    races++;
+    const best = load('ennatys', null);
+    if (best === null || row.fin < best) save('ennatys', row.fin);
+    if (race.mode === 'solo' && mine === 0) { wins++; level++; }
+    save('juoksut', races); save('voitot', wins); save('taso', level);
+    if (window.AiPelitScores) AiPelitScores.submit(row.fin);
+  }
+  race.mine = mine; race.row = row;
+}
+function resultText(row, mine) {
+  if (!row) return 'Juoksu päättyi';
+  if (row.dq) return '🟥 Varaslähtö – hylätty';
+  return (mine === 0 ? 'Voitit! ' : (mine + 1) + '. sija · ') + fmt(row.fin) + (row.est ? ' (arvio)' : '') + (row.drops ? ' · ' + row.drops + ' pudotus' + (row.drops > 1 ? 'ta' : '') : '') + (mine === 0 ? ' 🏆' : '');
+}
+function afterResults() {
+  const res = race.results, mine = race.mine, row = race.row;
+  if (race.mode === 'solo') {
+    race = null;
+    showMenu(resultText(row, mine), mine === 0 ? 'win' : 'lose');
+    return;
+  }
+  race = null;
+  R.note(res.map((r, i) => (i + 1) + '. ' + (r.id === R.me ? 'Sinä' : r.name) + ' ' + (r.dq ? 'hylätty' : r.fin === null ? '–' : fmt(r.fin) + (r.est ? ' arvio' : ''))).join(' · '));
+  R.backToRoom(resultText(row, mine), mine === 0 ? 'win' : 'lose');
+}
+
+// ---------- The loop ----------
+let lastT = performance.now(), idle = 0, drawnW = 0, drawnH = 0;
+function frame(now) {
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
+  if (race) tick(dt);
+  // With no race on (the menu, the room screen) the scene stands still: draw it once, not every frame.
+  // (and again when the screen turns or changes size).
+  if (race || idle < 2 || W !== drawnW || H !== drawnH) { draw(); drawnW = W; drawnH = H; }
+  idle = race ? 0 : idle + 1;
+  requestAnimationFrame(frame);
+}
+// A tap is judged at its own moment (#404): the race is run on to the event's time first, so a jump
+// pressed just before a log counts where the couple was then, not at the last frame drawn.
+function catchUp(e) {
+  let d = e.timeStamp - lastT;
+  if (race && d > 0 && d < 100) {
+    lastT = e.timeStamp;
+    for (; d > 0; d -= 50) tick(Math.min(0.05, d / 1000));
+  }
+}
+function tick(dt) {
+  for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
+  warn = Math.max(0, warn - dt);
+  texts.forEach(t => { t.t += dt; }); texts = texts.filter(t => t.t < 1.4);
+  if (race.phase === 'done') { race.doneT += dt; if (race.doneT > 3.4) afterResults(); return; }
+  if (race.mode === 'net' && R.paused) return;
+  const host = race.mode === 'solo' || R.isHost;
+  if (race.phase === 'cd') {
+    if (host) {
+      race.cdT += dt;
+      if (race.cdT >= race.gunAt) { race.phase = 'run'; race.clock = race.cdT - race.gunAt; bang(); }
+    }
+  } else if (race.phase === 'false') {
+    race.fsT += dt;
+    if (host && race.fsT >= FS_SHOW) { afterFalse(); if (!race) return; }
+  } else if (race.phase === 'run') {
+    race.clock += dt;
+  }
+  // Only the gun starts the physics: the computer thinks during the countdown (its false start) but
+  // moves, like every couple, only once the race runs, so nobody's slip grows while standing.
+  for (const r of race.runners) {
+    if (r.kind === 'cpu' && host) think(r, dt);
+    if ((r.kind === 'cpu' && host || r.kind === 'me') && race.phase === 'run') move(r, dt, race.clock);
+  }
+  if (race.mode === 'solo') {
+    if (me.fin !== null && (race.runners.every(out) || race.clock > me.finClock + 4)) finish(standings(race.clock));
+  } else if (R.isHost) hostTick(dt);
+  else guestTick(dt);
+}
+
+// ---------- Drawing ----------
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function laneBase(i) { return trackTop + laneH * (i + 1) - laneH * 0.18; }
+// Where a couple is drawn: its own state here, or another phone's a moment back.
+function shown(r) {
+  if (r.kind !== 'net') return r;
+  const p = r.tr.at();
+  return p ? { x: p.x, y: Math.max(0, p.y), s: Math.max(0, Math.min(1, p.s)) } : r;
+}
+function camX() { const r = me || (race && race.runners[0]); return (r ? r.x : 0) - (SW * 0.4) / sc; }
+
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (land) { x.fillStyle = '#15301f'; x.fillRect(0, 0, W, H); }
+  x.save();
+  if (land) { x.beginPath(); x.rect(SX, 0, SW, H); x.clip(); x.translate(SX, 0); }
+  drawScene();
+  x.restore();
+  drawControls();
+}
+function drawScene() {
+  const W = SW;
+  const cam = race ? camX() : -2;
+  // Sky, the forest behind and the people on the bank.
+  x.fillStyle = '#9fd3f5'; x.fillRect(0, 0, W, trackTop);
+  const standTop = trackTop - standH;
+  const pf = cam * sc * 0.25;
+  x.fillStyle = '#2f6b3a';
+  for (let k = Math.floor(pf / 26) - 1; k * 26 - pf < W + 26; k++) {
+    const n = (k * 7919) >>> 0, hgt = 34 + n % 22, px = k * 26 - pf;
+    x.beginPath(); x.moveTo(px - 13, standTop + 6); x.lineTo(px, standTop + 6 - hgt); x.lineTo(px + 13, standTop + 6); x.fill();
+  }
+  x.fillStyle = '#5c9a4a'; x.fillRect(0, standTop, W, standH);
+  const crowd = ['#e63946', '#f1faee', '#ffb703', '#8ecae6', '#2a9d8f', '#f4a261'];
+  const pc = cam * sc * 0.45, gap = 13;
+  for (let row = 0; row < 3; row++) {
+    const off = (row % 2) * gap / 2;
+    for (let k = Math.floor((pc - off) / gap) - 1; k * gap + off - pc < W + gap; k++) {
+      const n = (k * 7919 + row * 104729) >>> 0;
+      if (n % 5 === 0) continue;
+      x.fillStyle = crowd[n % crowd.length];
+      x.beginPath(); x.arc(k * gap + off - pc, standTop + 14 + row * 15, 4, 0, 7); x.fill();
+    }
+  }
+  // The track: sand.
+  x.fillStyle = '#d8b878'; x.fillRect(0, trackTop, W, trackEnd - trackTop);
+  x.fillStyle = '#3f8f3a'; x.fillRect(0, trackTop - 5, W, 5);
+  const n = race ? race.runners.length : 4;
+  x.strokeStyle = 'rgba(120,80,30,.35)'; x.lineWidth = 2;
+  for (let i = 0; i <= n; i++) { const y = trackTop + laneH * i; x.beginPath(); x.moveTo(0, y); x.lineTo(W, y); x.stroke(); }
+  const sxw = m => (m - cam) * sc;
+  // The water pit, across every lane.
+  const p0 = sxw(POOL[0]), p1 = sxw(POOL[1]);
+  if (p1 > -10 && p0 < W + 10) {
+    x.fillStyle = '#3a86c8'; x.fillRect(p0, trackTop, p1 - p0, laneH * n);
+    x.fillStyle = 'rgba(255,255,255,.25)';
+    for (let i = 0; i < n; i++) for (let k = 0; k < 6; k++) x.fillRect(p0 + (p1 - p0) * (k + 0.2) / 6, trackTop + laneH * i + laneH * 0.5, 14, 2);
+  }
+  // Start, every 50 m, the obstacles and the finish.
+  const marks = [0, 50, 100, 150, 200, TRACK];
+  for (const m of marks) {
+    const px = sxw(m);
+    if (px < -40 || px > W + 40) continue;
+    if (m === TRACK) {
+      for (let yy = trackTop, k = 0; yy < trackTop + laneH * n; yy += 8, k++) {
+        x.fillStyle = k % 2 ? '#111' : '#fff'; x.fillRect(px - 4, yy, 4, 8);
+        x.fillStyle = k % 2 ? '#fff' : '#111'; x.fillRect(px, yy, 4, 8);
+      }
+    } else { x.fillStyle = 'rgba(255,255,255,.75)'; x.fillRect(px - 1.5, trackTop, 3, laneH * n); }
+    label(m === TRACK ? 'MAALI' : String(m).replace('.', ',') + ' m', px);
+  }
+  LOGS.forEach(lx => label('Hirsi', sxw(lx)));
+  label('Vesieste', (p0 + p1) / 2);
+  // Lanes back to front: logs, the couple, then the water over its legs.
+  for (let i = 0; i < n; i++) {
+    const base = laneBase(i), r = race && race.runners[i];
+    if (r === me) { x.fillStyle = 'rgba(255,255,255,.12)'; x.fillRect(0, trackTop + laneH * i, W, laneH); }
+    x.fillStyle = 'rgba(60,40,10,.7)'; x.font = '700 11px system-ui'; x.textAlign = 'left';
+    x.fillText(String(i + 1), 4, trackTop + laneH * i + 13);
+    LOGS.forEach((lx, k) => {
+      const px = sxw(lx);
+      if (px < -30 || px > W + 30) return;
+      drawLog(px, base, r ? (r.down >> k & 1) : 0);
+    });
+    if (r) {
+      const p = shown(r), d = depth(p.x);
+      drawCouple(r, p, sxw(p.x), base + d * sv * 0.9);
+      if (d > 0) {
+        x.fillStyle = 'rgba(58,134,200,.75)';
+        x.fillRect(sxw(p.x) - 0.9 * sv, base - d * sv * 0.1, 1.8 * sv, d * sv + laneH * 0.18);
+        if (p.x > POOL[0] + 0.3 && r.v > 0.5) { x.fillStyle = 'rgba(255,255,255,.8)'; x.beginPath(); x.ellipse(sxw(p.x) + 0.35 * sv, base - d * sv * 0.1, 0.25 * sv, 0.06 * sv, 0, 0, 7); x.fill(); }
+      }
+    }
+  }
+  drawHud();
+  if (race && race.phase === 'done') drawResults();
+}
+function label(s, px) {
+  if (px < -60 || px > SW + 60) return;
+  x.font = '800 13px system-ui'; x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.55)';
+  x.strokeText(s, px, trackTop - 10); x.fillStyle = '#fff'; x.fillText(s, px, trackTop - 10);
+}
+function drawLog(px, base, knocked) {
+  const h = LOG_H * sv, r = h * 0.5, dx = knocked ? 0.25 * sv : 0;
+  x.fillStyle = '#7a4a22'; x.beginPath(); x.ellipse(px + dx, base - r, 0.2 * sv, r, 0, 0, 7); x.fill();
+  x.fillStyle = '#c79358'; x.beginPath(); x.ellipse(px + dx, base - r, 0.12 * sv, r * 0.7, 0, 0, 7); x.fill();
+  x.strokeStyle = '#7a4a22'; x.lineWidth = 1.5; x.beginPath(); x.ellipse(px + dx, base - r, 0.06 * sv, r * 0.35, 0, 0, 7); x.stroke();
+}
+
+// v1 (#311's kits): the player's own kit, or a friend's in a room; the computer's carriers wear
+// the 'perus' kit with the lane's shirt colour.
+const OUTFITS = AiPelitOutfits.yleisurheilu;
+let outfit = AiPelitOutfits.setup({
+  outfits: OUTFITS,
+  draw(g, o, w, h) { body(g, { y: 0, v: 0, ph: 0, stum: 0, s: 0, downT: 0, holdT: 0, color: COLORS[1], wife: 1 }, o, w * 0.5, h * 0.96, h * 0.42, true); },
+  change(o) { outfit = o; showAsu(); },
+});
+function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v * k)));
+  return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1);
+}
+function drawCouple(r, p, px, base) {
+  if (px < -80 || px > SW + 80) return;
+  const o = (r.asu && AiPelitOutfits.get(r.asu)) || OUTFITS[0];
+  x.save();
+  if (r.card >= 2) x.globalAlpha = 0.4;
+  const v = { y: p.y, v: r.v, ph: p.x * 1.5, stum: r.stum, s: p.s, downT: r.downT, holdT: r.holdT, color: r.color, wife: r.wife };
+  const { hx, hy } = body(x, v, o, px, base, sv, false);
+  x.restore();
+  const s = sv;
+  x.font = (r === me ? '800 ' : '600 ') + Math.round(Math.max(10, Math.min(14, 0.3 * s))) + 'px system-ui'; x.textAlign = 'center';
+  x.fillStyle = r === me ? '#ffd166' : 'rgba(255,255,255,.95)';
+  const name = r === me ? '▼ Sinä' : r.name;
+  const ly = hy - (o.head === 'witch' ? 0.42 : o.head ? 0.26 : 0.22) * s - 6;
+  x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)'; x.strokeText(name, hx, ly); x.fillText(name, hx, ly);
+  if (r.card) {
+    const lx = hx + x.measureText(name).width / 2 + 4;
+    x.fillStyle = r.card >= 2 ? '#e5383b' : '#ffd60a'; rr(lx, ly - 11, 8, 11, 2); x.fill();
+  }
+}
+// The carrier in outfit o, its feet at (px, base), s pixels a metre, with the carried one on its
+// back the Estonian way (upside down, legs over the shoulders); returns where the head is.
+function body(g, r, o, px, base, s, still) {
+  const lw = Math.max(still ? 2 : 3, 0.11 * s);
+  const air = r.y > 0.02, stum = r.stum > 0, down = r.downT > 0;
+  const lean = down ? 0.35 : 0.18 + Math.min(r.v, 8) * 0.02 + (stum ? 0.4 : 0);
+  const fy = base - r.y * s;
+  const hipX = px, hipY = fy - 0.92 * s;
+  const neckX = hipX + Math.sin(lean) * 0.55 * s, neckY = hipY - Math.cos(lean) * 0.55 * s;
+  const L = 0.46 * s;
+  const pt = (x0, y0, a, l) => [x0 + Math.sin(a) * l, y0 + Math.cos(a) * l];
+  let legs;
+  const p = r.ph * 2.2;
+  if (air) legs = [[1.3, 1.4], [-0.3, -1.6]];
+  else if (still || down || (r.v < 0.3 && (!race || race.phase !== 'run'))) legs = [[0.12, 0.05], [-0.1, -0.1]];
+  else {
+    const amp = 0.22 + Math.min(r.v, 8) * 0.06;
+    legs = [0, Math.PI].map(q => { const a = Math.sin(p + q) * amp; return [a, a - 0.25 - (0.6 + amp) * Math.max(0, Math.cos(p + q))]; });
+  }
+  // The arms hold the carried one's legs at the chest; a "Pidä kiinni" hugs them in tighter. On a
+  // drop they reach down.
+  const hug = r.holdT > 0 ? 0.25 : 0;
+  const arms = down ? [[0.9, 0.7], [0.8, 0.6]] : [[0.5 - hug, 2.4 + hug], [0.4 - hug, 2.2 + hug]];
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const near = o.bones ? o.top : o.skin, farC = shade(near, 0.83);
+  const seg = (pts, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); g.stroke(); };
+  const limb = (ox, oy, [a1, a2], len, col) => {
+    const k = pt(ox, oy, a1, len), e = pt(k[0], k[1], a2, len);
+    seg([[ox, oy], k, e], col, lw);
+    if (o.bones) seg([[ox, oy], k, e], o.skin, Math.max(1, lw * 0.35));
+    return e;
+  };
+  const top = o.top || r.color;
+  const wf = WIVES[r.wife || 0];
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(px - 0.15 * s, base, 0.5 * s / (1 + r.y), 0.07 * s, 0, 0, 7); g.fill();
+  // The carried one. On a drop they sit on the ground behind; otherwise hanging down the back,
+  // further back the more they have slipped.
+  let wLegs = null;
+  if (down) {
+    const gx = px - 0.75 * s, gy = base - 0.12 * s;
+    seg([[gx + 0.35 * s, gy], [gx - 0.2 * s, gy - 0.02 * s]], wf.bottom, lw * 1.8);
+    seg([[gx - 0.2 * s, gy], [gx - 0.35 * s, gy - 0.45 * s]], wf.top, lw * 2.1);
+    g.fillStyle = wf.skin; g.beginPath(); g.arc(gx - 0.4 * s, gy - 0.6 * s, 0.12 * s, 0, 7); g.fill();
+    g.fillStyle = wf.hair; g.beginPath(); g.arc(gx - 0.43 * s, gy - 0.64 * s, 0.12 * s, Math.PI * 0.9, Math.PI * 1.9); g.fill();
+  } else {
+    const sl = r.s || 0;
+    const wHipX = neckX - 0.06 * s, wHipY = neckY - 0.08 * s + sl * 0.12 * s;
+    const ta = -0.35 - lean * 0.6 - sl * 0.8;            // the body down the carrier's back
+    const sh = pt(wHipX, wHipY, ta, 0.52 * s), head = pt(wHipX, wHipY, ta, 0.68 * s);
+    seg([sh, [hipX - 0.04 * s, hipY - 0.12 * s]], shade(wf.skin, 0.85), lw * 0.9);  // arms round the waist
+    seg([[wHipX, wHipY], sh], wf.top, lw * 2.1);
+    g.fillStyle = wf.hair; g.beginPath(); g.ellipse(head[0], head[1] + 0.1 * s, 0.09 * s, 0.14 * s, 0, 0, 7); g.fill(); // hair hangs down
+    g.fillStyle = wf.skin; g.beginPath(); g.arc(head[0], head[1], 0.11 * s, 0, 7); g.fill();
+    // Legs over the shoulders and down the chest; the far one now, the near one over the arms.
+    const tA = 1.75 - sl * 0.5, sA = 0.15 + sl * 0.4;
+    const farK = pt(wHipX, wHipY, tA - 0.1, 0.36 * s);
+    seg([[wHipX, wHipY], farK, pt(farK[0], farK[1], sA, 0.38 * s)], shade(wf.bottom, 0.8), lw * 1.4);
+    wLegs = { x: wHipX, y: wHipY, tA, sA };
+  }
+  limb(neckX, neckY + 0.05 * s, arms[1], 0.3 * s, farC);
+  const far = limb(hipX, hipY, legs[1], L, farC);
+  g.fillStyle = shade(o.shoe === '#ffffff' ? '#2a2a2a' : o.shoe, 0.75); g.beginPath(); g.ellipse(far[0] + 0.06 * s, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); g.fill();
+  seg([[hipX, hipY], [neckX, neckY]], top, lw * 2.1);
+  if (o.stripe) {
+    const m = pt(hipX, hipY, Math.PI + lean, 0.3 * s);
+    seg([[m[0] - Math.cos(lean) * lw, m[1] - Math.sin(lean) * lw], [m[0] + Math.cos(lean) * lw, m[1] + Math.sin(lean) * lw]], o.stripe, Math.max(1, lw * 0.45));
+  }
+  const nearLeg = limb(hipX, hipY, legs[0], L, near);
+  g.fillStyle = o.shoe; g.beginPath(); g.ellipse(nearLeg[0] + 0.06 * s, nearLeg[1], 0.09 * s, 0.04 * s, 0, 0, 7); g.fill();
+  seg([[hipX, hipY], pt(hipX, hipY, legs[0][0], 0.16 * s)], o.bottom, lw * 1.6);
+  const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
+  if (o.head) AiPelitOutfits.head(g, o.head, hx, hy, 0.13 * s, 1);
+  else {
+    g.fillStyle = o.skin; g.beginPath(); g.arc(hx, hy, 0.13 * s, 0, 7); g.fill();
+    g.fillStyle = o.hair || 'rgba(0,0,0,.25)'; g.beginPath(); g.arc(hx - 0.03 * s, hy - 0.04 * s, 0.13 * s, Math.PI * 0.9, Math.PI * 1.9); g.fill();
+  }
+  if (wLegs) {
+    const k = pt(wLegs.x, wLegs.y, wLegs.tA, 0.36 * s), f = pt(k[0], k[1], wLegs.sA, 0.38 * s);
+    seg([[wLegs.x, wLegs.y], k, f], wf.bottom, lw * 1.4);
+    g.fillStyle = wf.skin; g.beginPath(); g.arc(f[0], f[1], 0.05 * s, 0, 7); g.fill();
+  }
+  limb(neckX, neckY + 0.05 * s, arms[0], 0.3 * s, near);
+  return { hx, hy };
+}
+
+function drawHud() {
+  const W = SW, top = hudTop;
+  x.fillStyle = 'rgba(10,30,20,.6)'; rr(8, top, W - 16, 72, 12); x.fill();
+  // Everyone along the course, with the logs and the water.
+  const bx = 22, bw = W - 44, by = top + 60;
+  x.fillStyle = 'rgba(255,255,255,.25)'; x.fillRect(bx, by - 1, bw, 3);
+  x.fillStyle = '#5aa9e6'; x.fillRect(bx + bw * POOL[0] / TRACK, by - 3, bw * (POOL[1] - POOL[0]) / TRACK, 7);
+  x.fillStyle = '#c79358'; LOGS.forEach(l => x.fillRect(bx + bw * l / TRACK - 2, by - 5, 4, 9));
+  if (race) race.runners.forEach(r => {
+    const p = shown(r);
+    x.fillStyle = r.color; x.beginPath(); x.arc(bx + bw * Math.min(1, p.x / TRACK), by, r === me ? 6 : 4.5, 0, 7); x.fill();
+    if (r === me) { x.strokeStyle = '#fff'; x.lineWidth = 2; x.stroke(); }
+  });
+  // The clock, with the penalties so far.
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 24px system-ui';
+  const t = !race ? 0 : race.phase === 'cd' || race.phase === 'false' ? 0 : me && me.fin !== null ? me.fin : race.clock;
+  const tt = t.toFixed(2).replace('.', ',');
+  x.fillText(tt, 20, top + 30);
+  if (me && me.drops && me.fin === null) {
+    const w = x.measureText(tt).width;
+    x.font = '800 15px system-ui'; x.fillStyle = '#ff9a8b'; x.fillText('+' + PENALTY * me.drops + ' s', 26 + w, top + 30);
+  }
+  // The slip meter: how far the carried one has slid.
+  if (me) {
+    const mx = W - 20 - 120, my = top + 38, s = Math.min(1, me.s);
+    x.textAlign = 'right'; x.font = '700 15px system-ui'; x.fillStyle = '#fff';
+    if (race) x.fillText(place(me) + '. / ' + race.runners.length + (me.card ? '  ' + (me.card >= 2 ? '🟥' : '🟨') : ''), W - 20, top + 24);
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(mx, my, 120, 9, 4); x.fill();
+    x.fillStyle = s > 0.7 ? '#ff6b5b' : s > 0.45 ? '#ffd166' : '#7ee081'; rr(mx, my, Math.max(4, 120 * s), 9, 4); x.fill();
+    x.textAlign = 'right'; x.font = '700 11px system-ui'; x.fillStyle = '#cfe6d6'; x.fillText('Ote', mx - 6, my + 9);
+  }
+  if (race && race.phase === 'false') drawCard();
+  else if (race && race.phase === 'cd') {
+    big(race.cdT < SET_AT ? 'Paikoillenne…' : 'Valmiit…', '#fff');
+    if (warn > 0) small('Odota laukausta!', '#ffd166');
+  } else if (race && race.phase === 'run' && race.clock < 0.8) big('PAM!', '#ffd166');
+  else if (race && me && me.downT > 0) small('Nosta eukko selkään…', '#ffd166');
+  else if (race && me && me.fin !== null && race.phase === 'run') big(place(me) + '. maaliin!', '#7ee081');
+  else if (race && me && race.phase === 'run' && me.s > 0.7) small('Pidä kiinni!', '#ff9a8b');
+  texts.forEach(tt => { x.globalAlpha = Math.max(0, 1 - tt.t / 1.4); small(tt.s, '#ff9a8b', 34 - tt.t * 30); x.globalAlpha = 1; });
+}
+function drawCard() {
+  const fs = race.fs, r = fs && race.runners.find(o => o.id === fs.id);
+  const W = SW, h = 212, y0 = land ? Math.min(trackTop + 10, H - safeB - h - 6) : trackTop + 10;
+  x.fillStyle = 'rgba(10,30,20,.9)'; rr(20, y0, W - 40, h, 16); x.fill();
+  x.textAlign = 'center'; x.font = '900 28px system-ui'; x.fillStyle = '#ff9a8b';
+  x.fillText('Varaslähtö!', W / 2, y0 + 40);
+  if (!r) return;
+  const red = fs.card >= 2, cw = 44, ch = 62, cy = y0 + 58;
+  x.save(); x.translate(W / 2, cy + ch / 2); x.rotate(0.12);
+  x.fillStyle = red ? '#e5383b' : '#ffd60a'; rr(-cw / 2, -ch / 2, cw, ch, 6); x.fill();
+  x.restore();
+  const who = r === me ? (red ? 'Punainen kortti: olet ulkona' : 'Sinulle keltainen kortti') : r.name + ': ' + (red ? 'punainen kortti' : 'keltainen kortti');
+  const sub = r === me ? (red ? 'Kaksi varaslähtöä' : 'Toisesta tulee punainen') : red ? 'Ulos radalta, muut lähtevät uudestaan' : 'Lähtö uudestaan';
+  x.font = '800 18px system-ui'; x.fillStyle = red ? '#ff9a8b' : '#ffd166'; x.fillText(who, W / 2, cy + ch + 34);
+  x.font = '600 15px system-ui'; x.fillStyle = '#fff'; x.fillText(sub, W / 2, cy + ch + 58);
+}
+function big(s, col) {
+  x.textAlign = 'center'; x.font = '900 32px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = trackTop + 40; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function small(s, col, dy = 0) {
+  x.textAlign = 'center'; x.font = '800 20px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = trackTop + 40 + dy; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+
+// The pads: 1 and 2 the feet, 3 the jump, 4 "Pidä kiinni". Upright the feet sit side by side at the
+// bottom and the jump and the hold share a bar above them, a gap apart (as in the other athletics
+// games); on its side a column at each edge, the jump over the left foot and the hold over the right.
+const PAD_GAP = 40;
+function pads() {
+  if (land) {
+    const y = safeT + 40, h = H - safeB - 6 - y, jh = Math.round(h * 0.34), w = side - 12;
+    const lx = safeL + 6, rx = W - safeR - side + 6;
+    return [{ k: 3, x: lx, y, w, h: jh }, { k: 1, x: lx, y: y + jh + PAD_GAP, w, h: h - jh - PAD_GAP },
+      { k: 4, x: rx, y, w, h: jh }, { k: 2, x: rx, y: y + jh + PAD_GAP, w, h: h - jh - PAD_GAP }];
+  }
+  const y = ctrlTop + 6, h = ctrlH - 12, th = Math.round(Math.min(62, h * 0.3)), fy = y + th + PAD_GAP, fh = h - th - PAD_GAP;
+  return [{ k: 3, x: 6, y, w: W / 2 - 9, h: th }, { k: 4, x: W / 2 + 3, y, w: W / 2 - 9, h: th },
+    { k: 1, x: 6, y: fy, w: W / 2 - 9, h: fh }, { k: 2, x: W / 2 + 3, y: fy, w: W / 2 - 9, h: fh }];
+}
+// Whether pad k does something now, as step(), jump() and hold() decide.
+function padOn(k) {
+  if (!race || !me || race.phase === 'done' || me.card >= 2) return false;
+  const run = race.phase === 'run' && me.fin === null;
+  if (k === 4) return run && me.downT <= 0;
+  const ground = run && !busy(me);
+  if (k === 3) return ground && me.vy <= 0 && depth(me.x) <= 0.05;
+  return race.phase === 'cd' || ground;
+}
+function drawControls() {
+  if (!land) { x.fillStyle = '#15301f'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
+  const next = me && me.foot === 1 ? 2 : 1;
+  const urgent = me && me.s > 0.55 && padOn(4);
+  for (const b of pads()) {
+    const on = padOn(b.k);
+    const glow = b.k <= 2 && on && race.phase === 'run' && b.k === next;
+    let col = !on ? '#223a2c' : flash[b.k] > 0 ? '#ffe08a' : b.k === 3 ? '#ffb703' : b.k === 4 ? (urgent ? '#ff6b5b' : '#f28482') : glow ? '#3f8f6a' : '#2c5a45';
+    x.fillStyle = col; rr(b.x, b.y, b.w, b.h, 18); x.fill();
+    x.fillStyle = !on ? '#6f9a80' : b.k >= 3 ? '#2a1a05' : '#fff'; x.textAlign = 'center';
+    if (b.k >= 3 && b.w > b.h * 1.6) {
+      x.font = '900 19px system-ui'; x.fillText(b.k === 3 ? '⤒ Hyppää' : '✋ Pidä kiinni', b.x + b.w / 2, b.y + b.h / 2 + 7);
+      continue;
+    }
+    x.font = '900 32px system-ui';
+    x.fillText(b.k === 3 ? '⤒' : b.k === 4 ? '✋' : '👟', b.x + b.w / 2, b.y + b.h / 2 + 4);
+    x.font = '800 14px system-ui';
+    x.fillText(b.k === 1 ? 'Vasen' : b.k === 2 ? 'Oikea' : b.k === 3 ? 'Hyppää' : 'Pidä kiinni', b.x + b.w / 2, b.y + b.h / 2 + 30);
+  }
+}
+
+function drawResults() {
+  const W = SW, res = race.results, rowH = 30, h = 60 + rowH * res.length;
+  const y0 = land ? Math.max(safeT + 6, Math.min(trackTop + 10, H - safeB - h - 6)) : trackTop + 10;
+  x.fillStyle = 'rgba(10,30,20,.9)'; rr(20, y0, W - 40, h, 16); x.fill();
+  x.fillStyle = '#ffd166'; x.textAlign = 'center'; x.font = '900 22px system-ui';
+  x.fillText('Tulokset', W / 2, y0 + 34);
+  res.forEach((r, i) => {
+    const y = y0 + 64 + i * rowH, mine = i === race.mine;
+    x.fillStyle = r.color; x.beginPath(); x.arc(40, y - 6, 7, 0, 7); x.fill();
+    x.textAlign = 'left'; x.font = (mine ? '900 ' : '600 ') + '15px system-ui'; x.fillStyle = mine ? '#ffd166' : '#fff';
+    const name = race.mode === 'net' && r.id === R.me ? 'Sinä' : r.name;
+    x.fillText((i + 1) + '. ' + name, 52, y);
+    x.textAlign = 'right';
+    x.fillText(r.dq ? 'Hylätty' : r.fin === null ? '–' : (r.est ? 'arvio ' : '') + fmt(r.fin), W - 32, y);
+  });
+}
+
+// ---------- Input ----------
+function press(k) {
+  unlock();
+  if (!race || !me || race.phase === 'done') return;
+  if (!padOn(k)) return;
+  flash[k] = 0.09;
+  if (k === 3) jump(me); else if (k === 4) hold(me); else step(me, k);
+}
+// Which pad a finger is on (0: none, the scene does nothing).
+// Only a drawn pad counts: the gaps between them and the scene do nothing.
+function padAt(cx, cy) {
+  const p = pads().find(p => cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h);
+  return p ? p.k : 0;
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  catchUp(e);
+  const k = padAt(e.clientX, e.clientY);
+  if (k) press(k);
+});
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  catchUp(e);
+  if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
+  else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
+  else if (e.key === ' ' || e.key === 'ArrowUp') press(3);
+  else if (e.key === 'ArrowDown' || e.key === 'c') press(4);
+});
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja muut';
+  const best = load('ennatys', null);
+  document.getElementById('stats').textContent = 'Juoksut ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
+  menu.classList.remove('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); soloRace(); });
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+document.getElementById('asu').addEventListener('click', () => AiPelitOutfits.open());
+resize();
+showAsu();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="eukonkanto" data-order="low" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
