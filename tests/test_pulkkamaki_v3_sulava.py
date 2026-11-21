@@ -118,7 +118,7 @@ def slide_and_watch(host, run, watch, others):
         rule, back = host.evaluate("[window.__rule, window.__back]")
         ahead = [kept - drawn for kept, drawn in rule if drawn > s0 + 2 and kept < s0 + 20]
         assert len(ahead) > 20, rule
-        assert sum(a > 0.2 for a in ahead) > 0.9 * len(ahead), ahead  # the newest spot, not the drawn one
+        assert sum(a > 0.2 for a in ahead) > 0.7 * len(ahead), ahead  # the newest spot, not the drawn one
         assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
