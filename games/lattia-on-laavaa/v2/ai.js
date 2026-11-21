@@ -93,7 +93,8 @@ function cpuThink(w, k, b, dt, sol) {
   if (!k.ground && tgt && k.vy > 0) k.jump = true;
   // A shove, at a kid in front and close.
   if (rt > 4 && k.cd <= 0 && k.ground && b.r() < b.shove * dt * 2) {
-    // Only where its own dash (about 1.6 m) still ends on what it stands on.
+    // Only where its own dash (about 1.6 m) would still end on what it stands on. The dash now
+    // stops at the edge anyway (#505); kept, so they never shove from a small piece: easier.
     const ex = k.x + Math.cos(k.face) * SHOVE_V * SHOVE_T, ez = k.z + Math.sin(k.face) * SHOVE_V * SHOVE_T;
     const o = cur && inside(cur, ex, ez, -0.1) ? shoveTarget(w, k, k.face) : null;
     if (o) return true;

@@ -149,15 +149,32 @@ def test_a_shove_at_the_edge_of_a_small_piece_never_carries_the_shover_off(site,
         res.push({ started, out: k.out, ground: k.ground, on: k.gpId === 'p' + p.i,
                    inside: Math.abs(k.x - p.x) <= p.w / 2 && Math.abs(k.z - p.z) <= p.d / 2 });
       }
-      // In the air a shove still dashes as before (it is how a kid reaches further).
-      const [w, k, p] = eval(ALONE_ON)('pouf');
-      k.face = 0; k.ground = false; k.gpId = null; k.y = p.h0 + 1; k.vy = 0; startShove(k);
+      // In the air a shove pushes without the dash, which could only carry the shover off.
+      let [w, k, p] = eval(ALONE_ON)('pouf');
+      k.face = 0; k.ground = false; k.gpId = null; k.y = p.h0 + 1; k.vy = 0;
+      const airStarted = startShove(k), airDash = k.dash;
       for (let i = 0; i < 30; i++) stepWorld(w, STEP, [k]);
-      return { res, air: k.x - p.x };
+      const air = { started: airStarted, dash: airDash, moved: Math.abs(k.x - p.x), shoves: k.shoves };
+      // A jump pressed during the dash ends it: the shover lands back on its pouf.
+      [w, k, p] = eval(ALONE_ON)('pouf');
+      k.face = 0; startShove(k); stepWorld(w, STEP, [k]); k.jump = true;
+      let left = false;
+      for (let i = 0; i < 240; i++) { stepWorld(w, STEP, [k]); if (k.vy < 0) k.jump = false; if (!k.ground && i > 5) left = true; if (inLava(w, k)) fall(w, k); }
+      const jumped = { left, out: k.out, on: k.gpId === 'p' + p.i };
+      // Along pieces of the same height (Keittiö's counters, 0.2 m apart) the dash goes on.
+      const w3 = newWorld(3, [{ id: 'a', name: 'a', kind: 'cpu' }, { id: 'b', name: 'b', kind: 'cpu' }], 1);
+      w3.ph = 'play'; w3.rt = 5; w3.kids[1].out = true;
+      const c1 = w3.pieces[0], k3 = w3.kids[0];
+      Object.assign(k3, { x: c1.x + 0.6, z: c1.z, y: c1.h0, ground: true, gpId: 'p0', vx: 0, vy: 0, vz: 0, face: 0 });
+      startShove(k3);
+      for (let i = 0; i < 120; i++) stepWorld(w3, STEP, [k3]);
+      return { res, air, jumped, along: { x: k3.x, on: k3.gpId, out: k3.out } };
     }""", ALONE_ON)
     for one in r["res"]:
         assert one == {"started": True, "out": False, "ground": True, "on": True, "inside": True}, r
-    assert r["air"] > 1.0
+    assert r["air"] == {"started": True, "dash": 0, "moved": pytest.approx(0, abs=0.05), "shoves": 1}, r
+    assert r["jumped"] == {"left": True, "out": False, "on": True}, r
+    assert r["along"]["on"] == "p1" and not r["along"]["out"], r
 
 
 def test_a_shove_from_the_edge_still_pushes_the_kid_in_front(site, context):
@@ -180,18 +197,20 @@ def test_a_jump_that_falls_just_short_of_the_edge_climbs_up(site, context):
     # Eero (#505): a jump that lands a little short of a piece's edge climbs onto it.
     page = open_game(site, context)
     r = page.evaluate("""(ALONE_ON) => {
-      const tryJump = (gap, stickOn, drop) => {
+      const tryJump = (gap, stickOn, drop, vy = -1) => {
         const [w, k, p] = eval(ALONE_ON)('sofa');
         // In the air beside the sofa's right side, its feet `drop` below the top, moving at it.
-        Object.assign(k, { x: p.x + p.w / 2 + gap, z: p.z, y: p.h0 - drop, ground: false, gpId: null, vx: stickOn ? -2 : 0, vy: -1, vz: 0, ix: stickOn ? -1 : 0, iz: 0 });
-        const y0 = k.y;
-        for (let i = 0; i < 60 && !k.out; i++) { stepWorld(w, STEP, [k]); if (inLava(w, k)) fall(w, k); }
-        return { up: !k.out && k.ground && k.gpId === 'p' + p.i, climbs: k.climbs, drawnFrom: y0 - p.h0 };
+        Object.assign(k, { x: p.x + p.w / 2 + gap, z: p.z, y: p.h0 - drop, ground: false, gpId: null, vx: stickOn ? -2 : 0, vy, vz: 0, ix: stickOn ? -1 : 0, iz: 0, jump: vy > 0, jumpHeld: vy > 0 });
+        let peak = k.y;
+        for (let i = 0; i < 60 && !k.out; i++) { stepWorld(w, STEP, [k]); peak = Math.max(peak, k.y); if (inLava(w, k)) fall(w, k); }
+        return { up: !k.out && k.ground && k.gpId === 'p' + p.i, climbs: k.climbs, over: peak - p.h0 };
       };
-      return { near: tryJump(0.25, true, 0.4), low: tryJump(0.25, true, 0.72), far: tryJump(0.9, true, 0.4), away: tryJump(0.25, false, 0.4) };
+      return { near: tryJump(0.25, true, 0.4), low: tryJump(0.25, true, 0.72), far: tryJump(0.9, true, 0.4), away: tryJump(0.25, false, 0.4), rising: tryJump(0.25, true, 0.4, 6) };
     }""", ALONE_ON)
     assert r["near"]["up"] and r["near"]["climbs"] == 1, r
     assert not r["low"]["up"] and not r["far"]["up"] and not r["away"]["up"], r
+    # Still rising fast past a taller piece's side: no grab, the jump goes on.
+    assert r["rising"]["climbs"] == 0 and r["rising"]["over"] > 0.2, r["rising"]
 
 
 def test_a_sinking_piece_tips_over_as_it_goes_under(site, context):
@@ -213,8 +232,8 @@ def test_the_computer_kids_jump_about_and_every_round_ends(site, context, lv):
     for seed in (1, 2, 3):
         r = page.evaluate(SIM, [lv, seed])
         assert r["over"], (lv, seed, r["rt"])
-        # Measured in v2 (#505) over rooms 1–3, seeds 1–4: the first fall at 33–80 s, half of the
-        # kids out at 53 s or later (v1: 41 s), the last by 97 s, and the kids jump several times a
+        # Measured in v2 (#505) over rooms 1–3, seeds 1–4: the first fall at 42–71 s, half of the
+        # kids out at 58 s or later (v1: 41 s), the last by 94 s, and the kids jump several times a
         # round. The bounds leave room for luck.
         outs = r["outs"]
         assert outs[len(outs) // 2] > 35, (lv, seed, outs)

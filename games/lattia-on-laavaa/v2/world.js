@@ -118,7 +118,7 @@ function newKid(p, i) {
   return {
     i, id: p.id, name: p.name, kind: p.kind, col: p.col === undefined ? i % KID_COLORS.length : p.col,
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, face: 0, ground: true, gpId: null,
-    ix: 0, iz: 0, jump: false, jumpHeld: false, coyote: 0, buf: 0, shoveT: 0, climbT: 0, climbX: 0, climbY: 0, climbZ: 0, climbs: 0,
+    ix: 0, iz: 0, jump: false, jumpHeld: false, coyote: 0, buf: 0, climbT: 0, climbX: 0, climbY: 0, climbZ: 0, climbs: 0,
     cd: 0, dash: 0, stun: 0, pushedAt: -9, out: false, outRt: -1, fellX: 0, fellZ: 0, shoves: 0, own: 0,
   };
 }
@@ -201,13 +201,14 @@ function moveKid(w, k, dt, sol) {
   k.climbT = Math.max(0, k.climbT - dt);
   // The ground under the kid as the step starts: a shove's dash stops at its edge (below).
   const g0 = k.ground && k.gpId ? sol.find(s => s.id === k.gpId) : null;
+  // A shove's dash is a dash with no stun (a push's is stunned); `dash` alone is what every phone
+  // sends, so a kid another phone takes over mid-shove stops at the edge as well.
+  const shoving = k.dash > 0 && !stun;
+  // The shove's dash is over: back to a run at once, not a slide on at dash speed.
+  const endDash = () => { k.dash = 0; k.vx = gvx + (k.vx - gvx) * 0.35; k.vz = gvz + (k.vz - gvz) * 0.35; };
   if (k.dash > 0) {
     k.dash = Math.max(0, k.dash - dt);
-    if (k.shoveT > 0) {
-      k.shoveT = Math.max(0, k.shoveT - dt);
-      // The shove's dash is over: back to a run at once, not a slide on at dash speed.
-      if (k.shoveT === 0) { k.vx = gvx + (k.vx - gvx) * 0.35; k.vz = gvz + (k.vz - gvz) * 0.35; }
-    }
+    if (shoving && k.dash === 0) endDash();
   } else {
     const a = (k.ground ? ACC : AIR_ACC) * dt;
     const tx = ix * RUN + gvx, tz = iz * RUN + gvz;
@@ -219,7 +220,11 @@ function moveKid(w, k, dt, sol) {
   k.jumpHeld = k.jump;
   k.buf = Math.max(0, k.buf - dt);
   k.coyote = k.ground ? 0.09 : Math.max(0, k.coyote - dt);
-  if (k.buf > 0 && (k.ground || k.coyote > 0) && !stun) { k.vy = JUMP_V; k.ground = false; k.coyote = 0; k.buf = 0; k.jumps = (k.jumps || 0) + 1; }
+  if (k.buf > 0 && (k.ground || k.coyote > 0) && !stun) {
+    // A jump ends a shove's dash: it never flies on at dash speed (#505).
+    if (k.dash > 0) endDash();
+    k.vy = JUMP_V; k.ground = false; k.coyote = 0; k.buf = 0; k.jumps = (k.jumps || 0) + 1;
+  }
   // A short jump on an early release.
   if (!k.jump && k.vy > 3 && !k.ground && !k.pushedUp) k.vy -= 40 * dt;
   k.vy -= GRAV * dt;
@@ -227,7 +232,9 @@ function moveKid(w, k, dt, sol) {
   k.x += k.vx * dt; k.z += k.vz * dt; k.y += k.vy * dt;
   // A shove on the ground never carries the shover off (#505): its dash stops SHOVE_EDGE inside
   // the edge of what it stands on (where it already stood further out, it stops where it was).
-  if (k.shoveT > 0 && g0) {
+  // A piece of about the same height just ahead (Keittiö's counters, 0.2 m apart) lets it on.
+  const mv = Math.hypot(k.x - ox, k.z - oz) || 1, ax = k.x + (k.x - ox) / mv * 0.5, az = k.z + (k.z - oz) / mv * 0.5;
+  if (shoving && k.ground && g0 && !sol.some(s => s !== g0 && Math.abs(s.top - g0.top) <= STEP_UP && inside(s, ax, az, 0.12))) {
     const gx = g0.x + g0.vx * dt, gz = g0.z + g0.vz * dt;
     const lx = Math.max(0, g0.w / 2 - SHOVE_EDGE), lz = Math.max(0, g0.d / 2 - SHOVE_EDGE);
     if (Math.abs(k.x - gx) > lx && (k.x - ox) * (k.x - gx) > 0) { k.x = Math.abs(ox - gx) > lx ? ox : gx + Math.sign(k.x - gx) * lx; k.vx = gvx; }
@@ -265,8 +272,11 @@ function moveKid(w, k, dt, sol) {
 }
 // The ledge grab (#505): a kid in the air whose body touches a piece's side, moving or steering
 // into it, with its feet at most CLIMB below the top (and not already above it), is pulled up onto
-// it, just inside the edge. climbX/Y/Z and climbT let the drawing show the climb instead of a jump.
+// it, just inside the edge. Only from about the top of a jump on (not while still rising fast), so
+// a jump past a taller piece on the way to another is not cut short. climbX/Y/Z and climbT let
+// the drawing show the climb instead of a jump.
 function climb(k, sol, ix, iz, vx, vz) {
+  if (k.vy > 1) return false;
   let best = null, bx = 0, bz = 0;
   for (const s of sol) {
     const rise = s.top - k.y;
@@ -274,9 +284,10 @@ function climb(k, sol, ix, iz, vx, vz) {
     // The point of the box nearest the kid, and how far the kid's middle is from it.
     const cx = clamp(k.x, s.x - s.w / 2, s.x + s.w / 2), cz = clamp(k.z, s.z - s.d / 2, s.z + s.d / 2);
     const dx = cx - k.x, dz = cz - k.z, d = Math.hypot(dx, dz);
-    if (d > KID_R + CLIMB_REACH) continue;
+    // Over it already (d = 0) is a landing, the ground's to take.
+    if (d > KID_R + CLIMB_REACH || d < 1e-6) continue;
     // Towards it: by the stick or by the kid's own speed (a jump that fell just short).
-    if (d > 1e-6 && (ix * dx + iz * dz) / d < 0.2 && ((vx - s.vx) * dx + (vz - s.vz) * dz) / d < 0.3) continue;
+    if ((ix * dx + iz * dz) / d < 0.2 && ((vx - s.vx) * dx + (vz - s.vz) * dz) / d < 0.3) continue;
     if (!best || s.top > best.top) { best = s; bx = cx; bz = cz; }
   }
   if (!best) return false;
@@ -312,9 +323,12 @@ function fall(w, k, rt) {
 }
 
 // ---- The shove: a short dash; a kid in front is pushed away ----
+// In the air (v2, #505) it pushes without the dash, which could only carry the shover off.
 function startShove(k) {
   if (k.out || k.cd > 0 || k.stun > 0) return false;
-  k.cd = SHOVE_CD; k.dash = SHOVE_T; k.shoveT = SHOVE_T; k.shoves++;
+  k.cd = SHOVE_CD; k.shoves++;
+  if (!k.ground) return true;
+  k.dash = SHOVE_T;
   const fx = Math.cos(k.face), fz = Math.sin(k.face);
   k.vx = fx * SHOVE_V; k.vz = fz * SHOVE_V;
   return true;
@@ -344,7 +358,7 @@ function pushOf(k, o) {
 function applyPush(k, imp) {
   if (k.out) return;
   k.vx = imp[0]; k.vy = Math.max(k.vy, imp[1]); k.vz = imp[2];
-  k.ground = false; k.stun = STUN; k.dash = 0.25; k.shoveT = 0; k.pushedUp = true;
+  k.ground = false; k.stun = STUN; k.dash = 0.25; k.pushedUp = true;
 }
 
 // ---- The round, as the host (or the phone alone) runs it ----
