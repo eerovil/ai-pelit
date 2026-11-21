@@ -212,3 +212,92 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_h
     assert all(abs(drawn - said) < 0.01 for _, said, drawn in sw), sw
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
+
+
+# On a phone: each frame, sled `id` as drawn (inside render3d, where the frame has swapped the drawn spot in), its
+# roll, and whether the room is paused.
+DRAWN = """(id) => { window.__dr = []; const r = recOf(id), d = window.render3d;
+  window.render3d = (...a) => { window.__dr.push([performance.now() / 1000, r.sl.s, r.sl.roll, AiPelitRooms.paused]);
+    return d(...a); }; }"""
+
+
+def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site, browser):
+    """A phone in the run goes away: every phone waits, and a guest draws the host's sled where it is, not gliding
+    on past its newest spot (to slide back once the run goes on). Sleds stand still in a pause, so they are drawn so."""
+    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    hid = me_of(host)
+    # The host's own sled goes straight down at 8 m/s, by the run's clock, which stands still in the pause (as the
+    # game's own sleds do: no frame steps them then); on the game's physics a tree could stop it short, and the
+    # drawing would then ease away its guess of the sled going on.
+    host.evaluate("""() => { const adv = window.__adv; let at = null;
+      window.advance = (h, sl, dt) => { if (sl !== me) return adv(h, sl, dt);
+        const t = runClock(), d = at === null ? 0 : t - at; at = t;
+        sl.v = 8; sl.s += sl.v * d; sl.yaw = 0; sl.air = false; sl.y = groundAt(h, sl.s, sl.x); }; }""")
+    aino.wait_for_function(f"recOf({json.dumps(hid)}).sl.s > {aino.evaluate(f'recOf({json.dumps(hid)}).sl.s')} + 6",
+                           timeout=10000)
+    aino.evaluate(DRAWN, hid)
+    aino.wait_for_timeout(500)
+    host.relay.drop(ville)
+    aino.wait_for_function("AiPelitRooms.paused", timeout=10000)
+    aino.wait_for_timeout(1200)
+    host.relay.back(ville)
+    aino.wait_for_function("!AiPelitRooms.paused", timeout=20000)
+    aino.wait_for_timeout(1000)
+    dr = aino.evaluate("window.__dr")
+    paused = [(t, s) for t, s, _, p in dr if p]
+    assert len(paused) > 20, dr
+    # From 0.15 s into the pause (the phones hear of it a moment apart), the sled stands where it was drawn.
+    held = [s for t, s in paused if t > paused[0][0] + 0.15]
+    assert max(held) - min(held) < 0.05, [round(s, 2) for _, s in paused]
+    assert dr[-1][1] > held[-1] + 2, dr[-1]  # and it slid on after the pause
+    # Never drawn sliding back up the hill, before, in or after the pause.
+    drawn = [round(s, 2) for _, s, _, _ in dr]
+    assert all(b >= a - 0.05 for a, b in zip(drawn, drawn[1:])), drawn
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+def test_a_friends_fall_rolls_one_way_and_ends_upright_at_once(site, browser):
+    """A fall rolls the sled 1.5 turns, and at its end the sled is upright again at once, as on the friend's own
+    phone: drawn on the host, the roll only grows, and then is 0, never rolling back between."""
+    host, guest = phones(site, browser)
+    gid = me_of(guest)
+    host.evaluate(DRAWN, gid)
+    guest.evaluate("window.advance = window.__adv; me.v = 6; fall(me, 'Kivi!')")
+    host.wait_for_function(f"recOf({json.dumps(gid)}).sl.fallT > 0", timeout=5000)
+    host.wait_for_function(f"!(recOf({json.dumps(gid)}).sl.fallT > 0)", timeout=5000)
+    host.wait_for_timeout(600)
+    rolls = [round(r, 3) for _, _, r, _ in host.evaluate("window.__dr")]
+    assert max(rolls) > 7, rolls  # it really rolled (to near 3π)
+    assert rolls[-1] == 0, rolls
+    assert all(b >= a - 0.01 or b == 0 for a, b in zip(rolls, rolls[1:])), rolls
+    assert not host.errors + guest.errors
+
+
+def test_a_friend_over_the_finish_line_is_drawn_slowing_down(site, browser):
+    """Past the line a finished sled brakes to a stop on its own phone; that phone keeps sending it until it stands,
+    so the others draw it slowing down there and not stopping dead at the line."""
+    host, guest = phones(site, browser)
+    gid = json.dumps(me_of(guest))
+    host.evaluate(f"""() => {{ window.__fin = []; const r = recOf({gid});
+      AiPelitRooms.on('message', (m, from) => {{ if (m.t === 'p' && from === {gid} && r.sl.fin) window.__fin.push(r.sl.s); }}); }}""")
+    guest.evaluate("""() => { window.advance = window.__adv;
+      me.s = hill.len - 3; me.x = centreX(hill, me.s); me.y = groundAt(hill, me.s, me.x); me.v = 6; me.yaw = 0; }""")
+    host.wait_for_function(f"recOf({gid}).sl.fin", timeout=5000)
+    guest.wait_for_function("me.fin && !(me.v > 0)", timeout=10000)
+    host.wait_for_timeout(500)
+    fin = host.evaluate("window.__fin")
+    assert len(set(fin)) > 10, fin  # a spot each tenth of a second while it slowed down
+    assert all(b >= a for a, b in zip(fin, fin[1:])), fin
+    assert fin[-1] > fin[0] + 3, fin
+    assert not host.errors + guest.errors
+
+
+def test_a_fast_friend_glides_over_a_long_gap_and_is_not_drawn_at_once(site, browser):
+    """A sled at the top speed (about 20 m/s) goes 20 m in a second's stall of its phone: still a glide on the
+    track, not a jump drawn at once. Only a move past 25 m is."""
+    host, _ = phones(site, browser)
+    sizes = host.evaluate("""() => { const tr = newTrack(), at = (t, s) => ({ s, x: 0, y: 0, yaw: 0, flip: 0, spin: 0, roll: 0, tilt: 0 });
+      tr.push(0, at(0, 100), 0); tr.push(1, at(1, 120), 1); const a = tr.size();
+      tr.push(2, at(2, 150), 2); return [a, tr.size()]; }""")
+    assert sizes == [2, 1], sizes

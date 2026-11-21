@@ -1,4 +1,4 @@
-"""Pulkkamäki v2 (#475): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
+"""Pulkkamäki v3 (#475, #480): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
 import shutil
 
 import pytest

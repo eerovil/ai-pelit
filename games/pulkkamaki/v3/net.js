@@ -48,10 +48,25 @@ const recOf = id => net && net.sleds.find(r => r.id === id);
 const myRec = () => recOf(RM.me);
 
 // v3 (#480): what a track keeps of another sled: its place, heading and height, and the turns drawn
-// (a trick's flip and spin, the roll of a fall, the lean). Angles blend the short way round.
+// (a trick's flip and spin, the roll of a fall, the lean). Heading, flip and spin blend the short way
+// round; a fall's roll only grows (0 to 1.5 turns) and is blended straight, and the track starts again
+// where a fall ends, as the roll drops back to 0 there (blended, it would roll backwards). A move longer
+// than `jump` between two spots is drawn at once: about a second at the top speed (19-22 m/s), as the
+// game has no respawn or teleport.
 const KEYS = ['s', 'x', 'y', 'yaw', 'flip', 'spin', 'roll', 'tilt'];
-const newTrack = () => AiPelitSulava.track({ keys: KEYS, angles: ['yaw', 'flip', 'spin', 'roll'], jump: 12 });
+const newTrack = () => AiPelitSulava.track({ keys: KEYS, angles: ['yaw', 'flip', 'spin'], jump: 25 });
 const stampOf = m => Number.isFinite(m.st) ? m.st : null;
+// The run's own clock in seconds, which stands still while the room is paused (a phone away), on every
+// phone. Stamps are on it, and the tracks hear and draw by it: during a pause the others are drawn
+// where they are (not gliding on past their newest spot, to slide back after it), and after it they go
+// on from there. asDrawn() asks it every frame, so a pause is noticed within a frame (Areena v9 too).
+const pz = { off: 0, at: null };
+function runClock() {
+  const t = AiPelitSulava.now();
+  if (net && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  return t - pz.off;
+}
 // A spot heard for another phone's or the computer's sled: the turns it shows now, worked out from
 // the state as sent, then into its track. `src` is whose clock the stamp is on, 'f' (the friend's)
 // or 'h' (the host's): when it changes (the computer takes over a friend, or gives them back) the
@@ -61,8 +76,9 @@ function heardSpot(rec, st, src) {
   if (sl.trick) trickPose(sl); else { sl.flip = 0; sl.spin = 0; }
   sl.tilt = sl.air ? 0 : -sl.steer * 0.25;
   sl.roll = sl.fallT > 0 ? (1 - sl.fallT / FALL_T) * TAU * 1.5 : 0;
-  if (src !== rec.src) rec.tr.snap(st, sl); else rec.tr.push(st, sl);
-  rec.src = src;
+  const a = runClock(), up = rec.fell && !(sl.fallT > 0);   // the fall has just ended
+  if (src !== rec.src || up) rec.tr.snap(st, sl, a); else rec.tr.push(st, sl, a);
+  rec.src = src; rec.fell = sl.fallT > 0;
 }
 // The sleds drawn from their tracks: every other phone's, and on a guest the computer's too (the
 // host slides those itself, and a friend's sled while its computer drives it).
@@ -71,9 +87,10 @@ const drawnHere = rec => rec.kind !== 'me' && !(RM.isHost && (rec.kind === 'cpu'
 function asDrawn() {
   const kept = [];
   if (!net) return kept;
+  const a = runClock();
   for (const rec of net.sleds) {
     if (!drawnHere(rec)) continue;
-    const sl = rec.sl, old = KEYS.map(k => sl[k]), d = rec.tr.at();
+    const sl = rec.sl, old = KEYS.map(k => sl[k]), d = rec.tr.at(a);
     for (const k of KEYS) sl[k] = d[k];
     kept.push([sl, old]);
   }
@@ -108,15 +125,15 @@ function addRec(r, i) {
   const sl = newSled(r.id, r.name, { outfit: r.kind === 'me' ? outfit : outfitOf(r.o) });
   placeSled(hill, sl, LANES[i % LANES.length]);
   if (r.kind === 'me') sl.onEvent = onMyEvent;
-  const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, lastT: 0, lastA: null, sl,
-    tr: newTrack(), ts: null, src: '' };
+  const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, lastA: null, sl,
+    tr: newTrack(), ts: null, src: '', fell: false };
   net.sleds.push(rec);
   sleds.push(sl);
   return rec;
 }
 function hostState() {
   // v3 (#480): `st`, the host's clock; `f`, a friend's own stamp for the spot they sent, while they drive it.
-  return { t: 's', round: net.round, st: AiPelitSulava.now(), hill: net.hill, ph: net.ph, cd: r2(net.cd), clock: r2(net.clock), ff: net.firstFin,
+  return { t: 's', round: net.round, st: runClock(), hill: net.hill, ph: net.ph, cd: r2(net.cd), clock: r2(net.clock), ff: net.firstFin,
     sk: net.sleds.map(r => ({ id: r.id, n: r.name, c: r.kind === 'cpu' ? 1 : 0, o: r.o, w: r.own, m: r.cpu ? 1 : 0, a: pack(r.sl),
       f: r.kind === 'net' && !r.drive ? r.ts : null })) };
 }
@@ -178,13 +195,16 @@ function netTick(dt) {
     if (net.sendT <= 0) { net.sendT = net.ph === 'run' ? 0.1 : 0.25; RM.send(hostState()); }
     return;
   }
-  // A guest: its sled ten times a second; once finished, again each second until the host has it.
+  // A guest: its sled ten times a second, on past the finish line until it stops (v3: the others draw
+  // it slowing down there, no longer carrying it on themselves); then again each second until the host
+  // has the finish.
   const rec = myRec();
   if (!rec || mode === 'netwait') return;
-  if (rec.sl.fin && rec.hostFin) return;
+  const stopped = rec.sl.fin && !(rec.sl.v > 0);
+  if (stopped && rec.hostFin) return;
   if (net.sendT <= 0) {
-    net.sendT = rec.sl.fin ? 1 : net.ph === 'run' ? 0.1 : 0.5;
-    RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), w: rec.own, o: outfit.id, a: pack(rec.sl) });
+    net.sendT = stopped ? 1 : net.ph === 'run' ? 0.1 : 0.5;
+    RM.send({ t: 'p', round: net.round, st: runClock(), w: rec.own, o: outfit.id, a: pack(rec.sl) });
   }
 }
 // The end clock's own time left, for the HUD: null until someone has finished.
@@ -276,7 +296,7 @@ if (RM) {
       // host's last take-over.
       if (!rec || rec.kind !== 'net' || rec.drive || net.res || !(m.w >= rec.own)) return;
       unpack(rec.sl, m.a);
-      rec.lastT = performance.now(); rec.lastA = m.a;
+      rec.lastA = m.a;
       rec.ts = stampOf(m); heardSpot(rec, rec.ts, 'f');
       if (m.o && m.o !== rec.o) { rec.o = m.o; rec.sl.outfit = outfitOf(m.o); }
       return;
@@ -307,7 +327,7 @@ if (RM) {
     const rec = recOf(id);
     if (!rec || !rec.drive) return;
     rec.drive = false; rec.own++; rec.sl.cpu = null; handOver(rec.sl);
-    rec.tr.reset(); rec.ts = null; rec.src = '';   // v3: drawn where the host has it until the phone's own spots come
+    rec.tr.reset(); rec.ts = null; rec.src = ''; rec.fell = false;   // v3: drawn where the host has it until the phone's own spots come
   });
   RM.on('lobby', toSolo);
   RM.on('leave', () => { toSolo(); });
