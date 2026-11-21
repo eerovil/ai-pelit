@@ -34,13 +34,14 @@ RUN = """([i, dir]) => { window.__run = false; let t0 = null, y0 = 0; const s = 
     }
     s(dt); }; }"""
 # Records, each frame, where fighter `i` is drawn along the arena and the moment its track was asked
-# (asDrawn(), right before the drawing), and when a host's message arrived (so a stall of the test machine,
-# with no message for a while, can be told from a jerk).
-SAMPLE = """(i) => { window.__ys = []; window.__got = [];
-  AiPelitRooms.on('message', m => { if (m.t === 's') window.__got.push(performance.now() / 1000); });
+# (asDrawn(), right before the drawing), and whether the phone had by then heard a spot from the host newer
+# than the moment drawn (so a stall of the test machine or its relay, with no spot heard for a while, can be
+# told from a jerk: the drawing then waits on the newest spot, by design).
+SAMPLE = """(i) => { window.__ys = []; let heard = -Infinity; const tr = fighters[i].tr;
+  AiPelitRooms.on('message', m => { if (m.t === 's' && m.ck > heard) heard = m.ck; });
   const a = window.asDrawn;
   window.asDrawn = () => { const t = performance.now() / 1000, kept = a();
-    if (window.__ys.length < 300) window.__ys.push([t, fighters[i].y]); return kept; }; }"""
+    if (window.__ys.length < 300) window.__ys.push([t, fighters[i].y, tr.time <= heard]); return kept; }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -80,22 +81,20 @@ def index(page):
 
 def glides(page):
     """The speed over each two drawn frames while the fighter ran: about the same all the way."""
-    ys, got = page.evaluate("[window.__ys, window.__got]")
+    ys = page.evaluate("window.__ys")
     # Only frames that came in time on the watching page itself (both gaps under 40 ms, a 60 Hz frame is 17):
     # a frame late on a busy test machine and the quick one after it measure the machine, not the drawing.
-    sp = [(t2, abs(b - a) / (t2 - t0)) for (t0, a), (t1, _), (t2, b) in zip(ys, ys[1:], ys[2:])
+    sp = [(t2, abs(b - a) / (t2 - t0), fa and fb) for (t0, a, fa), (t1, _, _), (t2, b, fb) in zip(ys, ys[1:], ys[2:])
           if t2 > t0 and t1 - t0 < 0.04 and t2 - t1 < 0.04]
-    moving = [i for i, (_, v) in enumerate(sp) if v > 10]
+    moving = [i for i, (_, v, _) in enumerate(sp) if v > 10]
     assert len(moving) > 50, len(moving)
     # Leave out the start and the stop: the drawing speeds up and slows down there over a moment.
     t0, t1 = sp[moving[0]][0] + 0.15, sp[moving[-1]][0] - 0.3
-    middle = [(t, v) for t, v in sp if t0 <= t <= t1]
+    middle = [(t, v, fed) for t, v, fed in sp if t0 <= t <= t1]
     assert len(middle) > 30, len(middle)
-
-    def heard(t):
-        return any(t - 0.3 <= g <= t for g in got)
-    kept = [v for t, v in middle if heard(t)]
-    shown = [round(v) for _, v in middle]
+    # Only frames drawn with a spot heard ahead of them: the drawing's own glide, not a gap in the messages.
+    kept = [v for _, v, fed in middle if fed]
+    shown = [round(v) for _, v, _ in middle]
     assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
     assert min(kept) > 20, shown
     m, sd = mean(kept), pstdev(kept)
