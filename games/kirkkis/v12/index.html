@@ -460,6 +460,11 @@ const gen = n => /[aeiouyäö]$/i.test(n) ? n + 'n' : n + 'in';
 // Something the players should hear about. The phone running the round passes it on to the others,
 // and each phone tells it from its own player's side ("Sinut nähtiin!" or "Näit Ainon!").
 function happen(ev) { if (R.isHost) events.push(ev); show(ev); }
+// v12 (#480): the round itself moved or stopped someone (the seeker back to the base, a tagged one frozen), so the
+// spots heard before no longer say where they are, and a friend's spots still carry the friend's last stamp until
+// their phone sends again. Forget them: the newest spot the round has is drawn as it is, and the next one starts
+// the glide again, on the host and on every guest.
+function restart(p) { if (p && p !== player) p.tr.reset(); }
 function show(ev) {
   const p = people[ev[1]];
   switch (ev[0]) {
@@ -496,6 +501,7 @@ function show(ev) {
       if (p) say(p, 'Omat nimet! Kaikki pelastettu!', 2.6);
       if (seeker === player) { toast('Kaikki pelastettu! 😮', 2.6); toBase(player, people.indexOf(player)); }
       else toast('Kaikki pelastettu! Piiloudu!', 2.6);
+      restart(seeker);
       say(seeker, '1, 2, 3…', 2.6);
       sfx.all();
       break;
@@ -511,6 +517,7 @@ function show(ev) {
       if (!p || !by) break;
       if (seeker !== p) setIt(p);
       p.st = 'seek'; by.st = 'hiding'; p.freeze = FREEZE; p.from = by; p.noBack = NO_BACK; by.freeze = 0;
+      restart(p);
       say(by, 'Hippa!', 1.4); say(p, '1, 2, 3…', FREEZE);
       if (p === player) toast('Sinut hipattiin! Olet hippa ✋', 2.4);
       else if (by === player) toast(`Hippasit ${gen(p.name)}! Pakene! 💨`, 2.2);
