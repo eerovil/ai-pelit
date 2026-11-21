@@ -347,9 +347,8 @@ def test_two_talking_at_once_are_both_heard(phones):
     hold(a)
     hold(b)
     host.wait_for_function("AiPelitRooms.voice.speakers.slice().sort().join() === 'Aino,Iida'")
-    # A peer's <audio> starts playing a moment after its talk flag arrives (play() is asynchronous), and until
-    # then the chip adds "Napauta ruutua" (sound held back); on a busy machine the first read caught that moment.
-    host.wait_for_function("!document.getElementById('aipr-talk').textContent.includes('Napauta')")
+    # No wait for the hint to go (#512): it shows only when the phone refused to play, never while a
+    # player is still starting or restarting after an error.
     assert host.locator("#aipr-talk").inner_text() in ("🔊 Aino, Iida", "🔊 Iida, Aino")
     a.mouse.up()
     host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Iida'")
