@@ -38,7 +38,7 @@ SAMPLE = """(i) => { window.__xs = []; window.__got = [];
   AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
   const d = window.draw;
   window.draw = () => { const k = race.karts[i];
-    if (window.__xs.length < 300) window.__xs.push([performance.now() / 1000, k.x, k.y]); d(); }; }"""
+    if (window.__xs.length < 300 && !window.__stop) window.__xs.push([performance.now() / 1000, k.x, k.y]); d(); }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -109,18 +109,22 @@ def run_and_watch(host, run, watch, others):
         host.evaluate("""(me) => { const k = race.karts[me]; window.__rule = []; window.__back = [];
           AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === k.id) window.__back.push(m.st - k.tr.time); });
           setInterval(() => { const l = window.__xs[window.__xs.length - 1];
-            if (l) window.__rule.push((k.x - l[1]) * Math.cos(k.a) + (k.y - l[2]) * Math.sin(k.a)); }, 37); }""", me)
+            if (l && !window.__stop) window.__rule.push([(k.x - l[1]) * Math.cos(k.a) + (k.y - l[2]) * Math.sin(k.a),
+              k.x === k.hd[0] && k.y === k.hd[1]]); }, 37); }""", me)
     s0 = run.evaluate("window.__s")
     run.evaluate("window.__run = true")
     watch.wait_for_function("window.__xs.length >= 200", timeout=20000)
+    for p in {host, watch}:
+        p.evaluate("window.__stop = true")  # only frames while the friend still drove
     run.evaluate("window.__run = false")
     assert run.evaluate("window.__s") > s0 + 200  # it really drove
     glides(watch)
     if run is not host:
         rule, back = host.evaluate("[window.__rule, window.__back]")
         assert len(rule) > 30, rule
-        moving = rule[5:-10]
-        assert sum(a > 3 for a in moving) > 0.9 * len(moving), rule  # the newest spot, not the drawn one
+        assert all(newest for _, newest in rule), rule  # between frames the kart is at the newest spot heard
+        ahead = [a for a, _ in rule[5:]]
+        assert mean(ahead) > 5 and sum(a > 0 for a in ahead) > 0.8 * len(ahead), ahead  # not the drawn one
         assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
@@ -198,6 +202,7 @@ def test_a_kart_moved_far_at_once_is_drawn_there_at_once(site, browser, watcher)
     aino.evaluate("window.__lane = 0")
     watch.wait_for_timeout(600)
     watch.evaluate(SWITCH, me)
+    watch.wait_for_timeout(400)  # a few spots heard before the jump
     aino.evaluate("window.__s += 300; me.prog += 300")
     sw = placed(watch, 1)
     assert sw[0][0] == "jump", sw
