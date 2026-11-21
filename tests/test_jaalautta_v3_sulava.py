@@ -139,7 +139,14 @@ def test_between_frames_the_guest_keeps_the_newest_spot_and_draws_one_a_moment_b
     assert all(r[0] is True for r in rule), [(n, r) for n, r in enumerate(rule) if r[0] is not True]  # between frames the seal is at the newest spot heard
     behind = [d for _, d in rule[5:]]
     assert mean(behind) > 0.1 and sum(d > 0.02 for d in behind) > 0.7 * len(behind), behind  # not the drawn one
-    assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
+    # On the host's clock, when each state came: the drawn moment's lag behind the host is its gap to the
+    # state's stamp plus how late the state came (over the quickest one): a late state (the jitter, a loaded
+    # test machine) comes near the drawn moment, but the moment is still a delay behind the host.
+    got = guest.evaluate("window.__got")[-len(back):]
+    quickest = min(g[0] - g[1] for g in got)
+    lag = [b + (g[0] - g[1] - quickest) for b, g in zip(back, got)]
+    assert len(back) > 15 and all(d > 0.03 for d in lag[5:]), list(zip(back, lag))  # drawn at least 30 ms back
+    assert mean(back[5:]) > 0.05, back
 
 
 # On the guest: when a state moves seal `i` by more than 0.5 units from the one before it (a new erä, or a move
@@ -260,3 +267,50 @@ def test_a_paused_round_holds_the_friend_s_seal_where_it_is_drawn(pair, first):
     assert max(steps) < 0.5, (max(steps), steps)  # and went on with no jump, back or forward
     moved = [f for f in xs if f[0] > go_at + 0.6]
     assert moved and math.hypot(moved[-1][1] - held[-1][0], moved[-1][2] - held[-1][1]) > 1, moved[-1:]
+
+
+# On the host: its seal, standing at (-2, 0), is mashed back onto the ice 3.5 units on (`saved` rises), as
+# teeter() does; under the 8-unit jump, so only the rescue can say it is a jump.
+RESCUE = "() => { me.x = 1.5; me.y = 0; me.vx = me.vy = 0; me.saved++; }"
+
+
+def test_a_rescued_seal_is_drawn_back_on_the_ice_at_once(pair):
+    """A wobbling seal mashed back onto the ice is put there, not slid: the guest draws it at its rescued spot
+    on the next frame."""
+    host, guest, i = pair
+    host.evaluate("() => { me.x = -2; me.y = 0; me.vx = me.vy = 0; }")
+    guest.wait_for_timeout(700)  # a few states heard there, the track settled
+    guest.evaluate(WATCH_JUMP, i)
+    guest.wait_for_function("window.__heard > 2", timeout=5000)
+    host.evaluate(RESCUE)
+    guest.wait_for_function("window.__sw.length >= 1", timeout=5000)
+    sw = guest.evaluate("window.__sw")
+    era, ax, ay, x, y = sw[0]
+    assert abs(ax - 1.5) < 0.01 and abs(ay) < 0.01, sw
+    assert abs(x - ax) < 0.01 and abs(y - ay) < 0.01, sw
+
+
+def test_a_rescue_heard_while_paused_is_drawn_at_once_when_the_round_goes_on(pair):
+    """A guest that hears the pause first holds the host's last states until it ends (heldOn()); a rescue among
+    them is still a jump then: the first frame after the pause draws the seal at its rescued spot, not gliding
+    there from where it stood."""
+    host, guest, i = pair
+    for p in (host, guest):
+        p.evaluate(PAUSE)
+    host.evaluate("() => { me.x = -2; me.y = 0; me.vx = me.vy = 0; }")
+    guest.wait_for_timeout(700)
+    guest.evaluate(SAMPLE, i)
+    guest.evaluate("window.__pz = true")
+    host.evaluate(RESCUE)
+    guest.wait_for_timeout(300)  # the host's states with the rescue come while the guest is paused
+    host.evaluate("window.__pz = true")
+    guest.wait_for_timeout(700)
+    guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
+    host.evaluate("window.__pz = false")
+    guest.wait_for_timeout(500)
+    guest.evaluate("window.__stop = true")
+    xs, go_at = guest.evaluate("[window.__xs, window.__goAt]")
+    before = [f for f in xs if f[0] < go_at]
+    after = [f for f in xs if f[0] > go_at]
+    assert before and abs(before[-1][1] + 2) < 0.01, before[-3:]  # held where it stood during the pause
+    assert after and abs(after[0][1] - 1.5) < 0.01 and abs(after[0][2]) < 0.01, after[:5]
