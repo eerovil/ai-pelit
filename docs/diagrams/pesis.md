@@ -33,12 +33,14 @@ flowchart TD
   N -- Kyllä --> O{Molemmat joukkueet lyöneet?}
   O -- Ei --> P[Vuoro vaihtuu] --> B
   O -- Kyllä --> Q{Yksin vai huoneessa?}
-  Q -- Yksin --> S[Voitto: seuraava taso ja uusi vastustaja]
+  Q -- Yksin --> U{Voitto?}
+  U -- Kyllä --> S[Voitto: seuraava taso ja uusi vastustaja]
+  U -- Häviö tai tasapeli --> V[Sama taso, sama vastustaja uudelleen]
   Q -- Huoneessa --> T[Tulos kaikille, takaisin huoneeseen]
   class A,B,G blue
-  class C,E,H,J,N,O,Q amber
+  class C,E,H,J,N,O,Q,U amber
   class M,L teal
-  class D,F,I,K rose
+  class D,F,I,K,V rose
   class R,T violet
   class S,P green
 ```
@@ -48,7 +50,7 @@ flowchart TD
 - **blue**: what the player sees and does
 - **amber**: a check that decides the path
 - **teal**: a run made, or the play stopped
-- **rose**: a try spent or a player out
+- **rose**: a try spent, a player out, or a match lost
 - **violet**: the match in a room with friends
 - **green**: a change of sides, a win and a new level
 
@@ -65,5 +67,7 @@ flowchart TD
 - **Lukkari pitää pallon kotipesällä**: `stopPlay()`: a runner past halfway to the next base makes it, one short of it goes back, and the batter not yet on 1st base is palo. The same stop ends a play that lasted `PLAY_MAX` (25 s).
 - **Juoksu**: a runner who reaches home after 3rd base scores a run, and stands with the others who scored; a player who scored does not bat again.
 - **Kolme paloa tai lyöjät loppu?**: three palot (`OUTS`), or no batter left in the order who is neither out nor home, ends the team's turn at bat (`endInning()`).
-- **Voitto: seuraava taso ja uusi vastustaja**: alone, a win raises `stats.taso` (the next match meets the next foe, a stronger team) and counts in `voitot`; a loss in `haviot`, a tie in `tasapelit`. The phone's own runs, those of its batting-order places, are counted in `juoksut` (in a room too) once each play is settled (`countRuns()`), so a run a foul takes back is never counted; each player's runs in the match (`runs`) go with the state a guest hears.
+- **Voitto?**: alone, `endMatch()` compares the phone's team's runs with the foe's and shows "Voitit a–b! 🏆", "Hävisit a–b" or "Tasapeli a–b" in the menu.
+- **Voitto: seuraava taso ja uusi vastustaja**: a win raises `stats.taso` (the next match meets the next foe, a stronger team) and counts in `voitot`.
+- **Sama taso, sama vastustaja uudelleen**: a loss counts in `haviot` and a tie in `tasapelit`; `stats.taso` stays, so the next match meets the same foe. The phone's own runs, those of its batting-order places, are counted in `juoksut` (in a room too) once each play is settled (`countRuns()`), so a run a foul takes back is never counted; each player's runs in the match (`runs`) go with the state a guest hears.
 - **Tulos kaikille, takaisin huoneeseen**: the host sends the end with `deliver()` and calls `endRound()`; every phone in the round counts its team's win, loss or tie once (`R.once()`) under `stats.kaverit`, and shows the score with `backToRoom()`.
