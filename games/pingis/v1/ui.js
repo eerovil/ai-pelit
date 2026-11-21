@@ -136,7 +136,7 @@ function hitBy(side, f) {
     aim = clamp(b.vx / 2.2 + (ball.x - b.x) / REACH * 0.4, -1, 1);
     if (tutorial && side === view) { tutorial = false; save('osattu', true); }
   }
-  const off = clamp(Math.abs(ball.x - b.x) / REACH, 0, 1);
+  const off = clamp(Math.abs(ball.x - b.x) / (brain ? CPU_REACH : REACH), 0, 1);
   const nf = newFlight(f.n + 1, side, false, shotLaunch(ball, side, kind, aim, off, rnd));
   f.over = { hit: true };
   game.flight = nf;
@@ -145,7 +145,7 @@ function hitBy(side, f) {
   hooks.launched(nf);
 }
 function stepOnce(f) {
-  const R = 1 - f.by, ev = ballStep(f.ball);
+  const R = 1 - f.by, pz = f.ball.z, ev = ballStep(f.ball);
   evSound(ev, f.ball);
   if (!judgeHere(R)) {
     // Not ours to judge: it flies on to the other end and waits there for its word.
@@ -154,7 +154,7 @@ function stepOnce(f) {
   }
   const res = judge(f, ev);
   if (res) { hooks.point(f, res.w); return; }
-  if (hittable(f) && meets(f, bats[R], cpuAt(R) ? CPU_REACH : REACH)) hitBy(R, f);
+  if (hittable(f) && meets(f, bats[R], cpuAt(R), pz)) hitBy(R, f);
 }
 function advance(dtg) {
   const g = game;

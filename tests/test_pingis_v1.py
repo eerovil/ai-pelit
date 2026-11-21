@@ -122,13 +122,14 @@ def test_shots_from_the_middle_land_and_launches_are_rounded(site, context):
 
 
 def test_a_bat_over_the_table_in_front_of_the_bounce_still_meets_the_ball(site, context):
-    # Eero on the preview: too hard to hit. A bat held over the table, where the ball has not
+    # Eero on the preview: too hard to hit. A bat held over the table 12 cm in front of the bounce
+    # (the ball bounces 48 cm from the end line), where the ball has not
     # bounced yet, meets it right after the bounce; 30 cm to the side still meets it; a bat
     # far to the side, or a ball long past, does not.
     page = open_game(site, context)
     got = page.evaluate("""() => {
       const out = {};
-      for (const [name, dx, dz] of [['front', 0, -0.25], ['side', 0.3, 0.3], ['far', 0.6, 0.3]]) {
+      for (const [name, dx, dz] of [['front', 0, -0.6], ['side', 0.3, 0.3], ['far', 0.6, 0.3]]) {
         const f = newFlight(1, 1, false, [0, 0.3, -1.2, 0, 0, 3.2, 0]);
         const q = predict(f, 0, 0.3), bat = { x: q.x + dx, z: HL + dz };
         let met = false;
@@ -138,6 +139,30 @@ def test_a_bat_over_the_table_in_front_of_the_bounce_still_meets_the_ball(site, 
       return out; }""")
     assert got == {"front": True, "side": True, "far": False}
 
+
+    # The computer keeps its old bat: 26 cm sideways, and only at its line, so the easier hit
+    # helps only the player (review of #509).
+    cpu = page.evaluate("""() => {
+      const out = {};
+      for (const [name, dx, dz] of [['front', 0, -0.6], ['line', 0.2, 0.3], ['side', 0.3, 0.3]]) {
+        const f = newFlight(1, 0, false, [0, 0.3, 1.2, 0, 0, -3.2, 0]);
+        const q = predict(f, 1, 0.3), bat = { x: q.x + dx, z: -HL - dz };
+        let met = false;
+        for (let k = 0; k < 2400 && !f.ball.dead && !met; k++) { const pz = f.ball.z; judge(f, ballStep(f.ball)); met = hittable(f) && meets(f, bat, true, pz); }
+        out[name] = met;
+      }
+      return out; }""")
+    assert cpu == {"front": False, "line": True, "side": False}
+    # And its hit off the bat's middle is judged against its own narrower bat.
+    go(page)
+    off = page.evaluate("""() => {
+      let seen = -1; const real = shotLaunch;
+      shotLaunch = (...a) => { seen = a[4]; return real(...a); };
+      game.ph = 'play'; brains[1].kind = 'block'; brains[1].aim = 0;
+      bats[1].x = 0; bats[1].z = -HL - 0.3;
+      const f = newFlight(1, 0, false, [0.13, 0.25, -HL - 0.3, 0, 0, -3, 0]); f.bR = 1;
+      hitBy(1, f); shotLaunch = real; return seen; }""")
+    assert abs(off - 0.13 / 0.26) < 1e-6
 
 def test_a_flick_up_serves_and_a_bat_in_the_way_returns_the_ball(site, context):
     page = open_game(site, context)
@@ -175,7 +200,7 @@ def test_standing_still_loses_and_following_the_ball_wins_on_easy(site, context)
     page = open_game(site, context)
     lazy = page.evaluate(SIM, [0, "lazy", 2])
     assert lazy["lost"] == 2 and lazy["pts"][0] < 16
-    # Following the ball (with a 10 cm wobble) won 15 of 16 games on easy when this was measured,
+    # Following the ball (with a 10 cm wobble) won 8 of 8 games on easy when this was measured,
     # so three of four leaves room for chance.
     good = page.evaluate(SIM, [0, "sloppy", 4])
     assert good["won"] >= 3 and good["hits"] > 80

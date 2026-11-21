@@ -18,7 +18,7 @@ const DEPTH = 0.4;             // how far past the bat's line a ball just bounce
 const CPU_REACH = 0.26;        // the computer's bat is narrower: the wider one is for a thumb
 const POINTS = 11;
 const LEVELS = [
-  { name: 'Helppo', note: 'Kone palauttaa rauhassa', react: 0.3, speed: 1.5, err: 0.24, miss: 0.15, aim: 0.35, smash: 0.42, drive: 0.15 },
+  { name: 'Helppo', note: 'Kone palauttaa rauhassa', react: 0.3, speed: 1.5, err: 0.2, miss: 0.1, aim: 0.35, smash: 0.42, drive: 0.15 },
   { name: 'Keskitaso', note: 'Kone tähtää kulmiin', react: 0.2, speed: 2.1, err: 0.11, miss: 0.045, aim: 0.55, smash: 0.33, drive: 0.4 },
   { name: 'Vaikea', note: 'Kone lyö kovaa', react: 0.12, speed: 2.8, err: 0.05, miss: 0.012, aim: 0.8, smash: 0.24, drive: 0.85 },
 ];
@@ -81,10 +81,13 @@ function judge(f, ev) {
 const hittable = f => !f.over && f.bR === 1 && f.ball.vz * sgn(1 - f.by) > 0 && !f.ball.dead;
 // Does the ball meet the bat now? It has bounced on the bat's half (`hittable`) and is at or just
 // past the bat's line: a bat held over the table, in front of where the ball bounced, still meets
-// it right after the bounce (Eero on v1's preview: too hard to hit).
-function meets(f, bat, reach = REACH) {
+// it right after the bounce (Eero on v1's preview: too hard to hit). The computer's bat (`cpu`) keeps
+// the narrower reach and meets the ball only in the step it crosses the bat's line (`pz`: the ball's
+// z before this step), so the easier hit helps only a thumb.
+function meets(f, bat, cpu = false, pz = 0) {
   const s = sgn(1 - f.by), b = f.ball, past = (b.z - bat.z) * s;
-  return past >= 0 && past < DEPTH && Math.abs(b.x - bat.x) < reach && b.y > -0.35 && b.y < 1.0;
+  const inLine = cpu ? (pz - bat.z) * s < 0 && past >= 0 : past >= 0 && past < DEPTH;
+  return inLine && Math.abs(b.x - bat.x) < (cpu ? CPU_REACH : REACH) && b.y > -0.35 && b.y < 1.0;
 }
 
 // ---- Shots ----
