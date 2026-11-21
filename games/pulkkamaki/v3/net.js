@@ -1,10 +1,14 @@
 'use strict';
-// Pulkkamäki v2: sledding with friends, everyone down the same hill at once (#475).
+// Pulkkamäki v3: sledding with friends, everyone down the same hill at once (#475).
 //
 // Every phone slides its own sled on its own clock and sends it to the host ten times a second.
 // The host slides the computer's sledders, keeps the run's clock and end (everyone down, or LATE
-// seconds after the first), and sends every sled to every phone ten times a second; between
-// messages each phone moves the others on the way they were going (coast). The host's record
+// seconds after the first), and sends every sled to every phone ten times a second. v3 (#480):
+// every phone draws the others from lib/sulava-1, a moment back, gliding between the spots heard
+// (asDrawn()); the rules keep the newest spot heard, and nothing carries another sled on at its
+// speed between messages any more (v2's coast()), so the host sends on the spot a friend sent,
+// with the friend's own stamp (`f` in each row; the message's `st` for the host's own and the
+// computer's sleds). The host's record
 // decides who is in, who has finished and when the run ends; a guest's points come from its own
 // phone. The result is the host's deliver(), saved once per round (once()).
 //
@@ -43,24 +47,39 @@ function outfitOf(id) {
 const recOf = id => net && net.sleds.find(r => r.id === id);
 const myRec = () => recOf(RM.me);
 
-// Another phone's sled between messages: on the way it was going, its trick turning on.
-function coast(hill, sl, dt) {
-  if (sl.fin && sl.v < 0.3) return;
-  const cd0 = courseDir(hill, sl.s);
-  sl.s += sl.v * Math.cos(sl.yaw) * dt;
-  sl.x += sl.v * Math.sin(sl.yaw) * dt;
-  sl.yaw -= courseDir(hill, sl.s) - cd0;   // the heading is measured from the course, as in step()
-  const gy = groundAt(hill, sl.s, sl.x);
-  if (sl.air) { sl.vy -= G * dt; sl.y = Math.max(gy, sl.y + sl.vy * dt); }
-  else sl.y = gy;
-  if (sl.trick) {
-    sl.trick.t += dt;
-    trickPose(sl);
-  }
-  sl.tilt += ((sl.air ? 0 : -sl.steer * 0.25) - sl.tilt) * Math.min(1, dt * 6);
+// v3 (#480): what a track keeps of another sled: its place, heading and height, and the turns drawn
+// (a trick's flip and spin, the roll of a fall, the lean). Angles blend the short way round.
+const KEYS = ['s', 'x', 'y', 'yaw', 'flip', 'spin', 'roll', 'tilt'];
+const newTrack = () => AiPelitSulava.track({ keys: KEYS, angles: ['yaw', 'flip', 'spin', 'roll'], jump: 12 });
+const stampOf = m => Number.isFinite(m.st) ? m.st : null;
+// A spot heard for another phone's or the computer's sled: the turns it shows now, worked out from
+// the state as sent, then into its track. `src` is whose clock the stamp is on, 'f' (the friend's)
+// or 'h' (the host's): when it changes (the computer takes over a friend, or gives them back) the
+// track starts again there, as two clocks cannot be compared.
+function heardSpot(rec, st, src) {
+  const sl = rec.sl;
+  if (sl.trick) trickPose(sl); else { sl.flip = 0; sl.spin = 0; }
+  sl.tilt = sl.air ? 0 : -sl.steer * 0.25;
   sl.roll = sl.fallT > 0 ? (1 - sl.fallT / FALL_T) * TAU * 1.5 : 0;
-  if (sl.fallT > 0) sl.fallT = Math.max(0, sl.fallT - dt);
+  if (src !== rec.src) rec.tr.snap(st, sl); else rec.tr.push(st, sl);
+  rec.src = src;
 }
+// The sleds drawn from their tracks: every other phone's, and on a guest the computer's too (the
+// host slides those itself, and a friend's sled while its computer drives it).
+const drawnHere = rec => rec.kind !== 'me' && !(RM.isHost && (rec.kind === 'cpu' || rec.drive)) && rec.tr.size();
+// Swaps the drawn spot in for one frame's drawing, and putBack() the newest one after it.
+function asDrawn() {
+  const kept = [];
+  if (!net) return kept;
+  for (const rec of net.sleds) {
+    if (!drawnHere(rec)) continue;
+    const sl = rec.sl, old = KEYS.map(k => sl[k]), d = rec.tr.at();
+    for (const k of KEYS) sl[k] = d[k];
+    kept.push([sl, old]);
+  }
+  return kept;
+}
+function putBack(kept) { for (const [sl, old] of kept) KEYS.forEach((k, i) => { sl[k] = old[i]; }); }
 
 // ---- The start ----
 function netStart(s) {
@@ -89,14 +108,17 @@ function addRec(r, i) {
   const sl = newSled(r.id, r.name, { outfit: r.kind === 'me' ? outfit : outfitOf(r.o) });
   placeSled(hill, sl, LANES[i % LANES.length]);
   if (r.kind === 'me') sl.onEvent = onMyEvent;
-  const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, lastT: 0, lastA: null, sl };
+  const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, lastT: 0, lastA: null, sl,
+    tr: newTrack(), ts: null, src: '' };
   net.sleds.push(rec);
   sleds.push(sl);
   return rec;
 }
 function hostState() {
-  return { t: 's', round: net.round, hill: net.hill, ph: net.ph, cd: r2(net.cd), clock: r2(net.clock), ff: net.firstFin,
-    sk: net.sleds.map(r => ({ id: r.id, n: r.name, c: r.kind === 'cpu' ? 1 : 0, o: r.o, w: r.own, m: r.cpu ? 1 : 0, a: pack(r.sl) })) };
+  // v3 (#480): `st`, the host's clock; `f`, a friend's own stamp for the spot they sent, while they drive it.
+  return { t: 's', round: net.round, st: AiPelitSulava.now(), hill: net.hill, ph: net.ph, cd: r2(net.cd), clock: r2(net.clock), ff: net.firstFin,
+    sk: net.sleds.map(r => ({ id: r.id, n: r.name, c: r.kind === 'cpu' ? 1 : 0, o: r.o, w: r.own, m: r.cpu ? 1 : 0, a: pack(r.sl),
+      f: r.kind === 'net' && !r.drive ? r.ts : null })) };
 }
 
 // ---- A guest hears the host ----
@@ -112,7 +134,11 @@ function guestState(m) {
       // The host has had my sled (the computer drove it, or I was away): carry on from its state.
       if (fresh || k.w > rec.own) { rec.own = k.w; unpack(rec.sl, k.a); handOver(rec.sl); }
       if (k.a[12]) rec.hostFin = true;
-    } else unpack(rec.sl, k.a);
+    } else {
+      unpack(rec.sl, k.a);
+      const own = Number.isFinite(k.f);
+      heardSpot(rec, own ? k.f : stampOf(m), own ? 'f' : 'h');
+    }
   });
   if (!me) me = myRec() ? myRec().sl : null;
   net.ph = m.ph; net.cd = m.cd; net.clock = m.clock; net.firstFin = m.ff === undefined ? null : m.ff;
@@ -140,8 +166,7 @@ function netTick(dt) {
       const sl = rec.sl;
       if (rec.kind === 'me') advance(hill, sl, dt);
       else if (host && (rec.kind === 'cpu' || rec.drive)) { cpuDrive(hill, sl, dt); advance(hill, sl, dt); }
-      // A phone silent for half a second (dropping, not yet noticed by the room) stays where it was.
-      else if (!host || rec.kind !== 'net' || performance.now() - rec.lastT < 500) coast(hill, sl, dt);
+      // v3: a sled heard from messages stays at its newest spot; its track draws it on (v2 coasted it).
     }
   }
   net.sendT -= dt;
@@ -159,7 +184,7 @@ function netTick(dt) {
   if (rec.sl.fin && rec.hostFin) return;
   if (net.sendT <= 0) {
     net.sendT = rec.sl.fin ? 1 : net.ph === 'run' ? 0.1 : 0.5;
-    RM.send({ t: 'p', round: net.round, w: rec.own, o: outfit.id, a: pack(rec.sl) });
+    RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), w: rec.own, o: outfit.id, a: pack(rec.sl) });
   }
 }
 // The end clock's own time left, for the HUD: null until someone has finished.
@@ -252,6 +277,7 @@ if (RM) {
       if (!rec || rec.kind !== 'net' || rec.drive || net.res || !(m.w >= rec.own)) return;
       unpack(rec.sl, m.a);
       rec.lastT = performance.now(); rec.lastA = m.a;
+      rec.ts = stampOf(m); heardSpot(rec, rec.ts, 'f');
       if (m.o && m.o !== rec.o) { rec.o = m.o; rec.sl.outfit = outfitOf(m.o); }
       return;
     }
@@ -281,6 +307,7 @@ if (RM) {
     const rec = recOf(id);
     if (!rec || !rec.drive) return;
     rec.drive = false; rec.own++; rec.sl.cpu = null; handOver(rec.sl);
+    rec.tr.reset(); rec.ts = null; rec.src = '';   // v3: drawn where the host has it until the phone's own spots come
   });
   RM.on('lobby', toSolo);
   RM.on('leave', () => { toSolo(); });

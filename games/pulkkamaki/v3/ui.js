@@ -364,8 +364,11 @@ function frame(now) {
   }
   sounds(dt);
   const moving = mode === 'run' || mode === 'count' || mode === 'netwait';
+  // v3 (#480): the others drawn a moment back, gliding between the spots heard (net.js).
+  const kept = net ? asDrawn() : null;
   render3d(hill, sleds, me, dt, !moving);
   drawHUD();
+  if (kept) putBack(kept);
   if (moving || still++ < 2 || !V3) raf = requestAnimationFrame(frame);
 }
 resize();
