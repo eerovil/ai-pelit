@@ -2,7 +2,8 @@
 
 How a match of Pesis plays (v1, #504). Two teams of nine on a field seen from above. The batter
 times a tap to the lukkari's (the pitcher's) toss, then runs from base to base by tapping the two
-feet in turn; the fielders pick the ball up and race it to a base or back to the lukkari. Each team
+feet in turn; the fielders run to the ball by themselves, and the phone whose fielder has it picks the base
+to throw to, or home to the lukkari. Each team
 bats once (one short period); three palot (outs) change sides, and the team with more runs wins.
 Alone the phone plays its whole team against a computer team; in a room the phones are split into
 the two teams and the computer fills every place left.
@@ -20,7 +21,8 @@ flowchart TD
   F --> H
   H -- Kyllä --> I[Palo]
   H -- Ei --> B
-  G --> J{Mitä pallolle käy?}
+  G --> W[Kenttäpelaajat juoksevat pallolle itse, pelaaja valitsee heiton]
+  W --> J{Mitä pallolle käy?}
   J -- Koppi ilmasta --> K[Koppi: lyöjä ja pesien väliltä juoksijat pois, ei paloa]
   J -- Pallo pesään ennen juoksijaa --> I
   J -- Lukkari pitää pallon kotipesällä --> L[Peli seis: yli puolivälin seuraavaan pesään, muut takaisin]
@@ -37,7 +39,7 @@ flowchart TD
   U -- Kyllä --> S[Voitto: seuraava taso ja uusi vastustaja]
   U -- Häviö tai tasapeli --> V[Sama taso, sama vastustaja uudelleen]
   Q -- Huoneessa --> T[Tulos kaikille, takaisin huoneeseen]
-  class A,B,G blue
+  class A,B,G,W blue
   class C,E,H,J,N,O,Q,U amber
   class M,L teal
   class D,F,I,K,V rose
@@ -61,7 +63,8 @@ flowchart TD
 - **Lukkari heittää pallon ylös**: `toss()` gives the toss a new pitch number (`tossN`) and a height. On the host, a pause (`R.paused`) or the batting phone coming back (`on('hello')`) calls `retoss()`: a toss cut short is thrown again with a new number, and no try is spent. A tap with an old pitch number is dropped.
 - **Lyöjä napauttaa LYÖ**: the LYÖ button. A tap within `HIT_WIN` (0.2 s) of the best moment, as the ball falls back to hand height, hits; early goes left, late right, and the nearer the best moment, the harder (`hit()`). Most hits are grounders; about a third fly. A friend's tap is waited for up to `LATE_OK` (0.5 s) after the toss ends. The computer batter taps near the best moment with an error that shrinks with its level.
 - **Pallo yli etulinjan ja kentällä?**: a ball whose first landing is outside the side lines or short of the front line (`FRONT`, 4 m) is foul (`foul()`): the runners go back to where they stood before the hit (`saved`), and a run made before the ball came down is taken back.
-- **Lyöjä juoksee: vasen ja oikea jalka vuorotellen**: the two foot buttons; each press on the other foot than the last adds speed, the same foot twice loses some (`step()`). A runner on a base starts only on its own press; the computer's runners on the bases wait until a fly has landed, then run when the ball looks slower to the next base than they are (`cpuRuns()`). A fielder steered by a phone runs with the same feet: alone it is the fielder nearest the ball, in a room the phone's fixed place. A phone fielder holding the ball throws it to the lukkari by itself after 4 s.
+- **Lyöjä juoksee: vasen ja oikea jalka vuorotellen**: the two foot buttons; each press on the other foot than the last adds speed, the same foot twice loses some (`step()`). A runner on a base starts only on its own press; the computer's runners on the bases wait until a fly has landed, then run when the ball looks slower to the next base than they are (`cpuRuns()`).
+- **Kenttäpelaajat juoksevat pallolle itse, pelaaja valitsee heiton**: every fielder, a phone's too, is moved by `cpuField()` (Eero's choice after trying v1, #504): a foot press moves only a runner (`footPress()`). The phone's fielder is alone the one nearest the ball, in a room the phone's fixed place (`assignCtl()`); when a computer fielder with no phone picks the ball up in a room, the choice of throw goes to the team's phone whose fixed place is nearest it. That phone gets the buttons 1., 2., 3. pesä and Koti (`throwTo()`, a guest's `w`); a computer fielder throws by `cpuThrow()`. A phone that has not chosen in `HOLD_MAX` (4 s) throws to the lukkari by itself (`phoneHold()`).
 - **Koppi ilmasta**: a fly caught before it lands, past the front line (`pickUp()`): the batter and every runner between bases are taken off the field, with no palo.
 - **Pallo pesään ennen juoksijaa**: a fielder with the ball within `BASE_R` of the base a runner is heading to (`checkBases()`) makes that runner palo (`burn()`).
 - **Lukkari pitää pallon kotipesällä**: `stopPlay()`: a runner past halfway to the next base makes it, one short of it goes back, and the batter not yet on 1st base is palo. The same stop ends a play that lasted `PLAY_MAX` (25 s).

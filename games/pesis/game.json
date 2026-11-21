@@ -1,11 +1,11 @@
 {
   "title": "Pesis",
-  "description": "Suomalainen pesäpallo ylhäältä nähtynä: lyö, juokse jalat vuorotellen ja polta juoksijat, yksin tai kahtena joukkueena kavereiden kanssa.",
+  "description": "Suomalainen pesäpallo ylhäältä nähtynä: lyö, juokse jalat vuorotellen ja heitä pallo pesään ennen juoksijaa, yksin tai kahtena joukkueena kavereiden kanssa.",
   "versions": [
     {
       "n": 1,
       "date": "2026-11-21",
-      "note": "Ensimmäinen versio: yksi jakso, lyönti pallon pudotessa, juoksu jalat vuorotellen, palot ja kopit, ja moninpeli 2–8 puhelimelle kahdessa joukkueessa.",
+      "note": "Ensimmäinen versio: yksi jakso, lyönti pallon pudotessa, juoksu jalat vuorotellen, kenttäpelaajat juoksevat pallolle itse ja pelaaja valitsee heiton, palot ja kopit, ja moninpeli 2–8 puhelimelle kahdessa joukkueessa.",
       "request": "Suomalainen Pesis. Moninpeli (pelaajat jaetaan 2 joukkueeseen)",
       "issue": "eerovil/ai-pelit#504"
     }

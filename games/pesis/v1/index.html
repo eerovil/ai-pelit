@@ -52,9 +52,9 @@
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <p id="stats"></p>
   <p class="help long">Yksi jakso: kumpikin joukkue lyö kerran. Lukkari syöttää pallon ylös: paina <b>Lyö</b>, kun pallo putoaa vihreälle. Aikaisin lyöty lähtee vasemmalle, myöhään oikealle.
-    Juokse painamalla <b>Vasen</b> ja <b>Oikea</b> vuorotellen. Pesällä seis, uusi painallus vie seuraavalle. Kentällä juokse pallolle ja heitä pesään tai kotiin lukkarille.<br>
+    Juokse painamalla <b>Vasen</b> ja <b>Oikea</b> vuorotellen. Pesällä seis, uusi painallus vie seuraavalle. Kentällä pelaajat juoksevat pallolle itse: kun pallo on sinulla, valitse, mihin pesään heität, tai kotiin lukkarille.<br>
     Kolme paloa vaihtaa vuoron. Kavereiden kanssa puhelimet jaetaan kahteen joukkueeseen, ja tietokone pelaa loput paikat.</p>
-  <p class="help short">Lyö, kun pallo putoaa vihreälle. Juokse jalat vuorotellen, pesällä seis. Kentällä juokse pallolle ja heitä pesään. Kolme paloa vaihtaa vuoron.</p>
+  <p class="help short">Lyö, kun pallo putoaa vihreälle. Juokse jalat vuorotellen, pesällä seis. Kentällä valitse, mihin pesään heität. Kolme paloa vaihtaa vuoron.</p>
 </div>
 <script src="../../../rooms.js" data-game="pesis" data-min="2" data-max="8"></script>
 <script src="../../../lib/aanet-5/aanet.js"></script>
@@ -142,7 +142,8 @@ function hearEvents() {
 // ---------- This phone ----------
 let net = { on: false, round: '', sendT: 0, setup: null };
 const myId = () => net.on ? R.me : 'me';
-const myPlayer = () => players.find(p => p.ctl && p.ctl === myId()) || null;
+// The ball's holder first: in a room the phone may throw for a teammate near its own place.
+const myPlayer = () => { const h = ball.held >= 0 ? P(ball.held) : null; return h && h.ctl && h.ctl === myId() ? h : players.find(p => p.ctl && p.ctl === myId()) || null; };
 function ctrlName(id) { const k = ctrls.find(q => q.id === id); return k ? k.name || '' : ''; }
 let myTeam = 0;
 
@@ -206,6 +207,7 @@ function mode() {
   if (state !== 'play') return 'wait';
   const r = runners.find(q => q.i === i);
   if (r) return r.run ? 'run' : 'base';
+  // Fielders run by themselves; the phone only picks the throw.
   if (me.t !== bt) return ball.held === i ? 'throw' : (ball.held < 0 && !ball.th ? 'field' : 'fieldwait');
   return 'wait';
 }
@@ -376,7 +378,7 @@ R.on('message', (m, from) => {
     if (m.round !== net.round || R.paused) return;
     const k = ctrls.find(q => q.id === from && !q.away);
     if (!k) return;
-    const p = players.find(q => q.ctl === from);
+    const h = ball.held >= 0 ? P(ball.held) : null, p = h && h.ctl === from ? h : players.find(q => q.ctl === from);
     if (m.t === 'b') { if (p && idx(p) === batter && pitch) batTap(+m.n, +m.ph); }
     else if (m.t === 'f') { if (p && +m.p === playN) footPress(idx(p), m.k === 1 ? 1 : 2); }
     else if (m.t === 'w') { if (p && +m.p === playN && ball.held === idx(p) && m.b >= 1 && m.b <= 4) throwTo(m.b | 0); }
@@ -417,7 +419,7 @@ function layout(md) {
     if (md === 'bat' || md === 'batwait') {
       b.push({ k: 'bat', x: safeL + 20 + r * 1.2, y: y - r * 0.2, r: r * 1.2, label: 'LYÖ' });
       b.push({ k: 'bat', x: W - safeR - 20 - r * 1.2, y: y - r * 0.2, r: r * 1.2, label: 'LYÖ' });
-    } else if (md === 'run' || md === 'base' || md === 'field') {
+    } else if (md === 'run' || md === 'base') {
       b.push({ k: 'foot', a: 1, x: safeL + 18 + r, y, r, label: 'Vasen', glow: next === 1 });
       b.push({ k: 'foot', a: 2, x: W - safeR - 18 - r, y, r, label: 'Oikea', glow: next === 2 });
     } else if (md === 'throw') {
@@ -428,7 +430,7 @@ function layout(md) {
   }
   const top = ctrlTop + 10, h = H - safeB - top - 10, w = W - 24;
   if (md === 'bat' || md === 'batwait') b.push({ k: 'bat', rect: [12, top, w, h], label: 'LYÖ!' });
-  else if (md === 'run' || md === 'base' || md === 'field') {
+  else if (md === 'run' || md === 'base') {
     b.push({ k: 'foot', a: 1, rect: [12, top, w / 2 - 6, h], label: 'Vasen', glow: next === 1 });
     b.push({ k: 'foot', a: 2, rect: [12 + w / 2 + 6, top, w / 2 - 6, h], label: 'Oikea', glow: next === 2 });
   } else if (md === 'throw') {
@@ -573,7 +575,7 @@ function hint(md) {
   if (md === 'run') return 'Juokse: vasen ja oikea vuorotellen';
   if (md === 'base') { const r = runners.find(q => q.i === idx(me)); return r.at >= 3 ? 'Paina, niin juokset kotiin' : 'Pesällä turvassa. Paina, niin juokset ' + (r.at + 1) + '. pesälle'; }
   if (md === 'throw') return 'Heitä pesään ennen juoksijaa';
-  if (md === 'field') return 'Juokse pallolle';
+  if (md === 'field') return 'Pelaaja juoksee pallolle, odota heittoa';
   if (md === 'fieldwait') return 'Pallo on kaverilla';
   if (!me && state !== 'over') {
     if (net.on && bt === myTeam) return 'Odota lyöntivuoroasi';

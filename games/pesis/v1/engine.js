@@ -10,6 +10,7 @@
 
 const FW = 15, FL = 60, FRONT = 4;           // half the width, the back line, the front line a hit must pass
 const BASES = [{ x: 0, y: 0 }, { x: -7, y: 5 }, { x: 7, y: 12 }, { x: -7, y: 19 }, { x: 0, y: 0 }];
+const HOLD_MAX = 4;                         // s a phone's fielder holds the ball before it throws home itself
 const BASE_R = 1.4;                          // a fielder with the ball this near a base holds it
 const G = 9.8, Z0 = 1.0;                     // the toss starts at hand height
 const HIT_WIN = 0.2;                         // a tap this far (s) from the best moment still hits
@@ -158,7 +159,8 @@ function step(i, foot) {
   if (foot !== p.foot) p.v = Math.min(RUN_MAX, p.v + STEP_V * (1 - p.v / RUN_MAX)); else p.v = Math.max(0, p.v - 0.3);
   p.foot = foot; p.steps++;
 }
-// A foot press from a phone, for its player (a runner or a fielder chasing the ball).
+// A foot press from a phone, for its runner. Fielders run by themselves (Eero, #504): a phone only
+// picks where its fielder throws.
 function footPress(i, foot) {
   if (state !== 'play') return false;
   const r = runners.find(q => q.i === i);
@@ -171,7 +173,6 @@ function footPress(i, foot) {
     step(i, foot);
     return true;
   }
-  if (P(i).t !== bt) { step(i, foot); return true; }
   return false;
 }
 // Would the computer run from here? When the ball is far from the next base and nobody has it.
@@ -375,7 +376,6 @@ function cpuField(dt) {
   const order = fielders().filter(p => p.k !== 0).sort((a, b) => hyp(a.x - land.x, a.y - land.y) / a.speed - hyp(b.x - land.x, b.y - land.y) / b.speed);
   const loose = ball.held < 0 && !ball.th;
   for (const p of fielders()) {
-    if (p.ctl) continue;
     // Off the bat each fielder needs a moment to see where the ball goes.
     if (state === 'play' && playT < p.react && ball.held < 0) continue;
     let tx = POS[p.k].x, ty = POS[p.k].y, sp = p.speed;
@@ -385,8 +385,14 @@ function cpuField(dt) {
     else if (POS[p.k].base && (ball.held >= 0 || ball.th || state === 'play')) { tx = BASES[POS[p.k].base].x; ty = BASES[POS[p.k].base].y; if (loose && order[0] && POS[order[0].k].base === POS[p.k].base) { tx = POS[p.k].x; ty = POS[p.k].y; } }
     if (ball.held === idx(p) && p.k !== 0) { tx = p.goal ? p.goal.x : p.x; ty = p.goal ? p.goal.y : p.y; }
     goTo(p, tx, ty, sp, dt);
-    if (ball.held === idx(p) && p.k !== 0) cpuThrow(p, dt);
+    if (ball.held === idx(p) && p.k !== 0) { if (p.ctl) phoneHold(p, dt); else cpuThrow(p, dt); }
   }
+}
+// A phone's fielder with the ball waits for the phone's choice of throw (throwTo, from its
+// buttons), and throws it to the lukkari by itself after HOLD_MAX.
+function phoneHold(p, dt) {
+  p.holdT = (p.holdT || 0) + dt;
+  if (p.holdT > HOLD_MAX) throwTo(4);
 }
 function cpuThrow(p, dt) {
   p.think -= dt;
@@ -411,23 +417,6 @@ function goTo(p, tx, ty, sp, dt) {
   const v = Math.min(sp, d * 5);
   p.x += dx / d * v * dt; p.y += dy / d * v * dt; p.v = v;
   if (d > 0.3) { p.fx = dx / d; p.fy = dy / d; }
-}
-// A phone's fielder: its feet's speed, towards the ball while it is loose; otherwise the computer
-// walks it (to its base for a throw, back to its place).
-function phoneField(p, dt) {
-  const loose = ball.held < 0 && !ball.th;
-  if (ball.held === idx(p)) { p.holdT = (p.holdT || 0) + dt; p.v = 0; if (p.holdT > 4) { throwTo(4); } return; }
-  if (loose) {
-    const land = landing();
-    p.v = Math.max(0, p.v - p.v * RUN_DRAG * dt);
-    const dx = land.x - p.x, dy = land.y - p.y, d = hyp(dx, dy);
-    if (d > 0.05) { const m = Math.min(d, p.v * dt); p.x += dx / d * m; p.y += dy / d * m; p.fx = dx / d; p.fy = dy / d; }
-    return;
-  }
-  let tx = POS[p.k].x, ty = POS[p.k].y;
-  if (ball.th && ball.th.to === idx(p)) { tx = ball.th.x; ty = ball.th.y; }
-  else if (POS[p.k].base) { tx = BASES[POS[p.k].base].x; ty = BASES[POS[p.k].base].y; }
-  goTo(p, tx, ty, p.speed * 0.8, dt);
 }
 function separate() {
   const f = fielders();
@@ -462,7 +451,6 @@ function stepGame(dt) {
     for (let s = 0; s < n && state === 'play'; s++) {
       stepRunners(h);
       cpuField(h);
-      for (const p of fielders()) if (p.ctl) phoneField(p, h);
       separate();
       stepBall(h);
       if (state !== 'play') break;
@@ -509,5 +497,18 @@ function assignCtl() {
       }
       k.follow = p; if (!p.ctl) p.ctl = k.id;
     }
+  }
+  // In a room the fielders' places are fixed, but the ball seldom comes to one: a computer
+  // fielder who picks it up hands the choice of throw to the team's phone whose fixed place is
+  // nearest, so every phone on the field gets to throw.
+  const h = ball.held >= 0 ? P(ball.held) : null;
+  if (h && h.t !== bt && h.k !== 0 && !h.ctl) {
+    let best = null, bd = Infinity;
+    for (const k of ctrls) {
+      if (k.away || k.t !== h.t || !(k.fix > 0)) continue;
+      const f = players[k.t * 9 + k.fix], d = hyp(f.x - h.x, f.y - h.y);
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (best) h.ctl = best.id;
   }
 }

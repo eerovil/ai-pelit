@@ -167,6 +167,39 @@ def test_alternating_feet_runs_faster_than_one_foot(site, context):
     assert alt > 5 and same < 2
 
 
+def test_the_phones_fielders_run_to_the_ball_by_themselves_and_the_phone_picks_the_throw(site, context):
+    page = start(site, context)
+    # The computer's team bats; the phone fields. A grounder up the middle.
+    page.evaluate("startInning(1); " + TO_PITCH)
+    assert page.evaluate("batTap(pitch.n, bestT(pitch.ap))") == "hit"
+    page.evaluate("Object.assign(ball, { x: 0, y: 3, z: 0.3, vx: 0.5, vy: 14, vz: 0, fly: false })")
+    # No foot buttons in the field: the fielder runs with no presses.
+    page.evaluate("run(() => playT < 0.6, 1)")
+    assert page.evaluate("mode()") == "field"
+    assert page.evaluate("layout('field').length") == 0
+    assert page.evaluate("footPress(idx(myPlayer()), 1)") is False
+    page.evaluate("run(() => ball.held < 0 && state === 'play', 6)")
+    assert page.evaluate("[state, ball.held >= 0 && P(ball.held).t, ball.held >= 0 && P(ball.held).k !== 0]") == ["play", 0, True]
+    assert page.evaluate("[myPlayer() === P(ball.held), mode()]") == [True, "throw"]
+    # It waits for the phone's choice, then throws where the phone picked.
+    page.evaluate("run(() => true, 1)")
+    assert page.evaluate("ball.held >= 0 && !ball.th")
+    page.evaluate("act('throw', 1)")
+    assert page.evaluate("ball.th && ball.th.b") == 1
+    assert page.errors == []
+
+
+def test_a_phones_fielder_holding_the_ball_throws_home_by_itself_after_a_while(site, context):
+    page = start(site, context)
+    page.evaluate("startInning(1); " + TO_PITCH)
+    page.evaluate("batTap(pitch.n, bestT(pitch.ap)); const k = players[FIX[0]]; ball.held = FIX[0]; ball.th = null; ball.fly = false; k.holdT = 0")
+    page.evaluate("run(() => ball.held === FIX[0] && state === 'play', 3)")
+    assert page.evaluate("ball.held === FIX[0]")
+    page.evaluate("run(() => ball.held === FIX[0] && state === 'play', 2)")
+    assert page.evaluate("ball.held !== FIX[0]")
+    assert page.errors == []
+
+
 def test_a_runner_on_a_base_waits_for_its_own_press(site, context):
     page = start(site, context)
     page.evaluate(TO_PITCH)
@@ -396,6 +429,19 @@ def test_a_guests_camera_follows_a_deep_ball(room):
     host.evaluate("batTap(pitch.n, bestT(pitch.ap)); const k = players[17]; k.think = 99; ball.held = 17; ball.fly = false")
     guest.wait_for_function("state === 'play' && camY > 30", timeout=4000)
     assert host.errors == guest.errors == []
+
+
+def test_a_computer_fielders_ball_is_thrown_by_the_phone_with_the_nearest_place(room):
+    host, [a, b] = room("Eero", "Aino", "Iida")
+    # Blue bats; red (Aino alone, fixed place 6) fields. The right koppari (17) picks the ball up.
+    host.wait_for_function("state === 'pitch'", timeout=4000)
+    host.evaluate("batTap(pitch.n, bestT(pitch.ap)); ball.held = 17; ball.th = null; ball.fly = false; players[17].holdT = 0")
+    me = a.evaluate("AiPelitRooms.me")
+    host.wait_for_function(f"P(17).ctl === {json.dumps(me)}", timeout=2000)
+    a.wait_for_function("mode() === 'throw'", timeout=3000)
+    a.evaluate("act('throw', 2)")
+    host.wait_for_function("ball.th && ball.th.b === 2 && ball.th.from === 17", timeout=2000)
+    assert host.errors == a.errors == b.errors == []
 
 
 def test_a_run_counts_for_the_phone_whose_batting_place_it_is(room):
