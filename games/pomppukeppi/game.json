@@ -1,0 +1,13 @@
+{
+  "title": "Pomppukeppi",
+  "description": "Jänikset pomppukepeillä: väritä ruutuja omiksesi ja lunasta ne pisteiksi, yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-21",
+      "note": "Ensimmäinen versio: kolme kenttää 3D:nä, lunastuslaatikko, kaksi tehostetta ja moninpeli 2–4 pelaajalle.",
+      "request": "Crash bash tyylinen peli josda pomppukepeillä värjätään ruutuja. Katso netistä miten se toimi crash bashissa. Tähän varmaan tarvii 3d",
+      "issue": "eerovil/ai-pelit#482"
+    }
+  ]
+}
