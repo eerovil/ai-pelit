@@ -514,11 +514,13 @@ def test_a_guest_reloading_mid_fight_draws_the_others_at_the_host_s_spot_then_gl
       const p = (64 * AiPelitSulava.now()) % 320; f.x = 170; f.y = 140 + (p < 160 ? p : 320 - p); s(dt); }; }""", me)
     guest.wait_for_timeout(500)
     guest.context.add_init_script("""addEventListener('load', () => {
-      window.__rl = []; let said = null, first = null;
-      AiPelitRooms.on('message', m => { if (m.t === 's' && typeof fighters !== 'undefined' && foe) {
-        said = m.f[fighters.indexOf(foe)][1]; if (first === null) first = said; } });
+      // The first state is kept whole: it is the one that makes the fighters, so 'foe' may not exist yet
+      // when it is heard (this listener can run before the game's), and its fighter is found at the first frame.
+      window.__rl = []; let firstF = null, first = null;
+      AiPelitRooms.on('message', m => { if (m.t === 's' && firstF === null) firstF = m.f; });
       const d = window.asDrawn;
       window.asDrawn = () => { const c = typeof fightClock === 'function' ? fightClock() : 0, k = d();
+        if (first === null && firstF && foe && typeof fighters !== 'undefined') first = firstF[fighters.indexOf(foe)][1];
         if (state === 'fight' && foe && first !== null) window.__rl.push([c, foe.y, first, foe.tr.time]);
         return k; }; })""")
     guest.reload()
