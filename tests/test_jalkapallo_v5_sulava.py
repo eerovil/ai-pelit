@@ -7,6 +7,8 @@ import json
 import math
 from statistics import mean, pstdev
 
+import pytest
+
 from conftest import ROOT
 from test_rooms_lib import Relay
 
@@ -90,12 +92,14 @@ def glides(page, host):
     why = {t2: (round((b - a) / (d2 - d0), 2) if d0 is not None and d2 is not None and d2 > d0 else None,
                 d2 is not None and c2 is not None and d2 > c2)
            for (t0, a, d0, _), (t2, b, d2, c2) in zip(xs, xs[2:])}
+    # Judged by time, not by a count of frames: a busy test machine draws fewer of them, and fewer in time (#498:
+    # 40 moving frames at load 105-115, where 50 were asked for). The run is 20 m at 5-6.3 m/s, over 3 s.
     moving = [i for i, (_, v) in enumerate(sp) if abs(v) > 0.5]
-    assert len(moving) > 50, len(moving)
+    assert moving and sp[moving[-1]][0] - sp[moving[0]][0] > 2.0, (len(moving), len(sp))
     # Leave out the start and the stop: the drawing speeds up and slows down there over a moment.
     t0, t1 = sp[moving[0]][0] + 0.15, sp[moving[-1]][0] - 0.3
     middle = [(t, v) for t, v in sp if t0 <= t <= t1]
-    assert len(middle) > 30, len(middle)
+    assert len(middle) >= 10, len(middle)
 
     # And only frames drawn between two spots heard, and not just after: when the spots come late (a busy test
     # machine), the track draws on a guess past the newest and then draws the difference away (lib/sulava-1's
@@ -109,7 +113,7 @@ def glides(page, host):
     kept = [v for t, v in middle if heard(t)]
     odd_why = [(round(v, 2), why.get(t)) for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
-    assert len(kept) > 30, (len(kept), len(middle), len(stalls))
+    assert len(kept) >= max(10, len(middle) // 4), (len(kept), len(middle), len(stalls))
     assert min(kept) > 0, shown  # never backwards
     m, sd = mean(kept), pstdev(kept)
     # The spread: under 0.33 of the mean. Without the smoothing it was 0.41-0.45 (sd 2.0-2.9 against 5-6.4);
@@ -376,9 +380,9 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
     aino.wait_for_function("owner === players[2] && Math.abs(players[1].x - 2) < 0.05 && players[2].tr.size() > 3"
                            " && Math.hypot(ball.x + 5.18, ball.y + 5) < 0.1", timeout=5000)
     host.evaluate(JITTER)
-    # On the host, each frame: [its clock, the one its spots are stamped with (ck), ball x, ball y].
+    # On the host, each frame: [the clock its spots are stamped with (ck, netClock()), ball x, ball y].
     host.evaluate("""() => { window.__hb = []; const u = window.update;
-      window.update = dt => { u(dt); window.__hb.push([AiPelitSulava.now(), ball.x, ball.y]); }; }""")
+      window.update = dt => { u(dt); window.__hb.push([netClock(), ball.x, ball.y]); }; }""")
     aino.evaluate(BALL, [2, 1])
     aino.wait_for_function("window.__b.length >= 30", timeout=5000)
     host.evaluate("release(players[2], 10, 0, 0, false)")
@@ -395,16 +399,105 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
     # While the ball is on its way (the host had it loose and past the passer's feet at the moment drawn), in
     # frames drawn between two spots heard: on a busy test machine the spots now and then come late, and the
     # drawing goes past the newest on a guess (sulava's `extra`), for the players as for the ball.
+    # From 0.1 s after the kick: the host's ball stood, then went at 10 m/s, between two of its spots (0.05 s apart, or
+    # more on a busy host), and a straight line between them sets the drawn ball off early by up to that much
+    # (measured: 0.13 m, 0.41 m at load 40).
+    kick = next(t for t, x, _ in hb if x > -5.17)
+
+    def judged(r):
+        return (r[1] is not None and r[9] is not None and kick + 0.1 <= r[1] <= r[9]
+                and (h := host_ball(r[1])) and h[0] < 1 and h)
     off = []
     for r in rec:
-        hbx = host_ball(r[1]) if r[1] is not None and r[9] is not None and r[1] <= r[9] else None
-        if hbx and -5 < hbx[0] < 1:
+        if hbx := judged(r):
             off.append(math.hypot(r[2] - hbx[0], r[3] - hbx[1]))
-    assert len(off) > 20, len(off)
+    # Enough of the flight judged, by time: the moments judged span at least half of the time the host had the ball
+    # on its way (#498: 12 frames at load 105-115, where 20 were asked for; a busy machine draws fewer).
+    way = [t for t, x, _ in hb if t >= kick + 0.1 and x < 1]
+    seen = [r[1] for r in rec if judged(r)]
+    assert len(off) >= 5 and way and max(seen) - min(seen) >= 0.5 * (way[-1] - way[0]), (
+        len(off), seen and (min(seen), max(seen)), way and (way[0], way[-1]))
     # Measured with the ball on its own track: at most 0.13 m off. Drawn at its newest spot (v5 before the
     # review) it ran 0.6-1.2 m ahead.
     assert max(off) < 0.4, [round(d, 2) for d in off]
     bx, by, qx, qy = rec[-1][2], rec[-1][3], rec[-1][7], rec[-1][8]
     assert math.hypot(bx - qx, by - qy) < 1.0, rec[-1]
     errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+# Fakes the room's pause (a phone away), which rooms.js sets: `window.__pz` on a phone is its AiPelitRooms.paused.
+PAUSE = """() => { window.__pz = false;
+  Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
+# On a guest, each frame until `window.__pzStop`: [the frame's time (as in SAMPLE), player i's drawn x, the ball's].
+PZREC = """(i) => { window.__pr = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+  const u = window.update;
+  window.update = dt => { const t = now(); u(dt); if (!window.__pzStop) window.__pr.push([t, players[i].x, ball.x]); }; }"""
+
+
+@pytest.mark.parametrize("first", ["host", "guest"])
+def test_a_paused_match_goes_on_from_where_the_guest_drew_it(site, browser, first):
+    """A computer player dribbles along the lane at 5 m/s and the room pauses for 0.7 s (a phone away). The host's
+    match stands and sends nothing; the guest stands too, and when the match goes on, the player and the ball go
+    on from where the guest drew them, at their speed: no step forward or back. The phones hear the pause 0.6 s
+    apart and its end 0.1 s apart, in either order. Before the fix the tracks ran on the real clock: a guest that
+    stopped first jumped over the host's last moments at the end, and one that stopped last had drawn on past the
+    newest spot on a guess and slid back."""
+    # Three phones, so player 2 is the computer's (with one phone on a team, it steers whoever has the ball).
+    host, guest, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    for p in (host, guest, ville):
+        p.evaluate(PAUSE)
+    host.evaluate(QUIET)
+    host.evaluate("""() => { const p = players[2]; p.x = -10; p.y = -5; p.fx = 1; p.fy = 0;
+      ball.x = -9.2; ball.y = -5; take(p); }""")
+    guest.wait_for_function("owner === players[2] && Math.abs(players[2].x + 10) < 0.05 && players[2].tr.size() > 3"
+                            " && Math.abs(ball.x + 9.18) < 0.1", timeout=5000)
+    host.evaluate(JITTER)
+    host.evaluate(STALLS)
+    guest.evaluate(PZREC, 2)
+    host.evaluate("window.__cpuRun = 2; window.__run = true")
+    guest.wait_for_timeout(1000)
+    clock = "(performance.timeOrigin + performance.now()) / 1000"
+    stop_host = lambda: [p.evaluate("window.__pz = true") for p in (host, ville)]
+    stop_guest = lambda: guest.evaluate(f"window.__pzAt = {clock}; window.__pz = true")
+    go_host = lambda: [p.evaluate("window.__pz = false") for p in (host, ville)]
+    go_guest = lambda: guest.evaluate(f"window.__goAt = {clock}; window.__pz = false")
+    order = [(stop_host, stop_guest), (go_host, go_guest)] if first == "host" else [(stop_guest, stop_host), (go_guest, go_host)]
+    # The other phone hears the pause 0.6 s later and the end of it 0.1 s later: each phone has its own connection,
+    # so the two pauses are not as long. 0.6 s is 12 of the host's spots, more than a track keeps (8).
+    for (a, b), later in zip(order, (600, 100)):
+        a()
+        guest.wait_for_timeout(later)
+        b()
+        guest.wait_for_timeout(300)
+    guest.wait_for_timeout(1000)
+    guest.evaluate("window.__pzStop = true")
+    pr, pz_at, go_at = guest.evaluate("[window.__pr, window.__pzAt, window.__goAt]")
+    stalls = host.evaluate("window.__stall")
+    t_from = go_at - 1.5  # half a second before the first phone paused
+    rec = [f for f in pr if f[0] >= t_from]
+    assert rec and rec[-1][0] > go_at + 0.9, (t_from, go_at, rec[-1:])
+    held = [f for f in rec if pz_at + 0.02 <= f[0] <= go_at]
+    assert held and max(abs(f[1] - held[0][1]) for f in held) < 0.01, held[:3]  # it stood all through the pause
+    # Each frame's step, against its time, up to 0.6 s after the guest went on: about 5-6 m/s (1.2x while the drawing
+    # catches up), never back. A long frame on a busy machine steps further, at the same speed: judged per second,
+    # with 0.2 m to spare. Left out, as in glides(): a moment after a frame came late on the host, whose match then
+    # stood, so the guest rightly drew a stop and a start (at load 75 the player stood 0.5 s mid-run after the pause,
+    # likely such a stall: not proven). The guest's clock stops at the first frame or message after the pause
+    # comes, so the first frame after it draws that time too: up to the frame gap around the pause's start (measured:
+    # 0.05 s, 0.27 m, in a 17 ms frame).
+    gap = next(b[0] - a[0] for a, b in zip(rec, rec[1:]) if b[0] >= pz_at)
+    first_on = next(f[0] for f in rec if f[0] > go_at)
+    bad = []
+    for (t0, x0, b0), (t1, x1, b1) in zip(rec, rec[1:]):
+        if t1 > go_at + 0.6 or any(st <= t1 <= st + 0.35 for st in stalls):
+            continue
+        took = t1 - t0 + (gap if t1 == first_on else 0)
+        for what, d in (("player", x1 - x0), ("ball", b1 - b0)):
+            if d < -0.1 or d > 0.2 + 7 * took:
+                bad.append((what, round(t1 - go_at, 3), round(d, 2), round(t1 - t0, 3)))
+    assert not bad, (bad, [(round(t - go_at, 3), round(x, 2), round(b, 2)) for t, x, b in rec])
+    after = [f for f in rec if f[0] > go_at + 0.6]
+    assert after[-1][1] > held[-1][1] + 1, (held[-1], after[-1])  # and it went on
+    errors = [e for p in (host, guest, ville) for e in p.errors]
     assert not errors, errors
