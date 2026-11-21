@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: kolme kenttää 3D:nä, lunastuslaatikko, kaksi tehostetta ja moninpeli 2–4 pelaajalle.",
       "request": "Crash bash tyylinen peli josda pomppukepeillä värjätään ruutuja. Katso netistä miten se toimi crash bashissa. Tähän varmaan tarvii 3d",
       "issue": "eerovil/ai-pelit#482"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-21",
+      "note": "Lumipallo näkyy: valkoinen pallo lentää kaaressa johtajajänikselle, joka pysähtyy vasta osumasta.",
+      "request": "Lumipallon pitää näkyä lentävän (Eero, #482).\n\nNyt \"?\"-laatikon Lumipallo osuu johtajaan heti, eikä palloa näy: vain \"Lumipallo!\" ja osumaääni.\n\nMuutos:\n- Kun jänis saa Lumipallon, valkoinen lumipallo lentää 3D:ssä kaaressa sen luota johtajajänikselle (vajaa sekunti).\n- Johtaja pysähtyy (💫, 1,5 s) vasta kun pallo osuu, ja osumassa näkyy pieni lumipöllähdys.\n- Huoneessa jokainen puhelin näkee saman lennon.\n\nPelaaja ei edelleenkään tähtää eikä valitse heittohetkeä: heitto lähtee itsestään, kuten v1:ssä.",
+      "issue": "eerovil/ai-pelit#492"
     }
   ]
 }

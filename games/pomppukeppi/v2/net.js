@@ -1,5 +1,5 @@
 'use strict';
-// Pomppukeppi v1: the match with friends, 2–4 phones on one board (#482).
+// Pomppukeppi v2: the match with friends, 2–4 phones on one board (#482).
 //
 // The host phone runs the only real world (world.js): every hop, landing, cash-in and power-up,
 // the computer hares' too. It sends the whole state 10 times a second. A guest sends only its
@@ -54,6 +54,7 @@ function hostState() {
     win: w.winner, ew: w.eraWin,
     cash: w.cash ? [w.cash.x, w.cash.y] : null,
     q: w.qbox ? [w.qbox.x, w.qbox.y, r2(w.qbox.life)] : null,
+    bl: w.balls.map(b => [b.id, b.to, b.sx, b.sy, r2(b.t)]),   // snowballs in the air (#492)
     tiles: w.tiles.slice(),
     hk: w.hares.map((h, i) => pack(h, net.recs[i])),
   };
@@ -63,7 +64,7 @@ function hostState() {
 function netStart(s) {
   net = { round: s.round, lastSeq: -1, recs: [], res: null, sendT: 0, myOwn: -1, hist: [], tracks: [], sentD: -2, sentF: -2, sentT: 0 };
   hideAll();
-  world = null; me = null; brains = []; result = null; stick = null; flick = -1; seen = null; pops = [];
+  world = null; me = null; brains = []; result = null; stick = null; flick = -1; seen = null; pops = []; puffs = [];
   if (s.host && !s.over) {
     const people = s.players.slice(0, 4), used = [col];
     const players = people.map(p => {
@@ -109,6 +110,13 @@ function guestState(m) {
   w.over = m.ph === 'over';
   w.cash = m.cash ? { x: m.cash[0], y: m.cash[1] } : null;
   w.qbox = m.q ? { x: m.q[0], y: m.q[1], life: m.q[2] } : null;
+  // The host's snowballs. A ball already flying here keeps the time it has run on this phone when
+  // that is ahead, so a late state does not pull it back; one the host no longer sends has hit.
+  const had = new Map((w.balls || []).map(b => [b.id, b]));
+  w.balls = (m.bl || []).map(a => {
+    const o = had.get(a[0]);
+    return { id: a[0], to: a[1], sx: a[2], sy: a[3], t: o ? Math.max(o.t, a[4]) : a[4] };
+  });
   if (m.tiles.length === w.tiles.length) for (let k = 0; k < w.tiles.length; k++) w.tiles[k] = m.tiles[k];
   m.hk.forEach((a, i) => {
     const h = w.hares[i];
@@ -197,6 +205,8 @@ function netTick(dt) {
   // hare hops with my finger.
   if (w.ph === 'count') w.cd = Math.max(0, w.cd - dt);
   if (w.ph === 'play') w.t = Math.min(ERA_T, w.t + dt);
+  // Snowballs fly on until the host says they hit (they wait over their target till then).
+  for (const b of w.balls) b.t = Math.min(BALL_T, b.t + dt);
   w.hares.forEach((h, i) => {
     if (h === me) return;
     const tr = net.tracks[i];
