@@ -241,7 +241,7 @@ def test_a_dodge_on_a_stalled_link_is_drawn_only_a_little_past_its_end(site, bro
 def test_a_paused_room_holds_the_drawn_fighters_and_goes_on_from_there(site, browser):
     """The host pauses first. While the room waits for a phone that is away, a guest draws the other fighters where they were when
     it paused, not going on at their last speed past the newest spot; when the room goes on, they move on
-    from there a little each frame, with no jump over the pause (1.5 s here)."""
+    from there at about its speed, with no jump over the pause (1.5 s here)."""
     host, guest = phones(site, browser)
     me = index(host)
     host.evaluate(PAUSE)
@@ -266,8 +266,9 @@ def test_a_paused_room_holds_the_drawn_fighters_and_goes_on_from_there(site, bro
     # Held short of where it stopped, then on to there.
     assert abs(after[0][2] - stop) > 2, (after[0][2], stop)
     assert abs(after[-1][2] - stop) < 0.5, (after[-1][2], stop)
-    steps = [abs(b[2] - a[2]) for a, b in zip(after, after[1:])]
-    assert max(steps) < 3, [round(s, 2) for s in steps]
+    # On at about its running speed (62 units/s), by the time between frames: no jump over the pause.
+    speeds = [abs(b[2] - a[2]) / (b[0] - a[0]) for a, b in zip(after, after[1:]) if b[0] > a[0]]
+    assert max(speeds) < 1.5 * 62, [round(v) for v in speeds]
     assert not host.errors + guest.errors
 
 
