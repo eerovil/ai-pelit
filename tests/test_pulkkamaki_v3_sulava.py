@@ -23,10 +23,11 @@ STRAIGHT = """() => { const adv = window.__adv = window.advance; window.__run = 
   window.advance = (h, sl, dt) => { if (sl !== me) return adv(h, sl, dt);
     const t = performance.now() / 1000, d = at === null ? 0 : t - at; at = t;
     sl.v = window.__run ? 8 : 0; sl.s += sl.v * d; sl.yaw = 0; sl.air = false; sl.y = groundAt(h, sl.s, sl.x); }; }"""
-# Records, each time the hill is drawn, where sled `id` is drawn down the hill, and when a message arrived (so a
-# stall of the test machine, with no message for a while, can be told from a jerk).
-SAMPLE = """(id) => { window.__zs = []; window.__got = [];
-  AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
+# Records, each time the hill is drawn, where sled `id` is drawn down the hill, and when a message brought a new spot
+# of it (so a stall of the test machine, the sending phone drawing no frame for a while, can be told from a jerk:
+# three phones drawing 3D on one machine stall now and then, and the host's own rows keep coming meanwhile).
+SAMPLE = """(id) => { window.__zs = []; window.__got = []; let was = null;
+  AiPelitRooms.on('message', () => { const s = recOf(id).sl.s; if (s !== was) window.__got.push(performance.now() / 1000); was = s; });
   const d = window.render3d;
   window.render3d = (...a) => { if (window.__zs.length < 300) window.__zs.push([performance.now() / 1000, recOf(id).sl.s]);
     return d(...a); }; }"""
@@ -78,7 +79,12 @@ def glides(page):
     middle = sp[moving[0] + 8:moving[-1] - 8]
 
     def heard(t):
-        return any(t - 0.3 <= g <= t for g in got)
+        # New spots kept coming over the last 0.6 s, none more than 0.3 s apart: a frame just after the sender
+        # stalled draws away the guess it made meanwhile, which is the library's ease and not a jerk.
+        near = [g for g in got if t - 0.6 <= g <= t]
+        before = [g for g in got if g < t - 0.6]
+        seq = before[-1:] + near
+        return bool(near) and t - near[-1] <= 0.3 and all(b - a <= 0.3 for a, b in zip(seq, seq[1:])) and bool(before)
     kept = [v for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
     assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
