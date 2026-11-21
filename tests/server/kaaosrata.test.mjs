@@ -22,7 +22,9 @@ test('Kaaosrata keeps old main scores and separate times for all four courses', 
   assert.equal((await call('POST','scores',{...score,version:6,board:'other'})).status,400);
   assert.equal((await call('GET','scores?game=kaaosrata&board=other')).status,400);
   env.DB.raw.prepare("UPDATE players SET status='approved' WHERE id=?").run(player);
-  assert.equal((await call('GET','scores/top')).body.games.kaaosrata.board,'main');
+  // v10 (#493): the shelf's no. 1 is Puomipuisto's list with heights.
+  assert.equal((await call('POST','scores',{...score,version:10,board:'main10',score:70})).status,200);
+  assert.equal((await call('GET','scores/top')).body.games.kaaosrata.board,'main10');
 });
 
 test('Kaaosrata v7 separates redesigned courses from v6 while preserving main and old lists', async () => {
@@ -67,4 +69,26 @@ test('Kaaosrata v8 keeps v7 lists apart from its harder courses', async () => {
     assert.equal((await call('GET','scores?game=kaaosrata&board='+board+'8&player='+player)).body.mine.score,70);
   }
   assert.equal((await call('POST','scores',{...score,version:8,board:'main'})).status,200);
+});
+
+test('Kaaosrata v10 keeps the courses with heights apart from every older list', async () => {
+  const env={DB:makeD1(),ADMIN_KEY:'test'}, player='f'.repeat(32);
+  const call=async(method,path,body)=>{
+    const response=await handle(new Request('https://pelit.test/api/'+path,{
+      method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})
+    }),env);
+    return {status:response.status,body:await response.json()};
+  };
+  await call('POST','players',{id:player,name:'Testi493'});
+  const score={player,game:'kaaosrata',version:9,score:50};
+  for(const id of ['main','hihna','laatat','finaali']) {
+    const old=id==='main'?'main':id+'8';
+    assert.equal((await call('POST','scores',{...score,board:old})).status,200);
+    assert.equal((await call('POST','scores',{...score,version:10,board:id+'10',score:80})).status,200);
+    assert.equal((await call('POST','scores',{...score,version:11,board:id+'10',score:79})).status,200);
+    assert.equal((await call('POST','scores',{...score,version:10,board:old})).status,400);
+    assert.equal((await call('POST','scores',{...score,board:id+'10'})).status,400);
+    assert.equal((await call('GET','scores?game=kaaosrata&board='+old+'&player='+player)).body.mine.score,50);
+    assert.equal((await call('GET','scores?game=kaaosrata&board='+id+'10&player='+player)).body.mine.score,79);
+  }
 });
