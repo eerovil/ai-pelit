@@ -170,12 +170,14 @@ window.K3D = { ready: false, failed: false };
     const shadowM = new T.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.32, depthWrite: false });
     const meRing = new T.Mesh(new T.TorusGeometry(0.5, 0.05, 8, 32).rotateX(Math.PI / 2), new T.MeshBasicMaterial({ color: '#ffd166' }));
     scene.add(meRing);
+    // A runner's body colour is its own material; the shapes, eyes and shadow are shared and stay.
+    function dropBody(r, o) { scene.remove(o.g, o.sh); o.mat.dispose(); bodies.delete(r); }
     function bodyOf(r) {
       let o = bodies.get(r);
       if (o && o.color === r.color) return o;
-      if (o) scene.remove(o.g, o.sh);
+      if (o) dropBody(r, o);
       const g = new T.Group(), tilt = new T.Group(); g.add(tilt);
-      const b = new T.Mesh(bodyG, std(r.color, { roughness: 0.4 })); b.position.y = 0.61; b.castShadow = true; tilt.add(b);
+      const mat = std(r.color, { roughness: 0.4 }), b = new T.Mesh(bodyG, mat); b.position.y = 0.61; b.castShadow = true; tilt.add(b);
       const eyes = [];
       for (const ex of [-0.14, 0.14]) {
         const e = new T.Mesh(ball, eyeM); e.scale.set(0.11, 0.13, 0.08); e.position.set(ex, 0.86, -0.3); tilt.add(e);
@@ -183,7 +185,7 @@ window.K3D = { ready: false, failed: false };
       }
       const sh = new T.Mesh(shadowG, shadowM);
       scene.add(g, sh);
-      o = { g, tilt, sh, eyes, color: r.color, head: 0 };
+      o = { g, tilt, sh, eyes, mat, color: r.color, head: 0 };
       bodies.set(r, o);
       return o;
     }
@@ -208,7 +210,7 @@ window.K3D = { ready: false, failed: false };
         if (g) { o.sh.position.set(r.x, g.h + 0.02, -r.y); o.sh.scale.setScalar(1 / (1 + (r.z - g.h) * 0.4)); }
         if (r === me && !fall && g) { meRing.visible = true; meRing.position.set(r.x, g.h + 0.04, -r.y); }
       }
-      for (const [r, o] of bodies) if (!seen.has(r)) { scene.remove(o.g, o.sh); bodies.delete(r); }
+      for (const [r, o] of bodies) if (!seen.has(r)) dropBody(r, o);
     }
 
     // ---- Each frame ----

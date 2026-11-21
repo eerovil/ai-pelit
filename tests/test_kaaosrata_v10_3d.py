@@ -131,6 +131,22 @@ def test_the_race_is_drawn_in_3d_behind_the_runner(site, context):
     assert page.errors == []
 
 
+def test_a_new_race_frees_the_last_races_runner_colours(site, context):
+    """Review of #500: every race makes a body material per runner; the runners of a finished race give theirs
+    back to the graphics card (the shared shapes, eyes and shadow stay)."""
+    page = open_game(site, context)
+    page.wait_for_function('K3D.ready', timeout=10000)
+    page.evaluate('''() => K3D_LIB.then(T => { window.__freed = 0; const d = T.MeshStandardMaterial.prototype.dispose;
+      T.MeshStandardMaterial.prototype.dispose = function () { if (this.color && this.roughness === 0.4) window.__freed++; return d.call(this); }; })''')
+    page.click('#go')
+    page.wait_for_function("race && race.runners.length === 8", timeout=8000)
+    page.wait_for_timeout(300)
+    page.evaluate("soloRace()")
+    page.wait_for_function('window.__freed >= 8', timeout=5000)
+    assert page.evaluate('window.__freed') == 8
+    assert page.errors == []
+
+
 def test_without_webgl_it_plays_on_the_2d_drawing(site, browser):
     ctx = browser.new_context(viewport={'width': 360, 'height': 740}, service_workers='block')
     try:
