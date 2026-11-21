@@ -7,7 +7,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/jaalautta/v2/"
+URL = "games/jaalautta/v3/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 # On the host: every seal but the host's own falls in, erä after erä, until the match is over.
