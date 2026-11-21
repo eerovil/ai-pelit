@@ -5,6 +5,7 @@ own fighter still chases its newest spot, with no extra delay. Between frames ev
 spot heard; only the drawing lags."""
 
 import json
+import math
 import shutil
 from statistics import mean, pstdev
 
@@ -298,14 +299,15 @@ FEED = """([i, V]) => new Promise(done => {
   // Stamps go on from the host's clock, as the host's own would (the track keeps them past its newest).
   const base = JSON.parse(JSON.stringify(window.__last)), off = base.ck - window.__lastAt;
   const t0 = fightClock(), y0 = 120, f = fighters[i];
-  const feed = () => { const m = JSON.parse(JSON.stringify(base)), ck = fightClock();
+  const feed = at => { const m = JSON.parse(JSON.stringify(base)), ck = at === undefined ? fightClock() : at;
     m.ck = ck + off; m.f[i][1] = y0 + V * (ck - t0); onMessage(m); return ck; };
   window.__feed = []; const d = window.asDrawn;
   window.asDrawn = () => { const k = d(); window.__feed.push([f.tr.time, f.y]); return k; };
   const tick = () => {
     if (fightClock() - t0 < 0.8) { feed(); setTimeout(tick, 65); return; }
     const last = feed();
-    setTimeout(() => { window.__held = feed() - t0; window.__lastOn = last - t0;
+    // Stamped 0.035 s after the last, however late the machine's timer brings it.
+    setTimeout(() => { window.__held = feed(last + 0.035) - t0; window.__lastOn = last - t0;
       setTimeout(() => done([y0, t0]), 500); }, 35);
   };
   tick(); })"""
@@ -374,12 +376,16 @@ def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, bro
     held = [st[first - 1][1]] + [y for _, y, p, *_ in st[first:] if p]
     assert len(held) > 8, len(held)
     assert max(held) - min(held) < 0.01, [round(y, 2) for y in held]
-    after = [y for _, y, p, *_ in st[first:] if not p]
+    last = max(k for k, e in enumerate(st) if e[2])
+    after = [(t, y) for t, y, p, *_ in st[last + 1:]]
     # By the pause the drawing had stood a while (the stall outran its 0.05 s guess) well short of the spot
-    # for its moment; after it, it eases there over a few frames: no frame covers 60% of the way.
+    # for its moment; after it, it eases there by the time gone (the track's easing, 0.1 s), and the drawn
+    # moment goes on at most 1.2 times the clock: never the whole way in one frame, however long the frame.
     gap = st[first][3] - held[-1]
     assert gap > 20, gap
-    steps = [abs(b - a) for a, b in zip([held[-1]] + after, after)]
-    assert max(steps[:5]) < 0.6 * gap, ([round(x, 2) for x in steps[:8]], gap)
-    assert abs(after[-1] - after[-2]) < 10, after[-5:]
+    t1 = st[last][0]
+    over = [(round(t - t1, 3), round(y - held[-1], 1)) for t, y in after[:6]
+            if y - held[-1] > gap * (1 - math.exp(-(t - t1) / 0.1)) + 1.2 * 200 * (t - t1) + 2]
+    assert not over, (over, gap)
+    assert abs(after[-1][1] - after[-2][1]) < 10, after[-5:]
     assert not host.errors + guest.errors
