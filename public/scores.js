@@ -116,6 +116,12 @@
       level: function () { return Math.max(1, saved('pulkkamaki', 'auki')); },
       levelText: function (n) { return n + (n === 1 ? ' mäki' : ' mäkeä') + ' auki'; },
     },
+    // Matches won alone against the computer, all told (#478); level: floes open ('auki').
+    jaalautta: {
+      order: 'high', score: function (s) { return s + (s === 1 ? ' voitto' : ' voittoa'); },
+      level: function () { return Math.max(1, saved('jaalautta', 'auki')); },
+      levelText: function (n) { return n + (n === 1 ? ' lautta' : ' lauttaa') + ' auki'; },
+    },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function orderFor(game, b) {

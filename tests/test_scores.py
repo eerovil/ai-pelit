@@ -681,3 +681,16 @@ def test_pulkkamaki_s_level_is_one_hill_open_before_its_first_save(site, context
     assert page.evaluate(level) == 1
     page.evaluate("localStorage.setItem('ai-pelit:pulkkamaki:auki', '3')")
     assert page.evaluate(level) == 3
+
+
+def test_jaalautta_s_level_is_one_floe_open_before_its_first_save(site, context):
+    # Jäälautta saves 'auki' only when a second floe opens (#478), like Pulkkamäki.
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + SORMISKEITTI)
+    level = "AiPelitScores.games.jaalautta.level()"
+    assert page.evaluate(level) == 1
+    page.evaluate("localStorage.setItem('ai-pelit:jaalautta:auki', '4')")
+    assert page.evaluate(level) == 4
+    assert page.evaluate("AiPelitScores.games.jaalautta.levelText(1)") == "1 lautta auki"
+    assert page.evaluate("AiPelitScores.games.jaalautta.score(2)") == "2 voittoa"
