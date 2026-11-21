@@ -27,7 +27,7 @@ const recOf = id => net && net.recs.find(r => r.id === id);
 function pack(sl, rec) {
   return [sl.id, sl.name, sl.hat, sl.kind === 'cpu' ? 1 : 0, sl.own, sl.lunges, r2(sl.x), r2(sl.y), r2(sl.vx), r2(sl.vy), r2(sl.face),
     r2(sl.cd), r2(sl.lungeT), r2(sl.stun), sl.out ? Math.max(0.01, r2(sl.out)) : 0, r2(sl.outX), r2(sl.outY),
-    sl.size ? sl.size.k : '', sl.size ? r2(sl.size.t) : 0, sl.fuse ? sl.fuse.k : '', sl.fuse ? r2(sl.fuse.t) : 0, sl.fuse ? r2(sl.fuse.g) : 0,
+    sl.size ? sl.size.k : '', sl.size ? r2(sl.size.t) : 0, sl.fuse ? sl.fuse.k : '', sl.fuse ? r2(sl.fuse.t) : 0, sl.fuse ? sl.fuse.from || '' : '',
     sl.stars, sl.hit, sl.got, sl.gotK || '', sl.crushed ? 1 : 0, rec && rec.helped ? 1 : 0,
     sl.teeter > 0 ? Math.max(0.01, r2(sl.teeter)) : 0, sl.mash, r2(sl.ta), sl.saved];
 }
@@ -39,7 +39,7 @@ function unpack(sl, a, mine) {
   }
   sl.stun = a[13]; sl.out = a[14]; sl.outX = a[15]; sl.outY = a[16];
   sl.size = a[17] ? { k: a[17], t: a[18] } : null;
-  sl.fuse = a[19] ? { k: a[19], t: a[20], g: a[21] } : null;
+  sl.fuse = a[19] ? { k: a[19], t: a[20], from: a[21] || null } : null;
   sl.stars = a[22]; sl.hit = a[23]; sl.got = a[24]; sl.gotK = a[25] || null; sl.crushed = !!a[26]; sl.helped = !!a[27];
   sl.teeter = a[28] || 0; sl.mash = a[29] || 0; sl.ta = a[30] || 0; sl.saved = a[31] || 0;
 }
