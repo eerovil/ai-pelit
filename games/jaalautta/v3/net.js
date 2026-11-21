@@ -161,7 +161,12 @@ const SEAL_JUMP = 8;
 function heardSpot(sl, st, jump) {
   const spot = { x: sl.x, y: sl.y, face: sl.face };
   if (!sl.tr) sl.tr = AiPelitSulava.track({ keys: ['x', 'y', 'face'], angles: ['face'], jump: SEAL_JUMP });
-  if (jump) sl.tr.snap(st, spot, netClock()); else sl.tr.push(st, spot, netClock());
+  const a = netClock();
+  // Heard while paused: the host's last states, sent before it heard the pause, can come after this
+  // phone did. Their stamps are ahead of the held clock, and on the track they would move the drawn
+  // moment on mid-pause; they wait in sl.held and go on once the round goes on (netClock()).
+  if (net && RM.paused) { if (jump || !sl.held) sl.held = []; sl.held.push([st, spot, jump]); return; }
+  if (jump) sl.tr.snap(st, spot, a); else sl.tr.push(st, spot, a);
 }
 // The tracks' clock, on the host (its stamps) and on a guest (arrivals, the drawn moment): it stands
 // still while the room is paused (RM.paused), as the host's world does and sends nothing, so a
@@ -171,8 +176,16 @@ const pz = { off: 0, at: null };
 function netClock() {
   const t = AiPelitSulava.now();
   if (net && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
+}
+function heldOn(a) {
+  if (!world) return;
+  for (const sl of world.seals) {
+    if (!sl.held) continue;
+    for (const [st, spot, jump] of sl.held) if (jump) sl.tr.snap(st, spot, a); else sl.tr.push(st, spot, a);
+    sl.held = null;
+  }
 }
 // Every other seal at the spot its track draws, for the picture only; putBack() restores the newest.
 // A seal in the water is drawn at outX, outY and is left alone, except just after it went in: the

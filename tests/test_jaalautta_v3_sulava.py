@@ -224,10 +224,13 @@ PAUSE = """() => { window.__pz = false;
   Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
 
 
-def test_a_paused_round_holds_the_friend_s_seal_where_it_is_drawn(pair):
+@pytest.mark.parametrize("first", ["host", "guest"])
+def test_a_paused_round_holds_the_friend_s_seal_where_it_is_drawn(pair, first):
     """While the room is paused the host's world stands and sends nothing; the guest's tracks wait too, so the
     seal sliding round is not guessed on beyond its last state and pulled back when the round goes on: it stands
-    where it was drawn, and goes on from there at its speed."""
+    where it was drawn, and goes on from there at its speed. The two phones hear the pause a moment apart, in
+    either order: a guest that hears it first still gets the host's last states, sent before the host stopped,
+    and they go on its tracks only once the round goes on, not ahead of the drawn moment."""
     host, guest, i = pair
     for p in (host, guest):
         p.evaluate(PAUSE)
@@ -235,13 +238,16 @@ def test_a_paused_round_holds_the_friend_s_seal_where_it_is_drawn(pair):
     guest.evaluate(SAMPLE, i)
     host.evaluate("window.__run = true")
     guest.wait_for_timeout(1500)
-    host.evaluate("window.__pz = true")
-    guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
-    guest.wait_for_timeout(1500)
-    guest.evaluate("window.__goAt = performance.now() / 1000")
-    host.evaluate("window.__t0 = null; window.__pz = false")  # it slides on from where it stood
-    guest.evaluate("window.__pz = false")
-    guest.wait_for_timeout(1500)
+    stop_host = lambda: host.evaluate("window.__pz = true")
+    stop_guest = lambda: guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
+    go_host = lambda: host.evaluate("window.__t0 = null; window.__pz = false")  # it slides on from where it stood
+    go_guest = lambda: guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
+    order = [(stop_host, stop_guest), (go_host, go_guest)] if first == "host" else [(stop_guest, stop_host), (go_guest, go_host)]
+    for a, b in order:
+        a()
+        guest.wait_for_timeout(250)  # the other phone hears it a quarter of a second later
+        b()
+        guest.wait_for_timeout(1500)
     guest.evaluate("window.__stop = true")
     host.evaluate("window.__run = false")
     xs, pz_at, go_at = guest.evaluate("[window.__xs, window.__pzAt, window.__goAt]")
@@ -249,7 +255,7 @@ def test_a_paused_round_holds_the_friend_s_seal_where_it_is_drawn(pair):
     assert len(held) > 30, len(held)
     spread = max(math.hypot(x - held[0][0], y - held[0][1]) for x, y in held)
     assert spread < 0.01, spread  # it stood still all through the pause
-    after = [f for f in xs if f[0] > pz_at]
+    after = [f for f in xs if f[0] > pz_at - 0.3]
     steps = [math.hypot(c - a, d - b) for (_, a, b), (_, c, d) in zip(after, after[1:])]
     assert max(steps) < 0.5, (max(steps), steps)  # and went on with no jump, back or forward
     moved = [f for f in xs if f[0] > go_at + 0.6]
