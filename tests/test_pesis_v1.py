@@ -214,6 +214,22 @@ def test_a_run_made_before_the_ball_lands_foul_is_taken_back(site, context):
     assert page.evaluate("[score, players[5].home]") == [[1, 0], True]
     page.evaluate("Object.assign(ball, { z: 0.01, vz: -1 }); update(1 / 60)")
     assert page.evaluate("[state, score, players[5].home, runners.map(r => [r.i, r.at])]") == ["dead", [0, 0], False, [[5, 3]]]
+    # Nor does the run reach the lifetime count, or stay on screen.
+    page.evaluate("countRuns()")
+    assert page.evaluate("[stats.juoksut, players[5].runs, events.some(e => e.k === 'juoksu')]") == [0, 0, False]
+    assert page.errors == []
+
+
+def test_runs_count_in_a_second_match_on_the_same_page(site, context):
+    page = start(site, context)
+    for match in (1, 2):
+        page.evaluate("players[3].runs = 2; state = 'dead'; stT = 0; countRuns()")
+        assert page.evaluate("stats.juoksut") == 2 * match
+        page.evaluate("score = [3, 0]; inn = 1; state = 'change'; stT = 99; update(1 / 60); update(1 / 60)")
+        page.wait_for_function("!document.getElementById('menu').classList.contains('hidden')")
+        if match == 1:
+            page.click("#go")
+            page.wait_for_function("state === 'ready' && players.length === 18 && players[3].runs === 0")
     assert page.errors == []
 
 
@@ -350,9 +366,15 @@ def test_a_pause_during_a_toss_throws_it_again_with_no_try_spent(room):
 
 def test_a_guest_that_reloads_mid_match_gets_the_match_back(room):
     host, [guest] = room("Eero", "Aino")
-    host.evaluate("score = [2, 1]")
+    host.wait_for_function("state === 'pitch'", timeout=4000)
+    # A run of the guest's team, counted once before the reload and not again after it.
+    host.evaluate("score = [2, 1]; players[9].runs = 1; state = 'dead'; stT = 0")
+    guest.wait_for_function("stats.juoksut === 1", timeout=3000)
     guest.reload()
-    guest.wait_for_function("players.length === 18 && myTeam === 1 && score[0] === 2", timeout=8000)
+    guest.wait_for_function("players.length === 18 && myTeam === 1 && score[0] === 2 && players[9].runs === 1", timeout=8000)
+    host.evaluate("state = 'dead'; stT = 0")
+    guest.wait_for_timeout(500)
+    assert guest.evaluate("stats.juoksut") == 1
     assert host.errors == guest.errors == []
 
 
@@ -378,8 +400,16 @@ def test_a_guests_camera_follows_a_deep_ball(room):
 
 def test_a_run_counts_for_the_phone_whose_batting_place_it_is(room):
     host, [a, b] = room("Eero", "Aino", "Iida")
-    # The host bats places 0, 2, 4... of the blue team, Iida 1, 3, 5...
-    for n, (page, w, want) in enumerate([(host, 2, 1), (host, 1, 0), (b, 1, 1), (b, 9, 0)]):
-        before = page.evaluate("stats.juoksut")
-        page.evaluate(f"events.push({{ id: 100000 + {n}, x: 0, y: 0, s: '', c: '', k: 'juoksu', w: {w}, t: 1 }}); countRuns()")
-        assert page.evaluate("stats.juoksut") - before == want
+    # The host bats places 0, 2, 4... of the blue team, Iida 1, 3, 5...; Aino all of red's.
+    host.wait_for_function("state === 'pitch'", timeout=4000)
+    before = [p.evaluate("stats.juoksut") for p in (host, a, b)]
+    host.evaluate("players[2].runs = 1; players[1].runs = 1; players[9].runs = 1; state = 'dead'; stT = 0")
+    for p in (a, b):
+        p.wait_for_function("players[2].runs === 1 && players[9].runs === 1 && state !== 'play'", timeout=3000)
+    host.wait_for_timeout(300)
+    after = [p.evaluate("stats.juoksut") for p in (host, a, b)]
+    assert [x - y for x, y in zip(after, before)] == [1, 1, 1]
+    # Heard again in later states, the same runs are not counted twice.
+    host.wait_for_timeout(500)
+    assert [p.evaluate("stats.juoksut") for p in (host, a, b)] == after
+    assert host.errors == a.errors == b.errors == []

@@ -48,7 +48,7 @@ function mkPlayer(t, k, name, lvl) {
   const l = Math.min(Math.max(lvl, 1), 9) - 1;
   return { t, k, name, ctl: '', x: POS[k].x, y: POS[k].y, v: 0, foot: 0, fx: 0, fy: 1, steps: 0,
     speed: Math.min(8.6, 7.2 + 0.16 * l), react: Math.max(0.15, 0.45 - 0.035 * l), err: Math.max(0.05, 0.13 - 0.009 * l),
-    lv: l + 1, think: 0, out: false, home: false };
+    lv: l + 1, runs: 0, think: 0, out: false, home: false };
 }
 const P = i => players[i];
 const fielders = () => players.filter(p => p.t !== bt);
@@ -129,7 +129,7 @@ function hit(off) {
   // Most go low and bounce before the fielders get there; the rest fly, and a fly can be caught.
   const ele = rnd() < 0.7 ? -0.12 + rnd() * 0.2 : 0.3 + rnd() * 0.55;
   const h = sp * Math.cos(ele);
-  saved = { runners: runners.map(r => ({ ...r })), batter, score: score.slice(), home: players.map(p => p.home) };
+  saved = { runners: runners.map(r => ({ ...r })), batter, score: score.slice(), home: players.map(p => p.home), runs: players.map(p => p.runs), ev: evN };
   playN++; playT = 0;
   ball = { x: 0, y: 0.5, z: 0.9, vx: Math.sin(ang) * h, vy: Math.cos(ang) * h, vz: sp * Math.sin(ele), held: -1, fly: true, th: null };
   pitch.done = true;
@@ -230,7 +230,7 @@ function arrive(r) {
   if (r.at >= 4) {
     score[bt]++;
     runners.splice(runners.indexOf(r), 1);
-    p.home = true;
+    p.home = true; p.runs++;
     const kun = r.bat;
     say(0, 1.5, kun ? 'Kunnari!' : 'Juoksu!', '#7ee081', 'juoksu', r.i);
     p.x = 8 + (p.k % 5) * 1.3; p.y = -1.6 - Math.floor(p.k / 5) * 1.3;  // home: the right of the plate
@@ -276,7 +276,8 @@ function foul() {
   if (saved) {
     // A runner who got home before the ball came down foul goes back too, and the run with them.
     batter = saved.batter; score = saved.score.slice();
-    players.forEach((p, i) => { p.home = saved.home[i]; });
+    players.forEach((p, i) => { p.home = saved.home[i]; p.runs = saved.runs[i]; });
+    events = events.filter(e => !(e.k === 'juoksu' && e.id > saved.ev));
     for (const r of runners) { const b = BASES[r.at]; P(r.i).x = b.x; P(r.i).y = b.y; }
   }
   ball.vx = ball.vy = ball.vz = 0;
