@@ -1,6 +1,6 @@
 # Lattia on laavaa: one round over the lava
 
-How a round of Lattia on laavaa plays (v1, #488). Kids stand on the furniture of a room seen
+How a round of Lattia on laavaa plays (v1, #488; v2, #505, made it easier, stopped the shove at the edge and added the ledge climb). Kids stand on the furniture of a room seen
 in 3D from behind and above. After a 3-2-1 countdown the floor is lava: pieces of furniture
 wobble and sink one at a time, the lava rises, and the kids jump from piece to piece and shove
 each other. The last kid standing wins. Alone the player meets five computer kids; in a room
