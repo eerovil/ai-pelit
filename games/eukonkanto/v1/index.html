@@ -109,7 +109,9 @@ function depth(m) {
   if (m <= POOL[0] || m >= POOL[1]) return 0;
   return Math.min(POOL_D, (m - POOL[0]) * POOL_D / SLOPE, (POOL[1] - m) * POOL_D / SLOPE);
 }
-const wading = r => depth(r.x) > 0.2;
+// Wading is where the water is over 0.2 m deep: from WET[0] to WET[1], the step's events at the edges.
+const WET = [POOL[0] + 0.2 * SLOPE / POOL_D, POOL[1] - 0.2 * SLOPE / POOL_D];
+const wading = r => r.x >= WET[0] && r.x < WET[1];
 
 // The scene is drawn from SX and SW wide. Upright it is the whole width with the pads under it;
 // on its side the pads are columns at the left and right edges, under the thumbs.
@@ -272,52 +274,62 @@ function drop(r) {
 }
 
 // One couple's physics for dt seconds of the race clock.
+// The step is walked through event by event, in time order (#506): the line, a log crossed, the
+// wading's start or end, a landing and her fall. In each piece the speed, the climb and the slip's
+// rate are fixed from the couple's state at its start; the earliest event inside the time left
+// ends the piece, the couple is moved to that moment (exactly onto the log, edge or line), the
+// event is applied, and the rest of the step is a new piece. An event counts only while it is
+// strictly ahead, so each one comes once; a tie goes to the line, then the logs, then the fall.
 function move(r, dt, clock) {
   r.holdT = Math.max(0, r.holdT - dt);
   if (r.fin !== null) { r.v = Math.max(0, r.v - 3 * dt); r.x += r.v * dt; r.ph += r.v * dt * 1.5; return; }
   if (r.downT > 0) { r.downT = Math.max(0, r.downT - dt); return; }
   r.stum = Math.max(0, r.stum - dt);
-  const wet = wading(r);
-  const loss = r.y > 0 ? 0.3 : 1.2 + 0.15 * r.v + (wet && r.v > VW ? 6 * (r.v - VW) : 0);
-  r.v = Math.max(0, r.v - loss * dt);
-  const x0 = r.x, wasIn = depth(x0) > 0;
-  r.x += r.v * dt;
-  // The slip grows with speed and with itself; the water holds them up a little. Her fall and the
-  // line are taken in the order they came within the step: the fall happens where the slip reached 1.
-  const rate = (0.04 + 0.034 * r.v) * (1 + r.s) * (wet ? 0.6 : 1) * (r.y > 0 ? 0.5 : 1);
-  const s0 = r.s;
-  r.s += rate * dt;
-  if (r.s >= 1) {
-    const xd = x0 + (r.x - x0) * Math.max(0, Math.min(1, (1 - s0) / (rate * dt)));
-    if (xd < TRACK) { r.x = xd; drop(r); return; } // she fell before the line (and before any log ahead)
-    r.s = 0.99; // the line came first: she is carried over it
-  }
-  if (!wasIn && depth(r.x) > 0 && r === me) S.play('loiskis', { vol: 0.6 }) || tone(200, 0.2, 'sine', 0.05, 90);
-  if (r.y > 0 || r.vy > 0) {
-    r.vy -= GRAV * dt; r.y += r.vy * dt;
-    if (r.y <= 0) { r.y = 0; r.vy = 0; r.s += LAND_SLIP; }
-  }
-  for (let i = 0; i < LOGS.length; i++) {
-    const lx = LOGS[i];
-    if (!(r.down >> i & 1) && x0 < lx && r.x >= lx && r.y < CLEAR) {
-      r.down |= 1 << i; r.v *= HIT_KEEP; r.stum = STUMBLE; r.hits++; r.s += HIT_SLIP;
-      if (r === me) { S.play('puu', { vol: 0.8 }) || tone(160, 0.18, 'sawtooth', 0.09, 70); texts.push({ s: 'Kompastus!', t: 0 }); }
+  const x0 = r.x;
+  let left = dt;
+  // At most 7 events (the line, two logs, two edges, a landing, a fall) and the last piece: the cap
+  // holds whatever the floats do, and only time past it would be lost.
+  for (let n = 0; n < 8 && left > 0; n++) {
+    const wet = wading(r), air = r.y > 0 || r.vy > 0, v = r.v;
+    const loss = air ? 0.3 : 1.2 + 0.15 * v + (wet && v > VW ? 6 * (v - VW) : 0);
+    // The slip grows with speed and with itself; the water and the air hold it up a little.
+    const rate = (0.04 + 0.034 * v) * (1 + r.s) * (wet ? 0.6 : 1) * (air ? 0.5 : 1);
+    let t = left, ev = null, to = null;
+    const at = (tt, e, x) => { if (tt < t) { t = Math.max(0, tt); ev = e; to = x; } };
+    if (v > 0) {
+      if (r.x < TRACK) at((TRACK - r.x) / v, 'line', TRACK);
+      LOGS.forEach((lx, i) => { if (r.x < lx && !(r.down >> i & 1)) at((lx - r.x) / v, 'log' + i, lx); });
+      if (r.x < WET[0]) at((WET[0] - r.x) / v, 'in', WET[0]);
+      else if (r.x < WET[1]) at((WET[1] - r.x) / v, 'out', WET[1]);
+    }
+    // The landing is the root after the take-off, never t = 0.
+    if (air) at((r.vy + Math.sqrt(r.vy * r.vy + 2 * GRAV * Math.max(0, r.y))) / GRAV, 'land', null);
+    at((1 - r.s) / rate, 'fall', null);
+    r.x = to !== null ? to : r.x + v * t;
+    if (air) { r.y += r.vy * t - GRAV * t * t / 2; r.vy -= GRAV * t; }
+    r.s += rate * t;
+    r.v = Math.max(0, v - loss * t);
+    left -= t;
+    if (ev === 'fall') { r.ph += (r.x - x0) * 1.5; drop(r); return; } // she fell here, before anything later
+    if (ev === 'land') { r.y = 0; r.vy = 0; r.s += LAND_SLIP; }
+    else if (ev === 'in') { if (r === me) S.play('loiskis', { vol: 0.6 }) || tone(200, 0.2, 'sine', 0.05, 90); }
+    else if (ev && ev.startsWith('log')) {
+      const i = +ev.slice(3);
+      if (r.y < CLEAR) { // the height as it crosses the log, not at the end of the step
+        r.down |= 1 << i; r.v *= HIT_KEEP; r.stum = STUMBLE; r.hits++; r.s += HIT_SLIP;
+        if (r === me) { S.play('puu', { vol: 0.8 }) || tone(160, 0.18, 'sawtooth', 0.09, 70); texts.push({ s: 'Kompastus!', t: 0 }); }
+      }
+    } else if (ev === 'line') {
+      // The time includes the penalties: the couple's own phone adds them here, once, and every reader
+      // (results, record, high-score list) takes fin as it is.
+      r.fin = Math.round((clock - left + PENALTY * r.drops) * 100) / 100;
+      r.finClock = clock;
+      if (race.firstFin === null) race.firstFin = clock;
+      if (r === me && !S.play('onnistui', { vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+      break;
     }
   }
-  // A landing or a log can tip her over too, there; a landing past the line came after it.
-  if (r.s >= 1) {
-    if (r.x < TRACK) { drop(r); return; }
-    r.s = 0.99;
-  }
-  r.ph += r.v * dt * 1.5;
-  if (r.x >= TRACK) {
-    // The time includes the penalties: the couple's own phone adds them here, once, and every reader
-    // (results, record, high-score list) takes fin as it is.
-    r.fin = Math.round((clock - (r.x - TRACK) / Math.max(r.v, 0.5) + PENALTY * r.drops) * 100) / 100;
-    r.finClock = clock;
-    if (race.firstFin === null) race.firstFin = clock;
-    if (r === me && !S.play('onnistui', { vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
-  }
+  r.ph += (r.x - x0) * 1.5;
 }
 
 // The computer taps at its own rate, jumps the logs at a distance that misses now and then, and

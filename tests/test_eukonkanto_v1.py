@@ -130,9 +130,61 @@ def test_the_line_before_the_fall_in_one_step_is_a_finish(site, browser):
     page = open_game(site, browser)
     to_gun(page)
     # 1 cm to go at 7 m/s: the line comes in the first tenth of the step, the slip only past half.
-    page.evaluate("() => { me.x = TRACK - 0.01; me.v = 7; me.s = 0.995; tick(1 / 60); }")
-    fin, drops, clock = page.evaluate("[me.fin, me.drops, race.clock]")
-    assert drops == 0 and fin == pytest.approx(clock, abs=0.03)
+    # Read in the same turn as the step: the page's own frames run the clock on between evaluates.
+    fin, drops, clock = page.evaluate(
+        "() => { me.x = TRACK - 0.01; me.v = 7; me.s = 0.995; tick(1 / 60); return [me.fin, me.drops, race.clock]; }")
+    # The line at 0.0014 s into the 1/60 s step: the time is the clock at that moment.
+    assert drops == 0 and fin == pytest.approx(clock - 1 / 60 + 0.0014, abs=0.006)
+    page.context.close()
+
+
+LOG_CASES = [
+    # (what, x, v, y, vy, dt, tripped): the height counts as the couple crosses the log at 62 m.
+    ("coming down, over the log as it crosses, under the clearing height by the end", 61.9, 6, 0.35, -1, 0.05, False),
+    ("coming down, landed just before the log", 61.7, 6, 0.05, -1, 0.07, True),
+    ("going up, under the clearing height as it crosses, over it by the end", 61.95, 6, 0.1, 4, 0.07, True),
+    ("going up, already over the log as it crosses", 61.95, 6, 0.32, 3, 0.07, False),
+]
+
+
+@pytest.mark.parametrize("what,x,v,y,vy,dt,tripped", LOG_CASES, ids=[c[0][:30] for c in LOG_CASES])
+def test_a_log_is_judged_at_the_moment_it_is_crossed(site, browser, what, x, v, y, vy, dt, tripped):
+    """Review on #506: not by the height at the end of the step."""
+    page = open_game(site, browser)
+    to_gun(page)
+    page.evaluate(f"() => {{ Object.assign(me, {{ x: {x}, v: {v}, y: {y}, vy: {vy}, s: 0 }}); tick({dt}); }}")
+    assert page.evaluate("[me.hits, (me.down & 1) === 1, me.x > 62]") == [int(tripped), tripped, True], what
+    assert page.errors == []
+    page.context.close()
+
+
+def test_a_long_step_into_the_water_brakes_from_the_edge_on(site, browser):
+    page = open_game(site, browser)
+    to_gun(page)
+    # 0.1 s on sand, then 0.4 s wading at 7 m/s: the water's braking takes it from the edge on.
+    # On sand all the way it would still run at about 5.9 m/s.
+    page.evaluate("() => { Object.assign(me, { x: WET[0] - 0.7, v: 7, s: 0 }); tick(0.5); }")
+    assert page.evaluate("[wading(me), me.v < 3, me.x > WET[0]]") == [True, True, True]
+    page.context.close()
+
+
+@pytest.mark.parametrize("steps", [1, 30])
+def test_a_fall_and_the_line_keep_their_order_in_long_and_short_steps(site, browser, steps):
+    """The two are at least 0.3 s apart here, so the rate fixed per piece cannot swap them."""
+    page = open_game(site, browser)
+    to_gun(page)
+    # Set and run in one turn, so the page's own frames cannot step in between.
+    run = f"for (let i = 0; i < {steps}; i++) tick(0.5 / {steps});"
+    # The fall at about 0.1 s, the line at about 0.43 s: she falls first.
+    page.evaluate("() => { Object.assign(me, { x: TRACK - 3, v: 7, s: 0.95 }); " + run + " }")
+    assert page.evaluate("[me.fin, me.drops]") == [None, 1]
+    # The line at 0.05 s, the fall not before 0.18 s: a finish, no drop.
+    page.context.close()
+    page = open_game(site, browser)
+    to_gun(page)
+    page.evaluate("() => { Object.assign(me, { x: TRACK - 0.35, v: 7, s: 0.9 }); " + run + " }")
+    assert page.evaluate("[me.fin !== null, me.drops]") == [True, 0]
+    assert page.errors == []
     page.context.close()
 
 
