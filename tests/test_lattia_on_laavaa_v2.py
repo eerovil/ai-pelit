@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/lattia-on-laavaa/v1/"
+URL = "games/lattia-on-laavaa/v2/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 KEY = "ai-pelit:lattia-on-laavaa:"
