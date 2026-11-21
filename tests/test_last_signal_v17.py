@@ -15,7 +15,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/last-signal/v16/"
+URL = "games/last-signal/v17/"
 SAVE = "ai-pelit:last-signal:peli"
 SAVE12 = SAVE + "12"
 SAVE13 = SAVE + "13"
@@ -1214,7 +1214,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
     # #355: on aanet-5, the sounds Eero found too loud softer.
-    opens_and_plays_with_the_quiet_library(real, context, "games/last-signal/v16")
+    opens_and_plays_with_the_quiet_library(real, context, "games/last-signal/v17")
 
 
 def test_a_state_bigger_than_the_room_s_message_limit_reaches_a_friend_in_parts(site, browser):

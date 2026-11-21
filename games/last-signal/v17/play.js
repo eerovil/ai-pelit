@@ -202,7 +202,7 @@ function sleep(trip) {
     sub.x = end[0]; sub.y = end[1]; sub.vx = sub.vy = 0;
     if (A.id.startsWith('railo')) { const h = +A.id.slice(5); sub.x = holeMid(h); sub.y = holeSurf(h); }
     G.auto = null; G.coast = false; G.mapNew = true;
-    if (net) { net.helm = null; net.subT = null; }
+    if (net) { net.helm = null; net.subT = null; net.subTr = null; }
     // every one is told, kind, size and distance as heard on the way, and listed in the morning's card too
     found = heard.map(([c, x, y]) => sonarText(c, x, y));
     for (const [c, x, y] of heard) heardNew(c, x, y);
@@ -255,18 +255,40 @@ function hosePack() { return [0, 0].concat(...hose.pts.map(p => [Math.round(p[0]
 function mine() {
   const d = G.mode === 'dive', b = d ? diver : G.mode === 'ice' ? walker : crew;
   return [G.mode, r2(b.x), r2(b.y), b.dir, crew.suit ? (crew.kit === 'hose' ? 2 : 1) : 0, d ? r2(diver.ang) : 0,
-    d && diver.kit === 'hose' ? hosePack() : 0, crew.harp ? 1 : 0];
+    d && diver.kit === 'hose' ? hosePack() : 0, crew.harp ? 1 : 0, stamp()];
 }
-function subPack() { return [r2(sub.x), r2(sub.y), sub.dir, r2(sub.vx), r2(sub.vy)]; }
+// v17 (#480): each spot carries its own phone's clock ([8] of a person, [5] of SISU), so every
+// phone draws the others from lib/sulava-1 a moment back, gliding between spots, not jerking to
+// each one as it comes. A host forwards a friend's spot with the friend's own stamp.
+const stamp = () => Math.round(AiPelitSulava.now() * 1000) / 1000;
+const stampOf = v => Number.isFinite(+v) && v !== null && v !== '' ? +v : null;
+function subPack() { return [r2(sub.x), r2(sub.y), sub.dir, r2(sub.vx), r2(sub.vy), stamp()]; }
+function setSubT(T) {
+  if (!Array.isArray(T)) { net.subT = null; net.subTr = null; return; }
+  const P = net.subT;
+  net.subT = T;
+  if (!net.subTr) net.subTr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 40 });
+  // A SISU at rest (its driver let go, stopSub(): no speed, and the spot heard last) is drawn where it
+  // stopped, not driven on past it. With no speed it may still move (drawn to an opening's middle): that glides.
+  const rest = !+T[3] && !+T[4] && P && +P[0] === +T[0] && +P[1] === +T[1];
+  net.subTr[rest ? 'snap' : 'push'](stampOf(T[5]), { x: +T[0] || 0, y: +T[1] || 0 });
+}
 function setOther(id, p) {
   const o = net.others[id];
   if (!o || !Array.isArray(p)) return;
   const jump = o.mode !== p[0];
-  [o.mode, o.tx, o.ty, o.dir, o.suit, o.ang] = [String(p[0]), +p[1] || 0, +p[2] || 0, p[3] < 0 ? -1 : 1, !!p[4], +p[5] || 0];
+  [o.mode, o.tx, o.ty, o.dir, o.suit, o.ta] = [String(p[0]), +p[1] || 0, +p[2] || 0, p[3] < 0 ? -1 : 1, !!p[4], +p[5] || 0];
   o.kit = p[4] === 2 ? 'hose' : 'tank';
-  o.hose = Array.isArray(p[6]) ? p[6].slice(0, 122).map(Number) : null;
+  o.hoseIn = Array.isArray(p[6]) ? p[6].slice(0, 122).map(Number) : null;  // as sent; o.hose is drawn, with the body (v17)
   o.harp = !!p[7];
-  if (jump) { o.x = o.tx; o.y = o.ty; }
+  o.st = stampOf(p[8]);
+  if (!o.tr) o.tr = AiPelitSulava.track({ keys: ['x', 'y', 'ang'], angles: ['ang'], jump: 8 });
+  const at = { x: o.tx, y: o.ty, ang: o.ta };
+  if (jump) { o.x = o.tx; o.y = o.ty; o.ang = o.ta; o.hose = o.hoseIn; o.tr.snap(o.st, at); o.hoses = []; }
+  else o.tr.push(o.st, at);
+  // The hose's points wait with the body they end at, so a moving diver is never drawn behind their own hose.
+  (o.hoses = o.hoses || []).push([o.st, o.hoseIn]);
+  if (o.hoses.length > 12) o.hoses.shift();
 }
 // v16 (#355): the room drops a message over its limit (MSG_MAX in rooms/worker.js: 16 000
 // characters until #375 made it 64 000), and a lived-in game's state was bigger, so the host sends
@@ -293,30 +315,34 @@ function statePart(m) {
 }
 function snapshot() {
   const ps = { [R.me]: mine() };
-  for (const [id, o] of Object.entries(net.others)) ps[id] = [o.mode, o.tx, o.ty, o.dir, o.suit ? (o.kit === 'hose' ? 2 : 1) : 0, o.ang, o.hose || 0, o.harp ? 1 : 0];
+  for (const [id, o] of Object.entries(net.others)) ps[id] = [o.mode, o.tx, o.ty, o.dir, o.suit ? (o.kit === 'hose' ? 2 : 1) : 0, o.ta, o.hoseIn || 0, o.harp ? 1 : 0, o.st];
   const m = G.s.m;
   const A = G.auto;
-  return { t: 'f', sub: subPack(), helm: net.helm, held: G.held, m: [r2(m.food), r2(m.health), r2(m.hull)], ps,
+  return { t: 'f', sub: net.subT || subPack(), helm: net.helm, held: G.held, m: [r2(m.food), r2(m.health), r2(m.hull)], ps,
     auto: A ? [A.id, A.name, Math.round(A.left || 0), A.pts.slice(A.i).flat().map(Math.round)] : 0,
     // v12: the crates on the move (falling, or in someone's hands) as they are now; the rest come with the game ('s')
     cr: G.s.crates.filter(c => c.f || c.w === 'held').map(c => [c.id, c.w, r2(c.x), r2(c.y), c.hw || 0, c.by || 0]) };
 }
 function stepNet(dt) {
-  // The others glide to where their phones last said; SISU too, unless this phone drives it.
-  const k = Math.min(1, dt * 10);
+  // The others glide between the spots their phones sent, a moment back (v17, lib/sulava-1);
+  // SISU too, unless this phone drives it.
   for (const o of Object.values(net.others)) {
-    const x0 = o.x, y0 = o.y;
-    if (Math.hypot(o.tx - o.x, o.ty - o.y) > 8) { o.x = o.tx; o.y = o.ty; }
-    o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k;
+    const x0 = o.x, y0 = o.y, at = o.tr && o.tr.at();
+    if (at) {
+      o.x = at.x; o.y = at.y; o.ang = at.ang;
+      const t = o.tr.time;
+      while (o.hoses.length > 1 && (o.hoses[1][0] === null || t === null || o.hoses[1][0] <= t)) o.hoses.shift();
+      if (o.hoses.length) o.hose = o.hoses[0][1];
+    }
     const d = Math.abs(o.x - x0) + Math.abs(o.y - y0);
     o.moving = d > 0.002; o.walkT += d;
     const b = o.mode === 'ice' && bldAt(o.x), g = o.mode === 'ice' && !b ? groundAt(o.x) : null;
     o.climbing = o.mode === 'home' ? o.y > UP + 0.05 && o.y < LOW - 0.05 : b ? !b.floors.some(f => Math.abs(o.y - f) < 0.3) : g != null && o.y < g - 0.3;
   }
   const T = net.subT;
-  if (T && G.mode !== 'sub') {
-    if (Math.hypot(T[0] - sub.x, T[1] - sub.y) > 40) { sub.x = T[0]; sub.y = T[1]; }
-    sub.x += (T[0] - sub.x) * k; sub.y += (T[1] - sub.y) * k; sub.dir = T[2] < 0 ? -1 : 1; sub.vx = T[3]; sub.vy = T[4];
+  const at = T && G.mode !== 'sub' && net.subTr && net.subTr.at();
+  if (at) {
+    sub.x = at.x; sub.y = at.y; sub.dir = T[2] < 0 ? -1 : 1; sub.vx = T[3]; sub.vy = T[4];
     sub.prop += dt * (2 + Math.abs(sub.vx));
   }
   if ((net.sendT -= dt) > 0) return;
@@ -370,7 +396,7 @@ R.on('message', (m, from) => {
   if (!net || !m) return;
   if (net.host) {
     if (!net.others[from] || !G.s) return;
-    if (m.t === 'me') { setOther(from, m.p); if (net.helm === from && Array.isArray(m.sub) && m.p[0] === 'sub') net.subT = m.sub; }
+    if (m.t === 'me') { setOther(from, m.p); if (net.helm === from && Array.isArray(m.sub) && m.p[0] === 'sub') setSubT(m.sub); }
     if (m.t === 'do') {
       setOther(from, m.p);
       const r = doAct(from, String(m.a), m.arg);
@@ -396,7 +422,7 @@ R.on('message', (m, from) => {
       if (c) Object.assign(c, { w, x: +x, y: +y, hw: hw || undefined, by: by || undefined, f: w === 'held' ? 0 : 1 });
     }
     for (const [id, p] of Object.entries(m.ps || {})) if (id !== R.me) setOther(id, p);
-    if (G.mode !== 'sub') net.subT = m.sub;
+    if (G.mode !== 'sub') setSubT(m.sub);
   }
   if (m.t === 're') answer(m);
   if (m.t === 'sonar' && m.say) G.sonarQ.push(String(m.say));  // v15
@@ -413,7 +439,7 @@ function letGo(id) {
   if (net.helm === id) { net.helm = null; stopSub(); }
 }
 // Host: nobody drives now, so SISU stays where its driver left it, still (else its last speed would keep the airlock shut).
-function stopSub() { if (net && net.subT) net.subT = [net.subT[0], net.subT[1], net.subT[2], 0, 0]; }
+function stopSub() { if (net && net.subT) setSubT([net.subT[0], net.subT[1], net.subT[2], 0, 0, net.subT[5]]); }
 R.on('hello', id => {
   if (!net || !net.host || !net.others[id]) return;
   letGo(id); net.others[id].mode = 'wait';

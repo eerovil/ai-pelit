@@ -6,7 +6,7 @@ carries the chart and the cave as bitmaps of a fixed size, so the whole game the
 import base64
 import json
 
-from test_last_signal_v16 import room, save_with
+from test_last_signal_v17 import room, save_with
 from test_rooms_lib import MSG_MAX
 
 # Every square of the chart (677 × 74) and of the cave map (21 600) seen, packed as world.js's pack() does.

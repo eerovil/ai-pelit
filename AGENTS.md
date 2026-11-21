@@ -247,6 +247,15 @@ high-score lists (#25), then play counts (#26).
   from above, uses it too, with no `scroll`, so its row stays where it is. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.
+- **Smooth movement (#480).** A room game draws the other players from
+  `<script src="../../../lib/sulava-1/sulava.js"></script>` (the newest folder), loaded before its own
+  script: one `AiPelitSulava.track({ keys, angles, jump })` per remote player, `push(stamp, spot)` on each
+  message (the stamp is the sending phone's `AiPelitSulava.now()`, sent with the spot; a host forwards a
+  friend's spot with the friend's stamp), `snap()` on a jump the game knows of, and `at()` each frame, which
+  gives the spot a moment back (0.06–0.25 s, learnt from the messages' gaps) between two spots. The phone's
+  own player never goes through it. Like `lib/yleisurheilu-*/` a folder never changes; a fix is
+  `sulava-2/`. Last Signal v17 is the model; the other room games with moving players follow, most-played
+  first (Eero's choice).
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose
   nickname the admin approved writes what to fix, and `POST /api/feedback` keeps it (private,
   shown on `/yllapito/`, never on GitHub). A game needs nothing for it. Once a day at 17.00 the host's
