@@ -673,18 +673,24 @@ function netClock() {
   if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
   return t - pz.off;
 }
-// A snapshot waits, with the moment it came, while 6 of those already on the tracks are ahead of the moment the ball
-// is drawn at. A track keeps only its 8 newest spots (lib/sulava-1), and a guest that hears a pause before the host
-// does stands still while the host's last half second comes in: put on the tracks at once, those spots pushed out
-// the two it was drawing between, and the player jumped 1.1 m when the match went on. Outside a pause about 5 are
-// ahead at most (0.25 s at 20 a second), so a snapshot goes on as it comes; over 20 waiting (a page the phone hid)
-// all go on. A rule by time (wait while over 0.25 s ahead) stood the player up to 2 s on a busy test machine, then
-// jumped it: its tracks draw up to 0.25 s back, so the newest spots were always that far ahead.
-function heardSnapshot(s) { (net.wait = net.wait || []).push([s, netClock()]); feedSnapshots(); }
+// A snapshot heard while this phone is paused waits, with the moment it came, while 6 of those already on the tracks
+// are ahead of the moment the ball is drawn at. A track keeps only its 8 newest spots (lib/sulava-1), and a guest
+// that hears a pause before the host does stands still while the host's last half second comes in: put on the
+// tracks at once, those spots pushed out the two it was drawing between, and the player jumped 1.1 m when the match
+// went on. Those heard after them wait with them, until none waits: let go at once, they pushed out the same two (a
+// 0.34 m step). Over 20 waiting (a page the phone hid) all go on. Only those wait: outside a pause the drawn moment is
+// that of the last frame, so after a slow frame the rule may hold the newest spots back (with every snapshot waiting,
+// a run on a busy test machine once drew one frame at twice the usual speed; the cause is not proven). A rule by time (wait while over 0.25 s ahead) stood the player up to 2 s
+// there, then jumped it: its tracks draw up to 0.25 s back, so the newest spots were always that far ahead.
+function heardSnapshot(s) {
+  const w = net.wait = net.wait || [];
+  w.push([s, netClock(), (net.on && R.paused) || (w.length > 0 && w[w.length - 1][2])]);
+  feedSnapshots();
+}
 function feedSnapshots() {
   const w = net.wait, d = ball.tr.time, fed = net.fed = net.fed || [];
   while (w && w.length) {
-    if (d !== null && fed.filter(t => t > d).length >= 6 && w.length <= 20) break;
+    if (w[0][2] && d !== null && fed.filter(t => t > d).length >= 6 && w.length <= 20) break;
     const [s, a] = w.shift(), st = stampOf(s);
     applySnapshot(s, a);
     if (st !== null) { fed.push(st); if (fed.length > 8) fed.shift(); }
