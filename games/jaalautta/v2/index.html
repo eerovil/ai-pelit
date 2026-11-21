@@ -33,6 +33,9 @@
   #endList li i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:-1px}
   #endList li b{color:#ffd84a;letter-spacing:1px}
   #endList .dim{opacity:.3}
+  #pauseBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(env(safe-area-inset-right,0px) + 6px);width:40px;height:40px;padding:0;border-radius:12px;font-size:18px;background:rgba(6,24,52,.55);display:none;z-index:5}
+  body.solo #pauseBtn{display:block}
+  body.narrow #pauseBtn{top:calc(env(safe-area-inset-top,0px) + 36px)}
   body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 12px);gap:8px 28px}
   body.land .screen>.head{flex:0 0 280px;display:flex;flex-direction:column;align-items:center;gap:8px}
   body.land h1{font-size:32px}
@@ -44,6 +47,7 @@
 </style>
 </head>
 <body>
+<canvas id="g" style="pointer-events:none"></canvas>
 <canvas id="c"></canvas>
 <div id="safe"></div>
 <div id="menu" class="screen" hidden>
@@ -57,6 +61,14 @@
     <button id="go" class="big">Pelaa!</button>
     <button id="friends">👥 Pelaa kavereiden kanssa</button>
     <button id="hat">🎩 Hattu</button>
+  </div>
+</div>
+<button id="pauseBtn" aria-label="Tauko">⏸</button>
+<div id="pause" class="screen" hidden>
+  <div class="head"><p style="margin:0;font-size:32px;font-weight:900">Tauko</p></div>
+  <div class="col">
+    <button id="resume" class="big">Jatka</button>
+    <button id="quit">Lopeta peli</button>
   </div>
 </div>
 <div id="end" class="screen" hidden>
@@ -75,6 +87,11 @@
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="world.js"></script>
 <script src="ai.js"></script>
+<script>
+// three.js for the 3D picture (#478 v2), loaded beside the game; the 2D drawing stays as the fallback.
+window.J3D_LIB = import('../../../lib/three-r187/three.module.js');
+</script>
+<script src="three3d.js"></script>
 <script src="ui.js"></script>
 <script src="net.js"></script>
 <script src="../../../scores.js" data-game="jaalautta" data-order="high" data-corner="bottom-right"></script>
