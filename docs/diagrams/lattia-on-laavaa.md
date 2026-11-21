@@ -11,10 +11,16 @@ flowchart TD
   A[Valitse huone, Pelaa!] --> B[3, 2, 1: lattia on laavaa!]
   R[Huone: tekijä valitsee huoneen, Aloita kierros] --> B
   B --> C[Tatti juoksuttaa lasta, Hyppy hyppää]
-  C --> D{Töni-nappi?}
-  D -- Kyllä, ei jäähyllä --> E[Syöksy eteen, edessä oleva lentää kauemmas]
+  C --> V{Hyppy jää vähän vajaaksi reunasta?}
+  V -- Kyllä --> W[Lapsi kiipeää huonekalun päälle]
+  V -- Ei --> D
+  W --> D{Töni-nappi?}
+  D -- Kyllä, ei jäähyllä --> X{Maassa vai ilmassa?}
+  X -- Maassa --> E[Syöksy eteen, pysähtyy reunaan, edessä oleva lentää kauemmas]
+  X -- Ilmassa --> Y[Edessä oleva lentää kauemmas, ei syöksyä]
   D -- Ei --> F
   E --> F[Huonekalut keikkuvat ja uppoavat yksi kerrallaan]
+  Y --> F
   F --> G[25 s jälkeen laava nousee, myöhemmin laavalla kelluu tavaroita]
   G --> H{Lapsi koskee laavaan?}
   H -- Ei --> K
@@ -28,9 +34,9 @@ flowchart TD
   K -- Ei --> C
   K -- Kyllä tai ei ketään --> L[Odotetaan 0,35 s myöhään tulevia putoamisia]
   L --> Q[Tulokset kaikille, takaisin huoneeseen]
-  class A,B,C blue
-  class D,H,K,M,S amber
-  class E teal
+  class A,B,C,W blue
+  class D,H,K,M,S,V,X amber
+  class E,Y teal
   class F,G,I rose
   class R,Q,L violet
   class N,O green
@@ -51,8 +57,9 @@ flowchart TD
 - **Huone: tekijä valitsee huoneen, Aloita kierros**: `rooms.js` with `data-min="2" data-max="8"`; the host picks any of the three rooms under the player list (`roomControls()` with `RM.extra()`, `games/lattia-on-laavaa/v2/net.js`); a guest sees "Huoneen tekijä (…) valitsee huoneen.". A room round saves nothing, so every room is open there.
 - **3, 2, 1: lattia on laavaa!**: `COUNT` (3 s) on the round clock `rt`, which runs from −3; the kids stand on the pieces that sink last (`newWorld()`).
 - **Tatti juoksuttaa lasta, Hyppy hyppää**: a finger on the left half of the screen (not on a button) is a floating stick; one on the right half that misses the buttons does nothing: where it touched down is the middle, and its direction and distance (up to 52 px) run the kid that way, relative to the camera behind it. "Hyppy" jumps (held, higher), about 1.5 m up and 3 m along at full run (`JUMP_V`, `GRAV`); a kid steps onto a piece up to `STEP_UP` higher without a jump. In the air, a kid whose body touches a piece's side (its middle within `KID_R` + `CLIMB_REACH` of it) while the stick or its speed points at it, with its feet at most `CLIMB` (0.65 m) below the top, not stunned and not still rising fast (`vy` over 1), is pulled up onto it just inside the edge (`climb()` in `world.js`, from v2, #505); `placeKids()` in `ui.js` draws the pull-up over `CLIMB_T` (0.2 s).
+- **Hyppy jää vähän vajaaksi reunasta?** and **Lapsi kiipeää huonekalun päälle**: the ledge grab, `climb()` in `world.js` (from v2, #505), as the stick box below says: in the air, not stunned, not still rising fast (`vy` over 1), the body touching a piece's side while the stick or the kid's speed points at it, the feet at most `CLIMB` (0.65 m) below the top; the kid is put just inside the edge and drawn pulling itself up over `CLIMB_T` (0.2 s). Too low, too far, not steering at it, or rising: no grab, the kid falls on.
 - **Töni-nappi?**: "Töni" above "Hyppy" (beside it when the phone is sideways); only while the round is on and its cooldown (`SHOVE_CD`, 1.5 s) is over.
-- **Syöksy eteen, edessä oleva lentää kauemmas**: the kid dashes forward (`startShove()`); on the ground the dash stops `SHOVE_EDGE` (0.15 m) inside the edge of what it stands on and slows to a run when it ends, so the shover never goes off with it; a piece of about the same height just ahead lets the dash on, a jump ends the dash, and in the air a shove pushes without a dash (from v2, #505), and the nearest kid in front within `SHOVE_REACH` and at about the same height is pushed away and up (`shoveTarget()`, `pushOf()`), stunned for a moment; a kid pushed in the last 0.4 s is not pushed again (`PUSHED_AGAIN`). In a room the host decides whom a shove hits, from where it has every kid, and a kid another phone moves is pushed by a `push` message to that phone. The host keeps each guest's cooldown itself on its round clock (`hostShove()` in `net.js`, `SHOVE_CD` less 0.25 s for messages that arrive bunched), so a shove sent sooner is ignored, a reload included.
+- **Maassa vai ilmassa?**, **Syöksy eteen, pysähtyy reunaan, edessä oleva lentää kauemmas** and **Edessä oleva lentää kauemmas, ei syöksyä**: the kid dashes forward (`startShove()`); on the ground the dash stops `SHOVE_EDGE` (0.15 m) inside the edge of what it stands on and slows to a run when it ends, so the shover never goes off with it; a piece of about the same height just ahead lets the dash on, a jump ends the dash, and in the air a shove pushes without a dash (from v2, #505), and the nearest kid in front within `SHOVE_REACH` and at about the same height is pushed away and up (`shoveTarget()`, `pushOf()`), stunned for a moment; a kid pushed in the last 0.4 s is not pushed again (`PUSHED_AGAIN`). In a room the host decides whom a shove hits, from where it has every kid, and a kid another phone moves is pushed by a `push` message to that phone. The host keeps each guest's cooldown itself on its round clock (`hostShove()` in `net.js`, `SHOVE_CD` less 0.25 s for messages that arrive bunched), so a shove sent sooner is ignored, a reload included.
 - **Huonekalut keikkuvat ja uppoavat yksi kerrallaan**: from each room's `start` (18, 15 or 12 s), one piece at a time wobbles for `WOBBLE` (3.4 s) and then sinks at `SINK_V` (0.32 m/s), tipping over to one side in its first 1.5 s under (`tipOf()`, drawn only: its top stays flat for the kids); the small pieces go first, the big ones last, and the seed shuffles each class (`newWorld()`). The next starts `gap` seconds later, a little sooner each time, never under 2.2 s (v2 made all of these slower, #505).
 - **25 s jälkeen laava nousee, myöhemmin laavalla kelluu tavaroita**: `lavaAt()` is the floor until 25 s, then rises to 0.45 m by about 111 s. From the room's `floatAt` (44, 40 or 36 s, while the last pieces still sink) cushions, books, baskets, trays and rubber ducks float across the lava, each lasting a while and sinking at the end, faster and smaller as the round goes on (`floatsAt()`), so a good player can last after the furniture is gone. The floats are pure functions of the seed and `rt`, the same on every phone.
 - **Lapsi koskee laavaan?**: a kid out of the air at the lava's height is out (`inLava()`, `fall()`). Alone the phone judges every kid; in a room each phone judges its own kid and sends the time of its fall, the host judges its own kid, the computer's, and a kid whose phone has been silent for a second of running round.
