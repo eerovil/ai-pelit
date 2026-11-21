@@ -26,7 +26,7 @@ function cpuThink(g, side, bat, brain, foe, dt) {
       brain.forN = f.n; brain.forR = g.r; brain.wait = L.react * (0.8 + brain.r() * 0.4);
       const d = 0.22 + brain.r() * 0.2, p = predict(f, side, d);
       // Off the bat's middle by its error; now and then it misjudges the ball altogether.
-      const slip = brain.r() < L.miss ? (brain.r() < 0.5 ? -1 : 1) * (REACH + 0.05) : 0;
+      const slip = brain.r() < L.miss ? (brain.r() < 0.5 ? -1 : 1) * (CPU_REACH + 0.05) : 0;
       brain.plan = p ? { x: p.x + gauss(brain.r) * L.err * 0.6 + slip, z: s * (HL + d), y: p.y } : null;
       const high = p && p.y > L.smash;
       brain.kind = high ? 'smash' : brain.r() < L.drive ? 'drive' : 'block';

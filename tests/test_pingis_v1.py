@@ -121,6 +121,24 @@ def test_shots_from_the_middle_land_and_launches_are_rounded(site, context):
         assert page.evaluate(FLY, a)[:1] == ["bounce1"], kind
 
 
+def test_a_bat_over_the_table_in_front_of_the_bounce_still_meets_the_ball(site, context):
+    # Eero on the preview: too hard to hit. A bat held over the table, where the ball has not
+    # bounced yet, meets it right after the bounce; 30 cm to the side still meets it; a bat
+    # far to the side, or a ball long past, does not.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const out = {};
+      for (const [name, dx, dz] of [['front', 0, -0.25], ['side', 0.3, 0.3], ['far', 0.6, 0.3]]) {
+        const f = newFlight(1, 1, false, [0, 0.3, -1.2, 0, 0, 3.2, 0]);
+        const q = predict(f, 0, 0.3), bat = { x: q.x + dx, z: HL + dz };
+        let met = false;
+        for (let k = 0; k < 2400 && !f.ball.dead && !met; k++) { judge(f, ballStep(f.ball)); met = hittable(f) && meets(f, bat); }
+        out[name] = met;
+      }
+      return out; }""")
+    assert got == {"front": True, "side": True, "far": False}
+
+
 def test_a_flick_up_serves_and_a_bat_in_the_way_returns_the_ball(site, context):
     page = open_game(site, context)
     go(page)
@@ -157,8 +175,10 @@ def test_standing_still_loses_and_following_the_ball_wins_on_easy(site, context)
     page = open_game(site, context)
     lazy = page.evaluate(SIM, [0, "lazy", 2])
     assert lazy["lost"] == 2 and lazy["pts"][0] < 16
-    good = page.evaluate(SIM, [0, "sloppy", 2])
-    assert good["won"] == 2 and good["hits"] > 40
+    # Following the ball (with a 10 cm wobble) won 15 of 16 games on easy when this was measured,
+    # so three of four leaves room for chance.
+    good = page.evaluate(SIM, [0, "sloppy", 4])
+    assert good["won"] >= 3 and good["hits"] > 80
     # The hard computer gives a player like that a real game.
     hard = page.evaluate(SIM, [2, "sloppy", 2])
     assert hard["pts"][1] >= 14

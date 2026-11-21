@@ -12,11 +12,13 @@
 
 const TAU = Math.PI * 2;
 const HL = 1.37, HW = 0.7625, NET_H = 0.1525, BR = 0.02;   // half length, half width, net, ball radius
-const G = 9.8, E = 0.88, FLOOR = -0.76, SLOW = 0.62, STEP = 1 / 240;
-const REACH = 0.26;            // how far from the bat's middle (sideways) a ball still meets it
+const G = 9.8, E = 0.88, FLOOR = -0.76, SLOW = 0.56, STEP = 1 / 240;
+const REACH = 0.36;            // how far from the bat's middle (sideways) a ball still meets it
+const DEPTH = 0.4;             // how far past the bat's line a ball just bounced still meets it
+const CPU_REACH = 0.26;        // the computer's bat is narrower: the wider one is for a thumb
 const POINTS = 11;
 const LEVELS = [
-  { name: 'Helppo', note: 'Kone palauttaa rauhassa', react: 0.3, speed: 1.5, err: 0.2, miss: 0.1, aim: 0.35, smash: 0.42, drive: 0.15 },
+  { name: 'Helppo', note: 'Kone palauttaa rauhassa', react: 0.3, speed: 1.5, err: 0.24, miss: 0.15, aim: 0.35, smash: 0.42, drive: 0.15 },
   { name: 'Keskitaso', note: 'Kone tähtää kulmiin', react: 0.2, speed: 2.1, err: 0.11, miss: 0.045, aim: 0.55, smash: 0.33, drive: 0.4 },
   { name: 'Vaikea', note: 'Kone lyö kovaa', react: 0.12, speed: 2.8, err: 0.05, miss: 0.012, aim: 0.8, smash: 0.24, drive: 0.85 },
 ];
@@ -77,11 +79,12 @@ function judge(f, ev) {
 }
 // The receiver may hit it: once bounced on their half, flying towards their end.
 const hittable = f => !f.over && f.bR === 1 && f.ball.vz * sgn(1 - f.by) > 0 && !f.ball.dead;
-// Did the ball meet the bat in the last step? `pz` is the ball's z before the step.
-function meets(f, pz, bat) {
-  const s = sgn(1 - f.by), b = f.ball;
-  const before = (pz - bat.z) * s, after = (b.z - bat.z) * s;
-  return before < 0 && after >= 0 && Math.abs(b.x - bat.x) < REACH && b.y > -0.35 && b.y < 1.0;
+// Does the ball meet the bat now? It has bounced on the bat's half (`hittable`) and is at or just
+// past the bat's line: a bat held over the table, in front of where the ball bounced, still meets
+// it right after the bounce (Eero on v1's preview: too hard to hit).
+function meets(f, bat, reach = REACH) {
+  const s = sgn(1 - f.by), b = f.ball, past = (b.z - bat.z) * s;
+  return past >= 0 && past < DEPTH && Math.abs(b.x - bat.x) < reach && b.y > -0.35 && b.y < 1.0;
 }
 
 // ---- Shots ----
