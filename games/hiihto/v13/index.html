@@ -21,6 +21,7 @@
      and with the loudest sounds quieter -->
 <!-- v12 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 const c = document.getElementById('c'), x = c.getContext('2d');
 let W, H, DPR, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, LAND = false;
@@ -483,7 +484,8 @@ function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'wax', sendT: 0, readyT: 0, clock: 0, firstFin: null, res: null,
     soloLevel: net ? net.soloLevel : level, adopt: false,
     skiers: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
-      z: 0, x: 0, lane: 1, v: 0, fin: null, wax: -1, fall: 0, ph: 0 })) };
+      z: 0, x: 0, lane: 1, v: 0, fin: null, wax: -1, fall: 0, ph: 0,
+      tr: AiPelitSulava.track({ keys: ['z'], jump: 15 }), ts: null, src: '' })) };
   touches.clear();
   if (s.host) { net.cfg = { level, style, seed: Math.floor(Math.random() * 1e9) }; netCourse(); }
   else mode = 'netwait';   // until the host says which course
@@ -502,7 +504,27 @@ function netCourse() {
 const r2 = n => Math.round(n * 100) / 100;
 // v4 adds the road: how far across it the skier is ([9]) and the snow left in its bindings ([10]),
 // so the computer, or the player back after a reload, carries on from the same step.
-const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null, k.road || null, k.clog || 0];
+// v13 (#480): [11] is a friend's own stamp (their phone's AiPelitSulava.now() when it sent the spot), sent on by
+// the host with the spot as the friend sent it; null for the host's own skier and the computer's, whose time is the
+// message's `st`. Every phone draws the others from a track (`tr`), a moment back, gliding between the spots heard.
+const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null, k.road || null, k.clog || 0,
+  RM.isHost && k.kind === 'net' ? k.ts : null];
+const stampOf = m => Number.isFinite(m.st) ? m.st : null;
+// A spot heard for another phone's skier: into its track, or the track starts again when its clock changes (the
+// computer takes over a friend, or gives them back), as the two clocks cannot be compared.
+function heardSpot(k, st, src) {
+  if (src !== k.src) k.tr.snap(st, { z: k.z }); else k.tr.push(st, { z: k.z });
+  k.src = src;
+}
+// The skiers drawn from their tracks: every other phone's, and on a guest the computer's too (the host runs those
+// itself). The rules (places, the end) keep the newest spot heard; drawing swaps the drawn one in and back.
+const drawnHere = k => k.kind !== 'me' && !(RM.isHost && k.kind === 'cpu') && k.tr.size();
+function asDrawn() {
+  return net ? net.skiers.filter(drawnHere).map(k => { const kept = [k, k.z]; k.zNew = k.z; k.z = k.tr.at().z; return kept; }) : [];
+}
+function putBack(kept) { for (const [k, z] of kept) { k.z = z; k.zNew = null; } }
+// The newest spot heard, also while a frame draws the smoothed one: the places on screen go by it, like the rules.
+const newest = k => k.zNew ?? k.z;
 function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; k.road = a[9] ?? null; k.clog = a[10] || 0; }
 // Puts a skier at a road step it was sent: the timers start again, the step rhythm is free.
 function roadFrom(p, road, clog, t) { p.road = road || undefined; p.clog = clog || 0; p.roadT = 0; if (road) p.lastKick = t - 1; }
@@ -519,7 +541,7 @@ function synced(k) {
   return k;
 }
 function hostState() {
-  return { t: 's', round: net.round, cfg: net.cfg, ph: net.phase, cd: r2(countT || 0), clock: r2(net.clock), sk: net.skiers.map(k => pack(synced(k))) };
+  return { t: 's', round: net.round, st: AiPelitSulava.now(), cfg: net.cfg, ph: net.phase, cd: r2(countT || 0), clock: r2(net.clock), sk: net.skiers.map(k => pack(synced(k))) };
 }
 
 // The host: the start once everyone has waxed, the computer's skiers, the end.
@@ -532,7 +554,7 @@ function netTick(dt, n) {
         k.z = k.p.z; k.lane = k.p.lane; k.v = k.p.v; k.road = k.p.road || null; k.clog = k.p.clog || 0;
         if (k.z >= course.len) { k.fin = r2(k.p.t); k.cpuFin = true; arrive(k); }
       }
-    } else if (net.phase === 'run' && k.fin === null && !k.fall) k.z += k.v * dt;
+    }   // v13: a skier heard from a message stays at its newest spot; its track draws it on (v12 carried it on at its speed)
     k.x += clamp(laneX(style, k.lane) - k.x, -9 * dt, 9 * dt);
     k.ph += dt * (k.fin === null ? 0.25 + k.v / 5 : 0);
   }
@@ -560,7 +582,7 @@ function netTick(dt, n) {
     if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: P.wax }); }
   }
   if ((mode === 'race' || mode === 'done') && net.sendT <= 0 && !net.res) {
-    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, s: pack(synced(meK())) });
+    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), s: pack(synced(meK())) });
   }
 }
 function guestState(m) {
@@ -569,7 +591,7 @@ function guestState(m) {
   m.sk.forEach((a, i) => {
     const k = net.skiers[i];
     if (!k) return;
-    if (k.kind !== 'me') { unpack(k, a); return; }
+    if (k.kind !== 'me') { unpack(k, a); const own = Number.isFinite(a[11]); heardSpot(k, own ? a[11] : stampOf(m), own ? 'f' : 'h'); return; }
     k.at = a[8] ?? k.at;   // when the host saw me finish, for my place
     // Back after a reload: the host knows my wax, and where I was.
     if (mode === 'wax' && a[4] >= 0) adopt(a, m);
@@ -610,8 +632,8 @@ function cpuTakes(k) {
 }
 // Finished skiers by time, ahead of everyone still on the trail, who go by how far they got.
 function standings() {
-  return net.skiers.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? finOrder(a) - finOrder(b) : b.z - a.z))
-    .map(k => ({ id: k.id, name: k.name, fin: k.fin, z: Math.round(Math.min(k.z, course.len)), color: k.color }));
+  return net.skiers.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? finOrder(a) - finOrder(b) : newest(b) - newest(a)))
+    .map(k => ({ id: k.id, name: k.name, fin: k.fin, z: Math.round(Math.min(newest(k), course.len)), color: k.color }));
 }
 const placeOf = (list, id) => list.findIndex(o => o.id === id) + 1;
 function netEnd(res) {
@@ -685,6 +707,7 @@ if (RM) {
         if (k.handback && m.s[0] < k.z - 1) return;
         k.handback = false;
         unpack(k, m.s); arrive(k);
+        k.ts = stampOf(m); heardSpot(k, k.ts, 'f');
       }
       return;
     }
@@ -698,7 +721,7 @@ if (RM) {
     else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
   });
   RM.on('continue', ids => { if (net) net.skiers.forEach(k => { if (ids.includes(k.id) && k.kind === 'net') cpuTakes(k); }); });
-  RM.on('back', id => { if (net) net.skiers.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; } }); });
+  RM.on('back', id => { if (net) net.skiers.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; k.tr.reset(); k.ts = null; k.src = ''; } }); });
   RM.on('lobby', toSolo);
   RM.on('leave', toSolo);
   RM.on('menu', toSolo);
@@ -1412,7 +1435,7 @@ function hint() {
 // My place among friends right now: finished ones by time, the rest by how far they are.
 function livePlace() {
   const me = synced(meK());
-  return 1 + net.skiers.filter(k => k !== me && (k.fin !== null ? me.fin === null || finOrder(k) < finOrder(me) : me.fin === null && k.z > me.z)).length;
+  return 1 + net.skiers.filter(k => k !== me && (k.fin !== null ? me.fin === null || finOrder(k) < finOrder(me) : me.fin === null && newest(k) > newest(me))).length;
 }
 
 function drawHud() {
@@ -1710,7 +1733,9 @@ function frame(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000); tune(t - lastT); lastT = t;
   step(dt);
   glideSound();
+  const kept = asDrawn();
   draw();
+  putBack(kept);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
