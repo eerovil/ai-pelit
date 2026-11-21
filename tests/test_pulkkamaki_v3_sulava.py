@@ -105,7 +105,8 @@ def slide_and_watch(host, run, watch, others):
         # Between frames the host keeps the friend's newest spot (ahead of where it last drew them, as they slide
         # on), and each of their spots is drawn a moment back on their clock.
         host.evaluate("""(id) => { const r = recOf(id); window.__rule = []; window.__back = [];
-          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === id) window.__back.push(m.st - r.tr.time); });
+          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === id)
+            window.__back.push([performance.now() / 1000, m.st, r.tr.time, r.tr.delay]); });
           setInterval(() => { if (window.__zs.length) window.__rule.push([r.sl.s, window.__zs[window.__zs.length - 1][1]]); }, 37); }""",
                       me)
     s0 = run.evaluate("me.s")
@@ -119,7 +120,18 @@ def slide_and_watch(host, run, watch, others):
         ahead = [kept - drawn for kept, drawn in rule if drawn > s0 + 2 and kept < s0 + 20]
         assert len(ahead) > 20, rule
         assert sum(a > 0.2 for a in ahead) > 0.7 * len(ahead), ahead  # the newest spot, not the drawn one
-        assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
+        # Each spot that came on time is drawn at least 40 ms back on its sender's clock. On time: its lag
+        # (arrival - stamp) within 20 ms of the smallest in the 2 s before, which is how the track learns the
+        # offset. A spot held up longer (a stalled phone under load) lands after its moment was already drawn
+        # on a guess, which the library then eases away; its stamp minus `tr.time` is about the delay minus
+        # how late it was (measured within 25 ms over 420 spots), so it may well be below 0 and says nothing
+        # about the delay (#480: checking every spot failed 1 run of 5 under load 80-97).
+        on_time, lags = [], []
+        for i, (a, st, t, _) in enumerate(back):
+            lags.append((a, a - st))
+            if i >= 5 and a - st - min(lag for at, lag in lags if at >= a - 2) < 0.02:
+                on_time.append(st - t)
+        assert len(back) > 15 and len(on_time) > 7 and min(on_time) > 0.04, (on_time, back)
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
 
