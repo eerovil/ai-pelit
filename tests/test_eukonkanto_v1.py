@@ -178,6 +178,24 @@ def test_two_steps_before_the_gun_are_a_yellow_then_a_red_card(site, browser):
     page.context.close()
 
 
+def test_nobody_moves_or_slips_before_the_gun_even_after_a_false_start(site, browser):
+    page = open_game(site, browser)
+    page.click("#go")
+    still = "race.runners.map(r => [r.x, r.s, r.v])"
+    page.evaluate("() => { race.runners.forEach(r => { r.ai.jumpy = null; }); race.gunAt = 9; }")
+    before = page.evaluate(still)
+    page.evaluate("() => { for (let i = 0; i < 40; i++) tick(0.05); }")  # 2 s of countdown
+    assert page.evaluate(still) == before
+    # A computer couple's false start, the card shown, and the countdown again: still nothing moves.
+    page.evaluate("() => { const c = race.runners.find(r => r.kind === 'cpu'); c.ai.jumpy = SET_AT + 0.1; tick(SET_AT + 0.2); }")
+    assert page.evaluate("race.phase") == "false"
+    page.evaluate("() => { tick(FS_SHOW + 0.01); race.runners.forEach(r => { r.ai.jumpy = null; }); race.gunAt = 9; for (let i = 0; i < 40; i++) tick(0.05); }")
+    assert page.evaluate("race.phase") == "cd"
+    assert page.evaluate(still) == before
+    assert page.errors == []
+    page.context.close()
+
+
 def test_the_menu_is_not_drawn_again_and_again(site, browser):
     page = open_game(site, browser)
     page.evaluate("() => { window.__draws = 0; const d = draw; window.draw = () => { window.__draws++; d(); }; }")

@@ -520,9 +520,11 @@ function tick(dt) {
   } else if (race.phase === 'run') {
     race.clock += dt;
   }
+  // Only the gun starts the physics: the computer thinks during the countdown (its false start) but
+  // moves, like every couple, only once the race runs, so nobody's slip grows while standing.
   for (const r of race.runners) {
-    if (r.kind === 'cpu' && host) { think(r, dt); move(r, dt, race.clock); }
-    else if (r.kind === 'me' && race.phase === 'run') move(r, dt, race.clock);
+    if (r.kind === 'cpu' && host) think(r, dt);
+    if ((r.kind === 'cpu' && host || r.kind === 'me') && race.phase === 'run') move(r, dt, race.clock);
   }
   if (race.mode === 'solo') {
     if (me.fin !== null && (race.runners.every(out) || race.clock > me.finClock + 4)) finish(standings(race.clock));
