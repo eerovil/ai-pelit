@@ -5,7 +5,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v2/"
+URL = "games/pulkkamaki/v3/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
