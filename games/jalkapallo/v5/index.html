@@ -61,6 +61,7 @@
      and with the loudest sounds quieter -->
 <!-- v4 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -180,7 +181,10 @@ const fwd = t => t === 0 ? 1 : -1;
 const spot = (t, ax, ay) => ({ x: ax * fwd(t), y: ay * fwd(t) });
 function player(t, slot, name, lvl) {
   const p = { t, slot, name, ctl: '', x: 0, y: 0, vx: 0, vy: 0, fx: 0, fy: fwd(t), cd: 0, lunge: 0, stun: 0, kicks: 0,
-    brain: { think: 0, tx: 0, ty: 0, act: '' }, keeper: slot === 2 };
+    brain: { think: 0, tx: 0, ty: 0, act: '' }, keeper: slot === 2,
+    // v5 (#480): on a guest, a player another phone or the computer moves is drawn from the host's spots,
+    // a moment back (lib/sulava-1). A dash (1.6 x 6.3 m/s) goes about 0.5 m between two spots.
+    tr: AiPelitSulava.track({ keys: ['x', 'y'], jump: 4 }), ease: 0 };
   skill(p, lvl);
   return p;
 }
@@ -647,24 +651,32 @@ function applySetup(s) {
   myTeam = me ? me.t : 0;
 }
 function snapshot() {
-  return { t: 's', round: net.round, st: state, pt: r2(pauseT), cl: r2(clock), sc: score, o: owner ? players.indexOf(owner) : -1,
+  return { t: 's', round: net.round, st: state, pt: r2(pauseT), cl: r2(clock), sc: score, ck: AiPelitSulava.now(), o: owner ? players.indexOf(owner) : -1,
     b: [r2(ball.x), r2(ball.y), r2(ball.z), r2(ball.vx), r2(ball.vy)],
     p: players.map(p => [r2(p.x), r2(p.y), r2(p.fx), r2(p.fy), p.kicks, p.lunge > 0 ? 1 : 0]),
     c: ctrls.map(k => [k.id, k.p ? players.indexOf(k.p) : -1]),
     m: msg, g: goals, tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]) };
 }
 const r2 = v => Math.round(v * 100) / 100;
+// Smooth movement (#480): the host runs every player, so each spot a guest hears carries the host's clock
+// (ck). p.tx, p.ty are the newest spot; p.x, p.y where the guest draws the player (guestUpdate()).
+const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
 function applySnapshot(s) {
   const was = state, loose = !owner, pvx = ball.vx || 0, pvy = ball.vy || 0;
   state = s.st; pauseT = s.pt; clock = s.cl; score = s.sc;
   owner = players[s.o] || null;
   ball.tx = s.b[0]; ball.ty = s.b[1]; ball.z = s.b[2]; ball.vx = s.b[3]; ball.vy = s.b[4];
+  ball.nx = s.b[0]; ball.ny = s.b[1];
+  // A kickoff puts everyone on their spot at once: no sliding there. So does the match's first spot.
+  const jump = state === 'kickoff' && was !== 'kickoff', st = stampOf(s);
   let kicked = false;
   s.p.forEach((q, i) => {
     const p = players[i];
     if (!p) return;
     if (q[4] > p.kicks) { kickSound(false); kicked = true; }
     p.tx = q[0]; p.ty = q[1]; p.fx = q[2]; p.fy = q[3]; p.kicks = q[4]; p.lunge = q[5] ? 0.1 : 0;
+    if (jump || !p.tr.size()) { p.tr.snap(st, { x: p.tx, y: p.ty }); p.x = p.tx; p.y = p.ty; p.ease = 0; }
+    else p.tr.push(st, { x: p.tx, y: p.ty });
   });
   for (const p of players) p.ctl = '';
   for (const [id, i] of s.c) if (players[i]) players[i].ctl = id;
@@ -689,10 +701,31 @@ function applySnapshot(s) {
   if (state === 'kickoff' && was !== 'kickoff') { for (const p of players) { p.x = p.tx; p.y = p.ty; } whistle(false); }
 }
 function guestUpdate(dt) {
-  for (const p of players) if (p.tx !== undefined) { const k = Math.min(1, dt * 15); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+  for (const p of players) {
+    if (p.tx === undefined) continue;
+    // The player this phone steers chases the newest spot, as before: never drawn back, so the thumb
+    // is felt at once.
+    if (p.ctl && p.ctl === myId()) { const k = Math.min(1, dt * 15); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.ease = 0.3; continue; }
+    // v5 (#480): everyone else glides between the host's spots, a moment back. One this phone has just
+    // stopped steering (a pass gave it another) eases back onto its track instead of jumping there.
+    const o = p.tr.at();
+    if (!o) continue;
+    if (p.ease > 0) { p.ease -= dt; const k = Math.min(1, dt * 15); p.x += (o.x - p.x) * k; p.y += (o.y - p.y) * k; }
+    else { p.x = o.x; p.y = o.y; }
+  }
   if (ball.tx !== undefined) {
     ball.tx += (ball.vx || 0) * dt; ball.ty += (ball.vy || 0) * dt;
-    const k = Math.min(1, dt * 18); ball.x += (ball.tx - ball.x) * k; ball.y += (ball.ty - ball.y) * k;
+    if (owner && owner.tx !== undefined) {
+      // A held ball is drawn at the feet of its player as drawn, where the host has it from them; the step
+      // from where it was drawn (a pass just taken) fades out over a tenth of a second.
+      const ax = owner.x + ball.nx - owner.tx, ay = owner.y + ball.ny - owner.ty;
+      if (!ball.held) { ball.held = true; ball.ex = ball.x - ax; ball.ey = ball.y - ay; }
+      const f = Math.max(0, 1 - dt * 12); ball.ex *= f; ball.ey *= f;
+      ball.x = ax + ball.ex; ball.y = ay + ball.ey;
+    } else {
+      ball.held = false;
+      const k = Math.min(1, dt * 18); ball.x += (ball.tx - ball.x) * k; ball.y += (ball.ty - ball.y) * k;
+    }
   }
   tick(dt);
   if ((net.sendT -= dt) <= 0) { net.sendT = 0.05; R.send({ t: 'i', round: net.round, x: r2(input.jx), y: r2(input.jy) }); }
