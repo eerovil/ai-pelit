@@ -64,8 +64,24 @@ const pz = { off: 0, at: null };
 function runClock() {
   const t = AiPelitSulava.now();
   if (net && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
+}
+// The phones hear a pause a moment apart: a spot this phone hears while paused, sent by a phone that had not
+// paused yet, is stamped ahead of the held clock. Heard by it, it would tell the track the spots come sooner than
+// they do, and for the next 2 s the track would draw the sled that much further on, past its newest spot on a
+// guess. So it waits in rec.held, and once the pause ends here the spots go on the track in order, each heard no
+// sooner than its stamp and the lag of the last spot heard before the pause (rec.lag): when it really came.
+function heldOn(a) {
+  if (!net) return;
+  for (const rec of net.sleds) {
+    if (!rec.held) continue;
+    for (const [st, spot, restart] of rec.held) {
+      if (restart || rec.lag === null || st === null) { rec.tr.snap(st, spot, a); rec.lag = st === null ? 0 : a - st; }
+      else rec.tr.push(st, spot, Math.max(a, st + rec.lag));
+    }
+    rec.held = null;
+  }
 }
 // A spot heard for another phone's or the computer's sled: the turns it shows now, worked out from
 // the state as sent, then into its track. `src` is whose clock the stamp is on, 'f' (the friend's)
@@ -77,8 +93,17 @@ function heardSpot(rec, st, src) {
   sl.tilt = sl.air ? 0 : -sl.steer * 0.25;
   sl.roll = sl.fallT > 0 ? (1 - sl.fallT / FALL_T) * TAU * 1.5 : 0;
   const a = runClock(), up = rec.fell && !(sl.fallT > 0);   // the fall has just ended
-  if (src !== rec.src || up) rec.tr.snap(st, sl, a); else rec.tr.push(st, sl, a);
+  const restart = src !== rec.src || up;
   rec.src = src; rec.fell = sl.fallT > 0;
+  if (net && RM.paused) {   // heard in a pause: it waits (heldOn()); the game's rules already have it in rec.sl
+    if (restart || !rec.held) rec.held = [];
+    const spot = {};
+    for (const k of KEYS) spot[k] = sl[k];
+    rec.held.push([st, spot, restart]);
+    return;
+  }
+  if (restart) rec.tr.snap(st, sl, a); else rec.tr.push(st, sl, a);
+  rec.lag = st === null ? null : a - st;
 }
 // The sleds drawn from their tracks: every other phone's, and on a guest the computer's too (the
 // host slides those itself, and a friend's sled while its computer drives it).
@@ -126,7 +151,7 @@ function addRec(r, i) {
   placeSled(hill, sl, LANES[i % LANES.length]);
   if (r.kind === 'me') sl.onEvent = onMyEvent;
   const rec = { id: r.id, name: r.name, kind: r.kind, o: r.o, own: 0, cpu: false, drive: false, hostFin: false, lastA: null, sl,
-    tr: newTrack(), ts: null, src: '', fell: false };
+    tr: newTrack(), ts: null, src: '', fell: false, held: null, lag: null };
   net.sleds.push(rec);
   sleds.push(sl);
   return rec;
@@ -327,7 +352,7 @@ if (RM) {
     const rec = recOf(id);
     if (!rec || !rec.drive) return;
     rec.drive = false; rec.own++; rec.sl.cpu = null; handOver(rec.sl);
-    rec.tr.reset(); rec.ts = null; rec.src = ''; rec.fell = false;   // v3: drawn where the host has it until the phone's own spots come
+    rec.tr.reset(); rec.held = null; rec.lag = null; rec.ts = null; rec.src = ''; rec.fell = false;   // v3: drawn where the host has it until the phone's own spots come
   });
   RM.on('lobby', toSolo);
   RM.on('leave', () => { toSolo(); });

@@ -4,7 +4,10 @@ coast()). The rules (the finish, the end) keep the newest spot heard; only the d
 
 import json
 import shutil
-from statistics import mean, pstdev
+import time
+from statistics import mean, median, pstdev
+
+import pytest
 
 from conftest import ROOT
 from test_rooms_lib import Relay
@@ -218,14 +221,26 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_h
 # On a phone: each frame, sled `id` as drawn (inside render3d, where the frame has swapped the drawn spot in), its
 # roll, and whether the room is paused.
 DRAWN = """(id) => { window.__dr = []; const r = recOf(id), d = window.render3d;
-  window.render3d = (...a) => { window.__dr.push([performance.now() / 1000, r.sl.s, r.sl.roll, AiPelitRooms.paused]);
+  window.render3d = (...a) => { window.__dr.push([performance.now() / 1000, r.sl.s, r.sl.roll, AiPelitRooms.paused,
+    r.tr.time === null ? null : runClock() - r.tr.time]);
     return d(...a); }; }"""
 
 
-def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site, browser):
+# The room's pause on one phone by hand, from `on` to `off` (ms on the machine's clock, which every page shares), to
+# set which phone hears it first; a pause on a busy test machine cannot wait for a message to reach a page.
+PAUSE = """([on, off]) => Object.defineProperty(AiPelitRooms, 'paused',
+  { get: () => Date.now() >= on && Date.now() < off, configurable: true })"""
+
+
+@pytest.mark.parametrize("first", ["away", "host", "guest"])
+def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site, browser, first):
     """A phone in the run goes away: every phone waits, and a guest draws the host's sled where it is, not gliding
-    on past its newest spot (to slide back once the run goes on). Sleds stand still in a pause, so they are drawn so."""
-    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    on past its newest spot (to slide back once the run goes on). Sleds stand still in a pause, so they are drawn so.
+    "away": a third phone really drops. The phones hear a pause a moment apart, so "host" and "guest" pause them by
+    hand a quarter of a second apart, each first: a guest that pauses first still hears the host's last spots, sent
+    before the host stopped, and they go on its track only once its pause ends, not ahead of the drawn moment."""
+    names = ("Testi A", "Testi B", "Testi C") if first == "away" else ("Testi A", "Testi B")
+    host, aino, *rest = phones(site, browser, names=names)
     hid = me_of(host)
     # The host's own sled goes straight down at 8 m/s, by the run's clock, which stands still in the pause (as the
     # game's own sleds do: no frame steps them then); on the game's physics a tree could stop it short, and the
@@ -238,24 +253,43 @@ def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site,
                            timeout=10000)
     aino.evaluate(DRAWN, hid)
     aino.wait_for_timeout(500)
-    host.relay.drop(ville)
-    aino.wait_for_function("AiPelitRooms.paused", timeout=10000)
-    aino.wait_for_timeout(1200)
-    host.relay.back(ville)
-    aino.wait_for_function("!AiPelitRooms.paused", timeout=20000)
-    aino.wait_for_timeout(1000)
+    if first == "away":
+        host.relay.drop(rest[0])
+        aino.wait_for_function("AiPelitRooms.paused", timeout=10000)
+        aino.wait_for_timeout(1200)
+        host.relay.back(rest[0])
+        aino.wait_for_function("!AiPelitRooms.paused", timeout=20000)
+    else:
+        at = time.time() * 1000 + 300
+        for p, d in ((host, 0), (aino, 250)) if first == "host" else ((aino, 0), (host, 250)):
+            p.evaluate(PAUSE, [at + d, at + d + 1450])  # both 1.45 s, a quarter of a second apart
+        aino.wait_for_timeout(300 + 1700)
+    aino.wait_for_timeout(2000)
     dr = aino.evaluate("window.__dr")
-    paused = [(t, s) for t, s, _, p in dr if p]
+    paused = [(t, s) for t, s, _, p, *_ in dr if p]
     assert len(paused) > 4 and paused[-1][0] - paused[0][0] > 0.8, dr  # by time: a loaded machine draws few frames
     # From 0.15 s into the pause (the phones hear of it a moment apart), the sled stands where it was drawn.
     held = [s for t, s in paused if t > paused[0][0] + 0.15]
     assert max(held) - min(held) < 0.05, [round(s, 2) for _, s in paused]
     assert dr[-1][1] > held[-1] + 2, dr[-1]  # and it slid on after the pause
     # Never drawn sliding back up the hill, before, in or after the pause.
-    drawn = [round(s, 2) for _, s, _, _ in dr]
+    drawn = [round(s, 2) for _, s, *_ in dr]
     assert all(b >= a - 0.05 for a, b in zip(drawn, drawn[1:])), drawn
-    errors = [e for p in (host, aino, ville) for e in p.errors]
+    errors = [e for p in (host, aino, *rest) for e in p.errors]
     assert not errors, errors
+    # After it the host's sled is drawn as far back in its own time as before: a spot heard in the pause with its
+    # stamp ahead of the held clock tells the track the spots come sooner than they do, and for the next 2 s it
+    # draws the sled up to 0.25 s further on, past its newest spot on a guess. Read from the track (this phone's
+    # clock less the drawn moment), which a stall of the sending phone does not move: with the spots held, it moved
+    # -0.01 to 0.06 s; heard at once, 0.13; held but heard when the pause ended, 0.12 to 0.16. Only when the two
+    # phones' pauses are as long ("host", "guest"): one that stood longer really is further behind the other's clock.
+    if first == "away":
+        return
+    went, gone = min(t for t, _, _, p, _ in dr if p), max(t for t, _, _, p, _ in dr if p)
+    before = [b for t, _, _, p, b in dr if not p and went - 0.5 < t < went and b is not None]
+    after = [b for t, _, _, p, b in dr if not p and gone + 1 < t < gone + 2 and b is not None]
+    assert len(before) > 2 and len(after) > 4, (before, after)
+    assert median(after) > median(before) - 0.08, (round(median(before), 3), [round(b, 3) for b in after])
 
 
 def test_a_friends_fall_rolls_one_way_and_ends_upright_at_once(site, browser):
@@ -268,7 +302,7 @@ def test_a_friends_fall_rolls_one_way_and_ends_upright_at_once(site, browser):
     host.wait_for_function(f"recOf({json.dumps(gid)}).sl.fallT > 0", timeout=5000)
     host.wait_for_function(f"!(recOf({json.dumps(gid)}).sl.fallT > 0)", timeout=5000)
     host.wait_for_timeout(600)
-    rolls = [round(r, 3) for _, _, r, _ in host.evaluate("window.__dr")]
+    rolls = [round(r, 3) for _, _, r, *_ in host.evaluate("window.__dr")]
     assert max(rolls) > 5, rolls  # it really rolled (most of the way to 3π; at a low frame rate no frame is drawn at the top)
     assert rolls[-1] == 0, rolls
     assert all(b >= a - 0.01 or b == 0 for a, b in zip(rolls, rolls[1:])), rolls
