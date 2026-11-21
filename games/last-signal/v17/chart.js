@@ -303,7 +303,7 @@ function startAuto(id) {
   if (!pts) return { say: 'Autopilotti ei löydä reittiä sinne', snd: 'no', sec: 2.2 };
   const name = k.area ? 'alue: ' + k.name : knowOf(k) === 3 ? k.name : k.kind;
   G.auto = { id, name, pts, i: 1, left: null, best: Infinity, stuckT: 0, tries: 0 };
-  if (net) { net.helm = null; net.subT = null; }
+  if (net) { net.helm = null; net.subT = null; net.subTr = null; }
   return { say: '🧭 Autopilotti: kohti ' + name, snd: 'up', sec: 2.2 };
 }
 // Every way the autopilot ends goes through here (owner's choice on #160: glide to a stop): SISU brakes smoothly

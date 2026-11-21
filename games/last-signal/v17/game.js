@@ -281,7 +281,7 @@ function showStory(m) {
     enterRoom(true);
   }
   if (m.k === 'breach') {
-    if (m.sub) { sub.x = m.sub[0]; sub.y = m.sub[1]; if (net) net.subT = null; }
+    if (m.sub) { sub.x = m.sub[0]; sub.y = m.sub[1]; if (net) { net.subT = null; net.subTr = null; } }
     sub.vx = sub.vy = 0;
     // Alone the player is back at the helm (v4); with friends a diver comes in by the airlock, the others stay.
     if (!net && G.mode !== 'sub') { G.carry = []; G.mode = 'sub'; crew.to = null; }
@@ -552,7 +552,7 @@ function doAct(who, a, arg) {
       const at = net && people().find(p => p.id === who);
       if (at && at.room !== 'ohjaamo') return { say: 'Ruoriin pääsee ohjaamosta', snd: 'no' };
       if (net && net.helm && net.helm !== who && present(net.helm)) return { say: nameOf(net.helm) + ' on ruorissa', snd: 'no' };
-      if (net) { net.helm = who; net.subT = null; }
+      if (net) { net.helm = who; net.subT = null; net.subTr = null; }
       // the one at the helm now drives; SISU glides on under them to a stop unless they steer
       if (G.auto) { stopAuto(); return { helm: 1, say: '🧭 Autopilotti pois: ruori on käsissäsi', sec: 2 }; }
       return { helm: 1 };

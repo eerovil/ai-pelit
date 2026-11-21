@@ -135,6 +135,10 @@ the version that taught it, so you can read the code that fixed it.
 - **The host decides.** One phone runs the round (who scored, a false start, the course) and the
   others draw what it sends; each phone may check its own collisions (Kaahari v2) when that feels
   fairer, but the result comes from the host.
+- **Draw the others from `lib/sulava-1`** (#480): push each spot a message brings to a
+  `AiPelitSulava.track()` with the sending phone's own clock, and draw from `at()` each frame. Putting
+  a remote player straight at the newest spot, or chasing it fast, shows every uneven gap between
+  messages as a jerk (Last Signal v16: the friend's person stepped backwards on a jittery network).
 - **The game still plays alone.** Computer players fill the empty places.
 
 ## 3D
