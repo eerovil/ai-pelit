@@ -324,3 +324,21 @@ def test_a_late_flick_on_a_slow_link_still_turns_the_guest_without_a_snap(hares)
     assert host.evaluate(f"{HARE.format(gid)}.x") == x0 - 1
     assert guest.evaluate("snaps") == 0
     assert host.errors == guest.errors == []
+
+
+def test_every_phone_sees_the_same_snowball_fly(hares):
+    host, g1 = room(hares, 2)
+    start([host, g1])
+    still(host)
+    gid = json.dumps(g1.evaluate("AiPelitRooms.me"))
+    # The host's hare takes a snowball; the guest's hare leads.
+    host.evaluate(f"""() => {{ const lead = {HARE.format(gid)}; lead.pts = 9; world.rand = () => 0.1;
+      world.qbox = {{ x: me.x + 1, y: me.y }}; Object.assign(me, {{ fx: me.x, fy: me.y, x: me.x + 1, p: 0.99 }}); step(world, 0.02); }}""")
+    i = host.evaluate(f"world.hares.indexOf({HARE.format(gid)})")
+    g1.wait_for_function(f"world.balls.length === 1 && world.balls[0].to === {i}", timeout=3000)
+    assert g1.evaluate(f"{HARE.format(gid)}.stun") == 0   # not yet: it is still flying
+    # Drawn on the guest's screen too, and gone with a puff when the host says it hit.
+    g1.wait_for_function("!V3 || V3.balls[0].b.visible", timeout=3000)
+    g1.wait_for_function(f"world.balls.length === 0 && {HARE.format(gid)}.stun > 0 && puffs.length === 1", timeout=3000)
+    host.wait_for_function(f"world.balls.length === 0 && {HARE.format(gid)}.stun > 0")
+    assert host.errors == [] and g1.errors == []

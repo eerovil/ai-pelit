@@ -135,7 +135,7 @@ def test_a_closed_ring_fills_on_aitaus(site, context):
     assert page.errors == []
 
 
-def test_a_snowball_stuns_the_leader_and_a_spring_makes_hops_quick(site, context):
+def test_a_snowball_flies_to_the_leader_and_stuns_it_on_the_hit(site, context):
     page = open_game(site, context)
     go(page)
     got = page.evaluate("""() => {
@@ -145,19 +145,49 @@ def test_a_snowball_stuns_the_leader_and_a_spring_makes_hops_quick(site, context
       world.qbox = { x: 1, y: 0, life: 5 };
       Object.assign(me, { fx: 0, fy: 0, x: 1, y: 0, p: 0.99 });
       step(world, 0.05);
-      const a = [me.gotK, lead.stun > 1];
-      world.rand = () => 0.9;   // the spring
-      world.qbox = { x: 2, y: 0, life: 5 };
-      Object.assign(me, { fx: 1, fy: 0, x: 2, y: 0, p: 0.99, want: 0 });
-      step(world, 0.05);
-      return a.concat([me.gotK, me.fast > 4, me.hopT]);
+      // In the air: nobody is stunned yet, and the ball rises over the board on its way.
+      const b = world.balls[0], start = ballPos(world, b);
+      const a = [me.gotK, world.balls.length, b.to, b.sx, b.sy, lead.stun, start.z > 1];
+      const t = b.t; b.t = BALL_T / 2;
+      const mid = ballPos(world, b);
+      b.t = t;
+      return a.concat([mid.z > start.z + 0.5, Math.hypot(mid.x - 1, mid.y) > 1]);
     }""")
-    assert got == ["lumi", True, "jousi", True, 0.2]
+    assert got == ["lumi", 1, 2, 1, 0, 0, True, True, True]
+    # The game's own loop flies it on: at the hit the leader is stunned and a puff of snow shows.
+    page.wait_for_function("world.balls.length === 0 && world.hares[2].stun > 1.2 && puffs.length === 1", timeout=3000)
+    page.wait_for_function("puffs.length === 0", timeout=2000)
     # A stunned hare bounces in place.
     page.evaluate("() => { const l = world.hares[2]; l.want = 2; l.p = 0.99; }")
     x = page.evaluate("world.hares[2].x")
     page.wait_for_timeout(500)
     assert page.evaluate("world.hares[2].x") == x
+    assert page.errors == []
+
+
+def test_a_snowball_in_flight_is_drawn_in_3d_and_gone_at_a_new_era(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("() => { world.hares[1].pts = 5; world.balls.push({ id: 99, by: 0, to: 1, sx: 0, sy: 0, t: 0.3 }); }")
+    page.wait_for_function("V3.balls[0].b.visible && V3.balls[0].b.position.y > 1")
+    assert page.evaluate("V3.balls[1].b.visible") is False
+    page.screenshot(path="/var/tmp/ppk2-ball.png")
+    page.evaluate("() => { world.balls[0].t = BALL_T / 2; world.t = ERA_T; me.pts = 30; step(world, 0.01); }")
+    assert page.evaluate("[world.balls.length, world.hares[1].stun]") == [0, 0]
+    assert page.errors == []
+
+
+def test_a_spring_makes_hops_quick(site, context):
+    page = open_game(site, context)
+    go(page)
+    got = page.evaluate("""() => {
+      world.rand = () => 0.9;   // the spring
+      world.qbox = { x: 1, y: 0, life: 5 };
+      Object.assign(me, { fx: 0, fy: 0, x: 1, y: 0, p: 0.99, want: 0 });
+      step(world, 0.05);
+      return [me.gotK, me.fast > 4, me.hopT, world.balls.length];
+    }""")
+    assert got == ["jousi", True, 0.2, 0]
     assert page.errors == []
 
 
@@ -264,6 +294,9 @@ def test_without_3d_the_board_is_drawn_flat(site, context):
     page.evaluate(TOUCH, ["pointermove", 150, 560])
     page.wait_for_function("me.y >= 2", timeout=3000)
     assert page.evaluate("flat && flat.s > 20")
+    # A snowball flies on the flat board too, and bursts into a puff on the hit.
+    page.evaluate("() => { world.hares[1].pts = 5; world.balls.push({ id: 7, by: 0, to: 1, sx: me.x, sy: me.y, t: 0 }); }")
+    page.wait_for_function("puffs.length === 1 && world.hares[1].stun > 0", timeout=3000)
     assert page.errors == []
 
 
