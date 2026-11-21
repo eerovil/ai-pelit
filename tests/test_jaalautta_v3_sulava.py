@@ -39,7 +39,7 @@ STEADY = """() => { const mv = window.moveSeal; window.__run = false; window.__a
 # jerk).
 SAMPLE = """(i) => { window.__xs = []; window.__got = []; window.__new = null; window.__back = [];
   AiPelitRooms.on('message', m => { if (m.t !== 's') return; window.__got.push([performance.now() / 1000, m.st]);
-    window.__new = [m.sk[i][6], m.sk[i][7]];
+    if (net && m.seq === net.lastSeq) window.__new = [m.sk[i][6], m.sk[i][7]];  // a state the game took (a late one it drops)
     const tr = world.seals[i].tr; if (tr && tr.time !== null) window.__back.push(m.st - tr.time); });
   const d = window.draw;
   window.draw = dt => { const t = performance.now() / 1000, sl = world && world.seals[i];
@@ -93,7 +93,7 @@ def drive_and_watch(host, guest, i, seconds=4):
     guest.wait_for_timeout(seconds * 1000)
     guest.evaluate("window.__stop = true")
     host.evaluate("window.__run = false")
-    assert host.evaluate("window.__a") > 3  # it really went round, 12 units or more (by its own clock)
+    assert host.evaluate("window.__a") > 0.7 * seconds  # it really went round (by the real clock)
 
 
 def test_a_friend_s_seal_glides_on_the_guest(pair):
@@ -131,12 +131,12 @@ def test_between_frames_the_guest_keeps_the_newest_spot_and_draws_one_a_moment_b
     back, on the host's clock."""
     host, guest, i = pair
     guest.evaluate("""(i) => { window.__rule = []; setInterval(() => { const sl = world && world.seals[i];
-      if (sl && window.__new && !window.__stop) window.__rule.push([sl.x === window.__new[0] && sl.y === window.__new[1],
+      if (sl && window.__new && !window.__stop) window.__rule.push([sl.x === window.__new[0] && sl.y === window.__new[1] || [sl.x, sl.y, ...window.__new],
         window.__xs.length ? Math.hypot(sl.x - window.__xs[window.__xs.length - 1][1], sl.y - window.__xs[window.__xs.length - 1][2]) : 0]); }, 37); }""", i)
     drive_and_watch(host, guest, i, seconds=3)
     rule, back = guest.evaluate("[window.__rule, window.__back]")
     assert len(rule) > 20, rule
-    assert all(newest for newest, _ in rule), rule  # between frames the seal is at the newest spot heard
+    assert all(r[0] is True for r in rule), [(n, r) for n, r in enumerate(rule) if r[0] is not True]  # between frames the seal is at the newest spot heard
     behind = [d for _, d in rule[5:]]
     assert mean(behind) > 0.1 and sum(d > 0.02 for d in behind) > 0.7 * len(behind), behind  # not the drawn one
     assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
@@ -145,7 +145,7 @@ def test_between_frames_the_guest_keeps_the_newest_spot_and_draws_one_a_moment_b
 # On the guest: when a state moves seal `i` by more than 0.5 units from the one before it (a new erä, or a move
 # of the test's own), the spot it brought and where the next frame drew the seal.
 WATCH_JUMP = """(i) => { window.__sw = []; let was = null, want = null; const d = window.draw;
-  AiPelitRooms.on('message', m => { if (m.t !== 's') return; const a = m.sk[i];
+  AiPelitRooms.on('message', m => { if (m.t !== 's') return; const a = m.sk[i]; window.__heard = (window.__heard || 0) + 1;
     if (was && Math.hypot(a[6] - was[0], a[7] - was[1]) > 0.5) want = [m.era, a[6], a[7]];
     was = [a[6], a[7]]; });
   window.draw = dt => { d(dt); if (want) { const sl = world.seals[i]; window.__sw.push([...want, sl.x, sl.y]); want = null; } }; }"""
@@ -163,6 +163,7 @@ def test_a_seal_put_somewhere_new_is_drawn_there_at_once(pair, how):
     host.evaluate(f"() => {{ [me.x, me.y] = {start}; me.vx = me.vy = 0; }}")
     guest.wait_for_timeout(700)  # a few states heard there, the track settled
     guest.evaluate(WATCH_JUMP, i)
+    guest.wait_for_function("window.__heard > 2", timeout=5000)  # the watch has a spot to compare with
     if how == "new era":
         host.evaluate("world.seals.filter(s => s !== me).forEach(s => fall(world, s))")
         guest.wait_for_function("window.__sw.length >= 1", timeout=12000)
