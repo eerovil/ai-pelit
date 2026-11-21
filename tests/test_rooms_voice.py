@@ -498,12 +498,18 @@ def test_a_player_that_paused_on_an_error_plays_again_with_no_tap_hint(phones):
     hold(a)
     host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
     host.wait_for_function("[...document.querySelectorAll('audio')].every(e => !e.paused)")
-    host.evaluate("""(() => { window.__plays = 0; const p0 = HTMLMediaElement.prototype.play;
-      HTMLMediaElement.prototype.play = function () { __plays++; return p0.call(this); };
+    # The room's own check runs every second and would start it too, so the restart must come
+    # well before that, and the hint must not show on any of the room's redraws (every 250 ms).
+    host.evaluate("""(() => { const t0 = performance.now(); window.__playAt = 0; window.__hint = false;
+      const p0 = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () { if (!__playAt) __playAt = performance.now() - t0; return p0.call(this); };
+      const iv = setInterval(() => { if (document.getElementById('aipr-talk').innerText.includes('Napauta')) __hint = true; }, 20);
+      setTimeout(() => clearInterval(iv), 700);
       const e = document.querySelectorAll('audio')[0]; e.pause(); e.dispatchEvent(new Event('error')); })()""")
-    assert "Napauta" not in host.locator("#aipr-talk").inner_text()
-    host.wait_for_function("__plays > 0 && [...document.querySelectorAll('audio')].every(e => !e.paused)", timeout=900)
-    assert "Napauta" not in host.locator("#aipr-talk").inner_text()
+    host.wait_for_timeout(800)
+    assert not host.evaluate("__hint")
+    assert 0 < host.evaluate("__playAt") < 500
+    assert host.evaluate("[...document.querySelectorAll('audio')].every(e => !e.paused)")
     a.mouse.up()
 
 

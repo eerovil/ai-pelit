@@ -172,4 +172,4 @@ def test_a_hidden_page_stays_asleep_and_a_frames_stopped_sound_wakes_on_a_tap_in
     page.mouse.click(180, 450)
     inner.wait_for_function("ac.state === 'running'", timeout=3000, polling=FRAME_POLL)
     page.mouse.click(180, 100)
-    page.wait_for_function("ac.state === 'running'", timeout=3000)
+    page.wait_for_function("ac.state === 'running'", timeout=3000, polling=FRAME_POLL)

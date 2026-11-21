@@ -742,9 +742,14 @@
       a.autoplay = true; a.setAttribute('playsinline', '');
       a.style.display = 'none';
       // Chromium sometimes fails a call's player with a decode error as its sound starts, which
-      // pauses it until the next check a second later (#512): start it again at once.
+      // pauses it until the next check a second later (#512): load the call's sound again and
+      // start it, at most once a second (heal() keeps trying after that).
       a.addEventListener('error', function () {
-        setTimeout(function () { if (p.audio === a && a.srcObject && a.paused) start(a); }, 100);
+        if (Date.now() - (a.retried || 0) < 1000) return;
+        a.retried = Date.now();
+        setTimeout(function () {
+          if (p.audio === a && a.srcObject && a.paused) { a.srcObject = a.srcObject; start(a); }
+        }, 100);
       });
       a.addEventListener('playing', function () { a.held = false; });
       document.body.appendChild(a);
