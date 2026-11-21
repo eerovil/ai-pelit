@@ -102,14 +102,20 @@ def run_and_watch(host, run, watch, others):
     run.evaluate("Object.assign(player, { x: 1, y: 11 })")
     watch.wait_for_function(f"Math.abs(people[{me}].x - 1) < 0.05 && Math.abs(people[{me}].y - 11) < 0.05", timeout=5000)
     watch.evaluate(SAMPLE, me)
+    if run is not host:
+        # On each friend's spot the host's rules know it at once (not where its screen draws them), and the
+        # screen draws it a moment back.
+        host.evaluate("""(me) => { window.__rule = []; AiPelitRooms.on('message', (m, from) => {
+          if (m.t === 'kme' && from === people[me].id && phase === 'count') window.__rule.push([m.x, people[me].x, m.s - people[me].tr.time]); }); }""", me)
     run.evaluate("joy = { id: -1, ox: 100, oy: 100, x: 140, y: 100 }")
     watch.wait_for_function("window.__xs.length >= 200", timeout=20000)
     run.evaluate("letGo()")
     assert run.evaluate("player.x") > 8  # it really ran, not into a wall
     glides(watch)
-    # The host's rules know the friend where their phone last said, not where its screen draws them.
     if run is not host:
-        x = run.evaluate("player.x")
-        host.wait_for_function(f"Math.abs(people[{me}].x - {x}) < 0.05")
+        rule = host.evaluate("window.__rule")
+        assert len(rule) > 15, rule
+        assert all(abs(said - known) < 0.01 for said, known, _ in rule), rule  # the rules: the newest spot
+        assert all(back > 0.03 for _, _, back in rule[5:]), rule  # drawn at least 30 ms back on the friend's clock
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
