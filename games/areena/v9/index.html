@@ -475,13 +475,31 @@ function fightClock() {
 // under a quarter second, less than the longest the drawing waits (0.25 s): a late message would
 // leave the drawn moment before the oldest spot. So a spot goes on a track only TR_GAP s or more
 // after the last one there (8 then span 0.42 s or more), and always when it is a jump (drawn at once).
-const TR_GAP = 0.06, TR_JUMP = 120;
+// A spot held back waits (f.trWait, the newest one heard) and goes on the track once the drawn moment
+// comes within TR_NEAR s of the track's newest spot: without it the drawn moment could pass the newest
+// spot on the track by more than the track's 0.05 s guess (extra) and the fighter would stand still
+// until the next spot went on, with newer spots heard all the while.
+const TR_GAP = 0.06, TR_JUMP = 120, TR_NEAR = 0.03;
+function onTrack(f, st, x, y, a, t) {
+  f.tr.push(st, { x, y }, a);
+  f.trT = t; f.trX = x; f.trY = y; f.trWait = null;
+}
 function toTrack(f, st) {
   const a = fightClock(), t = st === null ? a : st;
-  if (net.fresh) f.tr.snap(st, f, a);
-  else if (t >= f.trT && t - f.trT < TR_GAP && Math.hypot(f.x - f.trX, f.y - f.trY) <= TR_JUMP) return;
-  else f.tr.push(st, f, a);
-  f.trT = t; f.trX = f.x; f.trY = f.y;
+  if (net.fresh) { f.tr.snap(st, f, a); f.trT = t; f.trX = f.x; f.trY = f.y; f.trWait = null; return; }
+  // Older than the newest spot on the track (heard out of order): already past. A clock a second or
+  // more back is a restarted one, which the track takes as a jump.
+  if (t <= f.trT && t > f.trT - 1) return;
+  if (t > f.trT && t - f.trT < TR_GAP && Math.hypot(f.x - f.trX, f.y - f.trY) <= TR_JUMP) {
+    if (!f.trWait || t > f.trWait[4]) f.trWait = [st, f.x, f.y, a, t];
+    return;
+  }
+  onTrack(f, st, f.x, f.y, a, t);
+}
+// Before a frame: the waiting spot goes on when the drawing is about to need it.
+function trackNeeds(f) {
+  const w = f.trWait;
+  if (w && (f.tr.time === null || f.tr.time >= f.trT - TR_NEAR)) onTrack(f, w[0], w[1], w[2], w[3], w[4]);
 }
 function flip() { return !!(net && net.flip); }
 function nameFromMenu() { playerName = nameIn.value.trim().slice(0, 14); save('nimi', playerName); }
@@ -860,6 +878,7 @@ function asDrawn() {
   const kept = [];
   for (const f of fighters) {
     if (ownHere(f) || !f.tr.size()) continue;
+    trackNeeds(f);
     const o = f.tr.at(fightClock());
     kept.push([f, f.x, f.y]); f.x = f.seenX = o.x; f.y = f.seenY = o.y;
   }

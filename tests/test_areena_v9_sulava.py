@@ -174,22 +174,31 @@ DRAWN = """(i) => { window.__drawn = []; const a = window.asDrawn;
     window.__drawn.push([performance.now() / 1000, fighters[i].x, fighters[i].y]); return kept; }; }"""
 
 
-def test_eight_spots_on_a_track_span_more_than_its_longest_wait(site, browser):
+def test_on_a_laggy_link_the_drawn_moment_stays_within_the_tracks_spots(site, browser):
     """A track keeps 8 spots. The host sends 30 states a second, and 8 of them span under a quarter second,
-    less than the longest the drawing may wait (0.25 s). A spot goes on the track only 0.06 s or more after
-    the one before it, so its 8 cover 0.42 s or more; the messages and how often they go are as before."""
+    less than the longest the drawing may wait (0.25 s): on a laggy link the drawn moment would fall before
+    the oldest spot, and the fighter would stand on it. A spot goes on the track only 0.06 s or more after the
+    one before it (or when the drawing comes near the newest one), so on a link 0-250 ms late the drawn moment
+    stays within the spots kept; the messages and how often they go are as before."""
     host, guest = phones(site, browser)
     me = index(host)
-    guest.evaluate("""(i) => { window.__in = []; window.__sent = []; const tr = fighters[i].tr, p = tr.push;
+    host.evaluate(JITTER.replace("rnd() * 90", "rnd() * 250"))
+    guest.evaluate("""(i) => { window.__in = []; window.__sent = []; window.__at = [];
+      const tr = fighters[i].tr, p = tr.push;
       AiPelitRooms.on('message', m => { if (m.t === 's') window.__sent.push(m.ck); });
-      tr.push = (t, v, a) => { window.__in.push(t); return p(t, v, a); }; }""", me)
-    guest.wait_for_function("window.__in.length >= 20", timeout=10000)
-    pushed, sent = guest.evaluate("[window.__in, window.__sent]")
+      tr.push = (t, v, a) => { const n = window.__in; if (!n.length || t > n[n.length - 1]) n.push(t); return p(t, v, a); };
+      const d = window.asDrawn;
+      window.asDrawn = () => { const k = d(), n = window.__in;
+        if (n.length >= 10) window.__at.push([tr.time, n[n.length - 8], tr.delay]); return k; }; }""", me)
+    guest.wait_for_function("window.__at.length >= 240", timeout=20000)
+    at, sent = guest.evaluate("[window.__at, window.__sent]")
     gaps = [b - a for a, b in zip(sent, sent[1:])]
     # The host still sends one state each frame once 1/30 s has passed (two or three 60 Hz frames).
     assert mean(gaps) < 0.055, gaps
-    assert min(b - a for a, b in zip(pushed, pushed[1:])) >= 0.06 - 1e-9, pushed
-    assert all(b - a >= 0.42 for a, b in zip(pushed, pushed[7:])), pushed
+    # The link is laggy enough that the drawing waits long.
+    assert max(d for _, _, d in at[-60:]) > 0.2, [round(d, 3) for _, _, d in at]
+    before = [round(oldest - t, 3) for t, oldest, _ in at if t < oldest]
+    assert not before, before
     assert not host.errors + guest.errors
 
 
