@@ -353,14 +353,33 @@ function drawSnow(w) {
 function drawSeal(w, sl) {
   const R = radiusOf(sl) * V.s;
   if (sl.out) {
-    // In the water: a head bobbing where it went in, with rings.
+    // In the water: a head bobbing where it went in, with rings. Lohkare's end comes first: the block
+    // drops onto the seal, which squashes flat, shards fly, and both sink through the ice.
     const t = sl.out, x = X(sl.outX), y = Y(sl.outY);
-    cx.strokeStyle = 'rgba(220,240,255,' + Math.max(0, 0.7 - t * 0.3) + ')'; cx.lineWidth = 2;
-    for (let k = 0; k < 3; k++) { const rr = (t * 30 + k * 12) % 50; cx.beginPath(); cx.ellipse(x, y, rr, rr * 0.6, 0, 0, TAU); cx.stroke(); }
-    if (sl.crushed && t < 1.2) {
-      cx.fillStyle = 'rgba(200,235,255,' + (1 - t / 1.2) + ')';
-      cx.fillRect(x - R, y - R - (1.2 - t) * 30, R * 2, R * 2);
+    if (sl.crushed && t < CRUSH_T) {
+      const s = R * 2.2;
+      if (t < CRUSH_DROP) {
+        const k = t / CRUSH_DROP;
+        cx.fillStyle = '#8a93a3'; cx.beginPath(); cx.ellipse(x, y, R, R * (1 - 0.3 * k * k), 0, 0, TAU); cx.fill();
+        cx.fillStyle = '#bfe6ff'; cx.fillRect(x - s / 2, y - s / 2 - (1 - k * k) * 70, s, s);
+        cx.strokeStyle = '#7fb4d8'; cx.lineWidth = 2; cx.strokeRect(x - s / 2, y - s / 2 - (1 - k * k) * 70, s, s);
+        return;
+      }
+      const k = Math.min(1, (t - CRUSH_DROP) / (CRUSH_T - CRUSH_DROP - 0.2)), d = t - CRUSH_DROP;
+      cx.fillStyle = '#0d3a66'; cx.beginPath(); cx.arc(x, y, R * 1.25, 0, TAU); cx.fill();
+      cx.fillStyle = '#8a93a3'; cx.beginPath(); cx.ellipse(x, y, R * 1.2 * (1 - k * 0.6), R * 0.4 * (1 - k), 0, 0, TAU); cx.fill();
+      const b = s * (1 - k * 0.7), sh = (1 - k) * Math.sin(t * 60) * 2;
+      cx.globalAlpha = 1 - k; cx.fillStyle = '#bfe6ff'; cx.fillRect(x - b / 2 + sh, y - b / 2, b, b);
+      for (let i = 0; i < 8; i++) {
+        const a = i * TAU / 8 + sl.i, r = R + d * (40 + (i % 3) * 12);
+        cx.fillRect(x + Math.cos(a) * r - 3, y + Math.sin(a) * r - 3, 6, 6);
+      }
+      cx.globalAlpha = 1;
+      return;
     }
+    const tw = sl.crushed ? t - CRUSH_T : t;
+    cx.strokeStyle = 'rgba(220,240,255,' + Math.max(0, 0.7 - tw * 0.3) + ')'; cx.lineWidth = 2;
+    for (let k = 0; k < 3; k++) { const rr = (tw * 30 + k * 12) % 50; cx.beginPath(); cx.ellipse(x, y, rr, rr * 0.6, 0, 0, TAU); cx.stroke(); }
     cx.fillStyle = '#7a7f8a'; cx.beginPath(); cx.arc(x, y + Math.sin(clock * 3 + sl.i) * 2, V.s * 0.45, 0, TAU); cx.fill();
     cx.fillStyle = HATS[sl.hat % HATS.length].c; cx.beginPath(); cx.arc(x, y - V.s * 0.2 + Math.sin(clock * 3 + sl.i) * 2, V.s * 0.28, Math.PI, TAU); cx.fill();
     return;

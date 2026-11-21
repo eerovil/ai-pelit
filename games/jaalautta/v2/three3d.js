@@ -144,7 +144,39 @@ window.J3D = { ready: false, failed: false };
     const splashM = new T.MeshBasicMaterial({ color: '#dff2ff', transparent: true, depthWrite: false });
     const cloudM = new T.MeshStandardMaterial({ color: '#5a6070', roughness: 1 });
     const iceM = new T.MeshStandardMaterial({ color: '#bfe6ff', roughness: 0.15, transparent: true, opacity: 0.85 });
-    const crushM = new T.MeshStandardMaterial({ color: '#d6efff', roughness: 0.15, transparent: true, opacity: 0.9 });
+    // Lohkare's end (sl.out counts the time since): the held block drops onto the seal from where it
+    // hung, the seal squashes flat, ice shards fly, and block and seal sink through a hole in the ice.
+    const shadeM = new T.MeshBasicMaterial({ color: '#0a2a48', transparent: true, depthWrite: false });
+    function crush(sl, m, t, r) {
+      const s = 0.55 + LOHK_T * 0.07, h0 = TOP + r * 2.1 + 0.6, x = sl.outX, z = sl.outY;
+      m.quaternion.setFromAxisAngle(up, -sl.face);
+      if (t < CRUSH_DROP) {
+        // Falling, faster and faster; the seal still stands below it.
+        const k = t / CRUSH_DROP, low = TOP + r * 0.4 + s / 2;
+        mesh(box, iceM, x, h0 - (h0 - low) * k * k, z, s).rotation.y = sl.face;
+        // Its shadow on the ice, darker and sharper as it comes down.
+        mesh(glowG, shadeM, x, ON, z, s * (1.3 - 0.4 * k)); shadeM.opacity = 0.15 + 0.35 * k;
+        m.position.set(x, TOP, z); m.scale.set(r, r * (1 - 0.3 * k * k), r);
+        return;
+      }
+      const k = Math.min(1, (t - CRUSH_DROP) / (CRUSH_T - CRUSH_DROP - 0.2)), e = k * k;
+      // The hole it breaks, the block shuddering down into it, the seal flattened under it.
+      mesh(holeG, holeM, x, TOP - 0.02, z, r * 1.25, 1, r * 1.25);
+      const shake = (1 - k) * Math.sin(t * 60) * 0.06;
+      mesh(box, iceM, x + shake, TOP + r * 0.3 + s / 2 - e * (s + r * 1.5), z, s).rotation.y = sl.face;
+      m.position.set(x, TOP - e * r * 1.4, z); m.scale.set(r * 1.3, r * 0.3, r * 1.3);
+      // Eight shards out from the hit, up and down again onto the ice.
+      const d = t - CRUSH_DROP;
+      for (let i = 0; i < 8; i++) {
+        const a = i * TAU / 8 + sl.i, sp = 2.2 + (i % 3) * 0.6;
+        const y = Math.max(TOP + 0.05, TOP + 0.3 + d * (2.4 + (i % 2)) - 4.9 * d * d);
+        const o = mesh(box, iceM, x + Math.cos(a) * (r + d * sp), y, z + Math.sin(a) * (r + d * sp), 0.3 * (1 - k * 0.6));
+        o.rotation.set(d * 9 + i, d * 7, 0);
+      }
+      // A splash ring where it broke through.
+      const rr = 0.4 + d * 2.2, o = mesh(ringG, splashM, x, TOP + 0.03, z, rr, 1, rr);
+      o.material = splashM; splashM.opacity = Math.max(0, 0.8 - d);
+    }
     // Inside a floe part's outline, holes or not (onIce() in world.js counts an open hole as water).
     const inFloe = (w, x, y) => w.parts.some(p => Math.hypot(x - p.x, y - p.y) <= edgeAt(p, Math.atan2(y - p.y, x - p.x)));
     const LOOK = 1.25;  // seals drawn a little larger than their hit circle
@@ -163,13 +195,14 @@ window.J3D = { ready: false, failed: false };
           // that went through a hole or was crushed by Lohkare is in the water inside the floe: its head
           // shows above the ice's top there, not under the slab at sea level.
           const t = sl.out, wl = inFloe(w, sl.outX, sl.outY) ? TOP : SEA_Y;
+          if (sl.crushed && t < CRUSH_T) { crush(sl, m, t, R * LOOK); continue; }
+          // A crushed seal's head comes up only once the block has pressed it through.
+          const tw = sl.crushed ? t - CRUSH_T : t;
           m.position.set(sl.outX, wl - 0.75 * R * LOOK + Math.sin(clock * 3 + sl.i) * 0.06, sl.outY);
           m.quaternion.setFromAxisAngle(up, -sl.face);
-          // Lohkare's end: the ice block drops on the seal and fades, as the 2D block does.
-          if (sl.crushed && t < 1.2) { const b = mesh(box, crushM, sl.outX, wl + R * LOOK + (1.2 - t) * 2.5, sl.outY, R * LOOK * 1.6); b.material = crushM; crushM.opacity = 0.9 * (1 - t / 1.2); }
           for (let k = 0; k < 3; k++) {
-            const rr = ((t * 1.5 + k * 0.6) % 2.5) + 0.3, o = mesh(ringG, splashM, sl.outX, wl + (wl === TOP ? 0.03 : 0.1), sl.outY, rr, 1, rr * 0.9);
-            o.material = splashM; splashM.opacity = Math.max(0, 0.7 - t * 0.3);
+            const rr = ((tw * 1.5 + k * 0.6) % 2.5) + 0.3, o = mesh(ringG, splashM, sl.outX, wl + (wl === TOP ? 0.03 : 0.1), sl.outY, rr, 1, rr * 0.9);
+            o.material = splashM; splashM.opacity = Math.max(0, 0.7 - tw * 0.3);
           }
           continue;
         }

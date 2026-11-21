@@ -250,19 +250,24 @@ def test_the_four_power_ups(site, context):
       at(SIZE_T);
       for (let i = 0; i < 120 * 8.1; i++) { a.x = -4; b.x = 4; a.y = b.y = 0; tick(w, STEP); }
       out.worn = [a.size, b.size];
-      // Ukkonen: passed on a touch, not straight back (grace), and stuns the others at the end.
+      // Ukkonen: passed on the first touch, whoever pushes whom (#478), and stuns the others at the end.
       w = mk(3); w.ph = 'play'; const [c, d, e] = w.seals;
-      Object.assign(c, { x: 0, y: 0 }); Object.assign(d, { x: 1.7, y: 0 }); Object.assign(e, { x: -6, y: 0 });
-      givePower(c, 'ukko'); tick(w, STEP);
-      out.grace = [!!c.fuse, !d.fuse];
-      for (let i = 0; i < 120 * 0.6; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
-      out.passed = [!c.fuse, d.fuse && d.fuse.k];
-      // Never straight back to the seal that gave it, however long they touch.
-      for (let i = 0; i < 120 * 1.5; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
-      out.notBack = !!d.fuse && !c.fuse;
-      // A third seal can take it, and from there it may go back to the first one.
-      out.third = [passFuse(d, e), !d.fuse && !!e.fuse, passFuse(e, d), (e.fuse.g = 0, passFuse(e, d)), passFuse(e, c), !!c.fuse];
-      d.fuse = c.fuse; c.fuse = null; d.fuse.from = 'x';
+      const park = () => { Object.assign(c, { x: 0, y: 0, vx: 0, vy: 0 }); Object.assign(d, { x: 6, y: 0, vx: 0, vy: 0 }); Object.assign(e, { x: -6, y: 0, vx: 0, vy: 0 }); };
+      // The mover slides into the one standing still, until they touch.
+      const bump = (mover, still) => { for (let i = 0; i < 240; i++) { mover.vx = 4 * Math.sign(still.x - mover.x); mover.vy = 0; tick(w, STEP); if (Math.hypot(mover.x - still.x, mover.y - still.y) <= radiusOf(mover) + radiusOf(still) + 0.01) break; } };
+      park(); givePower(c, 'ukko'); c.fuse.t = 99;
+      bump(d, c); out.pushedIntoHolder = [!c.fuse, !!d.fuse];
+      park(); c.fuse = d.fuse; d.fuse = null; c.fuse.from = null;
+      bump(c, d); out.holderPushes = [!c.fuse, !!d.fuse];
+      // Held together, it stays with the one that took it; once parted, the next touch passes it back.
+      for (let i = 0; i < 120; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
+      out.oneTouchOnce = [!c.fuse, !!d.fuse];
+      d.x = 6; tick(w, STEP); d.x = 1.7; c.x = 0; tick(w, STEP);
+      out.back = [!!c.fuse, !d.fuse];
+      // A third seal takes it at once.
+      out.third = [passFuse(c, e), !c.fuse && !!e.fuse];
+      c.fuse = e.fuse; e.fuse = null; Object.assign(e, { x: -6, y: 0 });
+      d.fuse = c.fuse; c.fuse = null; d.fuse.from = null;
       d.fuse.t = 0.001; d.x = 6; c.x = 0; tick(w, STEP);
       out.stun = [c.stun > 0, e.stun > 0, d.stun === 0];
       // Lohkare: its last holder goes through the ice.
@@ -281,10 +286,11 @@ def test_the_four_power_ups(site, context):
     }""")
     assert r["size"] == [True, True, True, True]
     assert r["worn"] == [None, None]
-    assert r["grace"] == [True, True]
-    assert r["passed"] == [True, "ukko"]
-    assert r["notBack"]
-    assert r["third"] == [True, True, False, False, True, True]
+    assert r["pushedIntoHolder"] == [True, True]
+    assert r["holderPushes"] == [True, True]
+    assert r["oneTouchOnce"] == [True, True]
+    assert r["back"] == [True, True]
+    assert r["third"] == [True, True]
     assert r["ease"] == [True, True, True, True]
     assert r["stun"] == [True, True, True]
     assert r["crush"] == [True, True]
@@ -599,4 +605,35 @@ def test_the_pause_button_leaves_the_stars_room_on_a_narrow_phone(site, context,
     }""")
     assert right <= btn["x"] or bottom <= btn["y"], (right, bottom, btn)
     assert right <= size[0]
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("d3", [True, False])
+def test_lohkare_drops_on_its_holder_and_presses_it_through_the_ice(site, context, d3):
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if d3 and page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    if not d3:
+        page.evaluate("J3D.ready = false; J3D.failed = true")
+    go(page)
+    page.wait_for_function("world.t > 1")
+    page.evaluate("""() => {
+      const p = world.parts[0]; world.ring = null; world.ringNext = 1e9;
+      world.seals.forEach((s, i) => { s.x = p.x - 4; s.y = p.y - 5 + i * 3; s.vx = s.vy = 0; });
+      brains = world.seals.map(() => null);
+      const c = world.seals[1]; c.x = p.x + 3; c.y = p.y; givePower(c, 'lohk'); c.fuse.t = 0.02;
+    }""")
+    page.wait_for_function("world.seals[1].out > 0")
+    # Mid-crush (the block through, the hole open) the spot is dark water; every step draws.
+    ms = [0.05, 0.15, 0.3, 0.6, 0.9, 1.2, 1.5]
+    for t in ms:
+        page.evaluate(f"() => {{ world.seals[1].out = {t}; }}")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        if t == 0.9:
+            if d3:
+                x, y = page.evaluate("J3D.project(world.seals[1].outX, 0.14, world.seals[1].outY + 0.9)")
+            else:
+                x, y = page.evaluate("[X(world.seals[1].outX), Y(world.seals[1].outY) + 0.9 * V.s]")
+            assert ice_brightness(page, x, y) < 120, t
     assert page.errors == []

@@ -28,7 +28,9 @@ const SUDDEN_AT = 60, MELT = 1 / 20;
 // it, the time running out, or the ice under it going sends it in. A stunned seal cannot press.
 const TEETER_V = 6.5, TEETER_T = 1.6, TEETER_N = 5, TEETER_BACK = 4;
 const RING_FIRST = 6, RING_EVERY = 10, RING_COME = 1, RING_OPEN = 4, RING_R = 1.3;
-const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, PASS_GRACE = 0.5, STUN_T = 1.5;
+// Lohkare's crush as drawn: the block drops for CRUSH_DROP s, then presses the seal through by CRUSH_T.
+const CRUSH_DROP = 0.22, CRUSH_T = 1.3;
+const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, STUN_T = 1.5;
 const POWERS = ['jatti', 'pikku', 'ukko', 'lohk'];
 const POWER_NAMES = { jatti: 'Jätti', pikku: 'Pikkuinen', ukko: 'Ukkonen', lohk: 'Lohkare' };
 const ERA_PAUSE = 2.6, COUNT_T = 3, STARS_TO_WIN = 3;
@@ -291,14 +293,17 @@ function nudge(a, b) {
   if ((o.vx * dx + o.vy * dy) / d > 0.5) { t.teeter = -1; o.hit++; t.hit++; return; }
   o.x -= dx / d * (min - d); o.y -= dy / d * (min - d);
 }
-// A fuse (Ukkonen, Lohkare) goes to the seal its holder touches, unless the holder only just got it.
+// A fuse (Ukkonen, Lohkare) goes to whichever seal its holder touches, whoever pushed whom (#478).
+// Only straight back to the seal that just gave it waits until the two have parted, so one touch
+// passes it once and a new touch passes it again.
 function passFuse(from, to) {
-  // Never straight back to the seal that gave it: it must go to a third seal first.
-  if (!from.fuse || to.fuse || from.fuse.g > 0 || to.id === from.fuse.from) return false;
-  to.fuse = { k: from.fuse.k, t: from.fuse.t, g: PASS_GRACE, from: from.id };
+  if (!from.fuse || to.fuse || to.id === from.fuse.from) return false;
+  to.fuse = { k: from.fuse.k, t: from.fuse.t, from: from.id };
   from.fuse = null;
   return true;
 }
+// The giver may take it back once it is this far clear of the holder's edge.
+const PART_GAP = 0.3;
 function fall(w, sl) {
   sl.crushed = false;   // a crush sets it again right after
   sl.out = 1e-6; sl.outX = sl.x; sl.outY = sl.y;
@@ -346,7 +351,9 @@ function powers(w, h) {
     if (sl.out) continue;
     if (sl.size) { sl.size.t -= h; if (sl.size.t <= 0) sl.size = null; }
     if (sl.fuse) {
-      sl.fuse.t -= h; if (sl.fuse.g > 0) sl.fuse.g -= h;
+      sl.fuse.t -= h;
+      const gv = sl.fuse.from && w.seals.find(o => o.id === sl.fuse.from);
+      if (sl.fuse.from && (!gv || gv.out || Math.hypot(gv.x - sl.x, gv.y - sl.y) > radiusOf(gv) + radiusOf(sl) + PART_GAP)) sl.fuse.from = null;
       if (sl.fuse.t <= 0) {
         const k = sl.fuse.k; sl.fuse = null;
         if (k === 'ukko') { for (const o of w.seals) if (o !== sl && !o.out) { o.stun = STUN_T; o.hit++; } }
@@ -376,7 +383,7 @@ function powers(w, h) {
 function givePower(sl, k) {
   sl.got++; sl.gotK = k;
   if (k === 'jatti' || k === 'pikku') sl.size = { k, t: SIZE_T };
-  else sl.fuse = { k, t: k === 'ukko' ? UKKO_T : LOHK_T, g: PASS_GRACE };
+  else sl.fuse = { k, t: k === 'ukko' ? UKKO_T : LOHK_T, from: null };
 }
 
 // ---- The floe breaks smaller after SHRINK_AT seconds ----
