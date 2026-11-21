@@ -119,13 +119,19 @@ function takeQ(w, h) {
   if (lead && lead.pts > 0 && w.rand() < 0.5) { h.gotK = 'lumi'; lead.stun = STUN_T; }
   else { h.gotK = 'jousi'; h.fast = FAST_T; }
 }
-// Aitaus: the squares that are not this hare's split into areas; every area but the biggest that
-// has no other hare in it (standing or on its way) turns this hare's colour. Rocks and holes are
-// part of no area. So a line across a corner, against the board's edge, fills the corner.
+// Aitaus: the squares that are not this hare's split into areas; once there are two or more, every
+// area with no other hare in it (standing or on its way) turns this hare's colour, however big
+// (spec D9). Rocks and holes are part of no area. So a line across the board, against its edges,
+// fills the side the others are not on.
 function fillEnclosed(w, h) {
   const n = w.n, seen = new Uint8Array(n * n), areas = [];
+  // A square another hare stands on or hops from is open ground even when it is this hare's, so
+  // a hare on one of my squares inside the ring keeps it from filling.
+  const occ = new Uint8Array(n * n);
+  for (const o of w.hares) if (o !== h) { occ[o.y * n + o.x] = 1; occ[o.fy * n + o.fx] = 1; }
+  const wall = k => (w.tiles[k] === h.i && !occ[k]) || w.tiles[k] <= ROCK;
   for (let k = 0; k < n * n; k++) {
-    if (seen[k] || w.tiles[k] === h.i || w.tiles[k] <= ROCK) continue;
+    if (seen[k] || wall(k)) continue;
     const cells = [k], free = { cells, other: false };
     seen[k] = 1;
     for (let q = 0; q < cells.length; q++) {
@@ -134,19 +140,19 @@ function fillEnclosed(w, h) {
         const nx = x + dx, ny = y + dy;
         if (!inside(w, nx, ny)) continue;
         const nk = ny * n + nx;
-        if (seen[nk] || w.tiles[nk] === h.i || w.tiles[nk] <= ROCK) continue;
+        if (seen[nk] || wall(nk)) continue;
         seen[nk] = 1; cells.push(nk);
       }
     }
     for (const o of w.hares) if (o !== h && (cells.includes(o.y * n + o.x) || cells.includes(o.fy * n + o.fx))) free.other = true;
     areas.push(free);
   }
-  if (areas.length < 2) return 0;
-  let big = areas[0];
-  for (const a of areas) if (a.cells.length > big.cells.length) big = a;
+  // Nothing is cut off until the open ground is in two or more parts (a hare alone on my square
+  // is not a part).
+  if (areas.filter(a => a.cells.some(k => w.tiles[k] !== h.i)).length < 2) return 0;
   let filled = 0;
   for (const a of areas) {
-    if (a === big || a.other) continue;
+    if (a.other) continue;
     for (const k of a.cells) { w.tiles[k] = h.i; filled++; }
   }
   return filled;

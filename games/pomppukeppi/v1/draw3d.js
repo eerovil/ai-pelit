@@ -96,7 +96,7 @@ function buildBoard(w) {
     if (w.tiles[k] === HOLE) { const h = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.04, 20), holeM); h.position.set(x, 0.07, z); g.add(h); }
   }
   V3.scene.add(g);
-  V3.board = g; V3.n = n; V3.boardN = w.board; V3.tiles = tiles; V3.tileCol = new Array(n * n).fill(null); V3.flash = new Float32Array(n * n);
+  V3.board = g; V3.n = n; V3.boardN = w.board; V3.tiles = tiles; V3.tileCol = new Array(n * n).fill(null); V3.tileHex = new Array(n * n).fill(null); V3.flash = new Float32Array(n * n);
 }
 
 // A hare on a pogo stick, facing +z. Its colour is its jumper and the stick's spring.
@@ -159,10 +159,12 @@ function render3d(w, me, dt) {
   let dirtyC = false, dirtyM = false;
   for (let k = 0; k < n * n; k++) {
     const t = w.tiles[k];
-    if (t !== V3.tileCol[k]) {
-      if (V3.tileCol[k] !== null && t >= 0) V3.flash[k] = 0.25;
-      V3.tileCol[k] = t;
-      const base = t >= 0 ? COLORS[w.hares[t] ? w.hares[t].col : t] : t === BLANK ? ((k % n + ((k / n) | 0)) % 2 ? '#e6ddc2' : '#f0e9d4') : '#5f9a3e';
+    // Redrawn when the owner changes (with a flash) or the owner's colour does (a room may swap a
+    // computer hare's colour with a phone's).
+    const base = t >= 0 ? COLORS[w.hares[t] ? w.hares[t].col : t] : t === BLANK ? ((k % n + ((k / n) | 0)) % 2 ? '#e6ddc2' : '#f0e9d4') : '#5f9a3e';
+    if (t !== V3.tileCol[k] || base !== V3.tileHex[k]) {
+      if (t !== V3.tileCol[k] && V3.tileCol[k] !== null && t >= 0) V3.flash[k] = 0.25;
+      V3.tileCol[k] = t; V3.tileHex[k] = base;
       tiles.setColorAt(k, V3.col.set(base)); dirtyC = true;
     }
     if (V3.flash[k] > 0) {
