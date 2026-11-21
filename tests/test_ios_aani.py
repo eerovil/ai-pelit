@@ -5,14 +5,9 @@ public/back.js says so for every game; rooms.js asks for 'play-and-record' while
 Chromium has no navigator.audioSession, so these tests give the page a stand-in, as Safari has it.
 Whether an iPhone then really sounds can only be heard on one."""
 
-from conftest import game_page, make_game
+from conftest import FRAME_POLL, game_page, make_game
 from test_rooms_lib import make_room, join  # noqa: F401
 from test_rooms_voice import browser, phones, hold  # noqa: F401
-
-# Waits in a game's own frame poll on a clock, not on the frame's animation frames (Playwright's
-# default). Under a loaded test run Chromium drew this empty frame no frame for seconds, so a wait
-# never looked again although the frame's sound was running 50 ms after the tap (#512).
-FRAME_POLL = 50
 
 SESSION = "Object.defineProperty(navigator, 'audioSession', { value: { type: 'auto' }, configurable: true });"
 

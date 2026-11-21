@@ -2,7 +2,7 @@
 (public/back.js). It sits between each game's Web Audio and the speaker, so it reaches published
 versions unchanged; the friends' voice in a room plays through <audio> elements and is not touched."""
 
-from conftest import game_page, make_game
+from conftest import FRAME_POLL, game_page, make_game
 
 # Records, under back.js's patch, every node connected straight to a speaker, and the gain on it.
 SPY = """(() => {
@@ -103,8 +103,7 @@ def test_a_frame_without_back_js_follows_the_page_around_it(site, context):
     page.goto(f"{site.url}games/kehys/v1/")
     page.wait_for_selector("#ai-pelit-back")
     inner = page.frames[1]
-    # On a clock, not on the empty frame's animation frames, which a loaded run may not draw (#512).
-    inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani", polling=50)
+    inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani", polling=FRAME_POLL)
     inner.evaluate("() => { const c = new AudioContext(); c.createOscillator().connect(c.destination); }")
     assert speaker_gains(inner) == [0.04]
 

@@ -329,6 +329,11 @@ def _playwright():
 # processor. These flags let it pick the graphics card (#248): on the AgentDeck host's GTX 1660
 # SUPER three 3D test files took 1 min 12 s of processor time instead of 20 min 52 s. With no card
 # it still gets SwiftShader. Off in GitHub CI, whose runner has no card and runs no 3D tests.
+# Waits in a game's own frame poll on a clock, not on the frame's animation frames (Playwright's
+# default). Under a loaded test run Chromium drew an empty frame no frame for seconds, so a wait
+# never looked again although the frame's sound was running 50 ms after the tap (#512).
+FRAME_POLL = 50
+
 GPU_ARGS = [] if os.environ.get("CI") else [
     "--use-angle=vulkan", "--enable-features=Vulkan", "--enable-gpu", "--ignore-gpu-blocklist"]
 
