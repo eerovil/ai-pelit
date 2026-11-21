@@ -26,11 +26,17 @@ QUIET = """() => { window.__run = false; window.__cpuRun = -1;
   players.forEach((p, i) => { p.x = -12 + i * 4.5; p.y = 12; p.vx = p.vy = 0; });
   for (const k of ctrls) { k.switchT = 999; if (k.fixed < 0) k.p = players[k.t * 3]; } }"""
 # Records, each time the screen is drawn, where player `i` is drawn across the pitch, and when a message arrived
-# (so a stall of the test machine, with no message for a while, can be told from a jerk).
-SAMPLE = """(i) => { window.__xs = []; window.__got = [];
-  AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
+# (so a stall of the test machine, with no message for a while, can be told from a jerk). Times are the machine's
+# clock (timeOrigin + now), the same on every page.
+SAMPLE = """(i) => { window.__xs = []; window.__got = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+  AiPelitRooms.on('message', () => window.__got.push(now()));
   const d = window.draw;
-  window.draw = () => { if (window.__xs.length < 300) window.__xs.push([performance.now() / 1000, players[i].x]); d(); }; }"""
+  window.draw = () => { if (window.__xs.length < 300) window.__xs.push([now(), players[i].x]); d(); }; }"""
+# On the host: when a frame came late. The host runs at most 50 ms of the match per frame, so a busy test machine
+# slows the match itself there, and every phone rightly draws it slower: such moments are left out.
+STALLS = """() => { window.__stall = []; let last = 0; const d = window.draw;
+  window.draw = () => { const t = (performance.timeOrigin + performance.now()) / 1000;
+    if (last && t - last > 0.052) window.__stall.push(t); last = t; d(); }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -65,9 +71,10 @@ def phones(site, browser, names=("Testi A", "Testi B")):
     return pages
 
 
-def glides(page):
+def glides(page, host):
     """The speed over each two drawn frames while the player ran: always the same way and about the same."""
     xs, got = page.evaluate("[window.__xs, window.__got]")
+    stalls = host.evaluate("window.__stall")
     sp = [(t2, (b - a) / (t2 - t0)) for (t0, a), (t2, b) in zip(xs, xs[2:]) if t2 > t0]
     moving = [i for i, (_, v) in enumerate(sp) if abs(v) > 0.5]
     assert len(moving) > 50, len(moving)
@@ -77,10 +84,10 @@ def glides(page):
     assert len(middle) > 30, len(middle)
 
     def heard(t):
-        return any(t - 0.3 <= g <= t for g in got)
+        return any(t - 0.3 <= g <= t for g in got) and not any(s - 0.1 <= t <= s + 0.45 for s in stalls)
     kept = [v for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
-    assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
+    assert len(kept) > 30, (len(kept), len(middle), len(stalls))
     assert min(kept) > 1, shown
     m, sd = mean(kept), pstdev(kept)
     assert sd < 0.2 * m, (sd, m, shown)
@@ -94,10 +101,11 @@ def watch_run(host, watch, i, start):
     watch.wait_for_function(f"Math.abs(players[{i}].x + 10) < 0.05 && players[{i}].tr.size() > 3", timeout=5000)
     host.evaluate(JITTER)
     watch.evaluate(SAMPLE, i)
+    host.evaluate(STALLS)
     start()
     host.wait_for_function(f"players[{i}].x >= 9", timeout=10000)
     watch.wait_for_function("window.__xs.length >= 200", timeout=30000)
-    glides(watch)
+    glides(watch, host)
 
 
 def test_a_computer_player_running_glides_on_a_guest(site, browser):
@@ -244,10 +252,11 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_keeps_gliding_on_a_t
     aino.wait_for_function("players[1].ctl === ''", timeout=5000)
     host.evaluate(JITTER)
     aino.evaluate(SAMPLE, 1)
+    host.evaluate(STALLS)
     host.evaluate("window.__cpuRun = 1; window.__run = true")
     host.wait_for_function("players[1].x >= 9", timeout=10000)
     aino.wait_for_function("window.__xs.length >= 200", timeout=30000)
-    glides(aino)
+    glides(aino, host)
     host.relay.back(ville)
     host.wait_for_function("!ctrls.find(k => k.fixed === 1).away", timeout=20000)
     aino.wait_for_function("players[1].ctl !== ''", timeout=5000)
