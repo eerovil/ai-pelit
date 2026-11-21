@@ -484,20 +484,37 @@ function onTrack(f, st, x, y, a, t) {
   f.tr.push(st, { x, y }, a);
   f.trT = t; f.trX = x; f.trY = y; f.trWait = null;
 }
+// While the room is paused, states still on the way land (the room tells each phone of the pause on its
+// own, so a friend's phone may pause before the host's clock stops). Put on the track then, they would
+// change the spot drawn at the held moment in one frame: the track eases such a change by the frame's
+// time, which stands still with the clock. So they wait in f.trPz (each newer one, at most 16) and go on
+// the track, in order, on the first frame after the pause, where the track eases the change in.
+const TR_PZ = 16;
 function toTrack(f, st) {
   const a = fightClock(), t = st === null ? a : st;
-  if (net.fresh) { f.tr.snap(st, f, a); f.trT = t; f.trX = f.x; f.trY = f.y; f.trWait = null; return; }
+  if (net.fresh) { f.tr.snap(st, f, a); f.trT = t; f.trX = f.x; f.trY = f.y; f.trWait = null; f.trPz = null; return; }
+  if (net && R.paused) {
+    const q = f.trPz || (f.trPz = []);
+    if (!q.length || t > q[q.length - 1][4]) { q.push([st, f.x, f.y, a, t]); if (q.length > TR_PZ) q.shift(); }
+    return;
+  }
+  feedTrack(f, st, f.x, f.y, a, t);
+}
+function feedTrack(f, st, x, y, a, t) {
   // Older than the newest spot on the track (heard out of order): already past. A clock a second or
   // more back is a restarted one, which the track takes as a jump.
   if (t <= f.trT && t > f.trT - 1) return;
-  if (t > f.trT && t - f.trT < TR_GAP && Math.hypot(f.x - f.trX, f.y - f.trY) <= TR_JUMP) {
-    if (!f.trWait || t > f.trWait[4]) f.trWait = [st, f.x, f.y, a, t];
+  if (t > f.trT && t - f.trT < TR_GAP && Math.hypot(x - f.trX, y - f.trY) <= TR_JUMP) {
+    if (!f.trWait || t > f.trWait[4]) f.trWait = [st, x, y, a, t];
     return;
   }
-  onTrack(f, st, f.x, f.y, a, t);
+  onTrack(f, st, x, y, a, t);
 }
-// Before a frame: the waiting spot goes on when the drawing is about to need it.
+// Before a frame: the states heard during a pause go on once it is over, and the waiting spot goes on
+// when the drawing is about to need it.
 function trackNeeds(f) {
+  if (net && R.paused) return;
+  if (f.trPz) { const q = f.trPz; f.trPz = null; for (const w of q) feedTrack(f, w[0], w[1], w[2], w[3], w[4]); }
   const w = f.trWait;
   if (w && (f.tr.time === null || f.tr.time >= f.trT - TR_NEAR)) onTrack(f, w[0], w[1], w[2], w[3], w[4]);
 }

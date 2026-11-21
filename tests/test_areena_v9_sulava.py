@@ -238,7 +238,7 @@ def test_a_dodge_on_a_stalled_link_is_drawn_only_a_little_past_its_end(site, bro
 
 
 def test_a_paused_room_holds_the_drawn_fighters_and_goes_on_from_there(site, browser):
-    """While the room waits for a phone that is away, a guest draws the other fighters where they were when
+    """The host pauses first. While the room waits for a phone that is away, a guest draws the other fighters where they were when
     it paused, not going on at their last speed past the newest spot; when the room goes on, they move on
     from there a little each frame, with no jump over the pause (1.5 s here)."""
     host, guest = phones(site, browser)
@@ -295,9 +295,11 @@ def test_a_hits_number_starts_where_the_fighter_is_drawn(site, browser):
 # down at V units/s by the fight clock. Every 0.065 s for 0.8 s (each goes on the track), then one more
 # only 0.035 s after the last (held back: under 0.06 s), then none. Records each frame [moment drawn, y].
 FEED = """([i, V]) => new Promise(done => {
-  const base = JSON.parse(JSON.stringify(window.__last)), t0 = fightClock(), y0 = 120, f = fighters[i];
+  // Stamps go on from the host's clock, as the host's own would (the track keeps them past its newest).
+  const base = JSON.parse(JSON.stringify(window.__last)), off = base.ck - window.__lastAt;
+  const t0 = fightClock(), y0 = 120, f = fighters[i];
   const feed = () => { const m = JSON.parse(JSON.stringify(base)), ck = fightClock();
-    m.ck = ck; m.f[i][1] = y0 + V * (ck - t0); onMessage(m); return ck; };
+    m.ck = ck + off; m.f[i][1] = y0 + V * (ck - t0); onMessage(m); return ck; };
   window.__feed = []; const d = window.asDrawn;
   window.asDrawn = () => { const k = d(); window.__feed.push([f.tr.time, f.y]); return k; };
   const tick = () => {
@@ -329,4 +331,55 @@ def test_a_spot_held_back_goes_on_the_track_before_the_drawing_needs_it(site, br
     # Drawn on to 0.05 s past the spot held back (10 units), not stopping 7 units short of it.
     want = y0 + V * (held + 0.05)
     assert abs(ys[-1] - want) < 2, (ys[-1], want, y0 + V * (last_on + 0.05))
+    assert not host.errors + guest.errors
+
+
+# On the guest, with the host's own messages dropped and the room's pause by hand: the host's states fed by
+# hand, fighter `i` moving down at V units/s by the fight clock, every 1/30 s (stamps on from the host's
+# clock). After 0.6 s the link stalls for 0.5 s (the states go on being made and wait), then the guest pauses
+# and the waiting ones land; 0.5 s on the pause ends and the states come on as before for 0.5 s. Records each
+# frame [moment, y drawn, paused, y at the moment drawn].
+STALL = """([i, V]) => new Promise(done => {
+  const base = JSON.parse(JSON.stringify(window.__last)), off = base.ck - window.__lastAt;
+  const t0 = fightClock(), y0 = 120, f = fighters[i], q = [];
+  const make = () => { const m = JSON.parse(JSON.stringify(base)), ck = fightClock();
+    m.ck = ck + off; m.f[i][1] = y0 + V * (ck - t0); return m; };
+  window.__st = []; const d = window.asDrawn;
+  window.asDrawn = () => { const k = d(); window.__st.push([performance.now() / 1000, f.y, window.__pz,
+    f.tr.time === null ? null : y0 + V * (f.tr.time - off - t0)]); return k; };
+  let phase = 'on';
+  const tick = setInterval(() => { if (phase === 'on') onMessage(make()); else if (phase === 'stall') q.push(make()); }, 1000 / 30);
+  setTimeout(() => { phase = 'stall'; }, 600);
+  setTimeout(() => { phase = 'pause'; window.__pz = true; for (const m of q.splice(0)) onMessage(m); }, 1100);
+  setTimeout(() => { window.__pz = false; phase = 'on'; }, 1600);
+  setTimeout(() => { clearInterval(tick); done(); }, 2100); })"""
+
+
+def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, browser):
+    """The guest pauses before the host's last states reach it (the room tells each phone on its own): they
+    land during the pause, after a stall. The drawn fighter holds still all through the pause, and once it is
+    over the states go on the track and the drawing eases to them, not in one frame."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    guest.evaluate(PAUSE)
+    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') { window.__last = m; window.__lastAt = fightClock(); } }); }""")
+    guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
+    host.evaluate(DROP)
+    host.evaluate("window.__drop = true")
+    guest.wait_for_timeout(300)
+    guest.evaluate(STALL, [me, 200])
+    st = guest.evaluate("window.__st")
+    first = next(k for k, e in enumerate(st) if e[2])
+    # From the last frame before the pause: the states land as it starts.
+    held = [st[first - 1][1]] + [y for _, y, p, *_ in st[first:] if p]
+    assert len(held) > 15, len(held)
+    assert max(held) - min(held) < 0.01, [round(y, 2) for y in held]
+    after = [y for _, y, p, *_ in st[first:] if not p]
+    # By the pause the drawing had stood a while (the stall outran its 0.05 s guess) well short of the spot
+    # for its moment; after it, it eases there over a few frames: no frame covers 60% of the way.
+    gap = st[first][3] - held[-1]
+    assert gap > 20, gap
+    steps = [abs(b - a) for a, b in zip([held[-1]] + after, after)]
+    assert max(steps[:5]) < 0.6 * gap, ([round(x, 2) for x in steps[:8]], gap)
+    assert abs(after[-1] - after[-2]) < 10, after[-5:]
     assert not host.errors + guest.errors
