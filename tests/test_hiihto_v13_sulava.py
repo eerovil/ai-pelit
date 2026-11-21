@@ -160,3 +160,25 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_h
     assert all(abs(drawn - said) < 0.01 for _, said, drawn in sw), sw
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
+
+
+def test_the_place_on_screen_goes_by_the_newest_spot_not_the_drawn_one(site, browser):
+    """While a frame draws a friend a moment back, "sija" and the waiting list still count them where their phone last
+    said, like the end does: a friend who has just passed you is ahead at once."""
+    host, guest = phones(site, browser)
+    me = index(guest)
+    host.evaluate("""(i) => { window.__pl = []; const d = window.draw, k = net.skiers[i];
+      window.draw = () => { const own = synced(meK()).z; window.__pl.push([k.z, k.zNew ?? k.z, own, livePlace(),
+        standings()[0].id === k.id]); d(); }; }""", me)
+    guest.evaluate("window.__run = true")
+    host.wait_for_function(f"net.skiers[{me}].z > 6", timeout=10000)
+    guest.evaluate("window.__run = false")
+    pl = host.evaluate("window.__pl")
+    split = [p for p in pl if p[0] <= p[2] < p[1]]  # drawn behind the host, but heard ahead of them
+    assert split, pl[:40]
+    for drawn, heard, own, place, first in pl:
+        ahead = heard > own
+        assert place == (2 if ahead else 1), (drawn, heard, own, place)
+        if ahead:
+            assert first, (drawn, heard, own)
+    assert not host.errors + guest.errors

@@ -520,9 +520,11 @@ function heardSpot(k, st, src) {
 // itself). The rules (places, the end) keep the newest spot heard; drawing swaps the drawn one in and back.
 const drawnHere = k => k.kind !== 'me' && !(RM.isHost && k.kind === 'cpu') && k.tr.size();
 function asDrawn() {
-  return net ? net.skiers.filter(drawnHere).map(k => { const kept = [k, k.z]; k.z = k.tr.at().z; return kept; }) : [];
+  return net ? net.skiers.filter(drawnHere).map(k => { const kept = [k, k.z]; k.zNew = k.z; k.z = k.tr.at().z; return kept; }) : [];
 }
-function putBack(kept) { for (const [k, z] of kept) k.z = z; }
+function putBack(kept) { for (const [k, z] of kept) { k.z = z; k.zNew = null; } }
+// The newest spot heard, also while a frame draws the smoothed one: the places on screen go by it, like the rules.
+const newest = k => k.zNew ?? k.z;
 function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; k.road = a[9] ?? null; k.clog = a[10] || 0; }
 // Puts a skier at a road step it was sent: the timers start again, the step rhythm is free.
 function roadFrom(p, road, clog, t) { p.road = road || undefined; p.clog = clog || 0; p.roadT = 0; if (road) p.lastKick = t - 1; }
@@ -630,8 +632,8 @@ function cpuTakes(k) {
 }
 // Finished skiers by time, ahead of everyone still on the trail, who go by how far they got.
 function standings() {
-  return net.skiers.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? finOrder(a) - finOrder(b) : b.z - a.z))
-    .map(k => ({ id: k.id, name: k.name, fin: k.fin, z: Math.round(Math.min(k.z, course.len)), color: k.color }));
+  return net.skiers.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? finOrder(a) - finOrder(b) : newest(b) - newest(a)))
+    .map(k => ({ id: k.id, name: k.name, fin: k.fin, z: Math.round(Math.min(newest(k), course.len)), color: k.color }));
 }
 const placeOf = (list, id) => list.findIndex(o => o.id === id) + 1;
 function netEnd(res) {
@@ -1433,7 +1435,7 @@ function hint() {
 // My place among friends right now: finished ones by time, the rest by how far they are.
 function livePlace() {
   const me = synced(meK());
-  return 1 + net.skiers.filter(k => k !== me && (k.fin !== null ? me.fin === null || finOrder(k) < finOrder(me) : me.fin === null && k.z > me.z)).length;
+  return 1 + net.skiers.filter(k => k !== me && (k.fin !== null ? me.fin === null || finOrder(k) < finOrder(me) : me.fin === null && newest(k) > newest(me))).length;
 }
 
 function drawHud() {
