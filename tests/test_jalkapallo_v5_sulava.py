@@ -4,6 +4,7 @@ ball, every player), so its own screen draws its own simulation as before; a gue
 p.tx, p.ty and draws p.x, p.y a moment back. The player a guest steers itself still chases the newest spot."""
 
 import json
+import math
 from statistics import mean, pstdev
 
 from conftest import ROOT
@@ -29,14 +30,15 @@ QUIET = """() => { window.__run = false; window.__cpuRun = -1;
 # test machine, with no message for a while, can be told from a jerk). The time is taken as the frame's update()
 # starts, where guestUpdate() asks the track for the spot: taken later, in draw(), a frame whose work in between
 # ran long on a busy machine read as a jerk (#498). Times are the machine's clock (timeOrigin + now), the same on
-# every page.
-SAMPLE = """(i) => { window.__xs = []; window.__got = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+# every page. Called again, it starts a new record of player `i`.
+SAMPLE = """(i) => { window.__xs = []; window.__got = []; window.__si = i; if (window.__sampling) return; window.__sampling = true;
+  const now = () => (performance.timeOrigin + performance.now()) / 1000;
   AiPelitRooms.on('message', () => window.__got.push(now()));
   const u = window.update;
-  window.update = dt => { const t = now(); u(dt); if (window.__xs.length < 300) window.__xs.push([t, players[i].x]); }; }"""
+  window.update = dt => { const t = now(); u(dt); if (window.__xs.length < 300) window.__xs.push([t, players[window.__si].x]); }; }"""
 # On the host: when a frame came late. The host runs at most 50 ms of the match per frame, so a busy test machine
 # slows the match itself there, and every phone rightly draws it slower: such moments are left out.
-STALLS = """() => { window.__stall = []; let last = 0; const d = window.draw;
+STALLS = """() => { window.__stall = []; if (window.__stalls) return; window.__stalls = true; let last = 0; const d = window.draw;
   window.draw = () => { const t = (performance.timeOrigin + performance.now()) / 1000;
     if (last && t - last > 0.08) window.__stall.push(t); last = t; d(); }; }"""
 
@@ -201,7 +203,8 @@ def test_a_kickoff_puts_everyone_on_their_spot_at_once_on_the_guests(site, brows
                             .replace("window.__off", json.dumps(host.evaluate("window.__off"))), timeout=5000)
         g.evaluate("""() => { window.__seen = []; let was = state; const d = window.draw;
           window.draw = () => { if (state === 'kickoff' && was !== 'kickoff') window.__on = true; was = state;
-            if (window.__on && window.__seen.length < 30) window.__seen.push(players.map(p => [p.x, p.y])); d(); }; }""")
+            if (window.__on && window.__seen.length < 30) window.__seen.push(players.map(p => [p.x, p.y]).concat([[ball.x, ball.y]]));
+            d(); }; }""")
     host.evaluate("""() => { window.__spots = null; const ko = window.kickoff;
       window.kickoff = t => { ko(t); window.__spots = players.map(p => [p.x, p.y]); };
       msg = { s: 'MAALI!', t: 0 }; state = 'goal'; pauseT = 0.3; }""")
@@ -211,9 +214,13 @@ def test_a_kickoff_puts_everyone_on_their_spot_at_once_on_the_guests(site, brows
     for g in (aino, ville):
         seen, mine = g.evaluate("window.__seen"), g.evaluate("players.indexOf(myPlayer())")
         for frame in seen:
+            *frame, (bx, by) = frame
             off = [(i, x, y, spots[i]) for i, (x, y) in enumerate(frame)
                    if i != mine and (abs(x - spots[i][0]) > 0.05 or abs(y - spots[i][1]) > 0.05)]
             assert not off, (off, seen)
+            # The ball too: from the corner it lay in (13, 20) straight to the centre spot, at the kicker's feet,
+            # not sliding across the pitch.
+            assert math.hypot(bx, by) < 1.5, (bx, by, seen)
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
 
@@ -276,5 +283,110 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_keeps_gliding_on_a_t
     host.wait_for_function("!ctrls.find(k => k.fixed === 1).away", timeout=20000)
     aino.wait_for_function("players[1].ctl !== ''", timeout=5000)
     aino.wait_for_function("Math.abs(players[1].x - players[1].tx) < 0.01 && players[1].tx >= 9", timeout=5000)
+    # Ville steers again: he runs his player along the lane once more, and the third phone draws it gliding.
+    host.evaluate("window.__run = false; players[1].x = -10; players[1].y = -5")
+    aino.wait_for_function("Math.abs(players[1].x + 10) < 0.05 && players[1].ctl !== ''", timeout=5000)
+    ville.evaluate("setInterval(() => { input.jx = players[1].tx < 10 && window.__go ? 1 : 0; input.jy = 0; }, 5)")
+    aino.evaluate(SAMPLE, 1)
+    host.evaluate(STALLS)
+    ville.evaluate("window.__go = true")
+    host.wait_for_function("players[1].x >= 9", timeout=10000)
+    aino.wait_for_function("window.__xs.length >= 200", timeout=30000)
+    glides(aino, host)
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+# On a guest, each frame: [the frame's time (as in SAMPLE), the moment the first of `ids` is drawn at (its track's,
+# on the host's clock), ball x, ball y, the newest holder's index, then x, y of each player in `ids`].
+BALL = """(ids) => { window.__b = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+  const u = window.update;
+  window.update = dt => { const t = now(); u(dt); if (window.__b.length < 400) window.__b.push([t, players[ids[0]].tr.time,
+    ball.x, ball.y, players.indexOf(owner)].concat(...ids.map(i => [players[i].x, players[i].y]))); }; }"""
+
+
+def test_a_tackle_moves_the_ball_to_the_tackler_without_a_step(site, browser):
+    """A computer player of team 0 runs with the ball at 5 m/s; one of team 1, standing by its lane, takes it
+    (the host's take(), as a tackle or a steal does). On the host the ball rolls to the taker's feet in a few
+    frames; on a guest it must not jump there in one, neither on a third phone (Ville: both drawn from tracks) nor
+    on the phone the taker's team is steered from (Aino: the taker becomes her player, drawn ahead of the tracks)."""
+    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    host.evaluate(QUIET)
+    host.evaluate("""() => { const p = players[2], q = players[4];
+      p.x = -8; p.y = -5; p.fx = 1; p.fy = 0; ball.x = -7.2; ball.y = -5; take(p);
+      q.x = 1.6; q.y = -6.4; q.fx = 0; q.fy = 1; }""")
+    for g in (aino, ville):
+        g.wait_for_function("owner === players[2] && Math.abs(players[2].x + 8) < 0.05 && players[2].tr.size() > 3"
+                            " && Math.hypot(ball.x + 7.18, ball.y + 5) < 0.1", timeout=5000)
+    host.evaluate(JITTER)
+    host.evaluate("""() => { const u = window.update; window.update = dt => { u(dt);
+      if (!window.__stole && owner === players[2] && players[2].x > 0) { window.__stole = true; take(players[4]); } }; }""")
+    for g in (aino, ville):
+        g.evaluate(BALL, [2, 4])
+    host.evaluate("window.__cpuRun = 2; window.__run = true")
+    for g in (aino, ville):
+        g.wait_for_function("owner === players[4]", timeout=10000)
+        g.wait_for_function("window.__b.length >= 400", timeout=20000)
+    for g, name in ((aino, "Aino"), (ville, "Ville")):
+        rec = g.evaluate("window.__b")
+        took = next(i for i, r in enumerate(rec) if r[4] == 4)
+        # How far the ball is drawn to move in each frame around the take, in frames that came in time (a late
+        # frame on a busy test machine rightly moves it further, see glides()).
+        steps = [(i - took, math.hypot(b[2] - a[2], b[3] - a[3])) for i, (a, b) in enumerate(zip(rec, rec[1:]), 1)
+                 if took - 30 <= i <= took + 60 and b[0] - a[0] < 0.04]
+        assert len(steps) > 40, (name, len(steps))
+        # Dribbled at 5 m/s (under 0.1 m a frame), then a metre or more over to the taker in about a tenth of a
+        # second: never 0.4 m in one frame. Measured: at most 0.30 m on Aino's, 0.14 on Ville's; v5 before the
+        # review jumped it 0.65 m in one frame on Aino's.
+        big = [(i, round(d, 2)) for i, d in steps if d > 0.4]
+        assert not big, (name, big, [round(d, 2) for _, d in steps])
+        # And it ends at the taker's feet as drawn.
+        bx, by, qx, qy = rec[-1][2], rec[-1][3], rec[-1][7], rec[-1][8]
+        assert math.hypot(bx - qx, by - qy) < 1.0, (name, rec[-1])
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
+    """A computer player passes along the lane at 10 m/s to Ville's player, standing 8 m on. Aino's phone draws
+    the players a moment back, and the ball must be drawn at that same moment, where the host had it then: so it
+    leaves the passer's feet as drawn and comes to the taker's. v5 before the review drew a loose ball at its
+    newest spot, guessed on, so a kicked ball ran ahead of the kick."""
+    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    host.evaluate(QUIET)
+    host.evaluate("""() => { const p = players[2], q = players[1];
+      p.x = -6; p.y = -5; p.fx = 1; p.fy = 0; ball.x = -5.2; ball.y = -5; take(p);
+      q.x = 2; q.y = -5; q.fx = -1; q.fy = 0; }""")
+    aino.wait_for_function("owner === players[2] && Math.abs(players[1].x - 2) < 0.05 && players[2].tr.size() > 3"
+                           " && Math.hypot(ball.x + 5.18, ball.y + 5) < 0.1", timeout=5000)
+    host.evaluate(JITTER)
+    # On the host, each frame: [its clock, the one its spots are stamped with (ck), ball x, ball y].
+    host.evaluate("""() => { window.__hb = []; const u = window.update;
+      window.update = dt => { u(dt); window.__hb.push([AiPelitSulava.now(), ball.x, ball.y]); }; }""")
+    aino.evaluate(BALL, [2, 1])
+    aino.wait_for_function("window.__b.length >= 30", timeout=5000)
+    host.evaluate("release(players[2], 10, 0, 0, false)")
+    aino.wait_for_function("owner === players[1]", timeout=10000)
+    aino.wait_for_function("window.__b.length >= 150", timeout=10000)
+    rec, hb = aino.evaluate("window.__b"), host.evaluate("window.__hb")
+
+    def host_ball(t):
+        for (t0, x0, y0), (t1, x1, y1) in zip(hb, hb[1:]):
+            if t0 <= t <= t1:
+                f = (t - t0) / (t1 - t0) if t1 > t0 else 0
+                return x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+        return None
+    # While the ball is on its way (the host had it loose and past the passer's feet at the moment drawn).
+    off = []
+    for r in rec:
+        hbx = host_ball(r[1]) if r[1] is not None else None
+        if hbx and -5 < hbx[0] < 1:
+            off.append(math.hypot(r[2] - hbx[0], r[3] - hbx[1]))
+    assert len(off) > 20, len(off)
+    # Measured with the ball on its own track: at most 0.13 m off. Drawn at its newest spot (v5 before the
+    # review) it ran up to 1.2 m ahead.
+    assert max(off) < 0.4, [round(d, 2) for d in off]
+    bx, by, qx, qy = rec[-1][2], rec[-1][3], rec[-1][7], rec[-1][8]
+    assert math.hypot(bx - qx, by - qy) < 1.0, rec[-1]
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
