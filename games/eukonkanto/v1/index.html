@@ -280,6 +280,7 @@ function drop(r) {
 // ends the piece, the couple is moved to that moment (exactly onto the log, edge or line), the
 // event is applied, and the rest of the step is a new piece. An event counts only while it is
 // strictly ahead, so each one comes once; a tie goes to the line, then the logs, then the fall.
+const EPS = 1e-9;
 function move(r, dt, clock) {
   r.holdT = Math.max(0, r.holdT - dt);
   if (r.fin !== null) { r.v = Math.max(0, r.v - 3 * dt); r.x += r.v * dt; r.ph += r.v * dt * 1.5; return; }
@@ -295,7 +296,10 @@ function move(r, dt, clock) {
     // The slip grows with speed and with itself; the water and the air hold it up a little.
     const rate = (0.04 + 0.034 * v) * (1 + r.s) * (wet ? 0.6 : 1) * (air ? 0.5 : 1);
     let t = left, ev = null, to = null;
-    const at = (tt, e, x) => { if (tt < t) { t = Math.max(0, tt); ev = e; to = x; } };
+    // An event at the very end of the step, or a hair past it by rounding (EPS), still counts in this
+    // step: otherwise the couple would end the step exactly on it, no longer strictly before it, and it
+    // would never come. Among events the first named keeps a tie.
+    const at = (tt, e, x) => { if (ev === null ? tt <= left + EPS : tt < t) { t = Math.max(0, tt); ev = e; to = x; } };
     if (v > 0) {
       if (r.x < TRACK) at((TRACK - r.x) / v, 'line', TRACK);
       LOGS.forEach((lx, i) => { if (r.x < lx && !(r.down >> i & 1)) at((lx - r.x) / v, 'log' + i, lx); });

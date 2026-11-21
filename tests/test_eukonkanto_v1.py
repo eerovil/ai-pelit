@@ -159,6 +159,22 @@ def test_a_log_is_judged_at_the_moment_it_is_crossed(site, browser, what, x, v, 
     page.context.close()
 
 
+@pytest.mark.parametrize("where", ["TRACK", "LOGS[0]", "WET[0]"])
+def test_an_event_at_the_very_end_of_a_step_still_comes(site, browser, where):
+    """Review on #506: 25 cm at 5 m/s is exactly a 0.05 s step; the line, the log or the edge counts."""
+    page = open_game(site, browser)
+    to_gun(page)
+    got = page.evaluate(f"""() => {{
+      Object.assign(me, {{ x: {where} - 0.25, v: 5, s: 0, y: 0, vy: 0 }}); tick(0.05);
+      const a = [me.fin !== null, me.hits, wading(me)];
+      if (me.fin === null) {{ me.v = 5; tick(0.05); }}
+      return [...a, me.fin !== null, me.hits];
+    }}""")
+    want = {"TRACK": [True, 0, False, True, 0], "LOGS[0]": [False, 1, False, False, 1], "WET[0]": [False, 0, True, False, 0]}
+    assert got == want[where]
+    page.context.close()
+
+
 def test_a_long_step_into_the_water_brakes_from_the_edge_on(site, browser):
     page = open_game(site, browser)
     to_gun(page)
