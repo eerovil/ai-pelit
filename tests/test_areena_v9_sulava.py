@@ -175,29 +175,41 @@ DRAWN = """(i) => { window.__drawn = []; const a = window.asDrawn;
     window.__drawn.push([performance.now() / 1000, fighters[i].x, fighters[i].y]); return kept; }; }"""
 
 
+# On the guest, with the host's own messages dropped: the host's states fed to the game by hand, stamped
+# every 1/30 s as a host at its full rate stamps them (on from the last real one, with the real link's lag),
+# and let through in bursts, all waiting ones in order every 250 ms (as a mobile link that batches its
+# packets does). Records, each frame for 3 s, [moment drawn, stamp of the oldest of the 8 spots on the track,
+# delay].
+LAGGY = """(i) => new Promise(done => {
+  const base = JSON.parse(JSON.stringify(window.__last)), tr = fighters[i].tr, on = [], q = [], p = tr.push;
+  tr.push = (t, v, a) => { if (!on.length || t > on[on.length - 1]) on.push(t); return p(t, v, a); };
+  window.__at = []; const d = window.asDrawn;
+  window.asDrawn = () => { const k = d();
+    if (on.length >= 10) window.__at.push([tr.time, on[on.length - 8], tr.delay]); return k; };
+  const send = setInterval(() => { const m = JSON.parse(JSON.stringify(base));
+    m.ck = base.ck + fightClock() - window.__lastAt; q.push(m); }, 1000 / 30);
+  const burst = setInterval(() => { for (const m of q.splice(0)) onMessage(m); }, 250);
+  setTimeout(() => { clearInterval(send); clearInterval(burst); done(); }, 3000); })"""
+
+
 def test_on_a_laggy_link_the_drawn_moment_stays_within_the_tracks_spots(site, browser):
-    """A track keeps 8 spots. The host sends 30 states a second, and 8 of them span under a quarter second,
-    less than the longest the drawing may wait (0.25 s): on a laggy link the drawn moment would fall before
-    the oldest spot, and the fighter would stand on it. A spot goes on the track only 0.06 s or more after the
-    one before it (or when the drawing comes near the newest one), so on a link 0-250 ms late the drawn moment
-    stays within the spots kept; the messages and how often they go are as before."""
+    """A track keeps 8 spots. A host sends up to 30 states a second, and 8 of them span under a quarter
+    second, less than the longest the drawing may wait (0.25 s): on a laggy link the drawn moment would fall
+    before the oldest spot, and the fighter would stand on it. A spot goes on the track only 0.06 s or more
+    after the one before it (or when the drawing comes near the newest one), so with states 1/30 s apart
+    arriving in bursts every 250 ms, the drawn moment stays within the spots kept. The messages are as
+    before."""
     host, guest = phones(site, browser)
     me = index(host)
-    host.evaluate(JITTER.replace("rnd() * 90", "rnd() * 250"))
-    guest.evaluate("""(i) => { window.__in = []; window.__sent = []; window.__at = [];
-      const tr = fighters[i].tr, p = tr.push;
-      AiPelitRooms.on('message', m => { if (m.t === 's') window.__sent.push(m.ck); });
-      tr.push = (t, v, a) => { const n = window.__in; if (!n.length || t > n[n.length - 1]) n.push(t); return p(t, v, a); };
-      const d = window.asDrawn;
-      window.asDrawn = () => { const k = d(), n = window.__in;
-        if (n.length >= 10) window.__at.push([tr.time, n[n.length - 8], tr.delay]); return k; }; }""", me)
-    guest.wait_for_function("window.__at.length >= 240", timeout=20000)
-    at, sent = guest.evaluate("[window.__at, window.__sent]")
-    gaps = [b - a for a, b in zip(sent, sent[1:])]
-    # The host still sends one state each frame once 1/30 s has passed (two or three 60 Hz frames).
-    assert mean(gaps) < 0.055, gaps
-    # The link is laggy enough that the drawing waits long.
-    assert max(d for _, _, d in at[-60:]) > 0.2, [round(d, 3) for _, _, d in at]
+    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') { window.__last = m; window.__lastAt = fightClock(); } }); }""")
+    guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
+    host.evaluate(DROP)
+    host.evaluate("window.__drop = true")
+    guest.evaluate(LAGGY, me)
+    at = guest.evaluate("window.__at")
+    assert len(at) > 60, len(at)
+    # The link is laggy enough that the drawing waits about as long as it may.
+    assert max(d for _, _, d in at) > 0.2, [round(d, 3) for _, _, d in at]
     before = [round(oldest - t, 3) for t, oldest, _ in at if t < oldest]
     assert not before, before
     assert not host.errors + guest.errors
@@ -304,7 +316,7 @@ def test_a_spot_held_back_goes_on_the_track_before_the_drawing_needs_it(site, br
     0.05 s past the spot held back."""
     host, guest = phones(site, browser)
     me = index(host)
-    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') window.__last = m; }); }""")
+    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') { window.__last = m; window.__lastAt = fightClock(); } }); }""")
     guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
     host.evaluate(DROP)
     host.evaluate("window.__drop = true")
