@@ -82,6 +82,7 @@ export const GAMES = {
   marjakori: { order: 'high', boards: /^main$/ }, // sum of each level's best score
   pulkkamaki: { order: 'high', boards: /^maki-[1-3]$/, first: 'maki-1' }, // most points in one run down a hill (#475)
   jaalautta: { order: 'high', boards: /^main$/ }, // matches won alone against the computer (#478)
+  'lattia-on-laavaa': { order: 'high', boards: /^huone-[1-3]$/, first: 'huone-1' }, // longest time alone on one's feet per room, tenths of a second (#488)
 };
 
 const ID = /^[a-f0-9]{32}$/;

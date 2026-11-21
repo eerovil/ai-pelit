@@ -122,6 +122,13 @@
       level: function () { return Math.max(1, saved('jaalautta', 'auki')); },
       levelText: function (n) { return n + (n === 1 ? ' lautta' : ' lauttaa') + ' auki'; },
     },
+    // Longest time on one's feet alone, tenths of a second, one list per room ('huone-N', #488);
+    // level: rooms open ('auki'), saved only once a second room opens.
+    'lattia-on-laavaa': {
+      order: 'high', score: function (s) { return fixed(s / 10, 1) + ' s'; }, boards: true,
+      level: function () { return Math.max(1, saved('lattia-on-laavaa', 'auki')); },
+      levelText: function (n) { return n + (n === 1 ? ' huone' : ' huonetta') + ' auki'; },
+    },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function orderFor(game, b) {
