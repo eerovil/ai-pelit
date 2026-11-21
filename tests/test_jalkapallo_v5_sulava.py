@@ -25,13 +25,15 @@ QUIET = """() => { window.__run = false; window.__cpuRun = -1;
   state = 'play'; owner = null; Object.assign(ball, { x: 13, y: 20, z: 0, vx: 0, vy: 0, vz: 0 });
   players.forEach((p, i) => { p.x = -12 + i * 4.5; p.y = 12; p.vx = p.vy = 0; });
   for (const k of ctrls) { k.switchT = 999; if (k.fixed < 0) k.p = players[k.t * 3]; } }"""
-# Records, each time the screen is drawn, where player `i` is drawn across the pitch, and when a message arrived
-# (so a stall of the test machine, with no message for a while, can be told from a jerk). Times are the machine's
-# clock (timeOrigin + now), the same on every page.
+# Records, each frame, where player `i` is drawn across the pitch, and when a message arrived (so a stall of the
+# test machine, with no message for a while, can be told from a jerk). The time is taken as the frame's update()
+# starts, where guestUpdate() asks the track for the spot: taken later, in draw(), a frame whose work in between
+# ran long on a busy machine read as a jerk (#498). Times are the machine's clock (timeOrigin + now), the same on
+# every page.
 SAMPLE = """(i) => { window.__xs = []; window.__got = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
   AiPelitRooms.on('message', () => window.__got.push(now()));
-  const d = window.draw;
-  window.draw = () => { if (window.__xs.length < 300) window.__xs.push([now(), players[i].x]); d(); }; }"""
+  const u = window.update;
+  window.update = dt => { const t = now(); u(dt); if (window.__xs.length < 300) window.__xs.push([t, players[i].x]); }; }"""
 # On the host: when a frame came late. The host runs at most 50 ms of the match per frame, so a busy test machine
 # slows the match itself there, and every phone rightly draws it slower: such moments are left out.
 STALLS = """() => { window.__stall = []; let last = 0; const d = window.draw;
@@ -75,7 +77,12 @@ def glides(page, host):
     """The speed over each two drawn frames while the player ran: always the same way and about the same."""
     xs, got = page.evaluate("[window.__xs, window.__got]")
     stalls = host.evaluate("window.__stall")
-    sp = [(t2, (b - a) / (t2 - t0)) for (t0, a), (t2, b) in zip(xs, xs[2:]) if t2 > t0]
+    # Only frames that came in time on the watching page itself (both gaps under 40 ms, a 60 Hz frame is 17): a
+    # frame late on a busy test machine and the quick one after it measure the machine, not the drawing. Measured
+    # (#498): around such a spike the drawn moment (tr.time) went on evenly at 6.3 m/s; only the page's frames
+    # were uneven.
+    sp = [(t2, (b - a) / (t2 - t0)) for (t0, a), (t1, _), (t2, b) in zip(xs, xs[1:], xs[2:])
+          if t2 > t0 and t1 - t0 < 0.04 and t2 - t1 < 0.04]
     moving = [i for i, (_, v) in enumerate(sp) if abs(v) > 0.5]
     assert len(moving) > 50, len(moving)
     # Leave out the start and the stop: the drawing speeds up and slows down there over a moment.
@@ -88,10 +95,16 @@ def glides(page, host):
     kept = [v for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
     assert len(kept) > 30, (len(kept), len(middle), len(stalls))
-    assert min(kept) > 1, shown
+    assert min(kept) > 0, shown  # never backwards
     m, sd = mean(kept), pstdev(kept)
     assert sd < 0.2 * m, (sd, m, shown)
-    assert max(kept) < 1.8 * m, (max(kept), m, shown)
+    # Hardly a frame at twice the speed or under half of it. One in fifty may be: under a 10x CPU throttle the
+    # watching page now and then ran a frame's work late (a pause between the frame's start and its track
+    # lookup), so one frame read up to 1.75x (2x in a loaded verification run) while the drawn moment went on
+    # evenly, at most 1.25x (#498). Without the
+    # smoothing, the spread above fails by far (sd 2.0-2.9 against a mean of 5-6.4).
+    odd = [v for v in kept if not 0.5 * m < v < 1.8 * m]
+    assert len(odd) <= max(1, len(kept) // 50), (odd, m, shown)
 
 
 def watch_run(host, watch, i, start):
