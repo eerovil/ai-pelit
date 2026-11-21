@@ -1,5 +1,5 @@
 'use strict';
-// Pomppukeppi v1 (#482): the rules, in plain numbers. Four hares on pogo sticks hop over a tile
+// Pomppukeppi v2 (#482, #492): the rules, in plain numbers. Four hares on pogo sticks hop over a tile
 // board, one square per hop. Each landing paints the square in the hare's colour; a hop onto the
 // cash-in box turns all of the hare's squares into points and clears them. After ERA_T seconds the
 // most points wins the erä, and WINS_TO erät win the match. Nothing here draws or touches the
@@ -18,6 +18,9 @@ function rng(seed) {
 }
 
 const HOP_T = 0.32, FAST_HOP_T = 0.2, FAST_T = 5, STUN_T = 1.5;
+// A snowball flies for BALL_T s from where its thrower took the box to the leader, and stuns it
+// only when it hits (#492).
+const BALL_T = 0.8;
 const COUNT_T = 3, ERA_T = 60, ERA_PAUSE = 2.6, WINS_TO = 2;
 const CASH_GAP = 3, QBOX_FIRST = 8, QBOX_GAP = 12, QBOX_LIFE = 9;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
@@ -43,6 +46,7 @@ function newWorld(boardN, players, seed) {
     tiles: new Array(n * n).fill(BLANK),
     hares: [], ph: 'count', cd: COUNT_T, t: 0, era: 1, pause: 0,
     cash: null, cashT: 1.2, qbox: null, qT: QBOX_FIRST, eraWin: null, winner: null, over: false,
+    balls: [], ballN: 0,
   };
   for (const [x, y] of B.rocks) w.tiles[y * n + x] = ROCK;
   for (const [x, y] of B.holes) w.tiles[y * n + x] = HOLE;
@@ -67,7 +71,7 @@ function resetEra(w) {
     w.tiles[y * n + x] = h.i;
   });
   w.ph = 'count'; w.cd = COUNT_T; w.t = 0; w.pause = 0; w.eraWin = null;
-  w.cash = null; w.cashT = 1.2; w.qbox = null; w.qT = QBOX_FIRST;
+  w.cash = null; w.cashT = 1.2; w.qbox = null; w.qT = QBOX_FIRST; w.balls = [];
 }
 
 const inside = (w, x, y) => x >= 0 && y >= 0 && x < w.n && y < w.n;
@@ -116,7 +120,7 @@ function takeQ(w, h) {
   // Lumipallo only when someone else has points to lose; otherwise Pikajousi.
   const others = w.hares.filter(o => o !== h);
   const lead = others.reduce((a, o) => (!a || o.pts > a.pts ? o : a), null);
-  if (lead && lead.pts > 0 && w.rand() < 0.5) { h.gotK = 'lumi'; lead.stun = STUN_T; }
+  if (lead && lead.pts > 0 && w.rand() < 0.5) { h.gotK = 'lumi'; w.balls.push({ id: ++w.ballN, to: lead.i, sx: h.x, sy: h.y, t: 0 }); }
   else { h.gotK = 'jousi'; h.fast = FAST_T; }
 }
 // Aitaus: the squares that are not this hare's split into areas; once there are two or more, every
@@ -192,6 +196,15 @@ function step(w, dt) {
     }
   }
   for (const h of w.hares) { if (h.fast > 0) h.fast = Math.max(0, h.fast - dt); if (h.stun > 0) h.stun = Math.max(0, h.stun - dt); }
+  // Snowballs in the air (only in play: an erä's end drops them); one that arrives stuns its
+  // target for the whole STUN_T (a new hit starts it again).
+  for (const b of w.balls) b.t += dt;
+  w.balls = w.balls.filter(b => {
+    if (b.t < BALL_T) return true;
+    const o = w.hares[b.to];
+    if (o) o.stun = STUN_T;
+    return false;
+  });
   const order = w.hares.slice().sort((a, b) => a.pts - b.pts || a.i - b.i);
   for (const h of order) {
     h.p += dt / h.hopT;
@@ -202,7 +215,7 @@ function endEra(w) {
   const top = Math.max(...w.hares.map(h => h.pts));
   const leaders = w.hares.filter(h => h.pts === top);
   for (const h of w.hares) h.best = Math.max(h.best, h.pts);
-  w.ph = 'erä'; w.pause = ERA_PAUSE; w.t = ERA_T;
+  w.ph = 'erä'; w.pause = ERA_PAUSE; w.t = ERA_T; w.balls = [];
   if (leaders.length === 1 && top > 0) {
     const win = leaders[0];
     win.wins++; w.eraWin = win.id;
@@ -214,4 +227,12 @@ function harePos(h) {
   if (h.draw) return h.draw;   // another phone's hare in a room, gliding (net.js)
   const p = clamp(h.p, 0, 1);
   return { x: h.fx + (h.x - h.fx) * p, y: h.fy + (h.y - h.fy) * p, z: Math.sin(Math.PI * p) * (h.hopT < HOP_T ? 0.6 : 0.85), p };
+}
+// Where a snowball is drawn: board x, y and height. It leaves from over its thrower's square and
+// comes down on its target's chest wherever the target hops meanwhile, in an arc.
+function ballPos(w, b) {
+  const o = w.hares[b.to], q = clamp(b.t / BALL_T, 0, 1);
+  const e = o ? harePos(o) : { x: b.sx, y: b.sy, z: 0 };
+  const z0 = 1.1, z1 = e.z + 0.9, d = Math.hypot(e.x - b.sx, e.y - b.sy);
+  return { x: b.sx + (e.x - b.sx) * q, y: b.sy + (e.y - b.sy) * q, z: z0 + (z1 - z0) * q + Math.sin(Math.PI * q) * (0.8 + d * 0.25), q };
 }
