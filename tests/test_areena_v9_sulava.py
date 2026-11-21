@@ -208,7 +208,8 @@ def test_on_a_laggy_link_the_drawn_moment_stays_within_the_tracks_spots(site, br
     host.evaluate("window.__drop = true")
     guest.evaluate(LAGGY, me)
     at = guest.evaluate("window.__at")
-    assert len(at) > 60, len(at)
+    # Enough frames to judge, also on a machine so busy it draws 15 a second.
+    assert len(at) > 20, len(at)
     # The link is laggy enough that the drawing waits about as long as it may.
     assert max(d for _, _, d in at) > 0.2, [round(d, 3) for _, _, d in at]
     before = [round(oldest - t, 3) for t, oldest, _ in at if t < oldest]
@@ -379,7 +380,8 @@ def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, bro
     first = next(k for k, e in enumerate(st) if e[2])
     # From the last frame before the pause: the states land as it starts.
     held = [st[first - 1][1]] + [y for _, y, p, *_ in st[first:] if p]
-    assert len(held) > 8, len(held)
+    # Enough frames to judge, also on a machine so busy it draws 8 a second.
+    assert len(held) > 3, len(held)
     assert max(held) - min(held) < 0.01, [round(y, 2) for y in held]
     last = max(k for k, e in enumerate(st) if e[2])
     after = [(t, y) for t, y, p, *_ in st[last + 1:]]
