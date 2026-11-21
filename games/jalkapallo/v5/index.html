@@ -666,22 +666,58 @@ const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
 // the room is paused (R.paused), as the match does. On the real clock, in the test, a guest that heard the pause
 // first drew over it as if the match had gone on, a jump of 3.6 m when it did; one that heard it last and its end
 // first had drawn on past the newest spot on a guess, and slid 0.9 m back.
-const pz = { off: 0, at: null };
+// The phones hear a pause a moment apart, each over its own connection, so the two clocks stand for different
+// times. Two fixes keep a guest's tracks on the host's time across it:
+// - A snapshot heard during this phone's pause, sent before the host had paused, is stamped ahead of the held clock:
+//   it goes on the tracks as heard no sooner than its stamp plus the lag (arrival - stamp) the snapshots had before
+//   the pause (pz.lag, the smallest in its last second), as Pulkkamäki v3 and Areena v9 do. Heard at the held
+//   clock, it would look early, and the tracks would draw ahead of it for up to 2 s.
+// - When the host paused first, this clock ran on while the host's stood, so after the pause every snapshot comes
+//   later by that much than its lag from before: lib/sulava-1 learns its offset as the smallest lag of the last 2 s,
+//   so its tracks drew past the newest spot on a guess for up to 2 s (0.4 s past it, in 110 frames, in the test).
+//   For 3 s after this phone's pause ends, the clock goes at a quarter of its speed while the snapshots heard since
+//   are all later than that lag by over 0.03 s (at most 1.5 s held back in all): the friends slow down where they were
+//   drawn until the host's spots reach them, then go on, never drawn back. Not standing still: lib/sulava-1 eases a
+//   wrong guess away by the time its clock moves, so with the clock standing each spot showed in one frame (0.33 m).
+const pz = { off: 0, at: null, t: null, lag: null, on: null, onT: 0, drag: 0 };
 function netClock() {
-  const t = AiPelitSulava.now();
-  if (net.on && R.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  const t = AiPelitSulava.now(), dt = pz.t === null ? 0 : Math.max(0, t - pz.t);
+  pz.t = t;
+  if (net.on && R.paused) {
+    if (pz.at === null) { pz.at = t; pz.lag = lagBefore(t - pz.off); }
+    return pz.at - pz.off;
+  }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; pz.on = t - pz.off; pz.onT = t; pz.drag = 0; return t - pz.off; }
+  if (pz.on !== null) {
+    if (t - pz.onT > 3) pz.on = null;
+    else if (lateSincePause()) { pz.off += dt * 0.75; pz.drag += dt * 0.75; }
+  }
   return t - pz.off;
+}
+// [arrival, lag] of the last snapshots put on the tracks.
+const lags = [];
+function lagBefore(c) {
+  let m = null;
+  for (const [a, l] of lags) if (a >= c - 1 && (m === null || l < m)) m = l;
+  return m;
+}
+function lateSincePause() {
+  if (pz.lag === null || pz.drag >= 1.5) return false;
+  let m = null, n = 0;
+  for (let i = lags.length - 1; i >= 0 && n < 3 && lags[i][0] >= pz.on; i--, n++) if (m === null || lags[i][1] < m) m = lags[i][1];
+  return m !== null && m - pz.lag > 0.03;
 }
 // A snapshot heard while this phone is paused waits, with the moment it came, while 6 of those already on the tracks
 // are ahead of the moment the ball is drawn at. A track keeps only its 8 newest spots (lib/sulava-1), and a guest
-// that hears a pause before the host does stands still while the host's last half second comes in: put on the
-// tracks at once, those spots pushed out the two it was drawing between, and the player jumped 1.1 m when the match
-// went on. Those heard after them wait with them, until none waits: let go at once, they pushed out the same two (a
-// 0.34 m step). Over 20 waiting (a page the phone hid) all go on. Only those wait: outside a pause the drawn moment is
-// that of the last frame, so after a slow frame the rule may hold the newest spots back (with every snapshot waiting,
-// a run on a busy test machine once drew one frame at twice the usual speed; the cause is not proven). A rule by time (wait while over 0.25 s ahead) stood the player up to 2 s
-// there, then jumped it: its tracks draw up to 0.25 s back, so the newest spots were always that far ahead.
+// that hears a pause before the host does stands still while the host's last half second comes in (12 spots): put
+// on the tracks at once, those spots pushed out the two it was drawing between, and the player jumped 1.1 m when
+// the match went on. The drawn moment stands with the clock, so in a pause the snapshots already on the tracks soon
+// number 6 ahead of it (outside one, about 5 at most: 0.25 s at 20 a second), and the rest wait; they go on one by
+// one as the drawn moment passes them after the pause. Those heard after them wait with them, until none waits: let
+// go at once, they pushed out the same two (a 0.34 m step). Over 20 waiting (a page the phone hid) all go on.
+// Outside a pause nothing waits: the drawn moment is that of the last frame, so after a slow frame the rule could hold
+// the newest spots back. A rule by time (wait while over 0.25 s ahead) stood the player up to 2 s on a busy test
+// machine, then jumped it: its tracks draw up to 0.25 s back, so the newest spots were always that far ahead.
 function heardSnapshot(s) {
   const w = net.wait = net.wait || [];
   w.push([s, netClock(), (net.on && R.paused) || (w.length > 0 && w[w.length - 1][2])]);
@@ -691,9 +727,13 @@ function feedSnapshots() {
   const w = net.wait, d = ball.tr.time, fed = net.fed = net.fed || [];
   while (w && w.length) {
     if (w[0][2] && d !== null && fed.filter(t => t > d).length >= 6 && w.length <= 20) break;
-    const [s, a] = w.shift(), st = stampOf(s);
+    const [s, heard, held] = w.shift(), st = stampOf(s);
+    const a = held && st !== null && pz.lag !== null ? Math.max(heard, st + pz.lag) : heard;
     applySnapshot(s, a);
-    if (st !== null) { fed.push(st); if (fed.length > 8) fed.shift(); }
+    if (st !== null) {
+      fed.push(st); if (fed.length > 8) fed.shift();
+      lags.push([a, a - st]); if (lags.length > 40) lags.shift();
+    }
   }
 }
 function applySnapshot(s, heardAt) {

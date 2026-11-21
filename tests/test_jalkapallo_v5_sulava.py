@@ -440,10 +440,11 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
 # Fakes the room's pause (a phone away), which rooms.js sets: `window.__pz` on a phone is its AiPelitRooms.paused.
 PAUSE = """() => { window.__pz = false;
   Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
-# On a guest, each frame until `window.__pzStop`: [the frame's time (as in SAMPLE), player i's drawn x, the ball's].
+# On a guest, each frame until `window.__pzStop`: [the frame's time (as in SAMPLE), player i's drawn x, the ball's,
+# the moment player i is drawn at and the newest stamp on the tracks].
 PZREC = """(i) => { window.__pr = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
   const u = window.update;
-  window.update = dt => { const t = now(); u(dt); if (!window.__pzStop) window.__pr.push([t, players[i].x, ball.x]); }; }"""
+  window.update = dt => { const t = now(); u(dt); if (!window.__pzStop) window.__pr.push([t, players[i].x, ball.x, players[i].tr.time, (net.fed || []).slice(-1)[0]]); }; }"""
 
 
 @pytest.mark.parametrize("first", ["host", "guest"])
@@ -481,16 +482,17 @@ def test_a_paused_match_goes_on_from_where_the_guest_drew_it(site, browser, firs
         guest.wait_for_timeout(later)
         b()
         guest.wait_for_timeout(300)
-    guest.wait_for_timeout(1000)
+    # Then 1.8 s more, so most of the 2 s in which a track still has lags from before the pause is judged too.
+    guest.wait_for_timeout(1800)
     guest.evaluate("window.__pzStop = true")
     pr, pz_at, go_at = guest.evaluate("[window.__pr, window.__pzAt, window.__goAt]")
     stalls = host.evaluate("window.__stall")
     t_from = go_at - 1.5  # half a second before the first phone paused
     rec = [f for f in pr if f[0] >= t_from]
-    assert rec and rec[-1][0] > go_at + 0.9, (t_from, go_at, rec[-1:])
+    assert rec and rec[-1][0] > go_at + 1.7, (t_from, go_at, rec[-1:])
     held = [f for f in rec if pz_at + 0.02 <= f[0] <= go_at]
     assert held and max(abs(f[1] - held[0][1]) for f in held) < 0.01, held[:3]  # it stood all through the pause
-    # Each frame's step, against its time, up to 0.6 s after the guest went on: about 5-6 m/s (1.2x while the drawing
+    # Each frame's step, against its time, from before the pause to the end, in both orders: about 5-6 m/s (1.2x while the drawing
     # catches up), never back. A long frame on a busy machine steps further, at the same speed: judged per second,
     # with 0.2 m to spare. Left out, as in glides(): a moment after a frame came late on the host, whose match then
     # stood, so the guest rightly drew a stop and a start (at load 75 the player stood 0.5 s mid-run after the pause,
@@ -500,25 +502,24 @@ def test_a_paused_match_goes_on_from_where_the_guest_drew_it(site, browser, firs
     gap = next(b[0] - a[0] for a, b in zip(rec, rec[1:]) if b[0] >= pz_at)
     first_on = next(f[0] for f in rec if f[0] > go_at)
     bad = []
-    for (t0, x0, b0), (t1, x1, b1) in zip(rec, rec[1:]):
-        if t1 > go_at + (0.75 if first == "host" else 0.6) or any(st <= t1 <= st + 0.35 for st in stalls):
+    for (t0, x0, b0, *_), (t1, x1, b1, *_) in zip(rec, rec[1:]):
+        if any(st <= t1 <= st + 0.35 for st in stalls):
             continue
         took = t1 - t0 + (gap if t1 == first_on else 0)
-        # Known limit, host first (#498, left for lib/sulava-2): while only the host is paused, the guest's clock runs
-        # on, so it draws up to 0.25 s past its last spot and then stands; after the pause its track stays a little
-        # ahead of the host's stamps for up to 2 s (its offset is the smallest lag of the last 2 s, so it re-learns it
-        # only then) and draws on a guess. At load about 73 the first 0.4 s after the resume stepped 0.43 m in a
-        # 0.03 s frame and 0.97 m in a 0.08 s one, and once 0.95 m back at 0.52 s (likely: the guess ran ahead, and the
-        # difference was drawn away when the spots showed it). So in that order the first 0.75 s is judged only by what
-        # the limit allows: no step over 1.5 m in one frame, forward or back. The game before the fix still fails the
-        # hold and the guest-first order (and slid 0.99 m back here, which this window now allows). Fixing the limit
-        # needs the track to re-learn its offset (sulava-2).
-        limit = first == "host" and t1 <= go_at + 0.75
         for what, d in (("player", x1 - x0), ("ball", b1 - b0)):
-            if (abs(d) > 1.5) if limit else (d < -0.1 or d > 0.2 + 7 * took):
+            if d < -0.1 or d > 0.2 + 7 * took:
                 bad.append((what, round(t1 - go_at, 3), round(d, 2), round(t1 - t0, 3)))
-    assert not bad, (bad, [(round(t - go_at, 3), round(x, 2), round(b, 2)) for t, x, b in rec])
+    assert not bad, (bad, [(round(t - go_at, 3), round(x, 2), round(b, 2)) for t, x, b, *_ in rec])
     after = [f for f in rec if f[0] > go_at + 0.6]
     assert after[-1][1] > held[-1][1] + 1, (held[-1], after[-1])  # and it went on
+    # And from 0.75 s after the resume the drawing is a moment behind the newest spot, between two spots heard, as
+    # before the pause, not on a guess past it (lib/sulava-1 draws up to 0.25 s on), which steps from spot to spot.
+    # Host first, the guest's clock ran on while the host's stood, and its tracks then drew past the newest spot for
+    # up to 2 s (measured before the fix: 110 frames, the first 20 of them 0.28-0.43 s past it). With the fix the
+    # guest's clock goes slower until the host's spots catch up: past them by 0.25 s at 0.3 s, 0.05 s at 0.52 s.
+    ahead = [(round(t - go_at, 2), round(d - c, 3)) for t, _, _, d, c in rec
+             if t > go_at + 0.75 and d is not None and c is not None and d > c + 0.02
+             and not any(st <= t <= st + 0.35 for st in stalls)]
+    assert len(ahead) <= 3, ahead
     errors = [e for p in (host, guest, ville) for e in p.errors]
     assert not errors, errors
