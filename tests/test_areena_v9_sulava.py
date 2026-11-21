@@ -147,9 +147,9 @@ def test_a_friend_running_glides_on_a_third_phone(site, browser):
 
 
 def test_a_jump_is_drawn_at_once_not_glided(site, browser):
-    """The host moves a fighter 230 units in one frame, further than the track's jump (120 units, more than a
-    whole dodge's 84): from the first frame after the state that says so, the guest draws it where it landed,
-    not sliding across the arena towards it."""
+    """The host moves a fighter 230 units in one frame, faster than anything in a round moves one (a jump is
+    over 40 units plus 840 units/s for the time between the stamps): from the first frame after the state
+    that says so, the guest draws it where it landed, not sliding across the arena towards it."""
     host, guest = phones(site, browser)
     me = index(host)
     guest.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
@@ -451,4 +451,82 @@ def test_after_a_pause_heard_first_the_fighter_is_drawn_behind_its_newest_state(
     # ...and 1 to 2 s on as far behind it as before the pause, give or take.
     mb, ml = sum(before) / len(before), sum(later) / len(later)
     assert ml > mb - 0.05, (round(mb, 3), round(ml, 3), soon)
+    assert not host.errors + guest.errors
+
+
+# On the guest, with the host's own messages dropped: the host's states fed by hand each 1/30 s (stamped on
+# from the host's clock, as above), fighter `i` running down at 125 units/s. From 0.8 s none arrive for 0.4 s
+# (lost: the host's phone stalled), and in them it dodges (84 units more, from 0.9 s to 1.1 s); then they come
+# on as before, to 2 s. Records each frame [moment, y drawn, whether the state after the stall was heard].
+STALLED_DODGE = """(i) => new Promise(done => {
+  const base = JSON.parse(JSON.stringify(window.__last)), off = base.ck - window.__lastAt;
+  const t0 = fightClock(), y0 = 60, f = fighters[i];
+  const y = t => y0 + 125 * t + 84 * Math.min(1, Math.max(0, (t - 0.9) / 0.2));
+  let back = false;
+  window.__sd = []; const d = window.asDrawn;
+  window.asDrawn = () => { const k = d(); window.__sd.push([fightClock() - t0, f.y, back]); return k; };
+  const tick = setInterval(() => {
+    const t = fightClock() - t0;
+    if (t >= 0.8 && t < 1.2) return;
+    const m = JSON.parse(JSON.stringify(base)); m.ck = t0 + t + off; m.f[i][1] = y(t);
+    onMessage(m); if (t >= 1.2) back = true;
+  }, 1000 / 30);
+  setTimeout(() => { clearInterval(tick); done(); }, 2000); })"""
+
+
+def test_a_dodge_over_a_stalled_link_glides(site, browser):
+    """A dodge and a run while no state came for 0.4 s (84 + 125 x 0.4 = 134 units between two states, more
+    than a fixed 120-unit jump would allow) glides on a guest: a jump is judged by the time between the
+    stamps, and nothing in a round moves a fighter that fast. Snapped, it would be drawn over 100 units on in
+    one frame."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') { window.__last = m; window.__lastAt = fightClock(); } }); }""")
+    guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
+    host.evaluate(DROP)
+    host.evaluate("window.__drop = true")
+    guest.wait_for_timeout(300)
+    guest.evaluate(STALLED_DODGE, me)
+    sd = guest.evaluate("window.__sd")
+    k = next(k for k, e in enumerate(sd) if e[2])
+    # From the frame before the state after the stall was heard to 0.3 s on.
+    steps = [(round(t1, 3), round(b - a, 1)) for (_, a, _), (t1, b, _) in zip(sd[k - 1:], sd[k:])
+             if t1 < sd[k][0] + 0.3]
+    assert len(steps) > 2, steps
+    # Each step at most what a 0.1 s ease and the drawn moment's catch-up allow in a frame, never the whole way.
+    assert max(abs(s) for _, s in steps) < 60, "steps " + json.dumps(steps) + " frames " + json.dumps(sd)
+    assert not host.errors + guest.errors
+
+
+def test_a_guest_reloading_mid_fight_draws_the_others_at_the_host_s_spot_then_glides(site, browser):
+    """A guest that reloads mid-fight comes back into the round (rooms.js): the first state it hears is put on
+    the track as it is (net.fresh), so from its first frame it draws the host's fighter where the host has it,
+    not gliding there from the start spot, and from then on it glides."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    # The host's fighter goes up and down the arena's middle (y 140 to 300) at 64 units/s, by the clock.
+    host.evaluate("""(i) => { const s = window.step; window.step = dt => { const f = fighters[i];
+      const p = (64 * AiPelitSulava.now()) % 320; f.x = 170; f.y = 140 + (p < 160 ? p : 320 - p); s(dt); }; }""", me)
+    guest.wait_for_timeout(500)
+    guest.context.add_init_script("""addEventListener('load', () => {
+      window.__rl = []; let said = null, first = null;
+      AiPelitRooms.on('message', m => { if (m.t === 's' && typeof fighters !== 'undefined' && foe) {
+        said = m.f[fighters.indexOf(foe)][1]; if (first === null) first = said; } });
+      const d = window.asDrawn;
+      window.asDrawn = () => { const k = d();
+        if (state === 'fight' && foe && first !== null) window.__rl.push([performance.now() / 1000, foe.y, first, said]);
+        return k; }; })""")
+    guest.reload()
+    guest.wait_for_function("state === 'fight' && window.__rl && window.__rl.length >= 60", timeout=15000)
+    rl = guest.evaluate("window.__rl")
+    # The first frame drawn is at the first state heard.
+    assert abs(rl[0][1] - rl[0][2]) < 1, rl[:5]
+    # Then it glides: on at up to the fighter's speed (64 units/s) over each two frames that came in time,
+    # never a jump.
+    sp = [(round(t2 - rl[0][0], 3), round(abs(b - a) / (t2 - t0), 1))
+          for (t0, a, *_), (t1, *_), (t2, b, *_) in zip(rl, rl[1:], rl[2:]) if t1 - t0 < 0.04 and t2 - t1 < 0.04]
+    assert len(sp) > 20, len(sp)
+    assert max(v for _, v in sp) < 1.5 * 64, "speeds " + json.dumps(sp)
+    # And it moves, not standing on the first spot.
+    assert max(y for _, y, *_ in rl) - min(y for _, y, *_ in rl) > 10, rl
     assert not host.errors + guest.errors

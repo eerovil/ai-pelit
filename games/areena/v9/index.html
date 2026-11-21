@@ -479,9 +479,16 @@ function fightClock() {
 // comes within TR_NEAR s of the track's newest spot: without it the drawn moment could pass the newest
 // spot on the track by more than the track's 0.05 s guess (extra) and the fighter would stand still
 // until the next spot went on, with newer spots heard all the while.
-const TR_GAP = 0.06, TR_JUMP = 120, TR_NEAR = 0.03;
+// A jump is judged by the stamps (jumped()): further from the track's newest spot than TR_FAST units/s
+// (twice a dodge's 420, room for a hit's knock-back on top) for the time between, plus TR_SLACK. A
+// fixed distance would snap a dodge and a run over a link that stalled a third of a second (84 + 125
+// x 0.3 units); nothing in a round moves a fighter faster, and the first state is snapped (net.fresh).
+const TR_GAP = 0.06, TR_NEAR = 0.03, TR_FAST = 840, TR_SLACK = 40;
+function jumped(f, x, y, t) {
+  return Math.hypot(x - f.trX, y - f.trY) > TR_SLACK + TR_FAST * Math.max(0, t - f.trT);
+}
 function onTrack(f, st, x, y, a, t) {
-  f.tr.push(st, { x, y }, a);
+  if (jumped(f, x, y, t)) f.tr.snap(st, { x, y }, a); else f.tr.push(st, { x, y }, a);
   f.trT = t; f.trX = x; f.trY = y; f.trWait = null; f.trLag = st === null ? null : a - st;
 }
 // While the room is paused, states still on the way land (the room tells each phone of the pause on its
@@ -508,7 +515,7 @@ function feedTrack(f, st, x, y, a, t) {
   // Older than the newest spot on the track (heard out of order): already past. A clock a second or
   // more back is a restarted one, which the track takes as a jump.
   if (t <= f.trT && t > f.trT - 1) return;
-  if (t > f.trT && t - f.trT < TR_GAP && Math.hypot(x - f.trX, y - f.trY) <= TR_JUMP) {
+  if (t > f.trT && t - f.trT < TR_GAP && !jumped(f, x, y, t)) {
     if (!f.trWait || t > f.trWait[4]) f.trWait = [st, x, y, a, t];
     return;
   }
@@ -521,7 +528,7 @@ function trackNeeds(f) {
   if (f.trPz) {
     const q = f.trPz, lag = f.trLag; f.trPz = null;
     for (const w of q) {
-      const on = w[0] !== null && lag != null && Math.hypot(w[1] - f.trX, w[2] - f.trY) <= TR_JUMP;
+      const on = w[0] !== null && lag != null && !jumped(f, w[1], w[2], w[4]);
       feedTrack(f, w[0], w[1], w[2], on ? Math.max(fightClock(), w[4] + lag) : w[3], w[4]);
     }
   }
@@ -548,11 +555,11 @@ function onlineFight(s) {
     const f = fighter(SPOTS[i][0], SPOTS[i][1], String(p.name).slice(0, 16), COLORS[i === mine ? 0 : i === 0 ? mine : i]);
     f.id = p.id; f.gin = IDLE; f.dashN = 0; f.seenDash = 0; f.sid = '';
     // v9 (#480): on a friend's phone, where the host's spots put this fighter, drawn a moment back.
-    // The fastest move between two spots is a dodge (84 units in all), so a longer one is a jump.
+    // The game judges a jump by the stamps (jumped()) and snaps it itself, so the track takes none.
     // extra: a late fighter goes on at its last speed for at most 0.05 s, not the library's 0.25 s,
     // so one that stops at the end of a dodge (420 units/s) on a stalled link is drawn at most about
     // 21 units past where it stopped, not about 100.
-    f.tr = AiPelitSulava.track({ keys: ['x', 'y'], jump: TR_JUMP, extra: 0.05 });
+    f.tr = AiPelitSulava.track({ keys: ['x', 'y'], extra: 0.05 });
     return f;
   });
   me = fighters[mine];
