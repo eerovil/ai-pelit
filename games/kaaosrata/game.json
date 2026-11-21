@@ -57,6 +57,13 @@
       "note": "Kolmen uuden radan esteet ovat vaikeampia: nopeammat hihnat, portit, puomit ja heilurit, kapeammat sillat, lyhyemmin pysyvät laatat ja kapeammat hyppykivet; uudistetuilla radoilla on uudet ennätykset ja tuloslistat.",
       "request": "Liian helppo vielä. Valittu: esteet ovat liian helppoja (nopeammat ja kapeammat esteet, leveämmät välit, enemmän esteitä).",
       "issue": "eerovil/ai-pelit#454"
+    },
+    {
+      "n": 9,
+      "date": "2026-11-21",
+      "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }

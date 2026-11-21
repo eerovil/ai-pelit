@@ -61,6 +61,7 @@
      and with the loudest sounds quieter -->
 <!-- v5 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script src="radat.js"></script>
 <script>
 'use strict';
@@ -151,6 +152,9 @@ S.load(['valinta', 'hyppy', 'potku', 'putoaminen', 'osuma', 'tomahdys', 'voitto'
 function runner(id, name, color, kind, bot, skill) {
   return { id, name, color, kind, bot: !!bot, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ix: 0, iy: 0, jq: 0, off: 0,
     fin: null, fall: 0, cp: 0, stun: 0, cd: 0, best: 0, knocks: 0, ph: Math.random() * 6,
+    // v9 (#480): another phone's runner is drawn from the spots heard (`tr`), a moment back; `ts` and `hd` are a
+    // friend's newest stamp and spot as their phone sent them, `src` whose clock the last spot carried, `lf` its fall.
+    tr: AiPelitSulava.track({ keys: ['x', 'y', 'z', 'fall'], jump: 3 }), ts: null, hd: null, src: '', lf: 0,
     ai: { skill: skill || 0.7, k: 0, tx: null, stuck: 0, wander: 0, wx: 0, bar: 0 } };
 }
 let race = null, me = null, texts = [], beep = 0, swing = [];
@@ -403,19 +407,32 @@ R.on('start', s => {
   if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
 });
 const r2 = n => Math.round(n * 100) / 100;
-// [10] says the computer moves it now.
-const pack = r => [r2(r.x), r2(r.y), r2(r.z), r2(r.vx), r2(r.vy), r2(r.vz), r.fin, r2(r.fall), r.cp, r2(r.stun), r.kind === 'cpu' && !r.bot ? 1 : 0, r2(r.best)];
+// [10] says the computer moves it now. [12] (v9): a friend's spot is sent on as their phone sent it, with their own
+// stamp; the host's own and the computer's players carry the message's stamp (`s`), so [12] is null.
+const pack = r => R.isHost && r.kind === 'net' && r.hd ? r.hd
+  : [r2(r.x), r2(r.y), r2(r.z), r2(r.vx), r2(r.vy), r2(r.vz), r.fin, r2(r.fall), r.cp, r2(r.stun), r.kind === 'cpu' && !r.bot ? 1 : 0, r2(r.best), null];
+const stampOf = m => Number.isFinite(m.s) ? m.s : null;
+// A spot just heard for another phone's runner (already unpacked into it), stamped by the phone that moved it.
+// Back on its feet after a fall (a new spot at the checkpoint), or the clock changed (the computer took over a
+// friend, or gave them back): no glide from before.
+function heard(r, st, src) {
+  const spot = { x: r.x, y: r.y, z: r.z, fall: r.fall };
+  if ((r.lf > 0 && !(r.fall > 0)) || src !== r.src) r.tr.snap(st, spot); else r.tr.push(st, spot);
+  r.src = src; r.lf = r.fall;
+}
 function unpack(r, a) {
   [r.x, r.y, r.z, r.vx, r.vy, r.vz, r.fin, r.fall, r.cp, r.stun] = a;
   r.best = Math.max(r.best, a[11]);
 }
-function hostState() { return { t: 's', c: course.id, round: race.round, ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack) }; }
+function hostState() { return { t: 's', c: course.id, round: race.round, s: AiPelitSulava.now(), ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack) }; }
 R.on('message', (m, from) => {
   if (!race || race.mode !== 'net' || m.round !== race.round) return;
   if (R.isHost) {
     const r = race.runners.find(o => o.id === from);
     if (m.t === 'p' && r && r.kind === 'net') {
       unpack(r, m.r);
+      r.ts = stampOf(m); r.hd = m.r.slice(0, 12).concat([r.ts]);
+      heard(r, r.ts, 'f');
       if (r.fin !== null && race.firstFin === null) race.firstFin = race.clock;
     }
     return;
@@ -432,6 +449,7 @@ R.on('message', (m, from) => {
       // My own player is mine, unless the computer ran it while I was away.
       if (r === me && !a[10] && !(race.adopt && a[11] > me.best)) return;
       unpack(r, a);
+      if (r !== me) heard(r, Number.isFinite(a[12]) ? a[12] : stampOf(m), Number.isFinite(a[12]) ? 'f' : 'h');
     });
     if (m.ph === 'run') race.adopt = false;
   }
@@ -439,7 +457,7 @@ R.on('message', (m, from) => {
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
 R.on('continue', ids => { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) r.kind = 'cpu'; }); });
-R.on('back', id => { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') { r.kind = 'net'; r.ix = r.iy = 0; } }); });
+R.on('back', id => { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') { r.kind = 'net'; r.ix = r.iy = 0; r.tr.reset(); r.ts = r.hd = null; } }); });
 R.on('lobby', () => { race = null; });
 R.on('leave', () => { race = null; showMenu(); });
 R.on('menu', () => { race = null; showMenu(); });
@@ -459,7 +477,7 @@ function guestTick(dt) {
   const was = me.sentFin;
   if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !was))) {
     race.sendT = 1 / 12; me.sentFin = me.fin !== null;
-    R.send({ t: 'p', round: race.round, r: pack(me) });
+    R.send({ t: 'p', round: race.round, s: AiPelitSulava.now(), r: pack(me) });
   }
 }
 
@@ -495,11 +513,21 @@ function afterResults() {
 }
 
 // ---------- The loop ----------
+// v9 (#480): the other phones' runners are drawn gliding between the spots heard, a moment back (v8 drew each new
+// spot as it came). A bump with one happens where this phone draws them too (#480's D11, as in Kaahari); everything
+// else keeps the newest spot (carried on at its speed, the finish, what the host sends on), put back after.
+function asDrawn() {
+  return race && race.mode === 'net' ? race.runners.filter(r => r !== me && r.kind === 'net' && r.tr.size()).map(r => {
+    const k = [r, r.x, r.y, r.z, r.fall], o = r.tr.at(); r.x = o.x; r.y = o.y; r.z = o.z; r.fall = o.fall; return k; }) : [];
+}
+function putBack(kept) { for (const [r, x0, y0, z0, f0] of kept) { r.x = x0; r.y = y0; r.z = z0; r.fall = f0; } }
 let lastT = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   if (race) tick(dt);
+  const kept = asDrawn();
   draw();
+  putBack(kept);
   requestAnimationFrame(frame);
 }
 function tick(dt) {
@@ -533,7 +561,7 @@ function tick(dt) {
     }
     r.ph += Math.hypot(r.vx, r.vy) * dt * 2.2;
   }
-  if (race.phase === 'run') bumps();
+  if (race.phase === 'run') { const kept = asDrawn(); bumps(); putBack(kept); }
   if (race.phase === 'run') whoosh(t);
   if (race.mode === 'solo') { if (race.phase === 'run' && over()) finish(standings()); }
   else if (R.isHost) hostTick(dt);
