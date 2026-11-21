@@ -198,8 +198,10 @@ def test_a_flick_up_serves_and_a_bat_in_the_way_returns_the_ball(site, context):
 
 def test_standing_still_loses_and_following_the_ball_wins_on_easy(site, context):
     page = open_game(site, context)
-    lazy = page.evaluate(SIM, [0, "lazy", 2])
-    assert lazy["lost"] == 2 and lazy["pts"][0] < 16
+    # Standing still won 1 of 40 games on easy when this was measured (4.4 points a game, at
+    # most 14), so four games may hold one lucky win.
+    lazy = page.evaluate(SIM, [0, "lazy", 4])
+    assert lazy["lost"] >= 3 and lazy["pts"][0] < 32
     # Following the ball (with a 10 cm wobble) won 8 of 8 games on easy when this was measured,
     # so three of four leaves room for chance.
     good = page.evaluate(SIM, [0, "sloppy", 4])
