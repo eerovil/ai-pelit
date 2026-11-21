@@ -577,7 +577,11 @@ function frame(now) {
   }
   if (me) { if (me.got !== gotSeen) { gotSeen = me.got; me.gotT = 0; } me.gotT = (me.gotT || 0) + dt; }
   soundsOf(mode === 'play' || mode === 'netplay' ? world : null);
+  // v3 (#480): on a guest the other seals are drawn where their tracks glide (net.js), then put back
+  // at the newest spot heard.
+  const kept = net && typeof asDrawn === 'function' ? asDrawn() : null;
   draw(dt);
+  if (kept) putBack(kept);
   document.body.classList.toggle('playing', mode === 'play' || mode === 'pause' || mode === 'netplay' || mode === 'netwait');
   document.body.classList.toggle('solo', mode === 'play' && !net);
   const moving = mode === 'play' || mode === 'netplay' || mode === 'netwait' || mode === 'menu' || mode === 'end';

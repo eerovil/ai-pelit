@@ -7,6 +7,14 @@
 // others on by their speed between messages; its own seal moves at once with its own finger
 // (prediction) and is eased back to where the host has it. A guest decides nothing.
 //
+// v3 (#480): a guest draws the other seals from lib/sulava-1, gliding between the host's states a
+// moment back, instead of carrying each one on at its speed until the next state (v2). Each state
+// carries the host's own clock (`st`, AiPelitSulava.now()); the host moves every seal itself, so
+// every spot a guest hears is on that one clock and none is forwarded with a friend's stamp. The
+// seals keep the newest spot between frames (the guest's own seal and the HUD read it); only the
+// picture swaps the drawn spot in (asDrawn() and putBack(), around draw() in ui.js). A guest judges
+// no bump, so no rule needs the drawn spot.
+//
 // Order (design review, #478): a guest keeps only states of the round it last heard `start` for
 // (rooms.js's round id, compared only for equality) and, within it, only a `seq` above the last it
 // kept. The host's `seq` is one counter for the whole life of its page and never goes back.
@@ -46,7 +54,7 @@ function unpack(sl, a, mine) {
 function hostState() {
   const w = world;
   return {
-    t: 's', round: net.round, seq: ++hostSeq, f: w.floe, ph: w.ph, cd: r2(w.cd), era: w.era, tt: r2(w.t), pause: r2(w.pause),
+    t: 's', round: net.round, seq: ++hostSeq, st: AiPelitSulava.now(), f: w.floe, ph: w.ph, cd: r2(w.cd), era: w.era, tt: r2(w.t), pause: r2(w.pause),
     win: w.winner, ew: w.eraWin,
     parts: w.parts.map(p => p.r.map(r2)),
     warn: w.warn.map(b => [b.p, b.i, r2(b.t)]),
@@ -95,6 +103,8 @@ function guestState(m) {
     if (me) me.kind = 'me';
   }
   const w = world;
+  // v3 (#480): a new erä puts every seal back in its ring at once; no glide from where it was.
+  const newEra = w.era !== m.era, st = Number.isFinite(m.st) ? m.st : null;
   w.ph = m.ph; w.cd = m.cd; w.era = m.era; w.t = m.tt; w.pause = m.pause; w.winner = m.win; w.eraWin = m.ew;
   w.over = m.ph === 'over';
   m.parts.forEach((rs, i) => { if (w.parts[i]) w.parts[i].r = rs; });
@@ -104,7 +114,7 @@ function guestState(m) {
   w.holes = m.holes.map(([x, y, r, warn, open]) => ({ x, y, r, warn, open }));
   m.sk.forEach((a, i) => {
     const sl = w.seals[i];
-    if (sl !== me) { unpack(sl, a, false); return; }
+    if (sl !== me) { const saved = sl.saved; unpack(sl, a, false); heardSpot(sl, st, newEra || sl.saved > saved); return; }
     // My own seal: the host's word on everything but where it is, which is eased to the host's.
     if (a[4] !== net.myOwn) {
       // The host has handed it to me (start, my hello, back): count on from its numbers.
@@ -134,6 +144,32 @@ function guestState(m) {
   if (mode === 'netwait') { mode = 'netplay'; stick = null; }
   wake();
 }
+// v3 (#480): another seal's spot just heard (already unpacked into it), on the host's clock `st`
+// (null from a host without it: the track uses the arrival here). `jump` is a move the game knows
+// of: a new erä, or a wobbling seal mashed back onto the ice (`saved` rose). A move of over 8 units
+// between two states is a jump too: the fastest throw (about 30 units/s, a lunge into a small seal)
+// covers 5 in a late state's gap of 0.17 s, and a floe is 16-20 units across.
+const SEAL_JUMP = 8;
+function heardSpot(sl, st, jump) {
+  const spot = { x: sl.x, y: sl.y, face: sl.face };
+  if (!sl.tr) sl.tr = AiPelitSulava.track({ keys: ['x', 'y', 'face'], angles: ['face'], jump: SEAL_JUMP });
+  if (jump) sl.tr.snap(st, spot); else sl.tr.push(st, spot);
+}
+// Every other seal at the spot its track draws, for the picture only; putBack() restores the newest.
+// A seal in the water is drawn at outX, outY and is left alone.
+function asDrawn() {
+  if (!net || RM.isHost || !world) return [];
+  const kept = [];
+  for (const sl of world.seals) {
+    if (sl === me || sl.out || !sl.tr || !sl.tr.size()) continue;
+    const o = sl.tr.at();
+    if (!o) continue;
+    kept.push([sl, sl.x, sl.y, sl.face]);
+    sl.x = o.x; sl.y = o.y; sl.face = o.face;
+  }
+  return kept;
+}
+function putBack(kept) { for (const [sl, x, y, face] of kept) { sl.x = x; sl.y = y; sl.face = face; } }
 function netLunge() {
   if (!net || !me || !world || world.ph !== 'play') return;   // only while the erä is on
   if (RM.isHost) { me.want = me.lunges + 1; return; }
@@ -161,14 +197,11 @@ function netTick(dt) {
     if (net.sendT <= 0) { net.sendT = 1 / 15; RM.send(hostState()); }
     return;
   }
-  // A guest: the countdown and the others slide on, my own seal moves with my finger.
+  // A guest: the countdown runs, my own seal moves with my finger. v3 (#480): the others stay at the
+  // newest spot heard (v2 slid them on at their speed) and are drawn gliding a moment back (asDrawn()).
   if (w.ph === 'count') w.cd = Math.max(0, w.cd - dt);
   if (w.ph === 'play') {
-    for (const sl of w.seals) {
-      if (sl.out) { sl.out += dt; continue; }
-      if (sl === me) continue;
-      sl.x += sl.vx * dt; sl.y += sl.vy * dt;
-    }
+    for (const sl of w.seals) if (sl.out) sl.out += dt;
     if (me && !me.out && !(me.teeter > 0)) {
       const [ix, iy] = stickInput();
       me.ix = ix; me.iy = iy;
