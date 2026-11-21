@@ -1,7 +1,7 @@
 'use strict';
 // Jäälautta drawn in 3D (v2, #478). three.js renders the sea, the floe and the seals on a WebGL
-// canvas under the game's own 2D canvas, which keeps the HUD, the stick and the button. The game's
-// world (world.js) is unchanged: this only reads it each frame. A phone that cannot draw
+// canvas under the game's own 2D canvas, which keeps the HUD, the stick and the button. It only
+// reads the game's world (world.js) each frame and never changes it. A phone that cannot draw
 // WebGL (J3D.failed) keeps playing on the 2D drawing in ui.js.
 window.J3D = { ready: false, failed: false };
 (function () {
@@ -55,7 +55,10 @@ window.J3D = { ready: false, failed: false };
         let f = floes[i];
         if (!f) { f = floes[i] = new T.Mesh(undefined, [capM, sideM]); f.receiveShadow = true; f.castShadow = true; scene.add(f); }
         f.visible = p.r.some(r => r > 0.05);
-        if (f.sig !== sig && f.visible) { if (f.geometry) f.geometry.dispose(); f.geometry = floeGeo(p); f.sig = sig; }
+        // The melt changes every radius each step: rebuild then at most ten times a second, as the
+        // extruded, bevelled outline is costly to make on a cheap phone.
+        const melting = w.t >= SUDDEN_AT && f.geometry && performance.now() - (f.at || 0) < 100;
+        if (f.sig !== sig && f.visible && !melting) { if (f.geometry) f.geometry.dispose(); f.geometry = floeGeo(p); f.sig = sig; f.at = performance.now(); }
       });
       for (let i = w.parts.length; i < floes.length; i++) floes[i].visible = false;
     }
@@ -134,7 +137,7 @@ window.J3D = { ready: false, failed: false };
         const fl = add(ball, darkM, 0, 0, s * 0.25, 0.18, 0.07, 0.38, piv);
         parts[s < 0 ? 'fl' : 'fr'] = piv;
       }
-      parts.bodyM = bodyM;
+      parts.bodyM = bodyM; parts.hatM = hatM;
       const root = new T.Group(); root.add(g); root.userData = { g, parts };
       return root;
     }
@@ -189,6 +192,8 @@ window.J3D = { ready: false, failed: false };
         let m = seals.get(sl);
         if (!m) { m = sealModel(HATS[sl.hat % HATS.length].c); seals.set(sl, m); scene.add(m); }
         const { g, parts } = m.userData, R = radiusOf(sl);
+        // In a room the host may change a seal's hat once its phone's first input comes (net.js).
+        if (m.userData.hat !== sl.hat) { parts.hatM.color.set(HATS[sl.hat % HATS.length].c); m.userData.hat = sl.hat; }
         m.scale.setScalar(R * LOOK);
         if (sl.out) {
           // In the water: only the head and hat above the waves, bobbing, with rings spreading. A seal
@@ -253,6 +258,8 @@ window.J3D = { ready: false, failed: false };
       else tn.done = true;
     }
     J3D.tuning = tn;
+    // The hat colour a seal's model wears now (for the tests).
+    J3D.hatOf = sl => { const m = seals.get(sl); return m ? '#' + m.userData.parts.hatM.color.getHexString() : null; };
     J3D.render = function (w, clock, box, me) {
       const Wd = glc.clientWidth || innerWidth, Hd = glc.clientHeight || innerHeight;
       if (Wd !== lastW || Hd !== lastH) { rd.setSize(Wd, Hd, false); lastW = Wd; lastH = Hd; }

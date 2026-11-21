@@ -606,7 +606,7 @@ def test_the_pause_button_leaves_the_stars_room_on_a_narrow_phone(site, context,
     btn = page.locator("#pauseBtn").bounding_box()
     # The right end of the last seal's three stars (drawHUD: x + 16 + 2 × 12, a 12 px star) and the row's bottom.
     right, bottom = page.evaluate("""() => {
-      const n = world.seals.length, x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 ? 12 : 52);
+      const n = world.seals.length, x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 || net ? 12 : 52);
       const cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
       return [x0 + 3 * cw + 16 + 2 * 12 + 12, SAFE_T + 14 + 14];
     }""")
@@ -644,3 +644,41 @@ def test_lohkare_drops_on_its_holder_and_presses_it_through_the_ice(site, contex
                 x, y = page.evaluate("[X(world.seals[1].outX), Y(world.seals[1].outY) + 0.9 * V.s]")
             assert ice_brightness(page, x, y) < 120, t
     assert page.errors == []
+
+
+def test_a_seal_whose_hat_changes_wears_the_new_one_in_3d(site, context):
+    # In a room the host gives a guest's seal its own hat once that phone's first input comes (net.js).
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    go(page)
+    page.wait_for_timeout(200)
+    page.evaluate("() => { world.seals[2].hat = (world.seals[2].hat + 3) % HATS.length; }")
+    page.wait_for_timeout(200)
+    got, want = page.evaluate("[J3D.hatOf(world.seals[2]), HATS[world.seals[2].hat % HATS.length].c.toLowerCase()]")
+    assert got == want
+    assert page.errors == []
+
+
+def test_a_computer_seal_lunges_a_wobbling_seal_in_once_it_can(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const out = [];
+      for (let seed = 1; seed <= 6; seed++) {
+        const ps = [0, 1].map(i => ({ id: 'c' + i, name: 'c' + i, hat: i, kind: 'cpu' }));
+        const w = newWorld(1, ps, seed); w.ph = 'play';
+        const [a, c] = w.seals, p = w.parts[0], b = cpuBrain(FLOES[4].cpu, seed);   // the sharpest: it reacts in time
+        // a wobbles on the right edge and never presses; c leans on it from inside.
+        Object.assign(a, { x: p.x + edgeAt(p, 0) + 0.1, y: p.y, vx: 0, vy: 0, teeter: TEETER_T, mash: 0, tp: 0, ta: 0 });
+        Object.assign(c, { x: a.x - radiusOf(a) - radiusOf(c), y: p.y, vx: 0, vy: 0, cd: 0 });
+        let t = 0;
+        for (; t < TEETER_T - 0.1 && !a.out; t += STEP) { cpuThink(w, c, b, STEP); a.want = a.lunges; tick(w, STEP); }
+        out.push(a.out ? +t.toFixed(2) : null);
+      }
+      return out;
+    }""")
+    # Tipped in by the computer, not by its time running out, and never in the safe first 0.5 s. Its aim
+    # may miss (`err`), and a missed lunge waits out its cooldown, so not every seed.
+    hit = [t for t in r if t is not None]
+    assert len(hit) >= 4 and all(0.5 <= t < 1.4 for t in hit), r

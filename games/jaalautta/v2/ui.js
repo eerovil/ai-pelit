@@ -462,7 +462,7 @@ function drawHUD(w) {
   // Upright: rows of four along the top, right of the "‹ Pelit" chip. Sideways: one column in the
   // left margin under it, so the top bar stays free for the room's 🎤 chip.
   const n = w.seals.length, top = SAFE_T + 14;
-  const x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 ? 12 : 52), cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
+  const x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 || net ? 12 : 52), cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
   w.seals.forEach((s, i) => {
     const x = LAND ? SAFE_L + 14 : x0 + (i % 4) * cw, y = LAND ? SAFE_T + 50 + i * 22 : top + Math.floor(i / 4) * 20;
     cx.globalAlpha = s.out ? 0.5 : 1;
