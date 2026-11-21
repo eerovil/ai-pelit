@@ -29,8 +29,10 @@ STRAIGHT = """() => { const dr = window.drive; window.__run = false; window.__s 
     if (k !== me) return dr(k, dt, steer, d);
     const v = window.__run ? 150 : 0;
     window.__s += v * dt; k.prog += v * dt; k.v = v;
-    const p = at(T, window.__s, window.__lane);
-    Object.assign(k, { x: p.x, y: p.y, a: p.a, idx: p.i, s: ((window.__s % T.L) + T.L) % T.L, lat: window.__lane, z: 0, vz: 0 });
+    // Between two of the track's samples (6 px apart), so the kart moves evenly and not in 6 px steps.
+    const n = Math.floor(window.__s / T.step), f = window.__s / T.step - n;
+    const p = at(T, n * T.step, window.__lane), q = at(T, (n + 1) * T.step, window.__lane);
+    Object.assign(k, { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, a: p.a, idx: p.i, s: ((window.__s % T.L) + T.L) % T.L, lat: window.__lane, z: 0, vz: 0 });
   }; }"""
 # Records, each time the screen is drawn, where kart `i` is drawn, and when a message arrived (so a stall of the
 # test machine, with no message for a while, can be told from a jerk).
