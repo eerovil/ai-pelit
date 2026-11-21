@@ -25,7 +25,7 @@ SIM = """([floe, policy, seed, skill]) => {
       cpuThink(w, s, brains[i], STEP);
     });
     const ph = w.ph; tick(w, STEP);
-    for (const p of w.parts) for (const r of p.r) minFrac = Math.min(minFrac, r / p.r0);
+    if (w.ph === 'play' && w.t < SUDDEN_AT) for (const p of w.parts) for (const r of p.r) minFrac = Math.min(minFrac, r / p.r0);
     if (ph === 'play' && w.ph !== 'play') eras.push(w.t);
   }
   return { win: w.winner, over: w.over, eras, minFrac };
@@ -105,6 +105,42 @@ def test_the_floe_breaks_no_smaller_than_a_third_and_every_round_ends(site, cont
             assert r["over"] and r["win"]
             assert r["minFrac"] >= 1 / 3 - 1e-9
             assert max(r["eras"]) < 90, (floe, seed, r["eras"])
+
+
+def test_an_era_ends_even_when_nobody_touches_the_screen(site, context):
+    # Four phones in a room whose players all put them down: the melt still ends every erä, and a
+    # tie in the melt goes to one of the seals by lot, so the match ends (#479 review).
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const w = newWorld(1, [0, 1, 2, 3].map(i => ({ id: 'p' + i, name: 'p' + i, hat: i, kind: 'net' })), 9);
+      const eras = []; let guard = 0;
+      while (!w.over && guard++ < 120 * 60 * 15) {
+        const ph = w.ph; tick(w, STEP);
+        if (ph === 'play' && w.ph !== 'play') eras.push(w.t);
+      }
+      const melted = (() => { const v = newWorld(1, [{ id: 'a', name: 'a', hat: 0, kind: 'net' }, { id: 'b', name: 'b', hat: 1, kind: 'net' }], 3);
+        v.ph = 'play'; v.t = SUDDEN_AT; v.seals.forEach(s => { s.x = 0; s.y = 0; s.out = 1; }); v.seals[0].out = 0;
+        tick(v, 1); return v.parts[0].r.every(r => r < v.parts[0].r0 * (1 - MELT * 0.9)); })();
+      return { over: w.over, winner: w.winner, eras, melted };
+    }""")
+    assert r["over"] and r["winner"]
+    assert len(r["eras"]) >= 3 and max(r["eras"]) <= 60 + 20 + 1, r["eras"]
+    assert r["melted"]
+
+
+def test_no_lunge_is_kept_for_the_next_era(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("mode === 'play' && world && world.ph === 'count'")
+    b = page.evaluate("button()")
+    # A press during the countdown does nothing, and does not lunge when the erä starts.
+    page.evaluate(TOUCH, ["pointerdown", 8, b["x"], b["y"]])
+    assert page.evaluate("me.want === me.lunges")
+    page.wait_for_function("world.ph === 'play' && world.t > 0.2")
+    assert page.evaluate("[me.lunges, me.lungeT]") == [0, 0]
+    # A press left pending when an erä ends is dropped by the next one.
+    assert page.evaluate("() => { me.want = me.lunges + 1; resetEra(world); return me.want === me.lunges; }")
+    assert page.errors == []
 
 
 def test_lazy_play_does_not_win_and_the_hardest_floe_can_be_won(site, context):

@@ -23,10 +23,10 @@ let lastEnd = null, hostSeq = 0;   // `net` is declared in ui.js: its loop may r
 
 const r2 = n => Math.round(n * 100) / 100;
 const recOf = id => net && net.recs.find(r => r.id === id);
-// A seal as sent.
+// A seal as sent. `out` is never rounded down to 0, so a seal just in is in on the guests too.
 function pack(sl, rec) {
   return [sl.id, sl.name, sl.hat, sl.kind === 'cpu' ? 1 : 0, sl.own, sl.lunges, r2(sl.x), r2(sl.y), r2(sl.vx), r2(sl.vy), r2(sl.face),
-    r2(sl.cd), r2(sl.lungeT), r2(sl.stun), sl.out ? r2(sl.out) : 0, r2(sl.outX), r2(sl.outY),
+    r2(sl.cd), r2(sl.lungeT), r2(sl.stun), sl.out ? Math.max(0.01, r2(sl.out)) : 0, r2(sl.outX), r2(sl.outY),
     sl.size ? sl.size.k : '', sl.size ? r2(sl.size.t) : 0, sl.fuse ? sl.fuse.k : '', sl.fuse ? r2(sl.fuse.t) : 0, sl.fuse ? r2(sl.fuse.g) : 0,
     sl.stars, sl.hit, sl.got, sl.gotK || '', sl.crushed ? 1 : 0, rec && rec.helped ? 1 : 0];
 }
@@ -111,6 +111,8 @@ function guestState(m) {
       sl.kind = 'me';
       return;
     }
+    // The host counted a press it would not use (between erät): count on from there.
+    if (a[5] > net.myL) net.myL = a[5];
     const wasOut = sl.out;
     unpack(sl, a, true);
     sl.kind = 'me';
@@ -126,7 +128,7 @@ function guestState(m) {
   wake();
 }
 function netLunge() {
-  if (!net || !me) return;
+  if (!net || !me || !world || world.ph !== 'play') return;   // only while the erä is on
   if (RM.isHost) { me.want = me.lunges + 1; return; }
   net.myL++;
   me.want = net.myL;   // shown at once; the host decides whether it hit anything
@@ -186,7 +188,11 @@ function hostInput(m, from) {
   const d = Math.hypot(x, y);
   if (d > 1) { x /= d; y /= d; }
   sl.ix = x; sl.iy = y;
-  if (Number.isFinite(m.l) && m.l > sl.lunges) sl.want = Math.max(sl.want, Math.floor(m.l));
+  if (Number.isFinite(m.l) && m.l > sl.lunges) {
+    // A press that reaches the host between erät is counted but never lunges later.
+    if (world.ph === 'play') sl.want = Math.max(sl.want, Math.floor(m.l));
+    else sl.lunges = sl.want = Math.floor(m.l);
+  }
   // The phone's own hat colour, when no other phone wears it (a computer seal swaps with it).
   const h = Math.floor(m.h);
   if (h >= 0 && h < HATS.length && h !== sl.hat) {

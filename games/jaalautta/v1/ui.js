@@ -174,7 +174,7 @@ function stickInput() {
   return [dx, dy];
 }
 function lunge() {
-  if (!me || me.out) return;
+  if (!me || me.out || !world || world.ph !== 'play') return;   // the button is only there in play
   lungeFlash = 0.15;
   if (net) netLunge();
   else me.want = me.lunges + 1;
@@ -428,6 +428,7 @@ function drawHUD(w) {
     const win = w.seals.find(s => s.id === w.eraWin);
     shadowText(win ? (win === me ? 'Voitit erän!' : win.name + ' voitti erän!') : 'Tasapeli – erä uusiksi', W / 2, midY, 24, '#fff', 'center', 900);
   }
+  if (w.ph === 'play' && w.t >= SUDDEN_AT && w.t < SUDDEN_AT + 2.5) shadowText('Lautta sulaa!', W / 2, midY - 80, 26, '#9fd8ff', 'center', 900);
   if (me && me.out && w.ph === 'play') shadowText('Molskis!', W / 2, midY - 40, 30, '#9fd8ff', 'center', 900);
   if (me && me.got && me.gotK && me.gotT < 1.6) shadowText(POWER_NAMES[me.gotK] + '!', W / 2, midY + 50, 22, '#ffd84a', 'center', 900);
   // The pull: its base and its knob.

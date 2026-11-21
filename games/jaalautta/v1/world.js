@@ -20,6 +20,9 @@ const BUMP_MIN = 1.5;            // every bump throws at least this hard (units/
 // MIN_FRAC floors each wedge's radius at a third of the whole floe's (so the ice left can be about a
 // ninth of its area): a third of its size across, as the spec's "a third" was meant to read.
 const SHRINK_AT = 20, SHRINK_EVERY = 8, SHRINK_WARN = 1.5, MIN_FRAC = 1 / 3;
+// From SUDDEN_AT the whole floe melts evenly, MELT of its first radius a second, down to nothing, so
+// an erä always ends: by about 80 s even with nobody touching the screen (#479 review).
+const SUDDEN_AT = 60, MELT = 1 / 20;
 const RING_FIRST = 6, RING_EVERY = 10, RING_COME = 1, RING_OPEN = 4, RING_R = 1.3;
 const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, PASS_GRACE = 0.5, STUN_T = 1.5;
 const POWERS = ['jatti', 'pikku', 'ukko', 'lohk'];
@@ -84,6 +87,7 @@ function resetEra(w) {
       x = Math.cos(a) * d; y = Math.sin(a) * d;
     }
     Object.assign(sl, { x, y, vx: 0, vy: 0, ix: 0, iy: 0, cd: 0, lungeT: 0, stun: 0, out: 0, size: null, fuse: null, crushed: false });
+    sl.want = sl.lunges;   // a press left over from the last erä never lunges in this one
     sl.face = Math.atan2(-y, -x);
   });
 }
@@ -155,12 +159,20 @@ function tick(w, h) {
   hazards(w, h);
   powers(w, h);
   shrink(w, h);
+  if (w.t >= SUDDEN_AT) for (const p of w.parts) p.r = p.r.map(r => Math.max(0, r - p.r0 * MELT * h));
+  const fellNow = [];
   for (const sl of w.seals) {
     if (sl.out) { sl.out += h; continue; }
-    if (!onIce(w, sl.x, sl.y)) fall(w, sl);
+    if (!onIce(w, sl.x, sl.y)) { fall(w, sl); fellNow.push(sl); }
   }
   const left = w.seals.filter(alive);
-  if (left.length <= 1) endEra(w, left[0] || null);
+  if (left.length <= 1) {
+    let win = left[0] || null;
+    // In the melt the last seals may go in together: one of them, by lot, takes the erä, so it never
+    // replays for ever. Before the melt a tie is replayed (spec D8).
+    if (!win && w.t >= SUDDEN_AT && fellNow.length) win = fellNow[Math.floor(w.rand() * fellNow.length)];
+    endEra(w, win);
+  }
 }
 function moveSeal(w, sl, h) {
   if (sl.out) return;

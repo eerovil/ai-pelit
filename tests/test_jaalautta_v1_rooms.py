@@ -91,6 +91,19 @@ def test_three_phones_play_one_floe_and_the_next_match_starts_clean(seals):
     host.evaluate("fall(world, world.seals.find(s => s.kind === 'cpu'))")
     for p in (g1, g2):
         p.wait_for_function("world.seals.find(s => s.kind === 'cpu').out > 0", timeout=5000)
+    # The last knock-out of an erä: every guest sees all of them in the water through the pause.
+    host.evaluate("() => { world.seals.filter(s => s !== me).forEach(s => fall(world, s)); step(world, 0.02); }")
+    for p in (g1, g2):
+        p.wait_for_function("world.ph === 'erä'", timeout=5000)
+        assert p.evaluate(f"world.seals.filter(s => s.id !== {json.dumps(host.evaluate('me.id'))}).every(s => s.out > 0)")
+    # A lunge between erät: the guest's button does nothing, and a late one reaching the host is
+    # counted but never lunges when the next erä starts.
+    l0 = g1.evaluate("net.myL")
+    g1.evaluate(TOUCH, ["pointerdown", 9, b["x"], b["y"]])
+    assert g1.evaluate("net.myL") == l0
+    host.evaluate(f"(() => {{ const s = {SEAL.format(gid)}; hostInput({{ t: 'i', round: net.round, w: s.own, x: 0, y: 0, l: s.lunges + 1 }}, {gid}); }})()")
+    assert host.evaluate(f"(() => {{ const s = {SEAL.format(gid)}; return [s.want === s.lunges, s.lunges]; }})()") == [True, 2]
+    g1.wait_for_function("net.myL === 2", timeout=5000)
     # The host's seal wins the match: one result everywhere, nothing saved anywhere.
     for p in (host, g1, g2):
         p.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
