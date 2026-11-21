@@ -24,6 +24,7 @@ flowchart TD
     G6 -- Ei, viesti myöhässä --> G8{Alle 0,25 s yli uusimman?}
     G8 -- Kyllä --> G9[Jatka samaa vauhtia eteenpäin]
     G8 -- Ei --> G10[Pysähdy viimeiseen paikkaan]
+    G9 --> G13[Seuraava viesti korjaa arvauksen: ero liukuu pois 0,1 sekunnissa]
     G11[Viive mukautuu: viestien väli + vaihtelu, 0,06–0,25 s]
     G12[Oma pelaaja liikkuu sormen mukaan heti, ei viivettä]
   end
@@ -33,7 +34,7 @@ flowchart TD
   class H1,H2 blue
   class R1 violet
   class G1,G2,G3,G4 teal
-  class G5,G6,G7,G8,G9,G10,G11 amber
+  class G5,G6,G7,G8,G9,G10,G11,G13 amber
   class G12 green
 ```
 
@@ -53,4 +54,5 @@ flowchart TD
 - **Viive mukautuu: viestien väli + vaihtelu, 0,06–0,25 s**: the delay is the usual gap between spots plus twice how late they usually come (over the earliest of the last 2 s), limited to `minDelay`–`maxDelay` (0.06–0.25 s), so a steady connection waits less.
 - **Liu'u kahden viestin välillä**: `at()`: a straight-line blend of the track's `keys`; keys named in `angles` take the short way round. The moment drawn follows a change of offset or delay at most 20 % faster or slower than real time, and jumps to it after a frame gap over a second (the page slept).
 - **Jatka samaa vauhtia eteenpäin**: extrapolates from the last two spots, at most `extra` (0.25 s) past the newest, and not at all when those two are over 0.5 s apart. When a spot then comes that says the guess was off (the player had started or stopped), the difference between what was drawn and what the spots now say is drawn away over about 0.1 s (`EASE`), not in one frame.
+- **Seuraava viesti korjaa arvauksen: ero liukuu pois 0,1 sekunnissa**: when a spot comes after a frame drawn on that guess, `at()` works out what that frame should have drawn by the spots now known and draws the difference away over about 0.1 s (`EASE`), instead of in one frame (a player who had started or stopped walking).
 - **Oma pelaaja liikkuu sormen mukaan heti, ei viivettä**: the phone's own kart or player is never passed through the library.
