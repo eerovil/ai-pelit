@@ -34,14 +34,15 @@ RUN = """([i, dir]) => { window.__run = false; let t0 = null, y0 = 0; const s = 
     }
     s(dt); }; }"""
 # Records, each frame, where fighter `i` is drawn along the arena and the moment its track was asked
-# (asDrawn(), right before the drawing), and whether the phone had by then heard a spot from the host newer
-# than the moment drawn (so a stall of the test machine or its relay, with no spot heard for a while, can be
-# told from a jerk: the drawing then waits on the newest spot, by design).
+# (asDrawn(), right before the drawing), and whether the moment drawn was within the track's 0.05 s guess past
+# the newest spot the phone had heard by then. Past that, a stall of the test machine or its relay (no spot
+# heard for a while) holds the drawing on the newest spot, by design, and is not a jerk; within it, a fighter
+# standing still is one (as when a spot heard but held back was not put on the track in time).
 SAMPLE = """(i) => { window.__ys = []; let heard = -Infinity; const tr = fighters[i].tr;
   AiPelitRooms.on('message', m => { if (m.t === 's' && m.ck > heard) heard = m.ck; });
   const a = window.asDrawn;
   window.asDrawn = () => { const t = performance.now() / 1000, kept = a();
-    if (window.__ys.length < 300) window.__ys.push([t, fighters[i].y, tr.time <= heard]); return kept; }; }"""
+    if (window.__ys.length < 300) window.__ys.push([t, fighters[i].y, tr.time <= heard + 0.05]); return kept; }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -92,7 +93,8 @@ def glides(page):
     t0, t1 = sp[moving[0]][0] + 0.15, sp[moving[-1]][0] - 0.3
     middle = [(t, v, fed) for t, v, fed in sp if t0 <= t <= t1]
     assert len(middle) > 30, len(middle)
-    # Only frames drawn with a spot heard ahead of them: the drawing's own glide, not a gap in the messages.
+    # Only frames drawn within the guess past the newest spot heard: the drawing's own glide, not a gap in the
+    # messages.
     kept = [v for _, v, fed in middle if fed]
     shown = [round(v) for _, v, _ in middle]
     assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
@@ -274,4 +276,45 @@ def test_a_hits_number_starts_where_the_fighter_is_drawn(site, browser):
     hit = guest.evaluate("window.__hit")
     assert abs(hit["text"] - hit["seen"]) < 0.01, hit
     assert abs(hit["newest"] - hit["seen"]) > 0.5, hit
+    assert not host.errors + guest.errors
+
+
+# On the guest, with the host's own messages dropped: states fed to the game by hand, fighter `i` moving
+# down at V units/s by the fight clock. Every 0.065 s for 0.8 s (each goes on the track), then one more
+# only 0.035 s after the last (held back: under 0.06 s), then none. Records each frame [moment drawn, y].
+FEED = """([i, V]) => new Promise(done => {
+  const base = JSON.parse(JSON.stringify(window.__last)), t0 = fightClock(), y0 = 120, f = fighters[i];
+  const feed = () => { const m = JSON.parse(JSON.stringify(base)), ck = fightClock();
+    m.ck = ck; m.f[i][1] = y0 + V * (ck - t0); onMessage(m); return ck; };
+  window.__feed = []; const d = window.asDrawn;
+  window.asDrawn = () => { const k = d(); window.__feed.push([f.tr.time, f.y]); return k; };
+  const tick = () => {
+    if (fightClock() - t0 < 0.8) { feed(); setTimeout(tick, 65); return; }
+    const last = feed();
+    setTimeout(() => { window.__held = feed() - t0; window.__lastOn = last - t0;
+      setTimeout(() => done([y0, t0]), 500); }, 35);
+  };
+  tick(); })"""
+
+
+def test_a_spot_held_back_goes_on_the_track_before_the_drawing_needs_it(site, browser):
+    """A spot heard under 0.06 s after the newest one on the track waits; once the drawn moment nears the
+    newest spot on the track, it goes on. Without that, the drawing would stop 0.05 s past the track's newest
+    spot (its guess) while a newer spot had been heard: here, with the messages then stopping, it goes on to
+    0.05 s past the spot held back."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') window.__last = m; }); }""")
+    guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
+    host.evaluate(DROP)
+    host.evaluate("window.__drop = true")
+    guest.wait_for_timeout(300)
+    V = 200
+    y0, _ = guest.evaluate(FEED, [me, V])
+    held, last_on = guest.evaluate("[window.__held, window.__lastOn]")
+    assert 0.03 <= held - last_on < 0.06, (held, last_on)
+    ys = [y for _, y in guest.evaluate("window.__feed")]
+    # Drawn on to 0.05 s past the spot held back (10 units), not stopping 7 units short of it.
+    want = y0 + V * (held + 0.05)
+    assert abs(ys[-1] - want) < 2, (ys[-1], want, y0 + V * (last_on + 0.05))
     assert not host.errors + guest.errors
