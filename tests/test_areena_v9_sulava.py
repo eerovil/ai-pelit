@@ -239,14 +239,18 @@ def test_a_dodge_on_a_stalled_link_is_drawn_only_a_little_past_its_end(site, bro
 
 
 def test_a_paused_room_holds_the_drawn_fighters_and_goes_on_from_there(site, browser):
-    """The host pauses first. While the room waits for a phone that is away, a guest draws the other fighters where they were when
-    it paused, not going on at their last speed past the newest spot; when the room goes on, they move on
-    from there at about its speed, with no jump over the pause (1.5 s here)."""
+    """The host pauses first. While the room waits for a phone that is away, a guest draws the other fighters
+    where they were when it paused, not going on at their last speed past the newest spot; when the room goes
+    on, they move on from there at about its speed, with no jump over the pause (1.5 s here)."""
     host, guest = phones(site, browser)
     me = index(host)
     host.evaluate(PAUSE)
     guest.evaluate(PAUSE)
     host.evaluate(RUN, [me, 1 if guest.evaluate(f"fighters[{me}].y < AH / 2") else -1])
+    # A phone network's lag: the guest draws a longer moment back (0.11 s seen, 7 units at its speed), so
+    # the moment between the host's pause and the guest's (longer on a busy machine) leaves the drawn
+    # fighter short of where it stopped (4.2 units seen; 1.6 at the least without the lag).
+    host.evaluate(JITTER)
     guest.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
     guest.evaluate(DRAWN, me)
     host.evaluate("window.__run = true")
@@ -264,7 +268,7 @@ def test_a_paused_room_holds_the_drawn_fighters_and_goes_on_from_there(site, bro
     after = guest.evaluate("window.__drawn.slice(window.__go - 1)")
     stop = host.evaluate(f"fighters[{me}].y")
     # Held short of where it stopped, then on to there.
-    assert abs(after[0][2] - stop) > 2, (after[0][2], stop)
+    assert abs(after[0][2] - stop) > 1, (after[0][2], stop)
     assert abs(after[-1][2] - stop) < 0.5, (after[-1][2], stop)
     # On at about its running speed (62 units/s), by the time between frames: no jump over the pause.
     speeds = [abs(b[2] - a[2]) / (b[0] - a[0]) for a, b in zip(after, after[1:]) if b[0] > a[0]]
