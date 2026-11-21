@@ -5,7 +5,7 @@ Each phone keeps the last few positions it heard for every other player and draw
 moment in the past, gliding between the two messages around that moment, so an uneven gap between
 messages no longer shows as a jerk. The shared part is `public/lib/sulava-1/sulava.js`; the game
 sends as often as before, adds the sending phone's clock to each spot, and draws the others from it.
-Last Signal v17 is the first game on it, Kirkkis v12 the second, Kaaosrata v9 the third, Hiihto v13 the fourth, Lentopallo v8 the fifth, and Lattia on laavaa v1 (#488) uses it from its first version; the other room games with moving players follow, most-played first.
+Last Signal v17 is the first game on it, Kirkkis v12 the second, Kaaosrata v9 the third, Hiihto v13 the fourth, Lentopallo v8 the fifth, and Lattia on laavaa v1 (#488) and Eukonkanto v1 (#501) use it from their first versions; the other room games with moving players follow, most-played first.
 
 ```mermaid
 flowchart TD
