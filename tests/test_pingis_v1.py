@@ -186,6 +186,22 @@ def test_a_game_is_saved_point_by_point_and_the_end_counts_once(site, context):
     assert page.errors == []
 
 
+def test_a_long_deuce_is_resumed_and_a_broken_save_is_dropped(site, context):
+    # 40–39 is still on: nobody leads by two. It comes back after a reload as it was.
+    page = open_game(site, context, saves={"kesken": json.dumps({"lvl": 2, "sc": [40, 39], "first": 1})})
+    page.wait_for_function("mode === 'play' && game", timeout=20000)
+    assert page.evaluate("[game.sc, level, game.first, game.over]") == [[40, 39], 2, 1, False]
+    assert page.evaluate("serverAt(game.sc, game.first)") == page.evaluate("game.sv")
+    page.close()
+    # A finished score, a broken one or a level that is not one: the menu, and the save is gone.
+    for bad in ({"lvl": 0, "sc": [41, 39]}, {"lvl": 0, "sc": [3, -1]}, {"lvl": 0, "sc": [3, 1.5]}, {"lvl": 0.5, "sc": [3, 1]}, {"lvl": 3, "sc": [3, 1]}):
+        page = open_game(site, context, saves={"kesken": json.dumps(bad)})
+        page.wait_for_function("mode === 'menu'", timeout=20000)
+        assert saved(page, "kesken") is None, bad
+        assert page.errors == []
+        page.close()
+
+
 def test_sideways_the_menu_fits_and_turning_keeps_the_game(site, context):
     page = open_game(site, context, width=740, height=360)
     for sel in ("#go", "#friends", "#levels button >> nth=2"):

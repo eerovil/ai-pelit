@@ -82,9 +82,10 @@ function soloGame(resume) {
 }
 // The game alone is saved after each point, so a reload goes on from the score (never mid-rally).
 function saveSolo() { if (!net && game && !game.over) save('kesken', { lvl: level, sc: game.sc, first: game.first }); }
+// A game goes on past 11 for as long as nobody leads by two, so a live score has no ceiling.
 function readSolo() {
   const m = load('kesken', null);
-  if (!m || !Array.isArray(m.sc) || m.sc.length !== 2 || m.sc.some(n => !(Number.isInteger(n) && n >= 0 && n < 40)) || winnerOf(m.sc) >= 0 || !(m.lvl >= 0 && m.lvl < LEVELS.length)) { drop('kesken'); return null; }
+  if (!m || !Array.isArray(m.sc) || m.sc.length !== 2 || m.sc.some(n => !(Number.isSafeInteger(n) && n >= 0)) || winnerOf(m.sc) >= 0 || !(Number.isInteger(m.lvl) && m.lvl >= 0 && m.lvl < LEVELS.length)) { drop('kesken'); return null; }
   return { lvl: m.lvl, sc: m.sc, first: m.first === 1 ? 1 : 0 };
 }
 function soloPoint(f, w) {
