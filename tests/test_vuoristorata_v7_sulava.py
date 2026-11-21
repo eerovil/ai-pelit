@@ -165,7 +165,7 @@ def test_a_train_put_back_after_a_derail_is_drawn_there_at_once(site, browser):
         host.evaluate("""(i) => { window.__back = null; const k = net.cars[i]; const d = window.drawnS; let was = false;
           window.drawnS = o => { const s = d(o); if (o === k) { if (was && !k.crash && window.__back === null) window.__back = [k.s, s];
             was = was || !!k.crash; } return s; }; }""", me)
-        # Put back 8 m: closer than the track's jump (15 m), so only the derail tells it to start again there.
+        # Put back 8 m: closer than the track's jump (30 m), so only the derail tells it to start again there.
         off = guest.evaluate("game.car.check = game.car.s - 8; crash('air'); game.car.check")
         host.wait_for_function("window.__back !== null", timeout=10000)
         said, drawn = host.evaluate("window.__back")

@@ -652,7 +652,7 @@ function netStart(s) {
     soloLevel: net ? net.soloLevel : game.level, heard: false,
     cars: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
       s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null,
-      tr: AiPelitSulava.track({ keys: ['s'], jump: 15 }), ts: null, src: '' })) };
+      tr: AiPelitSulava.track({ keys: ['s'], jump: 30 }), ts: null, src: '' })) };
   show(null);
   if (s.host && !s.over) { net.cfg = { level: game.level }; netLevel(); startRide(); }
   else { game.mode = 'netwait'; $('odota').classList.remove('hidden'); document.body.classList.add('riding'); }
