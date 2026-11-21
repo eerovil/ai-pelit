@@ -1,0 +1,13 @@
+{
+  "title": "Jäälautta",
+  "description": "Liukkaat hylkeet jäälautalla: tönäise muut mereen ja pysy itse jäällä, yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-21",
+      "note": "Ensimmäinen versio: viisi lauttaa, syöksy, neljä tehostetta, lohkeileva jää ja moninpeli 2–8 pelaajalle.",
+      "request": "Samanlainen peli kuin crash bashin polar panic",
+      "issue": "eerovil/ai-pelit#478"
+    }
+  ]
+}
