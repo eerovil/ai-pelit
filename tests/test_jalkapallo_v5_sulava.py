@@ -97,12 +97,14 @@ def glides(page, host):
     assert len(kept) > 30, (len(kept), len(middle), len(stalls))
     assert min(kept) > 0, shown  # never backwards
     m, sd = mean(kept), pstdev(kept)
-    assert sd < 0.2 * m, (sd, m, shown)
+    # The spread: under 0.33 of the mean. Without the smoothing it was 0.41-0.45 (sd 2.0-2.9 against 5-6.4);
+    # with it 0.05 on a quiet machine, but up to 0.28 with three pages on a machine at load 65-72, where the
+    # frames' own timing (not the drawing) spreads it.
+    assert sd < 0.33 * m, (sd, m, shown)
     # Hardly a frame at twice the speed or under half of it. One in fifty may be: under a 10x CPU throttle the
     # watching page now and then ran a frame's work late (a pause between the frame's start and its track
     # lookup), so one frame read up to 1.75x (2x in a loaded verification run) while the drawn moment went on
-    # evenly, at most 1.25x (#498). Without the
-    # smoothing, the spread above fails by far (sd 2.0-2.9 against a mean of 5-6.4).
+    # evenly, at most 1.25x (#498).
     odd = [v for v in kept if not 0.5 * m < v < 1.8 * m]
     assert len(odd) <= max(1, len(kept) // 50), (odd, m, shown)
 
