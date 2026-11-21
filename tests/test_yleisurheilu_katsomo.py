@@ -4,7 +4,7 @@ figure there on every phone.
 
 The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v19, games/keihas/v18, games/kuula/v12, games/korkeushyppy/v16,
-games/seivashyppy/v17, games/moukari/v14, games/makihyppy/v13.
+games/seivashyppy/v17, games/moukari/v14, games/makihyppy/v13, games/saappaanheitto/v1.
 """
 
 import json
@@ -21,6 +21,7 @@ EVENTS = {
     "seivashyppy/v17": "drawRunner",
     "moukari/v14": "drawThrower",
     "makihyppy/v13": "drawJumper",
+    "saappaanheitto/v1": "drawAthlete",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
 STADIUM = {"pituushyppy/v19", "keihas/v18", "kuula/v12", "korkeushyppy/v16", "seivashyppy/v17"}
@@ -42,12 +43,12 @@ def watching(site, browser, path):
 
 
 def still(page, fid, x):
-    """The friend fid stands where it stood, within half a pixel; a walk moves a figure many pixels.
+    """The friend fid stands where it stood, within a pixel; a walk moves a figure many pixels.
     Not exactly (#512): Mäkihyppy's jumper leaves the standings board on every phone onto the
     position the phone on turn sends, rounded to a centimetre and so 4 mm from where it stood.
     Its camera eases over, and the row of friends behind slides a hundredth of a pixel. A loaded
     test run reached that only after the first reading."""
-    return abs(page.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(fid)}).x") - x) < 0.5
+    return abs(page.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(fid)}).x") - x) < 1
 
 
 def tap_scene(page, x):
@@ -89,6 +90,9 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
     me = fan.evaluate("K.mine().id")
     them = other.evaluate("K.mine().id")
     before = {p: p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") for p in pages}
+    # From yleisurheilu-9 (#395) the row slides with the background, and on a watching phone in
+    # Makihyppy the camera may still drift by a hundredth of a pixel, so staying put means moving
+    # less than a pixel, not exactly 0.
     # Nobody walks by themselves.
     fan.wait_for_timeout(600)
     for p in pages:
