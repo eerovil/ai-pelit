@@ -54,7 +54,7 @@ function hostState() {
     win: w.winner, ew: w.eraWin,
     cash: w.cash ? [w.cash.x, w.cash.y] : null,
     q: w.qbox ? [w.qbox.x, w.qbox.y, r2(w.qbox.life)] : null,
-    bl: w.balls.map(b => [b.id, b.by, b.to, b.sx, b.sy, r2(b.t)]),   // snowballs in the air (#492)
+    bl: w.balls.map(b => [b.id, b.to, b.sx, b.sy, r2(b.t)]),   // snowballs in the air (#492)
     tiles: w.tiles.slice(),
     hk: w.hares.map((h, i) => pack(h, net.recs[i])),
   };
@@ -115,7 +115,7 @@ function guestState(m) {
   const had = new Map((w.balls || []).map(b => [b.id, b]));
   w.balls = (m.bl || []).map(a => {
     const o = had.get(a[0]);
-    return { id: a[0], by: a[1], to: a[2], sx: a[3], sy: a[4], t: o ? Math.max(o.t, a[5]) : a[5] };
+    return { id: a[0], to: a[1], sx: a[2], sy: a[3], t: o ? Math.max(o.t, a[4]) : a[4] };
   });
   if (m.tiles.length === w.tiles.length) for (let k = 0; k < w.tiles.length; k++) w.tiles[k] = m.tiles[k];
   m.hk.forEach((a, i) => {

@@ -120,7 +120,7 @@ function takeQ(w, h) {
   // Lumipallo only when someone else has points to lose; otherwise Pikajousi.
   const others = w.hares.filter(o => o !== h);
   const lead = others.reduce((a, o) => (!a || o.pts > a.pts ? o : a), null);
-  if (lead && lead.pts > 0 && w.rand() < 0.5) { h.gotK = 'lumi'; w.balls.push({ id: ++w.ballN, by: h.i, to: lead.i, sx: h.x, sy: h.y, t: 0 }); }
+  if (lead && lead.pts > 0 && w.rand() < 0.5) { h.gotK = 'lumi'; w.balls.push({ id: ++w.ballN, to: lead.i, sx: h.x, sy: h.y, t: 0 }); }
   else { h.gotK = 'jousi'; h.fast = FAST_T; }
 }
 // Aitaus: the squares that are not this hare's split into areas; once there are two or more, every

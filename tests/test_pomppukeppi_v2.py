@@ -168,7 +168,7 @@ def test_a_snowball_flies_to_the_leader_and_stuns_it_on_the_hit(site, context):
 def test_a_snowball_in_flight_is_drawn_in_3d_and_gone_at_a_new_era(site, context):
     page = open_game(site, context)
     go(page)
-    page.evaluate("() => { world.hares[1].pts = 5; world.balls.push({ id: 99, by: 0, to: 1, sx: 0, sy: 0, t: 0.3 }); }")
+    page.evaluate("() => { world.hares[1].pts = 5; world.balls.push({ id: 99, to: 1, sx: 0, sy: 0, t: 0.3 }); }")
     page.wait_for_function("V3.balls[0].b.visible && V3.balls[0].b.position.y > 1")
     assert page.evaluate("V3.balls[1].b.visible") is False
     page.screenshot(path="/var/tmp/ppk2-ball.png")
@@ -295,7 +295,7 @@ def test_without_3d_the_board_is_drawn_flat(site, context):
     page.wait_for_function("me.y >= 2", timeout=3000)
     assert page.evaluate("flat && flat.s > 20")
     # A snowball flies on the flat board too, and bursts into a puff on the hit.
-    page.evaluate("() => { world.hares[1].pts = 5; world.balls.push({ id: 7, by: 0, to: 1, sx: me.x, sy: me.y, t: 0 }); }")
+    page.evaluate("() => { world.hares[1].pts = 5; world.balls.push({ id: 7, to: 1, sx: me.x, sy: me.y, t: 0 }); }")
     page.wait_for_function("puffs.length === 1 && world.hares[1].stun > 0", timeout=3000)
     assert page.errors == []
 
