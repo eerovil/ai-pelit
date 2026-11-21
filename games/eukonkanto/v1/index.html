@@ -334,6 +334,9 @@ function move(r, dt, clock) {
     }
   }
   r.ph += (r.x - x0) * 1.5;
+  // A log or a landing at the very end of the step (or past the piece cap) that filled the meter
+  // leaves no time for the fall's own event: she falls here, before any tap can pull her up.
+  if (r.fin === null && r.s >= 1) drop(r);
 }
 
 // The computer taps at its own rate, jumps the logs at a distance that misses now and then, and

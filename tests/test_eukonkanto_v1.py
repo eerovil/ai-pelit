@@ -175,6 +175,19 @@ def test_an_event_at_the_very_end_of_a_step_still_comes(site, browser, where):
     page.context.close()
 
 
+@pytest.mark.parametrize("what", ["log", "landing"])
+def test_a_knock_at_the_very_end_of_a_step_that_fills_the_meter_drops_her_then(site, browser, what):
+    """Review on #506: the fall comes in the same step, not in the next one after a tap."""
+    page = open_game(site, browser)
+    to_gun(page)
+    # A log 25 cm ahead at 5 m/s, or a landing 0.05 s off (y = g t^2 / 2 from vy = 0), in a 0.05 s step.
+    setup = ("{ x: LOGS[0] - 0.25, v: 5, s: 0.7, y: 0, vy: 0 }" if what == "log"
+             else "{ x: 100, v: 5, s: 0.9, y: GRAV * 0.05 * 0.05 / 2, vy: 0 }")
+    got = page.evaluate(f"() => {{ Object.assign(me, {setup}); tick(0.05); return [me.drops, me.downT > 0]; }}")
+    assert got == [1, True]
+    page.context.close()
+
+
 def test_a_long_step_into_the_water_brakes_from_the_edge_on(site, browser):
     page = open_game(site, browser)
     to_gun(page)
