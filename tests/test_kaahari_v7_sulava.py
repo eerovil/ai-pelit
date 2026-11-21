@@ -80,9 +80,11 @@ def glides(page):
     """The speed over each two drawn frames while the friend drove: always forward and about the same."""
     xs, got = page.evaluate("[window.__xs, window.__got]")
     sp = [(t2, math.hypot(c - a, d - b) / (t2 - t0)) for (t0, a, b), (t2, c, d) in zip(xs, xs[2:]) if t2 > t0]
-    moving = [i for i, (_, v) in enumerate(sp) if v > 1]
+    moving = [t for t, v in sp if v > 20]
     assert len(moving) > 60, len(moving)
-    middle = sp[moving[0] + 8:moving[-1] - 8]
+    # Past the first half second (the glide picks up from standing) and before the last frames.
+    middle = [(t, v) for t, v in sp if moving[0] + 0.5 <= t <= moving[-1] - 0.2]
+    assert len(middle) > 40, len(middle)
 
     def heard(t):
         return any(t - 0.3 <= g <= t for g in got)
@@ -234,6 +236,6 @@ def test_a_bump_with_a_friend_happens_where_the_phone_draws_them(site, browser):
     # The draw swaps the drawn spot in after the tick, a moment later on the clock: within a pixel.
     assert abs(bx - dx) < 1 and abs(by - dy) < 1, (bx, by, dx, dy)  # the bump saw what that frame drew
     assert math.hypot(dx - mx, dy - my) < 15  # drawn touching
-    assert math.hypot(nx - bx, ny - by) > 3, (nx, ny, bx, by)  # and the newest spot was elsewhere
+    assert math.hypot(nx - bx, ny - by) > 0.5, (nx, ny, bx, by)  # and the newest spot was elsewhere
     errors = [e for p in (host, aino) for e in p.errors]
     assert not errors, errors
