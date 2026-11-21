@@ -1,5 +1,5 @@
 'use strict';
-// Jäälautta v1: the screen, the fingers, the menus, the saves and the sounds, and the main loop.
+// Jäälautta v2: the screen, the fingers, the menus, the saves and the sounds, and the main loop.
 
 const c = document.getElementById('c'), cx = c.getContext('2d');
 let W = 360, H = 640, DPR = 1, SAFE_T = 0, SAFE_B = 0, SAFE_L = 0, SAFE_R = 0, LAND = false;
@@ -13,6 +13,8 @@ function resize() {
   SAFE_L = parseFloat(cs.paddingLeft) || 0; SAFE_R = parseFloat(cs.paddingRight) || 0;
   LAND = W > H;
   document.body.classList.toggle('land', LAND);
+  // Upright under 360 px the star row needs the whole width, so ⏸ sits under it (see drawHUD).
+  document.body.classList.toggle('narrow', !LAND && W < 360);
   wake();
 }
 addEventListener('resize', resize);
@@ -441,7 +443,7 @@ function drawHUD(w) {
   // Upright: rows of four along the top, right of the "‹ Pelit" chip. Sideways: one column in the
   // left margin under it, so the top bar stays free for the room's 🎤 chip.
   const n = w.seals.length, top = SAFE_T + 14;
-  const x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND ? 12 : 52), cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
+  const x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 ? 12 : 52), cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
   w.seals.forEach((s, i) => {
     const x = LAND ? SAFE_L + 14 : x0 + (i % 4) * cw, y = LAND ? SAFE_T + 50 + i * 22 : top + Math.floor(i / 4) * 20;
     cx.globalAlpha = s.out ? 0.5 : 1;
@@ -505,7 +507,6 @@ function drawHUD(w) {
 let tutorial = !load('osattu', false);
 function draw(dt) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  drawSea();
   // In the menus an empty floe floats behind.
   const w = world || menuWorld();
   V = view(w);

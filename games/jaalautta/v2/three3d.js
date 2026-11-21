@@ -34,7 +34,7 @@ window.J3D = { ready: false, failed: false };
     }
 
     // ---- The floe: each part an extruded outline, rebuilt when its edge changes ----
-    const ICE_D = 0.9, BEV = 0.14;
+    const ICE_D = 0.9, BEV = 0.14, TOP = BEV, ON = TOP + 0.02;  // the ice's top face, and just above it for marks
     const capM = new T.MeshStandardMaterial({ color: '#eef8ff', roughness: 0.55 });
     const sideM = new T.MeshStandardMaterial({ color: '#8cc4e8', roughness: 0.25, metalness: 0.05 });
     const floes = [];
@@ -84,21 +84,21 @@ window.J3D = { ready: false, failed: false };
       for (const b of w.warn) {
         const p = w.parts[b.p], a0 = (b.i - 1) / WEDGES * TAU, a1 = (b.i + 2) / WEDGES * TAU;
         const rIn = edgeAt(p, (a0 + a1) / 2) - 1.6 * w.scale, pts = [];
-        for (let k = 0; k <= 8; k++) { const a = a0 + (a1 - a0) * k / 8, r = rIn + (k % 2 ? 0.25 : -0.2); pts.push([p.x + Math.cos(a) * r, 0.03, p.y + Math.sin(a) * r]); }
+        for (let k = 0; k <= 8; k++) { const a = a0 + (a1 - a0) * k / 8, r = rIn + (k % 2 ? 0.25 : -0.2); pts.push([p.x + Math.cos(a) * r, ON, p.y + Math.sin(a) * r]); }
         line(pts, crackM[flash]);
       }
       for (const o of w.holes) {
-        if (o.open > 0) mesh(holeG, holeM, o.x, -0.01, o.y, o.r, 1, o.r);
-        else for (let k = 0; k < 5; k++) { const a = k * 1.3; line([[o.x, 0.03, o.y], [o.x + Math.cos(a) * o.r, 0.03, o.y + Math.sin(a) * o.r]], crackM[flash]); }
+        if (o.open > 0) mesh(holeG, holeM, o.x, TOP - 0.02, o.y, o.r, 1, o.r);
+        else for (let k = 0; k < 5; k++) { const a = k * 1.3; line([[o.x, ON, o.y], [o.x + Math.cos(a) * o.r, ON, o.y + Math.sin(a) * o.r]], crackM[flash]); }
       }
       const r = w.ring;
       if (r) {
         const k = r.come > 0 ? r.come / RING_COME : 0;
         if (r.come <= 0) {
           const pulse = 0.75 + Math.sin(clock * 6) * 0.25;
-          mesh(ringG, ringM, r.x, 0.05, r.y, RING_R);
-          const gl = mesh(glowG, glowM, r.x, 0.02, r.y, RING_R * 1.4); gl.material = glowM; glowM.opacity = 0.3 * pulse;
-          const q = mesh(ball, lampM, r.x, 0.5 + Math.sin(clock * 3) * 0.12, r.y, 0.22);
+          mesh(ringG, ringM, r.x, TOP + 0.08, r.y, RING_R);
+          const gl = mesh(glowG, glowM, r.x, ON, r.y, RING_R * 1.4); gl.material = glowM; glowM.opacity = 0.3 * pulse;
+          const q = mesh(ball, lampM, r.x, TOP + 0.5 + Math.sin(clock * 3) * 0.12, r.y, 0.22);
         }
         // The gull with its lantern, flying in from the side and hovering above the ring.
         const gx = r.x - k * 14, gy = 3.4 + k * 5, gz = r.y - 1 - k * 4, fl = Math.sin(clock * 10) * 0.5;
@@ -144,7 +144,10 @@ window.J3D = { ready: false, failed: false };
     const splashM = new T.MeshBasicMaterial({ color: '#dff2ff', transparent: true, depthWrite: false });
     const cloudM = new T.MeshStandardMaterial({ color: '#5a6070', roughness: 1 });
     const iceM = new T.MeshStandardMaterial({ color: '#bfe6ff', roughness: 0.15, transparent: true, opacity: 0.85 });
-    const LOOK = 1.25, TOP = BEV;  // seals drawn a little larger than their hit circle; the ice's top
+    const crushM = new T.MeshStandardMaterial({ color: '#d6efff', roughness: 0.15, transparent: true, opacity: 0.9 });
+    // Inside a floe part's outline, holes or not (onIce() in world.js counts an open hole as water).
+    const inFloe = (w, x, y) => w.parts.some(p => Math.hypot(x - p.x, y - p.y) <= edgeAt(p, Math.atan2(y - p.y, x - p.x)));
+    const LOOK = 1.25;  // seals drawn a little larger than their hit circle
     const qa = new T.Quaternion(), qb = new T.Quaternion(), up = new T.Vector3(0, 1, 0), ax = new T.Vector3();
     function drawSeals(w, clock, me) {
       const seen = new Set();
@@ -156,12 +159,16 @@ window.J3D = { ready: false, failed: false };
         const { g, parts } = m.userData, R = radiusOf(sl);
         m.scale.setScalar(R * LOOK);
         if (sl.out) {
-          // In the water: only the head and hat above the waves, bobbing, with rings spreading.
-          const t = sl.out;
-          m.position.set(sl.outX, SEA_Y - 0.75 * R * LOOK + Math.sin(clock * 3 + sl.i) * 0.06, sl.outY);
+          // In the water: only the head and hat above the waves, bobbing, with rings spreading. A seal
+          // that went through a hole or was crushed by Lohkare is in the water inside the floe: its head
+          // shows above the ice's top there, not under the slab at sea level.
+          const t = sl.out, wl = inFloe(w, sl.outX, sl.outY) ? TOP : SEA_Y;
+          m.position.set(sl.outX, wl - 0.75 * R * LOOK + Math.sin(clock * 3 + sl.i) * 0.06, sl.outY);
           m.quaternion.setFromAxisAngle(up, -sl.face);
+          // Lohkare's end: the ice block drops on the seal and fades, as the 2D block does.
+          if (sl.crushed && t < 1.2) { const b = mesh(box, crushM, sl.outX, wl + R * LOOK + (1.2 - t) * 2.5, sl.outY, R * LOOK * 1.6); b.material = crushM; crushM.opacity = 0.9 * (1 - t / 1.2); }
           for (let k = 0; k < 3; k++) {
-            const rr = ((t * 1.5 + k * 0.6) % 2.5) + 0.3, o = mesh(ringG, splashM, sl.outX, SEA_Y + 0.1, sl.outY, rr, 1, rr * 0.9);
+            const rr = ((t * 1.5 + k * 0.6) % 2.5) + 0.3, o = mesh(ringG, splashM, sl.outX, wl + (wl === TOP ? 0.03 : 0.1), sl.outY, rr, 1, rr * 0.9);
             o.material = splashM; splashM.opacity = Math.max(0, 0.7 - t * 0.3);
           }
           continue;
@@ -172,7 +179,8 @@ window.J3D = { ready: false, failed: false };
         if (tee) {
           // Tipping over the edge towards the water, rocking.
           ax.set(Math.sin(sl.ta), 0, -Math.cos(sl.ta)).normalize();
-          qb.setFromAxisAngle(ax, -(0.35 + rock * 0.2)); m.quaternion.copy(qb).multiply(qa);
+          // A positive turn about up × outward tips the top outwards, over the water.
+          qb.setFromAxisAngle(ax, 0.35 + rock * 0.2); m.quaternion.copy(qb).multiply(qa);
         } else m.quaternion.copy(qa);
         // A lunge stretches it forwards; a stun greys it.
         g.scale.set(sl.lungeT > 0 ? 1.18 : 1, sl.lungeT > 0 ? 0.92 : 1, 1);
@@ -186,14 +194,34 @@ window.J3D = { ready: false, failed: false };
           else { const s = 0.55 + (LOHK_T - sl.fuse.t) * 0.07, o = mesh(box, iceM, sl.x, h, sl.y, s); o.rotation.y = clock; o.castShadow = true; }
         }
       }
-      for (const [sl, m] of seals) if (!seen.has(sl)) { scene.remove(m); seals.delete(sl); }
+      // A seal gone with its world frees its own materials and hat (the shared shapes stay).
+      for (const [sl, m] of seals) if (!seen.has(sl)) {
+        scene.remove(m); seals.delete(sl);
+        m.traverse(o => { if (o.isMesh) { if (o.material !== whiteM) o.material.dispose(); if (o.geometry !== ball) o.geometry.dispose(); } });
+      }
     }
 
     // ---- Camera: the play box's middle on the floe's middle, the whole floe in view ----
     const v3 = new T.Vector3();
     let lastW = 0, lastH = 0;
+    // A cheap phone is short of pixels (AGENTS.md, Hiihto v7): after a warm-up, every 2.5 s of drawing
+    // under 27 frames a second steps the pixel ratio down to 1, then turns the shadows off.
+    const tn = { t: 0, n: 0, warm: false, done: false, at: 0 };
+    function tune() {
+      const now = performance.now(), ms = tn.at ? now - tn.at : 0; tn.at = now;
+      if (tn.done || !ms || ms > 500) return;
+      tn.t += ms; tn.n++;
+      if (tn.t < 2500) return;
+      const fps = 1000 * tn.n / tn.t, pr = rd.getPixelRatio(); tn.t = tn.n = 0;
+      if (!tn.warm) { tn.warm = true; return; }
+      if (fps >= 27) tn.done = true;
+      else if (pr > 1.01) { rd.setPixelRatio(Math.max(1, pr - 0.25)); lastW = 0; }
+      else if (sun.castShadow) sun.castShadow = false;
+      else tn.done = true;
+    }
+    J3D.tuning = tn;
     J3D.render = function (w, clock, box, me) {
-      const Wd = innerWidth, Hd = innerHeight;
+      const Wd = glc.clientWidth || innerWidth, Hd = glc.clientHeight || innerHeight;
       if (Wd !== lastW || Hd !== lastH) { rd.setSize(Wd, Hd, false); lastW = Wd; lastH = Hd; }
       let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
       for (const p of w.parts) { bx0 = Math.min(bx0, p.x - p.r0); bx1 = Math.max(bx1, p.x + p.r0); by0 = Math.min(by0, p.y - p.r0); by1 = Math.max(by1, p.y + p.r0); }
@@ -213,6 +241,7 @@ window.J3D = { ready: false, failed: false };
       waves(clock);
       drawFloes(w); drawBits(w, clock); drawSeals(w, clock, me);
       rd.render(scene, cam);
+      tune();
     };
     // A world point (x, height, y) on the screen, in CSS pixels.
     J3D.project = function (x, h, y) { v3.set(x, h, y).project(cam); return [(v3.x + 1) / 2 * lastW, (1 - v3.y) / 2 * lastH]; };

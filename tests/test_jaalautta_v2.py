@@ -558,3 +558,45 @@ def test_leaving_the_app_pauses_a_round_alone(site, context):
       document.dispatchEvent(new Event('visibilitychange')); }""")
     assert page.evaluate("mode") == "pause"
     assert page.errors == []
+
+
+def test_an_open_hole_and_a_seal_in_it_show_on_the_3d_ice(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    go(page)
+    page.wait_for_function("world.t > 1")      # past the "TÖNI!" over the floe
+    # A hole held open beside the middle, with the seals kept away from it and the clock stopped.
+    mx, my = page.evaluate("""() => {
+      const p = world.parts[0], h = { x: p.x + 3, y: p.y, r: 1.5 * world.scale, warn: 0, open: 1e9 };
+      world.holes = [h]; world.holeNext = 1e9; world.ring = null; world.ringNext = 1e9;
+      world.seals.forEach((s, i) => { s.x = p.x - 4; s.y = p.y - 5 + i * 3; s.vx = s.vy = 0; });
+      brains = world.seals.map(() => null);
+      return J3D.project(h.x, 0.14, h.y);
+    }""")
+    page.wait_for_timeout(300)
+    assert ice_brightness(page, mx, my) < 120      # dark water, not white ice over it
+    # A seal that goes in through it bobs there with its hat above the ice.
+    page.evaluate("() => { const s = world.seals[1], h = world.holes[0]; s.x = h.x; s.y = h.y; }")
+    page.wait_for_function("world.seals[1].out > 0")
+    hx, hy = page.evaluate("J3D.project(world.seals[1].outX, 0.6, world.seals[1].outY)")
+    page.wait_for_timeout(200)
+    assert ice_brightness(page, hx, hy) < 150
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(320, 568), (360, 740)])
+def test_the_pause_button_leaves_the_stars_room_on_a_narrow_phone(site, context, size):
+    page = open_game(site, context, *size)
+    go(page)
+    btn = page.locator("#pauseBtn").bounding_box()
+    # The right end of the last seal's three stars (drawHUD: x + 16 + 2 × 12, a 12 px star) and the row's bottom.
+    right, bottom = page.evaluate("""() => {
+      const n = world.seals.length, x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 ? 12 : 52);
+      const cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
+      return [x0 + 3 * cw + 16 + 2 * 12 + 12, SAFE_T + 14 + 14];
+    }""")
+    assert right <= btn["x"] or bottom <= btn["y"], (right, bottom, btn)
+    assert right <= size[0]
+    assert page.errors == []
