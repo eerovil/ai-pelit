@@ -18,12 +18,15 @@ JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free 
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   AiPelitRooms.send = (m, to) => { const now = performance.now(), at = Math.max(free, now + rnd() * 90); free = at;
     setTimeout(() => send(m, to), at - now); }; }"""
-# The phone's stick, in the arena's directions: at half speed (62 units/s) along the arena's middle (x 170,
-# clear of the pillars) towards `dir` (-1 up, 1 down) while `window.__run` is on, until 120 units short of
-# the far end, where the other fighter stands.
-RUN = """(dir) => { window.__run = false;
-  window.playerInput = () => ({ mx: 0, my: window.__run && (dir < 0 ? me.y > 130 : me.y < 310) ? dir * 0.5 : 0,
-    sword: false, bow: false, dash: false, lead: 1 }); }"""
+# On the host: while `window.__run` is on, fighter `i` moves along the arena's middle (x 170, clear of the
+# pillars) at 62 units/s by the wall clock towards `dir` (-1 up, 1 down), until 120 units short of the far
+# end, where the other fighter stands. By the clock and not by the host's frames, so a busy test machine
+# that drops the host's frames does not make the move itself uneven: what is measured is the guest's drawing.
+RUN = """([i, dir]) => { window.__run = false; let t0 = null, y0 = 0; const s = window.step;
+  window.step = dt => { s(dt); const f = fighters[i];
+    if (!window.__run) { t0 = null; return; }
+    const now = performance.now() / 1000; if (t0 === null) { t0 = now; y0 = f.y; }
+    const y = y0 + dir * 62 * (now - t0); f.y = dir < 0 ? Math.max(130, y) : Math.min(310, y); }; }"""
 # Records, each time the screen is drawn, where fighter `i` is drawn along the arena, and when a host's
 # message arrived (so a stall of the test machine, with no message for a while, can be told from a jerk).
 SAMPLE = """(i) => { window.__ys = []; window.__got = [];
@@ -90,9 +93,10 @@ def glides(page):
 
 
 def run_and_watch(host, run, watch, others):
-    """`run` moves its fighter along the arena while `watch` draws it; the host's messages are jittered."""
+    """`run`'s fighter moves along the arena in the host's fight while `watch` draws it; the host's messages
+    are jittered."""
     me = index(run)
-    run.evaluate(RUN, 1 if run.evaluate("me.y < AH / 2") else -1)
+    host.evaluate(RUN, [me, 1 if run.evaluate("me.y < AH / 2") else -1])
     host.evaluate(JITTER)
     watch.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
     watch.evaluate(SAMPLE, me)
@@ -102,7 +106,7 @@ def run_and_watch(host, run, watch, others):
       AiPelitRooms.on('message', m => { if (m.t === 's') said = m.f[i][1]; });
       setInterval(() => { if (said !== null && window.__ys.length)
         window.__rule.push([f.y, said, window.__ys[window.__ys.length - 1][1]]); }, 37); }""", me)
-    run.evaluate("window.__run = true")
+    host.evaluate("window.__run = true")
     watch.wait_for_function("window.__ys.length >= 200", timeout=30000)
     glides(watch)
     rule = watch.evaluate("window.__rule")
@@ -122,7 +126,7 @@ def test_the_host_running_glides_on_a_guest(site, browser):
 
 
 def test_a_friend_running_glides_on_a_third_phone(site, browser):
-    """The friend's stick moves their fighter in the host's fight; a third phone draws it as smoothly."""
+    """A friend's fighter moving in the host's fight: a third phone draws it as smoothly."""
     host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
     run_and_watch(host, aino, ville, others=[aino, ville])
 
