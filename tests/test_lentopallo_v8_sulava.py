@@ -209,3 +209,39 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_h
     assert all(abs(drawn - said) < 0.01 for _, said, drawn in sw), sw
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
+
+
+def test_the_host_takes_a_friends_spots_from_the_matchs_first_moment(site, browser):
+    """A guest that hears the match start marks its first spot (j), so the host does not wait out the half second
+    it drops spots for after a new rally: the friend moves on the host from the match's first moment."""
+    site.build(ROOT / "games")
+    relay, pages = Relay(), []
+    for name in ("Testi A", "Testi B"):
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
+                                  service_workers="block")
+        ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
+        page = ctx.new_page()
+        page.errors = []
+        page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
+        relay.attach(page)
+        page.goto(site.url + URL)
+        page.click("#multi")
+        pages.append(page)
+    host, guest = pages
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+    guest.click("#aipr-joinBtn")
+    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    # The guest runs from the moment it hears the match; the host notes each friend's spot it takes, and when.
+    guest.evaluate(RUN.replace("window.__run = false", "window.__run = true"))
+    host.evaluate("""() => { window.__took = [];
+      AiPelitRooms.on('message', (m, from) => { if (m.t !== 'p') return; const p = players.find(q => q.id === from);
+        if (p) setTimeout(() => window.__took.push([state, stateT, p.x === m.x]), 0); }); }""")
+    host.click("#aipr-start")
+    host.wait_for_function("window.__took.length >= 12", timeout=10000)
+    took = host.evaluate("window.__took")
+    early = [t for t in took if t[0] == "serve" and t[1] < 0.5]
+    assert early, took
+    assert all(t[2] for t in early), took
+    assert not host.errors + guest.errors

@@ -701,6 +701,7 @@ R.on('message', (m, from) => {
     me = mine; view = mine && mine.side > 0 ? -1 : 1;
     ball = { x: 0, y: 1.3, vx: 0, vy: 0, spin: 0, held: true };
     state = 'serve';
+    net.fresh = true;  // the first spot this phone sends tells the host it knows the match has started
     menu.classList.add('hidden');
   } else if (m.round === net.round && players.length) {
     if (m.t === 's') applySnapshot(m);
