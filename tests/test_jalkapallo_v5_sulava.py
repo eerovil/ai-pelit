@@ -149,6 +149,37 @@ def test_a_computer_player_running_glides_on_a_guest(site, browser):
     assert not host.errors + guest.errors
 
 
+def test_a_dash_after_a_long_gap_in_the_messages_glides_on_a_guest(site, browser):
+    """A player dashes at 10 m/s (the top speed) and no word comes from the host for 0.4 s, so the two spots on each
+    side of the gap are 4.5 m apart. That is a gap in the messages, not the host putting them somewhere new: the
+    guest goes on drawing them gliding, not in one step to the newest spot."""
+    host, guest = phones(site, browser)
+    host.evaluate(QUIET)
+    host.evaluate("players[4].x = -13; players[4].y = -5")
+    guest.wait_for_function("Math.abs(players[4].x + 13) < 0.05 && players[4].tr.size() > 3", timeout=5000)
+    host.evaluate(STALLS)
+    host.evaluate("""() => { const u = window.update;
+      window.update = dt => { u(dt); if (window.__dash && players[4].x < 13) players[4].x += 10 * Math.min(dt, 0.05); };
+      const send = AiPelitRooms.send.bind(AiPelitRooms);
+      AiPelitRooms.send = (m, to) => { if (m.t === 's' && window.__gap) return; send(m, to); }; }""")
+    guest.evaluate("""() => { window.__d = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+      const u = window.update; window.update = dt => { const t = now(); u(dt); window.__d.push([t, players[4].x]); }; }""")
+    host.evaluate("window.__dash = true")
+    host.wait_for_function("players[4].x > -4", timeout=5000)
+    gap = host.evaluate("""() => { window.__gap = true; const t = (performance.timeOrigin + performance.now()) / 1000;
+      setTimeout(() => { window.__gap = false; }, 400); return t; }""")
+    host.wait_for_function("players[4].x >= 13", timeout=10000)
+    guest.wait_for_timeout(500)
+    d, stalls = guest.evaluate("window.__d"), host.evaluate("window.__stall")
+    # Every frame from just before the gap to well after it: a step of a frame (17 ms at 10 m/s is 0.17 m), never
+    # back and never a jump. Measured (#480): at most 0.33 m; with the track's own 4 m jump it was a 2.17 m step.
+    near = [(round(t1 - gap, 3), round(b - a, 2)) for (t0, a), (t1, b) in zip(d, d[1:])
+            if gap - 0.2 <= t1 <= gap + 1.0 and t1 - t0 < 0.04 and not any(s <= t1 <= s + 0.35 for s in stalls)]
+    assert len(near) > 20, near
+    assert all(-0.05 < step < 0.6 for _, step in near), near
+    assert not host.errors + guest.errors
+
+
 def test_the_host_running_glides_on_a_guest(site, browser):
     """The host steers player 0 with its own joystick."""
     host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
@@ -200,7 +231,7 @@ def test_a_friends_held_ball_is_drawn_at_their_feet(site, browser):
     # time, the moment drawn and the newest stamp heard.
     guest.evaluate("""() => { window.__f = []; let ck = null; AiPelitRooms.on('message', m => { if (m.t === 's') ck = m.ck; });
       const d = window.draw; window.draw = () => { const p = players[2];
-      if (owner === p && p.tx > -7 && p.tx < 7) window.__f.push([ball.x - p.x, ball.nx - p.tx, p.tx - p.x,
+      if (owner === p && p.tx > -7 && p.tx < 7) window.__f.push([ball.x - p.x, ball.tx - p.tx, p.tx - p.x,
         (performance.timeOrigin + performance.now()) / 1000, p.tr.time, ck]); d(); }; }""")
     host.evaluate("window.__cpuRun = 2; window.__run = true")
     host.wait_for_function("players[2].x >= 9", timeout=10000)

@@ -183,8 +183,9 @@ function player(t, slot, name, lvl) {
   const p = { t, slot, name, ctl: '', x: 0, y: 0, vx: 0, vy: 0, fx: 0, fy: fwd(t), cd: 0, lunge: 0, stun: 0, kicks: 0,
     brain: { think: 0, tx: 0, ty: 0, act: '' }, keeper: slot === 2,
     // v5 (#480): on a guest, a player another phone or the computer moves is drawn from the host's spots,
-    // a moment back (lib/sulava-1). A dash (1.6 x 6.3 m/s) goes about 0.5 m between two spots.
-    tr: AiPelitSulava.track({ keys: ['x', 'y'], jump: 4 }), ease: 0 };
+    // a moment back (lib/sulava-1). A dash (1.6 x 6.3 m/s) goes about 0.5 m between two spots; what is a jump
+    // is judged by the time between them (feedTrack()), not by the track's own distance alone.
+    tr: AiPelitSulava.track({ keys: ['x', 'y'] }), ease: 0 };
   skill(p, lvl);
   return p;
 }
@@ -739,6 +740,17 @@ function feedSnapshots() {
     }
   }
 }
+// A spot onto a track (#480): pushed, so it glides, unless it is further from the last one than the fastest a
+// player (FAST_P, a dash is 10 m/s) or the ball (FAST_B, the hardest shot is 28 m/s) goes in the time between their
+// stamps, and a metre more; then it is the host putting it somewhere new, drawn there at once. Judged by the time,
+// a spot after a long gap in the messages (0.4 s at a dash is 4 m) still glides. fast 0 always snaps.
+const FAST_P = 12, FAST_B = 30;
+function feedTrack(tr, st, v, a, fast) {
+  const t = st === null ? a : st, l = tr.last;
+  tr.last = { x: v.x, y: v.y, t };
+  if (!fast || !l || Math.hypot(v.x - l.x, v.y - l.y) > 1 + fast * Math.max(0, t - l.t)) tr.snap(st, v, a);
+  else tr.push(st, v, a);
+}
 function applySnapshot(s, heardAt) {
   const was = state, loose = !owner, pvx = ball.vx || 0, pvy = ball.vy || 0, had = owner;
   state = s.st; pauseT = s.pt; clock = s.cl; score = s.sc;
@@ -752,17 +764,17 @@ function applySnapshot(s, heardAt) {
     if (!p) return;
     if (q[4] > p.kicks) { kickSound(false); kicked = true; if (p === had && p.ctl && p.ctl === myId()) ball.lead = LEAD; }
     p.tx = q[0]; p.ty = q[1]; p.fx = q[2]; p.fy = q[3]; p.kicks = q[4]; p.lunge = q[5] ? 0.1 : 0;
-    if (jump || !p.tr.size()) { p.tr.snap(st, { x: p.tx, y: p.ty }, a); p.x = p.tx; p.y = p.ty; p.ease = 0; }
-    else p.tr.push(st, { x: p.tx, y: p.ty }, a);
+    if (jump || !p.tr.size()) { feedTrack(p.tr, st, { x: p.tx, y: p.ty }, a, 0); p.x = p.tx; p.y = p.ty; p.ease = 0; }
+    else feedTrack(p.tr, st, { x: p.tx, y: p.ty }, a, FAST_P);
   });
   for (const p of players) p.ctl = '';
   for (const [id, i] of s.c) if (players[i]) players[i].ctl = id;
   // The ball's spot goes on its track whether held or loose, so a kick leaves the kicker's feet as drawn.
   const bs = { x: s.b[0], y: s.b[1], z: s.b[2] };
   if (jump || !ball.tr.size()) {
-    ball.tr.snap(st, bs, a); ball.x = bs.x; ball.y = bs.y; ball.z = bs.z;
+    feedTrack(ball.tr, st, bs, a, 0); ball.x = bs.x; ball.y = bs.y; ball.z = bs.z;
     ball.ex = ball.ey = 0; ball.heldBy = owner && owner.ctl === myId() ? owner : null; ball.lead = 0;
-  } else ball.tr.push(st, bs, a);
+  } else feedTrack(ball.tr, st, bs, a, FAST_B);
   ball.at = a; ball.st = st;
   // A save or a tackle the host said: hear it once, when its text first shows.
   const old = new Set(texts.map(t => t.s + t.x + ',' + t.y));
@@ -881,9 +893,10 @@ R.on('message', (m, from) => {
     if (net.round === m.round && players.length) return;
     applySetup(m);
     view = myTeam === 0 ? 1 : -1;
-    // The ball has its own track (#480), drawn at the same moment back as the players. A hard shot goes about
-    // 2.5 m between two spots; a move of over 8 m is the host putting it somewhere new (a test does).
-    ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, tr: AiPelitSulava.track({ keys: ['x', 'y', 'z'], jump: 8 }), heldBy: null, ex: 0, ey: 0, lead: 0, at: 0, st: null };
+    // The ball has its own track (#480), drawn at the same moment back as the players. The hardest shot (28 m/s)
+    // goes about 1.4 m between two spots, 20 a second; feedTrack() tells a jump (the host putting it somewhere new,
+    // a test does) by the time between them.
+    ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, tr: AiPelitSulava.track({ keys: ['x', 'y', 'z'] }), heldBy: null, ex: 0, ey: 0, lead: 0, at: 0, st: null };
     owner = null; goals = 0; state = 'kickoff';
     menu.classList.add('hidden');
     whistle(false);
