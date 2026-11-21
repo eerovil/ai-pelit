@@ -21,7 +21,7 @@ v8 (#454, "still too easy"; Eero picked harder obstacles) keeps v7's layouts but
 
 v9 (#480) draws the other phones' runners gliding, a moment back, between the spots their messages brought (`lib/sulava-1`, `sulava-liike.md`), keeping v8's courses, records and lists. v8 drew each spot as it came and carried it on at its last speed until the next, so a friend jerked on every uneven gap.
 
-v10 (#493) draws the race in 3D (three.js from `lib/three-r187/`), the camera behind and above the runner and always looking up the course, so the stick still means up = forward (Eero's choice). Every course has heights (Eero's choice): ramps up and down, steps to jump onto, drops to lower floors and, where a course has stepping stones, stones at rising heights. The layouts are v8's, lifted; each course has a new record and score list, and v9's record shows under it as the old one. A phone that cannot draw WebGL plays on v9's 2D drawing, with the heights lifting the runner.
+v10 (#493) draws the race in 3D (three.js from `lib/three-r187/`), the camera behind and above the runner and always looking up the course, so the stick still means up = forward (Eero's choice). Every course has heights (Eero's choice): ramps up and down, steps to jump onto, drops to lower floors and stepping stones at rising heights on every course (Hihnatehdas gets two, side to side, after its last belt and before the drop to the finish, in place of its two bumpers). The layouts are v8's, lifted; each course has a new record and score list, and v9's record shows under it as the old one. A phone that cannot draw WebGL plays on v9's 2D drawing, with the heights lifting the runner.
 
 ```mermaid
 flowchart TD

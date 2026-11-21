@@ -64,15 +64,17 @@ const gate = (y,w,ph,lane=2.4) => ({y,w,ph,a:1.3,lane});
 const main=original();
 const h=base('hihna','Hihnatehdas',150,160);
 h.board='hihna10';
-// Jumps up over the gaps, a ramp down the bar bridge, a step up to the back belt, a drop to the finish.
-h.floors=[floor(-4,10),floor(10,34,2.4),floor(36.8,40,5,0.5),floor(40,56,2,0.5),floor(58.8,62,5,1),floor(62,82,2.2,1,0.2),floor(82,90,5,1),floor(90,114,2.4,1),floor(116.8,121,5,1.5),floor(121,140,2.1,1.5),floor(140,158,5,0.5)];
-h.belts=[{...floor(12,34,2.4),vx:0,vy:-3.3},{...floor(40,56,2,0.5),vx:3.5,vy:0},{...floor(90,114,2.4,1),vx:0,vy:-3.6},{...floor(121,140,2.1,1.5),vx:-3.3,vy:0}];
+// Jumps up over the gaps, a ramp down the bar bridge, a step up to the back belt, two stones climbing
+// from side to side after it (#493: rising stones on every course) and a drop to the finish.
+h.floors=[floor(-4,10),floor(10,34,2.4),floor(36.8,40,5,0.5),floor(40,56,2,0.5),floor(58.8,62,5,1),floor(62,82,2.2,1,0.2),floor(82,90,5,1),floor(90,114,2.4,1),floor(116.8,121,5,1.5),floor(121,138,2.1,1.5),floor(138,140.4,5,1.5),floor(149.8,158,5,1.2)];
+h.belts=[{...floor(12,34,2.4),vx:0,vy:-3.3},{...floor(40,56,2,0.5),vx:3.5,vy:0},{...floor(90,114,2.4,1),vx:0,vy:-3.6},{...floor(121,138,2.1,1.5),vx:-3.3,vy:0}];
+h.stones=[[142.2,[-1.8]],[146,[1.8]]];
+h.stones.forEach(([y,xs],i)=>{xs.forEach(cx=>h.floors.push({x0:cx-0.9,x1:cx+0.9,y0:y,y1:y+2,h:[1.8,2.1][i],stone:true}));});
 h.sweepers=[{x:0,y:66,len:3.2,w:2.2,ph:0.6},{x:0,y:72,len:3.2,w:-2.4,ph:2},{x:0,y:78,len:3.2,w:2.3,ph:4}];
 h.pushers=[gate(17,1.4,0),gate(23,-1.5,2),gate(29,1.5,4),gate(45,1.3,1,2),gate(51,-1.4,3,2),gate(96,-1.4,2),gate(102,1.5,0),gate(108,-1.6,4),gate(127,1.4,3,2.1),gate(133,-1.5,1,2.1)];
-h.bumpers=[{x:-1.5,y:145},{x:1.5,y:149}];
-h.cps=[0,9,38,60,85,119,142,151.5];
-h.sections=[[10,'HIHNAPORTIT'],[40,'SIVUHIHNA'],[62,'PUOMISILTA'],[90,'VASTAHIHNA'],[121,'LOPPUPORTTI']];
-h.path=[point(9),{y:18.2,gap:0},{y:24.2,gap:1},{y:30.2,gap:2},point(33),point(38),{y:46.2,gap:3},{y:52.2,gap:4},point(55),point(60),point(64,0,0.4),point(69,0,0.4),point(75,0,0.4),point(81),point(85),{y:97.2,gap:5},{y:103.2,gap:6},{y:109.2,gap:7},point(113),point(119),{y:128.2,gap:8},{y:134.2,gap:9},point(142),point(147,0,0.4),point(154)];
+h.cps=[0,9,38,60,85,119,139,151.5];
+h.sections=[[10,'HIHNAPORTIT'],[40,'SIVUHIHNA'],[62,'PUOMISILTA'],[90,'VASTAHIHNA'],[121,'LOPPUPORTTI'],[140,'KIVET']];
+h.path=[point(9),{y:18.2,gap:0},{y:24.2,gap:1},{y:30.2,gap:2},point(33),point(38),{y:46.2,gap:3},{y:52.2,gap:4},point(55),point(60),point(64,0,0.4),point(69,0,0.4),point(75,0,0.4),point(81),point(85),{y:97.2,gap:5},{y:103.2,gap:6},{y:109.2,gap:7},point(113),point(119),{y:128.2,gap:8},{y:134.2,gap:9},point(139),{y:143.2,xs:[-1.8]},{y:147,xs:[1.8]},point(151),point(154)];
 const l=base('laatat','Laattalaakso',150,160);
 l.board='laatat10';
 // Tiles climbing like stairs, stones up and down, a ramp up through the gates, a drop to the bars.

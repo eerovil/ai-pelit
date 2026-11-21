@@ -31,7 +31,7 @@ RUN = '''([x, y, n, jump]) => { input.x = 0; input.y = 0;
 
 def test_every_course_has_ramps_steps_drops_and_rising_stones(site, context):
     """Eero picked heights on all four courses, of four kinds. Every course has ramps, steps and drops; the three
-    with stepping stones (Hihnatehdas has none, as in v8) set them at rising heights."""
+    stepping stones set them at rising heights, Hihnatehdas too (it had none in v8)."""
     page = open_game(site, context)
     kinds = page.evaluate('''() => RADAT.map(c => { useCourse(c.id);
       const all = FLOORS.concat(BELTS, TILES), top0 = f => f.h || 0, top1 = f => f.h1 ?? (f.h || 0);
@@ -46,7 +46,7 @@ def test_every_course_has_ramps_steps_drops_and_rising_stones(site, context):
                stones: new Set(stones).size, board: c.board }; })''')
     for k in kinds:
         assert k['ramps'] >= 1 and k['up'] >= 1 and k['down'] >= 1, k
-        assert k['stones'] >= (0 if k['id'] == 'hihna' else 2), k
+        assert k['stones'] >= 2, k
         assert k['board'] == k['id'] + '10', k
     page.evaluate("useCourse('main')")
     assert page.errors == []
