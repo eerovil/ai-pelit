@@ -185,12 +185,14 @@ def test_a_long_frame_on_the_sending_phone_stamps_each_spot_with_its_own_moment(
           AiPelitRooms.send = (m, to) => { if (m.t === 'p') window.__sent.push([m.st, m.c[0]]); return send(m, to); }; }""")
         guest.evaluate("window.__run = true")
         guest.wait_for_function("window.__sent.length >= 3", timeout=5000)
+        # Judge only spots sent while the train runs: a pair across the start or the stop moved for part of its gap.
+        guest.evaluate("window.__sent.length = 0")
         # Hold the page busy for 0.4 s, as a slow phone does; its next frame rides those 0.4 s in steps.
         guest.evaluate("""() => new Promise(ok => requestAnimationFrame(() => {
           const until = performance.now() + 400; while (performance.now() < until) {} ok(); }))""")
-        guest.wait_for_function("window.__sent.length >= 12", timeout=5000)
+        guest.wait_for_function("window.__sent.length >= 9", timeout=5000)
+        sent = guest.evaluate("window.__sent.slice()")
         guest.evaluate("window.__run = false")
-        sent = guest.evaluate("window.__sent")
         sp = [(s2 - s1) / (t2 - t1) for (t1, s1), (t2, s2) in zip(sent, sent[1:]) if s2 > s1]
         assert all(t2 > t1 for (t1, _), (t2, _) in zip(sent, sent[1:])), sent
         assert sp and all(9 < v < 15 for v in sp), (sp, sent)
