@@ -131,8 +131,8 @@ function serveLaunch(bat, side, aim, r) {
 }
 
 // ---- The game: one game to 11, two clear ----
-function newGame(names, kinds) {
-  return { sc: [0, 0], sv: 0, r: 0, names, kinds, flight: null, n: -1, ph: 'serve', wait: 1.2, last: -1, over: false, winner: -1 };
+function newGame(names) {
+  return { sc: [0, 0], sv: 0, r: 0, names, flight: null, n: -1, ph: 'serve', wait: 1.2, over: false, winner: -1 };
 }
 // Who serves at this score: two serves each, one each from 10–10.
 function serverAt(sc, first) {
@@ -146,7 +146,7 @@ function winnerOf(sc) {
 }
 // A point to side w. Returns true when the game is over.
 function addPoint(g, w) {
-  g.sc[w]++; g.last = w;
+  g.sc[w]++;
   g.winner = winnerOf(g.sc);
   g.over = g.winner >= 0;
   g.sv = serverAt(g.sc, g.first || 0);

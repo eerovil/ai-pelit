@@ -70,7 +70,7 @@ function newBats() {
 function soloGame(resume) {
   net = null; hooks = soloHooks; judgeHere = () => true; cpuAt = side => side === 1; view = 0;
   names = ['Sinä', 'Kone'];
-  game = newGame(names, ['me', 'cpu']);
+  game = newGame(names);
   game.first = 0;
   if (resume) { game.sc = resume.sc.slice(); game.first = resume.first; game.sv = serverAt(game.sc, game.first); }
   newBats();
@@ -262,7 +262,6 @@ function showEnd() {
   sfx(r.won ? 'voitto' : 'tappio', { vol: 0.3 });
   wake();
 }
-function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]); }
 $('go').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); soloGame(null); });
 $('again').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (result && result.net) backRoom(); else soloGame(null); });
 $('friends').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (window.AiPelitRooms) AiPelitRooms.open(); });
@@ -313,7 +312,6 @@ function draw2d(st) {
     cx.fillStyle = '#ffa63d'; cx.beginPath(); cx.arc(p.x, p.y, 5, 0, TAU); cx.fill();
   }
 }
-function project(x, y, z) { return V3 && !no3d ? project3d(x, y, z) : flatProject(x, y, z); }
 // The score at the top, the texts in the middle, the hint at the bottom.
 function drawHUD(dt) {
   const g = game, me = view, foe = 1 - view;

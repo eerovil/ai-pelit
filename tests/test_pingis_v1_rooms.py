@@ -114,6 +114,32 @@ def test_a_rally_heard_twice_and_a_second_serve_change_nothing(phones):
     assert host.errors == guest.errors == []
 
 
+def test_a_serve_reaches_a_phone_still_in_its_pause_after_the_point(phones):
+    """Each phone counts its own pause after a point; a slow one may still be in it when the
+    other serves. The serve is taken for the new rally all the same, both ways (#509 review)."""
+    host, guest = room(phones)
+    # The guest serves next (first = 1, one point played) while the host's pause runs on.
+    host.evaluate("() => { game.first = 1; game.ph = 'play'; hostPoint(0); game.wait = 99; }")
+    guest.wait_for_function("net.r === 1 && game.sv === 1 && game.ph === 'point'", timeout=5000)
+    guest.evaluate("() => { game.wait = 0; }")
+    serve(guest)
+    host.wait_for_function("game.flight && game.flight.by === 1 && game.flight.n === 0 && game.ph === 'play'", timeout=5000)
+    # The host serves next (two points played) while the guest still holds the last rally's
+    # flight in its pause.
+    r = host.evaluate("() => { game.flight = null; game.sc = [1, 0]; game.first = 1; game.ph = 'play'; hostPoint(0); return net.r; }")
+    guest.wait_for_function(f"net.r === {r} && game.sv === 0 && game.ph === 'point'", timeout=5000)
+    guest.evaluate("() => { game.wait = 99; game.flight = newFlight(5, 0, false, [0,0.3,-1,0,0,3,0]); game.flight.over = { w: 0 }; }")
+    host.evaluate("() => { game.wait = 0; }")
+    serve(host)
+    guest.wait_for_function("game.flight && game.flight.by === 0 && game.flight.n === 0 && game.ph === 'play'", timeout=5000)
+    # A second serve for the same rally is still dropped.
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    a = host.evaluate("game.flight.launch")
+    host.evaluate(f"hostHeard({{ t: 'l', round: net.round, r: net.r, n: 0, by: 1, s: 1, a: [0,0.3,-1.5,0,0,3,0] }}, {gid})")
+    assert host.evaluate("game.flight.launch") == a
+    assert host.errors == guest.errors == []
+
+
 def test_away_and_back_replays_the_rally_with_no_point(phones):
     host, guest = room(phones)
     host.evaluate("() => { game.first = 1; game.sv = 1; }")

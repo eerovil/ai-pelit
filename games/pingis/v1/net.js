@@ -14,8 +14,11 @@
 //
 // - A guest takes a `rally` only when its `r` is above the one it is in: the same rally heard
 //   twice (a drop and a `hello`) changes nothing.
-// - The host takes a serve only while rally `r` has no flight, and a guest's launch or point
-//   only for its current `r`, while `g` is the phone, for the flight it expects.
+// - Each rally has one serve (`served`). Either phone takes the other's serve for its current `r`
+//   while that rally has none, even while its own pause after the last point still runs: the
+//   two countdowns are frame-timed, so a slow phone may still be in it (#509 review). After the
+//   serve, a launch or point only for its current `r`, while `g` is the phone, for the flight it
+//   expects.
 // - While a phone in the room is away (rooms.js `paused`) both stop. A guest that was paused is
 //   stale: it neither serves nor judges until a newer rally comes, and when its pause lifts it
 //   tells the host (`sync`). The host replays the rally (same server, no point) when its own
@@ -30,7 +33,6 @@ const RM = window.AiPelitRooms;
 const SU = window.AiPelitSulava;
 const suNow = () => SU ? SU.now() : performance.now() / 1000;
 const r3 = v => Math.round(v * 1000) / 1000;
-let lastEnd = null;
 
 function sendRally(lw, to) {
   const g = game, m = {
@@ -50,7 +52,7 @@ function netStart(s) {
   net = {
     round: s.round, host, r: -1, p: 0, g: 'p', gNext: 'p', stale: false, wasP: false, wantReplay: false,
     names: people.map(p => p.name || 'Pelaaja'), guest: people[1] ? people[1].id : null,
-    res: null, sendT: 0, tracks: [null, null], helped: false, note: null, lastRally: null,
+    res: null, served: false, sendT: 0, tracks: [null, null], helped: false, note: null, lastRally: null,
   };
   hooks = { launched: netLaunched, point: netPoint, next: netNext };
   judgeHere = side => net.host ? (side === 0 || net.g === 'c') : (side === 1 && net.g === 'p' && !net.stale);
@@ -58,7 +60,7 @@ function netStart(s) {
   newBats();
   brains = [null, null];
   if (host && !s.over && people.length === 2) {
-    game = newGame(net.names.slice(), ['me', 'net']);
+    game = newGame(net.names.slice());
     game.first = Math.random() < 0.5 ? 0 : 1;
     game.sv = serverAt(game.sc, game.first);
     net.r = 0; game.r = 0; game.wait = 1.5;
@@ -77,23 +79,23 @@ function hostPoint(w) {
   if (!game || game.ph === 'point' || game.ph === 'over') return;
   addPoint(game, w);
   pointSound(w);
-  net.r++; game.r = net.r; net.g = net.gNext;
+  net.r++; game.r = net.r; net.g = net.gNext; net.served = false;
   sendRally(w);
 }
 // The same server serves again, with no point: anything from the old rally is dropped.
 function hostReplay() {
   net.wantReplay = false;
   if (!game || game.over || net.res) return;
-  net.r++; game.r = net.r; net.g = net.gNext;
+  net.r++; game.r = net.r; net.g = net.gNext; net.served = false;
   game.flight = null; game.ph = 'serve'; game.wait = 1.0;
   sendRally(-1);
 }
 function guestRally(m) {
   if (net.res || !(m.r > net.r) || !Array.isArray(m.sc) || m.sc.length !== 2) return;
-  net.r = m.r; net.stale = false; net.g = m.g === 'c' ? 'c' : 'p';
+  net.r = m.r; net.stale = false; net.served = false; net.g = m.g === 'c' ? 'c' : 'p';
   if (Array.isArray(m.nm) && m.nm.length === 2) net.names = m.nm.map(String);
   setNames();
-  if (!game) game = newGame(net.names.slice(), ['net', 'me']);
+  if (!game) game = newGame(net.names.slice());
   game.first = m.first === 1 ? 1 : 0;
   game.sc = m.sc.slice(); game.sv = m.sv === 1 ? 1 : 0; game.r = m.r;
   game.winner = winnerOf(game.sc); game.over = game.winner >= 0;
@@ -109,6 +111,7 @@ function guestRally(m) {
 
 // ---- The hooks ui.js calls ----
 function netLaunched(f) {
+  if (f.n === 0) net.served = true;
   if (!net.host && f.by !== 1) return;
   RM.send({ t: 'l', round: net.round, r: net.r, n: f.n, by: f.by, s: f.serve ? 1 : 0, a: f.launch });
 }
@@ -126,6 +129,7 @@ function netNext() {
 // ---- Launches heard from the other phone ----
 const goodLaunch = a => Array.isArray(a) && a.length === 7 && a.every(Number.isFinite);
 function takeLaunch(m) {
+  if (m.n === 0) net.served = true;
   const f = newFlight(m.n, m.by, m.n === 0, m.a.slice());
   if (game.flight && !game.flight.over) game.flight.over = { hit: true };
   game.flight = f; game.ph = 'play';
@@ -144,7 +148,7 @@ function hostHeard(m, from) {
   const f = game.flight;
   if (m.t === 'l' && m.by === 1 && goodLaunch(m.a)) {
     if (m.n === 0) {
-      if (f || game.ph !== 'serve' || game.sv !== 1) return;   // rally r has its flight already
+      if (net.served || game.over || game.sv !== 1) return;   // rally r has its serve already
     } else if (!f || f.over || f.by !== 0 || m.n !== f.n + 1) return;
     takeLaunch(m);
     return;
@@ -163,7 +167,7 @@ function guestHeard(m) {
   }
   if (m.t === 'l' && m.r === net.r && !net.res && goodLaunch(m.a) && (m.by === 0 || m.by === 1)) {
     const f = game.flight;
-    if (f ? m.n <= f.n : m.n !== 0) return;
+    if (m.n === 0 ? net.served || game.over : !f || m.n <= f.n) return;
     if (m.by === 1 && net.g === 'p') return;   // my own launches are mine; the host never sends them
     takeLaunch(m);
   }
@@ -226,7 +230,6 @@ function hostEnd() {
 function netEnd(m) {
   if (!net || net.res || !Array.isArray(m.sc)) return;
   net.res = m;
-  if (net.host) lastEnd = m;
   const w = winnerOf(m.sc), nm = Array.isArray(m.nm) ? m.nm : net.names;
   result = { net: true, side: view, won: w === view, sc: m.sc.slice(), foe: nm[1 - view] || '', helped: view === 1 && !!m.helped };
   if (RM.once(net.round)) {
@@ -264,7 +267,7 @@ if (RM) {
       // The phone is back: it gets the latest rally; a rally in play is replayed, not continued.
       if (net.lastRally) RM.send(net.lastRally, id);
       if (game.flight && game.ph === 'play') net.wantReplay = true;
-    } else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
+    }
   });
   RM.on('continue', ids => {
     if (!net || !net.host || net.res || !game || !ids.includes(net.guest)) return;

@@ -167,7 +167,7 @@ function render3d(st, dt) {
   });
   R.render(V3.scene, V3.camera);
 }
-// Screen px of a world point, for the names and texts ui.js writes on the 2D canvas.
+// Screen px of a world point (the tests put a finger on the bat and the ball with it).
 function project3d(x, y, z) {
   const v = V3.v.set(x, y, z).project(V3.camera);
   return { x: (v.x + 1) / 2 * V3.w, y: (1 - v.y) / 2 * V3.h, behind: v.z > 1 };
