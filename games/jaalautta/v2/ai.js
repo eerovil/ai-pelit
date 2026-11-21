@@ -51,7 +51,12 @@ function decide(w, sl, b) {
   const edgeSafe = 2.2 * radiusOf(sl) / SEAL_R;
   // Someone wobbling on the edge near me: go and tip it in, even that close to the edge myself.
   const tt = others.find(o => o.teeter > 0 && Math.hypot(o.x - sl.x, o.y - sl.y) < 5);
-  if (tt && here.edge > radiusOf(sl) * 0.8) { b.tx = tt.x; b.ty = tt.y; return; }
+  if (tt && here.edge > radiusOf(sl) * 0.8) {
+    b.tx = tt.x; b.ty = tt.y;
+    // Leaning on it does nothing (world.js nudge()): once it can be tipped, lunge into it.
+    if (tt.teeter < TEETER_T - TEETER_SAFE && Math.hypot(tt.x - sl.x, tt.y - sl.y) < 3.5) lungeAt(sl, b, tt.x, tt.y);
+    return;
+  }
   // Too near my own edge, or a hole opening under me: back to the middle of my part.
   const hole = w.holes.find(o => Math.hypot(sl.x - o.x, sl.y - o.y) < o.r + 0.8);
   if (here.edge < edgeSafe || hole) {
