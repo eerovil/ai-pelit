@@ -195,15 +195,26 @@ def test_a_friends_held_ball_is_drawn_at_their_feet(site, browser):
     host.evaluate(QUIET)
     host.evaluate("players[2].x = -10; players[2].y = -5; ball.x = -9.2; ball.y = -5; take(players[2]); players[2].fx = 1; players[2].fy = 0")
     guest.wait_for_function("owner === players[2] && Math.abs(players[2].x + 10) < 0.05", timeout=5000)
-    guest.evaluate("""() => { window.__f = []; const d = window.draw; window.draw = () => { const p = players[2];
-      if (owner === p && p.tx > -7 && p.tx < 7) window.__f.push([ball.x - p.x, ball.nx - p.tx, p.tx - p.x]); d(); }; }""")
+    host.evaluate(STALLS)
+    # Per frame: the ball from the drawn player, from the newest spot, the player's lag behind it, the machine's
+    # time, the moment drawn and the newest stamp heard.
+    guest.evaluate("""() => { window.__f = []; let ck = null; AiPelitRooms.on('message', m => { if (m.t === 's') ck = m.ck; });
+      const d = window.draw; window.draw = () => { const p = players[2];
+      if (owner === p && p.tx > -7 && p.tx < 7) window.__f.push([ball.x - p.x, ball.nx - p.tx, p.tx - p.x,
+        (performance.timeOrigin + performance.now()) / 1000, p.tr.time, ck]); d(); }; }""")
     host.evaluate("window.__cpuRun = 2; window.__run = true")
     host.wait_for_function("players[2].x >= 9", timeout=10000)
-    f = guest.evaluate("window.__f")
+    f, stalls = guest.evaluate("window.__f"), host.evaluate("window.__stall")
     assert len(f) > 30, f
-    # The player is drawn back by about the drawing's delay at 5 m/s, the ball held where the host has it.
-    assert mean(lag for _, _, lag in f) > 0.1, f
-    assert all(abs(drawn - said) < 0.1 for drawn, said, _ in f), [(round(a, 2), round(b, 2)) for a, b, _ in f]
+    # The ball held where the host has it, in every frame.
+    assert all(abs(drawn - said) < 0.1 for drawn, said, *_ in f), [(round(a, 2), round(b, 2)) for a, b, *_ in f]
+    # The player is drawn back by about the drawing's delay at 5 m/s. Judged only where the host ran the match in
+    # time and the moment drawn is not past the newest spot: at load 75-95 the mean lag over every frame was -0.43 m
+    # and 0.06 m (#498), likely as the host stood still in its late frames while the guest drew on a guess past it.
+    lags = [lag for _, _, lag, t, d, c in f if d is not None and c is not None and d <= c
+            and not any(st <= t <= st + 0.35 for st in stalls)]
+    assert len(lags) >= max(5, len(f) // 4), (len(lags), len(f), len(stalls))
+    assert mean(lags) > 0.1, (lags, f)
     assert not host.errors + guest.errors + ville.errors
 
 
