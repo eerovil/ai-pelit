@@ -42,6 +42,15 @@ def watching(site, browser, path):
     return relay, pages, athlete, fans
 
 
+def still(page, fid, x):
+    """The friend fid stands where it stood, within a pixel; a walk moves a figure many pixels.
+    Not exactly (#512): Mäkihyppy's jumper leaves the standings board on every phone onto the
+    position the phone on turn sends, rounded to a centimetre and so 4 mm from where it stood.
+    Its camera eases over, and the row of friends behind slides a hundredth of a pixel. A loaded
+    test run reached that only after the first reading."""
+    return abs(page.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(fid)}).x") - x) < 1
+
+
 def tap_scene(page, x):
     """Taps the scene at x (CSS px from the screen's left), below the HUD and above the controls."""
     y = page.evaluate("ctrlTop - 40")
@@ -87,7 +96,7 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
     # Nobody walks by themselves.
     fan.wait_for_timeout(600)
     for p in pages:
-        assert abs(p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") - before[p]) < 1
+        assert still(p, them, before[p])
     x0 = fan.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(me)}).x")
     x1 = before[fan]
     # From yleisurheilu-8 (#373) a tap on the other friend climbs onto them, so tap clear of them.
@@ -105,7 +114,7 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
         p.wait_for_function(
             f"Math.abs(K.fanSpots.find(f => f.id === {json.dumps(me)}).x - {target}) < 6", timeout=8000
         )
-        assert abs(p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") - before[p]) < 1
+        assert still(p, them, before[p])
     # A tap on the phone on turn does not move anyone; the turn is its own.
     assert athlete.evaluate("K.tapFans(100)") is False
     for p in pages:
