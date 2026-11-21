@@ -64,6 +64,13 @@
       "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
       "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
       "issue": "eerovil/ai-pelit#480"
+    },
+    {
+      "n": 10,
+      "date": "2026-11-21",
+      "note": "Peli on nyt 3D:nä kamera juoksijan takana, ja kaikilla radoilla on korkeuseroja: rampit, askelmat, pudotukset ja nousevat hyppykivet; radoilla on uudet ennätykset ja tuloslistat.",
+      "request": "Kaaosrata muutetaan 3d. Korkeuserojakin voidaan tehdä kenttiin. Valittu: kamera juoksijan takana ja yläpuolella, ohjaus ennallaan; korkeuserot kaikille neljälle radalle uusin ennätyksin ja tuloslistoin; rampit, askelmat, pudotukset ja nousevat hyppykivet.",
+      "issue": "eerovil/ai-pelit#493"
     }
   ]
 }

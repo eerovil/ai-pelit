@@ -347,11 +347,10 @@ def test_two_talking_at_once_are_both_heard(phones):
     hold(a)
     hold(b)
     host.wait_for_function("AiPelitRooms.voice.speakers.slice().sort().join() === 'Aino,Iida'")
-    # The speakers list fills as the talk message arrives, before the second voice's audio has
-    # started playing; until it plays, the label adds the "Napauta ruutua" hint (rooms.js
-    # renderVoice(), `held`). So wait for the label, not only for the list.
-    host.wait_for_function(
-        "['🔊 Aino, Iida', '🔊 Iida, Aino'].includes(document.getElementById('aipr-talk').innerText)")
+    # A peer's <audio> starts playing a moment after its talk flag arrives (play() is asynchronous), and until
+    # then the chip adds "Napauta ruutua" (sound held back); on a busy machine the first read caught that moment.
+    host.wait_for_function("!document.getElementById('aipr-talk').textContent.includes('Napauta')")
+    assert host.locator("#aipr-talk").inner_text() in ("🔊 Aino, Iida", "🔊 Iida, Aino")
     a.mouse.up()
     host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Iida'")
     b.mouse.up()

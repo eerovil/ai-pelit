@@ -6,7 +6,7 @@ import pytest
 from conftest import ROOT, ROOMS_IN_GAME
 from test_rooms_lib import Relay
 
-URL = 'games/kaaosrata/v9/'
+URL = 'games/kaaosrata/v10/'
 COURSES = ['main', 'hihna', 'laatat', 'finaali']
 
 
@@ -50,14 +50,14 @@ def test_belts_carry_a_runner_and_tiles_warn_then_drop_them(site, context):
     result = page.evaluate('''() => {
       useCourse('hihna');soloRace();race.phase='run';
       const b=BELTS[0];Object.assign(me,{x:0,y:b.y0+2});
-      const velocity=groundAt(me.x,me.y,0);const y=me.y;move(me,0.05,0);
+      const g=groundAt(me.x,me.y,0),velocity={vx:g.vx,vy:g.vy};const y=me.y;move(me,0.05,0);
       const carried=me.y-y;
       useCourse('laatat'); const tile=TILES[0],px=tile.x0+1,py=tile.y0+1;
       const on=groundAt(px,py,-tile.ph+0.1);
       const warning=tileOn(tile,-tile.ph+tile.on-0.3);
       const off=groundAt(px,py,-tile.ph+tile.on+0.1);
-      Object.assign(me,{x:px,y:py,z:0,vx:0,vy:0,off:0});
-      for(let i=0;i<8;i++)move(me,1/60,tile.on+0.2);
+      Object.assign(me,{x:px,y:py,z:tile.h||0,gx:px,gy:py,vx:0,vy:0});
+      for(let i=0;i<30&&me.fall<=0;i++)move(me,1/60,tile.on+0.2);
       return {velocity,carried,on,warning,off,fall:me.fall};
     }''')
     assert result['velocity'] == {'vx': 0, 'vy': -3.3}
@@ -115,11 +115,12 @@ def test_chooser_records_and_score_lists_survive_reload(site, context):
     # Complete a new course and ensure it saves and queues only that course's record.
     page.click('#course-next')
     page.click('#go')
-    page.evaluate("race.phase='run';race.clock=40;Object.assign(me,{x:0,y:FIN-0.02,vy:5,cp:CPS.length-2});input.y=1;tick(0.03);finish(standings());")
-    assert page.evaluate("load('ennatys:hihna8')") < 41
+    page.evaluate("race.phase='run';race.clock=40;Object.assign(me,{x:0,y:FIN-0.02,z:baseAt(0,FIN-0.02),gx:0,gy:FIN-0.02,vy:5,cp:CPS.length-2});input.y=1;tick(0.03);finish(standings());")
+    assert page.evaluate("load('ennatys:hihna10')") < 41
+    assert page.evaluate("load('ennatys:hihna8')") == 72.3
     assert page.evaluate("load('ennatys')") == 61.2
     queued = page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))")
-    assert any(q['game'] == 'kaaosrata' and q['board'] == 'hihna8' for q in queued.values()), queued
+    assert any(q['game'] == 'kaaosrata' and q['board'] == 'hihna10' for q in queued.values()), queued
     assert page.errors == []
 
 
@@ -177,16 +178,16 @@ def test_three_phones_follow_host_course_reload_and_next_round(site, browser):
         host.evaluate('race.clock=50;hostTick(0.1)')
         for page in [host, guests[1]]:
             page.wait_for_function("race && race.phase==='done'")
-            assert page.evaluate("load('ennatys:finaali8')") is not None
+            assert page.evaluate("load('ennatys:finaali10')") is not None
             assert page.evaluate("load('ennatys',null)") is None
-            assert page.evaluate("Object.values(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))).some(q=>q.board==='finaali8')")
+            assert page.evaluate("Object.values(JSON.parse(localStorage.getItem('ai-pelit:_tulokset:jono'))).some(q=>q.board==='finaali10')")
         # No snapshot is sent by a host already showing results: the end must identify its course.
         count = guests[0].evaluate("load('kisat',0)")
         relay.message = relay_message
         guests[0].reload()
         guests[0].wait_for_function("race && race.phase==='done' && course.id==='finaali'")
         assert guests[0].evaluate("load('kisat')") == count + 1
-        assert guests[0].evaluate("load('ennatys:finaali8')") == 41
+        assert guests[0].evaluate("load('ennatys:finaali10')") == 41
         assert guests[0].evaluate("load('ennatys',null)") is None
         for page in [host,*guests]: assert page.errors == []
     finally:
@@ -233,11 +234,16 @@ def test_old_new_course_records_are_kept_but_do_not_block_a_new_record(site, con
     assert 'Vanhan radan ennätys (v7): 44,50 s' in page.locator('#stats').inner_text()
     assert page.evaluate("load('ennatys:hihna7')") == 44.5
     assert page.evaluate('best') is None
-    assert page.evaluate('recordKey()') == 'ennatys:hihna8'
+    # v8-v9's record is the newest old layout once there is one.
+    page.evaluate("save('ennatys:hihna8',52.5)")
+    page.reload()
+    assert 'Vanhan radan ennätys (v9): 52,50 s' in page.locator('#stats').inner_text()
+    assert page.evaluate('recordKey()') == 'ennatys:hihna10'
     assert page.evaluate("load('ennatys:hihna')") == 20.5
     page.click('#go')
-    page.evaluate("race.phase='run';race.clock=60;Object.assign(me,{x:0,y:FIN-0.02,vy:5,cp:CPS.length-2});input.y=1;tick(0.03);finish(standings());")
-    assert 60 <= page.evaluate("load('ennatys:hihna8')") < 61
+    page.evaluate("race.phase='run';race.clock=60;Object.assign(me,{x:0,y:FIN-0.02,z:baseAt(0,FIN-0.02),gx:0,gy:FIN-0.02,vy:5,cp:CPS.length-2});input.y=1;tick(0.03);finish(standings());")
+    assert 60 <= page.evaluate("load('ennatys:hihna10')") < 61
+    assert page.evaluate("load('ennatys:hihna8')") == 52.5
     assert page.evaluate("load('ennatys:hihna')") == 20.5
     assert page.evaluate("load('ennatys')") == 61.2
     assert page.errors == []
@@ -276,9 +282,13 @@ def test_shelf_offers_current_v7_and_v6_lists_without_mixing_times(site, context
         ('kaaosrata', 'hihna', player): {'score': 25, 'version': 6},
         ('kaaosrata', 'hihna7', player): {'score': 60, 'version': 7},
         ('kaaosrata', 'hihna8', player): {'score': 75, 'version': 8},
+        ('kaaosrata', 'hihna10', player): {'score': 85, 'version': 10},
     }
     page = context.new_page()
     page.goto(site.url + '#/kaaosrata')
+    page.locator('.board-list[data-board="hihna10"]').click()
+    page.wait_for_selector('.score-list .tulos:has-text("85,00 s")')
+    assert '75,00 s' not in page.locator('.score-list').inner_text()
     page.locator('.board-list[data-board="hihna8"]').click()
     page.wait_for_selector('.score-list .tulos:has-text("75,00 s")')
     assert '60,00 s' not in page.locator('.score-list').inner_text()
@@ -288,7 +298,7 @@ def test_shelf_offers_current_v7_and_v6_lists_without_mixing_times(site, context
     page.locator('.board-list[data-board="hihna"]').click()
     page.wait_for_selector('.score-list .tulos:has-text("25,00 s")')
     assert '60,00 s' not in page.locator('.score-list').inner_text()
-    assert page.locator('.board-list').count() == 10
+    assert page.locator('.board-list').count() == 14
 
 
 def test_v8_obstacles_are_faster_and_narrower_than_v7(site, context):
@@ -306,7 +316,7 @@ def test_v8_obstacles_are_faster_and_narrower_than_v7(site, context):
       discs:c.discs.map(d=>Math.abs(d.w)),
     }))''')
     for c in r:
-        assert c['board'] == c['id'] + '8'
+        assert c['board'] == c['id'] + '10'  # v10 (#493): new lists for the courses with heights
         assert all(v >= 3.3 for v in c['belts']), c
         assert all(w <= 2.4 for w in c['bridges']), c
         assert all(w <= 1.91 for w in c['stones']), c
