@@ -1,0 +1,13 @@
+{
+  "title": "Lattia on laavaa",
+  "description": "Lattia muuttuu laavaksi: hypi huonekalulta toiselle ja pysy pisimpään kuivilla jaloilla, yksin tai kavereiden kanssa.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-21",
+      "note": "Ensimmäinen versio: kolme huonetta 3D:nä, nouseva laava, uppoavat huonekalut, kelluvat tavarat, tönäisy ja 2–8 pelaajan huoneet.",
+      "request": "Lattia on laavaa 3d peli multiplayer",
+      "issue": "eerovil/ai-pelit#488"
+    }
+  ]
+}
