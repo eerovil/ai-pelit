@@ -120,8 +120,9 @@ def test_a_fall_in_the_step_that_reaches_the_line_comes_before_the_finish(site, 
     assert page.evaluate("[me.fin, me.drops, me.x < TRACK, me.downT > 0]") == [None, 1, True, True]
     # The pick-up's 1.8 s and the 15 s are both in the time when they cross after it.
     clock = page.evaluate("race.clock")
-    page.evaluate("() => { for (let i = 0; i < 200 && me.downT > 0; i++) tick(1 / 60); me.v = 5; tick(1 / 60); }")
-    fin = page.evaluate("me.fin")
+    # Up again and over the last 10 cm in the same turn: the page's own frames must not decide it.
+    fin = page.evaluate("() => { for (let i = 0; i < 200 && me.downT > 0; i++) tick(1 / 60);"
+                        " for (let i = 0; i < 10 && me.fin === null; i++) { me.v = 5; tick(1 / 60); } return me.fin; }")
     assert fin is not None and fin > clock + 1.75 + 15
     page.context.close()
 
