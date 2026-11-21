@@ -62,6 +62,8 @@
      and with the loudest sounds quieter -->
 <!-- v8 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<!-- v9 (#480): the other fighters glide on a friend's phone, drawn a moment back between the host's spots -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -476,6 +478,9 @@ function onlineFight(s) {
   fighters = ps.map((p, i) => {
     const f = fighter(SPOTS[i][0], SPOTS[i][1], String(p.name).slice(0, 16), COLORS[i === mine ? 0 : i === 0 ? mine : i]);
     f.id = p.id; f.gin = IDLE; f.dashN = 0; f.seenDash = 0; f.sid = '';
+    // v9 (#480): on a friend's phone, where the host's spots put this fighter, drawn a moment back.
+    // The fastest move between two spots is a dodge (84 units in all), so a longer one is a jump.
+    f.tr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 120 });
     return f;
   });
   me = fighters[mine];
@@ -503,7 +508,7 @@ function remoteInput(f) {
 const r2 = v => Math.round(v * 100) / 100;
 function pack(f) { return [f.x, f.y, f.hp, f.fx, f.fy, f.swing, f.side, f.dash, f.flash, f.shot, f.ammo, f.swordCd, f.bowCd, f.dashCd].map(r2); }
 function sendState(to) {
-  R.send({ t: 's', round: net.round, st: state, T: r2(stateT), L: Math.ceil(net.left), tu: net.timeUp ? 1 : 0, f: fighters.map(pack),
+  R.send({ t: 's', round: net.round, ck: AiPelitSulava.now(), st: state, T: r2(stateT), L: Math.ceil(net.left), tu: net.timeUp ? 1 : 0, f: fighters.map(pack),
     ar: arrows.map(s => [s.x, s.y, s.vx, s.vy].map(Math.round).concat(fighters.indexOf(s.from))) }, to);
 }
 R.on('hello', id => { if (net && net.host && state !== 'room') sendState(id); });
@@ -530,10 +535,17 @@ function onMessage(m, from) {
 }
 
 // A friend's phone: the host's numbers, with the sounds of what changed in them.
-function unpack(f, a) {
+// v9 (#480): every other fighter stands at the newest spot heard (the hit numbers start there), and
+// goes on its track with the host's clock (ck); only the drawing glides (asDrawn()). The phone's own
+// fighter still chases its newest spot in guestStep(), so the stick answers with no extra delay.
+const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
+const ownHere = f => f === me && !net.watch;
+function unpack(f, a, st) {
   const was = { hp: f.hp, swing: f.swing, shot: f.shot, dash: f.dash };
   f.tx = a[0]; f.ty = a[1];
-  if (net.fresh) { f.x = f.tx; f.y = f.ty; }
+  if (net.fresh || !ownHere(f)) { f.x = f.tx; f.y = f.ty; }
+  // The first state this phone hears is a jump: drawn there at once, no glide.
+  if (!ownHere(f)) { if (net.fresh) f.tr.snap(st, f); else f.tr.push(st, f); }
   [f.hp, f.fx, f.fy, f.swing, f.side, f.dash, f.flash, f.shot, f.ammo, f.swordCd, f.bowCd, f.dashCd] = a.slice(2, 14);
   // The first state this phone hears (a new round, or back after a reload) is how things are: no sounds.
   if (net.fresh) { f.out = f.hp <= 0; return; }
@@ -552,7 +564,8 @@ function unpack(f, a) {
 }
 function guestState(m) {
   const before = state;
-  (m.f || []).forEach((a, i) => fighters[i] && unpack(fighters[i], a));
+  const st = stampOf(m);
+  (m.f || []).forEach((a, i) => fighters[i] && unpack(fighters[i], a, st));
   net.fresh = false;
   const gone = arrows.length > m.ar.length ? arrows.slice(m.ar.length) : [];
   gone.forEach(s => puffs.push({ x: s.x, y: s.y, t: 0.3 }));
@@ -566,8 +579,9 @@ function guestStep(dt) {
   texts.forEach(t => { t.t -= dt; t.dy -= 30 * dt; }); texts = texts.filter(t => t.t > 0);
   puffs.forEach(p => p.t -= dt); puffs = puffs.filter(p => p.t > 0);
   shake *= Math.exp(-10 * dt);
+  // Only the phone's own fighter chases its newest spot (v9: the others are drawn from their tracks).
   const k = Math.min(1, dt * 18);
-  for (const f of fighters) if (f.tx !== undefined) { f.x += (f.tx - f.x) * k; f.y += (f.ty - f.y) * k; }
+  if (ownHere(me) && me.tx !== undefined) { me.x += (me.tx - me.x) * k; me.y += (me.ty - me.y) * k; }
   for (const s of arrows) { s.x += s.vx * dt; s.y += s.vy * dt; }
   if (state === 'fight') net.left = Math.max(0, net.left - dt);
   const inp = playerInput();
@@ -808,10 +822,26 @@ function draw() {
   }
 }
 
+// v9 (#480): on a friend's phone the other fighters are drawn where their tracks put them a moment
+// back, and put back on their newest spot after the frame. The host runs the fight itself, so it
+// draws every fighter where it is.
+function asDrawn() {
+  if (!net || net.host) return [];
+  const kept = [];
+  for (const f of fighters) {
+    if (ownHere(f) || !f.tr.size()) continue;
+    const o = f.tr.at();
+    kept.push([f, f.x, f.y]); f.x = o.x; f.y = o.y;
+  }
+  return kept;
+}
+function putBack(kept) { for (const [f, px, py] of kept) { f.x = px; f.y = py; } }
+
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (dt > 0) step(dt); draw();
+  if (dt > 0) step(dt);
+  const kept = asDrawn(); draw(); putBack(kept);
   requestAnimationFrame(loop);
 }
 showMenu();
