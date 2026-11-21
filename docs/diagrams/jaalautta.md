@@ -29,7 +29,7 @@ flowchart TD
   V -- Kyllä --> W[Huojuu reunalla 1,6 s: Hakkaa Töniä!]
   W -- 5 painallusta ajoissa --> X[Takaisin jäälle, tönäisy keskelle]
   X --> C
-  W -- Aika loppuu, joku koskee, tainnuksissa tai jää sulaa --> I
+  W -- Aika loppuu, kova tönäisy 0,5 s jälkeen, tainnuksissa tai jää sulaa --> I
   V -- Ei --> I[Molskis: hylje on pois tältä kierrokselta]
   I --> K{Enää yksi jäällä?}
   K -- Ei --> L[20 s jälkeen lautan reuna lohkeilee pienemmäksi]
@@ -79,7 +79,7 @@ flowchart TD
 - **Hiljaa yli reunan, railo ei alla?**: when a seal's centre leaves the ice slower than `TEETER_V` (9 from v2, was 6.5; a seal walking at full stick goes about 6, an ordinary shove less than 9, a lunge's full hit faster), it starts wobbling there instead of falling (`teeter()` in `games/jaalautta/v2/world.js`). Not over an open hole (straight in), and not where the edge has melted under about one and a half seal widths (straight in). The owner asked for this on #478, as in the genre's model.
 - **Huojuu reunalla 1,6 s: Hakkaa Töniä!**: the seal rocks over the water and stays put; the stick does nothing, and each Töni press is a dot filled over it (`wobble()`), never a lunge. "Hakkaa Töniä!" shows above the button, which throbs, and a creak (`narina`) plays. A computer seal presses at a pace its floe's skill gives (`cpuThink()` in `ai.js`), and other computer seals within 5 come at it and, once its first `TEETER_SAFE` seconds are over and they are within 3.5, lunge into it (`lungeAt()`), since leaning does not tip it in. In a room the host counts the presses; a guest's own seal is drawn where the host has it.
 - **5 painallusta ajoissa**: `TEETER_N` presses within `TEETER_T` (1.6 s) put the seal back just inside the edge, sliding inwards at 4, with the `onnistui` chime.
-- **Aika loppuu, joku koskee, tainnuksissa tai jää sulaa**: the time running out; another seal coming at it at `TIP_V` (3) or faster, once its first `TEETER_SAFE` (0.5 s) are over (v2: before, the seal that pushed it over was usually still touching it and sent it straight in); one standing by or leaning on it is only moved off and stopped (`nudge()`, a fuse still passes on the touch) or a snowball; the ice under it melting away. A seal stunned by Ukkonen cannot press, so it goes in when its time ends.
+- **Aika loppuu, kova tönäisy 0,5 s jälkeen, tainnuksissa tai jää sulaa**: the time running out; another seal coming at it at `TIP_V` (3) or faster, once its first `TEETER_SAFE` (0.5 s) are over (v2: before, the seal that pushed it over was usually still touching it and sent it straight in); one standing by or leaning on it is only moved off and stopped (`nudge()`, a fuse still passes on the touch) or a snowball; the ice under it melting away. A seal stunned by Ukkonen cannot press, so it goes in when its time ends.
 - **Molskis: hylje on pois tältä kierrokselta**: `loiskis` sound (a crushed one `tomahdys` too), rings on the water; its head bobs where it went in until the next erä.
 - **20 s jälkeen lautan reuna lohkeilee pienemmäksi**: after 20 s, every 8 s a piece of each floe part's edge cracks (flashing 1.5 s ahead, `jaa` sound) and goes, never below a third of the start radius (the melt below then takes it all).
 - **60 s kulunut?** and **Lautta sulaa**: from `SUDDEN_AT` (60 s) "Lautta sulaa!" shows above the floe and the whole floe melts evenly, `MELT` (a twentieth of its first radius) a second, down to nothing, so every erä ends by about 80 s, even in a room where nobody touches the screen.

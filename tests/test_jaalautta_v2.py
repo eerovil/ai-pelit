@@ -646,6 +646,50 @@ def test_lohkare_drops_on_its_holder_and_presses_it_through_the_ice(site, contex
     assert page.errors == []
 
 
+@pytest.mark.parametrize("d3", [True, False])
+def test_a_lohkare_knockout_that_ends_the_era_plays_its_crush_out(site, context, d3):
+    # The crushed seal is the last but one: the erä ends at once, and its clock must keep going.
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if d3 and page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    if not d3:
+        page.evaluate("J3D.ready = false; J3D.failed = true")
+    go(page)
+    page.wait_for_function("world.t > 1")
+    page.evaluate("""() => {
+      const p = world.parts[0]; world.ring = null; world.ringNext = 1e9;
+      brains = world.seals.map(() => null);
+      world.seals.forEach((s, i) => { s.vx = s.vy = 0; if (i > 1) { s.out = 1; s.outX = s.x; s.outY = s.y; } });
+      world.seals[0].x = p.x - 3; world.seals[0].y = p.y;
+      const c = world.seals[1]; c.x = p.x + 3; c.y = p.y; givePower(c, 'lohk'); c.fuse.t = 0.02;
+    }""")
+    page.wait_for_function("world.ph === 'erä' && world.seals[1].out > 0")
+    page.wait_for_function("world.seals[1].out > 0.9 && world.ph === 'erä'", timeout=3000)
+    if d3:
+        x, y = page.evaluate("J3D.project(world.seals[1].outX, 0.14, world.seals[1].outY + 0.9)")
+    else:
+        x, y = page.evaluate("[X(world.seals[1].outX), Y(world.seals[1].outY) + 0.9 * V.s]")
+    assert ice_brightness(page, x, y) < 120
+    assert page.errors == []
+
+
+def test_two_wobbling_seals_touching_pass_a_fuse(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const ps = [0, 1].map(i => ({ id: 'c' + i, name: 'c' + i, hat: i, kind: 'cpu' }));
+      const w = newWorld(1, ps, 3); w.ph = 'play';
+      const [a, b] = w.seals, p = w.parts[0];
+      Object.assign(a, { x: p.x + edgeAt(p, 0) + 0.1, y: p.y, vx: 0, vy: 0, teeter: TEETER_T, tp: 0, ta: 0 });
+      Object.assign(b, { x: a.x, y: a.y + radiusOf(a) * 1.5, vx: 0, vy: 0, teeter: TEETER_T, tp: 0, ta: 0 });
+      givePower(a, 'ukko');
+      nudge(a, b);
+      return [!!a.fuse, b.fuse && b.fuse.k, b.fuse && b.fuse.from];
+    }""")
+    assert r == [False, 'ukko', 'c0']
+    assert page.errors == []
+
+
 def test_a_seal_whose_hat_changes_wears_the_new_one_in_3d(site, context):
     # In a room the host gives a guest's seal its own hat once that phone's first input comes (net.js).
     page = open_game(site, context)
