@@ -186,3 +186,51 @@ def test_the_computer_taking_over_the_aim_is_drawn_where_the_host_says(site, bro
     aino.evaluate("drag.id = null")
     errors = [e for p in (host, ville) for e in p.errors]
     assert not errors, errors
+
+
+def test_a_phone_not_on_turn_let_go_and_back_leaves_the_aim_alone(site, browser):
+    """Ville's phone drops while Aino aims, the host lets him go and he comes back: the host's aim stays on Aino's
+    track and her clock, since neither change was hers (the first version of v5 reset it for any phone)."""
+    host, aino, ville = phones(site, browser, names=("Eero", "Aino", "Ville"))
+    aino.evaluate(DRAG)
+    host.wait_for_function("Number.isFinite(net.aimTs) && aimTr.size() > 3", timeout=5000)
+    host.relay.drop(ville)
+    host.wait_for_selector("#aipr-goOn", state="visible", timeout=10000)
+    host.click("#aipr-goOn")
+    host.wait_for_function(f"net.away.includes({json.dumps(ville.evaluate('AiPelitRooms.me'))})")
+    assert host.evaluate("[Number.isFinite(net.aimTs), aimTr.size() > 3, aimSrc]") == [True, True, "f"]
+    host.relay.back(ville)
+    host.wait_for_function("net.away.length === 0", timeout=20000)
+    assert host.evaluate("[Number.isFinite(net.aimTs), aimTr.size() > 3, aimSrc, thrower()]") == [True, True, "f", aino.evaluate("AiPelitRooms.me")]
+    aino.evaluate("drag.id = null")
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+def test_resting_stones_keep_their_tracks_into_the_next_throw(site, browser):
+    """A new throw starts the aim again, not the stones: a guest's stone lying still keeps the spots it heard (the
+    first version of v5 started every stone's track again, which could jump one still gliding to rest)."""
+    host, aino = phones(site, browser)
+    host.evaluate("doThrow({ x: 0.2, w: 0.6, spin: 1 })")
+    aino.wait_for_function("phase === 'slide' && stones[0] && stones[0].tr.size() >= 8", timeout=5000)
+    # Stop the stone where it is, so the throw ends at once.
+    host.evaluate("stones.forEach(s => { s.vx = 0; s.vy = 0; s.m = false; })")
+    sizes = aino.evaluate("""() => new Promise(ok => { let before = stones[0].tr.size(), n = throwN;
+      AiPelitRooms.on('message', m => { if (m.t === 's' && throwN !== n) ok([before, stones[0].tr.size()]); before = stones[0].tr.size(); }); })""")
+    assert sizes[0] >= 8 and sizes[1] >= 8, sizes
+    errors = [e for p in (host, aino) for e in p.errors]
+    assert not errors, errors
+
+
+def test_lifting_the_finger_sends_the_aim_where_it_left(site, browser):
+    """The thrower's phone sends its aim 10 times a second while it drags, and once more as the finger lifts, so the
+    host (and through it every phone) ends on the true spot."""
+    host, aino = phones(site, browser)
+    aino.evaluate("drag.id = 99; drag.ox = drag.cx = 180; drag.oy = drag.cy = 600")
+    host.wait_for_function("Number.isFinite(net.aimTs)", timeout=5000)
+    # The finger moves, and lifts before the next of the 10 a second goes (a pull under 18 px throws nothing).
+    aino.evaluate("net.sendT = 100; aim.x = 0.77; aim.w = 0.4; up({ pointerId: 99 })")
+    host.wait_for_function("Math.abs(aim.x - 0.77) < 0.01 && Math.abs(aim.w - 0.4) < 0.01", timeout=3000)
+    assert host.evaluate("phase") == "aim"
+    errors = [e for p in (host, aino) for e in p.errors]
+    assert not errors, errors
