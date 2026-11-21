@@ -74,6 +74,7 @@
      and with the loudest sounds quieter -->
 <!-- v6 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const R = window.AiPelitRooms;
@@ -278,6 +279,9 @@ function newKart(i, kind, id, name, bot) {
     x: 0, y: 0, a: 0, v: 0, z: 0, vz: 0, idx: 0, s: 0, lat: 0, prog: 0, lap: 0, fin: null, lapT: 0, bestLap: null,
     boost: 0, walls: 0, drift: 0, dTime: 0, dWait: false, spin: 0, spinA: 0, fruit: 0, item: null, shield: 0, wallT: 0, yaw: 0,
     ai: { lane: 0, laneT: 0, itemT: 0, skill: 1, turboT: 2 },
+    // v7 (#480): another phone's kart is drawn from the spots heard (`tr`), a moment back; `ts` and `hd` are a
+    // friend's newest stamp and spot as their phone sent them, `src` whose clock the last spot carried.
+    tr: AiPelitSulava.track({ keys: ['x', 'y', 'a', 'z'], angles: ['a'], jump: 120 }), ts: null, hd: null, src: '',
   };
 }
 
@@ -560,7 +564,8 @@ function tick(dt) {
         } else if (k === me) { say(lap === LAPS - 1 ? 'Viimeinen kierros!' : 'Kierros ' + (lap + 1) + '/' + LAPS); S.play('onnistui', { vol: 0.3 }) || beep(660, 0.12, 'square', 0.07, 990); }
       }
     }
-    collide();
+    // v7 (#480's D11): a bump with another phone's kart happens where this phone draws it.
+    const kept = asDrawn(); collide(); putBack(kept);
     pickups(dt);
     if (race.mode === 'net') { if (host) hostTick(dt); else guestTick(dt); }
     if (race.phase === 'done') { race.doneT -= dt; if (race.doneT <= 0) { if (race.mode === 'net') netAfter(); else showResult(); } }
@@ -574,10 +579,9 @@ function tick(dt) {
 }
 
 function goRun(t) { race.phase = 'run'; race.t = t; race.karts.forEach(k => { k.lapT = 0; }); }
-// Another phone's kart between its messages: on the way it was going.
+// Another phone's kart between its messages: its timers run down. v7 (#480): it stays at the newest spot heard
+// (v6 carried it on at its speed); it is drawn gliding between the spots, a moment back (asDrawn()).
 function carry(k, dt) {
-  k.x += Math.cos(k.a) * k.v * dt; k.y += Math.sin(k.a) * k.v * dt;
-  if (k.fin === null) k.prog += k.v * dt;
   if (k.spin > 0) { k.spin -= dt; k.spinA += 12 * dt; } else k.spinA = 0;
   k.boost = Math.max(0, k.boost - dt); k.shield = Math.max(0, k.shield - dt);
   k.z = Math.max(0, k.z - 60 * dt);
@@ -621,15 +625,26 @@ function showResult() {
 // sent to every phone, and each phone checks only its own kart against it.
 let roomTrack = trackNo;
 const r1 = n => Math.round(n * 10) / 10, r2 = n => Math.round(n * 100) / 100;
-// [13] says the host's computer drives this player's kart now (its phone is away).
-const pack = k => [r1(k.x), r1(k.y), r2(k.a), r1(k.v), r1(k.prog), k.lap, k.fin, r2(k.spin), r2(k.boost), k.drift, r1(k.z), k.fruit, r1(k.shield), k.kind === 'cpu' && !k.bot ? 1 : 0, k.bestLap];
+// [13] says the host's computer drives this player's kart now (its phone is away). [15] (v7, #480): the host
+// sends a friend's spot on as their phone sent it, with their own stamp; the host's own kart and the computer's
+// carry the message's stamp (`st`), so [15] is null.
+const pack = k => R.isHost && k.kind === 'net' && k.hd ? k.hd : [r1(k.x), r1(k.y), r2(k.a), r1(k.v), r1(k.prog), k.lap, k.fin, r2(k.spin), r2(k.boost), k.drift, r1(k.z), k.fruit, r1(k.shield), k.kind === 'cpu' && !k.bot ? 1 : 0, k.bestLap, null];
+const stampOf = m => Number.isFinite(m.st) ? m.st : null;
+// A spot just heard for another phone's kart (already unpacked into it), stamped by the phone that moved it:
+// src 'f' (the friend's own clock) or 'h' (the host's). When the clock changes (the computer took over a friend,
+// or gave them back), no glide from before; a move of over 120 px between two spots is not glided either.
+function heardSpot(k, st, src) {
+  const spot = { x: k.x, y: k.y, a: k.a, z: k.z };
+  if (src !== k.src) k.tr.snap(st, spot); else k.tr.push(st, spot);
+  k.src = src;
+}
 function unpack(k, a) {
   [k.x, k.y, k.a, k.v, k.prog, k.lap, k.fin, k.spin, k.boost, k.drift, k.z, k.fruit, k.shield] = a;
   if (a[14] !== undefined) k.bestLap = a[14];
   const w = where(T, k.x, k.y, k.idx); k.idx = w.i; k.s = ((w.s % T.L) + T.L) % T.L; k.lat = w.lat;
   if (k.drift) k.dTime = Math.max(k.dTime, TIERS[0]);
 }
-function hostState() { return { t: 's', round: race.round, tr: race.tr, ph: race.phase === 'cd' ? 'cd' : 'run', cd: r2(race.cdT), clock: r2(race.t), k: race.karts.map(pack) }; }
+function hostState() { return { t: 's', round: race.round, st: AiPelitSulava.now(), tr: race.tr, ph: race.phase === 'cd' ? 'cd' : 'run', cd: r2(race.cdT), clock: r2(race.t), k: race.karts.map(pack) }; }
 function shareNet(m) { if (race && race.mode === 'net') R.send(Object.assign({ round: race.round }, m)); }
 
 R.on('start', s => {
@@ -655,6 +670,8 @@ R.on('message', (m, from) => {
     const k = race.karts.find(o => o.id === from);
     if (m.t === 'p' && k && k.kind === 'net') {
       unpack(k, m.k);
+      k.ts = stampOf(m); k.hd = m.k.slice(0, 15).concat([k.ts]);
+      heardSpot(k, k.ts, 'f');
       if (k.fin !== null && race.firstFin === null) race.firstFin = race.t;
     }
     return;
@@ -675,13 +692,14 @@ R.on('message', (m, from) => {
       if (k === me && !a[13] && !(race.adopt && a[4] > me.prog + 30)) return;
       unpack(k, a);
       if (k === me) { me.camA = me.a; race.camA = me.a; }
+      else heardSpot(k, Number.isFinite(a[15]) ? a[15] : stampOf(m), Number.isFinite(a[15]) ? 'f' : 'h');
     });
     if (m.ph === 'run') race.adopt = false;
   }
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
 R.on('continue', ids => { if (race && race.mode === 'net') race.karts.forEach(k => { if (ids.includes(k.id)) k.kind = 'cpu'; }); });
-R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') k.kind = 'net'; }); });
+R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.tr.reset(); k.ts = k.hd = null; k.src = ''; } }); });
 R.on('lobby', () => { race = null; engineOn(false); });
 R.on('leave', () => { race = null; engineOn(false); showMenu(); });
 R.on('menu', () => { race = null; engineOn(false); showMenu(); });
@@ -710,7 +728,7 @@ function guestTick(dt) {
   race.sendT -= dt;
   if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !me.sentFin))) {
     race.sendT = 1 / 12; me.sentFin = me.fin !== null;
-    R.send({ t: 'p', round: race.round, k: pack(me) });
+    R.send({ t: 'p', round: race.round, st: AiPelitSulava.now(), k: pack(me) });
   }
 }
 // This phone's kart is in: its time is kept, and it waits for the others.
@@ -1098,6 +1116,14 @@ document.getElementById('go').onclick = () => { document.getElementById('result'
 document.addEventListener('visibilitychange', () => { if (document.hidden) engineOn(false); else if (race && (race.phase === 'run' || race.phase === 'cd')) engineOn(true); });
 
 // ---------- Loop ----------
+// v7 (#480): the other phones' karts are drawn gliding between the spots heard, a moment back (v6 drew each new
+// spot as it came, carried on at its speed). Bumps use the drawn spot too (tick()); everything else (places, the
+// finish, what the host sends on) keeps the newest spot, put back after.
+function asDrawn() {
+  return race && race.mode === 'net' ? race.karts.filter(k => k !== me && k.kind === 'net' && k.tr.size()).map(k => {
+    const kept = [k, k.x, k.y, k.a, k.z], o = k.tr.at(); k.x = o.x; k.y = o.y; k.a = o.a; k.z = o.z; return kept; }) : [];
+}
+function putBack(kept) { for (const [k, x0, y0, a0, z0] of kept) { k.x = x0; k.y = y0; k.a = a0; k.z = z0; } }
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -1105,7 +1131,7 @@ function frame(now) {
     tick(dt);
     engineSound();
   }
-  if (race) draw();
+  if (race) { const kept = asDrawn(); draw(); putBack(kept); }
   else idle();
   requestAnimationFrame(frame);
 }
