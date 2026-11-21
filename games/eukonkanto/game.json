@@ -1,0 +1,14 @@
+{
+  "title": "Eukonkanto",
+  "description": "Kanna eukko selässä hirsien yli ja vesiesteen läpi, äläkä pudota: kisa tietokonetta vastaan tai kavereiden kanssa.",
+  "group": "yleisurheilu",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-21",
+      "note": "Ensimmäinen versio: 253,5 metrin eukonkantorata sivusta, kaksi hirsiestettä ja vesieste, pudotuksesta 15 sekuntia lisää, kolmea tietokonetta vastaan tai 2–6 kaverin kanssa.",
+      "request": "Yleisurheilupuolelle saappaanheitto ja eukonkanto",
+      "issue": "eerovil/ai-pelit#501"
+    }
+  ]
+}
