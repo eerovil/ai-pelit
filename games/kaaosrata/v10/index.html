@@ -8,6 +8,8 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#2b1b54;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
   canvas{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none}
+  /* v10 (#493): three.js draws the course on #g; #c above it keeps the names, the HUD and the stick. */
+  #g{pointer-events:none}
   #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
   #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(36,20,72,.86);text-align:center;touch-action:manipulation}
   #menu.hidden{display:none}
@@ -42,6 +44,7 @@
 </style>
 </head>
 <body>
+<canvas id="g"></canvas>
 <canvas id="c"></canvas>
 <div id="safe"></div>
 <div id="menu">
@@ -53,7 +56,7 @@
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <p id="stats"></p>
   <p class="help">Ohjaa vetämällä peukaloa ruudulla, hyppää oikean alakulman napista.
-    <span class="more">Hyppää kuilujen yli ja tähtää laskeutuminen. Väistä korkeat portit ja heilurit.</span>
+    <span class="more">Hyppää kuilujen yli ja ylemmille tasoille, ja tähtää laskeutuminen. Väistä korkeat portit ja heilurit.</span>
     Ensimmäinen maalissa voittaa!</p>
 </div>
 <script src="../../../rooms.js" data-game="kaaosrata" data-min="2" data-max="8"></script>
@@ -63,6 +66,8 @@
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="../../../lib/sulava-1/sulava.js"></script>
 <script src="radat.js"></script>
+<script>window.K3D_LIB = import('../../../lib/three-r187/three.module.js');</script>
+<script src="three3d.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -87,29 +92,93 @@ const movX = t => MOV ? MOV.a * Math.sin(MOV.w * t) : 0;
 const blockX = (p,t,k) => (k ? 2.6 : -2.6) + (p.a ?? BLOCK_A) * Math.sin(p.w*t+p.ph);
 const hamX = (h,t) => HAM_A * Math.sin(h.w*t+h.ph);
 const boardId = () => course.board || course.id;
-const recordKey = () => course.id === 'main' ? 'ennatys' : 'ennatys:' + boardId();
+// v10 (#493): every course's record is its own board's; v9's (the older layout's) stays shown under it.
+const recordKey = () => 'ennatys:' + boardId();
 function useCourse(id) {
   course = RADAT.find(c => c.id === id) || RADAT[0];
   ({fin:FIN,limit:LIMIT,floors:FLOORS,mov:MOV,discs:DISCS,sweepers:SWEEPERS,pushers:PUSHERS,bumpers:BUMPERS,hammers:HAMMERS,cps:CPS,sections:SECTIONS,path:PATH,belts:BELTS,tiles:TILES} = course);
   FLOORS_FAR_FIRST = FLOORS.slice().sort((a,b) => b.y0-a.y0);
+  STATIC = FLOORS.concat(BELTS);
+  // Each obstacle stands on the ground at its own place.
+  for (const o of SWEEPERS) o.base = baseAt(o.x, o.y);
+  for (const o of PUSHERS) o.base = baseAt(0, o.y);
+  for (const o of BUMPERS) o.base = o.h ?? baseAt(o.x, o.y);
+  for (const o of HAMMERS) o.base = baseAt(0, o.y);
   best = load(recordKey(), null);
   if (window.AiPelitScores) AiPelitScores.board(boardId(), course.name);
 }
 const tilePhase = (tile,t) => ((t+tile.ph)%tile.period+tile.period)%tile.period;
 const tileOn = (tile,t) => tilePhase(tile,t) < tile.on;
 
-// What is under a point: the floor's own movement {vx, vy}, or null over nothing.
-const STILL = { vx: 0, vy: 0 };
-function groundAt(px, py, t) {
-  for (const b of BELTS) if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) return {vx:b.vx,vy:b.vy};
-  for (const b of TILES) if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1 && tileOn(b,t)) return STILL;
-  for (const f of FLOORS) if (px >= f.x0 && px <= f.x1 && py >= f.y0 && py <= f.y1) return STILL;
-  if (MOV && py >= MOV.y0 && py <= MOV.y1 && Math.abs(px - movX(t)) <= MOV.hw) return { vx: MOV.a * MOV.w * Math.cos(MOV.w * t), vy: 0 };
+// ---------- Heights (v10, #493) ----------
+// Every surface (floor, stone, belt, tile while on, the sliding platform, a disc) is a solid column from
+// its top down. A ramp's top rises from `h` at its near end to `h1` at its far end.
+let STATIC = [];
+const STEP = 0.3; // how high a runner walks up without a jump
+const topOf = (f, py) => f.h1 === undefined ? (f.h || 0) : (f.h || 0) + (f.h1 - (f.h || 0)) * Math.max(0, Math.min(1, (py - f.y0) / (f.y1 - f.y0)));
+const inRect = (f, px, py) => px >= f.x0 && px <= f.x1 && py >= f.y0 && py <= f.y1;
+// Every surface over a point at race time t: [{h, vx, vy, s}], `s` the surface itself.
+function surfacesAt(px, py, t) {
+  const out = [];
+  for (const b of BELTS) if (inRect(b, px, py)) out.push({ h: topOf(b, py), vx: b.vx, vy: b.vy, s: b });
+  for (const b of TILES) if (inRect(b, px, py) && tileOn(b, t)) out.push({ h: b.h || 0, vx: 0, vy: 0, s: b });
+  for (const f of FLOORS) if (inRect(f, px, py)) out.push({ h: topOf(f, py), vx: 0, vy: 0, s: f });
+  if (MOV && py >= MOV.y0 && py <= MOV.y1 && Math.abs(px - movX(t)) <= MOV.hw) out.push({ h: MOV.h || 0, vx: MOV.a * MOV.w * Math.cos(MOV.w * t), vy: 0, s: MOV });
   for (const d of DISCS) {
     const dx = px - d.x, dy = py - d.y;
-    if (dx * dx + dy * dy <= d.r * d.r) return { vx: -d.w * dy, vy: d.w * dx };
+    if (dx * dx + dy * dy <= d.r * d.r) out.push({ h: d.h || 0, vx: -d.w * dy, vy: d.w * dx, s: d });
   }
-  return null;
+  return out;
+}
+// The ground under a point: the highest surface top at or below the feet + STEP, as {vx, vy, h}, or null.
+// Without `feet`, the highest surface there.
+function groundAt(px, py, t, feet = Infinity) {
+  let g = null;
+  for (const o of surfacesAt(px, py, t)) if (o.h <= feet + STEP + 1e-9 && (!g || o.h > g.h || (o.h === g.h && o.s.vx !== undefined))) g = o;
+  return g;
+}
+// A surface over the point higher than the feet can walk up: the runner may not stand there.
+function blockerAt(px, py, t, feet) {
+  let b = null;
+  for (const o of surfacesAt(px, py, t)) if (o.h > feet + STEP + 1e-9 && (!b || o.h > b.h)) b = o;
+  return b;
+}
+// The highest still surface at a spot (an obstacle's base), 0 over nothing.
+function baseAt(px, py) {
+  let h = null;
+  for (const f of STATIC) if (inRect(f, px, py)) h = Math.max(h ?? -Infinity, topOf(f, py));
+  return h ?? 0;
+}
+// The lowest top of any surface within d metres: below it nothing can catch a falling runner.
+function lowestNear(px, py, t, d = 8) {
+  let lo = Infinity;
+  const near = (x0, x1, y0, y1) => Math.hypot(Math.max(x0 - px, 0, px - x1), Math.max(y0 - py, 0, py - y1)) <= d;
+  for (const f of STATIC) if (near(f.x0, f.x1, f.y0, f.y1)) lo = Math.min(lo, f.h1 === undefined ? (f.h || 0) : Math.min(f.h || 0, f.h1));
+  for (const b of TILES) if (near(b.x0, b.x1, b.y0, b.y1)) lo = Math.min(lo, b.h || 0);
+  if (MOV && near(-MOV.a - MOV.hw, MOV.a + MOV.hw, MOV.y0, MOV.y1)) lo = Math.min(lo, MOV.h || 0);
+  for (const c of DISCS) if (near(c.x - c.r, c.x + c.r, c.y - c.r, c.y + c.r)) lo = Math.min(lo, c.h || 0);
+  return lo === Infinity ? 0 : lo;
+}
+// The runner standing on its ground, or null in the air.
+function standing(r, t) { const g = groundAt(r.x, r.y, t, r.z); return g && r.z <= g.h + 0.001 ? g : null; }
+// Out of a blocking surface the shortest way: its nearest edge (a disc: straight out).
+function pushOut(r, b, t) {
+  const s = b.s;
+  if (s.r !== undefined) { const dx = r.x - s.x, dy = r.y - s.y, d = Math.hypot(dx, dy) || 1; r.x = s.x + dx / d * (s.r + 0.02); r.y = s.y + dy / d * (s.r + 0.02); return; }
+  const x0 = s === MOV ? movX(t) - MOV.hw : s.x0, x1 = s === MOV ? movX(t) + MOV.hw : s.x1;
+  const opts = [[x0 - 0.02, r.y, r.x - x0], [x1 + 0.02, r.y, x1 - r.x], [r.x, s.y0 - 0.02, r.y - s.y0], [r.x, s.y1 + 0.02, s.y1 - r.y]];
+  const [nx, ny] = opts.sort((a, c) => a[2] - c[2])[0];
+  r.x = nx; r.y = ny;
+}
+// The one check after every change of position (the carry, the runner's own step, a knock, a bump): a
+// runner never stays inside a surface higher than it can walk up. Back to its last good spot along
+// whichever axis is free, losing its speed into the surface; pushed out if that spot is blocked too.
+function settle(r, t) {
+  if (r.fall > 0 || r.gx === undefined || !blockerAt(r.x, r.y, t, r.z)) return;
+  if (!blockerAt(r.x, r.gy, t, r.z)) { r.y = r.gy; r.vy = 0; }
+  else if (!blockerAt(r.gx, r.y, t, r.z)) { r.x = r.gx; r.vx = 0; }
+  else { r.x = r.gx; r.y = r.gy; r.vx = r.vy = 0; }
+  for (let k = 0, b; k < 3 && (b = blockerAt(r.x, r.y, t, r.z)); k++) pushOut(r, b, t);
 }
 
 // ---------- Moving ----------
@@ -150,7 +219,7 @@ S.load(['valinta', 'hyppy', 'potku', 'putoaminen', 'osuma', 'tomahdys', 'voitto'
 // kind: 'me' (this phone's thumb), 'cpu' (moved here by the computer), 'net' (moved by another phone).
 // A bot is a computer player in every phone's race; the host moves it.
 function runner(id, name, color, kind, bot, skill) {
-  return { id, name, color, kind, bot: !!bot, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ix: 0, iy: 0, jq: 0, off: 0,
+  return { id, name, color, kind, bot: !!bot, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ix: 0, iy: 0, jq: 0,
     fin: null, fall: 0, cp: 0, stun: 0, cd: 0, best: 0, knocks: 0, ph: Math.random() * 6,
     // v9 (#480): another phone's runner is drawn from the spots heard (`tr`), a moment back; `ts` and `hd` are a
     // friend's newest stamp and spot as their phone sent them, `src` whose clock the last spot carried, `lf` its fall.
@@ -170,7 +239,7 @@ function soloRace() {
 }
 function newRace(mode, round, runners) {
   race = { mode, round, runners, phase: 'cd', cdT: 0, clock: 0, doneT: 0, firstFin: null, late: 30, adopt: false, sendT: 0, results: null };
-  runners.forEach((r, i) => { r.x = -3.6 + (i % 4) * 2.4; r.y = i < 4 ? 0 : -2; r.best = r.y; });
+  runners.forEach((r, i) => { r.x = -3.6 + (i % 4) * 2.4; r.y = i < 4 ? 0 : -2; r.best = r.y; r.z = baseAt(r.x, r.y); r.gx = undefined; });
   me = runners.find(r => r.kind === 'me') || null;
   camY = me ? me.y : 0;
   texts = []; beep = 0; swing = [];
@@ -184,12 +253,15 @@ function knock(r, kx, ky, vz, stun) {
   if (r === me) { S.play('potku', { vol: 0.9 }) || tone(150, 0.2, 'sawtooth', 0.09, 60); texts.push({ s: 'Pläts!', t: 0 }); }
 }
 function respawn(r) {
-  const y = CPS[r.cp];
-  Object.assign(r, { x: -3 + Math.random() * 6, y, z: 0, vx: 0, vy: 0, vz: 0, fall: 0, stun: 0, jq: 0, coyote: 0 });
+  // On the checkpoint's own floor (#493: a narrow floor's sides are a drop now, not the same floor).
+  const y = CPS[r.cp], home = FLOORS.find(f => !f.stone && inRect(f, 0, y));
+  const x0 = Math.max(home ? home.x0 + 0.4 : -3, Math.min(home ? home.x1 - 0.4 : 3, -3 + Math.random() * 6));
+  Object.assign(r, { x: x0, y, z: baseAt(x0, y), vx: 0, vy: 0, vz: 0, fall: 0, stun: 0, jq: 0, coyote: 0, gx: undefined });
   r.ai.k = 0; r.ai.tx = null; r.ai.stuck = 0; r.ai.wander = 0;
 }
 
-// One runner's physics for dt seconds, at race time t.
+// One runner's physics for dt seconds, at race time t. v10 (#493): z is the feet's height above the
+// course's zero, and the ground is the surface under the feet (groundAt).
 function move(r, dt, t) {
   if (r.fall > 0) {
     r.fall += dt; r.vz -= GRAV * dt; r.z += r.vz * dt; r.x += r.vx * dt; r.y += r.vy * dt;
@@ -197,42 +269,49 @@ function move(r, dt, t) {
     return;
   }
   r.stun = Math.max(0, r.stun - dt); r.cd = Math.max(0, r.cd - dt); r.jq = Math.max(0, r.jq - dt);
-  const down = r.z <= 0.001;
-  const g = groundAt(r.x, r.y, t);
-  if (down && g) { r.x += g.vx * dt; r.y += g.vy * dt; r.off = 0; }
-  else if (down) r.off += dt;
-  // The redesigned courses grant one jump from real ground, including a short edge grace.
-  // Touching z=0 over a pit must not recharge another jump in mid-air.
-  if (course.id !== 'main') r.coyote = down && g ? 0.12 : Math.max(0,(r.coyote || 0)-dt);
+  r.gx = r.x; r.gy = r.y; // the last good spot, for settle()
+  const g = standing(r, t), down = !!g;
+  if (down) { r.x += g.vx * dt; r.y += g.vy * dt; }
+  // One jump from real ground, with a short grace past an edge. Over a pit no touch recharges it.
+  r.coyote = down ? 0.12 : Math.max(0, (r.coyote || 0) - dt);
   // Run towards where the thumb points; harder to steer in the air or knocked about.
   let ix = r.ix, iy = r.iy;
   const m = Math.hypot(ix, iy);
   if (m > 1) { ix /= m; iy /= m; }
+  // A ramp slows the climb and speeds the run down.
+  const ramp = down && g.s && g.s.h1 !== undefined ? (g.s.h1 - (g.s.h || 0)) / (g.s.y1 - g.s.y0) : 0;
+  const sp = SPEED * Math.max(0.7, Math.min(1.3, 1 - 0.9 * ramp * iy));
   const acc = r.stun > 0 ? 3 : down ? 30 : 9;
   const k = Math.min(1, acc * dt);
-  r.vx += (ix * SPEED - r.vx) * k; r.vy += (iy * SPEED - r.vy) * k;
-  if (r.jq > 0 && down && (course.id === 'main' ? r.off < 0.12 : r.coyote > 0) && r.stun <= 0 && race.phase === 'run') {
-    r.vz = JUMP_V; r.jq = 0; r.off = 0; r.coyote = 0;
+  r.vx += (ix * sp - r.vx) * k; r.vy += (iy * sp - r.vy) * k;
+  if (r.jq > 0 && r.coyote > 0 && r.stun <= 0 && race.phase === 'run') {
+    r.vz = JUMP_V; r.jq = 0; r.coyote = 0;
     if (r === me) S.play('hyppy', { vol: 0.6 }) || tone(380, 0.09, 'triangle', 0.05, 700);
   }
   r.x += r.vx * dt; r.y += r.vy * dt;
-  if (r.z > 0 || r.vz > 0) {
+  settle(r, t);
+  // Up and down: follow a ramp or a small step while standing, else fly and land on what is below.
+  const g2 = groundAt(r.x, r.y, t, r.z);
+  if (g2 && r.vz <= 0 && r.z <= g2.h + 0.001) { r.z = g2.h; r.vz = 0; }
+  else if (g2 && down && r.vz <= 0 && r.z - g2.h < 0.12) { r.z = g2.h; r.vz = 0; }
+  else {
     r.vz -= GRAV * dt; r.z += r.vz * dt;
-    if (r.z <= 0) {
-      // Down from a jump or a knock onto a floor: a thud, louder from higher (only a sound, no old
-      // beep). Coming down over a gap is the fall's sound instead.
-      if (r === me && r.vz < -2 && groundAt(r.x, r.y, t)) S.play('tomahdys', { vol: Math.min(0.8, 0.25 - r.vz * 0.06) });
-      r.z = 0; r.vz = 0;
+    if (g2 && r.z <= g2.h) {
+      // Down from a jump or a knock onto a surface: a thud, louder from higher (only a sound).
+      if (r === me && r.vz < -2) S.play('tomahdys', { vol: Math.min(0.8, 0.25 - r.vz * 0.06) });
+      r.z = g2.h; r.vz = 0;
     }
   }
-  if (r.z <= 0 && r.off > 0.1 && !groundAt(r.x, r.y, t)) {
-    r.fall = 0.001; r.vz = 0; r.falls = (r.falls || 0) + 1;
+  // Over nothing, and below every surface near enough to catch it: fallen. The margin is v9's short
+  // grace at an edge, when a late jump still makes it.
+  if (!groundAt(r.x, r.y, t, r.z) && r.z < lowestNear(r.x, r.y, t) - 0.15) {
+    r.fall = 0.001; r.vz = Math.min(r.vz, 0); r.falls = (r.falls || 0) + 1;
     if (r === me) { S.play('putoaminen', { vol: 0.7 }) || tone(500, 0.6, 'sine', 0.07, 80); }
     return;
   }
   hits(r, t);
   if (r.y > r.best) r.best = r.y;
-  if (r.z <= 0 && r.cp < CPS.length - 2 && r.y >= CPS[r.cp + 1] - 1.2 && groundAt(r.x, r.y, t)) {
+  if (r.cp < CPS.length - 2 && r.y >= CPS[r.cp + 1] - 1.2 && standing(r, t)) {
     r.cp++;
     if (r === me) { S.play('valinta', { vol: 0.7, rate: 1.25 }) || tone(990, 0.12, 'sine', 0.06); texts.push({ s: 'Välietappi ✓', t: 0, col: '#7ee081' }); }
   }
@@ -240,7 +319,7 @@ function move(r, dt, t) {
     r.fin = Math.round((t - (r.y - FIN) / Math.max(r.vy, 1)) * 100) / 100;
     r.cp = CPS.length - 1;
     // Out of the race: it stands where it crossed the line until the race ends.
-    Object.assign(r, { vx: 0, vy: 0, vz: 0, z: 0, ix: 0, iy: 0, jq: 0, stun: 0 });
+    Object.assign(r, { vx: 0, vy: 0, vz: 0, z: baseAt(r.x, r.y), ix: 0, iy: 0, jq: 0, stun: 0 });
     if (race.firstFin === null) race.firstFin = t;
     if (r === me && !S.play('voitto', { vol: 0.8 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.25, 'sine', 0.07), 120); }
   }
@@ -255,7 +334,7 @@ function hits(r, t) {
     if (hub < 0.55 + RAD) { const n = hub || 1; r.x = s.x + dx / n * (0.55 + RAD); r.y = s.y + dy / n * (0.55 + RAD); }
     const along = Math.max(-s.len, Math.min(s.len, dx * ux + dy * uy));
     const qx = s.x + ux * along, qy = s.y + uy * along, d = Math.hypot(r.x - qx, r.y - qy);
-    if (d < RAD + 0.2 && r.z < BAR_H && r.cd <= 0) {
+    if (d < RAD + 0.2 && r.z - s.base < BAR_H && r.cd <= 0) {
       // Swept the way the bar moves, faster further out.
       let tx = -s.w * (qy - s.y), ty = s.w * (qx - s.x), tl = Math.hypot(tx, ty);
       if (tl < 0.5) { tx = r.x - qx; ty = r.y - qy; tl = Math.hypot(tx, ty) || 1; }
@@ -263,7 +342,7 @@ function hits(r, t) {
       knock(r, tx / tl * sp, ty / tl * sp, 3, 0.6);
     }
   }
-  if (r.z < 2.5) for (const p of PUSHERS) for (let k = 0; k < 2; k++) {
+  for (const p of PUSHERS) if (r.z - p.base < 2.5) for (let k = 0; k < 2; k++) {
     const bx = blockX(p, t, k);
     const cx = Math.max(bx - BLOCK_HW, Math.min(bx + BLOCK_HW, r.x)), cy = Math.max(p.y - BLOCK_HD, Math.min(p.y + BLOCK_HD, r.y));
     let nx = r.x - cx, ny = r.y - cy, d = Math.hypot(nx, ny);
@@ -278,7 +357,7 @@ function hits(r, t) {
   }
   for (const b of BUMPERS) {
     const dx = r.x - b.x, dy = r.y - b.y, d = Math.hypot(dx, dy) || 1;
-    if (d < 0.6 + RAD && r.z < 1) {
+    if (d < 0.6 + RAD && r.z - b.base < 1) {
       r.x = b.x + dx / d * (0.6 + RAD); r.y = b.y + dy / d * (0.6 + RAD);
       r.vx = dx / d * 8; r.vy = dy / d * 8; r.stun = 0.3;
       if (r === me) tone(520, 0.12, 'sine', 0.08, 260);
@@ -286,7 +365,7 @@ function hits(r, t) {
   }
   for (const h of HAMMERS) {
     const hx = hamX(h, t), dx = r.x - hx, dy = r.y - h.y, d = Math.hypot(dx, dy) || 1;
-    if (d < HAM_R + RAD && r.z < 1.6 && r.cd <= 0) {
+    if (d < HAM_R + RAD && r.z - h.base < 1.6 && r.cd <= 0) {
       const dir = Math.cos(h.w * t + h.ph) * h.w >= 0 ? 1 : -1;
       knock(r, dir * 8 + dx / d * 3, dy / d * 3, 3.5, 0.7);
     }
@@ -342,11 +421,9 @@ function think(r, dt, t) {
   const dx = tx - r.x, dy = n.y - r.y, d = Math.hypot(dx, dy) || 1;
   const sp = 0.62 + 0.38 * Math.max(0, Math.min(1, a.skill));
   r.ix = dx / d * sp; r.iy = dy / d * sp;
-  if (course.id !== 'main' && r.z <= 0) {
-    const g = groundAt(r.x,r.y,t);
-    if (g && g.vx) r.ix = Math.max(-1,Math.min(1,r.ix-g.vx/SPEED));
-  }
-  if (n.tiles !== undefined && r.z <= 0 && r.y < TILES[n.tiles].y0) {
+  const g = standing(r, t);
+  if (course.id !== 'main' && g && g.vx) r.ix = Math.max(-1,Math.min(1,r.ix-g.vx/SPEED));
+  if (n.tiles !== undefined && g && r.y < TILES[n.tiles].y0) {
     const tile = TILES[n.tiles], arrival = Math.max(0,(tile.y0-r.y)/Math.max(2,SPEED*sp));
     const phase = tilePhase(tile,t+arrival);
     if (tile.y0-r.y < 1.2 && phase > tile.on-1) { r.ix *= 0.2; r.iy = 0; r.vy = 0; return; }
@@ -359,11 +436,11 @@ function think(r, dt, t) {
   // Stuck against something: try somewhere else for a moment.
   if (Math.hypot(r.vx, r.vy) < 0.8 && race.phase === 'run') a.stuck += dt; else a.stuck = 0;
   if (a.stuck > 0.8) { a.stuck = 0; a.wander = 1.2; a.wx = -4 + Math.random() * 8; }
-  if (r.z > 0 || r.jq > 0) return;
-  // The floor ends a step ahead: jump.
+  if (!g || r.jq > 0) return;
+  // The floor ends a step ahead, or a step up too high to walk: jump. A drop is walked off.
   const vl = Math.hypot(r.vx, r.vy) || 1;
   const px = r.x + r.vx / vl * 0.7, py = r.y + r.vy / vl * 0.7;
-  if (groundAt(r.x, r.y, t) && !groundAt(px, py, t + 0.1) && Math.random() < 0.6 + 0.4 * a.skill) jump(r);
+  if ((!groundAt(px, py, t + 0.1, r.z) || blockerAt(px, py, t + 0.1, r.z)) && Math.random() < 0.6 + 0.4 * a.skill) jump(r);
   // A bar coming: jump it, mostly.
   a.bar = Math.max(0, a.bar - dt);
   for (const s of SWEEPERS) {
@@ -551,17 +628,20 @@ function tick(dt) {
   const t = race.clock;
   for (const r of race.runners) {
     if (race.phase !== 'run') continue;
-    if (r.fin !== null) { r.vx = r.vy = r.vz = 0; r.z = Math.max(0, r.z); continue; } // finished: stands still
+    if (r.fin !== null) { r.vx = r.vy = r.vz = 0; r.z = baseAt(r.x, r.y); continue; } // finished: stands still
     if (r.kind === 'cpu' && host) { think(r, dt, t); move(r, dt, t); }
     else if (r.kind === 'me') move(r, dt, t);
     else if (r.kind === 'net') {
       // Another phone's player: carried on from what it last sent.
+      // v10: it lands on the ground under it, and falls on through only while its fall is set.
       r.x += r.vx * dt; r.y += r.vy * dt;
-      if (r.z > 0 || r.vz > 0) { r.vz -= GRAV * dt; r.z = Math.max(r.fall > 0 ? -50 : 0, r.z + r.vz * dt); }
+      const gn = r.fall > 0 ? null : groundAt(r.x, r.y, t, r.z), floorH = gn ? gn.h : -50;
+      if (r.z > floorH || r.vz > 0) { r.vz -= GRAV * dt; r.z = Math.max(floorH, r.z + r.vz * dt); if (r.z === floorH) r.vz = 0; }
+      else r.z = floorH;
     }
     r.ph += Math.hypot(r.vx, r.vy) * dt * 2.2;
   }
-  if (race.phase === 'run') { const kept = asDrawn(); bumps(); putBack(kept); }
+  if (race.phase === 'run') { const kept = asDrawn(); bumps(); putBack(kept); for (const r of race.runners) if (local(r) && r.fin === null) settle(r, t); }
   if (race.phase === 'run') whoosh(t);
   if (race.mode === 'solo') { if (race.phase === 'run' && over()) finish(standings()); }
   else if (R.isHost) hostTick(dt);
@@ -609,6 +689,15 @@ function draw() {
   if (follow) camY += ((follow.fall > 0 ? CPS[follow.cp] : follow.y) - camY) * 0.12;
   const ox = W / 2, oy = H * (wide ? 0.74 : 0.64);
   sx = wx => ox + wx * sc; sy = wy => oy - (wy - camY) * sc;
+  if (window.K3D && !K3D.failed) {
+    // 3D (#493): the course and the runners on the WebGL canvas, only the names and the HUD here.
+    x.clearRect(0, 0, W, H);
+    if (K3D.ready) { K3D.render(t, follow); drawNames3d(); }
+    drawHud();
+    drawControls();
+    if (race && race.phase === 'done') drawResults();
+    return;
+  }
   // Far below: a purple sky with drifting dots.
   const g = x.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#3a1f73'); g.addColorStop(1, '#1b0f3a');
@@ -641,6 +730,16 @@ function slab(x0, y0, x1, y1, top, side) {
 function drawCourse(t) {
   for (const f of FLOORS_FAR_FIRST) {
     slab(f.x0, f.y0, f.x1, f.y1, f.stone ? '#ffd166' : f.y0 >= 112 && f.y0 < 130 ? '#ff99c8' : '#a0e7e5', f.stone ? '#c98f1b' : '#5f8fb0');
+    // v10 (#493): without 3D, a higher floor is lighter and its ends are dark lines, so a step or a drop shows.
+    const h0 = topOf(f, f.y0), h1 = topOf(f, f.y1);
+    if (h0 > 0 || h1 > 0) {
+      const lit = x.createLinearGradient(0, sy(f.y0), 0, sy(f.y1));
+      lit.addColorStop(0, 'rgba(255,255,255,' + Math.min(0.45, h0 * 0.14) + ')');
+      lit.addColorStop(1, 'rgba(255,255,255,' + Math.min(0.45, h1 * 0.14) + ')');
+      x.fillStyle = lit; x.fillRect(sx(f.x0), sy(f.y1), (f.x1 - f.x0) * sc, sy(f.y0) - sy(f.y1));
+      x.fillStyle = 'rgba(30,20,70,.55)';
+      x.fillRect(sx(f.x0), sy(f.y0) - 2, (f.x1 - f.x0) * sc, 4); x.fillRect(sx(f.x0), sy(f.y1) - 2, (f.x1 - f.x0) * sc, 4);
+    }
     if (!f.stone && f.y1 - f.y0 > 5) {
       // Stripes across, to see the speed.
       x.fillStyle = 'rgba(255,255,255,.22)';
@@ -744,8 +843,10 @@ function drawRunner(r) {
   const px = sx(r.x), gy = sy(r.y);
   if (gy < -60 || gy > H + 60) return;
   const fall = r.fall > 0, s = sc * (fall ? Math.max(0.05, 1 - r.fall * 0.85) : 1);
-  if (!fall) { x.fillStyle = 'rgba(0,0,0,.28)'; x.beginPath(); x.ellipse(px, gy, RAD * sc / (1 + r.z * 0.4), RAD * sc * 0.45, 0, 0, 7); x.fill(); }
-  const by = gy - Math.max(0, r.z) * LIFT * sc + (fall ? r.fall * 40 : 0);
+  // The height above the ground under the feet (a tile, disc or platform too), not above the course's zero.
+  const gr = groundAt(r.x, r.y, race ? race.clock : 0, r.z), up = Math.max(0, r.z - (gr ? gr.h : baseAt(r.x, r.y)));
+  if (!fall) { x.fillStyle = 'rgba(0,0,0,.28)'; x.beginPath(); x.ellipse(px, gy, RAD * sc / (1 + up * 0.4), RAD * sc * 0.45, 0, 0, 7); x.fill(); }
+  const by = gy - up * LIFT * sc + (fall ? r.fall * 40 : 0);
   const bw = 0.42 * s, bh = 0.62 * s, wob = r.stun > 0 ? Math.sin(r.ph * 3 + r.stun * 30) * 0.3 : Math.sin(r.ph) * 0.06;
   x.save();
   x.translate(px, by); x.rotate(wob);
@@ -770,6 +871,20 @@ function drawRunner(r) {
   const label = r === me ? '▼ Sinä' : r.name;
   x.strokeText(label, px, by - bh * 1.6 - 5);
   x.fillStyle = r === me ? '#ffd166' : '#fff'; x.fillText(label, px, by - bh * 1.6 - 5);
+}
+
+// The names over the runners in 3D, where the WebGL canvas shows them.
+function drawNames3d() {
+  if (!race) return;
+  for (const r of race.runners.slice().sort((a, b) => (a === me) - (b === me))) {
+    if (r.fall > 0) continue;
+    const p = K3D.project(r.x, r.z + 1.35, r.y);
+    if (!p || p.y < -20 || p.y > H + 20) continue;
+    x.font = (r === me ? '800 13px' : '600 10px') + ' system-ui'; x.textAlign = 'center';
+    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.55)';
+    const label = r === me ? '▼ Sinä' : r.name;
+    x.strokeText(label, p.x, p.y); x.fillStyle = r === me ? '#ffd166' : '#fff'; x.fillText(label, p.x, p.y);
+  }
 }
 
 // Sideways: a panel on the left of the course, under the back chip, with the race along it upwards.
@@ -919,9 +1034,9 @@ function showMenu(result, cls) {
   document.getElementById('foe').textContent = 'Taso ' + level + ': ' + FOES[(level - 1) % FOES.length] + ' ja kuusi muuta';
   const stats = document.getElementById('stats');
   stats.textContent = 'Kisat ' + races + ' · Voitot ' + wins + (best !== null ? ' · Ennätys ' + fmt(best) : '');
-  // The newest earlier layout's record (v7's, else v6's) stays visible under this one's.
-  const older = course.id === 'main' ? [] : [[course.id + '7', 'v7'], [course.id, 'v6']];
-  const oldOne = older.map(([k, v]) => [load('ennatys:' + k, null), v]).find(([s]) => Number.isFinite(s));
+  // The newest earlier layout's record (v9's flat course, else v7's, else v6's) stays visible under this one's.
+  const older = course.id === 'main' ? [['ennatys', 'v9']] : [['ennatys:' + course.id + '8', 'v9'], ['ennatys:' + course.id + '7', 'v7'], ['ennatys:' + course.id, 'v6']];
+  const oldOne = older.map(([k, v]) => [load(k, null), v]).find(([s]) => Number.isFinite(s));
   if (oldOne) {
     const old = document.createElement('span');
     old.style.display = 'block'; old.style.fontSize = '12px';
