@@ -281,7 +281,7 @@ function newKart(i, kind, id, name, bot) {
     ai: { lane: 0, laneT: 0, itemT: 0, skill: 1, turboT: 2 },
     // v7 (#480): another phone's kart is drawn from the spots heard (`tr`), a moment back; `ts` and `hd` are a
     // friend's newest stamp and spot as their phone sent them, `src` whose clock the last spot carried.
-    tr: AiPelitSulava.track({ keys: ['x', 'y', 'a', 'z'], angles: ['a'], jump: 120 }), ts: null, hd: null, src: '', held: null,
+    tr: AiPelitSulava.track({ keys: ['x', 'y', 'a', 'z'], angles: ['a'], jump: 120 }), ts: null, hd: null, src: '', held: null, lag: null,
   };
 }
 
@@ -642,6 +642,7 @@ function heardSpot(k, st, src) {
   if (R.paused) { if (snap || !k.held) k.held = []; k.held.push([st, spot, snap]); return; }
   const a = netClock();
   if (snap) k.tr.snap(st, spot, a); else k.tr.push(st, spot, a);
+  k.lag = st === null ? null : a - st;  // how late the last spot heard came, for heldOn()
 }
 // The tracks' clock, on every phone (the stamps it sends, arrivals, the drawn moment): it stands still while the
 // room is paused (R.paused), as the race does and nothing is sent, so a moving kart is not guessed on and pulled
@@ -658,7 +659,14 @@ function heldOn(a) {
   if (!race || !race.karts) return;
   for (const k of race.karts) {
     if (!k.held) continue;
-    for (const [st, spot, snap] of k.held) if (snap) k.tr.snap(st, spot, a); else k.tr.push(st, spot, a);
+    // The clock reads the same at both ends of the pause, so a held spot would count as coming as early as it
+    // did, ahead of its stamp, and for the next 2 s the track would draw the kart past its newest spot on a
+    // guess. Each goes on as heard no sooner than its stamp plus the lag of the last spot heard before the pause
+    // (k.lag): about when it would have come (as Jäälautta v3).
+    for (const [st, spot, snap] of k.held) {
+      if (snap || k.lag == null || st === null) { k.tr.snap(st, spot, a); k.lag = st === null ? null : a - st; }
+      else k.tr.push(st, spot, Math.max(a, st + k.lag));
+    }
     k.held = null;
   }
 }
@@ -723,7 +731,7 @@ R.on('message', (m, from) => {
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
 R.on('continue', ids => { if (race && race.mode === 'net') race.karts.forEach(k => { if (ids.includes(k.id)) k.kind = 'cpu'; }); });
-R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.tr.reset(); k.ts = k.hd = k.held = null; k.src = ''; } }); });
+R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.tr.reset(); k.ts = k.hd = k.held = k.lag = null; k.src = ''; } }); });
 R.on('lobby', () => { race = null; engineOn(false); });
 R.on('leave', () => { race = null; engineOn(false); showMenu(); });
 R.on('menu', () => { race = null; engineOn(false); showMenu(); });

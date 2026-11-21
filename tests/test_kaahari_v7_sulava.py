@@ -36,15 +36,17 @@ STRAIGHT = """() => { const dr = window.drive; window.__run = false; window.__s 
   }; }"""
 # Records, each time the screen is drawn, where kart `i` is drawn and which moment of the sending phone's clock
 # that is (`tr.time`), when a message arrived, and the sending phone's stamp on each of its spots: so a stall of the
-# test machine, on either phone, can be told from a jerk.
-SAMPLE = """(i) => { window.__xs = []; window.__got = []; window.__st = [];
+# test machine, on either phone, can be told from a jerk. `__bh`: [when, how far the drawn moment is behind the
+# newest spot on the track, s].
+SAMPLE = """(i) => { window.__xs = []; window.__got = []; window.__st = []; window.__bh = []; let top = null;
   AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
   const tr = race.karts[i].tr, push = tr.push, snap = tr.snap;
-  tr.push = (st, ...r) => { window.__st.push(st); return push(st, ...r); };
-  tr.snap = (st, ...r) => { window.__st.push(st); return snap(st, ...r); };
+  tr.push = (st, ...r) => { window.__st.push(st); if (st !== null && !(st < top)) top = st; return push(st, ...r); };
+  tr.snap = (st, ...r) => { window.__st.push(st); top = st; return snap(st, ...r); };
   const d = window.draw;
   window.draw = () => { const k = race.karts[i];
-    if (window.__xs.length < (window.__cap || 300) && !window.__stop) window.__xs.push([performance.now() / 1000, k.x, k.y, k.tr.time]); d(); }; }"""
+    if (window.__xs.length < (window.__cap || 300) && !window.__stop) { window.__xs.push([performance.now() / 1000, k.x, k.y, k.tr.time]);
+      if (top !== null && k.tr.time !== null) window.__bh.push([performance.now() / 1000, top - k.tr.time]); } d(); }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -151,7 +153,7 @@ def run_and_watch(host, run, watch, others):
         assert all(newest for _, newest in rule), rule  # between frames the kart is at the newest spot heard
         ahead = [a for a, _ in rule[5:]]
         assert mean(ahead) > 5 and sum(a > 0 for a in ahead) > 0.8 * len(ahead), ahead  # not the drawn one
-        assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
+        assert len(back) > 15 and all(b > 0.03 for b in back[5:]), (len(back), [round(b, 3) for b in back[5:] if b <= 0.03])  # drawn at least 30 ms back
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
 
@@ -270,13 +272,9 @@ PAUSE = """() => { window.__pz = false;
   Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
 
 
-@pytest.mark.parametrize("first", ["driver", "watcher"])
-def test_a_paused_race_holds_the_friend_s_kart_where_it_is_drawn(site, browser, first):
-    """While the room is paused the race stands and nothing is sent; the watching phone's tracks wait too, so the
-    friend's kart driving on is not guessed on beyond its last spot and pulled back when the race goes on: it
-    stands where it was drawn, and drives on from there. The two phones hear the pause a moment apart, in either
-    order: a watcher that hears it first still gets the driver's last spots, sent before the driver stopped, and
-    they go on its track only once the race goes on, not ahead of the drawn moment."""
+def paused_race(site, browser, first, after):
+    """The host drives; the room pauses and goes on, each heard by the two phones a quarter of a second apart, the
+    driver (the host) or the watcher (the guest) first; the guest records `after` s past it."""
     host, guest = phones(site, browser)
     i = index(host)
     for p in (host, guest):
@@ -293,16 +291,31 @@ def test_a_paused_race_holds_the_friend_s_kart_where_it_is_drawn(site, browser, 
     go_host = lambda: host.evaluate("window.__pz = false")
     go_guest = lambda: guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
     order = [(stop_host, stop_guest), (go_host, go_guest)] if first == "driver" else [(stop_guest, stop_host), (go_guest, go_host)]
-    for a, b in order:
+    for n, (a, b) in enumerate(order):
         a()
         guest.wait_for_timeout(250)  # the other phone hears it a quarter of a second later
         b()
-        guest.wait_for_timeout(1200)
+        guest.wait_for_timeout(1200 if n == 0 else int(after * 1000))
     guest.evaluate("window.__stop = true")
     host.evaluate("window.__run = false")
+    errors = [e for p in (host, guest) for e in p.errors]
+    assert not errors, errors
+    return guest
+
+
+@pytest.mark.parametrize("first", ["driver", "watcher"])
+def test_a_paused_race_holds_the_friend_s_kart_where_it_is_drawn(site, browser, first):
+    """While the room is paused the race stands and nothing is sent; the watching phone's tracks wait too, so the
+    friend's kart driving on is not guessed on beyond its last spot and pulled back when the race goes on: it
+    stands where it was drawn, and drives on from there. The two phones hear the pause a moment apart, in either
+    order: a watcher that hears it first still gets the driver's last spots, sent before the driver stopped, and
+    they go on its track only once the race goes on, not ahead of the drawn moment."""
+    guest = paused_race(site, browser, first, 1.2)
     xs, pz_at, go_at = guest.evaluate("[window.__xs, window.__pzAt, window.__goAt]")
-    held = [(x, y) for t, x, y, _ in xs if pz_at + 0.02 <= t <= go_at]
-    assert len(held) > 30, len(held)
+    held = [(t, x, y) for t, x, y, _ in xs if pz_at + 0.02 <= t <= go_at]
+    # By time, not frames: a loaded test machine draws few (13 in a 1.25 s pause, in job fddb753a588e).
+    assert len(held) >= 5 and held[-1][0] - held[0][0] >= 1, [round(t - pz_at, 3) for t, _, _ in held]
+    held = [(x, y) for _, x, y in held]
     spread = max(math.hypot(x - held[0][0], y - held[0][1]) for x, y in held)
     assert spread < 0.01, spread  # it stood still all through the pause
     after = [f for f in xs if f[0] > pz_at - 0.3]
@@ -313,5 +326,19 @@ def test_a_paused_race_holds_the_friend_s_kart_where_it_is_drawn(site, browser, 
     assert not jumps, jumps
     moved = [f for f in xs if f[0] > go_at + 0.6]
     assert moved and math.hypot(moved[-1][1] - held[-1][0], moved[-1][2] - held[-1][1]) > 30, moved[-1:]
-    errors = [e for p in (host, guest) for e in p.errors]
-    assert not errors, errors
+
+
+@pytest.mark.parametrize("first", ["driver", "watcher"])
+def test_after_a_pause_the_friend_s_kart_is_drawn_as_far_behind_its_newest_spot_as_before(site, browser, first):
+    """The driver goes on first, so the watcher, still paused, holds the driver's first spots and puts them on the
+    track when its own pause ends. Its paused clock reads the same at both ends of the pause, so taken as heard
+    then, the spots would seem to have come early: the track would lower its delay and for a second or two draw
+    the kart ahead of the newest spot it knows (on a guess). Each held spot goes on as heard at its stamp plus the
+    lag of the last spot heard before the pause, so the kart is drawn about as far behind as before."""
+    guest = paused_race(site, browser, first, 2.2)
+    bh, pz_at, go_at = guest.evaluate("[window.__bh, window.__pzAt, window.__goAt]")
+    before = [b for t, b in bh if pz_at - 1.2 <= t <= pz_at - 0.3]
+    after = [b for t, b in bh if go_at + 1 <= t <= go_at + 2]
+    assert len(before) >= 5 and len(after) >= 5, (len(before), len(after))
+    shown = (round(mean(before), 3), round(min(after), 3), round(mean(after), 3))
+    assert mean(after) > mean(before) - 0.08, shown
