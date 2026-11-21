@@ -1,5 +1,5 @@
 'use strict';
-// Lattia on laavaa v1: the fingers, the menus, the saves, the sounds, the 2D layer over the 3D
+// Lattia on laavaa v2: the fingers, the menus, the saves, the sounds, the 2D layer over the 3D
 // picture (time, buttons, stick, names) and the main loop. Alone the phone runs the whole round;
 // with friends net.js does.
 
@@ -301,7 +301,11 @@ function placeKids(w) {
   for (const k of w.kids) {
     const s = net && typeof drawnSpot === 'function' ? drawnSpot(k) : null;
     if (s) { k.dx = s.x; k.dy = s.y; k.dz = s.z; k.df = s.f; }
-    else { k.dx = k.x; k.dy = k.y; k.dz = k.z; k.df = k.face; }
+    else {
+      // A climb (#505) is drawn as a quick pull up from where the kid grabbed the edge.
+      const c = k.climbT > 0 ? k.climbT / CLIMB_T : 0;
+      k.dx = k.x + (c ? k.climbX * c : 0); k.dy = k.y + (c ? k.climbY * c : 0); k.dz = k.z + (c ? k.climbZ * c : 0); k.df = k.face;
+    }
   }
 }
 function draw(clock) {
