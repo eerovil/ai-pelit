@@ -242,6 +242,12 @@ def test_the_four_power_ups(site, context):
       givePower(a, 'jatti'); givePower(b, 'pikku');
       out.size = [radiusOf(a) > SEAL_R, massOf(a) > 1, radiusOf(b) < SEAL_R, massOf(b) < 1];
       Object.assign(a, { x: -4, y: 0 }); Object.assign(b, { x: 4, y: 0 });
+      // They wear off over the last second, not at once.
+      const at = t => { a.size.t = b.size.t = t; return [radiusOf(a), massOf(a), radiusOf(b), massOf(b)]; };
+      const full = at(2), half = at(0.5);
+      out.ease = [half[0] < full[0] && half[0] > SEAL_R, half[1] < full[1] && half[1] > 1,
+                  half[2] > full[2] && half[2] < SEAL_R, half[3] > full[3] && half[3] < 1];
+      at(SIZE_T);
       for (let i = 0; i < 120 * 8.1; i++) { a.x = -4; b.x = 4; a.y = b.y = 0; tick(w, STEP); }
       out.worn = [a.size, b.size];
       // Ukkonen: passed on a touch, not straight back (grace), and stuns the others at the end.
@@ -251,8 +257,12 @@ def test_the_four_power_ups(site, context):
       out.grace = [!!c.fuse, !d.fuse];
       for (let i = 0; i < 120 * 0.6; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
       out.passed = [!c.fuse, d.fuse && d.fuse.k];
-      for (let i = 0; i < 120 * 0.3; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
+      // Never straight back to the seal that gave it, however long they touch.
+      for (let i = 0; i < 120 * 1.5; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
       out.notBack = !!d.fuse && !c.fuse;
+      // A third seal can take it, and from there it may go back to the first one.
+      out.third = [passFuse(d, e), !d.fuse && !!e.fuse, passFuse(e, d), (e.fuse.g = 0, passFuse(e, d)), passFuse(e, c), !!c.fuse];
+      d.fuse = c.fuse; c.fuse = null; d.fuse.from = 'x';
       d.fuse.t = 0.001; d.x = 6; c.x = 0; tick(w, STEP);
       out.stun = [c.stun > 0, e.stun > 0, d.stun === 0];
       // Lohkare: its last holder goes through the ice.
@@ -274,6 +284,8 @@ def test_the_four_power_ups(site, context):
     assert r["grace"] == [True, True]
     assert r["passed"] == [True, "ukko"]
     assert r["notBack"]
+    assert r["third"] == [True, True, False, False, True, True]
+    assert r["ease"] == [True, True, True, True]
     assert r["stun"] == [True, True, True]
     assert r["crush"] == [True, True]
     assert r["reset"] is False and r["plain"] is False
@@ -429,3 +441,32 @@ def test_my_seal_wobbling_on_the_edge_comes_back_with_the_button(site, context):
     page.wait_for_function("me.teeter > 0")
     page.wait_for_function("me.out > 0", timeout=4000)
     assert page.errors == []
+
+
+def test_computer_seals_keep_ukkonen_and_go_for_whoever_holds_it(site, context):
+    # As in the genre's model: Ukkonen's holder gains when it ends (the others are stunned), so a
+    # computer seal keeps it and the others come to take it; Lohkare is still passed on.
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const res = { flee: 0, chase: 0, giver: 0, pass: 0, n: 0 };
+      for (let s = 1; s <= 40; s++) {
+        const w = newWorld(3, [0, 1, 2].map(i => ({ id: 'p' + i, name: 'p' + i, hat: i, kind: 'cpu' })), s);
+        w.ph = 'play'; const [c, d, e] = w.seals;
+        Object.assign(c, { x: 0, y: 0 }); Object.assign(d, { x: 2, y: 0 }); Object.assign(e, { x: 0, y: 3 });
+        givePower(c, 'ukko'); c.fuse.from = e.id;
+        const think = sl => { const b = cpuBrain(FLOES[2].cpu, s); decide(w, sl, b); return b.slip > 0 ? null : b; };
+        const bc = think(c), bd = think(d), be = think(e);
+        if (!bc || !bd || !be) continue;
+        res.n++;
+        if (bc.tx < -0.5) res.flee++;                       // away from d, its nearest
+        if (Math.hypot(bd.tx - c.x, bd.ty - c.y) < 0.01) res.chase++;
+        if (Math.hypot(be.tx - c.x, be.ty - c.y) > 0.01) res.giver++;   // e just gave it: no chase
+        c.fuse.k = 'lohk'; const bl = think(c);
+        if (bl && bl.tx > 1.5) res.pass++;                  // to d, the nearest it may pass to
+      }
+      return res;
+    }""")
+    n = r["n"]
+    assert n >= 30, r
+    assert r["flee"] == n and r["chase"] == n and r["giver"] == n, r
+    assert r["pass"] >= n - 4, r

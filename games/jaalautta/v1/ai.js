@@ -3,7 +3,8 @@
 // lunge counter, so the host in a room drives them with the same rules as alone.
 //
 // Every `react` seconds it decides again: back from its own edge, to the gull's ring when it is
-// close, to another seal with a fuse to pass on, away from one coming with a fuse, and otherwise
+// close, to whoever holds Ukkonen (keeping it, if it is its own), to another seal to pass Lohkare
+// on, away from one coming with Lohkare, and otherwise
 // round behind the seal nearest an edge to shove it outwards. Its aim misses by up to `err`
 // degrees, and now and then it slips (a short wrong stick), so it falls in by itself sometimes.
 
@@ -58,15 +59,27 @@ function decide(w, sl, b) {
     if (hole) { b.tx = sl.x + (sl.x - hole.x) * 2; b.ty = sl.y + (sl.y - hole.y) * 2; }
     return;
   }
-  // I hold a fuse: to the nearest seal, to pass it on (and lunge into it).
-  if (sl.fuse && others.length) {
+  // I hold Ukkonen: keep it (its end stuns everyone else), away from the nearest seal.
+  if (sl.fuse && sl.fuse.k === 'ukko' && others.length) {
     const o = nearest(sl, others);
+    const dx = sl.x - o.x, dy = sl.y - o.y, d = Math.hypot(dx, dy) || 1;
+    b.tx = sl.x + dx / d * 2.5; b.ty = sl.y + dy / d * 2.5;
+    if (!onIce(w, b.tx, b.ty) || partOf(w, b.tx, b.ty).edge < edgeSafe) { b.tx = p.x; b.ty = p.y; }
+    return;
+  }
+  // Someone else holds Ukkonen and may hand it to me: go and take it.
+  const uk = others.find(o => o.fuse && o.fuse.k === 'ukko' && o.fuse.from !== sl.id);
+  if (uk && !sl.fuse) { b.tx = uk.x; b.ty = uk.y; return; }
+  // I hold Lohkare: to the nearest seal I may pass it to, to pass it on (and lunge into it).
+  const takers = sl.fuse ? others.filter(o => o.id !== sl.fuse.from) : [];
+  if (sl.fuse && takers.length) {
+    const o = nearest(sl, takers);
     b.tx = o.x; b.ty = o.y;
     if (Math.hypot(o.x - sl.x, o.y - sl.y) < 3.5) lungeAt(sl, b, o.x, o.y);
     return;
   }
   // Someone near me holds one: away from them.
-  const fz = others.find(o => o.fuse && Math.hypot(o.x - sl.x, o.y - sl.y) < 4.5);
+  const fz = others.find(o => o.fuse && o.fuse.k !== 'ukko' && Math.hypot(o.x - sl.x, o.y - sl.y) < 4.5);
   if (fz) {
     const dx = sl.x - fz.x, dy = sl.y - fz.y, d = Math.hypot(dx, dy) || 1;
     b.tx = sl.x + dx / d * 2.5; b.ty = sl.y + dy / d * 2.5;

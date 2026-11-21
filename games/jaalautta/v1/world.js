@@ -134,9 +134,16 @@ function spotOnIce(w, inner) {
 
 // ---- A seal's own numbers ----
 const alive = sl => !sl.out;
-function radiusOf(sl) { return SEAL_R * (sl.size ? (sl.size.k === 'jatti' ? 1.5 : 0.65) : 1); }
+// Jätti and Pikkuinen wear off over their last SIZE_EASE seconds, back to the seal's own size.
+const SIZE_EASE = 1;
+function sized(sl, big, small) {
+  if (!sl.size) return 1;
+  const f = Math.max(0, Math.min(1, sl.size.t / SIZE_EASE));
+  return 1 + ((sl.size.k === 'jatti' ? big : small) - 1) * f;
+}
+function radiusOf(sl) { return SEAL_R * sized(sl, 1.5, 0.65); }
 function massOf(sl) {
-  const m = sl.size ? (sl.size.k === 'jatti' ? 2.4 : 0.45) : 1;
+  const m = sized(sl, 2.4, 0.45);
   return m * (sl.lungeT > 0 ? LUNGE_MASS : 1);
 }
 
@@ -286,8 +293,9 @@ function nudge(a, b) {
 }
 // A fuse (Ukkonen, Lohkare) goes to the seal its holder touches, unless the holder only just got it.
 function passFuse(from, to) {
-  if (!from.fuse || to.fuse || from.fuse.g > 0) return false;
-  to.fuse = { k: from.fuse.k, t: from.fuse.t, g: PASS_GRACE };
+  // Never straight back to the seal that gave it: it must go to a third seal first.
+  if (!from.fuse || to.fuse || from.fuse.g > 0 || to.id === from.fuse.from) return false;
+  to.fuse = { k: from.fuse.k, t: from.fuse.t, g: PASS_GRACE, from: from.id };
   from.fuse = null;
   return true;
 }
