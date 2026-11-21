@@ -1,0 +1,263 @@
+"""Pomppukeppi v1 (#482): hares on pogo sticks paint a tile board, alone against the computer."""
+import json
+import shutil
+
+from conftest import ROOT, turn
+
+URL = "games/pomppukeppi/v1/"
+KEY = "ai-pelit:pomppukeppi:"
+TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
+  { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
+# The erä ends now with my hare far ahead.
+WIN_ERA = "() => { world.ph = 'play'; world.t = ERA_T; me.pts = 30; step(world, 0.01); }"
+# A world in the page with nothing else going on: no computer moves, no boxes.
+QUIET = "() => { brains = brains.map(() => null); world.hares.forEach(h => { h.want = -1; }); world.cashT = 99; world.qT = 99; }"
+
+
+def open_game(site, context, width=360, height=740, saves=None):
+    if not (site.games / "pomppukeppi").exists():
+        shutil.copytree(ROOT / "games" / "pomppukeppi", site.games / "pomppukeppi")
+        site.build()
+    page = context.new_page()
+    page.set_viewport_size({"width": width, "height": height})
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    if saves:
+        page.add_init_script("(() => { const s = " + json.dumps(saves) + "; for (const k in s) localStorage.setItem('" + KEY + "' + k, s[k]); })()")
+    page.goto(site.url + URL)
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    return page
+
+
+def go(page):
+    page.click("#go")
+    page.wait_for_function("mode === 'play' && world.ph === 'play'", timeout=8000)
+    page.evaluate(QUIET)
+
+
+def saved(page, k):
+    v = page.evaluate(f"localStorage.getItem('{KEY}{k}')")
+    return None if v is None else json.loads(v)
+
+
+def test_the_menu_opens_the_first_board_only(site, context):
+    page = open_game(site, context)
+    assert page.evaluate("!!V3")
+    boards = page.locator("#boards button")
+    assert boards.count() == 3
+    assert [boards.nth(i).is_disabled() for i in range(3)] == [False, True, True]
+    assert "🔒" in boards.nth(1).inner_text()
+    assert page.locator("#friends").is_visible()
+    # The colour button goes round the four colours, and is kept.
+    page.click("#col")
+    assert "Sininen" in page.locator("#col").inner_text()
+    assert saved(page, "vari") == 1
+    assert page.errors == []
+
+
+def test_the_stick_hops_my_hare_and_a_flick_waits_for_the_landing(site, context):
+    page = open_game(site, context)
+    go(page)
+    assert page.evaluate("[me.x, me.y]") == [0, 0]
+    # Held to the right: the hare hops right, one square a hop.
+    page.evaluate(TOUCH, ["pointerdown", 150, 500])
+    page.evaluate(TOUCH, ["pointermove", 210, 505])
+    assert page.evaluate("myWant()") == 0
+    page.wait_for_function("me.x >= 2", timeout=3000)
+    assert page.evaluate("me.y") == 0
+    # Its squares are painted its colour.
+    assert page.evaluate("[tileAt(world, 0, 0), tileAt(world, 1, 0)]") == [0, 0]
+    # A quick flick down, let go in mid-air: the next landing still hops down.
+    page.evaluate(TOUCH, ["pointerup", 210, 505])
+    page.evaluate("() => { me.p = 0.3; }")
+    page.evaluate(TOUCH, ["pointerdown", 150, 500])
+    page.evaluate(TOUCH, ["pointermove", 152, 560])
+    page.evaluate(TOUCH, ["pointerup", 152, 560])
+    y0 = page.evaluate("me.y")
+    assert page.evaluate("myWant()") == 1
+    page.wait_for_function(f"me.y === {y0} + 1", timeout=2000)
+    # Used once: with no finger, it then bounces in place.
+    page.wait_for_function("me.p < 0.5 && flick === -1", timeout=2000)
+    x, y = page.evaluate("[me.x, me.y]")
+    page.wait_for_timeout(800)
+    assert page.evaluate("[me.x, me.y]") == [x, y]
+    assert page.errors == []
+
+
+def test_a_cash_in_turns_squares_into_points_and_clears_them(site, context):
+    page = open_game(site, context)
+    go(page)
+    got = page.evaluate("""() => {
+      for (let x = 0; x < 5; x++) world.tiles[x] = 0;
+      world.cash = { x: 1, y: 1 };
+      Object.assign(me, { fx: 1, fy: 0, x: 1, y: 1, p: 0.99 });
+      step(world, 0.05);
+      return [me.pts, me.cashN, world.cash, ownCount(world, me), world.cashT];
+    }""")
+    # Five painted and the box's own square: six points, the board clean, a new box in 3 s.
+    assert got == [6, 1, None, 0, 3]
+    page.wait_for_function("world.cash !== null", timeout=5000)
+    assert page.errors == []
+
+
+def test_a_square_two_hares_hop_for_goes_to_the_one_with_fewer_points(site, context):
+    page = open_game(site, context)
+    go(page)
+    got = page.evaluate("""() => {
+      const [a, b] = [world.hares[1], world.hares[2]];
+      world.hares.forEach((h, i) => Object.assign(h, { x: 7, y: i, fx: 7, fy: i, p: 0.5 }));
+      Object.assign(a, { x: 2, y: 3, fx: 2, fy: 3, p: 0.99, pts: 9, want: 0 });
+      Object.assign(b, { x: 4, y: 3, fx: 4, fy: 3, p: 0.99, pts: 2, want: 2 });
+      step(world, 0.05);
+      return [[a.x, a.bumpN], [b.x, b.bumpN]];
+    }""")
+    assert got[1][0] == 3          # the one behind got it
+    assert got[0][0] == 2          # the leader bounced in place
+    assert got[0][1] == 1
+    assert page.errors == []
+
+
+def test_a_closed_ring_fills_on_aitaus(site, context):
+    page = open_game(site, context, saves={"auki": "3", "kentta": "3"})
+    go(page)
+    assert page.evaluate("world.board") == 3
+    got = page.evaluate("""() => {
+      world.hares.forEach((h, i) => Object.assign(h, { x: 8, y: 8 - i, fx: 8, fy: 8 - i }));
+      // An L from the left edge to the top edge round the top-left 2 x 2 corner, one square short.
+      for (const [x, y] of [[0, 2], [1, 2], [2, 2], [2, 1]]) world.tiles[y * 9 + x] = 0;
+      Object.assign(me, { fx: 2, fy: 1, x: 2, y: 0, p: 0.99, want: -1 });
+      step(world, 0.05);
+      return [[0, 0], [1, 0], [0, 1], [1, 1], [3, 3]].map(([x, y]) => tileAt(world, x, y));
+    }""")
+    assert got == [0, 0, 0, 0, -1]
+    assert page.errors == []
+
+
+def test_a_snowball_stuns_the_leader_and_a_spring_makes_hops_quick(site, context):
+    page = open_game(site, context)
+    go(page)
+    got = page.evaluate("""() => {
+      const lead = world.hares[2];
+      lead.pts = 12;
+      world.rand = () => 0.1;   // the snowball
+      world.qbox = { x: 1, y: 0, life: 5 };
+      Object.assign(me, { fx: 0, fy: 0, x: 1, y: 0, p: 0.99 });
+      step(world, 0.05);
+      const a = [me.gotK, lead.stun > 1];
+      world.rand = () => 0.9;   // the spring
+      world.qbox = { x: 2, y: 0, life: 5 };
+      Object.assign(me, { fx: 1, fy: 0, x: 2, y: 0, p: 0.99, want: 0 });
+      step(world, 0.05);
+      return a.concat([me.gotK, me.fast > 4, me.hopT]);
+    }""")
+    assert got == ["lumi", True, "jousi", True, 0.2]
+    # A stunned hare bounces in place.
+    page.evaluate("() => { const l = world.hares[2]; l.want = 2; l.p = 0.99; }")
+    x = page.evaluate("world.hares[2].x")
+    page.wait_for_timeout(500)
+    assert page.evaluate("world.hares[2].x") == x
+    assert page.errors == []
+
+
+def test_a_tie_replays_the_era(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("() => { world.hares[1].pts = 5; me.pts = 5; world.t = ERA_T; step(world, 0.01); }")
+    assert page.evaluate("[world.ph, world.eraWin, me.wins, world.hares[1].wins]") == ["erä", None, 0, 0]
+    page.wait_for_function("world.era === 2 && world.ph === 'count'", timeout=6000)
+    assert page.evaluate("world.hares.map(h => h.pts)") == [0, 0, 0, 0]
+    assert page.errors == []
+
+
+def test_a_match_alone_saves_between_eras_and_its_end_opens_the_next_board(site, context):
+    page = open_game(site, context)
+    page.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
+    go(page)
+    # Saved at the start, never mid-erä.
+    assert saved(page, "kesken1") == {"b": 1, "era": 1, "wins": [0, 0, 0, 0], "best": [0, 0, 0, 0]}
+    page.evaluate(WIN_ERA)
+    page.wait_for_function(f"localStorage.getItem('{KEY}kesken1').includes('\"era\":2')", timeout=3000)
+    assert saved(page, "kesken1")["wins"] == [1, 0, 0, 0]
+    # A reload goes on with the match, in the next erä.
+    page.reload()
+    page.wait_for_function("mode === 'play' && world", timeout=10000)
+    assert page.evaluate("[world.era, me.wins, me.best]") == [2, 1, 30]
+    page.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
+    page.wait_for_function("world.ph === 'play'", timeout=6000)
+    page.evaluate("() => { brains = brains.map(() => null); }")
+    page.evaluate("() => { world.ph = 'play'; world.t = ERA_T; me.pts = 41; step(world, 0.01); }")
+    # The deciding erä: the board opened, the record, the save gone and the score sent, at once.
+    page.wait_for_function("result !== null", timeout=2000)
+    assert saved(page, "auki") == 2
+    assert saved(page, "ennatys") == {"1": 41}
+    assert saved(page, "kesken1") is None
+    assert page.evaluate("sent") == [41]
+    page.wait_for_function("mode === 'end'", timeout=6000)
+    assert page.locator("#endTitle").inner_text() == "Voitit ottelun!"
+    assert "Kivikko aukesi" in page.locator("#endOpen").inner_text()
+    assert "uusi ennätys" in page.locator("#endNote").inner_text()
+    page.click("#toMenu")
+    assert page.locator("#boards button").nth(1).is_enabled()
+    assert page.errors == []
+
+
+def test_a_finished_or_broken_saved_match_is_dropped(site, context):
+    page = open_game(site, context, saves={"kesken1": json.dumps({"b": 1, "era": 3, "wins": [2, 1, 0, 0], "best": [9, 9, 0, 0]})})
+    page.wait_for_function("mode === 'menu'")
+    assert saved(page, "kesken1") is None
+    page.evaluate(f"localStorage.setItem('{KEY}kesken1', '{{broken')")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    assert saved(page, "kesken1") is None
+    assert page.errors == []
+
+
+def test_the_computer_hares_paint_and_cash_in(site, context):
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const out = [];
+      for (const b of [1, 2, 3]) {
+        const w = newWorld(b, [0, 1, 2, 3].map(i => ({ id: 'c' + i, name: 'c' + i, kind: 'cpu' })), 11 + b);
+        const br = w.hares.map((h, i) => cpuBrain(BOARDS[b - 1].cpu, 5 + i));
+        while (w.era === 1 && !w.over) { w.hares.forEach((h, i) => cpuThink(w, h, br[i])); step(w, 1 / 30); }
+        out.push(w.hares.map(h => [h.cashN, h.best]));
+      }
+      return out;
+    }""")
+    for board in got:
+        assert all(cash >= 1 for cash, _ in board), board
+        assert max(best for _, best in board) >= 15, board
+    assert page.errors == []
+
+
+def test_sideways_the_menu_fits_and_turning_keeps_the_round(site, context):
+    page = open_game(site, context, 740, 360)
+    for sel in ("#go", "#friends", "#col"):
+        box = page.locator(sel).bounding_box()
+        assert box["y"] >= 0 and box["y"] + box["height"] <= 360, sel
+    assert page.evaluate("document.scrollingElement.scrollHeight") <= 360
+    go(page)
+    page.evaluate("() => { me.pts = 7; }")
+    turn(page, {"width": 360, "height": 740})
+    page.wait_for_timeout(300)
+    assert page.evaluate("[mode, me.pts, LAND]") == ["play", 7, False]
+    assert page.errors == []
+
+
+def test_without_3d_the_board_is_drawn_flat(site, context):
+    if not (site.games / "pomppukeppi").exists():
+        shutil.copytree(ROOT / "games" / "pomppukeppi", site.games / "pomppukeppi")
+        site.build()
+    context.route("**/three.module.js", lambda r: r.abort())
+    page = context.new_page()
+    page.set_viewport_size({"width": 360, "height": 740})
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.wait_for_function("no3d", timeout=10000)
+    go(page)
+    page.evaluate(TOUCH, ["pointerdown", 150, 500])
+    page.evaluate(TOUCH, ["pointermove", 150, 560])
+    page.wait_for_function("me.y >= 2", timeout=3000)
+    assert page.evaluate("flat && flat.s > 20")
+    assert page.errors == []
