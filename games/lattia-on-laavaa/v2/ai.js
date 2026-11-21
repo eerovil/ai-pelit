@@ -1,11 +1,12 @@
 'use strict';
-// Lattia on laavaa v1: the computer's kids (#488). Each looks round every so often (its reaction
+// Lattia on laavaa v2: the computer's kids (#488). Each looks round every so often (its reaction
 // time), picks the piece that will last longest within a jump, runs at it and jumps at the edge.
 // It aims a little off (its error), and now and then shoves a kid in front of it.
 const SKILL = [
-  { react: 0.55, err: 0.35, shove: 0.12, look: 2.4 },   // Olohuone
-  { react: 0.4, err: 0.25, shove: 0.25, look: 2.7 },    // Lastenhuone
-  { react: 0.3, err: 0.16, shove: 0.45, look: 2.9 },    // Keittiö
+  // v2 (#505): slower and less exact, and they shove less (v1: 0.55/0.35/0.12, 0.4/0.25/0.25, 0.3/0.16/0.45).
+  { react: 0.85, err: 0.7, shove: 0.06, look: 2.2 },    // Olohuone
+  { react: 0.5, err: 0.32, shove: 0.15, look: 2.6 },    // Lastenhuone
+  { react: 0.38, err: 0.22, shove: 0.3, look: 2.8 },    // Keittiö
 ];
 function cpuBrain(level, seed) {
   const s = SKILL[clamp(level, 0, SKILL.length - 1)];

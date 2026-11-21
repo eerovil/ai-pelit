@@ -1,4 +1,4 @@
-"""Lattia on laavaa v1 (#488): kids jumping from furniture to furniture over a lava floor, alone
+"""Lattia on laavaa v2 (#505; v1 #488): kids jumping from furniture to furniture over a lava floor, alone
 against the computer's kids.
 
 The rules are tested on fresh worlds built in the page (world.js and ai.js are plain functions),
@@ -82,7 +82,7 @@ def test_pieces_sink_one_by_one_in_the_seeds_order_and_the_lava_rises(site, cont
                sinks: a.pieces.every(q => topOf(q, q.sinkAt - 0.01) === q.h0 && topOf(q, q.sinkAt + 1) < q.h0 && Math.abs(q.sinkAt - q.wobAt - WOBBLE) < 1e-9) };
     }""")
     assert r["same"] and r["other"]
-    assert r["gaps"] >= 1.6 - 1e-9
+    assert r["gaps"] >= 2.2 - 1e-9
     assert r["floats"] and r["none"] == 0
     assert r["lava"][0] == r["lava"][1] == pytest.approx(0.02) and r["lava"][2] and r["lava"][3] == pytest.approx(0.45)
     assert r["sinks"]
@@ -123,6 +123,77 @@ def test_a_shove_pushes_the_kid_in_front_once_and_waits_for_its_cooldown(site, c
     assert r["away"] and r["again"] is None
 
 
+# A kid alone on one piece, with nothing else in the room: [world, kid, piece].
+ALONE_ON = """(kind) => {
+  const w = newWorld(1, [{ id: 'a', name: 'a', kind: 'cpu' }, { id: 'b', name: 'b', kind: 'cpu' }], 1);
+  w.ph = 'play'; w.rt = 5;
+  const p = w.pieces.find(q => q.kind === kind), k = w.kids[0];
+  Object.assign(k, { x: p.x, z: p.z, y: p.h0, ground: true, gpId: 'p' + p.i, vx: 0, vy: 0, vz: 0 });
+  w.kids[1].out = true;
+  return [w, k, p];
+}"""
+
+
+def test_a_shove_at_the_edge_of_a_small_piece_never_carries_the_shover_off(site, context):
+    # Eero (#505): in v1 a shove always threw the shover off a small piece (its dash is ~1.65 m).
+    page = open_game(site, context)
+    r = page.evaluate("""(ALONE_ON) => {
+      const res = [];
+      for (const face of [0, Math.PI / 2, Math.PI, -Math.PI / 2, Math.PI / 4]) {
+        const [w, k, p] = eval(ALONE_ON)('pouf');
+        k.face = face;
+        // Start near the edge it dashes towards, too.
+        k.x = p.x + Math.cos(face) * 0.2; k.z = p.z + Math.sin(face) * 0.2;
+        const started = startShove(k);
+        for (let i = 0; i < 240; i++) { stepWorld(w, STEP, [k]); if (inLava(w, k)) fall(w, k); }
+        res.push({ started, out: k.out, ground: k.ground, on: k.gpId === 'p' + p.i,
+                   inside: Math.abs(k.x - p.x) <= p.w / 2 && Math.abs(k.z - p.z) <= p.d / 2 });
+      }
+      // In the air a shove still dashes as before (it is how a kid reaches further).
+      const [w, k, p] = eval(ALONE_ON)('pouf');
+      k.face = 0; k.ground = false; k.gpId = null; k.y = p.h0 + 1; k.vy = 0; startShove(k);
+      for (let i = 0; i < 30; i++) stepWorld(w, STEP, [k]);
+      return { res, air: k.x - p.x };
+    }""", ALONE_ON)
+    for one in r["res"]:
+        assert one == {"started": True, "out": False, "ground": True, "on": True, "inside": True}, r
+    assert r["air"] > 1.0
+
+
+def test_a_shove_from_the_edge_still_pushes_the_kid_in_front(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const w = newWorld(1, [0, 1].map(i => ({ id: 'k' + i, name: 'k' + i, kind: 'cpu' })), 1);
+      w.ph = 'play'; w.rt = 5;
+      const p = w.pieces.find(q => q.kind === 'table'), [a, b] = w.kids;
+      Object.assign(a, { x: p.x + p.w / 2 - 0.3, z: p.z, y: p.h0, ground: true, gpId: 'p' + p.i, face: 0 });
+      Object.assign(b, { x: p.x + p.w / 2 + 0.5, z: p.z, y: p.h0, ground: false });
+      const o = startShove(a) && shoveTarget(w, a, a.face);
+      if (o) { o.pushedAt = w.rt; applyPush(o, pushOf(a, o)); }
+      for (let i = 0; i < 60; i++) stepWorld(w, STEP, [a, b]);
+      return { hit: o === b, flew: b.x - (p.x + p.w / 2 + 0.5), stays: a.ground && Math.abs(a.x - p.x) <= p.w / 2 };
+    }""")
+    assert r["hit"] and r["flew"] > 0.8 and r["stays"], r
+
+
+def test_a_jump_that_falls_just_short_of_the_edge_climbs_up(site, context):
+    # Eero (#505): a jump that lands a little short of a piece's edge climbs onto it.
+    page = open_game(site, context)
+    r = page.evaluate("""(ALONE_ON) => {
+      const tryJump = (gap, stickOn, drop) => {
+        const [w, k, p] = eval(ALONE_ON)('sofa');
+        // In the air beside the sofa's right side, its feet `drop` below the top, moving at it.
+        Object.assign(k, { x: p.x + p.w / 2 + gap, z: p.z, y: p.h0 - drop, ground: false, gpId: null, vx: stickOn ? -2 : 0, vy: -1, vz: 0, ix: stickOn ? -1 : 0, iz: 0 });
+        const y0 = k.y;
+        for (let i = 0; i < 60 && !k.out; i++) { stepWorld(w, STEP, [k]); if (inLava(w, k)) fall(w, k); }
+        return { up: !k.out && k.ground && k.gpId === 'p' + p.i, climbs: k.climbs, drawnFrom: y0 - p.h0 };
+      };
+      return { near: tryJump(0.25, true, 0.4), low: tryJump(0.25, true, 0.72), far: tryJump(0.9, true, 0.4), away: tryJump(0.25, false, 0.4) };
+    }""", ALONE_ON)
+    assert r["near"]["up"] and r["near"]["climbs"] == 1, r
+    assert not r["low"]["up"] and not r["far"]["up"] and not r["away"]["up"], r
+
+
 def test_a_sinking_piece_tips_over_as_it_goes_under(site, context):
     # Review finding (#488): the furniture tips, not only shakes. The tilt grows over the first
     # 1.5 s of sinking, and the 3D scene draws it.
@@ -142,10 +213,12 @@ def test_the_computer_kids_jump_about_and_every_round_ends(site, context, lv):
     for seed in (1, 2, 3):
         r = page.evaluate(SIM, [lv, seed])
         assert r["over"], (lv, seed, r["rt"])
-        # Measured over rooms 1–3, seeds 1–4: the first fall at 5–41 s, half of the kids out at
-        # 40 s or later, and the kids jump several times a round. The bounds leave room for luck.
+        # Measured in v2 (#505) over rooms 1–3, seeds 1–4: the first fall at 33–80 s, half of the
+        # kids out at 53 s or later (v1: 41 s), the last by 97 s, and the kids jump several times a
+        # round. The bounds leave room for luck.
         outs = r["outs"]
-        assert outs[len(outs) // 2] > 25, (lv, seed, outs)
+        assert outs[len(outs) // 2] > 35, (lv, seed, outs)
+        assert outs[-1] < 200, (lv, seed, outs)
         assert r["jumps"] >= 4, (lv, seed, r)
 
 
