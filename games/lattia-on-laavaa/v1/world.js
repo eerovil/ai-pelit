@@ -122,6 +122,10 @@ function lavaAt(rt) { return rt < 20 ? 0.02 : Math.min(0.45, 0.02 + (rt - 20) * 
 // A piece's top at rt; 'gone' once it is under the lava.
 function topOf(p, rt) { return rt < p.sinkAt ? p.h0 : p.h0 - (rt - p.sinkAt) * SINK_V; }
 function wobbleOf(p, rt) { return rt >= p.wobAt ? Math.min(1, (rt - p.wobAt) / WOBBLE) : 0; }
+// How far a sinking piece has tipped over, radians, signed (drawing only: its top stays flat for
+// the kids). It leans over the first 1.5 s of sinking, to TIP; each piece its own way by its number.
+const TIP = 0.42;
+function tipOf(p, rt) { return rt <= p.sinkAt ? 0 : (p.i % 2 ? 1 : -1) * TIP * Math.min(1, (rt - p.sinkAt) / 1.5); }
 // Floats: from `floatAt` on, one every few seconds from a wall, across the lava, more and quicker
 // as time goes on; each is a function of its number k and the seed alone.
 const FLOAT_KINDS = [['fcushion', 1.0, 1.0], ['book', 0.8, 0.6], ['fbasket', 0.9, 0.9], ['tray', 1.1, 0.7], ['duck', 0.7, 0.7]];

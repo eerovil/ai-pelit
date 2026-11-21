@@ -28,6 +28,7 @@
 // the last standing wins (or the latest fall; the same instant is a draw); the host deliver()s it.
 const RM = window.AiPelitRooms;
 const MAX_KIDS = 8;
+const SHOVE_SLACK = 0.25;   // s the host forgives a guest's shove for arriving early
 let lastEnd = null, hostSeq = 0;
 let netRoom = 0;   // the host's pick of room for friends; 0 is the room picked alone
 const r3 = n => Math.round(n * 1000) / 1000;
@@ -221,6 +222,10 @@ function hostSpot(m, from) {
 function hostShove(m, from) {
   const k = world.kids.find(o => o.id === from), rec = net.recs.get(from);
   if (!k || !rec || rec.drive || m.h !== k.own || k.out || world.ph !== 'play') return;
+  // The cooldown is the host's to keep, on its own round clock (a reload keeps it: recs live the
+  // whole round). A little slack for messages that arrive bunched; the phone itself waits SHOVE_CD.
+  if (rec.shT !== undefined && world.rt - rec.shT < SHOVE_CD - SHOVE_SLACK) return;
+  rec.shT = world.rt;
   // Checked where every kid is in the host's view, in the order the host hears the shoves.
   const o = shoveTarget(world, k, +m.f || 0);
   if (!o) return;

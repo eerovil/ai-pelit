@@ -245,3 +245,29 @@ def test_a_guest_judges_its_own_fall_and_watches_on(kids):
     assert g1.evaluate("mode") == "netplay"
     assert host.evaluate("world.ph") == "play"
     assert host.errors == g1.errors == g2.errors == []
+
+
+def test_the_host_keeps_a_guests_shove_cooldown_even_across_a_reload(kids):
+    # Review finding (#488): a guest sending `sh` again and again must not shove more often than
+    # SHOVE_CD; the host keeps the cooldown on its own clock, and a reload does not reset it.
+    host, guest = room(kids)
+    start([host, guest])
+    host.evaluate("() => { brains = brains.map(() => null); }")
+    host.wait_for_function("world.ph === 'play'", timeout=15000)
+    gid = gid_of(guest)
+    host.evaluate("() => { window.tries = 0; const st = shoveTarget; shoveTarget = (...a) => { tries++; return st(...a); }; }")
+    sh = f"() => hostShove({{ t: 'sh', round: net.round, h: {KID.format(gid)}.own, f: 0 }}, {gid})"
+    for _ in range(4):
+        host.evaluate(sh)
+    assert host.evaluate("tries") == 1
+    t0 = host.evaluate(f"net.recs.get({gid}).shT")
+    guest.reload()
+    guest.wait_for_function("mode === 'netplay' && me && net.h >= 0", timeout=15000)
+    if host.evaluate(f"world.rt - {t0}") < 1.2:
+        host.evaluate(sh)
+        assert host.evaluate("tries") == 1   # still cooling down after the reload
+    host.wait_for_function(f"world.rt > {t0} + 1.5", timeout=10000)
+    host.evaluate(sh)
+    host.evaluate(sh)
+    assert host.evaluate("tries") == 2   # one more once the cooldown is over, and only one
+    assert host.errors == guest.errors == []

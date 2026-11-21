@@ -123,6 +123,19 @@ def test_a_shove_pushes_the_kid_in_front_once_and_waits_for_its_cooldown(site, c
     assert r["away"] and r["again"] is None
 
 
+def test_a_sinking_piece_tips_over_as_it_goes_under(site, context):
+    # Review finding (#488): the furniture tips, not only shakes. The tilt grows over the first
+    # 1.5 s of sinking, and the 3D scene draws it.
+    page = open_game(site, context)
+    go(page)
+    p = page.evaluate("""() => { const p = world.pieces[0];
+      return [tipOf(p, p.sinkAt), tipOf(p, p.sinkAt + 0.5), tipOf(p, p.sinkAt + 1.5), tipOf(p, p.sinkAt + 4), p.sinkAt]; }""")
+    assert p[0] == 0 and 0.1 < abs(p[1]) < abs(p[2]) and abs(p[2]) == pytest.approx(abs(p[3])) and abs(p[3]) > 0.35
+    page.evaluate(f"() => {{ world.rt = {p[4]} + 1.2; }}")
+    page.wait_for_function("(() => { const t = L3D.tilt(0); return t && Math.max(Math.abs(t[0]), Math.abs(t[1])) > 0.25; })()", timeout=5000)
+    assert page.errors == []
+
+
 @pytest.mark.parametrize("lv", [1, 2, 3])
 def test_the_computer_kids_jump_about_and_every_round_ends(site, context, lv):
     page = open_game(site, context)

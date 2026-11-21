@@ -335,8 +335,10 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
         g.position.y = top - p.h0;
         g.visible = top > L - 2.5;
         const s = rt < p.sinkAt ? wob : 1;
-        inner.rotation.z = Math.sin(clock * 19 + i) * 0.035 * s;
-        inner.rotation.x = Math.cos(clock * 17 + i * 2) * 0.03 * s;
+        // A sinking piece tips over its long side as it goes under (tipOf in world.js).
+        const tip = tipOf(p, rt), long = p.w >= p.d;
+        inner.rotation.z = Math.sin(clock * 19 + i) * 0.035 * s + (long ? 0 : tip);
+        inner.rotation.x = Math.cos(clock * 17 + i * 2) * 0.03 * s + (long ? tip : 0);
         inner.position.x = Math.sin(clock * 23 + i) * 0.02 * s;
       });
       // Floats.
@@ -371,6 +373,7 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       rd.render(scene, cam);
     };
     const v = new T.Vector3();
+    L3D.tilt = i => pieces[i] ? [pieces[i].userData.inner.rotation.x, pieces[i].userData.inner.rotation.z] : null;
     L3D.project = (x, y, z) => {
       v.set(x, y, z).project(cam);
       if (v.z > 1 || v.z < -1) return null;
