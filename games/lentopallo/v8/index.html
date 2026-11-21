@@ -64,6 +64,7 @@
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -165,6 +166,8 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 function player(side, slot, name, kind, id, lvl) {
   const [shirt, shorts] = COLORS[side < 0 ? 0 : 1][slot];
   const p = { side, slot, name, kind, id: id || '', shirt, shorts, x: side * 2.5, tx: null, y: 0, vy: 0, vx: 0, cd: 0, arms: 0, intent: 'set', hits: 0,
+    // v8 (#480): another phone's player is drawn from the spots heard, a moment back (lib/sulava-1).
+    tr: AiPelitSulava.track({ keys: ['x', 'y'], jump: 2 }), ts: null, src: '',
     brain: { wait: 0, mode: 'home', noise: 0, decided: false, serveT: 1, home: 2.5 } };
   skill(p, lvl || level);
   return p;
@@ -218,7 +221,7 @@ function newRally() {
   for (const p of players) {
     const two = mates(p).length > 0;
     p.x = p.side * (p === server ? 4.6 : !two ? 2.2 : team(p) === team(server) ? 1.4 : p.slot === 0 ? 1.4 : 3.0);
-    p.tx = null; p.y = 0; p.vy = 0; p.cd = 0; p.arms = 0;
+    p.tx = null; p.y = 0; p.vy = 0; p.cd = 0; p.arms = 0; p.tr.reset(); p.fresh = false;
     p.brain.wait = 0; p.brain.mode = 'home'; p.brain.serveT = 1.0 + Math.random() * 0.6; p.brain.home = home(p);
   }
   ball = { x: server.x - server.side * 0.35, y: 1.3, vx: 0, vy: 0, spin: 0, held: true, served: false };
@@ -454,8 +457,8 @@ function clampSide(p) {
 }
 function stepPlayer(p, dt) {
   if (p.kind === 'remote') {
-    // Another phone moves it: glide to where it says it is.
-    if (p.tx !== null) p.x += (p.tx - p.x) * Math.min(1, dt * 20);
+    // Another phone moves it: the rules take where it last said it is; the drawing glides (asDrawn()).
+    if (p.tx !== null) p.x = p.tx;
   } else {
     p.x += (p.vx || 0) * dt;
     clampSide(p);
@@ -574,13 +577,31 @@ function applySetup(s) {
   mine = players.find(p => p.kind === 'me');
 }
 function snapshot() {
-  return { t: 's', round: net.round, st: state, pt: pauseT,
+  return { t: 's', round: net.round, st: state, pt: pauseT, ck: AiPelitSulava.now(),
     b: [r2(ball.x), r2(ball.y), r2(ball.vx), r2(ball.vy), ball.held ? 1 : 0],
-    p: players.map(p => [r2(p.x), r2(p.y), p.arms > 0 ? 1 : 0, p.hits, r2(p.vx || 0)]),
+    p: players.map(p => [r2(p.x), r2(p.y), p.arms > 0 ? 1 : 0, p.hits, r2(p.vx || 0), p.kind === 'remote' ? p.ts : null]),
     sc: score, sv: players.indexOf(server), tc: touches, ts: touchSide, tos: tossed ? 1 : 0, ls: last ? players.indexOf(last) : -1,
     m: msg, tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]), fx };
 }
 const r2 = v => Math.round(v * 100) / 100;
+// Smooth movement (#480): each spot heard goes on the player's track with the clock of the phone that moved
+// it: the friend's own ('f', forwarded by the host) or the host's ('h', the computer's players and the host).
+// A change of clock starts the track again. The rules keep the newest spot; only the drawing lags.
+const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
+function heardSpot(p, st, src) {
+  const spot = { x: p.x, y: p.y };
+  if (src !== p.src) p.tr.snap(st, spot); else p.tr.push(st, spot);
+  p.src = src;
+}
+const drawnHere = p => p !== mine && !(R.isHost && p.kind === 'cpu') && p.tr.size();
+function asDrawn() {
+  if (!net.on || !players.length) return [];
+  const kept = players.filter(drawnHere).map(p => { const k = [p, p.x, p.y], o = p.tr.at(); p.x = o.x; p.y = o.y; return k; });
+  // A ball held by a player drawn back is drawn in their hands.
+  if (ball && ball.held && server && kept.some(k => k[0] === server)) { const k = kept.find(k => k[0] === server); kept.ball = ball.x; ball.x += server.x - k[1]; }
+  return kept;
+}
+function putBack(kept) { for (const [p, px, py] of kept) { p.x = px; p.y = py; } if (kept.ball !== undefined) ball.x = kept.ball; }
 function applySnapshot(s) {
   const was = state;
   state = s.st; pauseT = s.pt;
@@ -590,18 +611,22 @@ function applySnapshot(s) {
   if (up(1)) S.play('verkko', { vol: 0.8 }) || tone(150, 0.08, 'triangle', 0.05);
   fxSeen = f.slice();
   [ball.x, ball.y, ball.vx, ball.vy] = s.b; ball.held = !!s.b[4];
+  // A new rally puts everyone on their spot at once: no sliding there.
+  if (state === 'serve' && was !== 'serve') for (const p of players) p.tr.reset();
   s.p.forEach((q, i) => {
     const p = players[i];
     if (!p || p === mine) return;
     if (q[3] > p.hits) { p.arms = 0.3; slap(p, q[1] > 0.05 && Math.hypot(s.b[2], s.b[3]) > 8.5); }
-    p.tx = q[0]; p.y = q[1]; p.vx = q[4]; p.hits = q[3]; if (q[2]) p.arms = Math.max(p.arms, 0.1);
+    p.tx = q[0]; p.x = q[0]; p.y = q[1]; p.vx = q[4]; p.hits = q[3]; if (q[2]) p.arms = Math.max(p.arms, 0.1);
+    const own = Number.isFinite(q[5]);
+    heardSpot(p, own ? q[5] : stampOf(s), own ? 'f' : 'h');
   });
   if (mine && s.p[players.indexOf(mine)][3] > mine.hits) { mine.hits = s.p[players.indexOf(mine)][3]; mine.arms = 0.3; mine.cd = 0.28; slap(mine, mine.y > 0.05 && Math.hypot(s.b[2], s.b[3]) > 8.5); }
   score = s.sc; server = players[s.sv] || null; touches = s.tc; touchSide = s.ts; tossed = !!s.tos; last = players[s.ls] || null;
   msg = s.m; texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
   if (state === 'point' && was !== 'point') pointSound(sand);
   // The host just started a new rally: put this phone's player where the rally starts it.
-  if (state === 'serve' && was !== 'serve' && mine) { mine.x = mine.side * (mine === server ? 4.6 : mates(mine).length ? (team(mine) === team(server) ? 1.4 : mine.slot === 0 ? 1.4 : 3.0) : 2.2); mine.y = 0; mine.vy = 0; }
+  if (state === 'serve' && was !== 'serve' && mine) { net.fresh = true; mine.x = mine.side * (mine === server ? 4.6 : mates(mine).length ? (team(mine) === team(server) ? 1.4 : mine.slot === 0 ? 1.4 : 3.0) : 2.2); mine.y = 0; mine.vy = 0; }
 }
 function guestUpdate(dt) {
   if (state === 'serve' || state === 'play') steer(); else mine.vx = 0;
@@ -609,7 +634,7 @@ function guestUpdate(dt) {
   for (let i = 0; i < n; i++) {
     for (const p of players) {
       if (p === mine) stepPlayer(p, h);
-      else { if (p.tx !== null) p.x += (p.tx - p.x) * Math.min(1, h * 15); p.arms = Math.max(0, p.arms - h); }
+      else p.arms = Math.max(0, p.arms - h);  // v8: no chase to the newest spot; asDrawn() glides
     }
     stepBall(h, false);
   }
@@ -617,7 +642,8 @@ function guestUpdate(dt) {
   texts = texts.filter(t => t.t > 0);
   if ((net.sendT -= dt) <= 0) {
     net.sendT = 0.05;
-    R.send({ t: 'p', round: net.round, x: r2(mine.x), y: r2(mine.y), vy: r2(mine.vy), i: mine.intent });
+    R.send({ t: 'p', round: net.round, x: r2(mine.x), y: r2(mine.y), vy: r2(mine.vy), i: mine.intent, ck: AiPelitSulava.now(), ...(net.fresh ? { j: 1 } : {}) });
+    net.fresh = false;
   }
 }
 function hostEnd(w) {
@@ -657,7 +683,14 @@ R.on('message', (m, from) => {
     if (m.round !== net.round) return;
     const p = players.find(q => q.id === from);
     if (!p || p.kind !== 'remote') return;
-    if (m.t === 'p') { p.tx = m.x; p.y = m.y; p.vy = m.vy; p.intent = m.i === 'over' ? 'over' : 'set'; }
+    if (m.t === 'p') {
+      // At a new rally the host has put the friend on their spot; a spot they sent before they heard of it
+      // would pull them back. Their first spot sent after it says so (j); half a second at most, if it is lost.
+      if (m.j) p.fresh = true;
+      else if (!p.fresh && state === 'serve' && stateT < 0.5) return;
+      p.tx = m.x; p.x = m.x; p.y = m.y; p.vy = m.vy; p.intent = m.i === 'over' ? 'over' : 'set';
+      p.ts = stampOf(m); heardSpot(p, p.ts, 'f');
+    }
     if (m.t === 'toss') toss(p);
     return;
   }
@@ -677,7 +710,7 @@ R.on('message', (m, from) => {
 // A phone that comes back gets the match as it is: who plays where, then the running stream.
 R.on('hello', id => { if (net.on && net.setup && state !== 'done') R.send(net.setup, id); });
 R.on('continue', ids => { for (const p of players) if (ids.includes(p.id)) { p.kind = 'cpu'; p.tx = null; } });
-R.on('back', id => { for (const p of players) if (p.id === id) p.kind = 'remote'; });
+R.on('back', id => { for (const p of players) if (p.id === id) { p.kind = 'remote'; p.tr.reset(); p.ts = null; p.src = ''; } });
 R.on('lobby', () => { state = 'room'; });
 R.on('leave', () => { state = 'menu'; net.on = false; showMenu(); });
 R.on('menu', () => { state = 'menu'; net.on = false; showMenu(); });
@@ -872,7 +905,8 @@ function draw() {
 let prev = 0;
 function loop(t) {
   const dt = Math.min(0.05, (t - prev) / 1000 || 0); prev = t;
-  update(dt); draw();
+  update(dt);
+  const kept = asDrawn(); draw(); putBack(kept);
   requestAnimationFrame(loop);
 }
 
