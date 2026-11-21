@@ -501,7 +501,12 @@ def test_a_dodge_over_a_stalled_link_glides(site, browser):
 def test_a_guest_reloading_mid_fight_draws_the_others_at_the_host_s_spot_then_glides(site, browser):
     """A guest that reloads mid-fight comes back into the round (rooms.js): the first state it hears is put on
     the track as it is (net.fresh), so from its first frame it draws the host's fighter where the host has it,
-    not gliding there from the start spot, and from then on it glides."""
+    not gliding there from the start spot, and from then on it glides.
+    Judged by the drawn moment (the track's time) and the fight clock, as the track runs them: a reloading
+    page hears its first states later than the ones after (here, with the page's processor slowed 6 times,
+    about 0.09 s), so the track's offset falls over its first half second and the drawn moment catches up at
+    up to 1.2 times the clock (sulava-1's CATCH), drawing the fighter at up to 1.2 times its speed; measured
+    by the wall clock between frames, the frames' own unevenness on a busy machine then read 111 units/s."""
     host, guest = phones(site, browser)
     me = index(host)
     # The host's fighter goes up and down the arena's middle (y 140 to 300) at 64 units/s, by the clock.
@@ -513,20 +518,21 @@ def test_a_guest_reloading_mid_fight_draws_the_others_at_the_host_s_spot_then_gl
       AiPelitRooms.on('message', m => { if (m.t === 's' && typeof fighters !== 'undefined' && foe) {
         said = m.f[fighters.indexOf(foe)][1]; if (first === null) first = said; } });
       const d = window.asDrawn;
-      window.asDrawn = () => { const k = d();
-        if (state === 'fight' && foe && first !== null) window.__rl.push([performance.now() / 1000, foe.y, first, said]);
+      window.asDrawn = () => { const c = typeof fightClock === 'function' ? fightClock() : 0, k = d();
+        if (state === 'fight' && foe && first !== null) window.__rl.push([c, foe.y, first, foe.tr.time]);
         return k; }; })""")
     guest.reload()
     guest.wait_for_function("state === 'fight' && window.__rl && window.__rl.length >= 60", timeout=15000)
     rl = guest.evaluate("window.__rl")
     # The first frame drawn is at the first state heard.
     assert abs(rl[0][1] - rl[0][2]) < 1, rl[:5]
-    # Then it glides: on at up to the fighter's speed (64 units/s) over each two frames that came in time,
-    # never a jump.
-    sp = [(round(t2 - rl[0][0], 3), round(abs(b - a) / (t2 - t0), 1))
-          for (t0, a, *_), (t1, *_), (t2, b, *_) in zip(rl, rl[1:], rl[2:]) if t1 - t0 < 0.04 and t2 - t1 < 0.04]
-    assert len(sp) > 20, len(sp)
-    assert max(v for _, v in sp) < 1.5 * 64, "speeds " + json.dumps(sp)
+    # Then it glides: each frame the drawn moment goes on by at most 1.2 times the clock and never back, and
+    # the fighter is drawn on along its path at that moment (64 units/s), never a jump (4 units: a guess past
+    # a turn, eased away). Every frame whole in a failure's message: [clock, y, first, drawn moment].
+    shown = json.dumps([[round(c - rl[0][0], 4), round(y, 2), round(m, 4)] for c, y, _, m in rl])
+    steps = [(c1 - c0, m1 - m0, abs(y1 - y0)) for (c0, y0, _, m0), (c1, y1, _, m1) in zip(rl, rl[1:])]
+    assert all(-1e-6 <= dm <= 1.2 * dc + 0.002 for dc, dm, _ in steps), "frames " + shown
+    assert all(dy <= 64 * dm + 4 for _, dm, dy in steps), "frames " + shown
     # And it moves, not standing on the first spot.
     assert max(y for _, y, *_ in rl) - min(y for _, y, *_ in rl) > 10, rl
     assert not host.errors + guest.errors
