@@ -23,7 +23,7 @@ JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free 
 # the hook starts, not after the drawing, whose time on a busy test machine varies.
 SAMPLE = """([hook, what]) => { window.__xs = []; window.__got = []; const f = new Function('r', 'return ' + what);
   AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
-  if (!window[hook]) hook = "draw"; const d = window[hook];
+  const d = window[hook];
   window[hook] = (...a) => { const t = performance.now() / 1000, r = d(...a), v = f(r);
     if (v && window.__xs.length < 400) window.__xs.push([t, ...v]); return r; }; }"""
 STONE = ["stonesDrawn", "phase === 'slide' && stones[0] ? [stones[0].x, stones[0].y] : null"]
@@ -88,9 +88,8 @@ def glides(page, steady=False):
     vs = [v for _, v in middle]
     shown = [round(v, 2) for v in vs]
     # Each speed against the usual speed around it (16 frames, about a quarter of a second).
-    near = [(v, v / median(vs[max(0, i - 8):i + 9])) for i, v in enumerate(vs) if heard(middle[i][0])]
+    near = [(v, v / max(0.01, median(vs[max(0, i - 8):i + 9]))) for i, v in enumerate(vs) if heard(middle[i][0])]
     assert len(near) > 0.8 * len(middle), (len(near), len(middle))
-    open("/var/tmp/curl_dbg.json", "w").write(json.dumps([xs, got]))  # DEBUG
     # Measured on this host (#480): v5 0.07-0.19, v4's carry-on and chase 0.26-0.55.
     ratio = [r for _, r in near]
     assert pstdev(ratio) < 0.2, (pstdev(ratio), shown)
