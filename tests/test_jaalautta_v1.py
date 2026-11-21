@@ -114,8 +114,9 @@ def test_lazy_play_does_not_win_and_the_hardest_floe_can_be_won(site, context):
         assert "p0" not in wins, policy
     # A quick, sure player beats the two-floe level (the simulator won 7 of 20 with this one).
     strong = {"react": 0.15, "err": 4}
-    wins = [page.evaluate(SIM, [5, "cpu", s, strong])["win"] for s in range(1, 13)]
-    assert "p0" in wins
+    for floe in range(1, 6):
+        wins = [page.evaluate(SIM, [floe, "cpu", s, strong])["win"] for s in range(1, 13)]
+        assert "p0" in wins, floe
 
 
 def test_the_four_power_ups(site, context):
@@ -146,6 +147,13 @@ def test_the_four_power_ups(site, context):
       w.seals[1].x = 5; w.seals[2].x = -5; f.x = 0; f.y = 0;
       givePower(f, 'lohk'); f.fuse.t = 0.001; tick(w, STEP);
       out.crush = [!!f.out, !!f.crushed];
+      // The crush is that fall's only: the next erä and an ordinary fall show none (#479 review).
+      resetEra(w); out.reset = f.crushed; f.crushed = true; fall(w, f); out.plain = f.crushed;
+      // The gull's ring: a seal on it once it glows gets a power-up, and the ring is gone.
+      w = mk(2); w.ph = 'play'; const g = w.seals[0];
+      Object.assign(g, { x: 2, y: 1 }); Object.assign(w.seals[1], { x: -6, y: 0 });
+      w.ring = { x: 2, y: 1, come: 0, open: RING_OPEN }; tick(w, STEP);
+      out.ring = [!!(g.size || g.fuse), w.ring];
       return out;
     }""")
     assert r["size"] == [True, True, True, True]
@@ -155,6 +163,22 @@ def test_the_four_power_ups(site, context):
     assert r["notBack"]
     assert r["stun"] == [True, True, True]
     assert r["crush"] == [True, True]
+    assert r["reset"] is False and r["plain"] is False
+    assert r["ring"] == [True, None]
+
+
+def test_the_floe_starts_breaking_after_twenty_seconds(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const w = newWorld(1, [0, 1, 2, 3].map(i => ({ id: 'p' + i, name: 'p' + i, hat: i, kind: 'cpu' })), 4);
+      w.ph = 'play'; w.t = 0; w.ringNext = 1e9;
+      const whole = () => w.parts.every(p => p.r.every(r => r === p.r0));
+      while (w.t < SHRINK_AT - 0.1) tick(w, STEP);
+      const before = whole();
+      while (w.t < SHRINK_AT + SHRINK_WARN + 0.5) tick(w, STEP);
+      return [before, whole()];
+    }""")
+    assert r == [True, False]
 
 
 def test_the_stick_slides_my_seal_and_the_button_lunges(site, context):
@@ -165,6 +189,10 @@ def test_the_stick_slides_my_seal_and_the_button_lunges(site, context):
     page.evaluate(TOUCH, ["pointermove", 7, 160, 560])
     page.wait_for_timeout(500)
     assert page.evaluate("me.x") > x0 + 0.3
+    # A second finger that misses the button leaves the first one steering (#479 review).
+    page.evaluate(TOUCH, ["pointerdown", 9, 250, 400])
+    page.evaluate(TOUCH, ["pointerup", 9, 250, 400])
+    assert page.evaluate("stick && stick.id") == 7
     page.evaluate(TOUCH, ["pointerup", 7, 160, 560])
     b = page.evaluate("button()")
     page.evaluate(TOUCH, ["pointerdown", 8, b["x"], b["y"]])
@@ -195,6 +223,23 @@ def test_a_solo_win_counts_once_opens_the_next_floe_and_survives_a_reload(site, 
     assert page.evaluate("sent") == []
     assert page.locator("#endTitle").inner_text() == "Hävisit ottelun"
     assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:jaalautta:voitot'))") == 1
+    assert page.errors == []
+
+
+def test_a_won_match_counts_before_the_end_screen_so_a_reload_keeps_it(site, context):
+    page = open_game(site, context)
+    page.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
+    go(page)
+    # Two erät won, then the deciding one: won, but its pause before the end screen still running.
+    page.evaluate("""() => { for (let k = 0; k < 2; k++) {
+      world.ph = 'play'; world.seals.slice(1).forEach(s => fall(world, s)); step(world, ERA_PAUSE + 0.2); }
+      world.ph = 'play'; world.seals.slice(1).forEach(s => fall(world, s)); step(world, 0.05); }""")
+    page.wait_for_function("sent.length === 1")
+    assert page.evaluate("[mode, world.over]") == ["play", False]
+    assert page.evaluate("['voitot', 'auki', 'kesken1'].map(k => localStorage.getItem('ai-pelit:jaalautta:' + k))") == ["1", "2", None]
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    assert not page.locator("#floes button").nth(1).is_disabled()
     assert page.errors == []
 
 

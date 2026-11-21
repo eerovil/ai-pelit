@@ -117,7 +117,8 @@ function startPlay() {
   wake();
 }
 // Alone: the match is over. A win counts, opens the next floe and goes on the high-score list.
-function soloEnd() {
+// Counted the moment the deciding erä is won, so a reload before the end screen cannot lose it.
+function soloRecord() {
   const won = world.winner === me.id;
   drop('kesken1');
   let opened = 0;
@@ -127,8 +128,8 @@ function soloEnd() {
     if (window.AiPelitScores) AiPelitScores.submit(wins);
   }
   result = { won, opened, rows: rowsOf(world), wins };
-  showEnd();
 }
+function soloEnd() { if (!result) soloRecord(); showEnd(); }
 function rowsOf(w) {
   return w.seals.slice().sort((a, b) => (b.id === w.winner) - (a.id === w.winner) || b.stars - a.stars)
     .map(s => ({ id: s.id, name: s === me ? 'Sinä' : s.name, stars: s.stars, hat: s.hat, me: s === me, cpu: s.kind === 'cpu', helped: !!s.helped }));
@@ -149,6 +150,8 @@ c.addEventListener('pointerdown', e => {
   e.preventDefault();
   const b = button();
   if (Math.hypot(e.clientX - b.x, e.clientY - b.y) < b.r + 16) { lunge(); return; }
+  // A second finger that just misses the button does not take the stick from the first (#479 review).
+  if (stick) return;
   try { c.setPointerCapture(e.pointerId); } catch (_) {}
   stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
 });
@@ -488,6 +491,7 @@ function frame(now) {
     step(world, dt);
     // Saved at the start and after each erä, never mid-erä (design review, #478).
     if (ph !== 'erä' && world.ph === 'erä' && !world.winner) saveMatch();
+    if (world.winner && !result) soloRecord();
     if (tutorial && me.lunges > 0 && world.ph !== 'count') { tutorial = false; save('osattu', true); }
     if (world.over) { endT += dt; if (endT > 0.3) soloEnd(); }
   }

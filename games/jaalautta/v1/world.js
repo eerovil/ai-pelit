@@ -17,6 +17,8 @@ const ACC = 14, DRAG = 0.6, DRAG2 = 0.29;   // stick push; ice friction; air-ish
 const TURN = 8;                  // how fast a seal turns to its stick, rad/s
 const LUNGE_V = 9, LUNGE_T = 0.35, LUNGE_CD = 1.2, LUNGE_MASS = 2.5;
 const BUMP_MIN = 1.5;            // every bump throws at least this hard (units/s along the hit)
+// MIN_FRAC floors each wedge's radius at a third of the whole floe's (so the ice left can be about a
+// ninth of its area): a third of its size across, as the spec's "a third" was meant to read.
 const SHRINK_AT = 20, SHRINK_EVERY = 8, SHRINK_WARN = 1.5, MIN_FRAC = 1 / 3;
 const RING_FIRST = 6, RING_EVERY = 10, RING_COME = 1, RING_OPEN = 4, RING_R = 1.3;
 const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, PASS_GRACE = 0.5, STUN_T = 1.5;
@@ -81,13 +83,12 @@ function resetEra(w) {
       const a = (i / n) * TAU - Math.PI / 2, d = w.parts[0].r0 * 0.55;
       x = Math.cos(a) * d; y = Math.sin(a) * d;
     }
-    Object.assign(sl, { x, y, vx: 0, vy: 0, ix: 0, iy: 0, cd: 0, lungeT: 0, stun: 0, out: 0, size: null, fuse: null });
+    Object.assign(sl, { x, y, vx: 0, vy: 0, ix: 0, iy: 0, cd: 0, lungeT: 0, stun: 0, out: 0, size: null, fuse: null, crushed: false });
     sl.face = Math.atan2(-y, -x);
   });
 }
 
 // ---- Where the ice is ----
-function wedgeOf(a) { return ((Math.floor(((a % TAU) + TAU) % TAU / TAU * WEDGES)) % WEDGES + WEDGES) % WEDGES; }
 // The edge's radius at angle a, smoothly between wedge centres.
 function edgeAt(p, a) {
   const f = (((a % TAU) + TAU) % TAU) / TAU * WEDGES - 0.5;
@@ -111,11 +112,6 @@ function partOf(w, x, y) {
     if (d < bd) { bd = d; best = p; }
   }
   return { p: best, edge: -bd };
-}
-function iceLeft(w) {
-  let a = 0, a0 = 0;
-  for (const p of w.parts) { for (const r of p.r) a += r * r; a0 += p.r0 * p.r0 * WEDGES; }
-  return a / a0;
 }
 // A random spot well inside the ice.
 function spotOnIce(w, inner) {
@@ -238,6 +234,7 @@ function passFuse(from, to) {
   return true;
 }
 function fall(w, sl) {
+  sl.crushed = false;   // a crush sets it again right after
   sl.out = 1e-6; sl.outX = sl.x; sl.outY = sl.y;
   sl.vx = sl.vy = 0; sl.fuse = null; sl.size = null; sl.lungeT = 0;
 }
