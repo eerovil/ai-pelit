@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Saappaanheitto</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d3557;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (AGENTS.md rule 4). */
+  canvas{display:block;position:fixed;top:0;bottom:0;left:0;right:0;width:100%;height:100%;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(18,32,58,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:34px;letter-spacing:1px;color:#ffd166;text-shadow:0 3px 0 #9a5b12}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  :where(#menu) button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  :where(#menu) button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #cont:active{box-shadow:0 1px 0 #3c8a3f}
+  #cont.hidden{display:none}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #asu{font-size:16px;padding:9px 18px;background:#3d5a80;color:#fff;box-shadow:0 3px 0 #24364f}
+  #asu:active{box-shadow:0 1px 0 #24364f}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
+  .help.side{display:none}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,280px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#cont,#multi,#asu{grid-column:2;justify-self:stretch}
+    #go{grid-row:1 / span 2;align-self:center}
+    #cont{grid-row:3;align-self:center}
+    #multi{grid-row:4;align-self:start;padding:12px 14px;white-space:nowrap}
+    #asu{grid-row:5;align-self:start}
+    .help{margin:0;display:none}
+    .help.side{display:block}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>Saappaanheitto</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Kisaan!</button>
+  <button id="cont" class="hidden">Jatka kisaa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <button id="asu">👕 Asu</button>
+  <p id="stats"></p>
+  <p class="help">Pyöritä saapasta yli olan piirtämällä peukalolla ympyröitä kehälle myötäpäivään: mitä nopeammin ja mitä useampi
+    kierros, sitä kovempi vauhti. Nosta peukalo, kun saapas on vihreällä kaarella, niin se lentää parhaaseen
+    kulmaan. Yli kymmenen kierrosta väsyttää käden. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
+  <p class="help side">Piirrä peukalolla ympyröitä myötäpäivään oikean reunan kehälle ja nosta peukalo, kun saapas on
+    vihreällä kaarella. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
+</div>
+<script src="../../../rooms.js" data-game="saappaanheitto" data-min="2" data-max="8"></script>
+<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../outfits.js" data-game="saappaanheitto" data-share="yleisurheilu"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+window.x2d = x;
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+const FOES = ['Kumi-Kalle', 'Saapas-Sanna', 'Varsi-Ville', 'Lätäkkö-Leena', 'Rapa-Risto', 'Kalossi-Kaisa', 'Pohja-Pekka',
+  'Lenkki-Liisa', 'Huopa-Heikki', 'Kärki-Kirsi', 'Suo-Seppo', 'Myrsky-Maija', 'Tossu-Topi'];
+
+// ---------- The throw ----------
+// Seen from the side, metres: x forward (the throwing line at 0, the field beyond it), y up. The
+// thrower stands behind the line and swings the boot round in an upright circle at arm's length,
+// like a windmill. The player draws circles with a thumb on the ring of the pad: the boot is
+// always where the thumb is on that ring (the same angle), so the thumb shows where it is.
+// The boot's speed comes from how fast the thumb goes round (the last WIN_S seconds of turning),
+// times how far the swing has built up (and the boot follows it with some weight): half on the first lap, full after BUILD laps. Past TIRE
+// laps the arm tires and the speed drops; at SLIP laps the boot slips from the hand (a foul).
+// Lifting the thumb lets go: the boot flies along the circle's tangent. The swing is over the top
+// (clockwise on the screen, dir -1), as Eero chose on #503: let go early, while the boot still
+// rises behind, and it flies up and back; late, as it comes down in front, and it goes into the
+// ground. The best moment is high behind the shoulder. Going round the other way (underarm, dir 1)
+// works too, mirrored.
+const TAU = Math.PI * 2, DEG = Math.PI / 180;
+const SH_X = -1.1, SH_Y = 1.45, ARM = 0.55;   // the shoulder, and the hand holding the boot from it
+const KW = 2.0, VMAX = 28, WIN_S = 0.25;      // m/s of boot per rad/s of thumb, its top speed
+const BUILD = 2.5, TIRE = 10, SLIP = 14;      // laps
+const MIN_TURN = Math.PI;                     // less than half a lap before the lift: no throw
+const BEST = 43, HELP = 0.5, GOOD = 24, OKAY = 50;   // degrees: the best angle; the arm halves the error
+const DRAG = 0.006, G = 9.81, SUB = 1 / 240;
+const LAND_T = 2.4, BOARD_T = 3.5, TURN_MAX = 45;   // seconds
+
+const wrapR = r => ((r + Math.PI) % TAU + TAU) % TAU - Math.PI;
+// The hand (and the boot's top) when its arm points at angle a (radians, 0 forward, anticlockwise up).
+const bootAt = a => [SH_X + Math.cos(a) * ARM, SH_Y + Math.sin(a) * ARM];
+// How much of the thumb's speed reaches the boot after this many laps.
+function build(laps) {
+  const up = Math.min(1, 0.5 + 0.5 * laps / BUILD);
+  return laps > TIRE ? up * Math.max(0.55, 1 - 0.1 * (laps - TIRE)) : up;
+}
+// The angle a boot let go at arm angle a, going round dir (1 forward, -1 backward), flies at:
+// the circle's tangent, with the thrower's arm halving how far that is from the best (HELP).
+function launchDeg(a, dir) {
+  const raw = (a + dir * Math.PI / 2) / DEG;
+  const off = ((raw - BEST + 180) % 360 + 360) % 360 - 180;
+  return BEST + off * HELP;
+}
+// Where on the circle the green (best) and yellow (fair) arcs are for a direction: [a0, a1] radians.
+function arc(dir, half) { const m = (BEST - dir * 90) * DEG; return [m - half * DEG, m + half * DEG]; }
+function boot(a, v, dir) {
+  const [x0, y0] = bootAt(a), e = launchDeg(a, dir) * DEG;
+  return { x: x0, y: y0, vx: v * Math.cos(e), vy: v * Math.sin(e), t: 0, acc: 0, stuck: false, dir, a0: a, trail: [] };
+}
+function flySub(j) {
+  const v = Math.hypot(j.vx, j.vy);
+  j.vx += -DRAG * v * j.vx * SUB; j.vy += (-G - DRAG * v * j.vy) * SUB;
+  j.x += j.vx * SUB; j.y += j.vy * SUB; j.t += SUB;
+}
+// Where it lands (metres past the line, down to the centimetre) and why it does not count.
+function flight(a, v, dir) {
+  const j = boot(a, v, dir);
+  while (j.y > 0 && j.t < 20) flySub(j);
+  const why = j.x <= 0 ? 'Saapas ei ylittänyt viivaa' : '';
+  return { x: j.x, t: j.t, ang: launchDeg(a, dir), mark: why ? -1 : Math.floor(j.x * 100) / 100, why };
+}
+
+// ---------- Layout ----------
+// Upright, the scene is the whole width with the spin pad under it; on its side the pad is a
+// column at the right edge, under the right thumb, and the scene fills the rest.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, ctrlTop, ctrlH, groundY, hudTop, sceneB;
+let land = false, SX = 0, SW = 0, side = 0, standS = 60, flyS = 8;
+let ring = { cx: 0, cy: 0, r: 60 };
+function resize() {
+  const r = c.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  if (land) {
+    side = Math.max(190, Math.min(280, W * 0.3));
+    SX = safeL; SW = W - SX - safeR - side;
+    ctrlTop = H; ctrlH = 0; hudTop = safeT + 40; sceneB = H - safeB;
+    groundY = sceneB - 44;
+    const top = safeT + 44, bot = H - safeB - 8;
+    ring = { cx: W - safeR - side / 2, cy: (top + bot) / 2, r: Math.min(side * 0.3, (bot - top) * 0.3) };
+  } else {
+    SX = 0; SW = W;
+    ctrlH = Math.max(200, Math.min(300, H * 0.36));
+    ctrlTop = H - safeB - ctrlH; hudTop = safeT + 44; sceneB = ctrlTop;
+    groundY = ctrlTop - 44;
+    ring = { cx: W / 2, cy: ctrlTop + ctrlH / 2, r: Math.min(W * 0.3, ctrlH * 0.34) };
+  }
+  // At the line, about 6 m across and the thrower's whole swing high; flying, a whole throw's height.
+  standS = Math.min(SW / 6.5, (groundY - hudTop - 100) / 2.7);
+  flyS = Math.min(SW / 28, (groundY - hudTop - 80) / 18);
+}
+addEventListener('resize', resize);
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+const S = AiPelitAanet;
+S.load(['valinta', 'suhahdus', 'tomahdys', 'onnistui', 'virhe', 'mitali']);
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The competition ----------
+// The meet, its saves and playing it with friends are the shared athletics library's: twelve
+// throwers, three rounds, the best eight throw three more (Keihäänheitto is the model). th is
+// this phone's view of the throw.
+let th = null;
+const base = lv => Math.min(54, 32 + 3 * (lv - 1));   // 32 m at level 1, 3 m more per level
+const isNet = () => K.isNet();
+const K = AiPelitKisa.meet({
+  cheerSound: () => S.play('onnistui', { vol: 0.08 }),
+  slug: 'saappaanheitto', format: AiPelitKisa.rounds(), foes: FOES, skill: base,
+  spread: [3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 2.5,
+  cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
+  live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä heittoa',
+  fit: () => outfit.id, started: () => menu.classList.add('hidden'),
+  look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
+  chime: i => {
+    S.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 }) || tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06);
+  },
+});
+const thrower = id => K.thrower(id);
+const COLORS = K.COLORS;
+
+// The computer throws: around its skill, now and then a foul, and never past what a good player
+// reaches (about 59 m at the top speed and the best angle). A throw over it is drawn again.
+const CPU_MAX = 58;
+function cpuMark(t) {
+  if (Math.random() < 0.12) return -1;
+  let m;
+  do m = Math.floor((t.skill + K.gauss() * 3) * 100) / 100; while (m > CPU_MAX);
+  return Math.max(8, m);
+}
+// A new turn: this phone draws it, and runs it when it is its own.
+function newTurn(t, mine, seq) {
+  th = { seq, id: t.id, mine, phase: 'wait', t: 0, a: -Math.PI / 2 - 0.15, dir: -1, turn: 0, v: 0,
+    moves: [], boot: null, mark: null, why: '', sendT: 0, idle: 0, lap: 0 };
+  blend = 0; spinPtr = null;
+}
+
+// ---------- One throw ----------
+// phase: wait (the standings), ready (the boot hangs), spin (the thumb goes round), fly, land.
+let pop = null;
+function say(text, col) { pop = { text, col, t: 0.9 }; }
+const laps = a => Math.abs(a.turn) / TAU;
+// The thumb's turning speed (rad/s, signed): what it went round in the last WIN_S seconds.
+function thumbSpeed(a, now) {
+  while (a.moves.length && a.moves[0][0] < now - WIN_S) a.moves.shift();
+  let d = 0; for (const m of a.moves) d += m[1];
+  return d / WIN_S;
+}
+let clock = 0;   // seconds, the game's own, moved by step()
+function step(dt) {
+  clock += dt;
+  if (pop) { pop.t -= dt; if (pop.t <= 0) pop = null; }
+  if (K.step(dt)) return;
+  if (!th || !K.comp) return;
+  if (isNet() && R.paused) return;
+  th.t += dt; th.idle += dt;
+  const a = th;
+  if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; a.idle = 0; if (a.mine) S.play('valinta', { vol: 0.6 }) || tone(660, 0.1, 'sine', 0.06); } return; }
+  if (a.phase === 'ready') {
+    if (a.mine && isNet() && a.idle > TURN_MAX) return outcome(-1, 'Aika loppui');
+    return;
+  }
+  if (a.phase === 'spin') {
+    if (a.mine) {
+      const w = thumbSpeed(a, clock);
+      if (Math.abs(w) > 0.5) a.dir = w > 0 ? 1 : -1;
+      // The boot has weight: its speed follows the thumb's in about a third of a second, and a
+      // thumb that stops for a moment before the lift loses only a little of it.
+      const want = Math.min(VMAX, Math.abs(w) * KW) * build(laps(a));
+      a.v += (want - a.v) * (1 - Math.exp(-dt / (want > a.v ? 0.3 : 0.9)));
+      if (laps(a) >= SLIP) return outcome(-1, 'Käsi väsyi: saapas lipsahti');
+      if (isNet() && a.idle > TURN_MAX) return outcome(-1, 'Aika loppui');
+      a.sendT -= dt;
+      if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; K.send({ t: 'p', a: [r3(a.a), r2(a.v), a.phase, a.dir, r2(a.turn)] }); }
+    }
+    // A whoosh each lap, as the boot passes the bottom, brighter the faster it goes.
+    const n = Math.floor(laps(a));
+    if (n > a.lap) {
+      a.lap = n;
+      S.play('suhahdus', { vol: a.mine ? 0.35 : 0.18, rate: 0.75 + 0.5 * a.v / VMAX });
+      if (a.mine && n === TIRE) say('Käsi väsyy!', '#ffd166');
+    }
+    return;
+  }
+  if (a.phase === 'fly' || a.phase === 'land') {
+    const j = a.boot;
+    if (j && !j.stuck) {
+      j.acc += dt;
+      while (j.acc >= SUB && j.y > 0) {
+        flySub(j); j.acc -= SUB;
+        if (Math.round(j.t / SUB) % 10 === 0) j.trail.push([j.x, j.y]);
+      }
+      if (j.y <= 0) { j.stuck = true; j.y = 0; landed(); }
+    }
+    if (a.phase === 'land' && a.t >= LAND_T && a.mine && !a.sent) { a.sent = true; report(a.mark); }
+  }
+}
+const r2 = n => Math.round(n * 100) / 100, r3 = n => Math.round(n * 1000) / 1000;
+
+// ---------- The thumb ----------
+// The angle of a point round the ring's middle, as the boot's: right is forward, up is up.
+let spinPtr = null, lastFa = null;
+function ringAngle(px, py) {
+  const dx = px - ring.cx, dy = py - ring.cy;
+  return { ang: Math.atan2(-dy, dx), d: Math.hypot(dx, dy) };
+}
+// A thumb going down on the pad starts the swing; going down again later in the turn does nothing.
+function spinStart(e) {
+  unlock();
+  if (!th || !th.mine) return;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }   // alone, a tap skips the standings
+  if (th.phase !== 'ready' || spinPtr !== null) return;
+  const p = ringAngle(e.clientX, e.clientY);
+  spinPtr = e.pointerId; lastFa = p.d > ring.r * 0.3 ? p.ang : null;
+  th.phase = 'spin'; th.t = 0; th.turn = 0; th.v = 0; th.moves = []; th.lap = 0; th.idle = 0;
+  if (lastFa !== null) th.a = lastFa;
+}
+// Each move of the thumb turns the boot to the thumb's angle. Near the ring's middle the angle
+// jumps about, so those points are left out; so is a jump of more than a quarter turn.
+function spinMove(px, py, t) {
+  if (!th || th.phase !== 'spin') return;
+  const p = ringAngle(px, py);
+  if (p.d < ring.r * 0.3) return;
+  if (lastFa !== null) {
+    const d = wrapR(p.ang - lastFa);
+    // turn counts how far the arm has gone, either way, so going back never takes laps away.
+    if (Math.abs(d) < Math.PI / 2) { th.turn += Math.abs(d); th.moves.push([t, d]); th.idle = 0; }
+  }
+  lastFa = p.ang; th.a = p.ang;
+}
+function spinEnd(e) {
+  if (e.pointerId !== spinPtr) return;
+  spinPtr = null;
+  if (!th || !th.mine || th.phase !== 'spin') return;
+  catchUp(e);
+  spinMove(e.clientX, e.clientY, clock);
+  if (Math.abs(th.turn) < MIN_TURN) {
+    // A thumb lifted before half a lap: a slip, the boot hangs again.
+    th.phase = 'ready'; th.a = -Math.PI / 2 - 0.15; th.v = 0; th.turn = 0; th.dir = -1;
+    say('Pyöritä ympyrää!', '#ffd166');
+    // The phones watching put the boot back to hanging too.
+    if (isNet()) K.send({ t: 'p', a: [r3(th.a), 0, 'ready', th.dir, 0] });
+    return;
+  }
+  letGo();
+}
+function letGo() {
+  // Rounded as it goes over the room, so every phone flies the very same boot.
+  const a = r3(th.a), v = r2(th.v), dir = th.dir;
+  throwNow(a, v, dir);
+  if (isNet()) K.send({ t: 'rel', a: [a, v, dir] });
+}
+function throwNow(ang, v, dir) {
+  const a = th;
+  a.phase = 'fly'; a.t = 0; a.a = ang; a.v = v; a.dir = dir;
+  a.boot = boot(ang, v, dir);
+  const f = flight(ang, v, dir);
+  a.mark = f.mark; a.why = f.why; a.ang = f.ang;
+  if (a.mine) S.play('suhahdus', { vol: 0.8, rate: 0.9 + 0.3 * v / VMAX }) || tone(520, 0.18, 'sawtooth', 0.06, 160);
+}
+function landed() {
+  th.phase = 'land'; th.t = 0;
+  S.play('tomahdys', { vol: th.mine ? 0.9 : 0.45 });
+  if (th.mark >= 0) {
+    th.leads = K.comp && K.standings()[0] && th.mark > K.bestOf(K.standings()[0]);
+    if (th.mine) {
+      th.record = K.record(th.mark);
+      if (!S.play('onnistui', { delay: 0.2, vol: 0.3 })) { tone(880, 0.12, 'sine', 0.07); setTimeout(() => tone(1175, 0.2, 'sine', 0.07), 120); }
+    }
+  }
+}
+// A foul before the boot leaves the hand: the turn is over, no throw.
+function outcome(mark, why) {
+  th.phase = 'land'; th.t = 0; th.mark = mark; th.why = why; th.boot = null; spinPtr = null;
+  th.dropped = why !== 'Aika loppui';
+  if (th.mine) {
+    S.play('virhe', { vol: 0.5 }) || tone(160, 0.3, 'sawtooth', 0.06, 70);
+    if (isNet()) K.send({ t: 'rel', a: [r3(th.a), 0, th.dir], why });
+  }
+}
+function report(mark) { K.report(th.seq, mark); }
+
+// Another phone's thrower, as its phone sends it: the swing (p) and the release (rel).
+function watchFrom(m) {
+  if (!th || th.mine || !K.comp || th.id !== m.id) return;
+  if (m.t === 'p' && (th.phase === 'wait' || th.phase === 'ready' || th.phase === 'spin')) {
+    th.a = m.a[0]; th.v = m.a[1]; th.phase = m.a[2]; th.dir = m.a[3]; th.turn = m.a[4];
+  }
+  if (m.t === 'rel' && th.phase !== 'fly' && th.phase !== 'land') {
+    if (m.why) { th.a = m.a[0]; outcome(-1, m.why); } else throwNow(m.a[0], m.a[1], m.a[2]);
+  }
+}
+const fmt = K.fmt;
+
+// ---------- The loop ----------
+let lastT = performance.now();
+// A lift counts at the moment the thumb left, not at the last drawn frame (#404): the game runs on
+// to the event's own time first, and the next frame takes only what is left.
+function catchUp(e) {
+  let d = e.timeStamp - lastT;
+  if (d > 0 && d < 100) {
+    lastT = e.timeStamp;
+    for (; d > 0; d -= 50) step(Math.min(0.05, d / 1000));
+  }
+}
+// While the menu is open nothing moves, so the scene behind it is drawn once (and again on a turn of
+// the phone or a new outfit), not 60 times a second (docs/making-games.md, "A still game must not draw every frame").
+let idleAt = '', draws = 0;
+function frame(now) {
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
+  step(dt);
+  const still = !menu.classList.contains('hidden') && !K.ending ? W + 'x' + H + outfit.id : '';
+  if (!still || still !== idleAt) { draw(dt); draws++; }
+  idleAt = still;
+  requestAnimationFrame(frame);
+}
+
+// ---------- Drawing ----------
+let blend = 0, camX = -3, camS = 60;
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function draw(dt = 0) {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
+  x.save();
+  if (land) { x.beginPath(); x.rect(SX, 0, SW, H); x.clip(); x.translate(SX, 0); }
+  drawScene(dt);
+  x.restore();
+  drawControls();
+  if (K.ending) {
+    x.fillStyle = 'rgba(8,16,32,.82)'; x.fillRect(0, 0, W, H);
+    K.drawPodium(x, { left: safeL + 8, top: safeT + 44, w: W - safeL - safeR - 16, bottom: H - safeB - 8 });
+  }
+}
+// The camera: on the thrower while swinging, out after the boot while it flies.
+const REST = () => SH_X - 0.42 * SW / standS;
+function camera(dt) {
+  const fly = th && (th.phase === 'fly' || th.phase === 'land') && th.boot;
+  blend = fly ? Math.min(1, blend + dt * 1.4) : Math.max(0, blend - dt * 3);
+  const e = blend * blend * (3 - 2 * blend);
+  const s = standS + (flyS - standS) * e;
+  const fx = fly ? SH_X + (th.boot.x - SH_X) * e : SH_X;
+  camX = fx - (0.42 - 0.12 * e) * SW / s;
+  camS = s;
+  return s;
+}
+function drawScene(dt) {
+  const W = SW, s = camera(dt);
+  const sx = m => (m - camX) * s, sy = h => groundY - h * s;
+  // Sky, a few clouds, and a forest's edge across the field (a summer meet in the country).
+  const sky = x.createLinearGradient(0, 0, 0, groundY);
+  sky.addColorStop(0, '#6db3ec'); sky.addColorStop(1, '#d6edff');
+  x.fillStyle = sky; x.fillRect(0, 0, W, groundY);
+  x.fillStyle = 'rgba(255,255,255,.85)';
+  for (let k = 0; k < 6; k++) {
+    const span = W + 240, cx = ((k * 157 - camX * 3 - performance.now() / 500) % span + span) % span - 120;
+    const cy = hudTop + 92 + ((k * 61) % 5) * 22, r = 13 + (k % 3) * 5;
+    x.beginPath(); x.arc(cx, cy, r, 0, 7); x.arc(cx + r, cy - r * 0.5, r * 1.1, 0, 7); x.arc(cx + r * 2.1, cy, r * 0.9, 0, 7); x.fill();
+  }
+  const hillH = Math.max(50, (groundY - hudTop) * 0.34), hillTop = groundY - 18 - hillH;
+  // Spruces, sliding slower than the field.
+  const pc = camX * 6, gap = 22;
+  for (let k = Math.floor(pc / gap) - 1; k * gap - pc < W + gap; k++) {
+    const n = (k * 7919) >>> 0, tx = k * gap - pc, th2 = hillH * (0.55 + (n % 5) * 0.1);
+    x.fillStyle = n % 3 ? '#2f6b3a' : '#285c33';
+    x.beginPath(); x.moveTo(tx, groundY - 14); x.lineTo(tx + gap * 0.6, groundY - 14 - th2); x.lineTo(tx + gap * 1.2, groundY - 14); x.fill();
+  }
+  // The friends watching stand in front of the forest, drawn before the thrower so they never cover it.
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: groundY - 8, h: 40, walk: true, scroll: (camX - REST()) * 6 });
+  x.fillStyle = '#4a8f3f'; x.fillRect(0, groundY - 14, W, 14);
+  // The field: mown stripes every 5 m past the line, a sandy throwing area behind it.
+  x.fillStyle = '#5aa64e'; x.fillRect(0, groundY, W, sceneB - groundY);
+  for (let m = Math.max(0, Math.floor(camX / 5) * 5); sx(m) < W; m += 5) {
+    x.fillStyle = (m / 5) % 2 ? '#62ae55' : '#56a14a'; x.fillRect(sx(m), groundY, 5 * s, sceneB - groundY);
+  }
+  const lineX = sx(0);
+  x.fillStyle = '#c9a66b'; x.fillRect(Math.max(0, sx(-4)), groundY, Math.max(0, Math.min(W, lineX) - Math.max(0, sx(-4))), sceneB - groundY);
+  x.fillStyle = '#fff'; x.fillRect(lineX - Math.max(2, 0.05 * s), groundY - 2, Math.max(4, 0.1 * s), sceneB - groundY + 2);
+  // Distances every 10 m, small ticks every 5.
+  x.textAlign = 'center';
+  for (let m = 5; m <= 80; m += 5) {
+    const px = sx(m);
+    if (px < -40 || px > W + 40) continue;
+    x.fillStyle = 'rgba(255,255,255,.8)'; x.fillRect(px - 1, groundY, 2, m % 10 ? 8 : 16);
+    if (m % 10 === 0) {
+      x.font = '800 13px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.45)';
+      x.strokeText(m + ' m', px, groundY + 32); x.fillStyle = '#fff'; x.fillText(m + ' m', px, groundY + 32);
+    }
+  }
+  // Flags: the leader's mark and the player's own record.
+  let leadX = null;
+  const comp = K.comp, best = K.best;
+  if (comp && comp.throwers.length) {
+    const lead = K.standings()[0], lb = K.bestOf(lead);
+    if (lb > 0) { leadX = sx(lb); flag(leadX, '#ffd166', '1. ' + (lead.p === K.me ? 'Sinä' : lead.name), 0); }
+  }
+  if (best !== null) flag(sx(best), '#f1faee', 'Ennätys', leadX !== null && Math.abs(sx(best) - leadX) < 110 ? 16 : 0);
+  if (th) {
+    const t = thrower(th.id);
+    if (th.mine && th.phase === 'spin' && blend < 0.2) drawAim(sx(SH_X), sy(SH_Y), s);
+    drawAthlete(th, sx(SH_X), groundY, s, t ? t.col : COLORS[0], t ? (th.mine ? 'Sinä' : t.name) : '', looks(t));
+    if (th.boot) {
+      th.boot.trail.forEach((q, i, all) => {
+        x.fillStyle = 'rgba(255,255,255,' + (0.15 + 0.6 * i / all.length) + ')';
+        x.beginPath(); x.arc(sx(q[0]), sy(q[1]), 2, 0, 7); x.fill();
+      });
+      const j = th.boot;
+      // It tumbles end over end in the air, and lies on its side where it came down.
+      // It leaves the hand turned as it was held, and goes on turning the way it was swung.
+      const rot = j.stuck ? -Math.PI / 2 : -(j.a0 + j.dir * j.t * 9);
+      // Drawn bigger than it is once the camera is out, so it can be followed in the air.
+      const bk = Math.max(s, 46);
+      drawBoot(sx(j.x) - (j.stuck ? 0.24 * bk : 0), sy(j.y) - (j.stuck ? 0.12 * bk : 0), rot, bk);
+      if (j.stuck) {
+        x.strokeStyle = th.mark >= 0 ? '#fff' : '#ff6b5e'; x.lineWidth = 2.5;
+        x.beginPath(); x.ellipse(sx(j.x), groundY + 2, 22, 6, 0, 0, 7); x.stroke();
+      }
+    }
+  }
+  drawHud();
+  if (th && th.phase === 'wait') drawBoard(false);
+  if (comp && comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
+}
+function flag(px, col, label, up) {
+  if (px < -60 || px > SW + 60) return;
+  const top = groundY - 44 - up;
+  x.strokeStyle = '#eee'; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(px, groundY); x.lineTo(px, top); x.stroke();
+  x.fillStyle = col; x.beginPath(); x.moveTo(px, top); x.lineTo(px + 16, top + 6); x.lineTo(px, top + 12); x.fill();
+  x.font = '700 11px system-ui'; x.textAlign = 'left'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.5)';
+  x.strokeText(label, px + 3, top - 5); x.fillStyle = '#fff'; x.fillText(label, px + 3, top - 5);
+}
+// A green rubber boot, held by the top of its shaft at (hx, hy), the shaft pointing at screen
+// angle rot (radians, 0 right, clockwise down as the canvas turns), k pixels a metre.
+function drawBoot(hx, hy, rot, k, g = x) {
+  g.save(); g.translate(hx, hy); g.rotate(rot);
+  g.lineJoin = 'round';
+  g.fillStyle = '#2f6b3a'; g.strokeStyle = '#173a20'; g.lineWidth = Math.max(1, 0.02 * k);
+  g.beginPath();
+  g.moveTo(0, -0.075 * k); g.lineTo(0, 0.075 * k); g.lineTo(0.3 * k, 0.08 * k);
+  g.quadraticCurveTo(0.33 * k, 0.24 * k, 0.42 * k, 0.26 * k); g.lineTo(0.47 * k, 0.24 * k);
+  g.lineTo(0.47 * k, -0.08 * k); g.quadraticCurveTo(0.42 * k, -0.1 * k, 0.36 * k, -0.085 * k); g.closePath();
+  g.fill(); g.stroke();
+  // The sole and the band round the top.
+  g.fillStyle = '#1b1f24'; g.fillRect(0.45 * k, -0.08 * k, 0.04 * k, 0.33 * k);
+  g.fillStyle = '#c33d32'; g.fillRect(0.02 * k, -0.075 * k, 0.04 * k, 0.15 * k);
+  g.restore();
+}
+// Where to let go, round the shoulder while it is your swing: the circle the boot goes round, the
+// green arc (the best angles) and the yellow round it, for the way the boot is going now.
+function drawAim(px, py, s) {
+  const r = ARM * s;
+  x.lineCap = 'butt';
+  x.strokeStyle = 'rgba(255,255,255,.3)'; x.lineWidth = 2;
+  x.beginPath(); x.arc(px, py, r, 0, 7); x.stroke();
+  const ok = arc(th.dir, OKAY), good = arc(th.dir, GOOD);
+  x.lineWidth = Math.max(6, 0.12 * s);
+  x.strokeStyle = 'rgba(255,209,102,.75)'; x.beginPath(); x.arc(px, py, r, -ok[1], -ok[0]); x.stroke();
+  x.strokeStyle = 'rgba(126,224,129,.95)'; x.beginPath(); x.arc(px, py, r, -good[1], -good[0]); x.stroke();
+}
+// A thrower seen from the side, facing right, standing behind the line; heights in metres.
+function headTilt(a) {
+  const P = window.AiPelitOutfits && AiPelitOutfits.headPose;
+  if (!P || !a) return 0;
+  const t = performance.now() / 1000;
+  const st = a.phase === 'spin' || a.phase === 'fly' ? 'takeoff'
+    : a.phase === 'land' && a.t < 2.5 ? (a.why ? 'land' : 'cheer') : 'idle';
+  return P(st, t).tilt;
+}
+function drawAthlete(a, px, base, s, col, name, o = null, g = x) {
+  o = o || plain(col);
+  if (px < -120 || px > SW + 120) return;
+  const lw = Math.max(2.5, 0.11 * s);
+  const after = a.phase === 'fly' || a.phase === 'land', spin = a.phase === 'spin';
+  // The arm's angle: hanging at rest, the boot's while it swings, through forward after the throw.
+  const arm = spin || (after && !a.boot && a.dropped) ? a.a : after ? 0.35 : -Math.PI / 2 - 0.15;
+  const lean = spin ? -0.12 * Math.cos(arm) : after ? 0.22 : 0.03;
+  const hipX = px - 0.02 * s, hipY = base - 0.92 * s;
+  const neckX = hipX + Math.sin(lean) * 0.55 * s, neckY = hipY - Math.cos(lean) * 0.55 * s;
+  const L = 0.46 * s;
+  const pt = (x0, y0, ang, l) => [x0 + Math.sin(ang) * l, y0 + Math.cos(ang) * l];
+  // Feet apart, the left forward, braced for the swing.
+  const legs = after ? [[0.45, 0.25], [-0.4, -0.3]] : [[0.32, 0.12], [-0.3, -0.2]];
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const limb = (ox, oy, [a1, a2], len, c2) => {
+    const k = pt(ox, oy, a1, len), e = pt(k[0], k[1], a2, len);
+    g.strokeStyle = c2; g.lineWidth = lw;
+    g.beginPath(); g.moveTo(ox, oy); g.lineTo(k[0], k[1]); g.lineTo(e[0], e[1]); g.stroke();
+    if (o.bones && c2 !== o.skin) { g.strokeStyle = o.skin; g.lineWidth = Math.max(1, lw * 0.3); g.stroke(); }
+    return e;
+  };
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(px, base, 0.4 * s, 0.06 * s, 0, 0, 7); g.fill();
+  if (o.cape) {
+    g.fillStyle = o.cape; g.beginPath(); g.moveTo(neckX, neckY);
+    g.lineTo(neckX - 0.45 * s, neckY + 0.6 * s); g.lineTo(hipX - 0.12 * s, hipY + 0.05 * s); g.closePath(); g.fill();
+  }
+  const farSkin = shade(o.skin, 0.84), legSkin = o.halloween ? o.bottom : o.skin, farLeg = shade(legSkin, 0.84);
+  // The other arm out for balance, opposite the boot.
+  const bal = spin ? Math.PI / 2 - arm + Math.PI : after ? -0.6 : 0.25;
+  limb(neckX, neckY + 0.05 * s, [bal, bal + 0.3], 0.3 * s, farSkin);
+  const far = limb(hipX, hipY, legs[1], L, farLeg);
+  g.fillStyle = shade(o.shoe, 0.6); g.beginPath(); g.ellipse(far[0] + 0.06 * s, far[1], 0.09 * s, 0.04 * s, 0, 0, 7); g.fill();
+  g.strokeStyle = o.top; g.lineWidth = lw * 2.1;
+  g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(neckX, neckY); g.stroke();
+  if (o.bones) {
+    g.strokeStyle = o.skin; g.lineWidth = Math.max(1, lw * 0.35);
+    g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(neckX, neckY);
+    [0.45, 0.62, 0.79].forEach(k => { const rx = hipX + (neckX - hipX) * k, ry = hipY + (neckY - hipY) * k; g.moveTo(rx - lw * 0.9, ry); g.lineTo(rx + lw * 0.9, ry); });
+    g.stroke();
+  }
+  const near = limb(hipX, hipY, legs[0], L, legSkin);
+  g.fillStyle = o.shoe; g.beginPath(); g.ellipse(near[0] + 0.06 * s, near[1], 0.09 * s, 0.04 * s, 0, 0, 7); g.fill();
+  g.strokeStyle = o.bottom; g.lineWidth = lw * 1.6;
+  g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); g.stroke();
+  // The throwing arm, straight from the shoulder to the boot's shaft.
+  const shX = px, shY = base - SH_Y * s, hand = [shX + Math.cos(arm) * ARM * s, shY - Math.sin(arm) * ARM * s];
+  g.strokeStyle = o.skin; g.lineWidth = lw;
+  g.beginPath(); g.moveTo(neckX, neckY + 0.05 * s); g.lineTo(hand[0], hand[1]); g.stroke();
+  if (!a.boot && !a.bare && !(a.phase === 'land' && a.dropped)) drawBoot(hand[0], hand[1], -arm, s, g);
+  const hx = neckX + Math.sin(lean) * 0.16 * s, hy = neckY - Math.cos(lean) * 0.16 * s;
+  AiPelitOutfits.sideHead(g, o, hx, hy, 0.13 * s, 1, headTilt(a));
+  if (s > 18 && name && !(a.mine && spin)) {
+    g.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; g.textAlign = 'center';
+    g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.45)';
+    const lab = a.mine ? '▼ Sinä' : name, ly = hy - 0.62 * s - (o.head === 'witch' ? 0.2 * s : 0);
+    g.strokeText(lab, hx, ly); g.fillStyle = a.mine ? '#ffd166' : '#fff'; g.fillText(lab, hx, ly);
+  }
+  // A dropped boot (the arm tired) lies by the thrower's feet.
+  if (a.phase === 'land' && a.dropped) drawBoot(px - 0.6 * s, base - 0.12 * s, -Math.PI / 2, s, g);
+  if (pop && a.mine) {
+    g.font = '900 20px system-ui'; g.textAlign = 'center'; g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.5)';
+    const y = base - 2.6 * s - (0.9 - pop.t) * 30;
+    g.globalAlpha = Math.min(1, pop.t * 3);
+    g.strokeText(pop.text, px + 0.6 * s, y); g.fillStyle = pop.col; g.fillText(pop.text, px + 0.6 * s, y);
+    g.globalAlpha = 1;
+  }
+}
+// Outfits, one choice for every athletics event (outfits.js data-share). Everyone without one (the
+// computer, 'perus') wears the plain kit in the shirt colour the meet gave them.
+const OUTFITS = AiPelitOutfits.yleisurheilu;
+function plain(col) { return Object.assign({}, OUTFITS[0], { top: col }); }
+function looks(t) {
+  if (!t || !t.fit) return null;
+  const o = AiPelitOutfits.get(t.fit);
+  return !o || o.id === 'perus' || !o.top ? plain(t.col) : o;
+}
+function shade(hex, k) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v * k)));
+  return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1);
+}
+let outfit = AiPelitOutfits.setup({
+  outfits: OUTFITS,
+  draw(g, o, w, h) {
+    drawAthlete({ phase: 'ready', mine: false }, w * 0.45, h * 0.93, h * 0.38, COLORS[0], '', o.top ? o : plain(COLORS[0]), g);
+  },
+  change(o) {
+    outfit = o; showAsu();
+    if (K.comp && !isNet()) K.comp.throwers.forEach(t => { if (t.p === 'me') t.fit = o.id; });
+  },
+});
+function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
+
+function drawHud() {
+  const W = SW, top = hudTop;
+  const comp = K.comp;
+  if (!comp || !comp.throwers.length) return;
+  x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, 64, 12); x.fill();
+  const me = K.mine(), ROUNDS = K.F.ROUNDS;
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
+  x.fillText('Kierros ' + Math.min(comp.round, ROUNDS) + '/' + ROUNDS, 20, top + 24);
+  x.textAlign = 'right'; x.font = '700 14px system-ui';
+  if (me) x.fillText(me.marks.length ? 'Paras ' + (K.bestOf(me) > 0 ? fmt(K.bestOf(me)) : 'X') + ' · ' + K.placeOf(me) + '.' : 'Ei heittoa vielä', W - 20, top + 24);
+  const t = th && thrower(th.id);
+  if (th && th.mine && th.phase === 'spin') {
+    // The boot's speed, and the laps: green once the swing has built up, yellow when the arm tires.
+    const bx = 20, bw = W - 40 - 80, by = top + 40;
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
+    x.fillStyle = th.v > 22 ? '#7ee081' : th.v > 14 ? '#ffd166' : '#ff9a8b'; rr(bx, by, Math.max(12, bw * Math.min(1, th.v / VMAX)), 12, 6); x.fill();
+    x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '800 14px system-ui';
+    x.fillText(th.v.toFixed(1).replace('.', ',') + ' m/s', W - 20, by + 11);
+    const n = Math.floor(laps(th));
+    small('Kierroksia ' + n + (n >= TIRE ? ' – käsi väsyy!' : ''), n >= TIRE ? '#ffd166' : '#fff');
+  } else if (t) {
+    x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
+    x.fillText(th.mine ? 'Sinun vuorosi' : 'Heittää: ' + t.name, 20, top + 50);
+  }
+  if (!th) return;
+  if (th.phase === 'ready' && th.mine) {
+    message('Sinun vuorosi!', '#ffd166');
+    small('Pyöritä peukalolla ympyrää', '#fff');
+  } else if (th.phase === 'land') {
+    if (th.mark >= 0) {
+      message(fmt(th.mark), '#fff');
+      if (th.mine && th.record) small('Uusi ennätys!', '#7ee081');
+      else if (th.leads) small('Johtoon!', '#7ee081');
+      else if (th.mine) small('Lähtökulma ' + Math.round(th.ang) + '°', '#fff');
+    } else {
+      message('X', '#ff6b5e');
+      small(th.why || 'Hylätty', '#ff9a8b');
+    }
+  }
+}
+function message(s, col) {
+  x.textAlign = 'center'; x.font = '900 34px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 110; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function small(s, col) {
+  x.textAlign = 'center'; x.font = '800 18px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 140; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function drawBoard(final) {
+  if (land) K.drawBoard(x, final, { w: SW, top: safeT + 6, bottom: sceneB - 6, middle: true });
+  else K.drawBoard(x, final, { w: SW, top: hudTop + 72, bottom: sceneB - 4 });
+}
+
+// The spin pad: a ring to draw circles on, the same green and yellow arcs as round the thrower's
+// shoulder, and a dot where the boot (the thumb) is. Upright under the scene; on its side at the right.
+function padOn() { return !!(th && th.mine && (th.phase === 'ready' || th.phase === 'spin')); }
+function drawControls() {
+  if (land) { x.fillStyle = '#15233b'; x.fillRect(W - safeR - side, 0, side + safeR, H); }
+  else { x.fillStyle = '#15233b'; x.fillRect(0, ctrlTop, W, H - ctrlTop); }
+  const on = padOn(), { cx, cy, r } = ring;
+  x.fillStyle = on ? '#22385a' : '#1b2c47';
+  x.beginPath(); x.arc(cx, cy, r * 1.45, 0, 7); x.fill();
+  x.lineCap = 'butt';
+  x.strokeStyle = on ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.12)'; x.lineWidth = r * 0.42;
+  x.beginPath(); x.arc(cx, cy, r, 0, 7); x.stroke();
+  if (on) {
+    const dir = th.dir, ok = arc(dir, OKAY), good = arc(dir, GOOD);
+    x.lineWidth = r * 0.42;
+    x.strokeStyle = 'rgba(255,209,102,.55)'; x.beginPath(); x.arc(cx, cy, r, -ok[1], -ok[0]); x.stroke();
+    x.strokeStyle = 'rgba(126,224,129,.8)'; x.beginPath(); x.arc(cx, cy, r, -good[1], -good[0]); x.stroke();
+    // Arrows round the ring, the way the boot goes (over the top, clockwise, before the first lap).
+    x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 3; x.lineCap = 'round';
+    for (let k = 0; k < 4; k++) {
+      const m = k * Math.PI / 2 + Math.PI / 4, q = m + dir * 0.35;
+      x.beginPath(); x.arc(cx, cy, r * 1.32, -Math.max(m, q), -Math.min(m, q)); x.stroke();
+      const ex = cx + Math.cos(q) * r * 1.32, ey = cy - Math.sin(q) * r * 1.32, ta = Math.atan2(-Math.cos(q) * dir, -Math.sin(q) * dir);
+      x.beginPath(); x.moveTo(ex, ey); x.lineTo(ex - Math.cos(ta - 0.5) * 8, ey - Math.sin(ta - 0.5) * 8);
+      x.moveTo(ex, ey); x.lineTo(ex - Math.cos(ta + 0.5) * 8, ey - Math.sin(ta + 0.5) * 8); x.stroke();
+    }
+    const bx = cx + Math.cos(th.a) * r, by = cy - Math.sin(th.a) * r;
+    x.fillStyle = th.phase === 'spin' ? '#ffe08a' : '#ffb703';
+    x.beginPath(); x.arc(bx, by, r * 0.2, 0, 7); x.fill();
+  }
+  x.fillStyle = on ? '#fff' : '#6f86a6'; x.textAlign = 'center';
+  x.font = '800 14px system-ui';
+  x.fillText(on && th.phase === 'spin' ? 'Irti vihreällä' : 'Pyöritä', cx, cy + 5);
+}
+
+// ---------- Input ----------
+// Upright the pad is everything under the scene; on its side the column at the right.
+const onPad = (px, py) => land ? px >= W - safeR - side : py >= ctrlTop;
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  catchUp(e);
+  if (K.ending) { K.skip(); return; }
+  if (!onPad(e.clientX, e.clientY)) {
+    if (K.tapFans(e.clientX - SX, e.clientY)) return;
+    if (th && th.mine && th.phase === 'wait' && !isNet()) th.t = BOARD_T;
+    return;
+  }
+  spinStart(e);
+  if (spinPtr === e.pointerId) { try { c.setPointerCapture(e.pointerId); } catch (err) {} }
+});
+// Every point the thumb went through, at its own time, so a fast circle is read whole.
+c.addEventListener('pointermove', e => {
+  if (e.pointerId !== spinPtr) return;
+  const list = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  const pts = list.length ? list : [e];
+  const now = clock, last = pts[pts.length - 1].timeStamp;
+  for (const p of pts) spinMove(p.clientX, p.clientY, now - Math.max(0, last - p.timeStamp) / 1000);
+});
+addEventListener('pointerup', spinEnd);
+addEventListener('pointercancel', spinEnd);
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + K.level + ': ' + FOES[(K.level - 1) % FOES.length] + ' ja 10 muuta';
+  document.getElementById('stats').textContent = 'Kisat ' + K.comps + ' · Voitot ' + K.wins + (K.best !== null ? ' · Ennätys ' + fmt(K.best) : '');
+  const kept = K.kept(), cont = document.getElementById('cont');
+  cont.classList.toggle('hidden', !kept);
+  if (kept) cont.textContent = 'Jatka kisaa (kierros ' + kept.round + '/' + K.F.ROUNDS + ')';
+  menu.classList.remove('hidden');
+}
+function soloComp(saved) {
+  if (saved) saved.throwers.forEach(t => { if (t.p === 'me') t.fit = outfit.id; });
+  K.solo(saved);
+  menu.classList.add('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });
+document.getElementById('cont').addEventListener('click', () => {
+  unlock();
+  const kept = K.kept();
+  if (kept) soloComp(kept); else showMenu();
+});
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+document.getElementById('asu').addEventListener('click', () => AiPelitOutfits.open());
+showAsu();
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="saappaanheitto" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@ figure there on every phone.
 
 The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v19, games/keihas/v18, games/kuula/v12, games/korkeushyppy/v16,
-games/seivashyppy/v17, games/moukari/v14, games/makihyppy/v13.
+games/seivashyppy/v17, games/moukari/v14, games/makihyppy/v13, games/saappaanheitto/v1.
 """
 
 import json
@@ -21,6 +21,7 @@ EVENTS = {
     "seivashyppy/v17": "drawRunner",
     "moukari/v14": "drawThrower",
     "makihyppy/v13": "drawJumper",
+    "saappaanheitto/v1": "drawAthlete",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
 STADIUM = {"pituushyppy/v19", "keihas/v18", "kuula/v12", "korkeushyppy/v16", "seivashyppy/v17"}
@@ -80,10 +81,13 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
     me = fan.evaluate("K.mine().id")
     them = other.evaluate("K.mine().id")
     before = {p: p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") for p in pages}
+    # From yleisurheilu-9 (#395) the row slides with the background, and on a watching phone in
+    # Makihyppy the camera may still drift by a hundredth of a pixel, so staying put means moving
+    # less than a pixel, not exactly 0.
     # Nobody walks by themselves.
     fan.wait_for_timeout(600)
     for p in pages:
-        assert p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") == before[p]
+        assert abs(p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") - before[p]) < 1
     x0 = fan.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(me)}).x")
     x1 = before[fan]
     # From yleisurheilu-8 (#373) a tap on the other friend climbs onto them, so tap clear of them.
@@ -101,7 +105,7 @@ def test_a_tap_walks_my_own_figure_there_on_every_phone(site, browser, path):
         p.wait_for_function(
             f"Math.abs(K.fanSpots.find(f => f.id === {json.dumps(me)}).x - {target}) < 6", timeout=8000
         )
-        assert p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") == before[p]
+        assert abs(p.evaluate(f"K.fanSpots.find(f => f.id === {json.dumps(them)}).x") - before[p]) < 1
     # A tap on the phone on turn does not move anyone; the turn is its own.
     assert athlete.evaluate("K.tapFans(100)") is False
     for p in pages:
