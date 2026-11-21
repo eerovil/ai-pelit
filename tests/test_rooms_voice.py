@@ -347,9 +347,8 @@ def test_two_talking_at_once_are_both_heard(phones):
     hold(a)
     hold(b)
     host.wait_for_function("AiPelitRooms.voice.speakers.slice().sort().join() === 'Aino,Iida'")
-    # A peer's <audio> starts playing a moment after its talk flag arrives (play() is asynchronous), and until
-    # then the chip adds "Napauta ruutua" (sound held back); on a busy machine the first read caught that moment.
-    host.wait_for_function("!document.getElementById('aipr-talk').textContent.includes('Napauta')")
+    # No wait for the hint to go (#512): it shows only when the phone refused to play, never while a
+    # player is still starting or restarting after an error.
     assert host.locator("#aipr-talk").inner_text() in ("🔊 Aino, Iida", "🔊 Iida, Aino")
     a.mouse.up()
     host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Iida'")
@@ -491,6 +490,29 @@ def test_two_talking_with_the_sound_held_back_still_fit_and_a_tap_clears_the_hin
     host.wait_for_function("!document.getElementById('aipr-talk').textContent.includes('Napauta')")
     a.mouse.up()
     b.mouse.up()
+
+
+def test_a_player_that_paused_on_an_error_plays_again_with_no_tap_hint(phones):
+    # #512: Chromium sometimes fails a call's player with a decode error as the sound starts; the
+    # player paused, the room asked for a tap ("Napauta ruutua") and stayed silent until its next
+    # check a second later. Only a refusal to play asks for a tap, and the player starts again.
+    host, a, b = room_of_three(phones)
+    hold(a)
+    host.wait_for_function("AiPelitRooms.voice.speakers.join() === 'Aino'")
+    host.wait_for_function("[...document.querySelectorAll('audio')].every(e => !e.paused)")
+    # The room's own check runs every second and would start it too, so the restart must come
+    # well before that, and the hint must not show on any of the room's redraws (every 250 ms).
+    host.evaluate("""(() => { const t0 = performance.now(); window.__playAt = 0; window.__hint = false;
+      const p0 = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () { if (!__playAt) __playAt = performance.now() - t0; return p0.call(this); };
+      const iv = setInterval(() => { if (document.getElementById('aipr-talk').innerText.includes('Napauta')) __hint = true; }, 20);
+      setTimeout(() => clearInterval(iv), 700);
+      const e = document.querySelectorAll('audio')[0]; e.pause(); e.dispatchEvent(new Event('error')); })()""")
+    host.wait_for_timeout(800)
+    assert not host.evaluate("__hint")
+    assert 0 < host.evaluate("__playAt") < 500
+    assert host.evaluate("[...document.querySelectorAll('audio')].every(e => !e.paused)")
+    a.mouse.up()
 
 
 @pytest.mark.parametrize("kind", ["offer", "answer"])
