@@ -12,7 +12,7 @@ import pytest
 from conftest import ROOT
 
 EVENTS = ["korkeushyppy/v16", "pituushyppy/v19", "seivashyppy/v17", "keihas/v18", "kuula/v12",
-          "moukari/v14", "makihyppy/v13"]
+          "moukari/v14", "makihyppy/v13", "saappaanheitto/v1"]
 
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
