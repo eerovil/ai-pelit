@@ -103,7 +103,8 @@ def test_a_frame_without_back_js_follows_the_page_around_it(site, context):
     page.goto(f"{site.url}games/kehys/v1/")
     page.wait_for_selector("#ai-pelit-back")
     inner = page.frames[1]
-    inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani")
+    # On a clock, not on the empty frame's animation frames, which a loaded run may not draw (#512).
+    inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani", polling=50)
     inner.evaluate("() => { const c = new AudioContext(); c.createOscillator().connect(c.destination); }")
     assert speaker_gains(inner) == [0.04]
 
