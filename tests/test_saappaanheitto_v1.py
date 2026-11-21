@@ -183,3 +183,56 @@ def test_letting_go_between_frames_counts_at_its_own_moment(real, context):
     }""")
     assert abs(log[0] - 0.008) < 1e-6
     assert log[1:] == ["judged"]
+
+
+def test_a_watching_phone_flies_the_same_boot(real, context):
+    # In a room the thrower's phone sends `p` while spinning and `rel` on the lift; a phone watching
+    # draws the spin and flies the same boot to the same mark. Driven here by making this phone's
+    # turn someone else's, as a watching phone has it.
+    page, errors = open_game(real, context)
+    my_turn(page)
+    r = page.evaluate("""() => {
+      th.mine = false; th.phase = 'spin'; th.boot = null;
+      watchFrom({ t: 'p', id: th.id, a: [1.2, 20, 'spin', -1, 9] });
+      const seen = { a: th.a, v: th.v, dir: th.dir, turn: th.turn };
+      watchFrom({ t: 'p', id: 'someone-else', a: [0, 0, 'ready', 1, 0] });   // another phone's: ignored
+      const a = (BEST + 90) * DEG;
+      watchFrom({ t: 'rel', id: th.id, a: [a, VMAX, -1] });
+      // A late `p` after the release does not pull the boot back.
+      watchFrom({ t: 'p', id: th.id, a: [0, 0, 'ready', -1, 0] });
+      return { seen, phase: th.phase, mark: th.mark, want: flight(a, VMAX, -1).mark };
+    }""")
+    assert r["seen"] == {"a": 1.2, "v": 20, "dir": -1, "turn": 9}
+    assert r["phase"] in ("fly", "land")
+    page.wait_for_function("th.phase === 'land'", timeout=10000)
+    assert page.evaluate("th.mark") == r["want"]
+    assert errors == []
+
+
+def test_a_second_finger_does_not_take_the_boot(real, context):
+    page, errors = open_game(real, context)
+    my_turn(page)
+    r = page.evaluate("""() => {
+      spinStart({ pointerId: 7, clientX: ring.cx, clientY: ring.cy + ring.r, timeStamp: performance.now() });
+      spinStart({ pointerId: 8, clientX: ring.cx + ring.r, clientY: ring.cy, timeStamp: performance.now() });
+      const kept = spinPtr;
+      spinEnd({ pointerId: 8, clientX: ring.cx + ring.r, clientY: ring.cy, timeStamp: performance.now() });
+      return { kept, ptr: spinPtr, phase: th.phase };
+    }""")
+    assert r == {"kept": 7, "ptr": 7, "phase": "spin"}
+    assert errors == []
+
+
+def test_a_reload_mid_meet_offers_to_go_on(real, context):
+    page, errors = open_game(real, context)
+    my_turn(page)
+    circles(page, 3, 300, stop_deg=133)
+    page.wait_for_function("K.mine().marks.length === 1", timeout=10000)
+    mark = page.evaluate("K.mine().marks[0]")
+    page.reload()
+    page.wait_for_function("typeof K !== 'undefined'")
+    page.wait_for_selector("#cont:not(.hidden)")
+    page.click("#cont")
+    page.wait_for_function("K.comp !== null && th !== null")
+    assert page.evaluate("K.mine().marks[0]") == mark
+    assert errors == []
