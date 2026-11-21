@@ -106,3 +106,28 @@ def test_sisu_driven_by_a_friend_glides_and_stops_where_they_let_go(site, browse
     assert max(after) <= after[-1] + 0.05, (max(after), after[-1])
     assert after[-1] == after[-30]
     assert not host.errors and not guest.errors, host.errors + guest.errors
+
+
+def test_sisu_drawn_to_an_opening_s_middle_glides_with_no_speed(site, browser):
+    """Under an opening SISU is drawn to its middle while its speed stays 0: on the host it glides there too,
+    each frame a little, not jumping with each message as a SISU at rest would."""
+    host, guest = room(site, browser, names=("Eero", "Aino"))
+    for p in (host, guest):
+        p.evaluate("closeCard()")
+    host.evaluate("openHome(); closeCard()")
+    guest.wait_for_function("G.mode === 'home'")
+    guest.evaluate("""(() => { const r = ROOMS.find(r => r.id === 'ohjaamo');
+      Object.assign(crew, { x: (r.x0 + r.x1) / 2, y: UP, to: null, moving: false, climbing: false }); enterRoom(true); toHelm(); })()""")
+    guest.wait_for_function("G.mode === 'sub'", timeout=5000)
+    host.wait_for_function(f"net.helm === {guest.evaluate('AiPelitRooms.me')!r}")
+    host.evaluate(SAMPLE, "sub.x")
+    guest.evaluate("G.hold = false; input.x = input.y = 0; Object.assign(sub, { x: HOLES[0][0] + 2, y: ICE_Y + 5, vx: 0, vy: 0 })")
+    host.wait_for_function("window.__xs.length >= 400", timeout=20000)
+    assert guest.evaluate("sub.vx === 0 && sub.vy === 0 && Math.abs(sub.x - holeMid(0)) < 0.5")
+    lo, hi = host.evaluate("[HOLES[0][0] + 3, holeMid(0) - 2]")
+    xs = [x for _, x in host.evaluate("window.__xs")]
+    way = [(a, b) for a, b in zip(xs, xs[1:]) if lo < a < hi and lo < b < hi]
+    assert len(way) > 10, [round(x, 2) for x in xs]
+    still = sum(1 for a, b in way if abs(b - a) < 1e-6)
+    assert still < 0.25 * len(way), (still, len(way), [round(x, 2) for x in xs])
+    assert not host.errors and not guest.errors, host.errors + guest.errors

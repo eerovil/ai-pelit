@@ -265,10 +265,13 @@ const stampOf = v => Number.isFinite(+v) && v !== null && v !== '' ? +v : null;
 function subPack() { return [r2(sub.x), r2(sub.y), sub.dir, r2(sub.vx), r2(sub.vy), stamp()]; }
 function setSubT(T) {
   if (!Array.isArray(T)) { net.subT = null; net.subTr = null; return; }
+  const P = net.subT;
   net.subT = T;
   if (!net.subTr) net.subTr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 40 });
-  // A SISU at rest (its driver let go, stopSub()) is drawn where it stopped, not driven on past it.
-  net.subTr[!+T[3] && !+T[4] ? 'snap' : 'push'](stampOf(T[5]), { x: +T[0] || 0, y: +T[1] || 0 });
+  // A SISU at rest (its driver let go, stopSub(): no speed, and the spot heard last) is drawn where it
+  // stopped, not driven on past it. With no speed it may still move (drawn to an opening's middle): that glides.
+  const rest = !+T[3] && !+T[4] && P && +P[0] === +T[0] && +P[1] === +T[1];
+  net.subTr[rest ? 'snap' : 'push'](stampOf(T[5]), { x: +T[0] || 0, y: +T[1] || 0 });
 }
 function setOther(id, p) {
   const o = net.others[id];

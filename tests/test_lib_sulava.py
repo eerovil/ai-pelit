@@ -164,3 +164,17 @@ def test_a_wrong_guess_is_drawn_away_without_a_jump(page):
     assert max(st) < 0.25, max(st)  # drawn in one frame, the 0.6 m would be a leap
     assert sum(1 for s in st if s > 1.2 * walk) >= 4  # over a few frames
     assert min(st) > -1e-9
+
+
+def test_a_page_that_slept_with_no_new_spot_waits_at_the_newest(page):
+    """No spot came while the page was hidden: it wakes with the player at the newest spot, not 0.25 s on
+    past it, and goes on from there once a spot comes."""
+    r = page.evaluate("""() => {
+      const tr = AiPelitSulava.track({ keys: ['x'], minDelay: 0.1, maxDelay: 0.1 });
+      for (let i = 0; i <= 10; i++) { tr.push(i * 0.1, { x: i }, 50 + i * 0.1); tr.at(50 + i * 0.1); }
+      const woke = [tr.at(55.0).x, tr.at(55.02).x];
+      tr.push(5.0, { x: 50 }, 55.03);
+      return { woke, after: tr.at(55.05).x };
+    }""")
+    assert r["woke"] == [10, 10]
+    assert 10 < r["after"] <= 50

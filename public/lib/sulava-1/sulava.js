@@ -48,6 +48,9 @@
     // When the player was drawn on a guess (past the newest spot) and a spot then comes that says
     // otherwise, the difference is drawn away over EASE s instead of in one frame: err, per key.
     var out = {}, was = {}, err = {}, guessed = false, heard = 0, seen = 0, EASE = 0.1;
+    // After a jump of the drawn moment (the first frame, a page that slept) no guess is drawn until a
+    // new spot comes: the player waits at the newest spot known.
+    var still = false;
     var api = { time: null, delay: Math.min(maxD, Math.max(minD, 0.12)), push: push, snap: snap, at: at, reset: reset, size: function () { return S.length; } };
 
     function copy(v) { var o = {}; for (var k = 0; k < keys.length; k++) o[keys[k]] = +v[keys[k]] || 0; return o; }
@@ -80,7 +83,7 @@
       var g = t - n.t;
       if (g < 1) gap += (g - gap) * 0.2;
       S.push({ t: t, v: s });
-      heard++;
+      heard++; still = false;
       if (S.length > KEEP) S.shift();
       lag(a, t);
       late += ((a - t) - offset() - late) * 0.2;
@@ -107,7 +110,7 @@
       }
       guess = true;
       var q = S[S.length - 2];
-      if (!q || n.t - q.t > 0.5) return blend(n.v, n.v, 0, o);  // no speed to go on with
+      if (still || !q || n.t - q.t > 0.5) return blend(n.v, n.v, 0, o);  // no speed to go on with
       return blend(q.v, n.v, 1 + Math.min(p - n.t, extra) / (n.t - q.t), o);
     }
     function at(a) {
@@ -116,7 +119,7 @@
       var target = a - offset() - api.delay;
       var dt = last === null ? 0 : a - last;
       last = a;
-      if (pt === null || dt > 1 || dt < 0 || Math.abs(target - pt) > 1) pt = target;  // first frame, or the page slept
+      if (pt === null || dt > 1 || dt < 0 || Math.abs(target - pt) > 1) { pt = target; still = true; }  // first frame, or the page slept
       else pt += dt + Math.max(-CATCH * dt, Math.min(CATCH * dt, target - pt - dt));
       var k, key, fade = Math.exp(-Math.max(0, dt) / EASE);
       if (guessed && heard !== seen && api.time !== null && dt > 0 && dt <= 1) {
