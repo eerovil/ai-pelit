@@ -464,7 +464,13 @@ function happen(ev) { if (R.isHost) events.push(ev); show(ev); }
 // spots heard before no longer say where they are, and a friend's spots still carry the friend's last stamp until
 // their phone sends again. Forget them: the newest spot the round has is drawn as it is, and the next one starts
 // the glide again, on the host and on every guest.
-function restart(p) { if (p && p !== player) p.tr.reset(); }
+function restart(p) {
+  if (!p || p === player) return;
+  // On a guest the spot in the message that brought the event says where they are now: draw it from this frame on.
+  // The host draws its own newest spot (`p.x`) while the track is empty.
+  const k = p.heard;
+  if (k) { p.tr.snap(k.s, k); p.x = k.x; p.y = k.y; p.a = k.a; } else p.tr.reset();
+}
 function show(ev) {
   const p = people[ev[1]];
   switch (ev[0]) {
@@ -1501,6 +1507,7 @@ function guestState(m, snap) {
     // When that changes (the computer takes over a friend, or gives them back) the clocks differ: start again.
     const own = Number.isFinite(q[6]), src = own ? 'f' : 'h', st = own ? q[6] : (Number.isFinite(m.s) ? m.s : null);
     const spot = { x: q[0], y: q[1], a: q[2] };
+    p.heard = { s: st, x: q[0], y: q[1], a: q[2] };
     if (snap || src !== p.src) { p.tr.snap(st, spot); p.x = q[0]; p.y = q[1]; p.a = q[2]; } else p.tr.push(st, spot);
     p.src = src;
   });

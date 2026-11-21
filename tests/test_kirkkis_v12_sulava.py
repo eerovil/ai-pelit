@@ -58,6 +58,7 @@ def phones(site, browser, seeker, names=("Eero", "Aino"), mode="kirkkis"):
         p.wait_for_function("people.length === 5 && phase === 'count'")
     host.evaluate("Math.random = window.__rnd")
     assert host.evaluate("people.indexOf(seeker)") == seeker
+    host.relay = relay
     return pages
 
 
@@ -122,13 +123,25 @@ def run_and_watch(host, run, watch, others):
     assert not errors, errors
 
 
-# Where person `i` is drawn, each time the screen is drawn.
-DRAWN = """(i) => { window.__at = []; const d = window.draw;
-  window.draw = () => { window.__at.push([people[i].x, people[i].y]); d(); }; }"""
+# Where person `i` is drawn, each time the screen is drawn; and how many frames were drawn when the first message
+# that told of a recount or a tag arrived (`__ev`, after the game has read it).
+DRAWN = """(i) => { window.__at = []; window.__ev = null; const d = window.draw;
+  window.draw = () => { window.__at.push([people[i].x, people[i].y]); d(); };
+  AiPelitRooms.on('message', m => { if (window.__ev === null && m.t === 'ks' && (m.ev || []).some(e => e[0] === 'all' || e[0] === 'tag'))
+    window.__ev = window.__at.length; }); }"""
 
 
 def drawn_since(page, n):
     return page.evaluate(f"window.__at.slice({n})")
+
+
+def drawn_from_event(page, x, y):
+    """From the first frame after the message that told of it, a guest draws the person at (x, y)."""
+    page.wait_for_function("window.__ev !== null", timeout=2000)
+    page.wait_for_timeout(500)
+    at = page.evaluate("window.__at.slice(window.__ev)")
+    assert len(at) > 10
+    assert all(abs(a - x) < 0.05 and abs(b - y) < 0.05 for a, b in at), (x, y, at[:5], at[-5:])
 
 
 def test_a_friend_seeking_goes_back_to_the_base_at_once_on_every_phone(site, browser):
@@ -143,16 +156,13 @@ def test_a_friend_seeking_goes_back_to_the_base_at_once_on_every_phone(site, bro
         p.evaluate(DRAWN, me)
     # Aino's phone falls silent, so only the round itself can tell where she is.
     aino.evaluate("AiPelitRooms.send = () => {}")
-    host.evaluate("phase = 'seek'; allSaved(player)")
-    bx, by = host.evaluate(f"[people[{me}].x, people[{me}].y]")
+    n, bx, by = host.evaluate(f"phase = 'seek'; allSaved(player); [window.__at.length, people[{me}].x, people[{me}].y]")
     assert abs(bx - 3) + abs(by - 30) > 5  # the base is far from where she stood
-    for p in (host, ville):
-        p.wait_for_function(f"Math.abs(people[{me}].x - {bx}) < 0.05 && Math.abs(people[{me}].y - {by}) < 0.05", timeout=2000)
+    # The host from its next frame, Ville from the first frame after the message that told him.
     host.wait_for_timeout(500)
-    for p in (host, ville):
-        n = p.evaluate("window.__at.length")
-        p.wait_for_timeout(300)
-        assert all(abs(x - bx) < 0.05 and abs(y - by) < 0.05 for x, y in drawn_since(p, n))
+    at = drawn_since(host, n)
+    assert len(at) > 10 and all(abs(x - bx) < 0.05 and abs(y - by) < 0.05 for x, y in at), (bx, by, at[:5])
+    drawn_from_event(ville, bx, by)
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
 
@@ -175,16 +185,47 @@ def test_a_running_friend_tagged_stops_where_they_were_tagged(site, browser):
     # The host, who is it, tags her where she runs: its own player jumps next to her (the rules use her newest spot).
     host.evaluate(f"(() => {{ const h = people[{me}]; Object.assign(player, {{ x: h.x - 0.3, y: h.y }}); timer = Math.max(timer, 20); phase = 'seek'; seeker.st = 'seek'; rulesTag(); }})()")
     assert host.evaluate(f"seeker === people[{me}] && people[{me}].freeze > 0")
-    tx, ty = host.evaluate(f"[people[{me}].x, people[{me}].y]")
-    ville.wait_for_function(f"seeker === people[{me}]", timeout=2000)
-    # From a moment after the tag (the next message), every frame on both phones draws her where she was tagged.
-    for p in (host, ville):
-        p.wait_for_timeout(250)
-        n = p.evaluate("window.__at.length")
-        p.wait_for_timeout(500)
-        at = drawn_since(p, n)
-        assert len(at) > 10
-        assert all(abs(x - tx) < 0.05 and abs(y - ty) < 0.05 for x, y in at), (tx, ty, at[:5], at[-5:])
+    n, tx, ty = host.evaluate(f"[window.__at.length, people[{me}].x, people[{me}].y]")
+    # Every frame from the tag on (on Ville from the message that told him) draws her where she was tagged.
+    host.wait_for_timeout(500)
+    at = drawn_since(host, n)
+    assert len(at) > 10 and all(abs(x - tx) < 0.05 and abs(y - ty) < 0.05 for x, y in at), (tx, ty, at[:5], at[-5:])
+    drawn_from_event(ville, tx, ty)
     aino.evaluate("letGo()")
+    errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+# On a guest: each time the host's rows for person `i` change whose clock they carry (the computer took over a friend,
+# or gave them back), the spot that row brought, and where the next frame drew them.
+SWITCH = """(i) => { window.__sw = []; let src = people[i].src, want = null; const d = window.draw;
+  AiPelitRooms.on('message', m => { if (m.t === 'ks' && people[i].src !== src) { src = people[i].src;
+    const q = m.p[i]; want = [src, q[0], q[1]]; } });
+  window.draw = () => { d(); if (want) { window.__sw.push([...want, people[i].x, people[i].y]); want = null; } }; }"""
+
+
+def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_host_says(site, browser):
+    """A friend's phone drops mid-run: the host's computer runs their player, so the rows carry the host's clock and
+    no longer the friend's; when the phone is back, the friend's again. A third phone starts the track again at each
+    change, drawing the row's spot from the next frame, not a guess from the other clock."""
+    host, aino, ville = phones(site, browser, seeker=0, names=("Eero", "Aino", "Ville"))
+    me = 1
+    aino.evaluate("Object.assign(player, { x: 1, y: 11 })")
+    ville.wait_for_function(f"Math.abs(people[{me}].x - 1) < 0.05 && people[{me}].src === 'f'", timeout=5000)
+    ville.evaluate(SWITCH, me)
+    aino.evaluate("joy = { id: -1, ox: 100, oy: 100, x: 140, y: 100 }")
+    host.wait_for_function(f"people[{me}].x > 3", timeout=5000)
+    host.relay.drop(aino)
+    host.wait_for_selector("#aipr-goOn", state="visible", timeout=10000)
+    host.click("#aipr-goOn")
+    host.wait_for_function(f"people[{me}].ctrl === 'bot'")
+    ville.wait_for_function("window.__sw.length >= 1", timeout=5000)
+    aino.evaluate("letGo()")
+    host.relay.back(aino)
+    host.wait_for_function(f"people[{me}].ctrl === 'remote' && Number.isFinite(people[{me}].ts)", timeout=20000)
+    ville.wait_for_function("window.__sw.length >= 2", timeout=5000)
+    sw = ville.evaluate("window.__sw")
+    assert [s[0] for s in sw[:2]] == ["h", "f"], sw
+    assert all(abs(x - a) < 0.01 and abs(y - b) < 0.01 for _, a, b, x, y in sw), sw
     errors = [e for p in (host, aino, ville) for e in p.errors]
     assert not errors, errors
