@@ -61,9 +61,11 @@ export const GAMES = {
   // '<100|200|400>-tasainen' (no hurdles).
   aitajuoksu: { order: 'low', boards: /^(main|(200|400)-aidat|(100|200|400)-tasainen)$/ },
   eukonkanto: { order: 'low', boards: /^main$/ }, // fastest wife-carrying run, seconds, drops' +15 s included
-  kaaosrata: { order: 'low', boards: /^(main|(hihna|laatat|finaali)[78]?)$/, first: 'main',
-    boardVersions: { hihna: [6, 6], laatat: [6, 6], finaali: [6, 6], hihna7: [7, 7], laatat7: [7, 7], finaali7: [7, 7],
-      hihna8: [8, Infinity], laatat8: [8, Infinity], finaali8: [8, Infinity] } }, // fastest obstacle course, seconds
+  // v10 (#493): the 3D courses with heights have their own lists ('main10'...), the shelf's first.
+  kaaosrata: { order: 'low', boards: /^(main|(hihna|laatat|finaali)[78]?|(main|hihna|laatat|finaali)10)$/, first: 'main10',
+    boardVersions: { main: [1, 9], hihna: [6, 6], laatat: [6, 6], finaali: [6, 6], hihna7: [7, 7], laatat7: [7, 7], finaali7: [7, 7],
+      hihna8: [8, 9], laatat8: [8, 9], finaali8: [8, 9],
+      main10: [10, Infinity], hihna10: [10, Infinity], laatat10: [10, Infinity], finaali10: [10, Infinity] } }, // fastest obstacle course, seconds
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
