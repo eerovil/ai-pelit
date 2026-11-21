@@ -22,17 +22,25 @@ JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free 
 # pillars) at 62 units/s by the wall clock towards `dir` (-1 up, 1 down), until 120 units short of the far
 # end, where the other fighter stands. By the clock and not by the host's frames, so a busy test machine
 # that drops the host's frames does not make the move itself uneven: what is measured is the guest's drawing.
+# The spot is set before the host's own step, which sends it, so each spot goes with the stamp of its own
+# moment (set after it, a message would carry the frame before's spot with this frame's stamp: on a busy
+# machine, where the host's frames come 10-100 ms apart, the spots then read 15-190 units/s, not 62).
 RUN = """([i, dir]) => { window.__run = false; let t0 = null, y0 = 0; const s = window.step;
-  window.step = dt => { s(dt); const f = fighters[i];
-    if (!window.__run) { t0 = null; return; }
-    const now = performance.now() / 1000; if (t0 === null) { t0 = now; y0 = f.y; }
-    const y = y0 + dir * 62 * (now - t0); f.y = dir < 0 ? Math.max(130, y) : Math.min(310, y); }; }"""
-# Records, each time the screen is drawn, where fighter `i` is drawn along the arena, and when a host's
-# message arrived (so a stall of the test machine, with no message for a while, can be told from a jerk).
+  window.step = dt => { const f = fighters[i];
+    if (!window.__run) t0 = null;
+    else {
+      const now = AiPelitSulava.now(); if (t0 === null) { t0 = now; y0 = f.y; }
+      const y = y0 + dir * 62 * (now - t0); f.y = dir < 0 ? Math.max(130, y) : Math.min(310, y);
+    }
+    s(dt); }; }"""
+# Records, each frame, where fighter `i` is drawn along the arena and the moment its track was asked
+# (asDrawn(), right before the drawing), and when a host's message arrived (so a stall of the test machine,
+# with no message for a while, can be told from a jerk).
 SAMPLE = """(i) => { window.__ys = []; window.__got = [];
   AiPelitRooms.on('message', m => { if (m.t === 's') window.__got.push(performance.now() / 1000); });
-  const d = window.draw;
-  window.draw = () => { if (window.__ys.length < 300) window.__ys.push([performance.now() / 1000, fighters[i].y]); d(); }; }"""
+  const a = window.asDrawn;
+  window.asDrawn = () => { const t = performance.now() / 1000, kept = a();
+    if (window.__ys.length < 300) window.__ys.push([t, fighters[i].y]); return kept; }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -73,7 +81,10 @@ def index(page):
 def glides(page):
     """The speed over each two drawn frames while the fighter ran: about the same all the way."""
     ys, got = page.evaluate("[window.__ys, window.__got]")
-    sp = [(t2, abs(b - a) / (t2 - t0)) for (t0, a), (t2, b) in zip(ys, ys[2:]) if t2 > t0]
+    # Only frames that came in time on the watching page itself (both gaps under 40 ms, a 60 Hz frame is 17):
+    # a frame late on a busy test machine and the quick one after it measure the machine, not the drawing.
+    sp = [(t2, abs(b - a) / (t2 - t0)) for (t0, a), (t1, _), (t2, b) in zip(ys, ys[1:], ys[2:])
+          if t2 > t0 and t1 - t0 < 0.04 and t2 - t1 < 0.04]
     moving = [i for i, (_, v) in enumerate(sp) if v > 10]
     assert len(moving) > 50, len(moving)
     # Leave out the start and the stop: the drawing speeds up and slows down there over a moment.
