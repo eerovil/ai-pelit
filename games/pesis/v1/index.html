@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pesis</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#2f6b33;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (AGENTS.md rule 4). */
+  canvas{position:fixed;left:0;top:0;right:0;bottom:0;width:100%;height:100%;display:block;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(20,44,22,.9);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:40px;letter-spacing:1px;color:#ffe08a;text-shadow:0 3px 0 #6b4a10}
+  #result{margin:0;font-size:26px;font-weight:800}
+  #result.win{color:#7ee081}#result.lose{color:#ff7a6b}#result.draw{color:#ffd166}
+  #foe{margin:4px 0 0;font-size:17px;color:#ffe2b0}
+  .go{font:800 20px system-ui,sans-serif;padding:13px 22px;border:0;border-radius:16px;background:#ffd166;color:#2a1a05;box-shadow:0 4px 0 #9a6b12}
+  #resume{background:#7ee081;box-shadow:0 4px 0 #2f7a3a}
+  .go[hidden]{display:none}
+  .go:active{transform:translateY(3px);box-shadow:0 1px 0 #9a6b12}
+  #multi{font:700 17px system-ui,sans-serif;padding:11px 18px;border:2px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166}
+  #stats{margin:0;font-size:14px;color:#cfe5c8}
+  .help{margin:6px 0 0;font-size:13px;line-height:1.45;color:#c4dcbd;max-width:320px}
+  .help.short{display:none}
+  /* Sideways (#95): two columns, so the menu fits a 360 px tall screen without scrolling. */
+  @media (orientation:landscape) and (max-height:520px){
+    #menu{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:repeat(5,auto);align-content:center;justify-items:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu h1{grid-column:1;grid-row:1;font-size:34px}
+    #result{grid-column:1;grid-row:2;font-size:22px}
+    #foe{grid-column:1;grid-row:3;margin:0}
+    #stats{grid-column:1;grid-row:4}
+    .help.short{display:block;grid-column:1;grid-row:5;margin:0;max-width:330px}
+    .help.long{display:none}
+    #resume{grid-column:2;grid-row:1;align-self:end}
+    #go{grid-column:2;grid-row:2/4;align-self:center}
+    #multi{grid-column:2;grid-row:4/6;align-self:start}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu">
+  <h1>🥎 Pesis</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button class="go" id="resume" hidden>Jatka ottelua</button>
+  <button class="go" id="go">Pelaa yksin</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <p id="stats"></p>
+  <p class="help long">Yksi jakso: kumpikin joukkue lyö kerran. Lukkari syöttää pallon ylös: paina <b>Lyö</b>, kun pallo putoaa vihreälle. Aikaisin lyöty lähtee vasemmalle, myöhään oikealle.
+    Juokse painamalla <b>Vasen</b> ja <b>Oikea</b> vuorotellen. Pesällä seis, uusi painallus vie seuraavalle. Kentällä juokse pallolle ja heitä pesään tai kotiin lukkarille.<br>
+    Kolme paloa vaihtaa vuoron. Kavereiden kanssa puhelimet jaetaan kahteen joukkueeseen, ja tietokone pelaa loput paikat.</p>
+  <p class="help short">Lyö, kun pallo putoaa vihreälle. Juokse jalat vuorotellen, pesällä seis. Kentällä juokse pallolle ja heitä pesään. Kolme paloa vaihtaa vuoron.</p>
+</div>
+<script src="../../../rooms.js" data-game="pesis" data-min="2" data-max="8"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="engine.js"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+const menu = document.getElementById('menu');
+const R = window.AiPelitRooms;
+
+// ---------- Saves: shared by every version of this game ----------
+const KEY = 'ai-pelit:pesis:';
+function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
+const stats = Object.assign({ taso: 1, voitot: 0, haviot: 0, tasapelit: 0, juoksut: 0, kaverit: { voitot: 0, haviot: 0, tasapelit: 0 } }, load('stats', {}));
+level = stats.taso;
+const FOES = ['Hiekkasorsat', 'Pesäketut', 'Kotipolun Kiri', 'Lukkarin Pojat', 'Kenttäkotkat', 'Mestaripesis'];
+function foeName(l) { return l <= FOES.length ? FOES[l - 1] : FOES[FOES.length - 1] + ' ' + (l - FOES.length + 1); }
+const ROOM_LEVEL = 4;
+const COLORS = [['#2f6fd6', '#123c7a'], ['#d63a3a', '#701414']];
+
+// ---------- The screen ----------
+let box = { left: 0, top: 0 }, W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, wide = false, sc = 10, ctrlTop, midX, midY, viewTop, viewBot, viewL, viewR;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  // Sized from the canvas's own box, which every touch is read against too (Hiihto v5).
+  box = c.getBoundingClientRect();
+  W = box.width || innerWidth; H = box.height || innerHeight;
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  wide = W > H && H < 520;
+  if (wide) {
+    // Sideways the field runs across the screen, home on the left, and the buttons float in the
+    // lower corners under the thumbs.
+    ctrlTop = H; viewTop = safeT + 50; viewBot = H - safeB; viewL = safeL; viewR = W - safeR;
+    sc = Math.min((viewBot - viewTop) / (2 * FW + 3), 16);
+  } else {
+    const ctrlH = Math.max(140, Math.min(180, H * 0.24));
+    ctrlTop = H - safeB - ctrlH; viewTop = safeT + 56; viewBot = ctrlTop; viewL = 0; viewR = W;
+    sc = Math.min(W / (2 * FW + 2), 16);
+  }
+  midX = (viewL + viewR) / 2; midY = (viewTop + viewBot) / 2;
+}
+addEventListener('resize', resize);
+document.addEventListener('fullscreenchange', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe(c);
+resize();
+
+let camX = 0, camY = 10;
+// A spot on the field to the screen: upright home at the bottom, sideways home on the left.
+function SP(wx, wy) { return wide ? [midX + (wy - camY) * sc, midY + (wx - camX) * sc] : [midX + (wx - camX) * sc, midY - (wy - camY) * sc]; }
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.06, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+const S = AiPelitAanet;
+S.load(['puu', 'osuma', 'suhahdus', 'pilli', 'pilli2', 'onnistui', 'naksu', 'askel', 'askel2', 'voitto', 'tappio']);
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+// What each of the engine's events sounds like; heard on every phone as its event first shows.
+function eventSound(k) {
+  if (k === 'lyonti') S.play('puu', { vol: 0.9 }) || tone(180, 0.08, 'triangle', 0.1);
+  else if (k === 'huti') S.play('suhahdus', { vol: 0.5 }) || tone(300, 0.08, 'triangle', 0.04, 160);
+  else if (k === 'koppi' || k === 'kiinni') S.play('osuma', { vol: 0.7 }) || tone(330, 0.06, 'triangle', 0.06);
+  else if (k === 'heitto') S.play('suhahdus', { vol: 0.25, rate: 1.3 });
+  else if (k === 'palo') S.play('pilli', { vol: 0.7 }) || tone(2000, 0.2, 'sine', 0.05);
+  else if (k === 'juoksu') S.play('onnistui', { vol: 0.3 }) || tone(880, 0.15, 'sine', 0.04);
+  else if (k === 'laiton') S.play('naksu', { vol: 0.5 }) || tone(200, 0.05, 'square', 0.03);
+  else if (k === 'vaihto') S.play('pilli2', { vol: 0.7 }) || tone(1900, 0.4, 'sine', 0.05);
+}
+let heardEv = 0;
+function hearEvents() {
+  for (const e of events) if (e.id > heardEv) { heardEv = e.id; eventSound(e.k); }
+}
+
+// ---------- This phone ----------
+let net = { on: false, round: '', sendT: 0, setup: null };
+const myId = () => net.on ? R.me : 'me';
+const myPlayer = () => players.find(p => p.ctl && p.ctl === myId()) || null;
+function ctrlName(id) { const k = ctrls.find(q => q.id === id); return k ? k.name || '' : ''; }
+let myTeam = 0;
+
+// A match alone: this phone plays its whole team (each batter in turn, the fielder nearest the ball).
+function newMatch(resume) {
+  net = { on: false, round: '', sendT: 0, setup: null };
+  ctrls = [{ id: 'me', name: 'Sinä', t: 0, slots: [0, 1, 2, 3, 4, 5, 6, 7, 8], fix: -1, act: -1 }];
+  myTeam = 0; first = 0; level = stats.taso;
+  newGame([ROOM_LEVEL, level]);
+  if (resume) restore(resume);
+  menu.classList.add('hidden');
+  heardEv = evN;
+}
+// The match alone is kept between plays, so a reload or a trip to the shelf does not lose it.
+function keep() {
+  if (net.on || state === 'over') return;
+  if (state !== 'ready') return;
+  const m = { lv: level, inn, bt, first, sc: score, outs, tries, batter, queue,
+    r: runners.map(r => r.i + ':' + r.at), out: players.filter(p => p.out).map(idx), home: players.filter(p => p.home).map(idx) };
+  const k = JSON.stringify(m);
+  if (k !== keptKey) { keptKey = k; save('ottelu', m); }
+}
+let keptKey = '';
+function restore(m) {
+  inn = m.inn; bt = m.bt; score = m.sc.slice(); outs = m.outs; queue = m.queue.slice();
+  for (const p of players) { p.out = m.out.includes(idx(p)); p.home = m.home.includes(idx(p)); }
+  runners = m.r.map(s => { const [i, at] = s.split(':').map(Number); return { i, at, run: false, d: 0, bat: false, wait: 0, cpuGo: false }; });
+  batter = -1; nextBatter(); if (m.batter >= 0) { queue.unshift(batter); batter = m.batter; tries = m.tries; }
+  for (const k of ctrls) if (k.t === bt) k.act = batter;
+  ready();
+}
+
+// ---------- The frame ----------
+let lastStep = 0;
+function update(dt) {
+  if (!players.length || state === 'menu' || state === 'room' || state === 'done') return;
+  if (net.on && !R.isHost) { guestUpdate(dt); return; }
+  if (net.on && R.paused) {
+    // While a phone is away nothing moves, and a pitch in the air is thrown again afterwards.
+    if (state === 'pitch') retoss();
+    return;
+  }
+  assignCtl();
+  stepGame(dt);
+  lastStep = performance.now();
+  if (!net.on) keep();
+  if (state === 'over') { if (net.on) hostEnd(); else endMatch(); return; }
+  if (net.on && (net.sendT -= dt) <= 0) { net.sendT = 1 / 15; R.send(snapshot()); }
+}
+batterRemote = () => batter >= 0 && !!P(batter).ctl && P(batter).ctl !== myId();
+onToss = p => { if (net.on && R.isHost) R.send({ t: 'toss', round: net.round, n: p.n, ap: p.ap }); };
+
+// What this phone does now, from the match as it is (on a guest, as the host last said).
+function mode() {
+  const me = myPlayer();
+  if (!me) return 'wait';
+  const i = idx(me);
+  if ((state === 'pitch' || state === 'ready') && i === batter) return state === 'pitch' ? 'bat' : 'batwait';
+  if (state !== 'play') return 'wait';
+  const r = runners.find(q => q.i === i);
+  if (r) return r.run ? 'run' : 'base';
+  if (me.t !== bt) return ball.held === i ? 'throw' : (ball.held < 0 && !ball.th ? 'field' : 'fieldwait');
+  return 'wait';
+}
+// The player's actions: run here alone or on the host, sent to the host from a guest.
+function act(what, arg, e) {
+  const me = myPlayer();
+  if (!me) return;
+  if (what === 'bat') {
+    // Judged at the tap's own moment, not the last frame's (#404).
+    const late = e && e.timeStamp ? Math.max(0, (e.timeStamp - (net.on && !R.isHost ? 0 : lastStep)) / 1000) : 0;
+    if (net.on && !R.isHost) {
+      if (!lp) return;
+      const ph = (e && e.timeStamp ? e.timeStamp : performance.now()) / 1000 - lp.t0;
+      if (lp.tapped === lp.n) return;
+      lp.tapped = lp.n;
+      R.send({ t: 'b', round: net.round, n: lp.n, ph: Math.round(ph * 1000) / 1000 });
+      return;
+    }
+    if (pitch) batTap(pitch.n, pitch.t + Math.min(0.05, late));
+    return;
+  }
+  if (what === 'foot') {
+    S.play(arg === 1 ? 'askel' : 'askel2', { vol: 0.6 }) || tone(arg === 1 ? 190 : 230, 0.03, 'triangle', 0.04);
+    // A guest shows its own step at once (the glow on the next foot); the host's step() counts it.
+    if (net.on && !R.isHost) { me.foot = arg; me.steps++; R.send({ t: 'f', round: net.round, p: playN, k: arg }); return; }
+    footPress(idx(me), arg);
+    return;
+  }
+  if (what === 'throw') {
+    if (net.on && !R.isHost) { R.send({ t: 'w', round: net.round, p: playN, b: arg }); return; }
+    if (ball.held === idx(me)) throwTo(arg);
+  }
+}
+
+// ---------- Playing in a room (rooms.js) ----------
+// The host runs the match; the others send their taps and draw what the host sends.
+function setupFor(round, list) {
+  const per = [list.filter((_, i) => i % 2 === 0), list.filter((_, i) => i % 2 === 1)];
+  const ct = [];
+  for (const t of [0, 1]) {
+    const m = per[t].length;
+    // Each phone bats every m-th place of its team's order, and fields one fixed place.
+    per[t].forEach((ph, j) => ct.push({ id: ph.id, name: ph.name, t, slots: [0, 1, 2, 3, 4, 5, 6, 7, 8].filter(i => i % m === j), fix: FIX[j] }));
+  }
+  return { t: 'setup', round, ct, first: 0 };
+}
+function applySetup(s) {
+  net = { on: true, round: s.round, sendT: 0, setup: s };
+  ctrls = s.ct.map(k => ({ id: k.id, name: k.name, t: k.t, slots: k.slots.slice(), fix: k.fix, act: -1, away: false }));
+  const me = s.ct.find(k => k.id === R.me);
+  myTeam = me ? me.t : 0; first = s.first;
+  newGame([ROOM_LEVEL, ROOM_LEVEL]);
+  for (const p of players) { p.tr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 6 }); }
+  ballTr = AiPelitSulava.track({ keys: ['x', 'y', 'z'], jump: 6 });
+  heardEv = evN; lp = null;
+  menu.classList.add('hidden');
+}
+const r2 = v => Math.round(v * 100) / 100;
+function snapshot() {
+  return { t: 's', round: net.round, ck: AiPelitSulava.now(), st: state, stT: r2(stT), inn, bt, sc: score, o: outs, tr: tries, ba: batter,
+    pn: pitch ? [pitch.n, r2(pitch.ap), r2(pitch.t), pitch.done ? 1 : 0] : null, pl: playN,
+    b: [r2(ball.x), r2(ball.y), r2(ball.z), ball.held, ball.th ? 1 : 0],
+    p: players.map(p => [r2(p.x), r2(p.y), r2(p.fx), r2(p.fy), p.ctl ? ctrls.findIndex(k => k.id === p.ctl) : -1, (p.out ? 1 : 0) | (p.home ? 2 : 0), p.steps]),
+    r: runners.map(r => [r.i, r.at, r.run ? 1 : 0, r.bat ? 1 : 0]),
+    ev: events.map(e => [e.id, r2(e.x), r2(e.y), e.s, e.c, e.k, e.w, r2(e.t)]) };
+}
+let ballTr = null, lp = null, lastSnap = 0;
+function applySnapshot(s) {
+  const was = state, st = Number.isFinite(s.ck) ? s.ck : null;
+  state = s.st; stT = s.stT; inn = s.inn; bt = s.bt; score = s.sc; outs = s.o; tries = s.tr; batter = s.ba; playN = s.pl;
+  const jump = state === 'ready' && was !== 'ready';
+  s.p.forEach((q, i) => {
+    const p = players[i];
+    if (!p) return;
+    const spot = { x: q[0], y: q[1] };
+    if (jump || !p.tr.size()) p.tr.snap(st, spot); else p.tr.push(st, spot);
+    p.fx = q[2]; p.fy = q[3]; p.ctl = q[4] >= 0 && ctrls[q[4]] ? ctrls[q[4]].id : ''; p.out = !!(q[5] & 1); p.home = !!(q[5] & 2);
+    if (p.ctl !== myId()) p.steps = q[6];
+  });
+  ball.held = s.b[3]; ball.th = s.b[4] ? {} : null;
+  const bs = { x: s.b[0], y: s.b[1], z: s.b[2] };
+  if (jump || !ballTr.size()) ballTr.snap(st, bs); else ballTr.push(st, bs);
+  runners = s.r.map(a => ({ i: a[0], at: a[1], run: !!a[2], bat: !!a[3], d: 0, wait: 0 }));
+  // The pitch: a toss this phone has not heard yet starts here from the host's time.
+  if (s.pn && (!lp || lp.n !== s.pn[0]) && !s.pn[3]) lp = { n: s.pn[0], ap: s.pn[1], t0: performance.now() / 1000 - s.pn[2], tapped: 0 };
+  pitch = s.pn ? { n: s.pn[0], ap: s.pn[1], t: s.pn[2], done: !!s.pn[3] } : null;
+  events = s.ev.map(e => ({ id: e[0], x: e[1], y: e[2], s: e[3], c: e[4], k: e[5], w: e[6], t: e[7] }));
+  lastSnap = performance.now();
+}
+function guestUpdate(dt) {
+  stT += dt;
+  for (const e of events) e.t -= dt;
+}
+// The drawn spots of everyone on a guest: a moment back, gliding between the spots heard.
+function drawnSpots() {
+  if (!net.on || R.isHost) return null;
+  const kept = players.map(p => [p.x, p.y]);
+  for (const p of players) { const o = p.tr && p.tr.at(); if (o) { p.x = o.x; p.y = o.y; } }
+  const kb = [ball.x, ball.y, ball.z], o = ballTr && ballTr.at();
+  if (o) { ball.x = o.x; ball.y = o.y; ball.z = o.z; }
+  if (state === 'pitch' && lp && pitch && pitch.n === lp.n) { ball.x = 0; ball.y = 0.3; ball.z = Math.max(0, tossZ(lp.ap, Math.min(tossEnd(lp.ap), performance.now() / 1000 - lp.t0))); }
+  return { kept, kb };
+}
+function putBack(k) {
+  if (!k) return;
+  players.forEach((p, i) => { p.x = k.kept[i][0]; p.y = k.kept[i][1]; });
+  ball.x = k.kb[0]; ball.y = k.kb[1]; ball.z = k.kb[2];
+}
+
+function hostEnd() {
+  const m = { t: 'end', round: net.round, sc: score.slice(), ct: net.setup.ct.map(k => [k.id, k.t]) };
+  R.deliver(m);
+  R.endRound();
+  finish(m);
+}
+function finish(m) {
+  state = 'done';
+  const own = (m.ct || []).find(q => q[0] === R.me), t = own ? own[1] : myTeam;
+  const a = m.sc[t], b = m.sc[1 - t];
+  if (R.once(m.round)) {
+    const f = stats.kaverit;
+    if (a > b) f.voitot++; else if (a < b) f.haviot++; else f.tasapelit++;
+    save('stats', stats);
+  }
+  S.play(a > b ? 'voitto' : 'tappio', { vol: 0.6, delay: 0.3 });
+  R.backToRoom((a > b ? 'Voitto ' : a < b ? 'Häviö ' : 'Tasapeli ') + a + '–' + b + (a > b ? '! 🏆' : ''), a > b ? 'win' : a < b ? 'lose' : '');
+}
+function endMatch() {
+  const a = score[myTeam], b = score[1 - myTeam];
+  state = 'done';
+  save('ottelu', null);
+  if (a > b) { stats.voitot++; stats.taso++; } else if (a < b) stats.haviot++; else stats.tasapelit++;
+  level = stats.taso;
+  save('stats', stats);
+  S.play(a > b ? 'voitto' : 'tappio', { vol: 0.6, delay: 0.3 });
+  showMenu(a > b ? 'Voitit ' + a + '–' + b + '! 🏆' : a < b ? 'Hävisit ' + a + '–' + b : 'Tasapeli ' + a + '–' + b, a > b ? 'win' : a < b ? 'lose' : 'draw');
+}
+// Runs this phone's own player scored, kept as a lifetime count.
+let countedRuns = 0;
+function countRuns() {
+  for (const e of events) if (e.k === 'juoksu' && e.id > countedRuns) {
+    countedRuns = e.id;
+    if (e.w >= 0 && players[e.w] && players[e.w].t === myTeam && (players[e.w].ctl === myId() || !net.on)) { stats.juoksut++; save('stats', stats); }
+  }
+}
+
+R.on('start', s => {
+  menu.classList.add('hidden');
+  if (s.over) { net.round = s.round; state = 'room'; return; }
+  if (!R.isHost) { if (s.round !== net.round) { state = 'room'; players = []; } return; }
+  const setup = setupFor(s.round, s.players);
+  R.send(setup);
+  applySetup(setup);
+});
+R.on('message', (m, from) => {
+  if (R.isHost) {
+    // Taps that come while the round is paused, or for an old pitch or play, change nothing.
+    if (m.round !== net.round || R.paused) return;
+    const k = ctrls.find(q => q.id === from && !q.away);
+    if (!k) return;
+    const p = players.find(q => q.ctl === from);
+    if (m.t === 'b') { if (p && idx(p) === batter && pitch) batTap(+m.n, +m.ph); }
+    else if (m.t === 'f') { if (p && +m.p === playN) footPress(idx(p), m.k === 1 ? 1 : 2); }
+    else if (m.t === 'w') { if (p && +m.p === playN && ball.held === idx(p) && m.b >= 1 && m.b <= 4) throwTo(m.b | 0); }
+    return;
+  }
+  if (m.t === 'end') { finish(m); return; }
+  if (m.t === 'setup') {
+    if (net.round === m.round && players.length) return;
+    applySetup(m);
+    state = 'ready';
+  } else if (m.round === net.round && players.length) {
+    if (m.t === 's') applySnapshot(m);
+    else if (m.t === 'toss') lp = { n: m.n, ap: m.ap, t0: performance.now() / 1000, tapped: 0 };
+  }
+});
+// A phone that comes back gets the match as it is. A batter back in mid-toss gets a new toss.
+R.on('hello', id => {
+  if (!net.on || !net.setup || state === 'done') return;
+  R.send(net.setup, id);
+  if (state === 'pitch' && batter >= 0 && ctrls.some(k => k.id === id && k.t === bt && k.act === batter)) retoss();
+  R.send(snapshot(), id);
+});
+R.on('continue', ids => { for (const k of ctrls) if (ids.includes(k.id)) k.away = true; });
+R.on('back', id => { for (const k of ctrls) if (k.id === id) k.away = false; });
+R.on('lobby', () => { state = 'room'; });
+R.on('leave', () => { state = 'menu'; net.on = false; players = []; showMenu(); });
+R.on('menu', () => { state = 'menu'; net.on = false; players = []; showMenu(); });
+
+// ---------- Controls ----------
+let buttons = [];
+// The buttons for what this phone does now; the next foot to press glows.
+function layout(md) {
+  const me = myPlayer(), next = me && me.foot === 1 ? 2 : 1;
+  const b = [];
+  if (wide) {
+    const r = Math.min(46, H * 0.15), y = H - safeB - 16 - r;
+    if (md === 'bat' || md === 'batwait') {
+      b.push({ k: 'bat', x: safeL + 20 + r * 1.2, y: y - r * 0.2, r: r * 1.2, label: 'LYÖ' });
+      b.push({ k: 'bat', x: W - safeR - 20 - r * 1.2, y: y - r * 0.2, r: r * 1.2, label: 'LYÖ' });
+    } else if (md === 'run' || md === 'base' || md === 'field') {
+      b.push({ k: 'foot', a: 1, x: safeL + 18 + r, y, r, label: 'Vasen', glow: next === 1 });
+      b.push({ k: 'foot', a: 2, x: W - safeR - 18 - r, y, r, label: 'Oikea', glow: next === 2 });
+    } else if (md === 'throw') {
+      const rr = Math.min(30, H * 0.09), X = W - safeR - 14 - rr;
+      [[3, '3.'], [2, '2.'], [1, '1.'], [4, 'Koti']].forEach(([a, l], j) => b.push({ k: 'throw', a, x: X - (j % 2) * (rr * 2.3), y: H - safeB - 14 - rr - (1 - Math.floor(j / 2)) * rr * 2.3 - (j % 2 ? rr * 1.1 : 0), r: rr, label: l }));
+    }
+    return b;
+  }
+  const top = ctrlTop + 10, h = H - safeB - top - 10, w = W - 24;
+  if (md === 'bat' || md === 'batwait') b.push({ k: 'bat', rect: [12, top, w, h], label: 'LYÖ!' });
+  else if (md === 'run' || md === 'base' || md === 'field') {
+    b.push({ k: 'foot', a: 1, rect: [12, top, w / 2 - 6, h], label: 'Vasen', glow: next === 1 });
+    b.push({ k: 'foot', a: 2, rect: [12 + w / 2 + 6, top, w / 2 - 6, h], label: 'Oikea', glow: next === 2 });
+  } else if (md === 'throw') {
+    const bw = w / 2 - 6, bh = h / 2 - 5;
+    b.push({ k: 'throw', a: 3, rect: [12, top, bw, bh], label: '3. pesä' });
+    b.push({ k: 'throw', a: 2, rect: [12 + bw + 12, top, bw, bh], label: '2. pesä' });
+    b.push({ k: 'throw', a: 1, rect: [12, top + bh + 10, bw, bh], label: '1. pesä' });
+    b.push({ k: 'throw', a: 4, rect: [12 + bw + 12, top + bh + 10, bw, bh], label: 'Koti (lukkari)' });
+  }
+  return b;
+}
+function hitButton(px, py) {
+  for (const b of buttons) {
+    if (b.rect) { const [bx, by, bw, bh] = b.rect; if (px >= bx - 4 && px <= bx + bw + 4 && py >= by - 4 && py <= by + bh + 4) return b; }
+    else if (hyp(px - b.x, py - b.y) < b.r + 12) return b;
+  }
+  return null;
+}
+const at = e => [e.clientX - box.left, e.clientY - box.top];
+c.addEventListener('pointerdown', e => {
+  unlock();
+  e.preventDefault();
+  if (!players.length || state === 'menu' || state === 'done' || state === 'room') return;
+  const [ex, ey] = at(e);
+  buttons = layout(mode());
+  const b = hitButton(ex, ey);
+  if (!b) return;
+  b.down = performance.now();
+  pressed[b.k + (b.a || '')] = performance.now();
+  if (b.k === 'bat') act('bat', 0, e);
+  else if (b.k === 'foot') act('foot', b.a);
+  else if (b.k === 'throw') act('throw', b.a);
+});
+const pressed = {};
+
+// ---------- Drawing ----------
+function follow(dt) {
+  const vh = (wide ? (viewR - viewL) : (viewBot - viewTop)) / 2 / sc;
+  let ty = state === 'play' ? ball.y : 8;
+  const lo = vh - 5, hi = FL + 3 - vh;
+  ty = lo > hi ? (FL - 2) / 2 : Math.max(lo, Math.min(hi, ty));
+  if (state === 'ready' || state === 'pitch') ty = lo > hi ? ty : lo;
+  const k = Math.min(1, dt * 3);
+  camY += (ty - camY) * k; camX = 0;
+}
+function poly(pts) { x.beginPath(); pts.forEach((p, i) => { const [a, b] = SP(p[0], p[1]); i ? x.lineTo(a, b) : x.moveTo(a, b); }); }
+function drawField() {
+  x.fillStyle = '#2f6b33'; x.fillRect(0, 0, W, H);
+  // Mown stripes, then the sand of the field inside its lines.
+  for (let i = -2; i < 14; i++) { x.fillStyle = i % 2 ? '#357a39' : '#3c853f'; poly([[-FW - 8, i * 5], [FW + 8, i * 5], [FW + 8, i * 5 + 5], [-FW - 8, i * 5 + 5]]); x.fill(); }
+  x.fillStyle = '#d9b77a'; poly([[-FW, 0], [FW, 0], [FW, FL], [-FW, FL]]); x.fill();
+  // The home base: a half circle behind the plate.
+  x.fillStyle = '#cfa96a'; x.beginPath(); const [hx, hy] = SP(0, 0); x.arc(hx, hy, 4 * sc, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.9)'; x.lineWidth = 2;
+  poly([[-FW, 0], [-FW, FL], [FW, FL], [FW, 0]]); x.stroke();
+  x.setLineDash([6, 6]); poly([[-FW, FRONT], [FW, FRONT]]); x.stroke(); x.setLineDash([]);
+  // The runners' path, base to base.
+  x.strokeStyle = 'rgba(255,255,255,.35)'; x.lineWidth = Math.max(2, sc * 0.5);
+  poly(BASES.map(b => [b.x, b.y])); x.stroke();
+  for (let b = 1; b <= 3; b++) {
+    const [bx, by] = SP(BASES[b].x, BASES[b].y);
+    x.fillStyle = '#fff'; x.strokeStyle = '#8a6a3a'; x.lineWidth = 2;
+    x.beginPath(); x.arc(bx, by, Math.max(6, sc * 0.9), 0, 7); x.fill(); x.stroke();
+    x.fillStyle = '#5a3d10'; x.font = '800 ' + Math.max(10, sc * 0.9) + 'px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(b, bx, by + 1); x.textBaseline = 'alphabetic';
+  }
+  // The plate (lautanen) the lukkari tosses over.
+  x.fillStyle = '#fff'; x.beginPath(); x.arc(hx, hy, Math.max(5, sc * 0.4), 0, 7); x.fill();
+}
+function drawPlayer(p) {
+  const [px, py] = SP(p.x, p.y), r = Math.max(6, PR * sc * 1.2), [shirt, dark] = COLORS[p.t];
+  const me = p.ctl && p.ctl === myId();
+  x.globalAlpha = p.out ? 0.45 : 1;
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(px + 2, py + 3, r, r * 0.8, 0, 0, 7); x.fill();
+  if (p.ctl) { x.strokeStyle = me ? '#ffd166' : 'rgba(255,255,255,.85)'; x.lineWidth = me ? 3.5 : 2; x.beginPath(); x.arc(px, py, r * 1.6, 0, 7); x.stroke(); }
+  const [fx, fy] = wide ? [p.fy, p.fx] : [p.fx, -p.fy];
+  const moving = p.steps % 2 ? 1 : -1;
+  x.fillStyle = '#222';
+  for (const s of [-1, 1]) { x.beginPath(); x.arc(px - fy * s * r * 0.45 + fx * r * 0.5 * moving * s, py + fx * s * r * 0.45 + fy * r * 0.5 * moving * s, r * 0.3, 0, 7); x.fill(); }
+  x.fillStyle = p.k === 0 && p.t !== bt ? '#ffd166' : shirt;
+  x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); x.strokeStyle = dark; x.lineWidth = 2; x.stroke();
+  x.fillStyle = '#e0a878'; x.beginPath(); x.arc(px + fx * r * 0.1, py + fy * r * 0.1, r * 0.5, 0, 7); x.fill();
+  x.fillStyle = dark; x.beginPath(); x.arc(px - fx * r * 0.1, py - fy * r * 0.1, r * 0.42, 0, 7); x.fill();
+  // The batter's bat.
+  if (idx(p) === batter && (state === 'pitch' || state === 'ready')) {
+    x.strokeStyle = '#2b2b2b'; x.lineWidth = 3; x.beginPath(); x.moveTo(px + r * 0.5, py - r * 0.3); x.lineTo(px + r * 2.2, py - r * 1.6); x.stroke();
+  }
+  x.globalAlpha = 1;
+  if (me || p.ctl) {
+    const name = me ? 'Sinä' : ctrlName(p.ctl);
+    x.font = '700 11px system-ui'; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.55)';
+    x.strokeText(name, px, py + r + 13); x.fillStyle = me ? '#ffd166' : '#fff'; x.fillText(name, px, py + r + 13);
+  }
+}
+function drawBall() {
+  const [bx, by] = SP(ball.x, ball.y), r = Math.max(3.5, 0.18 * sc * (1 + ball.z * 0.12)), lift = ball.z * sc * 0.55;
+  x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.ellipse(bx + 1, by + 2, r, r * 0.7, 0, 0, 7); x.fill();
+  x.fillStyle = '#ffe14d'; x.strokeStyle = '#7a5a00'; x.lineWidth = 1;
+  x.beginPath(); x.arc(bx, by - lift, r, 0, 7); x.fill(); x.stroke();
+  if (by - lift < viewTop + 6 || bx > W - 6 || bx < 6) {
+    const ax = Math.max(14, Math.min(W - 14, bx)), ay = Math.max(viewTop + 14, by - lift);
+    x.fillStyle = '#ffe14d'; x.beginPath(); x.arc(ax, ay, 5, 0, 7); x.fill();
+  }
+}
+// The toss seen from the side, so the batter can time it: the ball's height, and the band where it hits best.
+function drawGauge() {
+  if (state !== 'pitch' && state !== 'ready') return;
+  // Sideways it stands left of the right LYÖ button, which covers the corner.
+  const ap = pitch ? pitch.ap : 3, gx = wide ? W - safeR - 20 - Math.min(46, H * 0.15) * 2.4 - 26 : W - 34, gy0 = wide ? viewBot - 24 : viewBot - 16, gh = Math.min(170, (viewBot - viewTop) * 0.55), top = 4;
+  const zy = z => gy0 - z / top * gh;
+  x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.roundRect(gx - 14, zy(top) - 8, 28, gh + 16, 10); x.fill();
+  const t0 = bestT(ap), zA = tossZ(ap, t0 - HIT_WIN * 0.5), zB = tossZ(ap, Math.min(tossEnd(ap), t0 + HIT_WIN * 0.5));
+  x.fillStyle = 'rgba(255,209,102,.55)'; x.fillRect(gx - 10, zy(tossZ(ap, t0 - HIT_WIN)), 20, zy(Math.max(0, tossZ(ap, Math.min(tossEnd(ap), t0 + HIT_WIN)))) - zy(tossZ(ap, t0 - HIT_WIN)));
+  x.fillStyle = '#5bd16a'; x.fillRect(gx - 10, zy(zA), 20, zy(zB) - zy(zA));
+  if (state === 'pitch') { x.fillStyle = '#ffe14d'; x.strokeStyle = '#7a5a00'; x.beginPath(); x.arc(gx, zy(ball.z), 7, 0, 7); x.fill(); x.stroke(); }
+}
+function teamName(t) {
+  if (net.on) return t === 0 ? 'Siniset' : 'Punaiset';
+  return t === myTeam ? 'Te' : foeName(level);
+}
+function drawHud() {
+  const y = safeT + 6, w = Math.min(260, W - 130), X = (W - w) / 2, ours = myTeam, theirs = 1 - ours;
+  x.fillStyle = 'rgba(20,30,16,.85)'; x.beginPath(); x.roundRect(X, y, w, 44, 12); x.fill();
+  x.textBaseline = 'middle'; x.textAlign = 'center';
+  x.fillStyle = COLORS[ours][0]; x.fillRect(X + 8, y + 8, 6, 16);
+  x.fillStyle = COLORS[theirs][0]; x.fillRect(X + w - 14, y + 8, 6, 16);
+  x.font = '900 20px system-ui'; x.fillStyle = '#fff'; x.fillText(score[ours] + ' – ' + score[theirs], X + w / 2, y + 16);
+  x.font = '700 11px system-ui'; x.fillStyle = '#dfe';
+  x.textAlign = 'left'; x.fillText(teamName(ours), X + 18, y + 16, w * 0.3);
+  x.textAlign = 'right'; x.fillText(teamName(theirs), X + w - 18, y + 16, w * 0.3);
+  x.textAlign = 'center'; x.font = '700 11px system-ui'; x.fillStyle = '#ffd166';
+  const pal = '●'.repeat(Math.min(3, outs)) + '○'.repeat(Math.max(0, 3 - outs));
+  x.fillText((inn + 1) + '/2 · ' + teamName(bt) + ' lyö · Palot ' + pal + ' · Lyönti ' + Math.min(3, tries + 1) + '/3', X + w / 2, y + 34, w - 10);
+  x.textBaseline = 'alphabetic';
+}
+function hint(md) {
+  const me = myPlayer();
+  if (md === 'bat') return 'Lyö, kun pallo on vihreällä';
+  if (md === 'batwait') return 'Sinä lyöt: lukkari syöttää';
+  if (md === 'run') return 'Juokse: vasen ja oikea vuorotellen';
+  if (md === 'base') { const r = runners.find(q => q.i === idx(me)); return r.at >= 3 ? 'Paina, niin juokset kotiin' : 'Pesällä turvassa. Paina, niin juokset ' + (r.at + 1) + '. pesälle'; }
+  if (md === 'throw') return 'Heitä pesään ennen juoksijaa';
+  if (md === 'field') return 'Juokse pallolle';
+  if (md === 'fieldwait') return 'Pallo on kaverilla';
+  if (!me && state !== 'over') {
+    if (net.on && bt === myTeam) return 'Odota lyöntivuoroasi';
+    return bt === myTeam ? 'Odota' : 'Odota palloa';
+  }
+  return '';
+}
+function drawControls() {
+  const md = mode();
+  buttons = layout(md);
+  if (!wide) { x.fillStyle = '#1f3a1f'; x.fillRect(0, ctrlTop, W, H - ctrlTop); x.fillStyle = 'rgba(255,255,255,.12)'; x.fillRect(0, ctrlTop, W, 2); }
+  for (const b of buttons) {
+    const on = pressed[b.k + (b.a || '')] && performance.now() - pressed[b.k + (b.a || '')] < 120;
+    x.fillStyle = on ? 'rgba(255,209,102,.9)' : b.glow ? 'rgba(255,209,102,.55)' : b.k === 'bat' ? 'rgba(255,209,102,.5)' : 'rgba(255,255,255,.25)';
+    x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = 2;
+    x.beginPath();
+    if (b.rect) x.roundRect(...b.rect, 16); else x.arc(b.x, b.y, b.r, 0, 7);
+    x.fill(); x.stroke();
+    const cx = b.rect ? b.rect[0] + b.rect[2] / 2 : b.x, cy = b.rect ? b.rect[1] + b.rect[3] / 2 : b.y;
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#1e1405';
+    x.font = '800 ' + (b.rect ? (b.k === 'throw' ? 18 : 26) : Math.round(b.r * 0.38)) + 'px system-ui';
+    x.fillText(b.label, cx, cy, b.rect ? b.rect[2] - 10 : b.r * 1.8);
+    x.textBaseline = 'alphabetic';
+  }
+  const s = hint(md);
+  if (s) {
+    // Upright it goes under the score, clear of the bench by home; sideways along the bottom between the buttons.
+    const hy = wide ? H - safeB - 14 : (buttons.length ? viewTop + 14 : ctrlTop + (H - safeB - ctrlTop) / 2);
+    x.font = '700 14px system-ui'; x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.6)';
+    x.strokeText(s, W / 2, hy, W - 20); x.fillStyle = '#fff'; x.fillText(s, W / 2, hy, W - 20);
+  }
+}
+function drawEvents() {
+  x.textAlign = 'center';
+  for (const e of events) {
+    if (!e.s) continue;
+    x.globalAlpha = Math.max(0, Math.min(1, e.t * 2));
+    const big = e.k === 'vaihto';
+    const [tx, ty] = big ? [W / 2, midY] : SP(e.x, e.y), up = big ? 0 : 26 + (1.4 - e.t) * 20;
+    x.font = big ? '900 30px system-ui' : '900 18px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.55)';
+    const tx2 = Math.max(60, Math.min(W - 60, tx));
+    x.strokeText(e.s, tx2, ty - up, W - 20); x.fillStyle = e.c || '#fff'; x.fillText(e.s, tx2, ty - up, W - 20);
+    if (big && state === 'change' && inn === 0) {
+      x.font = '800 17px system-ui'; const s = teamName(1 - bt) + ' lyö seuraavaksi';
+      x.strokeText(s, W / 2, ty + 30, W - 20); x.fillStyle = '#fff'; x.fillText(s, W / 2, ty + 30, W - 20);
+    }
+    x.globalAlpha = 1;
+  }
+}
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (!players.length || !ball || state === 'room') { x.fillStyle = '#2f6b33'; x.fillRect(0, 0, W, H); return; }
+  const k = drawnSpots();
+  drawField();
+  const list = players.filter(p => !p.home || state !== 'play').slice().sort((a, b) => SP(a.x, a.y)[1] - SP(b.x, b.y)[1]);
+  for (const p of list) drawPlayer(p);
+  drawBall();
+  drawGauge();
+  putBack(k);
+  drawEvents();
+  drawHud();
+  drawControls();
+}
+
+let prev = 0;
+function loop(t) {
+  const dt = Math.min(0.05, (t - prev) / 1000 || 0); prev = t;
+  update(dt);
+  hearEvents(); countRuns();
+  if (ball && players.length) follow(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + stats.taso + ': vastassa ' + foeName(stats.taso);
+  const f = stats.kaverit, fn = f.voitot + f.haviot + f.tasapelit;
+  document.getElementById('stats').textContent = 'Voitot ' + stats.voitot + ' · Tasapelit ' + stats.tasapelit + ' · Häviöt ' + stats.haviot + ' · Juoksut ' + stats.juoksut +
+    (fn ? ' · Kavereita vastaan ' + f.voitot + '–' + f.tasapelit + '–' + f.haviot : '');
+  const m = load('ottelu', null), res = document.getElementById('resume');
+  res.hidden = !(m && m.lv === stats.taso && Array.isArray(m.queue));
+  if (!res.hidden) res.textContent = 'Jatka ottelua ' + m.sc[0] + '–' + m.sc[1] + ' (' + (m.inn + 1) + '/2)';
+  menu.classList.remove('hidden');
+}
+function roomNote() {
+  if (R.inRoom) R.note('Puhelimet jaetaan vuorotellen siniseen ja punaiseen joukkueeseen. Lukkarin ja tyhjät paikat pelaa tietokone.');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); save('ottelu', null); newMatch(); });
+document.getElementById('resume').addEventListener('click', () => { unlock(); newMatch(load('ottelu', null)); });
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); roomNote(); });
+R.on('peers', roomNote);
+showMenu();
+requestAnimationFrame(loop);
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>
