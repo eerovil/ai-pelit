@@ -61,6 +61,8 @@
     piano: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('piano', 'taso'); } },
     // Fastest time in seconds, one list per race (100 m hurdles is 'main'); level: 'taso', the level the player is on.
     aitajuoksu: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('aitajuoksu', 'taso'); } },
+    // Fastest wife-carrying run in seconds, drops' penalties included; level: 'taso', the level the player is on.
+    eukonkanto: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('eukonkanto', 'taso'); } },
     // Fastest run through the obstacle course in seconds; level: 'taso', the level the player is on.
     kaaosrata: { order: 'low', lists: [['main', 'Puomipuisto'], ['hihna8', 'Hihnatehdas'], ['laatat8', 'Laattalaakso'], ['finaali8', 'Kaaosfinaali'], ['hihna7', 'Hihnatehdas v7'], ['laatat7', 'Laattalaakso v7'], ['finaali7', 'Kaaosfinaali v7'], ['hihna', 'Hihnatehdas v6'], ['laatat', 'Laattalaakso v6'], ['finaali', 'Kaaosfinaali v6']], score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('kaaosrata', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
