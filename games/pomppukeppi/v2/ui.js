@@ -1,5 +1,5 @@
 'use strict';
-// Pomppukeppi v1: the screen, the finger, the menus, the saves and the sounds, and the main loop.
+// Pomppukeppi v2: the screen, the finger, the menus, the saves and the sounds, and the main loop.
 // The 3D board is drawn by draw3d.js on the canvas #g underneath; this file draws the scores and
 // the stick on #c over it, and the whole board flat when the phone cannot draw 3D.
 
@@ -38,7 +38,7 @@ function setBoard(n) { if (window.AiPelitScores) AiPelitScores.board('kentta-' +
 
 // ---- Sounds (#205, aanet-5): only after the first tap, quiet (#337, #355) ----
 const S = window.AiPelitAanet;
-if (S) S.load(['jousi', 'boing', 'kello', 'nousu', 'osuma', 'gongi', 'pilli', 'voitto', 'tappio', 'valinta']);
+if (S) S.load(['jousi', 'boing', 'kello', 'nousu', 'osuma', 'suhahdus', 'lumi', 'gongi', 'pilli', 'voitto', 'tappio', 'valinta']);
 let ac = null;
 function beep(f, d, vol) {
   try {
@@ -50,11 +50,18 @@ function beep(f, d, vol) {
 }
 const sfx = (name, opts, f) => (S && S.play(name, opts)) || (f && beep(f, 0.1, 0.035));
 // What changed since the last frame, on any phone (the host's world or a guest's copy of it).
-let seen = null, pops = [];
+let seen = null, pops = [], puffs = [];
 function soundsOf(w) {
   if (!w) { seen = null; return; }
   const now = w.hares.map(h => ({ hop: h.hopN, bump: h.bumpN, cash: h.cashN, got: h.got, stun: h.stun > 0 }));
+  // Snowballs (#492): where each is now, so one gone as its target is stunned (it hit) bursts into a puff of snow there.
+  const balls = new Map(w.balls.map(b => [b.id, Object.assign(ballPos(w, b), { to: b.to })]));
   if (seen && seen.era === w.era) {
+    for (const [id, b] of balls) if (!seen.balls.has(id)) sfx('suhahdus', { vol: 0.1, rate: 1.3 });
+    for (const [id, b] of seen.balls) if (!balls.has(id) && w.hares[b.to] && w.hares[b.to].stun > 0) {
+      puffs.push({ x: b.x, y: b.y, z: b.z, t: 0 });
+      sfx('lumi', { vol: w.hares[b.to] === me ? 0.4 : 0.2 });
+    }
     if (seen.ph === 'count' && w.ph === 'play') sfx('gongi', { vol: 0.22 }, 520);
     if (seen.ph === 'play' && w.ph === 'erä') sfx('pilli', { vol: 0.2 }, 700);
     now.forEach((s, i) => {
@@ -70,7 +77,7 @@ function soundsOf(w) {
       if (s.stun && !o.stun) sfx('osuma', { vol: mine ? 0.4 : 0.15 }, 220);
     });
   }
-  seen = { ph: w.ph, era: w.era, hares: now };
+  seen = { ph: w.ph, era: w.era, hares: now, balls };
 }
 const POWER_NAMES = { jousi: 'Pikajousi!', lumi: 'Lumipallo!' };
 
@@ -111,7 +118,7 @@ function readMatch() {
   return { b, era: m.era, wins: m.wins, best: m.best };
 }
 function startPlay() {
-  mode = 'play'; result = null; endT = 0; seen = null; pops = [];
+  mode = 'play'; result = null; endT = 0; seen = null; pops = []; puffs = [];
   stick = null; flick = -1;
   hideAll();
   wake();
@@ -253,7 +260,20 @@ function draw2d(w) {
     cx.fillStyle = COLORS[h.col]; cx.beginPath(); cx.arc(X, Y, s * (0.3 + p.z * 0.08), 0, TAU); cx.fill();
     cx.strokeStyle = h === me ? '#ffe14a' : '#fff'; cx.lineWidth = h === me ? 4 : 2; cx.stroke();
   }
+  // Snowballs: a shadow on the board and the ball over it; the puff where one hit.
+  for (const b of w.balls) {
+    const p = ballPos(w, b), X = ox + (p.x + 0.5) * s, Y = oy + (p.y + 0.5) * s;
+    cx.fillStyle = 'rgba(0,0,0,.2)'; cx.beginPath(); cx.arc(X, Y, s * 0.1, 0, TAU); cx.fill();
+    cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(X, Y - p.z * s * 0.5, s * 0.14, 0, TAU); cx.fill();
+    cx.strokeStyle = '#b8cde0'; cx.lineWidth = 1.5; cx.stroke();
+  }
+  for (const f of puffs) {
+    const X = ox + (f.x + 0.5) * s, Y = oy + (f.y + 0.5) * s - f.z * s * 0.5, k = f.t / PUFF_T;
+    cx.fillStyle = 'rgba(255,255,255,' + (0.9 * (1 - k)) + ')';
+    for (let j = 0; j < 7; j++) { const a = j / 7 * TAU; cx.beginPath(); cx.arc(X + Math.cos(a) * s * 0.4 * k, Y + Math.sin(a) * s * 0.3 * k, s * (0.12 - 0.05 * k), 0, TAU); cx.fill(); }
+  }
 }
+const PUFF_T = 0.5;
 // Screen px of a board point, in 3D or flat.
 function project(x, y, z) {
   if (V3 && !no3d) return project3d(x, y, z);
@@ -294,7 +314,19 @@ function drawHUD(w, dt) {
   }
   // Cash-ins and power-ups rise from where they happened.
   pops = pops.filter(p => (p.t += dt) < 1.2);
-  for (const p of pops) { const s = project(p.x, p.y, 1.4 + p.t); shadowText(p.text, s.x, s.y - p.t * 30, 22, p.col, 'center', 900); }
+  for (const p of pops) {
+    // Kept whole on the screen, also over a hare at the board's edge.
+    const s = project(p.x, p.y, 1.4 + p.t);
+    cx.font = '900 22px system-ui,sans-serif';
+    const half = cx.measureText(p.text).width / 2 + 6, x = clamp(s.x, SAFE_L + half, W - SAFE_R - half);
+    shadowText(p.text, x, s.y - p.t * 30, 22, p.col, 'center', 900);
+  }
+  // A stunned hare has stars over its head.
+  for (const h of w.hares) {
+    if (!(h.stun > 0)) continue;
+    const pp = harePos(h), s = project(pp.x, pp.y, pp.z + 1.95);
+    shadowText('💫', s.x + Math.sin(V3t() * 6) * 6, s.y, 20, '#fff', 'center', 700);
+  }
   // Names with friends.
   if (net) for (const h of w.hares) {
     if (h === me) continue;
@@ -322,12 +354,14 @@ function roundRect(x, y, w, h, r) {
   cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath();
 }
 let tutorial = !load('osattu', false), showNo3d = 0;
+const V3t = () => performance.now() / 1000;
 let mw = null;
 function menuWorld() { if (!mw || mw.board !== boardN) mw = newWorld(boardN, [], 1); return mw; }
 function draw(dt) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   cx.clearRect(0, 0, W, H);
   const w = world || menuWorld();
+  puffs = puffs.filter(f => (f.t += dt) < PUFF_T);
   if (V3 && !no3d) render3d(w, me, dt);
   else draw2d(w);
   if (no3d && mode === 'menu') shadowText('Puhelimesi ei pysty piirtämään 3D-kuvaa.', W / 2, H - SAFE_B - 20, 13, '#fff', 'center', 700);
