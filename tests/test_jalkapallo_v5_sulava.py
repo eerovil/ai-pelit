@@ -33,9 +33,9 @@ QUIET = """() => { window.__run = false; window.__cpuRun = -1;
 # every page. Called again, it starts a new record of player `i`.
 SAMPLE = """(i) => { window.__xs = []; window.__got = []; window.__si = i; if (window.__sampling) return; window.__sampling = true;
   const now = () => (performance.timeOrigin + performance.now()) / 1000;
-  AiPelitRooms.on('message', () => window.__got.push(now()));
+  let ck = null; AiPelitRooms.on('message', m => { window.__got.push(now()); if (m.t === 's') ck = m.ck; });
   const u = window.update;
-  window.update = dt => { const t = now(); u(dt); if (window.__xs.length < 300) window.__xs.push([t, players[window.__si].x]); }; }"""
+  window.update = dt => { const t = now(); u(dt); if (window.__xs.length < 300) { const p = players[window.__si]; window.__xs.push([t, p.x, p.tr.time, ck]); } }; }"""
 # On the host: when a frame came late. The host runs at most 50 ms of the match per frame, so a busy test machine
 # slows the match itself there, and every phone rightly draws it slower: such moments are left out.
 STALLS = """() => { window.__stall = []; if (window.__stalls) return; window.__stalls = true; let last = 0; const d = window.draw;
@@ -83,8 +83,13 @@ def glides(page, host):
     # frame late on a busy test machine and the quick one after it measure the machine, not the drawing. Measured
     # (#498): around such a spike the drawn moment (tr.time) went on evenly at 6.3 m/s; only the page's frames
     # were uneven.
-    sp = [(t2, (b - a) / (t2 - t0)) for (t0, a), (t1, _), (t2, b) in zip(xs, xs[1:], xs[2:])
+    sp = [(t2, (b - a) / (t2 - t0)) for (t0, a, *_), (t1, *_), (t2, b, *_) in zip(xs, xs[1:], xs[2:])
           if t2 > t0 and t1 - t0 < 0.04 and t2 - t1 < 0.04]
+    # For a failure's message: per frame, the speed per drawn moment and whether it was drawn past the newest
+    # spot heard (a guess).
+    why = {t2: (round((b - a) / (d2 - d0), 2) if d0 is not None and d2 is not None and d2 > d0 else None,
+                d2 is not None and c2 is not None and d2 > c2)
+           for (t0, a, d0, _), (t2, b, d2, c2) in zip(xs, xs[2:])}
     moving = [i for i, (_, v) in enumerate(sp) if abs(v) > 0.5]
     assert len(moving) > 50, len(moving)
     # Leave out the start and the stop: the drawing speeds up and slows down there over a moment.
@@ -92,9 +97,17 @@ def glides(page, host):
     middle = [(t, v) for t, v in sp if t0 <= t <= t1]
     assert len(middle) > 30, len(middle)
 
+    # And only frames drawn between two spots heard, and not just after: when the spots come late (a busy test
+    # machine), the track draws on a guess past the newest and then draws the difference away (lib/sulava-1's
+    # `extra`), which is uneven by design. Measured at load 45-60: guessed frames down to 0.13x, 2.2x around
+    # them. Without the smoothing nothing is drawn from the track and every frame is judged.
+    guessed = [t for t, (_, g) in why.items() if g]
+
     def heard(t):
-        return any(t - 0.3 <= g <= t for g in got) and not any(s <= t <= s + 0.35 for s in stalls)
+        return (any(t - 0.3 <= g <= t for g in got) and not any(s <= t <= s + 0.35 for s in stalls)
+                and not any(g <= t <= g + 0.15 for g in guessed))
     kept = [v for t, v in middle if heard(t)]
+    odd_why = [(round(v, 2), why.get(t)) for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
     assert len(kept) > 30, (len(kept), len(middle), len(stalls))
     assert min(kept) > 0, shown  # never backwards
@@ -102,13 +115,13 @@ def glides(page, host):
     # The spread: under 0.33 of the mean. Without the smoothing it was 0.41-0.45 (sd 2.0-2.9 against 5-6.4);
     # with it 0.05 on a quiet machine, but up to 0.28 with three pages on a machine at load 65-72, where the
     # frames' own timing (not the drawing) spreads it.
-    assert sd < 0.33 * m, (sd, m, shown)
+    assert sd < 0.33 * m, (sd, m, shown, [w for w in odd_why if not 0.5 * m < w[0] < 1.8 * m])
     # Hardly a frame at twice the speed or under half of it. One in fifty may be: under a 10x CPU throttle the
     # watching page now and then ran a frame's work late (a pause between the frame's start and its track
     # lookup), so one frame read up to 1.75x (2x in a loaded verification run) while the drawn moment went on
     # evenly, at most 1.25x (#498).
     odd = [v for v in kept if not 0.5 * m < v < 1.8 * m]
-    assert len(odd) <= max(1, len(kept) // 50), (odd, m, shown)
+    assert len(odd) <= max(1, len(kept) // 50), (odd, m, [w for w in odd_why if not 0.5 * m < w[0] < 1.8 * m], shown)
 
 
 def watch_run(host, watch, i, start):
@@ -298,11 +311,14 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_keeps_gliding_on_a_t
 
 
 # On a guest, each frame: [the frame's time (as in SAMPLE), the moment the first of `ids` is drawn at (its track's,
-# on the host's clock), ball x, ball y, the newest holder's index, then x, y of each player in `ids`].
+# on the host's clock), ball x, ball y, the newest holder's index, x, y of the two players in `ids`, the host's
+# clock on the newest spot heard, and the moment the ball is drawn at (the first player's on v5 before #498's
+# review, which had no ball track)].
 BALL = """(ids) => { window.__b = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+  let ck = null; AiPelitRooms.on('message', m => { if (m.t === 's') ck = m.ck; });
   const u = window.update;
   window.update = dt => { const t = now(); u(dt); if (window.__b.length < 400) window.__b.push([t, players[ids[0]].tr.time,
-    ball.x, ball.y, players.indexOf(owner)].concat(...ids.map(i => [players[i].x, players[i].y]))); }; }"""
+    ball.x, ball.y, players.indexOf(owner)].concat(...ids.map(i => [players[i].x, players[i].y]), [ck, (ball.tr || players[ids[0]].tr).time])); }; }"""
 
 
 def test_a_tackle_moves_the_ball_to_the_tackler_without_a_step(site, browser):
@@ -330,16 +346,16 @@ def test_a_tackle_moves_the_ball_to_the_tackler_without_a_step(site, browser):
     for g, name in ((aino, "Aino"), (ville, "Ville")):
         rec = g.evaluate("window.__b")
         took = next(i for i, r in enumerate(rec) if r[4] == 4)
-        # How far the ball is drawn to move in each frame around the take, in frames that came in time (a late
-        # frame on a busy test machine rightly moves it further, see glides()).
-        steps = [(i - took, math.hypot(b[2] - a[2], b[3] - a[3])) for i, (a, b) in enumerate(zip(rec, rec[1:]), 1)
-                 if took - 30 <= i <= took + 60 and b[0] - a[0] < 0.04]
-        assert len(steps) > 40, (name, len(steps))
-        # Dribbled at 5 m/s (under 0.1 m a frame), then a metre or more over to the taker in about a tenth of a
-        # second: never 0.4 m in one frame. Measured: at most 0.30 m on Aino's, 0.14 on Ville's; v5 before the
-        # review jumped it 0.65 m in one frame on Aino's.
-        big = [(i, round(d, 2)) for i, d in steps if d > 0.4]
-        assert not big, (name, big, [round(d, 2) for _, d in steps])
+        # The ball's speed over each frame around the take, per moment drawn (the ball track's; a busy test
+        # machine's uneven frames do not show in it, see glides()).
+        sp = [(i - took, math.hypot(b[2] - a[2], b[3] - a[3]) / (b[10] - a[10]))
+              for i, (a, b) in enumerate(zip(rec, rec[1:]), 1)
+              if took - 30 <= i <= took + 60 and a[10] is not None and b[10] is not None and b[10] - a[10] > 0.008]
+        assert len(sp) > 40, (name, len(sp))
+        # Dribbled at 5 m/s, then a metre or so over to the taker as the host rolls it there. Measured at load
+        # 50-65: at most 18 m/s; v5 before the review jumped it there in one frame, 47-67 m/s.
+        fast = [(i, round(v, 1)) for i, v in sp if v > 30]
+        assert not fast, (name, fast, [round(v, 1) for _, v in sp])
         # And it ends at the taker's feet as drawn.
         bx, by, qx, qy = rec[-1][2], rec[-1][3], rec[-1][7], rec[-1][8]
         assert math.hypot(bx - qx, by - qy) < 1.0, (name, rec[-1])
@@ -376,15 +392,17 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
                 f = (t - t0) / (t1 - t0) if t1 > t0 else 0
                 return x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
         return None
-    # While the ball is on its way (the host had it loose and past the passer's feet at the moment drawn).
+    # While the ball is on its way (the host had it loose and past the passer's feet at the moment drawn), in
+    # frames drawn between two spots heard: on a busy test machine the spots now and then come late, and the
+    # drawing goes past the newest on a guess (sulava's `extra`), for the players as for the ball.
     off = []
     for r in rec:
-        hbx = host_ball(r[1]) if r[1] is not None else None
+        hbx = host_ball(r[1]) if r[1] is not None and r[9] is not None and r[1] <= r[9] else None
         if hbx and -5 < hbx[0] < 1:
             off.append(math.hypot(r[2] - hbx[0], r[3] - hbx[1]))
     assert len(off) > 20, len(off)
     # Measured with the ball on its own track: at most 0.13 m off. Drawn at its newest spot (v5 before the
-    # review) it ran up to 1.2 m ahead.
+    # review) it ran 0.6-1.2 m ahead.
     assert max(off) < 0.4, [round(d, 2) for d in off]
     bx, by, qx, qy = rec[-1][2], rec[-1][3], rec[-1][7], rec[-1][8]
     assert math.hypot(bx - qx, by - qy) < 1.0, rec[-1]
