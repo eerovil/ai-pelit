@@ -84,6 +84,7 @@
      and with the loudest sounds quieter -->
 <!-- v11 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const R = window.AiPelitRooms; // the shared room library (public/rooms.js)
@@ -424,7 +425,9 @@ function collide(p) {
 function person(name, color, isPlayer) {
   return { name, color, isPlayer, ctrl: isPlayer ? 'me' : 'bot', id: null, x: BASE.x, y: BASE.y, a: 0, role: 'hider', st: 'hiding', left: false,
            path: [], goal: null, repath: 0, look: 0, brave: 30, saw: null, peek: false, run: false, spot: null, bubble: '', bt: 0, moving: 0, stuck: 0, lx: 0, ly: 0,
-           breath: 1, spr: false, winded: false, freeze: 0, from: null, noBack: 0 };
+           breath: 1, spr: false, winded: false, freeze: 0, from: null, noBack: 0,
+           // v12 (#480): another phone's player is drawn from the spots heard, a moment back (lib/sulava-1).
+           tr: AiPelitSulava.track({ keys: ['x', 'y', 'a'], angles: ['a'], jump: 3 }), ts: null, src: '' };
 }
 // v10 (#370): a room takes eight phones, so eight colours; the first five are v1's.
 const COLORS = ['#f2c94c', '#e46a9b', '#4a8fe0', '#9b6ae0', '#e07b3a', '#3cc8d8', '#9ad83a', '#7a4a2a'];
@@ -1367,10 +1370,13 @@ let overStart = false; // a guest: the round had ended before this page heard of
 let events = [], sendT = 0, meT = 0, roomCode = '';
 const r2 = v => Math.round(v * 100) / 100;
 // v7: the sixth is how long one still waits after being tagged in Hippa, so a phone back mid-wait waits too.
-const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0), r2(Math.max(0, p.freeze || 0))]);
+// v12 (#480): the seventh is the stamp of a friend's own spot (its phone's clock), so every phone draws it as sent;
+// null for the host's own and the computer's players, whose time is the message's own `s`.
+const stateOf = () => people.map(p => [r2(p.x), r2(p.y), r2(p.a), p.st, r2(p.moving || 0), r2(Math.max(0, p.freeze || 0)),
+  p.ctrl === 'remote' && Number.isFinite(p.ts) ? p.ts : null]);
 // The round as another phone needs it: who is who, who seeks, and where everyone is.
 function roundMsg(t) {
-  return { t, round: rid, map: mapId, mode, seeker: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(),
+  return { t, round: rid, s: AiPelitSulava.now(), map: mapId, mode, seeker: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(),
            people: people.map(p => ({ n: p.name, c: p.color, id: p.id })) };
 }
 
@@ -1387,6 +1393,9 @@ R.on('message', (m, from) => {
     // A phone still waiting after being tagged (Hippa) stays where it is.
     if (m.t === 'kme' && p && racing() && !(p.freeze > 0) && [m.x, m.y, m.a].every(Number.isFinite)) {
       p.x = Math.max(0, Math.min(WW, m.x)); p.y = Math.max(0, Math.min(WH, m.y)); p.a = m.a; p.moving = +m.m || 0;
+      // v12: the rules use the newest spot; the screen draws it smoothly, and the others get it with its own stamp.
+      p.ts = Number.isFinite(m.s) ? m.s : null;
+      p.tr.push(p.ts, p);
     }
     return;
   }
@@ -1399,7 +1408,7 @@ R.on('hello', id => { if (phase === 'count' || phase === 'seek') R.send(roundMsg
 R.on('continue', ids => { for (const p of people) if (p.id && ids.includes(p.id) && p.ctrl === 'remote') botTakes(p); });
 R.on('back', id => {
   const p = people.find(q => q.id === id);
-  if (p && p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); }
+  if (p && p.ctrl === 'bot') { p.ctrl = 'remote'; bots = bots.filter(b => b !== p); p.tr.reset(); p.ts = null; }
 });
 R.on('peers', members => {
   // A new room starts from the beginning: nobody seeks next yet.
@@ -1436,7 +1445,7 @@ function hostTick(dt) {
   sendT = R.paused ? 0.5 : 1 / 12;
   hostSend();
 }
-function hostSend() { R.send({ t: 'ks', round: rid, sk: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(), ev: events.splice(0) }); }
+function hostSend() { R.send({ t: 'ks', round: rid, s: AiPelitSulava.now(), sk: people.indexOf(seeker), ph: phase, tm: r2(timer), sl: seekLeft === null ? null : r2(seekLeft), p: stateOf(), ev: events.splice(0) }); }
 
 // ----- On a guest phone -----
 function castFrom(m) {
@@ -1480,8 +1489,13 @@ function guestState(m, snap) {
     p.st = q[3];
     if (Number.isFinite(q[5]) && (snap || p !== player)) p.freeze = q[5];
     if (p === player && !snap) return; // this phone moves its own player
-    p.tx = q[0]; p.ty = q[1]; p.a = q[2]; p.moving = q[4];
-    if (snap) { p.x = q[0]; p.y = q[1]; }
+    p.moving = q[4];
+    // A spot is stamped by the phone that moved it: a friend's own (forwarded by the host) or the host's.
+    // When that changes (the computer takes over a friend, or gives them back) the clocks differ: start again.
+    const own = Number.isFinite(q[6]), src = own ? 'f' : 'h', st = own ? q[6] : (Number.isFinite(m.s) ? m.s : null);
+    const spot = { x: q[0], y: q[1], a: q[2] };
+    if (snap || src !== p.src) { p.tr.snap(st, spot); p.x = q[0]; p.y = q[1]; p.a = q[2]; } else p.tr.push(st, spot);
+    p.src = src;
   });
   if ((m.ph === 'count' || m.ph === 'seek') && (phase === 'count' || phase === 'seek')) phase = m.ph;
   if (Number.isFinite(m.tm)) timer = m.tm;
@@ -1494,12 +1508,11 @@ function guestStep(dt) {
   timer -= dt;
   if (seekLeft !== null) seekLeft = Math.max(0, seekLeft - dt);
   movePlayer(dt);
-  // The others glide to where the host last saw them.
-  const k = Math.min(1, dt * 12);
-  for (const p of people) if (p !== player && p.tx !== undefined) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+  // The others glide between the spots heard, a moment back (v12, #480; v11 chased the newest one).
+  for (const p of people) if (p !== player) { const o = p.tr.at(); if (o) { p.x = o.x; p.y = o.y; p.a = o.a; } }
   if ((meT -= dt) <= 0) {
     meT = 0.1;
-    R.send({ t: 'kme', round: rid, x: r2(player.x), y: r2(player.y), a: r2(player.a), m: r2(player.moving) });
+    R.send({ t: 'kme', round: rid, s: AiPelitSulava.now(), x: r2(player.x), y: r2(player.y), a: r2(player.a), m: r2(player.moving) });
   }
 }
 // The host picks the map under the room's player list; the others are told who picks.
@@ -1533,7 +1546,11 @@ function frame(now) {
   // Once the player is out, the rest of the round plays out faster (alone only: friends still play).
   const out = !R.inRoom && phase === 'seek' && player.role === 'hider' && !active(player);
   for (let i = 0; i < (out ? 3 : 1); i++) step(dt);
+  // v12 (#480): the host's rules keep a friend's newest spot, but the screen draws it smoothly, a moment back.
+  const kept = R.isHost ? people.filter(p => p.ctrl === 'remote' && p.tr.size()).map(p => {
+    const k = [p, p.x, p.y, p.a], o = p.tr.at(); p.x = o.x; p.y = o.y; p.a = o.a; return k; }) : [];
   draw();
+  for (const [p, x, y, a] of kept) { p.x = x; p.y = y; p.a = a; }
   requestAnimationFrame(frame);
 }
 showMenu();
