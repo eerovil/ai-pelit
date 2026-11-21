@@ -97,12 +97,14 @@ def glides(page):
     # Only frames drawn within the guess past the newest spot heard: the drawing's own glide, not a gap in the
     # messages.
     kept = [v for _, v, fed in middle if fed]
-    shown = [round(v) for _, v, _ in middle]
+    # Every frame pair whole in a failure's message (a string, which pytest does not shorten): [moment, speed,
+    # within the guess].
+    shown = json.dumps([[round(t, 3), round(v, 1), fed] for t, v, fed in middle])
     assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
     assert min(kept) > 20, shown
     m, sd = mean(kept), pstdev(kept)
-    assert sd < 0.25 * m, (sd, m, shown)
-    assert max(kept) < 2 * m, (max(kept), m, shown)
+    assert sd < 0.25 * m, f"sd {sd}, mean {m}, frames {shown}"
+    assert max(kept) < 2 * m, f"max {max(kept)}, mean {m}, frames {shown}"
 
 
 def run_and_watch(host, run, watch, others):
@@ -235,7 +237,8 @@ def test_a_dodge_on_a_stalled_link_is_drawn_only_a_little_past_its_end(site, bro
     # It dodged: drawn going up the arena by most of the dodge's 84 units.
     assert ys[0] - min(ys) > 50, ys
     past = stop - min(ys)
-    assert past < 25, (past, stop, ys)
+    # Every frame whole in a failure's message (a string, which pytest does not shorten): [moment, x, y].
+    assert past < 25, f"past {past}, stop {stop}, frames " + json.dumps(guest.evaluate("window.__drawn"))
     assert not host.errors + guest.errors
 
 
