@@ -92,20 +92,22 @@ def run_and_watch(host, run, watch, others):
     run.evaluate(JITTER)
     watch.evaluate(SAMPLE, me)
     if run is not host:
-        # On each friend's spot the host's rules know it at once (not where its screen draws them), and the
-        # screen draws it a moment back on the friend's clock.
-        host.evaluate("""(me) => { window.__rule = []; AiPelitRooms.on('message', (m, from) => { const r = race.runners[me];
-          if (m.t === 'p' && from === r.id) window.__rule.push([m.r[1], r.y, m.s - r.tr.time]); }); }""", me)
+        # Between frames the host keeps the friend's newest spot (ahead of where it last drew them, as they run up
+        # the course), and each of their spots is drawn a moment back on their clock.
+        host.evaluate("""(me) => { const r = race.runners[me]; window.__rule = []; window.__back = [];
+          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === r.id) window.__back.push(m.s - r.tr.time); });
+          setInterval(() => { if (window.__xs.length) window.__rule.push([r.y, window.__xs[window.__xs.length - 1][2]]); }, 37); }""", me)
     run.evaluate("window.__run = true")
     watch.wait_for_function("window.__xs.length >= 200", timeout=20000)
     run.evaluate("window.__run = false")
     assert run.evaluate("me.y") > 8  # it really ran
     glides(watch)
     if run is not host:
-        rule = host.evaluate("window.__rule")
-        assert len(rule) > 15, rule
-        assert all(abs(said - known) < 0.01 for said, known, _ in rule), rule  # the rules: the newest spot
-        assert all(back > 0.03 for _, _, back in rule[5:]), rule  # drawn at least 30 ms back
+        rule, back = host.evaluate("[window.__rule, window.__back]")
+        ahead = [kept - drawn for kept, drawn in rule if drawn > 2 and kept < 8]
+        assert len(ahead) > 30, rule
+        assert sum(a > 0.1 for a in ahead) > 0.9 * len(ahead), ahead  # the newest spot, not the drawn one
+        assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
 
@@ -185,4 +187,30 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_h
     kinds = [k for k in placed(ville, 2) if k != "up"]
     assert kinds[:2] == ["h", "f"], kinds
     errors = [e for p in (host, aino, ville) for e in p.errors]
+    assert not errors, errors
+
+
+def test_a_bump_with_a_friend_happens_where_the_phone_draws_them(site, browser):
+    """A friend runs past this phone's runner. The bump that pushes it is worked out from where this phone draws the
+    friend (#480's D11), not from their newest spot, which is a moment further on: a bump where the player sees one."""
+    host, aino = phones(site, browser)
+    me = index(aino)
+    aino.evaluate(JITTER)
+    host.evaluate("Object.assign(me, { x: 0.55, y: 5, vx: 0, vy: 0 }); input.x = input.y = 0")
+    aino.evaluate("Object.assign(me, { x: 0, y: 0.5 })")
+    host.wait_for_function(f"Math.abs(race.runners[{me}].x) < 0.05 && Math.abs(race.runners[{me}].y - 0.5) < 0.05", timeout=3000)
+    host.wait_for_timeout(400)
+    # Each frame: where the friend is drawn, and where the bumps saw them on a frame that pushed this phone's runner.
+    host.evaluate("""(i) => { window.__fr = 0; window.__drawn = {}; window.__hit = null; const d = window.draw, b = window.bumps;
+      window.draw = () => { const r = race.runners[i]; window.__drawn[window.__fr] = [r.x, r.y]; window.__fr++; d(); };
+      window.bumps = () => { const r = race.runners[i], at = [me.x, me.y, r.x, r.y]; b();
+        if (window.__hit === null && (me.x !== at[0] || me.y !== at[1])) window.__hit = [window.__fr, at[2], at[3]]; }; }""", me)
+    aino.evaluate("window.__run = true")
+    host.wait_for_function("window.__hit !== null && window.__drawn[window.__hit[0]]", timeout=5000)
+    aino.evaluate("window.__run = false")
+    fr, bx, by = host.evaluate("window.__hit")
+    dx, dy = host.evaluate(f"window.__drawn[{fr}]")
+    assert abs(bx - dx) < 0.02 and abs(by - dy) < 0.02, (bx, by, dx, dy)  # the bump saw what that frame drew
+    assert ((dx - 0.55) ** 2 + (dy - 5) ** 2) ** 0.5 < 0.82  # drawn touching
+    errors = [e for p in (host, aino) for e in p.errors]
     assert not errors, errors

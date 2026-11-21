@@ -513,16 +513,21 @@ function afterResults() {
 }
 
 // ---------- The loop ----------
+// v9 (#480): the other phones' runners are drawn gliding between the spots heard, a moment back (v8 drew each new
+// spot as it came). A bump with one happens where this phone draws them too (#480's D11, as in Kaahari); everything
+// else keeps the newest spot (carried on at its speed, the finish, what the host sends on), put back after.
+function asDrawn() {
+  return race && race.mode === 'net' ? race.runners.filter(r => r !== me && r.kind === 'net' && r.tr.size()).map(r => {
+    const k = [r, r.x, r.y, r.z, r.fall], o = r.tr.at(); r.x = o.x; r.y = o.y; r.z = o.z; r.fall = o.fall; return k; }) : [];
+}
+function putBack(kept) { for (const [r, x0, y0, z0, f0] of kept) { r.x = x0; r.y = y0; r.z = z0; r.fall = f0; } }
 let lastT = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   if (race) tick(dt);
-  // v9 (#480): the other phones' runners are drawn gliding between the spots heard, a moment back; the race's
-  // rules (bumps, the finish) keep the newest spot, put back after drawing. v8 drew each new spot as it came.
-  const kept = race && race.mode === 'net' ? race.runners.filter(r => r !== me && r.kind === 'net' && r.tr.size()).map(r => {
-    const k = [r, r.x, r.y, r.z, r.fall], o = r.tr.at(); r.x = o.x; r.y = o.y; r.z = o.z; r.fall = o.fall; return k; }) : [];
+  const kept = asDrawn();
   draw();
-  for (const [r, x0, y0, z0, f0] of kept) { r.x = x0; r.y = y0; r.z = z0; r.fall = f0; }
+  putBack(kept);
   requestAnimationFrame(frame);
 }
 function tick(dt) {
@@ -556,7 +561,7 @@ function tick(dt) {
     }
     r.ph += Math.hypot(r.vx, r.vy) * dt * 2.2;
   }
-  if (race.phase === 'run') bumps();
+  if (race.phase === 'run') { const kept = asDrawn(); bumps(); putBack(kept); }
   if (race.phase === 'run') whoosh(t);
   if (race.mode === 'solo') { if (race.phase === 'run' && over()) finish(standings()); }
   else if (R.isHost) hostTick(dt);
