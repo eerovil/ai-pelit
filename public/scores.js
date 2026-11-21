@@ -76,6 +76,8 @@
     tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki2', 'Mökkitikka'], ['kisa2', 'Pistekisa'], ['mokki', 'Vanha Mökkitikka'], ['main', 'Vanha Pistekisa']] },
     // Longest javelin throw in metres; level: 'taso', the level the player is on.
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
+    // Longest boot throw in metres; level: 'taso', the level the player is on.
+    saappaanheitto: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('saappaanheitto', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
     // Most points in a ski-jumping meet; level: 'taso', the level the player is on. Named lists, the
