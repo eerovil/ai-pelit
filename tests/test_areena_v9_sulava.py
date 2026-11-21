@@ -392,5 +392,7 @@ def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, bro
     over = [(round(t - t1, 3), round(y - held[-1], 1)) for t, y in after[:6]
             if y - held[-1] > gap * (1 - math.exp(-(t - t1) / 0.1)) + 1.2 * 200 * (t - t1) + 2]
     assert not over, (over, gap)
-    assert abs(after[-1][1] - after[-2][1]) < 10, after[-5:]
+    # And by the end it runs on at the states' speed (200 units/s), caught up.
+    (ta, ya), (tb, yb) = after[-2], after[-1]
+    assert abs(yb - ya) / (tb - ta) < 1.5 * 200, after[-5:]
     assert not host.errors + guest.errors
