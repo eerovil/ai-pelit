@@ -1,5 +1,5 @@
 'use strict';
-// Lattia on laavaa v1: the round with friends, 2–8 phones in one room (#488, design on the issue).
+// Lattia on laavaa v2: the round with friends, 2–8 phones in one room (#488, design on the issue).
 //
 // The host's phone runs the round: its clock `rt`, the computer's kids, every shove, and who is
 // out. Each phone moves its own kid itself (so the stick and the jump answer at once) and sends
