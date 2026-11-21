@@ -2,7 +2,10 @@
 lib/sulava-1 between the spots their phone sends, instead of being carried on at its last speed between messages
 (v6). The places and the end use the newest spot heard; only the drawing lags."""
 
+import time
 from statistics import mean, pstdev
+
+import pytest
 
 from test_vuoristorata_v7 import room_of
 
@@ -220,5 +223,49 @@ def test_a_friend_past_the_line_brakes_to_a_stop_on_every_screen(site, browser):
         assert host.evaluate(f"net.cars[{i}].fin") == 5
         errors = [e for p in (host, aino, ville) for e in p.errors]
         assert not errors, errors
+    finally:
+        close(host)
+
+
+# The room's pause on one phone by hand, from `on` to `off` (ms on the machine's clock, which every page shares), to
+# set which phone hears it first; a pause on a busy test machine cannot wait for a message to reach a page.
+PAUSE = """([on, off]) => Object.defineProperty(AiPelitRooms, 'paused',
+  { get: () => Date.now() >= on && Date.now() < off, configurable: true })"""
+# Each frame, where car `i` is drawn and whether this phone is paused.
+DRAWN = """(i) => { window.__dr = []; const d = window.drawnS;
+  window.drawnS = k => { const s = d(k); if (k === net.cars[i])
+    window.__dr.push([performance.now() / 1000, s, AiPelitRooms.paused]); return s; }; }"""
+
+
+@pytest.mark.parametrize("first", ["host", "guest"])
+def test_a_pause_holds_a_friend_s_train_where_it_is_drawn_and_it_rides_on_from_there(site, browser, first):
+    """A phone in the race goes away: the race stands still on every phone (step()), so the friend's train is drawn
+    standing where it was, not guessed on along the track (to be pulled back once the race goes on). The phones hear
+    a pause a moment apart, so each order is paused by hand a quarter of a second apart: a phone that pauses first
+    still hears the other's last spots, and they go on its track only once its own pause ends."""
+    host, guest = phones(site, browser)
+    try:
+        i = index(guest)
+        guest.evaluate("window.__run = true")
+        host.wait_for_function(f"net.cars[{i}].s > 46", timeout=10000)
+        host.evaluate(DRAWN, i)
+        host.wait_for_timeout(500)
+        at = time.time() * 1000 + 300
+        for p, d in ((host, 0), (guest, 250)) if first == "host" else ((guest, 0), (host, 250)):
+            p.evaluate(PAUSE, [at + d, at + d + 1450])  # both 1.45 s, a quarter of a second apart
+        host.wait_for_timeout(300 + 1700 + 1500)
+        guest.evaluate("window.__run = false")
+        dr = host.evaluate("window.__dr")
+        paused = [(t, s) for t, s, p in dr if p]
+        assert len(paused) > 4 and paused[-1][0] - paused[0][0] > 0.8, dr  # by time: a loaded machine draws few frames
+        # From 0.3 s into this phone's pause (the other's spots sent before its own pause have been drawn by then),
+        # the train stands where it was drawn.
+        held = [s for t, s in paused if t > paused[0][0] + 0.3]
+        assert held and max(held) - min(held) < 0.05, [round(s, 2) for _, s in paused]
+        assert dr[-1][1] > held[-1] + 5, dr[-1]  # and it rode on after the pause
+        # Never drawn going back along the track, before, in or after the pause.
+        drawn = [round(s, 2) for _, s, _ in dr]
+        assert all(b >= a - 0.05 for a, b in zip(drawn, drawn[1:])), drawn
+        assert not host.errors + guest.errors
     finally:
         close(host)
