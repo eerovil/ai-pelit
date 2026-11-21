@@ -1,5 +1,5 @@
 'use strict';
-// Pomppukeppi v1: the board and the hares in 3D (three.js, the site's shared copy, #99). It only
+// Pomppukeppi v2: the board and the hares in 3D (three.js, the site's shared copy, #99). It only
 // reads the world (world.js). index.html imports three.js and calls init3d(THREE); a phone that
 // cannot draw 3D plays on a flat board drawn by ui.js (draw2d()).
 // Board square (x, y) is world (x - (n - 1) / 2, 0, y - (n - 1) / 2): x to the right, y towards
@@ -30,6 +30,22 @@ function init3d(T) {
   V3.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.28, 12), new THREE.MeshLambertMaterial({ color: 0xffe14a, emissive: 0x806a10 }));
   V3.arrow.rotation.x = Math.PI;
   scene.add(V3.marker, V3.arrow);
+  // Snowballs and their puffs of snow (#492): a few meshes made once and reused.
+  const snow = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x6a7a88 });
+  V3.balls = [0, 1, 2].map(() => {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), snow);
+    const sh = new THREE.Mesh(new THREE.CircleGeometry(0.17, 14), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+    sh.rotation.x = -Math.PI / 2; b.visible = sh.visible = false;
+    scene.add(b, sh);
+    return { b, sh };
+  });
+  const bit = new THREE.SphereGeometry(0.13, 8, 6);
+  V3.puffs = [0, 1].map(() => {
+    const g = new THREE.Group();
+    for (let k = 0; k < 9; k++) g.add(new THREE.Mesh(bit, new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x6a7a88, transparent: true })));
+    g.visible = false; scene.add(g);
+    return g;
+  });
 }
 
 const lambert = hex => new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
@@ -205,6 +221,30 @@ function render3d(w, me, dt) {
     mesh.visible = !!b;
     if (b) { mesh.position.set(b.x - half, 0.42 + Math.sin(V3.t * 3) * 0.06, b.y - half); mesh.rotation.y = V3.t * 1.4; }
   }
+  // Snowballs in the air, with a shadow under each.
+  V3.balls.forEach((m, k) => {
+    const b = w.balls[k];
+    m.b.visible = m.sh.visible = !!b;
+    if (!b) return;
+    const p = ballPos(w, b);
+    m.b.position.set(p.x - half, 0.06 + p.z, p.y - half);
+    m.b.rotation.x += dt * 9;
+    m.sh.position.set(p.x - half, 0.075, p.y - half);
+  });
+  // Puffs: the bits fly out and fade (ui.js keeps the list and their times).
+  V3.puffs.forEach((g, k) => {
+    const f = puffs[k];
+    g.visible = !!f;
+    if (!f) return;
+    const q = f.t / PUFF_T;
+    g.position.set(f.x - half, 0.06 + f.z, f.y - half);
+    g.children.forEach((o, j) => {
+      const a = j / g.children.length * TAU, up = (j % 3 - 1) * 0.5;
+      o.position.set(Math.cos(a) * 0.75 * q, up * q - q * q * 0.3, Math.sin(a) * 0.75 * q);
+      o.scale.setScalar(1.3 - q * 0.6);
+      o.material.opacity = Math.min(1, 2 * (1 - q));
+    });
+  });
   R.render(V3.scene, V3.camera);
 }
 // Screen px of a board point (x, y, height): the names and pop-ups ui.js writes on the 2D canvas.
