@@ -93,7 +93,7 @@ function newWorld(level, players, seed) {
   order.forEach((p, k) => { p.wobAt = t; p.sinkAt = t + WOBBLE; t += Math.max(1.6, R.gap - k * 0.12); });
   const w = {
     level, seed, rt: -COUNT, kids: [], pieces, ph: 'count', over: false, winner: null, draw: false, graceAt: null,
-    floatAt: R.floatAt, lastSink: t, floatsCache: { k0: 0, list: [] },
+    floatAt: R.floatAt, floatsCache: { k0: 0 },
   };
   // Spawns: on the pieces that sink last, spread round them.
   const spots = order.slice().reverse().filter(p => p.h0 < 1.5);
@@ -103,7 +103,6 @@ function newWorld(level, players, seed) {
     k.x = pc.x + (n % 2 ? 0.45 : -0.45) * Math.min(1, (pc.w - 0.6) / 0.9) * (n ? 1 : 0);
     k.z = pc.z + (n > 1 ? 0.3 : 0);
     k.y = pc.h0; k.face = Math.atan2(-k.z, -k.x) || 0;
-    k.sx = k.x; k.sz = k.z;
     w.kids.push(k);
   });
   return w;
@@ -111,7 +110,7 @@ function newWorld(level, players, seed) {
 function newKid(p, i) {
   return {
     i, id: p.id, name: p.name, kind: p.kind, col: p.col === undefined ? i % KID_COLORS.length : p.col,
-    x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, face: 0, ground: true, gp: -1,
+    x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, face: 0, ground: true, gpId: null,
     ix: 0, iz: 0, jump: false, jumpHeld: false, coyote: 0, buf: 0,
     cd: 0, dash: 0, stun: 0, pushedAt: -9, out: false, outRt: -1, fellX: 0, fellZ: 0, shoves: 0, own: 0,
   };
@@ -123,7 +122,6 @@ function lavaAt(rt) { return rt < 20 ? 0.02 : Math.min(0.45, 0.02 + (rt - 20) * 
 // A piece's top at rt; 'gone' once it is under the lava.
 function topOf(p, rt) { return rt < p.sinkAt ? p.h0 : p.h0 - (rt - p.sinkAt) * SINK_V; }
 function wobbleOf(p, rt) { return rt >= p.wobAt ? Math.min(1, (rt - p.wobAt) / WOBBLE) : 0; }
-function alive(p, rt) { return topOf(p, rt) > lavaAt(rt) + 0.03; }
 // Floats: from `floatAt` on, one every few seconds from a wall, across the lava, more and quicker
 // as time goes on; each is a function of its number k and the seed alone.
 const FLOAT_KINDS = [['fcushion', 1.0, 1.0], ['book', 0.8, 0.6], ['fbasket', 0.9, 0.9], ['tray', 1.1, 0.7], ['duck', 0.7, 0.7]];
@@ -166,11 +164,10 @@ function solids(w, rt) {
   for (const p of w.pieces) {
     const top = topOf(p, rt);
     if (top <= L + 0.03) continue;
-    const wob = wobbleOf(p, rt);
     // A wobbling piece shakes a little under the feet; it does not throw anyone off.
-    list.push({ id: 'p' + p.i, x: p.x, z: p.z, w: p.w, d: p.d, top, vx: 0, vz: 0, wob });
+    list.push({ id: 'p' + p.i, x: p.x, z: p.z, w: p.w, d: p.d, top, vx: 0, vz: 0 });
   }
-  for (const f of floatsAt(w, rt)) if (f.top > L + 0.03) list.push({ id: 'f' + f.k, x: f.x, z: f.z, w: f.w, d: f.d, top: f.top, vx: f.vx, vz: f.vz, wob: f.sink });
+  for (const f of floatsAt(w, rt)) if (f.top > L + 0.03) list.push({ id: 'f' + f.k, x: f.x, z: f.z, w: f.w, d: f.d, top: f.top, vx: f.vx, vz: f.vz });
   return list;
 }
 const inside = (s, x, z, m) => Math.abs(x - s.x) <= s.w / 2 + m && Math.abs(z - s.z) <= s.d / 2 + m;
@@ -188,7 +185,7 @@ function moveKid(w, k, dt, sol) {
   if (m > 0.15) k.face = Math.atan2(iz, ix);
   // The ground's own speed (a float) carries a kid standing on it.
   let gvx = 0, gvz = 0;
-  if (k.ground && k.gp >= 0) { const g = sol.find(s => s.id === k.gpId); if (g) { gvx = g.vx; gvz = g.vz; } }
+  if (k.ground && k.gpId) { const g = sol.find(s => s.id === k.gpId); if (g) { gvx = g.vx; gvz = g.vz; } }
   if (k.dash > 0) {
     k.dash = Math.max(0, k.dash - dt);
   } else {
@@ -229,11 +226,11 @@ function moveKid(w, k, dt, sol) {
   }
   const was = k.ground;
   if (best && k.y <= best.top && k.vy <= 0.5) {
-    k.y = best.top; k.vy = 0; k.ground = true; k.gpId = best.id; k.gp = 1; k.pushedUp = false;
+    k.y = best.top; k.vy = 0; k.ground = true; k.gpId = best.id; k.pushedUp = false;
   } else if (best && was && k.vy <= 0 && k.y - best.top < STEP_UP && k.y > best.top) {
-    k.y = best.top; k.vy = 0; k.ground = true; k.gpId = best.id; k.gp = 1;   // stepping down a little
+    k.y = best.top; k.vy = 0; k.ground = true; k.gpId = best.id;   // stepping down a little
   } else {
-    k.ground = false; k.gp = -1; k.gpId = null;
+    k.ground = false; k.gpId = null;
   }
 }
 // Kids bump: they cannot stand in one spot. Only `mine` are moved (the others belong to other

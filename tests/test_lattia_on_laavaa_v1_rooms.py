@@ -197,10 +197,13 @@ def test_an_away_phone_pauses_the_clock_and_the_computer_takes_it_and_gives_it_b
     kids.relay.back(guest)
     host.wait_for_function(f"!net.recs.get({gid}).drive", timeout=15000)
     guest.wait_for_function(f"net.h >= {own + 1} && !net.cpuMine && mode === 'netplay'", timeout=10000)
+    # The host ran the kid on until the phone's first spot with the new count, then let it go.
+    host.wait_for_function(f"!net.recs.get({gid}).hand && !runsHere({KID.format(gid)})", timeout=5000)
     host.evaluate("() => world.kids.filter(k => k !== me).forEach(k => fall(world, k))")
     guest.wait_for_function("mode === 'end'", timeout=10000)
     assert guest.evaluate("result.helped")
-    assert "Tietokone" in guest.locator("#endNote").inner_text()
+    note = guest.locator("#endNote").inner_text()
+    assert "Tietokone" in note and "Kestit" in note   # helped, and still its own time
     assert host.errors == guest.errors == []
 
 

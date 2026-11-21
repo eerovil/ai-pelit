@@ -148,7 +148,8 @@ c.addEventListener('pointerdown', e => {
   const b = buttons();
   if (hit(b.jump, e)) { jumpPtr = e.pointerId; return; }
   if (hit(b.shove, e)) { shoveBtn(); return; }
-  if (stick) return;
+  // The stick is the left half's (Eero's choice): a thumb that misses a button on the right runs nothing.
+  if (stick || e.clientX > W / 2) return;
   try { c.setPointerCapture(e.pointerId); } catch (_) {}
   stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
 });
@@ -205,7 +206,7 @@ function showEnd() {
   const r = result;
   if (r.net) {
     $('endTitle').textContent = r.draw ? 'Tasapeli!' : r.won ? 'Voitit!' : (r.winnerName || 'Joku') + ' voitti';
-    $('endNote').textContent = r.helped ? 'Tietokone pelasi puolestasi' : r.time !== null ? 'Kestit ' + fmt(r.time) : '';
+    $('endNote').textContent = [r.helped ? 'Tietokone pelasi välillä puolestasi' : '', r.time !== null ? 'Kestit ' + fmt(r.time) : ''].filter(Boolean).join(' · ');
   } else {
     $('endTitle').textContent = r.won ? 'Voitit kierroksen!' : 'Laavaan!';
     $('endNote').textContent = 'Kestit ' + fmt(r.time) + (r.rec ? ' – uusi ennätys!' : best[roomN - 1] ? ' · paras ' + fmt(best[roomN - 1]) : '');

@@ -52,7 +52,7 @@ function runsHere(k) {
   if (k === me && !(net && net.cpuMine)) return true;
   if (!RM || !RM.isHost || !net) return false;
   const rec = net.recs.get(k.id);
-  return !!rec && (rec.kind === 'cpu' || rec.drive || rec.silent);
+  return !!rec && (rec.kind === 'cpu' || rec.drive || rec.hand || rec.silent);
 }
 
 // ---- The host's snapshot ----
@@ -81,7 +81,7 @@ function netStart(s) {
     world = newWorld(netRoom || roomN, players, (Date.now() % 1e9) >>> 0);
     const lvl = ROOMS[world.level - 1].cpu;
     world.kids.forEach((k, i) => {
-      net.recs.set(k.id, { kind: k.kind === 'cpu' ? 'cpu' : k.kind, drive: false, silent: false, helped: false, inT: performance.now() });
+      net.recs.set(k.id, { kind: k.kind === 'cpu' ? 'cpu' : k.kind, drive: false, hand: false, silent: false, helped: false, inT: performance.now() });
       brains[i] = k.kind === 'cpu' ? cpuBrain(lvl, world.seed + i * 31) : null;
     });
     me = world.kids.find(k => k.id === RM.me) || null;
@@ -122,6 +122,8 @@ function guestState(m) {
         Object.assign(k, { x: a[6], y: a[7], z: a[8], vx: a[9], vy: a[10], vz: a[11], face: a[12], stun: a[14], dash: a[15], ground: false });
         k.shoves = Math.max(k.shoves, a[16]); k.jumps = Math.max(k.jumps || 0, a[17]);
       }
+      // While the computer drives it, my kid is drawn smoothly like the others'.
+      if (net.cpuMine) { const t = trackOf(k.id); if (t) t.push(a[5], { x: a[6], z: a[8], y: a[7], f: a[12] }); }
       // The host says I fell (it judged me, or I had told it): out at once, never alive again.
       if (outRt >= 0 && !k.out) fall(w, k, outRt);
       return;
@@ -184,10 +186,10 @@ function hostStep(dt, now) {
   w.kids.forEach((k, i) => {
     const rec = net.recs.get(k.id);
     // A phone silent for a second of running round: the host runs its kid on, stick let go.
-    rec.silent = rec.kind === 'net' && !rec.drive && now - rec.inT > 1000;
+    rec.silent = rec.kind === 'net' && !rec.drive && !rec.hand && now - rec.inT > 1000;
     if (rec.silent) { k.ix = k.iz = 0; k.jump = false; }
     if (runsHere(k)) run.push(k);
-    if (sol && brains[i] && (rec.kind === 'cpu' || rec.drive) && cpuThink(w, k, brains[i], dt, sol)) doShove(k);
+    if (sol && brains[i] && (rec.kind === 'cpu' || rec.drive || rec.hand) && cpuThink(w, k, brains[i], dt, sol)) doShove(k);
   });
   stepWorld(w, dt, run);
   for (const k of run) { k.stamp = stampNow(); if (w.ph === 'play' && inLava(w, k)) fall(w, k); }
@@ -206,7 +208,7 @@ function guestStep(dt) {
 function hostSpot(m, from) {
   const k = world.kids.find(o => o.id === from), rec = net.recs.get(from);
   if (!k || !rec || rec.kind !== 'net' || rec.drive || m.h !== k.own) return;   // not its now, or an old hand-over
-  rec.inT = performance.now(); rec.silent = false;
+  rec.inT = performance.now(); rec.silent = false; rec.hand = false;   // the phone has its kid now
   const n = v => Number.isFinite(+v) ? +v : 0;
   Object.assign(k, { x: clamp(n(m.x), X0, X1), y: n(m.y), z: clamp(n(m.z), Z0, Z1), vx: n(m.vx), vy: n(m.vy), vz: n(m.vz), face: n(m.f), stun: n(m.st), dash: n(m.da) });
   k.shoves = Math.max(k.shoves, Math.floor(n(m.sh))); k.jumps = Math.max(k.jumps || 0, Math.floor(n(m.j)));
@@ -314,7 +316,7 @@ if (RM) {
   RM.on('hello', id => {
     if (net && !net.res && world) {
       const k = world.kids.find(o => o.id === id), rec = net.recs.get(id);
-      if (k && rec && rec.kind === 'net' && !k.out) { rec.drive = false; rec.silent = false; k.own++; k.ix = k.iz = 0; rec.inT = performance.now(); }
+      if (k && rec && rec.kind === 'net' && !k.out) { rec.drive = false; rec.hand = true; rec.silent = false; k.own++; k.ix = k.iz = 0; k.jump = false; rec.inT = performance.now(); }
       RM.send(hostState(), id);
     } else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
   });
@@ -325,7 +327,7 @@ if (RM) {
       const rec = net.recs.get(k.id);
       if (!ids.includes(k.id) || !rec || rec.kind !== 'net' || rec.drive) return;
       // From now on the host ignores that phone's spots and falls still on their way.
-      rec.drive = true; rec.helped = true; k.own++;
+      rec.drive = true; rec.hand = false; rec.helped = true; k.own++;
       brains[i] = cpuBrain(lvl, world.seed + i * 31 + 7);
     });
   });
@@ -333,7 +335,8 @@ if (RM) {
     if (!net || !world) return;
     const k = world.kids.find(o => o.id === id), rec = net.recs.get(id);
     if (!k || !rec || !rec.drive) return;
-    rec.drive = false; rec.inT = performance.now(); k.own++; k.ix = k.iz = 0; k.jump = false;
+    // The computer runs the kid on until the phone's first spot with the new count (design review).
+    rec.drive = false; rec.hand = true; rec.inT = performance.now(); k.own++;
     RM.send(hostState(), id);
   });
   RM.on('lobby', toSolo);

@@ -153,6 +153,10 @@ def test_the_stick_runs_my_kid_and_the_buttons_jump_and_shove(site, context):
     page.evaluate(TOUCH, ["pointerdown", 9, b["shove"]["x"], b["shove"]["y"]])
     page.wait_for_function("me.shoves === 1 && me.cd > 0", timeout=3000)
     assert page.evaluate("stick") is None
+    # A thumb on the right half that misses the buttons starts no stick (the stick is the left's).
+    page.evaluate(TOUCH, ["pointerdown", 10, b["jump"]["x"], b["jump"]["y"] - 230])
+    assert page.evaluate("stick") is None
+    page.evaluate(TOUCH, ["pointerup", 10, b["jump"]["x"], b["jump"]["y"] - 230])
     assert page.errors == []
 
 
