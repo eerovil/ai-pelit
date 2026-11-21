@@ -17,7 +17,7 @@ PUHELINKOPPI = "games/puhelinkoppi/v9/"
 SORMISKEITTI = "games/sormiskeitti/v10/"
 HIIHTO = "games/hiihto/v13/"
 PIANO = "games/piano/v11/"
-VUORISTORATA = "games/vuoristorata/v6/"
+VUORISTORATA = "games/vuoristorata/v7/"
 
 # Plays one Sormiskeitti round synchronously through the game's own step(), so the result does not
 # hang on frame timing. `push` is frames between pushes; `trick` adds a late ollie and a let-go at the top.

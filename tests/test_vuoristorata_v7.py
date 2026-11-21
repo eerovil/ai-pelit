@@ -8,7 +8,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/vuoristorata/v6/"
+URL = "games/vuoristorata/v7/"
 KEY = "ai-pelit:vuoristorata:"
 
 
