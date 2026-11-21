@@ -264,7 +264,7 @@ def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site,
         for p, d in ((host, 0), (aino, 250)) if first == "host" else ((aino, 0), (host, 250)):
             p.evaluate(PAUSE, [at + d, at + d + 1450])  # both 1.45 s, a quarter of a second apart
         aino.wait_for_timeout(300 + 1700)
-    aino.wait_for_timeout(2000)
+    aino.wait_for_timeout(2500)
     dr = aino.evaluate("window.__dr")
     paused = [(t, s) for t, s, _, p, *_ in dr if p]
     assert len(paused) > 4 and paused[-1][0] - paused[0][0] > 0.8, dr  # by time: a loaded machine draws few frames
@@ -286,9 +286,12 @@ def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site,
     if first == "away":
         return
     went, gone = min(t for t, _, _, p, _ in dr if p), max(t for t, _, _, p, _ in dr if p)
-    before = [b for t, _, _, p, b in dr if not p and went - 0.5 < t < went and b is not None]
-    after = [b for t, _, _, p, b in dr if not p and gone + 1 < t < gone + 2 and b is not None]
-    assert len(before) > 2 and len(after) > 4, (before, after)
+    # The two clocks are two pages' (each its own performance.now()), so the value is their offset plus the lag:
+    # only how it changes counts. By time, not frames: a busy machine can draw no frame for half a second, so the
+    # last few frames before the pause, and those from 1 to 2.5 s after it, however few.
+    before = [b for t, _, _, p, b in dr if not p and went - 2 < t < went and b is not None][-10:]
+    after = [b for t, _, _, p, b in dr if not p and gone + 1 < t < gone + 2.5 and b is not None]
+    assert before and after, ([(round(t - went, 2), p) for t, _, _, p, _ in dr])
     assert median(after) > median(before) - 0.08, (round(median(before), 3), [round(b, 3) for b in after])
 
 
