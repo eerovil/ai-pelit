@@ -111,6 +111,31 @@ def test_a_drop_adds_fifteen_seconds_once(site, browser):
     page.context.close()
 
 
+def test_a_fall_in_the_step_that_reaches_the_line_comes_before_the_finish(site, browser):
+    """Review on #506: her fall and the line in one step are taken in the order they came."""
+    page = open_game(site, browser)
+    to_gun(page)
+    # She slips off at once, 10 cm before the line: a drop there, no finish this step.
+    page.evaluate("() => { me.x = TRACK - 0.1; me.v = 7; me.s = 0.9999; tick(1 / 60); }")
+    assert page.evaluate("[me.fin, me.drops, me.x < TRACK, me.downT > 0]") == [None, 1, True, True]
+    # The pick-up's 1.8 s and the 15 s are both in the time when they cross after it.
+    clock = page.evaluate("race.clock")
+    page.evaluate("() => { for (let i = 0; i < 200 && me.downT > 0; i++) tick(1 / 60); me.v = 5; tick(1 / 60); }")
+    fin = page.evaluate("me.fin")
+    assert fin is not None and fin > clock + 1.75 + 15
+    page.context.close()
+
+
+def test_the_line_before_the_fall_in_one_step_is_a_finish(site, browser):
+    page = open_game(site, browser)
+    to_gun(page)
+    # 1 cm to go at 7 m/s: the line comes in the first tenth of the step, the slip only past half.
+    page.evaluate("() => { me.x = TRACK - 0.01; me.v = 7; me.s = 0.995; tick(1 / 60); }")
+    fin, drops, clock = page.evaluate("[me.fin, me.drops, race.clock]")
+    assert drops == 0 and fin == pytest.approx(clock, abs=0.03)
+    page.context.close()
+
+
 def test_a_couple_still_out_gets_an_estimate_and_it_is_not_saved(site, browser):
     page = open_game(site, browser)
     to_gun(page)
@@ -176,6 +201,12 @@ def test_each_pad_is_where_it_is_drawn(site, browser, size):
     assert all(k == hit for k, hit in got)
     # A tap on the scene does nothing.
     assert page.evaluate("padAt(W / 2, trackTop + 20)") == 0
+    # Nor does one in a gap between pads, or above, below and beside them (review on #506).
+    gaps = page.evaluate("""(() => { const p = {}; pads().forEach(q => { p[q.k] = q; });
+      const mid = q => q.x + q.w / 2;
+      return [[mid(p[3]), (p[3].y + p[3].h + p[1].y) / 2], [mid(p[4]), (p[4].y + p[4].h + p[2].y) / 2],
+        [mid(p[3]), p[3].y - 3], [mid(p[1]), p[1].y + p[1].h + 3], [p[1].x - 3, p[1].y + 5]]; })()""")
+    assert [page.evaluate(f"padAt({x}, {y})") for x, y in gaps] == [0, 0, 0, 0, 0]
     # Upright the feet are at the bottom, jump on the left and hold on the right above them.
     p = {k: (x, y) for k, x, y in page.evaluate("pads().map(p => [p.k, p.x, p.y])")}
     assert p[1][0] < p[2][0] and p[3][0] < p[4][0]
