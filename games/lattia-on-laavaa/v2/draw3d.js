@@ -1,5 +1,5 @@
 'use strict';
-// Lattia on laavaa v1: the room drawn in 3D (#488). three.js renders the room, the furniture, the
+// Lattia on laavaa v2: the room drawn in 3D (#488). three.js renders the room, the furniture, the
 // lava, the floats and the kids on the WebGL canvas #g under the 2D canvas #c, which keeps the
 // HUD, the stick and the buttons (ui.js). This only reads the world each frame; nothing here
 // changes how the round plays. A phone that cannot draw WebGL gets L3D.failed and a Finnish note.
