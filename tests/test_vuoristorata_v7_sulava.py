@@ -1,0 +1,175 @@
+"""Vuoristorata v7 (#480): a friend's train glides along the track on the other phones' screens, drawn from
+lib/sulava-1 between the spots their phone sends, instead of being carried on at its last speed between messages
+(v6). The places and the end use the newest spot heard; only the drawing lags."""
+
+from statistics import mean, pstdev
+
+from test_vuoristorata_v7 import room_of
+
+# A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
+JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  AiPelitRooms.send = (m, to) => { const now = performance.now(), at = Math.max(free, now + rnd() * 90); free = at;
+    setTimeout(() => send(m, to), at - now); }; }"""
+# The phone's own train goes on at 12 m/s while `window.__run` is on, and stands still while it is off.
+STRAIGHT = """() => { window.__run = false;
+  window.rideStep = (t, car, h) => { car.v = window.__run ? 12 : 0; car.s += car.v * h; car.t += h; return null; }; }"""
+# Records, each time the screen draws car `i`, where along the track it is drawn, and when a message arrived (so a
+# stall of the test machine, with no message for a while, can be told from a jerk).
+SAMPLE = """(i) => { window.__ss = []; window.__got = [];
+  AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
+  const d = window.drawnS;
+  window.drawnS = k => { const s = d(k); if (k === net.cars[i] && window.__ss.length < 300) window.__ss.push([performance.now() / 1000, s]); return s; }; }"""
+
+
+def phones(site, browser, names=("Eero", "Aino")):
+    """Phones in a room, the race running, every train standing still at 40 m."""
+    relay, host, guests, ctxs = room_of(site, browser, list(names))
+    host.click("#aipr-start")
+    pages = [host, *guests]
+    for p in pages:
+        p.wait_for_function("net && net.cfg && game.mode === 'ride'", timeout=15000)
+        p.evaluate(STRAIGHT)
+        p.evaluate("game.car.s = 40; game.car.check = 40")
+    host.relay = relay
+    host.ctxs = ctxs
+    return pages
+
+
+def index(page):
+    return page.evaluate("net.cars.findIndex(k => k.kind === 'me')")
+
+
+def glides(page):
+    """The speed over each two drawn frames while the friend rode: always forward and about the same."""
+    ss, got = page.evaluate("[window.__ss, window.__got]")
+    sp = [(t2, (b - a) / (t2 - t0)) for (t0, a), (t2, b) in zip(ss, ss[2:]) if t2 > t0]
+    moving = [i for i, (_, v) in enumerate(sp) if v > 0.5]
+    assert len(moving) > 60, len(moving)
+    t0, t1 = sp[moving[0]][0] + 0.3, sp[moving[-1]][0] - 0.3  # the start and the stop take a moment to glide
+    middle = [(t, v) for t, v in sp if t0 <= t <= t1]
+    assert len(middle) > 40, len(middle)
+
+    def heard(t):
+        return any(t - 0.3 <= g <= t for g in got)
+    kept = [v for t, v in middle if heard(t)]
+    shown = [round(v, 2) for _, v in middle]
+    assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
+    assert min(kept) > 3, shown
+    m, sd = mean(kept), pstdev(kept)
+    assert sd < 0.25 * m, (sd, m, shown)
+    assert max(kept) < 2 * m, (max(kept), m, shown)
+
+
+def ride_and_watch(host, run, watch, others):
+    me = index(run)
+    run.evaluate(JITTER)
+    watch.evaluate(SAMPLE, me)
+    if run is not host and watch is not host:
+        host.evaluate(SAMPLE, me)  # the host's drawn spots, for its check below
+    if run is not host:
+        # Between frames the host keeps the friend's newest spot (ahead of where it last drew them, as they ride on).
+        host.evaluate("""(me) => { const k = net.cars[me]; window.__rule = [];
+          setInterval(() => { if (window.__ss.length) window.__rule.push([k.s, window.__ss[window.__ss.length - 1][1]]); }, 37); }""", me)
+    run.evaluate("window.__run = true")
+    watch.wait_for_function("window.__ss.length >= 200", timeout=30000)
+    run.evaluate("window.__run = false")
+    assert run.evaluate("game.car.s") > 60  # it really rode
+    glides(watch)
+    if run is not host:
+        rule = host.evaluate("window.__rule")
+        ahead = [kept - drawn for kept, drawn in rule if 42 < drawn and kept < 70]
+        assert len(ahead) > 30, rule
+        # The newest spot, not the drawn one (a late message can leave the drawing running on a moment past it).
+        assert sum(a > 0 for a in ahead) > 0.75 * len(ahead) and mean(ahead) > 0.3, ahead
+    errors = [e for p in (host, *others) for e in p.errors]
+    assert not errors, errors
+
+
+def close(host):
+    for c in host.ctxs:
+        c.close()
+
+
+def test_a_friend_riding_glides_on_the_host(site, browser):
+    host, guest = phones(site, browser)
+    try:
+        ride_and_watch(host, guest, host, others=[guest])
+    finally:
+        close(host)
+
+
+def test_the_host_riding_glides_on_a_guest(site, browser):
+    host, guest = phones(site, browser)
+    try:
+        ride_and_watch(host, host, guest, others=[guest])
+    finally:
+        close(host)
+
+
+def test_a_friend_riding_glides_on_a_third_phone_too(site, browser):
+    """The host sends a friend's spots on as they came, with the friend's own clock, so a third phone draws them
+    as smoothly (v6 sent where its own guess had carried them)."""
+    host, aino, ville = phones(site, browser, names=("Eero", "Aino", "Ville"))
+    try:
+        host.evaluate(JITTER)
+        ride_and_watch(host, aino, ville, others=[aino, ville])
+    finally:
+        close(host)
+
+
+# On a phone: each time a message changes whose clock car `i`'s spot carries (the computer took over a friend, or
+# gave them back), the spot it brought and where the next frame drew them.
+SWITCH = """(i) => { window.__sw = []; const k = net.cars[i]; let src = k.src, want = null; const d = window.drawnS;
+  AiPelitRooms.on('message', m => { if (m.t !== 's' || k.src === src) return; src = k.src; want = [src, m.c[i][0]]; });
+  window.drawnS = o => { const s = d(o); if (o === k && want) { window.__sw.push([...want, s]); want = null; } return s; }; }"""
+
+
+def test_a_friend_taken_over_by_the_computer_and_given_back_is_drawn_where_the_host_says(site, browser):
+    """A friend's phone drops mid-race: the host's computer rides for them, so their row carries the host's clock and
+    no longer the friend's; when the phone is back, the friend's again. A third phone starts the track again at each
+    change, drawing the row's spot from the next frame, not a guess from the other clock."""
+    host, aino, ville = phones(site, browser, names=("Eero", "Aino", "Ville"))
+    try:
+        me = index(aino)
+        aino.evaluate("window.__run = true")
+        ville.wait_for_function(f"net.cars[{me}].src === 'f' && net.cars[{me}].s > 44", timeout=5000)
+        ville.evaluate(SWITCH, me)
+        host.relay.drop(aino)
+        host.wait_for_selector("#aipr-goOn", state="visible", timeout=10000)
+        host.click("#aipr-goOn")
+        host.wait_for_function(f"net.cars[{me}].kind === 'cpu'")
+        ville.wait_for_function("window.__sw.some(s => s[0] === 'h')", timeout=5000)
+        host.relay.back(aino)
+        host.wait_for_function(f"net.cars[{me}].kind === 'net' && !net.cars[{me}].handback && net.cars[{me}].ts !== null",
+                               timeout=20000)
+        ville.wait_for_function("window.__sw.some(s => s[0] === 'f')", timeout=5000)
+        sw = ville.evaluate("window.__sw")
+        assert [s[0] for s in sw][:2] == ["h", "f"], sw
+        assert all(abs(drawn - said) < 0.01 for _, said, drawn in sw), sw
+        errors = [e for p in (host, aino, ville) for e in p.errors]
+        assert not errors, errors
+    finally:
+        close(host)
+
+
+def test_a_train_put_back_after_a_derail_is_drawn_there_at_once(site, browser):
+    """A friend's train flies off and is put back before the place it flew off: the other phone draws it there from
+    the first spot after, instead of gliding it backwards down the track."""
+    host, guest = phones(site, browser)
+    try:
+        me = index(guest)
+        guest.evaluate("window.__run = true")
+        host.wait_for_function(f"net.cars[{me}].s > 70", timeout=10000)
+        guest.evaluate("window.__run = false")
+        host.evaluate("""(i) => { window.__back = null; const k = net.cars[i]; const d = window.drawnS; let was = false;
+          window.drawnS = o => { const s = d(o); if (o === k) { if (was && !k.crash && window.__back === null) window.__back = [k.s, s];
+            was = was || !!k.crash; } return s; }; }""", me)
+        # Put back 8 m: closer than the track's jump (15 m), so only the derail tells it to start again there.
+        off = guest.evaluate("game.car.check = game.car.s - 8; crash('air'); game.car.check")
+        host.wait_for_function("window.__back !== null", timeout=10000)
+        said, drawn = host.evaluate("window.__back")
+        assert abs(said - off) < 0.5 and abs(drawn - said) < 0.01, (off, said, drawn)
+        assert not host.errors + guest.errors
+    finally:
+        close(host)

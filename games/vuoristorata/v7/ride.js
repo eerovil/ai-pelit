@@ -634,6 +634,8 @@ function quiet() {
 // trains in their own colours on the same track (they ride through each other). The host runs the
 // start, the end (everyone in, or 40 s after the first) and the computer's car for a friend who is
 // away, and sends the race ten times a second. The first to the finish wins.
+// v7 (#480): the other trains are drawn from lib/sulava-1, a moment back, gliding between the spots heard
+// (drawnS()); the rules (places, the end) keep the newest spot heard, no longer carried on at its speed.
 const RM = window.AiPelitRooms;
 const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
 const LATE = 40;
@@ -649,7 +651,8 @@ function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'cd', sendT: 0, clock: 0, firstFin: null, res: null, order: '',
     soloLevel: net ? net.soloLevel : game.level, heard: false,
     cars: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
-      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null })) };
+      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null,
+      tr: AiPelitSulava.track({ keys: ['s'], jump: 15 }), ts: null, src: '' })) };
   show(null);
   if (s.host && !s.over) { net.cfg = { level: game.level }; netLevel(); startRide(); }
   else { game.mode = 'netwait'; $('odota').classList.remove('hidden'); document.body.classList.add('riding'); }
@@ -661,13 +664,26 @@ function copyCarState(k, car, crash) {
   k.over = car.over; k.check = car.check; k.crash = crash;
 }
 const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0,
-  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0];
+  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0,
+  k.kind === 'net' && RM.isHost ? k.ts : null];
+// v7 (#480): [12] is a friend's own stamp (their phone's AiPelitSulava.now() when it sent the spot), sent on by
+// the host as it came; null for the host's own car and the computer's, whose stamp is the message's `st`.
+const stampOf = m => Number.isFinite(m.st) ? m.st : null;
+// A spot heard for another train. Its source is 'f' (the friend's clock) or 'h' (the host's): when it changes
+// (the computer took over or gave back), or the train was put back after a derail, its track starts again there.
+function heardSpot(k, st, src, wasCrash) {
+  const spot = { s: k.s };
+  if (src !== k.src || (wasCrash && !k.crash)) k.tr.snap(st, spot); else k.tr.push(st, spot);
+  k.src = src;
+}
+// Where another train is drawn: a moment back on its track; the host's computer cars where its rules put them.
+function drawnS(k) { return k.kind !== 'me' && !(RM.isHost && k.kind === 'cpu') && k.tr.size() ? k.tr.at().s : k.s; }
 function synced(k) {
   if (k.kind === 'me') copyCarState(k, game.car, crashState());
   return k;
 }
 function hostState() {
-  return { t: 's', round: net.round, cfg: net.cfg, ph: net.phase, cd: r2(game.count || 0), clock: r2(net.clock), c: net.cars.map(k => pack(synced(k))) };
+  return { t: 's', round: net.round, st: AiPelitSulava.now(), cfg: net.cfg, ph: net.phase, cd: r2(game.count || 0), clock: r2(net.clock), c: net.cars.map(k => pack(synced(k))) };
 }
 function arrive(k) {
   if (k.fin === null || k.at !== null) return;
@@ -693,7 +709,7 @@ function netTick(dt) {
         copyCarState(k, k.car, k.crash);
         if (k.car.fin !== null) { k.fin = r2(k.car.fin); k.cpuFin = true; arrive(k); }
       }
-    } else if (net.phase === 'run' && k.fin === null && !k.crash) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
+    }
   }
   // The places, for the HUD: finished by their time on the race clock, the rest by how far they are.
   const list = net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s));
@@ -712,7 +728,7 @@ function netTick(dt) {
     return;
   }
   if ((game.mode === 'ride' || game.mode === 'crash' || game.mode === 'done') && net.sendT <= 0 && !net.res) {
-    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, c: pack(synced(meK())) });
+    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), c: pack(synced(meK())) });
   }
 }
 function guestState(m) {
@@ -729,8 +745,11 @@ function guestState(m) {
     const k = net.cars[i];
     if (!k) return;
     if (k.kind !== 'me') {
+      const wasCrash = !!k.crash;
       k.s = a[0]; k.v = a[1]; k.fin = a[2]; k.at = a[3];
       k.energy = a[6] ?? 1; k.took = a[7] || []; k.over = a[8] || 0; k.check = a[9] ?? a[0]; k.crash = a[10] || null;
+      const own = Number.isFinite(a[12]);
+      heardSpot(k, own ? a[12] : stampOf(m), own ? 'f' : 'h', wasCrash);
       return;
     }
     k.at = a[3] ?? k.at;
@@ -845,9 +864,11 @@ if (RM) {
       k.handback = false;
       // A finish the host has heard stands, whatever a reloaded phone sends after it.
       if (k.fin === null) {
+        const wasCrash = !!k.crash;
         k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2];
         k.energy = m.c[6] ?? 1; k.took = m.c[7] || []; k.over = m.c[8] || 0; k.check = m.c[9] ?? m.c[0];
         k.crash = m.c[10] || null;
+        k.ts = stampOf(m); heardSpot(k, k.ts, 'f', wasCrash);
       }
       arrive(k);
       return;
@@ -860,7 +881,7 @@ if (RM) {
     else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
   });
   RM.on('continue', ids => { if (net) net.cars.forEach(k => { if (ids.includes(k.id) && k.kind === 'net') cpuTakes(k); }); });
-  RM.on('back', id => { if (net) net.cars.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; } }); });
+  RM.on('back', id => { if (net) net.cars.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; k.tr.reset(); k.ts = null; k.src = ''; } }); });
   RM.on('lobby', toSolo);
   RM.on('leave', toSolo);
   RM.on('menu', toSolo);
