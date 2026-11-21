@@ -236,3 +236,25 @@ def test_a_reload_mid_meet_offers_to_go_on(real, context):
     page.wait_for_function("K.comp !== null && th !== null")
     assert page.evaluate("K.mine().marks[0]") == mark
     assert errors == []
+
+
+def test_going_back_the_other_way_keeps_the_laps(real, context):
+    # Review of #507: the laps count how far the arm went, either way, so turning back after two
+    # laps neither cancels the throw nor resets the arm's tiring.
+    page, errors = open_game(real, context)
+    my_turn(page)
+    r = page.evaluate("""() => {
+      spinStart({ pointerId: 7, clientX: ring.cx, clientY: ring.cy + ring.r, timeStamp: performance.now() });
+      let a = -Math.PI / 2;
+      const go = (n, s) => { for (let i = 0; i < n; i++) { a += s * Math.PI / 12; spinMove(ring.cx + Math.cos(a) * ring.r, ring.cy - Math.sin(a) * ring.r, clock); } };
+      go(48, -1);
+      const before = laps(th);
+      go(24, 1);
+      return { before, after: laps(th) };
+    }""")
+    assert abs(r["before"] - 2) < 0.05
+    assert abs(r["after"] - 3) < 0.05
+    page.mouse.move(*page.evaluate("[ring.cx + ring.r, ring.cy]"))
+    page.evaluate("spinEnd({ pointerId: 7, clientX: ring.cx + ring.r, clientY: ring.cy, timeStamp: performance.now() })")
+    assert page.evaluate("th.phase") in ("fly", "land")
+    assert errors == []

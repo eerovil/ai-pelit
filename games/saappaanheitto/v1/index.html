@@ -314,7 +314,8 @@ function spinMove(px, py, t) {
   if (p.d < ring.r * 0.3) return;
   if (lastFa !== null) {
     const d = wrapR(p.ang - lastFa);
-    if (Math.abs(d) < Math.PI / 2) { th.turn += d; th.moves.push([t, d]); th.idle = 0; }
+    // turn counts how far the arm has gone, either way, so going back never takes laps away.
+    if (Math.abs(d) < Math.PI / 2) { th.turn += Math.abs(d); th.moves.push([t, d]); th.idle = 0; }
   }
   lastFa = p.ang; th.a = p.ang;
 }
