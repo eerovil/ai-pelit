@@ -576,6 +576,7 @@ function say(wx, wy, s, col) { texts.push({ x: wx, y: wy, s, c: col, t: 0.9 }); 
 function update(dt) {
   stateT += dt;
   if (!players.length || state === 'menu' || state === 'done' || state === 'room') return;
+  netClock();
   if (net.on && R.paused) return;
   if (net.on && !R.isHost) { guestUpdate(dt); return; }
   const mine = myCtrl();
@@ -651,7 +652,7 @@ function applySetup(s) {
   myTeam = me ? me.t : 0;
 }
 function snapshot() {
-  return { t: 's', round: net.round, st: state, pt: r2(pauseT), cl: r2(clock), sc: score, ck: AiPelitSulava.now(), o: owner ? players.indexOf(owner) : -1,
+  return { t: 's', round: net.round, st: state, pt: r2(pauseT), cl: r2(clock), sc: score, ck: netClock(), o: owner ? players.indexOf(owner) : -1,
     b: [r2(ball.x), r2(ball.y), r2(ball.z), r2(ball.vx), r2(ball.vy)],
     p: players.map(p => [r2(p.x), r2(p.y), r2(p.fx), r2(p.fy), p.kicks, p.lunge > 0 ? 1 : 0]),
     c: ctrls.map(k => [k.id, k.p ? players.indexOf(k.p) : -1]),
@@ -661,31 +662,59 @@ const r2 = v => Math.round(v * 100) / 100;
 // Smooth movement (#480): the host runs every player, so each spot a guest hears carries the host's clock
 // (ck). p.tx, p.ty are the newest spot; p.x, p.y where the guest draws the player (guestUpdate()).
 const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
-function applySnapshot(s) {
+// The tracks' clock, on the host (its stamps) and on a guest (arrivals, the drawn moment): it stands still while
+// the room is paused (R.paused), as the match does. On the real clock, in the test, a guest that heard the pause
+// first drew over it as if the match had gone on, a jump of 3.6 m when it did; one that heard it last and its end
+// first had drawn on past the newest spot on a guess, and slid 0.9 m back.
+const pz = { off: 0, at: null };
+function netClock() {
+  const t = AiPelitSulava.now();
+  if (net.on && R.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  return t - pz.off;
+}
+// A snapshot waits, with the moment it came, while 6 of those already on the tracks are ahead of the moment the ball
+// is drawn at. A track keeps only its 8 newest spots (lib/sulava-1), and a guest that hears a pause before the host
+// does stands still while the host's last half second comes in: put on the tracks at once, those spots pushed out
+// the two it was drawing between, and the player jumped 1.1 m when the match went on. Outside a pause about 5 are
+// ahead at most (0.25 s at 20 a second), so a snapshot goes on as it comes; over 20 waiting (a page the phone hid)
+// all go on. A rule by time (wait while over 0.25 s ahead) stood the player up to 2 s on a busy test machine, then
+// jumped it: its tracks draw up to 0.25 s back, so the newest spots were always that far ahead.
+function heardSnapshot(s) { (net.wait = net.wait || []).push([s, netClock()]); feedSnapshots(); }
+function feedSnapshots() {
+  const w = net.wait, d = ball.tr.time, fed = net.fed = net.fed || [];
+  while (w && w.length) {
+    if (d !== null && fed.filter(t => t > d).length >= 6 && w.length <= 20) break;
+    const [s, a] = w.shift(), st = stampOf(s);
+    applySnapshot(s, a);
+    if (st !== null) { fed.push(st); if (fed.length > 8) fed.shift(); }
+  }
+}
+function applySnapshot(s, heardAt) {
   const was = state, loose = !owner, pvx = ball.vx || 0, pvy = ball.vy || 0;
   state = s.st; pauseT = s.pt; clock = s.cl; score = s.sc;
   owner = players[s.o] || null;
   ball.tx = s.b[0]; ball.ty = s.b[1]; ball.vx = s.b[3]; ball.vy = s.b[4];
   ball.nx = s.b[0]; ball.ny = s.b[1];
   // A kickoff puts everyone on their spot at once: no sliding there. So does the match's first spot.
-  const jump = state === 'kickoff' && was !== 'kickoff', st = stampOf(s);
+  const jump = state === 'kickoff' && was !== 'kickoff', st = stampOf(s), a = heardAt === undefined ? netClock() : heardAt;
   let kicked = false;
   s.p.forEach((q, i) => {
     const p = players[i];
     if (!p) return;
     if (q[4] > p.kicks) { kickSound(false); kicked = true; }
     p.tx = q[0]; p.ty = q[1]; p.fx = q[2]; p.fy = q[3]; p.kicks = q[4]; p.lunge = q[5] ? 0.1 : 0;
-    if (jump || !p.tr.size()) { p.tr.snap(st, { x: p.tx, y: p.ty }); p.x = p.tx; p.y = p.ty; p.ease = 0; }
-    else p.tr.push(st, { x: p.tx, y: p.ty });
+    if (jump || !p.tr.size()) { p.tr.snap(st, { x: p.tx, y: p.ty }, a); p.x = p.tx; p.y = p.ty; p.ease = 0; }
+    else p.tr.push(st, { x: p.tx, y: p.ty }, a);
   });
   for (const p of players) p.ctl = '';
   for (const [id, i] of s.c) if (players[i]) players[i].ctl = id;
   // The ball's spot goes on its track whether held or loose, so a kick leaves the kicker's feet as drawn.
   const bs = { x: s.b[0], y: s.b[1], z: s.b[2] };
   if (jump || !ball.tr.size()) {
-    ball.tr.snap(st, bs); ball.x = bs.x; ball.y = bs.y; ball.z = bs.z;
+    ball.tr.snap(st, bs, a); ball.x = bs.x; ball.y = bs.y; ball.z = bs.z;
     ball.ex = ball.ey = 0; ball.heldBy = owner && owner.ctl === myId() ? owner : null;
-  } else ball.tr.push(st, bs);
+  } else ball.tr.push(st, bs, a);
   // A save or a tackle the host said: hear it once, when its text first shows.
   const old = new Set(texts.map(t => t.s + t.x + ',' + t.y));
   msg = s.m; texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
@@ -707,6 +736,7 @@ function applySnapshot(s) {
   if (jump) whistle(false);
 }
 function guestUpdate(dt) {
+  feedSnapshots();
   for (const p of players) {
     if (p.tx === undefined) continue;
     // The player this phone steers chases the newest spot, as before: never drawn back, so the thumb
@@ -714,7 +744,7 @@ function guestUpdate(dt) {
     if (p.ctl && p.ctl === myId()) { const k = Math.min(1, dt * 15); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.ease = 0.3; continue; }
     // v5 (#480): everyone else glides between the host's spots, a moment back. One this phone has just
     // stopped steering (a pass gave it another) eases back onto its track instead of jumping there.
-    const o = p.tr.at();
+    const o = p.tr.at(netClock());
     if (!o) continue;
     if (p.ease > 0) { p.ease -= dt; const k = Math.min(1, dt * 15); p.x += (o.x - p.x) * k; p.y += (o.y - p.y) * k; }
     else { p.x = o.x; p.y = o.y; }
@@ -728,7 +758,7 @@ function guestUpdate(dt) {
     // phone's player gets or loses the ball), the step from where the ball was drawn fades out over a tenth
     // of a second instead of showing in one frame.
     const mine = owner && owner.tx !== undefined && owner.ctl === myId() ? owner : null;
-    const o = ball.tr.at(), m = mine && mine.tr.at();
+    const o = ball.tr.at(netClock()), m = mine && mine.tr.at(netClock());
     if (o) {
       let ax = o.x, ay = o.y;
       if (m) { ax += mine.x - m.x; ay += mine.y - m.y; }
@@ -796,7 +826,7 @@ R.on('message', (m, from) => {
     menu.classList.add('hidden');
     whistle(false);
   } else if (m.round === net.round && players.length) {
-    if (m.t === 's') applySnapshot(m);
+    if (m.t === 's') heardSnapshot(m);
   }
 });
 // A phone that comes back gets the match as it is: who plays where, then the running stream.
