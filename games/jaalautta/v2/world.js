@@ -24,11 +24,16 @@ const SHRINK_AT = 20, SHRINK_EVERY = 8, SHRINK_WARN = 1.5, MIN_FRAC = 1 / 3;
 // an erä always ends: by about 80 s even with nobody touching the screen (#479 review).
 const SUDDEN_AT = 60, MELT = 1 / 20;
 // A seal that slides over the edge slower than TEETER_V wobbles there for TEETER_T s (owner's ask on
-// #478): TEETER_N presses of Töni in that time haul it back towards the middle; a seal that touches
-// it, the time running out, or the ice under it going sends it in. A stunned seal cannot press.
-const TEETER_V = 6.5, TEETER_T = 1.6, TEETER_N = 5, TEETER_BACK = 4;
+// #478): TEETER_N presses of Töni in that time haul it back towards the middle; a hard hit (below),
+// the time running out, or the ice under it going sends it in. A stunned seal cannot press.
+const TEETER_V = 9, TEETER_T = 1.6, TEETER_N = 5, TEETER_BACK = 4;
+// Only a real hit tips a wobbling seal in (coming at it at TIP_V or more), and not in its first
+// TEETER_SAFE s: the seal that pushed it over is often still touching it (#478, it went straight in).
+const TIP_V = 3, TEETER_SAFE = 0.5;
 const RING_FIRST = 6, RING_EVERY = 10, RING_COME = 1, RING_OPEN = 4, RING_R = 1.3;
-const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, PASS_GRACE = 0.5, STUN_T = 1.5;
+// Lohkare's crush as drawn: the block drops for CRUSH_DROP s, then presses the seal through by CRUSH_T.
+const CRUSH_DROP = 0.22, CRUSH_T = 1.3;
+const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, STUN_T = 1.5;
 const POWERS = ['jatti', 'pikku', 'ukko', 'lohk'];
 const POWER_NAMES = { jatti: 'Jätti', pikku: 'Pikkuinen', ukko: 'Ukkonen', lohk: 'Lohkare' };
 const ERA_PAUSE = 2.6, COUNT_T = 3, STARS_TO_WIN = 3;
@@ -160,6 +165,8 @@ function tick(w, h) {
     return;
   }
   if (w.ph === 'erä') {
+    // The seals in the water keep their clock, so a crush or a splash that ended the erä plays out.
+    for (const sl of w.seals) if (sl.out) sl.out += h;
     w.pause -= h;
     if (w.pause <= 0) nextEra(w);
     return;
@@ -280,25 +287,35 @@ function bounce(w, a, b, ra, rb, ma, mb, seals) {
   if (seals) { if (vn > 2) { a.hit++; b.hit++; } }
   else if (vn > 1) b.hit++;
 }
-// A seal touching a wobbling one: coming at it at all, it sends it in (a fuse still passes on the
-// touch); standing by, it is only moved off. Two wobbling side by side leave each other be.
+// A seal touching a wobbling one: coming at it hard (TIP_V) once the first TEETER_SAFE s are over, it
+// sends it in (a fuse still passes on the touch); slower, or standing by, it is only moved off. Two wobbling side by side leave each other be,
+// but a fuse still passes between them on the touch.
 function nudge(a, b) {
-  if (a.teeter && b.teeter) return;
+  if (a.teeter && b.teeter) {
+    if (Math.hypot(a.x - b.x, a.y - b.y) < radiusOf(a) + radiusOf(b)) passFuse(a, b) || passFuse(b, a);
+    return;
+  }
   const t = a.teeter ? a : b, o = t === a ? b : a;
   const dx = t.x - o.x, dy = t.y - o.y, d = Math.hypot(dx, dy), min = radiusOf(t) + radiusOf(o);
   if (d >= min || d === 0) return;
   passFuse(o, t) || passFuse(t, o);
-  if ((o.vx * dx + o.vy * dy) / d > 0.5) { t.teeter = -1; o.hit++; t.hit++; return; }
+  if (t.teeter < TEETER_T - TEETER_SAFE && (o.vx * dx + o.vy * dy) / d > TIP_V) { t.teeter = -1; o.hit++; t.hit++; return; }
   o.x -= dx / d * (min - d); o.y -= dy / d * (min - d);
+  // Leaning on it stops it there: only a new run-up or a lunge tips it in.
+  const vn = (o.vx * dx + o.vy * dy) / d;
+  if (vn > 0) { o.vx -= dx / d * vn; o.vy -= dy / d * vn; }
 }
-// A fuse (Ukkonen, Lohkare) goes to the seal its holder touches, unless the holder only just got it.
+// A fuse (Ukkonen, Lohkare) goes to whichever seal its holder touches, whoever pushed whom (#478).
+// Only straight back to the seal that just gave it waits until the two have parted, so one touch
+// passes it once and a new touch passes it again.
 function passFuse(from, to) {
-  // Never straight back to the seal that gave it: it must go to a third seal first.
-  if (!from.fuse || to.fuse || from.fuse.g > 0 || to.id === from.fuse.from) return false;
-  to.fuse = { k: from.fuse.k, t: from.fuse.t, g: PASS_GRACE, from: from.id };
+  if (!from.fuse || to.fuse || to.id === from.fuse.from) return false;
+  to.fuse = { k: from.fuse.k, t: from.fuse.t, from: from.id };
   from.fuse = null;
   return true;
 }
+// The giver may take it back once it is this far clear of the holder's edge.
+const PART_GAP = 0.3;
 function fall(w, sl) {
   sl.crushed = false;   // a crush sets it again right after
   sl.out = 1e-6; sl.outX = sl.x; sl.outY = sl.y;
@@ -346,7 +363,9 @@ function powers(w, h) {
     if (sl.out) continue;
     if (sl.size) { sl.size.t -= h; if (sl.size.t <= 0) sl.size = null; }
     if (sl.fuse) {
-      sl.fuse.t -= h; if (sl.fuse.g > 0) sl.fuse.g -= h;
+      sl.fuse.t -= h;
+      const gv = sl.fuse.from && w.seals.find(o => o.id === sl.fuse.from);
+      if (sl.fuse.from && (!gv || gv.out || Math.hypot(gv.x - sl.x, gv.y - sl.y) > radiusOf(gv) + radiusOf(sl) + PART_GAP)) sl.fuse.from = null;
       if (sl.fuse.t <= 0) {
         const k = sl.fuse.k; sl.fuse = null;
         if (k === 'ukko') { for (const o of w.seals) if (o !== sl && !o.out) { o.stun = STUN_T; o.hit++; } }
@@ -376,7 +395,7 @@ function powers(w, h) {
 function givePower(sl, k) {
   sl.got++; sl.gotK = k;
   if (k === 'jatti' || k === 'pikku') sl.size = { k, t: SIZE_T };
-  else sl.fuse = { k, t: k === 'ukko' ? UKKO_T : LOHK_T, g: PASS_GRACE };
+  else sl.fuse = { k, t: k === 'ukko' ? UKKO_T : LOHK_T, from: null };
 }
 
 // ---- The floe breaks smaller after SHRINK_AT seconds ----

@@ -8,6 +8,13 @@
       "note": "Ensimmäinen versio: viisi lauttaa, syöksy, neljä tehostetta, lohkeileva jää ja moninpeli 2–8 pelaajalle.",
       "request": "Samanlainen peli kuin crash bashin polar panic",
       "issue": "eerovil/ai-pelit#478"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-21",
+      "note": "Jäälautta kolmiulotteisena (three.js), ja ⏸-tauko, josta pelin voi lopettaa kesken.",
+      "request": "Tee prototyyppi 3d versio tästä. Tarvii napin jolla lopettaa pelin kesken. 3d ylhäältä is best",
+      "issue": "eerovil/ai-pelit#478"
     }
   ]
 }

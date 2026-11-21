@@ -8,7 +8,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/jaalautta/v1/"
+URL = "games/jaalautta/v2/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 # One whole match of four computer seals; seal 0 plays by `policy`: 'cpu' (with `skill`, or the
@@ -115,12 +115,19 @@ def test_a_wobbling_seal_goes_in_on_time_on_a_touch_or_stunned(site, context):
       res.before = !a.out;
       for (let i = 0; i < 120 * 0.2; i++) tick(w, STEP);
       res.after = !!a.out;
-      // Another seal walking into it tips it in at once, presses or not.
-      w = eval(T)(); a = w.seals[0]; const b = w.seals[1];
-      Object.assign(b, { x: a.x - 2.2, y: 0, vx: 4, vy: 0 });
-      a.want = a.lunges + 2;
-      for (let i = 0; i < 30 && !a.out; i++) tick(w, STEP);
-      res.touched = !!a.out && !b.out;
+      // Another seal coming at it hard tips it in, presses or not, but not in its first TEETER_SAFE s
+      // (the one that pushed it over is often still touching it), and leaning on it never does.
+      const hitAt = (age, v) => {
+        w = eval(T)(); a = w.seals[0]; const b = w.seals[1]; a.teeter = TEETER_T - age;
+        Object.assign(b, { x: a.x - 1.75, y: 0, vx: v, vy: 0 }); a.want = a.lunges + 2;
+        for (let i = 0; i < 6 && !a.out; i++) { b.vx = Math.max(b.vx, v * 0.99); tick(w, STEP); }
+        return !!a.out && !b.out;
+      };
+      res.touched = [hitAt(0.7, 5), hitAt(0.1, 5), hitAt(0.7, 1.5)];
+      w = eval(T)(); a = w.seals[0]; const lean = w.seals[1];
+      Object.assign(lean, { x: a.x - 1.75, y: 0, vx: 0, vy: 0 });
+      for (let i = 0; i < 120; i++) { lean.ix = 1; lean.iy = 0; tick(w, STEP); }
+      res.leaning = !a.out || a.teeter === 0;
       // A seal standing by is only moved off.
       w = eval(T)(); a = w.seals[0];
       Object.assign(w.seals[1], { x: a.x - 1.7, y: 0, vx: 0, vy: 0 }); tick(w, STEP);
@@ -140,8 +147,8 @@ def test_a_wobbling_seal_goes_in_on_time_on_a_touch_or_stunned(site, context):
       res.melted = !!a.out;
       return res;
     }""", TEETER)
-    assert r == {"before": True, "after": True, "touched": True, "standing": True, "stunned": True,
-                 "hole": True, "melted": True}
+    assert r == {"before": True, "after": True, "touched": [True, False, False], "leaning": True,
+                 "standing": True, "stunned": True, "hole": True, "melted": True}
 
 
 def test_computer_seals_press_their_way_back_the_sharper_the_more_often(site, context):
@@ -250,19 +257,24 @@ def test_the_four_power_ups(site, context):
       at(SIZE_T);
       for (let i = 0; i < 120 * 8.1; i++) { a.x = -4; b.x = 4; a.y = b.y = 0; tick(w, STEP); }
       out.worn = [a.size, b.size];
-      // Ukkonen: passed on a touch, not straight back (grace), and stuns the others at the end.
+      // Ukkonen: passed on the first touch, whoever pushes whom (#478), and stuns the others at the end.
       w = mk(3); w.ph = 'play'; const [c, d, e] = w.seals;
-      Object.assign(c, { x: 0, y: 0 }); Object.assign(d, { x: 1.7, y: 0 }); Object.assign(e, { x: -6, y: 0 });
-      givePower(c, 'ukko'); tick(w, STEP);
-      out.grace = [!!c.fuse, !d.fuse];
-      for (let i = 0; i < 120 * 0.6; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
-      out.passed = [!c.fuse, d.fuse && d.fuse.k];
-      // Never straight back to the seal that gave it, however long they touch.
-      for (let i = 0; i < 120 * 1.5; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
-      out.notBack = !!d.fuse && !c.fuse;
-      // A third seal can take it, and from there it may go back to the first one.
-      out.third = [passFuse(d, e), !d.fuse && !!e.fuse, passFuse(e, d), (e.fuse.g = 0, passFuse(e, d)), passFuse(e, c), !!c.fuse];
-      d.fuse = c.fuse; c.fuse = null; d.fuse.from = 'x';
+      const park = () => { Object.assign(c, { x: 0, y: 0, vx: 0, vy: 0 }); Object.assign(d, { x: 6, y: 0, vx: 0, vy: 0 }); Object.assign(e, { x: -6, y: 0, vx: 0, vy: 0 }); };
+      // The mover slides into the one standing still, until they touch.
+      const bump = (mover, still) => { for (let i = 0; i < 240; i++) { mover.vx = 4 * Math.sign(still.x - mover.x); mover.vy = 0; tick(w, STEP); if (Math.hypot(mover.x - still.x, mover.y - still.y) <= radiusOf(mover) + radiusOf(still) + 0.01) break; } };
+      park(); givePower(c, 'ukko'); c.fuse.t = 99;
+      bump(d, c); out.pushedIntoHolder = [!c.fuse, !!d.fuse];
+      park(); c.fuse = d.fuse; d.fuse = null; c.fuse.from = null;
+      bump(c, d); out.holderPushes = [!c.fuse, !!d.fuse];
+      // Held together, it stays with the one that took it; once parted, the next touch passes it back.
+      for (let i = 0; i < 120; i++) { c.x = 0; d.x = 1.7; c.y = d.y = 0; tick(w, STEP); }
+      out.oneTouchOnce = [!c.fuse, !!d.fuse];
+      d.x = 6; tick(w, STEP); d.x = 1.7; c.x = 0; tick(w, STEP);
+      out.back = [!!c.fuse, !d.fuse];
+      // A third seal takes it at once.
+      out.third = [passFuse(c, e), !c.fuse && !!e.fuse];
+      c.fuse = e.fuse; e.fuse = null; Object.assign(e, { x: -6, y: 0 });
+      d.fuse = c.fuse; c.fuse = null; d.fuse.from = null;
       d.fuse.t = 0.001; d.x = 6; c.x = 0; tick(w, STEP);
       out.stun = [c.stun > 0, e.stun > 0, d.stun === 0];
       // Lohkare: its last holder goes through the ice.
@@ -281,10 +293,11 @@ def test_the_four_power_ups(site, context):
     }""")
     assert r["size"] == [True, True, True, True]
     assert r["worn"] == [None, None]
-    assert r["grace"] == [True, True]
-    assert r["passed"] == [True, "ukko"]
-    assert r["notBack"]
-    assert r["third"] == [True, True, False, False, True, True]
+    assert r["pushedIntoHolder"] == [True, True]
+    assert r["holderPushes"] == [True, True]
+    assert r["oneTouchOnce"] == [True, True]
+    assert r["back"] == [True, True]
+    assert r["third"] == [True, True]
     assert r["ease"] == [True, True, True, True]
     assert r["stun"] == [True, True, True]
     assert r["crush"] == [True, True]
@@ -470,3 +483,246 @@ def test_computer_seals_keep_ukkonen_and_go_for_whoever_holds_it(site, context):
     assert n >= 30, r
     assert r["flee"] == n and r["chase"] == n and r["giver"] == n, r
     assert r["pass"] >= n - 4, r
+
+
+# ---- v2: the 3D picture and the pause button (#478) ----
+
+def ice_brightness(page, x, y):
+    """Mean brightness of a 9 × 9 patch of the screen around (x, y), from a real screenshot."""
+    from io import BytesIO
+    from PIL import Image
+    img = Image.open(BytesIO(page.screenshot(clip={"x": x - 4, "y": y - 4, "width": 9, "height": 9}))).convert("L")
+    return sum(img.tobytes()) / (img.width * img.height)
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+def test_the_floe_and_every_seal_are_drawn_in_3d_on_the_screen(site, context, size):
+    w, h = size
+    page = open_game(site, context, w, h)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    go(page)
+    page.evaluate("""() => {
+      const ps = Array.from({ length: 8 }, (_, i) => ({ id: i ? 'c' + i : 'me', name: 'n' + i, hat: i, kind: i ? 'cpu' : 'me' }));
+      world = newWorld(1, ps, 2); me = world.seals[0]; brains = world.seals.map(() => null);
+    }""")
+    page.wait_for_timeout(300)
+    r = page.evaluate("""() => {
+      const p = world.parts[0], b = playBox();
+      return { gl: getComputedStyle(document.getElementById('g')).display,
+               seals: world.seals.map(s => J3D.project(s.x, 0, s.y)),
+               floe: [J3D.project(p.x - p.r0, 0, p.y), J3D.project(p.x + p.r0, 0, p.y), J3D.project(p.x, 0, p.y - p.r0), J3D.project(p.x, 0, p.y + p.r0)],
+               mid: J3D.project(p.x, 0, p.y), box: [b.x0, b.y0, b.x1, b.y1] };
+    }""")
+    assert r["gl"] == "block"
+    x0, y0, x1, y1 = r["box"]
+    for x, y in r["seals"] + r["floe"]:
+        assert x0 - 1 <= x <= x1 + 1 and y0 - 1 <= y <= y1 + 1, (x, y, r["box"])
+    # The ice shows white-ish beside its middle, where no seal stands at the start (they ring the edge).
+    mx, my = r["mid"]
+    assert ice_brightness(page, mx, my) > 170
+    assert page.errors == []
+
+
+def test_a_phone_without_3d_plays_on_the_2d_drawing(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    page.evaluate("J3D.ready = false; J3D.failed = true")
+    go(page)
+    page.wait_for_timeout(300)
+    assert page.evaluate("getComputedStyle(document.getElementById('g')).display") == "none"
+    mx, my = page.evaluate("() => { const p = world.parts[0]; return [X(p.x), Y(p.y)]; }")
+    assert ice_brightness(page, mx, my) > 170
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+def test_pause_stops_the_round_and_quit_ends_the_match(site, context, size):
+    page = open_game(site, context, *size)
+    assert not page.is_visible("#pauseBtn")      # not on the menu
+    go(page)
+    btn = page.locator("#pauseBtn").bounding_box()
+    assert btn["x"] + btn["width"] <= size[0] and btn["y"] >= 0
+    page.evaluate("me.stars = 1; saveMatch()")
+    page.tap("#pauseBtn")
+    t0 = page.evaluate("world.t")
+    page.wait_for_timeout(500)
+    assert page.evaluate("[mode, world.t]") == ["pause", t0]
+    assert page.is_visible("#resume") and page.is_visible("#quit")
+    page.tap("#resume")
+    page.wait_for_function(f"mode === 'play' && world.t > {t0}")
+    assert page.evaluate("me.stars") == 1
+    page.tap("#pauseBtn")
+    page.tap("#quit")
+    assert page.evaluate("mode") == "menu" and page.is_visible("#menu")
+    assert not page.is_visible("#pauseBtn")
+    # The quit match does not come back on the next open.
+    assert page.evaluate("localStorage.getItem('ai-pelit:jaalautta:kesken1')") is None
+    page.reload()
+    page.wait_for_function("typeof mode !== 'undefined' && mode === 'menu'")
+    assert page.errors == []
+
+
+def test_leaving_the_app_pauses_a_round_alone(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("""() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange')); }""")
+    assert page.evaluate("mode") == "pause"
+    assert page.errors == []
+
+
+def test_an_open_hole_and_a_seal_in_it_show_on_the_3d_ice(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    go(page)
+    page.wait_for_function("world.t > 1")      # past the "TÖNI!" over the floe
+    # A hole held open beside the middle, with the seals kept away from it and the clock stopped.
+    mx, my = page.evaluate("""() => {
+      const p = world.parts[0], h = { x: p.x + 3, y: p.y, r: 1.5 * world.scale, warn: 0, open: 1e9 };
+      world.holes = [h]; world.holeNext = 1e9; world.ring = null; world.ringNext = 1e9;
+      world.seals.forEach((s, i) => { s.x = p.x - 4; s.y = p.y - 5 + i * 3; s.vx = s.vy = 0; });
+      brains = world.seals.map(() => null);
+      return J3D.project(h.x, 0.14, h.y);
+    }""")
+    page.wait_for_timeout(300)
+    assert ice_brightness(page, mx, my) < 120      # dark water, not white ice over it
+    # A seal that goes in through it bobs there with its hat above the ice.
+    page.evaluate("() => { const s = world.seals[1], h = world.holes[0]; s.x = h.x; s.y = h.y; }")
+    page.wait_for_function("world.seals[1].out > 0")
+    hx, hy = page.evaluate("J3D.project(world.seals[1].outX, 0.6, world.seals[1].outY)")
+    page.wait_for_timeout(200)
+    assert ice_brightness(page, hx, hy) < 150
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(320, 568), (360, 740)])
+def test_the_pause_button_leaves_the_stars_room_on_a_narrow_phone(site, context, size):
+    page = open_game(site, context, *size)
+    go(page)
+    btn = page.locator("#pauseBtn").bounding_box()
+    # The right end of the last seal's three stars (drawHUD: x + 16 + 2 × 12, a 12 px star) and the row's bottom.
+    right, bottom = page.evaluate("""() => {
+      const n = world.seals.length, x0 = SAFE_L + 92, x1 = W - SAFE_R - (LAND || W < 360 || net ? 12 : 52);
+      const cw = Math.min(78, (x1 - x0) / Math.min(n, 4));
+      return [x0 + 3 * cw + 16 + 2 * 12 + 12, SAFE_T + 14 + 14];
+    }""")
+    assert right <= btn["x"] or bottom <= btn["y"], (right, bottom, btn)
+    assert right <= size[0]
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("d3", [True, False])
+def test_lohkare_drops_on_its_holder_and_presses_it_through_the_ice(site, context, d3):
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if d3 and page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    if not d3:
+        page.evaluate("J3D.ready = false; J3D.failed = true")
+    go(page)
+    page.wait_for_function("world.t > 1")
+    page.evaluate("""() => {
+      const p = world.parts[0]; world.ring = null; world.ringNext = 1e9;
+      world.seals.forEach((s, i) => { s.x = p.x - 4; s.y = p.y - 5 + i * 3; s.vx = s.vy = 0; });
+      brains = world.seals.map(() => null);
+      const c = world.seals[1]; c.x = p.x + 3; c.y = p.y; givePower(c, 'lohk'); c.fuse.t = 0.02;
+    }""")
+    page.wait_for_function("world.seals[1].out > 0")
+    # Mid-crush (the block through, the hole open) the spot is dark water; every step draws.
+    ms = [0.05, 0.15, 0.3, 0.6, 0.9, 1.2, 1.5]
+    for t in ms:
+        page.evaluate(f"() => {{ world.seals[1].out = {t}; }}")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        if t == 0.9:
+            if d3:
+                x, y = page.evaluate("J3D.project(world.seals[1].outX, 0.14, world.seals[1].outY + 0.9)")
+            else:
+                x, y = page.evaluate("[X(world.seals[1].outX), Y(world.seals[1].outY) + 0.9 * V.s]")
+            assert ice_brightness(page, x, y) < 120, t
+    assert page.errors == []
+
+
+@pytest.mark.parametrize("d3", [True, False])
+def test_a_lohkare_knockout_that_ends_the_era_plays_its_crush_out(site, context, d3):
+    # The crushed seal is the last but one: the erä ends at once, and its clock must keep going.
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if d3 and page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    if not d3:
+        page.evaluate("J3D.ready = false; J3D.failed = true")
+    go(page)
+    page.wait_for_function("world.t > 1")
+    page.evaluate("""() => {
+      const p = world.parts[0]; world.ring = null; world.ringNext = 1e9;
+      brains = world.seals.map(() => null);
+      world.seals.forEach((s, i) => { s.vx = s.vy = 0; if (i > 1) { s.out = 1; s.outX = s.x; s.outY = s.y; } });
+      world.seals[0].x = p.x - 3; world.seals[0].y = p.y;
+      const c = world.seals[1]; c.x = p.x + 3; c.y = p.y; givePower(c, 'lohk'); c.fuse.t = 0.02;
+    }""")
+    page.wait_for_function("world.ph === 'erä' && world.seals[1].out > 0")
+    page.wait_for_function("world.seals[1].out > 0.9 && world.ph === 'erä'", timeout=3000)
+    if d3:
+        x, y = page.evaluate("J3D.project(world.seals[1].outX, 0.14, world.seals[1].outY + 0.9)")
+    else:
+        x, y = page.evaluate("[X(world.seals[1].outX), Y(world.seals[1].outY) + 0.9 * V.s]")
+    assert ice_brightness(page, x, y) < 120
+    assert page.errors == []
+
+
+def test_two_wobbling_seals_touching_pass_a_fuse(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const ps = [0, 1].map(i => ({ id: 'c' + i, name: 'c' + i, hat: i, kind: 'cpu' }));
+      const w = newWorld(1, ps, 3); w.ph = 'play';
+      const [a, b] = w.seals, p = w.parts[0];
+      Object.assign(a, { x: p.x + edgeAt(p, 0) + 0.1, y: p.y, vx: 0, vy: 0, teeter: TEETER_T, tp: 0, ta: 0 });
+      Object.assign(b, { x: a.x, y: a.y + radiusOf(a) * 1.5, vx: 0, vy: 0, teeter: TEETER_T, tp: 0, ta: 0 });
+      givePower(a, 'ukko');
+      nudge(a, b);
+      return [!!a.fuse, b.fuse && b.fuse.k, b.fuse && b.fuse.from];
+    }""")
+    assert r == [False, 'ukko', 'c0']
+    assert page.errors == []
+
+
+def test_a_seal_whose_hat_changes_wears_the_new_one_in_3d(site, context):
+    # In a room the host gives a guest's seal its own hat once that phone's first input comes (net.js).
+    page = open_game(site, context)
+    page.wait_for_function("J3D.ready || J3D.failed", timeout=15000)
+    if page.evaluate("J3D.failed"):
+        pytest.skip("this Chromium has no WebGL")
+    go(page)
+    page.wait_for_timeout(200)
+    page.evaluate("() => { world.seals[2].hat = (world.seals[2].hat + 3) % HATS.length; }")
+    page.wait_for_timeout(200)
+    got, want = page.evaluate("[J3D.hatOf(world.seals[2]), HATS[world.seals[2].hat % HATS.length].c.toLowerCase()]")
+    assert got == want
+    assert page.errors == []
+
+
+def test_a_computer_seal_lunges_a_wobbling_seal_in_once_it_can(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      const out = [];
+      for (let seed = 1; seed <= 6; seed++) {
+        const ps = [0, 1].map(i => ({ id: 'c' + i, name: 'c' + i, hat: i, kind: 'cpu' }));
+        const w = newWorld(1, ps, seed); w.ph = 'play';
+        const [a, c] = w.seals, p = w.parts[0], b = cpuBrain(FLOES[4].cpu, seed);   // the sharpest: it reacts in time
+        // a wobbles on the right edge and never presses; c leans on it from inside.
+        Object.assign(a, { x: p.x + edgeAt(p, 0) + 0.1, y: p.y, vx: 0, vy: 0, teeter: TEETER_T, mash: 0, tp: 0, ta: 0 });
+        Object.assign(c, { x: a.x - radiusOf(a) - radiusOf(c), y: p.y, vx: 0, vy: 0, cd: 0 });
+        let t = 0;
+        for (; t < TEETER_T - 0.1 && !a.out; t += STEP) { cpuThink(w, c, b, STEP); a.want = a.lunges; tick(w, STEP); }
+        out.push(a.out ? +t.toFixed(2) : null);
+      }
+      return out;
+    }""")
+    # Tipped in by the computer, not by its time running out, and never in the safe first 0.5 s. Its aim
+    # may miss (`err`), and a missed lunge waits out its cooldown, so not every seed.
+    hit = [t for t in r if t is not None]
+    assert len(hit) >= 4 and all(0.5 <= t < 1.4 for t in hit), r
