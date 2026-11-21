@@ -167,6 +167,7 @@ function heardSpot(sl, st, jump) {
   // moment on mid-pause; they wait in sl.held and go on once the round goes on (netClock()).
   if (net && RM.paused) { if (jump || !sl.held) sl.held = []; sl.held.push([st, spot, jump]); return; }
   if (jump) sl.tr.snap(st, spot, a); else sl.tr.push(st, spot, a);
+  sl.lag = st === null ? null : a - st;   // how late the last state heard came, for heldOn()
 }
 // The tracks' clock, on the host (its stamps) and on a guest (arrivals, the drawn moment): it stands
 // still while the room is paused (RM.paused), as the host's world does and sends nothing, so a
@@ -183,7 +184,14 @@ function heldOn(a) {
   if (!world) return;
   for (const sl of world.seals) {
     if (!sl.held) continue;
-    for (const [st, spot, jump] of sl.held) if (jump) sl.tr.snap(st, spot, a); else sl.tr.push(st, spot, a);
+    // The clock reads the same at both ends of the pause, so a held state would count as coming as early
+    // as it did, ahead of its stamp, and for the next 2 s the track would draw the seal past its newest
+    // state on a guess. Each goes on as heard no sooner than its stamp plus the lag of the last state
+    // heard before the pause (sl.lag): about when it would have come (as Pulkkamäki v3).
+    for (const [st, spot, jump] of sl.held) {
+      if (jump || sl.lag == null || st === null) { sl.tr.snap(st, spot, a); sl.lag = st === null ? null : a - st; }
+      else sl.tr.push(st, spot, Math.max(a, st + sl.lag));
+    }
     sl.held = null;
   }
 }

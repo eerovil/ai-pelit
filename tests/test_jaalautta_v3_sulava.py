@@ -314,3 +314,35 @@ def test_a_rescue_heard_while_paused_is_drawn_at_once_when_the_round_goes_on(pai
     after = [f for f in xs if f[0] > go_at]
     assert before and abs(before[-1][1] + 2) < 0.01, before[-3:]  # held where it stood during the pause
     assert after and abs(after[0][1] - 1.5) < 0.01 and abs(after[0][2]) < 0.01, after[:5]
+
+
+def test_after_a_pause_heard_first_the_friend_s_seal_is_drawn_behind_its_newest_state(pair):
+    """The host's last states, heard while the guest was already paused, go on the track when the pause ends as
+    if they had come when they would have (their stamp plus the lag before the pause), not as early as the held
+    clock says. Otherwise for 2 s the track takes the states for quicker than they are and draws the seal ahead
+    of the newest one heard, on a guess (0.065 s ahead on average and up to 0.2 s, where it drew 0.05 s behind
+    before the pause)."""
+    host, guest, i = pair
+    for p in (host, guest):
+        p.evaluate(PAUSE)
+    host.evaluate(JITTER)
+    guest.evaluate("""(i) => { window.__dl = []; let newest = null;
+      AiPelitRooms.on('message', m => { if (m.t === 's') newest = m.st; });
+      const d = window.draw; window.draw = dt => { d(dt); const tr = world.seals[i].tr;
+        if (tr && tr.time !== null && newest !== null) window.__dl.push([performance.now() / 1000, newest - tr.time]); }; }""", i)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(2500)
+    guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
+    guest.wait_for_timeout(250)  # the host hears the pause a quarter of a second later, sending on till then
+    host.evaluate("window.__pz = true")
+    guest.wait_for_timeout(1500)
+    guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
+    guest.wait_for_timeout(250)
+    host.evaluate("window.__t0 = null; window.__pz = false")
+    guest.wait_for_timeout(2500)
+    host.evaluate("window.__run = false")
+    dl, pz_at, go_at = guest.evaluate("[window.__dl, window.__pzAt, window.__goAt]")
+    pre = [b for t, b in dl if pz_at - 1 <= t < pz_at]  # how far behind the newest state heard it is drawn
+    post = [b for t, b in dl if go_at + 1 <= t <= go_at + 2]
+    assert len(pre) > 20 and len(post) > 20, (len(pre), len(post))
+    assert mean(post) > mean(pre) - 0.05, (mean(pre), mean(post), min(post))
