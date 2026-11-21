@@ -401,3 +401,54 @@ def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, bro
     (ta, ya), (tb, yb) = after[-2], after[-1]
     assert abs(yb - ya) / (tb - ta) < 1.5 * 200, after[-5:]
     assert not host.errors + guest.errors
+
+
+# The host's states at V units/s, made each 1/30 s by the guest's own clock (the host's stamps, as above) and
+# heard L s later. At 2 s the guest pauses and the states on the way land; at 2.5 s the pause ends and they
+# come on as before, to 5 s. Records each frame [moment, how far the drawn moment is behind the newest state
+# heard, paused].
+BEHIND = """([i, V, L]) => new Promise(done => {
+  const base = JSON.parse(JSON.stringify(window.__last)), off = base.ck - window.__lastAt;
+  const t0 = fightClock(), y0 = 120, f = fighters[i], fly = [];
+  let newest = -Infinity, on = true;
+  const make = st => { const m = JSON.parse(JSON.stringify(base)); m.ck = st + off; m.f[i][1] = y0 + V * (st - t0); return m; };
+  const hear = m => { newest = Math.max(newest, m.ck); onMessage(m); };
+  window.__bh = []; const d = window.asDrawn;
+  window.asDrawn = () => { const k = d(); window.__bh.push([fightClock() - t0, newest - f.tr.time, window.__pz]); return k; };
+  const tick = setInterval(() => {
+    if (!on) return;
+    fly.push(fightClock());
+    while (fly.length && fly[0] <= fightClock() - L) hear(make(fly.shift()));
+  }, 1000 / 30);
+  setTimeout(() => { on = false; window.__pz = true; for (const st of fly.splice(0)) hear(make(st)); }, 2000);
+  setTimeout(() => { window.__pz = false; on = true; }, 2500);
+  setTimeout(() => { clearInterval(tick); done(); }, 5000); })"""
+
+
+def test_after_a_pause_heard_first_the_fighter_is_drawn_behind_its_newest_state(site, browser):
+    """The states that landed during the guest's pause go on the track as heard their usual lag after their
+    stamps: with the clock read inside the pause they would look early, and the track would draw the fighter
+    ahead of its newest state, guessed, for a second or two (without it: up to 0.12 s ahead, 0.07 s ahead on
+    average 1 to 2 s on, against 0.04 s behind before the pause)."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    guest.evaluate(PAUSE)
+    guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') { window.__last = m; window.__lastAt = fightClock(); } }); }""")
+    guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
+    host.evaluate(DROP)
+    host.evaluate("window.__drop = true")
+    guest.wait_for_timeout(300)
+    guest.evaluate(BEHIND, [me, 100, 0.3])
+    bh = guest.evaluate("window.__bh")
+    tp = next(t for t, _, p in bh if p)
+    tr = max(t for t, _, p in bh if p)
+    before = [b for t, b, p in bh if tp - 1 <= t < tp and not p]
+    soon = [(round(t - tr, 2), round(b, 3)) for t, b, p in bh if tr + 0.4 <= t < tr + 2 and not p]
+    later = [b for t, b, p in bh if tr + 1 <= t < tr + 2 and not p]
+    assert len(before) > 5 and len(later) > 5, (len(before), len(later))
+    # Once the held states are drawn through (0.4 s on), never drawn ahead of the newest state...
+    assert min(b for _, b in soon) > -0.03, soon
+    # ...and 1 to 2 s on as far behind it as before the pause, give or take.
+    mb, ml = sum(before) / len(before), sum(later) / len(later)
+    assert ml > mb - 0.05, (round(mb, 3), round(ml, 3), soon)
+    assert not host.errors + guest.errors

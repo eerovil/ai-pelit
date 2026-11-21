@@ -482,17 +482,21 @@ function fightClock() {
 const TR_GAP = 0.06, TR_JUMP = 120, TR_NEAR = 0.03;
 function onTrack(f, st, x, y, a, t) {
   f.tr.push(st, { x, y }, a);
-  f.trT = t; f.trX = x; f.trY = y; f.trWait = null;
+  f.trT = t; f.trX = x; f.trY = y; f.trWait = null; f.trLag = st === null ? null : a - st;
 }
 // While the room is paused, states still on the way land (the room tells each phone of the pause on its
 // own, so a friend's phone may pause before the host's clock stops). Put on the track then, they would
 // change the spot drawn at the held moment in one frame: the track eases such a change by the frame's
 // time, which stands still with the clock. So they wait in f.trPz (each newer one, at most 16) and go on
-// the track, in order, on the first frame after the pause, where the track eases the change in.
+// the track, in order, on the first frame after the pause, where the track eases the change in. Each
+// goes on as heard the fighter's last lag (arrival minus stamp, f.trLag) after its stamp, and not at
+// the clock read inside the pause, which stood still: with that one they would look early, the track
+// would lower its delay and draw the fighter ahead of its newest state, guessed, for a second or two.
+// A jump, a state with no stamp, or a fighter with no lag yet goes on as heard.
 const TR_PZ = 16;
 function toTrack(f, st) {
   const a = fightClock(), t = st === null ? a : st;
-  if (net.fresh) { f.tr.snap(st, f, a); f.trT = t; f.trX = f.x; f.trY = f.y; f.trWait = null; f.trPz = null; return; }
+  if (net.fresh) { f.tr.snap(st, f, a); f.trT = t; f.trX = f.x; f.trY = f.y; f.trWait = null; f.trPz = null; f.trLag = st === null ? null : a - st; return; }
   if (net && R.paused) {
     const q = f.trPz || (f.trPz = []);
     if (!q.length || t > q[q.length - 1][4]) { q.push([st, f.x, f.y, a, t]); if (q.length > TR_PZ) q.shift(); }
@@ -514,7 +518,13 @@ function feedTrack(f, st, x, y, a, t) {
 // when the drawing is about to need it.
 function trackNeeds(f) {
   if (net && R.paused) return;
-  if (f.trPz) { const q = f.trPz; f.trPz = null; for (const w of q) feedTrack(f, w[0], w[1], w[2], w[3], w[4]); }
+  if (f.trPz) {
+    const q = f.trPz, lag = f.trLag; f.trPz = null;
+    for (const w of q) {
+      const on = w[0] !== null && lag != null && Math.hypot(w[1] - f.trX, w[2] - f.trY) <= TR_JUMP;
+      feedTrack(f, w[0], w[1], w[2], on ? Math.max(fightClock(), w[4] + lag) : w[3], w[4]);
+    }
+  }
   const w = f.trWait;
   if (w && (f.tr.time === null || f.tr.time >= f.trT - TR_NEAR)) onTrack(f, w[0], w[1], w[2], w[3], w[4]);
 }
