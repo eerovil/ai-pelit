@@ -696,6 +696,19 @@ def test_jaalautta_s_level_is_one_floe_open_before_its_first_save(site, context)
     assert page.evaluate("AiPelitScores.games.jaalautta.score(2)") == "2 voittoa"
 
 
+def test_pomppukeppi_s_level_is_one_board_open_before_its_first_save(site, context):
+    # Pomppukeppi saves 'auki' only when a second board opens (#482), like Jäälautta.
+    site.build(ROOT / "games")
+    page = context.new_page()
+    page.goto(site.url + SORMISKEITTI)
+    level = "AiPelitScores.games.pomppukeppi.level()"
+    assert page.evaluate(level) == 1
+    page.evaluate("localStorage.setItem('ai-pelit:pomppukeppi:auki', '2')")
+    assert page.evaluate(level) == 2
+    assert page.evaluate("AiPelitScores.games.pomppukeppi.levelText(1)") == "1 kenttä auki"
+    assert page.evaluate("AiPelitScores.games.pomppukeppi.score(24)") == "24 p"
+
+
 def test_lattia_on_laavaa_s_level_is_one_room_open_before_its_first_save(site, context):
     # Lattia on laavaa saves 'auki' only when a second room opens (#488); its score is tenths of
     # a second, shown in seconds.

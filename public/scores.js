@@ -122,6 +122,13 @@
       level: function () { return Math.max(1, saved('jaalautta', 'auki')); },
       levelText: function (n) { return n + (n === 1 ? ' lautta' : ' lauttaa') + ' auki'; },
     },
+    // Most points in one erä alone, one list per board ('kentta-N', #482); level: boards open ('auki').
+    // The game saves 'auki' only once a second board opens, so a new player has 1 open.
+    pomppukeppi: {
+      order: 'high', score: function (s) { return s + ' p'; }, boards: true,
+      level: function () { return Math.max(1, saved('pomppukeppi', 'auki')); },
+      levelText: function (n) { return n + (n === 1 ? ' kenttä' : ' kenttää') + ' auki'; },
+    },
     // Longest time on one's feet alone, tenths of a second, one list per room ('huone-N', #488);
     // level: rooms open ('auki'), saved only once a second room opens.
     'lattia-on-laavaa': {
