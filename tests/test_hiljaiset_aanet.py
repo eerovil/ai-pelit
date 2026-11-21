@@ -15,7 +15,7 @@ from conftest import ROOT, Site, wait_for_worker
 
 VERSIONS = [
     "games/aitajuoksu/v12", "games/areena/v8", "games/curling/v4", "games/hiihto/v13",
-    "games/jaan-alla/v7", "games/jalkapallo/v4", "games/kaahari/v6", "games/kaaosrata/v8",
+    "games/jaan-alla/v7", "games/jalkapallo/v5", "games/kaahari/v6", "games/kaaosrata/v8",
     "games/keihas/v18", "games/kirkkis/v11", "games/korkeushyppy/v16", "games/kuula/v12",
     "games/lentopallo/v8", "games/makihyppy/v13", "games/molkky/v4", "games/moukari/v14",
     "games/orava/v6", "games/pallorata/v5", "games/pilkki/v6", "games/pituushyppy/v19",
