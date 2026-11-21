@@ -12,6 +12,11 @@ from test_rooms_lib import Relay
 
 URL = "games/kaaosrata/v10/"
 
+# These phones draw in 2D (each test aborts three.module.js), so they need not run with the 3D tests, one game at a
+# time on the host (`alone`), where their timing failed beside the other 3D files. A games marker keeps conftest from
+# marking the file `alone`, so it runs with the 2D tests as v9's did.
+pytestmark = pytest.mark.games("kaaosrata")
+
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
