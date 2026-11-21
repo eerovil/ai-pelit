@@ -457,3 +457,12 @@ def test_a_host_reloaded_mid_race_loses_the_round_and_nothing_is_saved(couples):
     guest.wait_for_function("race === null", timeout=12000)
     assert saved(guest, "ennatys") is None and guest.evaluate("window.__sent") == []
     assert guest.errors == []
+
+
+def test_every_sound_it_loads_is_played():
+    """Review on #506: a loaded sound nobody plays is a download for nothing on every new phone."""
+    import re
+    src = (ROOT / "games" / "eukonkanto" / "v1" / "index.html").read_text()
+    loaded = set(re.findall(r"'([a-z0-9]+)'", re.search(r"S\.load\(\[(.*?)\]\)", src).group(1)))
+    played = set(re.findall(r"S\.(?:play|loop)\('([a-z0-9]+)'", src)) | {"askel", "askel2"}  # the feet pick one of two
+    assert loaded == played

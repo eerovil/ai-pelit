@@ -165,7 +165,7 @@ function tone(f, d, type = 'square', vol = 0.08, to = 0) {
   o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
 }
 const S = AiPelitAanet;
-S.load(['pilli', 'lahto', 'askel', 'askel2', 'ruoho', 'ponnistus', 'puu', 'loiskis', 'tomahdys', 'naksu', 'onnistui']);
+S.load(['pilli', 'lahto', 'askel', 'askel2', 'ponnistus', 'puu', 'loiskis', 'tomahdys', 'naksu', 'onnistui']);
 function whistle() {
   if (S.play('pilli', { vol: 0.8 })) return;
   tone(2400, 0.18, 'sine', 0.07, 2000); setTimeout(() => tone(2400, 0.4, 'sine', 0.07, 2100), 200);
