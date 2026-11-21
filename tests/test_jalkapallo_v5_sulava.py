@@ -218,6 +218,61 @@ def test_a_friends_held_ball_is_drawn_at_their_feet(site, browser):
     assert not host.errors + guest.errors + ville.errors
 
 
+@pytest.mark.parametrize("what", ["shot", "pass"])
+def test_a_guests_own_kick_leaves_its_feet_at_once_on_that_guest(site, browser, what):
+    """A guest's own player runs up the pitch with the ball and shoots or passes it on. On that guest's phone the
+    ball leaves from where it was drawn, at the player's feet, as soon as the host's word of the kick comes, and
+    flies where the host has it, not the drawing's delay behind (the phone's own actions are not delayed)."""
+    host, aino, ville = phones(site, browser, names=("Testi A", "Testi B", "Testi C"))
+    host.evaluate(QUIET)
+    host.evaluate("""() => { const p = players[1]; p.x = -3; p.y = -15; p.fx = 0; p.fy = 1;
+      players[0].x = 3; players[0].y = 2; ball.x = -3; ball.y = -14.2; take(p); }""")
+    ville.wait_for_function("owner === players[1] && players[1].ctl === AiPelitRooms.me && players[1].tr.size() > 3",
+                            timeout=5000)
+    host.evaluate(JITTER)
+    host.evaluate(STALLS)
+    # Per frame, on both: the machine's time (the same on every page), the ball, the kicker's kicks.
+    rec_js = """window.__k = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+      const u = window.update; window.update = dt => { const t = now(); u(dt);
+        if (window.__k.length < 400) window.__k.push([t, ball.x, ball.y, players[1].kicks]); };"""
+    host.evaluate("() => { " + rec_js + " }")
+    ville.evaluate("() => { " + rec_js + """
+      setInterval(() => { input.jx = 0; input.jy = window.__go ? view : 0; }, 5); window.__go = true; }""")
+    ville.wait_for_function("players[1].ty > -8", timeout=5000)
+    k0 = ville.evaluate("players[1].kicks")
+    if what == "shot":
+        ville.evaluate("act('shootDown'); act('shootUp', 0.6)")
+    else:
+        ville.evaluate("act('pass')")
+    ville.wait_for_function(f"players[1].kicks > {k0}", timeout=5000)
+    ville.wait_for_timeout(600)
+    rec, stalls, on_host = ville.evaluate("window.__k"), host.evaluate("window.__stall"), host.evaluate("window.__k")
+    i = next(i for i, f in enumerate(rec) if f[3] > k0)
+    t_h, y0 = rec[i][0], rec[i - 1][2]
+    # The ball goes up the pitch from the frame the kick is heard: never back down it (a held ball sits 0.8 m in
+    # front of the player's feet), and 0.1 s on it is over 1 m on its way (a pass goes at 7-17 m/s, the shot at
+    # 22).
+    after = [f for f in rec[i - 1:] if f[0] <= t_h + 0.4]
+    back = [(round(b[0] - t_h, 3), round(b[2] - a[2], 2)) for a, b in zip(after, after[1:]) if b[2] - a[2] < -0.05]
+    assert not back, (back, [(round(f[0] - t_h, 3), round(f[2], 2)) for f in after])
+    late = next(f for f in rec if f[0] >= t_h + 0.1)
+    assert late[2] - y0 > 1.0, (round(late[0] - t_h, 3), late[2] - y0, [(round(f[0] - t_h, 3), round(f[2], 2)) for f in after])
+    # And from 0.15 s (the step from the feet faded out) to 0.3 s it is drawn about where the host has it at the
+    # same moment, the message's way behind, not the track's delay more.
+
+    def host_y(t):
+        for a, b in zip(on_host, on_host[1:]):
+            if a[0] <= t <= b[0]:
+                return a[2] + (b[2] - a[2]) * (t - a[0]) / (b[0] - a[0]) if b[0] > a[0] else a[2]
+    lead = [(round(f[0] - t_h, 3), round(host_y(f[0]) - f[2], 2)) for f in rec
+            if t_h + 0.15 <= f[0] <= t_h + 0.3 and host_y(f[0]) is not None
+            and not any(s <= f[0] <= s + 0.35 for s in stalls)]
+    # Measured (#480): 0.06-0.39 m behind the host; drawn from the track, the shot was 2.8 m and the pass 1.1 m
+    # behind all along.
+    assert lead and all(abs(d) < 0.8 for _, d in lead), lead
+    assert not host.errors + aino.errors + ville.errors
+
+
 def test_a_kickoff_puts_everyone_on_their_spot_at_once_on_the_guests(site, browser):
     """After a goal the host puts everyone on their kickoff spot. Every guest starts each track again there, so
     from the kickoff's first frame everyone else is drawn on their spot, and nobody slides there."""
