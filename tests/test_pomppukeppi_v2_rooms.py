@@ -1,4 +1,4 @@
-"""Pomppukeppi v1 with friends (#482): the host runs the board, the guests send their stick."""
+"""Pomppukeppi v2 with friends (#482): the host runs the board, the guests send their stick."""
 import json
 import shutil
 
@@ -7,7 +7,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/pomppukeppi/v1/"
+URL = "games/pomppukeppi/v2/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 # On the host: my hare wins erä after erä until the match is over.

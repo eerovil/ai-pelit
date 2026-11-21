@@ -1,4 +1,4 @@
-"""Pomppukeppi v1 (#482): hares on pogo sticks paint a tile board, alone against the computer."""
+"""Pomppukeppi v2 (#482): hares on pogo sticks paint a tile board, alone against the computer."""
 import json
 import shutil
 
@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pomppukeppi/v1/"
+URL = "games/pomppukeppi/v2/"
 KEY = "ai-pelit:pomppukeppi:"
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
