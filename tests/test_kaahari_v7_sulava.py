@@ -330,8 +330,9 @@ def test_a_paused_race_holds_the_friend_s_kart_where_it_is_drawn(site, browser, 
 
 @pytest.mark.parametrize("first", ["driver", "watcher"])
 def test_after_a_pause_the_friend_s_kart_is_drawn_as_far_behind_its_newest_spot_as_before(site, browser, first):
-    """The driver goes on first, so the watcher, still paused, holds the driver's first spots and puts them on the
-    track when its own pause ends. Its paused clock reads the same at both ends of the pause, so taken as heard
+    """The watcher holds the driver's spots it hears while paused and puts them on the track when its own pause
+    ends: the driver's last spots, sent before it heard the pause, when the watcher pauses first, and its first
+    ones after the pause, when the driver goes on first. Its paused clock reads the same at both ends of the pause, so taken as heard
     then, the spots would seem to have come early: the track would lower its delay and for a second or two draw
     the kart ahead of the newest spot it knows (on a guess). Each held spot goes on as heard at its stamp plus the
     lag of the last spot heard before the pause, so the kart is drawn about as far behind as before."""
@@ -342,3 +343,23 @@ def test_after_a_pause_the_friend_s_kart_is_drawn_as_far_behind_its_newest_spot_
     assert len(before) >= 5 and len(after) >= 5, (len(before), len(after))
     shown = (round(mean(before), 3), round(min(after), 3), round(mean(after), 3))
     assert mean(after) > mean(before) - 0.08, shown
+
+
+def test_spots_held_in_a_pause_with_no_frame_drawn_go_on_the_track_when_it_ends(site, browser):
+    """A phone whose page draws no frame (hidden) still hears the room. Spots it hears while paused wait, and the
+    first spot heard after the pause puts them on the track, though no frame read the clock in between."""
+    host, guest = phones(site, browser)
+    i = index(host)
+    guest.evaluate(PAUSE)
+    host.evaluate("window.__lane = 0; window.__run = true")
+    guest.wait_for_timeout(500)
+    guest.evaluate("window.__frame = window.frame; window.frame = () => {}")  # no more frames
+    guest.wait_for_timeout(200)
+    guest.evaluate("window.__pz = true")
+    guest.wait_for_function(f"race.karts[{i}].held && race.karts[{i}].held.length >= 3", timeout=5000)
+    guest.evaluate("window.__pz = false")
+    guest.wait_for_function(f"race.karts[{i}].held === null", timeout=2000)  # put on the track by the next spot
+    guest.evaluate("window.frame = window.__frame; requestAnimationFrame(window.frame)")
+    host.evaluate("window.__run = false")
+    errors = [e for p in (host, guest) for e in p.errors]
+    assert not errors, errors

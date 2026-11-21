@@ -639,8 +639,10 @@ const stampOf = m => Number.isFinite(m.st) ? m.st : null;
 function heardSpot(k, st, src) {
   const spot = { x: k.x, y: k.y, a: k.a, z: k.z }, snap = src !== k.src;
   k.src = src;
-  if (R.paused) { if (snap || !k.held) k.held = []; k.held.push([st, spot, snap]); return; }
+  // Read first: with no frame drawn during the pause (a hidden page), this is what sees it start, so its end
+  // puts the held spots on the track (heldOn()) before this one, and not only at the end of the next pause.
   const a = netClock();
+  if (R.paused) { if (snap || !k.held) k.held = []; k.held.push([st, spot, snap]); return; }
   if (snap) k.tr.snap(st, spot, a); else k.tr.push(st, spot, a);
   k.lag = st === null ? null : a - st;  // how late the last spot heard came, for heldOn()
 }
