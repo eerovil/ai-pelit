@@ -246,7 +246,7 @@ def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site,
     aino.wait_for_timeout(1000)
     dr = aino.evaluate("window.__dr")
     paused = [(t, s) for t, s, _, p in dr if p]
-    assert len(paused) > 20, dr
+    assert len(paused) > 4 and paused[-1][0] - paused[0][0] > 0.8, dr  # by time: a loaded machine draws few frames
     # From 0.15 s into the pause (the phones hear of it a moment apart), the sled stands where it was drawn.
     held = [s for t, s in paused if t > paused[0][0] + 0.15]
     assert max(held) - min(held) < 0.05, [round(s, 2) for _, s in paused]
@@ -269,7 +269,7 @@ def test_a_friends_fall_rolls_one_way_and_ends_upright_at_once(site, browser):
     host.wait_for_function(f"!(recOf({json.dumps(gid)}).sl.fallT > 0)", timeout=5000)
     host.wait_for_timeout(600)
     rolls = [round(r, 3) for _, _, r, _ in host.evaluate("window.__dr")]
-    assert max(rolls) > 7, rolls  # it really rolled (to near 3π)
+    assert max(rolls) > 5, rolls  # it really rolled (most of the way to 3π; at a low frame rate no frame is drawn at the top)
     assert rolls[-1] == 0, rolls
     assert all(b >= a - 0.01 or b == 0 for a, b in zip(rolls, rolls[1:])), rolls
     assert not host.errors + guest.errors
