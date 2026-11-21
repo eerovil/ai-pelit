@@ -10,7 +10,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/kaaosrata/v9/"
+URL = "games/kaaosrata/v10/"
 
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
