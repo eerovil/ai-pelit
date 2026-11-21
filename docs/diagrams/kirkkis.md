@@ -22,7 +22,7 @@ sits beside the back chip, clear of the 🎤 chip `rooms.js` puts right of the m
 
 v11 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
-v12 (#480) draws the other phones' players gliding, a moment back, between the spots their messages brought (`lib/sulava-1`, `sulava-liike.md`): `kme`, `kr` and `ks` carry the sender's clock (`s`), the host forwards a friend's spot with the friend's own stamp (the seventh of each `stateOf()` row), and each person has a track (`tr`). The host's rules still use the newest spot; only its screen draws the smoothed one (`frame()`). v11 drew a friend on the host at each new spot as it came, and chased the newest spot on a guest.
+v12 (#480) draws the other phones' players gliding, a moment back, between the spots their messages brought (`lib/sulava-1`, `sulava-liike.md`): `kme`, `kr` and `ks` carry the sender's clock (`s`), the host forwards a friend's spot with the friend's own stamp (the seventh of each `stateOf()` row), and each person has a track (`tr`). The host's rules still use the newest spot; only its screen draws the smoothed one (`frame()`). v11 drew a friend on the host at each new spot as it came, and chased the newest spot on a guest. When the round itself moves or stops someone ("Kaikki pelastettu!" sends the seeker to the base; Hippa freezes the one tagged), every phone forgets that person's spots (`restart()` in `show()`), so they are drawn there at once.
 
 ```mermaid
 flowchart TD
