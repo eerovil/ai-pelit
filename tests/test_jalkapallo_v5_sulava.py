@@ -36,7 +36,7 @@ SAMPLE = """(i) => { window.__xs = []; window.__got = []; const now = () => (per
 # slows the match itself there, and every phone rightly draws it slower: such moments are left out.
 STALLS = """() => { window.__stall = []; let last = 0; const d = window.draw;
   window.draw = () => { const t = (performance.timeOrigin + performance.now()) / 1000;
-    if (last && t - last > 0.052) window.__stall.push(t); last = t; d(); }; }"""
+    if (last && t - last > 0.08) window.__stall.push(t); last = t; d(); }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -84,7 +84,7 @@ def glides(page, host):
     assert len(middle) > 30, len(middle)
 
     def heard(t):
-        return any(t - 0.3 <= g <= t for g in got) and not any(s - 0.1 <= t <= s + 0.45 for s in stalls)
+        return any(t - 0.3 <= g <= t for g in got) and not any(s <= t <= s + 0.35 for s in stalls)
     kept = [v for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
     assert len(kept) > 30, (len(kept), len(middle), len(stalls))
