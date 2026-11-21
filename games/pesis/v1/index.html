@@ -159,7 +159,9 @@ function newMatch(resume) {
 // The match alone is kept between plays, so a reload or a trip to the shelf does not lose it.
 function keep() {
   if (net.on || state === 'over') return;
-  if (state !== 'ready') return;
+  // Before a pitch, and once a play is settled (all on their bases), so a reload undoes nothing;
+  // the play that ends the half is kept from before its pitch.
+  if (state !== 'ready' && !(state === 'dead' && outs < OUTS && runners.every(r => !r.run))) return;
   const m = { lv: level, inn, bt, first, sc: score, outs, tries, batter, queue,
     r: runners.map(r => r.i + ':' + r.at), out: players.filter(p => p.out).map(idx), home: players.filter(p => p.home).map(idx) };
   const k = JSON.stringify(m);
@@ -270,7 +272,7 @@ function snapshot() {
     r: runners.map(r => [r.i, r.at, r.run ? 1 : 0, r.bat ? 1 : 0]),
     ev: events.map(e => [e.id, r2(e.x), r2(e.y), e.s, e.c, e.k, e.w, r2(e.t)]) };
 }
-let ballTr = null, lp = null, lastSnap = 0;
+let ballTr = null, lp = null;
 function applySnapshot(s) {
   const was = state, st = Number.isFinite(s.ck) ? s.ck : null;
   state = s.st; stT = s.stT; inn = s.inn; bt = s.bt; score = s.sc; outs = s.o; tries = s.tr; batter = s.ba; playN = s.pl;
@@ -291,7 +293,6 @@ function applySnapshot(s) {
   if (s.pn && (!lp || lp.n !== s.pn[0]) && !s.pn[3]) lp = { n: s.pn[0], ap: s.pn[1], t0: performance.now() / 1000 - s.pn[2], tapped: 0 };
   pitch = s.pn ? { n: s.pn[0], ap: s.pn[1], t: s.pn[2], done: !!s.pn[3] } : null;
   events = s.ev.map(e => ({ id: e[0], x: e[1], y: e[2], s: e[3], c: e[4], k: e[5], w: e[6], t: e[7] }));
-  lastSnap = performance.now();
 }
 function guestUpdate(dt) {
   stT += dt;
@@ -346,7 +347,9 @@ let countedRuns = 0;
 function countRuns() {
   for (const e of events) if (e.k === 'juoksu' && e.id > countedRuns) {
     countedRuns = e.id;
-    if (e.w >= 0 && players[e.w] && players[e.w].t === myTeam && (players[e.w].ctl === myId() || !net.on)) { stats.juoksut++; save('stats', stats); }
+    // A run is this phone's when its batting-order place is one of the phone's own.
+    const p = e.w >= 0 ? players[e.w] : null, k = ctrls.find(q => q.id === myId());
+    if (p && k && p.t === k.t && k.slots.includes(p.k)) { stats.juoksut++; save('stats', stats); }
   }
 }
 
@@ -454,7 +457,9 @@ const pressed = {};
 // ---------- Drawing ----------
 function follow(dt) {
   const vh = (wide ? (viewR - viewL) : (viewBot - viewTop)) / 2 / sc;
-  let ty = state === 'play' ? ball.y : 8;
+  // A guest's ball is only in its track between frames (drawnSpots puts it back after drawing).
+  const bo = net.on && !R.isHost && ballTr ? ballTr.at() : null;
+  let ty = state === 'play' ? (bo ? bo.y : ball.y) : 8;
   const lo = vh - 5, hi = FL + 3 - vh;
   ty = lo > hi ? (FL - 2) / 2 : Math.max(lo, Math.min(hi, ty));
   if (state === 'ready' || state === 'pitch') ty = lo > hi ? ty : lo;

@@ -203,6 +203,37 @@ def test_the_menu_and_the_buttons_fit_the_screen(site, context, size):
             assert b[0] >= 0 and b[1] >= 0 and b[0] + b[2] <= size[0] + 0.5 and b[1] + b[3] <= size[1] + 0.5, (md, b)
     assert page.errors == []
 
+def test_a_run_made_before_the_ball_lands_foul_is_taken_back(site, context):
+    page = start(site, context)
+    page.evaluate(TO_PITCH)
+    # A runner on the 3rd base when the ball is hit far out of the side line, high.
+    page.evaluate("runners.push({ i: 5, at: 3, run: false, d: 0, bat: false, wait: 0 }); queue = queue.filter(i => i !== 5)")
+    page.evaluate("batTap(pitch.n, bestT(pitch.ap))")
+    page.evaluate("Object.assign(ball, { x: 20, y: 30, z: 8, vx: 0, vy: 0, vz: 0, fly: true })")
+    page.evaluate("const r = runners.find(r => r.i === 5); Object.assign(r, { run: true, d: segLen(3) - 0.05 }); players[5].v = 6; update(1 / 60)")
+    assert page.evaluate("[score, players[5].home]") == [[1, 0], True]
+    page.evaluate("Object.assign(ball, { z: 0.01, vz: -1 }); update(1 / 60)")
+    assert page.evaluate("[state, score, players[5].home, runners.map(r => [r.i, r.at])]") == ["dead", [0, 0], False, [[5, 3]]]
+    assert page.errors == []
+
+
+def test_each_team_plays_at_its_own_level(site, context):
+    page = start(site, context)
+    # Alone: the phone's own team at level 4, the foe at the phone's level (1 at first).
+    assert page.evaluate("players.map(p => p.lv)") == [4] * 9 + [1] * 9
+
+
+def test_a_settled_pitch_is_kept_so_a_reload_does_not_undo_it(site, context):
+    page = start(site, context)
+    page.evaluate(TO_PITCH)
+    page.evaluate("run(() => state === 'pitch', 6); update(1 / 60)")
+    assert page.evaluate("[state, tries]") == ["dead", 1]
+    page.reload()
+    page.evaluate(RUN)
+    page.click("#resume")
+    assert page.evaluate("[tries, batter, state]") == [1, 0, "ready"]
+
+
 
 # ---------- Rooms ----------
 
@@ -268,6 +299,8 @@ def test_the_phones_split_into_two_teams_and_the_computer_fills_the_rest(room):
     assert host.evaluate("ctrls.map(k => [k.id, k.t, k.slots, k.fix])") == [
         [ids[0], 0, [0, 2, 4, 6, 8], 6], [ids[2], 0, [1, 3, 5, 7], 4], [ids[1], 1, [0, 1, 2, 3, 4, 5, 6, 7, 8], 6]]
     assert [p.evaluate("myTeam") for p in (host, a, b)] == [0, 1, 0]
+    # Every computer player in a room is level 4.
+    assert host.evaluate("players.every(p => p.lv === 4)")
     # The lukkari is always the computer's.
     host.wait_for_function("state === 'pitch' || state === 'ready'")
     assert host.evaluate("!lukkari().ctl")
@@ -332,3 +365,21 @@ def test_the_end_reaches_both_phones_once_and_each_saves_its_own_result(room):
         assert p.locator("#aipr-result").inner_text() == res
         assert json.loads(p.evaluate("localStorage.getItem('ai-pelit:pesis:stats')"))["kaverit"] == saved
     assert host.errors == guest.errors == []
+
+
+def test_a_guests_camera_follows_a_deep_ball(room):
+    host, [guest] = room("Eero", "Aino")
+    host.wait_for_function("state === 'pitch'", timeout=4000)
+    # A hit caught deep by the right koppari, who holds it.
+    host.evaluate("batTap(pitch.n, bestT(pitch.ap)); const k = players[17]; k.think = 99; ball.held = 17; ball.fly = false")
+    guest.wait_for_function("state === 'play' && camY > 30", timeout=4000)
+    assert host.errors == guest.errors == []
+
+
+def test_a_run_counts_for_the_phone_whose_batting_place_it_is(room):
+    host, [a, b] = room("Eero", "Aino", "Iida")
+    # The host bats places 0, 2, 4... of the blue team, Iida 1, 3, 5...
+    for n, (page, w, want) in enumerate([(host, 2, 1), (host, 1, 0), (b, 1, 1), (b, 9, 0)]):
+        before = page.evaluate("stats.juoksut")
+        page.evaluate(f"events.push({{ id: 100000 + {n}, x: 0, y: 0, s: '', c: '', k: 'juoksu', w: {w}, t: 1 }}); countRuns()")
+        assert page.evaluate("stats.juoksut") - before == want

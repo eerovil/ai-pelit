@@ -11,7 +11,7 @@
 const FW = 15, FL = 60, FRONT = 4;           // half the width, the back line, the front line a hit must pass
 const BASES = [{ x: 0, y: 0 }, { x: -7, y: 5 }, { x: 7, y: 12 }, { x: -7, y: 19 }, { x: 0, y: 0 }];
 const BASE_R = 1.4;                          // a fielder with the ball this near a base holds it
-const G = 9.8, Z0 = 1.0, IDEAL = 0.0;        // the toss starts at hand height; IDEAL: the best tap's offset
+const G = 9.8, Z0 = 1.0;                     // the toss starts at hand height
 const HIT_WIN = 0.2;                         // a tap this far (s) from the best moment still hits
 const LATE_OK = 0.5;                         // a friend's tap is waited for this long after the pitch ends
 const THROW_V = 19, CATCH_R = 1.0, PR = 0.55;
@@ -48,7 +48,7 @@ function mkPlayer(t, k, name, lvl) {
   const l = Math.min(Math.max(lvl, 1), 9) - 1;
   return { t, k, name, ctl: '', x: POS[k].x, y: POS[k].y, v: 0, foot: 0, fx: 0, fy: 1, steps: 0,
     speed: Math.min(8.6, 7.2 + 0.16 * l), react: Math.max(0.15, 0.45 - 0.035 * l), err: Math.max(0.05, 0.13 - 0.009 * l),
-    think: 0, out: false, home: false };
+    lv: l + 1, think: 0, out: false, home: false };
 }
 const P = i => players[i];
 const fielders = () => players.filter(p => p.t !== bt);
@@ -79,7 +79,7 @@ function nextBatter() {
 // Everyone to their places before a pitch: fielders to theirs, runners on their bases.
 function ready() {
   state = 'ready'; stT = 0; pitch = null;
-  ball = { x: 0.4, y: 0.4, z: Z0, vx: 0, vy: 0, vz: 0, held: idx(lukkari()), fly: false, th: null, landed: false };
+  ball = { x: 0.4, y: 0.4, z: Z0, vx: 0, vy: 0, vz: 0, held: idx(lukkari()), fly: false, th: null };
   for (const p of players) {
     p.v = 0; p.goal = null; p.holdT = 0;
     if (p.t !== bt) { p.x = POS[p.k].x; p.y = POS[p.k].y; p.fx = 0; p.fy = -1; }
@@ -116,7 +116,7 @@ function batTap(n, ph) {
   if (state !== 'pitch' || !pitch || pitch.n !== n || pitch.tapped || pitch.done) return null;
   if (!(ph >= 0) || pitch.t > tossEnd(pitch.ap) + LATE_OK) return null;
   pitch.tapped = true;
-  const off = ph - bestT(pitch.ap) - IDEAL, z = tossZ(pitch.ap, ph);
+  const off = ph - bestT(pitch.ap), z = tossZ(pitch.ap, ph);
   if (Math.abs(off) > HIT_WIN || z < 0.1) { say(0, 1, 'Huti', '#fff', 'huti'); return 'huti'; }
   hit(off);
   return 'hit';
@@ -129,9 +129,9 @@ function hit(off) {
   // Most go low and bounce before the fielders get there; the rest fly, and a fly can be caught.
   const ele = rnd() < 0.7 ? -0.12 + rnd() * 0.2 : 0.3 + rnd() * 0.55;
   const h = sp * Math.cos(ele);
-  saved = { runners: runners.map(r => ({ ...r })), batter };
+  saved = { runners: runners.map(r => ({ ...r })), batter, score: score.slice(), home: players.map(p => p.home) };
   playN++; playT = 0;
-  ball = { x: 0, y: 0.5, z: 0.9, vx: Math.sin(ang) * h, vy: Math.cos(ang) * h, vz: sp * Math.sin(ele), held: -1, fly: true, th: null, landed: false };
+  ball = { x: 0, y: 0.5, z: 0.9, vx: Math.sin(ang) * h, vy: Math.cos(ang) * h, vz: sp * Math.sin(ele), held: -1, fly: true, th: null };
   pitch.done = true;
   state = 'play'; stT = 0;
   // The batter must run; the runners on the bases choose.
@@ -178,7 +178,7 @@ function footPress(i, foot) {
 function cpuRuns(r) {
   if (r.at >= 4) return false;
   const nb = BASES[r.at + 1], mine = segLen(r.at) / (P(r.i).speed - 0.6);
-  const lv = Math.min(level, 9);
+  const lv = P(r.i).lv;
   return ballEta(nb) > mine * (0.95 - lv * 0.02) + (rnd() - 0.5) * 0.4;
 }
 // How soon the fielders could have the ball on a spot.
@@ -254,7 +254,7 @@ function stepBall(dt) {
     ball.vz -= G * dt; ball.z += ball.vz * dt;
     if (ball.z <= 0) {
       ball.z = 0;
-      if (ball.fly) { ball.fly = false; ball.landed = true; if (state === 'play' && foulAt(ball.x, ball.y)) { foul(); return; } }
+      if (ball.fly) { ball.fly = false; if (state === 'play' && foulAt(ball.x, ball.y)) { foul(); return; } }
       ball.vz = -ball.vz * 0.35; if (ball.vz < 1) ball.vz = 0;
       ball.vx *= 0.6; ball.vy *= 0.6;
     }
@@ -273,7 +273,12 @@ const foulAt = (x, y) => Math.abs(x) > FW || y > FL || y < FRONT;
 function foul() {
   say(ball.x, ball.y, 'Laiton lyönti', '#ffd166', 'laiton');
   runners = saved ? saved.runners.map(r => ({ ...r })) : [];
-  if (saved) batter = saved.batter;
+  if (saved) {
+    // A runner who got home before the ball came down foul goes back too, and the run with them.
+    batter = saved.batter; score = saved.score.slice();
+    players.forEach((p, i) => { p.home = saved.home[i]; });
+    for (const r of runners) { const b = BASES[r.at]; P(r.i).x = b.x; P(r.i).y = b.y; }
+  }
   ball.vx = ball.vy = ball.vz = 0;
   tries++;
   if (tries >= TRIES) { outs++; P(batter).out = true; say(0, 1, 'Kolme lyöntiä: palo', '#ff8a80', 'palo'); batter = -1; }
@@ -395,8 +400,8 @@ function cpuThrow(p, dt) {
     const tt = d / THROW_V + 0.1;
     if (there && left - tt > gain) { gain = left - tt; best = b; }
   }
-  // The lukkari's plate ends the play: everyone running then is palo, so it is the throw when
-  // the runners are far from their bases too.
+  // The lukkari's plate ends the play (stopPlay): a runner short of halfway goes back and the
+  // batter short of 1st is palo, so it is the throw when the runners are far from their bases too.
   throwTo(best);
 }
 function goTo(p, tx, ty, sp, dt) {
