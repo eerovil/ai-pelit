@@ -1,6 +1,6 @@
 """Kaaosrata v9 (#480): a friend's runner glides on the other phones' screens, drawn from lib/sulava-1 between the
 spots their phone sends, instead of jumping to each one as it comes (v8 drew each spot at once and carried it on at
-its last speed until the next). The race's rules (bumps, the finish) still use the newest spot; only the drawing lags."""
+its last speed until the next). A bump with a friend is worked out where they are drawn (#480's D11); the finish and the standings use the newest spot."""
 
 import json
 from statistics import mean, pstdev
@@ -112,7 +112,7 @@ def run_and_watch(host, run, watch, others):
     assert not errors, errors
 
 
-# A guest runs, seen on the host (whose rules keep the newest spot and whose screen draws it smoothly),
+# A guest runs, seen on the host (which keeps the newest spot between frames and draws it smoothly),
 # and the host runs, seen on a guest.
 @pytest.mark.parametrize("walker", ["guest", "host"])
 def test_a_friend_running_glides_on_the_other_phone(site, browser, walker):
