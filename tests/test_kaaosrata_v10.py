@@ -4,7 +4,7 @@ import json
 
 from conftest import ROOT
 
-URL = "games/kaaosrata/v9/"
+URL = "games/kaaosrata/v10/"
 NAMES = ['valinta', 'hyppy', 'potku', 'putoaminen', 'osuma', 'tomahdys', 'voitto', 'suhahdus']
 
 # Every AiPelitAanet.play() call, with whether it played, in window.heard.
@@ -40,7 +40,9 @@ def running(page):
 
 
 def put(page, **kw):
-    page.evaluate(f"heard.splice(0); input.x = 0; input.y = 0; Object.assign(me, {{ z: 0, vx: 0, vy: 0, vz: 0, stun: 0, cd: 0, fall: 0 }}, {json.dumps(kw)})")
+    # v10 (#493): the runner stands on the ground where it is put, which is not always at height 0.
+    page.evaluate(f"heard.splice(0); input.x = 0; input.y = 0; Object.assign(me, {{ vx: 0, vy: 0, vz: 0, stun: 0, cd: 0, fall: 0 }}, {json.dumps(kw)});"
+                  " me.z = baseAt(me.x, me.y); me.gx = me.x; me.gy = me.y")
 
 
 def test_the_countdown_blips_and_a_jump_lands_with_a_thud(site, context):
@@ -50,7 +52,7 @@ def test_the_countdown_blips_and_a_jump_lands_with_a_thud(site, context):
     put(page, x=0, y=2)
     page.evaluate("press()")
     page.wait_for_function("me.z > 0.5", timeout=1000)
-    page.wait_for_function("me.z === 0", timeout=2000)
+    page.wait_for_function("me.z === baseAt(me.x, me.y)", timeout=2000)
     got = heard(page)
     assert got[:2] == ["hyppy", "tomahdys"], got
     assert page.errors == []
@@ -124,7 +126,8 @@ def test_v2_saves_are_read_as_they_are(site, context):
     }""")
     page.reload()
     assert "Taso 3" in page.inner_text("#foe")
-    assert "Ennätys" in page.inner_text("#stats")
+    # v10 (#493) has new courses, so the v2-v9 record shows as the old course's.
+    assert "Vanhan radan ennätys (v9): 61,20 s" in page.inner_text("#stats")
     assert page.errors == []
 
 
@@ -155,7 +158,7 @@ def test_without_the_sound_library_it_still_plays_with_its_beeps(site, browser):
         page.goto(site.url + URL)
         page.click("#go")
         page.wait_for_function("race && race.phase === 'run'", timeout=6000)
-        page.evaluate("Object.assign(me, { x: 0, y: 139.5, z: 0, vx: 0, vy: 5, cp: 4 }); input.y = 1; press()")
+        page.evaluate("Object.assign(me, { x: 0, y: 139.5, z: baseAt(0, 139.5), gx: 0, gy: 139.5, vx: 0, vy: 5, cp: 4 }); input.y = 1; press()")
         page.wait_for_function("!race", timeout=12000)
         assert page.inner_text("#result").startswith("Voitit!")
         assert page.errors == []
@@ -181,4 +184,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/kaaosrata/v9")
+    opens_and_plays_with_the_quiet_library(real, context, "games/kaaosrata/v10")
