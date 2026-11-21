@@ -63,10 +63,10 @@
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <button id="asu">👕 Asu</button>
   <p id="stats"></p>
-  <p class="help">Pyöritä saapasta piirtämällä peukalolla ympyröitä kehälle: mitä nopeammin ja mitä useampi
+  <p class="help">Pyöritä saapasta yli olan piirtämällä peukalolla ympyröitä kehälle myötäpäivään: mitä nopeammin ja mitä useampi
     kierros, sitä kovempi vauhti. Nosta peukalo, kun saapas on vihreällä kaarella, niin se lentää parhaaseen
     kulmaan. Yli kymmenen kierrosta väsyttää käden. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
-  <p class="help side">Piirrä peukalolla ympyröitä oikean reunan kehälle ja nosta peukalo, kun saapas on
+  <p class="help side">Piirrä peukalolla ympyröitä myötäpäivään oikean reunan kehälle ja nosta peukalo, kun saapas on
     vihreällä kaarella. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
 </div>
 <script src="../../../rooms.js" data-game="saappaanheitto" data-min="2" data-max="8"></script>
@@ -91,10 +91,13 @@ const FOES = ['Kumi-Kalle', 'Saapas-Sanna', 'Varsi-Ville', 'Lätäkkö-Leena', '
 // The boot's speed comes from how fast the thumb goes round (the last WIN_S seconds of turning),
 // times how far the swing has built up (and the boot follows it with some weight): half on the first lap, full after BUILD laps. Past TIRE
 // laps the arm tires and the speed drops; at SLIP laps the boot slips from the hand (a foul).
-// Lifting the thumb lets go: the boot flies along the circle's tangent. Going round forward
-// (anticlockwise on the screen) that is best low in front, going round backward high behind.
+// Lifting the thumb lets go: the boot flies along the circle's tangent. The swing is over the top
+// (clockwise on the screen, dir -1), as Eero chose on #503: let go early, while the boot still
+// rises behind, and it flies up and back; late, as it comes down in front, and it goes into the
+// ground. The best moment is high behind the shoulder. Going round the other way (underarm, dir 1)
+// works too, mirrored.
 const TAU = Math.PI * 2, DEG = Math.PI / 180;
-const SH_X = -1.1, SH_Y = 1.45, ARM = 0.87;   // the shoulder, and the boot's middle from it
+const SH_X = -1.1, SH_Y = 1.45, ARM = 0.55;   // the shoulder, and the hand holding the boot from it
 const KW = 2.0, VMAX = 28, WIN_S = 0.25;      // m/s of boot per rad/s of thumb, its top speed
 const BUILD = 2.5, TIRE = 10, SLIP = 14;      // laps
 const MIN_TURN = Math.PI;                     // less than half a lap before the lift: no throw
@@ -103,7 +106,7 @@ const DRAG = 0.006, G = 9.81, SUB = 1 / 240;
 const LAND_T = 2.4, BOARD_T = 3.5, TURN_MAX = 45;   // seconds
 
 const wrapR = r => ((r + Math.PI) % TAU + TAU) % TAU - Math.PI;
-// The boot's middle when its arm points at angle a (radians, 0 forward, anticlockwise up).
+// The hand (and the boot's top) when its arm points at angle a (radians, 0 forward, anticlockwise up).
 const bootAt = a => [SH_X + Math.cos(a) * ARM, SH_Y + Math.sin(a) * ARM];
 // How much of the thumb's speed reaches the boot after this many laps.
 function build(laps) {
@@ -121,7 +124,7 @@ function launchDeg(a, dir) {
 function arc(dir, half) { const m = (BEST - dir * 90) * DEG; return [m - half * DEG, m + half * DEG]; }
 function boot(a, v, dir) {
   const [x0, y0] = bootAt(a), e = launchDeg(a, dir) * DEG;
-  return { x: x0, y: y0, vx: v * Math.cos(e), vy: v * Math.sin(e), t: 0, acc: 0, stuck: false, dir, trail: [] };
+  return { x: x0, y: y0, vx: v * Math.cos(e), vy: v * Math.sin(e), t: 0, acc: 0, stuck: false, dir, a0: a, trail: [] };
 }
 function flySub(j) {
   const v = Math.hypot(j.vx, j.vy);
@@ -218,7 +221,7 @@ function cpuMark(t) {
 }
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {
-  th = { seq, id: t.id, mine, phase: 'wait', t: 0, a: -Math.PI / 2 - 0.15, dir: 1, turn: 0, v: 0,
+  th = { seq, id: t.id, mine, phase: 'wait', t: 0, a: -Math.PI / 2 - 0.15, dir: -1, turn: 0, v: 0,
     moves: [], boot: null, mark: null, why: '', sendT: 0, idle: 0, lap: 0 };
   blend = 0; spinPtr = null;
 }
@@ -323,8 +326,10 @@ function spinEnd(e) {
   spinMove(e.clientX, e.clientY, clock);
   if (Math.abs(th.turn) < MIN_TURN) {
     // A thumb lifted before half a lap: a slip, the boot hangs again.
-    th.phase = 'ready'; th.a = -Math.PI / 2 - 0.15; th.v = 0; th.turn = 0;
+    th.phase = 'ready'; th.a = -Math.PI / 2 - 0.15; th.v = 0; th.turn = 0; th.dir = -1;
     say('Pyöritä ympyrää!', '#ffd166');
+    // The phones watching put the boot back to hanging too.
+    if (isNet()) K.send({ t: 'p', a: [r3(th.a), 0, 'ready', th.dir, 0] });
     return;
   }
   letGo();
@@ -445,7 +450,7 @@ function drawScene(dt) {
     x.beginPath(); x.moveTo(tx, groundY - 14); x.lineTo(tx + gap * 0.6, groundY - 14 - th2); x.lineTo(tx + gap * 1.2, groundY - 14); x.fill();
   }
   // The friends watching stand in front of the forest, drawn before the thrower so they never cover it.
-  K.drawFans(x, { left: 12, right: SW - 12, bottom: groundY - 8, h: 40, walk: true, scroll: (camX - REST()) * 9 });
+  K.drawFans(x, { left: 12, right: SW - 12, bottom: groundY - 8, h: 40, walk: true, scroll: (camX - REST()) * 6 });
   x.fillStyle = '#4a8f3f'; x.fillRect(0, groundY - 14, W, 14);
   // The field: mown stripes every 5 m past the line, a sandy throwing area behind it.
   x.fillStyle = '#5aa64e'; x.fillRect(0, groundY, W, sceneB - groundY);
@@ -485,7 +490,8 @@ function drawScene(dt) {
       });
       const j = th.boot;
       // It tumbles end over end in the air, and lies on its side where it came down.
-      const rot = j.stuck ? -Math.PI / 2 : -Math.PI / 2 - j.dir * j.t * 9;
+      // It leaves the hand turned as it was held, and goes on turning the way it was swung.
+      const rot = j.stuck ? -Math.PI / 2 : -(j.a0 + j.dir * j.t * 9);
       // Drawn bigger than it is once the camera is out, so it can be followed in the air.
       const bk = Math.max(s, 46);
       drawBoot(sx(j.x) - (j.stuck ? 0.24 * bk : 0), sy(j.y) - (j.stuck ? 0.12 * bk : 0), rot, bk);
@@ -591,7 +597,7 @@ function drawAthlete(a, px, base, s, col, name, o = null, g = x) {
   g.strokeStyle = o.bottom; g.lineWidth = lw * 1.6;
   g.beginPath(); g.moveTo(hipX, hipY); g.lineTo(...pt(hipX, hipY, legs[0][0], 0.16 * s)); g.stroke();
   // The throwing arm, straight from the shoulder to the boot's shaft.
-  const shX = px, shY = base - SH_Y * s, hand = [shX + Math.cos(arm) * 0.5 * s, shY - Math.sin(arm) * 0.5 * s];
+  const shX = px, shY = base - SH_Y * s, hand = [shX + Math.cos(arm) * ARM * s, shY - Math.sin(arm) * ARM * s];
   g.strokeStyle = o.skin; g.lineWidth = lw;
   g.beginPath(); g.moveTo(neckX, neckY + 0.05 * s); g.lineTo(hand[0], hand[1]); g.stroke();
   if (!a.boot && !a.bare && !(a.phase === 'land' && a.dropped)) drawBoot(hand[0], hand[1], -arm, s, g);
@@ -709,7 +715,7 @@ function drawControls() {
     x.lineWidth = r * 0.42;
     x.strokeStyle = 'rgba(255,209,102,.55)'; x.beginPath(); x.arc(cx, cy, r, -ok[1], -ok[0]); x.stroke();
     x.strokeStyle = 'rgba(126,224,129,.8)'; x.beginPath(); x.arc(cx, cy, r, -good[1], -good[0]); x.stroke();
-    // Arrows round the ring, the way the boot goes (forward before the first lap).
+    // Arrows round the ring, the way the boot goes (over the top, clockwise, before the first lap).
     x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 3; x.lineCap = 'round';
     for (let k = 0; k < 4; k++) {
       const m = k * Math.PI / 2 + Math.PI / 4, q = m + dir * 0.35;

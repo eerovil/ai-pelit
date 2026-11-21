@@ -42,13 +42,15 @@ def my_turn(page):
 def test_the_flight_rewards_speed_and_the_right_moment(real, context):
     page, errors = open_game(real, context)
     r = page.evaluate("""() => {
-      const best = (BEST - 90) * DEG;               // going round forward, let go low in front
+      // Over the top (clockwise, dir -1, Eero's choice on #503): the angle falls as the boot goes
+      // round, so an early release is at a larger angle and a late one at a smaller.
+      const best = (BEST + 90) * DEG;               // high behind the shoulder
       return {
-        top: flight(best, VMAX, 1),
-        slow: flight(best, 12, 1),
-        early: flight(best + 100 * DEG, VMAX, 1),   // still on the way up: flies up and back
-        late: flight(best - 110 * DEG, VMAX, 1),    // past the bottom: low, into the ground
-        back: flight((BEST + 90) * DEG, VMAX, -1),  // going round backward, let go high behind
+        top: flight(best, VMAX, -1),
+        slow: flight(best, 12, -1),
+        early: flight(best + 100 * DEG, VMAX, -1),  // still rising behind: flies up and back
+        late: flight(best - 110 * DEG, VMAX, -1),   // coming down in front: low, into the ground
+        under: flight((BEST - 90) * DEG, VMAX, 1),  // the underarm swing, mirrored
       };
     }""")
     assert 55 < r["top"]["mark"] < 62, r["top"]
@@ -56,10 +58,10 @@ def test_the_flight_rewards_speed_and_the_right_moment(real, context):
     assert 0 < r["slow"]["mark"] < 20, r["slow"]
     assert r["early"]["mark"] == -1 and r["early"]["why"]
     assert r["late"]["mark"] < 0.3 * r["top"]["mark"], r["late"]
-    # The overarm swing reaches as far, from the same best angle.
-    assert abs(r["back"]["mark"] - r["top"]["mark"]) < 1.5
+    # The underarm swing reaches about as far, from the same best angle.
+    assert abs(r["under"]["mark"] - r["top"]["mark"]) < 2
     # The arm halves an error: 30 degrees off the tangent costs a little, not the throw.
-    off = page.evaluate("flight((BEST - 90 - 30) * DEG, VMAX, 1)")
+    off = page.evaluate("flight((BEST + 90 + 30) * DEG, VMAX, -1)")
     assert 0.8 * r["top"]["mark"] < off["mark"] < r["top"]["mark"]
     assert errors == []
 
@@ -76,20 +78,20 @@ def test_the_computer_never_throws_past_58_m(real, context):
 
 
 def circles(page, laps, lap_ms, stop_deg=None):
-    """Draws circles anticlockwise on the spin pad with the mouse, from the bottom, and lifts at stop_deg."""
+    """Draws circles clockwise (over the top) on the spin pad with the mouse, from the bottom, and lifts at stop_deg."""
     cx, cy, r = page.evaluate("[ring.cx, ring.cy, ring.r]")
     per = 24
     a = -math.pi / 2
     page.mouse.move(cx + r * math.cos(a), cy - r * math.sin(a))
     page.mouse.down()
     for _ in range(int(laps * per)):
-        a += 2 * math.pi / per
+        a -= 2 * math.pi / per
         page.mouse.move(cx + r * math.cos(a), cy - r * math.sin(a))
         page.wait_for_timeout(lap_ms / per)
     if stop_deg is not None:
         target = stop_deg * math.pi / 180
         while abs(((target - a + math.pi) % (2 * math.pi)) - math.pi) > 0.15:
-            a += 2 * math.pi / per
+            a -= 2 * math.pi / per
             page.mouse.move(cx + r * math.cos(a), cy - r * math.sin(a))
             page.wait_for_timeout(lap_ms / per)
     page.mouse.up()
@@ -98,10 +100,10 @@ def circles(page, laps, lap_ms, stop_deg=None):
 def test_a_thumb_drawing_circles_throws_the_boot(real, context):
     page, errors = open_game(real, context)
     my_turn(page)
-    circles(page, 4, 300, stop_deg=-47)
+    circles(page, 4, 300, stop_deg=133)
     page.wait_for_function("th.phase === 'land'", timeout=10000)
     th = page.evaluate("({ mark: th.mark, ang: th.ang, v: th.v, dir: th.dir })")
-    assert th["dir"] == 1
+    assert th["dir"] == -1
     assert th["v"] > 5
     assert abs(th["ang"] - 43) < 8, th
     assert th["mark"] > 5, th
@@ -153,7 +155,7 @@ def test_on_its_side_the_pad_is_under_the_right_thumb(real, context):
     assert cx > 740 * 0.66
     assert cx + 1.45 * r <= 740 and cx - 1.45 * r >= page.evaluate("W - side")
     assert cy - 1.45 * r >= 0 and cy + 1.45 * r <= 360
-    circles(page, 3, 300, stop_deg=-47)
+    circles(page, 3, 300, stop_deg=133)
     page.wait_for_function("th.phase === 'land'", timeout=10000)
     assert page.evaluate("th.mark") > 0
     # Turning back upright keeps the meet going.
