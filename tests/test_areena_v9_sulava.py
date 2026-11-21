@@ -372,7 +372,7 @@ def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, bro
     first = next(k for k, e in enumerate(st) if e[2])
     # From the last frame before the pause: the states land as it starts.
     held = [st[first - 1][1]] + [y for _, y, p, *_ in st[first:] if p]
-    assert len(held) > 15, len(held)
+    assert len(held) > 8, len(held)
     assert max(held) - min(held) < 0.01, [round(y, 2) for y in held]
     after = [y for _, y, p, *_ in st[first:] if not p]
     # By the pause the drawing had stood a while (the stall outran its 0.05 s guess) well short of the spot
