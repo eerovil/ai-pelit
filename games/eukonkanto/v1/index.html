@@ -354,7 +354,8 @@ R.on('start', s => {
 });
 const r2 = n => Math.round(n * 100) / 100;
 // A couple as sent. [6] says the computer runs it now; [10] is its card, which only the host gives.
-const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum), r.card, r2(r.s), r.drops, r2(r.downT)];
+// [14] asks the couple's phone to take the host's copy: the computer ran it while that phone was away.
+const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum), r.card, r2(r.s), r.drops, r2(r.downT), r.give ? 1 : 0];
 function unpack(r, a) {
   r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; r.vy = a[7]; r.foot = a[8]; r.stum = a[9];
   r.s = a[11] || 0; r.drops = a[12] || 0; r.downT = a[13] || 0;
@@ -370,6 +371,10 @@ R.on('message', (m, from) => {
     const r = race.runners.find(o => o.id === from);
     if (m.t === 'p' && r && typeof m.o === 'string') r.asu = m.o;
     if (m.t === 'p' && r && r.kind === 'net' && Array.isArray(m.r)) {
+      // A phone back from away may still send where it was when it left: keep the computer's
+      // run until the phone has taken it (its spot no longer behind, its finish not undone).
+      if (r.give && (m.r[0] < r.x - 0.5 || (r.fin !== null && m.r[5] === null))) return;
+      r.give = false;
       unpack(r, m.r);
       r.ck = typeof m.ck === 'number' ? m.ck : null;
       r.tr.push(r.ck, r);
@@ -391,7 +396,7 @@ R.on('message', (m, from) => {
       if (m.o && r !== me && typeof m.o[i] === 'string') r.asu = m.o[i];
       r.card = a[10] || 0;
       // My own couple is mine, unless the computer ran it while I was away.
-      if (r === me && !a[6] && !(race.adopt && a[0] > me.x)) return;
+      if (r === me && !a[6] && !a[14] && !(race.adopt && a[0] > me.x)) return;
       unpack(r, a);
       if (r !== me) r.tr.push(m.ck ? m.ck[i] : null, r);
     });
@@ -400,8 +405,10 @@ R.on('message', (m, from) => {
   if (m.t === 'end') finish(m.res);
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
-R.on('continue', ids => { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) { r.kind = 'cpu'; r.ai.th = aiHoldAt(r); } }); });
-R.on('back', id => { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') r.kind = 'net'; }); });
+function takeOver(ids) { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) { r.kind = 'cpu'; r.give = false; r.ai.th = aiHoldAt(r); } }); }
+function giveBack(id) { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') { r.kind = 'net'; r.give = true; } }); }
+R.on('continue', takeOver);
+R.on('back', giveBack);
 // The host lost the round (it reloaded) or ended it: the race is gone for everyone, nothing saved.
 R.on('lobby', () => { race = null; });
 R.on('leave', () => { race = null; showMenu(); });
@@ -465,12 +472,24 @@ function afterResults() {
 }
 
 // ---------- The loop ----------
-let lastT = performance.now();
+let lastT = performance.now(), idle = 0, drawnW = 0, drawnH = 0;
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
   if (race) tick(dt);
-  draw();
+  // With no race on (the menu, the room screen) the scene stands still: draw it once, not every frame.
+  // (and again when the screen turns or changes size).
+  if (race || idle < 2 || W !== drawnW || H !== drawnH) { draw(); drawnW = W; drawnH = H; }
+  idle = race ? 0 : idle + 1;
   requestAnimationFrame(frame);
+}
+// A tap is judged at its own moment (#404): the race is run on to the event's time first, so a jump
+// pressed just before a log counts where the couple was then, not at the last frame drawn.
+function catchUp(e) {
+  let d = e.timeStamp - lastT;
+  if (race && d > 0 && d < 100) {
+    lastT = e.timeStamp;
+    for (; d > 0; d -= 50) tick(Math.min(0.05, d / 1000));
+  }
 }
 function tick(dt) {
   for (const k in flash) flash[k] = Math.max(0, flash[k] - dt);
@@ -877,11 +896,13 @@ function padAt(cx, cy) {
 }
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
+  catchUp(e);
   const k = padAt(e.clientX, e.clientY);
   if (k) press(k);
 });
 addEventListener('keydown', e => {
   if (e.repeat) return;
+  catchUp(e);
   if (e.key === 'ArrowLeft' || e.key === 'z') press(1);
   else if (e.key === 'ArrowRight' || e.key === 'x') press(2);
   else if (e.key === ' ' || e.key === 'ArrowUp') press(3);

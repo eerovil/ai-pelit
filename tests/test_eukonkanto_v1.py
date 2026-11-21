@@ -126,6 +126,47 @@ def test_a_couple_still_out_gets_an_estimate_and_it_is_not_saved(site, browser):
     page.context.close()
 
 
+def test_a_win_alone_raises_the_level(site, browser):
+    page = open_game(site, browser, {KEY + "taso": 3})
+    to_gun(page)
+    assert page.evaluate("race.runners.find(r => r.id === 'a').name") == "Ville ja Veera"
+    page.evaluate("() => { race.runners.forEach(r => { if (r !== me) r.card = 2; }); me.x = TRACK - 0.01; me.v = 6; tick(1 / 60); }")
+    assert page.evaluate("race.mine") == 0
+    assert [saved(page, k) for k in ("taso", "voitot", "juoksut")] == [4, 1, 1]
+    page.evaluate("race.doneT = 9; tick(0.01)")
+    assert page.inner_text("#result").startswith("Voitit!")
+    assert "Taso 4" in page.inner_text("#foe")
+    page.context.close()
+
+
+def test_two_steps_before_the_gun_are_a_yellow_then_a_red_card(site, browser):
+    page = open_game(site, browser)
+    page.click("#go")
+    page.evaluate("() => { race.runners.forEach(r => { r.ai.jumpy = null; }); race.gunAt = 9; tick(SET_AT + 0.05); press(1); }")
+    assert page.evaluate("[race.phase, me.card]") == ["false", 1]
+    page.evaluate("() => { tick(FS_SHOW + 0.01); tick(SET_AT + 0.05); press(2); }")
+    assert page.evaluate("me.card") == 2
+    page.evaluate("tick(FS_SHOW + 0.01)")
+    assert page.evaluate("race") is None
+    assert "hylätty" in page.inner_text("#result")
+    assert saved(page, "juoksut") is None
+    page.context.close()
+
+
+def test_the_menu_is_not_drawn_again_and_again(site, browser):
+    page = open_game(site, browser)
+    page.evaluate("() => { window.__draws = 0; const d = draw; window.draw = () => { window.__draws++; d(); }; }")
+    page.wait_for_timeout(500)
+    assert page.evaluate("window.__draws") == 0
+    page.set_viewport_size({"width": 740, "height": 360})
+    page.wait_for_timeout(300)
+    assert 1 <= page.evaluate("window.__draws") <= 3, "turning the phone draws the scene once more"
+    to_gun(page)
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.__draws") > 6
+    page.context.close()
+
+
 @pytest.mark.parametrize("size", [(360, 740), (740, 360)])
 def test_each_pad_is_where_it_is_drawn(site, browser, size):
     page = open_game(site, browser, width=size[0], height=size[1])
@@ -185,6 +226,10 @@ def couples(site, browser):
     yield phone
     for c in contexts:
         c.close()
+
+
+def gid(page):
+    return json.dumps(page.evaluate("AiPelitRooms.me"))
 
 
 def race_with(phone, n=2):
@@ -259,3 +304,55 @@ def test_the_host_ending_the_round_stops_the_race_everywhere(couples):
         p.wait_for_function("race === null", timeout=8000)
     assert saved(host, "juoksut") is None and saved(guest, "juoksut") is None
     assert host.errors == [] and guest.errors == []
+
+
+def test_three_phones_race_and_end_on_one_result(couples):
+    pages = race_with(couples, 3)
+    assert all(p.evaluate("race.runners.length") == 3 for p in pages)
+    for i, p in enumerate(pages):
+        p.evaluate(f"() => {{ me.x = TRACK - 0.02 - {i} * 0.5; me.v = 6; }}")
+    for p in pages:
+        p.wait_for_function("race && race.phase === 'done'", timeout=10000)
+    res = [p.evaluate("race.results") for p in pages]
+    assert res[0] == res[1] == res[2]
+    assert not any(r["est"] for r in res[0])
+    for p in pages:
+        assert saved(p, "ennatys") == p.evaluate("me.fin")
+    assert all(p.errors == [] for p in pages)
+
+
+def test_a_guest_reloaded_mid_race_takes_its_couple_back(couples):
+    host, guest = race_with(couples)
+    guest.evaluate("() => { me.x = 80; me.v = 6; me.drops = 1; }")
+    host.wait_for_function(f"race.runners.find(r => r.id === {gid(guest)}).x > 79")
+    guest.reload()
+    guest.wait_for_function("race && race.mode === 'net' && race.phase === 'run'", timeout=12000)
+    guest.wait_for_function("me.x > 79 && me.drops === 1", timeout=8000)
+    assert host.evaluate(f"race.runners.find(r => r.id === {gid(guest)}).x") > 79
+    assert host.errors == [] and guest.errors == []
+
+
+def test_a_guest_back_from_away_keeps_what_the_computer_ran(couples):
+    host, guest = race_with(couples)
+    g = gid(guest)
+    # The computer runs the guest's couple while it is away, over the line, and hands it back
+    # before the guest has heard any of it: the guest's own copy is still back at the start.
+    host.evaluate(f"""() => {{ takeOver([{g}]); const r = race.runners.find(r => r.id === {g});
+      r.x = TRACK - 0.02; r.v = 6; move(r, 1 / 60, race.clock); giveBack({g}); }}""")
+    fin = host.evaluate(f"race.runners.find(r => r.id === {g}).fin")
+    assert fin is not None
+    guest.wait_for_function(f"me.fin === {fin}", timeout=8000)
+    host.wait_for_function(f"!race.runners.find(r => r.id === {g}).give", timeout=8000)
+    assert host.evaluate(f"race.runners.find(r => r.id === {g}).fin") == fin
+    assert host.evaluate(f"race.runners.find(r => r.id === {g}).x") >= 253.5
+    assert host.errors == [] and guest.errors == []
+
+
+def test_a_host_reloaded_mid_race_loses_the_round_and_nothing_is_saved(couples):
+    host, guest = race_with(couples)
+    guest.evaluate("() => { me.x = TRACK - 0.02; me.v = 6; }")
+    guest.wait_for_function("me.fin !== null")
+    host.reload()
+    guest.wait_for_function("race === null", timeout=12000)
+    assert saved(guest, "ennatys") is None and guest.evaluate("window.__sent") == []
+    assert guest.errors == []
