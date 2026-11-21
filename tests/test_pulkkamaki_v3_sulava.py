@@ -325,6 +325,11 @@ def test_a_friend_over_the_finish_line_is_drawn_slowing_down(site, browser):
     assert len(set(fin)) > 10, fin  # a spot each tenth of a second while it slowed down
     assert all(b >= a for a, b in zip(fin, fin[1:])), fin
     assert fin[-1] > fin[0] + 3, fin
+    # Where it came to rest reaches the host, though the host had the finish long before, and is drawn there.
+    rest = guest.evaluate("[me.s, me.v || 0]")
+    seen = host.evaluate(f"[recOf({gid}).sl.s, recOf({gid}).sl.v || 0]")
+    assert abs(seen[0] - rest[0]) < 0.02 and seen[1] == rest[1] == 0, (seen, rest)
+    host.wait_for_function(f"Math.abs(recOf({gid}).tr.at(runClock()).s - {rest[0]}) < 0.05", timeout=3000)
     assert not host.errors + guest.errors
 
 

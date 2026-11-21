@@ -226,7 +226,9 @@ function netTick(dt) {
   const rec = myRec();
   if (!rec || mode === 'netwait') return;
   const stopped = rec.sl.fin && !(rec.sl.v > 0);
-  if (stopped && rec.hostFin) return;
+  // Once the host has the finish, the sled where it came to rest is sent once more, then nothing.
+  if (stopped && rec.hostFin && rec.restSent) return;
+  if (stopped && !rec.restSent) { rec.restSent = true; net.sendT = 0; }
   if (net.sendT <= 0) {
     net.sendT = stopped ? 1 : net.ph === 'run' ? 0.1 : 0.5;
     RM.send({ t: 'p', round: net.round, st: runClock(), w: rec.own, o: outfit.id, a: pack(rec.sl) });
