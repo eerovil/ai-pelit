@@ -23,6 +23,10 @@ const SHRINK_AT = 20, SHRINK_EVERY = 8, SHRINK_WARN = 1.5, MIN_FRAC = 1 / 3;
 // From SUDDEN_AT the whole floe melts evenly, MELT of its first radius a second, down to nothing, so
 // an erä always ends: by about 80 s even with nobody touching the screen (#479 review).
 const SUDDEN_AT = 60, MELT = 1 / 20;
+// A seal that slides over the edge slower than TEETER_V wobbles there for TEETER_T s (owner's ask on
+// #478): TEETER_N presses of Töni in that time haul it back towards the middle; a seal that touches
+// it, the time running out, or the ice under it going sends it in. A stunned seal cannot press.
+const TEETER_V = 6.5, TEETER_T = 1.6, TEETER_N = 5, TEETER_BACK = 4;
 const RING_FIRST = 6, RING_EVERY = 10, RING_COME = 1, RING_OPEN = 4, RING_R = 1.3;
 const SIZE_T = 8, UKKO_T = 5, LOHK_T = 8, PASS_GRACE = 0.5, STUN_T = 1.5;
 const POWERS = ['jatti', 'pikku', 'ukko', 'lohk'];
@@ -60,7 +64,7 @@ function newWorld(floeN, players, seed) {
   w.seals = players.map((p, i) => ({
     id: p.id, name: p.name, hat: p.hat, kind: p.kind, i,
     x: 0, y: 0, vx: 0, vy: 0, face: 0, ix: 0, iy: 0, want: 0, lunges: 0, own: 0,
-    cd: 0, lungeT: 0, stun: 0, out: 0, outX: 0, outY: 0, size: null, fuse: null, stars: 0, hit: 0, got: 0,
+    cd: 0, lungeT: 0, stun: 0, out: 0, outX: 0, outY: 0, teeter: 0, mash: 0, tp: 0, ta: 0, saved: 0, size: null, fuse: null, stars: 0, hit: 0, got: 0,
   }));
   resetEra(w);
   return w;
@@ -86,7 +90,7 @@ function resetEra(w) {
       const a = (i / n) * TAU - Math.PI / 2, d = w.parts[0].r0 * 0.55;
       x = Math.cos(a) * d; y = Math.sin(a) * d;
     }
-    Object.assign(sl, { x, y, vx: 0, vy: 0, ix: 0, iy: 0, cd: 0, lungeT: 0, stun: 0, out: 0, size: null, fuse: null, crushed: false });
+    Object.assign(sl, { x, y, vx: 0, vy: 0, ix: 0, iy: 0, cd: 0, lungeT: 0, stun: 0, out: 0, teeter: 0, mash: 0, size: null, fuse: null, crushed: false });
     sl.want = sl.lunges;   // a press left over from the last erä never lunges in this one
     sl.face = Math.atan2(-y, -x);
   });
@@ -163,7 +167,8 @@ function tick(w, h) {
   const fellNow = [];
   for (const sl of w.seals) {
     if (sl.out) { sl.out += h; continue; }
-    if (!onIce(w, sl.x, sl.y)) { fall(w, sl); fellNow.push(sl); }
+    if (sl.teeter > 0) continue;
+    if (sl.teeter < 0 || (!onIce(w, sl.x, sl.y) && !teeter(w, sl))) { fall(w, sl); fellNow.push(sl); }
   }
   const left = w.seals.filter(alive);
   if (left.length <= 1) {
@@ -179,6 +184,7 @@ function moveSeal(w, sl, h) {
   if (sl.cd > 0) sl.cd = Math.max(0, sl.cd - h);
   if (sl.lungeT > 0) sl.lungeT = Math.max(0, sl.lungeT - h);
   if (sl.stun > 0) sl.stun = Math.max(0, sl.stun - h);
+  if (sl.teeter > 0) return wobble(w, sl, h);
   let ix = sl.ix, iy = sl.iy;
   const m = Math.hypot(ix, iy);
   if (m > 1) { ix /= m; iy /= m; }
@@ -207,16 +213,45 @@ function moveSeal(w, sl, h) {
   const turn = (Math.hypot(ix, iy) > 0.15 ? TURN : 2) * h;
   sl.face += clamp(d, -turn, turn);
 }
+// Over the edge at a walk: it starts wobbling there (true), or not (false: it goes in). Not over an
+// open hole, and not where the edge has (nearly) melted away.
+function teeter(w, sl) {
+  if (Math.hypot(sl.vx, sl.vy) >= TEETER_V) return false;
+  for (const o of w.holes) if (o.open > 0 && Math.hypot(sl.x - o.x, sl.y - o.y) < o.r) return false;
+  const p = partOf(w, sl.x, sl.y).p, a = Math.atan2(sl.y - p.y, sl.x - p.x);
+  if (edgeAt(p, a) < radiusOf(sl) * 1.5) return false;
+  sl.teeter = TEETER_T; sl.mash = 0; sl.tp = w.parts.indexOf(p); sl.ta = a;
+  sl.vx = sl.vy = 0; sl.lungeT = 0;
+  return true;
+}
+// A wobbling seal: it stays put; each Töni press counts (never a lunge), and enough of them in time
+// put it back on the ice with a shove inwards. `teeter` -1 tells tick() it goes in now.
+function wobble(w, sl, h) {
+  sl.ix = sl.iy = 0;
+  if (sl.want > sl.lunges) { if (sl.stun <= 0) sl.mash += sl.want - sl.lunges; sl.lunges = sl.want; }
+  const p = w.parts[sl.tp], er = edgeAt(p, sl.ta), R = radiusOf(sl);
+  if (er < R * 1.5) { sl.teeter = -1; return; }
+  if (sl.mash >= TEETER_N) {
+    const ca = Math.cos(sl.ta), sa = Math.sin(sl.ta), d = er - R * 0.8;
+    sl.x = p.x + ca * d; sl.y = p.y + sa * d; sl.vx = -ca * TEETER_BACK; sl.vy = -sa * TEETER_BACK;
+    sl.face = sl.ta + Math.PI; sl.teeter = 0; sl.mash = 0; sl.cd = Math.max(sl.cd, 0.3); sl.saved++;
+    return;
+  }
+  sl.teeter -= h;
+  if (sl.teeter <= 0) sl.teeter = -1;
+}
 // Seals bounce like discs; a lunging seal counts heavier, so a good lunge throws the other far.
 function collide(w) {
   const ss = w.seals;
   for (let i = 0; i < ss.length; i++) for (let j = i + 1; j < ss.length; j++) {
     const a = ss[i], b = ss[j];
     if (a.out || b.out) continue;
+    if (a.teeter || b.teeter) { nudge(a, b); continue; }
     bounce(w, a, b, radiusOf(a), radiusOf(b), massOf(a), massOf(b), true);
   }
   for (const s of w.snow) for (const sl of ss) {
     if (sl.out) continue;
+    if (sl.teeter && Math.hypot(sl.x - s.x, sl.y - s.y) < s.r + radiusOf(sl)) { sl.teeter = -1; continue; }
     bounce(w, s, sl, s.r, radiusOf(sl), 3, massOf(sl), false);
   }
 }
@@ -238,6 +273,17 @@ function bounce(w, a, b, ra, rb, ma, mb, seals) {
   if (seals) { if (vn > 2) { a.hit++; b.hit++; } }
   else if (vn > 1) b.hit++;
 }
+// A seal touching a wobbling one: coming at it at all, it sends it in (a fuse still passes on the
+// touch); standing by, it is only moved off. Two wobbling side by side leave each other be.
+function nudge(a, b) {
+  if (a.teeter && b.teeter) return;
+  const t = a.teeter ? a : b, o = t === a ? b : a;
+  const dx = t.x - o.x, dy = t.y - o.y, d = Math.hypot(dx, dy), min = radiusOf(t) + radiusOf(o);
+  if (d >= min || d === 0) return;
+  passFuse(o, t) || passFuse(t, o);
+  if ((o.vx * dx + o.vy * dy) / d > 0.5) { t.teeter = -1; o.hit++; t.hit++; return; }
+  o.x -= dx / d * (min - d); o.y -= dy / d * (min - d);
+}
 // A fuse (Ukkonen, Lohkare) goes to the seal its holder touches, unless the holder only just got it.
 function passFuse(from, to) {
   if (!from.fuse || to.fuse || from.fuse.g > 0) return false;
@@ -248,7 +294,7 @@ function passFuse(from, to) {
 function fall(w, sl) {
   sl.crushed = false;   // a crush sets it again right after
   sl.out = 1e-6; sl.outX = sl.x; sl.outY = sl.y;
-  sl.vx = sl.vy = 0; sl.fuse = null; sl.size = null; sl.lungeT = 0;
+  sl.vx = sl.vy = 0; sl.fuse = null; sl.size = null; sl.lungeT = 0; sl.teeter = 0; sl.mash = 0;
 }
 
 // ---- Snowballs (floe 3) and cracks (floe 4) ----

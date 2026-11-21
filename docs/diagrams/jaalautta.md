@@ -22,20 +22,32 @@ flowchart TD
   F -- Ei --> H{Keskipiste jään ulkopuolella?}
   G --> H
   H -- Ei --> K
-  H -- Kyllä --> I[Molskis: hylje on pois tältä kierrokselta]
+  H -- Kyllä --> V{Hiljaa yli reunan, railo ei alla?}
+  V -- Kyllä --> W[Huojuu reunalla 1,6 s: Hakkaa Töniä!]
+  W -- 5 painallusta ajoissa --> X[Takaisin jäälle, tönäisy keskelle]
+  X --> C
+  W -- Aika loppuu, joku koskee, tainnuksissa tai jää sulaa --> I
+  V -- Ei --> I[Molskis: hylje on pois tältä kierrokselta]
   I --> K{Enää yksi jäällä?}
   K -- Ei --> L[20 s jälkeen lautan reuna lohkeilee pienemmäksi]
-  L --> C
+  L --> S{60 s kulunut?}
+  S -- Ei --> C
+  S -- Kyllä --> U[Lautta sulaa: koko lautta pienenee tasaisesti olemattomiin]
+  U --> C
   K -- Kyllä --> M[Kierroksen voitto, tähti]
+  K -- Kaikki putosivat yhtä aikaa --> Y{Sulamisen aikana?}
+  Y -- Ei --> B
+  Y -- Kyllä --> Z[Arpa: yksi yhtä aikaa pudonneista saa tähden]
+  Z --> M
   M --> N{Kolme tähteä?}
   N -- Ei --> B
   N -- Kyllä --> O{Yksin vai huoneessa?}
   O -- Yksin --> P[Voitto avaa seuraavan lautan]
   O -- Huoneessa --> Q[Tulokset kaikille, takaisin huoneeseen]
   class A,B,C blue
-  class D,F,H,K,N,O amber
-  class E,G,T teal
-  class I,L rose
+  class D,F,H,K,N,O,S,V,Y amber
+  class E,G,T,X teal
+  class I,L,U,W,Z rose
   class R,Q violet
   class M,P green
 ```
@@ -59,9 +71,16 @@ flowchart TD
 - **Tönäisy: syöksyjä lentää kauemmas**: two seals bounce like discs; a lunging seal counts 2.5 times heavier, so a well-timed lunge throws the other far and itself hardly moves. Jätti is heavier and Pikkuinen lighter.
 - **Lumipallo tai railo**: on the third floe big snowballs roll across and shove whoever they hit; on the fourth, holes open in the ice: cracks flash for 1.5 s, then the hole is open water for 4 s.
 - **Tehoste: Jätti, Pikkuinen, Ukkonen tai Lohkare**: a gull flies a lantern in and lights a ring on the ice 6 s into the erä, and again 6 s after each ring is gone; it glows 4 s (`POWERS` in `world.js`). The first seal in gets one at random: Jätti (big, heavy, 8 s), Pikkuinen (small, light, 8 s), Ukkonen (a 5 s cloud passed on by any touch; at its end every other seal is stunned 1.5 s), Lohkare (an 8 s ice block passed on by any touch; its last holder is pressed through the ice). A fuse cannot pass back within 0.5 s, and only one is on the floe at a time. The same four effects as the original's, with this game's own names and look.
-- **Keskipiste jään ulkopuolella?**: a seal falls only when its centre leaves the ice (or is over an open hole), so half over the edge it still has a moment to scramble back.
+- **Keskipiste jään ulkopuolella?**: a seal falls only when its centre leaves the ice (or is over an open hole), so half over the edge it still has a moment to scramble back; past that, a slow one wobbles on the edge (below) before it goes in.
+- **Hiljaa yli reunan, railo ei alla?**: when a seal's centre leaves the ice slower than `TEETER_V` (6.5; a seal walking at full stick goes about 6, a lunge or a hard shove faster), it starts wobbling there instead of falling (`teeter()` in `games/jaalautta/v1/world.js`). Not over an open hole (straight in), and not where the edge has melted under about one and a half seal widths (straight in). The owner asked for this on #478, as in the genre's model.
+- **Huojuu reunalla 1,6 s: Hakkaa Töniä!**: the seal rocks over the water and stays put; the stick does nothing, and each Töni press is a dot filled over it (`wobble()`), never a lunge. "Hakkaa Töniä!" shows above the button, which throbs, and a creak (`narina`) plays. A computer seal presses at a pace its floe's skill gives (`cpuThink()` in `ai.js`), and other computer seals come to tip it in. In a room the host counts the presses; a guest's own seal is drawn where the host has it.
+- **5 painallusta ajoissa**: `TEETER_N` presses within `TEETER_T` (1.6 s) put the seal back just inside the edge, sliding inwards at 4, with the `onnistui` chime.
+- **Aika loppuu, joku koskee, tainnuksissa tai jää sulaa**: the time running out; another seal coming at it at all (one standing by is only moved off; `nudge()`, a fuse still passes on the touch) or a snowball; the ice under it melting away. A seal stunned by Ukkonen cannot press, so it goes in when its time ends.
 - **Molskis: hylje on pois tältä kierrokselta**: `loiskis` sound (a crushed one `tomahdys` too), rings on the water; its head bobs where it went in until the next erä.
-- **20 s jälkeen lautan reuna lohkeilee pienemmäksi**: after 20 s, every 8 s a piece of each floe part's edge cracks (flashing 1.5 s ahead, `jaa` sound) and goes, never below a third of the start radius. From 60 s (`SUDDEN_AT` in `world.js`) "Lautta sulaa!": the whole floe melts evenly, a twentieth of its radius a second, down to nothing, so every erä ends by about 80 s even if nobody touches the screen.
-- **Kierroksen voitto, tähti**: the last seal on the ice gets a star; if the last two fall in the same step before 60 s, nobody does and the next erä is played; once the floe melts, one of the seals that went in together gets it by lot (`tick()` in `world.js`), so the match always ends.
+- **20 s jälkeen lautan reuna lohkeilee pienemmäksi**: after 20 s, every 8 s a piece of each floe part's edge cracks (flashing 1.5 s ahead, `jaa` sound) and goes, never below a third of the start radius (the melt below then takes it all).
+- **60 s kulunut?** and **Lautta sulaa**: from `SUDDEN_AT` (60 s) "Lautta sulaa!" shows above the floe and the whole floe melts evenly, `MELT` (a twentieth of its first radius) a second, down to nothing, so every erä ends by about 80 s, even in a room where nobody touches the screen.
+- **Kierroksen voitto, tähti**: the last seal on the ice gets a star.
+- **Kaikki putosivat yhtä aikaa** / **Sulamisen aikana?**: if the last seals fall in the same step before 60 s, nobody gets a star and the erä is played again (spec D8).
+- **Arpa**: during the melt, one of the seals that went in together gets the star by lot (`tick()` in `world.js`), so the match always ends.
 - **Voitto avaa seuraavan lautan**: alone, the end screen names the winner with everyone's stars, "Uusi ottelu" and "Valitse lautta". A win adds one to `ai-pelit:jaalautta:voitot`, sends that total to the high-score list (`AiPelitScores.submit`, list `main`) and opens the next floe; a loss saves and sends nothing.
 - **Tulokset kaikille, takaisin huoneeseen**: the host's `deliver()` of the match result; each phone shows it once (`once()`; a phone that already saw it goes straight back to the room) and saves nothing lasting, then "Takaisin huoneeseen". A seal the computer drove for an away phone ("Jatka ilman heitä") is marked so.

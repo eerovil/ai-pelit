@@ -28,7 +28,8 @@ function pack(sl, rec) {
   return [sl.id, sl.name, sl.hat, sl.kind === 'cpu' ? 1 : 0, sl.own, sl.lunges, r2(sl.x), r2(sl.y), r2(sl.vx), r2(sl.vy), r2(sl.face),
     r2(sl.cd), r2(sl.lungeT), r2(sl.stun), sl.out ? Math.max(0.01, r2(sl.out)) : 0, r2(sl.outX), r2(sl.outY),
     sl.size ? sl.size.k : '', sl.size ? r2(sl.size.t) : 0, sl.fuse ? sl.fuse.k : '', sl.fuse ? r2(sl.fuse.t) : 0, sl.fuse ? r2(sl.fuse.g) : 0,
-    sl.stars, sl.hit, sl.got, sl.gotK || '', sl.crushed ? 1 : 0, rec && rec.helped ? 1 : 0];
+    sl.stars, sl.hit, sl.got, sl.gotK || '', sl.crushed ? 1 : 0, rec && rec.helped ? 1 : 0,
+    sl.teeter > 0 ? Math.max(0.01, r2(sl.teeter)) : 0, sl.mash, r2(sl.ta), sl.saved];
 }
 function unpack(sl, a, mine) {
   sl.name = a[1]; sl.hat = a[2]; sl.kind = a[3] ? 'cpu' : 'net'; sl.own = a[4];
@@ -40,6 +41,7 @@ function unpack(sl, a, mine) {
   sl.size = a[17] ? { k: a[17], t: a[18] } : null;
   sl.fuse = a[19] ? { k: a[19], t: a[20], g: a[21] } : null;
   sl.stars = a[22]; sl.hit = a[23]; sl.got = a[24]; sl.gotK = a[25] || null; sl.crushed = !!a[26]; sl.helped = !!a[27];
+  sl.teeter = a[28] || 0; sl.mash = a[29] || 0; sl.ta = a[30] || 0; sl.saved = a[31] || 0;
 }
 function hostState() {
   const w = world;
@@ -113,10 +115,15 @@ function guestState(m) {
     }
     // The host counted a press it would not use (between erät): count on from there.
     if (a[5] > net.myL) net.myL = a[5];
-    const wasOut = sl.out;
+    const wasOut = sl.out, wasTeeter = sl.teeter > 0;
     unpack(sl, a, true);
     sl.kind = 'me';
-    if (sl.out || wasOut || w.ph !== 'play') { sl.x = a[6]; sl.y = a[7]; sl.vx = a[8]; sl.vy = a[9]; sl.face = a[10]; sl.cd = a[11]; sl.lungeT = a[12]; return; }
+    // Outside play no press is pending: whatever I sent is used up, so none lunges in the next erä
+    // on my own copy either (#479 review; the host already drops them).
+    if (w.ph !== 'play') sl.lunges = sl.want = net.myL;
+    // Wobbling on the edge: the host's word on where, and on the presses (none of them lunge).
+    if (sl.teeter > 0) sl.lunges = sl.want = net.myL;
+    if (sl.out || wasOut || w.ph !== 'play' || sl.teeter > 0 || wasTeeter) { sl.x = a[6]; sl.y = a[7]; sl.vx = a[8]; sl.vy = a[9]; sl.face = a[10]; sl.cd = a[11]; sl.lungeT = a[12]; return; }
     const ex = a[6] - sl.x, ey = a[7] - sl.y;
     if (Math.hypot(ex, ey) > 2.5) { sl.x = a[6]; sl.y = a[7]; sl.vx = a[8]; sl.vy = a[9]; }
     else { sl.x += ex * 0.35; sl.y += ey * 0.35; sl.vx += (a[8] - sl.vx) * 0.5; sl.vy += (a[9] - sl.vy) * 0.5; }
@@ -162,7 +169,7 @@ function netTick(dt) {
       if (sl === me) continue;
       sl.x += sl.vx * dt; sl.y += sl.vy * dt;
     }
-    if (me && !me.out) {
+    if (me && !me.out && !(me.teeter > 0)) {
       const [ix, iy] = stickInput();
       me.ix = ix; me.iy = iy;
       me.want = Math.max(me.want, net.myL);

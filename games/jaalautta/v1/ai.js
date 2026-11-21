@@ -14,6 +14,15 @@ function cpuBrain(skill, seed) {
 }
 function cpuThink(w, sl, b, dt) {
   if (sl.out || w.ph !== 'play') { sl.ix = sl.iy = 0; return; }
+  // Wobbling on the edge: press Töni, at a pace its skill allows (the sharpest make it nearly
+  // always, the first floe's often not), after a moment to notice.
+  if (sl.teeter > 0) {
+    if (b.mash == null) b.mash = b.react * (0.5 + b.rand() * 0.5);
+    b.mash -= dt;
+    if (b.mash <= 0) { sl.want = sl.lunges + 1; b.mash = 0.12 + b.err * 0.45 * (0.6 + b.rand() * 0.8); }
+    return;
+  }
+  b.mash = null;
   if (b.slip > 0) { b.slip -= dt; sl.ix = b.sx; sl.iy = b.sy; return; }
   b.wait -= dt;
   if (b.wait <= 0) {
@@ -39,6 +48,9 @@ function decide(w, sl, b) {
     return;
   }
   const edgeSafe = 2.2 * radiusOf(sl) / SEAL_R;
+  // Someone wobbling on the edge near me: go and tip it in, even that close to the edge myself.
+  const tt = others.find(o => o.teeter > 0 && Math.hypot(o.x - sl.x, o.y - sl.y) < 5);
+  if (tt && here.edge > radiusOf(sl) * 0.8) { b.tx = tt.x; b.ty = tt.y; return; }
   // Too near my own edge, or a hole opening under me: back to the middle of my part.
   const hole = w.holes.find(o => Math.hypot(sl.x - o.x, sl.y - o.y) < o.r + 0.8);
   if (here.edge < edgeSafe || hole) {

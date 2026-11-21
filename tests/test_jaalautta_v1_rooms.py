@@ -104,6 +104,15 @@ def test_three_phones_play_one_floe_and_the_next_match_starts_clean(seals):
     host.evaluate(f"(() => {{ const s = {SEAL.format(gid)}; hostInput({{ t: 'i', round: net.round, w: s.own, x: 0, y: 0, l: s.lunges + 1 }}, {gid}); }})()")
     assert host.evaluate(f"(() => {{ const s = {SEAL.format(gid)}; return [s.want === s.lunges, s.lunges]; }})()") == [True, 2]
     g1.wait_for_function("net.myL === 2", timeout=5000)
+    # A press the guest sent in play but its own copy had not used when the erä ended: the host
+    # drops it, and the guest's copy does not lunge with it when the next erä starts (#479 review).
+    g1.evaluate("() => { net.myL++; me.want = net.myL; }")
+    host.wait_for_function(f"{SEAL.format(gid)}.lunges === 3", timeout=5000)
+    g1.wait_for_function("world.era === 2 && world.ph === 'play'", timeout=12000)
+    for _ in range(4):
+        assert g1.evaluate("[me.lungeT, me.want === me.lunges]") == [0, True]
+        g1.wait_for_timeout(60)
+    assert host.evaluate(f"{SEAL.format(gid)}.lungeT") == 0
     # The host's seal wins the match: one result everywhere, nothing saved anywhere.
     for p in (host, g1, g2):
         p.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
@@ -178,4 +187,25 @@ def test_the_computer_takes_an_away_phone_and_gives_it_back(seals):
     guest.wait_for_function("mode === 'end'", timeout=10000)
     assert guest.evaluate("result.helped")
     assert "Tietokone" in guest.locator("#endNote").inner_text()
+    assert host.errors == guest.errors == []
+
+
+def test_a_guest_wobbling_on_the_edge_presses_its_way_back(seals):
+    host, guest = room(seals)
+    start([host, guest])
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    # Nobody else moves: the computer's seals stand still far off, the host's too.
+    host.evaluate(f"""() => {{ brains = brains.map(() => null); const g = {SEAL.format(gid)};
+      world.seals.forEach((s, i) => {{ if (s !== g) Object.assign(s, {{ x: -3 + i * 0.1, y: -3 + i * 2, vx: 0, vy: 0 }}); }});
+      Object.assign(g, {{ x: edgeAt(world.parts[0], 0) + 0.1, y: 0, vx: 1, vy: 0 }}); }}""")
+    guest.wait_for_function("me.teeter > 0", timeout=5000)
+    b = guest.evaluate("button()")
+    for k in range(TEETER_N := 5):
+        guest.evaluate(TOUCH, ["pointerdown", 20 + k, b["x"], b["y"]])
+        guest.evaluate(TOUCH, ["pointerup", 20 + k, b["x"], b["y"]])
+        guest.wait_for_timeout(110)
+    host.wait_for_function(f"{SEAL.format(gid)}.saved === 1", timeout=5000)
+    assert host.evaluate(f"(() => {{ const g = {SEAL.format(gid)}; return [!g.out, g.teeter, g.lungeT]; }})()") == [True, 0, 0]
+    guest.wait_for_function("me.saved === 1 && !(me.teeter > 0) && !me.out", timeout=5000)
+    assert guest.evaluate("me.lungeT") == 0
     assert host.errors == guest.errors == []

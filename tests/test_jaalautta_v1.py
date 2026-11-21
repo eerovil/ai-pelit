@@ -75,10 +75,87 @@ def test_a_seal_falls_only_when_its_middle_leaves_the_ice(site, context):
       w.ph = 'play'; const a = w.seals[0], e = edgeAt(w.parts[0], 0);
       a.x = e - 0.2; a.y = 0; w.seals[1].x = -5; w.seals[1].y = 0;   // more than half over the edge
       tick(w, STEP); const half = !a.out;
-      a.x = e + 0.1; tick(w, STEP);
+      a.x = e + 0.1; a.vx = TEETER_V + 1; tick(w, STEP);   // fast over the edge: no wobble, straight in
       return [half, !!a.out, w.ph];
     }""")
     assert r == [True, True, "erä"]
+
+
+# Two seals on floe 1, `a` just over the edge on the right, still: it wobbles there.
+TEETER = """() => {
+  const w = newWorld(1, [{ id: 'a', name: 'a', hat: 0, kind: 'cpu' }, { id: 'b', name: 'b', hat: 1, kind: 'cpu' }], 1);
+  w.ph = 'play'; const [a, b] = w.seals, e = edgeAt(w.parts[0], 0);
+  Object.assign(a, { x: e + 0.1, y: 0, vx: 1, vy: 0 }); Object.assign(b, { x: -5, y: 0, vx: 0, vy: 0 });
+  tick(w, STEP); return w;
+}"""
+
+
+def test_a_slow_seal_wobbles_on_the_edge_and_five_presses_bring_it_back(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""(T) => {
+      const w = eval(T)(), a = w.seals[0], out = [a.teeter > 0, !!a.out];
+      for (let k = 0; k < 4; k++) { a.want = a.lunges + 1; for (let i = 0; i < 24; i++) tick(w, STEP); }
+      out.push(a.teeter > 0, a.mash, a.lungeT);          // four presses: still wobbling, no lunge
+      a.want = a.lunges + 1; tick(w, STEP);
+      out.push(a.teeter, onIce(w, a.x, a.y), a.vx < 0, a.saved);
+      for (let i = 0; i < 120; i++) tick(w, STEP);
+      out.push(!!a.out, onIce(w, a.x, a.y));
+      return out;
+    }""", TEETER)
+    assert r == [True, False, True, 4, 0, 0, True, True, 1, False, True]
+
+
+def test_a_wobbling_seal_goes_in_on_time_on_a_touch_or_stunned(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""(T) => {
+      const res = {};
+      // Nobody presses: in once its time is up, not before.
+      let w = eval(T)(), a = w.seals[0];
+      for (let i = 0; i < 120 * (TEETER_T - 0.1); i++) tick(w, STEP);
+      res.before = !a.out;
+      for (let i = 0; i < 120 * 0.2; i++) tick(w, STEP);
+      res.after = !!a.out;
+      // Another seal walking into it tips it in at once, presses or not.
+      w = eval(T)(); a = w.seals[0]; const b = w.seals[1];
+      Object.assign(b, { x: a.x - 2.2, y: 0, vx: 4, vy: 0 });
+      a.want = a.lunges + 2;
+      for (let i = 0; i < 30 && !a.out; i++) tick(w, STEP);
+      res.touched = !!a.out && !b.out;
+      // A seal standing by is only moved off.
+      w = eval(T)(); a = w.seals[0];
+      Object.assign(w.seals[1], { x: a.x - 1.7, y: 0, vx: 0, vy: 0 }); tick(w, STEP);
+      res.standing = a.teeter > 0;
+      // Stunned (Ukkonen) it cannot press its way back.
+      w = eval(T)(); a = w.seals[0]; a.stun = 5;
+      for (let i = 0; i < 120 * 2; i++) { a.want = a.lunges + 1; tick(w, STEP); }
+      res.stunned = !!a.out;
+      // Over an open hole: straight in.
+      w = eval(T)(); a = w.seals[0]; a.teeter = 0; a.x = 0; a.y = 3; a.vx = 0;
+      w.holes = [{ x: 0, y: 3, r: 1.5, warn: 0, open: 3 }]; tick(w, STEP);
+      res.hole = !!a.out;
+      // The ice going from under it (the melt): in, presses or not.
+      w = eval(T)(); a = w.seals[0]; w.t = SUDDEN_AT;
+      w.parts[0].r = w.parts[0].r.map(() => 1);
+      for (let i = 0; i < 3; i++) { a.want = a.lunges + 1; tick(w, STEP); }
+      res.melted = !!a.out;
+      return res;
+    }""", TEETER)
+    assert r == {"before": True, "after": True, "touched": True, "standing": True, "stunned": True,
+                 "hole": True, "melted": True}
+
+
+def test_computer_seals_press_their_way_back_the_sharper_the_more_often(site, context):
+    page = open_game(site, context)
+    saved = page.evaluate("""(T) => [1, 5].map(floe => {
+      let n = 0;
+      for (let s = 1; s <= 30; s++) {
+        const w = eval(T)(), a = w.seals[0], br = cpuBrain(FLOES[floe - 1].cpu, s);
+        for (let i = 0; i < 120 * 2 && a.teeter > 0; i++) { cpuThink(w, a, br, STEP); tick(w, STEP); }
+        if (!a.out) n++;
+      }
+      return n;
+    })""", TEETER)
+    assert 3 <= saved[0] <= 27 and saved[1] >= 25 and saved[1] > saved[0], saved
 
 
 def test_a_lunge_throws_another_seal_further_than_a_bump(site, context):
@@ -330,4 +407,25 @@ def test_turning_the_phone_keeps_the_match(site, context):
     turn(page, {"width": 740, "height": 360})
     page.wait_for_function("LAND")
     assert page.evaluate("[mode, me.stars]") == ["play", 1]
+    assert page.errors == []
+
+
+def test_my_seal_wobbling_on_the_edge_comes_back_with_the_button(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("""() => { brains = brains.map(() => null);
+      world.seals.forEach((s, i) => { if (s !== me) Object.assign(s, { x: -3 + i * 0.1, y: -3 + i * 2, vx: 0, vy: 0, ix: 0, iy: 0 }); });
+      Object.assign(me, { x: edgeAt(world.parts[0], 0) + 0.1, y: 0, vx: 1, vy: 0 }); }""")
+    page.wait_for_function("me.teeter > 0")
+    b = page.evaluate("button()")
+    for k in range(5):
+        page.evaluate(TOUCH, ["pointerdown", 30 + k, b["x"], b["y"]])
+        page.evaluate(TOUCH, ["pointerup", 30 + k, b["x"], b["y"]])
+        page.wait_for_timeout(60)
+    page.wait_for_function("me.saved === 1 && !me.teeter && !me.out")
+    assert page.evaluate("me.lungeT") == 0
+    # Left alone on the edge, it goes in.
+    page.evaluate("Object.assign(me, { x: edgeAt(world.parts[0], 0) + 0.1, y: 0, vx: 1, vy: 0 })")
+    page.wait_for_function("me.teeter > 0")
+    page.wait_for_function("me.out > 0", timeout=4000)
     assert page.errors == []

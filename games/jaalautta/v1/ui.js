@@ -42,7 +42,7 @@ function hatFor(taken, i) {
 
 // ---- Sounds (#205, aanet-5): only after the first tap, quiet (#337, #355) ----
 const S = window.AiPelitAanet;
-if (S) S.load(['gongi', 'suhahdus', 'osuma', 'tomahdys', 'jaa', 'loiskis', 'voitto', 'tappio', 'valinta', 'nousu', 'onnistui']);
+if (S) S.load(['gongi', 'suhahdus', 'osuma', 'tomahdys', 'jaa', 'loiskis', 'voitto', 'tappio', 'valinta', 'nousu', 'onnistui', 'narina']);
 let ac = null;
 function beep(f, d, vol) {
   try {
@@ -57,7 +57,7 @@ const sfx = (name, opts, f) => (S && S.play(name, opts)) || (f && beep(f, 0.12, 
 let seen = null;
 function soundsOf(w) {
   if (!w) { seen = null; return; }
-  const now = w.seals.map(s => ({ out: !!s.out, l: s.lunges, hit: s.hit, got: s.got, stun: s.stun > 0, cr: !!s.crushed }));
+  const now = w.seals.map(s => ({ out: !!s.out, l: s.lunges, hit: s.hit, got: s.got, stun: s.stun > 0, cr: !!s.crushed, tee: s.teeter > 0, sv: s.saved || 0 }));
   const st = { ph: w.ph, era: w.era, warn: w.warn.length, seals: now };
   if (seen && seen.era === w.era) {
     if (seen.ph === 'count' && w.ph === 'play') sfx('gongi', { vol: 0.25 }, 520);
@@ -66,7 +66,10 @@ function soundsOf(w) {
       const o = seen.seals[i], mine = w.seals[i] === me;
       if (!o) return;
       if (s.out && !o.out) { sfx(s.cr ? 'tomahdys' : 'loiskis', { vol: mine ? 0.55 : 0.35 }, 200); if (s.cr) sfx('loiskis', { vol: 0.3, delay: 0.1 }); }
-      if (s.l > o.l && mine) sfx('suhahdus', { vol: 0.3 });
+      if (s.tee && !o.tee) sfx('narina', { vol: mine ? 0.4 : 0.2 }, 260);
+      if (s.sv > o.sv) sfx('onnistui', { vol: mine ? 0.35 : 0.15 }, 660);
+      if (s.l > o.l && mine && !s.tee && !o.tee) sfx('suhahdus', { vol: 0.3 });
+      else if (s.l > o.l && mine) sfx('valinta', { vol: 0.2, rate: 1 + (w.seals[i].mash || 0) * 0.08 }, 500);
       if (s.hit > o.hit && (mine || i < 4)) sfx('osuma', { vol: mine ? 0.4 : 0.18, rate: 0.9 + Math.random() * 0.2 }, 300);
       if (s.got > o.got) sfx('nousu', { vol: mine ? 0.3 : 0.15 }, 880);
       if (s.stun && !o.stun && mine) sfx('tomahdys', { vol: 0.4 }, 120);
@@ -344,7 +347,9 @@ function drawSeal(w, sl) {
     cx.fillStyle = HATS[sl.hat % HATS.length].c; cx.beginPath(); cx.arc(x, y - V.s * 0.2 + Math.sin(clock * 3 + sl.i) * 2, V.s * 0.28, Math.PI, TAU); cx.fill();
     return;
   }
-  const x = X(sl.x), y = Y(sl.y), a = sl.face;
+  // Wobbling on the edge: rocking over the water, flippers flailing.
+  const tee = sl.teeter > 0, rock = tee ? Math.sin(clock * 9 + sl.i) : 0;
+  const x = X(sl.x + Math.cos(sl.ta) * rock * 0.12), y = Y(sl.y + Math.sin(sl.ta) * rock * 0.12), a = sl.face + rock * 0.4;
   if (sl === me) { cx.strokeStyle = '#ffd84a'; cx.lineWidth = 3; cx.beginPath(); cx.arc(x, y, R + 5, 0, TAU); cx.stroke(); }
   cx.fillStyle = 'rgba(0,40,80,.22)'; cx.beginPath(); cx.ellipse(x + 3, y + 4, R * 1.05, R * 0.85, 0, 0, TAU); cx.fill();
   cx.save(); cx.translate(x, y); cx.rotate(a);
@@ -358,7 +363,7 @@ function drawSeal(w, sl) {
   cx.fillStyle = '#4f5562';
   cx.beginPath(); cx.ellipse(-R * 1.15, -R * 0.32, R * 0.36, R * 0.18, -0.5, 0, TAU); cx.fill();
   cx.beginPath(); cx.ellipse(-R * 1.15, R * 0.32, R * 0.36, R * 0.18, 0.5, 0, TAU); cx.fill();
-  const fl = Math.sin(clock * 12 + sl.i) * (Math.hypot(sl.vx, sl.vy) > 0.5 ? 0.3 : 0.05);
+  const fl = Math.sin(clock * 12 + sl.i) * (tee ? 0.9 : Math.hypot(sl.vx, sl.vy) > 0.5 ? 0.3 : 0.05);
   cx.beginPath(); cx.ellipse(R * 0.1, -R * 0.85, R * 0.38, R * 0.16, -0.6 + fl, 0, TAU); cx.fill();
   cx.beginPath(); cx.ellipse(R * 0.1, R * 0.85, R * 0.38, R * 0.16, 0.6 - fl, 0, TAU); cx.fill();
   cx.fillStyle = body; cx.beginPath(); cx.ellipse(-R * 0.15, 0, R * 1.05, R * 0.82, 0, 0, TAU); cx.fill();
@@ -373,6 +378,12 @@ function drawSeal(w, sl) {
   if (sl.stun > 0) {
     cx.fillStyle = '#ffe14a'; cx.font = '700 ' + Math.round(R) + 'px system-ui'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
     for (let k = 0; k < 3; k++) { const b = clock * 5 + k * 2.1; cx.fillText('✦', x + Math.cos(b) * R, y - R * 1.1 + Math.sin(b) * R * 0.3); }
+  }
+  // The presses it still needs, as dots over it.
+  if (tee) for (let k = 0; k < TEETER_N; k++) {
+    cx.fillStyle = k < sl.mash ? '#ffb000' : 'rgba(255,255,255,.85)';
+    cx.beginPath(); cx.arc(x + (k - (TEETER_N - 1) / 2) * 12, y - R - 10, 4.5, 0, TAU); cx.fill();
+    cx.strokeStyle = 'rgba(20,50,90,.6)'; cx.lineWidth = 1; cx.stroke();
   }
   // The fuse over it: a thunder cloud or a hanging ice block, with its seconds left.
   if (sl.fuse) {
@@ -432,6 +443,11 @@ function drawHUD(w) {
   // over its top part. Warm, so it reads on white ice as on the sea.
   if (w.ph === 'play' && w.t >= SUDDEN_AT && w.t < SUDDEN_AT + 2.5)
     shadowText('Lautta sulaa!', W / 2, LAND ? midY - 80 : top + (n > 4 ? 66 : 46), 26, '#ff9d42', 'center', 900);
+  // Wobbling: in the water just above the button it means, never over the floe.
+  if (me && me.teeter > 0 && w.ph === 'play') {
+    const b = button();
+    shadowText('Hakkaa Töniä!', LAND ? Math.min(b.x, W - SAFE_R - 92) : W / 2, b.y - b.r - 26, LAND ? 19 : 26, '#ffd84a', 'center', 900);
+  }
   if (me && me.out && w.ph === 'play') shadowText('Molskis!', W / 2, midY - 40, 30, '#9fd8ff', 'center', 900);
   if (me && me.got && me.gotK && me.gotT < 1.6) shadowText(POWER_NAMES[me.gotK] + '!', W / 2, midY + 50, 22, '#ffd84a', 'center', 900);
   // The pull: its base and its knob.
@@ -443,10 +459,11 @@ function drawHUD(w) {
   }
   // The button, its ring filling back over the cooldown.
   if (me && (w.ph === 'play' || w.ph === 'count')) {
-    const b = button(), ready = me.cd <= 0 && !me.out;
+    const b = button(), tee = me.teeter > 0, ready = (me.cd <= 0 || tee) && !me.out;
     cx.fillStyle = lungeFlash > 0 ? '#ffd84a' : ready ? 'rgba(224,40,58,.9)' : 'rgba(120,60,70,.7)';
-    cx.beginPath(); cx.arc(b.x, b.y, b.r, 0, TAU); cx.fill();
-    if (me.cd > 0) {
+    // Wobbling, the button throbs: press it again and again.
+    cx.beginPath(); cx.arc(b.x, b.y, b.r * (tee ? 1 + Math.abs(Math.sin(clock * 10)) * 0.12 : 1), 0, TAU); cx.fill();
+    if (me.cd > 0 && !tee) {
       cx.strokeStyle = '#fff'; cx.lineWidth = 4;
       cx.beginPath(); cx.arc(b.x, b.y, b.r - 4, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - me.cd / LUNGE_CD)); cx.stroke();
     }
