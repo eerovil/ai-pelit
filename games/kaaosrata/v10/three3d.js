@@ -69,7 +69,13 @@ window.K3D = { ready: false, failed: false };
       return new T.Mesh(flat(w, d), new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false, fog: true }));
     }
     function clear() {
-      for (const o of [...world.children]) { world.remove(o); if (o.geometry && o.geometry.type === 'BoxGeometry' && o.geometry !== box) o.geometry.dispose(); }
+      // Free what the last course made on the graphics card; the shared shapes stay.
+      const keep = new Set([box, ball, cyl]), mats = new Set();
+      for (const o of [...world.children]) {
+        world.remove(o);
+        o.traverse(n => { if (n.geometry && !keep.has(n.geometry)) n.geometry.dispose(); [].concat(n.material || []).forEach(m => mats.add(m)); });
+      }
+      for (const m of mats) { if (m.map) m.map.dispose(); m.dispose(); }
     }
     function build() {
       clear();
@@ -128,6 +134,8 @@ window.K3D = { ready: false, failed: false };
       for (const b of BUMPERS) {
         const m = new T.Mesh(cyl, [std('#8a5a00'), std('#ffb703'), std('#8a5a00')]); m.scale.set(0.6, 0.7, 0.6);
         m.position.set(b.x, b.base + 0.35, -b.y); m.castShadow = true; world.add(m);
+        const under = baseAt(b.x, b.y);
+        if (b.base > under + 0.1) { const p = new T.Mesh(box, std('#555566')); p.scale.set(0.2, b.base - under, 0.2); p.position.set(b.x, (b.base + under) / 2, -b.y); world.add(p); }
       }
       const ham = std('#9b4dde', { roughness: 0.35 }), post = std('#555566'), rope = new T.LineBasicMaterial({ color: '#333333' });
       for (const h of HAMMERS) {
@@ -248,7 +256,6 @@ window.K3D = { ready: false, failed: false };
       if (ratio > 1) ratio = 1; else if (ratio > 0.75) ratio = 0.75; else { rd.shadowMap.enabled = false; sun.castShadow = false; tuneStep = 3; }
       rd.setPixelRatio(ratio); lastW = 0; tuneStep++;
     }
-    K3D.tuneState = () => ({ ratio, shadows: rd.shadowMap.enabled });
 
     K3D.render = function (t, follow) {
       if (built !== course) build();

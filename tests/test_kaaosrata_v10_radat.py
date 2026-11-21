@@ -56,8 +56,8 @@ def test_belts_carry_a_runner_and_tiles_warn_then_drop_them(site, context):
       const on=groundAt(px,py,-tile.ph+0.1);
       const warning=tileOn(tile,-tile.ph+tile.on-0.3);
       const off=groundAt(px,py,-tile.ph+tile.on+0.1);
-      Object.assign(me,{x:px,y:py,z:baseAt(px,py),gx:px,gy:py,vx:0,vy:0,off:0});
-      for(let i=0;i<8;i++)move(me,1/60,tile.on+0.2);
+      Object.assign(me,{x:px,y:py,z:tile.h||0,gx:px,gy:py,vx:0,vy:0});
+      for(let i=0;i<30&&me.fall<=0;i++)move(me,1/60,tile.on+0.2);
       return {velocity,carried,on,warning,off,fall:me.fall};
     }''')
     assert result['velocity'] == {'vx': 0, 'vy': -3.3}

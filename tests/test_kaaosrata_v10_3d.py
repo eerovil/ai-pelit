@@ -52,6 +52,31 @@ def test_every_course_has_ramps_steps_drops_and_rising_stones(site, context):
     assert page.errors == []
 
 
+def test_moving_ground_sits_at_the_height_of_its_neighbours(site, context):
+    """The design's data rules, on every course: a belt is as high as any floor under it, and the sliding
+    platform and each spinning disc are within a walkable step (STEP) of the surfaces just before and after them,
+    so moving ground never hides a wall or a drop."""
+    page = open_game(site, context)
+    bad = page.evaluate('''() => { const bad = [];
+      for (const c of RADAT) { useCourse(c.id);
+        for (const b of BELTS) for (const f of FLOORS)
+          for (const [px, py] of [[b.x0 + 0.01, b.y0 + 0.01], [b.x1 - 0.01, b.y1 - 0.01], [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]])
+            if (inRect(f, px, py) && Math.abs(topOf(f, py) - topOf(b, py)) > 1e-9) bad.push([c.id, 'belt', b.y0, f.y0]);
+        const movers = DISCS.map(d => ({ y0: d.y - d.r, y1: d.y + d.r, h: d.h || 0, x0: d.x - d.r, x1: d.x + d.r }));
+        if (MOV) movers.push({ y0: MOV.y0, y1: MOV.y1, h: MOV.h || 0, x0: -MOV.a - MOV.hw, x1: MOV.a + MOV.hw });
+        const all = FLOORS.map(f => ({ y0: f.y0, y1: f.y1, x0: f.x0, x1: f.x1, a: topOf(f, f.y0), b: topOf(f, f.y1) }))
+          .concat(movers.map(m => ({ ...m, a: m.h, b: m.h })));
+        for (const m of movers) {
+          const next = all.filter(o => o.x0 < m.x1 && m.x0 < o.x1 && (o.y1 <= m.y0 + 0.01 && o.y1 > m.y0 - 3.5 || o.y0 >= m.y1 - 0.01 && o.y0 < m.y1 + 3.5) && o.y0 !== m.y0);
+          if (!next.length) bad.push([c.id, 'alone', m.y0]);
+          for (const o of next) if (Math.abs((o.y1 <= m.y0 + 0.01 ? o.b : o.a) - m.h) > STEP + 1e-9) bad.push([c.id, 'mover', m.y0, o.y0]);
+        }
+      }
+      useCourse('main'); return bad; }''')
+    assert bad == []
+    assert page.errors == []
+
+
 def test_a_ramp_lifts_a_step_stops_a_walk_and_a_jump_climbs_it(site, context):
     page = open_game(site, context)
     page.click('#go')

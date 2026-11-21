@@ -96,7 +96,8 @@ f.floors=[floor(-4,12),floor(12,35,2.4,0,1.2),floor(35,41,5,1.2),floor(41,54,2.4
 f.sweepers=[{x:0,y:17,len:3.2,w:2.3,ph:0},{x:0,y:23,len:3.2,w:-2.5,ph:1.2},{x:0,y:29,len:3.2,w:2.4,ph:2.6}];
 f.belts=[{...floor(43,54,2.4,1.2),vx:0,vy:-3.6},{...floor(59,73,2.1,0.6),vx:-3.4,vy:0}];
 f.pushers=[gate(46,1.5,1),gate(51,-1.4,3),gate(63,-1.5,2,2.1),gate(69,1.4,0,2.1)];
-f.bumpers=[{x:-2.2,y:135},{x:2.2,y:135}];
+// The right bumper stands over the gap between the stones, on a post at their height.
+f.bumpers=[{x:-2.2,y:135},{x:2.2,y:135,h:2.25}];
 f.discs=[{x:-1.5,y:81,r:3,w:1.4,h:0.6},{x:2,y:88,r:2.8,w:-1.6,h:0.6},{x:-1,y:95,r:3,w:1.7,h:0.6}];
 f.mov={y0:84,y1:86.4,hw:1.3,a:2.7,w:1.5,h:0.6};
 f.hammers=[{y:146,w:2.2,ph:0},{y:151,w:1.9,ph:2.2},{y:156,w:2.4,ph:4.1},{y:161,w:2.1,ph:1}];
