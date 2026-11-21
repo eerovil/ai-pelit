@@ -34,13 +34,17 @@ STRAIGHT = """() => { const dr = window.drive; window.__run = false; window.__s 
     const p = at(T, n * T.step, window.__lane), q = at(T, (n + 1) * T.step, window.__lane);
     Object.assign(k, { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, a: p.a, idx: p.i, s: ((window.__s % T.L) + T.L) % T.L, lat: window.__lane, z: 0, vz: 0 });
   }; }"""
-# Records, each time the screen is drawn, where kart `i` is drawn, and when a message arrived (so a stall of the
-# test machine, with no message for a while, can be told from a jerk).
-SAMPLE = """(i) => { window.__xs = []; window.__got = [];
+# Records, each time the screen is drawn, where kart `i` is drawn and which moment of the sending phone's clock
+# that is (`tr.time`), when a message arrived, and the sending phone's stamp on each of its spots: so a stall of the
+# test machine, on either phone, can be told from a jerk.
+SAMPLE = """(i) => { window.__xs = []; window.__got = []; window.__st = [];
   AiPelitRooms.on('message', () => window.__got.push(performance.now() / 1000));
+  const tr = race.karts[i].tr, push = tr.push, snap = tr.snap;
+  tr.push = (st, ...r) => { window.__st.push(st); return push(st, ...r); };
+  tr.snap = (st, ...r) => { window.__st.push(st); return snap(st, ...r); };
   const d = window.draw;
   window.draw = () => { const k = race.karts[i];
-    if (window.__xs.length < 300 && !window.__stop) window.__xs.push([performance.now() / 1000, k.x, k.y]); d(); }; }"""
+    if (window.__xs.length < (window.__cap || 300) && !window.__stop) window.__xs.push([performance.now() / 1000, k.x, k.y, k.tr.time]); d(); }; }"""
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
@@ -80,12 +84,14 @@ def index(page):
 
 def glides(page):
     """The speed over each two drawn frames while the friend drove: always forward and about the same."""
-    xs, got = page.evaluate("[window.__xs, window.__got]")
-    sp = [(t2, math.hypot(c - a, d - b) / (t2 - t0)) for (t0, a, b), (t2, c, d) in zip(xs, xs[2:]) if t2 > t0]
-    moving = [t for t, v in sp if v > 20]
+    xs, got, st = page.evaluate("[window.__xs, window.__got, window.__st]")
+    st = sorted(s for s in st if s is not None)
+    sp = [(t2, math.hypot(c - a, d - b) / (t2 - t0), w0, w2)
+          for (t0, a, b, w0), (t2, c, d, w2) in zip(xs, xs[2:]) if t2 > t0]
+    moving = [t for t, v, _, _ in sp if v > 20]
     assert len(moving) > 60, len(moving)
     # Past the first half second (the glide picks up from standing) and before the last frames.
-    middle = [(t, v) for t, v in sp if moving[0] + 0.5 <= t <= moving[-1] - 0.2]
+    middle = [(t, v, w0, w2) for t, v, w0, w2 in sp if moving[0] + 0.5 <= t <= moving[-1] - 0.2]
     assert len(middle) > 40, len(middle)
 
     def heard(t):
@@ -94,8 +100,20 @@ def glides(page):
         delay (0.25 s), and nothing can glide through such a hole; a jerk with the spots coming in is the game's."""
         before = [g for g in got if g <= t]
         return len(before) > 1 and t - before[-1] < 0.15 and before[-1] - before[-2] < 0.2
-    kept = [v for t, v in middle if heard(t)]
-    shown = [round(v) for _, v in middle]
+
+    def sent(w):
+        """The sending phone sent the spots on both sides of the drawn moment `w` (its own clock) less than 0.2 s
+        apart. Its page stalls on a loaded machine too (verification job 709b18f4e4b8: no frame and no spot for
+        0.84 s, and its kart, whose step per frame is capped, went 17 px in that time); the watcher then draws
+        the kart as slowly as it went by the sender's clock, which is right."""
+        if w is None:
+            return False
+        lo = [s for s in st if s <= w]
+        hi = [s for s in st if s > w]
+        return bool(lo) and bool(hi) and hi[0] - lo[-1] < 0.2
+
+    kept = [v for t, v, w0, w2 in middle if heard(t) and sent(w0) and sent(w2)]
+    shown = [round(v) for _, v, _, _ in middle]
     assert len(kept) > 30 and len(kept) > 0.5 * len(middle), (len(kept), len(middle))
     assert min(kept) > 30, shown
     m, sd = mean(kept), pstdev(kept)
@@ -244,4 +262,56 @@ def test_a_bump_with_a_friend_happens_where_the_phone_draws_them(site, browser):
     assert math.hypot(dx - mx, dy - my) < 15  # drawn touching
     assert math.hypot(nx - bx, ny - by) > 0.5, (nx, ny, bx, by)  # and the newest spot was elsewhere
     errors = [e for p in (host, aino) for e in p.errors]
+    assert not errors, errors
+
+
+# Fakes the room's pause (a phone away), which rooms.js sets: `window.__pz` on a phone is its AiPelitRooms.paused.
+PAUSE = """() => { window.__pz = false;
+  Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
+
+
+@pytest.mark.parametrize("first", ["driver", "watcher"])
+def test_a_paused_race_holds_the_friend_s_kart_where_it_is_drawn(site, browser, first):
+    """While the room is paused the race stands and nothing is sent; the watching phone's tracks wait too, so the
+    friend's kart driving on is not guessed on beyond its last spot and pulled back when the race goes on: it
+    stands where it was drawn, and drives on from there. The two phones hear the pause a moment apart, in either
+    order: a watcher that hears it first still gets the driver's last spots, sent before the driver stopped, and
+    they go on its track only once the race goes on, not ahead of the drawn moment."""
+    host, guest = phones(site, browser)
+    i = index(host)
+    for p in (host, guest):
+        p.evaluate(PAUSE)
+    host.evaluate("window.__lane = 0")
+    host.wait_for_timeout(500)
+    host.evaluate(JITTER)
+    guest.evaluate("window.__cap = 100000")
+    guest.evaluate(SAMPLE, i)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(1200)
+    stop_host = lambda: host.evaluate("window.__pz = true")
+    stop_guest = lambda: guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
+    go_host = lambda: host.evaluate("window.__pz = false")
+    go_guest = lambda: guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
+    order = [(stop_host, stop_guest), (go_host, go_guest)] if first == "driver" else [(stop_guest, stop_host), (go_guest, go_host)]
+    for a, b in order:
+        a()
+        guest.wait_for_timeout(250)  # the other phone hears it a quarter of a second later
+        b()
+        guest.wait_for_timeout(1200)
+    guest.evaluate("window.__stop = true")
+    host.evaluate("window.__run = false")
+    xs, pz_at, go_at = guest.evaluate("[window.__xs, window.__pzAt, window.__goAt]")
+    held = [(x, y) for t, x, y, _ in xs if pz_at + 0.02 <= t <= go_at]
+    assert len(held) > 30, len(held)
+    spread = max(math.hypot(x - held[0][0], y - held[0][1]) for x, y in held)
+    assert spread < 0.01, spread  # it stood still all through the pause
+    after = [f for f in xs if f[0] > pz_at - 0.3]
+    # And went on with no jump, back or forward: 150 px/s is 2.5 px a frame, more over a frame the test machine
+    # was late with, but never much faster than the kart goes.
+    steps = [(math.hypot(c - a, d - b), t2 - t1) for (t1, a, b, _), (t2, c, d, _) in zip(after, after[1:])]
+    jumps = [(round(m, 1), round(dt, 3)) for m, dt in steps if m > 8 and m > 300 * dt]
+    assert not jumps, jumps
+    moved = [f for f in xs if f[0] > go_at + 0.6]
+    assert moved and math.hypot(moved[-1][1] - held[-1][0], moved[-1][2] - held[-1][1]) > 30, moved[-1:]
+    errors = [e for p in (host, guest) for e in p.errors]
     assert not errors, errors

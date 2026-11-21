@@ -281,7 +281,7 @@ function newKart(i, kind, id, name, bot) {
     ai: { lane: 0, laneT: 0, itemT: 0, skill: 1, turboT: 2 },
     // v7 (#480): another phone's kart is drawn from the spots heard (`tr`), a moment back; `ts` and `hd` are a
     // friend's newest stamp and spot as their phone sent them, `src` whose clock the last spot carried.
-    tr: AiPelitSulava.track({ keys: ['x', 'y', 'a', 'z'], angles: ['a'], jump: 120 }), ts: null, hd: null, src: '',
+    tr: AiPelitSulava.track({ keys: ['x', 'y', 'a', 'z'], angles: ['a'], jump: 120 }), ts: null, hd: null, src: '', held: null,
   };
 }
 
@@ -633,10 +633,34 @@ const stampOf = m => Number.isFinite(m.st) ? m.st : null;
 // A spot just heard for another phone's kart (already unpacked into it), stamped by the phone that moved it:
 // src 'f' (the friend's own clock) or 'h' (the host's). When the clock changes (the computer took over a friend,
 // or gave them back), no glide from before; a move of over 120 px between two spots is not glided either.
+// Heard while paused: the phones hear a pause a moment apart, so another phone's last spots, sent before it heard
+// the pause, can come after this phone did. Their stamps are ahead of the held clock (netClock()), and on the
+// track they would move the drawn moment on mid-pause; they wait in k.held and go on once the race goes on.
 function heardSpot(k, st, src) {
-  const spot = { x: k.x, y: k.y, a: k.a, z: k.z };
-  if (src !== k.src) k.tr.snap(st, spot); else k.tr.push(st, spot);
+  const spot = { x: k.x, y: k.y, a: k.a, z: k.z }, snap = src !== k.src;
   k.src = src;
+  if (R.paused) { if (snap || !k.held) k.held = []; k.held.push([st, spot, snap]); return; }
+  const a = netClock();
+  if (snap) k.tr.snap(st, spot, a); else k.tr.push(st, spot, a);
+}
+// The tracks' clock, on every phone (the stamps it sends, arrivals, the drawn moment): it stands still while the
+// room is paused (R.paused), as the race does and nothing is sent, so a moving kart is not guessed on and pulled
+// back when the race goes on. frame() reads it every frame, so a pause is seen as it starts and its length is left
+// out once it ends.
+const pz = { off: 0, at: null };
+function netClock() {
+  const t = AiPelitSulava.now();
+  if (R.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
+  return t - pz.off;
+}
+function heldOn(a) {
+  if (!race || !race.karts) return;
+  for (const k of race.karts) {
+    if (!k.held) continue;
+    for (const [st, spot, snap] of k.held) if (snap) k.tr.snap(st, spot, a); else k.tr.push(st, spot, a);
+    k.held = null;
+  }
 }
 function unpack(k, a) {
   [k.x, k.y, k.a, k.v, k.prog, k.lap, k.fin, k.spin, k.boost, k.drift, k.z, k.fruit, k.shield] = a;
@@ -644,7 +668,7 @@ function unpack(k, a) {
   const w = where(T, k.x, k.y, k.idx); k.idx = w.i; k.s = ((w.s % T.L) + T.L) % T.L; k.lat = w.lat;
   if (k.drift) k.dTime = Math.max(k.dTime, TIERS[0]);
 }
-function hostState() { return { t: 's', round: race.round, st: AiPelitSulava.now(), tr: race.tr, ph: race.phase === 'cd' ? 'cd' : 'run', cd: r2(race.cdT), clock: r2(race.t), k: race.karts.map(pack) }; }
+function hostState() { return { t: 's', round: race.round, st: netClock(), tr: race.tr, ph: race.phase === 'cd' ? 'cd' : 'run', cd: r2(race.cdT), clock: r2(race.t), k: race.karts.map(pack) }; }
 function shareNet(m) { if (race && race.mode === 'net') R.send(Object.assign({ round: race.round }, m)); }
 
 R.on('start', s => {
@@ -699,7 +723,7 @@ R.on('message', (m, from) => {
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
 R.on('continue', ids => { if (race && race.mode === 'net') race.karts.forEach(k => { if (ids.includes(k.id)) k.kind = 'cpu'; }); });
-R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.tr.reset(); k.ts = k.hd = null; k.src = ''; } }); });
+R.on('back', id => { if (race && race.mode === 'net') race.karts.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.tr.reset(); k.ts = k.hd = k.held = null; k.src = ''; } }); });
 R.on('lobby', () => { race = null; engineOn(false); });
 R.on('leave', () => { race = null; engineOn(false); showMenu(); });
 R.on('menu', () => { race = null; engineOn(false); showMenu(); });
@@ -728,7 +752,7 @@ function guestTick(dt) {
   race.sendT -= dt;
   if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !me.sentFin))) {
     race.sendT = 1 / 12; me.sentFin = me.fin !== null;
-    R.send({ t: 'p', round: race.round, st: AiPelitSulava.now(), k: pack(me) });
+    R.send({ t: 'p', round: race.round, st: netClock(), k: pack(me) });
   }
 }
 // This phone's kart is in: its time is kept, and it waits for the others.
@@ -1121,7 +1145,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) engin
 // finish, what the host sends on) keeps the newest spot, put back after.
 function asDrawn() {
   return race && race.mode === 'net' ? race.karts.filter(k => k !== me && k.kind === 'net' && k.tr.size()).map(k => {
-    const kept = [k, k.x, k.y, k.a, k.z], o = k.tr.at(); k.x = o.x; k.y = o.y; k.a = o.a; k.z = o.z; return kept; }) : [];
+    const kept = [k, k.x, k.y, k.a, k.z], o = k.tr.at(netClock()); k.x = o.x; k.y = o.y; k.a = o.a; k.z = o.z; return kept; }) : [];
 }
 function putBack(kept) { for (const [k, x0, y0, a0, z0] of kept) { k.x = x0; k.y = y0; k.a = a0; k.z = z0; } }
 let last = performance.now();
@@ -1131,6 +1155,7 @@ function frame(now) {
     tick(dt);
     engineSound();
   }
+  netClock();  // sees a pause start and end as they happen
   if (race) { const kept = asDrawn(); draw(); putBack(kept); }
   else idle();
   requestAnimationFrame(frame);
