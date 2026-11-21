@@ -267,20 +267,25 @@ function setSubT(T) {
   if (!Array.isArray(T)) { net.subT = null; net.subTr = null; return; }
   net.subT = T;
   if (!net.subTr) net.subTr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 40 });
-  net.subTr.push(stampOf(T[5]), { x: +T[0] || 0, y: +T[1] || 0 });
+  // A SISU at rest (its driver let go, stopSub()) is drawn where it stopped, not driven on past it.
+  net.subTr[!+T[3] && !+T[4] ? 'snap' : 'push'](stampOf(T[5]), { x: +T[0] || 0, y: +T[1] || 0 });
 }
 function setOther(id, p) {
   const o = net.others[id];
   if (!o || !Array.isArray(p)) return;
   const jump = o.mode !== p[0];
-  [o.mode, o.tx, o.ty, o.dir, o.suit, o.ang] = [String(p[0]), +p[1] || 0, +p[2] || 0, p[3] < 0 ? -1 : 1, !!p[4], +p[5] || 0];
+  [o.mode, o.tx, o.ty, o.dir, o.suit, o.ta] = [String(p[0]), +p[1] || 0, +p[2] || 0, p[3] < 0 ? -1 : 1, !!p[4], +p[5] || 0];
   o.kit = p[4] === 2 ? 'hose' : 'tank';
-  o.hose = Array.isArray(p[6]) ? p[6].slice(0, 122).map(Number) : null;
+  o.hoseIn = Array.isArray(p[6]) ? p[6].slice(0, 122).map(Number) : null;  // as sent; o.hose is drawn, with the body (v17)
   o.harp = !!p[7];
   o.st = stampOf(p[8]);
   if (!o.tr) o.tr = AiPelitSulava.track({ keys: ['x', 'y', 'ang'], angles: ['ang'], jump: 8 });
-  const at = { x: o.tx, y: o.ty, ang: o.ang };
-  if (jump) { o.x = o.tx; o.y = o.ty; o.tr.snap(o.st, at); } else o.tr.push(o.st, at);
+  const at = { x: o.tx, y: o.ty, ang: o.ta };
+  if (jump) { o.x = o.tx; o.y = o.ty; o.ang = o.ta; o.hose = o.hoseIn; o.tr.snap(o.st, at); o.hoses = []; }
+  else o.tr.push(o.st, at);
+  // The hose's points wait with the body they end at, so a moving diver is never drawn behind their own hose.
+  (o.hoses = o.hoses || []).push([o.st, o.hoseIn]);
+  if (o.hoses.length > 12) o.hoses.shift();
 }
 // v16 (#355): the room drops a message over its limit (MSG_MAX in rooms/worker.js: 16 000
 // characters until #375 made it 64 000), and a lived-in game's state was bigger, so the host sends
@@ -307,10 +312,10 @@ function statePart(m) {
 }
 function snapshot() {
   const ps = { [R.me]: mine() };
-  for (const [id, o] of Object.entries(net.others)) ps[id] = [o.mode, o.tx, o.ty, o.dir, o.suit ? (o.kit === 'hose' ? 2 : 1) : 0, o.ang, o.hose || 0, o.harp ? 1 : 0, o.st];
+  for (const [id, o] of Object.entries(net.others)) ps[id] = [o.mode, o.tx, o.ty, o.dir, o.suit ? (o.kit === 'hose' ? 2 : 1) : 0, o.ta, o.hoseIn || 0, o.harp ? 1 : 0, o.st];
   const m = G.s.m;
   const A = G.auto;
-  return { t: 'f', sub: subPack(), helm: net.helm, held: G.held, m: [r2(m.food), r2(m.health), r2(m.hull)], ps,
+  return { t: 'f', sub: net.subT || subPack(), helm: net.helm, held: G.held, m: [r2(m.food), r2(m.health), r2(m.hull)], ps,
     auto: A ? [A.id, A.name, Math.round(A.left || 0), A.pts.slice(A.i).flat().map(Math.round)] : 0,
     // v12: the crates on the move (falling, or in someone's hands) as they are now; the rest come with the game ('s')
     cr: G.s.crates.filter(c => c.f || c.w === 'held').map(c => [c.id, c.w, r2(c.x), r2(c.y), c.hw || 0, c.by || 0]) };
@@ -320,7 +325,12 @@ function stepNet(dt) {
   // SISU too, unless this phone drives it.
   for (const o of Object.values(net.others)) {
     const x0 = o.x, y0 = o.y, at = o.tr && o.tr.at();
-    if (at) { o.x = at.x; o.y = at.y; o.ang = at.ang; }
+    if (at) {
+      o.x = at.x; o.y = at.y; o.ang = at.ang;
+      const t = o.tr.time;
+      while (o.hoses.length > 1 && (o.hoses[1][0] === null || t === null || o.hoses[1][0] <= t)) o.hoses.shift();
+      if (o.hoses.length) o.hose = o.hoses[0][1];
+    }
     const d = Math.abs(o.x - x0) + Math.abs(o.y - y0);
     o.moving = d > 0.002; o.walkT += d;
     const b = o.mode === 'ice' && bldAt(o.x), g = o.mode === 'ice' && !b ? groundAt(o.x) : null;
@@ -426,7 +436,7 @@ function letGo(id) {
   if (net.helm === id) { net.helm = null; stopSub(); }
 }
 // Host: nobody drives now, so SISU stays where its driver left it, still (else its last speed would keep the airlock shut).
-function stopSub() { if (net && net.subT) net.subT = [net.subT[0], net.subT[1], net.subT[2], 0, 0]; }
+function stopSub() { if (net && net.subT) setSubT([net.subT[0], net.subT[1], net.subT[2], 0, 0, net.subT[5]]); }
 R.on('hello', id => {
   if (!net || !net.host || !net.others[id]) return;
   letGo(id); net.others[id].mode = 'wait';

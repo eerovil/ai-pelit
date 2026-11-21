@@ -12,6 +12,8 @@
 //   tr.snap(stamp, { x, y });        // a jump the game knows of (a new round, a respawn): no glide
 //   const s = tr.at();               // each frame: { x, y } to draw (one object, reused), or null
 //                                    // before the first spot
+//   tr.time                          // the moment at() last drew, on the sender's clock: for a
+//                                    // game's own extras that should lag with the player (a hose)
 //
 // Options (defaults): keys ['x', 'y'], angles [] (keys that wrap in radians, blended the short way
 // round), jump Infinity (a move longer than this between two spots, measured on the first two keys,
@@ -22,7 +24,9 @@
 // as the smallest (arrival - stamp) it saw in the last two seconds, so a late message cannot pull
 // it, and the delay is the usual gap between spots plus twice how late they usually are, kept
 // within minDelay..maxDelay. The drawn moment follows a change of either at most 20% faster or
-// slower than real time, so the player never jumps back or forth when they change.
+// slower than real time, so the player never jumps back or forth when they change. A late player
+// is drawn on a guess (going on at their last speed); when the next spot shows the guess was off
+// (they had started or stopped), the difference is drawn away over about a tenth of a second.
 //
 // A published library folder never changes (AGENTS.md, "3D games"): a fix goes in sulava-2/.
 (function () {
@@ -41,8 +45,10 @@
     var maxD = opt.maxDelay === undefined ? 0.25 : opt.maxDelay;
     var extra = opt.extra === undefined ? 0.25 : opt.extra;
     var S = [], lags = [], gap = 0.1, late = 0.02, pt = null, last = null;
-    var out = {};
-    var api = { delay: Math.min(maxD, Math.max(minD, 0.12)), push: push, snap: snap, at: at, reset: reset, size: function () { return S.length; } };
+    // When the player was drawn on a guess (past the newest spot) and a spot then comes that says
+    // otherwise, the difference is drawn away over EASE s instead of in one frame: err, per key.
+    var out = {}, was = {}, err = {}, guessed = false, heard = 0, seen = 0, EASE = 0.1;
+    var api = { time: null, delay: Math.min(maxD, Math.max(minD, 0.12)), push: push, snap: snap, at: at, reset: reset, size: function () { return S.length; } };
 
     function copy(v) { var o = {}; for (var k = 0; k < keys.length; k++) o[keys[k]] = +v[keys[k]] || 0; return o; }
     function far(a, b) {
@@ -50,7 +56,7 @@
       var dx = a[keys[0]] - b[keys[0]], dy = keys[1] ? a[keys[1]] - b[keys[1]] : 0;
       return Math.sqrt(dx * dx + dy * dy) > jump;
     }
-    function reset() { S = []; lags = []; pt = null; last = null; }
+    function reset() { S = []; lags = []; pt = null; last = null; err = {}; guessed = false; }
     function offset() { var m = Infinity; for (var k = 0; k < lags.length; k++) if (lags[k][1] < m) m = lags[k][1]; return m; }
     function lag(a, t) {
       lags.push([a, a - t]);
@@ -74,19 +80,35 @@
       var g = t - n.t;
       if (g < 1) gap += (g - gap) * 0.2;
       S.push({ t: t, v: s });
+      heard++;
       if (S.length > KEEP) S.shift();
       lag(a, t);
       late += ((a - t) - offset() - late) * 0.2;
       var want = Math.min(maxD, Math.max(minD, gap + 2 * late));
       api.delay += (want - api.delay) * 0.2;
     }
-    function blend(a, b, f) {
+    function blend(a, b, f, o) {
       for (var k = 0; k < keys.length; k++) {
         var key = keys[k], d = b[key] - a[key];
         if (angles[key]) d = wrap(d);
-        out[key] = a[key] + d * f;
+        o[key] = a[key] + d * f;
       }
-      return out;
+      return o;
+    }
+    // Where the spots put the player at moment p (into o); sets guess when p is past the newest spot.
+    var guess = false;
+    function sample(p, o) {
+      var first = S[0], n = S[S.length - 1];
+      guess = false;
+      if (p <= first.t) return blend(first.v, first.v, 0, o);
+      for (var k = 1; k < S.length; k++) if (p <= S[k].t) {
+        var q0 = S[k - 1];
+        return blend(q0.v, S[k].v, (p - q0.t) / (S[k].t - q0.t), o);
+      }
+      guess = true;
+      var q = S[S.length - 2];
+      if (!q || n.t - q.t > 0.5) return blend(n.v, n.v, 0, o);  // no speed to go on with
+      return blend(q.v, n.v, 1 + Math.min(p - n.t, extra) / (n.t - q.t), o);
     }
     function at(a) {
       if (!S.length) return null;
@@ -96,15 +118,29 @@
       last = a;
       if (pt === null || dt > 1 || dt < 0 || Math.abs(target - pt) > 1) pt = target;  // first frame, or the page slept
       else pt += dt + Math.max(-CATCH * dt, Math.min(CATCH * dt, target - pt - dt));
-      var first = S[0], n = S[S.length - 1];
-      if (pt <= first.t) return blend(first.v, first.v, 0);
-      for (var k = 1; k < S.length; k++) if (pt <= S[k].t) {
-        var p = S[k - 1];
-        return blend(p.v, S[k].v, (pt - p.t) / (S[k].t - p.t));
+      var k, key, fade = Math.exp(-Math.max(0, dt) / EASE);
+      if (guessed && heard !== seen && api.time !== null && dt > 0 && dt <= 1) {
+        // A spot came after a guessed frame: what that frame should have drawn, by the spots now known.
+        sample(api.time, was);
+        for (k = 0; k < keys.length; k++) {
+          key = keys[k];
+          var d = out[key] - was[key];
+          if (angles[key]) d = wrap(d);
+          err[key] = d;
+        }
       }
-      var q = S[S.length - 2];
-      if (!q || n.t - q.t > 0.5) return blend(n.v, n.v, 0);  // no speed to go on with
-      return blend(q.v, n.v, 1 + Math.min(pt - n.t, extra) / (n.t - q.t));
+      seen = heard;
+      api.time = pt;
+      var o = sample(pt, out);
+      guessed = guess;
+      for (k = 0; k < keys.length; k++) {
+        key = keys[k];
+        if (!err[key]) continue;
+        err[key] *= fade;
+        if (Math.abs(err[key]) < 1e-4) err[key] = 0;
+        o[key] += err[key];
+      }
+      return o;
     }
     return api;
   }

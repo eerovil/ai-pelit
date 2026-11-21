@@ -138,3 +138,29 @@ def test_a_sleeping_page_wakes_on_the_newest_spot(page):
       return tr.at(56.0).x;
     }""")
     assert x == pytest.approx(59, abs=0.2)
+
+
+def test_a_wrong_guess_is_drawn_away_without_a_jump(page):
+    """A player standing still starts to walk (4 m/s) while their spots come late: the library goes on past the
+    newest spot at the speed it last knew (none), and the spot that then comes says they were ahead. The
+    difference (0.6 m) is drawn away over a tenth of a second, not in one frame."""
+    st = page.evaluate("""() => {
+      const tr = AiPelitSulava.track({ keys: ['x'], minDelay: 0.1, maxDelay: 0.1 });
+      const msgs = [];
+      for (let i = 0; i <= 40; i++) {
+        const t = i * 0.1, x = t < 1 ? 0 : (t - 1) * 4;
+        msgs.push({ t, x, at: 50 + t + (i === 11 ? 0.15 : i === 12 ? 0.05 : 0) });  // two spots come late, together
+      }
+      msgs.sort((a, b) => a.at - b.at);
+      const xs = []; let k = 0;
+      for (let f = 0; f < 240; f++) {
+        const now = 50 + f / 60;
+        while (k < msgs.length && msgs[k].at <= now) { const m = msgs[k++]; tr.push(m.t, { x: m.x }, m.at); }
+        xs.push(tr.at(now).x);
+      }
+      return xs.map((x, i) => i ? x - xs[i - 1] : 0);
+    }""")
+    walk = 4 / 60
+    assert max(st) < 0.25, max(st)  # drawn in one frame, the 0.6 m would be a leap
+    assert sum(1 for s in st if s > 1.2 * walk) >= 4  # over a few frames
+    assert min(st) > -1e-9
