@@ -26,7 +26,13 @@ SAMPLE = """([hook, what]) => { window.__xs = []; window.__got = []; const f = n
   const d = window[hook];
   window[hook] = (...a) => { const t = performance.now() / 1000, r = d(...a), v = f(r);
     if (v && window.__xs.length < 400) window.__xs.push([t, ...v]); return r; }; }"""
-STONE = ["stonesDrawn", "phase === 'slide' && stones[0] ? [stones[0].x, stones[0].y] : null"]
+STONE = ["stonesDrawn", "phase === 'slide' && stones[0] ? [stones[0].x, stones[0].y, stones[0].tr.time] : null"]
+# On the host: each time its frames stalled for longer than one step of the world may take (50 ms, `loop()`), when
+# on its clock. The world then ran slower than the clock, so the spots it sent were themselves uneven in time; on a
+# busy test machine that is no fault of the drawing.
+STALLS = """() => { window.__stall = []; let last = null; const u = window.update;
+  window.update = dt => { const t = performance.now() / 1000; if (last !== null && t - last > 0.05) window.__stall.push([last, t]);
+    last = t; u(dt); }; }"""
 AIM = ["aimDrawn", "phase === 'aim' && aimShown ? [r.x, 0] : null"]
 # The thrower's finger drags the broom across at 0.6 m a second, moved each frame just before the game sends it (as
 # a pointermove would come before the frame; a separate animation frame might run after the send on a busy machine).
@@ -73,23 +79,28 @@ def phones(site, browser, names=("Eero", "Aino")):
     return pages
 
 
-def glides(page, steady=False):
+def glides(page, steady=False, stalls=()):
     """The speed over each two drawn frames while it moved: never far from the speed around it (a stone slows down
-    as it slides), and for the dragged broom about the same throughout."""
+    as it slides), and for the dragged broom about the same throughout. With `stalls` (the host's, on its clock),
+    frames drawing a moment near one (the sample's third value) are left out."""
     xs, got = page.evaluate("[window.__xs, window.__got]")
-    sp = [(t2, ((c - a) ** 2 + (d - b) ** 2) ** 0.5 / (t2 - t0))
-          for (t0, a, b), (t2, c, d) in zip(xs, xs[2:]) if t2 > t0]
-    moving = [i for i, (_, v) in enumerate(sp) if v > 0.05]
+
+    def stalled(q):
+        return len(q) > 3 and any(a - 0.1 <= q[3] <= b + 0.1 for a, b in stalls)
+    sp = [(q2[0], -1 if stalled(q0) or stalled(q2) else ((q2[1] - q0[1]) ** 2 + (q2[2] - q0[2]) ** 2) ** 0.5 / (q2[0] - q0[0]))
+          for q0, q2 in zip(xs, xs[2:]) if q2[0] > q0[0]]
+    moving = [i for i, (_, v) in enumerate(sp) if v > 0.05 or v < 0]
     assert len(moving) > 60, len(moving)
     middle = sp[moving[0] + 8:moving[-1] - 8]
 
     def heard(t):
         return any(t - 0.3 <= g <= t for g in got)
+    middle = [(t, v) for t, v in middle if v >= 0]
     vs = [v for _, v in middle]
     shown = [round(v, 2) for v in vs]
     # Each speed against the usual speed around it (16 frames, about a quarter of a second).
     near = [(v, v / max(0.01, median(vs[max(0, i - 8):i + 9]))) for i, v in enumerate(vs) if heard(middle[i][0])]
-    assert len(near) > 0.8 * len(middle), (len(near), len(middle))
+    assert len(near) > 60 and len(near) > 0.8 * len(middle), (len(near), len(middle))
     # Measured on this host (#480): v5 0.07-0.19, v4's carry-on and chase 0.26-0.55.
     ratio = [r for _, r in near]
     assert pstdev(ratio) < 0.2, (pstdev(ratio), shown)
@@ -101,10 +112,11 @@ def test_a_sliding_stone_glides_on_a_guest(site, browser):
     """The host runs the stones and sends them 20 times a second, unevenly late: a guest draws the slide smoothly."""
     host, aino = phones(site, browser)
     host.evaluate(JITTER)
+    host.evaluate(STALLS)
     aino.evaluate(SAMPLE, STONE)
     host.evaluate("doThrow({ x: 0.4, w: 0.75, spin: 1 })")
     aino.wait_for_function("window.__xs.length >= 300", timeout=30000)
-    glides(aino)
+    glides(aino, stalls=host.evaluate("window.__stall"))
     # The rules keep the newest spot: between frames the guest's stone is where the host said last.
     at = aino.evaluate("""() => new Promise(ok => AiPelitRooms.on('message', m => {
       if (m.t === 's' && m.ph === 'slide') ok([m.st[0][1], m.st[0][2], stones[0].x, stones[0].y, stones[0].tr.time, m.ck]); }))""")
