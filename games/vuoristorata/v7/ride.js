@@ -872,6 +872,11 @@ if (RM) {
         k.energy = m.c[6] ?? 1; k.took = m.c[7] || []; k.over = m.c[8] || 0; k.check = m.c[9] ?? m.c[0];
         k.crash = m.c[10] || null;
         k.ts = stampOf(m); heardSpot(k, k.ts, 'f', wasCrash);
+      } else if (m.c[2] !== null && m.c[0] >= k.s) {
+        // Past the line the train brakes to a stop: its spot still moves on every screen, while
+        // the finish time and place heard first stand.
+        k.s = m.c[0]; k.v = m.c[1];
+        k.ts = stampOf(m); heardSpot(k, k.ts, 'f', false);
       }
       arrive(k);
       return;

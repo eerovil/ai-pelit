@@ -198,3 +198,27 @@ def test_a_long_frame_on_the_sending_phone_stamps_each_spot_with_its_own_moment(
         assert sp and all(9 < v < 15 for v in sp), (sp, sent)
     finally:
         close(host)
+
+
+def test_a_friend_past_the_line_brakes_to_a_stop_on_every_screen(site, browser):
+    """Past the finish line the friend's train still moves while it brakes, and their phone still sends where it is.
+    The host kept their finish time and place but dropped those spots too, so the host and a third phone drew the
+    train stopped at its last spot before the line (or guessed on past it)."""
+    host, aino, ville = phones(site, browser, names=("Eero", "Aino", "Ville"))
+    try:
+        i = index(aino)
+        aino.evaluate("game.car.fin = game.car.t = 5; game.mode = 'done'; meK().fin = 5; window.__run = true")
+        host.wait_for_function(f"net.cars[{i}].fin !== null", timeout=10000)
+        at_fin = host.evaluate(f"net.cars[{i}].s")
+        aino.wait_for_timeout(1000)
+        aino.evaluate("window.__run = false")
+        end = aino.evaluate("game.car.s")
+        assert end > at_fin + 5  # it really rode on past the line
+        for p in (host, ville):
+            p.wait_for_function(f"Math.abs(drawnS(net.cars[{i}]) - {end}) < 0.5", timeout=5000)
+        # The finish heard first stands.
+        assert host.evaluate(f"net.cars[{i}].fin") == 5
+        errors = [e for p in (host, aino, ville) for e in p.errors]
+        assert not errors, errors
+    finally:
+        close(host)
