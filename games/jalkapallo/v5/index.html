@@ -662,10 +662,10 @@ const r2 = v => Math.round(v * 100) / 100;
 // (ck). p.tx, p.ty are the newest spot; p.x, p.y where the guest draws the player (guestUpdate()).
 const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
 function applySnapshot(s) {
-  const was = state, loose = !owner, pvx = ball.vx || 0, pvy = ball.vy || 0;
+  const was = state, loose = !owner, held = owner, pvx = ball.vx || 0, pvy = ball.vy || 0;
   state = s.st; pauseT = s.pt; clock = s.cl; score = s.sc;
   owner = players[s.o] || null;
-  ball.tx = s.b[0]; ball.ty = s.b[1]; ball.z = s.b[2]; ball.vx = s.b[3]; ball.vy = s.b[4];
+  ball.tx = s.b[0]; ball.ty = s.b[1]; ball.vx = s.b[3]; ball.vy = s.b[4];
   ball.nx = s.b[0]; ball.ny = s.b[1];
   // A kickoff puts everyone on their spot at once: no sliding there. So does the match's first spot.
   const jump = state === 'kickoff' && was !== 'kickoff', st = stampOf(s);
@@ -680,6 +680,15 @@ function applySnapshot(s) {
   });
   for (const p of players) p.ctl = '';
   for (const [id, i] of s.c) if (players[i]) players[i].ctl = id;
+  // The ball's spot goes on its track whether held or loose, so a kick leaves the kicker's feet as drawn.
+  const bs = { x: s.b[0], y: s.b[1], z: s.b[2] };
+  if (jump || !ball.tr.size()) {
+    ball.tr.snap(st, bs); ball.x = bs.x; ball.y = bs.y; ball.z = bs.z;
+    ball.ex = ball.ey = ball.ease = 0; ball.heldBy = owner && owner.ctl === myId() ? owner : null;
+  } else ball.tr.push(st, bs);
+  // A steal or a tackle: the host rolls the ball to the new holder's feet in a few frames, quicker than its
+  // spots come. Until the drawing has passed that moment, the ball chases its track instead of sitting on it.
+  if (held && owner && held !== owner) ball.ease = ball.tr.delay + 0.15;
   // A save or a tackle the host said: hear it once, when its text first shows.
   const old = new Set(texts.map(t => t.s + t.x + ',' + t.y));
   msg = s.m; texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
@@ -698,7 +707,7 @@ function applySnapshot(s) {
   for (const p of players) p.wasLunge = p.lunge > 0;
   if (s.g > goals) { goals = s.g; whistle(false); cheer(); shake = 8; }
   if (state === 'full' && was !== 'full') whistle(true);
-  if (state === 'kickoff' && was !== 'kickoff') { for (const p of players) { p.x = p.tx; p.y = p.ty; } whistle(false); }
+  if (jump) whistle(false);
 }
 function guestUpdate(dt) {
   for (const p of players) {
@@ -713,18 +722,26 @@ function guestUpdate(dt) {
     if (p.ease > 0) { p.ease -= dt; const k = Math.min(1, dt * 15); p.x += (o.x - p.x) * k; p.y += (o.y - p.y) * k; }
     else { p.x = o.x; p.y = o.y; }
   }
-  if (ball.tx !== undefined) {
+  if (ball.tx !== undefined && ball.tr) {
     ball.tx += (ball.vx || 0) * dt; ball.ty += (ball.vy || 0) * dt;
-    if (owner && owner.tx !== undefined) {
-      // A held ball is drawn at the feet of its player as drawn, where the host has it from them; the step
-      // from where it was drawn (a pass just taken) fades out over a tenth of a second.
-      const ax = owner.x + ball.nx - owner.tx, ay = owner.y + ball.ny - owner.ty;
-      if (!ball.held) { ball.held = true; ball.ex = ball.x - ax; ball.ey = ball.y - ay; }
+    // v5 (#480): the ball is drawn from its track, a moment back like the players, so a held ball is at
+    // its holder's feet as drawn and a kicked one leaves them. Only a ball this phone's own player holds
+    // (drawn ahead of the track) is drawn at that player's feet, where the host has it from them.
+    // Whenever the drawing switches between the two (this phone's player gets or loses the ball), the step
+    // from where the ball was drawn fades out over a tenth of a second instead of showing in one frame.
+    const mine = owner && owner.tx !== undefined && owner.ctl === myId() ? owner : null;
+    const o = ball.tr.at();
+    if (o) {
+      let ax = o.x, ay = o.y;
+      if (mine) { ax = mine.x + ball.nx - mine.tx; ay = mine.y + ball.ny - mine.ty; }
+      if (mine !== ball.heldBy) { ball.heldBy = mine; ball.ex = ball.x - ax; ball.ey = ball.y - ay; }
       const f = Math.max(0, 1 - dt * 12); ball.ex *= f; ball.ey *= f;
-      ball.x = ax + ball.ex; ball.y = ay + ball.ey;
-    } else {
-      ball.held = false;
-      const k = Math.min(1, dt * 18); ball.x += (ball.tx - ball.x) * k; ball.y += (ball.ty - ball.y) * k;
+      if (ball.ease > 0) {
+        // Just after a steal (applySnapshot()): chase the track; what is left when it ends fades out as above.
+        ball.ease -= dt; const k = Math.min(1, dt * 15);
+        ball.x += (ax - ball.x) * k; ball.y += (ay - ball.y) * k; ball.ex = ball.x - ax; ball.ey = ball.y - ay;
+      } else { ball.x = ax + ball.ex; ball.y = ay + ball.ey; }
+      ball.z = mine ? 0 : o.z;
     }
   }
   tick(dt);
@@ -779,7 +796,9 @@ R.on('message', (m, from) => {
     if (net.round === m.round && players.length) return;
     applySetup(m);
     view = myTeam === 0 ? 1 : -1;
-    ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0 };
+    // The ball has its own track (#480), drawn at the same moment back as the players. A hard shot goes about
+    // 2.5 m between two spots; a move of over 8 m is the host putting it somewhere new (a test does).
+    ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, tr: AiPelitSulava.track({ keys: ['x', 'y', 'z'], jump: 8 }), heldBy: null, ex: 0, ey: 0 };
     owner = null; goals = 0; state = 'kickoff';
     menu.classList.add('hidden');
     whistle(false);
