@@ -258,3 +258,21 @@ def test_going_back_the_other_way_keeps_the_laps(real, context):
     page.evaluate("spinEnd({ pointerId: 7, clientX: ring.cx + ring.r, clientY: ring.cy, timeStamp: performance.now() })")
     assert page.evaluate("th.phase") in ("fly", "land")
     assert errors == []
+
+
+def test_the_open_menu_does_not_redraw_every_frame(real, context):
+    # Review of #507: a still game must not draw every frame (docs/making-games.md).
+    page, errors = open_game(real, context)
+    page.wait_for_timeout(300)
+    n = page.evaluate("draws")
+    page.wait_for_timeout(600)
+    assert page.evaluate("draws") == n
+    # Turning the phone draws it once again, and a meet draws every frame.
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_timeout(300)
+    assert 0 < page.evaluate("draws") - n < 4
+    page.click("#go")
+    n = page.evaluate("draws")
+    page.wait_for_timeout(500)
+    assert page.evaluate("draws") - n > 10
+    assert errors == []
