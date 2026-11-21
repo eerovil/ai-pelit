@@ -459,6 +459,30 @@ nameIn.addEventListener('keydown', e => { if (e.key === 'Enter') document.getEle
 // turned round (flip), so each player starts at the bottom of their screen.
 const R = window.AiPelitRooms;
 let net = null;
+// v9 (#480): the fight's own clock in seconds, which stands still while the room is paused (a phone
+// away), on the host and on every friend's phone. The host stamps its states with it (ck), and a
+// friend's tracks hear and draw by it: during a pause the drawn fighters hold where they are (no
+// going on past the newest spot), and after it they go on from there, with no jump over the pause.
+// loop() asks it every frame, so a pause is noticed within a frame.
+const pz = { off: 0, at: null };
+function fightClock() {
+  const t = AiPelitSulava.now();
+  if (net && R.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  return t - pz.off;
+}
+// A track keeps only 8 spots (lib/sulava-1). The host sends 30 states a second, so 8 of them span
+// under a quarter second, less than the longest the drawing waits (0.25 s): a late message would
+// leave the drawn moment before the oldest spot. So a spot goes on a track only TR_GAP s or more
+// after the last one there (8 then span 0.42 s or more), and always when it is a jump (drawn at once).
+const TR_GAP = 0.06, TR_JUMP = 120;
+function toTrack(f, st) {
+  const a = fightClock(), t = st === null ? a : st;
+  if (net.fresh) f.tr.snap(st, f, a);
+  else if (t >= f.trT && t - f.trT < TR_GAP && Math.hypot(f.x - f.trX, f.y - f.trY) <= TR_JUMP) return;
+  else f.tr.push(st, f, a);
+  f.trT = t; f.trX = f.x; f.trY = f.y;
+}
 function flip() { return !!(net && net.flip); }
 function nameFromMenu() { playerName = nameIn.value.trim().slice(0, 14); save('nimi', playerName); }
 document.getElementById('multi').addEventListener('click', () => {
@@ -480,7 +504,10 @@ function onlineFight(s) {
     f.id = p.id; f.gin = IDLE; f.dashN = 0; f.seenDash = 0; f.sid = '';
     // v9 (#480): on a friend's phone, where the host's spots put this fighter, drawn a moment back.
     // The fastest move between two spots is a dodge (84 units in all), so a longer one is a jump.
-    f.tr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 120 });
+    // extra: a late fighter goes on at its last speed for at most 0.05 s, not the library's 0.25 s,
+    // so one that stops at the end of a dodge (420 units/s) on a stalled link is drawn at most about
+    // 21 units past where it stopped, not about 100.
+    f.tr = AiPelitSulava.track({ keys: ['x', 'y'], jump: TR_JUMP, extra: 0.05 });
     return f;
   });
   me = fighters[mine];
@@ -508,7 +535,7 @@ function remoteInput(f) {
 const r2 = v => Math.round(v * 100) / 100;
 function pack(f) { return [f.x, f.y, f.hp, f.fx, f.fy, f.swing, f.side, f.dash, f.flash, f.shot, f.ammo, f.swordCd, f.bowCd, f.dashCd].map(r2); }
 function sendState(to) {
-  R.send({ t: 's', round: net.round, ck: AiPelitSulava.now(), st: state, T: r2(stateT), L: Math.ceil(net.left), tu: net.timeUp ? 1 : 0, f: fighters.map(pack),
+  R.send({ t: 's', round: net.round, ck: fightClock(), st: state, T: r2(stateT), L: Math.ceil(net.left), tu: net.timeUp ? 1 : 0, f: fighters.map(pack),
     ar: arrows.map(s => [s.x, s.y, s.vx, s.vy].map(Math.round).concat(fighters.indexOf(s.from))) }, to);
 }
 R.on('hello', id => { if (net && net.host && state !== 'room') sendState(id); });
@@ -545,18 +572,21 @@ function unpack(f, a, st) {
   f.tx = a[0]; f.ty = a[1];
   if (net.fresh || !ownHere(f)) { f.x = f.tx; f.y = f.ty; }
   // The first state this phone hears is a jump: drawn there at once, no glide.
-  if (!ownHere(f)) { if (net.fresh) f.tr.snap(st, f); else f.tr.push(st, f); }
+  if (!ownHere(f)) toTrack(f, st);
   [f.hp, f.fx, f.fy, f.swing, f.side, f.dash, f.flash, f.shot, f.ammo, f.swordCd, f.bowCd, f.dashCd] = a.slice(2, 14);
   // The first state this phone hears (a new round, or back after a reload) is how things are: no sounds.
   if (net.fresh) { f.out = f.hp <= 0; return; }
+  // A hit's number and a knockout's word start where the fighter is drawn (v9: a moment back), so
+  // they come up over it and not ahead of it.
+  const [sx, sy] = seenAt(f);
   if (f.hp < was.hp) {
     const n = Math.round(was.hp - f.hp);
-    texts.push({ x: f.tx, y: f.ty, dy: -26, s: '-' + n, c: f === me ? '#ff8a80' : '#ffe08a', t: 0.8 });
+    texts.push({ x: sx, y: sy, dy: -26, s: '-' + n, c: f === me ? '#ff8a80' : '#ffe08a', t: 0.8 });
     shake = Math.max(shake, n > 12 ? 7 : 4); sfx.hit(n > 12);
   }
   if (f.hp <= 0 && !f.out) {
     f.out = true; sfx.ko();
-    if (fighters.length > 2) texts.push({ x: f.tx, y: f.ty, dy: -44, s: 'Tyrmätty!', c: '#ff7a6b', t: 1.4 });
+    if (fighters.length > 2) texts.push({ x: sx, y: sy, dy: -44, s: 'Tyrmätty!', c: '#ff7a6b', t: 1.4 });
   }
   if (f.swing > 0 && was.swing <= 0) sfx.swing();
   if (f.shot > was.shot + 0.05) sfx.shot();
@@ -830,16 +860,19 @@ function asDrawn() {
   const kept = [];
   for (const f of fighters) {
     if (ownHere(f) || !f.tr.size()) continue;
-    const o = f.tr.at();
-    kept.push([f, f.x, f.y]); f.x = o.x; f.y = o.y;
+    const o = f.tr.at(fightClock());
+    kept.push([f, f.x, f.y]); f.x = f.seenX = o.x; f.y = f.seenY = o.y;
   }
   return kept;
 }
+// Where a fighter was last drawn: its own spot for the phone's own fighter and on the host.
+function seenAt(f) { return ownHere(f) || f.seenX === undefined ? [f.x, f.y] : [f.seenX, f.seenY]; }
 function putBack(kept) { for (const [f, px, py] of kept) { f.x = px; f.y = py; } }
 
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  fightClock();
   if (dt > 0) step(dt);
   const kept = asDrawn(); draw(); putBack(kept);
   requestAnimationFrame(loop);

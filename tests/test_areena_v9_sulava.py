@@ -143,8 +143,9 @@ def test_a_friend_running_glides_on_a_third_phone(site, browser):
 
 
 def test_a_jump_is_drawn_at_once_not_glided(site, browser):
-    """A fighter that the host's spots move further than a dodge between two messages (a phone back after a
-    while away, heard again) is drawn there at once on the next frame, not slid across the arena."""
+    """The host moves a fighter 230 units in one frame, further than the track's jump (120 units, more than a
+    whole dodge's 84): from the first frame after the state that says so, the guest draws it where it landed,
+    not sliding across the arena towards it."""
     host, guest = phones(site, browser)
     me = index(host)
     guest.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
@@ -156,4 +157,113 @@ def test_a_jump_is_drawn_at_once_not_glided(site, browser):
     jump = guest.evaluate("window.__jump")
     # Every frame from the first after the jump draws it where it landed.
     assert all(abs(drawn - want) < 0.5 for want, drawn in jump), jump
+    assert not host.errors + guest.errors
+
+
+# On the host: a fighter's dodge by hand, up the arena's middle (420 units/s for 0.2 s, as act() moves one).
+DODGE = """(i) => { const f = fighters[i]; f.dx = 0; f.dy = -1; f.dash = 0.2; f.dashCd = 1.1; }"""
+# On the host: while `window.__drop` is on, its messages are not sent.
+DROP = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); window.__drop = false;
+  AiPelitRooms.send = (m, to) => { if (!window.__drop) send(m, to); }; }"""
+# The room's pause by hand: `AiPelitRooms.paused` reads `window.__pz` (as while a phone is away).
+PAUSE = """() => { window.__pz = false;
+  Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
+# Every drawn frame of fighter `i` on the watching phone: [moment, x, y].
+DRAWN = """(i) => { window.__drawn = []; const a = window.asDrawn;
+  window.asDrawn = () => { const kept = a();
+    window.__drawn.push([performance.now() / 1000, fighters[i].x, fighters[i].y]); return kept; }; }"""
+
+
+def test_eight_spots_on_a_track_span_more_than_its_longest_wait(site, browser):
+    """A track keeps 8 spots. The host sends 30 states a second, and 8 of them span under a quarter second,
+    less than the longest the drawing may wait (0.25 s). A spot goes on the track only 0.06 s or more after
+    the one before it, so its 8 cover 0.42 s or more; the messages and how often they go are as before."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    guest.evaluate("""(i) => { window.__in = []; window.__sent = []; const tr = fighters[i].tr, p = tr.push;
+      AiPelitRooms.on('message', m => { if (m.t === 's') window.__sent.push(m.ck); });
+      tr.push = (t, v, a) => { window.__in.push(t); return p(t, v, a); }; }""", me)
+    guest.wait_for_function("window.__in.length >= 20", timeout=10000)
+    pushed, sent = guest.evaluate("[window.__in, window.__sent]")
+    gaps = [b - a for a, b in zip(sent, sent[1:])]
+    # The host still sends one state each frame once 1/30 s has passed (two or three 60 Hz frames).
+    assert mean(gaps) < 0.055, gaps
+    assert min(b - a for a, b in zip(pushed, pushed[1:])) >= 0.06 - 1e-9, pushed
+    assert all(b - a >= 0.42 for a, b in zip(pushed, pushed[7:])), pushed
+    assert not host.errors + guest.errors
+
+
+def test_a_dodge_on_a_stalled_link_is_drawn_only_a_little_past_its_end(site, browser):
+    """The host's fighter dodges, and the host's messages stop as the dodge ends: the guest goes on at the
+    last speed it saw (420 units/s) for only 0.05 s, so it draws the fighter at most about 21 units past where
+    it stopped (with the library's 0.25 s, up to about 100)."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    host.evaluate(DROP)
+    guest.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
+    guest.evaluate(DRAWN, me)
+    host.evaluate(DODGE, me)
+    host.wait_for_function(f"fighters[{me}].dash <= 0", polling="raf", timeout=5000)
+    host.evaluate("window.__drop = true")
+    stop = host.evaluate(f"fighters[{me}].y")
+    guest.wait_for_timeout(600)
+    ys = [y for _, _, y in guest.evaluate("window.__drawn")]
+    # It dodged: drawn going up the arena by most of the dodge's 84 units.
+    assert ys[0] - min(ys) > 50, ys
+    past = stop - min(ys)
+    assert past < 25, (past, stop, ys)
+    assert not host.errors + guest.errors
+
+
+def test_a_paused_room_holds_the_drawn_fighters_and_goes_on_from_there(site, browser):
+    """While the room waits for a phone that is away, a guest draws the other fighters where they were when
+    it paused, not going on at their last speed past the newest spot; when the room goes on, they move on
+    from there a little each frame, with no jump over the pause (1.5 s here)."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    host.evaluate(PAUSE)
+    guest.evaluate(PAUSE)
+    host.evaluate(RUN, [me, 1 if guest.evaluate(f"fighters[{me}].y < AH / 2") else -1])
+    guest.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
+    guest.evaluate(DRAWN, me)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(500)
+    # It stops running and the room pauses at once, while the guest still draws it gliding a moment back.
+    host.evaluate("window.__run = false; window.__pz = true")
+    guest.evaluate("window.__pz = true; window.__held = window.__drawn.length")
+    guest.wait_for_timeout(1500)
+    held = guest.evaluate("window.__drawn.slice(window.__held)")
+    assert len(held) > 30, len(held)
+    assert max(y for _, _, y in held) - min(y for _, _, y in held) < 0.01, [round(y, 2) for _, _, y in held]
+    host.evaluate("window.__pz = false")
+    guest.evaluate("window.__pz = false; window.__go = window.__drawn.length")
+    guest.wait_for_timeout(800)
+    after = guest.evaluate("window.__drawn.slice(window.__go - 1)")
+    stop = host.evaluate(f"fighters[{me}].y")
+    # Held short of where it stopped, then on to there.
+    assert abs(after[0][2] - stop) > 2, (after[0][2], stop)
+    assert abs(after[-1][2] - stop) < 0.5, (after[-1][2], stop)
+    steps = [abs(b[2] - a[2]) for a, b in zip(after, after[1:])]
+    assert max(steps) < 3, [round(s, 2) for s in steps]
+    assert not host.errors + guest.errors
+
+
+def test_a_hits_number_starts_where_the_fighter_is_drawn(site, browser):
+    """A guest's hit number for a running fighter starts at its drawn spot (a moment back), not at the newest
+    spot the host sent."""
+    host, guest = phones(site, browser)
+    me = index(host)
+    host.evaluate(RUN, [me, 1 if guest.evaluate(f"fighters[{me}].y < AH / 2") else -1])
+    guest.wait_for_function(f"fighters[{me}].tr.size() > 3", timeout=5000)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(600)
+    # Heard after the game's own handler, which has made the number by then.
+    guest.evaluate("""(i) => { window.__hit = null; const f = fighters[i];
+      AiPelitRooms.on('message', m => { if (m.t === 's' && window.__hit === null && m.f[i][2] < f.max)
+        window.__hit = { newest: m.f[i][1], seen: f.seenY, text: texts.length ? texts[texts.length - 1].y : null }; }); }""", me)
+    host.evaluate(f"fighters[{me}].hp -= 7")
+    guest.wait_for_function("window.__hit !== null", timeout=5000)
+    hit = guest.evaluate("window.__hit")
+    assert abs(hit["text"] - hit["seen"]) < 0.01, hit
+    assert abs(hit["newest"] - hit["seen"]) > 0.5, hit
     assert not host.errors + guest.errors
