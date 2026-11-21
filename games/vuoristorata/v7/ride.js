@@ -663,6 +663,9 @@ function copyCarState(k, car, crash) {
   k.s = car.s; k.v = car.v; k.energy = car.energy; k.took = [...car.took];
   k.over = car.over; k.check = car.check; k.crash = crash;
 }
+// The moment the rules' step being run stands for (a long frame is ridden in steps), else now: a spot's stamp.
+let stepAt = null;
+const stamp = () => stepAt ?? AiPelitSulava.now();
 const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0,
   r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0,
   k.kind === 'net' && RM.isHost ? k.ts : null];
@@ -683,7 +686,7 @@ function synced(k) {
   return k;
 }
 function hostState() {
-  return { t: 's', round: net.round, st: AiPelitSulava.now(), cfg: net.cfg, ph: net.phase, cd: r2(game.count || 0), clock: r2(net.clock), c: net.cars.map(k => pack(synced(k))) };
+  return { t: 's', round: net.round, st: stamp(), cfg: net.cfg, ph: net.phase, cd: r2(game.count || 0), clock: r2(net.clock), c: net.cars.map(k => pack(synced(k))) };
 }
 function arrive(k) {
   if (k.fin === null || k.at !== null) return;
@@ -728,7 +731,7 @@ function netTick(dt) {
     return;
   }
   if ((game.mode === 'ride' || game.mode === 'crash' || game.mode === 'done') && net.sendT <= 0 && !net.res) {
-    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), c: pack(synced(meK())) });
+    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: stamp(), c: pack(synced(meK())) });
   }
 }
 function guestState(m) {
@@ -908,9 +911,11 @@ function wire() {
   // A slow phone's long frame is ridden in 50 ms steps, so its clock keeps real time and a race
   // between fast and slow phones stays fair. Only a gap over a second (the page was hidden) is cut.
   (function frame(now) {
-    let rest = Math.min(1, Math.max(0, (now - last) / 1000));
+    let rest = Math.min(1, Math.max(0, (now - last) / 1000)), at = now / 1000 - rest;
     last = now;
-    while (rest > 1e-6) { const dt = Math.min(0.05, rest); step(dt); rest -= dt; }
+    // Each step's spots are stamped with that step's own moment (#480), so a long frame's spots keep their pace.
+    while (rest > 1e-6) { const dt = Math.min(0.05, rest); at += dt; stepAt = at; step(dt); rest -= dt; }
+    stepAt = null;
     requestAnimationFrame(frame);
   })(last);
 }

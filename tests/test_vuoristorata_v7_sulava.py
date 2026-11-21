@@ -173,3 +173,26 @@ def test_a_train_put_back_after_a_derail_is_drawn_there_at_once(site, browser):
         assert not host.errors + guest.errors
     finally:
         close(host)
+
+
+def test_a_long_frame_on_the_sending_phone_stamps_each_spot_with_its_own_moment(site, browser):
+    """A slow phone's long frame is ridden in 50 ms steps, and a spot may be sent in any of them. Each one carries the
+    moment of its own step, not the frame's: one stamp for several spots made the other phones draw the train behind
+    its stamp, then rush it on (seen on a loaded test machine as a jerk forward and an ease back)."""
+    host, guest = phones(site, browser)
+    try:
+        guest.evaluate("""() => { window.__sent = []; const send = AiPelitRooms.send.bind(AiPelitRooms);
+          AiPelitRooms.send = (m, to) => { if (m.t === 'p') window.__sent.push([m.st, m.c[0]]); return send(m, to); }; }""")
+        guest.evaluate("window.__run = true")
+        guest.wait_for_function("window.__sent.length >= 3", timeout=5000)
+        # Hold the page busy for 0.4 s, as a slow phone does; its next frame rides those 0.4 s in steps.
+        guest.evaluate("""() => new Promise(ok => requestAnimationFrame(() => {
+          const until = performance.now() + 400; while (performance.now() < until) {} ok(); }))""")
+        guest.wait_for_function("window.__sent.length >= 12", timeout=5000)
+        guest.evaluate("window.__run = false")
+        sent = guest.evaluate("window.__sent")
+        sp = [(s2 - s1) / (t2 - t1) for (t1, s1), (t2, s2) in zip(sent, sent[1:]) if s2 > s1]
+        assert all(t2 > t1 for (t1, _), (t2, _) in zip(sent, sent[1:])), sent
+        assert sp and all(9 < v < 15 for v in sp), (sp, sent)
+    finally:
+        close(host)
