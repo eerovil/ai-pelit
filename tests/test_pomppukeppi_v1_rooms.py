@@ -266,3 +266,61 @@ def test_the_computer_takes_an_away_phone_and_gives_it_back(hares):
     assert guest.evaluate("result.helped")
     assert "Tietokone" in guest.locator("#endNote").inner_text()
     assert host.errors == guest.errors == []
+
+
+def test_the_other_hares_glide_on_a_guest(hares):
+    # lib/sulava-1 (#480): the host's hare, seen on the guest, moves in small steps every frame.
+    host, guest = room(hares)
+    start([host, guest])
+    still(host)
+    guest.wait_for_function("net.myOwn >= 0 && world.ph === 'play'")
+    hid = json.dumps(host.evaluate("AiPelitRooms.me"))
+    guest.evaluate(f"""() => {{
+      window.gx = []; const h = {HARE.format(hid)};
+      (function rec() {{ const p = harePos(h); gx.push([p.x, p.y, p.z]); if (gx.length < 120) requestAnimationFrame(rec); }})();
+    }}""")
+    host.evaluate(TOUCH, ["pointerdown", 7, 150, 500])
+    host.evaluate(TOUCH, ["pointermove", 7, 150, 560])
+    guest.wait_for_function("gx.length >= 120", timeout=8000)
+    host.evaluate(TOUCH, ["pointerup", 7, 150, 560])
+    gx = guest.evaluate("gx")
+    assert guest.evaluate(f"!!{HARE.format(hid)}.draw")
+    assert gx[-1][1] - gx[0][1] >= 2, "the host's hare did not come down the board"
+    steps = [abs(b[1] - a[1]) for a, b in zip(gx, gx[1:])]
+    assert max(steps) < 0.3, max(steps)
+    # Not stood still at each landing until the next state: few frames in a row without moving.
+    moved = [k for k, s in enumerate(steps) if s > 1e-4]
+    run = longest = 0
+    for s in steps[moved[0]:moved[-1]]:
+        run = run + 1 if s < 1e-4 else 0
+        longest = max(longest, run)
+    assert longest <= 4, longest
+    assert host.errors == guest.errors == []
+
+
+def test_a_late_flick_on_a_slow_link_still_turns_the_guest_without_a_snap(hares):
+    # The guest's hare runs behind the host's: a flick let go late in hop n reaches the host after
+    # that landing, and is used at the next one; the guest only renumbers its hops.
+    host, guest = room(hares)
+    start([host, guest])
+    still(host)
+    guest.wait_for_function("net.myOwn >= 0 && world.ph === 'play'")
+    guest.evaluate("""() => {
+      const send = AiPelitRooms.send.bind(AiPelitRooms);
+      AiPelitRooms.send = (m, to) => setTimeout(() => send(m, to), 200);
+      const gs = guestState; guestState = m => setTimeout(() => gs(m), 200);
+      const sn = snapMine; window.snaps = 0; snapMine = a => { snaps++; sn(a); };
+    }""")
+    gid = json.dumps(guest.evaluate("AiPelitRooms.me"))
+    guest.wait_for_timeout(700)
+    x0 = guest.evaluate("me.x")
+    guest.wait_for_function("me.p > 0.6", timeout=2000)
+    guest.evaluate(TOUCH, ["pointerdown", 7, 200, 560])
+    guest.evaluate(TOUCH, ["pointermove", 7, 140, 560])
+    guest.evaluate(TOUCH, ["pointerup", 7, 140, 560])
+    host.wait_for_function(f"{HARE.format(gid)}.x === {x0} - 1 && {HARE.format(gid)}.p > 0.9", timeout=3000)
+    guest.wait_for_timeout(900)
+    assert guest.evaluate("me.x") == x0 - 1
+    assert host.evaluate(f"{HARE.format(gid)}.x") == x0 - 1
+    assert guest.evaluate("snaps") == 0
+    assert host.errors == guest.errors == []

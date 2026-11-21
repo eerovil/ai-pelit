@@ -2,6 +2,8 @@
 import json
 import shutil
 
+import pytest
+
 from conftest import ROOT, turn
 
 URL = "games/pomppukeppi/v1/"
@@ -260,4 +262,64 @@ def test_without_3d_the_board_is_drawn_flat(site, context):
     page.evaluate(TOUCH, ["pointermove", 150, 560])
     page.wait_for_function("me.y >= 2", timeout=3000)
     assert page.evaluate("flat && flat.s > 20")
+    assert page.errors == []
+
+
+# One erä in the page's own world: hare 0 played by `mine`, three computer hares on board 1.
+ERA_WITH = """(mine) => {
+  const w = newWorld(1, [0, 1, 2, 3].map(i => ({ id: 'h' + i, name: 'h' + i, kind: i ? 'cpu' : 'me' })), 7);
+  const br = w.hares.map((h, i) => i ? cpuBrain(BOARDS[0].cpu, 3 + i) : null);
+  const h0 = w.hares[0];
+  let painted = 0, win = null, pts = 0, best = 0;
+  while (w.era === 1 && !w.over) {
+    w.hares.forEach((h, i) => { if (i) cpuThink(w, h, br[i]); });
+    if (mine === 'still') h0.want = -1;
+    else {
+      // Paint, but never hop onto the cash box: a square of someone else's or a blank one first.
+      const ok = [0, 1, 2, 3].filter(d => canHop(w, h0, d) && !(w.cash && w.cash.x === h0.x + DIRS[d][0] && w.cash.y === h0.y + DIRS[d][1]));
+      const fresh = ok.filter(d => tileAt(w, h0.x + DIRS[d][0], h0.y + DIRS[d][1]) !== h0.i);
+      h0.want = fresh.length ? fresh[0] : ok.length ? ok[(h0.hopN * 7) % ok.length] : -1;
+    }
+    if (w.ph === 'play') painted = Math.max(painted, ownCount(w, h0));
+    step(w, 1 / 30);
+    if (w.eraWin && !win) { win = w.eraWin; pts = h0.pts; best = Math.max(...w.hares.slice(1).map(h => h.pts)); }
+  }
+  return { pts, cash: h0.cashN, painted, win, best };
+}"""
+
+
+def test_standing_still_or_only_painting_loses_the_era(site, context):
+    # Spec: neither standing still nor only painting may win.
+    page = open_game(site, context)
+    still = page.evaluate(ERA_WITH, "still")
+    assert still["pts"] == 0 and still["win"] not in (None, "h0") and still["best"] > 0, still
+    paint = page.evaluate(ERA_WITH, "paint")
+    assert paint["painted"] >= 8 and paint["cash"] == 0 and paint["pts"] == 0, paint
+    assert paint["win"] not in (None, "h0"), paint
+    assert page.errors == []
+
+
+def end_screen(page):
+    go(page)
+    page.evaluate(WIN_ERA)
+    page.wait_for_function("world.era === 2 && world.ph === 'play'", timeout=8000)
+    page.evaluate(QUIET)
+    page.evaluate("() => { world.t = ERA_T; me.pts = 31; step(world, 0.01); }")
+    page.wait_for_function("mode === 'end'", timeout=6000)
+
+
+def fits(page, sels, w, h):
+    for sel in sels:
+        box = page.locator(sel).bounding_box()
+        assert box and box["x"] >= 0 and box["x"] + box["width"] <= w and box["y"] >= 0 and box["y"] + box["height"] <= h, (sel, box)
+    assert page.evaluate("document.scrollingElement.scrollHeight") <= h
+
+
+@pytest.mark.parametrize("size", [(360, 640), (390, 844), (740, 360)])
+def test_the_menu_and_the_end_screen_fit_the_screen(site, context, size):
+    w, h = size
+    page = open_game(site, context, w, h)
+    fits(page, ("#go", "#friends", "#col", "#boards"), w, h)
+    end_screen(page)
+    fits(page, ("#endTitle", "#endList", "#again", "#toMenu"), w, h)
     assert page.errors == []

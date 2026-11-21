@@ -205,6 +205,7 @@ function endEra(w) {
 }
 // Where a hare is drawn: board x, y, and height over the board (0 on landing).
 function harePos(h) {
+  if (h.draw) return h.draw;   // another phone's hare in a room, gliding (net.js)
   const p = clamp(h.p, 0, 1);
   return { x: h.fx + (h.x - h.fx) * p, y: h.fy + (h.y - h.fy) * p, z: Math.sin(Math.PI * p) * (h.hopT < HOP_T ? 0.6 : 0.85), p };
 }

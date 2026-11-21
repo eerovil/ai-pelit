@@ -25,9 +25,16 @@
 // The list keeps at most 40 hops; a match more than that behind is no match.
 //
 // A flick let go before landing is sent with the hop number it is for, so the host uses it at
-// that landing even when the "let go" message arrives first. A room match saves nothing lasting.
+// that landing even when the "let go" message arrives first, or at the next one when the flick
+// itself arrives after that landing (the guest's hare runs a little behind the host's); either
+// way only once. A room match saves nothing lasting.
+//
+// The other hares glide (lib/sulava-1, #480): each is drawn a moment back, between two of the
+// host's states, so none stands frozen at a landing until the next state arrives.
 const RM = window.AiPelitRooms;
-let lastEnd = null, hostSeq = 0;   // `net` is declared in ui.js: its loop may run before this file
+let lastEnd = null, hostSeq = 0;
+const SU = window.AiPelitSulava;
+const suNow = () => SU ? SU.now() : performance.now() / 1000;   // `net` is declared in ui.js: its loop may run before this file
 
 const r2 = n => Math.round(n * 100) / 100;
 function pack(h, rec) {
@@ -43,7 +50,7 @@ function unpackHop(h, a) { h.x = a[5]; h.y = a[6]; h.fx = a[7]; h.fy = a[8]; h.p
 function hostState() {
   const w = world;
   return {
-    t: 's', round: net.round, seq: ++hostSeq, b: w.board, ph: w.ph, cd: r2(w.cd), era: w.era, tt: r2(w.t), pause: r2(w.pause),
+    t: 's', round: net.round, seq: ++hostSeq, st: r2(suNow() * 10) / 10, b: w.board, ph: w.ph, cd: r2(w.cd), era: w.era, tt: r2(w.t), pause: r2(w.pause),
     win: w.winner, ew: w.eraWin,
     cash: w.cash ? [w.cash.x, w.cash.y] : null,
     q: w.qbox ? [w.qbox.x, w.qbox.y, r2(w.qbox.life)] : null,
@@ -54,7 +61,7 @@ function hostState() {
 
 // ---- The start ----
 function netStart(s) {
-  net = { round: s.round, lastSeq: -1, recs: [], res: null, sendT: 0, myOwn: -1, hist: [], sentD: -2, sentF: -2, sentT: 0 };
+  net = { round: s.round, lastSeq: -1, recs: [], res: null, sendT: 0, myOwn: -1, hist: [], tracks: [], sentD: -2, sentF: -2, sentT: 0 };
   hideAll();
   world = null; me = null; brains = []; result = null; stick = null; flick = -1; seen = null; pops = [];
   if (s.host && !s.over) {
@@ -94,7 +101,7 @@ function guestState(m) {
     world = newWorld(m.b, m.hk.map(a => ({ id: a[0], name: a[1], col: a[2], kind: a[3] ? 'cpu' : 'net' })), 1);
     me = world.hares.find(h => h.id === RM.me) || null;
     if (me) me.kind = 'me';
-    net.myOwn = -1; net.hist = [];
+    net.myOwn = -1; net.hist = []; net.tracks = [];
   }
   const w = world;
   const wasEra = w.era;
@@ -108,7 +115,7 @@ function guestState(m) {
     if (!h) return;
     unpackRest(h, a);
     h.kind = h === me ? 'me' : a[3] ? 'cpu' : 'net';
-    if (h !== me) { unpackHop(h, a); return; }
+    if (h !== me) { unpackHop(h, a); glide(i, h, m.st, w.era !== wasEra || w.ph !== 'play'); return; }
     // My own hare. Outside play, on a new erä, or when the host hands it to me (start, my hello,
     // back), the host's word on where it is.
     if (a[4] !== net.myOwn || w.ph !== 'play' || w.era !== wasEra || h.stun > 0) { net.myOwn = a[4]; snapMine(a); return; }
@@ -116,12 +123,19 @@ function guestState(m) {
     if (k < 0) k = lateStart(a);
     if (k < 0) { snapMine(a); return; }
     net.hist.splice(0, k);
-    // The squares I have landed on since the host's hop, painted mine already on my phone.
-    for (let j = 1; j < net.hist.length; j++) { const e = net.hist[j]; if (passable(w, e.fx, e.fy)) w.tiles[e.fy * w.n + e.fx] = me.i; }
   });
   if (!me) return;   // not in this match (joined late): the room says so
   if (mode === 'netwait') { mode = 'netplay'; stick = null; }
   wake();
+}
+// Another hare's spot on the host's clock, for its track: where it is, how high, and how near a
+// landing (0 on the ground, 0.5 at the top), which the drawing reads as `p`.
+function glide(i, h, st, jump) {
+  if (!SU) return;
+  const tr = net.tracks[i] || (net.tracks[i] = SU.track({ keys: ['x', 'y', 'z', 'p'], jump: 1.5 }));
+  const p = clamp(h.p, 0, 1);
+  const v = { x: h.fx + (h.x - h.fx) * p, y: h.fy + (h.y - h.fy) * p, z: Math.sin(Math.PI * p) * (h.hopT < HOP_T ? 0.6 : 0.85), p: Math.min(p, 1 - p) };
+  if (jump || !tr.size()) tr.snap(st, v); else tr.push(st, v);
 }
 // The host bounced my hare in place at hop n where my phone made the first hop of a new
 // direction: my direction reached the host after that landing (a round trip longer than a hop).
@@ -137,15 +151,17 @@ function lateStart(a) {
   net.hist.splice(j, 0, { n: a[16], fx: e.fx, fy: e.fy, x: e.fx, y: e.fy, d: -1, at: e.at });
   return j;
 }
-// A guest's own hop, started the moment its hare lands on its phone.
+// A guest's own hop, started the moment its hare lands on its phone. The square it landed on is
+// painted only when the host's state says so (design, #482): the tiles are the host's alone.
 function guestHop(w, h) {
-  if (w.ph === 'play' && passable(w, h.x, h.y)) w.tiles[h.y * w.n + h.x] = h.i;
   h.fx = h.x; h.fy = h.y; h.p = 0; h.hopN++;
   h.hopT = h.fast > 0 ? FAST_HOP_T : HOP_T;
   let d = -1;
   if (w.ph === 'play' && h.stun <= 0 && h.want >= 0 && canHop(w, h, h.want)) { d = h.want; h.x += DIRS[d][0]; h.y += DIRS[d][1]; }
   const prev = net.hist[net.hist.length - 1];
-  net.hist.push({ n: h.hopN, fx: h.fx, fy: h.fy, x: h.x, y: h.y, d, first: d >= 0 && (!prev || prev.d !== d), at: performance.now() });
+  // A hop from a flick counts as a new direction too: the host may hear it one landing late.
+  const flicked = d >= 0 && flick >= 0 && stickDir() < 0;
+  net.hist.push({ n: h.hopN, fx: h.fx, fy: h.fy, x: h.x, y: h.y, d, first: d >= 0 && (!prev || prev.d !== d || flicked), at: performance.now() });
   if (net.hist.length > 40) net.hist.shift();
 }
 
@@ -163,12 +179,15 @@ function netTick(dt) {
       else if (rec.kind === 'net') {
         // A phone silent for a second: its stick counts as let go until it talks again.
         if (now - rec.inT > 1000) rec.d = -1;
-        h.want = rec.d >= 0 ? rec.d : rec.fn === h.hopN ? rec.fd : -1;
+        // A flick for the landing ending hop n, or the next one when it came after that landing.
+        h.want = rec.d >= 0 ? rec.d : rec.fn >= 0 && (rec.fn === h.hopN || rec.fn === h.hopN - 1) ? rec.fd : -1;
       }
     });
-    const hop = me ? me.hopN : 0;
+    const hop = me ? me.hopN : 0, hops = w.hares.map(h => h.hopN);
     step(w, dt);
     if (me && me.hopN !== hop) flick = -1;
+    // A landing at or after a flick's hop has used it.
+    w.hares.forEach((h, i) => { const rec = net.recs[i]; if (rec.fn >= 0 && h.hopN !== hops[i] && rec.fn <= hops[i]) rec.fn = -1; });
     if (w.over) return hostEnd();
     net.sendT -= dt;
     if (net.sendT <= 0) { net.sendT = 0.1; RM.send(hostState()); }
@@ -178,7 +197,12 @@ function netTick(dt) {
   // hare hops with my finger.
   if (w.ph === 'count') w.cd = Math.max(0, w.cd - dt);
   if (w.ph === 'play') w.t = Math.min(ERA_T, w.t + dt);
-  for (const h of w.hares) if (h !== me) h.p = Math.min(1, h.p + dt / h.hopT);
+  w.hares.forEach((h, i) => {
+    if (h === me) return;
+    const tr = net.tracks[i];
+    if (tr) h.draw = tr.at();
+    else h.p = Math.min(1, h.p + dt / h.hopT);
+  });
   if (me && net.myOwn >= 0) {
     me.want = myWant();
     me.p += dt / me.hopT;
