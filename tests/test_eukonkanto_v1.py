@@ -1,0 +1,261 @@
+"""Eukonkanto v1 (#501): carry the wife over two logs and through the water pit, and do not drop her.
+
+What the design review asked the code to answer (on the issue): the +15 s per drop is added once,
+on the phone that runs the couple; a race with friends ends when everyone is in or 30 s after the
+first; a couple still out then gets an estimated time, marked; and a phone saves and sends only its
+own row of the delivered results, and only when that row is not an estimate."""
+import json
+import shutil
+
+import pytest
+
+from conftest import ROOT
+from test_rooms_lib import Relay
+from yleisurheilu_asut import DECEMBER
+
+URL = "games/eukonkanto/v1/"
+SHARED = "ai-pelit:_asut:yleisurheilu"
+KEY = "ai-pelit:eukonkanto:"
+# Records what the game sends to the high-score list instead of sending it.
+SPY = "() => { window.__sent = []; AiPelitScores.submit = s => { window.__sent.push(s); }; }"
+# Plays this phone's own couple for a few seconds of race clock, the way a quick player would:
+# feet in turn, a grab when the slip meter is past half, a jump just before each log.
+PLAY = """(secs) => {
+  let n = 0, foot = 1;
+  for (let i = 0; i < secs * 60 && race && race.phase !== 'done'; i++) {
+    if (race.phase === 'run' && me.fin === null) {
+      if (i % 7 === 0) { press(foot); foot = 3 - foot; }
+      if (me.s > 0.5) press(4);
+      const lx = LOGS.find(l => l > me.x);
+      if (lx !== undefined && lx - me.x < 0.25 + me.v * 0.2) press(3);
+    }
+    tick(1 / 60); n++;
+  }
+  return n;
+}"""
+
+
+def build(site):
+    if not (site.games / "eukonkanto").exists():
+        shutil.copytree(ROOT / "games" / "eukonkanto", site.games / "eukonkanto")
+        site.build()
+
+
+def open_game(site, browser, store=None, width=360, height=740):
+    build(site)
+    ctx = browser.new_context(viewport={"width": width, "height": height}, is_mobile=True, has_touch=True)
+    for k, v in (store or {}).items():
+        ctx.add_init_script(f"localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))})")
+    ctx.add_init_script(DECEMBER)
+    page = ctx.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.goto(site.url + URL)
+    page.wait_for_function("typeof race !== 'undefined' && window.AiPelitScores")
+    page.evaluate(SPY)
+    return page
+
+
+def to_gun(page):
+    """Starts a race alone and runs its clock to the gun, without waiting in real time."""
+    page.click("#go")
+    page.evaluate("() => { race.runners.forEach(r => { r.ai.jumpy = null; }); race.gunAt = 0.05; tick(0.06); }")
+    assert page.evaluate("race.phase") == "run"
+
+
+def saved(page, name):
+    v = page.evaluate(f"localStorage.getItem('{KEY}{name}')")
+    return None if v is None else json.loads(v)
+
+
+def test_a_race_alone_plays_to_the_end_and_saves_its_own_time(site, browser):
+    page = open_game(site, browser)
+    to_gun(page)
+    page.evaluate(PLAY, 120)
+    assert page.evaluate("race.phase") == "done"
+    fin, row = page.evaluate("[me.fin, race.row]")
+    assert 45 < fin < 120
+    assert row["id"] == "me" and not row["est"] and row["fin"] == fin
+    assert saved(page, "ennatys") == fin
+    assert saved(page, "juoksut") == 1
+    assert page.evaluate("window.__sent") == [fin]
+    assert page.evaluate("me.down") == 0, "the jumps cleared both logs"
+    page.evaluate("draw()")
+    page.evaluate("race.doneT = 9; tick(0.01)")
+    assert page.is_visible("#menu")
+    assert "Ennätys" in page.inner_text("#stats")
+    assert page.errors == []
+    page.context.close()
+
+
+def test_a_drop_adds_fifteen_seconds_once(site, browser):
+    page = open_game(site, browser)
+    to_gun(page)
+    page.evaluate("() => { me.x = 230; me.v = 6; me.s = 0.999; tick(1 / 60); }")
+    assert page.evaluate("[me.drops, me.downT > 0, me.v]") == [1, True, 0]
+    # Picking her up takes a while and she cannot run meanwhile.
+    page.evaluate("() => { press(1); press(2); }")
+    assert page.evaluate("me.v") == 0
+    page.evaluate("() => { for (let i = 0; i < 200 && me.downT > 0; i++) tick(1 / 60); }")
+    page.evaluate("() => { me.x = TRACK - 0.01; me.v = 5; me.s = 0; tick(1 / 60); }")
+    fin, clock = page.evaluate("[me.fin, me.finClock]")
+    assert fin == pytest.approx(clock + 15, abs=0.02)
+    # The results, the record and the list take fin as it is: nothing is added a second time.
+    page.evaluate("() => { race.runners.forEach(r => { if (r !== me) r.card = 2; }); tick(1 / 60); }")
+    assert page.evaluate("race.row.fin") == fin
+    assert saved(page, "ennatys") == fin
+    assert page.evaluate("window.__sent") == [fin]
+    page.evaluate("race.doneT = 9; tick(0.01)")
+    assert "1 pudotus" in page.inner_text("#result")
+    assert page.errors == []
+    page.context.close()
+
+
+def test_a_couple_still_out_gets_an_estimate_and_it_is_not_saved(site, browser):
+    page = open_game(site, browser)
+    to_gun(page)
+    page.evaluate("() => { me.x = 200; me.v = 5; me.drops = 1; }")
+    rows = page.evaluate("standings(race.clock)")
+    mine = next(r for r in rows if r["id"] == "me")
+    assert mine["est"] and mine["fin"] > page.evaluate("race.clock") + 15
+    page.evaluate("finish(standings(race.clock))")
+    assert saved(page, "ennatys") is None and saved(page, "juoksut") is None
+    assert page.evaluate("window.__sent") == []
+    page.evaluate("race.doneT = 9; tick(0.01)")
+    assert "(arvio)" in page.inner_text("#result")
+    page.context.close()
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+def test_each_pad_is_where_it_is_drawn(site, browser, size):
+    page = open_game(site, browser, width=size[0], height=size[1])
+    to_gun(page)
+    got = page.evaluate("pads().map(p => [p.k, padAt(p.x + p.w / 2, p.y + p.h / 2)])")
+    assert sorted(k for k, _ in got) == [1, 2, 3, 4]
+    assert all(k == hit for k, hit in got)
+    # A tap on the scene does nothing.
+    assert page.evaluate("padAt(W / 2, trackTop + 20)") == 0
+    # Upright the feet are at the bottom, jump on the left and hold on the right above them.
+    p = {k: (x, y) for k, x, y in page.evaluate("pads().map(p => [p.k, p.x, p.y])")}
+    assert p[1][0] < p[2][0] and p[3][0] < p[4][0]
+    assert p[3][1] < p[1][1] and p[4][1] < p[2][1]
+    page.mouse.click(*page.evaluate("(() => { const q = pads().find(p => p.k === 4); return [q.x + q.w / 2, q.y + q.h / 2]; })()"))
+    assert page.evaluate("me.holdT") > 0
+    assert page.errors == []
+    page.context.close()
+
+
+def test_an_outfit_picked_in_another_event_is_worn_here(site, browser):
+    page = open_game(site, browser, {SHARED: "noita"})
+    assert page.inner_text("#asu") == "👕 Asu: Noita"
+    page.click("#go")
+    assert page.evaluate("me.asu") == "noita"
+    page.context.close()
+
+
+# #337: no crowd noise; #355: on aanet-5, the sounds Eero found too loud softer.
+from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  # noqa: F401,E402
+
+
+def test_it_opens_and_plays_with_the_quiet_library(real, context):
+    opens_and_plays_with_the_quiet_library(real, context, "games/eukonkanto/v1")
+
+
+# ---------- With friends ----------
+
+@pytest.fixture
+def couples(site, browser):
+    build(site)
+    relay = Relay()
+    contexts = []
+
+    def phone(name):
+        ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True)
+        contexts.append(ctx)
+        ctx.add_init_script("localStorage.setItem('ai-pelit:_pelaaja:nimi'," + json.dumps(json.dumps(name)) + ")")
+        p = ctx.new_page()
+        p.errors = []
+        p.on("pageerror", lambda e: p.errors.append(str(e)))
+        relay.attach(p)
+        p.goto(site.url + URL)
+        p.wait_for_function("typeof race !== 'undefined' && window.AiPelitScores")
+        p.evaluate(SPY)
+        return p
+
+    yield phone
+    for c in contexts:
+        c.close()
+
+
+def race_with(phone, n=2):
+    host = phone("Testi1")
+    host.click("#multi")
+    host.click("#aipr-create")
+    host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
+    code = host.evaluate("AiPelitRooms.code")
+    pages = [host]
+    for i in range(1, n):
+        p = phone("Testi" + str(i + 1))
+        p.click("#multi")
+        p.fill("#aipr-codeIn", code)
+        p.click("#aipr-joinBtn")
+        p.wait_for_function("AiPelitRooms.inRoom")
+        pages.append(p)
+    host.wait_for_function(f"AiPelitRooms.members.filter(p => p.on).length === {n}")
+    host.click("#aipr-start")
+    for p in pages:
+        p.wait_for_function("race && race.mode === 'net' && race.phase === 'run'", timeout=12000)
+    return pages
+
+
+def test_two_phones_race_and_each_keeps_its_own_time(couples):
+    host, guest = race_with(couples)
+    assert host.evaluate("race.runners.length") == 2
+    # The guest drops her once and comes in; the host comes in clean.
+    guest.evaluate("() => { me.drops = 1; me.x = TRACK - 0.02; me.v = 6; }")
+    guest.wait_for_function("me.fin !== null")
+    gfin = guest.evaluate("me.fin")
+    host.wait_for_function(f"race.runners.find(r => r.id === {json.dumps(guest.evaluate('R.me'))}).fin === {gfin}")
+    host.evaluate("() => { me.x = TRACK - 0.02; me.v = 6; }")
+    for p in (host, guest):
+        p.wait_for_function("race && race.phase === 'done'", timeout=8000)
+    hres, gres = host.evaluate("race.results"), guest.evaluate("race.results")
+    assert hres == gres
+    grow = next(r for r in gres if r["id"] == guest.evaluate("R.me"))
+    assert grow["fin"] == gfin and grow["drops"] == 1 and not grow["est"]
+    hfin = host.evaluate("me.fin")
+    assert saved(host, "ennatys") == hfin and saved(guest, "ennatys") == gfin
+    assert host.evaluate("window.__sent") == [hfin] and guest.evaluate("window.__sent") == [gfin]
+    # Back in the room.
+    for p in (host, guest):
+        p.wait_for_function("race === null", timeout=8000)
+    assert host.errors == [] and guest.errors == []
+
+
+def test_a_guest_whose_finish_the_host_never_heard_saves_nothing(couples):
+    host, guest = race_with(couples)
+    # The guest crosses the line on its own phone, but nothing it sends reaches the host any more.
+    guest.evaluate("() => { R.send = () => {}; me.x = TRACK - 0.02; me.v = 6; }")
+    guest.wait_for_function("me.fin !== null")
+    # The host comes in and the race ends (as it would 30 s after it): the guest's row is an estimate.
+    host.evaluate("() => { me.x = TRACK - 0.02; me.v = 6; }")
+    host.wait_for_function("me.fin !== null")
+    host.evaluate("() => { race.firstFin = race.clock - LATE - 1; }")
+    for p in (host, guest):
+        p.wait_for_function("race && race.phase === 'done'", timeout=8000)
+    row = guest.evaluate("race.row")
+    assert row["est"] and row["id"] == guest.evaluate("R.me")
+    assert saved(guest, "ennatys") is None and saved(guest, "juoksut") is None
+    assert guest.evaluate("window.__sent") == []
+    assert saved(host, "ennatys") == host.evaluate("me.fin")
+    guest.evaluate("race.doneT = 9; tick(0.01)")
+    assert host.errors == [] and guest.errors == []
+
+
+def test_the_host_ending_the_round_stops_the_race_everywhere(couples):
+    host, guest = race_with(couples)
+    host.evaluate("AiPelitRooms.stopRound()")
+    for p in (host, guest):
+        p.wait_for_function("race === null", timeout=8000)
+    assert saved(host, "juoksut") is None and saved(guest, "juoksut") is None
+    assert host.errors == [] and guest.errors == []
