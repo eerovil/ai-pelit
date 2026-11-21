@@ -170,8 +170,12 @@ def test_a_friends_flip_turns_smoothly_between_messages(site, browser):
     fl, heard = host.evaluate("[window.__fl, [...window.__heard]]")
     turning = [f for f in fl if 0.2 < f < 6.1]
     between = [f for f in turning if f not in heard]
-    assert len(set(turning)) > 12, fl
-    assert len(between) > 0.6 * len(turning), (fl, heard)
+    # Measured against the frames the host drew while it turned, not a fixed count, which follows the frame rate
+    # (#480: 34 turning frames at 59 fps, 13 at 21 fps on a CPU-throttled host; a loaded run showed 12 angles and failed a
+    # fixed "more than 12").
+    assert len(turning) > 4, fl  # enough frames to judge
+    assert len(set(turning)) > 0.8 * len(turning), fl  # a new angle nearly every frame, not one per message
+    assert len(between) > 0.6 * len(turning), (fl, heard)  # and mostly angles no message brought
     # Turning one way only, never back (an angle blended the short way round).
     assert all(b >= a - 0.05 for a, b in zip(turning, turning[1:])), turning
     assert not host.errors + guest.errors
