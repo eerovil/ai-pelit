@@ -91,6 +91,8 @@ def run_and_watch(host, run, watch, others):
     me = index(run)
     run.evaluate(JITTER)
     watch.evaluate(SAMPLE, me)
+    if run is not host and watch is not host:
+        host.evaluate(SAMPLE, me)  # the host's drawn spots, for its check below
     if run is not host:
         # Between frames the host keeps the friend's newest spot (ahead of where it last drew them, as they run up
         # the course), and each of their spots is drawn a moment back on their clock.
