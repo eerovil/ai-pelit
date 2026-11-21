@@ -26,7 +26,10 @@ const SUDDEN_AT = 60, MELT = 1 / 20;
 // A seal that slides over the edge slower than TEETER_V wobbles there for TEETER_T s (owner's ask on
 // #478): TEETER_N presses of Töni in that time haul it back towards the middle; a seal that touches
 // it, the time running out, or the ice under it going sends it in. A stunned seal cannot press.
-const TEETER_V = 6.5, TEETER_T = 1.6, TEETER_N = 5, TEETER_BACK = 4;
+const TEETER_V = 9, TEETER_T = 1.6, TEETER_N = 5, TEETER_BACK = 4;
+// Only a real hit tips a wobbling seal in (coming at it at TIP_V or more), and not in its first
+// TEETER_SAFE s: the seal that pushed it over is often still touching it (#478, it went straight in).
+const TIP_V = 3, TEETER_SAFE = 0.5;
 const RING_FIRST = 6, RING_EVERY = 10, RING_COME = 1, RING_OPEN = 4, RING_R = 1.3;
 // Lohkare's crush as drawn: the block drops for CRUSH_DROP s, then presses the seal through by CRUSH_T.
 const CRUSH_DROP = 0.22, CRUSH_T = 1.3;
@@ -282,16 +285,19 @@ function bounce(w, a, b, ra, rb, ma, mb, seals) {
   if (seals) { if (vn > 2) { a.hit++; b.hit++; } }
   else if (vn > 1) b.hit++;
 }
-// A seal touching a wobbling one: coming at it at all, it sends it in (a fuse still passes on the
-// touch); standing by, it is only moved off. Two wobbling side by side leave each other be.
+// A seal touching a wobbling one: coming at it hard (TIP_V) once the first TEETER_SAFE s are over, it
+// sends it in (a fuse still passes on the touch); slower, or standing by, it is only moved off. Two wobbling side by side leave each other be.
 function nudge(a, b) {
   if (a.teeter && b.teeter) return;
   const t = a.teeter ? a : b, o = t === a ? b : a;
   const dx = t.x - o.x, dy = t.y - o.y, d = Math.hypot(dx, dy), min = radiusOf(t) + radiusOf(o);
   if (d >= min || d === 0) return;
   passFuse(o, t) || passFuse(t, o);
-  if ((o.vx * dx + o.vy * dy) / d > 0.5) { t.teeter = -1; o.hit++; t.hit++; return; }
+  if (t.teeter < TEETER_T - TEETER_SAFE && (o.vx * dx + o.vy * dy) / d > TIP_V) { t.teeter = -1; o.hit++; t.hit++; return; }
   o.x -= dx / d * (min - d); o.y -= dy / d * (min - d);
+  // Leaning on it stops it there: only a new run-up or a lunge tips it in.
+  const vn = (o.vx * dx + o.vy * dy) / d;
+  if (vn > 0) { o.vx -= dx / d * vn; o.vy -= dy / d * vn; }
 }
 // A fuse (Ukkonen, Lohkare) goes to whichever seal its holder touches, whoever pushed whom (#478).
 // Only straight back to the seal that just gave it waits until the two have parted, so one touch

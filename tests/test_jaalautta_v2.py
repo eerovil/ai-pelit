@@ -115,12 +115,19 @@ def test_a_wobbling_seal_goes_in_on_time_on_a_touch_or_stunned(site, context):
       res.before = !a.out;
       for (let i = 0; i < 120 * 0.2; i++) tick(w, STEP);
       res.after = !!a.out;
-      // Another seal walking into it tips it in at once, presses or not.
-      w = eval(T)(); a = w.seals[0]; const b = w.seals[1];
-      Object.assign(b, { x: a.x - 2.2, y: 0, vx: 4, vy: 0 });
-      a.want = a.lunges + 2;
-      for (let i = 0; i < 30 && !a.out; i++) tick(w, STEP);
-      res.touched = !!a.out && !b.out;
+      // Another seal coming at it hard tips it in, presses or not, but not in its first TEETER_SAFE s
+      // (the one that pushed it over is often still touching it), and leaning on it never does.
+      const hitAt = (age, v) => {
+        w = eval(T)(); a = w.seals[0]; const b = w.seals[1]; a.teeter = TEETER_T - age;
+        Object.assign(b, { x: a.x - 1.75, y: 0, vx: v, vy: 0 }); a.want = a.lunges + 2;
+        for (let i = 0; i < 6 && !a.out; i++) { b.vx = Math.max(b.vx, v * 0.99); tick(w, STEP); }
+        return !!a.out && !b.out;
+      };
+      res.touched = [hitAt(0.7, 5), hitAt(0.1, 5), hitAt(0.7, 1.5)];
+      w = eval(T)(); a = w.seals[0]; const lean = w.seals[1];
+      Object.assign(lean, { x: a.x - 1.75, y: 0, vx: 0, vy: 0 });
+      for (let i = 0; i < 120; i++) { lean.ix = 1; lean.iy = 0; tick(w, STEP); }
+      res.leaning = !a.out || a.teeter === 0;
       // A seal standing by is only moved off.
       w = eval(T)(); a = w.seals[0];
       Object.assign(w.seals[1], { x: a.x - 1.7, y: 0, vx: 0, vy: 0 }); tick(w, STEP);
@@ -140,8 +147,8 @@ def test_a_wobbling_seal_goes_in_on_time_on_a_touch_or_stunned(site, context):
       res.melted = !!a.out;
       return res;
     }""", TEETER)
-    assert r == {"before": True, "after": True, "touched": True, "standing": True, "stunned": True,
-                 "hole": True, "melted": True}
+    assert r == {"before": True, "after": True, "touched": [True, False, False], "leaning": True,
+                 "standing": True, "stunned": True, "hole": True, "melted": True}
 
 
 def test_computer_seals_press_their_way_back_the_sharper_the_more_often(site, context):
