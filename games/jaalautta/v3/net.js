@@ -54,7 +54,7 @@ function unpack(sl, a, mine) {
 function hostState() {
   const w = world;
   return {
-    t: 's', round: net.round, seq: ++hostSeq, st: AiPelitSulava.now(), f: w.floe, ph: w.ph, cd: r2(w.cd), era: w.era, tt: r2(w.t), pause: r2(w.pause),
+    t: 's', round: net.round, seq: ++hostSeq, st: netClock(), f: w.floe, ph: w.ph, cd: r2(w.cd), era: w.era, tt: r2(w.t), pause: r2(w.pause),
     win: w.winner, ew: w.eraWin,
     parts: w.parts.map(p => p.r.map(r2)),
     warn: w.warn.map(b => [b.p, b.i, r2(b.t)]),
@@ -120,7 +120,7 @@ function guestState(m) {
       heardSpot(sl, st, newEra || sl.saved > saved);
       // It went in: the splash waits until the track draws the moment of this state (asDrawn()).
       if (!sl.out) sl.fallSt = sl.outLag = null;
-      else if (!wasOut) { sl.fallSt = st === null ? AiPelitSulava.now() : st; sl.outLag = null; }
+      else if (!wasOut) { sl.fallSt = st === null ? netClock() : st; sl.outLag = null; }
       return;
     }
     // My own seal: the host's word on everything but where it is, which is eased to the host's.
@@ -161,7 +161,18 @@ const SEAL_JUMP = 8;
 function heardSpot(sl, st, jump) {
   const spot = { x: sl.x, y: sl.y, face: sl.face };
   if (!sl.tr) sl.tr = AiPelitSulava.track({ keys: ['x', 'y', 'face'], angles: ['face'], jump: SEAL_JUMP });
-  if (jump) sl.tr.snap(st, spot); else sl.tr.push(st, spot);
+  if (jump) sl.tr.snap(st, spot, netClock()); else sl.tr.push(st, spot, netClock());
+}
+// The tracks' clock, on the host (its stamps) and on a guest (arrivals, the drawn moment): it stands
+// still while the room is paused (RM.paused), as the host's world does and sends nothing, so a
+// moving seal is not guessed on and pulled back when the round goes on. netTick() reads it every
+// frame, so a pause is seen as it starts and its length is left out once it ends.
+const pz = { off: 0, at: null };
+function netClock() {
+  const t = AiPelitSulava.now();
+  if (net && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; }
+  return t - pz.off;
 }
 // Every other seal at the spot its track draws, for the picture only; putBack() restores the newest.
 // A seal in the water is drawn at outX, outY and is left alone, except just after it went in: the
@@ -175,7 +186,7 @@ function asDrawn() {
     if (sl === me || !sl.tr || !sl.tr.size()) continue;
     if (sl.out) {
       if (typeof sl.fallSt === 'number') {
-        const o = sl.tr.at();
+        const o = sl.tr.at(netClock());
         if (o && sl.tr.time < sl.fallSt) {
           kept.push([sl, sl.x, sl.y, sl.face, sl.out]);
           sl.x = o.x; sl.y = o.y; sl.face = o.face; sl.out = 0;
@@ -186,7 +197,7 @@ function asDrawn() {
       if (sl.outLag) { kept.push([sl, sl.x, sl.y, sl.face, sl.out]); sl.out = Math.max(1e-6, sl.out - sl.outLag); }
       continue;
     }
-    const o = sl.tr.at();
+    const o = sl.tr.at(netClock());
     if (!o) continue;
     kept.push([sl, sl.x, sl.y, sl.face, sl.out]);
     sl.x = o.x; sl.y = o.y; sl.face = o.face;
@@ -204,6 +215,7 @@ function netLunge() {
 // ---- Each frame, in a room ----
 function netTick(dt) {
   if (!net || net.res || !world) return;
+  netClock();
   if (RM.paused) return;   // a phone in the match is away: everyone waits, the host's world too
   const w = world;
   if (RM.isHost) {

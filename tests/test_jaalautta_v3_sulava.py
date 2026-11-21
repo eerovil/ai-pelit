@@ -218,3 +218,39 @@ def test_a_friend_s_seal_splashes_where_it_is_drawn_going_in(pair):
     assert fr[first][2] < 0.1, fr[first:first + 3]  # the splash starts from its beginning
     assert all(f[2] > 0 for f in fr[first:]), fr[first:]  # and then stays in the water
 
+
+# Fakes the room's pause (a phone away), which rooms.js sets: `window.__pz` on a phone is its AiPelitRooms.paused.
+PAUSE = """() => { window.__pz = false;
+  Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
+
+
+def test_a_paused_round_holds_the_friend_s_seal_where_it_is_drawn(pair):
+    """While the room is paused the host's world stands and sends nothing; the guest's tracks wait too, so the
+    seal sliding round is not guessed on beyond its last state and pulled back when the round goes on: it stands
+    where it was drawn, and goes on from there at its speed."""
+    host, guest, i = pair
+    for p in (host, guest):
+        p.evaluate(PAUSE)
+    host.evaluate(JITTER)
+    guest.evaluate(SAMPLE, i)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(1500)
+    host.evaluate("window.__pz = true")
+    guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
+    guest.wait_for_timeout(1500)
+    guest.evaluate("window.__goAt = performance.now() / 1000")
+    host.evaluate("window.__t0 = null; window.__pz = false")  # it slides on from where it stood
+    guest.evaluate("window.__pz = false")
+    guest.wait_for_timeout(1500)
+    guest.evaluate("window.__stop = true")
+    host.evaluate("window.__run = false")
+    xs, pz_at, go_at = guest.evaluate("[window.__xs, window.__pzAt, window.__goAt]")
+    held = [(x, y) for t, x, y in xs if pz_at + 0.02 <= t <= go_at]
+    assert len(held) > 30, len(held)
+    spread = max(math.hypot(x - held[0][0], y - held[0][1]) for x, y in held)
+    assert spread < 0.01, spread  # it stood still all through the pause
+    after = [f for f in xs if f[0] > pz_at]
+    steps = [math.hypot(c - a, d - b) for (_, a, b), (_, c, d) in zip(after, after[1:])]
+    assert max(steps) < 0.5, (max(steps), steps)  # and went on with no jump, back or forward
+    moved = [f for f in xs if f[0] > go_at + 0.6]
+    assert moved and math.hypot(moved[-1][1] - held[-1][0], moved[-1][2] - held[-1][1]) > 1, moved[-1:]
