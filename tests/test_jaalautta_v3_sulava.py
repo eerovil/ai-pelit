@@ -176,3 +176,45 @@ def test_a_seal_put_somewhere_new_is_drawn_there_at_once(pair, how):
         assert era == 2, sw
         assert abs(ax) < 0.01 and abs(ay + 5.5) < 0.01, sw  # its ring spot
     assert abs(x - ax) < 0.01 and abs(y - ay) < 0.01, sw
+
+
+# On the host: its seal slides along y = 0 from x = -6 at 8 units/s by the real clock while `window.__dash` is
+# on, and goes in at x = 5 (fall(), which keeps outX, outY where it went in).
+DASH = """() => { const mv = window.moveSeal;
+  window.moveSeal = (w, sl, h) => {
+    if (sl !== me || !window.__dash) return mv(w, sl, h);
+    if (sl.out) return;
+    const t = performance.now() / 1000;
+    if (window.__d0 == null) window.__d0 = t;
+    Object.assign(sl, { x: -6 + 8 * (t - window.__d0), y: 0, vx: 8, vy: 0, face: 0 });
+    if (sl.x > 5) fall(w, sl);
+  }; }"""
+# On a guest: each drawn frame of seal `i` (where, and its `out` as drawn: 0 dry), and the spot the host said it
+# went in at.
+WATCH_FALL = """(i) => { window.__fr = []; window.__in = null; const d = window.draw;
+  AiPelitRooms.on('message', m => { if (m.t !== 's') return; const a = m.sk[i];
+    if (a[14] > 0 && !window.__in) window.__in = [a[15], a[16]]; });
+  window.draw = dt => { const sl = world.seals[i]; window.__fr.push([sl.x, sl.y, sl.out]); d(dt); }; }"""
+
+
+def test_a_friend_s_seal_splashes_where_it_is_drawn_going_in(pair):
+    """The state that says a seal went in is ahead of the moment its track draws, so the guest keeps drawing it
+    dry, gliding on to the edge, until the track reaches that moment, and then splashes it where it went in:
+    the last dry frame is beside the splash, not up to a quarter of a second of its slide (2 units) short."""
+    host, guest, i = pair
+    host.evaluate("() => { me.x = -6; me.y = 0; me.vx = me.vy = 0; }")
+    guest.wait_for_timeout(700)  # a few states heard there, the track settled
+    host.evaluate(JITTER)
+    host.evaluate(DASH)
+    guest.evaluate(WATCH_FALL, i)
+    host.evaluate("window.__dash = true")
+    guest.wait_for_function("window.__in && window.__fr.filter(f => f[2] > 0).length > 5", timeout=8000)
+    fr, (ox, oy) = guest.evaluate("[window.__fr, window.__in]")
+    first = next(n for n, f in enumerate(fr) if f[2] > 0)
+    dry = fr[first - 1]
+    assert abs(ox - 5) < 0.6 and abs(oy) < 0.01, (ox, oy)
+    assert fr[first - 10][0] < dry[0] - 0.3, fr[first - 10:first + 2]  # it was sliding up to the edge
+    assert math.hypot(dry[0] - ox, dry[1] - oy) < 0.6, (dry, ox, oy, fr[first - 5:first + 2])
+    assert fr[first][2] < 0.1, fr[first:first + 3]  # the splash starts from its beginning
+    assert all(f[2] > 0 for f in fr[first:]), fr[first:]  # and then stays in the water
+

@@ -114,7 +114,15 @@ function guestState(m) {
   w.holes = m.holes.map(([x, y, r, warn, open]) => ({ x, y, r, warn, open }));
   m.sk.forEach((a, i) => {
     const sl = w.seals[i];
-    if (sl !== me) { const saved = sl.saved; unpack(sl, a, false); heardSpot(sl, st, newEra || sl.saved > saved); return; }
+    if (sl !== me) {
+      const saved = sl.saved, wasOut = sl.out;
+      unpack(sl, a, false);
+      heardSpot(sl, st, newEra || sl.saved > saved);
+      // It went in: the splash waits until the track draws the moment of this state (asDrawn()).
+      if (!sl.out) sl.fallSt = sl.outLag = null;
+      else if (!wasOut) { sl.fallSt = st === null ? AiPelitSulava.now() : st; sl.outLag = null; }
+      return;
+    }
     // My own seal: the host's word on everything but where it is, which is eased to the host's.
     if (a[4] !== net.myOwn) {
       // The host has handed it to me (start, my hello, back): count on from its numbers.
@@ -156,20 +164,36 @@ function heardSpot(sl, st, jump) {
   if (jump) sl.tr.snap(st, spot); else sl.tr.push(st, spot);
 }
 // Every other seal at the spot its track draws, for the picture only; putBack() restores the newest.
-// A seal in the water is drawn at outX, outY and is left alone.
+// A seal in the water is drawn at outX, outY and is left alone, except just after it went in: the
+// state that says so (stamp `fallSt`) is ahead of the moment the track draws, so until the track
+// reaches it the seal is still drawn dry and gliding to the edge, and only then splashes, at outX,
+// outY, where it went in. Its splash then starts from the beginning (`out` counted from there).
 function asDrawn() {
   if (!net || RM.isHost || !world) return [];
   const kept = [];
   for (const sl of world.seals) {
-    if (sl === me || sl.out || !sl.tr || !sl.tr.size()) continue;
+    if (sl === me || !sl.tr || !sl.tr.size()) continue;
+    if (sl.out) {
+      if (typeof sl.fallSt === 'number') {
+        const o = sl.tr.at();
+        if (o && sl.tr.time < sl.fallSt) {
+          kept.push([sl, sl.x, sl.y, sl.face, sl.out]);
+          sl.x = o.x; sl.y = o.y; sl.face = o.face; sl.out = 0;
+          continue;
+        }
+        sl.fallSt = null; sl.outLag = sl.out;   // the track has reached the fall: the splash begins
+      }
+      if (sl.outLag) { kept.push([sl, sl.x, sl.y, sl.face, sl.out]); sl.out = Math.max(1e-6, sl.out - sl.outLag); }
+      continue;
+    }
     const o = sl.tr.at();
     if (!o) continue;
-    kept.push([sl, sl.x, sl.y, sl.face]);
+    kept.push([sl, sl.x, sl.y, sl.face, sl.out]);
     sl.x = o.x; sl.y = o.y; sl.face = o.face;
   }
   return kept;
 }
-function putBack(kept) { for (const [sl, x, y, face] of kept) { sl.x = x; sl.y = y; sl.face = face; } }
+function putBack(kept) { for (const [sl, x, y, face, out] of kept) { sl.x = x; sl.y = y; sl.face = face; sl.out = out; } }
 function netLunge() {
   if (!net || !me || !world || world.ph !== 'play') return;   // only while the erä is on
   if (RM.isHost) { me.want = me.lunges + 1; return; }
