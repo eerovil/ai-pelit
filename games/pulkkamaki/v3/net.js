@@ -64,7 +64,10 @@ const pz = { off: 0, at: null };
 function runClock() {
   const t = AiPelitSulava.now();
   if (net && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
+  // It goes on 1 ms past the paused moment: a track eases a correction only in a frame whose clock has moved on,
+  // and the spots heldOn() pushes now would otherwise be drawn at once, a hop over all a stall before the pause
+  // left unseen (on a clock in whole ms, Safari's and Firefox's, every time).
+  if (pz.at !== null) { pz.off += t - pz.at - 0.001; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
 }
 // The phones hear a pause a moment apart: a spot this phone hears while paused, sent by a phone that had not
