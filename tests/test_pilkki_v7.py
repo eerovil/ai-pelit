@@ -14,7 +14,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/pilkki/v6/"
+URL = "games/pilkki/v7/"
 
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) { update(DT); closing(DT); } }; }"
 
@@ -491,6 +491,52 @@ def test_friends_see_each_other_on_the_ice_and_fish_each_other_s_holes(room):
     assert host.errors == guest.errors == []
 
 
+# v7 (#536): a friend walking is drawn gliding, frame by frame, not jumping once a second.
+WATCH = """(name) => {
+  const seen = window.__seen = [], t0 = performance.now();
+  window.__done = false;
+  (function look() {
+    const o = others().find(q => q.name === name);
+    if (o) seen.push([o.x, o.y, performance.now() / 1000]);
+    if (performance.now() - t0 < 3500) requestAnimationFrame(look); else window.__done = true;
+  })();
+}"""
+
+
+def test_a_friend_walking_glides_on_every_phone(room):
+    host, [aino, ville] = room("Eero", "Aino", "Ville")
+    # Aino stands in the middle of the lake, the others see her there.
+    aino.evaluate("stand(LAKE_W / 2, LAKE_H / 2)")
+    for p in (host, ville):
+        p.wait_for_function("others().some(o => o.name === 'Aino' && Math.abs(o.x - LAKE_W / 2) < 0.2)", timeout=4000)
+    # Then she walks 12 m: the host hears her spots straight, Ville through the host.
+    # She has stood a while and has just sent her spot, so her next rest send is a second away:
+    # starting to walk sends at once all the same.
+    aino.wait_for_function("net.stillT > 0.7")
+    for p in (host, ville):
+        p.evaluate(WATCH, "Aino")
+    aino.evaluate("net.atT = 0.99; me.tx = LAKE_W / 2 + 12")
+    for p in (host, ville):
+        p.wait_for_function("window.__done", timeout=8000)
+        seen = p.evaluate("window.__seen")
+        steps = [(math.hypot(b[0] - a[0], b[1] - a[1]), b[2] - a[2]) for a, b in zip(seen, seen[1:])]
+        moving = [d for d, _ in steps if d > 1e-4]
+        # Many small steps, never much faster than her walk (6 m/s); a jump is far faster.
+        # Measured per second, as a busy test machine may skip frames.
+        assert len(moving) > 40, len(moving)
+        fastest = max(d / max(dt, 1 / 60) for d, dt in steps)
+        assert fastest < 15, fastest
+        assert abs(seen[-1][0] - (aino.evaluate("LAKE_W / 2") + 12)) < 0.05
+    # Standing, she sends her spot only once a second.
+    sent = aino.evaluate("""() => new Promise(done => {
+      let n = 0; const send = R.send;
+      R.send = (m, to) => { if (m.t === 'at') n++; return send(m, to); };
+      setTimeout(() => { R.send = send; done(n); }, 2500);
+    })""")
+    assert 1 <= sent <= 3, sent
+    assert host.errors == aino.errors == ville.errors == []
+
+
 # ---------- Screens ----------
 
 @pytest.mark.parametrize("size", [(740, 360), (640, 360), (360, 640), (390, 844)])
@@ -531,7 +577,7 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v6")
+    opens_and_plays_with_the_quiet_library(real, context, "games/pilkki/v7")
 
 
 # #345: the Worker drops oversized room messages; a dense school still reaches guests.
@@ -608,6 +654,13 @@ def test_two_guests_each_get_their_own_nearby_fish(room):
     guests[0].evaluate(f"() => {{ stand({ax}, {ay}); sendMe(); }}")
     guests[1].evaluate(f"() => {{ stand({bx}, {by}); sendMe(); }}")
     for g, (x, y) in zip(guests, [(ax, ay), (bx, by)]):
+        # Only fish the host sent once it knew the guest's new spot: a guest's start by the shore
+        # may be a few metres from it, and the fish sent for the start then pass the check below
+        # though a few near the new spot are not among them (CI on #542: 47 of 51).
+        gid = g.evaluate("AiPelitRooms.me")
+        host.wait_for_function(f"net.board[{json.dumps(gid)}] && Math.abs(net.board[{json.dumps(gid)}].x - {x}) < 0.2")
+        k0 = host.evaluate("net.pSeq")
+        g.wait_for_function(f"net.pReceived > {k0}", timeout=10000)
         g.wait_for_function(f"pond.length > 0 && pond.every(f => net.claims[f.id] || (Math.abs(f.lx - {x}) < 60 && Math.abs(f.ly - {y}) < 60))", timeout=10000)
         want = host.evaluate(f"pond.filter(f => Math.abs(f.lx - {x}) < 40 && Math.abs(f.ly - {y}) < 40).length")
         assert g.evaluate("pond.length") >= want > 0
