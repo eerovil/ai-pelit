@@ -1,5 +1,5 @@
 'use strict';
-// Pingis v1: the screen, the finger, the menus, the saves, the sounds and the main loop, and the
+// Pingis v2: the screen, the finger, the menus, the saves, the sounds and the main loop, and the
 // rally itself (who serves, each step of the ball, a hit, a point) for one phone. Alone this phone
 // judges both ends; with friends net.js decides which end it judges (`judgeHere`) and what a
 // launch or a point does (`hooks`). The 3D hall is drawn by draw3d.js on the canvas #g under
@@ -236,7 +236,7 @@ function batHeights(ball, dt) {
 
 // ---- Menus (DOM, over the canvas) ----
 const $ = id => document.getElementById(id);
-function hideAll() { for (const id of ['menu', 'end']) $(id).hidden = true; }
+function hideAll() { for (const id of ['menu', 'end', 'paused']) $(id).hidden = true; }
 function showMenu() {
   mode = 'menu'; game = null;
   hideAll(); $('menu').hidden = false;
@@ -267,6 +267,30 @@ $('go').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); soloGame
 $('again').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (result && result.net) backRoom(); else soloGame(null); });
 $('friends').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (window.AiPelitRooms) AiPelitRooms.open(); });
 $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); showMenu(); });
+// A game alone can be paused and quit mid-way (#531). The pause stops the ball where it is; the
+// quit drops the saved game, so the menu shows next time, and counts neither a win nor a loss.
+// With friends the room has its own ways out (the "‹ Pelit" chip), so the button is not shown.
+function pauseGame() {
+  if (mode !== 'play' || net || !game) return;
+  mode = 'paused'; finger = null;
+  hideAll(); $('paused').hidden = false; $('pause').hidden = true;
+  $('pauseScore').textContent = LEVELS[level].name + ' · ' + game.sc[0] + '–' + game.sc[1];
+  wake();
+}
+function resumeGame() {
+  if (mode !== 'paused') return;
+  hideAll(); mode = 'play'; wake();
+}
+function quitGame() {
+  if (mode !== 'paused') return;
+  drop('kesken');
+  showMenu();
+}
+$('pause').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); pauseGame(); });
+$('resume').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); resumeGame(); });
+$('quit').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); quitGame(); });
+// A phone put away mid-game comes back to the pause screen, not to a ball already flying.
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 
 // ---- Drawing on the 2D canvas ----
 function shadowText(t, x, y, size, colr, align, weight) {
@@ -388,6 +412,7 @@ function frame(now) {
   const moving = mode === 'play' || mode === 'netplay' || mode === 'netwait';
   if (moving) tune(ms);
   document.body.classList.toggle('playing', moving);
+  $('pause').hidden = mode !== 'play' || !!net;
   if (moving || still++ < 3) raf = requestAnimationFrame(frame);
 }
 resize();
