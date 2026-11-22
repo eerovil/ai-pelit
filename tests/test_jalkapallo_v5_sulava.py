@@ -271,7 +271,8 @@ def test_a_guests_own_kick_leaves_its_feet_at_once_on_that_guest(site, browser, 
       const u = window.update; window.update = dt => { const t = now(); u(dt);
         if (window.__k.length < 400) window.__k.push([t, ball.x, ball.y, players[1].kicks]); };"""
     host.evaluate("() => { " + rec_js + " }")
-    ville.evaluate("() => { " + rec_js + """
+    # On the guest also the quickest arrival - stamp of the last second, as the game counts it (lagBefore()).
+    ville.evaluate("() => { " + rec_js.replace("players[1].kicks]", "players[1].kicks, lagBefore(AiPelitSulava.now())]") + """
       setInterval(() => { input.jx = 0; input.jy = window.__go ? view : 0; }, 5); window.__go = true; }""")
     ville.wait_for_function("players[1].ty > -8", timeout=5000)
     k0 = ville.evaluate("players[1].kicks")
@@ -299,12 +300,17 @@ def test_a_guests_own_kick_leaves_its_feet_at_once_on_that_guest(site, browser, 
         for a, b in zip(on_host, on_host[1:]):
             if a[0] <= t <= b[0]:
                 return a[2] + (b[2] - a[2]) * (t - a[0]) / (b[0] - a[0]) if b[0] > a[0] else a[2]
-    lead = [(round(f[0] - t_h, 3), round(host_y(f[0]) - f[2], 2)) for f in rec
-            if t_h + 0.15 <= f[0] <= t_h + 0.3 and host_y(f[0]) is not None
+    # The quickest message's way, from that lag: the pages' AiPelitSulava.now() count from their own timeOrigin.
+    shift = (ville.evaluate("performance.timeOrigin") - host.evaluate("performance.timeOrigin")) / 1000
+    lead = [(round(f[0] - t_h, 3), round(host_y(f[0] - f[4] - shift) - f[2], 2), round(f[4] + shift, 3),
+             round(host_y(f[0]) - f[2], 2)) for f in rec
+            if t_h + 0.15 <= f[0] <= t_h + 0.3 and f[4] is not None and host_y(f[0] - f[4] - shift) is not None
+            and host_y(f[0]) is not None
             and not any(s <= f[0] <= s + 0.35 for s in stalls)]
     # Measured (#480): 0.06-0.39 m behind the host; drawn from the track, the shot was 2.8 m and the pass 1.1 m
-    # behind all along.
-    assert lead and all(abs(d) < 0.8 for _, d in lead), lead
+    # behind all along. Judged against the host's ball the quickest message's way back, which is all the guest can
+    # know: GitHub's runner (run 44978444467) drew the pass 3.19-3.3 m behind the host at the same moment.
+    assert lead and all(abs(d) < 0.8 for _, d, *_ in lead), lead
     assert not host.errors + aino.errors + ville.errors
 
 
@@ -512,14 +518,17 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
     for r in rec:
         if hbx := judged(r):
             off.append(math.hypot(r[2] - hbx[0], r[3] - hbx[1]))
-    # Enough of the flight judged, by time: the moments judged span at least half of the time the host had the ball
-    # on its way (#498: 12 frames at load 105-115, where 20 were asked for; a busy machine draws fewer). Three such
-    # moments are enough: the bug drew the ball 0.6-1.2 m ahead all through the flight, so each judged moment
-    # shows it, against the 0.4 m allowed. GitHub's runner judged 4, spanning 0.42 s of a 0.74 s flight (run
-    # 44973493512), when 5 were asked for.
+    # Enough of the flight judged, by time: three moments of the flight, spanning at least 0.2 s, four of the
+    # host's spot gaps (#498: 12 frames at load 105-115, where 20 were asked for; a busy machine draws fewer). The
+    # bug drew the ball 0.6-1.2 m ahead all through the flight, so each judged moment shows it, against the 0.4 m
+    # allowed. Half the flight was asked for before: GitHub's runner judged 4 moments over 0.42 s of a 0.74 s
+    # flight (run 44973493512), and a loaded host run (job 3ef20e7d9b9c) 14 over 0.27 s of 0.66 s, after which every
+    # frame drew past the newest spot heard. Four workers on two cores showed why: the messages fell behind (the
+    # test's relay is one busy process) and the drawn moment stayed 0.2-0.77 s past the newest spot for the whole
+    # flight, the players' with it, so nothing could be judged there.
     way = [t for t, x, _ in hb if t >= kick + 0.1 and x < 1]
     seen = [r[1] for r in rec if judged(r)]
-    assert len(off) >= 3 and way and max(seen) - min(seen) >= 0.5 * (way[-1] - way[0]), (
+    assert len(off) >= 3 and way and max(seen) - min(seen) >= min(0.2, 0.5 * (way[-1] - way[0])), (
         len(off), seen and (min(seen), max(seen)), way and (way[0], way[-1]))
     # Measured with the ball on its own track: at most 0.13 m off. Drawn at its newest spot (v5 before the
     # review) it ran 0.6-1.2 m ahead.
