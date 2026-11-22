@@ -3,7 +3,7 @@ import json
 
 import pytest
 from conftest import ROOT, turn
-from test_kiekkoammunta_v3 import URL, settle, shot
+from test_kiekkoammunta_v4 import URL, settle, shot
 from test_rooms_lib import Relay
 
 # Finish the rest of this phone's turn without the pointer, through the game's own report.
@@ -75,6 +75,8 @@ def on_turn(pages):
 def wait_turn(pages, seq):
     for p in pages:
         p.wait_for_function(f'match&&(match.over||match.seq>={seq})', polling=50)
+        # A watcher holds the shooter's shots and hits until its late-drawn sight reaches them (#540).
+        p.wait_for_function('!held.length', polling=50)
         p.evaluate("for(let i=0;i<200&&round&&screen==='play'&&['flight','gap'].includes(round.phase);i++)step(1/60)")
 
 
@@ -152,9 +154,10 @@ def test_host_chooses_skeet_and_a_watcher_sees_the_same_discs(phones):
     guest.wait_for_function("round.phase==='flight'", polling=50)
     assert guest.evaluate('round.discs.map(d=>[d.kind,d.slot])') == host.evaluate('round.discs.map(d=>[d.kind,d.slot])')
     host.evaluate('step(.3);drag(30,-10);lastAim=0;drag(1,0)')
-    guest.wait_for_function('aimTo&&Math.abs(aimTo.yaw-%r)<1e-6' % host.evaluate('round.aim.yaw'), polling=50)
+    # The watcher's sight glides there (watchTick() is its frame; this page's rAF is off) and stops
+    # where the shooter's stopped, from the one more aim sent once the finger stops.
     was = guest.evaluate('round.aim.yaw')
-    guest.evaluate('step(.3)')
+    guest.wait_for_function('watchTick(),Math.abs(round.aim.yaw-%r)<1e-6' % host.evaluate('round.aim.yaw'), polling=50)
     assert guest.evaluate('round.aim.yaw') != was
     # A hit is the shooter's to say: the watcher's own step shows the ring and nothing more.
     host.mouse.up()
@@ -164,6 +167,71 @@ def test_host_chooses_skeet_and_a_watcher_sees_the_same_discs(phones):
     res = host.evaluate('round.results[0]')
     other.wait_for_function('round.results[0]===%s' % json.dumps(res), polling=50)
     assert host.evaluate('round.phase') == 'gap'
+    assert not guest.errors
+
+
+def test_the_watchers_see_the_shooters_aim_glide(phones):
+    # #540: the aim comes ten times a second, at uneven gaps; a watcher draws it through lib/sulava-1,
+    # so each frame moves the sight a little and never back, not one jump per message.
+    host, guest = room(phones, 2)
+    per = host.evaluate('2/scale*1.6')
+    guest.evaluate("""window.seen=[];window.tick=setInterval(()=>{watchTick();seen.push(round.aim.yaw)},16)""")
+    # The shooter's finger moves the same way every 16 ms for a second, then stops.
+    host.evaluate("""new Promise(done=>{let n=0;const id=setInterval(()=>{drag(2,0);
+        if(++n===60){clearInterval(id);done()}},16)})""")
+    end = host.evaluate('round.aim.yaw')
+    guest.wait_for_function('Math.abs(round.aim.yaw-%r)<1e-6' % end, polling=50)
+    seen = guest.evaluate('clearInterval(tick),seen')
+    steps = [b - a for a, b in zip(seen, seen[1:])]
+    moving = [d for d in steps if d > 1e-9]
+    assert len(moving) > 30, steps
+    # One message's move is six drags; a frame moves about one, and never back.
+    assert max(steps) < 3 * per, (max(steps) / per, steps)
+    assert min(steps) > -0.2 * per, (min(steps) / per, steps)
+    assert not guest.errors
+
+
+def test_a_watcher_holds_the_disc_until_its_sight_is_there(phones):
+    # The disc launches on a watcher when its sight, drawn a moment late, reaches the launch.
+    host, guest = room(phones, 2)
+    guest.evaluate("R.on('message',m=>{if(m.k==='fly')window.flyAt=performance.now()})")
+    guest.evaluate("window.launched=0;"
+                   "setInterval(()=>{if(!launched&&round.phase==='flight')launched=performance.now()},5)")
+    host.evaluate('call()')
+    guest.wait_for_function("round.phase==='flight'", polling=50)
+    late = guest.evaluate('launched-flyAt')
+    assert 30 <= late <= 400, late
+    assert guest.evaluate('round.discs.length') == 1
+    assert not guest.errors
+
+
+def test_no_frame_on_a_watcher_draws_the_targets_start_sight(phones):
+    # Review of #546: a held `fly` (and a watcher's gap ending) rebuilt the round, whose prepare()
+    # reset the sight to the target's start, and that frame was drawn before the track's aim came back.
+    host, guest = room(phones, 2)
+    # Real frames on the watcher (the fixture stubs them out), drawing through the game's own loop.
+    guest.evaluate("""requestAnimationFrame=f=>setTimeout(()=>f(performance.now()),16);
+        catchUp=t=>{const e=Math.max(0,(t-lastTime)/1000);lastTime=t;step(e)};
+        window.drawn=[];const d0=draw;draw=()=>{drawn.push([round&&round.aim.yaw,round&&round.phase]);d0()};
+        window.preps=[];const p0=prepare;prepare=()=>{p0();preps.push(round.aim.yaw)};""")
+    start = host.evaluate('round.aim.yaw')
+    host.evaluate('drag(60,0);lastAim=0;drag(1,0)')
+    moved = host.evaluate('round.aim.yaw')
+    assert abs(moved - start) > 0.2
+    guest.wait_for_function('Math.abs(round.aim.yaw-%r)<1e-6' % moved, polling=50)
+    guest.evaluate('drawn=[];wake()')
+    host.evaluate('call()')
+    guest.wait_for_function("round.phase==='flight'&&drawn.some(d=>d[1]==='flight')", polling=50)
+    # The disc ends on the shooter; the watcher's gap then ends in its own step() and shows the next target.
+    host.evaluate("for(const d of round.discs)resolveDisc(d,true);round.shots=[];round.phase='gap';round.gap=0;advance()")
+    guest.wait_for_function("round.index===1&&round.phase==='ready'", polling=50, timeout=10000)
+    guest.wait_for_timeout(300)
+    seen, preps = guest.evaluate('[drawn,preps]')
+    assert any(p == 'flight' for _, p in seen) and any(p == 'gap' for _, p in seen), seen
+    # The watcher's own prepare() ran on the fly and on the next target; each picks its own start
+    # (the disc's launch varies), so a frame showing one of those is the reset, not the shooter's sight.
+    assert len(preps) >= 2, preps
+    assert not [y for y, _ in seen if any(abs(y - q) < 1e-9 for q in preps)], (preps, seen)
     assert not guest.errors
 
 

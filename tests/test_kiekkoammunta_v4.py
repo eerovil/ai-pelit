@@ -2,7 +2,7 @@
 import pytest
 from conftest import ROOT, turn
 
-URL = 'games/kiekkoammunta/v3/'
+URL = 'games/kiekkoammunta/v4/'
 
 
 def open_game(site, browser, size=(360, 740)):
