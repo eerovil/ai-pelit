@@ -360,9 +360,10 @@ def test_parachute_opens_only_low_and_slow_and_lands_softly(site, context):
     page = open_game(site, context)
     r = page.evaluate("""() => {
       cancelAnimationFrame(frameId); frameId = 0; paused = false;
-      const at = (h, v) => { ship = freshFlight('kotiin', 'pad');
-        Object.assign(ship, { x: 0, y: EARTH_R + h, vx: v, vy: -50, landedOn: null, visited: ['moon'],
+      const at = (h, v, vy = -50) => { ship = freshFlight('kotiin', 'pad');
+        Object.assign(ship, { x: 0, y: EARTH_R + h, vx: v, vy, landedOn: null, visited: ['moon'],
           fuel: fuelForDeltaV(1500) }); };
+      at(15000, 300, 50); const rising = openChute(), risingState = ship.chute;
       at(25000, 300); const high = openChute(), highState = ship.chute;
       at(15000, 450); const fast = openChute(), fastState = ship.chute;
       at(15000, 300); const ok = openChute(), okState = ship.chute;
@@ -371,8 +372,9 @@ def test_parachute_opens_only_low_and_slow_and_lands_softly(site, context):
         if (i % 500 === 0) warps.push([Math.round(surfaceClearance().clearance), maxWarp()]);
         step(0.1);
       }
-      return { high, highState, fast, fastState, ok, okState, warps, phase: ship.phase, touch: ship.touch, reason: ship.reason };
+      return { rising, risingState, high, highState, fast, fastState, ok, okState, warps, phase: ship.phase, touch: ship.touch, reason: ship.reason };
     }""")
+    assert r['rising'] == 'Laskuvarjo aukeaa vasta, kun alus putoaa.' and r['risingState'] == 'packed'
     assert r['high'] == 'Laskuvarjo aukeaa vasta alle 20 km korkeudessa.' and r['highState'] == 'packed'
     assert r['fast'].startswith('Laskuvarjo repesi') and r['fastState'] == 'torn'
     assert r['ok'] == 'Laskuvarjo auki.' and r['okState'] == 'open'
@@ -413,6 +415,34 @@ def test_nose_holds_after_a_turn_and_point_buttons_aim_without_fuel(site, contex
     assert r['point'] == 'up' and r['fuelUsed'] == 0, r
     page.locator('[data-point="up"]').click()
     assert page.evaluate('ship.point') is None
+    assert page.errors == []
+
+
+def test_a_turn_tap_turns_as_far_at_any_warp(site, context):
+    page = open_game(site, context)
+    start_from_orbit(page)
+    r = page.evaluate("""() => {
+      const turned = rate => { warp = rate; held.turn = 1; held.turnFor = 0; ship.point = null;
+        const a0 = ship.angle; for (let i = 0; i < 10; i++) steer(ship, 0.02 * rate);
+        held.turn = 0; return Math.abs(wrap(ship.angle - a0)) * 180 / Math.PI; };
+      return [turned(1), turned(5)];
+    }""")
+    assert abs(r[0] - 3) < 0.01 and abs(r[1] - r[0]) < 1e-9, r
+    assert page.errors == []
+
+
+def test_hints_do_not_call_an_unfinished_orbit_done(site, context):
+    page = open_game(site, context)
+    start_from_orbit(page)
+    r = page.evaluate("""() => {
+      const earth = guidance(Object.assign({}, ship, { trip: 'kiertorata', vx: ship.vx * 1.25 }))[1];
+      const m = bodyAt(MOON, ship.t), v = Math.sqrt(MOON.mu / (MOON.radius + 1000));
+      const moon = guidance(Object.assign({}, ship, { trip: 'kuu-kierto', x: m.x, y: m.y + MOON.radius + 1000,
+        vx: m.vx + v * 0.9, vy: m.vy }))[1];
+      return { earth, moon };
+    }""")
+    assert 'liian korkealla' in r['earth'], r
+    assert r['moon'].startswith('Rata osuu Kuuhun'), r
     assert page.errors == []
 
 

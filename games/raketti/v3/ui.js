@@ -170,7 +170,8 @@ function updateUi() {
   $('throttle').disabled = !live || s.fuel === 0;
   $('cut').disabled = !live;
   $('warp').disabled = !live || maxWarp() === 1;
-  const air = Math.hypot(s.x, s.y) - EARTH_R < EARTH.air.top;
+  // Only while falling: opened on the way up, it would end the climb for good.
+  const air = Math.hypot(s.x, s.y) - EARTH_R < EARTH.air.top && s.x * s.vx + s.y * s.vy < 0;
   $('chute').disabled = !live || s.chute !== 'packed' || !air || !!s.landedOn;
   text('chute', s.chute === 'open' ? 'Varjo auki' : s.chute === 'torn' ? 'Varjo rikki' : 'Laskuvarjo');
   for (const b of document.querySelectorAll('[data-point]')) {

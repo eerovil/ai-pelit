@@ -101,7 +101,6 @@ function orbitAround(b, s = ship) {
   }
   return { body: b, r, altitude: r - b.radius, vr, vt, speed: Math.sqrt(v2), peri, apo, a, ecc, h, energy, toApo };
 }
-function orbit(s = ship) { return orbitAround(refBody(s), s); }
 function approach(s = ship) {
   const p = station(s), length = SHIP.length / 2;
   const nx = s.x + Math.sin(s.angle) * length, ny = s.y + Math.cos(s.angle) * length;
@@ -148,8 +147,10 @@ function pointTarget(s = ship) {
 // The nose holds its direction (D4): buttons turn it, letting go stops it.
 function steer(s, dt) {
   if (held.turn) {
-    s.point = null; held.turnFor += dt;
-    s.omega = held.turn * (held.turnFor < 0.4 ? TURN_SLOW : TURN_FAST);
+    // Turning counts real seconds, so a tap turns the nose as far at ×5 as at ×1.
+    const w = Math.max(1, warp);
+    s.point = null; held.turnFor += dt / w;
+    s.omega = held.turn * (held.turnFor < 0.4 ? TURN_SLOW : TURN_FAST) / w;
   } else {
     held.turnFor = 0;
     const target = pointTarget(s);
@@ -169,7 +170,7 @@ function surfaceClearance(s = ship) {
   }
   return best;
 }
-// Only wall-clock speed changes; forces, fuel and integration steps do not (D11).
+// Only wall-clock speed changes; forces, fuel and the step limit do not (D11).
 function maxWarp() {
   if (!ship || ship.phase !== 'flight') return 1;
   if (ship.landedOn) return ship.throttle ? 1 : 5;
@@ -182,7 +183,6 @@ function maxWarp() {
   if (near.clearance < near.body.near100) return 100;
   return 1000;
 }
-function canWarp(rate = 10) { return maxWarp() >= rate; }
 function limitWarp() { warp = Math.min(warp, maxWarp()); }
 function clearHeld() { held.turn = held.forward = held.side = 0; held.turnFor = 0; }
 function endFlight(reason, success = false) {
@@ -232,6 +232,7 @@ function openChute() {
   if (!s || paused || s.phase !== 'flight' || s.chute !== 'packed') return '';
   const altitude = Math.hypot(s.x, s.y) - EARTH_R;
   if (altitude > CHUTE.height || s.landedOn) return 'Laskuvarjo aukeaa vasta alle 20 km korkeudessa.';
+  if (s.x * s.vx + s.y * s.vy >= 0) return 'Laskuvarjo aukeaa vasta, kun alus putoaa.';
   s.chute = Math.hypot(s.vx, s.vy) > CHUTE.speed ? 'torn' : 'open';
   s.point = null; saveFlight();
   return s.chute === 'torn' ? 'Laskuvarjo repesi: vauhti oli yli 400 m/s.' : 'Laskuvarjo auki.';

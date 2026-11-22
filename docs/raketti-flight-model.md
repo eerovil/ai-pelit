@@ -25,9 +25,9 @@ The ship is one stage: 4 t dry, 26 t fuel, specific impulse 380 s, about 7.5 km/
 
 ## Steps and time warp
 
-Velocity Verlet with the thrust held over the step. Steps are 0.02 s under thrust, while turning, on a surface or within 2 km of the station; otherwise 1 % of the time to the nearest surface at the current speed, up to 5 s. Under the open parachute a step stays short against the parachute's slowing rate. Time warp changes only how much flight time a frame covers; it never changes the steps, so ×1000 flies the same path as ×1 (a test checks this).
+Velocity Verlet with the thrust held over the step. Steps are 0.02 s under thrust, while turning, on a surface or within 2 km of the station; otherwise 1 % of the time to the nearest surface at the current speed, up to 5 s. Under the open parachute a step stays short against the parachute's slowing rate. Time warp changes only how much flight time a frame covers. The step limit is the same at every speed (×1 takes frame-sized steps, smaller still), so ×1000 flies nearly the same path as ×1: a test keeps them within 1 km.
 
-The allowed warp (`maxWarp`) is ×1 within 500 m of a surface or 50 m of the port, ×5 under thrust or near a body, ×100 at middle distance, ×1000 far out. Under the open parachute it is ×100 above 300 m. A higher selected rate drops by itself.
+The allowed warp (`maxWarp`) is ×1 within 500 m of a surface or 50 m of the port, ×5 under thrust or near a body, ×100 at middle distance, ×1000 far out. Under the open parachute it is ×100 above 300 m. The turn buttons count real seconds, so a tap turns the nose as far at ×5 as at ×1. The parachute opens only while the ship falls. A higher selected rate drops by itself.
 
 ## Trips and stars
 

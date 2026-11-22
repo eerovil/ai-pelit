@@ -80,7 +80,8 @@ function ascentGuide(s) {
 function ascentPitch(h) { return clamp(20 + (h - 1500) / 28500 * 60, 20, 80); }
 function transferGuide(s, target, r2, n2, name, aim) {
   const o = orbitAround(EARTH, s), lead = transferLead(o.r, r2, n2), ahead = leadOf(target, s);
-  if (o.apo + EARTH_R < r2 * 0.9) {
+  // Raise the high point first, until it is near the target's height.
+  if (o.apo + EARTH_R < r2 - 0.1 * (r2 - EARTH_R)) {
     const wait = ((ahead - lead) % TAU + TAU) % TAU;
     if (wait < 4 * Math.PI / 180) return ['2', `Nyt: Menosuuntaan ja teho täysille, kunnes radan ylin on ${aim}.`];
     return ['2', `${name} on ${deg(ahead)}° edellä. Kun se on noin ${deg(lead)}° edellä, kiihdytä menosuuntaan. Nopeuta aikaa odottaessa.`];
@@ -105,7 +106,10 @@ function guidance(s = ship, path = null) {
     return ascentGuide(s);
   }
   const trip = s.trip, closest = path && path.closest;
-  if (trip === 'kiertorata') return ['1', 'Katkaise teho, niin kiertorata on valmis.'];
+  if (trip === 'kiertorata') {
+    if (o.apo >= 1000000) return ['1', `Radan ylin ${km(o.apo)} on liian korkealla (raja 1000 km). Radan alimmassa Vastasuuntaan ja jarruta.`];
+    return ['1', 'Katkaise teho, niin kiertorata on valmis.'];
+  }
   if (trip === 'asema') {
     const d = approach(s);
     if (d.range < 2000) {
@@ -144,8 +148,8 @@ function guidance(s = ship, path = null) {
     const m = orbitAround(MOON, s);
     if (s.landedOn === 'moon') return ['3', 'Olet Kuussa. Tämä matka jatkuu kiertoradalta: nouse ja kierrä Kuuta.'];
     if (trip === 'kuu-kierto' || m.energy >= 0 || m.apo > 370000) {
-      if (m.energy < 0 && m.apo < 370000) return ['3', 'Katkaise teho, niin kiertorata on valmis.'];
       if (m.peri < 2000) return ['3', `Rata osuu Kuuhun! Kiihdytä sivulle, kunnes radan alin on yli 2 km (nyt ${km(m.peri)}).`];
+      if (m.energy < 0 && m.apo < 370000) return ['3', 'Katkaise teho, niin kiertorata on valmis.'];
       if (m.vr < 0 && m.altitude - m.peri > 15000) return ['3', `Kuu lähestyy. Lähimmillään ${km(m.peri)} korkeudella. Jarruta siellä Vastasuuntaan.`];
       return ['3', `Nyt: Vastasuuntaan ja teho täysille, kunnes radan ylin on alle 370 km (nyt ${km(m.apo)}).`];
     }
