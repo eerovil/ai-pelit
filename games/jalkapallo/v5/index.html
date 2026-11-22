@@ -61,6 +61,7 @@
      and with the loudest sounds quieter -->
 <!-- v4 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -180,7 +181,11 @@ const fwd = t => t === 0 ? 1 : -1;
 const spot = (t, ax, ay) => ({ x: ax * fwd(t), y: ay * fwd(t) });
 function player(t, slot, name, lvl) {
   const p = { t, slot, name, ctl: '', x: 0, y: 0, vx: 0, vy: 0, fx: 0, fy: fwd(t), cd: 0, lunge: 0, stun: 0, kicks: 0,
-    brain: { think: 0, tx: 0, ty: 0, act: '' }, keeper: slot === 2 };
+    brain: { think: 0, tx: 0, ty: 0, act: '' }, keeper: slot === 2,
+    // v5 (#480): on a guest, a player another phone or the computer moves is drawn from the host's spots,
+    // a moment back (lib/sulava-1). A dash (1.6 x 6.3 m/s) goes about 0.5 m between two spots; what is a jump
+    // is judged by the time between them (feedTrack()), not by the track's own distance alone.
+    tr: AiPelitSulava.track({ keys: ['x', 'y'] }), ease: 0 };
   skill(p, lvl);
   return p;
 }
@@ -572,6 +577,7 @@ function say(wx, wy, s, col) { texts.push({ x: wx, y: wy, s, c: col, t: 0.9 }); 
 function update(dt) {
   stateT += dt;
   if (!players.length || state === 'menu' || state === 'done' || state === 'room') return;
+  netClock();
   if (net.on && R.paused) return;
   if (net.on && !R.isHost) { guestUpdate(dt); return; }
   const mine = myCtrl();
@@ -647,27 +653,135 @@ function applySetup(s) {
   myTeam = me ? me.t : 0;
 }
 function snapshot() {
-  return { t: 's', round: net.round, st: state, pt: r2(pauseT), cl: r2(clock), sc: score, o: owner ? players.indexOf(owner) : -1,
+  return { t: 's', round: net.round, st: state, pt: r2(pauseT), cl: r2(clock), sc: score, ck: netClock(), o: owner ? players.indexOf(owner) : -1,
     b: [r2(ball.x), r2(ball.y), r2(ball.z), r2(ball.vx), r2(ball.vy)],
     p: players.map(p => [r2(p.x), r2(p.y), r2(p.fx), r2(p.fy), p.kicks, p.lunge > 0 ? 1 : 0]),
     c: ctrls.map(k => [k.id, k.p ? players.indexOf(k.p) : -1]),
     m: msg, g: goals, tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]) };
 }
 const r2 = v => Math.round(v * 100) / 100;
-function applySnapshot(s) {
-  const was = state, loose = !owner, pvx = ball.vx || 0, pvy = ball.vy || 0;
+// Smooth movement (#480): the host runs every player, so each spot a guest hears carries the host's clock
+// (ck). p.tx, p.ty are the newest spot; p.x, p.y where the guest draws the player (guestUpdate()).
+const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
+// The tracks' clock, on the host (its stamps) and on a guest (arrivals, the drawn moment): it stands still while
+// the room is paused (R.paused), as the match does. On the real clock, in the test, a guest that heard the pause
+// first drew over it as if the match had gone on, a jump of 3.6 m when it did; one that heard it last and its end
+// first had drawn on past the newest spot on a guess, and slid 0.9 m back.
+// The phones hear a pause a moment apart, each over its own connection, so the two clocks stand for different
+// times. Two fixes keep a guest's tracks on the host's time across it:
+// - A snapshot heard during this phone's pause, sent before the host had paused, is stamped ahead of the held clock:
+//   it goes on the tracks as heard no sooner than its stamp plus the lag (arrival - stamp) the snapshots had before
+//   the pause (pz.lag, the smallest in its last second), as Pulkkamäki v3 and Areena v9 do. Heard at the held
+//   clock, it would look early, and the tracks would draw ahead of it for up to 2 s.
+// - When the host paused first, this clock ran on while the host's stood, so after the pause every snapshot comes
+//   later by that much than its lag from before: lib/sulava-1 learns its offset as the smallest lag of the last 2 s,
+//   so its tracks drew past the newest spot on a guess for up to 2 s (0.4 s past it, in 110 frames, in the test).
+//   For 3 s after this phone's pause ends, the clock goes at a quarter of its speed while the snapshots heard since
+//   are all later than that lag by over 0.03 s (at most 1.5 s held back in all): the friends slow down where they were
+//   drawn until the host's spots reach them, then go on, never drawn back. Not standing still: lib/sulava-1 eases a
+//   wrong guess away by the time its clock moves, so with the clock standing each spot showed in one frame (0.33 m).
+const pz = { off: 0, at: null, t: null, lag: null, on: null, onT: 0, drag: 0 };
+// After this phone's own player kicks the ball, it is drawn from its newest spot for LEAD_ON s, then eased onto
+// its track by LEAD s (see guestUpdate()).
+const LEAD = 1, LEAD_ON = 0.3;
+function netClock() {
+  const t = AiPelitSulava.now(), dt = pz.t === null ? 0 : Math.max(0, t - pz.t);
+  pz.t = t;
+  if (net.on && R.paused) {
+    if (pz.at === null) { pz.at = t; pz.lag = lagBefore(t - pz.off); }
+    return pz.at - pz.off;
+  }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; pz.on = t - pz.off; pz.onT = t; pz.drag = 0; return t - pz.off; }
+  if (pz.on !== null) {
+    if (t - pz.onT > 3) pz.on = null;
+    else if (lateSincePause()) { pz.off += dt * 0.75; pz.drag += dt * 0.75; }
+  }
+  return t - pz.off;
+}
+// [arrival, lag, heard] of the last snapshots put on the tracks (arrival is later than heard for one held across a
+// pause).
+const lags = [];
+function lagBefore(c) {
+  let m = null;
+  for (const [a, l] of lags) if (a >= c - 1 && (m === null || l < m)) m = l;
+  return m;
+}
+// Late: every snapshot heard since the pause ended. Judged on the last three alone, a jittery connection (each
+// message 0-90 ms late) had three in a row over 0.03 s late now and then, and everyone was drawn at a quarter of
+// their speed for some frames with no pause asymmetry to make up (#498: four frames at 0.25x on a third phone
+// after a friend's phone dropped and the host went on). Snapshots heard during the pause are left out: their
+// arrival was put at their stamp plus pz.lag.
+function lateSincePause() {
+  if (pz.lag === null || pz.drag >= 1.5) return false;
+  let m = null;
+  for (let i = lags.length - 1; i >= 0 && lags[i][2] > pz.on; i--) if (m === null || lags[i][1] < m) m = lags[i][1];
+  return m !== null && m - pz.lag > 0.03;
+}
+// A snapshot heard while this phone is paused waits, with the moment it came, while 6 of those already on the tracks
+// are ahead of the moment the ball is drawn at. A track keeps only its 8 newest spots (lib/sulava-1), and a guest
+// that hears a pause before the host does stands still while the host's last half second comes in (12 spots): put
+// on the tracks at once, those spots pushed out the two it was drawing between, and the player jumped 1.1 m when
+// the match went on. The drawn moment stands with the clock, so in a pause the snapshots already on the tracks soon
+// number 6 ahead of it (outside one, about 5 at most: 0.25 s at 20 a second), and the rest wait; they go on one by
+// one as the drawn moment passes them after the pause. Those heard after them wait with them, until none waits: let
+// go at once, they pushed out the same two (a 0.34 m step). Over 20 waiting (a page the phone hid) all go on.
+// Outside a pause nothing waits: the drawn moment is that of the last frame, so after a slow frame the rule could hold
+// the newest spots back. A rule by time (wait while over 0.25 s ahead) stood the player up to 2 s on a busy test
+// machine, then jumped it: its tracks draw up to 0.25 s back, so the newest spots were always that far ahead.
+function heardSnapshot(s) {
+  const w = net.wait = net.wait || [];
+  w.push([s, netClock(), (net.on && R.paused) || (w.length > 0 && w[w.length - 1][2])]);
+  feedSnapshots();
+}
+function feedSnapshots() {
+  const w = net.wait, d = ball.tr.time, fed = net.fed = net.fed || [];
+  while (w && w.length) {
+    if (w[0][2] && d !== null && fed.filter(t => t > d).length >= 6 && w.length <= 20) break;
+    const [s, heard, held] = w.shift(), st = stampOf(s);
+    const a = held && st !== null && pz.lag !== null ? Math.max(heard, st + pz.lag) : heard;
+    applySnapshot(s, a);
+    if (st !== null) {
+      fed.push(st); if (fed.length > 8) fed.shift();
+      lags.push([a, a - st, heard]); if (lags.length > 40) lags.shift();
+    }
+  }
+}
+// A spot onto a track (#480): pushed, so it glides, unless it is further from the last one than the fastest a
+// player (FAST_P, a dash is 10 m/s) or the ball (FAST_B, the hardest shot is 28 m/s) goes in the time between their
+// stamps, and a metre more; then it is the host putting it somewhere new, drawn there at once. Judged by the time,
+// a spot after a long gap in the messages (0.4 s at a dash is 4 m) still glides. fast 0 always snaps.
+const FAST_P = 12, FAST_B = 30;
+function feedTrack(tr, st, v, a, fast) {
+  const t = st === null ? a : st, l = tr.last;
+  tr.last = { x: v.x, y: v.y, t };
+  if (!fast || !l || Math.hypot(v.x - l.x, v.y - l.y) > 1 + fast * Math.max(0, t - l.t)) tr.snap(st, v, a);
+  else tr.push(st, v, a);
+}
+function applySnapshot(s, heardAt) {
+  const was = state, loose = !owner, pvx = ball.vx || 0, pvy = ball.vy || 0, had = owner;
   state = s.st; pauseT = s.pt; clock = s.cl; score = s.sc;
   owner = players[s.o] || null;
-  ball.tx = s.b[0]; ball.ty = s.b[1]; ball.z = s.b[2]; ball.vx = s.b[3]; ball.vy = s.b[4];
+  ball.tx = s.b[0]; ball.ty = s.b[1]; ball.vx = s.b[3]; ball.vy = s.b[4];
+  // A kickoff puts everyone on their spot at once: no sliding there. So does the match's first spot.
+  const jump = state === 'kickoff' && was !== 'kickoff', st = stampOf(s), a = heardAt === undefined ? netClock() : heardAt;
   let kicked = false;
   s.p.forEach((q, i) => {
     const p = players[i];
     if (!p) return;
-    if (q[4] > p.kicks) { kickSound(false); kicked = true; }
+    if (q[4] > p.kicks) { kickSound(false); kicked = true; if (p === had && p.ctl && p.ctl === myId()) ball.lead = LEAD; }
     p.tx = q[0]; p.ty = q[1]; p.fx = q[2]; p.fy = q[3]; p.kicks = q[4]; p.lunge = q[5] ? 0.1 : 0;
+    if (jump || !p.tr.size()) { feedTrack(p.tr, st, { x: p.tx, y: p.ty }, a, 0); p.x = p.tx; p.y = p.ty; p.ease = 0; }
+    else feedTrack(p.tr, st, { x: p.tx, y: p.ty }, a, FAST_P);
   });
   for (const p of players) p.ctl = '';
   for (const [id, i] of s.c) if (players[i]) players[i].ctl = id;
+  // The ball's spot goes on its track whether held or loose, so a kick leaves the kicker's feet as drawn.
+  const bs = { x: s.b[0], y: s.b[1], z: s.b[2] };
+  if (jump || !ball.tr.size()) {
+    feedTrack(ball.tr, st, bs, a, 0); ball.x = bs.x; ball.y = bs.y; ball.z = bs.z;
+    ball.ex = ball.ey = 0; ball.heldBy = owner && owner.ctl === myId() ? owner : null; ball.lead = 0;
+  } else feedTrack(ball.tr, st, bs, a, FAST_B);
+  ball.at = a; ball.st = st;
   // A save or a tackle the host said: hear it once, when its text first shows.
   const old = new Set(texts.map(t => t.s + t.x + ',' + t.y));
   msg = s.m; texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
@@ -686,13 +800,52 @@ function applySnapshot(s) {
   for (const p of players) p.wasLunge = p.lunge > 0;
   if (s.g > goals) { goals = s.g; whistle(false); cheer(); shake = 8; }
   if (state === 'full' && was !== 'full') whistle(true);
-  if (state === 'kickoff' && was !== 'kickoff') { for (const p of players) { p.x = p.tx; p.y = p.ty; } whistle(false); }
+  if (jump) whistle(false);
 }
 function guestUpdate(dt) {
-  for (const p of players) if (p.tx !== undefined) { const k = Math.min(1, dt * 15); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
-  if (ball.tx !== undefined) {
-    ball.tx += (ball.vx || 0) * dt; ball.ty += (ball.vy || 0) * dt;
-    const k = Math.min(1, dt * 18); ball.x += (ball.tx - ball.x) * k; ball.y += (ball.ty - ball.y) * k;
+  feedSnapshots();
+  for (const p of players) {
+    if (p.tx === undefined) continue;
+    // The player this phone steers chases the newest spot, as before: never drawn back, so the thumb
+    // is felt at once.
+    if (p.ctl && p.ctl === myId()) { const k = Math.min(1, dt * 15); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.ease = 0.3; continue; }
+    // v5 (#480): everyone else glides between the host's spots, a moment back. One this phone has just
+    // stopped steering (a pass gave it another) eases back onto its track instead of jumping there.
+    const o = p.tr.at(netClock());
+    if (!o) continue;
+    if (p.ease > 0) { p.ease -= dt; const k = Math.min(1, dt * 15); p.x += (o.x - p.x) * k; p.y += (o.y - p.y) * k; }
+    else { p.x = o.x; p.y = o.y; }
+  }
+  if (ball.tx !== undefined && ball.tr) {
+    // v5 (#480): the ball is drawn from its track, a moment back like the players, so a held ball is at
+    // its holder's feet as drawn, a kicked one leaves them and a stolen one rolls over as on the host. This
+    // phone's own player is drawn ahead of its track (it chases the newest spot): a ball near them is drawn
+    // as far ahead with them, so it stays at their feet. When the drawing switches between the two (this
+    // phone's player gets or loses the ball), the step from where the ball was drawn fades out over a tenth
+    // of a second instead of showing in one frame.
+    const mine = owner && owner.tx !== undefined && owner.ctl === myId() ? owner : null;
+    const o = ball.tr.at(netClock()), m = mine && mine.tr.at(netClock());
+    if (o) {
+      let ax = o.x, ay = o.y;
+      if (m) { ax += mine.x - m.x; ay += mine.y - m.y; ball.lead = 0; }
+      else if (ball.lead > 0 && owner) { ball.lead = 0; ball.ex = ball.x - ax; ball.ey = ball.y - ay; }
+      else if (ball.lead > 0) {
+        // This phone's own player has just kicked it (a shot or a pass): it leaves from the newest spot, gone on at
+        // its speed since, and not from the track, which still has it at the feet a moment back and would send it
+        // off that much later (D7: the phone's own actions are not delayed). After LEAD_ON s it eases onto its
+        // track over the rest of LEAD, so it flies a little slower for that while and the friends then take it
+        // where they are drawn. Someone taking it ends that at once, the step fading out as below.
+        ball.lead -= dt;
+        // How long ago the host had it at its newest spot: by the stamp, from the quickest a message has come over
+        // the last second, so a message that came late does not send it on too far and back when the next comes.
+        const c = netClock(), lag = ball.st === null ? null : lagBefore(c);
+        const k = Math.min(1, ball.lead / (LEAD - LEAD_ON)), age = Math.max(0, lag === null ? c - ball.at : c - lag - ball.st);
+        ax += (ball.tx + (ball.vx || 0) * age - ax) * k; ay += (ball.ty + (ball.vy || 0) * age - ay) * k;
+      }
+      if (mine !== ball.heldBy) { ball.heldBy = mine; ball.ex = ball.x - ax; ball.ey = ball.y - ay; }
+      const f = Math.max(0, 1 - dt * 12); ball.ex *= f; ball.ey *= f;
+      ball.x = ax + ball.ex; ball.y = ay + ball.ey; ball.z = o.z;
+    }
   }
   tick(dt);
   if ((net.sendT -= dt) <= 0) { net.sendT = 0.05; R.send({ t: 'i', round: net.round, x: r2(input.jx), y: r2(input.jy) }); }
@@ -746,12 +899,15 @@ R.on('message', (m, from) => {
     if (net.round === m.round && players.length) return;
     applySetup(m);
     view = myTeam === 0 ? 1 : -1;
-    ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0 };
+    // The ball has its own track (#480), drawn at the same moment back as the players. The hardest shot (28 m/s)
+    // goes about 1.4 m between two spots, 20 a second; feedTrack() tells a jump (the host putting it somewhere new,
+    // a test does) by the time between them.
+    ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, tr: AiPelitSulava.track({ keys: ['x', 'y', 'z'] }), heldBy: null, ex: 0, ey: 0, lead: 0, at: 0, st: null };
     owner = null; goals = 0; state = 'kickoff';
     menu.classList.add('hidden');
     whistle(false);
   } else if (m.round === net.round && players.length) {
-    if (m.t === 's') applySnapshot(m);
+    if (m.t === 's') heardSnapshot(m);
   }
 });
 // A phone that comes back gets the match as it is: who plays where, then the running stream.
