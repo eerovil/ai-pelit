@@ -698,17 +698,23 @@ function netClock() {
   }
   return t - pz.off;
 }
-// [arrival, lag] of the last snapshots put on the tracks.
+// [arrival, lag, heard] of the last snapshots put on the tracks (arrival is later than heard for one held across a
+// pause).
 const lags = [];
 function lagBefore(c) {
   let m = null;
   for (const [a, l] of lags) if (a >= c - 1 && (m === null || l < m)) m = l;
   return m;
 }
+// Late: every snapshot heard since the pause ended. Judged on the last three alone, a jittery connection (each
+// message 0-90 ms late) had three in a row over 0.03 s late now and then, and everyone was drawn at a quarter of
+// their speed for some frames with no pause asymmetry to make up (#498: four frames at 0.25x on a third phone
+// after a friend's phone dropped and the host went on). Snapshots heard during the pause are left out: their
+// arrival was put at their stamp plus pz.lag.
 function lateSincePause() {
   if (pz.lag === null || pz.drag >= 1.5) return false;
-  let m = null, n = 0;
-  for (let i = lags.length - 1; i >= 0 && n < 3 && lags[i][0] >= pz.on; i--, n++) if (m === null || lags[i][1] < m) m = lags[i][1];
+  let m = null;
+  for (let i = lags.length - 1; i >= 0 && lags[i][2] > pz.on; i--) if (m === null || lags[i][1] < m) m = lags[i][1];
   return m !== null && m - pz.lag > 0.03;
 }
 // A snapshot heard while this phone is paused waits, with the moment it came, while 6 of those already on the tracks
@@ -736,7 +742,7 @@ function feedSnapshots() {
     applySnapshot(s, a);
     if (st !== null) {
       fed.push(st); if (fed.length > 8) fed.shift();
-      lags.push([a, a - st]); if (lags.length > 40) lags.shift();
+      lags.push([a, a - st, heard]); if (lags.length > 40) lags.shift();
     }
   }
 }

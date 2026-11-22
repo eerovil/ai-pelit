@@ -671,3 +671,50 @@ def test_spots_landing_in_a_guests_pause_after_a_stall_do_not_hop_the_drawing(si
     assert not hops, (hops, round(gap, 2), [(round(f[0] - go_at, 3), round(f[1], 2)) for f in pr if f[0] > pz_at - 0.2][:40])
     assert pr[-1][1] > held[-1][1] + 2  # and it ran on
     assert not host.errors + guest.errors
+
+
+# On the host, once `window.__late3` is on: of each four snapshots it sends, the first leaves at once and the other
+# three 60 ms late, in order (a jittery connection, made the same every run).
+LATE3 = """() => { window.__late3 = false; let k = 0, free = 0; const send = AiPelitRooms.send.bind(AiPelitRooms);
+  AiPelitRooms.send = (m, to) => { if (m.t !== 's' || !window.__late3) { send(m, to); return; }
+    const now = performance.now(), at = Math.max(free, now + (k++ % 4 ? 60 : 0)); free = at;
+    setTimeout(() => send(m, to), at - now); }; }"""
+
+
+def test_a_jittery_connection_after_a_pause_does_not_slow_the_drawing(site, browser):
+    """The room pauses on both phones at about the same moment and goes on, so nothing is late on the host's time.
+    After it the host's snapshots come jittered: three of each four 60 ms late. For 3 s after a pause the guest's
+    clock goes at a quarter of its speed while the snapshots heard since are late (a host that paused first), so
+    every player is drawn slower there. Judged on the last three snapshots alone, three late ones in a row read as
+    a host that paused first, and the drawn moment went at 0.25x for some frames, again and again (#498: four
+    frames at a quarter of the speed on a third phone after a friend's phone dropped). The drawn moment must go on
+    at real time."""
+    host, guest = phones(site, browser)
+    for pg in (host, guest):
+        pg.evaluate(PAUSE)
+    host.evaluate(QUIET)
+    host.evaluate("players[4].x = -12; players[4].y = -5")
+    guest.wait_for_function("Math.abs(players[4].x + 12) < 0.05 && players[4].tr.size() > 3", timeout=5000)
+    host.evaluate(LATE3)
+    guest.evaluate(PZREC, 4)
+    host.evaluate("window.__cpuRun = 4; window.__run = true")
+    guest.wait_for_timeout(800)
+    # The guest stops first and goes on last, so its clock stands a little longer than the host's: the snapshots
+    # after it, if anything, come early.
+    guest.evaluate("window.__pz = true")
+    host.evaluate("window.__pz = true")
+    guest.wait_for_timeout(500)
+    host.evaluate("window.__pz = false; window.__late3 = true")
+    clock = "(performance.timeOrigin + performance.now()) / 1000"
+    go_at = guest.evaluate(f"window.__pz = false; {clock}")
+    guest.wait_for_timeout(2500)
+    guest.evaluate("window.__pzStop = true")
+    pr = guest.evaluate("window.__pr")
+    drag = guest.evaluate("pz.drag")
+    after = [f for f in pr if f[0] > go_at + 0.05 and f[3] is not None]
+    assert after and after[-1][0] - after[0][0] > 2, len(after)
+    # lib/sulava-1 itself changes the drawn moment's pace by at most 20% (a new delay), so 0.5x is the slow one.
+    slow = [(round(t1 - go_at, 3), round((d1 - d0) / (t1 - t0), 2)) for (t0, _, _, d0, _), (t1, _, _, d1, _)
+            in zip(after, after[1:]) if t1 > t0 and (d1 - d0) / (t1 - t0) < 0.5]
+    assert not slow, (slow, round(drag, 3))
+    assert not host.errors + guest.errors
