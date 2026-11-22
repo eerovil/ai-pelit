@@ -31,25 +31,26 @@ const LAND_DONE = 0.8;
 const GIFT_PTS = 50, BIG_GIFT_PTS = 100;
 const FALL_T = 1.1;
 
-// ---- The three hills ----
+// ---- The hills (seven from v6) ----
 // Each is fixed, so a record on it compares with every other run on it. `kick`: jumps as
-// [s, x, height, length, width]; `open`: points needed on the hill before it to open this one.
+// [s, x, height, length, width]; `open`: points needed on the hill before it to open this one;
+// `at`: "on it" in Finnish (v6), for the lock's text.
 const HILLS = [
   {
-    name: 'Kotimäki', len: 640, grad: 0.21, wave: 0.05, width: 18, open: 0, seed: 11,
+    name: 'Kotimäki', at: 'Kotimäessä', len: 640, grad: 0.21, wave: 0.05, width: 18, open: 0, seed: 11,
     bend: [[60, 0.0042, 0.3], [14, 0.011, 1.7]],
     kick: [[90, 0, 1.2, 6, 6], [190, -3, 1.4, 6, 6], [285, 3, 1.5, 6.5, 6], [380, 0, 1.6, 6.5, 7], [470, -2, 1.8, 7, 6], [560, 2, 2.0, 7, 7]],
     trees: 18, rocks: 6, snowmen: 6, gifts: 18,
   },
   {
-    name: 'Kuusikko', len: 800, grad: 0.24, wave: 0.06, width: 16, open: 2500, seed: 23,
+    name: 'Kuusikko', at: 'Kuusikossa', len: 800, grad: 0.24, wave: 0.06, width: 16, open: 2500, seed: 23,
     bend: [[70, 0.005, 1.1], [18, 0.013, 0.2]],
     kick: [[85, 2, 1.4, 6, 6], [170, -3, 1.6, 6.5, 6], [255, 3, 1.8, 7, 6], [290, 3, 1.4, 6, 6], [380, -2, 2.0, 7, 6],
       [470, 2, 2.1, 7.5, 6], [505, 2, 1.6, 6.5, 6], [600, -3, 2.2, 7.5, 6], [700, 0, 2.4, 8, 7]],
     trees: 34, rocks: 9, snowmen: 8, gifts: 24,
   },
   {
-    name: 'Tunturi', len: 950, grad: 0.27, wave: 0.07, width: 14, open: 4000, seed: 37,
+    name: 'Tunturi', at: 'Tunturilla', len: 950, grad: 0.27, wave: 0.07, width: 14, open: 4000, seed: 37,
     bend: [[80, 0.006, 2.1], [22, 0.016, 0.9]],
     kick: [[90, -2, 1.8, 7, 5], [180, 2, 2.2, 7.5, 5], [270, -3, 2.4, 8, 5], [355, 2, 2.6, 8, 5], [440, -2, 2.4, 8, 5],
       [475, -2, 1.8, 7, 5], [560, 3, 2.8, 8.5, 5], [650, -2, 2.6, 8, 5], [740, 2, 3.0, 9, 5], [840, 0, 3.2, 9, 6]],
@@ -60,7 +61,7 @@ const HILLS = [
   // cliff 2 m long (s even, so the drawn ground has a row at both ends) that throws a fast sled
   // into the air.
   {
-    name: 'Rotko', len: 820, grad: 0.22, wave: 0.05, width: 16, open: 3000, seed: 41,
+    name: 'Rotko', at: 'Rotkossa', len: 820, grad: 0.22, wave: 0.05, width: 16, open: 3000, seed: 41,
     bend: [[70, 0.0048, 0.6], [16, 0.012, 2.4]],
     steep: [[150, 40, 0.55], [330, 50, 0.7], [600, 60, 0.8]],
     drop: [[120, 3.5], [270, 5], [460, 6], [560, 4], [770, 7]],
@@ -68,14 +69,40 @@ const HILLS = [
     trees: 30, rocks: 10, snowmen: 6, gifts: 24,
   },
   {
-    name: 'Jyrkänne', len: 960, grad: 0.26, wave: 0.06, width: 15, open: 4000, seed: 53,
+    name: 'Jyrkänne', at: 'Jyrkänteellä', len: 960, grad: 0.26, wave: 0.06, width: 15, open: 4000, seed: 53,
     bend: [[85, 0.0055, 1.4], [20, 0.015, 0.4]],
     steep: [[100, 50, 0.8], [260, 70, 1.0], [470, 50, 0.9], [640, 80, 1.1], [840, 50, 0.8]],
     drop: [[90, 4], [150, 6], [300, 8], [370, 5], [520, 6], [700, 9], [780, 10]],
     kick: [[200, 2, 1.8, 7, 6], [430, -2, 2.2, 7.5, 6], [600, 3, 2.4, 8, 5], [880, 0, 3.0, 9, 6]],
     trees: 40, rocks: 12, snowmen: 8, gifts: 28,
   },
+  // v6 (#517): sharp bends and tunnels. `tunnel`: [s, length], a vault of rock under the snow over
+  // the track; its walls keep the sled in and its roof keeps it low (no jump or drop inside, nor
+  // just before its mouth). `berm`: the snow rises on the outside of each bend, so a fast sled can
+  // ride up the outer curve and come back down (Eero's wish for v6).
+  {
+    name: 'Mutkamäki', at: 'Mutkamäessä', len: 900, grad: 0.23, wave: 0.05, width: 15, open: 4000, seed: 67,
+    bend: [[26, 0.028, 0.5], [8, 0.011, 1.9]], berm: true,
+    tunnel: [[300, 70], [620, 90]],
+    steep: [[240, 30, 0.5]],
+    drop: [[470, 4]],
+    kick: [[100, 0, 1.6, 7, 6], [190, 2, 1.8, 7, 6], [420, -2, 2.0, 7.5, 6], [530, 2, 2.2, 7.5, 6], [760, -2, 2.4, 8, 6], [840, 0, 2.6, 8.5, 7]],
+    trees: 34, rocks: 10, snowmen: 8, gifts: 28,
+  },
+  {
+    name: 'Luolasto', at: 'Luolastossa', len: 1000, grad: 0.25, wave: 0.06, width: 14, open: 4500, seed: 79,
+    bend: [[22, 0.024, 1.2], [6, 0.045, 0.3]], berm: true,
+    tunnel: [[150, 80], [380, 120], [700, 140]],
+    steep: [[420, 60, 0.6]],
+    drop: [[280, 5], [560, 6], [880, 7]],
+    kick: [[60, 0, 1.4, 6, 6], [255, 2, 1.8, 7, 6], [520, -2, 2.2, 7.5, 6], [615, 2, 2.4, 8, 6], [860, 0, 2.6, 8, 6], [930, -2, 2.8, 8.5, 6]],
+    trees: 30, rocks: 10, snowmen: 6, gifts: 30,
+  },
 ];
+const ROOF = 5.2, WALL = 0.5;   // a tunnel's height over the snow; its walls this far outside the track's edge
+// A bend's bank (#517 v6): BERM_PER_TURN m per radian of turn a metre, at most BERM_MAX m high,
+// rising from BERM_IN m inside the track's edge; BERM_TURN is how hard its slope turns the sled down it.
+const BERM_PER_TURN = 90, BERM_MAX = 1.7, BERM_IN = 3.5, BERM_TURN = 1.1;
 const RUNOUT = 90;   // the flat at the bottom, past the finish line
 
 // Builds a hill's numbers once: the height along the centre line every metre, and the trees,
@@ -100,10 +127,22 @@ function buildHill(n) {
   }
   const kicks = H.kick.map(([s, x, ht, len, w], i) => ({ i, s, x, h: ht, len, w }));
   const drops = (H.drop || []).map(([s, d]) => ({ s, h: d }));
-  const hill = { n, name: H.name, len: H.len, width: H.width, open: H.open, bend: H.bend, base, total, kicks, drops, obst: [], gifts: [] };
+  const tunnels = (H.tunnel || []).map(([s, len]) => ({ s, len }));
+  const hill = { n, name: H.name, len: H.len, width: H.width, open: H.open, bend: H.bend, base, total, kicks, drops, tunnels, obst: [], gifts: [] };
+  // The berms (v6): every metre, how high the outer side of the bend rises (BERM_PER_TURN metres per
+  // radian a metre of turning, at most BERM_MAX), signed by the side: + right, - left. They ease out
+  // towards a tunnel, whose walls and roof stand on level snow.
+  hill.berm = new Float32Array(total + 1);
+  hill.bermy = !!H.berm;
+  if (H.berm) for (let s = 0; s <= total; s++) {
+    const turn = (courseDir(hill, s + 1) - courseDir(hill, s - 1)) / 2;
+    const gap = tunnels.reduce((m, t) => Math.min(m, s < t.s ? t.s - s : s > t.s + t.len ? s - t.s - t.len : 0), 1e9);
+    const fade = clamp((gap - 6) / 14, 0, 1) * clamp((H.len + 10 - s) / 20, 0, 1);
+    hill.berm[s] = -Math.sign(turn) * Math.min(BERM_MAX, Math.abs(turn) * BERM_PER_TURN) * fade;
+  }
   // Keep the jumps' run-ups and landings clear, and the snow before and below each drop.
   const clear = (s, x) => kicks.some(k => s > k.s - 28 && s < k.s + k.len + 26 && Math.abs(x - k.x) < k.w / 2 + 3) ||
-    drops.some(d => s > d.s - 12 && s < d.s + 30);
+    drops.some(d => s > d.s - 12 && s < d.s + 30) || tunnels.some(t => s > t.s - 8 && s < t.s + t.len + 8);
   const place = (count, kind, rad) => {
     for (let i = 0, tries = 0; i < count && tries < 2000; tries++) {
       const s = 40 + r() * (H.len - 60), x = (r() * 2 - 1) * (H.width / 2 - 1.5);
@@ -125,7 +164,10 @@ function buildHill(n) {
 }
 
 // Which way the course itself heads at `s` (radians from straight down the s axis).
-function courseDir(hill, s) { return Math.atan2(centreX(hill, s + 0.6) - centreX(hill, s - 0.6), 1.2); }
+function courseDir(hill, s) { return Math.atan(courseSlope(hill, s)); }
+// How much the centre line moves across per metre along (v6): s and x are not square to each other
+// on a bend, so a heading `yaw` from the course really goes atan(slope + tan(yaw)) in the world.
+function courseSlope(hill, s) { return (centreX(hill, s + 0.6) - centreX(hill, s - 0.6)) / 1.2; }
 function centreX(hill, s) { let v = 0; for (const [a, k, p] of hill.bend) v += a * Math.sin(s * k + p); return v; }
 function baseAt(hill, s) {
   const b = hill.base, i = clamp(Math.floor(s), 0, hill.total - 1), f = clamp(s - i, 0, 1);
@@ -142,7 +184,20 @@ function kickAt(hill, s, x) {
   }
   return 0;
 }
-function groundAt(hill, s, x) { return baseAt(hill, s) + bankAt(hill, x) + kickAt(hill, s, x); }
+// The tunnel the sled is in at `s`, if any (v6).
+function tunnelAt(hill, s) { for (const t of hill.tunnels || []) if (s >= t.s && s <= t.s + t.len) return t; return null; }
+// The berm at (s, x): on the outside of a bend, rising from BERM_IN m inside the edge (v6).
+function bermAt(hill, s, x) {
+  const b = hill.berm; if (!b) return 0;
+  const i = clamp(Math.floor(s), 0, hill.total - 1), f = clamp(s - i, 0, 1), h = b[i] + (b[i + 1] - b[i]) * f;
+  const d = x * Math.sign(h) - (hill.width / 2 - BERM_IN);
+  // u² up to the edge, then rounding over to a flat top twice as high, so its top throws no sled.
+  const u = Math.min(d / BERM_IN, 2);
+  return d > 0 ? Math.abs(h) * (u <= 1 ? u * u : 1 + 2 * (u - 1) - (u - 1) * (u - 1)) : 0;
+}
+// The snow's height without the jumps: the slope, the banks and the berms.
+function snowAt(hill, s, x) { return baseAt(hill, s) + bankAt(hill, x) + bermAt(hill, s, x); }
+function groundAt(hill, s, x) { return snowAt(hill, s, x) + kickAt(hill, s, x); }
 
 // ---- A sled ----
 function newSled(id, name, opts) {
@@ -271,7 +326,7 @@ function step(hill, sl, dt) {
 
   // The sled keeps its own heading (#475, Eero's choice: no steering by itself). `yaw` is measured
   // from the course, so where the course bends the yaw changes by as much the other way.
-  const cd0 = courseDir(hill, sl.s);
+  const c0 = courseSlope(hill, sl.s), x0 = sl.x, t0 = tunnelAt(hill, sl.s);
   if (sl.air) {
     sl.airT += dt;
     sl.vy -= G * dt;
@@ -297,12 +352,17 @@ function step(hill, sl, dt) {
     const gx = (groundAt(hill, sl.s, sl.x + 0.05) - groundAt(hill, sl.s, sl.x - 0.05)) / 0.1;
     const along = gs * Math.cos(sl.yaw) + gx * Math.sin(sl.yaw);
     const th = Math.atan(-along);
-    const off = Math.abs(sl.x) > hill.width / 2;
+    // Up a berm the groomed snow goes on 2 m past the edge (v6).
+    const off = Math.abs(sl.x) > hill.width / 2 + (bermAt(hill, sl.s, sl.x) > 0 ? 2 : 0);
     const mu = off ? 0.2 : sl.fallT > 0 ? 0.35 : 0.045;
     const a = G * Math.sin(th) - mu * G * Math.cos(th) - 0.0045 * sl.v * sl.v - 0.9 * Math.abs(sl.yaw) * Math.abs(steer) - (sl.fin ? 2.5 : 0);
     sl.v = Math.max(sl.fin ? 0 : 0.6, sl.v + a * dt);
     // The banks push a sled back towards the track.
     sl.vxb += -gx * G * 0.8 * dt; sl.vxb *= Math.max(0, 1 - dt * 2.5);
+    // On a hill with berms (v6) the snow's sideways slope also turns the sled, as a banked curve
+    // does: up the outer curve and round the bend. (The older hills keep their own feel.)
+    const gb = hill.bermy ? (snowAt(hill, sl.s, sl.x + 0.05) - snowAt(hill, sl.s, sl.x - 0.05)) / 0.1 : 0;   // the jumps' steep sides do not count
+    if (gb && sl.fallT <= 0) sl.yaw = clamp(sl.yaw - gb * G * BERM_TURN * Math.cos(sl.yaw) / Math.max(sl.v, 4) * dt, -MAX_YAW, MAX_YAW);
     const py = sl.y, ps = sl.s, px = sl.x;
     sl.s += sl.v * Math.cos(sl.yaw) * dt;
     sl.x += (sl.v * Math.sin(sl.yaw) + sl.vxb) * dt;
@@ -322,13 +382,39 @@ function step(hill, sl, dt) {
       sl.y = gy;
     }
   }
-  sl.yaw -= courseDir(hill, sl.s) - cd0;
+  // The sled keeps its heading in the world as the course bends under it (#517 v6, review of #525):
+  // the world heading over the old slope, put back as a heading from the course at the new place.
+  const c1 = courseSlope(hill, sl.s);
+  if (c1 !== c0) sl.yaw = Math.atan2(Math.sin(sl.yaw) + (c0 - c1) * Math.cos(sl.yaw), Math.cos(sl.yaw));
+  // In a tunnel (v6): the walls turn the sled back along them, the roof stops it rising.
+  const tun = tunnelAt(hill, sl.s);
+  if (tun) {
+    const lim = hill.width / 2 + WALL - 0.4;
+    if (!t0 && Math.abs(x0) > lim + 0.3) {
+      // Coming at the mouth from out beside the track: the snow over the tunnel stops the sled, which
+      // then slides along its face towards the opening (not through the mound into the tunnel).
+      sl.s = tun.s - 0.3; sl.x = x0 - Math.sign(x0) * Math.min(Math.abs(x0) - lim, 4 * dt); sl.vxb = 0;
+      if (sl.air) { sl.air = false; sl.vy = 0; }
+      sl.y = groundAt(hill, sl.s, sl.x);
+      if (sl.fallT <= 0 && !sl.fin) fall(sl); else sl.v = Math.min(sl.v, 2);
+    } else if (Math.abs(sl.x) > lim) {
+      const side = Math.sign(sl.x);
+      sl.x = side * lim; sl.vxb = 0;
+      if (Math.sign(sl.yaw) === side) {
+        const hard = Math.abs(sl.yaw) > 0.12;   // a knock, not the sled held against the wall
+        sl.yaw *= 0.3;
+        if (hard) { sl.v *= 0.97; if (sl.onEvent) sl.onEvent('wall'); }
+      }
+    }
+    const top = baseAt(hill, sl.s) + ROOF - 1.3;
+    if (sl.air && sl.y > top) { sl.y = top; sl.vy = Math.min(sl.vy, 0); }
+  }
   // The trees, rocks and snowmen: low enough to hit them is a fall.
   if (sl.fallT <= 0 && !sl.fin) {
     for (const o of hill.obst) {
       if (Math.abs(o.s - sl.s) > 2 || sl.hitWait[o.id]) continue;
       const tall = o.kind === 'kuusi' ? 4 : o.kind === 'lumiukko' ? 1.8 : 0.9;
-      if (sl.y - baseAt(hill, o.s) - bankAt(hill, o.x) > tall) continue;
+      if (sl.y - snowAt(hill, o.s, o.x) > tall) continue;
       if (Math.hypot(o.s - sl.s, o.x - sl.x) < o.r + 0.45) {
         sl.hitWait[o.id] = 2;
         sl.x += (sl.x >= o.x ? 1 : -1) * 0.6;
@@ -341,7 +427,7 @@ function step(hill, sl, dt) {
   // Presents: each sled takes its own.
   for (const gf of hill.gifts) {
     if (Math.abs(gf.s - sl.s) > 1.6 || sl.gifts.includes(gf.id)) continue;
-    const gy = baseAt(hill, gf.s) + bankAt(hill, gf.x) + gf.up;
+    const gy = snowAt(hill, gf.s, gf.x) + gf.up;
     if (Math.hypot(gf.s - sl.s, gf.x - sl.x, (gy - (sl.y + 0.6)) * 0.8) < (gf.big ? 1.7 : 1.3)) {
       sl.gifts.push(gf.id);
       const p = gf.big ? BIG_GIFT_PTS : GIFT_PTS;
