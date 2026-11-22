@@ -1,13 +1,14 @@
-"""Vuoristorata v7 (#480): a friend's train glides along the track on the other phones' screens, drawn from
+"""Vuoristorata v7-v8 (#480): a friend's train glides along the track on the other phones' screens, drawn from
 lib/sulava-1 between the spots their phone sends, instead of being carried on at its last speed between messages
 (v6). The places and the end use the newest spot heard; only the drawing lags."""
 
+import math
 import time
 from statistics import mean, pstdev
 
 import pytest
 
-from test_vuoristorata_v7 import room_of
+from test_vuoristorata_v8 import room_of
 
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
@@ -266,6 +267,69 @@ def test_a_pause_holds_a_friend_s_train_where_it_is_drawn_and_it_rides_on_from_t
         # Never drawn going back along the track, before, in or after the pause.
         drawn = [round(s, 2) for _, s, _ in dr]
         assert all(b >= a - 0.05 for a, b in zip(drawn, drawn[1:])), drawn
+        assert not host.errors + guest.errors
+    finally:
+        close(host)
+
+
+# On the guest, with the host sending nothing and the room's pause by hand (`window.__pz`): the host's train fed by
+# hand, riding at V m/s by the tracks' clock, a spot each 1/30 s (stamps on a clock 100 s from the guest's). After
+# 0.6 s the link stalls for 1 s (the spots go on being made and wait), then the guest pauses and the waiting ones
+# land; 0.5 s on the pause ends and the spots come on as before for 0.5 s. Records each frame [moment, s drawn,
+# paused, s at the moment drawn].
+STALL = """([i, V]) => new Promise(done => {
+  window.__pz = false;
+  Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true });
+  const k = net.cars[i], s0 = k.s, t0 = netClock(), off = 100, q = [];
+  k.tr.reset();   // a clock of its own from here
+  const hear = (c, s) => { k.s = s; heardSpot(k, c + off, k.src || 'h', false); };
+  window.__st = []; const d = window.drawnS;
+  window.drawnS = c => { const s = d(c); if (c === k) window.__st.push([performance.now() / 1000, s, window.__pz,
+    k.tr.time === null ? null : s0 + V * (k.tr.time - off - t0)]); return s; };
+  let phase = 'on';
+  const tick = setInterval(() => { const c = netClock(), s = s0 + V * (c - t0);
+    if (phase === 'on') hear(c, s); else if (phase === 'stall') q.push([c, s]); }, 1000 / 30);
+  setTimeout(() => { phase = 'stall'; }, 600);
+  setTimeout(() => { phase = 'pause'; window.__pz = true; for (const [c, s] of q.splice(0)) hear(c, s); }, 1600);
+  setTimeout(() => { window.__pz = false; phase = 'on'; }, 2100);
+  setTimeout(() => { clearInterval(tick); done(); }, 2600); })"""
+
+
+@pytest.mark.parametrize("ms", [False, True], ids=["chromium-clock", "whole-ms-clock"])
+def test_spots_landing_in_a_pause_after_a_stall_are_eased_in_after_it(site, browser, ms):
+    """v8: a stall, then the guest pauses and the stalled spots land in the pause. The train drawn holds still all
+    through the pause, and once it is over the drawing eases to the spots, not the whole way in one frame. Also on
+    a clock that counts whole milliseconds (Safari's, Firefox's), where the first frame after the pause read the
+    paused moment again in v7: the track eases a correction only when its clock has moved on since the last frame,
+    so the train hopped there."""
+    host, guest = phones(site, browser)
+    try:
+        i = index(host)
+        if ms:
+            guest.evaluate("""() => { const n = performance.now.bind(performance);
+              AiPelitSulava.now = () => Math.floor(n()) / 1000; }""")
+        host.evaluate("() => { AiPelitRooms.send = () => {}; }")  # the host's own spots no longer reach the guest
+        guest.wait_for_timeout(300)
+        V = 20
+        guest.evaluate(STALL, [i, V])
+        st = guest.evaluate("window.__st")
+        first = next(n for n, e in enumerate(st) if e[2])
+        held = [st[first - 1][1]] + [s for _, s, p, *_ in st[first:] if p]
+        assert len(held) > 3, len(held)
+        assert max(held) - min(held) < 0.01, [round(s, 2) for s in held]
+        last = max(n for n, e in enumerate(st) if e[2])
+        after = [(t, s) for t, s, p, *_ in st[last + 1:]]
+        # By the pause the drawing had stood a while (the stall outran its 0.25 s guess) well short of the spot for its
+        # moment; after it, it eases there by the time gone (the track's easing, 0.1 s), and the drawn moment goes on
+        # at most 1.2 times the clock: never the whole way in one frame, however long the frame.
+        gap = st[first][3] - held[-1]
+        assert gap > 5, gap
+        t1 = st[last][0]
+        over = [(round(t - t1, 3), round(s - held[-1], 2)) for t, s in after[:6]
+                if s - held[-1] > gap * (1 - math.exp(-(t - t1) / 0.1)) + 1.2 * V * (t - t1) + 0.3]
+        assert not over, (over, round(gap, 2))
+        (ta, sa), (tb, sb) = after[-2], after[-1]
+        assert abs(sb - sa) / (tb - ta) < 1.5 * V, after[-5:]  # and by the end it runs on at the spots' speed
         assert not host.errors + guest.errors
     finally:
         close(host)
