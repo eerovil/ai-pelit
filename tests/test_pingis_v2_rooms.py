@@ -70,8 +70,9 @@ def test_two_phones_play_one_rally_from_both_ends(phones):
     host, guest = room(phones)
     assert host.evaluate("[view, names]") == [0, ["Sinä", "Testi2"]]
     assert guest.evaluate("[view, names]") == [1, ["Testi1", "Sinä"]]
-    # The guest's camera is behind its own end, the other way round.
-    assert guest.evaluate("V3.view") in (1, -1) or guest.evaluate("no3d")
+    # The guest's camera is behind its own end, the other way round. V3.view is set by the next
+    # 3D frame (render3d), which on a busy run comes a moment after the game state, so wait for it.
+    guest.wait_for_function("no3d || V3.view === 1 || V3.view === -1", timeout=5000)
     for p in (host, guest):
         p.evaluate(AUTO)
     server = host if host.evaluate("game.sv") == 0 else guest
