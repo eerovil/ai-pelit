@@ -654,7 +654,9 @@ const pz = { off: 0, at: null };
 function netClock() {
   const t = AiPelitSulava.now();
   if (R.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
+  // It goes on 1 ms past the paused moment: a track read at the very moment of its last frame (dt 0) draws the
+  // held spots just put on it at once and eases nothing in, so after a stall the kart would hop the whole gap.
+  if (pz.at !== null) { pz.off += t - pz.at - 0.001; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
 }
 function heldOn(a) {

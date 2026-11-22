@@ -363,3 +363,60 @@ def test_spots_held_in_a_pause_with_no_frame_drawn_go_on_the_track_when_it_ends(
     host.evaluate("window.__run = false")
     errors = [e for p in (host, guest) for e in p.errors]
     assert not errors, errors
+
+
+# On the host: while `window.__stall` is on, its messages wait (a link that stalls), and `__flush()` sends the
+# waiting ones at once. Records each frame where its own kart is, by the clock it stamps its spots with.
+STALL = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms), q = [];
+  window.__stall = false; window.__own = [];
+  AiPelitRooms.send = (m, to) => { if (window.__stall) q.push([m, to]); else send(m, to); };
+  window.__flush = () => { window.__stall = false; for (const [m, to] of q.splice(0)) send(m, to); };
+  const d = window.draw;
+  window.draw = () => { window.__own.push([netClock(), me.x, me.y]); d(); }; }"""
+
+
+@pytest.mark.parametrize("ms", [False, True], ids=["chromium-clock", "whole-ms-clock"])
+def test_after_a_stall_then_a_pause_the_friend_s_kart_eases_to_its_spots(site, browser, ms):
+    """The host's spots stall for 0.7 s, so the guest draws the host's kart on a guess past its newest spot and then
+    stops (0.25 s at most): by the guess it falls behind where the kart really was. Then the guest pauses, and the
+    stalled spots land in the pause and are held. When the pause ends they go on the track, and the drawing eases
+    to them by the time gone (the track's 0.1 s easing), never the whole gap in one frame. Also on a clock that
+    counts whole milliseconds (Safari's and Firefox's): the first read after a pause gives the paused moment
+    again, and a track read at the same moment as the frame before does not ease a correction in."""
+    host, guest = phones(site, browser)
+    i = index(host)
+    if ms:
+        guest.evaluate("""() => { const n = performance.now.bind(performance);
+          AiPelitSulava.now = () => Math.floor(n()) / 1000; }""")
+    guest.evaluate(PAUSE)
+    host.evaluate("window.__lane = 0")
+    host.evaluate(STALL)
+    guest.evaluate("window.__cap = 100000")
+    guest.evaluate(SAMPLE, i)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(1200)
+    host.evaluate("window.__stall = true")
+    guest.wait_for_timeout(700)
+    guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
+    host.evaluate("window.__flush()")
+    guest.wait_for_timeout(500)
+    guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
+    guest.wait_for_timeout(700)
+    guest.evaluate("window.__stop = true")
+    host.evaluate("window.__run = false")
+    xs, pz_at, go_at = guest.evaluate("[window.__xs, window.__pzAt, window.__goAt]")
+    own = host.evaluate("window.__own")
+    paused = [f for f in xs if pz_at + 0.02 <= f[0] <= go_at]
+    assert len(paused) >= 3, len(paused)
+    t1, hx, hy, moment = paused[-1]
+    # Where the host's kart really was at the moment the paused frames drew: the gap the guess left.
+    real = min(own, key=lambda o: abs(o[0] - moment))
+    gap = math.hypot(real[1] - hx, real[2] - hy)
+    assert gap > 20, (gap, moment, real)
+    after = [(t, x, y) for t, x, y, _ in xs if t > go_at][:8]
+    assert len(after) >= 4, len(after)
+    over = [(round(t - t1, 3), round(math.hypot(x - hx, y - hy), 1)) for t, x, y in after
+            if math.hypot(x - hx, y - hy) > gap * (1 - math.exp(-(t - t1) / 0.1)) + 1.2 * 150 * (t - t1) + 2]
+    assert not over, (over, round(gap, 1))
+    errors = [e for p in (host, guest) for e in p.errors]
+    assert not errors, errors
