@@ -558,15 +558,15 @@ function drawScene() {
 // A concrete platform: its slab out to the tip at 0, on a pillar from the deck, a rail at the back.
 function drawPlatform() {
   const top = sy(BOARD_Y), slab = Math.max(6, 0.3 * S);
-  x.fillStyle = '#9aa7b0'; x.fillRect(sx(-3.4), top + slab, 1.3 * S, sy(DECK) - top - slab);
-  x.fillStyle = '#7d8a94'; x.fillRect(sx(-3.4) + 1.3 * S - 4, top + slab, 4, sy(DECK) - top - slab);
+  x.fillStyle = '#9aa7b0'; x.fillRect(sx(-2.7), top + slab, 1.1 * S, sy(DECK) - top - slab);
+  x.fillStyle = '#7d8a94'; x.fillRect(sx(-1.6) - 4, top + slab, 4, sy(DECK) - top - slab);
   x.fillStyle = '#b8c3ca'; x.fillRect(sx(-3.6), top, 3.6 * S, slab);
   x.fillStyle = '#2e6fa8'; x.fillRect(sx(-3.6), top - Math.max(2, 0.05 * S), 3.6 * S, Math.max(2, 0.05 * S));
   x.strokeStyle = '#c9d3da'; x.lineWidth = 3;
   x.beginPath(); x.moveTo(sx(-3.4), top); x.lineTo(sx(-3.4), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), top); x.stroke();
   // The height, painted on the pillar.
-  x.fillStyle = 'rgba(30,50,70,.75)'; x.font = '800 ' + Math.max(11, Math.round(0.42 * S)) + 'px system-ui'; x.textAlign = 'center';
-  x.fillText(String(BOARD_Y).replace('.', ',') + ' m', sx(-2.75), top + slab + Math.max(14, 0.6 * S));
+  x.fillStyle = 'rgba(30,50,70,.75)'; x.font = '800 ' + Math.max(11, Math.round(0.28 * S)) + 'px system-ui'; x.textAlign = 'center';
+  x.textAlign = 'right'; x.fillText(String(BOARD_Y).replace('.', ',') + ' m', sx(-1.6) - 8, top + slab + Math.max(14, 0.6 * S));
 }
 // The springboard (1 m or 3 m): fixed on its stand back to the fulcrum, bending past it, its tip down by dip.
 function drawBoard(dip) {
