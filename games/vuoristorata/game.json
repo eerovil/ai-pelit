@@ -43,6 +43,13 @@
       "note": "Vauhti- ja jarruohjaus, nopeusmerkit, suistumisriski ja nopeimman ajan kilpailu ovat taas mukana.",
       "request": "Vuoristoratapeli: palautetaan nopeusrajoitus mekaniikat",
       "issue": "eerovil/ai-pelit#463"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-21",
+      "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }

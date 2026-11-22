@@ -10,18 +10,25 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/kaaosrata/v9/"
+URL = "games/kaaosrata/v10/"
+
+# These phones draw in 2D (each test aborts three.module.js), so they need not run with the 3D tests, one game at a
+# time on the host (`alone`), where their timing failed beside the other 3D files. A games marker keeps conftest from
+# marking the file `alone`, so it runs with the 2D tests as v9's did.
+pytestmark = pytest.mark.games("kaaosrata")
 
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   AiPelitRooms.send = (m, to) => { const now = performance.now(), at = Math.max(free, now + rnd() * 90); free = at;
     setTimeout(() => send(m, to), at - now); }; }"""
-# The phone's own runner goes straight up the course at 4 m/s, past every obstacle (so it never falls or is knocked),
+# The phone's own runner goes straight up the course at 4 m/s on the ground (v10: up its ramps too), past every
+# obstacle (so it never falls or is knocked),
 # while `window.__run` is on; the others move by the game's own rules.
 STRAIGHT = """() => { const mv = window.move; window.__run = false;
   window.move = (r, dt, t) => { if (r !== me || !window.__run || r.fall > 0) return mv(r, dt, t);
-    r.vx = 0; r.vy = 4; r.z = 0; r.vz = 0; r.y += 4 * dt; }; }"""
+    r.vx = 0; r.vy = 4; r.vz = 0; r.y += 4 * dt;
+    r.z = baseAt(r.x, r.y); r.gx = r.x; r.gy = r.y; }; }"""
 # Records, each time the screen is drawn, where runner `i` is drawn, and when a message arrived (so a stall of the
 # test machine, with no message for a while, can be told from a jerk).
 SAMPLE = """(i) => { window.__xs = []; window.__got = [];
@@ -38,6 +45,10 @@ def phones(site, browser, names=("Testi A", "Testi B")):
     for name in names:
         ctx = browser.new_context(viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True,
                                   service_workers="block")
+        # These tests are about the network, not the drawing, so the phones draw v10's 2D fallback (#493): three
+        # pages drawing 3D in one test browser stalled the running phone's frames for up to 280 ms (measured), and
+        # its spots with them; a real phone draws only its own screen.
+        ctx.route("**/three.module.js", lambda route: route.abort())
         ctx.add_init_script(f"localStorage.setItem('ai-pelit:_pelaaja:nimi', {json.dumps(json.dumps(name))})")
         page = ctx.new_page()
         page.errors = []

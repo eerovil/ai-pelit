@@ -97,6 +97,7 @@
      and with the loudest sounds quieter -->
 <!-- v4 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -471,9 +472,10 @@ if (renderer) {
       for (const k of net.cars) {
         if (k.kind === 'me') continue;
         const t = trainFor(k); seen.add(k.id);
-        t.visible = Math.abs(k.s - game.car.s) > 3.5;
+        const ks = drawnS(k);  // v7 (#480): a moment back, gliding between the spots heard
+        t.visible = Math.abs(ks - game.car.s) > 3.5;
         if (t.visible) {
-          const o = at(game.track, Math.max(0, k.s)).a;
+          const o = at(game.track, Math.max(0, ks)).a;
           t.matrix.copy(frameMatrix(o, 0, 0, 0, 1, 1, 1));
         }
       }
