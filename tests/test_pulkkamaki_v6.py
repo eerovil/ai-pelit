@@ -54,9 +54,11 @@ def test_the_sled_keeps_its_heading_when_the_finger_lifts(site, context):
     page.evaluate(TOUCH, ["pointerdown", 150, 500])
     page.evaluate(TOUCH, ["pointermove", 260, 500])
     page.wait_for_timeout(700)
-    held = page.evaluate("me.yaw")
+    # Lift the finger and read the heading in the same moment: a frame between the two (a busy
+    # host) would still be steered and count as a turn after the lift.
+    held = page.evaluate("""() => { const y = me.yaw; document.getElementById('c').dispatchEvent(new PointerEvent('pointerup',
+      { pointerId: 9, clientX: 260, clientY: 500, bubbles: true, pointerType: 'touch' })); return y; }""")
     assert held > 0.4
-    page.evaluate(TOUCH, ["pointerup", 260, 500])
     page.wait_for_timeout(600)
     # It is not turned back down the hill by itself (Eero's choice).
     assert page.evaluate("me.yaw") == pytest.approx(held, abs=0.15)
