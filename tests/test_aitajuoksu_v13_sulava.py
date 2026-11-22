@@ -37,7 +37,7 @@ SAMPLE = """(i) => { window.__xs = []; window.__got = [];
 
 
 def phones(site, browser, names=("Testi A", "Testi B")):
-    """Two phones in a room, the race running."""
+    """Phones in a room (two unless more names are given), the race running."""
     site.build(ROOT / "games")
     relay, pages = Relay(), []
     for name in names:
@@ -51,13 +51,14 @@ def phones(site, browser, names=("Testi A", "Testi B")):
         page.goto(site.url + URL)
         page.click("#multi")
         pages.append(page)
-    host, guest = pages
+    host, guests = pages[0], pages[1:]
     host.click("#aipr-create")
     host.wait_for_function("AiPelitRooms.isHost && AiPelitRooms.members.length === 1")
-    guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
-    guest.click("#aipr-joinBtn")
-    guest.wait_for_function("AiPelitRooms.inRoom")
-    host.wait_for_function("AiPelitRooms.members.filter(m => m.on).length === 2")
+    for n, guest in enumerate(guests, 2):
+        guest.fill("#aipr-codeIn", host.evaluate("AiPelitRooms.code"))
+        guest.click("#aipr-joinBtn")
+        guest.wait_for_function("AiPelitRooms.inRoom")
+        host.wait_for_function(f"AiPelitRooms.members.filter(m => m.on).length === {n}")
     for p in pages:
         p.evaluate(DRIVE)
     host.click("#aipr-start")
@@ -97,19 +98,34 @@ def speeds(xs, got):
     return kept
 
 
+def glides(xs, got, lo=2, spread=0.25):
+    kept = speeds(xs, got)
+    shown = [round(v, 1) for v in kept]
+    # Never backwards (v12: each spot that came later than the one before pulled the runner back), and about 8 m/s.
+    assert min(kept) > lo, shown
+    m, sd = mean(kept), pstdev(kept)
+    assert 6 < m < 10, shown
+    assert sd < spread * m, (sd, m, shown)
+
+
 @pytest.mark.parametrize("who", ["guest", "host"])
 def test_a_friends_runner_glides_at_its_own_speed(site, browser, who):
     host, guest = phones(site, browser)
     run, other = (guest, host) if who == "guest" else (host, guest)
-    xs, got = watch(run, other)
-    kept = speeds(xs, got)
-    shown = [round(v, 1) for v in kept]
-    # Never backwards (v12: each spot that came later than the one before pulled the runner back), and about 8 m/s.
-    assert min(kept) > 2, shown
-    m, sd = mean(kept), pstdev(kept)
-    assert 6 < m < 10, shown
-    assert sd < 0.25 * m, (sd, m, shown)
+    glides(*watch(run, other))
     assert not host.errors and not guest.errors, host.errors + guest.errors
+
+
+def test_a_friends_runner_glides_on_a_third_phone_too(site, browser):
+    """A friend's spots reach a third phone through the host, as they came: not where the host has carried the
+    runner on since, which would no longer match the friend's stamp sent with it."""
+    pages = phones(site, browser, ("Testi A", "Testi B", "Testi C"))
+    host, run, other = pages
+    host.evaluate(JITTER)
+    # Two jittery hops may now and then leave a frame slow, but the speed stays even: sent on from where the host
+    # had carried the runner, it spread 2-3 m/s about its 8 (0.6-0.9 sent as it came).
+    glides(*watch(run, other), lo=1, spread=0.15)
+    assert not any(p.errors for p in pages), [p.errors for p in pages]
 
 
 def test_a_friends_jump_rises_and_falls_every_frame(site, browser):
@@ -135,3 +151,15 @@ def test_the_race_keeps_the_newest_spot(site, browser):
     guest.evaluate("window.__run = false")
     assert kept > drawn, (kept, drawn)
     assert kept - drawn < 8 * 0.4, (kept, drawn)
+
+
+def test_the_place_shown_is_the_races(site, browser):
+    """The place on the screen goes by the newest spots, not by where the friends are drawn a moment back."""
+    host, guest = phones(site, browser)
+    i = guest.evaluate("race.runners.indexOf(me)")
+    # The friend stands just ahead of the host's runner, but is drawn well behind it.
+    place = host.evaluate("""(i) => { const r = race.runners[i]; me.x = r.x - 1;
+      r.tr = { at: () => ({ x: me.x - 5, y: 0 }), size: () => 1, push() {}, reset() {} };
+      draw(); return [livePlace, place(me), race.runners.length]; }""", i)
+    assert place[0] == place[1] and place[0] >= 2, place
+    assert not host.errors and not guest.errors, host.errors + guest.errors
