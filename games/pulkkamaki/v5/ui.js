@@ -173,7 +173,7 @@ c.addEventListener('pointerdown', e => {
 // brings a slow sled up to a good speed, so a steering drag must not push too.
 const TAP_MS = 300;
 function tapPush(p, now) {
-  if (mode !== 'run' || !me || p.air || me.air || now - p.t0 > TAP_MS || Math.abs(p.x - p.x0) >= SWIPE) return;
+  if (mode !== 'run' || !me || p.air || me.air || now - p.t0 > TAP_MS || p.far >= SWIPE) return;
   if (net && window.AiPelitRooms && AiPelitRooms.paused) return;
   pushOff(me, hill);
 }
@@ -181,12 +181,14 @@ c.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   p.x = e.clientX; p.y = e.clientY;
+  p.far = Math.max(p.far || 0, Math.hypot(p.x - p.x0, p.y - p.y0));   // a touch that ever moved is no tap
   airGesture(p, e.timeStamp, false);
 });
 function lift(e) {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   p.x = e.clientX; p.y = e.clientY;
+  p.far = Math.max(p.far || 0, Math.hypot(p.x - p.x0, p.y - p.y0));
   airGesture(p, e.timeStamp, true);
   if (e.type === 'pointerup') tapPush(p, e.timeStamp);
   if (p.grab && me) setGrab(me, false);

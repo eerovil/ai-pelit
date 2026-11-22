@@ -347,11 +347,14 @@ def test_a_stopped_sled_is_pushed_on_with_the_hands(site, context):
       return sl.v;
     }""")
     assert off == 4.2
-    # A steering drag on the snow is no push, nor is a long press: only a short tap is (v5).
+    # A steering drag on the snow is no push, nor a drag back to where it began, nor a quick swipe up or down,
+    # nor a long press: only a short tap is (v5).
     page.evaluate("() => { me.v = 4; me.fallT = 0; me.air = false; }")
-    page.evaluate(TOUCH, ["pointerdown", 180, 500])
-    page.evaluate(TOUCH, ["pointermove", 260, 500])
-    page.evaluate(TOUCH, ["pointerup", 260, 500])
+    for path in ([(260, 500)], [(260, 500), (182, 500)], [(180, 420)], [(180, 580), (180, 505)]):
+        page.evaluate(TOUCH, ["pointerdown", 180, 500])
+        for x, y in path:
+            page.evaluate(TOUCH, ["pointermove", x, y])
+        page.evaluate(TOUCH, ["pointerup", *path[-1]])
     page.evaluate(TOUCH, ["pointerdown", 180, 500])
     page.wait_for_timeout(400)
     page.evaluate(TOUCH, ["pointerup", 180, 500])
