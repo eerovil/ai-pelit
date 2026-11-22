@@ -1,0 +1,14 @@
+{
+  "title": "Uimahyppy",
+  "description": "Pompi ponnahduslaudalla kuin trampoliinilla, ponnista voltteihin ja avaa ennen vettä, joka hypyllä korkeammalta 10 metrin tasolle asti: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "group": "yleisurheilu",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-22",
+      "note": "Ensimmäinen versio: viisi hyppyä yhä korkeammalta (1 m ja 3 m ponnahduslauta, 5, 7,5 ja 10 m taso), laudalla pompitaan kuin trampoliinilla, ↻ Voltti pohjassa kerälle ja 🌀 Kierre kiertää; tuomaripisteet lasketaan yhteen, yksin tai 2–8 kaverin kanssa.",
+      "request": "Yleisurheilu uimahyppy.\n\nEeron valinnat:\n- Ohjaus: pompi laudalla tahdissa, pidä sormi pohjassa kerälle ja volteiksi, nosta sormi avautuaksesi ennen vettä.\n- Pisteet: tuomaripisteet lasketaan yhteen kaikista hypyistä.\n- Ei hypyn valintaa: pisteet tulevat tehdyistä volteista. \"Myös kierre. Ja tietty ponnahduslauta.\"\n- Korkeudet: joka hyppy korkeammalta, 1 m ja 3 m ponnahduslauta, sitten 5 m, 7,5 m ja 10 m taso (ei lautaa).\n- \"Pomppiminen saisi olla kuten trampoliinipelissä.\"",
+      "issue": "eerovil/ai-pelit#516"
+    }
+  ]
+}

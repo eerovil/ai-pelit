@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Uimahyppy</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#10263f;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  /* A fixed box, not 100dvh (AGENTS.md rule 4). */
+  canvas{display:block;position:fixed;top:0;bottom:0;left:0;right:0;width:100%;height:100%;touch-action:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #pad{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:8px 10px calc(env(safe-area-inset-bottom,0px) + 10px);box-sizing:border-box;touch-action:none}
+  #pad button{flex:1;height:64px;border:0;border-radius:16px;font:800 18px system-ui,sans-serif;color:#fff;background:#3d5a80;box-shadow:0 4px 0 #24364f;touch-action:none;padding:0}
+  #pad button.on{transform:translateY(3px);box-shadow:0 1px 0 #24364f;background:#ee6c4d}
+  #pad button[data-act=kierre]{flex:.8;background:#7b5ea7;box-shadow:0 4px 0 #4b3570}
+  #pad button[data-act=kierre].on{box-shadow:0 1px 0 #4b3570;background:#b388eb}
+  #pad.off{visibility:hidden}
+  /* Sideways (rule 4): the two buttons in the lower corners, the middle of the screen stays the scene. */
+  @media (orientation:landscape){
+    #pad{top:0;display:grid;grid-template-columns:116px 1fr 116px;grid-template-rows:1fr 58px;gap:10px;
+      padding:0 calc(env(safe-area-inset-right,0px) + 10px) calc(env(safe-area-inset-bottom,0px) + 10px) calc(env(safe-area-inset-left,0px) + 10px);pointer-events:none}
+    #pad button{height:auto;pointer-events:auto}
+    #pad button[data-act=kierre]{grid-area:2/1}
+    #pad button[data-act=voltti]{grid-area:2/3}
+  }
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(10,30,52,.88);text-align:center;touch-action:manipulation}
+  #menu.hidden{display:none}
+  #menu h1{margin:0;font-size:34px;letter-spacing:1px;color:#8ee3ff;text-shadow:0 3px 0 #1b5d85}
+  #result{margin:0;font-size:22px;font-weight:800}
+  #result:empty{display:none}
+  #result.win{color:#7ee081}#result.lose{color:#ff9a8b}
+  #foe{margin:2px 0 0;font-size:16px;color:#ffc9a8}
+  :where(#menu) button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ffb703;color:#2a1a05;box-shadow:0 4px 0 #9a5b12}
+  :where(#menu) button:active{transform:translateY(3px);box-shadow:0 1px 0 #9a5b12}
+  #cont{font-size:18px;padding:12px 22px;background:#7ee081;color:#123b14;box-shadow:0 4px 0 #3c8a3f}
+  #cont:active{box-shadow:0 1px 0 #3c8a3f}
+  #cont.hidden{display:none}
+  #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
+  #multi:active{box-shadow:0 1px 0 #3a7894}
+  #asu{font-size:16px;padding:9px 18px;background:#3d5a80;color:#fff;box-shadow:0 3px 0 #24364f}
+  #asu:active{box-shadow:0 1px 0 #24364f}
+  #stats{margin:0;font-size:14px;color:#b9cfe0}
+  .help{margin:4px 0 0;font-size:13px;line-height:1.45;color:#a9c0d3;max-width:320px}
+  .help.side{display:none}
+  /* A phone on its side: two columns, the title and help on the left, the buttons on the right. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #menu{display:grid;grid-template-columns:minmax(0,340px) minmax(0,280px);grid-template-rows:repeat(5,auto);
+      align-content:center;justify-content:center;column-gap:28px;row-gap:8px;
+      padding:calc(env(safe-area-inset-top,0px) + 36px) calc(env(safe-area-inset-right,0px) + 20px) calc(env(safe-area-inset-bottom,0px) + 12px) calc(env(safe-area-inset-left,0px) + 20px)}
+    #menu.hidden{display:none}
+    #menu h1{font-size:30px;grid-row:1}
+    #result{font-size:19px;grid-row:2}
+    #foe{grid-row:3}
+    #stats{grid-row:4}
+    .help{grid-row:5}
+    #menu h1,#result,#foe,#stats,.help{grid-column:1;justify-self:center}
+    #go,#cont,#multi,#asu{grid-column:2;justify-self:stretch}
+    #go{grid-row:1 / span 2;align-self:center}
+    #cont{grid-row:3;align-self:center}
+    #multi{grid-row:4;align-self:start;padding:12px 14px;white-space:nowrap}
+    #asu{grid-row:5;align-self:start}
+    .help{margin:0;display:none}
+    .help.side{display:block}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="pad" class="off"><button data-act="kierre">🌀 Kierre</button><button data-act="voltti">↻ Voltti</button></div>
+<div id="menu">
+  <h1>Uimahyppy</h1>
+  <p id="result"></p>
+  <p id="foe"></p>
+  <button id="go">Kisaan!</button>
+  <button id="cont" class="hidden">Jatka kisaa</button>
+  <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <button id="asu">👕 Asu</button>
+  <p id="stats"></p>
+  <p class="help">Viisi hyppyä, joka kerta korkeammalta: 1 m ja 3 m ponnahduslauta, sitten 5 m, 7,5 m ja 10 m
+    taso. Laudalla pidä sormi ruudulla ja nosta se, kun lauta on alimmillaan: pompu kasvaa. ↻ Voltti laudalla
+    ponnistaa hyppyyn. Ilmassa pidä Voltti (tai ruutu) pohjassa kerälle voltteihin, 🌀 Kierre pohjassa kiertää.
+    Päästä ennen vettä ja osu pystysuoraan. Tuomarien pisteet lasketaan yhteen.</p>
+  <p class="help side">Laudalla nosta sormi tahdissa pomppuihin, ↻ Voltti ponnistaa. Ilmassa Voltti pohjassa:
+    voltit, 🌀 Kierre: kierre. Päästä ennen vettä. Viisi hyppyä, yhä korkeammalta.</p>
+</div>
+<script src="../../../rooms.js" data-game="uimahyppy" data-min="2" data-max="8"></script>
+<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../outfits.js" data-game="uimahyppy" data-share="yleisurheilu"></script>
+<script>
+'use strict';
+const c = document.getElementById('c'), x = c.getContext('2d');
+window.x2d = x;
+const menu = document.getElementById('menu'), pad = document.getElementById('pad');
+const R = window.AiPelitRooms;
+
+const FOES = ['Loiske-Lasse', 'Pulahdus-Pia', 'Voltti-Ville', 'Kerä-Kaisa', 'Kierre-Kalle', 'Aalto-Anni', 'Molski-Matti',
+  'Polski-Paula', 'Hyppy-Heikki', 'Sukellus-Sanna', 'Vesi-Veikko', 'Lauta-Liisa', 'Pisara-Pekka'];
+
+// ---------- The dive ----------
+// Seen from the side, metres: x forward (the board's or the platform's tip at 0, the pool beyond
+// it), y up from the water. Each dive of the meet is from higher up (#516, Eero's choice): the 1 m
+// and the 3 m springboard, then the 5, 7.5 and 10 m platforms. On a springboard the diver bounces as
+// on Trampoliini (Eero's wish): a finger down on the screen bends the knees and its lift is the push,
+// best at the board's lowest moment; a push on the beat bounces higher, none lower. "↻ Voltti" on
+// the board is the take-off. From a platform there is no bounce: Voltti (or a tap) jumps off. In the
+// air Voltti or a finger on the screen held tucks the body, spinning fast; let go, it opens straight,
+// which slows the spin to a seventh (the spin's momentum is kept, as a real diver's is). "🌀 Kierre"
+// held twists. The judges look at the entry: straight up and down, open, the twist finished. The
+// dive's difficulty comes from the somersaults and twists done.
+const TAU = Math.PI * 2, DEG = Math.PI / 180, G = 9.81;
+const HEIGHTS = [{ m: 1, board: true }, { m: 3, board: true }, { m: 5 }, { m: 7.5 }, { m: 10 }];
+let BOARD_Y = 3, BOARD = true;                 // this dive's height, and whether it is a springboard
+const FULCRUM = -2.4, BACK = -4.8, WALL = -1.6, DECK = 0.35;  // the board, the pool's edge
+const FOOT_X = -0.18, HIP = 1.0;               // where the diver stands on the tip; hip above the feet
+const HMAX = 1.5, VMAX = Math.sqrt(2 * G * HMAX);   // m: the highest bounce, and its speed off the board
+const V_MIN = 2.4, V_HOP = 3, V_STAND = 2.6, V_PLAT = 4.3;   // m/s: the lowest bounce, the first hop, a dive from standing, off a platform
+const CONTACT = 0.3, EARLY = 0.12, PUSH = 1.2;  // s on the board; how early a push still counts; m/s a perfect push adds
+const VX = 1.15;                               // m/s forward at the take-off
+const W_OPEN = 1.5, W_TUCK = 11;             // rad/s of spin open and tucked
+const TUCK_T = 0.15, HELP = 8, HELP_MAX = 2.2;   // s to tuck; the open body's pull to a clean entry
+const TWIST_W = 3 * Math.PI;                   // rad/s of twist while Kierre is held
+const ENTRY_Y = 0.15;                          // the hip this close to the water: in
+const BOARD_T = 3.5, WATER_T = 2.8, TURN_MAX = 45;   // s
+const heightOf = round => HEIGHTS[Math.max(0, Math.min(HEIGHTS.length - 1, (round || 1) - 1))];
+const heightName = h => String(h.m).replace('.', ',') + ' m ' + (h.board ? 'lauta' : 'taso');
+
+// The spin at a tuck of k (0 open, 1 tucked): the body's inertia falls as it tucks.
+const spin = k => W_OPEN / (1 - (1 - W_OPEN / W_TUCK) * k);
+// The judging of an entry: the angle a (radians of forward somersault, 0 upright), the twist w, the
+// tuck k left at the entry, and the bounce h the dive left from (the judges like height). Returns the dive's name, difficulty, the five judges and the points.
+const ser = (a, w) => ({ halves: Math.max(0, Math.round(a / Math.PI)), tw: Math.round(Math.abs(w) / Math.PI) });
+function judge(a, w, k, h = HMAX, rnd = Math.random) {
+  const { halves, tw } = ser(a, w);
+  const err = Math.abs(a - halves * Math.PI) / DEG, twErr = Math.abs(Math.abs(w) - tw * Math.PI) / DEG;
+  // A twist adds to the difficulty only with a somersault to go with it: at most a half twist for
+  // each half somersault, so holding Kierre down a straight fall earns nothing (#521 helper check).
+  const dd = Math.round((1 + 0.3 * halves + 0.2 * Math.min(tw, halves) + (halves % 2 ? 0.1 : 0)) * 10) / 10;
+  let base, why = '';
+  if (err > 60) {
+    // Flat on the water: on the belly when the body faces down, on the back otherwise.
+    const m = ((a % TAU) + TAU) % TAU, belly = (m < Math.PI) !== (tw % 2 === 1);
+    why = belly ? 'Mahalasku!' : 'Selkälasku!';
+    base = Math.max(0, 2 - (err - 60) * 0.05);
+  } else base = 10 - err * 0.085 - k * 3.5 - twErr * 0.03 - Math.max(0, 1 - h / HMAX) * 2;
+  base = Math.max(0, Math.min(10, base));
+  const judges = Array.from({ length: 5 }, () => Math.max(0, Math.min(10, Math.round((base + gauss(rnd) * 0.6) * 2) / 2)));
+  const mid = judges.slice().sort((p, q) => p - q).slice(1, 4);
+  const pts = Math.round(mid.reduce((s, v) => s + v, 0) * dd * 100) / 100;
+  return { halves, tw, err: Math.round(err), dd, judges, pts, why, name: diveName(halves, tw), splash: 0.25 + Math.min(err, 90) / 40 + k * 0.8 };
+}
+function gauss(rnd = Math.random) { let u = 0; while (!u) u = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * rnd()); }
+const half = n => (n >= 2 ? Math.floor(n / 2) : '') + (n % 2 ? '½' : '');
+function diveName(halves, tw) {
+  const s = halves ? half(halves) + ' voltin hyppy' : 'Suora hyppy';
+  return tw ? s + ', ' + half(tw) + (tw === 2 ? ' kierre' : ' kierrettä') : s;
+}
+
+// ---------- Layout ----------
+// The scene fills the screen above the control pad. It is as tall as this dive needs (the water,
+// the board or platform, the highest bounce and the diver over it) and at least 6 m across; on its
+// side a 10 m platform would make the diver tiny, so there the camera follows the diver down instead.
+let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, hudTop, sceneB, ctrlTop;
+let land = false, SX = 0, SW = 0, S = 60, OX = 0, OY = 0, camY = 0, view = null;
+const MIN_S = 34;   // px a metre at the least, on its side
+function resize() {
+  const r = c.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  W = r.width || innerWidth; H = r.height || innerHeight;
+  c.width = W * DPR; c.height = H * DPR;
+  const cs = getComputedStyle(document.getElementById('safe'));
+  safeT = parseFloat(cs.paddingTop) || 0; safeB = parseFloat(cs.paddingBottom) || 0;
+  safeL = parseFloat(cs.paddingLeft) || 0; safeR = parseFloat(cs.paddingRight) || 0;
+  land = W > H * 1.15;
+  SX = safeL; SW = W - safeL - safeR;
+  hudTop = safeT + (land ? 40 : 44); sceneB = H - safeB;
+  // The pad's top upright; on its side its buttons sit in the corners, under this line (the meet's
+  // cheer button sits there too while the pad is away).
+  ctrlTop = land ? sceneB - 60 : sceneB - 82;
+  frameScene();
+}
+addEventListener('resize', resize);
+// Fits this dive's height on the screen: S px a metre, the water's line OY when the camera is down.
+function frameScene() {
+  if (!W) return;
+  const top = hudTop + (land ? 40 : 70), bottom = land ? sceneB : ctrlTop, avail = bottom - top;
+  const under = land ? 0.4 : 1.0, tall = BOARD_Y + HIP + (BOARD ? HMAX : V_PLAT * V_PLAT / (2 * G)) + 1.0 + under;
+  S = Math.min(SW / 6, avail / tall);
+  let spare = avail - tall * S;
+  if (land && S < MIN_S) { S = MIN_S; spare = 0; }
+  view = { top, avail, under, tall };
+  OY = top + (Math.min(tall, avail / S) - under) * S + Math.max(0, spare) * 0.45;
+  OX = SW / 2 - 0.6 * S;
+}
+// Where the camera wants to be: down at the water, or up with the diver when the scene does not fit.
+function camAim() {
+  if (!view || view.tall * S <= view.avail + 1) return 0;
+  const p = th && pose(th), y = p ? p.y : BOARD_Y + HIP, seen = view.avail / S;
+  // The diver's hip a little under the middle, so the messages above stay clear of it.
+  return Math.max(0, Math.min(view.tall - seen, y - seen * 0.4 + view.under));
+}
+const sx = m => OX + m * S, sy = h => OY - (h - camY) * S;
+
+// ---------- Sound (only after the first tap) ----------
+let ac = null;
+function tone(f, d, type = 'square', vol = 0.08, to = 0) {
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+const A = AiPelitAanet;
+A.load(['valinta', 'jousi', 'suhahdus', 'loiskis', 'onnistui', 'virhe', 'mitali']);
+function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+
+// ---------- The competition ----------
+// The meet, its saves and playing it with friends are the shared athletics library's. Diving adds
+// its own format on the library's rounds: five dives (three, then the best eight two more), and the
+// judges' points of every dive summed, not the best one.
+function points(o) {
+  const F = AiPelitKisa.rounds(Object.assign({ rounds: 5, cut: 3, final: 8 }, o));
+  const total = t => Math.round(t.marks.reduce((s, m) => s + (m > 0 ? m : 0), 0) * 100) / 100;
+  const dove = t => t.marks.some(m => m !== undefined && m !== null);
+  F.total = total;
+  F.bestOf = t => dove(t) ? total(t) : -2;
+  F.standings = c => c.throwers.slice().sort((a, b) => {
+    if (c.final) { const fa = c.final.includes(a.id), fb = c.final.includes(b.id); if (fa !== fb) return fa ? -1 : 1; }
+    return (total(b) - total(a)) || (c.throwers.indexOf(a) - c.throwers.indexOf(b));
+  });
+  F.missed = 0;   // a dive skipped while its phone is away scores nothing
+  // The rounds' board names its right column PARAS; here it is everything summed.
+  const board = F.board;
+  F.board = (g, K, final, box) => {
+    const own = Object.prototype.hasOwnProperty.call(g, 'fillText'), ft = g.fillText;
+    g.fillText = function (s, ...r) { return ft.call(this, s === 'PARAS' ? 'YHT.' : s, ...r); };
+    try { return board(g, K, final, box); } finally { if (own) g.fillText = ft; else delete g.fillText; }
+  };
+  return F;
+}
+let th = null;
+const base = lv => Math.min(62, 30 + 4 * (lv - 1));   // a computer diver's usual points a dive
+const isNet = () => K.isNet();
+const fmtP = p => p === undefined || p === null ? '–' : p < 0 ? 'X' : p.toFixed(2).replace('.', ',') + ' p';
+const K = AiPelitKisa.meet({
+  cheerSound: () => A.play('onnistui', { vol: 0.08 }),
+  slug: 'uimahyppy', format: points(), foes: FOES, skill: base, fmt: fmtP,
+  spread: [6, 4, 2, 0, -2, -4, -6, -8, -10, -12, -14], jitter: 4,
+  cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
+  live: ['p', 'end'], watch: watchFrom, none: 'ei pisteitä',
+  fit: () => outfit.id, started: () => menu.classList.add('hidden'),
+  look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
+  chime: i => {
+    A.play('mitali', { rate: [1.12, 1, 0.89][i] || 1, vol: 0.8 }) || tone([523, 659, 784][2 - i] || 523, 0.25, 'sine', 0.06);
+  },
+});
+const diver = id => K.thrower(id);
+const COLORS = K.COLORS;
+
+// The computer dives around its skill, now and then flat on the water, and never past what a very
+// good player reaches. Higher up there is time for more, so its points grow with the height as the
+// player's best do: simulating every hold and twist with judges of no scatter, the best clean dive
+// scores about 66, 74, 78, 84 and 84 at the five heights. Each height's cap stays a little under it,
+// so a perfect dive always beats the computer (#521 review).
+const CPU_CAP = [63, 70, 74, 80, 80], CPU_HEIGHT = [0.9, 1, 1.06, 1.14, 1.2];
+function cpuMark(t, c) {
+  if (Math.random() < 0.05) return Math.round((3 + Math.random() * 9) * 100) / 100;
+  const i = Math.max(0, HEIGHTS.indexOf(heightOf((c || K.comp || {}).round)));
+  let m;
+  do m = Math.round((t.skill * CPU_HEIGHT[i] + K.gauss() * 7) * 100) / 100; while (m > CPU_CAP[i]);
+  return Math.max(4, m);
+}
+// A new turn: this phone draws it, and runs it when it is its own.
+function newTurn(t, mine, seq) {
+  th = { seq, id: t.id, mine, phase: 'wait', t: 0, idle: 0, b: null, d: null, res: null, drops: [], sendT: 0, sent: false,
+    track: mine ? null : AiPelitSulava.track({ keys: ['x', 'y', 'a', 'w', 'k', 'd'], extra: 0.1 }), seen: null };
+  ptr = null; flipHeld = false; twistHeld = false; bend = 0;
+  const h = heightOf(K.comp && K.comp.round);
+  th.hgt = h; BOARD_Y = h.m; BOARD = !!h.board;
+  frameScene(); camY = camAim();
+}
+
+// ---------- One dive ----------
+// phase: wait (the standings), ready (on the board's tip), bounce, dive, water.
+let pop = null;
+function say(text, col) { pop = { text, col, t: 0.9 }; }
+let clock = 0;   // seconds, the game's own, moved by step()
+function step(dt) {
+  clock += dt;
+  if (pop) { pop.t -= dt; if (pop.t <= 0) pop = null; }
+  if (K.step(dt)) return;
+  if (!th || !K.comp) return;
+  if (isNet() && R.paused) return;
+  th.t += dt; th.idle += dt;
+  const a = th;
+  stepDrops(a, dt);
+  if (a.phase === 'wait') { if (a.t >= BOARD_T) { a.phase = 'ready'; a.t = 0; a.idle = 0; if (a.mine) A.play('valinta', { vol: 0.6 }) || tone(660, 0.1, 'sine', 0.06); } return; }
+  if (a.phase === 'water') {
+    const u = a.d;
+    if (u) { u.vy *= Math.exp(-dt * 3); u.y = Math.max(-1.1, u.y + u.vy * dt); u.x += u.vx * dt; u.vx *= Math.exp(-dt * 3); }
+    if (a.t >= WATER_T && a.mine && !a.sent) { a.sent = true; K.report(a.seq, a.res.pts); }
+    return;
+  }
+  if (!a.mine) return;
+  if (isNet() && a.idle > TURN_MAX && (a.phase === 'ready' || a.phase === 'bounce')) return timeOut();
+  // A finger on the screen bends the knees (Trampoliini's squat), quickly down and quicker back up.
+  bend += ((ptr !== null && (a.phase === 'ready' || a.phase === 'bounce') ? 1 : 0) - bend) * Math.min(1, dt * (ptr !== null ? 14 : 20));
+  if (a.phase === 'bounce') stepBounce(a, dt);
+  else if (a.phase === 'dive') stepDive(a, dt);
+  a.sendT -= dt;
+  if (isNet() && a.sendT <= 0 && (a.phase === 'bounce' || a.phase === 'dive')) {
+    a.sendT = 1 / 15;
+    const p = pose(a);
+    K.send({ t: 'p', s: r3(AiPelitSulava.now()), a: [r3(p.x), r3(p.y), r3(p.a), r3(p.w), r2(p.k), r3(p.d), a.phase] });
+  }
+}
+const r2 = n => Math.round(n * 100) / 100, r3 = n => Math.round(n * 1000) / 1000;
+
+// The bounce, as on Trampoliini: the board is pressed down for CONTACT s each landing, deeper the
+// faster the diver came down. The push is the lift of the finger on the screen (or Voltti), best
+// half way through the press; a push up to EARLY s before the landing counts from its moment.
+let bend = 0;   // 0..1, the knees bent by a finger on the screen
+function startBounce(a) {
+  a.phase = 'bounce'; a.t = 0; a.idle = 0;
+  a.b = { air: true, fy: 0, vy: V_HOP, tc: 0, vin: V_HOP, push: null, early: null, go: false, dip: 0, v: V_HOP };
+  A.play('jousi', { vol: 0.2, rate: 0.9 }) || tone(260, 0.08, 'sine', 0.04);
+}
+const timeToBoard = b => (b.vy + Math.sqrt(Math.max(0, b.vy * b.vy + 2 * G * b.fy))) / G;
+function pushQuality(t) {
+  const err = Math.abs(t - CONTACT / 2);
+  return err < 0.05 ? 1 : Math.max(0, 1 - (err - 0.05) / 0.2);
+}
+// A push now (the finger's lift, or Voltti): on the board it counts at once, just before the landing
+// it counts from its moment. Returns true when it counted.
+function push(a) {
+  const b = a.b;
+  if (!b) return false;
+  if (!b.air) { if (b.push === null) b.push = b.tc; return true; }
+  const t = timeToBoard(b);
+  if (t <= EARLY && b.vy < 0) { b.early = -t; return true; }
+  return false;
+}
+function stepBounce(a, dt) {
+  const b = a.b;
+  if (!b.air) {
+    b.tc += dt;
+    b.dip = 0.08 + 0.22 * Math.min(1, b.vin / VMAX);
+    if (b.tc < CONTACT) { b.fy = -b.dip * Math.sin(Math.PI * b.tc / CONTACT); return; }
+    // The press is over: the push sets the next hop.
+    let v;
+    if (b.push === null) v = b.vin * 0.82;
+    else {
+      const q = pushQuality(b.push);
+      v = b.vin * 0.9 + PUSH * q;
+      if (v >= VMAX - 0.01) say('Huippukorkeus!', '#7ee081');
+      else if (q >= 0.95) say('Täydellinen ponnistus!', '#7ee081');
+      else if (q < 0.6) say(b.push < CONTACT / 2 ? 'Liian aikaisin' : 'Liian myöhään', '#ffd166');
+    }
+    v = Math.max(V_MIN, Math.min(VMAX, v));
+    b.v = v; b.air = true; b.fy = 0; b.vy = v; b.tc = 0;
+    A.play('jousi', { vol: 0.25, rate: 0.9 + 0.3 * v / VMAX }) || tone(220 + 60 * v, 0.08, 'sine', 0.04);
+    if (b.go) return takeOff(a, v);
+    return;
+  }
+  b.vy -= G * dt; b.fy += b.vy * dt;
+  if (b.fy <= 0) {
+    b.air = false; b.fy = 0; b.tc = 0; b.vin = Math.abs(b.vy);
+    b.push = b.early; b.early = null;
+  }
+}
+// Off the board or the platform, forward, at the speed up v.
+function takeOff(a, v) {
+  const p = pose(a);
+  a.phase = 'dive'; a.t = 0; pop = null;
+  a.d = { x: p.x, y: BOARD_Y + HIP, vx: VX, vy: v, a: 0.1, w: 0, k: 0, h: BOARD ? v * v / (2 * G) : HMAX };
+  A.play('suhahdus', { vol: 0.5, rate: 0.9 + 0.3 * Math.min(1, v / VMAX) }) || tone(440, 0.12, 'sine', 0.04, 220);
+}
+// ↻ Voltti before the dive: on the board it is the take-off at the end of this press (and its push,
+// when it comes on the board or just before it). Standing, or on a platform, it jumps off at once.
+function volttiGo(a) {
+  if (a.phase === 'ready') return takeOff(a, BOARD ? V_STAND : V_PLAT);
+  if (a.phase !== 'bounce' || !a.b) return;
+  push(a);
+  a.b.go = true;
+}
+function stepDive(a, dt) {
+  // A twist needs a straight body: while Kierre is held the diver opens, and the somersault slows.
+  const d = a.d, held = (ptr !== null || flipHeld) && !twistHeld;
+  d.k += Math.max(-dt / TUCK_T, Math.min(dt / TUCK_T, (held ? 1 : 0) - d.k));
+  // Open, the body steers a little towards a clean entry (straight up or down), so a near miss counts.
+  const near = Math.max(0, Math.round(d.a / Math.PI)) * Math.PI;
+  const help = Math.max(-HELP_MAX, Math.min(HELP_MAX, (near - d.a) * HELP)) * (1 - d.k);
+  d.a += Math.max(0, spin(d.k) + help) * dt;
+  if (twistHeld) d.w += TWIST_W * dt;
+  else {
+    // Let go, the twist finishes its half turn (or goes back to it).
+    const to = Math.round(d.w / Math.PI) * Math.PI - d.w;
+    d.w += Math.max(-TWIST_W * dt, Math.min(TWIST_W * dt, to));
+  }
+  d.vy -= G * dt; d.x += d.vx * dt; d.y += d.vy * dt;
+  if (d.y <= ENTRY_Y) enter(a, judge(d.a, d.w, d.k, d.h));
+}
+// Into the water: the judges' points, the splash; the phones watching get the same.
+function enter(a, res) {
+  a.phase = 'water'; a.t = 0; a.res = res; ptr = null; flipHeld = twistHeld = false;
+  pad.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+  const d = a.d || { x: 1.5, y: ENTRY_Y, a: res.halves * Math.PI, w: 0, k: 0 };
+  a.d = Object.assign({}, d, { vy: -3, vx: 0.3 });
+  splash(a, d.x, res.splash);
+  A.play('loiskis', { vol: Math.min(1, 0.35 + res.splash * 0.25) * (a.mine ? 1 : 0.6), rate: 1.25 - Math.min(0.5, res.splash * 0.15) }) || tone(180, 0.3, 'triangle', 0.05, 60);
+  if (a.mine) {
+    if (isNet()) K.send({ t: 'end', r: res, a: [r3(d.x), r3(d.y), r3(d.a), r3(d.w), r2(d.k)] });
+    if (res.why) A.play('virhe', { vol: 0.4, delay: 0.3 }) || tone(160, 0.3, 'sawtooth', 0.05, 70);
+    else if (res.judges.reduce((s, v) => s + v, 0) / 5 >= 7) A.play('onnistui', { delay: 0.4, vol: 0.3 }) || tone(880, 0.12, 'sine', 0.06);
+  }
+  const lead = K.comp && K.standings()[0];
+  const me = diver(a.id);
+  a.leads = !!(me && lead && lead !== me && K.F.total(me) + res.pts > K.F.total(lead));
+}
+function timeOut() {
+  ptr = null;
+  enter(th, { halves: 0, tw: 0, err: 0, dd: 0, judges: [0, 0, 0, 0, 0], pts: 0, why: 'Aika loppui', name: '', splash: 0 });
+  th.d = null;
+}
+function splash(a, x0, size) {
+  if (size <= 0) return;
+  const n = Math.round(10 + size * 14);
+  for (let i = 0; i < n; i++) {
+    const v = (1.5 + Math.random() * 2.5) * Math.min(2.2, 0.6 + size * 0.5);
+    const ang = Math.PI / 2 + (Math.random() - 0.5) * 1.3;
+    a.drops.push({ x: x0 + (Math.random() - 0.5) * 0.3, y: 0, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v, r: 0.03 + Math.random() * 0.05 });
+  }
+  a.ring = { x: x0, t: 0, size };
+}
+function stepDrops(a, dt) {
+  for (const p of a.drops) { p.vy -= G * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+  a.drops = a.drops.filter(p => p.y > -0.05);
+  if (a.ring) a.ring.t += dt;
+}
+
+// Where the diver is: the hip (x, y), the somersault a, the twist w, the tuck k, and the board's dip d.
+function pose(a) {
+  if (!a) return null;
+  if (!a.mine && (a.phase === 'bounce' || a.phase === 'dive')) {
+    const s = a.track.at();
+    if (s) return { x: s.x, y: s.y, a: s.a, w: s.w, k: s.k, d: s.d, ph: a.phase };
+  }
+  // The knees bend with a finger on the screen (bend), and as the board presses down (d).
+  const sq = a.mine ? bend : 0;
+  if (a.phase === 'bounce' && a.b) {
+    const b = a.b, d = b.air ? 0 : b.dip * Math.sin(Math.PI * Math.min(1, b.tc / CONTACT));
+    return { x: FOOT_X, y: BOARD_Y + (b.air ? b.fy : -d * 0.88) + HIP - (b.air ? 0 : d * 0.6) - sq * 0.22, a: 0, w: 0, k: 0, d, knee: Math.min(0.6, d * 2.2 + sq * 0.5), ph: 'bounce',
+      fy: b.air ? b.fy : 0, h: b.v * b.v / (2 * G) };
+  }
+  if ((a.phase === 'dive' || a.phase === 'water') && a.d) {
+    // The board shakes a moment after the take-off.
+    const d = a.phase === 'dive' ? 0.18 * Math.cos(a.t * 26) * Math.exp(-a.t * 5) : 0;
+    return { x: a.d.x, y: a.d.y, a: a.d.a, w: a.d.w, k: a.d.k, d, ph: a.phase };
+  }
+  return { x: FOOT_X, y: BOARD_Y + HIP - sq * 0.22, a: 0, w: 0, k: 0, d: 0, knee: sq * 0.5, ph: 'ready' };
+}
+
+// Another phone's diver, as its phone sends it: where it is (p) and its entry with the points (end).
+function watchFrom(m) {
+  if (!th || th.mine || !K.comp || th.id !== m.id) return;
+  if (m.t === 'p' && Array.isArray(m.a) && (th.phase === 'wait' || th.phase === 'ready' || th.phase === 'bounce' || th.phase === 'dive')) {
+    const [px, py, pa, pw, pk, pd, ph] = m.a;
+    if (ph !== 'bounce' && ph !== 'dive') return;
+    if (th.phase !== ph) th.t = 0;
+    th.phase = ph;
+    th.track.push(typeof m.s === 'number' ? m.s : null, { x: px, y: py, a: pa, w: pw, k: pk, d: pd });
+    th.idle = 0;
+  }
+  if (m.t === 'end' && th.phase !== 'water' && m.r && typeof m.r.pts === 'number') {
+    const p = m.a || [];
+    th.d = { x: +p[0] || 1.5, y: +p[1] || ENTRY_Y, a: +p[2] || 0, w: +p[3] || 0, k: +p[4] || 0 };
+    enter(th, m.r);
+    if (m.r.why === 'Aika loppui') th.d = null;
+  }
+}
+
+// ---------- The loop ----------
+let lastT = performance.now();
+// A tap counts at the moment the finger went down, not at the last drawn frame (#404): the game runs
+// on to the event's own time first, and the next frame takes only what is left.
+function catchUp(e) {
+  let d = e.timeStamp - lastT;
+  if (d > 0 && d < 100) {
+    lastT = e.timeStamp;
+    for (; d > 0; d -= 50) step(Math.min(0.05, d / 1000));
+  }
+}
+// While the menu is open nothing moves, so the scene behind it is drawn once (and again on a turn of
+// the phone or a new outfit), not 60 times a second (docs/making-games.md, "A still game must not draw every frame").
+let idleAt = '', draws = 0;
+function frame(now) {
+  const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
+  step(dt);
+  camY += (camAim() - camY) * Math.min(1, dt * 5);
+  const show = !!(th && th.mine && (th.phase === 'ready' || th.phase === 'bounce' || th.phase === 'dive') && !K.ending && menu.classList.contains('hidden'));
+  if (show === pad.classList.contains('off')) pad.classList.toggle('off', !show);
+  const still = !menu.classList.contains('hidden') && !K.ending ? W + 'x' + H + outfit.id : '';
+  if (!still || still !== idleAt) { draw(); draws++; }
+  idleAt = still;
+  requestAnimationFrame(frame);
+}
+
+// ---------- Drawing ----------
+function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+function draw() {
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.save();
+  x.translate(SX, 0);
+  drawScene();
+  x.restore();
+  if (land) { x.fillStyle = '#10263f'; x.fillRect(0, 0, SX, H); x.fillRect(W - safeR, 0, safeR, H); }
+  if (K.ending) {
+    x.fillStyle = 'rgba(8,16,32,.82)'; x.fillRect(0, 0, W, H);
+    K.drawPodium(x, { left: safeL + 8, top: safeT + 44, w: W - safeL - safeR - 16, bottom: H - safeB - 8 });
+  }
+}
+function drawScene() {
+  const w = SW, OY = sy(0);
+  // The hall: a wall with tall windows, the stands' rail, the far side of the pool.
+  const wall = x.createLinearGradient(0, 0, 0, OY);
+  wall.addColorStop(0, '#2d5c86'); wall.addColorStop(1, '#a9cfe6');
+  x.fillStyle = wall; x.fillRect(0, 0, w, OY);
+  x.fillStyle = 'rgba(255,255,255,.16)';
+  const winW = Math.max(26, 1.2 * S), gap = winW * 2.2;
+  for (let px = ((sx(-20) % gap) + gap) % gap - gap; px < w; px += gap) x.fillRect(px, sy(BOARD_Y + 4.6), winW, 3.4 * S);
+  x.fillStyle = '#d9e4ea'; x.fillRect(0, sy(DECK), w, DECK * S);
+  // The friends watching stand on the far side, drawn before the diver so they never cover it.
+  K.drawFans(x, { left: 12, right: w - 12, bottom: sy(DECK) + 2, h: 40, walk: true });
+  if (BOARD) drawBoard(pose(th) ? pose(th).d : 0); else drawPlatform();
+  // The water, with the depth darkening and the lane line on the bottom.
+  const water = x.createLinearGradient(0, OY, 0, sceneB);
+  water.addColorStop(0, 'rgba(64,170,220,.92)'); water.addColorStop(1, 'rgba(18,84,140,.98)');
+  const wl = sx(WALL);
+  if (th && th.d && th.phase === 'water') drawDiverAt(th, pose(th));
+  x.fillStyle = water; x.fillRect(Math.max(0, wl), OY, w - Math.max(0, wl), sceneB - OY);
+  x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(Math.max(0, wl), OY - 1, w, 2);
+  // The pool's edge and the deck under the board.
+  x.fillStyle = '#c4d1d8'; x.fillRect(0, sy(DECK), Math.max(0, wl), sceneB - sy(DECK));
+  x.fillStyle = '#9fb2bd'; x.fillRect(Math.max(0, wl) - 4, sy(DECK), 4, sceneB - sy(DECK));
+  if (th && th.ring) {
+    const g = th.ring, k = Math.min(1, g.t / 1.6);
+    x.strokeStyle = 'rgba(255,255,255,' + (0.8 * (1 - k)) + ')'; x.lineWidth = 2;
+    x.beginPath(); x.ellipse(sx(g.x), OY, (0.3 + g.t * (0.8 + g.size * 0.3)) * S, 0.08 * S, 0, 0, 7); x.stroke();
+  }
+  if (th) {
+    for (const p of th.drops) { x.fillStyle = 'rgba(230,248,255,.9)'; x.beginPath(); x.arc(sx(p.x), sy(p.y), Math.max(1.5, p.r * S), 0, 7); x.fill(); }
+    if (th.phase !== 'water') drawDiverAt(th, pose(th));
+  }
+  drawHud();
+  if (th && th.phase === 'wait') drawStandings(false);
+  if (K.comp && K.comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
+}
+// A concrete platform: its slab out to the tip at 0, on a pillar from the deck, a rail at the back.
+function drawPlatform() {
+  const top = sy(BOARD_Y), slab = Math.max(6, 0.3 * S);
+  x.fillStyle = '#9aa7b0'; x.fillRect(sx(-2.7), top + slab, 1.1 * S, sy(DECK) - top - slab);
+  x.fillStyle = '#7d8a94'; x.fillRect(sx(-1.6) - 4, top + slab, 4, sy(DECK) - top - slab);
+  x.fillStyle = '#b8c3ca'; x.fillRect(sx(-3.6), top, 3.6 * S, slab);
+  x.fillStyle = '#2e6fa8'; x.fillRect(sx(-3.6), top - Math.max(2, 0.05 * S), 3.6 * S, Math.max(2, 0.05 * S));
+  x.strokeStyle = '#c9d3da'; x.lineWidth = 3;
+  x.beginPath(); x.moveTo(sx(-3.4), top); x.lineTo(sx(-3.4), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), top); x.stroke();
+  // The height, painted on the pillar.
+  x.fillStyle = 'rgba(30,50,70,.75)'; x.font = '800 ' + Math.max(11, Math.round(0.28 * S)) + 'px system-ui';
+  x.textAlign = 'right'; x.fillText(String(BOARD_Y).replace('.', ',') + ' m', sx(-1.6) - 8, top + slab + Math.max(14, 0.6 * S));
+}
+// The springboard (1 m or 3 m): fixed on its stand back to the fulcrum, bending past it, its tip down by dip.
+function drawBoard(dip) {
+  const by = y => sy(y);
+  x.fillStyle = '#8a98a3'; x.fillRect(sx(BACK - 0.4), by(BOARD_Y - 0.1), (FULCRUM - BACK + 0.8) * S, by(DECK) - by(BOARD_Y - 0.1));
+  x.fillStyle = '#6f7d88'; x.fillRect(sx(FULCRUM - 0.15), by(BOARD_Y - 0.1), 0.3 * S, 0.1 * S);
+  x.strokeStyle = '#2e6fa8'; x.lineWidth = Math.max(4, 0.1 * S); x.lineCap = 'butt';
+  x.beginPath(); x.moveTo(sx(BACK), by(BOARD_Y));
+  for (let m = FULCRUM; m <= 0.001; m += 0.2) { const f = (m - FULCRUM) / -FULCRUM; x.lineTo(sx(m), by(BOARD_Y - dip * f * f)); }
+  x.stroke();
+  x.strokeStyle = '#f2f2f2'; x.lineWidth = Math.max(1.5, 0.03 * S);
+  x.beginPath(); x.moveTo(sx(BACK), by(BOARD_Y) - x.lineWidth); x.lineTo(sx(FULCRUM), by(BOARD_Y) - x.lineWidth);
+  for (let m = FULCRUM; m <= 0.001; m += 0.2) { const f = (m - FULCRUM) / -FULCRUM; x.lineTo(sx(m), by(BOARD_Y - dip * f * f) - x.lineWidth); }
+  x.stroke();
+  // The rails up the stand.
+  x.strokeStyle = '#c9d3da'; x.lineWidth = 3;
+  x.beginPath(); x.moveTo(sx(BACK + 0.2), by(BOARD_Y)); x.lineTo(sx(BACK + 0.2), by(BOARD_Y + 0.9)); x.lineTo(sx(FULCRUM - 0.6), by(BOARD_Y + 0.9)); x.lineTo(sx(FULCRUM - 0.6), by(BOARD_Y)); x.stroke();
+}
+function drawDiverAt(a, p) {
+  if (!p) return;
+  const t = diver(a.id), o = looks(t) || plain(t ? t.col : COLORS[0]);
+  const name = t ? (a.mine ? '▼ Sinä' : t.name) : '';
+  let armA, knee = 0;
+  if (p.ph === 'ready' || a.phase === 'wait') { armA = Math.PI - 0.1 - (p.knee || 0) * 0.8; knee = p.knee || 0; }
+  else if (p.ph === 'bounce') {
+    // Arms up as the hop rises, swung down and back as the board is pressed.
+    const up = p.fy !== undefined ? Math.min(1, p.fy / Math.max(0.2, p.h || 0.4)) : Math.max(0, (p.y - BOARD_Y - HIP) / 0.8);
+    armA = Math.PI - 0.4 - up * (Math.PI - 0.6); knee = p.knee !== undefined ? p.knee : Math.min(0.5, (p.d || 0) * 2.2);
+  } else armA = 0;
+  drawDiver(x, o, sx(p.x), sy(p.y), S, p.a, p.w, p.k, armA, knee, a.mine, a.phase === 'water' ? 1 - Math.min(0.75, a.t * 0.5) : 1);
+  if (name && p.ph !== 'dive' && a.phase !== 'water' && !(a.mine && p.ph === 'bounce')) {
+    x.font = (a.mine ? '800 ' : '600 ') + '13px system-ui'; x.textAlign = 'center';
+    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.45)';
+    const ly = sy(p.y + 1.0);
+    x.strokeText(name, sx(p.x), ly); x.fillStyle = a.mine ? '#ffd166' : '#fff'; x.fillText(name, sx(p.x), ly);
+  }
+  if (pop && a.mine) {
+    x.font = '900 20px system-ui'; x.textAlign = 'center'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+    const y = sy(p.y + 1.3) - (0.9 - pop.t) * 30;
+    x.globalAlpha = Math.min(1, pop.t * 3);
+    x.strokeText(pop.text, sx(p.x) + 0.9 * S, y); x.fillStyle = pop.col; x.fillText(pop.text, sx(p.x) + 0.9 * S, y);
+    x.globalAlpha = 1;
+  }
+}
+// A diver seen from the side, facing forward (right), turned round its hip at (px, py) by the
+// somersault a (clockwise on the screen), narrowed and turned over by the twist w, tucked by k.
+// armA is the arms' angle from the body's head end (0 overhead, PI down by the sides), knee a bend.
+function drawDiver(g, o, px, py, s, a, w, k, armA, knee, mine, alpha = 1) {
+  o = o || plain(COLORS[0]);
+  const lw = Math.max(2.5, 0.11 * s);
+  const cw = Math.cos(w || 0), sxw = (cw < 0 ? -1 : 1) * Math.max(0.3, Math.abs(cw));
+  g.save(); g.globalAlpha = alpha; g.translate(px, py); g.rotate(a || 0); g.scale(sxw, 1);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const pt = (x0, y0, ang, l) => [x0 + Math.sin(ang) * l, y0 - Math.cos(ang) * l];
+  const lean = k * 0.5;
+  const neck = pt(0, 0, lean, 0.55 * s), head = pt(neck[0], neck[1], lean, 0.17 * s), sh = pt(0, 0, lean, 0.5 * s);
+  const thighA = Math.PI - k * (Math.PI - 0.75) - knee * 0.5, shinA = thighA + k * 2.6 + knee;
+  const arm = armA + (0.95 * 1.9 - armA) * k + lean;
+  const legSkin = o.halloween ? o.bottom : o.skin;
+  const limb = (ox, oy, a1, a2, len, col, wd) => {
+    const kn = pt(ox, oy, a1, len), e = pt(kn[0], kn[1], a2, len);
+    g.strokeStyle = col; g.lineWidth = wd || lw;
+    g.beginPath(); g.moveTo(ox, oy); g.lineTo(kn[0], kn[1]); g.lineTo(e[0], e[1]); g.stroke();
+    return e;
+  };
+  // The far arm and leg, a shade darker, then the body, then the near ones.
+  limb(sh[0], sh[1], arm + 0.12, arm + 0.12 + k * 0.6, 0.3 * s, shade(o.skin, 0.84));
+  limb(0, 0, thighA + 0.08, shinA + 0.08, 0.45 * s, shade(legSkin, 0.84));
+  g.strokeStyle = o.top; g.lineWidth = lw * 2.1;
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(neck[0], neck[1]); g.stroke();
+  const foot = limb(0, 0, thighA, shinA, 0.45 * s, legSkin);
+  g.fillStyle = legSkin; g.beginPath(); g.arc(foot[0], foot[1], lw * 0.55, 0, 7); g.fill();
+  g.strokeStyle = o.bottom; g.lineWidth = lw * 1.7;
+  g.beginPath(); g.moveTo(...pt(0, 0, lean, 0.08 * s)); g.lineTo(...pt(0, 0, thighA, 0.12 * s)); g.stroke();
+  limb(sh[0], sh[1], arm, arm + k * 0.6, 0.3 * s, o.skin);
+  AiPelitOutfits.sideHead(g, o, head[0], head[1], 0.13 * s, 1, lean * 0.6);
+  g.restore();
+}
+// Outfits, one choice for every athletics event (outfits.js data-share). Everyone without one (the
+// computer, 'perus') wears the plain kit in the shirt colour the meet gave them.
+const OUTFITS = AiPelitOutfits.yleisurheilu;
+function plain(col) { return Object.assign({}, OUTFITS[0], { top: col }); }
+function looks(t) {
+  if (!t || !t.fit) return null;
+  const o = AiPelitOutfits.get(t.fit);
+  return !o || o.id === 'perus' || !o.top ? plain(t.col) : o;
+}
+function shade(hex, k) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v * k)));
+  return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1);
+}
+let outfit = AiPelitOutfits.setup({
+  outfits: OUTFITS,
+  draw(g, o, w, h) {
+    drawDiver(g, o.top ? o : plain(COLORS[0]), w * 0.45, h * 0.55, h * 0.38, 0, 0, 0, Math.PI - 0.1, 0, false);
+  },
+  change(o) {
+    outfit = o; showAsu();
+    if (K.comp && !isNet()) K.comp.throwers.forEach(t => { if (t.p === 'me') t.fit = o.id; });
+  },
+});
+function showAsu() { document.getElementById('asu').textContent = '👕 Asu: ' + outfit.name; }
+
+function drawHud() {
+  const W = SW, top = hudTop;
+  const comp = K.comp;
+  if (!comp || !comp.throwers.length) return;
+  x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, land ? 36 : 64, 12); x.fill();
+  const me = K.mine(), ROUNDS = K.F.ROUNDS;
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
+  x.fillText('Hyppy ' + Math.min(comp.round, ROUNDS) + '/' + ROUNDS + (land && th && th.hgt ? ' · ' + heightName(th.hgt) : ''), 20, top + 24);
+  if (!land && th && th.hgt) { x.font = '800 14px system-ui'; x.fillStyle = '#8ee3ff'; x.fillText(heightName(th.hgt), W - 20 - x.measureText(heightName(th.hgt)).width, top + 51); x.fillStyle = '#fff'; }
+  x.textAlign = 'right'; x.font = '700 14px system-ui';
+  if (me) x.fillText(me.marks.length ? 'Yht. ' + fmtP(K.F.total(me)) + ' · ' + K.placeOf(me) + '.' : 'Ei hyppyä vielä', W - 20, top + 24);
+  const t = th && diver(th.id);
+  if (th && th.mine && th.phase === 'bounce') {
+    // The bounce's height: green once it is high.
+    const bx = land ? 230 : 20, bw = land ? W - 230 - 200 : W - 40 - 92, by = land ? top + 12 : top + 40, h = (th.b.v / VMAX) ** 2;
+    x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
+    x.fillStyle = h > 0.8 ? '#7ee081' : h > 0.45 ? '#ffd166' : '#ff9a8b'; rr(bx, by, Math.max(12, bw * Math.min(1, h)), 12, 6); x.fill();
+  } else if (th && (th.phase === 'dive') && th.d) {
+    x.textAlign = 'left'; x.font = '800 15px system-ui'; x.fillStyle = '#8ee3ff';
+    const { halves, tw } = ser(th.d.a, th.d.w);
+    x.fillText('↻ ' + (halves ? half(halves) : '0') + (tw ? '  ⟲ ' + half(tw) : ''), land ? 230 : 20, land ? top + 24 : top + 50);
+  } else if (t) {
+    x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
+    x.fillText(th.mine ? 'Sinun vuorosi' : 'Hyppää: ' + t.name, land ? 230 : 20, land ? top + 24 : top + 50);
+  }
+  if (!th) return;
+  if (th.phase === 'ready' && th.mine) {
+    if (!land) message('Sinun vuorosi!', '#ffd166');
+    hint(BOARD ? 'Paina ruutua ja nosta: pomppu' : '↻ Voltti: hyppää tasolta', '#fff');
+  } else if (th.phase === 'bounce' && th.mine) {
+    hint(th.b.go ? 'Ponnistus seuraavasta' : th.b.v > VMAX * 0.9 ? '↻ Voltti laudalla: hyppy!' : 'Nosta sormi, kun lauta on alhaalla', '#fff');
+  } else if (th.phase === 'dive' && th.mine) {
+    hint(ptr !== null || flipHeld ? 'Päästä ennen vettä' : '↻ pohjassa: kerälle · 🌀 kierre', '#fff');
+  } else if (th.phase === 'water' && th.res && th.t > 0.4) {
+    const r = th.res;
+    message(fmtP(r.pts), r.why ? '#ff9a8b' : '#fff');
+    small(r.why || (r.name + ' · vaikeus ' + r.dd.toFixed(1).replace('.', ',')), r.why ? '#ff9a8b' : '#fff');
+    if (r.dd > 0) drawJudges(r.judges);
+    if (th.mine && th.leads && !r.why) tiny('Johtoon!', '#7ee081');
+  }
+}
+// The five judges' scores: the highest and the lowest are left out (dimmed).
+function drawJudges(js) {
+  const order = js.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]);
+  const out = new Set([order[0][1], order[4][1]]);
+  const y = hudTop + (land ? 128 : 168), gap = Math.min(58, (SW - 40) / 5);
+  x.font = '800 17px system-ui'; x.textAlign = 'center';
+  js.forEach((v, i) => {
+    const cx = SW / 2 + (i - 2) * gap;
+    x.fillStyle = out.has(i) ? 'rgba(10,20,40,.35)' : 'rgba(10,20,40,.7)'; rr(cx - gap / 2 + 4, y - 18, gap - 8, 26, 8); x.fill();
+    x.fillStyle = out.has(i) ? 'rgba(255,255,255,.45)' : '#fff';
+    x.fillText(v.toFixed(1).replace('.', ','), cx, y + 1);
+  });
+}
+function message(s, col) {
+  x.textAlign = 'center'; x.font = '900 34px system-ui'; x.lineWidth = 6; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + (land ? 76 : 106); x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function small(s, col) {
+  x.textAlign = 'center'; x.font = '800 17px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + (land ? 100 : 134); x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+// The how-to line during your own dive, clear of the diver: upright low over the water, on its side to
+// the right under the score bar.
+function hint(s, col) {
+  if (!land) {
+    // Upright, low over the water, under the dive.
+    x.textAlign = 'center'; x.font = '800 17px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+    const y = ctrlTop - 16; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+    return;
+  }
+  x.textAlign = 'center'; x.font = '800 16px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + 60; x.strokeText(s, SW / 2 + 170, y); x.fillStyle = col; x.fillText(s, SW / 2 + 170, y);
+}
+function tiny(s, col) {
+  x.textAlign = 'center'; x.font = '800 16px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.5)';
+  const y = hudTop + (land ? 160 : 200); x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+}
+function drawStandings(final) {
+  if (land) K.drawBoard(x, final, { w: SW, top: safeT + 6, bottom: sceneB - 6, middle: true });
+  else K.drawBoard(x, final, { w: SW, top: hudTop + 72, bottom: sceneB - 4 });
+}
+
+// ---------- Input ----------
+// While it is your dive: a finger on the screen bends the knees and its lift pushes off the board
+// (on the first one, the first hop); in the air it tucks like Voltti. One finger at a time on the
+// screen; the two buttons each take their own.
+let ptr = null, flipHeld = false, twistHeld = false;
+function press(e) {
+  unlock();
+  if (!th || !th.mine) return;
+  if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }   // alone, a tap skips the standings
+  if (ptr !== null) return;
+  if (th.phase !== 'ready' && th.phase !== 'bounce' && th.phase !== 'dive') return;
+  ptr = e.pointerId; th.idle = 0;
+}
+function release(e) {
+  if (e.pointerId !== ptr) return;
+  catchUp(e);
+  ptr = null;
+  if (!th || !th.mine) return;
+  // The lift: the first hop (or, from a platform, a jump off), or a push.
+  if (th.phase === 'ready') { if (BOARD) startBounce(th); else takeOff(th, V_PLAT); }
+  else if (th.phase === 'bounce') push(th);
+}
+c.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  catchUp(e);
+  if (K.ending) { K.skip(); return; }
+  if (!th || !th.mine) { K.tapFans(e.clientX - SX, e.clientY); return; }
+  press(e);
+  if (ptr === e.pointerId) { try { c.setPointerCapture(e.pointerId); } catch (err) {} }
+});
+addEventListener('pointerup', release);
+addEventListener('pointercancel', release);
+pad.querySelectorAll('button').forEach(btn => {
+  const act = btn.dataset.act;
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    unlock(); catchUp(e);
+    try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+    btn.classList.add('on');
+    if (!th || !th.mine) return;
+    th.idle = 0;
+    if (act === 'voltti') { flipHeld = true; if (th.phase === 'ready' || th.phase === 'bounce') volttiGo(th); }
+    else twistHeld = true;
+  });
+  const up = e => {
+    if (!btn.classList.contains('on')) return;
+    catchUp(e);
+    btn.classList.remove('on');
+    if (act === 'voltti') flipHeld = false; else twistHeld = false;
+  };
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+});
+
+// ---------- Menu ----------
+function showMenu(result, cls) {
+  const r = document.getElementById('result');
+  r.textContent = result || ''; r.className = cls || '';
+  document.getElementById('foe').textContent = 'Taso ' + K.level + ': ' + FOES[(K.level - 1) % FOES.length] + ' ja 10 muuta';
+  document.getElementById('stats').textContent = 'Kisat ' + K.comps + ' · Voitot ' + K.wins + (K.best !== null ? ' · Ennätys ' + fmtP(K.best) : '');
+  const kept = K.kept(), cont = document.getElementById('cont');
+  cont.classList.toggle('hidden', !kept);
+  if (kept) cont.textContent = 'Jatka kisaa (hyppy ' + kept.round + '/' + K.F.ROUNDS + ')';
+  menu.classList.remove('hidden');
+}
+function soloComp(saved) {
+  if (saved) saved.throwers.forEach(t => { if (t.p === 'me') t.fit = outfit.id; });
+  K.solo(saved);
+  menu.classList.add('hidden');
+}
+document.getElementById('go').addEventListener('click', () => { unlock(); K.drop('kesken'); soloComp(); });
+document.getElementById('cont').addEventListener('click', () => {
+  unlock();
+  const kept = K.kept();
+  if (kept) soloComp(kept); else showMenu();
+});
+document.getElementById('multi').addEventListener('click', () => { unlock(); R.open(); });
+document.getElementById('asu').addEventListener('click', () => AiPelitOutfits.open());
+showAsu();
+resize();
+showMenu();
+requestAnimationFrame(frame);
+</script>
+<script src="../../../scores.js" data-game="uimahyppy" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
