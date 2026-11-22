@@ -135,7 +135,7 @@ def run_and_watch(host, run, watch, others):
         # Between frames the host keeps the friend's newest spot (ahead of where it last drew them, as they drive
         # on), and each of their spots is drawn a moment back on their clock.
         host.evaluate("""(me) => { const k = race.karts[me]; window.__rule = []; window.__back = [];
-          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === k.id) window.__back.push(m.st - k.tr.time); });
+          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === k.id) window.__back.push([m.st - k.tr.time, netClock() - m.st, k.tr.delay, netClock()]); });
           setInterval(() => { const l = window.__xs[window.__xs.length - 1];
             if (l && !window.__stop) window.__rule.push([(k.x - l[1]) * Math.cos(k.a) + (k.y - l[2]) * Math.sin(k.a),
               k.x === k.hd[0] && k.y === k.hd[1]]); }, 37); }""", me)
@@ -153,7 +153,16 @@ def run_and_watch(host, run, watch, others):
         assert all(newest for _, newest in rule), rule  # between frames the kart is at the newest spot heard
         ahead = [a for a, _ in rule[5:]]
         assert mean(ahead) > 5 and sum(a > 0 for a in ahead) > 0.8 * len(ahead), ahead  # not the drawn one
-        assert len(back) > 15 and all(b > 0.03 for b in back[5:]), (len(back), [round(b, 3) for b in back[5:] if b <= 0.03])  # drawn at least 30 ms back
+        assert len(back) > 15, len(back)
+        # Drawn a moment back: the track draws the moment its delay before a spot that came as early as any in the
+        # last 2 s (its offset). A spot that came later than that by its lateness lands that much nearer the drawn
+        # moment, past it once later than the delay (a stall, of either phone or the link: the track then guesses on
+        # for 0.25 s at most). So each spot that came no later than its delay less 50 ms is drawn at least 30 ms
+        # back (20 ms for the drawn moment's easing), and most spots come in time.
+        late = [(b, lag - min(l for _, l, _, w in back if t - 2 <= w <= t), d) for b, lag, d, t in back]
+        on_time = [(b, la, d) for b, la, d in late[5:] if la <= d - 0.05]
+        assert len(on_time) > 0.7 * len(late[5:]), [(round(b, 3), round(la, 3), round(d, 3)) for b, la, d in late[5:]]
+        assert all(b > 0.03 for b, _, _ in on_time), [(round(b, 3), round(la, 3), round(d, 3)) for b, la, d in on_time if b <= 0.03]
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
 
