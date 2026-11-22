@@ -79,6 +79,8 @@ p = newPlane(route);
 function startFlight(fromApproach) {
   route = ROUTES[rN - 1];
   p = fromApproach ? approachPlane(route) : newPlane(route);
+  // A practice landing is scored on screen only: no list, record or new route without a take-off.
+  p.practice = !!fromApproach;
   beginFlight();
 }
 function beginFlight() {
@@ -105,7 +107,8 @@ function endFlight() {
   drop('lento');
   const o = p.over;
   result = { ok: o.ok, why: o.why };
-  if (o.ok) {
+  if (o.ok && p.practice) result = Object.assign(result, o, { practice: true, was: best(rN) });
+  else if (o.ok) {
     const was = best(rN);
     result = Object.assign(result, o, { record: o.points > was, was });
     if (o.points > was) save('ennatys-' + rN, o.points);
@@ -152,8 +155,8 @@ c.addEventListener('pointerdown', e => {
   if (mode !== 'fly') return;
   const [x, y] = point(e);
   const bt = btnAt(x, y);
-  if (bt) { bt.down = e.pointerId; wake(); return; }
   if (p.over) return;
+  if (bt) { bt.down = e.pointerId; wake(); return; }
   if (inBox(L.zoneThr, x, y) && thrHold.id === null) { thrHold.id = e.pointerId; thrHold.y = y; thrHold.t0 = p.thr; return; }
   if (x < W * 0.6 && y > SAFE_T + 60 && stick.id === null) { stick.id = e.pointerId; stick.x0 = stick.x = x; stick.y0 = stick.y = y; readStick(); }
 });
@@ -187,7 +190,7 @@ function brakeHeld() { return BTNS[2].down !== null && BTNS[2].down !== undefine
 
 // ---- Pause and the page going away ----
 function pause() {
-  if (mode !== 'fly') return;
+  if (mode !== 'fly' || p.over) return;
   mode = 'pause'; keepFlight();
   stick.id = thrHold.id = null; p.sx = p.sy = 0;
   $('pause').hidden = false; chip(true);
@@ -239,11 +242,11 @@ function showEnd() {
     row('Pysähtyi radalle', r.stop);
     row('Yhteensä', r.points + ' p');
   } else row(r.why, '');
-  $('endNote').textContent = r.ok ? (r.record ? (r.was ? 'Uusi ennätys!' : 'Ensimmäinen laskeutuminen!') : 'Ennätys ' + r.was + ' p') : 'Yritä uudelleen alusta tai harjoittele pelkkä laskeutuminen.';
+  $('endNote').textContent = r.practice ? 'Harjoituslasku: ei tuloslistalle eikä avaa uutta lentoa.' : r.ok ? (r.record ? (r.was ? 'Uusi ennätys!' : 'Ensimmäinen laskeutuminen!') : 'Ennätys ' + r.was + ' p') : 'Yritä uudelleen alusta tai harjoittele pelkkä laskeutuminen.';
   $('endOpen').hidden = !r.opened; if (r.opened) $('endOpen').textContent = 'Uusi lento auki: ' + r.opened;
   $('next').hidden = !(r.ok && rN < open);
   $('again').textContent = r.ok ? 'Lennä uudelleen' : 'Alusta';
-  $('approach').hidden = r.ok;
+  $('approach').hidden = r.ok && !r.practice;
   $('end').hidden = false; chip(true);
   wake();
 }
@@ -361,7 +364,7 @@ function frame(now) {
   const moving = mode === 'fly';
   render3d(p, route, dt, !moving);
   drawHUD();
-  if (moving || still++ < 2 || !V3) raf = requestAnimationFrame(frame);
+  if (moving || still++ < 2 || (!V3 && !no3d)) raf = requestAnimationFrame(frame);
 }
 function g0Lost() { return !p.over && guidance(p, route).lost; }
 resize();

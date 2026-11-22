@@ -142,10 +142,11 @@ def test_the_plane_stays_on_the_runway_without_the_stick(site, context):
 def test_every_route_can_be_flown_and_landed(site, context, n):
     page = open_game(site, context)
     res = page.evaluate(f"""() => {{ const r = ROUTES[{n - 1}], q = flyRoute(r);
-      return {{ over: q.over, t: q.t, onTo: !!runwayAt(q.x, q.z) }}; }}""")
+      return {{ over: q.over, t: q.t, onTo: runwayAt(q.x, q.z, 0) === r.to }}; }}""")
     o = res["over"]
     assert o and o["ok"], o
     assert o["stars"] >= 1 and o["points"] > 0
+    assert res["onTo"]
     assert res["t"] < 400
     # From the approach too ("Harjoittele laskeutumista").
     o2 = page.evaluate(f"() => {{ const r = ROUTES[{n - 1}], q = approachPlane(r); return flyRoute(r, q).over; }}")
@@ -219,6 +220,53 @@ def test_a_landing_opens_the_next_route_and_scores(site, context):
     page.click("#toMenu")
     assert not page.locator("#routes button").nth(1).is_disabled()
     assert page.errors == []
+
+
+def test_a_practice_landing_counts_on_screen_only(site, context):
+    page = open_game(site, context)
+    page.click("#go")
+    page.wait_for_function("mode === 'fly'", timeout=8000)
+    page.evaluate("() => { startFlight(true); }")
+    assert page.evaluate("p.practice")
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    assert page.locator("#endTitle").inner_text() == "Laskeutuminen onnistui!"
+    assert "Harjoituslasku" in page.locator("#endNote").inner_text()
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:auki')") in (None, "1")
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:ennatys-1')") is None
+    assert page.locator("#approach").is_visible() and not page.locator("#next").is_visible()
+    assert page.errors == []
+
+
+def test_the_lights_show_two_white_on_the_glide_path(site, context):
+    page = open_game(site, context)
+    for r in range(5):
+        for d in (300, 1000, 2500, 4000):
+            lit = page.evaluate(f"""() => {{ const r = ROUTES[{r}], f = FIELDS[r.to], q = approachPlane(r);
+              q.x = f.x - dirX(f.hdg) * {d}; q.z = f.z - dirZ(f.hdg) * {d}; q.y = guidance(q, r).glideH;
+              return papi(q, f); }}""")
+            assert lit.count(True) == 2, (r, d, lit)
+
+
+def test_a_landing_ends_on_the_brake_with_some_throttle_left(site, context):
+    page = open_game(site, context)
+    o = page.evaluate("""() => { const r = ROUTES[0], f = FIELDS[r.to], q = approachPlane(r);
+      q.x = f.x + dirX(f.hdg) * 220; q.z = f.z + dirZ(f.hdg) * 220; q.hdg = f.hdg + 0.08;
+      q.y = f.elev + 0.3; q.v = 31; q.gam = -Math.asin(1 / 31); q.pit = 0.05; q.gear = true; q.flaps = 2; q.thr = 0.2;
+      for (let i = 0; i < 120 * 60 && !(q.over && q.over.stopped); i++) { q.brake = q.ground; q.sx = q.sy = 0; step(q, DT, r); }
+      return Object.assign({ hdgOff: Math.abs(wrapAngle(q.hdg - f.hdg)) }, q.over); }""")
+    assert o["ok"] and o["stop"] > 0, o
+    assert o["hdgOff"] < 1e-6
+
+
+def test_pause_is_not_offered_once_the_flight_has_ended(site, context):
+    page = open_game(site, context)
+    go(page)
+    assert land_now(page)["ok"]
+    page.evaluate("pause()")
+    assert page.evaluate("mode") == "fly"
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:auki')") == "2"
 
 
 def test_a_crash_offers_the_approach(site, context):

@@ -135,7 +135,7 @@ function approachPlane(route) {
   const f = FIELDS[route.to], d = 5000;
   const p = newPlane(route);
   Object.assign(p, {
-    x: f.x - dirX(f.hdg) * d, z: f.z - dirZ(f.hdg) * d, y: f.elev + d * Math.tan(GLIDE),
+    x: f.x - dirX(f.hdg) * d, z: f.z - dirZ(f.hdg) * d, y: f.elev + (d + aimAt(f)) * Math.tan(GLIDE),
     hdg: f.hdg, v: 42, thr: 0.35, flaps: 0, gear: false, ground: false, airborne: true,
   });
   p.gam = -GLIDE * 0.5; p.pit = p.gam + trimAoa(p);
@@ -222,6 +222,9 @@ function touchDown(p, gnd, route) {
   p.ground = true; p.gam = 0; p.bank = 0; p.stall = false;
   p.events.push('touch');
   const f = FIELDS[route.to];
+  if (rw >= 0) { const fh = FIELDS[rw].hdg, off = wrapAngle(p.hdg - fh), back = Math.abs(off) > Math.PI / 2;
+    const want = back ? wrapAngle(fh + Math.PI) : fh, left = wrapAngle(p.hdg - want);
+    if (Math.abs(left) < 20 * DEG) p.hdg = want; }
   if (rw === route.to && p.airborne && !p.touch) {
     const r = onRunway(f, p.x, p.z);
     p.touch = { sink, c: r.c, a: r.a };
@@ -250,7 +253,7 @@ function groundStep(p, dt, route, m) {
   const gnd = groundAt(p.x, p.z);
   p.y = gnd;
   // Lift-off: the wing carries the plane.
-  if (L > m * G * 1.01 && p.v > 15) {
+  if (L > m * G * 1.01 && p.v > 15 && (!p.touch || p.sy > 0.1)) {
     p.ground = false; p.gam = 0.02; p.y = gnd + 0.05;
     if (p.touch && !p.over) p.touch = null;   // a touch-and-go: the next touchdown counts
     p.events.push('liftoff');
@@ -262,7 +265,7 @@ function groundStep(p, dt, route, m) {
     if (p.touch) { finishLanding(p, route, false); return; }
     if (p.v > 6) { crash(p, 'Ulos kiitoradalta'); return; }
   }
-  if (p.v < 0.5 && p.thr < 0.05) {
+  if (p.v < 0.5 && (p.thr < 0.05 || p.touch)) {
     p.v = 0;
     if (p.touch) finishLanding(p, route, true);
     else if (p.airborne && !p.over) {
@@ -305,16 +308,17 @@ function guidance(p, route) {
   return {
     lined, dist, rel: wrapAngle(brg - p.hdg), runwayDist: Math.max(0, -r.a), a: r.a, c: r.c,
     // The glide path's height here, above the runway.
-    glideH: f.elev + Math.max(0, -r.a) * Math.tan(GLIDE),
+    glideH: f.elev + Math.max(0, aimAt(f) - r.a) * Math.tan(GLIDE),
     out: p.x < BOUNDS.x0 || p.x > BOUNDS.x1 || p.z < BOUNDS.z0 || p.z > BOUNDS.z1,
     lost: p.x < BOUNDS.x0 - 6000 || p.x > BOUNDS.x1 + 6000 || p.z < BOUNDS.z0 - 6000 || p.z > BOUNDS.z1 + 6000,
   };
 }
 // The four lights beside a runway (PAPI): each is white when the plane is above its angle.
 const PAPI_ANGLES = [3.5, 3.17, 2.83, 2.5].map(a => a * DEG);
-const PAPI_AT = 250;
+// They stand at the aim point, inside the touchdown zone `landingScore` rewards; the glide path meets the ground there.
+const aimAt = f => f.len < 700 ? 110 : 220;
 function papi(p, f) {
-  const r = onRunway(f, p.x, p.z), d = PAPI_AT - r.a;
+  const r = onRunway(f, p.x, p.z), d = aimAt(f) - r.a;
   if (d <= 0) return null;
   const ang = Math.atan2(p.y - f.elev, d);
   return PAPI_ANGLES.map(a => ang > a);

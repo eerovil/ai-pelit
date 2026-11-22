@@ -179,12 +179,12 @@ function airfield(f, idx) {
   appr.count = k; appr.visible = false; grp.add(appr);
   // The glide-path lights (PAPI) left of the runway, 250 m on.
   const papiG = new THREE.BoxGeometry(2.2, 1.4, 1.4), papiM = [];
-  for (let i = 0; i < 4; i++) { const pm = new THREE.Mesh(papiG, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })); pm.position.set(-wid / 2 - 12 - i * 9, 1, -PAPI_AT); grp.add(pm); papiM.push(pm); }
+  for (let i = 0; i < 4; i++) { const pm = new THREE.Mesh(papiG, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })); pm.position.set(-wid / 2 - 12 - i * 9, 1, -aimAt(f)); grp.add(pm); papiM.push(pm); }
   // The windsock.
   const sock = new THREE.Group();
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 7, 5), new THREE.MeshLambertMaterial({ color: 0xdddddd })); pole.position.y = 3.5; sock.add(pole);
   const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.9, 4, 8, 1, true), new THREE.MeshLambertMaterial({ color: 0xff6a1a, side: THREE.DoubleSide }));
-  cone.rotation.x = Math.PI / 2; cone.position.set(0, 7, 2); const arm = new THREE.Group(); arm.add(cone); sock.add(arm);
+  cone.rotation.x = Math.PI / 2; cone.position.set(0, 0, 2); const arm = new THREE.Group(); arm.position.y = 7; arm.add(cone); sock.add(arm);
   sock.position.set(side - 30, 0, -120); grp.add(sock);
   grp.position.set(f.x, f.elev, f.z);
   grp.rotation.y = -f.hdg;
@@ -251,7 +251,7 @@ function buildGuide(route) {
   const f = FIELDS[route.to], m = new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.55 }), geo = new THREE.TorusGeometry(14, 0.6, 6, 24);
   for (let d = 300; d <= APPROACH; d += 300) {
     const r = new THREE.Mesh(geo, m);
-    r.position.set(f.x - dirX(f.hdg) * d, f.elev + 20 + d * Math.tan(GLIDE), f.z - dirZ(f.hdg) * d);
+    r.position.set(f.x - dirX(f.hdg) * d, f.elev + 14 + (d + aimAt(f)) * Math.tan(GLIDE), f.z - dirZ(f.hdg) * d);
     r.rotation.y = -f.hdg;
     g.add(r);
   }

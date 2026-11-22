@@ -64,25 +64,31 @@ flowchart TD
 - **Liian hidas tai jyrkkä?**: the wing stalls past an angle of attack of 0.24 rad (about 14°):
   lift drops, "SAKKAUS – nokka alas!" shows, `halytys` sounds quietly, and the nose falls by
   itself until speed comes back.
-- **Lähestyminen: telineet alas, laipat, kaasu pienelle**: four lights 250 m past the threshold
-  (`PAPI_ANGLES` 3.5°, 3.17°, 2.83°, 2.5°; two white and two red on the 3° slope), also drawn as
-  four dots ("Liukupolku") in the strip within 4.5 km. Yellow rings every 300 m out to 3 km mark
-  the path on the first two routes; "Telineet alas!" warns inside 2.5 km with the gear up.
+- **Lähestyminen: telineet alas, laipat, kaasu pienelle**: four lights at the aim point, 220 m past
+  the threshold (110 m on the short runway; `aimAt()` in `world.js`), where the 3° glide path meets
+  the ground (`PAPI_ANGLES` 3.5°, 3.17°, 2.83°, 2.5°; two white and two red on it), also drawn as
+  four dots ("Liukupolku") in the strip within 4.5 km. Yellow rings every 300 m out to 3 km, centred
+  14 m above that path, mark it on the first two routes; "Telineet alas!" warns inside 2.5 km with
+  the gear up.
 - **Koskettaa maata**: `touchDown()` in `world.js`. A touch ends the flight with its reason when
   it is in a lake ("Järveen"), off a runway ("Ohi kiitoradan", "Sakkaus maahan" when stalled), with
   the gear up ("Telineet ylhäällä"), sinking faster than 3 m/s ("Liian kova lasku"), banked over
   10° ("Siipi maahan") or nose down past 5° ("Nokka edellä maahan"). Stopping on the start field
   or another one ends it "Palasit lähtökentälle" / "Pysähdyit väärälle kentälle". On a crash the
-  plane stops, `kolari` sounds softly, and there is no explosion.
-- **Jarruta pysähdyksiin radalle**: the landing ends when the plane stops with the throttle shut,
-  or rolls off the runway (then with no stopping points).
+  plane stops, `kolari` sounds softly, and there is no explosion. A touchdown within 20° of the
+  runway's line turns the plane onto it (either way), and after it the plane leaves the ground again
+  only with the stick pulled back.
+- **Jarruta pysähdyksiin radalle**: the landing ends when the plane stops, throttle or not, or
+  rolls off the runway (then with no stopping points). Once the flight has ended, ⏸ does nothing.
 - **Laskeutumisen pisteet ja tähdet**: `landingScore()`: softness 400 at 0.5 m/s, falling to 0
   at 3 m/s; centre line 300, falling to 0 at the runway's edge; touchdown point 200 within
   150–300 m of the threshold (60–180 m on the short runway), less beyond; stopped on the runway
   100. Stars: 3 from 850 points, 2 from 600, else 1.
 - **Seuraava lento aukeaa, ennätys, tuloslista**: the points go to the route's high-score list
   (`reitti-<N>`, `scores.js`), which opens over the end screen after a new score; "🏆 Tuloslista"
-  opens it again. Buttons: "Seuraava lento", "Lennä uudelleen", "Valikkoon".
+  opens it again. Buttons: "Seuraava lento", "Lennä uudelleen", "Valikkoon". A landing from
+  "Harjoittele laskeutumista" (`p.practice`) shows its points and stars only: "Harjoituslasku: ei
+  tuloslistalle eikä avaa uutta lentoa."; no list, record, stars or new route.
 - **Yritä uudelleen**: after a crash "Alusta" flies the route again from the runway, and
-  "Harjoittele laskeutumista" starts 5 km out on the runway's line at the 3° slope (about 260 m),
+  "Harjoittele laskeutumista" starts 5 km out on the runway's line on the glide path (about 270 m),
   151 km/h, gear up and flaps 0, so landing can be practised without flying the whole route.
