@@ -216,7 +216,7 @@ function steerInput() {
   me.steer = p && !p.air ? steerOf(p) : 0;
   if (p && Math.abs(me.steer) > 0.3) teach.steered = true;
 }
-const teach = { steered: false, swiped: false, pushed: false };
+const teach = { steered: false, swiped: false };
 let lateT = 0;   // "Ei ehdi!" shown this long after a swipe too near the landing
 
 // ---- Menus (DOM, over the canvas) ----
