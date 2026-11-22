@@ -1,5 +1,5 @@
 """Pulkkamäki v6 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
-the steep hills with drops, no trick begun too late, the hand push."""
+the steep hills with drops, no trick begun too late, the hand push, the bends and tunnels (v6)."""
 import shutil
 
 import pytest
@@ -41,8 +41,8 @@ def test_the_menu_opens_the_first_hill_only(site, context):
     page = open_game(site, context)
     assert page.evaluate("!!V3")
     hills = page.locator("#hills button")
-    assert hills.count() == 5
-    assert [hills.nth(i).is_disabled() for i in range(5)] == [False, True, True, True, True]
+    assert hills.count() == 7
+    assert [hills.nth(i).is_disabled() for i in range(7)] == [False, True, True, True, True, True, True]
     assert "🔒" in hills.nth(1).inner_text()
     assert page.locator("#friends").is_visible()
     assert page.errors == []
@@ -162,7 +162,7 @@ def test_the_record_and_opened_hills_survive_a_reload(site, context):
     page.reload()
     page.wait_for_function("V3 || no3d", timeout=20000)
     hills = page.locator("#hills button")
-    assert [hills.nth(i).is_disabled() for i in range(5)] == [False, False, True, True, True]
+    assert [hills.nth(i).is_disabled() for i in range(7)] == [False, False, True, True, True, True, True]
     assert "3100" in hills.nth(0).inner_text()
     assert page.evaluate("hillN") == 2
     assert page.errors == []
@@ -372,4 +372,57 @@ def test_a_hand_push_is_sent_to_the_other_phones(site, context):
       return [b.pushT, c.pushT];
     }""")
     assert got == [0.35, 0]
+    assert page.errors == []
+
+
+def test_the_v6_hills_bend_sharply_and_go_through_tunnels(site, context):
+    # #517 v6: "Lisää kenttiä. Voisi olla tunneleita jne", "Mutkia voisi olla".
+    page = open_game(site, context)
+    got = page.evaluate("""() => [1, 2, 3, 4, 5, 6, 7].map(n => {
+      const h = buildHill(n);
+      let bend = 0;   // the sharpest turn of the course, radians per metre
+      for (let s = 1; s < h.len; s++) bend = Math.max(bend, Math.abs(courseDir(h, s + 1) - courseDir(h, s - 1)) / 2);
+      // Nothing throws a sled into a roof: no jump or drop inside a tunnel or in the 40 m before it,
+      // and nothing to hit inside one.
+      const clear = h.tunnels.every(t =>
+        h.kicks.every(k => k.s + k.len < t.s - 40 || k.s > t.s + t.len) &&
+        h.drops.every(d => d.s < t.s - 40 || d.s > t.s + t.len) &&
+        h.obst.every(o => o.s < t.s - 3 || o.s > t.s + t.len + 3));
+      return [h.name, h.tunnels.length, bend, clear];
+    })""")
+    names = [g[0] for g in got]
+    assert names[5:] == ["Mutkamäki", "Luolasto"]
+    for name, tunnels, bend, clear in got[:5]:
+        assert tunnels == 0 and bend < 0.01, (name, bend)   # the older hills stay as they were
+    for name, tunnels, bend, clear in got[5:]:
+        assert tunnels >= 2 and bend > 0.015 and clear, (name, tunnels, bend, clear)
+    assert got[6][1] >= 3
+    assert page.errors == []
+
+
+def test_a_tunnels_walls_keep_the_sled_in_and_its_roof_keeps_it_low(site, context):
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const h = buildHill(7), t = h.tunnels[1], lim = h.width / 2 + WALL;
+      // Steered hard at the right wall all through the tunnel.
+      const sl = newSled('t', 't'); sl.s = t.s + 2; sl.x = 0; sl.y = groundAt(h, sl.s, 0); sl.v = 14;
+      let walls = 0, widest = 0; sl.onEvent = e => { if (e === 'wall') walls++; };
+      while (sl.s < t.s + t.len - 2) { sl.steer = 1; step(h, sl, DT); widest = Math.max(widest, Math.abs(sl.x)); }
+      // Thrown up hard inside it: it stays under the roof.
+      const up = newSled('u', 'u'); up.s = t.s + 10; up.x = 0; up.y = groundAt(h, up.s, 0) + 0.5; up.v = 12;
+      up.air = true; up.vy = 14;
+      let over = -99;
+      for (let i = 0; i < 240 && up.air; i++) { step(h, up, DT); over = Math.max(over, up.y - (baseAt(h, up.s) + ROOF)); }
+      // Out in the open the same throw goes far higher.
+      const out = newSled('o', 'o'); out.s = t.s - 60; out.x = 0; out.y = groundAt(h, out.s, 0) + 0.5; out.v = 12;
+      out.air = true; out.vy = 14;
+      let high = 0;
+      for (let i = 0; i < 240 && out.air; i++) { step(h, out, DT); high = Math.max(high, out.y - baseAt(h, out.s)); }
+      return { walls, widest, lim, v: sl.v, over, high, fell: sl.fallT > 0 };
+    }""")
+    assert got["widest"] <= got["lim"], got
+    assert got["walls"] >= 1 and not got["fell"], got   # it knocks the wall but does not fall
+    assert got["v"] > 5, got   # and slides on
+    assert got["over"] < 0, got   # under the roof all the time
+    assert got["high"] > 6, got
     assert page.errors == []

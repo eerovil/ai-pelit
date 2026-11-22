@@ -89,11 +89,22 @@ function santaSleigh() {
 
 // ---- The hill ----
 function hillPoint(hill, s, x, y) { return [centreX(hill, s) + x, y, -s]; }
+// The way a sled heading `yaw` from the course really goes in the world (v6): s and x are not
+// square to each other where the course bends, so on a sharp bend this differs from course + yaw.
+function worldDir(hill, s, yaw) {
+  const c = (centreX(hill, s + 0.6) - centreX(hill, s - 0.6)) / 1.2;
+  return Math.atan2(c * Math.cos(yaw) + Math.sin(yaw), Math.cos(yaw));
+}
+// Hill place a world distance `d` from (s, x) along world heading `dir`.
+function hillAhead(hill, s, x, dir, d) {
+  const s2 = s + Math.cos(dir) * d;
+  return [s2, centreX(hill, s) + x + Math.sin(dir) * d - centreX(hill, s2)];
+}
 
 function buildWorld(hill) {
   if (V3.world) { V3.scene.remove(V3.world); V3.world.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
   const world = new THREE.Group();
-  world.add(terrain(hill), oldTracks(hill), kickers(hill), spruces(hill), rocksAndSnowmen(hill), lanterns(hill), finishArch(hill));
+  world.add(terrain(hill), oldTracks(hill), kickers(hill), spruces(hill), rocksAndSnowmen(hill), lanterns(hill), finishArch(hill), tunnels(hill));
   V3.gifts = gifts(hill); world.add(V3.gifts);
   V3.scene.add(world);
   V3.world = world; V3.hill = hill; V3.trails = new Map();
@@ -177,7 +188,7 @@ function terrain(hill) {
   for (let x = -70; x <= 70; x += x < -14 || x > 14 ? 5 : 1) xs.push(x);
   const s0 = -40, s1 = hill.total, ds = 2, rows = Math.floor((s1 - s0) / ds) + 1, cols = xs.length;
   const pos = new Float32Array(rows * cols * 3), col = new Float32Array(rows * cols * 3), uv = new Float32Array(rows * cols * 2);
-  const c = new THREE.Color(), track = new THREE.Color('#eef3ff'), soft = new THREE.Color('#cfdaf4');
+  const c = new THREE.Color(), track = new THREE.Color('#eef3ff'), soft = new THREE.Color('#cfdaf4'), under = new THREE.Color('#8a97c0');
   const TILE = 14;   // metres one texture tile covers
   for (let i = 0; i < rows; i++) {
     const s = s0 + i * ds, cx = centreX(hill, s), b = baseAt(hill, Math.max(0, s)) + (s < 0 ? -s * 0.1 : 0);
@@ -185,6 +196,7 @@ function terrain(hill) {
       const x = xs[j], k = (i * cols + j) * 3;
       pos[k] = cx + x; pos[k + 1] = b + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1); pos[k + 2] = -s;
       c.copy(track).lerp(soft, clamp((Math.abs(x) - hill.width / 2) / 4, 0, 1));
+      if (Math.abs(x) <= hill.width / 2 + WALL + 1 && tunnelAt(hill, s)) c.lerp(under, 0.55);   // in a tunnel's shade (v6)
       col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
       uv[(i * cols + j) * 2] = x / TILE; uv[(i * cols + j) * 2 + 1] = s / TILE;
     }
@@ -293,12 +305,16 @@ function spruceGeometry() {
 function spruces(hill) {
   const r = rng(hill.n * 101), list = [];
   for (const o of hill.obst) if (o.kind === 'kuusi') list.push([o.s, o.x, 1]);
+  const mound = (s, x) => (hill.tunnels || []).some(t => s > t.s - 3 && s < t.s + t.len + 3 && Math.abs(x) < hill.width / 2 + MOUND + 2);
   for (let s = -30; s < hill.total; s += 3) {
+    // x is measured straight across, so on a bend the same x is nearer the track: further out there (v6).
+    const wide = 1 / Math.cos(courseDir(hill, s));
     for (const side of [-1, 1]) {
-      if (r() < 0.55) list.push([s + r() * 3, side * (hill.width / 2 + 3 + r() * 6), 0.8 + r() * 0.6]);
-      if (r() < 0.5) list.push([s + r() * 3, side * (hill.width / 2 + 10 + r() * 50), 0.9 + r() * 0.9]);
+      if (r() < 0.55) list.push([s + r() * 3, side * (hill.width / 2 + 3 + r() * 6) * wide, 0.8 + r() * 0.6]);
+      if (r() < 0.5) list.push([s + r() * 3, side * (hill.width / 2 + 10 + r() * 50) * wide, 0.9 + r() * 0.9]);
     }
   }
+  for (let i = list.length - 1; i >= 0; i--) if (list[i][2] !== 1 && mound(list[i][0], list[i][1])) list.splice(i, 1);
   const m = new THREE.InstancedMesh(spruceGeometry(), lambert(), list.length), o = new THREE.Object3D(), lights = [];
   list.forEach(([s, x, k], i) => {
     const [X, Y, Z] = hillPoint(hill, s, x, baseAt(hill, Math.max(0, s)) + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1) - 0.1);
@@ -337,6 +353,7 @@ function rocksAndSnowmen(hill) {
 function lanterns(hill) {
   const parts = [], lights = [];
   for (let s = 10; s < hill.len + 40; s += 24) {
+    if ((hill.tunnels || []).some(t => s > t.s - 3 && s < t.s + t.len + 3)) continue;   // the tunnel has its own lamps
     for (const side of [-1, 1]) {
       const x = side * (hill.width / 2 + 1.2), y = baseAt(hill, s) + bankAt(hill, x), [X, , Z] = hillPoint(hill, s, x, 0);
       const g = new THREE.CylinderGeometry(0.06, 0.08, 1.6, 6); g.translate(X, y + 0.8, Z); parts.push([g, '#2a2a33']);
@@ -367,6 +384,53 @@ function finishArch(hill) {
   banner.position.set(X, y + 4.6, Z); grp.add(banner);
   for (let i = 0; i <= 16; i++) lights.push([X - half + i * half / 8, y + 5.35, Z + 0.05]);
   grp.add(glowPoints(lights, i => (i % 2 ? '#ffd84a' : '#ffffff'), 0.4));
+  return grp;
+}
+
+// The tunnels (v6): a vault through a mound of snow. Inside, straight walls and a round roof of
+// dark rock with lamps along its top; outside, the snowy mound; at each mouth, the face between
+// them with a ring of lights. Its walls and roof are where world.js stops the sled (WALL, ROOF).
+const MOUND = 8, WALL_UP = 2.6;
+function tunnels(hill) {
+  const grp = new THREE.Group();
+  if (!(hill.tunnels || []).length) return grp;
+  const pos = [], col = [], c = new THREE.Color(), lights = [], rim = [];
+  const tri = (a, b, d, hex) => { c.set(hex); for (const p of [a, b, d]) { pos.push(...p); col.push(c.r, c.g, c.b); } };
+  const quad = (a, b, d, e, hex) => { tri(a, b, d, hex); tri(b, e, d, hex); };
+  const W = hill.width / 2 + WALL, N = 14;
+  // The inside's cross-section, left foot to right foot: up the wall, over the roof, down the wall.
+  const inner = [[-W, 0], [-W, WALL_UP / 2]];
+  for (let i = 0; i <= N; i++) { const a = Math.PI * i / N; inner.push([-W * Math.cos(a), WALL_UP + (ROOF - WALL_UP) * Math.sin(a)]); }
+  inner.push([W, WALL_UP / 2], [W, 0]);
+  // The mound's, as many points, over the banks.
+  const O = W + MOUND, outer = inner.map((_, i) => {
+    const x = -O * Math.cos(Math.PI * i / (inner.length - 1)), m = Math.cos(Math.PI / 2 * x / O);
+    return [x, bankAt(hill, x) + (ROOF + 2.2) * m * m - 0.2];
+  });
+  const at = (s, [x, y]) => hillPoint(hill, s, x, baseAt(hill, s) + y);
+  for (const t of hill.tunnels) {
+    const s1 = t.s + t.len, rows = [];
+    for (let s = t.s; s < s1; s += 2) rows.push(s);
+    rows.push(s1);
+    for (let r = 0; r < rows.length - 1; r++) {
+      const a = rows[r], b = rows[r + 1], dark = r % 2 ? '#7484ab' : '#6a7aa2';
+      for (let i = 0; i < inner.length - 1; i++) {
+        quad(at(a, inner[i]), at(a, inner[i + 1]), at(b, inner[i]), at(b, inner[i + 1]), i < 2 || i > inner.length - 3 ? '#5d6b92' : dark);
+        quad(at(a, outer[i]), at(a, outer[i + 1]), at(b, outer[i]), at(b, outer[i + 1]), '#e6edfb');
+      }
+    }
+    for (const s of [t.s, s1]) {
+      for (let i = 0; i < inner.length - 1; i++) quad(at(s, inner[i]), at(s, inner[i + 1]), at(s, outer[i]), at(s, outer[i + 1]), '#8d9abb');
+      for (let i = 1; i < inner.length - 1; i++) rim.push(at(s, [inner[i][0] * 1.02, inner[i][1] + 0.15]));
+    }
+    for (let s = t.s + 6; s < s1 - 2; s += 10) lights.push(at(s, [0, ROOF - 0.15]));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+  g.computeVertexNormals();
+  grp.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  grp.add(glowPoints(lights, () => '#ffd27a', 0.35), glowPoints(rim, i => ['#ff4848', '#ffd23a', '#48ff7a', '#4aa8ff'][i % 4], 0.3));
   return grp;
 }
 
@@ -458,13 +522,12 @@ function dressHead(h, o, mat) {
 
 // Places a sled's rig: its place and heading on the hill, then the trick's turn, the lean, the pose.
 function poseRig(rig, hill, sl, look) {
-  const u = rig.userData, ds = 0.6;
+  const u = rig.userData;
   const [X, Y, Z] = hillPoint(hill, sl.s, sl.x, sl.y);
   rig.position.set(X, Y, Z);
   // The course's own heading here, and the sled's yaw from it.
-  const dir = Math.atan2(centreX(hill, sl.s + ds) - centreX(hill, sl.s - ds), 2 * ds);
   rig.rotation.set(0, 0, 0);
-  rig.rotation.y = -(dir + sl.yaw);
+  rig.rotation.y = -worldDir(hill, sl.s, sl.yaw);
   // Nose follows the snow's slope on the ground; in the air the flight's.
   const slope = sl.air ? Math.atan2(sl.vy, Math.max(1, sl.v)) * 0.6 : Math.atan(groundAt(hill, sl.s + 0.5, sl.x) - groundAt(hill, sl.s - 0.5, sl.x));
   u.slope = (u.slope === undefined ? slope : u.slope + (slope - u.slope) * 0.25);
@@ -526,6 +589,7 @@ function render3d(hill, sleds, me, dt, still) {
     }
     p.needsUpdate = true;
   }
+  V3.snow.visible = !V3.inTunnel;   // no snow falls under a tunnel's roof
   V3.snow.position.set(cam.position.x, cam.position.y - 8, cam.position.z + 8);
   V3.snow.rotation.y = -dir;
   // Santa crosses the sky every 25 s or so, far ahead.
@@ -544,9 +608,12 @@ function render3d(hill, sleds, me, dt, still) {
 function chaseCamera(hill, me, cam, dt, still) {
   if (me) showRider(me, true);
   const d = me || { s: 0, x: 0, y: baseAt(hill, 0), yaw: 0, air: false };
-  const dir = courseDir(hill, d.s) + d.yaw * 0.6;
+  const dir = worldDir(hill, d.s, d.yaw * 0.6);
   const back = LAND ? 6.4 : 8.6, up = LAND ? 2.6 : 3.7;
-  const bs = d.s - Math.cos(dir) * back, bx = d.x - Math.sin(dir) * back;
+  const [bs, bx0] = hillAhead(hill, d.s, d.x, dir, -back);
+  // On a sharp bend the place behind the sled is off the track, among the spruces (v6): the camera
+  // stays over the track, or no further out than the sled itself.
+  const side = Math.max(Math.abs(d.x), hill.width / 2 + 0.8), bx = clamp(bx0, -side, side);
   const want = hillPoint(hill, bs, bx, Math.max(d.y, groundAt(hill, d.s, d.x)) + up);
   want[1] = Math.max(want[1], groundAt(hill, bs, bx) + 1.4);
   if (!V3.cam) V3.cam = want.slice();
@@ -555,8 +622,16 @@ function chaseCamera(hill, me, cam, dt, still) {
   // stretch the sled falls metres in a moment, and a slow camera lost it under the screen's edge).
   const ky = still ? 1 : Math.min(1, dt * (3.5 + 1.5 * Math.abs(want[1] - V3.cam[1])));
   for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? ky : k);
+  // In a tunnel or at its mouth the camera stays under the roof and inside the walls (v6).
+  const cs = -V3.cam[2], tn = (hill.tunnels || []).find(t => cs > t.s - 6 && cs < t.s + t.len + 1);
+  if (tn) {
+    const lim = hill.width / 2 + WALL - 1.2, cx = centreX(hill, cs);
+    V3.cam[0] = cx + clamp(V3.cam[0] - cx, -lim, lim);
+    V3.cam[1] = Math.min(V3.cam[1], baseAt(hill, clamp(cs, tn.s, tn.s + tn.len)) + ROOF - 0.9);
+  }
+  V3.inTunnel = !!tn;
   cam.position.set(...V3.cam);
-  const ls = d.s + 9, lx = d.x + Math.sin(dir) * 9;
+  const [ls, lx] = hillAhead(hill, d.s, d.x, dir, 9);
   cam.lookAt(...hillPoint(hill, ls, lx, Math.max(d.y - 1.5, groundAt(hill, ls, lx)) + 0.6));
   cam.fov = LAND ? 58 : 66; cam.updateProjectionMatrix();
   return dir;
@@ -576,7 +651,8 @@ function eyeCamera(hill, me, cam) {
   cam.rotateX(-0.26);   // eyes a little down the track
   cam.fov = LAND ? 64 : 78; cam.updateProjectionMatrix();
   V3.cam = null;   // the chase camera starts afresh when the view changes back
-  return courseDir(hill, me.s) + me.yaw;
+  V3.inTunnel = !!tunnelAt(hill, me.s);
+  return worldDir(hill, me.s, me.yaw);
 }
 function showRider(sl, on) {
   const P = rigFor(sl).userData.P;
