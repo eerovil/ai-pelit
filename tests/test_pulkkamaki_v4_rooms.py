@@ -66,7 +66,7 @@ def start(pages):
 def test_two_phones_go_down_together_and_get_one_result(sledders):
     host, guest = room(sledders)
     # The host picks the hill on the room screen; a guest only sees who does.
-    assert host.locator("#pulkka-room button").count() == 3
+    assert host.locator("#pulkka-room button").count() == 5   # every hill, from v4 (#517) five
     assert "valitsee mäen" in guest.locator("#pulkka-room").inner_text()
     start([host, guest])
     for p in (host, guest):
