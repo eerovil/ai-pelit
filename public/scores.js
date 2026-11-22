@@ -142,6 +142,12 @@
       level: function () { return Math.max(1, saved('lattia-on-laavaa', 'auki')); },
       levelText: function (n) { return n + (n === 1 ? ' huone' : ' huonetta') + ' auki'; },
     },
+    // Points for one landing, one list per route ('reitti-N', #533); level: routes open ('auki').
+    lentokone: {
+      order: 'high', score: function (s) { return s + ' p'; }, boards: true,
+      level: function () { return Math.max(1, saved('lentokone', 'auki')); },
+      levelText: function (n) { return n + (n === 1 ? ' reitti' : ' reittiä') + ' auki'; },
+    },
   };
   if (GAMES[GAME]) ORDER = GAMES[GAME].order;
   function orderFor(game, b) {

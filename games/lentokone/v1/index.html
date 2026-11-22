@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lentokone</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#4f8fd8;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+  #g{pointer-events:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  .screen{position:fixed;top:0;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    padding:calc(env(safe-area-inset-top,0px) + 52px) calc(env(safe-area-inset-right,0px) + 16px) calc(env(safe-area-inset-bottom,0px) + 16px) calc(env(safe-area-inset-left,0px) + 16px);
+    box-sizing:border-box;background:linear-gradient(rgba(10,30,70,.6),rgba(10,30,70,.25) 45%,rgba(10,30,70,.65))}
+  .screen[hidden]{display:none}
+  h1{margin:0;font-size:36px;font-weight:900;letter-spacing:.5px;text-shadow:0 3px 0 #c8202f,0 6px 14px rgba(0,0,0,.4)}
+  h2{margin:0;font-size:28px;font-weight:900;text-align:center}
+  .sub{margin:-2px 0 2px;font-size:14px;opacity:.92;text-align:center;max-width:330px;line-height:1.35}
+  .col{display:flex;flex-direction:column;gap:8px;align-items:stretch;width:100%;max-width:340px}
+  button{font:700 16px system-ui,sans-serif;border:0;border-radius:14px;padding:12px 14px;color:#fff;background:rgba(255,255,255,.17);touch-action:manipulation}
+  button.big{background:#c8202f;font-size:21px;padding:14px;box-shadow:0 4px 0 #8a1420}
+  button[hidden]{display:none}
+  button.route{display:flex;justify-content:space-between;align-items:center;text-align:left;padding:7px 12px}
+  button.route span{display:flex;flex-direction:column;gap:1px}
+  button.route small{font-weight:500;font-size:12px;opacity:.85}
+  button.route em{font-style:normal;color:#ffd84a;font-size:15px;letter-spacing:1px}
+  button.route.on{background:rgba(255,216,74,.28);outline:2px solid #ffd84a}
+  button.route em i,#endStars i{font-style:normal;color:rgba(255,255,255,.3)}
+  button:disabled{opacity:.55}
+  .row{display:flex;gap:8px}
+  .row button{flex:1}
+  #routeNote{margin:0;font-size:13px;opacity:.9;text-align:center}
+  #endStars{margin:0;font-size:38px;color:#ffd84a;letter-spacing:4px}
+  #endNote,#endOpen{margin:0;font-size:15px;font-weight:700;color:#ffd84a;text-align:center}
+  #endParts{list-style:none;margin:0;padding:0;width:100%;max-width:340px}
+  #endParts li{display:flex;justify-content:space-between;gap:10px;padding:5px 10px;border-radius:10px;font-size:15px}
+  #endParts li:last-child{font-weight:800;background:rgba(255,216,74,.2)}
+  @media (max-height:700px) and (orientation:portrait){.screen{gap:7px}h1{font-size:30px}.col{gap:6px}button{padding:10px 14px}button.big{padding:11px}button.route{padding:5px 12px}}
+  body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 12px);gap:8px 26px}
+  body.land .screen>.head{flex:0 0 250px;display:flex;flex-direction:column;align-items:center;gap:6px}
+  body.land h1{font-size:30px}
+  body.land .col{max-width:410px;gap:6px}
+  body.land #routes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  body.land button.route{padding:5px 9px}
+  body.land button.route small{font-size:11px}
+  body.land button.big{padding:10px}
+  body.land button{padding:9px 12px;font-size:15px}
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu" class="screen" hidden>
+  <div class="head">
+    <h1>✈ Lentokone</h1>
+    <p class="sub">Nouse kiitoradalta, lennä toiselle kentälle ja laskeudu pehmeästi. Vasen peukalo ohjaa, oikea antaa kaasua.</p>
+    <p id="routeNote"></p>
+  </div>
+  <div class="col">
+    <div id="routes" class="col"></div>
+    <button id="resume" hidden>▶ Jatka lentoa</button>
+    <button id="go" class="big">Lennä!</button>
+    <div class="row"><button id="view">📷 Takaa</button></div>
+    <button id="stickBtn">🕹 Sauva</button>
+  </div>
+</div>
+<div id="end" class="screen" hidden>
+  <div class="head">
+    <h2 id="endTitle"></h2>
+    <p id="endStars"></p>
+    <p id="endNote"></p>
+    <p id="endOpen" hidden></p>
+  </div>
+  <div class="col">
+    <ul id="endParts"></ul>
+    <button id="next" class="big">Seuraava lento</button>
+    <button id="again">Lennä uudelleen</button>
+    <button id="approach">Harjoittele laskeutumista</button>
+    <div class="row"><button id="scores">🏆 Tuloslista</button><button id="toMenu">Valikkoon</button></div>
+  </div>
+</div>
+<div id="pause" class="screen" hidden>
+  <div class="head"><h2>Tauko</h2></div>
+  <div class="col">
+    <button id="goOn" class="big">Jatka</button>
+    <button id="pRestart">Alusta</button>
+    <button id="pApproach">Harjoittele laskeutumista</button>
+    <button id="pMenu">Valikkoon</button>
+  </div>
+</div>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="world.js"></script>
+<script src="draw3d.js"></script>
+<script src="ui.js"></script>
+<script type="module">
+import('../../../lib/three-r187/three.module.js').then(m => {
+  try { init3d(m); } catch (e) { no3d = true; }
+  wake();
+}, () => { no3d = true; wake(); });
+</script>
+<script src="../../../scores.js" data-game="lentokone" data-order="high" data-corner="top-right"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>

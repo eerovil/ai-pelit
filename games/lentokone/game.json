@@ -1,0 +1,14 @@
+{
+  "title": "Lentokone",
+  "description": "Nouse kiitoradalta, lennä toiselle kentälle ja laskeudu pehmeästi. 3D-lentopeli.",
+  "category": "vauhti",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-22",
+      "note": "Ensimmäinen versio: viisi reittiä kentältä toiselle, nousu, lento ja pisteytetty laskeutuminen 3D:nä.",
+      "request": "Lentokonepeli. Lähtö kiitoradalta, lentäminen ja laskeutuminen toiselle kiitoradalle. 3d",
+      "issue": "eerovil/ai-pelit#533"
+    }
+  ]
+}
