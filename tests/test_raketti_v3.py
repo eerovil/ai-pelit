@@ -1,4 +1,9 @@
-"""Raketti: manual controls, real orbit dynamics, contact docking and resumable flight."""
+"""Raketti v3 (#548): a small Earth and Moon, six trips, a nose that holds where it points.
+
+The flights here are flown by scripted test pilots (PILOT below) through the same things the
+player's controls set: throttle, nose direction, pointing mode, translation and time warp. The
+game itself has no autopilot.
+"""
 import shutil
 
 import pytest
@@ -6,6 +11,237 @@ import pytest
 from conftest import ROOT, turn
 
 URL = 'games/raketti/v3/'
+
+# Test pilots only, never shipped. They set ship.throttle, ship.angle, ship.point, held.* and
+# warp, exactly what the slider, the turn and point buttons, the thrusters and "Aika" set.
+PILOT = r"""
+// A scripted pilot that flies only through the player's controls' effects (throttle, nose, warp).
+window.pilot = function (opts = {}) {
+  const log = [];
+  const frame = 1 / 30, thrustWarp = opts.thrustWarp || 2;
+  let stage = 'ascent', guard = 0;
+  const radial = (b = EARTH) => { const q = relative(b, ship); return Math.atan2(q.x, q.y); };
+  const fly = (w) => { warp = Math.min(w, maxWarp()); advanceFlight(frame); };
+  const aimApo = opts.aimApo || 4.88e6;
+  while (ship.phase === 'flight' && guard++ < 200000) {
+    const o = orbitAround(EARTH, ship), h = o.altitude;
+    if (stage === 'ascent') {
+      ship.throttle = 1;
+      if (h > 1500) { ship.point = null; ship.angle = wrap(radial() + ascentPitch(h) * Math.PI / 180); }
+      if (o.apo >= 60000) { ship.throttle = 0; stage = 'coast1'; log.push(['meco', ship.t, ship.real]); }
+      fly(thrustWarp); continue;
+    }
+    if (stage === 'coast1') {
+      ship.point = 'pro';
+      if (o.toApo < 8 || o.vr < 0) { stage = 'circ'; }
+      fly(o.toApo > 60 ? 1000 : 1); continue;
+    }
+    if (stage === 'circ') {
+      ship.point = 'pro'; ship.throttle = 1;
+      if (o.peri > 45000) { ship.throttle = 0; stage = 'wait'; log.push(['orbit', ship.t, ship.real, Math.round(deltaV())]); }
+      fly(thrustWarp); continue;
+    }
+    if (opts.stop === 'orbit') break;
+    if (stage === 'wait') {
+      ship.point = 'pro';
+      const T = opts.target || MOON, lead = transferLead(o.r, T.orbit.r, T.orbit.n), ahead = leadOf(bodyAt(T, ship.t), ship);
+      const wait = ((ahead - lead) % TAU + TAU) % TAU;
+      if (wait < 1 * Math.PI / 180 || wait > TAU - 0.5 * Math.PI / 180) { stage = 'tli'; log.push(['tli', ship.t, ship.real]); }
+      fly(wait > 0.2 ? 1000 : wait > 0.03 ? 100 : 5); continue;
+    }
+    if (stage === 'tli') {
+      ship.point = 'pro'; ship.throttle = o.apo + EARTH_R > aimApo - 2e5 ? 0.05 : 1;
+      if (o.apo + EARTH_R >= aimApo) { ship.throttle = 0; stage = opts.stop === 'tli' ? 'end' : 'cruise'; log.push(['tliEnd', ship.t, ship.real, Math.round(deltaV())]); }
+      fly(thrustWarp); continue;
+    }
+    if (stage === 'cruise') {
+      const m = orbitAround(MOON, ship);
+      if (opts.stop === 'moon' && refBody() === MOON) break;
+      if (refBody() === MOON && !opts.noFix && (m.peri < 15000 || m.peri > 60000) && m.vr < 0 && m.altitude > 60000) {
+        const q = relative(MOON, ship), sg = Math.sign(m.h) * (m.peri < 15000 ? 1 : -1);
+        ship.point = null; ship.angle = Math.atan2(-q.y * sg, q.x * sg); ship.throttle = 0.05; fly(2);
+        if (!log.fix) { log.fix = 1; log.push(['fix', ship.t, ship.real, Math.round(m.peri)]); }
+        continue;
+      }
+      ship.throttle = 0;
+      if (refBody() === MOON && m.vr >= 0) { stage = 'loi'; log.push(['peri', ship.t, ship.real, Math.round(m.altitude)]); }
+      if (refBody() === MOON && m.altitude < 30000 && m.vr < 0 && m.altitude - m.peri < 2000) { stage = 'loi'; log.push(['nearperi', ship.t, ship.real, Math.round(m.altitude)]); }
+      ship.point = 'retro';
+      fly(1000); continue;
+    }
+    if (stage === 'loi') {
+      ship.point = 'retro'; const m = orbitAround(MOON, ship);
+      ship.throttle = m.energy < 0 && m.apo < 400000 ? 0.1 : 1;
+      if (m.energy < 0 && m.apo < 250000) { ship.throttle = 0; log.push(['loiEnd', ship.t, ship.real, Math.round(deltaV()), Math.round(m.peri), Math.round(m.apo)]); stage = 'done'; }
+      fly(thrustWarp); continue;
+    }
+    break;
+  }
+  return { phase: ship.phase, reason: ship.reason, t: ship.t, real: ship.real, dv: deltaV(), stars: ship.stars, log };
+};
+// Land on body b from wherever the ship is near it: kill sideways speed, then fall on a
+// throttle that keeps the descent under a speed that shrinks with height.
+window.lander = function (b, opts = {}) {
+  const frame = 1 / 30, log = []; let guard = 0;
+  const fly = (w) => { warp = Math.min(w, maxWarp()); advanceFlight(frame); };
+  while (ship.phase === 'flight' && !ship.landedOn && guard++ < 200000) {
+    const q = relative(b, ship), r = Math.hypot(q.x, q.y), h = r - b.radius - SHIP.length / 2;
+    const ux = q.x / r, uy = q.y / r, down = -(q.vx * ux + q.vy * uy);
+    const sx = q.vx + down * ux, sy = q.vy + down * uy, side = Math.hypot(sx, sy);
+    const g = b.mu / r / r, amax = Math.min(SHIP.thrust / mass(), SHIP.accCap);
+    const target = Math.max(b.id === 'rock' ? 0.3 : 1.2, Math.sqrt(2 * 0.3 * amax * Math.max(0, h - 5)) * (b.id === 'rock' ? 0.3 : 1));
+    // Thrust vector wanted: cancel side speed, hold descent at target.
+    let wx = -sx * 0.5, wy = -sy * 0.5;
+    const vert = g + (down - target) * 2;
+    wx += ux * vert; wy += uy * vert;
+    const need = Math.hypot(wx, wy);
+    if (need > 1e-4 && (h > 60 || side > 0.3)) { ship.point = null; ship.angle = Math.atan2(wx, wy); }
+    else ship.point = 'up';
+    ship.throttle = clamp(need / amax, 0, 1);
+    if (Math.cos(ship.angle - Math.atan2(wx, wy)) < 0.9) ship.throttle = 0;
+    fly(opts.warp || 2);
+  }
+  return { phase: ship.phase, landed: ship.landedOn, reason: ship.reason, real: ship.real, dv: deltaV(), touch: ship.touch, stars: ship.stars };
+};
+// Meet a moving body: wait at the closest point of the coasting path, match its speed,
+// then drift in at a speed that shrinks with distance.
+window.meet = function (b, opts = {}) {
+  const frame = 1 / 30, log = []; let guard = 0, stage = 'coast';
+  const fly = (w) => { warp = Math.min(w, maxWarp()); advanceFlight(frame); };
+  while (ship.phase === 'flight' && guard++ < 300000) {
+    const q = relative(b, ship), r = Math.hypot(q.x, q.y), h = r - b.radius;
+    const closing = -(q.x * q.vx + q.y * q.vy) / r;
+    if (stage === 'coast') {
+      if (closing <= 0 && r < (opts.within || 400000)) { stage = 'match'; log.push(['closest', ship.t, ship.real, Math.round(h)]); }
+      fly(1000); continue;
+    }
+    if (stage === 'match') {
+      const v = Math.hypot(q.vx, q.vy);
+      ship.point = null; ship.angle = Math.atan2(-q.vx, -q.vy);
+      ship.throttle = clamp(v / 20, 0.02, 1);
+      if (v < 1) { ship.throttle = 0; stage = 'drift'; log.push(['matched', ship.t, ship.real, Math.round(h), Math.round(deltaV())]); }
+      fly(2); continue;
+    }
+    if (stage === 'drift') {
+      const want = Math.min(opts.cruise || 200, Math.sqrt(h) * 1.2);
+      const ux = -q.x / r, uy = -q.y / r;
+      const ex = ux * want - q.vx, ey = uy * want - q.vy, err = Math.hypot(ex, ey);
+      if (h < (opts.landFrom || 3000)) break;
+      if (err > 3) { ship.point = null; ship.angle = Math.atan2(ex, ey); ship.throttle = clamp(err / 40, 0.01, 1); fly(2); }
+      else { ship.throttle = 0; fly(100); }
+      continue;
+    }
+  }
+  log.push(['meetEnd', ship.t, ship.real, Math.round(deltaV())]);
+  return log;
+};
+window.placeAround = function (b, alt, fuelDv) {
+  const p = bodyAt(b, ship.t), r = b.radius + alt, v = Math.sqrt(b.mu / r), a = 1.0;
+  Object.assign(ship, { x: p.x + r * Math.sin(a), y: p.y + r * Math.cos(a), vx: p.vx + v * Math.cos(a), vy: p.vy - v * Math.sin(a), landedOn: null, point: null, throttle: 0 });
+  if (fuelDv) ship.fuel = fuelForDeltaV(fuelDv);
+};
+// From the Moon's surface home to Earth under the parachute.
+window.homer = function (opts = {}) {
+  const frame = 1 / 30, log = []; let guard = 0, stage = 'up';
+  const fly = (w) => { warp = Math.min(w, maxWarp()); advanceFlight(frame); };
+  while (ship.phase === 'flight' && guard++ < 400000) {
+    const m = orbitAround(MOON, ship), q = relative(MOON, ship), up = Math.atan2(q.x, q.y);
+    const dir = 1;
+    if (stage === 'up') {
+      ship.throttle = 1; ship.point = null;
+      ship.angle = wrap(up + dir * clamp(0.35 + m.altitude / 2000, 0.35, 1.5));
+      if (m.apo > 20000) { ship.throttle = 0; stage = 'coast'; log.push(['moonApo', ship.t, ship.real, Math.round(deltaV())]); }
+      fly(2); continue;
+    }
+    if (stage === 'coast') {
+      ship.point = 'pro';
+      if (m.toApo < 5 || m.vr < 0) stage = 'circ';
+      fly(m.toApo > 30 ? 100 : 1); continue;
+    }
+    if (stage === 'circ') {
+      ship.point = 'pro'; ship.throttle = 1;
+      if (m.peri > 12000) { ship.throttle = 0; stage = 'wait'; log.push(['moonOrbit', ship.t, ship.real, Math.round(deltaV())]); }
+      fly(2); continue;
+    }
+    if (stage === 'wait') {
+      // Burn where the ship moves against the Moon's own motion, so it falls to Earth.
+      const mv = bodyAt(MOON, ship.t), along = (q.vx * mv.vx + q.vy * mv.vy) / Math.hypot(q.vx, q.vy) / Math.hypot(mv.vx, mv.vy);
+      ship.point = 'pro';
+      if (along < -0.995) { stage = 'tei'; log.push(['tei', ship.t, ship.real]); }
+      fly(along < -0.9 ? 5 : 100); continue;
+    }
+    if (stage === 'tei') {
+      ship.point = 'pro'; ship.throttle = 1;
+      const path = predictPath(ship), c = path.closest.earth;
+      if (c && c.d < 25000) { ship.throttle = 0; stage = 'cruise'; log.push(['teiEnd', ship.t, ship.real, Math.round(deltaV()), Math.round(c.d)]); }
+      fly(1); continue;
+    }
+    if (stage === 'cruise') {
+      const h = Math.hypot(ship.x, ship.y) - EARTH_R, v = Math.hypot(ship.vx, ship.vy);
+      ship.point = h < 60000 ? 'retro' : null;
+      if (ship.chute === 'packed' && h < CHUTE.height && v < CHUTE.speed - 20) { openChute(); log.push(['chute', ship.t, ship.real, Math.round(h), Math.round(v)]); }
+      fly(1000); continue;
+    }
+  }
+  return { phase: ship.phase, reason: ship.reason, real: ship.real, dv: deltaV(), touch: ship.touch, stars: ship.stars, log };
+};
+// From a low Earth orbit up to the station and into its port.
+window.docker = function (opts = {}) {
+  const frame = 1 / 30, log = []; let guard = 0, stage = 'wait';
+  const fly = (w) => { warp = Math.min(w, maxWarp()); advanceFlight(frame); };
+  while (ship.phase === 'flight' && guard++ < 400000) {
+    const o = orbitAround(EARTH, ship), st = station(ship), d = approach(ship);
+    if (stage === 'wait') {
+      ship.point = 'pro';
+      const lead = transferLead(o.r, STATION_R, STATION_N), ahead = leadOf(st, ship);
+      const wait = ((ahead - lead) % TAU + TAU) % TAU;
+      if (wait < 0.5 * Math.PI / 180 || wait > TAU - 0.3 * Math.PI / 180) { stage = 'raise'; log.push(['raise', ship.t, ship.real, Math.round(wait * 57.3)]); }
+      fly(wait > 0.2 ? 1000 : wait > 0.03 ? 100 : 5); continue;
+    }
+    if (stage === 'raise') {
+      ship.point = 'pro'; ship.throttle = 0.1;
+      if (o.apo + EARTH_R >= STATION_R) { ship.throttle = 0; stage = 'coast'; log.push(['raised', ship.t, ship.real, Math.round(deltaV())]); }
+      fly(1); continue;
+    }
+    if (stage === 'coast') {
+      ship.point = 'pro';
+      if (Math.hypot(ship.x - st.x, ship.y - st.y) < 15000 || (o.toApo < 4 && o.vr > 0)) { stage = 'circ'; log.push(['apo', ship.t, ship.real, Math.round(d.range)]); }
+      fly(o.toApo > 60 ? 1000 : 1); continue;
+    }
+    if (stage === 'circ') {
+      ship.point = 'pro'; ship.throttle = 0.1;
+      if (o.peri > STATION_R - EARTH_R - 4000) { ship.throttle = 0; stage = 'close'; log.push(['close', ship.t, ship.real, Math.round(d.range), Math.round(deltaV())]); }
+      fly(1); continue;
+    }
+    if (stage === 'close') {
+      // Main engine, velocity aimed at a point 40 m behind the port.
+      const ax = st.px - 40 * st.tx, ay = st.py - 40 * st.ty;
+      const nx = ship.x + Math.sin(ship.angle) * SHIP.length / 2, ny = ship.y + Math.cos(ship.angle) * SHIP.length / 2;
+      const dx = ax - nx, dy = ay - ny, dist = Math.hypot(dx, dy);
+      const want = Math.min(80, Math.sqrt(dist) * 0.4);
+      const ex = dx / dist * want - (ship.vx - st.vx), ey = dy / dist * want - (ship.vy - st.vy), err = Math.hypot(ex, ey);
+      if (dist < 8 && Math.hypot(ship.vx - st.vx, ship.vy - st.vy) < 0.5) { ship.throttle = 0; stage = 'dock'; log.push(['hold', ship.t, ship.real, Math.round(deltaV())]); continue; }
+      if (err > 0.4) {
+        ship.point = null; ship.angle = Math.atan2(ex, ey);
+        ship.throttle = clamp(err / (2 * SHIP.accCap), 0.001, 1);
+      } else ship.throttle = 0;
+      fly(5); continue;
+    }
+    if (stage === 'dock') {
+      ship.point = null; ship.angle = wrap(st.angle); ship.omega = 0; ship.throttle = 0;
+      const nx = ship.x + Math.sin(ship.angle) * SHIP.length / 2, ny = ship.y + Math.cos(ship.angle) * SHIP.length / 2;
+      const dx = st.px - nx, dy = st.py - ny, dist = Math.hypot(dx, dy);
+      const vx = dx / dist * Math.min(0.3, dist * 0.1), vy = dy / dist * Math.min(0.3, dist * 0.1);
+      const ex = vx - (ship.vx - st.pvx), ey = vy - (ship.vy - st.pvy);
+      const fx = Math.sin(ship.angle), fy = Math.cos(ship.angle), rx = Math.cos(ship.angle), ry = -Math.sin(ship.angle);
+      held.forward = clamp((ex * fx + ey * fy) / 0.05, -1, 1); held.side = clamp((ex * rx + ey * ry) / 0.05, -1, 1);
+      fly(1); continue;
+    }
+  }
+  clearHeld();
+  return { phase: ship.phase, reason: ship.reason, real: ship.real, dv: deltaV(), touch: ship.touch, stars: ship.stars, log };
+};
+"""
 
 
 def open_game(site, context):
@@ -15,502 +251,321 @@ def open_game(site, context):
     page.errors = []
     page.on('pageerror', lambda error: page.errors.append(str(error)))
     page.goto(site.url + URL)
-    page.wait_for_function("typeof ship !== 'undefined' && !!document.getElementById('launch')")
+    page.wait_for_function("typeof ship !== 'undefined' && !!document.querySelector('#trips .trip')")
     return page
 
 
-def start(page, button='launch'):
-    page.locator('#' + button).click()
-    page.evaluate('cancelAnimationFrame(frameId); frameId=0; lastFrame=0')
+def fly(page, body):
+    """Runs body (JS statements ending in a return) with the frame loop stopped and the pilots loaded."""
+    if not page.evaluate('typeof window.pilot === "function"'):
+        page.add_script_tag(content=PILOT)
+    return page.evaluate('() => { cancelAnimationFrame(frameId); frameId = 0; paused = false; ' + body + ' }')
 
 
-# A test pilot only: sends the same pointer/range events as the player's controls.
-# There is no pilot/controller in the shipped game. Substeps use the real game physics.
-PILOT = r"""() => {
- window.controlState = {};
- window.control = (key, value) => {
-   window.controlState ||= {};
-   if (controlState[key] === value) return;
-   const id = {turn:11,forward:12,side:13}[key];
-   if (controlState[key]) document.querySelector(`[data-hold="${key}:${controlState[key]}"]`)
-     .dispatchEvent(new PointerEvent('pointerup',{pointerId:id,bubbles:true}));
-   if (value) document.querySelector(`[data-hold="${key}:${value}"]`)
-     .dispatchEvent(new PointerEvent('pointerdown',{pointerId:id,bubbles:true}));
-   controlState[key]=value;
- };
- window.power = value => {
-   const slider=document.getElementById('throttle'); slider.value=value*100;
-   slider.dispatchEvent(new Event('input',{bubbles:true}));
- };
- window.flyDock = () => {
-   for(let t=0; t<650 && ship.phase==='flight'; t+=.1) {
-     const d=approach(), desired=clamp(-d.along*.03,0,.15);
-     const desiredSpin=STATION_N+clamp(wrap(d.p.angle-ship.angle)*.3,-.005,.005);
-     control('turn',ship.omega<desiredSpin-.00015?1:ship.omega>desiredSpin+.00015?-1:0);
-     control('forward',-d.closing<desired-.004?1:-d.closing>desired+.004?-1:0);
-     const radial=-d.cross*.03-d.lateral*.5;
-     control('side',radial>.003?-1:radial<-.003?1:0);
-     step(.1);
-   }
-   updateUi(); if(ship.phase!=='flight') showResult();
-   return {phase:ship.phase,reason:ship.reason,t:ship.t,rcs:ship.rcs};
- };
+def test_pad_to_moon_orbit_takes_under_five_minutes(site, context):
+    page = open_game(site, context)
+    r = fly(page, "ship = freshFlight('kuu-kierto', 'pad'); return pilot();")
+    assert r['phase'] == 'done', r
+    assert r['real'] < 300, r
+    assert r['stars'] >= 2 and r['dv'] >= 3300, r
+    assert page.evaluate('JSON.parse(localStorage.getItem("ai-pelit:raketti:tahdet"))["kuu-kierto"]') == r['stars']
+    assert page.errors == []
+
+
+def test_first_trip_reaches_orbit_with_three_stars(site, context):
+    page = open_game(site, context)
+    r = fly(page, "ship = freshFlight('kiertorata', 'pad'); return pilot({stop: 'orbit'});")
+    assert r['phase'] == 'done', r
+    assert r['real'] < 180 and r['stars'] == 3, r
+    page.evaluate('showResult()')
+    assert page.locator('#result-title').inner_text() == 'Matka onnistui!'
+    assert page.locator('#result-next').inner_text() == 'Seuraava: Avaruusasemalle'
+    assert page.locator('#result-list li.lit').count() == 3
+    assert page.errors == []
+
+
+def test_moon_landing_from_the_pad(site, context):
+    page = open_game(site, context)
+    r = fly(page, "ship = freshFlight('kuuhun', 'pad'); const a = pilot(); const l = lander(MOON); return {a, l};")
+    assert r['l']['phase'] == 'done', r
+    assert r['l']['landed'] == 'moon' and r['l']['touch']['soft'], r
+    assert r['l']['real'] < 7 * 60, r
+    assert page.errors == []
+
+
+def test_home_from_the_moon_under_the_parachute(site, context):
+    page = open_game(site, context)
+    r = fly(page, "ship = freshFlight('kotiin', 'pad'); pilot(); lander(MOON); "
+                  "if (ship.landedOn !== 'moon') return {phase: ship.phase, reason: ship.reason}; "
+                  "const h = homer(); return {...h, visited: ship.visited};")
+    assert r['phase'] == 'done', r
+    assert set(r['visited']) == {'moon', 'earth'}, r
+    assert r['touch']['body'] == 'earth' and r['touch']['speed'] <= 10, r
+    assert r['real'] < 10 * 60, r
+    assert page.errors == []
+
+
+def test_rock_landing(site, context):
+    page = open_game(site, context)
+    r = fly(page, "ship = freshFlight('kivi', 'pad'); pilot({target: ROCK, aimApo: 2.0e6 + 1500, stop: 'tli'}); "
+                  "meet(ROCK, {within: 400000}); return lander(ROCK);")
+    assert r['phase'] == 'done' and r['landed'] == 'rock', r
+    assert r['touch']['speed'] <= 1, r
+    assert r['real'] < 7 * 60, r
+    assert page.errors == []
+
+
+def test_docking_at_the_station(site, context):
+    page = open_game(site, context)
+    r = fly(page, "ship = freshFlight('asema', 'pad'); pilot({stop: 'orbit'}); return docker();")
+    assert r['phase'] == 'done', r
+    assert r['reason'].startswith('Telakointi onnistui'), r
+    assert r['touch']['body'] == 'station' and r['touch']['speed'] <= 0.5, r
+    assert r['real'] < 12 * 60, r
+    assert page.errors == []
+
+
+# Drops the ship onto a body from just above it with a chosen down speed, sideways speed and tilt.
+DROP = """([trip, id, down, side, tilt]) => {
+  cancelAnimationFrame(frameId); frameId = 0; paused = false;
+  ship = freshFlight(trip, 'orbit'); const b = body(id), p = bodyAt(b, 0), a = 0.5;
+  const r = b.radius + SHIP.length / 2 + 0.01, ux = Math.sin(a), uy = Math.cos(a);
+  Object.assign(ship, { x: p.x + r * ux, y: p.y + r * uy, vx: p.vx - down * ux + side * uy,
+    vy: p.vy - down * uy - side * ux, angle: wrap(a + tilt * Math.PI / 180), landedOn: null, point: null });
+  step(0.05);
+  return { phase: ship.phase, reason: ship.reason, touch: ship.touch, landed: ship.landedOn };
 }"""
 
 
-ASCENT = r"""() => {
-      let staged=false;
-      for(let t=0;t<800 && ship.phase==='flight';t+=.1) {
-        const o=orbit(),rad=Math.atan2(ship.x,ship.y),h=o.altitude;
-        const pitch=h<2000?0:h<10000?(h-2000)/8000*20:
-          h<40000?20+(h-10000)/30000*20:h<100000?40+(h-40000)/60000*25:
-          h<200000?65+(h-100000)/100000*15:87;
-        let target=rad+pitch*Math.PI/180;
-        if(ship.stage===0 && ship.fuel[0]<1) {
-          document.getElementById('stage').click(); power(1); staged=true;
-        }
-        if(o.apo>400000) power(0);
-        if(o.toApo<45 && h>200000 && o.peri<390000) {
-          power(.6); target=Math.atan2(ship.vx,ship.vy);
-        }
-        const desired=clamp(wrap(target-ship.angle)*.4,-.015,.015),rate=ship.omega-o.vt/o.r;
-        control('turn',rate<desired-.0003?1:rate>desired+.0003?-1:0);
-        step(.1); updateUi();
+@pytest.mark.parametrize('trip,where,down,side,tilt,phase,why', [
+    ('kuuhun', 'moon', 1, 0.5, 5, 'done', ''),
+    ('kuuhun', 'moon', 4, 0, 0, 'crashed', 'Liian kova vauhti alas'),
+    ('kuuhun', 'moon', 1, 3, 0, 'crashed', 'Liian kova sivuvauhti'),
+    ('kuuhun', 'moon', 1, 0, 20, 'crashed', 'Alus kallistui 20°'),
+    ('kivi', 'rock', 0.4, 0.2, 20, 'done', ''),
+    ('kivi', 'rock', 1.2, 0, 0, 'crashed', 'Liian kova vauhti'),
+    ('kotiin', 'earth', 1, 0, 0, 'crashed', 'Matkan tavoite jäi kesken'),
+])
+def test_landing_limits(site, context, trip, where, down, side, tilt, phase, why):
+    page = open_game(site, context)
+    r = page.evaluate(DROP, [trip, where, down, side, tilt])
+    assert r['phase'] == phase, r
+    assert why in r['reason'], r
+    if phase == 'done':
+        assert r['landed'] == where and r['touch']['soft'], r
+    assert page.errors == []
+
+
+def test_parachute_opens_only_low_and_slow_and_lands_softly(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      cancelAnimationFrame(frameId); frameId = 0; paused = false;
+      const at = (h, v) => { ship = freshFlight('kotiin', 'pad');
+        Object.assign(ship, { x: 0, y: EARTH_R + h, vx: v, vy: -50, landedOn: null, visited: ['moon'],
+          fuel: fuelForDeltaV(1500) }); };
+      at(25000, 300); const high = openChute(), highState = ship.chute;
+      at(15000, 450); const fast = openChute(), fastState = ship.chute;
+      at(15000, 300); const ok = openChute(), okState = ship.chute;
+      const warps = [];
+      for (let i = 0; i < 20000 && ship.phase === 'flight'; i++) {
+        if (i % 500 === 0) warps.push([Math.round(surfaceClearance().clearance), maxWarp()]);
+        step(0.1);
       }
-      power(0);control('turn',0);saveFlight();
-      return {staged,phase:ship.phase,orbited:ship.orbited,peri:orbit().peri,
-        apo:orbit().apo,t:ship.t,fuel:ship.fuel[1],record:achieved.orbit};
-    }"""
-
-
-def test_manual_launch_can_reach_a_stable_orbit(site, context):
-    page = open_game(site, context)
-    start(page)
-    page.evaluate(PILOT)
-    result = page.evaluate(ASCENT)
-    assert result['staged'] and result['phase'] == 'flight', result
-    assert result['orbited'] and result['record'], result
-    assert result['peri'] > 150000 and 300000 < result['apo'] < 600000, result
-    assert 700 < result['t'] < 801 and result['fuel'] > 5000
-    assert page.errors == []
-
-
-def test_docking_practice_can_be_completed_twice_with_controls(site, context):
-    page = open_game(site, context)
-    for _ in range(2):
-        start(page, 'practice-dock' if _ == 0 else 'retry')
-        page.evaluate(PILOT)
-        result = page.evaluate('flyDock()')
-        assert result['phase'] == 'docked', result
-        assert result['rcs'] > 0 and 100 < result['t'] < 650
-        assert page.locator('#result-title').inner_text() == 'Tervetuloa asemalle.'
-        assert page.evaluate('achieved.dock') is False  # Practice is not a mission achievement.
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('start_delay', [0, .02])
-def test_free_orbit_conserves_energy_and_period(site, context, start_delay):
-    page = open_game(site, context)
-    start(page, 'practice-orbit')
-    # A rendered frame may have advanced the orbit before the test cancels RAF.
-    page.evaluate('delay => step(delay)', start_delay)
-    result = page.evaluate("""() => {
-      const initial=orbit(),x0=ship.x,y0=ship.y;
-      const energy0=(ship.vx**2+ship.vy**2)/2-MU/initial.r;
-      const period=TAU*Math.sqrt(initial.r**3/MU);
-      held.turn=held.forward=held.side=0;
-      step(period);
-      const o=orbit(),energy=(ship.vx**2+ship.vy**2)/2-MU/o.r;
-      return {drift:Math.abs(o.r-initial.r),position:Math.hypot(ship.x-x0,ship.y-y0),
-        energy:Math.abs((energy-energy0)/energy0),phase:ship.phase};
+      return { high, highState, fast, fastState, ok, okState, warps, phase: ship.phase, touch: ship.touch, reason: ship.reason };
     }""")
-    assert result['phase'] == 'flight'
-    assert result['drift'] < 5 and result['position'] < 20, result
-    assert result['energy'] < 1e-6
+    assert r['high'] == 'Laskuvarjo aukeaa vasta alle 20 km korkeudessa.' and r['highState'] == 'packed'
+    assert r['fast'].startswith('Laskuvarjo repesi') and r['fastState'] == 'torn'
+    assert r['ok'] == 'Laskuvarjo auki.' and r['okState'] == 'open'
+    assert r['phase'] == 'done', r
+    assert r['touch']['body'] == 'earth' and r['touch']['speed'] <= 10, r
+    assert all(w == 100 for h, w in r['warps'] if h > 600), r['warps']
     assert page.errors == []
 
 
-def test_raising_orbit_requires_velocity_not_just_height(site, context):
-    page = open_game(site, context)
-    result = page.evaluate("""() => {
-      ship=freshFlight('orbit'); ship.vx=0; ship.omega=0;ship.orbited=false;
-      paused=false;step(1);
-      return {orbited:ship.orbited,peri:orbit().peri,alt:orbit().altitude};
-    }""")
-    assert result['alt'] > 200000 and result['peri'] < 0 and not result['orbited']
-    assert page.errors == []
-
-
-def test_prograde_burn_raises_opposite_apsis_and_uses_mass(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-orbit')
-    result = page.evaluate("""() => {
-      const before=orbit(),m=mass(),fuel=ship.fuel[1];ship.throttle=.2;step(3);
-      return {before:before.apo,after:orbit().apo,massUsed:m-mass(),fuelUsed:fuel-ship.fuel[1]};
-    }""")
-    assert result['after'] > result['before'] + 10000
-    assert result['massUsed'] == pytest.approx(result['fuelUsed'], abs=1e-6)
-    assert result['fuelUsed'] == pytest.approx(1900000 * .2 / (450 * 9.80665) * 3, rel=1e-6)
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('bad', ['speed', 'angle', 'spin'])
-def test_unsafe_contact_is_not_docking(site, context, bad):
-    page = open_game(site, context)
-    result = page.evaluate("""bad => {
-      ship=freshFlight('dock');paused=false;
-      const p=station();ship.x=p.px-8-0.5;
-      ship.vx=p.pvx;ship.vy=p.pvy+8*STATION_N;
-      if(bad==='speed')ship.vx+=2;
-      if(bad==='angle') {ship.angle+=.3;ship.x=p.px-Math.sin(ship.angle)*8-.5;ship.y=p.py-Math.cos(ship.angle)*8;}
-      if(bad==='spin')ship.omega+=.08;
-      step(.02);return {phase:ship.phase,reason:ship.reason};
-    }""", bad)
-    assert result['phase'] == 'crashed', result
-    assert 'Törmäys' in result['reason']
-    assert page.errors == []
-
-
-def test_rcs_translation_and_rotation_keep_momentum_after_release(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-dock')
-    page.evaluate(PILOT)
-    result = page.evaluate("""() => {
-      const f=ship.rcs;control('forward',1);control('turn',1);step(.2);
-      control('forward',0);control('turn',0);const w=ship.omega;step(2);
-      return {omega:ship.omega,w,used:f-ship.rcs,held:{...held},phase:ship.phase};
-    }""")
-    assert result['used'] > 0 and result['w'] > .0012
-    assert result['omega'] == pytest.approx(result['w'], abs=1e-10)
-    assert result['held'] == {'turn': 0, 'forward': 0, 'side': 0}
-    assert page.errors == []
-
-
-def test_pointer_cancel_and_pause_release_all_thrusters(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-dock')
-    page.locator('[data-hold="turn:1"]').dispatch_event('pointerdown', {'pointerId': 22})
-    assert page.evaluate('held.turn') == 1
-    page.locator('[data-hold="turn:1"]').dispatch_event('pointercancel', {'pointerId': 22})
-    assert page.evaluate('held.turn') == 0
-    page.locator('[data-hold="forward:1"]').dispatch_event('pointerdown', {'pointerId': 23})
-    page.locator('#pause').click()
-    assert page.evaluate('paused && held.forward===0 && pointers.size===0')
-    assert page.locator('#pause-panel').is_visible()
-    assert page.errors == []
-
-
-def test_save_reload_and_rotation_preserve_flight(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-orbit')
-    page.evaluate('step(12);saveFlight()')
-    saved = page.evaluate('JSON.parse(localStorage.getItem(SAVE_KEY))')
-    turn(page, {'width': 740, 'height': 360})
-    assert page.evaluate('ship.t') == pytest.approx(saved['t'])
+def start_from_orbit(page, trip='kuu-kierto'):
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify({kiertorata: 1, asema: 1}))")
     page.reload()
-    assert page.locator('#resume').is_visible()
+    page.wait_for_function("!!document.querySelector('#trips .trip')")
+    page.locator(f'.trip[data-trip="{trip}"]').click()
+    page.locator('#start-orbit').click()
+    page.evaluate('cancelAnimationFrame(frameId); frameId = 0')
+
+
+def test_nose_holds_after_a_turn_and_point_buttons_aim_without_fuel(site, context):
+    page = open_game(site, context)
+    start_from_orbit(page)
+    turn_button = page.locator('[data-hold="turn:1"]')
+    turn_button.dispatch_event('pointerdown', {'pointerId': 7})
+    page.evaluate('step(1)')
+    turn_button.dispatch_event('pointerup', {'pointerId': 7})
+    r = page.evaluate("""() => {
+      const fuel = ship.fuel, a0 = ship.angle; step(10); const held = Math.abs(wrap(ship.angle - a0));
+      document.querySelector('[data-point="pro"]').click(); step(3);
+      const q = pointFrame(), pro = Math.abs(wrap(Math.atan2(q.vx, q.vy) - ship.angle)) * 180 / Math.PI;
+      step(200);
+      const q2 = pointFrame(), pro2 = Math.abs(wrap(Math.atan2(q2.vx, q2.vy) - ship.angle)) * 180 / Math.PI;
+      document.querySelector('[data-point="up"]').click(); step(3);
+      const up = Math.abs(wrap(Math.atan2(ship.x, ship.y) - ship.angle)) * 180 / Math.PI;
+      return { held, pro, pro2, up, point: ship.point, fuelUsed: fuel - ship.fuel };
+    }""")
+    assert r['held'] < 1e-9, r
+    assert r['pro'] < 2 and r['pro2'] < 2 and r['up'] < 2, r
+    assert r['point'] == 'up' and r['fuelUsed'] == 0, r
+    page.locator('[data-point="up"]').click()
+    assert page.evaluate('ship.point') is None
+    assert page.errors == []
+
+
+def test_quadratic_throttle_slider(site, context):
+    page = open_game(site, context)
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    page.locator('#start-pad').click()
+    page.locator('#throttle').fill('50')
+    assert page.evaluate('ship.throttle') == pytest.approx(0.25)
+    assert page.locator('#power').inner_text() == '25 %'
+    page.locator('#cut').click()
+    assert page.evaluate('ship.throttle') == 0
+    assert page.errors == []
+
+
+def test_time_warp_limits_and_same_flight_at_any_speed(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+      cancelAnimationFrame(frameId); frameId = 0; paused = false;
+      ship = freshFlight('kuu-kierto', 'pad'); const pad = maxWarp();
+      ship.throttle = 1; const padBurn = maxWarp(); ship.throttle = 0;
+      ship = freshFlight('kuu-kierto', 'orbit'); const low = maxWarp();
+      ship.throttle = 0.1; const burn = maxWarp(); ship.throttle = 0;
+      const start = JSON.parse(JSON.stringify(ship)), e0 = orbitAround(EARTH, ship).energy;
+      warp = 1000; for (let i = 0; i < 1500 && ship.t < 3000; i++) advanceFlight(1 / 30);
+      const fast = { x: ship.x, y: ship.y, t: ship.t, e: orbitAround(EARTH, ship).energy };
+      ship = JSON.parse(JSON.stringify(start)); warp = 1;
+      while (ship.t < fast.t - 1e-9) step(Math.min(1 / 30, fast.t - ship.t));
+      const slow = { x: ship.x, y: ship.y, t: ship.t, e: orbitAround(EARTH, ship).energy };
+      return { pad, padBurn, low, burn, fast, slow, e0, gap: Math.hypot(fast.x - slow.x, fast.y - slow.y) };
+    }""")
+    assert r['pad'] == 5 and r['padBurn'] == 1, r
+    assert r['low'] == 100 and r['burn'] == 5, r
+    assert r['fast']['t'] > 1500, r
+    assert r['gap'] < 1000, r
+    assert abs(r['fast']['e'] / r['slow']['e'] - 1) < 1e-5, r
+    assert abs(r['fast']['e'] / r['e0'] - 1) < 1e-3, r
+    assert page.errors == []
+
+
+def test_warp_button_steps_through_allowed_rates(site, context):
+    page = open_game(site, context)
+    start_from_orbit(page)
+    page.evaluate("ship.x *= 3; ship.y *= 3; ship.vx /= Math.sqrt(3); ship.vy /= Math.sqrt(3); updateUi()")
+    seen = []
+    for _ in range(7):
+        page.locator('#warp').click()
+        seen.append(page.locator('#warp').inner_text())
+    assert seen == ['Aika ×2', 'Aika ×5', 'Aika ×10', 'Aika ×100', 'Aika ×1000', 'Aika ×1', 'Aika ×2']
+    page.locator('#throttle').fill('20')
+    assert page.locator('#warp').inner_text() == 'Aika ×2'
+    page.locator('#warp').click()
+    page.locator('#warp').click()
+    assert page.locator('#warp').inner_text() == 'Aika ×1'
+    assert page.errors == []
+
+
+def test_trips_unlock_in_order_and_old_saves_are_left_alone(site, context):
+    page = open_game(site, context)
+    page.evaluate("""() => { localStorage.setItem('ai-pelit:raketti:lento', 'old flight');
+      localStorage.setItem('ai-pelit:raketti:saavutukset', 'old marks'); }""")
+    page.reload()
+    page.wait_for_function("!!document.querySelector('#trips .trip')")
+    assert page.locator('.trip:not([disabled])').count() == 1
+    assert page.locator('#star-total').inner_text() == 'Tähtiä 0 / 18'
+    assert page.locator('#resume').is_hidden()
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    assert page.locator('#start-orbit').is_hidden()
+    page.evaluate("""() => { stars = {}; ship = freshFlight('kiertorata', 'orbit'); paused = false;
+      step(0.1); mainMenu(); }""")
+    assert page.evaluate('ship.phase') == 'done'
+    assert page.locator('.trip:not([disabled])').count() == 2
+    page.locator('.trip[data-trip="asema"]').click()
+    assert page.locator('#start-orbit').is_visible()
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify({kiertorata: 9, asema: 'x'}))")
+    page.reload()
+    page.wait_for_function("!!document.querySelector('#trips .trip')")
+    assert page.locator('.trip:not([disabled])').count() == 1
+    assert page.evaluate("[localStorage.getItem('ai-pelit:raketti:lento'), "
+                         "localStorage.getItem('ai-pelit:raketti:saavutukset')]") == ['old flight', 'old marks']
+    assert page.errors == []
+
+
+def test_flight_resumes_after_reload_and_turning(site, context):
+    page = open_game(site, context)
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    page.locator('#start-pad').click()
+    page.evaluate("cancelAnimationFrame(frameId); frameId = 0; ship.throttle = 1; step(20); ship.throttle = 0; saveFlight()")
+    before = page.evaluate('[ship.t, ship.y]')
+    page.reload()
+    page.wait_for_function("!!document.querySelector('#trips .trip')")
+    assert page.locator('#resume').inner_text() == 'Jatka: Kiertoradalle'
     page.locator('#resume').click()
     assert page.locator('#pause-panel').is_visible()
-    actual = page.evaluate('({...ship})')
-    for key in ('x', 'y', 'vx', 'vy', 'angle', 'omega', 'fuel', 'rcs', 't', 'throttle'):
-        assert actual[key] == saved[key]
-    assert page.evaluate('paused') is True
+    turn(page, {'width': 740, 'height': 360})
     page.locator('#continue').click()
-    assert page.locator('#overlay').is_hidden()
+    assert page.evaluate('[ship.t, ship.y]') == pytest.approx(before, rel=1e-3)
+    assert page.evaluate('paused') is False
+    page.locator('#pause').click()
+    page.locator('#to-menu').click()
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    page.locator('#start-pad').click()
+    assert page.locator('#replace-panel').is_visible()
+    page.locator('#replace-yes').click()
+    assert page.evaluate('ship.t') < 1
     assert page.errors == []
 
 
 @pytest.mark.parametrize('mutation', [
-    {'x': None}, {'fuel': [-1, 100]}, {'stage': 7}, {'rcs': -1},
-    {'phase': 'flight', 't': -10}, {'omega': 1000}, {'throttle': 2}, {'practice': 'false'},
+    "s.x = null", "s.trip = 'mars'", "s.point = 'side'", "s.fuel = 1e9", "s.visited = ['sun']",
 ])
 def test_corrupt_save_is_not_resumed(site, context, mutation):
     page = open_game(site, context)
-    page.evaluate("""m => {const s={...freshFlight('orbit'),...m};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}""", mutation)
+    page.evaluate(f"""() => {{ const s = freshFlight('kiertorata', 'pad'); {mutation};
+      localStorage.setItem('ai-pelit:raketti:matka', JSON.stringify(s)); }}""")
     page.reload()
+    page.wait_for_function("!!document.querySelector('#trips .trip')")
     assert page.locator('#resume').is_hidden()
-    assert page.locator('#launch').is_visible()
     assert page.errors == []
 
 
-def test_no_fuel_means_no_free_thrust_and_staging_is_manual(site, context):
-    page = open_game(site, context)
-    result = page.evaluate("""() => {
-      ship=freshFlight('orbit');paused=false;ship.fuel[1]=0;ship.rcs=0;ship.throttle=1;
-      held.forward=1;held.turn=1;const w=ship.omega;step(1);
-      return {stage:ship.stage,throttle:ship.throttle,omega:ship.omega,w,mass:mass(),fuel:ship.fuel[1]};
-    }""")
-    assert result['stage'] == 1 and result['fuel'] == 0 and result['throttle'] == 0
-    assert result['mass'] == 29000 and result['omega'] == result['w']
-    assert page.errors == []
+FITS = """sel => { const r = document.querySelector(sel).getBoundingClientRect();
+  return r.width > 0 && r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1; }"""
 
 
-def test_warp_choices_follow_controls_without_losing_manoeuvre_speed(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-orbit')
-    for rate in [2, 5, 10, 100, 1]:
-        page.locator('#warp').click()
-        assert page.locator('#warp').inner_text() == f'Aika ×{rate}'
-    for _ in range(4):
-        page.locator('#warp').click()
-    turn = page.locator('[data-hold="turn:1"]')
-    forward = page.locator('[data-hold="forward:1"]')
-    turn.dispatch_event('pointerdown', {'pointerId': 21})
-    forward.dispatch_event('pointerdown', {'pointerId': 22})
-    assert page.evaluate('warp === 5 && held.turn === 1 && held.forward === 1 && !canWarp(10)')
-    # A second press and cancellation must retain both time and the other thumb.
-    turn.dispatch_event('pointercancel', {'pointerId': 21})
-    assert page.evaluate('warp === 5 && held.turn === 0 && held.forward === 1')
-    forward.dispatch_event('pointerup', {'pointerId': 22})
-    page.locator('#throttle').evaluate("el => { el.value = '30'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
-    assert page.evaluate('warp === 5 && ship.throttle === .3 && maxWarp() === 5')
-    for rate in [1, 2, 5]:
-        page.locator('#warp').click()
-        assert page.evaluate('warp') == rate
-    # Main-engine cutoff and staging must not silently speed the simulation up.
-    page.locator('#cut').click()
-    assert page.evaluate('warp') == 5
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('rate', [2, 5])
-@pytest.mark.parametrize('kind', ['launch', 'orbit'])
-def test_accelerated_power_and_steering_match_normal_physics(site, context, rate, kind):
-    page = open_game(site, context)
-    start(page, 'launch' if kind == 'launch' else 'practice-orbit')
-    result = page.evaluate("""({rate,kind}) => {
-      ship.throttle=kind==='launch'?1:.6; held.turn=1; held.forward=1; held.side=-1;
-      const initial=JSON.stringify(ship), startT=ship.t;
-      warp=rate; advanceFlight(.4); const fast=structuredClone(ship);
-      ship=JSON.parse(initial);warp=1;step(.4*rate);const normal=structuredClone(ship);
-      return {fast,normal,elapsed:fast.t-startT};
-    }""", {'rate': rate, 'kind': kind})
-    for key in ('x', 'y', 'vx', 'vy', 't', 'omega', 'rcs'):
-        assert result['fast'][key] == pytest.approx(result['normal'][key], abs=1e-5)
-    assert result['fast']['fuel'] == pytest.approx(result['normal']['fuel'], abs=1e-5)
-    assert result['elapsed'] == pytest.approx(.4 * rate)
-    assert result['fast']['phase'] == result['normal']['phase'] == 'flight'
-    assert result['fast']['fuel'][0 if kind == 'launch' else 1] < (295000 if kind == 'launch' else 18000)
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('order', ['speed-first', 'thrust-first'])
-def test_launch_throttle_and_staging_keep_selected_speed(site, context, order):
-    page = open_game(site, context)
-    start(page)
-    if order == 'thrust-first':
-        page.locator('#throttle').evaluate("el => { el.value = '70'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
-    page.locator('#warp').click()
-    page.locator('#warp').click()
-    if order == 'speed-first':
-        page.locator('#throttle').evaluate("el => { el.value = '70'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
-    assert page.evaluate('warp === 5 && ship.throttle === .7')
-    page.evaluate('ship.y=EARTH+2000;updateUi()')
-    page.locator('#stage').click()
-    assert page.evaluate('warp === 5 && ship.stage === 1 && ship.throttle === 0')
-    page.locator('#throttle').evaluate("el => { el.value = '50'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
-    assert page.evaluate('warp === 5 && ship.throttle === .5')
-    page.locator('#pause').click()
-    page.reload()
-    page.locator('#resume').click()
-    assert page.evaluate('paused && warp === 1 && ship.stage === 1 && ship.throttle === .5')
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('input_kind', ['throttle', 'turn', 'forward', 'side'])
-def test_high_coasting_speed_is_capped_when_a_control_is_used(site, context, input_kind):
-    page = open_game(site, context)
-    start(page, 'practice-orbit')
-    page.evaluate('warp=100;updateUi()')
-    if input_kind == 'throttle':
-        page.locator('#throttle').evaluate("el => { el.value = '10'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
-    else:
-        page.locator(f'[data-hold="{input_kind}:1"]').dispatch_event('pointerdown', {'pointerId': 31})
-    assert page.evaluate('warp === 5 && maxWarp() === 5')
-    assert page.locator('#warp').inner_text() == 'Aika ×5'
-    assert page.errors == []
-
-
-def test_docking_limit_is_visible_and_cancels_within_the_frame(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-dock')
-    page.locator('#warp').click()
-    page.locator('#warp').click()
-    assert page.evaluate('warp') == 5
-    result = page.evaluate("""() => {
-      const p=station();ship.x=p.px-30;ship.y=p.py;ship.vx=p.pvx+5;
-      advanceFlight(.2);updateUi();return {t:ship.t,warp,range:approach().range,phase:ship.phase};
-    }""")
-    assert result['warp'] == 1 and .4 < result['t'] < .65, result
-    assert 18 < result['range'] <= 20 and result['phase'] == 'flight', result
-    assert page.locator('#warp').is_disabled()
-    assert page.locator('#warp-note').inner_text() == 'Porttiin enintään 20 m: ×1'
-    # Departing the safety zone never turns acceleration back on without a tap.
-    page.evaluate('ship.x-=50;advanceFlight(.1);updateUi()')
-    assert page.evaluate('warp') == 1
-    assert page.locator('#warp').is_enabled()
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('width,height', [(360, 640), (360, 740), (390, 844), (740, 360)])
-def test_phone_screens_help_and_controls_fit(site, browser, width, height):
+@pytest.mark.parametrize('width,height', [(360, 640), (360, 740), (740, 360)])
+def test_menus_help_and_controls_fit_the_screen(site, browser, width, height):
     context = browser.new_context(viewport={'width': width, 'height': height}, is_mobile=True, has_touch=True)
     page = open_game(site, context)
-    for selector in ('#menu', '#launch', '#practice-dock'):
-        box = page.locator(selector).bounding_box()
-        assert box and box['y'] >= 0 and box['y'] + box['height'] <= height, (selector, box)
-    page.locator('#menu-help').tap()
-    for i in range(7):
-        box = page.locator('#help-panel').bounding_box()
-        assert box and box['y'] >= 0 and box['y'] + box['height'] <= height, (i, box)
-        assert page.locator('#help-close').is_visible()
-        if i < 6:
-            page.locator('#help-next').tap()
-    page.locator('#help-close').tap()
-    start(page, 'practice-dock')
-    for selector in ('#controls', '#guidance', '#telemetry', '#scene', '#pause'):
-        box = page.locator(selector).bounding_box()
-        assert box and box['x'] >= 0 and box['y'] >= 0 and box['x'] + box['width'] <= width + 1 and box['y'] + box['height'] <= height + 1, (selector, box)
-    assert page.evaluate('document.documentElement.scrollHeight<=innerHeight')
-    assert page.errors == []
-    context.close()
-
-
-def test_offline_play_and_storage_denial(site, context):
-    page = open_game(site, context)
-    page.evaluate("() => {Storage.prototype.setItem=function(){throw new Error('denied')}}")
-    context.set_offline(True)
-    start(page, 'practice-dock')
-    page.evaluate(PILOT)
-    result = page.evaluate('flyDock()')
-    assert result['phase'] == 'docked'
-    assert page.errors == []
-
-
-def test_existing_flight_requires_confirmation_before_replacing(site, context):
-    page = open_game(site, context)
-    start(page, 'practice-orbit')
-    page.locator('#pause').click()
-    page.locator('#to-menu').click()
-    page.locator('#launch').click()
-    assert page.locator('#replace-panel').is_visible()
-    page.locator('#replace-no').click()
-    assert page.evaluate('loadFlight().practice')
-    page.locator('#launch').click()
-    page.locator('#replace-yes').click()
-    assert page.evaluate('!ship.practice && ship.stage===0')
-    assert page.errors == []
-
-
-def test_warp_cancellation_does_not_consume_rest_of_accelerated_frame(site, context):
-    page = open_game(site, context)
-    result = page.evaluate("""() => {
-      ship=freshFlight('dock');paused=false;const p=station();
-      ship.x=p.px-6000;ship.vx=p.pvx+1000;warp=100;
-      advanceFlight(.2);return {t:ship.t,warp,phase:ship.phase,range:approach().range};
-    }""")
-    assert result['warp'] == 5 and result['t'] < 3, result
-    assert result['range'] > 3000 and result['phase'] == 'flight'
-    assert page.errors == []
-
-
-@pytest.mark.parametrize('scenario', ['fast-port', 'tail-hull'])
-def test_swept_contact_and_entire_vehicle_collide(site, context, scenario):
-    page = open_game(site, context)
-    result = page.evaluate("""scenario => {
-      ship=freshFlight('dock');paused=false;const p=station();
-      if(scenario==='fast-port') {ship.x=p.px-8-6;ship.vx=p.pvx+500;}
-      else {ship.x=p.x;ship.y=p.y+17;ship.angle=0;ship.vx=p.vx;ship.vy=p.vy;}
-      step(.02);return {phase:ship.phase,reason:ship.reason};
-    }""", scenario)
-    assert result['phase'] == 'crashed', result
-    assert 'Törmäys' in result['reason']
-    assert page.errors == []
-
-
-# Test-only controls for rendezvous and docking; no state placement or teleporting.
-MISSION = r"""() => {
- let phase='coast',arrival=ship.t+orbit().toApo,log=[];
- for(let t=0;t<7500 && ship.phase==='flight';t+=.05) {
-  const p=station(),d=approach();
-  let ax=0,ay=0;
-  if(phase==='coast' && ship.t>arrival-300)phase='terminal';
-  if(phase==='terminal') {
-   const tx=p.px-1500*p.tx,ty=p.py-1500*p.ty,dx=tx-ship.x,dy=ty-ship.y,r=Math.hypot(ship.x,ship.y);
-   const tvx=p.pvx+1500*STATION_N*p.rx,tvy=p.pvy+1500*STATION_N*p.ry;
-   const tau=clamp(Math.sqrt(Math.hypot(dx,dy)/.1),12,70);
-   ax=dx/(tau*tau)+2*(tvx-ship.vx)/tau-MU*tx/Math.hypot(tx,ty)**3+MU*ship.x/r**3;
-   ay=dy/(tau*tau)+2*(tvy-ship.vy)/tau-MU*ty/Math.hypot(tx,ty)**3+MU*ship.y/r**3;
-   if(d.along < -800 && Math.abs(d.cross)<1000 && d.speed<3){phase='dock';power(0);}
-  }
-  if(phase==='terminal') {
-   const a=Math.hypot(ax,ay),err=wrap(Math.atan2(ax,ay)-ship.angle),des=clamp(err*.15,-.03,.03);
-   control('turn',ship.omega<des-.0005?1:ship.omega>des+.0005?-1:0);
-   control('forward',0);control('side',0);
-   power(Math.abs(err)<.035?clamp(a*mass()/1900000,0,.2):0);
-  }else if(phase==='coast'){
-   power(0);control('turn',ship.omega>.002?-1:ship.omega<-.002?1:0);control('forward',0);control('side',0);
-  }else if(phase==='dock'){
-   const tx=p.px-8.6*p.tx,ty=p.py-8.6*p.ty,dx=tx-ship.x,dy=ty-ship.y;
-   const r=Math.hypot(ship.x,ship.y),tr=Math.hypot(tx,ty),dist=Math.hypot(dx,dy);
-   const tvx=p.pvx+8.6*STATION_N*p.rx,tvy=p.pvy+8.6*STATION_N*p.ry;
-   const speed=Math.min(dist*.03,dist<20?.15:.5),vrx=dist?dx/dist*speed:0,vry=dist?dy/dist*speed:0;
-   const ax=.2*(tvx-STATION_N*dy+vrx-ship.vx)-MU*tx/tr**3+MU*ship.x/r**3;
-   const ay=.2*(tvy+STATION_N*dx+vry-ship.vy)-MU*ty/tr**3+MU*ship.y/r**3;
-   const f=ax*Math.sin(ship.angle)+ay*Math.cos(ship.angle),side=ax*Math.cos(ship.angle)-ay*Math.sin(ship.angle);
-   const desiredSpin=STATION_N+clamp(wrap(p.angle-ship.angle)*.15,-.025,.025);
-   control('turn',ship.omega<desiredSpin-.0005?1:ship.omega>desiredSpin+.0005?-1:0);
-   control('forward',f>.002?1:f<-.002?-1:0);control('side',side>.002?1:side<-.002?-1:0);
-
-  }
-  step(.05);updateUi();
-  if(Math.round(t*20)%10000===0)log.push({t:ship.t,range:d.range,speed:d.speed,fuel:ship.fuel[1],rcs:ship.rcs,phase,alt:orbit().altitude});
- }
- return {log,phase,ship,d:approach()};
-}
-"""
-
-
-@pytest.mark.parametrize('size', [(360, 740), (740, 360)])
-def test_entire_manual_mission_from_launch_to_docking(site, browser, size):
-    context = browser.new_context(viewport={'width': size[0], 'height': size[1]}, is_mobile=True, has_touch=True)
-    page = open_game(site, context)
-    start(page)
-    page.evaluate(PILOT)
-    ascent = page.evaluate(ASCENT)
-    assert ascent['phase'] == 'flight' and ascent['orbited'], ascent
-    page.evaluate(PILOT)
-    result = page.evaluate(MISSION)
-    assert result['ship']['phase'] == 'docked', result
-    assert result['ship']['practice'] is False
-    assert result['ship']['fuel'][1] > 0 and result['ship']['rcs'] > 0
-    assert page.evaluate('achieved.orbit && achieved.dock')
-    assert result['d']['speed'] <= .25
-    page.evaluate('showResult()')
-    assert page.locator('#result-title').inner_text() == 'Tervetuloa asemalle.'
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', "
+                  "JSON.stringify({kiertorata: 3, asema: 2, 'kuu-kierto': 1, kuuhun: 1, kotiin: 1}))")
     page.reload()
-    assert page.locator('#achievements').inner_text() == 'SAAVUTETTU · Kiertorata ja telakointi'
+    page.wait_for_function("!!document.querySelector('#trips .trip')")
+    for sel in ['#menu', '.trip[data-trip="kivi"]']:
+        assert page.evaluate(FITS, sel), (sel, width, height)
+    page.locator('.trip[data-trip="kotiin"]').click()
+    for sel in ['#trip-panel', '#start-pad', '#start-orbit', '#trip-back']:
+        assert page.evaluate(FITS, sel), (sel, width, height)
+    page.locator('#trip-back').click()
+    page.locator('#menu-help').click()
+    for _ in range(6):
+        assert page.evaluate(FITS, '#help-panel'), (page.locator('#help-title').inner_text(), width, height)
+        if page.locator('#help-next').is_enabled():
+            page.locator('#help-next').click()
+    page.locator('#help-close').click()
+    page.locator('.trip[data-trip="asema"]').click()
+    page.locator('#start-pad').click()
+    controls = ['#throttle', '#cut', '#chute', '[data-point="pro"]', '[data-point="retro"]', '[data-point="up"]',
+                '[data-hold="turn:-1"]', '[data-hold="turn:1"]', '[data-hold="side:-1"]', '[data-hold="forward:1"]',
+                '[data-hold="forward:-1"]', '[data-hold="side:1"]', '#warp', '#help', '#pause', '#c', '#guide',
+                '[data-view="map"]', '#view-dock']
+    for sel in controls:
+        assert page.evaluate(FITS, sel), (sel, width, height)
+    assert page.evaluate('document.documentElement.scrollHeight <= innerHeight + 1')
     assert page.errors == []
     context.close()
-
-
-def test_handbook_transfer_phase_and_burn_reach_station_orbit(site, context):
-    page = open_game(site, context)
-    result = page.evaluate("""() => {
-      ship=freshFlight('orbit');paused=false;
-      const r1=EARTH+250000,r2=EARTH+400000,a=(r1+r2)/2;
-      const transferTime=Math.PI*Math.sqrt(a**3/MU);
-      const lead=Math.PI-STATION_N*transferTime;
-      const dv=Math.sqrt(MU/r1)*(Math.sqrt(2*r2/(r1+r2))-1);
-      // Keep the physical station clear of the deliberately unbraked reference intercept.
-      ship.stationPhase=lead+.01;ship.vx+=dv;
-      step(transferTime);const p=station({...ship,stationPhase:lead});
-      return {lead:lead*180/Math.PI,dv,t:transferTime,alt:orbit().altitude,
-        range:Math.hypot(ship.x-p.x,ship.y-p.y),phase:ship.phase};
-    }""")
-    assert result['lead'] == pytest.approx(2.98, abs=.01)
-    assert result['dv'] == pytest.approx(43.33, abs=.01)
-    assert result['t'] == pytest.approx(2726.49, abs=.1)
-    assert result['alt'] == pytest.approx(400000, abs=5)
-    assert result['range'] < 10
-    assert page.errors == []
