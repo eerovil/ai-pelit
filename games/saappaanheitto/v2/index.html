@@ -206,9 +206,11 @@ const K = AiPelitKisa.meet({
   // v2 (#480): a friend's swing is drawn a moment back, the boot's arm angle gliding between the spots their phone
   // sends; the release (rel) is the swing's last angle, so the boot leaves the hand where the glide ends. The angle
   // sent wraps at ±π, and the thumb has no speed limit, so two spots far apart (a slow frame on their phone) may be
-  // more than half a lap apart: the track glides a running angle instead (unwound()), as Moukari's, and draw()
-  // wraps it back. No jump distance: the one real jump (a slip back to hanging) comes with the turn's end anyway.
-  glide: { keys: ['a'], spot: m => m.t === 'p' ? { a: unwound(m.a[0], m.a[3], m.a[4]) } : m.t === 'rel' ? { a: unwound(m.a[0], 0, null) } : null },
+  // more than half a lap apart: the track glides a running angle instead (unwound(), the release with its turn
+  // too), as Moukari's, and draw() wraps it back. No jump distance: the one real jump, a thumb lifted before half
+  // a lap (the boot hangs again, a 'p' of phase 'ready'), is a snap the meet makes at once.
+  glide: { keys: ['a'], spot: m => m.t === 'p' ? { a: unwound(m.a[0], m.a[3], m.a[4]) } : m.t === 'rel' ? { a: unwound(m.a[0], m.a[2], Number.isFinite(m.a[3]) ? m.a[3] : null) } : null,
+    snap: m => m.t === 'p' && m.a[2] === 'ready' },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
   chime: i => {
@@ -229,7 +231,7 @@ function cpuMark(t) {
 }
 // v2 (#480): the angle a friend's phone sent, a, as a running angle: the one a whole number of laps away from
 // where the last one and the swing since put it (the turn sent, `turn`, grows by the angle swung either way, `dir`
-// the way it goes now; null on the release). A new turn, or a swing started again, starts it afresh.
+// the way it goes now; null when not known). A new turn, or a swing started again, starts it afresh.
 let unU = null, unT = 0;
 const wrapA = v => Math.atan2(Math.sin(v), Math.cos(v));
 function unwound(a, dir, turn) {
@@ -359,7 +361,7 @@ function letGo() {
   // Rounded as it goes over the room, so every phone flies the very same boot.
   const a = r3(th.a), v = r2(th.v), dir = th.dir;
   throwNow(a, v, dir);
-  if (isNet()) K.send({ t: 'rel', a: [a, v, dir] });
+  if (isNet()) K.send({ t: 'rel', a: [a, v, dir, r2(th.turn)] });   // [3] (#480): the turn, for the glide
 }
 function throwNow(ang, v, dir) {
   const a = th;
@@ -386,7 +388,7 @@ function outcome(mark, why) {
   th.dropped = why !== 'Aika loppui';
   if (th.mine) {
     S.play('virhe', { vol: 0.5 }) || tone(160, 0.3, 'sawtooth', 0.06, 70);
-    if (isNet()) K.send({ t: 'rel', a: [r3(th.a), 0, th.dir], why });
+    if (isNet()) K.send({ t: 'rel', a: [r3(th.a), 0, th.dir, r2(th.turn)], why });
   }
 }
 function report(mark) { K.report(th.seq, mark); }

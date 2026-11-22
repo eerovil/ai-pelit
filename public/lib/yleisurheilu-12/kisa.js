@@ -18,7 +18,9 @@
 // (null before the first spot). The watching phone hears the live messages (watch) only when the
 // track has drawn up to their moment, so a take-off or a release does not cut the glide short and
 // hop the athlete forward; one held for over 0.6 s goes on at once. A new turn starts the track
-// afresh and drops what was still held for the turn before.
+// afresh and drops what was still held for the turn before. `glide.snap(m)`, when true for a message
+// with a spot, is a jump within the turn (Saappaanheitto's boot hanging again): what was held goes to
+// the game at once, then the message, and the track starts again at its spot.
 //
 // New in yleisurheilu-11 (#469): the podium's official hangs each medal with its own arms
 // (AiPelitOutfits.figure()'s reach), not with two extra arms beside its own.
@@ -473,6 +475,9 @@
     function heard(m) {
       if (!SL || !G.tr) { o.watch(m); return; }
       const st = Number.isFinite(m.st) ? m.st : null, sp = o.glide.spot(m);
+      // A jump the game knows of within the turn (glide.snap): what waits is the game's at once, then this, with
+      // the athlete drawn where it says from the next frame.
+      if (sp && o.glide.snap && o.glide.snap(m)) { while (G.q.length) o.watch(G.q.shift()[0]); G.tr.snap(st, sp); o.watch(m); return; }
       if (sp) G.tr.push(st, sp);
       if (st !== null && G.tr.time !== null && (G.q.length || st > G.tr.time)) { G.q.push([m, SL.now()]); return; }
       o.watch(m);
