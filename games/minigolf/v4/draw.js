@@ -43,7 +43,7 @@ function draw() {
   var cup=P(...h.cup);ctx.strokeStyle='#fff4d2';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cup[0]+2,cup[1]-3);ctx.lineTo(cup[0]+2,cup[1]-29);ctx.stroke();ctx.fillStyle='#f4cb71';ctx.beginPath();ctx.moveTo(cup[0]+3,cup[1]-29);ctx.lineTo(cup[0]+20,cup[1]-23);ctx.lineTo(cup[0]+3,cup[1]-17);ctx.fill();
   var players=round?round.players:[{ball:golfBall(h.tee)}];
   players.forEach(function(p,i){var b=p.ball;if(b.holed||b.water)return;var active=!round||i===round.turn;ctx.globalAlpha=active?1:.35;circle(b.x+.035,b.y+.05,BALL_RADIUS*1.2,'#264936');circle(b.x,b.y,BALL_RADIUS,colors[i],'#ffffff',1);if(active)circle(b.x-.025,b.y-.03,.025,'white');ctx.globalAlpha=1;});
-  if(round&&aim&&round.phase==='aim') {
+  if(round&&aim&&aim.p>0&&round.phase==='aim') {
     var b=round.players[round.turn].ball,s=shownAim();drawAimLine(b.x,b.y,s.a,s.p);
   }
 }
@@ -78,7 +78,7 @@ function frame(now) {
     else stopSound();
   } else stopSound();
   draw();
-  if(round&&['aim','roll','hole'].includes(round.phase)&&(round.phase==='roll'||(round.phase==='hole'&&!online)||HOLES[round.hole].mill||(aimTrack&&aim&&round.phase==='aim'))&&(!online||!R.paused)) askDraw();
+  if(round&&['aim','roll','hole'].includes(round.phase)&&(round.phase==='roll'||(round.phase==='hole'&&!online)||HOLES[round.hole].mill||aimGliding())&&(!online||!R.paused)) askDraw();
   else lastFrame=0;
 }
 function pointer(e) { var r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]; }
@@ -91,17 +91,21 @@ function dragAim(e) {
   var base=dragging.base?screenVector(Math.cos(dragging.base.a)*dragging.base.p*Math.min(W,H)*.3,Math.sin(dragging.base.a)*dragging.base.p*Math.min(W,H)*.3):[0,0];
   var dx=dragging.x-p[0]+base[0],dy=dragging.y-p[1]+base[1],len=Math.hypot(dx,dy),v=worldVector(dx,dy);
   aim=len?{a:Math.atan2(v[1],v[0]),p:Math.max(MIN_POWER,Math.min(1,len/(Math.min(W,H)*.3))),length:len,st:stamp()}:null;
-  if(aim&&online)sendAim();
+  if(online)sendAim();
   updateHUD();askDraw();
 }
 // At most 10 aims a second; the last one of a pull that stops goes out when the gap is over (#537).
 var aimTimer=0;
 function sendAim() {
-  if(!dragging||!aim||!online||!canAim())return;
+  if(!dragging||!online||!canAim())return;
   var wait=dragging.sent+100-performance.now();
   if(wait>0){if(!aimTimer)aimTimer=setTimeout(function(){aimTimer=0;sendAim();},wait);return;}
-  if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim.a,p:aim.p,st:aim.st});
-  dragging.sent=performance.now();
+  aimNow();dragging.sent=performance.now();
+}
+// The aim as it is now (none: power 0), straight away: the end of a pull that did not shoot.
+function aimNow() {
+  if(!online||!round||!mine())return;
+  if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim?aim.a:0,p:aim?aim.p:0,st:aim&&aim.st||stamp()});
 }
 canvas.addEventListener('pointerdown',function(e){hideNotice();if(!canAim()||dragging)return;var p=pointer(e);dragging={id:e.pointerId,x:p[0],y:p[1],sent:0,base:parkedAim&&aim?{a:aim.a,p:aim.p}:null};if(!parkedAim)aim=null;parkedAim=false;canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',dragAim);
@@ -113,13 +117,14 @@ canvas.addEventListener('pointerup',function(e){
   if(shot&&shot.length>0&&canAim()) {
     if(authority())shoot(shot.a,shot.p,round.seq,round.players[round.turn].id);
     else R.send({t:'shot',round:roomRound,seq:round.seq,a:shot.a,p:shot.p});
-  } else if(online) {if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:0,p:0});}
+  } else aimNow();
   updateHUD();askDraw();
 });
 canvas.addEventListener('pointercancel',function(){
   dragging=null;
   if(aim&&canAim()&&performance.now()<rotationGrace){parkedAim=true;round.notice='Tähtäys säilyi · vedä säätääksesi, napauta lyödäksesi';}
   else {aim=null;parkedAim=false;}
+  if(round&&round.phase==='aim')aimNow();
   updateHUD();askDraw();
 });
 new ResizeObserver(fit).observe(canvas);

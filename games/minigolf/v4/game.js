@@ -19,15 +19,20 @@ function stopSound() { if(rollingSound) rollingSound.stop(); rollingSound=null; 
 // so it is drawn through lib/sulava-1 a moment late, gliding between the spots it heard. One track
 // per turn (seq) and player; the aiming phone's own line never goes through it. No guess past the
 // newest spot (extra 0): a finger that stops sends nothing more, and a guessed line would stay overshot.
-var aimTrack=null,aimKey='';
+var aimTrack=null,aimKey='',aimHeard=0,aimLast={};
 function stamp() { return window.AiPelitSulava?AiPelitSulava.now():null; }
 function heardAim(a) {
   if(!window.AiPelitSulava||!online||!round||round.phase!=='aim'||mine()||!a||!(a.p>0)) {aimTrack=null;aimKey='';return;}
-  var key=round.seq+':'+round.players[round.turn].id,st=Number.isFinite(a.st)?a.st:null;
-  if(!aimTrack||key!==aimKey) {aimTrack=AiPelitSulava.track({keys:['a','p'],angles:['a'],extra:0});aimKey=key;aimTrack.snap(st,a);}
+  var key=round.seq+':'+round.players[round.turn].id,st=Number.isFinite(a.st)?a.st:null,n=aimTrack?aimTrack.size():0;
+  if(!aimTrack||key!==aimKey) {aimTrack=AiPelitSulava.track({keys:['a','p'],angles:['a'],extra:0});aimKey=key;aimTrack.snap(st,a);n=-1;}
   else aimTrack.push(st,a);
+  // A state sent again for another reason (a notice ending) repeats the aim: only a new one wakes the glide.
+  if(n!==aimTrack.size()||a.a!==aimLast.a||a.p!==aimLast.p) aimHeard=performance.now();
+  aimLast={a:a.a,p:a.p};
 }
 // What the aim line draws: the glide for another player's aim, the aim itself otherwise.
+// Frames run only while the glide can still move: the longest delay (0.25 s) after the newest aim, with room for the drawn moment to catch up.
+function aimGliding() { return !!(aimTrack&&aim&&aim.p>0&&round&&round.phase==='aim'&&performance.now()-aimHeard<600); }
 function shownAim() { var s=aimTrack&&aim&&!mine()?aimTrack.at():null; return s?{a:s.a,p:s.p}:aim; }
 function keepRound() { if(round&&!online) save('kierros',round); }
 function mine() { return round&&(!online||round.players[round.turn].id===R.me); }
@@ -273,6 +278,7 @@ $('next').onclick=function() {
   else if(round.phase==='end') {if(online) R.backToRoom('Kierros pelattu','win');else newRound();}
 };
 document.addEventListener('visibilitychange',function(){
-  aim=dragging=null; if(document.hidden){keepRound();stopSound();}else{lastFrame=0;askDraw();}
+  var pulling=dragging&&online&&round&&round.phase==='aim';
+  aim=dragging=null; if(pulling)aimNow(); if(document.hidden){keepRound();stopSound();}else{lastFrame=0;askDraw();}
 });
 window.addEventListener('pagehide',keepRound);

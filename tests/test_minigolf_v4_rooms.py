@@ -157,24 +157,38 @@ def test_others_see_the_pullers_power_line(golf_phones):
     guest.wait_for_function("aim===null")
 
 
-def test_a_friends_aim_glides_between_the_spots_heard(golf_phones):
+@pytest.mark.parametrize('puller',['host','guest'])
+def test_a_friends_aim_glides_between_the_spots_heard(golf_phones,puller):
     """#537: the others draw the puller's line through lib/sulava-1, between the aims they heard,
-    and the last aim of a pull that stops inside the 100 ms gap still reaches them."""
+    and the last aim of a pull that stops inside the 100 ms gap still reaches them. A host passes
+    a guest's aim on with the guest's stamp; a still finger lets the watcher's frames sleep."""
     host,guest=room(golf_phones,2)
-    guest.evaluate("""window.lines=[];window.heard=[];const d=drawAimLine;drawAimLine=(x,y,a,q)=>{lines.push(q);d(x,y,a,q)};
+    if puller=='guest':
+        host.evaluate("round.turn=1;round.seq++;sendState();askDraw()")
+        guest.wait_for_function('round.turn===1&&mine()')
+    aimer,watcher=(host,guest) if puller=='host' else (guest,host)
+    watcher.evaluate("""window.lines=[];window.heard=[];const d=drawAimLine;drawAimLine=(x,y,a,q)=>{lines.push(q);d(x,y,a,q)};
       const h=heardAim;heardAim=a=>{if(a&&a.p>0)heard.push(a.p);h(a)}""")
-    host.mouse.move(180,370);host.mouse.down()
+    aimer.mouse.move(180,370);aimer.mouse.down()
     for y in range(380,500,12):
-        host.mouse.move(180,y);host.wait_for_timeout(45)
-    final=host.evaluate('aim.p')
-    guest.wait_for_function(f"heard.length>2&&Math.abs(heard[heard.length-1]-{final})<1e-9")
-    guest.wait_for_function(f"Math.abs(lines[lines.length-1]-{final})<1e-6")
-    between=guest.evaluate("lines.filter(q=>heard.every(h=>Math.abs(h-q)>1e-6)&&q>heard[0]&&q<heard[heard.length-1]).length")
+        aimer.mouse.move(180,y);aimer.wait_for_timeout(45)
+    final=aimer.evaluate('aim.p')
+    watcher.wait_for_function(f"heard.length>2&&Math.abs(heard[heard.length-1]-{final})<1e-9")
+    watcher.wait_for_function(f"Math.abs(lines[lines.length-1]-{final})<1e-6")
+    between=watcher.evaluate("lines.filter(q=>heard.every(h=>Math.abs(h-q)>1e-6)&&q>heard[0]&&q<heard[heard.length-1]).length")
     assert between>3
-    seen=guest.evaluate("lines")
+    seen=watcher.evaluate("lines")
     assert all(b>=a-1e-9 for a,b in zip(seen,seen[1:])), 'a steady pull never draws backwards'
-    host.mouse.up();host.wait_for_function("round.phase==='roll'")
-    guest.wait_for_function("aim===null&&aimTrack===null")
+    # The finger holds still: the watcher's glide ends and its frames sleep.
+    watcher.wait_for_timeout(900)
+    n=watcher.evaluate("lines.length");watcher.wait_for_timeout(400)
+    assert watcher.evaluate("lines.length")==n
+    # Pulled back to the start: the friend's line goes away before the release.
+    aimer.mouse.move(180,370)
+    watcher.wait_for_function("!(aim&&aim.p>0)")
+    aimer.mouse.move(180,480);aimer.mouse.up()
+    for p in (host,guest):p.wait_for_function("round.phase==='roll'")
+    watcher.wait_for_function("aim===null&&aimTrack===null")
     assert not guest.errors and not host.errors
 
 def test_host_clamps_a_guests_tiny_visible_putt(golf_phones):
