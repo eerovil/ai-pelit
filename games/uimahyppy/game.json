@@ -1,0 +1,14 @@
+{
+  "title": "Uimahyppy",
+  "description": "Pomppaa ponnahduslaudalla tahdissa, pidä sormi pohjassa voltteihin ja avaa ennen vettä: arvokisa tietokonetta vastaan tai kavereiden kanssa.",
+  "group": "yleisurheilu",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-22",
+      "note": "Ensimmäinen versio: 3 metrin ponnahduslauta, tahdissa napautetut pomput, sormi pohjassa kerälle volteiksi ja sivulle liu'uttaen kierteeksi; viiden hypyn arvokisa, jossa tuomaripisteet lasketaan yhteen, yksin tai 2–8 kaverin kanssa.",
+      "request": "Yleisurheilu uimahyppy.\n\nEeron valinnat:\n- Ohjaus: pompi laudalla tahdissa napauttamalla, pidä sormi pohjassa kerälle ja volteiksi, nosta sormi avautuaksesi ennen vettä.\n- Pisteet: tuomaripisteet lasketaan yhteen kaikista hypyistä.\n- Ei hypyn valintaa: pisteet tulevat tehdyistä volteista. \"Myös kierre. Ja tietty ponnahduslauta.\"",
+      "issue": "eerovil/ai-pelit#516"
+    }
+  ]
+}
