@@ -465,19 +465,20 @@ def test_after_a_pause_heard_first_the_fighter_is_drawn_behind_its_newest_state(
 # On the guest, with the host's own messages dropped: the host's states fed by hand each 1/30 s (stamped on
 # from the host's clock, as above), fighter `i` running down at 125 units/s. From 0.8 s none arrive for 0.4 s
 # (lost: the host's phone stalled), and in them it dodges (84 units more, from 0.9 s to 1.1 s); then they come
-# on as before, to 2 s. Records each frame [moment, y drawn, whether the state after the stall was heard].
+# on as before, to 2 s. Records each frame [moment, y drawn, whether the state after the stall was heard, y of
+# the newest state heard].
 STALLED_DODGE = """(i) => new Promise(done => {
   const base = JSON.parse(JSON.stringify(window.__last)), off = base.ck - window.__lastAt;
   const t0 = fightClock(), y0 = 60, f = fighters[i];
   const y = t => y0 + 125 * t + 84 * Math.min(1, Math.max(0, (t - 0.9) / 0.2));
-  let back = false;
+  let back = false, fed = null;
   window.__sd = []; const d = window.asDrawn;
-  window.asDrawn = () => { const k = d(); window.__sd.push([fightClock() - t0, f.y, back]); return k; };
+  window.asDrawn = () => { const k = d(); window.__sd.push([fightClock() - t0, f.y, back, fed]); return k; };
   const tick = setInterval(() => {
     const t = fightClock() - t0;
     if (t >= 0.8 && t < 1.2) return;
     const m = JSON.parse(JSON.stringify(base)); m.ck = t0 + t + off; m.f[i][1] = y(t);
-    onMessage(m); if (t >= 1.2) back = true;
+    onMessage(m); fed = y(t); if (t >= 1.2) back = true;
   }, 1000 / 30);
   setTimeout(() => { clearInterval(tick); done(); }, 2000); })"""
 
@@ -497,12 +498,25 @@ def test_a_dodge_over_a_stalled_link_glides(site, browser):
     guest.evaluate(STALLED_DODGE, me)
     sd = guest.evaluate("window.__sd")
     k = next(k for k, e in enumerate(sd) if e[2])
-    # From the frame before the state after the stall was heard to 0.3 s on.
-    steps = [(round(t1, 3), round(b - a, 1)) for (_, a, _), (t1, b, _) in zip(sd[k - 1:], sd[k:])
-             if t1 < sd[k][0] + 0.3]
+    # From the frame before the state after the stall was heard to 0.3 s on: [moment, frame's time, step,
+    # most the step may be].
+    steps = []
+    for (t0, a, _, _), (t1, b, _, fed) in zip(sd[k - 1:], sd[k:]):
+        if t1 >= sd[k][0] + 0.3:
+            break
+        # What the track allows in a frame of dt s, which a loaded machine makes long (85 ms in a run with
+        # several test runs at once, against 17 ms): its drawn moment goes on at most 1.2 dt, over spots at
+        # most 335 units/s apart (134 units in the 0.4 s of the stall), and the rest of the way to the newest
+        # state heard is eased in at 1 - exp(-dt / 0.1). So a long frame may step far, and is judged by its dt.
+        dt = t1 - t0
+        steps.append((round(t1, 3), round(dt, 4), round(b - a, 1),
+                      round((fed - a) * (1 - math.exp(-dt / 0.1)) + 1.2 * 335 * dt + 2, 1)))
     assert len(steps) > 2, steps
-    # Each step at most what a 0.1 s ease and the drawn moment's catch-up allow in a frame, never the whole way.
-    assert max(abs(s) for _, s in steps) < 60, "steps " + json.dumps(steps) + " frames " + json.dumps(sd)
+    over = [s for s in steps if abs(s[2]) > s[3]]
+    assert not over, "over " + json.dumps(over) + " frames " + json.dumps(sd)
+    # And never the whole way to the newest state in one frame, as a snap would draw it, however long the frame.
+    _, a, _, _ = sd[k - 1]
+    assert steps[0][2] < sd[k][3] - a - 1, (steps[0], sd[k][3] - a)
     assert not host.errors + guest.errors
 
 
