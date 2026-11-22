@@ -1,4 +1,4 @@
-"""Pulkkamäki v4 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
+"""Pulkkamäki v5 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
 the steep hills with drops, no trick begun too late, the hand push."""
 import shutil
 
@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v4/"
+URL = "games/pulkkamaki/v5/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
@@ -326,18 +326,19 @@ def test_a_stopped_sled_is_pushed_on_with_the_hands(site, context):
     page.evaluate(TOUCH, ["pointerdown", 180, 500])
     page.evaluate(TOUCH, ["pointerup", 180, 500])
     v = page.evaluate("me.v")
-    assert v > 1.8, v
+    assert v > 2.8, v
     assert page.evaluate("me.pushT") > 0
-    # Pushes add up to a slow start and no more; a sled going well is not pushed.
+    # A few pushes add up to a good speed (v5, Eero: "pitää päästä ihan hyvään vauhtiin käsillä") and no more;
+    # a sled going well is not pushed.
     got = page.evaluate("""() => {
       const sl = newSled('t', 't'); sl.v = 0.6;
-      const a = []; for (let i = 0; i < 4; i++) a.push(pushOff(sl));
-      const top = sl.v; sl.v = 8; const fast = pushOff(sl);
+      const a = []; for (let i = 0; i < 6; i++) a.push(pushOff(sl));
+      const top = sl.v; sl.v = 10.5; const fast = pushOff(sl);
       sl.v = 0.6; sl.air = true; const air = pushOff(sl);
       return [a, top, fast, air];
     }""")
-    assert got[0] == [True, True, False, False]
-    assert 3 <= got[1] <= 4.2
+    assert got[0] == [True, True, True, True, False, False]
+    assert got[1] == 10
     assert got[2:] == [False, False]
     assert page.errors == []
 

@@ -203,8 +203,9 @@ function trickDone(sl) {
   if (sl.queue) { sl.trick = { type: sl.queue, t: 0 }; sl.queue = null; }
 }
 
-// A hand push (#517): a sled nearly stopped on the snow gets going again, a push at a time.
-const PUSH_BELOW = 3, PUSH_DV = 1.6, PUSH_MAX = 4.2;
+// A hand push (#517): a slow sled on the snow gets going, a push at a time. From v5 a few quick
+// pushes bring it up to a good speed (10 m/s), not only off a standstill.
+const PUSH_BELOW = 10, PUSH_DV = 2.5, PUSH_MAX = 10;
 function canPush(sl) { return !sl.air && !sl.fin && sl.fallT <= 0 && sl.v < PUSH_BELOW; }
 function pushOff(sl) {
   if (!canPush(sl)) return false;
