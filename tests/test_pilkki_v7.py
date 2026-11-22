@@ -652,6 +652,13 @@ def test_two_guests_each_get_their_own_nearby_fish(room):
     guests[0].evaluate(f"() => {{ stand({ax}, {ay}); sendMe(); }}")
     guests[1].evaluate(f"() => {{ stand({bx}, {by}); sendMe(); }}")
     for g, (x, y) in zip(guests, [(ax, ay), (bx, by)]):
+        # Only fish the host sent once it knew the guest's new spot: a guest's start by the shore
+        # may be a few metres from it, and the fish sent for the start then pass the check below
+        # though a few near the new spot are not among them (CI on #542: 47 of 51).
+        gid = g.evaluate("AiPelitRooms.me")
+        host.wait_for_function(f"net.board[{json.dumps(gid)}] && Math.abs(net.board[{json.dumps(gid)}].x - {x}) < 0.2")
+        k0 = host.evaluate("net.pSeq")
+        g.wait_for_function(f"net.pReceived > {k0}", timeout=10000)
         g.wait_for_function(f"pond.length > 0 && pond.every(f => net.claims[f.id] || (Math.abs(f.lx - {x}) < 60 && Math.abs(f.ly - {y}) < 60))", timeout=10000)
         want = host.evaluate(f"pond.filter(f => Math.abs(f.lx - {x}) < 40 && Math.abs(f.ly - {y}) < 40).length")
         assert g.evaluate("pond.length") >= want > 0
