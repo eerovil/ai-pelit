@@ -33,7 +33,7 @@ with its own arms (`figure()`'s `reach`), not with two extra arms beside its own
 (#503), a new throwing event, loads it too, and so does Uimahyppy v1 (#516), diving, whose
 `points()` format sums each diver's five dives.
 `yleisurheilu-12/` (#480: Pituushyppy v20, Keihäs v19, Kuula v13, Moukari v15, Korkeushyppy v17,
-Seiväshyppy v18, Saappaanheitto v2; Mäkihyppy and Uimahyppy stay on `-11/`) adds the `glide` option: the phone
+Seiväshyppy v18, Saappaanheitto v2, then Mäkihyppy v14 with x and y; Uimahyppy stays on `-11/`) adds the `glide` option: the phone
 watching draws the friend on turn gliding between their run-up spots, from `lib/sulava-1`
 (`sulava-liike.md`), instead of jumping to each spot as it comes.
 The next change goes in `yleisurheilu-13/`.

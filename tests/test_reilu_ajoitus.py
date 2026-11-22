@@ -17,7 +17,7 @@ GAMES = [
     ("games/kuula/v13", "ArrowLeft", "press"),
     ("games/korkeushyppy/v17", "ArrowLeft", "press"),
     ("games/keihas/v19", "ArrowLeft", "press"),
-    ("games/makihyppy/v13", " ", "action"),
+    ("games/makihyppy/v14", " ", "action"),
 ]
 LETTING_GO = [
     ("games/seivashyppy/v18", "holdPtr", "letGo"),
@@ -169,7 +169,7 @@ def test_piano_a_long_frame_is_run_through_whole(real, context):
 
 
 def test_makihyppy_a_short_hold_steers_until_the_finger_lifts(real, context):
-    page = opened(real, context, "games/makihyppy/v13", "typeof catchUp === 'function'")
+    page = opened(real, context, "games/makihyppy/v14", "typeof catchUp === 'function'")
     got = page.evaluate(
         """() => {
           requestAnimationFrame = () => 0;
