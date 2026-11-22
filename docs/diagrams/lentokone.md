@@ -65,7 +65,9 @@ flowchart TD
 - **Matkustajat nousevat kyytiin bussista portaita**: `beginBoarding()` in `ui.js`, drawn from
   `paxScene('board', t)` in `passengers.js`: 16 passengers walk from a yellow bus to wheeled stairs and
   in at the jet's front door, counted "🧳 N / 16 koneessa"; the door shuts, the bus drives off and the
-  stairs pull back (about 12 s). A tap anywhere ("Napauta: ohita") skips to the flight. Nothing is
+  stairs pull back (about 13 s). A tap anywhere ("Napauta: ohita") skips to the flight. Flying the
+  same route again in the jet after a crash or a restart ("Lennä uudelleen", "Alusta", ⏸'s restart)
+  skips it: the passengers are still aboard. Nothing is
   saved during it, and turning the phone keeps it.
 - **Kaasu täysille, vauhti kasvaa**: the throttle is a slider on the right; a finger dragged up or
   down from anywhere on it moves it from where it was. On the ground the stick's side movement
@@ -116,11 +118,12 @@ flowchart TD
   (`reitti-<N>`, `scores.js`), which opens over the end screen after a new score; "🏆 Tuloslista"
   opens it again (in the jet only after the passengers have left). Buttons: "Seuraava lento", "Lennä uudelleen", "Valikkoon". A crash also drops the
   saved flight at once, so a reload during its banner does not offer it again.
-- **Iso kone?** (after a landing): a landing that ended well in the jet (`p.over.ok`, a practice
-  landing too) leaves the passengers out after the 1.8 s banner; a crash goes straight to the end screen.
+- **Iso kone?** (after a landing): a landing in the jet that ended well and stopped on the runway
+  (`p.over.ok` and `p.over.stop === 100`, a practice landing too) leaves the passengers out after the
+  1.8 s banner, the plane set level; a crash or a roll off the runway goes straight to the end screen.
 - **Matkustajat poistuvat portaita bussiin**: `beginDeplaning()` in `ui.js`, `paxScene('deplane', t)`:
   the bus comes from behind, the stairs drive to the door, it opens and the 16 walk down into the bus,
   which drives away; then the end screen. The landing was already saved; a tap skips it.
 - **Yritä uudelleen**: after a crash or a practice landing "Alusta" flies the route again from the runway, and
   "Harjoittele laskeutumista" starts 5 km out on the runway's line on the glide path (about 270 m),
-  151 km/h, gear up and flaps 0, so landing can be practised without flying the whole route.
+  151 km/h in the small plane and 209 km/h in the jet (`vStart`), gear up and flaps 0, so landing can be practised without flying the whole route.

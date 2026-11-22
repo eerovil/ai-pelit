@@ -580,3 +580,33 @@ def test_turning_the_phone_keeps_the_boarding(site, context):
     assert page.evaluate("mode") == "board"
     assert page.evaluate("paxT") > 3
     assert page.errors == []
+
+
+def test_a_retry_after_a_crash_keeps_the_passengers_aboard(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    board_now(page)
+    # Off the runway on the take-off roll: a crash, no passengers walk out.
+    page.evaluate("() => { p.thr = 1; p.hdg += 0.6; }")
+    page.wait_for_function("mode === 'end'", timeout=30000)
+    assert page.evaluate("pax === null")
+    page.click("#again")
+    assert page.evaluate("mode") == "fly"
+    # A new flight from the menu boards them again.
+    page.evaluate("() => showMenu()")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    assert page.errors == []
+
+
+def test_no_one_walks_out_after_a_roll_off_the_runway(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    board_now(page)
+    page.evaluate("() => { flyRoute(route, p, 900); }")
+    # Pretend it rolled off the runway's end: landed, but no stopping points.
+    page.evaluate("() => { p.over.stop = 0; p.pit = 0.1; }")
+    page.wait_for_function("mode === 'end'", timeout=8000)
+    assert page.errors == []

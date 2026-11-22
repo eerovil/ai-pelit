@@ -45,9 +45,7 @@ const PLANES = {
     vr: 130, vApp: 44, vStart: 58,
   },
 };
-const PLANE = PLANES.pieni;
 const kindOf = p => PLANES[p.kind] || PLANES.pieni;
-const VR_KMH = PLANE.vr;   // v1's name for the small plane's rotate speed
 
 // ---- The airfields: one chain of six, each route flies from one to the next ----
 // A runway: its threshold (x, z), the heading it is landed and taken off along, length, width, height.

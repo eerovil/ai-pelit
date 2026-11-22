@@ -83,11 +83,13 @@ let paxT = 0, pax = null, stepT = 0, stepN = 0;   // the passengers' scene and i
 // The menu's picture: the plane on the first route's runway.
 p = newPlane(route, plane);
 function startFlight(fromApproach) {
+  // Flying the same route again in the jet after a crash or a restart: the passengers are still aboard.
+  const aboard = mode !== 'menu' && p && p.kind === 'iso' && plane === 'iso' && route === ROUTES[rN - 1] && !(p.over && p.over.ok);
   route = ROUTES[rN - 1];
   p = fromApproach ? approachPlane(route, plane) : newPlane(route, plane);
   // A practice landing is scored on screen only: no list, record or new route without a take-off.
   p.practice = !!fromApproach;
-  if (p.kind === 'iso' && !fromApproach) beginBoarding();
+  if (p.kind === 'iso' && !fromApproach && !aboard) beginBoarding();
   else beginFlight();
 }
 // The passengers walk from the bus up the stairs; a tap skips it. Nothing is saved until the flight.
@@ -98,6 +100,7 @@ function beginBoarding() {
 }
 function beginDeplaning() {
   mode = 'deplane'; paxT = 0; pax = paxScene('deplane', 0);
+  p.pit = 0; p.bank = 0;   // level on its wheels, so the door meets the stairs
   wake();
 }
 function beginFlight(fromBoarding) {
@@ -407,7 +410,7 @@ function frame(now) {
     if (p.over) {
       settleFlight(); endT += dt;
       // The jet's passengers walk out after a landing, before the end screen.
-      if (endT > (p.over.ok ? 1.8 : 2.4)) { if (p.over.ok && p.kind === 'iso') beginDeplaning(); else endFlight(); }
+      if (endT > (p.over.ok ? 1.8 : 2.4)) { if (p.over.ok && p.over.stop === 100 && p.kind === 'iso') beginDeplaning(); else endFlight(); }
     }
     else { saveT += dt; if (saveT > 1) { saveT = 0; keepFlight(); } }
     tune(dt * 1000);
