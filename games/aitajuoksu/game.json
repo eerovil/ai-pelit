@@ -86,6 +86,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 13,
+      "date": "2026-11-22",
+      "note": "Kavereiden juoksijat liikkuvat sulavasti eivätkä nyi.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }

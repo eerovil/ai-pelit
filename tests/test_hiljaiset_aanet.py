@@ -14,7 +14,7 @@ import pytest
 from conftest import ROOT, Site, wait_for_worker
 
 VERSIONS = [
-    "games/aitajuoksu/v12", "games/areena/v9", "games/curling/v5", "games/hiihto/v13",
+    "games/aitajuoksu/v13", "games/areena/v9", "games/curling/v5", "games/hiihto/v13",
     "games/jaan-alla/v7", "games/jalkapallo/v5", "games/kaahari/v7", "games/kaaosrata/v8",
     "games/keihas/v19", "games/kirkkis/v11", "games/korkeushyppy/v17", "games/kuula/v13",
     "games/lentopallo/v8", "games/makihyppy/v13", "games/molkky/v4", "games/moukari/v15",
