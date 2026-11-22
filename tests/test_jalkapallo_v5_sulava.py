@@ -225,9 +225,12 @@ def test_a_guest_draws_its_own_player_at_the_newest_spot(site, browser):
 # friend's run (8 of 117 frames between spots there) went the same way. DRIVE stops the guest's frames and its
 # clock, and keeps each snapshot from the host as it comes; STEP then plays the frames at 60 a second, hearing each
 # snapshot as long after its stamp as the quickest one before had come (its lag, so the tracks' learnt offset stays
-# as it was), plus up to `jitter` s more, in order (seeded, so every run hears them the same), and returns BALL's
-# record of the players `ids`, with the first one's newest spot (x), the ball's after it, and how many snapshots
-# the frame heard. UNDRIVE gives the page its own frames and clock back.
+# as it was), plus up to `jitter` s more, in order (seeded, so every run hears them the same). Per frame it returns
+# [the guest's clock, the moment the first of `ids` is drawn at, ball x, y, the holder's index, x, y of the two
+# players in `ids`, the newest stamp on the tracks, the moment the ball is drawn at, the first player's newest spot
+# (x), the ball's, how many snapshots the frame heard, the first player's kicks, the ball's newest y, the frame's
+# moment on the page's own clock]. A snapshot the host marked `lt` is heard that much later. UNDRIVE gives the page
+# its own frames and clock back. The tackle and jittery-connection tests are driven the same way.
 DRIVE = """() => { const V = window.__v = { t: AiPelitSulava.now(), L: lagBefore(netClock()), now: AiPelitSulava.now };
   AiPelitSulava.now = () => V.t;
   window.__q = []; window.__heard = window.heardSnapshot; window.heardSnapshot = s => { window.__q.push(s); };
@@ -235,16 +238,16 @@ DRIVE = """() => { const V = window.__v = { t: AiPelitSulava.now(), L: lagBefore
 STEP = """([ids, jitter]) => { const V = window.__v, q = window.__q, out = [], dt = 1 / 60; let quiet = 0;
   let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const due = s => { if (s.__due === undefined) { const st = stampOf(s);
-    s.__due = st === null ? -Infinity : Math.max(V.free || -Infinity, st + V.L + rnd() * jitter); V.free = s.__due; }
+    s.__due = st === null ? -Infinity : Math.max(V.free || -Infinity, st + V.L + rnd() * jitter + (s.lt || 0)); V.free = s.__due; }
     return s.__due; };
-  while (out.length < 3000 && quiet < 0.5) {
+  while (out.length < 3000 && (q.length || quiet < 0.5)) {
     V.t += dt; quiet += dt; const c = netClock(); let n = 0;
     while (q.length && due(q[0]) <= c) { window.__heard(q.shift()); quiet = 0; n++; }
     window.__u(dt);
     const f = net.fed || [];
     const [p, r] = ids.map(i => players[i]);
     out.push([c, p.tr.time, ball.x, ball.y, players.indexOf(owner), p.x, p.y, r.x, r.y, f.length ? f[f.length - 1] : null,
-      ball.tr.time, p.tx, ball.tx, n, p.kicks, ball.ty]);
+      ball.tr.time, p.tx, ball.tx, n, p.kicks, ball.ty, V.t]);
   }
   return out; }"""
 # Gives the guest its own frames and clock back, and hears what is still kept.
@@ -438,15 +441,6 @@ def test_a_friend_taken_over_by_the_computer_and_given_back_keeps_gliding_on_a_t
     assert not errors, errors
 
 
-# On a guest, each frame: [the frame's time (the machine's clock, timeOrigin + now, the same on every page), the
-# moment the first of `ids` is drawn at (its track's, on the host's clock), ball x, ball y, the newest holder's index, x, y of the two players in `ids`, the host's
-# clock on the newest spot heard, and the moment the ball is drawn at (the first player's on v5 before #498's
-# review, which had no ball track)].
-BALL = """(ids) => { window.__b = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
-  let ck = null; AiPelitRooms.on('message', m => { if (m.t === 's') ck = m.ck; });
-  const u = window.update;
-  window.update = dt => { const t = now(); u(dt); if (window.__b.length < 400) window.__b.push([t, players[ids[0]].tr.time,
-    ball.x, ball.y, players.indexOf(owner)].concat(...ids.map(i => [players[i].x, players[i].y]), [ck, (ball.tr || players[ids[0]].tr).time])); }; }"""
 
 
 def test_a_tackle_moves_the_ball_to_the_tackler_without_a_step(site, browser):
@@ -462,20 +456,24 @@ def test_a_tackle_moves_the_ball_to_the_tackler_without_a_step(site, browser):
     for g in (aino, ville):
         g.wait_for_function("owner === players[2] && Math.abs(players[2].x + 8) < 0.05 && players[2].tr.size() > 3"
                             " && Math.hypot(ball.x + 7.18, ball.y + 5) < 0.1", timeout=5000)
-    host.evaluate(JITTER)
     host.evaluate("""() => { const u = window.update; window.update = dt => { u(dt);
       if (!window.__stole && owner === players[2] && players[2].x > 0) { window.__stole = true; take(players[4]); } }; }""")
+    host.evaluate(HOSTCLOCK)
+    # Both guests' frames are STEP's, the snapshots heard 0-90 ms late (a busy mobile connection). Left to their own
+    # frames, GitHub's runner drew under 400 frames in 20 s on one of them (run 45001254196), and on four workers over
+    # two cores of a busy host the take did not come within 10 s in 2 of 10 runs (#498).
     for g in (aino, ville):
-        g.evaluate(BALL, [2, 4])
+        g.evaluate(DRIVE)
     host.evaluate("window.__cpuRun = 2; window.__run = true")
+    host.wait_for_function("window.__stole", timeout=20000)
+    end = host.evaluate("netClock() + 1.5")
     for g in (aino, ville):
-        g.wait_for_function("owner === players[4]", timeout=10000)
-        g.wait_for_function("window.__b.length >= 400", timeout=20000)
+        g.wait_for_function(f"(q => q.length && q[q.length - 1].ck >= {end})(window.__q)", timeout=20000)
     for g, name in ((aino, "Aino"), (ville, "Ville")):
-        rec = g.evaluate("window.__b")
+        rec = g.evaluate(STEP, [[2, 4], 0.09])
+        g.evaluate(UNDRIVE)
         took = next(i for i, r in enumerate(rec) if r[4] == 4)
-        # The ball's speed over each frame around the take, per moment drawn (the ball track's; a busy test
-        # machine's uneven frames do not show in it).
+        # The ball's speed over each frame around the take, per moment drawn (the ball track's).
         sp = [(i - took, math.hypot(b[2] - a[2], b[3] - a[3]) / (b[10] - a[10]))
               for i, (a, b) in enumerate(zip(rec, rec[1:]), 1)
               if took - 30 <= i <= took + 60 and a[10] is not None and b[10] is not None and b[10] - a[10] > 0.008]
@@ -483,7 +481,7 @@ def test_a_tackle_moves_the_ball_to_the_tackler_without_a_step(site, browser):
         # Dribbled at 5 m/s, then a metre or so over to the taker as the host rolls it there. Measured at load
         # 50-65: at most 18 m/s; v5 before the review jumped it there in one frame, 47-67 m/s.
         fast = [(i, round(v, 1)) for i, v in sp if v > 30]
-        # On a failure, the frames around the take too: (frame, machine time and ball track's moment from the take,
+        # On a failure, the frames around the take too: (frame, the guest's clock and ball track's moment from the take,
         # ball x, y, the holder). Four workers on two cores of a host at load 45 had one frame at 34 m/s on Aino,
         # right after the take (#498), which 14 runs after could not show again (at most 16.4 m/s).
         around = [(i - took, round(r[0] - rec[took][0], 3), r[10] and round(r[10] - rec[took][10], 3), round(r[2], 2),
@@ -695,10 +693,11 @@ def test_spots_landing_in_a_guests_pause_after_a_stall_do_not_hop_the_drawing(si
     guest.evaluate(f"window.__pzAt = {clock}; window.__pz = true")
     host.evaluate("window.__pz = true; window.__release()")
     guest.wait_for_timeout(500)
-    host.evaluate("window.__hold = false; window.__pz = false")
+    hx_go = host.evaluate("window.__hold = false; window.__pz = false; players[4].x")
     guest.evaluate(f"window.__goAt = {clock}; window.__pz = false")
     guest.wait_for_timeout(1000)
     guest.evaluate("window.__pzStop = true")
+    hx_end = host.evaluate("players[4].x")
     pr, pz_at, go_at = guest.evaluate("[window.__pr, window.__pzAt, window.__goAt]")
     stalls = host.evaluate("window.__stall")
     # The stall outran the guess: when the pause came, the drawn moment was over 0.25 s past the newest spot.
@@ -720,52 +719,76 @@ def test_spots_landing_in_a_guests_pause_after_a_stall_do_not_hop_the_drawing(si
             and (x1 - x0 < -0.1 or x1 - x0 > 0.1 + 7 * (m1 - m0) / 0.8 + gap * (1 - math.exp(-(m1 - m0) / 0.8 / 0.1)))]
     assert not hops, (hops, round(gap, 2), [(round(f[0] - go_at, 3), round(f[1], 2), round(f[3] or 0, 3), round(f[4] or 0, 3))
                                             for f in pr if f[0] > go_at - 0.1][:20])
-    assert pr[-1][1] > held[-1][1] + 2  # and it ran on
+    # And it ran on as far as the player did after the pause, less the track's delay (0.25 s at most, at 5 m/s) and
+    # slack. The runner stops at x = 10: on a busy machine (load 45-56, #498) the waits before the pause took so long
+    # that they were there already, and the drawing rightly stood at 10.08 after it.
+    assert pr[-1][1] > held[-1][1] + (hx_end - hx_go) - 1.5, (round(pr[-1][1], 2), round(held[-1][1], 2), hx_go, hx_end)
     assert not host.errors + guest.errors
 
 
-# On the host, once `window.__late3` is on: of each four snapshots it sends, the first leaves at once and the other
-# three 60 ms late, in order (a jittery connection, made the same every run).
-LATE3 = """() => { window.__late3 = false; let k = 0, free = 0; const send = AiPelitRooms.send.bind(AiPelitRooms);
-  AiPelitRooms.send = (m, to) => { if (m.t !== 's' || !window.__late3) { send(m, to); return; }
-    const now = performance.now(), at = Math.max(free, now + (k++ % 4 ? 60 : 0)); free = at;
-    setTimeout(() => send(m, to), at - now); }; }"""
+# On the host: of each six snapshots it sends from the machine's moment `from` on (its own: a HOSTCLOCK step's), the
+# first is marked to be heard at once and the other five 60 ms late (`lt`, which STEP reads): a jittery connection,
+# the same every run. Heard in order, a snapshot 60 ms late comes with the on-time one sent 50 ms after it; with
+# three of each four late, as before the test was driven, the last three were all late for no frame at all.
+LATE = """() => { let k = 0; const send = AiPelitRooms.send.bind(AiPelitRooms); window.__lateFrom = Infinity;
+  AiPelitRooms.send = (m, to) => { if (m.t === 's' && AiPelitSulava.now() + performance.timeOrigin / 1000 >= window.__lateFrom)
+    m = Object.assign({}, m, { lt: k++ % 6 ? 0.06 : 0 }); send(m, to); }; }"""
+# The room is paused from `window.__pzWin[0]` to `[1]` on the machine's clock, as the page's own clock reads it: on
+# the host each HOSTCLOCK step, on a driven guest each of STEP's frames, sees it at its own moment.
+PAUSE_WIN = """() => { window.__pzWin = [Infinity, Infinity];
+  Object.defineProperty(AiPelitRooms, 'paused', { configurable: true, get: () => {
+    const n = AiPelitSulava.now() + performance.timeOrigin / 1000; return n >= window.__pzWin[0] && n < window.__pzWin[1]; } }); }"""
+# On the host, in one go from its own clock: the pause from `d` s on, 5 ms after the guest's, and the jitter 0.1 s
+# after the guest goes on. Returns the guest's pause moment.
+WINDOWS = """(d) => { const t = (performance.timeOrigin + performance.now()) / 1000 + d;
+  window.__pzWin = [t + 0.005, t + 0.505]; window.__lateFrom = t + 0.61; return t; }"""
 
 
 def test_a_jittery_connection_after_a_pause_does_not_slow_the_drawing(site, browser):
     """The room pauses on both phones at about the same moment and goes on, so nothing is late on the host's time.
-    After it the host's snapshots come jittered: three of each four 60 ms late. For 3 s after a pause the guest's
+    After it the host's snapshots come jittered: five of each six 60 ms late. For 3 s after a pause the guest's
     clock goes at a quarter of its speed while the snapshots heard since are late (a host that paused first), so
     every player is drawn slower there. Judged on the last three snapshots alone, three late ones in a row read as
     a host that paused first, and the drawn moment went at 0.25x for some frames, again and again (#498: four
     frames at a quarter of the speed on a third phone after a friend's phone dropped). The drawn moment must go on
     at real time."""
     host, guest = phones(site, browser)
-    for pg in (host, guest):
-        pg.evaluate(PAUSE)
     host.evaluate(QUIET)
     host.evaluate("players[4].x = -12; players[4].y = -5")
     guest.wait_for_function("Math.abs(players[4].x + 12) < 0.05 && players[4].tr.size() > 3", timeout=5000)
-    host.evaluate(LATE3)
-    guest.evaluate(PZREC, 4)
-    host.evaluate("window.__cpuRun = 4; window.__run = true")
-    guest.wait_for_timeout(800)
-    # The guest stops first and goes on last, so its clock stands a little longer than the host's: the snapshots
-    # after it, if anything, come early.
-    guest.evaluate("window.__pz = true")
-    host.evaluate("window.__pz = true")
-    guest.wait_for_timeout(500)
-    host.evaluate("window.__pz = false; window.__late3 = true")
     clock = "(performance.timeOrigin + performance.now()) / 1000"
-    go_at = guest.evaluate(f"window.__pz = false; {clock}")
-    guest.wait_for_timeout(2500)
-    guest.evaluate("window.__pzStop = true")
-    pr = guest.evaluate("window.__pr")
+    # The guest stops first and goes on last, 5 ms apart: its clock stands a little longer than the host's, so the
+    # snapshots after it, if anything, come early. The jitter starts 0.1 s after the guest goes on, so the snapshots
+    # it hears first after the pause are on time. The guest's frames are STEP's and the host's match runs on the
+    # machine's clock (HOSTCLOCK), and each phone sees the pause at its moment on its own clock. Timed by the test,
+    # or by the pages' timers, a busy runner had a phone pause or go on at its first frame after a late one: GitHub's
+    # runner had two frames at 0.25x 0.27-0.32 s after the resume (run 45001254196), and so did a host at load 30
+    # with the pauses set by timers (0.33 s after), likely as the pauses differed by more than the 0.03 s the game
+    # slows at (not proven). With 20 ms between them, the late snapshots read only 0.027 s late on a quiet machine,
+    # and the rule on the last three alone passed.
+    # The host sets its own pause and jitter in one call, so a slow round trip cannot move one past the other; the
+    # guest is driven, so its pause needs only to be set before STEP replays it.
+    host.evaluate(PAUSE_WIN)
+    host.evaluate(LATE)
+    host.evaluate(HOSTCLOCK)
+    guest.evaluate(PAUSE_WIN)
+    guest.evaluate(DRIVE)
+    host.evaluate("window.__cpuRun = 4; window.__run = true")
+    t = host.evaluate(WINDOWS, 1.0)
+    guest.evaluate("w => { window.__pzWin = w; }", [t, t + 0.51])
+    host.wait_for_function(f"{clock} > {t + 0.51 + 2.6}", timeout=30000)
+    end = host.evaluate("netClock()")
+    guest.wait_for_function(f"(q => q.length && q[q.length - 1].ck >= {end})(window.__q)", timeout=20000)
+    origin = guest.evaluate("performance.timeOrigin / 1000")
+    rec = guest.evaluate(STEP, [[4, 4], 0])
     drag = guest.evaluate("pz.drag")
-    after = [f for f in pr if f[0] > go_at + 0.05 and f[3] is not None]
+    guest.evaluate(UNDRIVE)
+    go_at = t + 0.51
+    # Per frame: its moment on the machine's clock and the moment player 4 is drawn at.
+    after = [(r[16] + origin, r[1]) for r in rec if r[16] + origin > go_at + 0.05 and r[1] is not None]
     assert after and after[-1][0] - after[0][0] > 2, len(after)
     # lib/sulava-1 itself changes the drawn moment's pace by at most 20% (a new delay), so 0.5x is the slow one.
-    slow = [(round(t1 - go_at, 3), round((d1 - d0) / (t1 - t0), 2)) for (t0, _, _, d0, *_), (t1, _, _, d1, *_)
+    slow = [(round(t1 - go_at, 3), round((d1 - d0) / (t1 - t0), 2)) for (t0, d0), (t1, d1)
             in zip(after, after[1:]) if t1 > t0 and (d1 - d0) / (t1 - t0) < 0.5]
     assert not slow, (slow, round(drag, 3))
     assert not host.errors + guest.errors
