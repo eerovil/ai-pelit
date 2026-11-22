@@ -168,20 +168,29 @@ c.addEventListener('pointerdown', e => {
   const p = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: e.timeStamp, air: !!(me && me.air), used: false, grab: false };
   pointers.set(e.pointerId, p);
   if (!p.air) steerFinger = e.pointerId;
-  // A sled nearly stopped on the snow: each touch is a push with the hands (#517).
-  if (mode === 'run' && me && !p.air && !(net && window.AiPelitRooms && AiPelitRooms.paused)) pushOff(me);
 });
+// A tap on the snow (a short touch that did not steer) is a push with the hands (#517); from v5 it
+// brings a slow sled up to a good speed, so a steering drag must not push too.
+const TAP_MS = 300;
+function tapPush(p, now) {
+  if (mode !== 'run' || !me || p.air || me.air || now - p.t0 > TAP_MS || p.far >= SWIPE) return;
+  if (net && window.AiPelitRooms && AiPelitRooms.paused) return;
+  pushOff(me, hill);
+}
 c.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   p.x = e.clientX; p.y = e.clientY;
+  p.far = Math.max(p.far || 0, Math.hypot(p.x - p.x0, p.y - p.y0));   // a touch that ever moved is no tap
   airGesture(p, e.timeStamp, false);
 });
 function lift(e) {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   p.x = e.clientX; p.y = e.clientY;
+  p.far = Math.max(p.far || 0, Math.hypot(p.x - p.x0, p.y - p.y0));
   airGesture(p, e.timeStamp, true);
+  if (e.type === 'pointerup') tapPush(p, e.timeStamp);
   if (p.grab && me) setGrab(me, false);
   pointers.delete(e.pointerId);
   if (steerFinger === e.pointerId) steerFinger = null;
@@ -325,7 +334,7 @@ function drawHUD() {
   }
   if (lateT > 0 && me.air && !me.trick && !me.grab) shadowText('Ei ehdi!', W / 2, H * 0.2, 20, '#ffb0b0', 'center', 800);
   // Nearly stopped: the hands push the sled on.
-  if (mode === 'run' && runT > 1 && canPush(me) && me.v < 2.2 && !(net && window.AiPelitRooms && AiPelitRooms.paused)) shadowText('Napauta: työnnä käsillä', W / 2, H * 0.62, 18, '#fff', 'center', 800);
+  if (mode === 'run' && runT > 1 && canPush(me, hill) && me.v < 2.2 && !(net && window.AiPelitRooms && AiPelitRooms.paused)) shadowText('Napauta: työnnä käsillä', W / 2, H * 0.62, 18, '#fff', 'center', 800);
   // The first runs teach the controls.
   if (tutorial && mode === 'run') {
     let t = '';

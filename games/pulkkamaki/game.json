@@ -29,6 +29,13 @@
       "note": "Kaksi uutta mäkeä jyrkkine kohtineen ja pudotuksineen, temppu ei enää ala juuri ennen alastuloa, ja pysähtyneen pulkan voi työntää käsillä liikkeelle.",
       "request": "Pulkkamäki. Älä anna aloittaa uutta temppu juuri ennen laskeutumista. Tee uusia mäkiä jossa on todella jyrkkiä kohtia ja pudotuksia. Ja semmonen että voi ottaa käsillä vauhtia jos on pysähtynyt",
       "issue": "eerovil/ai-pelit#517"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-22",
+      "note": "Käsillä työntämällä pääsee nyt hyvään vauhtiin: muutamalla napautuksella pulkka kiihtyy 10 m/s:iin.",
+      "request": "Enemmän vauhtia käsillä. Pitää päästä ihan hyvään vauhtiin käsillä",
+      "issue": "eerovil/ai-pelit#517"
     }
   ]
 }
