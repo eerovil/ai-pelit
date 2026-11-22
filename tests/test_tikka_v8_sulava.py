@@ -49,7 +49,7 @@ def check_glides(thrower, watcher):
     # on time (under 40 ms) are held to it.
     timely = [d for ms, d in moves if ms < 40]
     assert len(timely) > 30, moves
-    assert max(timely) < 3.5, moves
+    assert max(abs(d) for d in timely) < 3.5, moves
     assert sum(1 for d in timely if abs(d) < 0.05) < len(timely) / 5, moves
     # It is a moment behind, not far off: by the end it is nearly where the thrower aims.
     last = watcher.evaluate("drawn[drawn.length - 1][1]")
