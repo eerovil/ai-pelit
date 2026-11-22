@@ -3,7 +3,7 @@ import json
 
 import pytest
 from conftest import ROOT, turn
-from test_kiekkoammunta_v3 import URL, settle, shot
+from test_kiekkoammunta_v4 import URL, settle, shot
 from test_rooms_lib import Relay
 
 # Finish the rest of this phone's turn without the pointer, through the game's own report.
