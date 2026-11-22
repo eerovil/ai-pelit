@@ -7,10 +7,10 @@ phone's calls are counted by wrapping RTCPeerConnection, so a test can read how 
 
 import pytest
 
-from conftest import keep_rooms_in_game, make_game
+from conftest import AUDIO_ARGS, keep_rooms_in_game, make_game
 from test_rooms_lib import Relay, demo_page, join, make_room, start  # noqa: F401
 
-FAKE_MIC = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]
+FAKE_MIC = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] + AUDIO_ARGS
 
 COUNT_CALLS = """
 (() => {
