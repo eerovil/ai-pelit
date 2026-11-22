@@ -78,6 +78,8 @@
      and with the loudest sounds quieter -->
 <!-- v12 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<!-- v13 (#480): the other phones' runners are drawn a moment back, gliding between the spots heard -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -185,7 +187,7 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 // kind: 'me' (this phone's taps), 'cpu' (moved here by the computer), 'net' (another phone's).
 function runner(id, name, color, kind, rate, asu) {
   return { id, name, color, kind, asu: asu || null, rate: rate || 7, x: 0, y: 0, vy: 0, v: 0, foot: 0, stum: 0, hits: 0, down: 0,
-    fin: null, ph: 0, card: 0, ai: { t: 0.2 + Math.random() * 0.15, err: 0, hurdle: -1, jumpy: null } };
+    fin: null, ph: 0, card: 0, tr: null, st: null, hx: null, hy: null, src: '', ai: { t: 0.2 + Math.random() * 0.15, err: 0, hurdle: -1, jumpy: null } };
 }
 let race = null, me = null, texts = [], warn = 0, flash = { 1: 0, 2: 0, 3: 0 };
 
@@ -320,6 +322,8 @@ function soloOver() {
 // phone runs its own runner and sends it to the host.
 R.on('start', s => {
   const rs = s.players.map((p, i) => runner(p.id, p.name, COLORS[i % COLORS.length], p.id === R.me ? 'me' : 'net', 7.6, p.id === R.me ? outfit.id : null));
+  // v13 (#480): every runner this phone hears rather than moves is drawn from a track (lib/sulava-1).
+  rs.forEach(r => { if (r.kind === 'net') r.tr = AiPelitSulava.track({ keys: ['x', 'y'], jump: 5 }); });
   newRace('net', s.round, rs, dist, hurdles); // a guest takes the host's race from its first 's'
   race.adopt = !R.isHost; // a guest reloaded mid-race takes its runner back from the host
   if (s.over) race.phase = 'wait'; // a phone that missed the end: the results are on their way
@@ -330,7 +334,22 @@ R.on('start', s => {
 const r2 = n => Math.round(n * 100) / 100;
 const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum), r.card];
 function unpack(r, a) { r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; r.vy = a[7]; r.foot = a[8]; r.stum = a[9]; }
-function hostState() { return { t: 's', round: race.round, k: [race.dist, race.hurdles ? 1 : 0], ph: race.phase, cd: race.cdT, clock: race.clock, fs: race.fs, r: race.runners.map(pack), o: race.runners.map(r => r.asu || '') }; }
+// v13 (#480): `st` is the host's stamp clock (gameT) as it sends; `sts` a friend's own stamp of the spot it sent, passed on
+// with that spot as it came (`hx`, `hy`; not where the host has carried it on since), so each runner's track
+// glides on the clock of the phone that moved it.
+const sent = r => { const a = pack(r); if (r.kind === 'net' && r.hx !== null) { a[0] = r2(r.hx); a[1] = r2(r.hy); } return a; };
+function hostState() {
+  return { t: 's', round: race.round, k: [race.dist, race.hurdles ? 1 : 0], ph: race.phase, cd: race.cdT, clock: race.clock, fs: race.fs, r: race.runners.map(sent), o: race.runners.map(r => r.asu || ''),
+    st: Math.round(gameT * 1000) / 1000, sts: race.runners.map(r => r.kind === 'net' ? r.st : null) };
+}
+// A spot just heard for a runner this phone draws (already unpacked into it), stamped by the phone `src` that
+// moved it. A new source (the computer took the runner over, or gave it back) has another clock: start afresh.
+function heard(r, st, src) {
+  if (!r.tr) return;
+  if (r.src !== src) { r.tr.reset(); r.src = src; }
+  r.tr.push(st, { x: r.x, y: r.y });
+}
+const stamp = v => Number.isFinite(v) ? v : null;
 R.on('message', (m, from) => {
   if (!race || race.mode !== 'net' || m.round !== race.round) return;
   if (R.isHost) {
@@ -338,6 +357,7 @@ R.on('message', (m, from) => {
     if (m.t === 'p' && r && typeof m.o === 'string') r.asu = m.o; // v5: the guest's outfit (#158)
     if (m.t === 'p' && r && r.kind === 'net') {
       unpack(r, m.r);
+      r.st = stamp(m.st); r.hx = r.x; r.hy = r.y; heard(r, r.st, r.id);
       // A guest in first starts the wait for the rest, as a runner finishing here does.
       if (r.fin !== null && race.firstFin === null) race.firstFin = race.clock;
     }
@@ -363,14 +383,19 @@ R.on('message', (m, from) => {
       // My own runner is mine, unless the computer ran it while I was away.
       if (r === me && !a[6] && !(race.adopt && a[0] > me.x)) return;
       unpack(r, a);
+      const own = m.sts && stamp(m.sts[i]);
+      heard(r, own !== null && own !== undefined ? own : stamp(m.st), own !== null && own !== undefined ? r.id : 'host');
     });
     if (m.ph === 'run') race.adopt = false;
   }
   if (m.t === 'end') finish(m.res);
 });
 R.on('hello', id => { if (race && race.mode === 'net' && race.phase !== 'done') R.send(hostState(), id); });
-R.on('continue', ids => { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) r.kind = 'cpu'; }); });
-R.on('back', id => { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') r.kind = 'net'; }); });
+// v13: a runner's track starts afresh when the computer takes it over or gives it back (on the host; the other
+// phones start afresh when the spots' source changes, in heard()).
+const afresh = r => { r.src = ''; r.st = null; r.hx = r.hy = null; if (r.tr) r.tr.reset(); };
+R.on('continue', ids => { if (race) race.runners.forEach(r => { if (ids.includes(r.id)) { r.kind = 'cpu'; afresh(r); } }); });
+R.on('back', id => { if (race) race.runners.forEach(r => { if (r.id === id && r.kind === 'cpu') { r.kind = 'net'; afresh(r); } }); });
 R.on('lobby', () => { race = null; });
 R.on('leave', () => { race = null; showMenu(); });
 R.on('menu', () => { race = null; showMenu(); });
@@ -391,7 +416,7 @@ function guestTick(dt) {
   const was = me.sentFin;
   if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !was))) {
     race.sendT = 1 / 12; me.sentFin = me.fin !== null;
-    R.send({ t: 'p', round: race.round, r: pack(me), o: me.asu || '' });
+    R.send({ t: 'p', round: race.round, r: pack(me), o: me.asu || '', st: Math.round(gameT * 1000) / 1000 });
   }
 }
 
@@ -427,8 +452,17 @@ function afterResults() {
 
 // ---------- The loop ----------
 let lastT = performance.now();
+// The clock this phone stamps its spots with (#480). The runners move by dt, held to 0.05 s a frame, so after
+// a stalled frame they have gone less far than the wall clock says. Stamped on the wall clock, the other phones
+// guessed them on at full speed through the stall and then drew them back. So the stamp moves on with dt and
+// catches up with the wall clock at most half a dt more a frame (the runner looks slower for a few frames, never
+// backwards): a phone that stays above 14 frames a second keeps the wall clock, which the other phones'
+// tracks learn their offset from. A page that slept a second or more jumps to the wall clock.
+let gameT = AiPelitSulava.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const lag = AiPelitSulava.now() - gameT - dt;
+  gameT += lag > 1 ? dt + lag : dt + Math.max(0, Math.min(dt / 2, lag));
   if (race) tick(dt);
   draw();
   requestAnimationFrame(frame);
@@ -468,7 +502,22 @@ function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
 function laneBase(i) { return trackTop + laneH * (i + 1) - laneH * 0.18; }
 function camX() { const r = me || (race && race.runners[0]); return (r ? r.x : 0) - (SW * 0.4) / sc; }
 
+// v13 (#480): the runners heard from other phones are drawn where their track says, a moment back, and
+// put back after the frame: the race itself (standings, the host's checks) keeps the newest spot.
+function drawnSpots() {
+  if (!race || race.mode !== 'net') return [];
+  // The host moves a runner the computer took over itself, so draws it as it is.
+  return race.runners.filter(r => r.tr && r !== me && (r.kind === 'net' || !R.isHost) && r.tr.size()).map(r => {
+    const kept = [r, r.x, r.y], o = r.tr.at(); r.x = o.x; r.y = Math.max(0, o.y); return kept; });
+}
+// The place shown is the race's, from the newest spots, worked out before the drawn ones are swapped in.
+let livePlace = 0;
 function draw() {
+  livePlace = race && me ? place(me) : 0;
+  const kept = drawnSpots();
+  try { drawFrame(); } finally { kept.forEach(([r, px, py]) => { r.x = px; r.y = py; }); }
+}
+function drawFrame() {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();
@@ -692,7 +741,7 @@ function drawHud() {
   x.fillText(t.toFixed(2).replace('.', ','), 20, top + 30);
   x.textAlign = 'right'; x.font = '700 15px system-ui';
   if (race && me) {
-    x.fillText(place(me) + '. / ' + race.runners.length + (me.hits ? '  · ' + me.hits + ' 🚧' : '') + (me.card ? '  ' + (me.card >= 2 ? '🟥' : '🟨') : ''), W - 20, top + 28);
+    x.fillText(livePlace + '. / ' + race.runners.length + (me.hits ? '  · ' + me.hits + ' 🚧' : '') + (me.card ? '  ' + (me.card >= 2 ? '🟥' : '🟨') : ''), W - 20, top + 28);
   }
   // The starter, and the messages.
   if (race && race.phase === 'false') drawCard();
@@ -701,7 +750,7 @@ function drawHud() {
     big(s, '#fff');
     if (warn > 0) small('Odota laukausta!', '#ffd166');
   } else if (race && race.phase === 'run' && race.clock < 0.8) big('PAM!', '#ffd166');
-  else if (race && me && me.fin !== null && race.phase === 'run') big(place(me) + '. maaliin!', '#7ee081');
+  else if (race && me && me.fin !== null && race.phase === 'run') big(livePlace + '. maaliin!', '#7ee081');
   texts.forEach(tt => { x.globalAlpha = 1 - tt.t; small(tt.s, '#ff9a8b', -tt.t * 30); x.globalAlpha = 1; });
 }
 // The starter calls the start back and shows the card to whoever went early.
