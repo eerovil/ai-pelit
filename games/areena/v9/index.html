@@ -522,9 +522,15 @@ function feedTrack(f, st, x, y, a, t) {
   onTrack(f, st, x, y, a, t);
 }
 // Before a frame: the states heard during a pause go on once it is over, and the waiting spot goes on
-// when the drawing is about to need it.
+// when the drawing is about to need it. Neither goes on in a frame whose clock has not moved on from
+// the frame before (f.trC): the track eases a change in only over a frame's time, so in such a frame it
+// would draw the whole change at once. The first read after a pause gives the paused moment, so the first
+// frame after one is such a frame when nothing read the clock in between (seen in a test under load, and
+// every time on a clock that counts whole milliseconds, as Safari's and Firefox's do).
 function trackNeeds(f) {
+  const c = fightClock(), was = f.trC; f.trC = c;
   if (net && R.paused) return;
+  if (was !== undefined && c <= was) return;
   if (f.trPz) {
     const q = f.trPz, lag = f.trLag; f.trPz = null;
     for (const w of q) {

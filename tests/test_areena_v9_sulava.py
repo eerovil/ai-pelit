@@ -9,6 +9,8 @@ import math
 import shutil
 from statistics import mean, pstdev
 
+import pytest
+
 from conftest import ROOT
 from test_rooms_lib import Relay
 
@@ -366,12 +368,18 @@ STALL = """([i, V]) => new Promise(done => {
   setTimeout(() => { clearInterval(tick); done(); }, 2100); })"""
 
 
-def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, browser):
+@pytest.mark.parametrize("ms", [False, True], ids=["chromium-clock", "whole-ms-clock"])
+def test_states_landing_after_a_guest_paused_wait_for_the_pause_to_end(site, browser, ms):
     """The guest pauses before the host's last states reach it (the room tells each phone on its own): they
     land during the pause, after a stall. The drawn fighter holds still all through the pause, and once it is
-    over the states go on the track and the drawing eases to them, not in one frame."""
+    over the states go on the track and the drawing eases to them, not in one frame. Also on a clock that
+    counts whole milliseconds (Safari's and Firefox's), where the first frame after the pause reads the
+    paused moment again, as it did under load here: the states held then may not go on in that frame."""
     host, guest = phones(site, browser)
     me = index(host)
+    if ms:
+        guest.evaluate("""() => { const n = performance.now.bind(performance);
+          AiPelitSulava.now = () => Math.floor(n()) / 1000; }""")
     guest.evaluate(PAUSE)
     guest.evaluate("""() => { AiPelitRooms.on('message', m => { if (m.t === 's') { window.__last = m; window.__lastAt = fightClock(); } }); }""")
     guest.wait_for_function(f"window.__last && fighters[{me}].tr.size() > 3", timeout=5000)
