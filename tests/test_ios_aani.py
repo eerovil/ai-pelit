@@ -5,7 +5,7 @@ public/back.js says so for every game; rooms.js asks for 'play-and-record' while
 Chromium has no navigator.audioSession, so these tests give the page a stand-in, as Safari has it.
 Whether an iPhone then really sounds can only be heard on one."""
 
-from conftest import game_page, make_game
+from conftest import FRAME_POLL, game_page, make_game
 from test_rooms_lib import make_room, join  # noqa: F401
 from test_rooms_voice import browser, phones, hold  # noqa: F401
 
@@ -65,7 +65,7 @@ def test_a_games_own_frames_play_media_too(site, context):
     page.goto(f"{site.url}games/kehys/v1/")
     page.wait_for_selector("#ai-pelit-back")
     inner = page.frames[1]
-    inner.wait_for_function("window.ready && navigator.audioSession.type === 'playback'")
+    inner.wait_for_function("window.ready && navigator.audioSession.type === 'playback'", polling=FRAME_POLL)
     inner.evaluate("navigator.audioSession.type = 'auto'")
     page.mouse.click(180, 450)
     assert inner.evaluate("navigator.audioSession.type") == "playback"
@@ -165,11 +165,11 @@ def test_a_hidden_page_stays_asleep_and_a_frames_stopped_sound_wakes_on_a_tap_in
     page.evaluate("delete document.hidden")
     # Two contexts stopped at once, the page's and the frame's: a tap in the frame wakes the frame's.
     inner = page.frames[1]
-    inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani")
+    inner.wait_for_function("window.ready && AudioNode.prototype.__aiPelitAani", polling=FRAME_POLL)
     inner.evaluate("ac.createGain().connect(ac.destination)")
     inner.evaluate("ac.suspend()")
-    inner.wait_for_function("ac.state === 'suspended'")
+    inner.wait_for_function("ac.state === 'suspended'", polling=FRAME_POLL)
     page.mouse.click(180, 450)
-    inner.wait_for_function("ac.state === 'running'", timeout=3000)
+    inner.wait_for_function("ac.state === 'running'", timeout=3000, polling=FRAME_POLL)
     page.mouse.click(180, 100)
-    page.wait_for_function("ac.state === 'running'", timeout=3000)
+    page.wait_for_function("ac.state === 'running'", timeout=3000, polling=FRAME_POLL)
