@@ -74,15 +74,37 @@ def test_each_dart_starts_a_new_glide(site, browser):
     relay, pages = room(site, browser, ["Eero", "Aino"])
     host, guest = pages
     start(pages)
-    host.wait_for_function("mine() && !banner && !flying && dartsLeft === 3", timeout=8000)
-    host.evaluate("() => { HAND.shaky = 0; HAND.steady = 0; HAND.tiring = 0; aim = { x: -80, y: 0 }; hold = { id: 99, lx: 0, ly: 0, t: 0.5 }; }")
-    guest.wait_for_function("seen && seen.size() > 2", timeout=5000)
-    # The dart flies: the guest drops the old sight, and the next one's first spot is drawn as it is.
-    host.evaluate("() => { const h = hold; hold = null; release(aim.x, aim.y); aim = { x: 80, y: 0 }; }")
-    guest.wait_for_function("seen === null", timeout=5000)
-    host.evaluate("() => { while (flying) step(1 / 60); hold = { id: 99, lx: 0, ly: 0, t: 0.5 }; }")
-    guest.wait_for_function("seen && seen.size() > 0", timeout=5000)
-    guest.wait_for_function("(() => { const s = seen.at(); return s && s.x > 70; })()", timeout=2000)
+    # Aino's turn: the host watches her sight, and its own throwAt() of her dart drops the track.
+    host.evaluate("() => { for (let i = 0; i < 3; i++) { release(0, 0); while (flying) step(1 / 60); } }")
+    guest.wait_for_function("mine() && !banner && !flying && dartsLeft === 3", timeout=8000)
+    host.evaluate(SPY)
+    guest.evaluate("() => { HAND.shaky = 0; HAND.steady = 0; HAND.tiring = 0; aim = { x: -80, y: 0 }; hold = { id: 99, lx: 0, ly: 0, t: 0.5 }; }")
+    host.wait_for_function("seen && seen.size() > 2", timeout=5000)
+    guest.evaluate("() => { hold = null; release(-80, 0); aim = { x: 80, y: 0 }; }")
+    host.wait_for_function("turnDarts.length === 1 && seen === null", timeout=5000)
+    host.evaluate("drawn.splice(0)")
+    guest.evaluate("hold = { id: 99, lx: 0, ly: 0, t: 0.5 }")
+    host.wait_for_function("drawn.length > 0", timeout=5000)
+    # The next dart's first sight is drawn where it is, not on a glide from -80.
+    assert host.evaluate("drawn[0][1]") > 75
+    for p in pages:
+        assert p.errors == []
+        p.context.close()
+
+
+def test_the_computer_taking_a_turn_starts_a_new_track(site, browser):
+    relay, pages = room(site, browser, ["Eero", "Aino", "Ville"])
+    host, aino, ville = pages
+    start(pages)
+    host.evaluate("() => { for (let i = 0; i < 3; i++) { release(0, 0); while (flying) step(1 / 60); } }")
+    aino.wait_for_function("mine() && !banner && !flying && dartsLeft === 3", timeout=8000)
+    aino.evaluate("() => { HAND.shaky = 0; HAND.steady = 0; HAND.tiring = 0; aim = { x: -80, y: 0 }; hold = { id: 99, lx: 0, ly: 0, t: 0.5 }; }")
+    ville.wait_for_function("seen && seen.size() > 2", timeout=5000)
+    # The host's computer sends for the same turn: Ville's phone starts a new track for it.
+    aino.evaluate("hold = null")
+    host.evaluate("R.send({ t: 'a', round: net.round, x: 50, y: 0, s: stamp(), w: R.me })")
+    ville.wait_for_function("seen && seen.size() === 1", timeout=5000)
+    assert ville.evaluate("seenBy") == host.evaluate("R.me")
     for p in pages:
         assert p.errors == []
         p.context.close()

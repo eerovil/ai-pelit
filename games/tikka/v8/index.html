@@ -398,10 +398,14 @@ function release(tx, ty) {
 const r1 = n => Math.round(n * 10) / 10;
 // The thrower's sight on the other phones (v8, #539): each 'a' carries the sending phone's clock
 // (s), and the sight is drawn from lib/sulava-1 a moment back, gliding between the spots instead
-// of jumping to each one as it arrives. A new turn or dart (seen = null) starts a new track.
+// of jumping to each one as it arrives. A new turn or dart (seen = null) starts a new track, and so
+// does another phone taking over the turn (w, the sender: the computer on the host for an away
+// friend, and back), whose clock the old track never learnt.
 const stamp = () => Math.round(AiPelitSulava.now() * 1000) / 1000;
+let seenBy = null;
 function see(m) {
-  if (!seen) seen = AiPelitSulava.track({ keys: ['x', 'y'] });
+  if (seen && seenBy !== m.w) seen = null;
+  if (!seen) { seen = AiPelitSulava.track({ keys: ['x', 'y'] }); seenBy = m.w; }
   seen.push(typeof m.s === 'number' ? m.s : null, { x: +m.x || 0, y: +m.y || 0 });
 }
 function state() {
@@ -524,7 +528,7 @@ function step(dt) {
     if (aimSend <= 0) {
       aimSend = 0.1;
       const w = sway(hold ? hold.t : HAND.settled);
-      R.send({ t: 'a', round: net.round, x: r1(aim.x + w.x), y: r1(aim.y + w.y), s: stamp() });
+      R.send({ t: 'a', round: net.round, x: r1(aim.x + w.x), y: r1(aim.y + w.y), s: stamp(), w: R.me });
     }
   }
   if (flying) {
