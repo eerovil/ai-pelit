@@ -160,7 +160,9 @@ function hostClaim(from) {
 // ---- Each frame, in a room ----
 function netTick(dt) {
   if (!net || !net.ready || net.res || !world) return;
-  if (RM.paused) { acc = 0; return; }   // every hero stands, the clock too
+  // Every hero stands, the clock too; touches are ignored (playing()) and any held or queued
+  // one is dropped, so nothing made during the pause acts when it ends.
+  if (RM.paused) { acc = 0; stick = null; webPtr = null; lookPtr = null; jumpQ = false; return; }
   acc += dt;
   let steps = 0;
   const me = net.me, h = world.hero;

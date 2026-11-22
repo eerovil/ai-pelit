@@ -69,7 +69,7 @@ function buttons() {
 }
 const gapTo = (b, e) => Math.hypot(e.clientX - b.x, e.clientY - b.y) - b.r;
 const playing = () => (mode === 'play' && !!world) ||
-  (mode === 'netplay' && world && typeof net !== 'undefined' && net && !net.res && !!net.me);
+  (mode === 'netplay' && world && typeof net !== 'undefined' && net && !net.res && !!net.me && !RM.paused);
 // Each finger gets its own job. A button already held by one thumb is not offered to the other,
 // so a second thumb landing near the first still does what it is near (#529: a jump tapped right
 // beside the held Seitti took the web over instead).

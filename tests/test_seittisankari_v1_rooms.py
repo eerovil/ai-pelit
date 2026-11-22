@@ -34,6 +34,7 @@ def phone(site, browser):
         p.wait_for_function("typeof mode !== 'undefined'")
         return p
 
+    make.relay = relay
     yield make
     for c in contexts:
         c.close()
@@ -140,3 +141,17 @@ def test_a_guest_who_reloads_comes_back_where_it_was(phone):
     assert abs(guest.evaluate("world.hero.x") - x0) < 1
     assert guest.evaluate("net.goal") == host.evaluate("net.goal")
     assert host.errors == [] and guest.errors == []
+
+
+def test_touches_during_a_pause_do_nothing_when_it_ends(phone):
+    host, guest = room(phone, 2)
+    start([host, guest])
+    host.evaluate("() => { stick = { id: 9, x0: 50, y0: 500, x: 50, y: 440 }; webPtr = 8; }")   # thumbs held
+    phone.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.paused", timeout=10000)
+    host.wait_for_function("stick === null && webPtr === null")   # held ones are let go
+    b = host.evaluate("buttons()")
+    host.evaluate("""([x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent('pointerdown',
+      { pointerId: 3, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))""", [b["jump"]["x"], b["jump"]["y"]])
+    assert host.evaluate("[jumpQ, webPtr, stick]") == [False, None, None]
+    assert host.errors == []
