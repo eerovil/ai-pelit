@@ -1251,6 +1251,8 @@
         // A watching phone's aim and held messages go first, so the disc they launch steps this frame.
         if (online) watchTick();
         catchUp(now);
+        // A watcher's gap ending in step() starts the next target with its start sight: the track's goes back.
+        if (online) watchAim();
         draw();
         // watchTick() may have woken a frame already (a held disc launched): only one loop runs.
         if (!raf && (active() || watchBusy()) && !document.hidden) raf = requestAnimationFrame(frame);

@@ -205,6 +205,36 @@ def test_a_watcher_holds_the_disc_until_its_sight_is_there(phones):
     assert not guest.errors
 
 
+def test_no_frame_on_a_watcher_draws_the_targets_start_sight(phones):
+    # Review of #546: a held `fly` (and a watcher's gap ending) rebuilt the round, whose prepare()
+    # reset the sight to the target's start, and that frame was drawn before the track's aim came back.
+    host, guest = room(phones, 2)
+    # Real frames on the watcher (the fixture stubs them out), drawing through the game's own loop.
+    guest.evaluate("""requestAnimationFrame=f=>setTimeout(()=>f(performance.now()),16);
+        catchUp=t=>{const e=Math.max(0,(t-lastTime)/1000);lastTime=t;step(e)};
+        window.drawn=[];const d0=draw;draw=()=>{drawn.push([round&&round.aim.yaw,round&&round.phase]);d0()};
+        window.preps=[];const p0=prepare;prepare=()=>{p0();preps.push(round.aim.yaw)};""")
+    start = host.evaluate('round.aim.yaw')
+    host.evaluate('drag(60,0);lastAim=0;drag(1,0)')
+    moved = host.evaluate('round.aim.yaw')
+    assert abs(moved - start) > 0.2
+    guest.wait_for_function('Math.abs(round.aim.yaw-%r)<1e-6' % moved, polling=50)
+    guest.evaluate('drawn=[];wake()')
+    host.evaluate('call()')
+    guest.wait_for_function("round.phase==='flight'&&drawn.some(d=>d[1]==='flight')", polling=50)
+    # The disc ends on the shooter; the watcher's gap then ends in its own step() and shows the next target.
+    host.evaluate("for(const d of round.discs)resolveDisc(d,true);round.shots=[];round.phase='gap';round.gap=0;advance()")
+    guest.wait_for_function("round.index===1&&round.phase==='ready'", polling=50, timeout=10000)
+    guest.wait_for_timeout(300)
+    seen, preps = guest.evaluate('[drawn,preps]')
+    assert any(p == 'flight' for _, p in seen) and any(p == 'gap' for _, p in seen), seen
+    # The watcher's own prepare() ran on the fly and on the next target; each picks its own start
+    # (the disc's launch varies), so a frame showing one of those is the reset, not the shooter's sight.
+    assert len(preps) >= 2, preps
+    assert not [y for y, _ in seen if any(abs(y - q) < 1e-9 for q in preps)], (preps, seen)
+    assert not guest.errors
+
+
 def test_only_the_phone_on_turn_counts_and_a_message_twice_is_one(phones):
     pages = room(phones, 3)
     host, guest, other = pages

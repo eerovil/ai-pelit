@@ -20,6 +20,7 @@ let aimTrack = null,
   trackSeq = 0,
   held = [],
   aimHeard = -9,
+  aimNow = null,
   flushTimer = 0;
 const cur = () => match.players[match.turn];
 const mine = () => cur().id === R.me;
@@ -61,16 +62,21 @@ function liveAim(force, jump) {
 // A watching phone, each frame: the aim the track draws now, and the messages whose moment it reached.
 function watchTick() {
   if (!aimTrack) return;
-  const a = aimTrack.at(),
-    t = aimTrack.time;
-  if (a && round && round.watch && round.seq === trackSeq) {
-    round.aim.yaw = a.yaw;
-    round.aim.pitch = a.pitch;
-  }
+  aimNow = aimTrack.at();
+  const t = aimTrack.time;
   while (held.length && (t === null || !(held[0].at > t))) play(held.shift());
+  watchAim();
   // rAF stops on a hidden page, and between draws: the held hits still land, on a timer.
   clearTimeout(flushTimer);
   flushTimer = held.length ? setTimeout(watchTick, 40) : 0;
+}
+// The sampled aim goes on the round last: a held `fly` (syncView, view, prepare) and a watcher's gap
+// ending in step() both reset round.aim to a target's start, which would show for one frame.
+function watchAim() {
+  if (aimNow && round && round.watch && round.seq === trackSeq) {
+    round.aim.yaw = aimNow.yaw;
+    round.aim.pitch = aimNow.pitch;
+  }
 }
 // Keep drawing while the sight may still glide: its delay, the guess past the last aim, the easing.
 function watchBusy() {
@@ -78,6 +84,7 @@ function watchBusy() {
 }
 function dropTrack() {
   aimTrack = null;
+  aimNow = null;
   trackSeq = 0;
   held = [];
   clearTimeout(flushTimer);
@@ -193,6 +200,7 @@ function hear(m) {
     // A new turn, and a new phone's clock: what the last turn still held is drawn now.
     while (held.length) play(held.shift());
     aimTrack = AiPelitSulava.track({ keys: ["yaw", "pitch"] });
+    aimNow = null;
     trackSeq = m.seq;
   }
   if (m.aim && Number.isFinite(m.aim.yaw) && Number.isFinite(m.aim.pitch)) {
