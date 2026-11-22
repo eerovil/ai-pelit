@@ -170,7 +170,8 @@ function startTrick(sl, type, hill) {
 // Time a trick needs before the landing: what is left of the one turning now, and LAND_DONE of the new one.
 function trickFits(hill, sl, type) {
   const now = sl.trick ? Math.max(0, TRICKS[sl.trick.type].dur - sl.trick.t) : 0;
-  return timeToLand(hill, sl) >= now + TRICKS[type].dur * LAND_DONE;
+  // 0.05 s to spare: timeToLand() steps in 1/30 s and leaves out the air's drag, so it may be a little late.
+  return timeToLand(hill, sl) >= now + TRICKS[type].dur * LAND_DONE + 0.05;
 }
 // The grab is not begun either when the landing is too near to let go in time (the "Päästä irti!" warning).
 const GRAB_LATE = 0.45;
@@ -249,7 +250,7 @@ function land(hill, sl) {
 
 // The sled's turn for the trick going on; returns how far it has gone, 0 to 1.
 function trickPose(sl) {
-  const T = TRICKS[sl.trick.type], p = Math.min(1, sl.trick.t / T.dur), e = p * p * (3 - 2 * p);
+  const T = TRICKS[sl.trick.type], p = Math.min(1, sl.trick.t / T.dur), e = smooth(p);
   sl.flip = sl.trick.type === 'front' ? e * TAU : sl.trick.type === 'back' ? -e * TAU : 0;
   sl.spin = sl.trick.type === 'spinL' ? e * TAU : sl.trick.type === 'spinR' ? -e * TAU : 0;
   return p;
@@ -369,7 +370,8 @@ function timeToLand(hill, sl) {
 
 // ---- The computer's sledders ----
 // One aims at the jumps ahead, steers round what is in its way, and in the air does a trick when
-// it thinks there is time; it misjudges now and then (`err`), and falls like anyone.
+// it thinks there is time; it misjudges now and then (`err`), though from v4 (#517) a trick too late
+// for the landing is refused it as it is a player, and it falls like anyone on a tree, a rock or a snowman.
 function cpuBrain(skill, seed) { return { skill, r: rng(seed), aim: 0, aimFor: -1, think: 0 }; }
 function cpuDrive(hill, sl, dt) {
   const b = sl.cpu;

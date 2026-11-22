@@ -1,6 +1,6 @@
 # Pulkkamäki: one run down the hill
 
-How one run of Pulkkamäki plays (v3, #475, #480). Each player slides down a snowy Christmas-evening hill on
+How one run of Pulkkamäki plays (v4, #475, #480, #517). Each player slides down a snowy Christmas-evening hill on
 a sled in 3D, seen through the rider's own eyes (or from behind, a menu choice): steering between spruces and jumps on the snow, tricks in the air,
 points for every trick landed and every present caught. Alone the player races three computer
 sledders; in a room 2–6 phones go down the same hill at the same time, and computer sledders fill
@@ -12,7 +12,9 @@ flowchart TD
   R[Huone: tekijä valitsee mäen, Aloita kierros] --> B
   B --> C[Sormi vetää vasemmalle tai oikealle: pulkka kääntyy ja pysyy siihen suuntaan]
   C --> D{Mitä edessä?}
-  D -- Hyppyri --> E[Ilmassa: pyyhkäisyt tekevät temput]
+  D -- Hyppyri tai pudotus --> E[Ilmassa: pyyhkäisyt tekevät temput]
+  C --> P[Pysähtynyt: napautus työntää käsillä]
+  P --> C
   D -- Kuusi, kivi tai lumiukko --> F[Kaatuminen: vauhti pois, putki katkeaa]
   D -- Lahjapaketti --> G[Lisäpisteitä]
   E --> H{Temppu valmiina ja ote irti alastulossa?}
@@ -31,7 +33,7 @@ flowchart TD
   class A,B,C blue
   class D,H,M,S amber
   class R,U,V violet
-  class E,G,I teal
+  class E,G,I,P teal
   class F rose
   class N,Q green
 ```
@@ -47,10 +49,11 @@ flowchart TD
 
 ## Boxes
 
-- **Valitse mäki, Laske!**: the menu (`showMenu()` in `ui.js`) offers five hills from v4 (#517; Kotimäki, Kuusikko, Tunturi, Rotko, Jyrkänne, `HILLS` in `world.js`; sideways in two columns); the next one opens once a run on the one before scores its `open` points (2500, 4000, 3000, 4000). Rotko and Jyrkänne have long steep stretches (`steep`, eased in and out over their first and last quarter) and drops (`drop`, a cliff 2 m long); the sled leaves the snow when the ground falls more than 6 cm below where the slope behind it would have gone in one step (`step()`, from v4), and at over 2 m/s, so a drop throws a fast sled and a steep stretch keeps it on the snow, saved as `ai-pelit:pulkkamaki:auki`. The last hill is saved as `ai-pelit:pulkkamaki:maki`. "📷 Silmistä" / "📷 Takaa" picks the view, saved as `ai-pelit:pulkkamaki:kamera` (`fp` or `back`); "👕 Asu" the outfit (`outfits.js`); "👥 Pelaa kavereiden kanssa" opens the room (`AiPelitRooms.open()`).
+- **Valitse mäki, Laske!**: the menu (`showMenu()` in `ui.js`) offers five hills from v4 (#517; Kotimäki, Kuusikko, Tunturi, Rotko, Jyrkänne, `HILLS` in `world.js`; sideways in two columns); the next one opens once a run on the one before scores its `open` points (2500, 4000, 3000, 4000), saved as `ai-pelit:pulkkamaki:auki`. Rotko and Jyrkänne have long steep stretches (`steep`, eased in and out over their first and last quarter) and drops (`drop`, a cliff 2 m long); the sled leaves the snow when the ground falls more than 6 cm below where the slope behind it would have gone in one step (`step()`, from v4), and at over 2 m/s, so a drop throws a fast sled and a steep stretch keeps it on the snow. The last hill is saved as `ai-pelit:pulkkamaki:maki`. "📷 Silmistä" / "📷 Takaa" picks the view, saved as `ai-pelit:pulkkamaki:kamera` (`fp` or `back`); "👕 Asu" the outfit (`outfits.js`); "👥 Pelaa kavereiden kanssa" opens the room (`AiPelitRooms.open()`).
 - **Huone: tekijä valitsee mäen, Aloita kierros**: `rooms.js` with `data-min="2" data-max="6"`; under the player list (`roomControls()` in `net.js`, `RM.extra()`) the host picks one of its open hills, the others see "Huoneen tekijä (<nimi>) valitsee mäen.". The host makes a sled for each player and computer sledders up to four sleds; every phone builds the same hill from the host's hill number (`buildHill(n)` is fixed per hill) and takes the sleds from the host's first message.
-- **Sormi vetää vasemmalle tai oikealle: pulkka kääntyy**: on the snow, how far the finger is from where it touched down sets how fast the sled turns (`steerOf()` in `ui.js`); when the finger lifts the sled keeps the heading it has (Eero's choice: no steering by itself), also through the course's bends, at most about 75° from the course (`MAX_YAW`). After a fall it points down the course again. Gravity gives the speed, and turning hard brakes a little. From v4 (#517) a sled on the snow under `PUSH_BELOW` (3 m/s), not falling and not over the line, is pushed on by each touch (`pushOff()` in `world.js`, called on `pointerdown` in `ui.js`): +1.6 m/s, at most up to 4.2 m/s, with both arms reaching to the snow; the HUD says "Napauta: työnnä käsillä" under 2.2 m/s. The computer pushes too below 1.5 m/s.
-- **Ilmassa: pyyhkäisyt tekevät temput**: in the air a swipe starts a trick: up a front flip, down a back flip, left or right a spin; holding a finger still is a grab (Superman) that scores while held. A trick plays out over a set time, and the next one may follow once it is done. From v4 (#517) a trick is not begun, nor queued, when the predicted time to the snow (`timeToLand()`) is less than what is left of the trick turning now plus `LAND_DONE` of the new one (`trickFits()`), and a grab not when less than `GRAB_LATE` (0.45 s) is left; the swipe then shows "Ei ehdi!". The computer's tricks pass the same check.
+- **Sormi vetää vasemmalle tai oikealle: pulkka kääntyy**: on the snow, how far the finger is from where it touched down sets how fast the sled turns (`steerOf()` in `ui.js`); when the finger lifts the sled keeps the heading it has (Eero's choice: no steering by itself), also through the course's bends, at most about 75° from the course (`MAX_YAW`). After a fall it points down the course again. Gravity gives the speed, and turning hard brakes a little.
+- **Pysähtynyt: napautus työntää käsillä**: from v4 (#517) a sled on the snow under `PUSH_BELOW` (3 m/s), not falling and not over the line, is pushed on by each touch (`pushOff()` in `world.js`, called on `pointerdown` in `ui.js`, not while a room is paused): +1.6 m/s, at most up to 4.2 m/s, with both arms reaching to the snow for `pushT` (0.35 s, sent to the other phones as the sled's 20th value, so they see the arms too); the HUD says "Napauta: työnnä käsillä" under 2.2 m/s. The computer pushes too below 1.5 m/s.
+- **Ilmassa: pyyhkäisyt tekevät temput**: in the air a swipe starts a trick: up a front flip, down a back flip, left or right a spin; holding a finger still is a grab (Superman) that scores while held. A trick plays out over a set time, and the next one may follow once it is done. From v4 (#517) a trick is not begun, nor queued, when the predicted time to the snow (`timeToLand()`) is less than what is left of the trick turning now plus `LAND_DONE` of the new one and 0.05 s to spare (`trickFits()`), and a grab not when less than `GRAB_LATE` (0.45 s) is left; the swipe then shows "Ei ehdi!" (not when it was refused for a grab still held). The computer's tricks pass the same check.
 - **Temppu valmiina ja ote irti alastulossa?**: `land()` in `world.js`: landing with a grab still held, or with a trick less than `LAND_DONE` (80 %) done, is a fall; a trick at least that far done counts as finished. There is no separate angle check. A generous margin, so a near miss lands (docs/making-games.md, "Be generous with timing").
 - **Pisteet: temppu kertaa putki**: each trick has its points; several in one jump multiply them, and landing clean jumps in a row raises the streak (putki), which a fall resets.
 - **Kaatuminen: vauhti pois, putki katkeaa**: the sled tips and the rider rolls in the snow for about a second; the trick in the air scores nothing.

@@ -340,3 +340,16 @@ def test_a_stopped_sled_is_pushed_on_with_the_hands(site, context):
     assert 3 <= got[1] <= 4.2
     assert got[2:] == [False, False]
     assert page.errors == []
+
+
+def test_a_hand_push_is_sent_to_the_other_phones(site, context):
+    # The arms of a push go with the sled's message (net.js pack/unpack), so friends see it too.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const a = newSled('a', 'a'); a.v = 0.6; pushOff(a);
+      const b = newSled('b', 'b'); unpack(b, pack(a));
+      const c = newSled('c', 'c'); unpack(c, pack(newSled('d', 'd')));
+      return [b.pushT, c.pushT];
+    }""")
+    assert got == [0.35, 0]
+    assert page.errors == []

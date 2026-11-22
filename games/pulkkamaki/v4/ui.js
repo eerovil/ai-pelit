@@ -169,7 +169,7 @@ c.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, p);
   if (!p.air) steerFinger = e.pointerId;
   // A sled nearly stopped on the snow: each touch is a push with the hands (#517).
-  if (mode === 'run' && me && !p.air && pushOff(me)) teach.pushed = true;
+  if (mode === 'run' && me && !p.air && !(net && window.AiPelitRooms && AiPelitRooms.paused) && pushOff(me)) teach.pushed = true;
 });
 c.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId);
@@ -198,7 +198,7 @@ function airGesture(p, now, up) {
   if (d >= SWIPE) {
     const type = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'spinL' : 'spinR') : (dy < 0 ? 'front' : 'back');
     if (startTrick(me, type, hill)) { p.used = true; teach.swiped = true; }
-    else if (me.fallT <= 0 && !me.fin) { p.used = true; lateT = 0.8; }   // too near the landing (#517)
+    else if (me.fallT <= 0 && !me.fin && !me.grab) { p.used = true; lateT = 0.8; }   // too near the landing (#517)
   }
 }
 function checkHolds(now) {
