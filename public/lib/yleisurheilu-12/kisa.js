@@ -13,7 +13,8 @@
 // New in yleisurheilu-12 (#480): the athlete on turn glides on the other phones. A game that also
 // loads lib/sulava-1 (before this file) passes `glide: { keys: ['x'], angles: [], jump: 3,
 // spot: m => m.t === 'p' ? { x: m.a[0] } : null }`: K.send stamps each live message with the
-// sending phone's clock (`st`), each phone watching puts the spots `spot` reads from them on one
+// sending phone's stamp clock (`st`: its own clock, less the frames' stalls, see stampTick; `glide.cap`, 0.05
+// by default, is how far one frame moves the game), each phone watching puts the spots `spot` reads from them on one
 // track per turn, and K.glide() gives, each frame, where the track draws the athlete a moment back
 // (null before the first spot). The watching phone hears the live messages (watch) only when the
 // track has drawn up to their moment, so a take-off or a release does not cut the glide short and
@@ -483,6 +484,24 @@
       o.watch(m);
     }
     K.glide = () => G.out;
+    // The clock K.send stamps with. The events move their athlete by a frame's dt held to 0.05 s (`glide.cap`), so
+    // after a stalled frame it has gone less far than the wall clock says; stamped on the wall clock, the other
+    // phones guessed it on at full speed through the stall and then drew it back (Aitajuoksu v13, #480). So the
+    // stamp moves on with the same held dt, from a frame loop of its own, and catches up with the wall clock at
+    // most half a dt more a frame: a phone that stays above 14 frames a second keeps the wall clock, which the
+    // other phones' tracks learn their offset from. A page that slept a second or more jumps to the wall clock.
+    const CAP = o.glide && Number.isFinite(o.glide.cap) ? o.glide.cap : 0.05;
+    let stampT = SL ? SL.now() : 0, stampLast = null;
+    function stampTick(ms) {
+      const t = ms / 1000;
+      if (stampLast !== null) {
+        const dt = Math.min(CAP, Math.max(0, t - stampLast)), lag = SL.now() - stampT - dt;
+        stampT += lag > 1 ? dt + lag : dt + Math.max(0, Math.min(dt / 2, lag));
+      }
+      stampLast = t;
+      requestAnimationFrame(stampTick);
+    }
+    if (SL) requestAnimationFrame(stampTick);
     K.isHost = () => !isNet() || R.isHost;
     const human = t => !!t && t.p !== null; // a friend is never the computer's (#297)
     K.human = human;
@@ -538,7 +557,7 @@
     // The turn's own messages: the host adds whose turn it is and sends them to every phone.
     K.send = m => {
       m.round = K.comp.room;
-      if (SL) m.st = SL.now();
+      if (SL) m.st = SL.now() - stampT > 1 ? SL.now() : Math.round(stampT * 1000) / 1000;
       if (R.isHost) R.send(Object.assign({ id: K.shownId }, m)); else R.send(m);
     };
     // A new record for this phone's player, saved at once; true when it is one.

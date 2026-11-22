@@ -32,3 +32,25 @@ def test_a_friends_run_up_glides_and_takes_off_where_the_glide_ends(site, browse
     rel = watcher.evaluate("th.relX")
     assert -0.05 < rel - last < 0.4, (rel, last)
     assert not athlete.errors and not watcher.errors, athlete.errors + watcher.errors
+
+
+def test_a_stalled_frame_on_the_athletes_phone_never_draws_them_back(site, browser):
+    """A busy phone misses frames: the game moves its athlete at most 0.05 s a frame, so after a stalled frame it has
+    gone less far than the wall clock says. lib/yleisurheilu-12 stamps the spots on a clock that moves the same way
+    and catches up slowly (stampTick): stamped on the wall clock, the watching phone guessed the athlete on at full
+    speed through the stall and then drew it back (9 m/s, then -5.9)."""
+    athlete, watcher = pair(site, browser, PATH)
+    watcher.evaluate(SAMPLE, ["th", "x"])
+    athlete.evaluate(DRIVE)
+    athlete.wait_for_function("th && th.mine && th.phase === 'run'", timeout=15000)
+    athlete.wait_for_timeout(600)
+    for _ in range(3):
+        athlete.evaluate("() => { const e = performance.now() + 200; while (performance.now() < e); }")
+        athlete.wait_for_timeout(300)
+    watcher.wait_for_function("th && th.phase === 'fly'", timeout=15000)
+    xs = watcher.evaluate("window.__xs")
+    run = [(t, x) for t, x, ph in xs if ph in ("run", "ready")]
+    back = [(round(t1, 2), round(b - a, 3)) for (_, a), (t1, b) in zip(run, run[1:]) if b < a - 1e-3]
+    assert not back, back
+    assert run[-1][1] - run[0][1] > 20, (run[0][1], run[-1][1])
+    assert not athlete.errors and not watcher.errors, athlete.errors + watcher.errors
