@@ -1,6 +1,6 @@
 # Pilkkiminen: one contest, from the first hole to the result
 
-How a contest of Pilkkiminen (ice fishing) plays, as of v5 (#345). On the ice the view is from
+How a contest of Pilkkiminen (ice fishing) plays, as of v7 (#536). On the ice the view is from
 above and follows the angler over a lake far bigger than the screen; at a hole it is from the side:
 the angler, the hole, and the water down to the bottom. Five minutes on the clock; each fish is drilled
 for, jigged in rhythm, struck and reeled in, and the biggest total catch wins. Alone three computer
@@ -76,7 +76,7 @@ flowchart TD
 
 ## Boxes
 
-- **Miten pelataan?**: the menu in `games/pilkki/v5/index.html`: **Aloita pilkkikisa** (`newContest()`), **Jatka kisaa** when a contest alone was left unfinished (kept every two seconds as `ai-pelit:pilkki:kisa3` by `keepContest()`, with where the angler stands, the holes and every fish; v1 and v2 keep their own under `kisa` and `kisa2`), or **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`).
+- **Miten pelataan?**: the menu in `games/pilkki/v7/index.html`: **Aloita pilkkikisa** (`newContest()`), **Jatka kisaa** when a contest alone was left unfinished (kept every two seconds as `ai-pelit:pilkki:kisa3` by `keepContest()`, with where the angler stands, the holes and every fish; v1 and v2 keep their own under `kisa` and `kisa2`), or **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`).
 - **Sinä ja kolme tietokoneen pilkkijää samalla järvellä**: `cpuAnglers()`: each rival walks to near a spot, drills a hole (it stays, and the player may fish it), fishes it a while and moves on; now and then it lands a fish in sight of its hole, and that fish is gone from the lake; how often, and how often the bigger of two, grows with the level (`rivalRate()`).
 - **Tutka valikossa: ei tutkaa, kaikuluotain tai tutka**: the `#gear` buttons, kept in `ai-pelit:pilkki:tutka` (`radar`). Without one no fish are drawn and a hole's depth is found when the jig touches the bottom (`bottom()`); the flasher (`kaikuluotain`) shows marks for the fish right under the hole, their width only roughly the size, and the depth (`drawFlasher()`); the sonar (`tutka`) shows blurred blobs round the hole, never exactly where the fish are (`shownFish()`). Both tell the depth on the ice where the angler stands.
 - **Jäällä: napauta kohtaa, ukko kävelee sinne**: `drawIce()` follows the angler (`me`) at about 36 m across the screen's short side (two fingers pinch it between about 100 m and a few metres, `setZoom()`; never the whole lake), on a lake of 260 × 190 m (`LAKE_W`, `LAKE_H`) with its depths from `depthAt()`; a finger lifted without moving sets where to walk (6 m/s, `walk()`), never past the shore (`onIce()`). With `?kalat` in the address every fish shows through the ice, pike and burbot lettered (`DEBUG`), for trying the game out. The others and every hole are drawn (`others()`, `allHoles()`).
