@@ -295,20 +295,22 @@ def paused_race(site, browser, first, after):
     guest.evaluate(SAMPLE, i)
     host.evaluate("window.__run = true")
     guest.wait_for_timeout(1200)
-    stop_host = lambda: host.evaluate("window.__pz = true")
-    stop_guest = lambda: guest.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
-    go_host = lambda: host.evaluate("window.__pz = false")
-    go_guest = lambda: guest.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
-    order = [(stop_host, stop_guest), (go_host, go_guest)] if first == "driver" else [(stop_guest, stop_host), (go_guest, go_host)]
-    for n, (a, b) in enumerate(order):
-        a()
-        guest.wait_for_timeout(250)  # the other phone hears it a quarter of a second later
-        b()
-        guest.wait_for_timeout(1200 if n == 0 else int(after * 1000))
+    # Each phone's pause lasts 1.45 s by its own timer, so both clocks stand as long (a phone's clock leaves out its
+    # own pause) however slow the test machine is to reach the second phone.
+    pause = """() => { window.__pzAt = performance.now() / 1000; window.__pz = true;
+      setTimeout(() => { window.__goAt = performance.now() / 1000; window.__pz = false; }, 1450); }"""
+    a, b = (host, guest) if first == "driver" else (guest, host)
+    a.evaluate(pause)
+    guest.wait_for_timeout(250)  # the other phone hears it a quarter of a second later, and so its end too
+    b.evaluate(pause)
+    guest.wait_for_function("window.__goAt !== undefined && !window.__pz", timeout=10000)
+    host.wait_for_function("window.__goAt !== undefined && !window.__pz", timeout=10000)
+    guest.wait_for_timeout(int(after * 1000))
     guest.evaluate("window.__stop = true")
     host.evaluate("window.__run = false")
     errors = [e for p in (host, guest) for e in p.errors]
     assert not errors, errors
+    guest.pauses = (host.evaluate('pz.off'), guest.evaluate('pz.off'))  # how long each phone's clock stood
     return guest
 
 
@@ -350,8 +352,15 @@ def test_after_a_pause_the_friend_s_kart_is_drawn_as_far_behind_its_newest_spot_
     before = [b for t, b in bh if pz_at - 1.2 <= t <= pz_at - 0.3]
     after = [b for t, b in bh if go_at + 1 <= t <= go_at + 2]
     assert len(before) >= 5 and len(after) >= 5, (len(before), len(after))
-    shown = (round(mean(before), 3), round(min(after), 3), round(mean(after), 3))
-    assert mean(after) > mean(before) - 0.08, shown
+    shown = (round(mean(before), 3), round(min(after), 3), round(mean(after), 3), [round(x, 3) for x in guest.pauses])
+    # Each phone's clock leaves out its own pause. When the driver's stood longer (in CI run 44983834984 the test
+    # told each phone by hand, and was about 0.55 s slower to tell the driver it ended), its stamps come that much
+    # later on the watcher's clock, and for 2 s the watcher's track, which learnt how early a spot can come before
+    # the pause, draws the kart that much nearer, or ahead of, its newest spot: by 0.17 and 0.49 s, measured, for a
+    # clock that stood 0.29 and 0.6 s longer. A known limit (the PR's); each phone now times its own pause, and what
+    # is left of a difference is allowed for.
+    skew = max(0, guest.pauses[0] - guest.pauses[1])
+    assert mean(after) > mean(before) - skew - 0.08, shown
 
 
 def test_spots_held_in_a_pause_with_no_frame_drawn_go_on_the_track_when_it_ends(site, browser):
