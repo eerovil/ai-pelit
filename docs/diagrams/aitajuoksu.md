@@ -26,6 +26,8 @@ v11 (#337, `aanet-4`) has no crowd: the finish is the quiet `onnistui` blip at 0
 
 v12 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v13 (#480) draws the other phones' runners from `lib/sulava-1` (`sulava-liike.md`, `games/aitajuoksu/v13/index.html`): each runner this phone hears rather than moves has a track (`tr`, keys `x`, `y`, `jump` 5 m), and `drawnSpots()` swaps the drawn spot in around `drawFrame()`, a moment back, gliding between the spots heard. v12 put each runner at its newest spot as it came and carried it on at its speed, so a spot that came late pulled it back, and a jump rose and fell in 12 steps a second. A guest's `p` carries its clock (`st`); the host's `s` carries its own (`st`) and each friend's stamp passed on (`sts`). The race itself (places, the host's end of the race) keeps the newest spot. A runner's track starts afresh when the computer takes it over or gives it back (`src`); the host draws a runner its computer runs as it is.
+
 ```mermaid
 flowchart TD
   V[Valitse matka ja aidat] --> A[Juokse! tai Aloita kierros]
