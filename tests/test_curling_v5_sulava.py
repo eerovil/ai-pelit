@@ -4,6 +4,7 @@ carried each on at its speed and chased the host's newest spot); every phone dra
 thrower drags) the same way (v4 drew each spot as it came, 10 and 8 times a second). The rules keep the newest spot."""
 
 import json
+import pytest
 import shutil
 from statistics import mean, median, pstdev
 
@@ -232,5 +233,99 @@ def test_lifting_the_finger_sends_the_aim_where_it_left(site, browser):
     aino.evaluate("net.sendT = 100; aim.x = 0.77; aim.w = 0.4; up({ pointerId: 99 })")
     host.wait_for_function("Math.abs(aim.x - 0.77) < 0.01 && Math.abs(aim.w - 0.4) < 0.01", timeout=3000)
     assert host.evaluate("phase") == "aim"
+    errors = [e for p in (host, aino) for e in p.errors]
+    assert not errors, errors
+
+
+# Fakes the room's pause (a phone away), which rooms.js sets: `window.__pz` on a phone is its AiPelitRooms.paused.
+PAUSE = """() => { window.__pz = false;
+  Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
+# A clock that counts whole milliseconds, as Safari's and Firefox's do.
+WHOLE_MS = """() => { const n = performance.now.bind(performance); AiPelitSulava.now = () => Math.floor(n()) / 1000; }"""
+# The thrower's finger drags the broom across at 0.6 m a second of the match's own time (the steps it runs), so it
+# stands while the match is paused, and the aim she sends after the pause goes on from where it stood.
+DRAG_STEPS = """() => { drag.id = 99; aim.x = -1.5; const u = window.guestUpdate;
+  window.guestUpdate = dt => { if (drag.id === 99) { aim.x += 0.6 * dt; aim.w = 0.5; aimShown = true; } u(dt); }; }"""
+
+
+def pause_both(first, then, watcher):
+    """The room pauses and goes on, each heard by the two phones a quarter of a second apart, `first` first both
+    times (as when its link is the quicker). The watcher marks when its own pause starts and ends."""
+    def stop(p):
+        p.evaluate("window.__pzAt = performance.now() / 1000; window.__pz = true")
+
+    def go(p):
+        p.evaluate("window.__goAt = performance.now() / 1000; window.__pz = false")
+    for n, step in enumerate((stop, go)):
+        step(first)
+        watcher.wait_for_timeout(250)
+        step(then)
+        watcher.wait_for_timeout(1200)
+    return watcher.evaluate("[window.__xs, window.__pzAt, window.__goAt]")
+
+
+def stands_then_goes_on(xs, pz_at, go_at, fast):
+    """Drawn frames ([t, x, y, ...]) stand still through the watcher's pause, go on after it with no jump (never
+    much faster than `fast`, m/s, more over a frame the test machine was late with), and do move on."""
+    held = [(t, x, y) for t, x, y, *_ in xs if pz_at + 0.02 <= t <= go_at]
+    assert len(held) >= 5 and held[-1][0] - held[0][0] >= 0.8, [round(t - pz_at, 3) for t, _, _ in held]
+    spread = max(((x - held[0][1]) ** 2 + (y - held[0][2]) ** 2) ** 0.5 for _, x, y in held)
+    assert spread < 0.005, spread
+    after = [f for f in xs if f[0] > pz_at - 0.3]
+    steps = [(((c - a) ** 2 + (d - b) ** 2) ** 0.5, t2 - t1, t2) for (t1, a, b, *_), (t2, c, d, *_) in zip(after, after[1:])]
+    jumps = [(round(m, 3), round(dt, 3), round(t - go_at, 3)) for m, dt, t in steps if m > 0.02 and m > 1.5 * fast * dt]
+    assert not jumps, jumps
+    moved = [f for f in xs if f[0] > go_at + 0.6]
+    assert moved and ((moved[-1][1] - held[-1][1]) ** 2 + (moved[-1][2] - held[-1][2]) ** 2) ** 0.5 > 0.1, moved[-1:]
+
+
+BOTH = [pytest.param(ms, first, id=f"{first}-first-{'whole-ms' if ms else 'chromium'}-clock")
+        for ms in (False, True) for first in ("watcher", "mover")]
+
+
+@pytest.mark.parametrize("ms,first", BOTH)
+def test_a_paused_room_holds_a_sliding_stone_where_a_guest_draws_it(site, browser, ms, first):
+    """The host's stone slides; a phone is away, so the room pauses and the slide stands, and goes on. The guest's
+    drawing stands with it: its track's clock stands while paused, so the stone is not guessed on past the host's
+    last spot (0.25 s at most) and pulled back when the slide goes on. When the guest hears the pause first, the
+    host's last spots come in its pause; when the host goes on first, its first spots after do: either way they
+    wait, and go on the track as the guest goes on, with no jump. Also on a clock of whole milliseconds."""
+    host, aino = phones(site, browser)
+    for p in (host, aino):
+        p.evaluate(PAUSE)
+    if ms:
+        for p in (host, aino):
+            p.evaluate(WHOLE_MS)
+    host.evaluate(JITTER)
+    aino.evaluate(SAMPLE, STONE)
+    host.evaluate("doThrow({ x: 0.4, w: 0.75, spin: 1 })")
+    aino.wait_for_function("window.__xs.length >= 40", timeout=10000)
+    xs = aino.evaluate("window.__xs")
+    fast = max(((c - a) ** 2 + (d - b) ** 2) ** 0.5 / (t2 - t1) for (t1, a, b, _), (t2, c, d, _) in zip(xs[10:], xs[11:]) if t2 > t1)
+    xs, pz_at, go_at = pause_both(*((aino, host) if first == "watcher" else (host, aino)), aino)
+    assert host.evaluate("phase") == "slide"
+    stands_then_goes_on(xs, pz_at, go_at, max(fast, 1))
+    errors = [e for p in (host, aino) for e in p.errors]
+    assert not errors, errors
+
+
+@pytest.mark.parametrize("ms,first", BOTH)
+def test_a_paused_room_holds_a_friends_aim_where_the_host_draws_it(site, browser, ms, first):
+    """Aino drags the broom; the room pauses and goes on. The host's drawing of her aim stands through its pause
+    and goes on from there. When the host hears the pause first, her last aims come in its pause; when she goes on
+    first, her first ones after do: they wait, and go on the track as the host goes on."""
+    host, aino = phones(site, browser)
+    for p in (host, aino):
+        p.evaluate(PAUSE)
+    if ms:
+        for p in (host, aino):
+            p.evaluate(WHOLE_MS)
+    aino.evaluate(JITTER)
+    host.evaluate(SAMPLE, AIM)
+    aino.evaluate(DRAG_STEPS)
+    host.wait_for_function("window.__xs.length >= 40 && aimTr.size() > 5", timeout=10000)
+    xs, pz_at, go_at = pause_both(*((host, aino) if first == "watcher" else (aino, host)), host)
+    aino.evaluate("drag.id = null")
+    stands_then_goes_on(xs, pz_at, go_at, 0.6)
     errors = [e for p in (host, aino) for e in p.errors]
     assert not errors, errors
