@@ -75,7 +75,7 @@ flowchart TD
   flies the plane just flown (`p.kind`); only a flight picked in the menu takes the menu's plane. Nothing is
   saved during it, and turning the phone keeps it.
 - **Kone kiitoradan päässä, moottori käy**: looking around (`LOOK` in `draw3d.js`): a finger put down
-  on the free part of the screen (not the stick's left side below the top strip, the throttle or a
+  on the free part of the screen (not the stick's area, `L.zoneStick`: the left 42 % of the width below 45 % of the height and the top strip; not the throttle or a
   button), or anywhere during the passengers' scenes, turns the view about the plane as it drags (the
   cockpit view turns the head). A moment (1.2 s, `LOOK_BACK`) after it lifts, the flight's view glides
   back behind the plane; the passengers' view stays where it was turned. A new flight starts looking ahead.

@@ -165,7 +165,7 @@ function endFlight() {
 function setBoard(n) { n = n || rN; if (window.AiPelitScores) AiPelitScores.board('reitti-' + n, ROUTES[n - 1].name); }
 
 // ---- The thumbs ----
-// The stick: a finger down on the left side; how far it is from where it touched down is the stick.
+// The stick: a finger down in the lower left quarter; how far it is from where it touched down is the stick.
 // The throttle: a slider on the right; dragging moves it from where it was. Buttons act on the lift.
 const stick = { id: null, x0: 0, y0: 0, x: 0, y: 0, R: 60 };
 const thrHold = { id: null, y: 0, t0: 0 };
@@ -187,6 +187,10 @@ function layout() {
   L.brake = LAND ? { x: SAFE_L + 170, y: b - 30 - bh, w: 90, h: bh } : { x: SAFE_L + 16, y: b - 30 - bh - 150, w: 90, h: bh };
   L.pause = { x: r - 52, y: SAFE_T + 10, w: 42, h: 38 };
   L.stickHome = { x: SAFE_L + 92, y: b - 104 };
+  // The stick takes a finger only in the lower left quarter, round its ring; the middle of the
+  // screen is free for looking around (Eero: it grabbed too eagerly there, #547).
+  const sy = Math.max(SAFE_T + 60, H * 0.45);
+  L.zoneStick = { x: 0, y: sy, w: W * 0.42, h: H - sy };
   L.hudY = SAFE_T + 8;
 }
 const inBox = (bx, x, y) => bx && x >= bx.x && x <= bx.x + bx.w && y >= bx.y && y <= bx.y + bx.h;
@@ -206,7 +210,7 @@ c.addEventListener('pointerdown', e => {
   const bt = btnAt(x, y);
   if (bt && !p.over) { bt.down = e.pointerId; wake(); return; }
   if (!p.over && inBox(L.zoneThr, x, y) && thrHold.id === null) { thrHold.id = e.pointerId; thrHold.y = y; thrHold.t0 = p.thr; return; }
-  if (!p.over && x < W * 0.6 && y > SAFE_T + 60 && stick.id === null) { stick.id = e.pointerId; stick.x0 = stick.x = x; stick.y0 = stick.y = y; readStick(); return; }
+  if (!p.over && inBox(L.zoneStick, x, y) && stick.id === null) { stick.id = e.pointerId; stick.x0 = stick.x = x; stick.y0 = stick.y = y; readStick(); return; }
   if (lookHold.id === null && !bt) startLook(e, x, y);
 });
 c.addEventListener('pointermove', e => {

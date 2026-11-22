@@ -737,3 +737,22 @@ def test_the_glide_path_lights_are_said_in_words(site, context):
     page.wait_for_timeout(300)
     assert page.evaluate("glideWords(papi(p, FIELDS[route.to]))[0]") == "Oikea liukupolku ✓"
     assert page.errors == []
+
+
+@pytest.mark.parametrize("size", [(360, 740), (740, 360)])
+def test_the_stick_takes_only_the_lower_left_and_the_middle_looks_around(site, context, size):
+    page = open_game(site, context, size[0], size[1])
+    page.click("#go")
+    page.wait_for_function("mode === 'fly'", timeout=8000)
+    w, h = size
+    # The middle of the screen, and the upper left, look around instead of grabbing the stick.
+    for pid, (x, y) in enumerate([(w * 0.5, h * 0.5), (w * 0.3, h * 0.3)], start=20):
+        page.evaluate(TOUCH, ["pointerdown", pid, x, y])
+        assert page.evaluate("stick.id === null && lookHold.id !== null"), (x, y)
+        page.evaluate(TOUCH, ["pointerup", pid, x, y])
+    # Round the stick's ring it is the stick.
+    home = page.evaluate("L.stickHome")
+    page.evaluate(TOUCH, ["pointerdown", 30, home["x"], home["y"]])
+    assert page.evaluate("stick.id === 30")
+    page.evaluate(TOUCH, ["pointerup", 30, home["x"], home["y"]])
+    assert page.errors == []
