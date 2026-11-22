@@ -82,13 +82,20 @@ let mode = 'menu', p = null, route = ROUTES[rN - 1], endT = 0, saveT = 0, result
 let paxT = 0, pax = null, stepT = 0, stepN = 0;   // the passengers' scene and its clock (#547)
 // The menu's picture: the plane on the first route's runway.
 p = newPlane(route, plane);
-function startFlight(fromApproach) {
-  // Flying the same route again in the jet after a crash or a restart: the passengers are still aboard.
-  const aboard = mode !== 'menu' && p && p.kind === 'iso' && plane === 'iso' && route === ROUTES[rN - 1] && !(p.over && p.over.ok);
+let paxIn = false;   // the jet's passengers are aboard: boarded (or skipped), not yet walked out
+// `fresh`: a flight picked in the menu or a new route, in the menu's plane, with nobody aboard yet.
+// A retry ("Alusta", ⏸'s restart, "Lennä uudelleen") flies the plane just flown, and in the jet
+// boards only when nobody is aboard (the passengers walked out after a runway landing).
+function startFlight(fromApproach, fresh) {
+  const kind = fresh || !p ? plane : (p.kind || 'pieni');
+  if (fresh) paxIn = false;
+  const aboard = paxIn && kind === 'iso';
   route = ROUTES[rN - 1];
-  p = fromApproach ? approachPlane(route, plane) : newPlane(route, plane);
+  p = fromApproach ? approachPlane(route, kind) : newPlane(route, kind);
   // A practice landing is scored on screen only: no list, record or new route without a take-off.
   p.practice = !!fromApproach;
+  // A practice approach comes in with its passengers aboard; they walk out after its landing.
+  if (fromApproach && p.kind === 'iso') paxIn = true;
   if (p.kind === 'iso' && !fromApproach && !aboard) beginBoarding();
   else beginFlight();
 }
@@ -100,13 +107,14 @@ function beginBoarding() {
   wake();
 }
 function beginDeplaning() {
-  mode = 'deplane'; paxT = 0; pax = paxScene('deplane', 0);
+  mode = 'deplane'; paxT = 0; pax = paxScene('deplane', 0); paxIn = false;
   lookReset(); lookHold.id = null;
   p.pit = 0; p.bank = 0;   // level on its wheels, so the door meets the stairs
   wake();
 }
 function beginFlight(fromBoarding) {
   mode = 'fly'; endT = 0; saveT = 0; result = null; acc = 0; pax = null;
+  if (fromBoarding) paxIn = true;
   stick.id = thrHold.id = lookHold.id = null; for (const b of BTNS) b.down = null;
   lookReset();
   // From the passengers' scene the chase camera glides from where it was.
@@ -120,6 +128,7 @@ function resumeFlight() {
   if (!s || !s.p || !ROUTES[s.r - 1]) { drop('lento'); showMenu(); return; }
   rN = s.r; route = ROUTES[rN - 1];
   p = Object.assign(newPlane(route, s.p.kind || 'pieni'), s.p, { events: [], sx: 0, sy: 0, brake: false });
+  paxIn = p.kind === 'iso';   // a jet flight in the air had boarded
   beginFlight();
 }
 function keepFlight() {
@@ -149,6 +158,7 @@ function settleFlight() {
 function endFlight() {
   settleFlight();
   mode = 'end'; pax = null;
+  lookReset();   // the end screen's view looks ahead again, wherever the passengers' scene was turned
   showEnd();
   if (result.ask && window.AiPelitScores) { result.ask = false; AiPelitScores.prompt(); }
 }
@@ -259,7 +269,7 @@ function hideAll() { for (const id of ['menu', 'end', 'pause']) $(id).hidden = t
 // The 🏆 chip: shown in the menus, not over the flight's controls.
 function chip(on) { const ch = document.getElementById('ai-pelit-tulokset-nappi'); if (ch) ch.style.display = on ? '' : 'none'; }
 function showMenu() {
-  mode = 'menu'; hideAll();
+  mode = 'menu'; hideAll(); lookReset(); paxIn = false;
   route = ROUTES[rN - 1]; p = newPlane(route, plane);
   // The jet waits with its stairs and bus by the door.
   pax = plane === 'iso' ? paxScene('board', 0) : null;
@@ -309,12 +319,12 @@ function showEnd() {
   $('end').hidden = false; chip(true);
   wake();
 }
-$('go').onclick = () => { sfx('valinta', { vol: 0.25 }); drop('lento'); startFlight(false); };
+$('go').onclick = () => { sfx('valinta', { vol: 0.25 }); drop('lento'); startFlight(false, true); };
 $('resume').onclick = () => resumeFlight();
 $('plane').onclick = () => { plane = plane === 'iso' ? 'pieni' : 'iso'; save('kone', plane); sfx('valinta', { vol: 0.25 }); showMenu(); };
 $('view').onclick = () => { camView = camView === 'chase' ? 'cockpit' : 'chase'; save('kamera', camView); showMenu(); };
 $('stickBtn').onclick = () => { stickStyle = stickStyle === 'lentaja' ? 'suora' : 'lentaja'; save('sauva', stickStyle); showMenu(); };
-$('next').onclick = () => { rN = Math.min(open, rN + 1); save('reitti', rN); setBoard(rN); startFlight(false); };
+$('next').onclick = () => { rN = Math.min(open, rN + 1); save('reitti', rN); setBoard(rN); startFlight(false, true); };
 $('again').onclick = () => startFlight(false);
 $('approach').onclick = () => startFlight(true);
 $('toMenu').onclick = () => showMenu();
@@ -439,7 +449,7 @@ function frame(now) {
     if (p.over) {
       settleFlight(); endT += dt;
       // The jet's passengers walk out after a landing, before the end screen.
-      if (endT > (p.over.ok ? 1.8 : 2.4)) { if (p.over.ok && p.over.stop === 100 && p.kind === 'iso') beginDeplaning(); else endFlight(); }
+      if (endT > (p.over.ok ? 1.8 : 2.4)) { if (p.over.ok && p.over.stop === 100 && p.kind === 'iso' && paxIn) beginDeplaning(); else endFlight(); }
     }
     else { saveT += dt; if (saveT > 1) { saveT = 0; keepFlight(); } }
     tune(dt * 1000);

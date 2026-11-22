@@ -609,6 +609,53 @@ def test_no_one_walks_out_after_a_roll_off_the_runway(site, context):
     # Pretend it rolled off the runway's end: landed, but no stopping points.
     page.evaluate("() => { p.over.stop = 0; p.pit = 0.1; }")
     page.wait_for_function("mode === 'end'", timeout=8000)
+    # They are still aboard, so "Lennä uudelleen" flies without boarding anyone more.
+    page.locator("#ai-pelit-tulokset button", has_text="Sulje").click()
+    page.click("#again")
+    assert page.evaluate("mode") == "fly"
+    assert page.errors == []
+
+
+def test_a_restart_after_a_practice_approach_keeps_its_passengers(site, context):
+    page = open_game(site, context, plane="iso")
+    page.evaluate("() => startFlight(true)")
+    # ⏸'s restart (or "Alusta" after a crash) flies from the runway: the approach's passengers
+    # are aboard, so nobody boards, and they walk out after the landing.
+    page.evaluate("() => startFlight(false)")
+    assert page.evaluate("mode === 'fly' && p.ground && !p.practice && paxIn")
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'deplane'", timeout=8000)
+    assert page.errors == []
+
+
+def test_a_retry_flies_the_plane_just_flown_not_the_menus(site, context):
+    page = open_game(site, context, plane="iso")
+    page.evaluate("""() => { const q = newPlane(ROUTES[0], 'pieni'); delete q.events;
+      localStorage.setItem('ai-pelit:lentokone:lento', JSON.stringify({ r: 1, p: q })); showMenu(); }""")
+    page.click("#resume")
+    page.wait_for_function("mode === 'fly'", timeout=8000)
+    page.evaluate("() => startFlight(false)")
+    assert page.evaluate("mode === 'fly' && p.kind === 'pieni'")
+    # A flight picked in the menu takes the menu's plane.
+    page.evaluate("() => showMenu()")
+    page.click("#go")
+    page.wait_for_function("mode === 'board' && p.kind === 'iso'", timeout=8000)
+    assert page.errors == []
+
+
+def test_the_view_looks_ahead_again_after_the_passengers_and_in_the_menu(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    board_now(page)
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'deplane'", timeout=8000)
+    drag(page, 11, 250, 400, -150, 60)
+    assert abs(page.evaluate("LOOK.yaw")) > 1
+    page.evaluate("() => endFlight()")
+    assert page.evaluate("mode === 'end' && LOOK.yaw === 0 && LOOK.pitch === 0")
+    page.evaluate("() => { LOOK.yaw = 1; LOOK.pitch = 0.3; showMenu(); }")
+    assert page.evaluate("LOOK.yaw === 0 && LOOK.pitch === 0")
     assert page.errors == []
 
 
