@@ -84,9 +84,13 @@ def glides(page, host):
     # Only frames that came in time on the watching page itself (both gaps under 40 ms, a 60 Hz frame is 17): a
     # frame late on a busy test machine and the quick one after it measure the machine, not the drawing. Measured
     # (#498): around such a spike the drawn moment (tr.time) went on evenly at 6.3 m/s; only the page's frames
-    # were uneven.
+    # were uneven. Late is late for the page's own pace: on a page that draws every 30-36 ms (four test workers
+    # on two cores, #498) half its frames are over 40 ms, and GitHub's runner kept only 12 frames of a 2.5 s run
+    # (run 44972239058), so a frame there is late only past 1.5 times the page's usual gap.
+    gaps = sorted(b[0] - a[0] for a, b in zip(xs, xs[1:]))
+    late = max(0.04, 1.5 * gaps[len(gaps) // 2])
     sp = [(t2, (b - a) / (t2 - t0)) for (t0, a, *_), (t1, *_), (t2, b, *_) in zip(xs, xs[1:], xs[2:])
-          if t2 > t0 and t1 - t0 < 0.04 and t2 - t1 < 0.04]
+          if t2 > t0 and t1 - t0 < late and t2 - t1 < late]
     # For a failure's message: per frame, the speed per drawn moment and whether it was drawn past the newest
     # spot heard (a guess).
     why = {t2: (round((b - a) / (d2 - d0), 2) if d0 is not None and d2 is not None and d2 > d0 else None,
@@ -509,10 +513,13 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
         if hbx := judged(r):
             off.append(math.hypot(r[2] - hbx[0], r[3] - hbx[1]))
     # Enough of the flight judged, by time: the moments judged span at least half of the time the host had the ball
-    # on its way (#498: 12 frames at load 105-115, where 20 were asked for; a busy machine draws fewer).
+    # on its way (#498: 12 frames at load 105-115, where 20 were asked for; a busy machine draws fewer). Three such
+    # moments are enough: the bug drew the ball 0.6-1.2 m ahead all through the flight, so each judged moment
+    # shows it, against the 0.4 m allowed. GitHub's runner judged 4, spanning 0.42 s of a 0.74 s flight (run
+    # 44973493512), when 5 were asked for.
     way = [t for t, x, _ in hb if t >= kick + 0.1 and x < 1]
     seen = [r[1] for r in rec if judged(r)]
-    assert len(off) >= 5 and way and max(seen) - min(seen) >= 0.5 * (way[-1] - way[0]), (
+    assert len(off) >= 3 and way and max(seen) - min(seen) >= 0.5 * (way[-1] - way[0]), (
         len(off), seen and (min(seen), max(seen)), way and (way[0], way[-1]))
     # Measured with the ball on its own track: at most 0.13 m off. Drawn at its newest spot (v5 before the
     # review) it ran 0.6-1.2 m ahead.
@@ -527,10 +534,11 @@ def test_a_pass_is_drawn_at_the_moment_the_players_are(site, browser):
 PAUSE = """() => { window.__pz = false;
   Object.defineProperty(AiPelitRooms, 'paused', { get: () => window.__pz, configurable: true }); }"""
 # On a guest, each frame until `window.__pzStop`: [the frame's time (as in SAMPLE), player i's drawn x, the ball's,
-# the moment player i is drawn at and the newest stamp on the tracks].
+# the moment player i is drawn at, the newest stamp on the tracks, and when the last two snapshots arrived].
 PZREC = """(i) => { window.__pr = []; const now = () => (performance.timeOrigin + performance.now()) / 1000;
+  let got = [null, null]; AiPelitRooms.on('message', m => { if (m.t === 's') got = [now(), got[0]]; });
   const u = window.update;
-  window.update = dt => { const t = now(); u(dt); if (!window.__pzStop) window.__pr.push([t, players[i].x, ball.x, players[i].tr.time, (net.fed || []).slice(-1)[0]]); }; }"""
+  window.update = dt => { const t = now(); u(dt); if (!window.__pzStop) window.__pr.push([t, players[i].x, ball.x, players[i].tr.time, (net.fed || []).slice(-1)[0], got[0], got[1]]); }; }"""
 
 
 @pytest.mark.parametrize("first", ["host", "guest"])
@@ -606,9 +614,16 @@ def test_a_paused_match_goes_on_from_where_the_guest_drew_it(site, browser, firs
     # Past it by more than two spots' gap (0.1 s) counts: the bug drew 0.28-0.43 s past it, while under a full
     # suite's load the slowed clock was still 0.02-0.05 s past it at 0.86-0.93 s (job af1befa4a4cc), a frame's
     # worth of the library's own short guess.
-    ahead = [(round(t - go_at, 2), round(d - c, 3)) for t, _, _, d, c in rec
+    # Judged only while the spots come in, as in Kaahari v7's test: the last one at most 0.15 s back and under 0.2 s
+    # after the one before. With no spot heard for g s the drawing is past the newest by about g less the track's
+    # delay whatever the game does, since the drawn moment goes on at real time: GitHub's runner (run 44973493512)
+    # had 0.116, 0.153, 0.216, 0.258, 0.305 s past it at 1.70-1.89 s, growing by the frames' own time (0.19 s in
+    # 0.19 s), so no spot came in those frames. The bug drew past the newest with the spots coming in.
+    def coming(t, g0, g1):
+        return g0 is not None and g1 is not None and t - g0 < 0.15 and g0 - g1 < 0.2
+    ahead = [(round(t - go_at, 2), round(d - c, 3)) for t, _, _, d, c, g0, g1 in rec
              if t > go_at + 0.75 and d is not None and c is not None and d > c + 0.1
-             and not any(st <= t <= st + 0.35 for st in stalls)]
+             and coming(t, g0, g1) and not any(st <= t <= st + 0.35 for st in stalls)]
     assert len(ahead) <= 3, ahead
     errors = [e for p in (host, guest, ville) for e in p.errors]
     assert not errors, errors
@@ -645,7 +660,10 @@ def test_spots_landing_in_a_guests_pause_after_a_stall_do_not_hop_the_drawing(si
     host.evaluate("window.__cpuRun = 4; window.__run = true")
     guest.wait_for_timeout(800)
     host.evaluate("window.__hold = true")
+    # At least 0.5 s, and until the drawing is 0.35 s past the newest spot: the track's delay is up to 0.25 s, so
+    # on a busy machine (load 28-40, #498) 0.5 s left it only 0.285 s past, hardly beyond the 0.25 s guess.
     guest.wait_for_timeout(500)
+    guest.wait_for_function("players[4].tr.time - (net.fed || []).slice(-1)[0] > 0.35", timeout=3000)
     clock = "(performance.timeOrigin + performance.now()) / 1000"
     guest.evaluate(f"window.__pzAt = {clock}; window.__pz = true")
     host.evaluate("window.__pz = true; window.__release()")
@@ -662,13 +680,19 @@ def test_spots_landing_in_a_guests_pause_after_a_stall_do_not_hop_the_drawing(si
     held = [f for f in pr if pz_at <= f[0] <= go_at]
     assert len(held) > 3, len(held)
     assert max(f[1] for f in held) - min(f[1] for f in held) < 0.01, [(round(f[0] - pz_at, 3), round(f[1], 2)) for f in held]
-    # After it, each frame steps at the player's speed (5 m/s, 7 with the catching up), plus the eased gap (0.1 s).
+    # After it, each frame steps at the player's speed (5 m/s, 7 with the catching up), plus the eased gap (0.1 s),
+    # over the time the track's clock moved in that frame. That is the drawn moment's step (tr.time) over 0.8, since
+    # the moment moves 0.8-1.2 times the clock. It is not the frame's own time on the first frame after the pause:
+    # the paused moment is the clock at the first paused frame, so that frame's gap before it is moved then. Four
+    # workers on one machine (#498) drew 0.35-1.33 m in that first frame, with the moment stepping 0.02-0.1 s in a
+    # 0.010-0.052 s frame, where the frame before the pause had been that long.
     gap = 5 * (at_pz[3] - at_pz[4] - 0.25)
     after = [f for f in pr if f[0] > go_at - 0.05]
-    hops = [(round(t1 - go_at, 3), round(x1 - x0, 2)) for (t0, x0, *_), (t1, x1, *_) in zip(after, after[1:])
+    hops = [(round(t1 - go_at, 3), round(x1 - x0, 2)) for (t0, x0, _, m0, *_), (t1, x1, _, m1, *_) in zip(after, after[1:])
             if not any(st <= t1 <= st + 0.35 for st in stalls)
-            and (x1 - x0 < -0.1 or x1 - x0 > 0.1 + 7 * (t1 - t0) + gap * (1 - math.exp(-(t1 - t0) / 0.1)))]
-    assert not hops, (hops, round(gap, 2), [(round(f[0] - go_at, 3), round(f[1], 2)) for f in pr if f[0] > pz_at - 0.2][:40])
+            and (x1 - x0 < -0.1 or x1 - x0 > 0.1 + 7 * (m1 - m0) / 0.8 + gap * (1 - math.exp(-(m1 - m0) / 0.8 / 0.1)))]
+    assert not hops, (hops, round(gap, 2), [(round(f[0] - go_at, 3), round(f[1], 2), round(f[3] or 0, 3), round(f[4] or 0, 3))
+                                            for f in pr if f[0] > go_at - 0.1][:20])
     assert pr[-1][1] > held[-1][1] + 2  # and it ran on
     assert not host.errors + guest.errors
 
@@ -714,7 +738,7 @@ def test_a_jittery_connection_after_a_pause_does_not_slow_the_drawing(site, brow
     after = [f for f in pr if f[0] > go_at + 0.05 and f[3] is not None]
     assert after and after[-1][0] - after[0][0] > 2, len(after)
     # lib/sulava-1 itself changes the drawn moment's pace by at most 20% (a new delay), so 0.5x is the slow one.
-    slow = [(round(t1 - go_at, 3), round((d1 - d0) / (t1 - t0), 2)) for (t0, _, _, d0, _), (t1, _, _, d1, _)
+    slow = [(round(t1 - go_at, 3), round((d1 - d0) / (t1 - t0), 2)) for (t0, _, _, d0, *_), (t1, _, _, d1, *_)
             in zip(after, after[1:]) if t1 > t0 and (d1 - d0) / (t1 - t0) < 0.5]
     assert not slow, (slow, round(drag, 3))
     assert not host.errors + guest.errors

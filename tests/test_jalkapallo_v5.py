@@ -177,7 +177,9 @@ def test_the_final_whistle_ends_the_match_and_saves_it(site, context):
 
 def test_the_computer_plays_a_whole_match_on_its_own(site, context):
     page = open_game(site, context)
-    kicks = page.evaluate("ctrls = []; level = 4; run(() => state !== 'done', 200); players.reduce((n, p) => n + p.kicks, 0)")
+    # A match takes 183 s of play (TIME, the kick-off and the final whistle) and 3.2 s more for each goal, so 200 s
+    # ran out on a match of six goals or more: 4 of 150 level-4 matches (#498). 400 s covers 60 goals.
+    kicks = page.evaluate("ctrls = []; level = 4; run(() => state !== 'done', 400); players.reduce((n, p) => n + p.kicks, 0)")
     assert page.evaluate("state") == "done"
     assert kicks > 20
     assert page.errors == []
