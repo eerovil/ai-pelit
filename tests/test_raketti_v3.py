@@ -5,7 +5,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = 'games/raketti/v2/'
+URL = 'games/raketti/v3/'
 
 
 def open_game(site, context):
