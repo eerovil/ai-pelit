@@ -30,7 +30,7 @@ function pack(sl) {
   return [r2(sl.s), r2(sl.x), r2(sl.y), r2(sl.v), r2(sl.yaw), r2(sl.vy), sl.air ? 1 : 0,
     sl.trick ? TRICK_IDS.indexOf(sl.trick.type) + 1 : 0, sl.trick ? r2(sl.trick.t) : 0, sl.grab ? 1 : 0,
     sl.points, sl.streak, sl.fin ? 1 : 0, r2(sl.fallT), r2(sl.steer), sl.gifts.slice(),
-    sl.jump.map(j => [j.type, j.pts]), sl.queue || 0, r2(sl.grabT)];
+    sl.jump.map(j => [j.type, j.pts]), sl.queue || 0, r2(sl.grabT), r2(sl.pushT || 0)];
 }
 function unpack(sl, a) {
   sl.s = a[0]; sl.x = a[1]; sl.y = a[2]; sl.v = a[3]; sl.yaw = a[4]; sl.vy = a[5]; sl.air = !!a[6];
@@ -40,6 +40,7 @@ function unpack(sl, a) {
   if (Array.isArray(a[15])) sl.gifts = a[15];
   // What this jump has earned so far (tricks done, one waiting, the grab's time), scored on landing.
   if (Array.isArray(a[16])) { sl.jump = a[16].map(([type, pts]) => ({ type, pts })); sl.queue = a[17] || null; sl.grabT = a[18] || 0; }
+  sl.pushT = a[19] || 0;   // v4 (#517): the arms of a hand push
 }
 function outfitOf(id) {
   return (window.AiPelitOutfits && id && AiPelitOutfits.get(id)) || OUTFITS.find(o => o.id === id) || OUTFITS[0];

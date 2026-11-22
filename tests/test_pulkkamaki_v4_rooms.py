@@ -1,4 +1,4 @@
-"""Pulkkamäki v3 with friends (#475, #480): everyone down the same hill at once, the host keeps the end."""
+"""Pulkkamäki v4 with friends (#475, #480): everyone down the same hill at once, the host keeps the end."""
 import json
 import shutil
 
@@ -7,7 +7,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/pulkkamaki/v3/"
+URL = "games/pulkkamaki/v4/"
 # My sled straight to just above the finish line, so the run ends in seconds.
 NEAR_END = "(() => { me.s = hill.len - 4; me.x = centreX(hill, me.s); me.y = groundAt(hill, me.s, me.x); me.v = 12; me.yaw = 0; me.air = false; })()"
 # The host's computer sledders the same way.
@@ -66,7 +66,7 @@ def start(pages):
 def test_two_phones_go_down_together_and_get_one_result(sledders):
     host, guest = room(sledders)
     # The host picks the hill on the room screen; a guest only sees who does.
-    assert host.locator("#pulkka-room button").count() == 3
+    assert host.locator("#pulkka-room button").count() == 5   # every hill, from v4 (#517) five
     assert "valitsee mäen" in guest.locator("#pulkka-room").inner_text()
     start([host, guest])
     for p in (host, guest):
