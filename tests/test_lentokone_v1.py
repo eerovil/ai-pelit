@@ -269,6 +269,34 @@ def test_pause_is_not_offered_once_the_flight_has_ended(site, context):
     assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:auki')") == "2"
 
 
+def test_a_landing_is_kept_when_the_page_reloads_during_the_banner(site, context):
+    page = open_game(site, context)
+    go(page)
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'fly' && result && result.ok", timeout=4000)
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:auki')") == "2"
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:lento')") is None
+    page.reload()
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    assert not page.locator("#resume").is_visible()
+    assert not page.locator("#routes button").nth(1).is_disabled()
+    assert int(page.evaluate("localStorage.getItem('ai-pelit:lentokone:ennatys-1')")) > 0
+    assert page.errors == []
+
+
+def test_a_crash_is_not_resumed_when_the_page_reloads_during_the_banner(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_timeout(1300)   # past the first checkpoint
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:lento')") is not None
+    page.evaluate("() => { p.x = FIELDS[0].x + 300; p.z = FIELDS[0].z - 3000; p.y = groundAt(p.x, p.z) + 40; p.v = 50; p.ground = false; p.airborne = true; p.gear = false; p.gam = -0.3; p.pit = -0.3; }")
+    page.wait_for_function("mode === 'fly' && result && !result.ok", timeout=8000)
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:lento')") is None
+    page.reload()
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    assert not page.locator("#resume").is_visible()
+
+
 def test_a_crash_offers_the_approach(site, context):
     page = open_game(site, context)
     go(page)

@@ -102,8 +102,11 @@ function keepFlight() {
   const q = Object.assign({}, p); delete q.events;
   save('lento', { r: rN, p: q });
 }
-// The flight is over: the score, the stars, the next route.
-function endFlight() {
+// The flight is over: the score, the stars, the next route, saved the moment it is earned (the end
+// screen waits a moment after it, and a reload or a hidden page then must not lose the landing).
+// Once per flight: `result` is set here and cleared only when a new flight begins.
+function settleFlight() {
+  if (result) return;
   drop('lento');
   const o = p.over;
   result = { ok: o.ok, why: o.why };
@@ -117,6 +120,9 @@ function endFlight() {
     if (tutorial) { tutorial = false; save('osattu', true); }
     if (window.AiPelitScores) { setBoard(rN); AiPelitScores.submit(o.points); }
   }
+}
+function endFlight() {
+  settleFlight();
   mode = 'end';
   showEnd();
 }
@@ -356,7 +362,7 @@ function frame(now) {
     while (acc >= DT) { step(p, DT, route); acc -= DT; }
     events();
     if (g0Lost()) { p.over = { ok: false, why: 'Eksyit liian kauas', stopped: true }; }
-    if (p.over) { endT += dt; if (endT > (p.over.ok ? 1.8 : 2.4)) endFlight(); }
+    if (p.over) { settleFlight(); endT += dt; if (endT > (p.over.ok ? 1.8 : 2.4)) endFlight(); }
     else { saveT += dt; if (saveT > 1) { saveT = 0; keepFlight(); } }
     tune(dt * 1000);
   }

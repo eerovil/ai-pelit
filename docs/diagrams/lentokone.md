@@ -21,14 +21,17 @@ flowchart TD
   J -- Ei radalla, liian kova tai teline ylhäällä --> X
   J -- Radalla ja tarpeeksi pehmeästi --> K[Jarruta pysähdyksiin radalle]
   K --> L[Laskeutumisen pisteet ja tähdet]
-  L --> M[Seuraava lento aukeaa, ennätys, tuloslista]
+  L --> O{Harjoituslasku?}
+  O -- Ei, lento alusta --> M[Seuraava lento aukeaa, ennätys, tuloslista]
+  O -- Kyllä --> P[Vain pisteet näkyvät]
+  P --> N
   X --> N{Yritä uudelleen}
   N -- Alusta --> B
   N -- Harjoittele laskeutumista --> I
   class A,B,C,E,F,I,K blue
-  class D,G,J,N amber
+  class D,G,J,N,O amber
   class H,X rose
-  class L,M green
+  class L,M,P green
 ```
 
 ## Colours
@@ -42,7 +45,7 @@ flowchart TD
 
 - **Valitse lento, Lennä!**: the menu lists five routes (`ROUTES` in `games/lentokone/v1/world.js`);
   a locked one says "🔒 Laskeudu ensin: <reitti>". The next opens after any landing on the one
-  before (`ai-pelit:lentokone:auki`), with each route's best stars in `ai-pelit:lentokone:tahdet`
+  before that was flown from its runway, not a practice landing (`ai-pelit:lentokone:auki`), with each route's best stars in `ai-pelit:lentokone:tahdet`
   and best points in `ai-pelit:lentokone:ennatys-<N>`. "📷 Takaa" / "📷 Ohjaamosta" picks the view
   (`kamera`), "🕹 Sauva" which way the stick lifts the nose (`sauva`: finger down by default).
   "▶ Jatka lentoa" resumes a flight saved each second as `ai-pelit:lentokone:lento` (a reload, a
@@ -84,11 +87,16 @@ flowchart TD
   at 3 m/s; centre line 300, falling to 0 at the runway's edge; touchdown point 200 within
   150–300 m of the threshold (60–180 m on the short runway), less beyond; stopped on the runway
   100. Stars: 3 from 850 points, 2 from 600, else 1.
-- **Seuraava lento aukeaa, ennätys, tuloslista**: the points go to the route's high-score list
+- **Harjoituslasku?**: whether the flight began at "Harjoittele laskeutumista" (`p.practice`, set by
+  `startFlight(true)` in `ui.js` and kept in the saved flight).
+- **Vain pisteet näkyvät**: the end screen shows the points and stars with "Harjoituslasku: ei
+  tuloslistalle eikä avaa uutta lentoa." and offers "Harjoittele laskeutumista" again.
+- **Seuraava lento aukeaa, ennätys, tuloslista**: saved the moment the plane stops
+  (`settleFlight()` in `ui.js`, once per flight), so a reload or a hidden page during the 1.8 s banner
+  keeps it; the end screen follows the banner. The points go to the route's high-score list
   (`reitti-<N>`, `scores.js`), which opens over the end screen after a new score; "🏆 Tuloslista"
-  opens it again. Buttons: "Seuraava lento", "Lennä uudelleen", "Valikkoon". A landing from
-  "Harjoittele laskeutumista" (`p.practice`) shows its points and stars only: "Harjoituslasku: ei
-  tuloslistalle eikä avaa uutta lentoa."; no list, record, stars or new route.
-- **Yritä uudelleen**: after a crash "Alusta" flies the route again from the runway, and
+  opens it again. Buttons: "Seuraava lento", "Lennä uudelleen", "Valikkoon". A crash also drops the
+  saved flight at once, so a reload during its banner does not offer it again.
+- **Yritä uudelleen**: after a crash or a practice landing "Alusta" flies the route again from the runway, and
   "Harjoittele laskeutumista" starts 5 km out on the runway's line on the glide path (about 270 m),
   151 km/h, gear up and flaps 0, so landing can be practised without flying the whole route.
