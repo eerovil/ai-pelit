@@ -203,11 +203,12 @@ const K = AiPelitKisa.meet({
   spread: [3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 2.5,
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä heittoa',
-  // v2 (#480): a friend's swing is drawn a moment back, the boot's arm angle (radians, wrapping at ±π) gliding
-  // the short way round between the spots their phone sends; the release (rel) is the swing's last angle, so the
-  // boot leaves the hand where the glide ends. No jump distance: a track measures it on the raw angle, which
-  // passes ±π once a lap, and the one real jump (a slip back to hanging) glides the short way well enough.
-  glide: { keys: ['a'], angles: ['a'], spot: m => m.t === 'p' || m.t === 'rel' ? { a: m.a[0] } : null },
+  // v2 (#480): a friend's swing is drawn a moment back, the boot's arm angle gliding between the spots their phone
+  // sends; the release (rel) is the swing's last angle, so the boot leaves the hand where the glide ends. The angle
+  // sent wraps at ±π, and the thumb has no speed limit, so two spots far apart (a slow frame on their phone) may be
+  // more than half a lap apart: the track glides a running angle instead (unwound()), as Moukari's, and draw()
+  // wraps it back. No jump distance: the one real jump (a slip back to hanging) comes with the turn's end anyway.
+  glide: { keys: ['a'], spot: m => m.t === 'p' ? { a: unwound(m.a[0], m.a[3], m.a[4]) } : m.t === 'rel' ? { a: unwound(m.a[0], 0, null) } : null },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
   chime: i => {
@@ -226,11 +227,23 @@ function cpuMark(t) {
   do m = Math.floor((t.skill + K.gauss() * 3) * 100) / 100; while (m > CPU_MAX);
   return Math.max(8, m);
 }
+// v2 (#480): the angle a friend's phone sent, a, as a running angle: the one a whole number of laps away from
+// where the last one and the swing since put it (the turn sent, `turn`, grows by the angle swung either way, `dir`
+// the way it goes now; null on the release). A new turn, or a swing started again, starts it afresh.
+let unU = null, unT = 0;
+const wrapA = v => Math.atan2(Math.sin(v), Math.cos(v));
+function unwound(a, dir, turn) {
+  if (turn !== null && turn < unT) unU = null;
+  const want = unU === null ? a : unU + (turn === null ? 0 : dir * (turn - unT));
+  unU = a + TAU * Math.round((want - a) / TAU);
+  if (turn !== null) unT = turn;
+  return unU;
+}
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {
   th = { seq, id: t.id, mine, phase: 'wait', t: 0, a: -Math.PI / 2 - 0.15, dir: -1, turn: 0, v: 0,
     moves: [], boot: null, mark: null, why: '', sendT: 0, idle: 0, lap: 0 };
-  blend = 0; spinPtr = null;
+  blend = 0; spinPtr = null; unU = null; unT = 0;
 }
 
 // ---------- One throw ----------
@@ -420,7 +433,7 @@ function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
 function draw(dt = 0) {
   const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'spin'));
   const kept = th ? th.a : 0;
-  if (sw) th.a = g.a;
+  if (sw) th.a = wrapA(g.a);
   try { drawFrame(dt); } finally { if (sw) th.a = kept; }
 }
 function drawFrame(dt) {

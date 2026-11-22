@@ -8,7 +8,7 @@ along the circle's tangent. The camera then follows the boot out over the field,
 Keihäänheitto. The meet is the shared athletics library's (`public/lib/yleisurheilu-12/kisa.js`):
 twelve throwers alone against the computer, or 2–8 phones in a room with the computer filling the
 rest; three rounds, then the best eight throw three more.
-v2 (#480) passes `glide` to the meet (`lib/sulava-1`): on a friend's turn the phone watching draws the swing (the arm's angle `a`, wrapping, with no jump) gliding between the spots their phone sends, and the let-go (`rel`) where the glide ends.
+v2 (#480) passes `glide` to the meet (`lib/sulava-1`): on a friend's turn the phone watching draws the swing (the arm's angle `a`, glided as a running angle, `unwound()`, so a fast thumb never turns it backwards; no jump) gliding between the spots their phone sends, and the let-go (`rel`) where the glide ends.
 
 ```mermaid
 flowchart TD

@@ -5,23 +5,24 @@ the glide ends."""
 
 import math
 
+import pytest
+
 from yleisurheilu_glide import SAMPLE, even, pair
 
 PATH = "saappaanheitto/v2"
 URL = "games/saappaanheitto/v2/"
 
-# The phone on turn swings the boot over the top (clockwise, dir -1) at an even 12 rad/s from the moment the boot
-# hangs, with no thumb, and lets go after 2.5 s (about five laps, short of the tiring arm).
-W = 12
-DRIVE = """() => { const st = window.step; window.__run = true; let spun = 0;
+# The phone on turn swings the boot over the top (clockwise, dir -1) at an even `w` rad/s from the moment the boot
+# hangs, with no thumb, and lets go after `dur` s (short of the arm slipping, 14 laps).
+DRIVE = """([w, dur]) => { const st = window.step; window.__run = true; let spun = 0;
   window.step = dt => {
     if (th && th.mine && window.__run) {
       if (th.phase === 'ready') { th.phase = 'spin'; th.t = 0; th.turn = 0; th.v = 20; th.dir = -1; th.lap = 0; spun = 0; }
       else if (th.phase === 'spin') {
         th.idle = 0; spun += dt;
-        let a = th.a - 12 * dt; if (a <= -Math.PI) a += 2 * Math.PI;
-        th.a = a; th.turn += 12 * dt;
-        if (spun >= 2.5) { window.__run = false; letGo(); }
+        let a = th.a - w * dt; if (a <= -Math.PI) a += 2 * Math.PI;
+        th.a = a; th.turn += w * dt;
+        if (spun >= dur) { window.__run = false; letGo(); }
       }
     }
     return st(dt);
@@ -45,14 +46,17 @@ def unwrapped(xs):
     return out
 
 
-def test_a_friends_swing_glides_and_lets_go_where_the_glide_ends(site, browser):
+# 40 rad/s is more than half a lap between two spots (12 a second): gliding the sent angle the short way round
+# would turn the boot backwards, so the track glides a running angle.
+@pytest.mark.parametrize("w, dur", [(12, 2.5), (40, 2.0)])
+def test_a_friends_swing_glides_and_lets_go_where_the_glide_ends(site, browser, w, dur):
     athlete, watcher = pair(site, browser, PATH)
     watcher.evaluate(SAMPLE, ["th", "a"])
-    athlete.evaluate(DRIVE)
+    athlete.evaluate(DRIVE, [w, dur])
     watcher.wait_for_function("th && th.phase === 'fly'", timeout=20000)
     watcher.wait_for_timeout(200)
     xs, got = watcher.evaluate("[window.__xs, window.__got]")
-    even(unwrapped(xs), got, ("spin",), -W)
+    even(unwrapped(xs), got, ("spin",), -w)
     # The last drawn swing frame is next to the release angle: no hop round onto it.
     last = [a for _, a, ph in xs if ph == "spin"][-1]
     rel = watcher.evaluate("th.a")
