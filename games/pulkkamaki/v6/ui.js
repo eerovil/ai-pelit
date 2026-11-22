@@ -97,6 +97,7 @@ function onMyEvent(e, pts) {
   else if (e === 'land') sfx('lumi', { vol: 0.5 });
   else if (e === 'trick') { sfx('lasku', { vol: 0.45 }); sfx('onnistui', { vol: 0.3, delay: 0.05 }, 880); }
   else if (e === 'fall') sfx('tomahdys', { vol: 0.6 }, 140);
+  else if (e === 'wall') sfx('tomahdys', { vol: 0.3, rate: 1.4 }, 200);
   else if (e === 'push') sfx('lumi', { vol: 0.25, rate: 1.3 });
   else if (e === 'gift') sfx('kello', { vol: 0.18, rate: 1.2 }, 1320);
   else if (e === 'finish') finishLine();
@@ -240,7 +241,7 @@ function showMenu() {
     b.className = 'hill' + (n === hillN ? ' on' : '');
     const locked = n > open;
     b.disabled = locked;
-    b.innerHTML = '<b>' + H.name + '</b><small>' + (locked ? '🔒 ' + H.open + ' p ' + HILLS[i - 1].name + 'ssa' : best(n) ? 'Ennätys ' + best(n) + ' p' : 'Ei vielä laskettu') + '</small>';
+    b.innerHTML = '<b>' + H.name + '</b><small>' + (locked ? '🔒 ' + H.open + ' p<span class="at"> ' + HILLS[i - 1].at + '</span>' : best(n) ? 'Ennätys ' + best(n) + ' p' : 'Ei vielä laskettu') + '</small>';
     b.addEventListener('click', () => { hillN = n; save('maki', n); sfx('valinta', { vol: 0.3 }); showMenu(); });
     box.appendChild(b);
   });

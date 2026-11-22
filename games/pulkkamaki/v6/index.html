@@ -19,8 +19,10 @@
   .col{display:flex;flex-direction:column;gap:10px;align-items:stretch;width:100%;max-width:330px}
   button{font:700 17px system-ui,sans-serif;border:0;border-radius:14px;padding:13px 16px;color:#fff;background:rgba(255,255,255,.16);touch-action:manipulation}
   button.big{background:#c8202f;font-size:21px;padding:15px;box-shadow:0 4px 0 #8a1420}
-  button.hill{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;padding:11px 14px}
-  button.hill small{font-weight:500;font-size:13px;opacity:.85}
+  /* Seven hills from v6: two to a row, upright too, so the menu still fits a 360 x 640 screen. */
+  #hills{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  button.hill{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:8px 11px;font-size:16px}
+  button.hill small{font-weight:500;font-size:12px;opacity:.85}
   button.hill.on{background:rgba(255,216,74,.28);outline:2px solid #ffd84a}
   button:disabled{opacity:.55}
   .row{display:flex;gap:10px}
@@ -31,10 +33,13 @@
   #endList li{display:flex;justify-content:space-between;padding:6px 10px;border-radius:10px;font-size:16px}
   #endList li.me{background:rgba(255,216,74,.22);font-weight:700}
   body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 14px);gap:10px 28px}
-  body.land .screen>.head{flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  body.land .screen>.head{flex:0 0 260px;display:flex;flex-direction:column;align-items:center;gap:8px}
   body.land h1{font-size:32px}
-  body.land #hills{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  body.land button.hill{padding:5px 9px;font-size:15px;flex-direction:column;align-items:flex-start;gap:0}
+  body.land .col{max-width:400px;gap:8px}
+  body.land #hills{grid-template-columns:1fr 1fr 1fr}
+  body.land button.hill{padding:5px 9px;font-size:15px;gap:0}
+  body.land button.big{padding:11px}
+  body.land button.hill .at{display:none}   /* only the points sideways, so the lock fits one line */
   body.land button.hill small{font-size:12px}
 </style>
 </head>

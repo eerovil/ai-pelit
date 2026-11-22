@@ -1,12 +1,12 @@
-"""Pulkkamäki v5 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
-the steep hills with drops, no trick begun too late, the hand push."""
+"""Pulkkamäki v6 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
+the steep hills with drops, no trick begun too late, the hand push, the bends and tunnels (v6)."""
 import shutil
 
 import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v5/"
+URL = "games/pulkkamaki/v6/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
@@ -41,8 +41,8 @@ def test_the_menu_opens_the_first_hill_only(site, context):
     page = open_game(site, context)
     assert page.evaluate("!!V3")
     hills = page.locator("#hills button")
-    assert hills.count() == 5
-    assert [hills.nth(i).is_disabled() for i in range(5)] == [False, True, True, True, True]
+    assert hills.count() == 7
+    assert [hills.nth(i).is_disabled() for i in range(7)] == [False, True, True, True, True, True, True]
     assert "🔒" in hills.nth(1).inner_text()
     assert page.locator("#friends").is_visible()
     assert page.errors == []
@@ -54,9 +54,11 @@ def test_the_sled_keeps_its_heading_when_the_finger_lifts(site, context):
     page.evaluate(TOUCH, ["pointerdown", 150, 500])
     page.evaluate(TOUCH, ["pointermove", 260, 500])
     page.wait_for_timeout(700)
-    held = page.evaluate("me.yaw")
+    # Lift the finger and read the heading in the same moment: a frame between the two (a busy
+    # host) would still be steered and count as a turn after the lift.
+    held = page.evaluate("""() => { const y = me.yaw; document.getElementById('c').dispatchEvent(new PointerEvent('pointerup',
+      { pointerId: 9, clientX: 260, clientY: 500, bubbles: true, pointerType: 'touch' })); return y; }""")
     assert held > 0.4
-    page.evaluate(TOUCH, ["pointerup", 260, 500])
     page.wait_for_timeout(600)
     # It is not turned back down the hill by itself (Eero's choice).
     assert page.evaluate("me.yaw") == pytest.approx(held, abs=0.15)
@@ -162,7 +164,7 @@ def test_the_record_and_opened_hills_survive_a_reload(site, context):
     page.reload()
     page.wait_for_function("V3 || no3d", timeout=20000)
     hills = page.locator("#hills button")
-    assert [hills.nth(i).is_disabled() for i in range(5)] == [False, False, True, True, True]
+    assert [hills.nth(i).is_disabled() for i in range(7)] == [False, False, True, True, True, True, True]
     assert "3100" in hills.nth(0).inner_text()
     assert page.evaluate("hillN") == 2
     assert page.errors == []
@@ -170,14 +172,16 @@ def test_the_record_and_opened_hills_survive_a_reload(site, context):
 
 # Each hill run through by the computer's best sledder and by a sled nobody touches, in game time.
 RUNS = """() => HILLS.map((_, i) => i + 1).map(n => {
-  const h = buildHill(n), out = [];
-  for (const brain of [cpuBrain(CPU_SKILL[2], 11), null]) {
+  const h = buildHill(n), runs = [];
+  // The best of three good computer runs (one run's score swings by a third with its luck), and idle.
+  for (const brain of [cpuBrain(CPU_SKILL[2], 7), cpuBrain(CPU_SKILL[2], 11), cpuBrain(CPU_SKILL[2], 13), null]) {
     const sl = newSled('t', 't'); placeSled(h, sl, 0); sl.cpu = brain;
     let t = 0;
     for (; t < 150 && !sl.fin; t += DT) { if (brain) cpuDrive(h, sl, DT); step(h, sl, DT); }
-    out.push([sl.fin, Math.round(t), sl.points]);
+    runs.push([sl.fin, Math.round(t), sl.points]);
   }
-  return out;
+  const best = runs.slice(0, 3).filter(r => r[0]).sort((a, b) => b[2] - a[2])[0] || runs[0];
+  return [best, runs[3]];
 })"""
 
 
@@ -372,4 +376,138 @@ def test_a_hand_push_is_sent_to_the_other_phones(site, context):
       return [b.pushT, c.pushT];
     }""")
     assert got == [0.35, 0]
+    assert page.errors == []
+
+
+def test_the_v6_hills_bend_sharply_and_go_through_tunnels(site, context):
+    # #517 v6: "Lisää kenttiä. Voisi olla tunneleita jne", "Mutkia voisi olla".
+    page = open_game(site, context)
+    got = page.evaluate("""() => [1, 2, 3, 4, 5, 6, 7].map(n => {
+      const h = buildHill(n);
+      let bend = 0;   // the sharpest turn of the course, radians per metre
+      for (let s = 1; s < h.len; s++) bend = Math.max(bend, Math.abs(courseDir(h, s + 1) - courseDir(h, s - 1)) / 2);
+      // Nothing throws a sled into a roof: no jump or drop inside a tunnel or in the 40 m before it,
+      // and nothing to hit inside one.
+      const clear = h.tunnels.every(t =>
+        h.kicks.every(k => k.s + k.len < t.s - 40 || k.s > t.s + t.len) &&
+        h.drops.every(d => d.s < t.s - 40 || d.s > t.s + t.len) &&
+        h.obst.every(o => o.s < t.s - 3 || o.s > t.s + t.len + 3));
+      return [h.name, h.tunnels.length, bend, clear];
+    })""")
+    names = [g[0] for g in got]
+    assert names[5:] == ["Mutkamäki", "Luolasto"]
+    for name, tunnels, bend, clear in got[:5]:
+        assert tunnels == 0 and bend < 0.01, (name, bend)   # the older hills stay as they were
+    for name, tunnels, bend, clear in got[5:]:
+        assert tunnels >= 2 and bend > 0.015 and clear, (name, tunnels, bend, clear)
+    assert got[6][1] >= 3
+    assert page.errors == []
+
+
+def test_a_tunnels_walls_keep_the_sled_in_and_its_roof_keeps_it_low(site, context):
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const h = buildHill(7), t = h.tunnels[1], lim = h.width / 2 + WALL;
+      // Steered hard at the right wall all through the tunnel.
+      const sl = newSled('t', 't'); sl.s = t.s + 2; sl.x = 0; sl.y = groundAt(h, sl.s, 0); sl.v = 14;
+      let walls = 0, widest = 0; sl.onEvent = e => { if (e === 'wall') walls++; };
+      while (sl.s < t.s + t.len - 2) { sl.steer = 1; step(h, sl, DT); widest = Math.max(widest, Math.abs(sl.x)); }
+      // Thrown up hard inside it: it stays under the roof.
+      const up = newSled('u', 'u'); up.s = t.s + 10; up.x = 0; up.y = groundAt(h, up.s, 0) + 0.5; up.v = 12;
+      up.air = true; up.vy = 14;
+      let over = -99;
+      for (let i = 0; i < 240 && up.air; i++) { step(h, up, DT); over = Math.max(over, up.y - (baseAt(h, up.s) + ROOF)); }
+      // Out in the open the same throw goes far higher.
+      const out = newSled('o', 'o'); out.s = t.s - 60; out.x = 0; out.y = groundAt(h, out.s, 0) + 0.5; out.v = 12;
+      out.air = true; out.vy = 14;
+      let high = 0;
+      for (let i = 0; i < 240 && out.air; i++) { step(h, out, DT); high = Math.max(high, out.y - baseAt(h, out.s)); }
+      return { walls, widest, lim, v: sl.v, over, high, fell: sl.fallT > 0 };
+    }""")
+    assert got["widest"] <= got["lim"], got
+    assert got["walls"] >= 1 and not got["fell"], got   # it knocks the wall but does not fall
+    assert got["v"] > 5, got   # and slides on
+    assert got["over"] < 0, got   # under the roof all the time
+    assert got["high"] > 6, got
+    assert page.errors == []
+
+
+def test_an_unsteered_sled_keeps_its_world_heading_through_a_sharp_bend(site, context):
+    # Review of #525: the old fix kept course + yaw, but the real heading is atan(slope + tan(yaw)),
+    # so on Mutkamäki an unsteered sled turned some 17 degrees by itself.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const h = buildHill(6), dir = sl => Math.atan(courseSlope(h, sl.s) + Math.tan(sl.yaw));
+      const air = newSled('a', 'a'); air.s = 20; air.x = 0; air.yaw = 0.45; air.v = 15;
+      air.y = groundAt(h, 20, 0) + 60; air.air = true; air.vy = 0;
+      const a0 = dir(air); let aMax = 0;
+      while (air.s < 50 && air.air) { step(h, air, DT); aMax = Math.max(aMax, Math.abs(dir(air) - a0)); }
+      const snow = newSled('g', 'g'); snow.s = 20; snow.x = 0; snow.yaw = 0.2; snow.v = 6; snow.y = groundAt(h, 20, 0);
+      const g0 = dir(snow); let gMax = 0;
+      for (let i = 0; i < 40; i++) { step(h, snow, DT); gMax = Math.max(gMax, Math.abs(dir(snow) - g0)); }
+      const bend = Math.abs(courseDir(h, 50) - courseDir(h, 20));
+      return { aMax, gMax, bend, s: air.s, air: air.air };
+    }""")
+    assert got["bend"] > 0.2, got   # the course really bends there
+    assert got["air"] or got["s"] >= 50, got
+    assert got["aMax"] < 0.01, got
+    assert got["gMax"] < 0.03, got   # on the snow only the banks and slopes turn it a little
+    assert page.errors == []
+
+
+def test_a_sled_beside_the_track_stops_at_a_tunnels_mound_not_through_it(site, context):
+    # Helper find on #525: a sled out beside the track reaching a tunnel was set onto the wall line,
+    # moving it metres sideways through the snow mound in one step.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const h = buildHill(7), t = h.tunnels[0], lim = h.width / 2 + WALL - 0.4;
+      const sl = newSled('m', 'm'); sl.s = t.s - 6; sl.x = lim + 4; sl.y = groundAt(h, sl.s, sl.x); sl.v = 12;
+      let jump = 0, fell = false, inside = 0;
+      for (let i = 0; i < 120 * 20 && sl.s < t.s + 20; i++) {
+        const x = sl.x; step(h, sl, DT); jump = Math.max(jump, Math.abs(sl.x - x));
+        fell = fell || sl.fallT > 0;
+        if (tunnelAt(h, sl.s)) inside = Math.max(inside, Math.abs(sl.x));
+      }
+      return { jump, fell, inside, lim, s: sl.s, end: t.s + 20, v: sl.v, x: sl.x };
+    }""")
+    assert got["jump"] < 0.5, got   # never moved sideways in one leap
+    assert got["fell"], got   # it hit the mound
+    assert got["inside"] <= got["lim"] + 1e-6, got
+    assert got["s"] >= got["end"], got   # and found its way into the tunnel
+    assert page.errors == []
+
+
+def test_a_fast_sled_rides_up_the_outer_curve_of_a_bend_and_back(site, context):
+    # Eero, v6: "Voisko olla mahdollista että mutkassa voi nousta sinne ulkokurviin ylös".
+    page = open_game(site, context)
+    got = page.evaluate("""() => [6, 7].map(n => {
+      const h = buildHill(n);
+      // The highest berm with no jump or drop near it, and which side it is on.
+      // (and no tunnel mouth within 70 m after it: a sled still out wide there hits its mound)
+      const near = s => h.kicks.some(k => Math.abs(k.s - s) < 45) || h.drops.some(d => Math.abs(d.s - s) < 45)
+        || h.tunnels.some(t => t.s > s && t.s - s < 70);
+      let at = 0;
+      for (let s = 60; s < h.len - 40; s++) if (!near(s) && Math.abs(h.berm[s]) > Math.abs(h.berm[at])) at = s;
+      const out = Math.sign(h.berm[at]);
+      // Fast, nobody steering, a little towards the outside: it rides up the outer curve.
+      h.obst = [];   // only the bank here: a spruce by the track on its way back is luck
+      const sl = newSled('t', 't'); sl.s = at - 20; sl.x = 0; sl.y = groundAt(h, sl.s, sl.x); sl.v = 20;
+      sl.yaw = out * 0.2;
+      let up = 0, back = false, flew = false, t = 0;
+      for (; t < 7 && !back; t += DT) {
+        step(h, sl, DT);
+        flew = flew || sl.air;
+        up = Math.max(up, sl.y - baseAt(h, sl.s));
+        back = up > 1 && Math.abs(sl.x) < h.width / 2 - 1;
+      }
+      // The inner side of the bend stays flat, and the old hills have no berms.
+      const inner = bermAt(h, at, -out * h.width / 2);
+      return { berm: Math.abs(h.berm[at]), up, back, flew, fell: sl.fallT > 0, inner,
+        old: Math.max(...[1, 2, 3, 4, 5].map(k => Math.max(...buildHill(k).berm.map(Math.abs)))) };
+    })""")
+    for g in got:
+        assert g["berm"] > 1, g
+        assert g["up"] > 1, g   # it rides up the outer curve
+        assert g["back"] and not g["fell"] and not g["flew"], g   # and comes back down onto the track, on the snow
+        assert g["inner"] == 0 and g["old"] == 0, g
     assert page.errors == []

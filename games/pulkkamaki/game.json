@@ -36,6 +36,13 @@
       "note": "Käsillä työntämällä pääsee nyt hyvään vauhtiin: muutamalla napautuksella pulkka kiihtyy 10 m/s:iin.",
       "request": "Enemmän vauhtia käsillä. Pitää päästä ihan hyvään vauhtiin käsillä",
       "issue": "eerovil/ai-pelit#517"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-22",
+      "note": "Kaksi uutta mutkaista mäkeä, Mutkamäki ja Luolasto, joissa lasketaan tunneleiden läpi ja mutkissa voi nousta ulkokurvin vallille.",
+      "request": "Lisää kenttiä. Voisi olla tunneleita jne. Mutkia voisi olla. Voisko olla mahdollista että mutkassa voi nousta sinne ulkokurviin ylös",
+      "issue": "eerovil/ai-pelit#517"
     }
   ]
 }
