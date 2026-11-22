@@ -51,7 +51,7 @@ def test_a_removed_game_goes_to_the_shelf_and_its_cached_files_go(site, context)
     # A saved shortcut to it opens the shelf, online and offline.
     page.goto(f"{site.url}games/vanha/v1/")
     assert page.url == site.url
-    page.wait_for_selector('.card[data-slug="pysyy"]')
+    page.wait_for_selector('.shelf-row[data-slug="pysyy"]')
     context.set_offline(True)
     try:
         page.goto(f"{site.url}games/vanha/v1/index.html")

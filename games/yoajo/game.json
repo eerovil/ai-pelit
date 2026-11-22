@@ -1,6 +1,7 @@
 {
   "title": "Yöajo",
   "description": "Aja yöllä Valtatie 4:ää pohjoiseen: pitkät päälle ja pois, ohita traktorit ja rekat, varo hirviä, kuoppia ja nopeuskameroita.",
+  "category": "vauhti",
   "versions": [
     {
       "n": 1,

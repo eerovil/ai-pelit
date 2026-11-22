@@ -1,6 +1,7 @@
 {
   "title": "Piano",
   "description": "Osu putoaviin nuotteihin, niin kappale soi.",
+  "category": "rauhalliset",
   "versions": [
     {
       "n": 1,

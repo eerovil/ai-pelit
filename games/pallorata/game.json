@@ -1,6 +1,7 @@
 {
   "title": "Pallorata",
   "description": "Ohjaa vierivää palloa kapealla radalla taivaan yllä: hyppää hyppyreistä, kiidä turboista, väistä palikoita ja kerää tähtiä.",
+  "category": "vauhti",
   "versions": [
     {
       "n": 1,

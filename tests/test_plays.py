@@ -42,7 +42,7 @@ def test_opening_a_version_counts_one_play(site, context):
     page.goto(f"{site.url}games/hyppy/v1/index.html")
     page.wait_for_selector("#ai-pelit-back")
     page.goto(site.url)  # leaving the page must not lose the beacon
-    page.wait_for_selector(".card")
+    page.wait_for_selector(".shelf-row")
     assert fake.sent == [{"game": "pomppu", "version": 2}, {"game": "hyppy", "version": 1}]
 
 
@@ -54,17 +54,17 @@ def test_the_shelf_shows_each_games_total_and_keeps_it_offline(site, context):
     fake.totals = {"pomppu": 412, "vanha": 3}
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector('.card[data-slug="pomppu"] .plays:text("pelattu 412 kertaa")')
+    page.wait_for_selector('.shelf-row[data-slug="pomppu"] .plays:text("pelattu 412 kertaa")')
     # A game nobody has opened yet shows no count.
-    assert page.locator('.card[data-slug="hyppy"] .plays').inner_text() == ""
+    assert page.locator('.shelf-row[data-slug="hyppy"] .plays').inner_text() == ""
 
     fake.totals = {"pomppu": 1, "hyppy": 2}
     page.reload()
-    page.wait_for_selector('.card[data-slug="pomppu"] .plays:text("pelattu 1 kerran")')
-    assert page.locator('.card[data-slug="hyppy"] .plays').inner_text() == " · pelattu 2 kertaa"
+    page.wait_for_selector('.shelf-row[data-slug="pomppu"] .plays:text("pelattu 1 kerran")')
+    assert page.locator('.shelf-row[data-slug="hyppy"] .plays').inner_text() == " · pelattu 2 kertaa"
 
     # Without the network the last totals still show.
     fake.online = False
     page.reload()
-    page.wait_for_selector(".card")
-    assert page.locator('.card[data-slug="hyppy"] .plays').inner_text() == " · pelattu 2 kertaa"
+    page.wait_for_selector(".shelf-row")
+    assert page.locator('.shelf-row[data-slug="hyppy"] .plays').inner_text() == " · pelattu 2 kertaa"

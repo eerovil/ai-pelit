@@ -36,13 +36,28 @@ LIB_REF = re.compile(r"""['"]\.\./\.\./\.\./lib/([^'"?#]+)""")
 LIB_DIR = ROOT / "public" / "lib"
 ROOM_SCRIPT_RE = re.compile(r'<script[^>]+src="\.\./\.\./\.\./rooms\.js"[^>]*>')
 ROOM_MAX_RE = re.compile(r'data-max="([2-8])"')
-# Shelf groups (#153): a game.json with "group": "<key>" shows inside that group's card, and the
-# group's page lists its games. A key is a shelf address like a game's slug, so no game may take it.
+# Shelf groups (#153): a game.json with "group": "<key>". The shelf once showed a group as one
+# card; since #523 it lists every game on its own, and a group only gives its games their category.
+# A key is a shelf address like a game's slug (the old group page), so no game may take it.
 GROUPS = {
     "yleisurheilu": {
         "title": "Yleisurheilu",
         "description": "Juoksut, hypyt ja heitot, jokainen omana pelinään.",
     },
+}
+
+# The shelf's categories (#523), in the order of their buttons: each game.json names one with
+# "category": "<key>" (a game in a group with none takes the group's key). A key is a shelf
+# address too (#/<key> opens the shelf with that button on), so no game may take it.
+CATEGORIES = {
+    "kaverikaaos": "Kaverikaaos",
+    "talvi": "Talvi",
+    "yleisurheilu": "Yleisurheilu",
+    "pallo": "Pallo ja maali",
+    "temput": "Temput",
+    "vauhti": "Vauhti",
+    "seikkailu": "Seikkailu",
+    "rauhalliset": "Rauhalliset",
 }
 
 
@@ -124,13 +139,22 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     room_match = ROOM_MAX_RE.search(room_script.group(0)) if room_script else None
     room_max = int(room_match.group(1)) if room_match else 5
     group = meta.get("group")
-    if group is not None and group not in GROUPS:
+    # A list or an object in game.json would raise TypeError in the `in` tests below.
+    if group is not None and (not isinstance(group, str) or group not in GROUPS):
         raise GameError(f"{slug}: game.json names an unknown group {group!r} (GROUPS in scripts/build.py)")
+    # Key presence, not truthiness: a written but empty or malformed category is refused, not
+    # quietly replaced by the group's.
+    category = meta["category"] if "category" in meta else (group if group in CATEGORIES else None)
+    if category is None:
+        raise GameError(f"{slug}: game.json needs a category, one of {', '.join(CATEGORIES)} (CATEGORIES in scripts/build.py)")
+    if not isinstance(category, str) or category not in CATEGORIES:
+        raise GameError(f"{slug}: game.json names an unknown category {category!r} (CATEGORIES in scripts/build.py)")
     return {
         "slug": slug,
         "title": meta["title"],
         "description": meta["description"],
         **({"group": group} if group else {}),
+        "category": category,
         **({"room": {"max": room_max}} if room_script else {}),
         # A new picture gets a new name, so no phone keeps showing an old one from its cache.
         "thumb": f"thumbs/{slug}-{hashlib.sha256(thumb.read_bytes()).hexdigest()[:8]}.webp",
@@ -154,6 +178,24 @@ def merged_at(version_dir: Path) -> float:
     return float(out.stdout.strip() or "inf")
 
 
+def added_at(game_dir: Path) -> float:
+    """When the game first came to git: the commit that added its game.json (#523). Its first
+    version folder is gone (#346), so this is what tells two games released the same day apart.
+    Not yet committed counts as now; outside git, or in a shallow clone, every game ties."""
+    try:
+        out = subprocess.run(
+            ["git", "log", "--diff-filter=A", "--format=%ct", "--", "game.json"],
+            cwd=game_dir, capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0.0
+    if out.returncode:
+        return 0.0
+    # The oldest add, if the file was ever deleted and added again.
+    lines = out.stdout.split()
+    return float(lines[-1]) if lines else float("inf")
+
+
 def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR, removed=REMOVED) -> dict:
     games = [load_game(d, lib_dir=lib_dir) for d in sorted(games_dir.iterdir()) if d.is_dir()]
     back = {g["slug"] for g in games} & set(removed)
@@ -165,13 +207,21 @@ def build_catalog(games_dir: Path, lib_dir: Path = LIB_DIR, removed=REMOVED) -> 
     # 28 games updated on one day sat in reverse alphabetical order, today's new ones low.
     when = {g["slug"]: merged_at(games_dir / g["slug"] / f"v{g['versions'][-1]['n']}") for g in games}
     games.sort(key=lambda g: (g["versions"][-1]["date"], when[g["slug"]], g["slug"]), reverse=True)
-    taken = {g["slug"] for g in games} & set(GROUPS)
+    taken = {g["slug"] for g in games} & (set(GROUPS) | set(CATEGORIES))
     if taken:
-        raise GameError(f"{', '.join(sorted(taken))}: a game's slug is a group's address (GROUPS in scripts/build.py)")
+        raise GameError(f"{', '.join(sorted(taken))}: a game's slug is a group's or a category's address "
+                        "(GROUPS and CATEGORIES in scripts/build.py)")
+    # The shelf's Uudet (#523): a rank, 1 for the first game released, by the first version's day,
+    # then by when its game.json came to git, then by slug. The shelf shows the highest first.
+    added = {g["slug"]: added_at(games_dir / g["slug"]) for g in games}
+    for i, g in enumerate(sorted(games, key=lambda g: (g["versions"][0]["date"], added[g["slug"]], g["slug"])), start=1):
+        g["released"] = i
     used = {g["group"] for g in games if "group" in g}
     groups = [{"slug": k, **v} for k, v in GROUPS.items() if k in used]
+    have = {g["category"] for g in games}
+    categories = [{"slug": k, "title": v} for k, v in CATEGORIES.items() if k in have]
     # Games removed whole (#469): sw.js drops their cached files and sends their pages to the shelf.
-    return {"games": games, "groups": groups, "removed": sorted(removed)}
+    return {"games": games, "groups": groups, "categories": categories, "removed": sorted(removed)}
 
 
 def redirects(catalog: dict) -> str:

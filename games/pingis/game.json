@@ -1,6 +1,7 @@
 {
   "title": "Pingis",
   "description": "Pöytätennistä 3D:nä: maila seuraa sormea, pelaa konetta tai kaveria vastaan yksitoista pisteeseen.",
+  "category": "pallo",
   "versions": [
     {
       "n": 1,

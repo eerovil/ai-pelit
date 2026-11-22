@@ -64,8 +64,58 @@ def test_an_unknown_group_or_a_game_named_like_a_group_is_refused(tmp_path):
     (tmp_path / "hyppy" / "game.json").unlink()
     make_game(tmp_path, "hyppy", [game_page("a")])
     make_game(tmp_path, "yleisurheilu", [game_page("a")])
-    with pytest.raises(build.GameError, match="group's address"):
+    with pytest.raises(build.GameError, match="group's or a category's address"):
         build.build_catalog(tmp_path)
+
+
+def test_every_game_names_a_known_category_and_an_event_takes_its_groups(tmp_path):
+    # #523: the shelf's buttons filter by category, so a new game must pick one.
+    make_game(tmp_path, "hyppy", [game_page("a")], group="yleisurheilu")
+    make_game(tmp_path, "maali", [game_page("a")], category="pallo")
+    catalog = build.build_catalog(tmp_path)
+    assert {g["slug"]: g["category"] for g in catalog["games"]} == {"hyppy": "yleisurheilu", "maali": "pallo"}
+    # Only the categories that have games, in the buttons' order.
+    assert catalog["categories"] == [{"slug": "yleisurheilu", "title": "Yleisurheilu"},
+                                     {"slug": "pallo", "title": "Pallo ja maali"}]
+    make_game(tmp_path, "maali", [game_page("a")], category="urheilu")
+    with pytest.raises(build.GameError, match="unknown category 'urheilu'"):
+        build.build_catalog(tmp_path)
+    make_game(tmp_path, "maali", [game_page("a")], category=["pallo"])
+    with pytest.raises(build.GameError, match="unknown category"):
+        build.build_catalog(tmp_path)
+    make_game(tmp_path, "maali", [game_page("a")], category=None)
+    with pytest.raises(build.GameError, match="needs a category"):
+        build.build_catalog(tmp_path)
+    make_game(tmp_path, "maali", [game_page("a")])
+    # An event's own category, when written, must be a real one too: the group does not cover for it.
+    for bad in ([], {}, ""):
+        meta = json.loads((tmp_path / "hyppy" / "game.json").read_text())
+        meta["category"] = bad
+        (tmp_path / "hyppy" / "game.json").write_text(json.dumps(meta))
+        with pytest.raises(build.GameError, match="category"):
+            build.build_catalog(tmp_path)
+    make_game(tmp_path, "hyppy", [game_page("a")], group="yleisurheilu")
+    make_game(tmp_path, "temput", [game_page("a")])
+    with pytest.raises(build.GameError, match="category's address"):
+        build.build_catalog(tmp_path)
+
+
+def test_released_ranks_games_by_their_first_version_not_their_updates(tmp_path):
+    # #523: Uudet lists games by release; two released the same day go by when game.json came to git.
+    games = tmp_path / "games"
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    who = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for slug, hour in (("zeta", "06"), ("aamu", "07")):
+        make_game(games, slug, [game_page("a")], dates=["2026-11-01"])
+        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+        subprocess.run(["git", *who, "commit", "-qm", slug], cwd=tmp_path, check=True,
+                       env={"PATH": "/usr/bin:/bin", "GIT_COMMITTER_DATE": f"2026-11-01T{hour}:00:00"})
+    # Old, but updated today: still the first released.
+    make_game(games, "vanha", [game_page("a"), game_page("b")], dates=["2026-01-01", "2026-11-20"])
+    make_game(games, "kesken", [game_page("a")], dates=["2026-11-01"])  # not committed yet
+    catalog = build.build_catalog(games)
+    released = {g["slug"]: g["released"] for g in catalog["games"]}
+    assert sorted(released, key=released.get) == ["vanha", "zeta", "aamu", "kesken"]
 
 
 def small_webp():

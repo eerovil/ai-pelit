@@ -1,6 +1,7 @@
 {
   "title": "Pulkkamäki",
   "description": "Jouluinen pulkkamäki iltavaloissa: käännä pulkkaa, hyppää hyppyreistä ja tee ilmassa voltteja ja piruetteja, yksin tai kavereiden kanssa samaan aikaan.",
+  "category": "talvi",
   "versions": [
     {
       "n": 1,

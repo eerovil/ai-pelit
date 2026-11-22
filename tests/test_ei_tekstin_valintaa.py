@@ -69,9 +69,9 @@ def test_the_shelf_and_the_room_page_select_no_text(site, context):
     site.build()
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector(".card")
-    assert page.evaluate(STYLE, ".card")[:2] == ["none", "none"]
-    page.dblclick(".card h2")
+    page.wait_for_selector(".shelf-row")
+    assert page.evaluate(STYLE, ".shelf-row")[:2] == ["none", "none"]
+    page.dblclick(".shelf-row h2")
     assert page.evaluate("getSelection().toString()") == ""
     page.goto(f"{site.url}huone/")
     assert page.evaluate(STYLE, "body")[:2] == ["none", "none"]

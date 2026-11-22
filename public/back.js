@@ -29,6 +29,17 @@
       if (!sent) fetch(shelf + 'api/plays', { method: 'POST', body: body, headers: { 'content-type': 'application/json' }, keepalive: true }).catch(function () {});
     } catch (e) {}
   }
+  // The shelf's "Viimeksi pelatut" (#523): this game first in the phone's list of the last 8 games
+  // opened, slugs only. Counted as the play above is, so a game's own reload does not move it.
+  if (slug && version && !again) {
+    try {
+      var RECENT = 'ai-pelit:_hylly:viimeksi';
+      var recent = JSON.parse(localStorage.getItem(RECENT) || '[]');
+      if (!Array.isArray(recent)) recent = [];
+      recent = [slug].concat(recent.filter(function (s) { return s !== slug && typeof s === 'string'; })).slice(0, 8);
+      localStorage.setItem(RECENT, JSON.stringify(recent));
+    } catch (e) {}
+  }
   // Playing right now (#325): while this page is on screen it says so every 45 seconds, and says it
   // left when it is hidden, so the shelf can show how many play each game now. The id is random
   // per page open, kept only in this page. A game inside another page's frame is not counted

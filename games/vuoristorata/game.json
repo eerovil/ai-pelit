@@ -1,6 +1,7 @@
 {
   "title": "Vuoristorata",
   "description": "Aja vuoristoradan etupenkistä: säädä vauhtia, noudata nopeusmerkkejä ja tavoittele nopeinta aikaa. Yksin tai kavereiden kanssa.",
+  "category": "vauhti",
   "versions": [
     {
       "n": 1,
