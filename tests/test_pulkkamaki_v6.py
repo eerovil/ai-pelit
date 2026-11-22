@@ -428,6 +428,28 @@ def test_a_tunnels_walls_keep_the_sled_in_and_its_roof_keeps_it_low(site, contex
     assert page.errors == []
 
 
+def test_a_sled_beside_the_track_stops_at_a_tunnels_mound_not_through_it(site, context):
+    # Helper find on #525: a sled out beside the track reaching a tunnel was set onto the wall line,
+    # moving it metres sideways through the snow mound in one step.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const h = buildHill(7), t = h.tunnels[0], lim = h.width / 2 + WALL - 0.4;
+      const sl = newSled('m', 'm'); sl.s = t.s - 6; sl.x = lim + 4; sl.y = groundAt(h, sl.s, sl.x); sl.v = 12;
+      let jump = 0, fell = false, inside = 0;
+      for (let i = 0; i < 120 * 20 && sl.s < t.s + 20; i++) {
+        const x = sl.x; step(h, sl, DT); jump = Math.max(jump, Math.abs(sl.x - x));
+        fell = fell || sl.fallT > 0;
+        if (tunnelAt(h, sl.s)) inside = Math.max(inside, Math.abs(sl.x));
+      }
+      return { jump, fell, inside, lim, s: sl.s, end: t.s + 20, v: sl.v, x: sl.x };
+    }""")
+    assert got["jump"] < 0.5, got   # never moved sideways in one leap
+    assert got["fell"], got   # it hit the mound
+    assert got["inside"] <= got["lim"] + 1e-6, got
+    assert got["s"] >= got["end"], got   # and found its way into the tunnel
+    assert page.errors == []
+
+
 def test_a_fast_sled_rides_up_the_outer_curve_of_a_bend_and_back(site, context):
     # Eero, v6: "Voisko olla mahdollista että mutkassa voi nousta sinne ulkokurviin ylös".
     page = open_game(site, context)

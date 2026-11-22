@@ -323,7 +323,7 @@ function step(hill, sl, dt) {
 
   // The sled keeps its own heading (#475, Eero's choice: no steering by itself). `yaw` is measured
   // from the course, so where the course bends the yaw changes by as much the other way.
-  const cd0 = courseDir(hill, sl.s);
+  const cd0 = courseDir(hill, sl.s), x0 = sl.x, t0 = tunnelAt(hill, sl.s);
   if (sl.air) {
     sl.airT += dt;
     sl.vy -= G * dt;
@@ -358,7 +358,8 @@ function step(hill, sl, dt) {
     sl.vxb += -gx * G * 0.8 * dt; sl.vxb *= Math.max(0, 1 - dt * 2.5);
     // On a hill with berms (v6) the snow's sideways slope also turns the sled, as a banked curve
     // does: up the outer curve and round the bend. (The older hills keep their own feel.)
-    if (hill.bermy && gx && sl.fallT <= 0) sl.yaw = clamp(sl.yaw - gx * G * BERM_TURN * Math.cos(sl.yaw) / Math.max(sl.v, 4) * dt, -MAX_YAW, MAX_YAW);
+    const gb = hill.bermy ? (snowAt(hill, sl.s, sl.x + 0.05) - snowAt(hill, sl.s, sl.x - 0.05)) / 0.1 : 0;   // the jumps' steep sides do not count
+    if (gb && sl.fallT <= 0) sl.yaw = clamp(sl.yaw - gb * G * BERM_TURN * Math.cos(sl.yaw) / Math.max(sl.v, 4) * dt, -MAX_YAW, MAX_YAW);
     const py = sl.y, ps = sl.s, px = sl.x;
     sl.s += sl.v * Math.cos(sl.yaw) * dt;
     sl.x += (sl.v * Math.sin(sl.yaw) + sl.vxb) * dt;
@@ -380,9 +381,17 @@ function step(hill, sl, dt) {
   }
   sl.yaw -= courseDir(hill, sl.s) - cd0;
   // In a tunnel (v6): the walls turn the sled back along them, the roof stops it rising.
-  if (tunnelAt(hill, sl.s)) {
+  const tun = tunnelAt(hill, sl.s);
+  if (tun) {
     const lim = hill.width / 2 + WALL - 0.4;
-    if (Math.abs(sl.x) > lim) {
+    if (!t0 && Math.abs(x0) > lim + 0.3) {
+      // Coming at the mouth from out beside the track: the snow over the tunnel stops the sled, which
+      // then slides along its face towards the opening (not through the mound into the tunnel).
+      sl.s = tun.s - 0.3; sl.x = x0 - Math.sign(x0) * Math.min(Math.abs(x0) - lim, 4 * dt); sl.vxb = 0;
+      if (sl.air) { sl.air = false; sl.vy = 0; }
+      sl.y = groundAt(hill, sl.s, sl.x);
+      if (sl.fallT <= 0 && !sl.fin) fall(sl); else sl.v = Math.min(sl.v, 2);
+    } else if (Math.abs(sl.x) > lim) {
       const side = Math.sign(sl.x);
       sl.x = side * lim; sl.vxb = 0;
       if (Math.sign(sl.yaw) === side) {
