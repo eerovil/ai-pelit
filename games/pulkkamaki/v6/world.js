@@ -99,8 +99,10 @@ const HILLS = [
     trees: 30, rocks: 10, snowmen: 6, gifts: 30,
   },
 ];
-const ROOF = 5.2, WALL = 0.5;
-const BERM_PER_TURN = 90, BERM_MAX = 1.7, BERM_IN = 3.5, BERM_TURN = 1.1;   // it starts BERM_IN m inside the track's edge   // a tunnel's height over the snow; its walls this far outside the track's edge
+const ROOF = 5.2, WALL = 0.5;   // a tunnel's height over the snow; its walls this far outside the track's edge
+// A bend's bank (#517 v6): BERM_PER_TURN m per radian of turn a metre, at most BERM_MAX m high,
+// rising from BERM_IN m inside the track's edge; BERM_TURN is how hard its slope turns the sled down it.
+const BERM_PER_TURN = 90, BERM_MAX = 1.7, BERM_IN = 3.5, BERM_TURN = 1.1;
 const RUNOUT = 90;   // the flat at the bottom, past the finish line
 
 // Builds a hill's numbers once: the height along the centre line every metre, and the trees,
