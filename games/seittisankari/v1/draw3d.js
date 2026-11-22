@@ -265,32 +265,11 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       }
     }
 
-    // ---- The missions' things ----
+    // ---- The race's roof: a flag, and a tall light over it that shows from across the city ----
     const things = new T.Group(); scene.add(things);
     const flag = new T.Group(); part(flag, cyl, '#ddd', 0, 2, 0, 0.08, 4, 0.08); part(flag, box, '#ff3b3b', 0.7, 3.5, 0, 1.4, 0.9, 0.05, { emissive: '#ff2020', emissiveIntensity: 0.4 }); things.add(flag);
-    const cat = new T.Group(); part(cat, box, '#f29b38', 0, 0.3, 0, 0.3, 0.3, 0.6); part(cat, ball, '#f29b38', 0, 0.55, 0.32, 0.2, 0.2, 0.2);
-    part(cat, new T.ConeGeometry(1, 1, 4), '#f29b38', -0.1, 0.78, 0.32, 0.06, 0.14, 0.06); part(cat, new T.ConeGeometry(1, 1, 4), '#f29b38', 0.1, 0.78, 0.32, 0.06, 0.14, 0.06);
-    part(cat, cyl, '#f29b38', 0, 0.55, -0.4, 0.04, 0.5, 0.04); things.add(cat);
-    const thief = new T.Group(); part(thief, box, '#222', -0.13, 0.42, 0, 0.2, 0.84, 0.22); part(thief, box, '#222', 0.13, 0.42, 0, 0.2, 0.84, 0.22);
-    for (let k = 0; k < 4; k++) part(thief, box, k % 2 ? '#f0f0f0' : '#222', 0, 0.9 + k * 0.14, 0, 0.5, 0.14, 0.3);
-    part(thief, ball, '#e0b48c', 0, 1.55, 0, 0.2, 0.22, 0.2); part(thief, box, '#111', 0, 1.6, 0.12, 0.38, 0.08, 0.05);
-    part(thief, ball, '#c8a050', 0.1, 1.1, -0.35, 0.3, 0.32, 0.25); things.add(thief);
-    const wrap = new T.Mesh(new T.SphereGeometry(1, 10, 8), new T.MeshStandardMaterial({ color: '#fff', wireframe: true })); things.add(wrap);
-    const balloonG = []; const droneG = [];
-    function balloonMesh(col) {
-      const g = new T.Group(); part(g, ball, col, 0, 0, 0, 0.9, 1.1, 0.9, { roughness: 0.3, emissive: col, emissiveIntensity: 0.25 });
-      part(g, cyl, '#eee', 0, -1.9, 0, 0.02, 1.8, 0.02); things.add(g); return g;
-    }
-    function droneMesh() {
-      const g = new T.Group(); part(g, box, '#30343c', 0, 0, 0, 0.9, 0.25, 0.9);
-      for (const [x, z] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) part(g, cyl, '#bbb', x, 0.15, z, 0.35, 0.03, 0.35);
-      part(g, ball, '#ff3030', 0, -0.15, 0.45, 0.08, 0.08, 0.08, { emissive: '#ff2020', emissiveIntensity: 1 });
-      things.add(g); return g;
-    }
-    const aim = new T.Mesh(new T.TorusGeometry(0.6, 0.08, 6, 24), new T.MeshBasicMaterial({ color: '#ffffff', depthTest: false, transparent: true, opacity: 0.9 }));
-    aim.renderOrder = 10; scene.add(aim);
-    const ring = new T.Mesh(new T.TorusGeometry(1.4, 0.1, 6, 28), new T.MeshBasicMaterial({ color: '#ffd166', depthTest: false, transparent: true }));
-    ring.renderOrder = 10; scene.add(ring);
+    const beam = new T.Mesh(new T.CylinderGeometry(2.5, 2.5, 400, 16, 1, true), new T.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.35, depthWrite: false, side: T.DoubleSide, fog: false }));
+    beam.position.y = 200; flag.add(beam);
 
     // ---- The camera: behind the hero, kept out of the buildings ----
     const camPos = new T.Vector3(), look = new T.Vector3();
@@ -321,7 +300,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       return [(pv.x + 1) / 2 * glc.clientWidth, (1 - pv.y) / 2 * glc.clientHeight];
     };
     L3D.draw = (s, dt) => {
-      // s = { w, hero, heroes: [{h, col, id}], cam, aim, target }
+      // s = { w, hero, heroes: [{h, col, id}], cam, playing }
       const seen = new Set();
       for (const o of s.heroes) {
         let m = heroes.get(o.id);
@@ -331,34 +310,8 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       for (const [id, m] of heroes) if (!seen.has(id)) { m.g.visible = false; m.shadow.visible = false; m.web.visible = false; }
       const w = s.w, now = performance.now() / 1000;
       flag.visible = !!(w && w.flag); if (flag.visible) { flag.position.set(w.flag.x, w.flag.y, w.flag.z); flag.children[1].rotation.y = Math.sin(now * 3) * 0.3; }
-      cat.visible = !!(w && w.cat);
-      if (cat.visible) {
-        if (w.cat.held) { const h = s.hero; cat.position.set(h.x, h.y + 1.35, h.z); cat.rotation.y = h.yaw; cat.scale.setScalar(0.8); }
-        else { cat.position.set(w.cat.x, w.cat.y, w.cat.z); cat.rotation.y = now; cat.scale.setScalar(1); }
-      }
-      thief.visible = !!(w && w.thief);
-      wrap.visible = false;
-      if (thief.visible) {
-        thief.position.set(w.thief.x, w.thief.y, w.thief.z); thief.rotation.y = w.thief.yaw || 0;
-        if (w.thief.caught) { wrap.visible = true; wrap.position.set(w.thief.x, w.thief.y + 0.9, w.thief.z); wrap.scale.set(0.5, 1, 0.5); }
-      }
-      const bl = (w && w.balloons) || [];
-      while (balloonG.length < bl.length) balloonG.push(balloonMesh(BALLOON_COLS[balloonG.length % BALLOON_COLS.length]));
-      balloonG.forEach((g, i) => { const b = bl[i]; g.visible = !!b && !b.got; if (g.visible) g.position.set(b.x, b.y + Math.sin(now * 1.5 + i) * 0.4, b.z); });
-      const dr = (w && w.drones) || [];
-      while (droneG.length < dr.length) droneG.push(droneMesh());
-      droneG.forEach((g, i) => {
-        const d = dr[i]; g.visible = !!d; if (!d) return;
-        g.position.set(d.x, d.y - (d.caught ? 0 : 0), d.z); g.rotation.y = d.a;
-        if (d.caught) { g.position.y = d.y; }
-      });
-      if (dr.length) dr.forEach((d, i) => { if (d.caught) { droneG[i].visible = true; droneG[i].scale.setScalar(0.9); } });
       const h = s.hero;
       if (h) place(h, s.cam, dt);
-      aim.visible = !!s.aim;
-      if (aim.visible) { aim.position.set(s.aim.x, s.aim.y, s.aim.z); aim.quaternion.copy(cam.quaternion); const k = cam.position.distanceTo(aim.position) / 25; aim.scale.setScalar(Math.max(0.6, k)); }
-      ring.visible = !!s.target;
-      if (ring.visible) { ring.position.set(s.target.x, s.target.y + 1, s.target.z); ring.quaternion.copy(cam.quaternion); ring.scale.setScalar(1 + Math.sin(now * 8) * 0.1); }
       rd.render(scene, cam);
       L3D.ready = true;
       // A slow phone: fewer pixels (#103's lesson).

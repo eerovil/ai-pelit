@@ -25,63 +25,42 @@ document.addEventListener('fullscreenchange', resize);
 const KEY = 'ai-pelit:seittisankari:';
 function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(k, v) { try { if (v === null) localStorage.removeItem(KEY + k); else localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
-let open = clamp(Math.floor(load('taso', 1)) || 1, 1, MISSIONS.length);
-const times = load('ajat', {}) || {};
-
 // ---- Sounds (aanet-5, quiet: #337, #355) ----
 const S = window.AiPelitAanet;
-if (S) S.load(['suhahdus', 'askel', 'askel2', 'tomahdys', 'hyppy', 'pop', 'onnistui', 'valinta', 'voitto', 'tappio', 'kello']);
+if (S) S.load(['suhahdus', 'askel', 'askel2', 'tomahdys', 'hyppy', 'pop', 'valinta', 'voitto', 'tappio']);
 const sfx = (name, opts) => S && S.play(name, opts);
 
 // ---- The round ----
-let mode = 'menu', world = null, acc = 0, endT = 0, result = null, saveT = 0;
+let mode = 'menu', world = null, acc = 0, result = null, saveT = 0;
 const cam = { yaw: 0, pitch: 0.3, manualT: 9 };
-function startMission(n, resume) {
-  world = newWorld(n);
-  if (resume) restore(world, resume);
+// Into the city: where the hero was last time, if a spot is saved (a reload or a turn of the
+// phone goes on, rule 5).
+function startFree() {
+  world = newWorld();
+  const q = (load('kierros', null) || {}).h;
+  if (q) restore(world, q);
   cam.yaw = world.hero.yaw; cam.pitch = 0.3; cam.manualT = 9;
-  mode = 'play'; acc = 0; endT = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null;
+  mode = 'play'; acc = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null;
   hideAll();
   saveRound();
 }
-// The running mission on the phone, so a reload or a turn of the phone goes on (rule 5).
 function saveRound() {
-  if (!world || world.done || world.failed) { save('kierros', null); return; }
-  const w = world, h = w.hero;
-  save('kierros', { n: w.n, t: Math.round(w.t * 10) / 10,
-    h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz },
-    b: w.balloons ? w.balloons.map(b => b.got ? 1 : 0) : null, cat: w.cat ? w.cat.held : null,
-    th: w.thief ? [w.thief.t, w.thief.caught] : null, d: w.drones ? w.drones.map(d => d.caught ? 1 : 0) : null });
+  if (!world || mode !== 'play') return;
+  const h = world.hero;
+  save('kierros', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz } });
 }
-function restore(w, s) {
-  w.t = +s.t || 0;
-  const h = w.hero, q = s.h || {};
-  if ([q.x, q.y, q.z].every(Number.isFinite)) { h.x = q.x; h.y = q.y; h.z = q.z; h.yaw = +q.yaw || 0; h.st = 'air'; }
+function restore(w, q) {
+  const h = w.hero;
+  if (![q.x, q.y, q.z].every(Number.isFinite)) return;
+  h.x = clamp(q.x, -EDGE, EDGE); h.y = clamp(q.y, 0, 400); h.z = clamp(q.z, -EDGE, EDGE); h.yaw = +q.yaw || 0; h.st = 'air';
   if (q.st === 'wall' && CITY[q.box]) { h.st = 'wall'; h.box = CITY[q.box]; h.nx = q.nx; h.nz = q.nz; }
-  if (w.balloons && s.b) w.balloons.forEach((b, i) => { b.got = !!s.b[i]; });
-  if (w.cat && s.cat) w.cat.held = true;
-  if (w.thief && s.th) { w.thief.t = +s.th[0] || 0; w.thief.caught = !!s.th[1]; }
-  if (w.drones && s.d) w.drones.forEach((d, i) => { d.caught = !!s.d[i]; });
-}
-function finish() {
-  const w = world, n = w.n;
-  save('kierros', null);
-  if (w.failed) { result = { ok: false }; return; }
-  let rec = false, opened = 0;
-  if (w.M.limit) {
-    const t = Math.round(w.t * 10) / 10;
-    if (!times[n] || t < times[n]) { times[n] = t; rec = true; save('ajat', times); }
-    if (window.AiPelitScores) { AiPelitScores.board('tehtava-' + n, w.M.name); AiPelitScores.submit(Math.round(w.t * 10)); }
-  }
-  if (n === open && open < MISSIONS.length) { open++; save('taso', open); opened = open; }
-  result = { ok: true, t: w.t, rec, opened };
 }
 
 // ---- The fingers ----
 // Left half: a floating stick. Right half: Seitti (held) and Hyppy, and a drag anywhere else
 // turns the camera.
 const STICK = 52;
-let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, caughtHold = false;
+let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null;
 function buttons() {
   const r = LAND ? 46 : 50, rj = LAND ? 34 : 38;
   const web = { x: W - SAFE_R - r - (LAND ? 26 : 20), y: H - SAFE_B - r - (LAND ? 20 : 30), r };
@@ -89,7 +68,7 @@ function buttons() {
   return { web, jump };
 }
 const gapTo = (b, e) => Math.hypot(e.clientX - b.x, e.clientY - b.y) - b.r;
-const playing = () => (mode === 'play' && world && !world.done && !world.failed) ||
+const playing = () => (mode === 'play' && !!world) ||
   (mode === 'netplay' && world && typeof net !== 'undefined' && net && !net.res && !!net.me);
 // Each finger gets its own job. A button already held by one thumb is not offered to the other,
 // so a second thumb landing near the first still does what it is near (#529: a jump tapped right
@@ -101,7 +80,7 @@ c.addEventListener('pointerdown', e => {
   // With Seitti held, a second thumb on or beside it jumps.
   const b = buttons(), dw = webPtr === null ? gapTo(b.web, e) : Infinity, dj = Math.min(gapTo(b.jump, e), webPtr === null ? Infinity : gapTo(b.web, e));
   if (Math.min(dw, dj) < 22) {
-    if (dw <= dj) { webPtr = e.pointerId; caughtHold = mode === 'play' && tryCatch(world); }   // near a thief or a drone: wrap it
+    if (dw <= dj) webPtr = e.pointerId;
     else { jumpQ = true; jumpFlash = 0.15; }
     return;
   }
@@ -124,7 +103,7 @@ c.addEventListener('pointermove', e => {
 function lift(e) {
   if (stick && e.pointerId === stick.id) stick = null;
   if (lookPtr && e.pointerId === lookPtr.id) lookPtr = null;
-  if (e.pointerId === webPtr) { webPtr = null; caughtHold = false; }
+  if (e.pointerId === webPtr) webPtr = null;
 }
 c.addEventListener('pointerup', lift);
 c.addEventListener('pointercancel', lift);
@@ -138,7 +117,7 @@ function stickInput() {
 }
 function input() {
   const [ix, iy] = stickInput();
-  const inp = { ix, iy, jump: jumpQ, web: webPtr !== null && !caughtHold, yaw: cam.yaw };
+  const inp = { ix, iy, jump: jumpQ, web: webPtr !== null, yaw: cam.yaw };
   jumpQ = false;
   return inp;
 }
@@ -165,43 +144,10 @@ const fmt = t => { t = Math.max(0, t); const m = Math.floor(t / 60), s = t - m *
 function showMenu() {
   mode = 'menu'; world = null;
   hideAll(); $('menu').hidden = false;
-  const box = $('missions'); box.innerHTML = '';
-  const saved = load('kierros', null);
-  if (saved && (saved.n === 0 || MISSIONS[saved.n - 1])) {
-    const b = document.createElement('button');
-    b.className = 'mission go';
-    b.innerHTML = '<b>▶ Jatka: ' + (saved.n ? MISSIONS[saved.n - 1].name : FREE.name) + '</b>';
-    b.addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); startMission(saved.n, saved); });
-    box.appendChild(b);
-  }
-  MISSIONS.forEach((M, i) => {
-    const n = i + 1, b = document.createElement('button');
-    b.className = 'mission';
-    b.disabled = n > open;
-    b.innerHTML = '<b>' + n + '. ' + M.name + '</b><small>' + (n > open ? '🔒' : times[n] ? 'Paras ' + fmt(times[n]) : M.note) + '</small>';
-    b.addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); startMission(n); });
-    box.appendChild(b);
-  });
   $('friends').hidden = !window.AiPelitRooms;
-  if (window.AiPelitScores) AiPelitScores.board('tehtava-' + Math.max(3, Math.min(open, MISSIONS.length)), MISSIONS[Math.max(3, Math.min(open, MISSIONS.length)) - 1].name);
-}
-function showEnd() {
-  mode = 'end';
-  hideAll(); $('end').hidden = false;
-  const r = result, M = world.M;
-  $('endTitle').textContent = r.ok ? 'Tehtävä tehty!' : 'Aika loppui!';
-  $('endNote').textContent = r.ok ? (M.limit ? 'Aika ' + fmt(r.t) + (r.rec ? ' – uusi ennätys!' : ' · paras ' + fmt(times[world.n])) : M.name) : 'Yritä uudelleen';
-  $('again').hidden = false; $('toMenu').textContent = 'Tehtävät';
-  $('endOpen').hidden = !r.opened;
-  if (r.opened) $('endOpen').textContent = '🔓 ' + MISSIONS[r.opened - 1].name + ' aukesi!';
-  $('next').hidden = !(r.ok && world.n && world.n < MISSIONS.length && world.n + 1 <= open);
-  sfx(r.ok ? 'voitto' : 'tappio', { vol: 0.3 });
 }
 $('friends').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (window.AiPelitRooms) AiPelitRooms.open(); });
-$('free').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); startMission(0); });
-$('again').addEventListener('click', () => {
-  if (result && result.net) return; sfx('valinta', { vol: 0.3 }); startMission(world.n); });
-$('next').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); startMission(world.n + 1); });
+$('free').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); startFree(); });
 $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (result && result.net) backRoom(); else showMenu(); });
 $('quit').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); saveRound(); showMenu(); });
 
@@ -211,29 +157,18 @@ function shadowText(t, x, y, size, col, align, weight) {
   cx.fillStyle = 'rgba(10,20,40,.6)'; cx.fillText(t, x + 1.5, y + 2);
   cx.fillStyle = col; cx.fillText(t, x, y);
 }
-let aimNow = null, targetNow = null;
+let aimNow = null;
+let hintT = load('ohje', 0) ? 99 : 0;   // the controls, told once on the phone's first visit
 function drawHUD(w) {
   const h = w.hero, top = SAFE_T + 22;
-  const goal = w.cat && w.cat.held ? w.M.goal2 : w.M.goal;
-  const left = w.M.limit ? Math.max(0, w.M.limit - w.t) : null;
-  if (left !== null) shadowText(fmt(left), LAND ? SAFE_L + 150 : W / 2, top, 22, left < 15 ? '#ff8080' : '#fff', 'center', 900);
-  let extra = '';
-  if (w.balloons && w.n) extra = ' ' + w.balloons.filter(b => b.got).length + '/' + w.balloons.length;
-  if (w.drones) extra = ' ' + w.drones.filter(d => d.caught).length + '/' + w.drones.length;
-  if (goal) shadowText(goal + extra, W / 2, LAND ? top + 26 : top + 30, 15, '#fff', 'center', 800);
-  if (w.n === 0 && w.balloons) shadowText('🎈 ' + w.balloons.filter(b => b.got).length, W - SAFE_R - 96, top, 16, '#fff', 'right', 800);
-  // Height above the street.
-  shadowText('↑ ' + Math.round(h.y) + ' m', W - SAFE_R - 14, top + (LAND ? 0 : 0), 16, '#e8f4ff', 'right', 800);
-  // Hints in the first two missions.
-  if (w.hint === 'wall' && w.t < 14) {
-    shadowText('Juokse seinää päin: tartut siihen', W / 2, H * 0.3, 15, '#fff', 'center', 700);
-    shadowText('Tikku ylös: kiipeä', W / 2, H * 0.3 + 20, 15, '#fff', 'center', 700);
-  }
-  if (w.hint === 'web' && w.t < 16) {
-    shadowText('Hyppää katolta ja pidä Seitti pohjassa', W / 2, H * 0.3, 15, '#fff', 'center', 700);
-    shadowText('Päästä irti heilahduksen huipulla', W / 2, H * 0.3 + 20, 15, '#fff', 'center', 700);
-  }
+  shadowText('↑ ' + Math.round(h.y) + ' m', W - SAFE_R - 14, top, 16, '#e8f4ff', 'right', 800);
+  if (hintT < 16) drawHints();
   drawControls(h);
+}
+function drawHints() {
+  const lines = hintT < 8 ? ['Juokse seinää päin: tartut siihen', 'Tikku ylös: kiipeä'] : ['Pidä Seitti pohjassa: heilu', 'Päästä irti heilahduksen huipulla'];
+  shadowText(lines[0], W / 2, H * 0.3, 15, '#fff', 'center', 700);
+  shadowText(lines[1], W / 2, H * 0.3 + 20, 15, '#fff', 'center', 700);
 }
 function drawControls(h) {
   if (stick) {
@@ -247,12 +182,11 @@ function drawControls(h) {
   cx.fillStyle = webPtr !== null ? 'rgba(255,255,255,.95)' : canWeb ? 'rgba(30,170,160,.88)' : 'rgba(60,80,90,.55)';
   cx.beginPath(); cx.arc(b.web.x, b.web.y, b.web.r, 0, TAU); cx.fill();
   cx.strokeStyle = 'rgba(255,255,255,.75)'; cx.lineWidth = 3; cx.stroke();
-  shadowText(targetNow ? 'Nappaa' : 'Seitti', b.web.x, b.web.y, 17, webPtr !== null ? '#0b4a46' : '#fff', 'center', 900);
+  shadowText('Seitti', b.web.x, b.web.y, 17, webPtr !== null ? '#0b4a46' : '#fff', 'center', 900);
   cx.fillStyle = jumpFlash > 0 ? 'rgba(255,255,255,.95)' : 'rgba(255,140,60,.85)';
   cx.beginPath(); cx.arc(b.jump.x, b.jump.y, b.jump.r, 0, TAU); cx.fill(); cx.stroke();
   shadowText('Hyppy', b.jump.x, b.jump.y, 15, '#fff', 'center', 900);
 }
-function drawEnd() {}
 
 // ---- In a room: the others' heroes, names over them, the round's clock and score ----
 function netHeroes(dt) {
@@ -268,9 +202,12 @@ function drawNetHUD(w) {
   if (M.limit) { const left = Math.max(0, M.limit - net.rt); shadowText(fmt(left), LAND ? SAFE_L + 150 : W / 2, top, 22, left < 15 ? '#ff8080' : '#fff', 'center', 900); }
   else shadowText(fmt(net.rt), LAND ? SAFE_L + 150 : W / 2, top, 20, '#fff', 'center', 900);
   let goal = M.note;
-  if (net.mode === 'pallot') {
-    const mine = net.taken.filter(o => o === RM.me).length, left = net.taken.filter(o => !o).length;
-    goal = '🎈 Sinulla ' + mine + ' · jäljellä ' + left;
+  const gb = goalBox();
+  if (gb) {
+    // The marked roof: how far, and an arrow toward it as the camera looks.
+    const t = roofTop(gb), dx = t.x - w.hero.x, dz = t.z - w.hero.z, d = Math.round(Math.hypot(dx, dz));
+    goal = 'Merkitylle katolle! ' + (d > 15 ? d + ' m' : '↑ ' + Math.max(0, Math.round(gb.h - w.hero.y)) + ' m');
+    if (d > 15) drawArrow(W / 2, (LAND ? top + 26 : top + 30) + 32, angDiff(cam.yaw, Math.atan2(dx, dz)));
   }
   shadowText(goal, W / 2, LAND ? top + 26 : top + 30, 15, '#fff', 'center', 800);
   shadowText('↑ ' + Math.round(w.hero.y) + ' m', W - SAFE_R - 14, top, 16, '#e8f4ff', 'right', 800);
@@ -279,12 +216,17 @@ function drawNetHUD(w) {
     if (p.id === RM.me || !p.dh) continue;
     const q = L3D.project(p.dh.x, p.dh.y + 2.4, p.dh.z);
     if (!q) continue;
-    const label = p.name + (net.mode === 'pallot' ? ' ' + net.taken.filter(o => o === p.id).length : '');
-    shadowText(label, q[0], q[1], 13, p.col, 'center', 800);
+    shadowText(p.name, q[0], q[1], 13, p.col, 'center', 800);
   }
   if (RM.paused) shadowText('Odotetaan kaveria…', W / 2, H * 0.4, 18, '#ffd166', 'center', 900);
   if (net.me) drawControls(w.hero);
   else shadowText('Katsot kierrosta', W / 2, H - SAFE_B - 40, 16, '#fff', 'center', 800);
+}
+function drawArrow(x, y, a) {
+  cx.save(); cx.translate(x, y); cx.rotate(-a);
+  cx.fillStyle = '#ffd166'; cx.strokeStyle = 'rgba(10,20,40,.6)'; cx.lineWidth = 3;
+  cx.beginPath(); cx.moveTo(0, -16); cx.lineTo(12, 10); cx.lineTo(0, 4); cx.lineTo(-12, 10); cx.closePath();
+  cx.stroke(); cx.fill(); cx.restore();
 }
 function showNetEnd() {
   mode = 'end';
@@ -292,8 +234,7 @@ function showNetEnd() {
   const r = result;
   $('endTitle').textContent = r.won ? 'Voitit!' : r.winRow ? r.winRow.n + ' voitti' : 'Kierros päättyi';
   $('endNote').textContent = r.rows.map((o, i) => (i + 1) + '. ' + o.n + ' ' +
-    (r.mode === 'pallot' ? '🎈 ' + o.b : o.t !== null ? fmt(o.t) : '↑ ' + o.y + ' m')).join('  ·  ');
-  $('endOpen').hidden = true; $('next').hidden = true; $('again').hidden = true;
+    (o.t !== null ? fmt(o.t) : '↑ ' + o.y + ' m')).join('  ·  ');
   $('toMenu').textContent = 'Takaisin huoneeseen';
   sfx(r.won ? 'voitto' : 'tappio', { vol: 0.3 });
 }
@@ -310,26 +251,22 @@ function frame(now) {
     acc += dt;
     while (acc >= STEP) { acc -= STEP; tick(STEP); }
     saveT += dt; if (saveT > 2) { saveT = 0; saveRound(); }
-    if (world.done || world.failed) { if (!result) finish(); endT += dt; if (endT > 1.4 && mode === 'play') showEnd(); }
+    if (hintT < 16) { hintT += dt; if (hintT >= 16) save('ohje', 1); }
   }
   if (mode === 'netplay' && typeof netTick === 'function') netTick(dt);
   draw(dt);
   document.body.classList.toggle('playing', mode === 'play' || mode === 'netplay');
   document.body.classList.toggle('net', mode === 'netplay' || mode === 'netwait');
 }
-// One fixed step: the hero, the camera, the mission, the sounds.
+// One fixed step: the hero, the camera, the sounds.
 function tick(dt) {
   const w = world, h = w.hero, st0 = h.st, lands0 = h.lands || 0;
-  if (!w.done && !w.failed) stepHero(h, input(), dt);
+  stepHero(h, input(), dt);
   stepCam(h, dt);
-  stepMission(w, dt);
+  stepRound(w, dt);
   if (h.st === 'swing' && st0 !== 'swing') sfx('suhahdus', { vol: 0.25, rate: 1.3 });
   if ((h.lands || 0) > lands0) sfx('tomahdys', { vol: 0.15 });
   if (h.jumped) { h.jumped = false; sfx('pop', { vol: 0.2 }); }
-  for (const e of w.ev.splice(0)) {
-    if (e === 'balloon') sfx('pop', { vol: 0.3, rate: 1.4 });
-    else if (e === 'caught' || e === 'cat') sfx('onnistui', { vol: 0.3 });
-  }
 }
 function draw(dt) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -339,15 +276,13 @@ function draw(dt) {
     const h = world.hero;
     const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
     aimNow = h.st !== 'swing' && playing() ? aimAnchor(h, fx, fz) : null;
-    targetNow = mode === 'play' && playing() ? catchable(world) : null;
     const heroes = mode === 'netplay' && net ? netHeroes(dt) : [{ id: 'me', col: '#1fb5a8', h }];
-    if (mode === 'netplay' && net) world.balloons = netBalloons();
-    s = { w: world, hero: h, heroes, cam, aim: null, target: targetNow, playing: playing() };
+    s = { w: world, hero: h, heroes, cam, playing: playing() };
   } else {
     // Behind the menu: the city turning slowly.
     menuT += dt; cam.yaw = menuT * 0.08; cam.pitch = 0.5;
     menuHero.y = 45;
-    s = { w: null, hero: menuHero, heroes: [], cam, aim: null, target: null };
+    s = { w: null, hero: menuHero, heroes: [], cam };
   }
   if (window.L3D && L3D.draw) L3D.draw(s, dt);
   if (window.L3D && L3D.failed) {
