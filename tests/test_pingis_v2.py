@@ -218,8 +218,10 @@ def test_a_game_is_saved_point_by_point_and_the_end_counts_once(site, context):
     page.evaluate("() => { game.ph = 'play'; game.flight = newFlight(0, 1, false, [0,0.3,-1,0,0,3,0]); soloPoint(game.flight, 0); }")
     assert saved(page, "kesken") == {"lvl": 1, "sc": [1, 0], "first": 0}
     page.reload()
-    page.wait_for_function("mode === 'play' && game", timeout=20000)
+    # v2 (#531): a saved game reopens on the pause screen.
+    page.wait_for_function("mode === 'paused' && game", timeout=20000)
     assert page.evaluate("game.sc") == [1, 0]
+    page.click("#resume")
     assert page.evaluate("level") == 1
     # Winning the game: the end screen, one more win on this level, the save cleared.
     page.evaluate("() => { game.sc = [10, 3]; game.ph = 'play'; game.flight = newFlight(0, 1, false, [0,0.3,-1,0,0,3,0]); soloPoint(game.flight, 0); game.wait = 0; }")
@@ -236,7 +238,7 @@ def test_a_game_is_saved_point_by_point_and_the_end_counts_once(site, context):
 def test_a_long_deuce_is_resumed_and_a_broken_save_is_dropped(site, context):
     # 40–39 is still on: nobody leads by two. It comes back after a reload as it was.
     page = open_game(site, context, saves={"kesken": json.dumps({"lvl": 2, "sc": [40, 39], "first": 1})})
-    page.wait_for_function("mode === 'play' && game", timeout=20000)
+    page.wait_for_function("mode === 'paused' && game", timeout=20000)
     assert page.evaluate("[game.sc, level, game.first, game.over]") == [[40, 39], 2, 1, False]
     assert page.evaluate("serverAt(game.sc, game.first)") == page.evaluate("game.sv")
     page.close()

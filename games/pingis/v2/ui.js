@@ -270,16 +270,21 @@ $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); show
 // A game alone can be paused and quit mid-way (#531). The pause stops the ball where it is; the
 // quit drops the saved game, so the menu shows next time, and counts neither a win nor a loss.
 // With friends the room has its own ways out (the "‹ Pelit" chip), so the button is not shown.
+// Once the last point is played the game is already counted, so it cannot be paused any more.
+// A finger still on the table keeps its bat (`finger` is kept); it jumps there on resume.
+const canPause = () => mode === 'play' && !net && !!game && !game.over;
 function pauseGame() {
-  if (mode !== 'play' || net || !game) return;
-  mode = 'paused'; finger = null;
+  if (!canPause()) return;
+  mode = 'paused';
   hideAll(); $('paused').hidden = false; $('pause').hidden = true;
   $('pauseScore').textContent = LEVELS[level].name + ' · ' + game.sc[0] + '–' + game.sc[1];
   wake();
 }
 function resumeGame() {
   if (mode !== 'paused') return;
-  hideAll(); mode = 'play'; wake();
+  hideAll(); mode = 'play';
+  if (bats) bats[view].jump = true;   // no swing from where the bat was before the pause
+  wake();
 }
 function quitGame() {
   if (mode !== 'paused') return;
@@ -412,11 +417,12 @@ function frame(now) {
   const moving = mode === 'play' || mode === 'netplay' || mode === 'netwait';
   if (moving) tune(ms);
   document.body.classList.toggle('playing', moving);
-  $('pause').hidden = mode !== 'play' || !!net;
+  $('pause').hidden = !canPause();
   if (moving || still++ < 3) raf = requestAnimationFrame(frame);
 }
 resize();
 const resumed = !(window.AiPelitRooms && AiPelitRooms.inRoom) ? readSolo() : null;
 if (window.AiPelitRooms && AiPelitRooms.inRoom) hideAll();
-else if (resumed) { level = resumed.lvl; soloGame(resumed); }
+// A saved game reopens on the pause screen: go on with it, or quit it.
+else if (resumed) { level = resumed.lvl; soloGame(resumed); pauseGame(); }
 else showMenu();

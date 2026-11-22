@@ -73,6 +73,9 @@ def test_two_phones_play_one_rally_from_both_ends(phones):
     # The guest's camera is behind its own end, the other way round. V3.view is set by the next
     # 3D frame (render3d), which on a busy run comes a moment after the game state, so wait for it.
     guest.wait_for_function("no3d || V3.view === 1 || V3.view === -1", timeout=5000)
+    # v2 (#531): the pause button is for a game alone; a room game has the "‹ Pelit" chip.
+    for p in (host, guest):
+        assert p.locator("#pause").is_hidden()
     for p in (host, guest):
         p.evaluate(AUTO)
     server = host if host.evaluate("game.sv") == 0 else guest

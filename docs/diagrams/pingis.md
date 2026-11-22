@@ -42,7 +42,7 @@ flowchart TD
   R -- Yksin --> T[Voitot tasolle, keskeneräinen peli pois]
   R -- Kaverin kanssa --> U[Tulos molemmille kerran, takaisin huoneeseen]
   S1 -.-> Z{⏸ kesken pelin?}
-  Z -- Jatka peliä --> A
+  Z -- Jatka peliä --> Z2[Peli jatkuu siitä mihin jäi]
   Z -- Lopeta peli --> Z1[Valikkoon, keskeneräinen peli pois, ei voittoa eikä tappiota]
   X[Kaveri poissa] --> Y[Pallo pysähtyy; paluun jälkeen sama syöttö uudestaan ilman pistettä]
   Y --> A
@@ -63,8 +63,9 @@ flowchart TD
 
 - **Kone pelaa toista päätä valitulla tasolla**: `cpuBrain()`, `cpuThink()` and `cpuServes()` in `games/pingis/v2/ai.js`, with the level's reaction time, speed, aim error and misses from `LEVELS` in `world.js` (Helppo, Keskitaso, Vaikea).
 - **Huone, 2 puhelinta: tekijä on isäntä ja pitää pisteet**: `netStart()` in `games/pingis/v2/net.js`; the host is side 0, the friend side 1, and each phone's camera is behind its own end (`placeCamera()` in `draw3d.js`). The friend's bat glides through `lib/sulava-1` (`glide()`).
-- **⏸ kesken pelin?**: alone only (`mode === 'play'` and no `net`), the ⏸ button in the top-right corner, or the page being hidden (`visibilitychange`), calls `pauseGame()` in `ui.js`: `mode` becomes `'paused'`, so `frame()` stops calling `playFrame()` and the ball stays where it was. In a room the button is not shown; the "‹ Pelit" chip is the way out there.
-- **Valikkoon, keskeneräinen peli pois, ei voittoa eikä tappiota**: `quitGame()` drops `ai-pelit:pingis:kesken` and calls `showMenu()`; `ai-pelit:pingis:voitot` is not touched. `resumeGame()` (Jatka peliä) sets `mode` back to `'play'`.
+- **⏸ kesken pelin?**: alone only, before the last point (`canPause()`: `mode === 'play'`, no `net`, not `game.over`), the ⏸ button in the top-right corner, or the page being hidden (`visibilitychange`), calls `pauseGame()` in `ui.js`; a saved game reopened (`readSolo()`) starts on the pause screen too: `mode` becomes `'paused'`, so `frame()` stops calling `playFrame()` and the ball stays where it was. In a room the button is not shown; the "‹ Pelit" chip is the way out there.
+- **Valikkoon, keskeneräinen peli pois, ei voittoa eikä tappiota**: `quitGame()` drops `ai-pelit:pingis:kesken` and calls `showMenu()`; `ai-pelit:pingis:voitot` is not touched. 
+- **Peli jatkuu siitä mihin jäi**: `resumeGame()` sets `mode` back to `'play'`; the ball goes on from where it stopped, and the bat jumps to the finger without a swing (`bats[view].jump`).
 - **Syöttäjä pitää palloa mailan päällä**: `heldBall()` in `ui.js`; the server is `serverAt()` in `world.js`.
 - **Nopea veto ylös?**: `myBat()` in `ui.js` measures the bat's speed over the last 80 ms; a quick push up calls `tryServe()`. The touch-down itself never counts (`bats[view].jump`).
 - **Syöttö: pomppu omalla puolella, sitten toisella**: `serveLaunch()` in `world.js` solves both hops, so every serve clears the net and lands on both halves.
