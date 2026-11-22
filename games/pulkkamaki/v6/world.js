@@ -164,7 +164,10 @@ function buildHill(n) {
 }
 
 // Which way the course itself heads at `s` (radians from straight down the s axis).
-function courseDir(hill, s) { return Math.atan2(centreX(hill, s + 0.6) - centreX(hill, s - 0.6), 1.2); }
+function courseDir(hill, s) { return Math.atan(courseSlope(hill, s)); }
+// How much the centre line moves across per metre along (v6): s and x are not square to each other
+// on a bend, so a heading `yaw` from the course really goes atan(slope + tan(yaw)) in the world.
+function courseSlope(hill, s) { return (centreX(hill, s + 0.6) - centreX(hill, s - 0.6)) / 1.2; }
 function centreX(hill, s) { let v = 0; for (const [a, k, p] of hill.bend) v += a * Math.sin(s * k + p); return v; }
 function baseAt(hill, s) {
   const b = hill.base, i = clamp(Math.floor(s), 0, hill.total - 1), f = clamp(s - i, 0, 1);
@@ -323,7 +326,7 @@ function step(hill, sl, dt) {
 
   // The sled keeps its own heading (#475, Eero's choice: no steering by itself). `yaw` is measured
   // from the course, so where the course bends the yaw changes by as much the other way.
-  const cd0 = courseDir(hill, sl.s), x0 = sl.x, t0 = tunnelAt(hill, sl.s);
+  const c0 = courseSlope(hill, sl.s), x0 = sl.x, t0 = tunnelAt(hill, sl.s);
   if (sl.air) {
     sl.airT += dt;
     sl.vy -= G * dt;
@@ -379,7 +382,10 @@ function step(hill, sl, dt) {
       sl.y = gy;
     }
   }
-  sl.yaw -= courseDir(hill, sl.s) - cd0;
+  // The sled keeps its heading in the world as the course bends under it (#517 v6, review of #525):
+  // the world heading over the old slope, put back as a heading from the course at the new place.
+  const c1 = courseSlope(hill, sl.s);
+  if (c1 !== c0) sl.yaw = Math.atan2(Math.sin(sl.yaw) + (c0 - c1) * Math.cos(sl.yaw), Math.cos(sl.yaw));
   // In a tunnel (v6): the walls turn the sled back along them, the roof stops it rising.
   const tun = tunnelAt(hill, sl.s);
   if (tun) {

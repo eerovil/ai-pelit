@@ -92,7 +92,7 @@ function hillPoint(hill, s, x, y) { return [centreX(hill, s) + x, y, -s]; }
 // The way a sled heading `yaw` from the course really goes in the world (v6): s and x are not
 // square to each other where the course bends, so on a sharp bend this differs from course + yaw.
 function worldDir(hill, s, yaw) {
-  const c = (centreX(hill, s + 0.6) - centreX(hill, s - 0.6)) / 1.2;
+  const c = courseSlope(hill, s);   // the same sum as step() keeps the heading with
   return Math.atan2(c * Math.cos(yaw) + Math.sin(yaw), Math.cos(yaw));
 }
 // Hill place a world distance `d` from (s, x) along world heading `dir`.
