@@ -44,7 +44,7 @@ function draw() {
   var players=round?round.players:[{ball:golfBall(h.tee)}];
   players.forEach(function(p,i){var b=p.ball;if(b.holed||b.water)return;var active=!round||i===round.turn;ctx.globalAlpha=active?1:.35;circle(b.x+.035,b.y+.05,BALL_RADIUS*1.2,'#264936');circle(b.x,b.y,BALL_RADIUS,colors[i],'#ffffff',1);if(active)circle(b.x-.025,b.y-.03,.025,'white');ctx.globalAlpha=1;});
   if(round&&aim&&round.phase==='aim') {
-    var b=round.players[round.turn].ball;drawAimLine(b.x,b.y,aim.a,aim.p);
+    var b=round.players[round.turn].ball,s=shownAim();drawAimLine(b.x,b.y,s.a,s.p);
   }
 }
 // The aim line alone shows the power (#438): it grows longer, thicker and from pale yellow to red.
@@ -78,7 +78,7 @@ function frame(now) {
     else stopSound();
   } else stopSound();
   draw();
-  if(round&&['aim','roll','hole'].includes(round.phase)&&(round.phase==='roll'||(round.phase==='hole'&&!online)||HOLES[round.hole].mill)&&(!online||!R.paused)) askDraw();
+  if(round&&['aim','roll','hole'].includes(round.phase)&&(round.phase==='roll'||(round.phase==='hole'&&!online)||HOLES[round.hole].mill||(aimTrack&&aim&&round.phase==='aim'))&&(!online||!R.paused)) askDraw();
   else lastFrame=0;
 }
 function pointer(e) { var r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]; }
@@ -90,9 +90,18 @@ function dragAim(e) {
   if(dragging.reanchor){dragging.x=p[0];dragging.y=p[1];dragging.base=aim?{a:aim.a,p:aim.p}:null;dragging.reanchor=false;}
   var base=dragging.base?screenVector(Math.cos(dragging.base.a)*dragging.base.p*Math.min(W,H)*.3,Math.sin(dragging.base.a)*dragging.base.p*Math.min(W,H)*.3):[0,0];
   var dx=dragging.x-p[0]+base[0],dy=dragging.y-p[1]+base[1],len=Math.hypot(dx,dy),v=worldVector(dx,dy);
-  aim=len?{a:Math.atan2(v[1],v[0]),p:Math.max(MIN_POWER,Math.min(1,len/(Math.min(W,H)*.3))),length:len}:null;
-  if(aim&&online&&performance.now()-dragging.sent>100){if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim.a,p:aim.p});dragging.sent=performance.now();}
+  aim=len?{a:Math.atan2(v[1],v[0]),p:Math.max(MIN_POWER,Math.min(1,len/(Math.min(W,H)*.3))),length:len,st:stamp()}:null;
+  if(aim&&online)sendAim();
   updateHUD();askDraw();
+}
+// At most 10 aims a second; the last one of a pull that stops goes out when the gap is over (#537).
+var aimTimer=0;
+function sendAim() {
+  if(!dragging||!aim||!online||!canAim())return;
+  var wait=dragging.sent+100-performance.now();
+  if(wait>0){if(!aimTimer)aimTimer=setTimeout(function(){aimTimer=0;sendAim();},wait);return;}
+  if(R.isHost)sendState();else R.send({t:'aim',round:roomRound,seq:round.seq,a:aim.a,p:aim.p,st:aim.st});
+  dragging.sent=performance.now();
 }
 canvas.addEventListener('pointerdown',function(e){hideNotice();if(!canAim()||dragging)return;var p=pointer(e);dragging={id:e.pointerId,x:p[0],y:p[1],sent:0,base:parkedAim&&aim?{a:aim.a,p:aim.p}:null};if(!parkedAim)aim=null;parkedAim=false;canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',dragAim);

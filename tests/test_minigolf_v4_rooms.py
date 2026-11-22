@@ -157,6 +157,26 @@ def test_others_see_the_pullers_power_line(golf_phones):
     guest.wait_for_function("aim===null")
 
 
+def test_a_friends_aim_glides_between_the_spots_heard(golf_phones):
+    """#537: the others draw the puller's line through lib/sulava-1, between the aims they heard,
+    and the last aim of a pull that stops inside the 100 ms gap still reaches them."""
+    host,guest=room(golf_phones,2)
+    guest.evaluate("""window.lines=[];window.heard=[];const d=drawAimLine;drawAimLine=(x,y,a,q)=>{lines.push(q);d(x,y,a,q)};
+      const h=heardAim;heardAim=a=>{if(a&&a.p>0)heard.push(a.p);h(a)}""")
+    host.mouse.move(180,370);host.mouse.down()
+    for y in range(380,500,12):
+        host.mouse.move(180,y);host.wait_for_timeout(45)
+    final=host.evaluate('aim.p')
+    guest.wait_for_function(f"heard.length>2&&Math.abs(heard[heard.length-1]-{final})<1e-9")
+    guest.wait_for_function(f"Math.abs(lines[lines.length-1]-{final})<1e-6")
+    between=guest.evaluate("lines.filter(q=>heard.every(h=>Math.abs(h-q)>1e-6)&&q>heard[0]&&q<heard[heard.length-1]).length")
+    assert between>3
+    seen=guest.evaluate("lines")
+    assert all(b>=a-1e-9 for a,b in zip(seen,seen[1:])), 'a steady pull never draws backwards'
+    host.mouse.up();host.wait_for_function("round.phase==='roll'")
+    guest.wait_for_function("aim===null&&aimTrack===null")
+    assert not guest.errors and not host.errors
+
 def test_host_clamps_a_guests_tiny_visible_putt(golf_phones):
     host,guest=room(golf_phones,2)
     # Move to the guest's turn without changing the behavior under test.

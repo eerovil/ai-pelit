@@ -15,6 +15,20 @@ function relative(n) { return n===0?'par':n>0?'+'+n:String(n).replace('-','−')
 function sound(name,vol) { if(S) S.play(name,{vol:vol===undefined?.25:vol}); }
 if(S) S.load(['puu','osuma','hiekka','loiskis','naksu','onnistui','rullaus']);
 function stopSound() { if(rollingSound) rollingSound.stop(); rollingSound=null; }
+// The aim of the player on turn, as another phone hears it (#537): 10 times a second at uneven gaps,
+// so it is drawn through lib/sulava-1 a moment late, gliding between the spots it heard. One track
+// per turn (seq) and player; the aiming phone's own line never goes through it. No guess past the
+// newest spot (extra 0): a finger that stops sends nothing more, and a guessed line would stay overshot.
+var aimTrack=null,aimKey='';
+function stamp() { return window.AiPelitSulava?AiPelitSulava.now():null; }
+function heardAim(a) {
+  if(!window.AiPelitSulava||!online||!round||round.phase!=='aim'||mine()||!a||!(a.p>0)) {aimTrack=null;aimKey='';return;}
+  var key=round.seq+':'+round.players[round.turn].id,st=Number.isFinite(a.st)?a.st:null;
+  if(!aimTrack||key!==aimKey) {aimTrack=AiPelitSulava.track({keys:['a','p'],angles:['a'],extra:0});aimKey=key;aimTrack.snap(st,a);}
+  else aimTrack.push(st,a);
+}
+// What the aim line draws: the glide for another player's aim, the aim itself otherwise.
+function shownAim() { var s=aimTrack&&aim&&!mine()?aimTrack.at():null; return s?{a:s.a,p:s.p}:aim; }
 function keepRound() { if(round&&!online) save('kierros',round); }
 function mine() { return round&&(!online||round.players[round.turn].id===R.me); }
 function authority() { return !online||R.isHost; }
@@ -50,7 +64,7 @@ function resumeRound() {
   if(round.phase==='end') { finishRecord(); showCard(); } else showPlay();
 }
 function menu() {
-  stopSound(); if(R)R.extra(null); aim=dragging=null; round=null; online=false;
+  stopSound(); if(R)R.extra(null); aim=dragging=aimTrack=null; round=null; online=false;
   $('menu').style.display='flex'; $('card').style.display='none';
   $('hud').classList.add('hidden'); $('bottom').classList.add('hidden'); $('notice').textContent='';
   var best=load('paras',null); $('best').textContent=Number.isFinite(best)?'Paras: '+best+' lyöntiä ('+relative(best-PAR)+')':'Radan par on '+PAR+'.';
@@ -190,7 +204,7 @@ function shoot(a,p,seq,id) {
   p=Math.max(MIN_POWER,p);
   var player=round.players[round.turn],b=player.ball;
   round.origin=[b.x,b.y]; player.strokes++; b.vx=Math.cos(a)*p*MAX_SPEED; b.vy=Math.sin(a)*p*MAX_SPEED;
-  round.phase='roll'; round.shotTime=0; round.notice=''; aim=dragging=null;
+  round.phase='roll'; round.shotTime=0; round.notice=''; aim=dragging=aimTrack=null;
   sound('puu'); keepRound(); updateHUD(); sendState(); askDraw(); return true;
 }
 function step(dt) {
@@ -223,11 +237,11 @@ function receive(m,from) {
     if(!round) return;
     if(m.t==='shot') shoot(m.a,m.p,m.seq,from);
     if(m.t==='aim'&&round.phase==='aim'&&from===round.players[round.turn].id&&m.seq===round.seq&&Number.isFinite(m.a)&&Number.isFinite(m.p)) {
-      aim={a:m.a,p:m.p>0?Math.max(MIN_POWER,Math.min(1,m.p)):0};sendState();updateHUD();askDraw();
+      aim={a:m.a,p:m.p>0?Math.max(MIN_POWER,Math.min(1,m.p)):0,st:Number.isFinite(m.st)?m.st:null};heardAim(aim);sendState();updateHUD();askDraw();
     }
   } else if(from===roomHost&&(m.t==='state'||m.t==='result')&&m.state) {
     var ownAim=dragging&&mine()?aim:null;
-    var was=round;round=clone(m.state);hearState(was,round); aim=ownAim&&mine()&&round.phase==='aim'?ownAim:m.aim||null; accumulator=0;
+    var was=round;round=clone(m.state);hearState(was,round); aim=ownAim&&mine()&&round.phase==='aim'?ownAim:m.aim||null; accumulator=0; heardAim(aim);
     if(round.phase!=='aim'||!mine())dragging=null;
     if(round.phase==='end') {finishRecord();showCard();}
     else if(round.phase==='hole') showCard(); else showPlay();
@@ -236,7 +250,7 @@ function receive(m,from) {
 if(R) {
   R.turns(id=>!!(round&&online&&round.phase==='aim'&&round.players[round.turn].id===id));
   R.on('start',function(s) {
-    R.extra(null);online=true;roomRound=s.round;roomHost=R.hostId;round=null;aim=dragging=null;accumulator=0; stopSound();
+    R.extra(null);online=true;roomRound=s.round;roomHost=R.hostId;round=null;aim=dragging=aimTrack=null;accumulator=0; stopSound();
     if(R.isHost) { round=fresh(s.players,roomRotation(s.players));keepNextStarter(round);showPlay();sendState(); }
     else { $('menu').style.display='none';$('card').style.display='none';$('notice').textContent='Odotetaan rataa…'; }
 
