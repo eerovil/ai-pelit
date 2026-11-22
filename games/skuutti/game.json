@@ -1,6 +1,7 @@
 {
   "title": "Skuutti",
   "description": "Aja potkulaudalla rampissa, pumppaa vauhtia ja tee temppuja ilmassa.",
+  "category": "temput",
   "versions": [
     {
       "n": 1,

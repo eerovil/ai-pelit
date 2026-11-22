@@ -1,6 +1,7 @@
 {
   "title": "Kiekkoammunta",
   "description": "Ammu savikiekkoja haulikolla: trap tai skeet, 25 kiekkoa, tähtää vetämällä ja laukaise päästämällä irti.",
+  "category": "pallo",
   "versions": [
     {
       "n": 1,

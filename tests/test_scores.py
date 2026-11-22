@@ -261,7 +261,7 @@ def test_the_shelf_shows_no_admin_link_without_the_key(site, context, fake):
     fake.players = {"a" * 32: {"name": "Aino", "status": "pending"}}
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector(".card")
+    page.wait_for_selector(".shelf-row")
     page.wait_for_timeout(300)
     assert page.locator(".waiting-names").count() == 0
 
@@ -404,7 +404,7 @@ def test_hiihto_sends_courses_passed(site, context, fake):
     assert shown in page.locator("#ai-pelit-tulokset").inner_text()
 
 
-def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
+def test_each_game_s_page_shows_its_lists(site, context, fake):
     site.build(ROOT / "games")
     a, b = "a" * 32, "b" * 32
     fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
@@ -421,15 +421,12 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     }
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
-    assert page.locator('.top-score[data-top="sormiskeitti"]').inner_text() == "🏆 Aino · 64 cm"
-    assert page.locator('.top-score[data-top="hiihto"]').inner_text() == "🏆 Taso 1: Aino · 1.11,5"
-    assert page.locator('.top-score[data-top="vuoristorata"]').inner_text() == "🏆 Taso 1: Aino · 1.05,0"
-    assert page.locator('.top-score[data-top="voimistelu"]').is_hidden()
-    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == "🏆 Aino · taso 40"
+    page.wait_for_selector('.shelf-row[data-slug="sormiskeitti"]')
+    # The shelf's rows are short (#523): the no. 1 shows on the game's page only.
+    assert page.locator(".top-score").count() == 0
     assert page.locator("#ai-pelit-tulokset-nappi").count() == 0  # no chip on the shelf
 
-    page.click('.card[data-slug="sormiskeitti"] .card-main')
+    page.click('.shelf-row[data-slug="sormiskeitti"] .shelf-row-main')
     page.wait_for_selector(".score-list .tulos")
     rows = page.locator(".score-list .tulos").all_inner_texts()
     assert [" ".join(r.split()) for r in rows] == ["1. Aino 64 cm taso 7 v5", "2. Bertta 58 cm v5"]
@@ -453,11 +450,6 @@ def test_the_shelf_shows_each_game_s_no_1_and_its_lists(site, context, fake):
     page.goto(site.url + "#/vuoristorata")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
     assert "1.05,0" in page.locator(".score-list").inner_text()
-
-    # Offline the cards keep the last no. 1 they saw.
-    fake.online = False
-    page.goto(site.url)
-    page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
 
 
 @pytest.mark.games("sormiskeitti")
@@ -580,22 +572,6 @@ def test_piano_a_score_v9_left_offline_is_sent_as_v10_after_the_cut(site, contex
     assert row == {"score": 900, "version": 10, "level": 6}
 
 
-def test_a_kept_no_1_from_a_list_the_shelf_no_longer_shows_is_not_shown(site, context, fake):
-    """Withdrawn named lists and Vuoristorata's v5 point board must not masquerade as current results."""
-    site.build(ROOT / "games")
-    fake.online = False
-    page = context.new_page()
-    page.goto(site.url)
-    page.evaluate("""localStorage.setItem('ai-pelit:_tulokset:ykkoset', JSON.stringify({
-        puhelinkoppi: { board: 'putki', name: 'Bertta', score: 7, version: 3 },
-        vuoristorata: { board: 'elamys-1', name: 'Bertta', score: 520, version: 5 },
-        sormiskeitti: { board: 'main', name: 'Aino', score: 64, version: 5 } }))""")
-    page.reload()
-    page.wait_for_selector('.top-score[data-top="sormiskeitti"]:has-text("Aino")')
-    assert page.locator('.top-score[data-top="puhelinkoppi"]').inner_text() == ""
-    assert page.locator('.top-score[data-top="vuoristorata"]').inner_text() == ""
-
-
 @pytest.mark.games("tikka")
 def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, context, fake):
     site.build(ROOT / "games")
@@ -603,10 +579,6 @@ def test_tikanheitto_shows_mokkitikka_first_with_pistekisa_a_tap_away(site, cont
     fake.players = {a: {"name": "Aino", "status": "approved"}, b: {"name": "Bertta", "status": "approved"}}
     fake.scores = {("tikka", "mokki2", a): {"score": 254, "version": 7}, ("tikka", "kisa2", b): {"score": 412, "version": 7}}
     page = context.new_page()
-    page.goto(site.url)
-    # The shelf card: Mökkitikka's no. 1, named.
-    page.wait_for_selector('.top-score[data-top="tikka"]:has-text("Aino")')
-    assert page.locator('.top-score[data-top="tikka"]').inner_text() == "🏆 Mökkitikka: Aino · 254 p"
     # The game's page: the Mökkitikka list first, Pistekisa a tap away, and back.
     page.goto(site.url + "#/tikka")
     page.wait_for_selector(".score-list .tulos:has-text('Aino')")
@@ -656,10 +628,6 @@ def test_pasianssi_shows_the_fastest_draw_one_time_first_and_draw_three_separate
         ("pasianssi", "veto3", c): {"score": 300, "version": 1},
     }
     page = context.new_page()
-    page.goto(site.url)
-    page.wait_for_selector('.top-score[data-top="pasianssi"]:has-text("Bertta")')
-    assert page.locator('.top-score[data-top="pasianssi"]').inner_text() == "🏆 1 kortti: Bertta · 3:00"
-
     page.goto(site.url + "#/pasianssi")
     page.wait_for_selector(".score-list .tulos:has-text('Bertta')")
     assert page.locator(".score-list .board-list[aria-pressed='true']").inner_text() == "1 kortti"

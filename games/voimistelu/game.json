@@ -1,6 +1,7 @@
 {
   "title": "Voimistelu",
   "description": "Rekkitanko ja eritasonojapuut kuin olympialaisissa: jättikierrot, lentoliikkeet ja voltti alas.",
+  "category": "temput",
   "versions": [
     {
       "n": 1,

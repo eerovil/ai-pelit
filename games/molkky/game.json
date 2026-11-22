@@ -1,6 +1,7 @@
 {
   "title": "Mölkky",
   "description": "Heitä kalikkaa mökin pihalla ja kaada numeroituja keiloja tasan 50 pisteeseen. Tietokonetta tai kavereita vastaan.",
+  "category": "pallo",
   "versions": [
     {
       "n": 1,

@@ -1,6 +1,7 @@
 {
   "title": "Frisbeegolf",
   "description": "Heitä kiekko koriin yhdeksän väylän puistoradalla: pyyhkäise kiekko lentoon, kaarra puiden ohi ja varo lampea. Yksin tai kavereiden kanssa.",
+  "category": "pallo",
   "versions": [
     {
       "n": 1,

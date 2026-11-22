@@ -1,6 +1,7 @@
 {
   "title": "Pesis",
   "description": "Suomalainen pesäpallo ylhäältä nähtynä: lyö, juokse jalat vuorotellen ja heitä pallo pesään ennen juoksijaa, yksin tai kahtena joukkueena kavereiden kanssa.",
+  "category": "pallo",
   "versions": [
     {
       "n": 1,
