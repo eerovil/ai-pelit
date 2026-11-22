@@ -12,7 +12,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/molkky/v4/"
+URL = "games/molkky/v5/"
 
 # Steps the game by hand, 1/240 s at a time, while cond() holds, at most max seconds of game time.
 RUN = "() => { window.run = (cond, max = 30) => { for (let t = 0; t < max && cond(); t += DT) update(DT); }; }"
@@ -450,6 +450,150 @@ def test_a_guest_that_reloads_mid_game_gets_it_back(room):
     assert guest.errors == []
 
 
+
+# ---------- v5 (#538): what a phone only hears about glides ----------
+
+def test_a_friends_aim_glides_on_the_host_and_on_a_watching_phone(room):
+    host, [aino, iida] = room("Eero", "Aino", "Iida")
+    host.evaluate("turn = 1; toAim()")
+    aino.wait_for_function("myTurn()")
+    iida.wait_for_function("phase === 'aim' && !myTurn() && nameOf(turn) === 'Aino'")
+    # Aino's aim messages carry her own clock, and the host passes that stamp on.
+    aino.evaluate("aimShown = true; aim.x = 0; aim.d = 2.5; AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0, d: 2.5, st: 0, ts: AiPelitSulava.now() })")
+    host.wait_for_function("aimShown && aim.d === 2.5", timeout=3000)
+    iida.wait_for_function("aimShown && aim.d === 2.5", timeout=3000)
+    # Each watching phone notes, every 10 ms, the newest aim it heard and the one it draws.
+    for p in (host, iida):
+        p.evaluate("window.seen = []; setInterval(() => seen.push([aim.d, drawnAim().d]), 10)")
+    aino.wait_for_timeout(150)
+    aino.evaluate("AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0, d: 3.5, st: 0, ts: AiPelitSulava.now() })")
+    for p in (host, iida):
+        p.wait_for_function("seen.length && Math.abs(seen[seen.length - 1][1] - 3.5) < 0.01", timeout=3000)
+        seen = p.evaluate("seen")
+        # Once 3.5 m was heard, the drawn aim was still on its way there from 2.5 m, and it went
+        # forward only, in small steps rather than one jump.
+        after = [d for heard, d in seen if heard == 3.5]
+        assert after[0] < 3.45, seen
+        assert all(b >= a - 1e-6 for a, b in zip(after, after[1:])), seen
+        drawn = [d for _, d in seen]
+        assert max(b - a for a, b in zip(drawn, drawn[1:])) < 0.6, seen
+    # Aino's own aim is drawn as it is.
+    assert aino.evaluate("drawnAim() === aim") is True
+    assert host.errors == aino.errors == iida.errors == []
+
+
+def test_the_kalikka_and_the_pins_glide_on_a_guest(room):
+    host, [guest] = room("Eero", "Aino")
+    # The guest notes when the first snapshot with a hit comes, and when its hit sound plays.
+    guest.evaluate("""() => {
+      window.hitHeard = null; window.hitPlayed = null;
+      const apply = applySnapshot;
+      window.applySnapshot = s => { if (hitHeard === null && s.ev && s.ev.hit > 0) hitHeard = performance.now(); apply(s); };
+      const play = sounds;
+      window.sounds = ev => { if (hitPlayed === null && ev.hit > heard.hit) hitPlayed = performance.now(); play(ev); };
+    }""")
+    host.evaluate("turn = 0; toAim(); doThrow({ x: 0, d: 3.35, st: 1 }, true)")
+    guest.wait_for_function("phase === 'fly' && world.k !== null", timeout=3000)
+    # Each frame the guest draws the kalikka and the pins between two spots heard, a moment back:
+    # never past the newest spot, and moving a little every frame rather than in the host's 25
+    # steps a second.
+    frames = guest.evaluate("""() => new Promise(done => {
+      const out = [];
+      const f = () => {
+        out.push([world.k ? world.k.y : null, SM.k ? SM.k.size() : 0, world.pins.map(p => [p.a, p.ta])]);
+        if (out.length < 90) requestAnimationFrame(f); else done(out);
+      };
+      requestAnimationFrame(f);
+    })""")
+    moving = [y for y, n, _ in frames if y is not None and n > 1][:40]
+    assert len(moving) > 10, frames
+    steps = [b - a for a, b in zip(moving, moving[1:])]
+    assert all(s >= -1e-6 for s in steps), steps
+    # Few frames stand still while the kalikka flies (headless frames come about every 16 ms).
+    assert sum(1 for s in steps if abs(s) < 1e-6) < len(steps) / 3, steps
+    # A pin knocked over tips over in small steps, behind the newest tilt heard.
+    for i in range(12):
+        tilt = [pins[i][0] for _, _, pins in frames]
+        heard = [pins[i][1] for _, _, pins in frames]
+        assert max(abs(b - a) for a, b in zip(tilt, tilt[1:])) < 0.5, (i, tilt)
+    tipped = [i for i in range(12) if max(pins[i][1] for _, _, pins in frames) > 0.5]
+    assert tipped, "the throw knocked no pin"
+    assert any(pins[i][1] - pins[i][0] > 0.05 for i in tipped for _, _, pins in frames), frames
+    # The hit sounds as the kalikka is drawn reaching the pins, not as the host's word comes.
+    guest.wait_for_function("hitPlayed !== null", timeout=5000)
+    assert guest.evaluate("hitPlayed - hitHeard") > 30
+    # Once still, every pin ends where the host has it, and when the pins are stood up they stand
+    # at once.
+    guest.wait_for_function("phase === 'show'", timeout=8000)
+    guest.wait_for_function("world.pins.every(p => Math.abs(p.x - p.tx) < 1e-3 && Math.abs(p.y - p.ty) < 1e-3)", timeout=3000)
+    guest.wait_for_function("raised", timeout=5000)
+    assert guest.evaluate("world.pins.every(p => p.a === 0 && p.x === p.tx && p.y === p.ty)") is True
+    assert host.errors == guest.errors == []
+
+
+def test_a_new_thrower_mid_aim_forgets_the_friends_aim_on_the_host(room):
+    host, [guest, third] = room("Eero", "Aino", "Iida")
+    host.evaluate("turn = 1; toAim()")
+    guest.wait_for_function("myTurn()")
+    guest.evaluate("AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0.3, d: 2.2, st: 0, ts: AiPelitSulava.now() })")
+    host.wait_for_function("aimShown && aim.d === 2.2", timeout=3000)
+    room.relay.drop(guest)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1")
+    host.click("#aipr-goOn")
+    host.wait_for_function("thrower() === 'cpu' && aim.d !== 2.2", timeout=5000)
+    # The computer's aim is drawn as it is, and Aino's old stamp is not sent on.
+    assert host.evaluate("[drawnAim() === aim, net.aimT, SM.aim.size()]") == [True, None, 0]
+    # The third phone starts its aim track afresh for the computer's aim.
+    third.wait_for_function("net.th === 'cpu' && aimShown", timeout=5000)
+    third.wait_for_function("Math.abs(drawnAim().d - aim.d) < 0.3", timeout=3000)
+    assert host.errors == third.errors == []
+
+def test_a_fast_roll_spins_the_kalikka_forward_on_a_guest(room):
+    host, [guest] = room("Eero", "Aino")
+    # A rolling kalikka turns its spin by more than half a turn between two snapshots: drawn
+    # between them it keeps turning forward, never back the short way round.
+    spins = guest.evaluate("""() => {
+      SM.k = null; const tr = stickTrack(), at = { x: 0, y: 0, z: 0, yaw: 0, air: 0 };
+      tr.snap(0, { ...at, spin: 0 }, 0);
+      for (let i = 1; i <= 6; i++) tr.push(i * 0.04, { ...at, spin: i * 4 }, i * 0.04);
+      const out = [];
+      for (let a = 0.05; a < 0.4; a += 0.01) out.push(tr.at(a).spin);
+      return out;
+    }""")
+    assert all(b >= a - 1e-6 for a, b in zip(spins, spins[1:])), spins
+    assert spins[0] >= -1e-6 and spins[-1] > 4, spins
+
+
+def test_a_new_throws_first_snapshot_stands_the_pins_at_once_on_a_guest(room):
+    host, [guest] = room("Eero", "Aino")
+    host.evaluate("turn = 0; toAim(); doThrow({ x: 0, d: 3.35, st: 1 }, true)")
+    guest.wait_for_function("phase === 'fly' && SM.pins.length && SM.pins[0].size() > 1", timeout=3000)
+    # The next throw's first word comes straight as the throw (no aim heard between): its pins are
+    # placed where the host says, not glided on from the last throw.
+    assert guest.evaluate("""() => {
+      const s = snapshot(); s.n = throwN + 1; s.ph = 'fly'; s.k = 0;
+      s.p = s.p.map((q, i) => [i * 0.1, 3, 0, 0, 0, 0]);
+      applySnapshot(s);
+      return SM.pins.every(t => t.size() === 1) && world.pins.every((p, i) => p.x === i * 0.1 && p.y === 3);
+    }""") is True
+    assert guest.errors == []
+
+
+def test_a_watching_phone_let_go_keeps_the_friends_aim_gliding_on_the_host(room):
+    host, [guest, third] = room("Eero", "Aino", "Iida")
+    host.evaluate("turn = 1; toAim()")
+    guest.wait_for_function("myTurn()")
+    guest.evaluate("AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0.3, d: 2.2, st: 0, ts: AiPelitSulava.now() })")
+    host.wait_for_function("aimShown && aim.d === 2.2 && SM.aim && SM.aim.size() > 0", timeout=3000)
+    t = host.evaluate("net.aimT")
+    room.relay.drop(third)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1")
+    host.click("#aipr-goOn")
+    host.wait_for_function("net.away.length === 1")
+    # Aino still throws: her aim track and stamp stay.
+    assert host.evaluate("[thrower() !== 'cpu', net.aimT, SM.aim.size() > 0]") == [True, t, True]
+    assert host.errors == []
+
 # ---------- Screens ----------
 
 @pytest.mark.parametrize("size", [(740, 360), (640, 360), (360, 640), (390, 844)])
@@ -498,4 +642,4 @@ from test_hiljaiset_aanet import opens_and_plays_with_the_quiet_library, real  #
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):
-    opens_and_plays_with_the_quiet_library(real, context, "games/molkky/v4")
+    opens_and_plays_with_the_quiet_library(real, context, "games/molkky/v5")
