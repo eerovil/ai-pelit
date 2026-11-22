@@ -513,16 +513,23 @@ def test_a_guest_reloading_mid_fight_draws_the_others_at_the_host_s_spot_then_gl
     host.evaluate("""(i) => { const s = window.step; window.step = dt => { const f = fighters[i];
       const p = (64 * AiPelitSulava.now()) % 320; f.x = 170; f.y = 140 + (p < 160 ? p : 320 - p); s(dt); }; }""", me)
     guest.wait_for_timeout(500)
-    guest.context.add_init_script("""addEventListener('load', () => {
-      // The first state is kept whole: it is the one that makes the fighters, so 'foe' may not exist yet
-      // when it is heard (this listener can run before the game's), and its fighter is found at the first frame.
-      window.__rl = []; let firstF = null, first = null;
-      AiPelitRooms.on('message', m => { if (m.t === 's' && firstF === null) firstF = m.f; });
+    guest.context.add_init_script("""(() => {
+      // The first state the game itself handles is kept whole: its own message handler is wrapped as rooms.js
+      // hands the game AiPelitRooms, since a listener added at 'load' missed states the page handled before
+      // it (in CI the first frame was drawn at a state 5 units before the first one such a listener heard).
+      // It is the state that makes the fighters, so its fighter is found at the first frame.
+      window.__rl = []; let firstF = null, first = null, rooms;
+      Object.defineProperty(window, 'AiPelitRooms', { configurable: true, get: () => rooms, set: v => {
+        const on = v.on;
+        v.on = (ev, fn) => on.call(v, ev, ev !== 'message' ? fn : (m, from) => {
+          if (m && m.t === 's' && firstF === null) firstF = m.f; return fn(m, from); });
+        rooms = v; } });
+      addEventListener('load', () => {
       const d = window.asDrawn;
       window.asDrawn = () => { const c = typeof fightClock === 'function' ? fightClock() : 0, k = d();
         if (first === null && firstF && foe && typeof fighters !== 'undefined') first = firstF[fighters.indexOf(foe)][1];
         if (state === 'fight' && foe && first !== null) window.__rl.push([c, foe.y, first, foe.tr.time]);
-        return k; }; })""")
+        return k; }; }); })()""")
     guest.reload()
     guest.wait_for_function("state === 'fight' && window.__rl && window.__rl.length >= 60", timeout=15000)
     rl = guest.evaluate("window.__rl")
