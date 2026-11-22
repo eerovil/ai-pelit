@@ -71,7 +71,9 @@
 <!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v10 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<!-- v14 (#480): the jumper on another phone glides down the in-run and through the air (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -424,6 +426,12 @@ const K = AiPelitKisa.meet({
   init: c => { c.seed = Math.floor(Math.random() * 1e6); },
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'fin'], watch: watchFrom, none: 'ei pisteitä',
+  // v14 (#480): a friend's jump is drawn a moment back, gliding between the spots their phone sends (x, y on the
+  // hill), instead of easing after each one; the landing (fin) is the flight's last spot, on the hill at the
+  // distance, so the slide down the outrun starts where the glide ends. They move about 2 m between two spots.
+  glide: { keys: ['x', 'y'], jump: 25,
+    spot: m => m.t === 'p' && Array.isArray(m.a) ? { x: m.a[1], y: m.a[2] }
+      : m.t === 'fin' && m.r && typeof m.r.d === 'number' ? { x: xAtDist(m.r.d), y: hillY(xAtDist(m.r.d)) } : null },
   // The week's points go on their own high-score list (a meet saved by v1 on v1's).
   started: () => { menu.classList.add('hidden'); scoreList(); },
   // v12 (#469): everyone in their own outfit on the podium, as in the air.
@@ -680,7 +688,15 @@ function frame(now) {
 // ---------- Drawing ----------
 let flash = { 1: 0, 2: 0, 3: 0 }, camX = 0, camY = 0, camS = 16, camInit = true;
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v14 (#480): a friend's jumper on the in-run and in the air is drawn where the meet's track has it (K.glide()),
+// and put back after; the camera follows the drawn jumper.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'inrun' || th.phase === 'fly'));
+  const kx = th ? th.x : 0, ky = th ? th.y : 0;
+  if (sw) { th.x = g.x; th.y = g.y; }
+  try { drawFrame(dt); } finally { if (sw) { th.x = kx; th.y = ky; } }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#122640'; x.fillRect(0, 0, W, H); }
   x.save();
