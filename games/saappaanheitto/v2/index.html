@@ -70,7 +70,9 @@
     vihreällä kaarella. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
 </div>
 <script src="../../../rooms.js" data-game="saappaanheitto" data-min="2" data-max="8"></script>
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<!-- v2 (#480): the thrower on another phone swings the boot round smoothly (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="../../../outfits.js" data-game="saappaanheitto" data-share="yleisurheilu"></script>
 <script>
@@ -201,6 +203,11 @@ const K = AiPelitKisa.meet({
   spread: [3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 2.5,
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä heittoa',
+  // v2 (#480): a friend's swing is drawn a moment back, the boot's arm angle (radians, wrapping at ±π) gliding
+  // the short way round between the spots their phone sends; the release (rel) is the swing's last angle, so the
+  // boot leaves the hand where the glide ends. No jump distance: a track measures it on the raw angle, which
+  // passes ±π once a lap, and the one real jump (a slip back to hanging) glides the short way well enough.
+  glide: { keys: ['a'], angles: ['a'], spot: m => m.t === 'p' || m.t === 'rel' ? { a: m.a[0] } : null },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
   chime: i => {
@@ -409,7 +416,14 @@ function frame(now) {
 // ---------- Drawing ----------
 let blend = 0, camX = -3, camS = 60;
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v2 (#480): a friend's swinging arm is drawn where the meet's track has it (K.glide()), and put back after.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'spin'));
+  const kept = th ? th.a : 0;
+  if (sw) th.a = g.a;
+  try { drawFrame(dt); } finally { if (sw) th.a = kept; }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();

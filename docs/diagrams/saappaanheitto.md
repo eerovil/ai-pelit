@@ -5,9 +5,10 @@ swings a rubber boot round in an upright circle at arm's length, like a windmill
 #503). The player draws circles with a thumb on the ring of the spin pad: the boot is always at the
 thumb's angle, it goes faster the faster the thumb goes round, and lifting the thumb lets it go
 along the circle's tangent. The camera then follows the boot out over the field, as in
-Keihäänheitto. The meet is the shared athletics library's (`public/lib/yleisurheilu-11/kisa.js`):
+Keihäänheitto. The meet is the shared athletics library's (`public/lib/yleisurheilu-12/kisa.js`):
 twelve throwers alone against the computer, or 2–8 phones in a room with the computer filling the
 rest; three rounds, then the best eight throw three more.
+v2 (#480) passes `glide` to the meet (`lib/sulava-1`): on a friend's turn the phone watching draws the swing (the arm's angle `a`, wrapping, with no jump) gliding between the spots their phone sends, and the let-go (`rel`) where the glide ends.
 
 ```mermaid
 flowchart TD
@@ -59,7 +60,7 @@ flowchart TD
 ## Boxes
 
 - **Valikko: Kisaan!, Jatka kisaa tai kaverit**: `showMenu()` in `games/saappaanheitto/v1/index.html`. "Kisaan!" starts a new meet at the player's level (`taso`); "Jatka kisaa (kierros N/6)" shows when a meet alone was left unfinished (`kesken`, `K.kept()`); "👥 Pelaa kavereiden kanssa" opens the room (`public/rooms.js`, 2–8 phones); "👕 Asu" picks the athletics events' shared outfit (`data-share="yleisurheilu"`, `asut.md`). Sideways the menu is two columns.
-- **Kisa: 12 heittäjää, arvottu järjestys**: `AiPelitKisa.meet()` and `rounds()` in `public/lib/yleisurheilu-11/kisa.js` (see `yleisurheilu-kirjasto.md`): the players, then computer throwers (`FOES`) up to twelve, each with a skill around `base(level)` metres (32 m at level 1, 3 m more per level up to 54 m), spread by `spread` and `jitter`.
+- **Kisa: 12 heittäjää, arvottu järjestys**: `AiPelitKisa.meet()` and `rounds()` in `public/lib/yleisurheilu-12/kisa.js` (see `yleisurheilu-kirjasto.md`): the players, then computer throwers (`FOES`) up to twelve, each with a skill around `base(level)` metres (32 m at level 1, 3 m more per level up to 54 m), spread by `spread` and `jitter`.
 - **Tulostaulu: kierros, sijat, viimeisin ja paras**: the library's `K.drawBoard()`, shown for 3.5 s (`BOARD_T`) before each of the player's turns; alone a tap skips it.
 - **Kenen vuoro?**: the library's turn order; `newTurn()` makes the turn each phone draws (`th`), its own (`mine`) or someone else's.
 - **Tietokone heittää heti, enintään 58 m**: `cpuMark()`: the skill plus a scatter of 3 m, a foul one time in eight (0.12), at least 8 m; a throw over `CPU_MAX` (58 m, about what a player reaches at the top speed and the best angle) is drawn again, as in Moukarinheitto (#404).
