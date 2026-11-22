@@ -93,11 +93,8 @@ header {
   font-weight:550;
   white-space:nowrap;
 }
-#telemetry div:nth-child(3) strong {
+#telemetry div:nth-child(3) strong,#telemetry div:nth-child(6) strong {
   color:#83dfd2;
-}
-#metric-c {
-  font-size:13px!important;
 }
 #scene {
   flex:1;
@@ -212,10 +209,6 @@ input[type=range] {
   color:#ffd3a1;
   border-color:#6e523c;
 }
-#stage {
-  width:100px;
-  flex:none;
-}
 .control-bottom {
   display:flex;
   gap:12px;
@@ -260,15 +253,6 @@ footer {
   justify-content:flex-end;
   gap:6px;
   margin-top:5px;
-}
-footer span {
-  margin-right:auto;
-  font-size:8px;
-  color:#99b0be;
-}
-#footer-info {
-  display:grid;
-  gap:2px;
 }
 footer button {
   min-height:28px;
@@ -334,25 +318,6 @@ h2 {
   font-size:11px!important;
   color:#98b2c1!important;
 }
-.mission-strip {
-  display:flex;
-  justify-content:space-between;
-  border-top:1px solid #345063;
-  border-bottom:1px solid #345063;
-  padding:13px 0;
-  gap:8px;
-}
-.mission-strip span {
-  font-size:8px;
-  letter-spacing:.5px;
-}
-.mission-strip b {
-  display:block;
-  font-size:20px;
-  color:#85d6cc;
-  font-weight:500;
-  margin-bottom:3px;
-}
 .panel button {
   width:100%;
   margin-top:8px;
@@ -364,30 +329,6 @@ h2 {
   color:#0a252c;
   border-color:#84ded0;
   font-weight:700;
-}
-.practice {
-  border-top:1px solid #30485a;
-  margin-top:16px;
-  padding-top:12px;
-}
-.practice>span {
-  font-size:8px;
-  letter-spacing:1.5px;
-  color:#99b1c0;
-}
-.practice div {
-  display:flex;
-  gap:6px;
-}
-.practice button {
-  font-size:10px;
-  padding:7px 5px;
-  min-height:38px;
-}
-#achievements {
-  font-size:10px;
-  color:#83dfd2;
-  margin:12px 0 0;
 }
 .help-panel {
   max-width:510px;
@@ -421,28 +362,111 @@ h2 {
 .help-panel a {
   color:#84ded0;
 }
+#chute {
+  width:86px;
+  flex:none;
+}
+.point-row {
+  display:flex;
+  gap:5px;
+  margin-top:6px;
+}
+.point-row button {
+  flex:1;
+  min-height:36px;
+  font-size:11px;
+  padding:4px 2px;
+}
+button.selected {
+  background:#245a58;
+  border-color:#84ded0;
+  color:#f4fbfa;
+}
+footer #rcs {
+  margin-right:auto;
+  font-size:9px;
+  color:#99b0be;
+}
+#menu {
+  max-height:100%;
+  overflow:auto;
+}
+#menu h1 {
+  font-size:38px;
+}
+.menu-head .detail {
+  margin:8px 0 2px;
+}
+.menu-actions {
+  display:flex;
+  gap:6px;
+}
+.menu-actions button {
+  flex:1;
+}
+#trips {
+  display:grid;
+  gap:6px;
+  margin-top:12px;
+}
+#trips .trip {
+  margin:0;
+  display:grid;
+  grid-template-columns:1fr auto;
+  grid-template-rows:auto auto;
+  text-align:left;
+  min-height:44px;
+  padding:5px 12px;
+  gap:0 8px;
+}
+.trip-name {
+  font-size:14px;
+  font-weight:600;
+}
+.trip-meta {
+  grid-row:2;
+  font-size:10px;
+  color:#9fb6c3;
+}
+.trip-stars {
+  grid-row:1/3;
+  grid-column:2;
+  align-self:center;
+  font-size:17px;
+  color:#f1cf86;
+  letter-spacing:1px;
+}
+.stars-line {
+  font-size:22px!important;
+  color:#f1cf86!important;
+  letter-spacing:2px;
+  margin:6px 0!important;
+}
+#result-list {
+  list-style:none;
+  padding:0;
+  margin:0 0 8px;
+  font-size:12px;
+  line-height:1.7;
+}
+#result-list .lit {
+  color:#f1cf86;
+}
+#result-list .dim {
+  color:#7f96a3;
+}
 @media(max-height:680px) and (orientation:portrait) {
   .panel {
-    padding:18px;
+    padding:16px;
   }
-  h1 {
-    font-size:34px;
+  #menu h1 {
+    font-size:30px;
   }
   .eyebrow {
     margin-bottom:8px;
   }
-  .intro {
-    margin:12px 0;
-  }
-  .mission-strip {
-    padding:8px 0;
-  }
-  .detail {
-    margin:10px 0;
-  }
-  .practice {
-    margin-top:10px;
-    padding-top:8px;
+  #trips .trip {
+    min-height:40px;
   }
   .panel button {
     min-height:38px;
@@ -451,220 +475,163 @@ h2 {
     font-size:11px;
   }
   #telemetry {
-    gap:6px;
-    padding:7px 10px;
+    gap:5px;
+    padding:6px 10px;
   }
   #telemetry strong {
     font-size:14px;
   }
   #guidance {
-    min-height:48px;
-    padding:6px 10px;
+    min-height:46px;
+    padding:5px 10px;
+  }
+  .turn-pad button,.translation button {
+    height:44px;
   }
 }
 @media(orientation:landscape) {
+  #app {
+    display:grid;
+    grid-template-columns:1fr 300px;
+    grid-template-rows:auto auto 1fr auto;
+  }
+  header,#telemetry,#scene,#guidance {
+    grid-column:1;
+  }
+  #controls {
+    grid-column:2;
+    grid-row:1/5;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-evenly;
+    border-left:1px solid #223646;
+    padding:6px 8px;
+  }
   header {
-    height:36px;
+    height:34px;
   }
   #telemetry {
     grid-template-columns:repeat(6,1fr);
-    padding:6px 12px;
-    gap:9px;
+    padding:5px 10px;
+    gap:6px;
   }
   #telemetry strong {
-    font-size:14px;
+    font-size:13px;
   }
   #telemetry span {
     font-size:8px;
   }
-  #metric-c {
-    font-size:11px!important;
-  }
   #guidance {
-    min-height:35px;
+    min-height:36px;
     padding:4px 10px;
   }
   #guide {
     font-size:10px;
+    line-height:1.35;
   }
   #guide-step {
     font-size:10px;
-    padding:2px;
-  }
-  #controls {
-    height:104px;
-    position:relative;
-    padding:6px 10px;
-  }
-  .control-top {
-    position:absolute;
-    left:34%;
-    right:30%;
-    top:4px;
-  }
-  .control-top label {
-    min-width:35px;
-  }
-  .control-top b {
-    font-size:12px;
-  }
-  .control-top input {
-    height:32px;
-  }
-  .control-top button {
-    min-height:32px;
-  }
-  #stage {
-    position:absolute;
-    top:38px;
-    right:0;
-    width:105px;
-    height:30px;
-    min-height:30px;
-  }
-  .control-bottom {
-    margin:0;
-  }
-  .turn-pad {
-    width:30%;
-    flex:none;
-  }
-  .translation {
-    width:27%;
-    flex:none;
+    padding:2px 4px;
   }
   .control-bottom span {
     margin:0 0 3px;
-    font-size:7px;
+  }
+  .turn-pad {
+    max-width:none;
+    width:40%;
+    flex:none;
   }
   .turn-pad button,.translation button {
-    height:49px;
-  }
-  .control-bottom .turn-pad button {
-    width:50%;
-  }
-  .control-bottom .translation button {
-    min-width:32px;
-  }
-  footer {
-    position:absolute;
-    left:10px;
-    right:10px;
-    bottom:4px;
-    margin:0;
-  }
-  footer span {
-    font-size:9px;
+    height:60px;
+    min-width:0;
   }
   #views {
     bottom:5px;
   }
   #views button {
-    min-height:27px;
+    min-height:28px;
   }
   #scene-label {
     top:7px;
   }
   .overlay {
-    padding:40px 18px 8px;
+    padding:38px 16px 8px;
   }
   .panel {
-    max-width:650px;
-    padding:16px 22px;
+    max-width:680px;
+    padding:14px 20px;
+    max-height:100%;
+    overflow:auto;
   }
   #menu {
     display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:4px 24px;
+    grid-template-columns:240px 1fr;
+    gap:14px;
+    align-items:center;
   }
-  #menu .eyebrow {
-    grid-column:1;
+  #trips {
     margin:0;
-    font-size:8px;
+    gap:5px;
   }
-  #menu h1 {
-    grid-column:1;
-    font-size:32px;
-  }
-  h1 span {
-    font-size:12px;
-  }
-  .intro {
-    grid-column:1;
-    margin:8px 0!important;
-    font-size:12px!important;
-  }
-  .mission-strip {
-    grid-column:1;
-    grid-row:4;
-    padding:7px 0;
-  }
-  .mission-strip b {
-    font-size:16px;
-  }
-  .detail {
-    margin:5px 0;
-  }
-  #menu>.detail {
-    grid-column:2;
-    grid-row:1/3;
-    font-size:10px!important;
-    align-self:center;
+  #trips .trip {
+    min-height:40px;
+    padding:3px 10px;
   }
   .menu-actions {
-    grid-column:2;
-    grid-row:3/5;
-    align-self:center;
-  }
-  .practice {
-    grid-column:2;
-    grid-row:5;
-    margin:3px 0 0;
-    padding:7px 0 0;
-  }
-  #achievements {
-    grid-column:1;
-    grid-row:5;
-    font-size:9px;
-    margin:5px 0;
-    align-self:center;
+    flex-direction:column;
+    gap:0;
   }
   .panel h2 {
-    font-size:21px;
-    margin-bottom:8px;
+    font-size:20px;
+    margin-bottom:6px;
   }
   .panel>p {
-    margin:8px 0;
+    margin:6px 0;
   }
   .panel button {
     min-height:36px;
-    margin-top:6px;
+    margin-top:5px;
+  }
+  #trip-panel,#result,#pause-panel,#replace-panel {
+    display:grid;
+    grid-template-columns:1fr 220px;
+    gap:0 18px;
+    align-content:start;
+  }
+  #trip-panel>:not(button),#result>:not(button),#pause-panel>:not(button),#replace-panel>:not(button) {
+    grid-column:1;
+  }
+  #trip-panel>button,#result>button,#pause-panel>button,#replace-panel>button {
+    grid-column:2;
+  }
+  #trip-panel>.eyebrow,#result>.eyebrow,#pause-panel>.eyebrow {
+    grid-row:1;
+  }
+  #start-pad,#result-next,#continue,#replace-yes {
+    grid-row:2;
+  }
+  #start-orbit,#retry,#pause-help,#replace-no {
+    grid-row:3;
+  }
+  #trip-back,#result-menu,#to-menu {
+    grid-row:4;
   }
   .help-panel {
-    max-width:650px;
-  }
-  .help-panel .eyebrow {
-    margin-bottom:6px;
+    max-width:680px;
   }
   .help-panel p,.help-panel ul {
     font-size:11px;
-    line-height:1.5;
-    margin:8px 0;
-  }
-  .help-nav button {
-    min-height:32px;
-  }
-  .practice button {
-    min-height:33px;
-  }
-  .help-panel h2 {
-    font-size:20px;
+    line-height:1.45;
+    margin:6px 0;
   }
   .help-panel ul {
     columns:2;
-    column-gap:24px;
+    column-gap:22px;
   }
   .help-panel li {
     break-inside:avoid;
+  }
+  .help-nav button {
+    min-height:32px;
   }
 }

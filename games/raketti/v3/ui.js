@@ -1,7 +1,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
-var panelName = 'menu', helpPage = 0, helpReturn = 'menu', pendingKind = 'launch';
-var lastKind = 'launch', frameId = 0, lastFrame = 0, lastUi = 0, saveElapsed = 0;
+const WARPS = [1, 2, 5, 10, 100, 1000];
+var panelName = 'menu', helpPage = 0, helpReturn = 'menu', pendingStart = null, chosenTrip = 'kiertorata';
+var frameId = 0, lastFrame = 0, lastUi = 0, saveElapsed = 0, flash = '', flashUntil = 0;
 const pointers = new Map();
 var audio = null, engineGain = null;
 function soundReady() {
@@ -21,15 +22,15 @@ function soundReady() {
 }
 function updateSound() {
   if (audio && engineGain) engineGain.gain.setTargetAtTime(
-    !paused && ship && ship.phase === 'flight' ? ship.throttle * 0.035 : 0, audio.currentTime, 0.08);
+    !paused && ship && ship.phase === 'flight' ? Math.sqrt(ship.throttle) * 0.035 : 0, audio.currentTime, 0.08);
 }
-function distance(m) {
-  if (!Number.isFinite(m)) return 'avoin rata';
-  if (Math.abs(m) < 1000) return `${Math.round(m)} m`;
-  return `${(m / 1000).toFixed(Math.abs(m) < 10000 ? 1 : 0)} km`;
+function duration(t) {
+  t = Math.max(0, t);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = Math.floor(t % 60);
+  return `${h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
-function duration(t) { return `${Math.floor(t / 60).toString().padStart(2, '0')}:${Math.floor(t % 60).toString().padStart(2, '0')}`; }
 function text(id, value) { const n = $(id); if (n.textContent !== value) n.textContent = value; }
+function starText(n) { return '★'.repeat(n) + '☆'.repeat(3 - n); }
 function showPanel(name) {
   panelName = name; $('overlay').hidden = !name;
   for (const el of document.querySelectorAll('.panel')) el.hidden = el.id !== name;
@@ -61,93 +62,140 @@ function play() {
   if (!ship || ship.phase !== 'flight') return;
   showPanel(''); paused = false; lastFrame = 0; updateUi(); updateSound(); schedule();
 }
-function activeSaved() { const s = loadFlight(); return s && ['flight', 'pad'].includes(s.phase); }
-function startFlight(kind) {
-  ship = freshFlight(kind); lastKind = kind;
-  ship.phase = 'flight'; ship.throttle = kind === 'launch' ? 1 : 0;
-  view = kind === 'orbit' ? 'map' : kind === 'dock' ? 'dock' : 'flight';
-  warp = 1; saveElapsed = 0; releaseInputs(); paused = false; saveFlight(); play();
+function activeSaved() { const s = loadFlight(); return s && s.phase === 'flight' ? s : null; }
+function startFlight(trip, from) {
+  ship = freshFlight(trip, from); chosenTrip = trip;
+  view = from === 'orbit' ? 'map' : 'flight'; mapWide = false;
+  warp = 1; saveElapsed = 0; flash = ''; releaseInputs(); paused = false; saveFlight(); play();
 }
-function requestFlight(kind) {
-  pendingKind = kind;
-  if (activeSaved()) showPanel('replace-panel'); else startFlight(kind);
+function requestFlight(trip, from) {
+  pendingStart = [trip, from];
+  if (activeSaved()) showPanel('replace-panel'); else startFlight(trip, from);
+}
+function renderTrips() {
+  const list = $('trips');
+  list.textContent = '';
+  for (const t of TRIPS) {
+    const open = tripOpen(t.id), b = document.createElement('button');
+    b.className = 'trip'; b.dataset.trip = t.id; b.disabled = !open;
+    b.innerHTML = `<span class="trip-name"></span><span class="trip-meta"></span><span class="trip-stars"></span>`;
+    b.querySelector('.trip-name').textContent = (open ? '' : '🔒 ') + t.name;
+    b.querySelector('.trip-meta').textContent = `noin ${t.minutes} min`;
+    b.querySelector('.trip-stars').textContent = open ? starText(stars[t.id] || 0) : '';
+    b.onclick = () => openTrip(t.id);
+    list.appendChild(b);
+  }
 }
 function mainMenu() {
   if (ship) saveFlight();
-  readRecords();
-  $('resume').hidden = !activeSaved();
-  text('achievements', achieved.dock ? 'SAAVUTETTU · Kiertorata ja telakointi' : achieved.orbit ? 'SAAVUTETTU · Kiertorata' : 'Oma lento. Omat päätökset.');
+  readStars(); renderTrips();
+  const saved = activeSaved();
+  $('resume').hidden = !saved;
+  if (saved) text('resume', `Jatka: ${TRIP[saved.trip].name}`);
+  const total = TRIPS.reduce((n, t) => n + (stars[t.id] || 0), 0);
+  text('star-total', `Tähtiä ${total} / ${TRIPS.length * 3}`);
   showPanel('menu');
 }
+function openTrip(id) {
+  if (!tripOpen(id)) return;
+  chosenTrip = id;
+  const t = TRIP[id];
+  text('trip-title', t.name); text('trip-goal', t.goal);
+  text('trip-stars', `${starText(stars[id] || 0)} · noin ${t.minutes} min`);
+  text('trip-star-rule', `Tähdet: perillä · Δv jäljellä vähintään ${t.dvStar} m/s · ${t.soft}.`);
+  $('start-orbit').hidden = id === 'kiertorata' || !(stars.kiertorata > 0);
+  showPanel('trip-panel');
+}
+function nextTrip(id) { const i = TRIPS.findIndex(t => t.id === id); return TRIPS[i + 1] || null; }
 function showResult() {
-  const success = ship.phase === 'docked';
-  text('result-label', ship.practice ? 'HARJOITUS PÄÄTTYI' : 'LENTO PÄÄTTYI');
-  text('result-title', success ? 'Tervetuloa asemalle.' : 'Lento keskeytyi.');
+  const ok = ship.phase === 'done', t = TRIP[ship.trip];
+  text('result-label', t.name.toUpperCase());
+  text('result-title', ok ? 'Matka onnistui!' : 'Matka päättyi.');
   text('result-reason', ship.reason);
-  text('result-stats', `Lentoaika ${duration(ship.t)} · Korkeus ${distance(orbit().altitude)}${ship.practice ? ' · Harjoitus ei kirjaa saavutuksia.' : ''}`);
+  $('result-stars').hidden = !ok;
+  if (ok) {
+    text('result-star-big', starText(ship.stars));
+    const dv = Math.round(deltaV(ship)), soft = tripSoft(ship);
+    const rows = [['Perillä', true],
+      [`Δv jäljellä ${dv} m/s (tähti ≥ ${t.dvStar})`, dv >= t.dvStar],
+      [soft ? `${t.soft[0].toUpperCase()}${t.soft.slice(1)}` : `Ei ${t.soft}`, soft]];
+    const ul = $('result-list'); ul.textContent = '';
+    for (const [label, lit] of rows) {
+      const li = document.createElement('li'); li.className = lit ? 'lit' : 'dim';
+      li.textContent = `${lit ? '★' : '☆'} ${label}`; ul.appendChild(li);
+    }
+  }
+  text('result-stats', `Lentoaika T+ ${duration(ship.t)} · pelattu ${duration(ship.real)}`);
+  const next = ok && nextTrip(ship.trip);
+  $('result-next').hidden = !next;
+  if (next) text('result-next', `Seuraava: ${next.name}`);
   showPanel('result');
 }
-function guidance() {
-  if (!ship) return ['01', 'Laukaisu → kiertorata → telakointi'];
-  const o = orbit(), d = approach(), h = o.altitude;
-  if (d.range < 2000) {
-    if (d.speed > 1) return ['03', `Jarruta siirtosuuttimilla. Nopeusero ${d.speed.toFixed(2)} m/s. Keltainen viiva näyttää liikkeen asemaan nähden.`];
-    if (Math.abs(d.cross) > 1) return ['03', `Kohdista portin vihreälle linjalle: sivuero ${d.cross.toFixed(1)} m. Suuttimien nuolet ovat aluksen suuntia.`];
-    return ['03', `Lähesty porttia alle 0,25 m/s. Nokan suuntaero ${(d.alignment * 180 / Math.PI).toFixed(1)}°. Vastapainallus pysäyttää kierron.`];
-  }
-  if (ship.stage === 0 && ship.fuel[0] < 1) return ['01', '1. vaihe tyhjä. Irrota vaihe, nosta sitten 2. vaiheen teho. Irrotus katkaisee moottorin.'];
-  if (h < 3000) return ['01', 'Teho 100 %. Nokka lähes pystyssä. Käännä maltillisesti oikealle; vastapainallus pysäyttää kierron.'];
-  if (h < 45000 && !ship.orbited) return ['01', `Käänny vähitellen kohti horisonttia. Kuormitus ${(atmosphere(ship.x, ship.y, ship.vx, ship.vy).q / 1000).toFixed(0)} kPa; vähennä tehoa tarvittaessa.`];
-  if (o.apo < 380000 && !ship.orbited) return ['02', `Nosta radan ylin noin 400 km:iin. Vaakasuora vauhti ${Math.round(o.vt)} m/s. Avaa Kartta.`];
-  if (o.peri < 150000) return ['02', `Katkaise nousupoltto. Radan ylimpään ${Number.isFinite(o.toApo) ? duration(o.toApo) : '—'}. Kiihdytä siellä liikesuuntaan: nosta radan alin yli 150 km.`];
-  if (ship.fuel[1] < 1 && ship.rcs < 1) return ['02', 'Polttoaine loppui. Vapaa lento jatkuu. Voit aloittaa uuden lennon valikosta.'];
-  const lead = wrap(Math.atan2(d.p.x, d.p.y) - Math.atan2(ship.x, ship.y)) * 180 / Math.PI;
-  return ['02', `Asema ${Math.abs(lead).toFixed(1)}° ${lead >= 0 ? 'edellä' : 'jäljessä'}, ${distance(d.range)}. ${lead >= 0 ? 'Alempi rata saavuttaa asemaa.' : 'Ylempi rata antaa aseman saavuttaa sinut.'} Kohtaaminen: Ohje → 4.`];
+function telemetry(s) {
+  const ref = refBody(s), o = orbitAround(ref, s), d = approach(s);
+  const docking = view === 'dock';
+  const fuelPct = Math.round(s.fuel / SHIP.fuel * 100);
+  return {
+    alt: km(Math.max(0, o.altitude - SHIP.length / 2)),
+    speed: `${Math.round(s.landedOn ? 0 : o.speed).toLocaleString('fi-FI')} m/s`,
+    fuel: `${fuelPct} %`,
+    aLabel: docking ? 'PORTTIIN' : 'RADAN ALIN', a: docking ? km(d.range) : s.landedOn ? '—' : o.peri < 0 ? 'pinnan alla' : km(o.peri),
+    bLabel: docking ? 'NOPEUSERO' : 'RADAN YLIN', b: docking ? `${d.speed.toFixed(2)} m/s` : s.landedOn ? '—' : o.energy >= 0 ? 'karkaa' : km(o.apo),
+    cLabel: docking ? 'SUUNTAERO' : 'Δv JÄLJELLÄ', c: docking ? `${Math.round(Math.abs(d.alignment) * 180 / Math.PI)}°` : `${Math.round(deltaV(s)).toLocaleString('fi-FI')} m/s`,
+    ref
+  };
+}
+function stateName(s, ref) {
+  if (s.phase === 'done') return 'PERILLÄ';
+  if (s.phase === 'crashed') return 'MATKA PÄÄTTYI';
+  if (s.landedOn) return { earth: 'MAAN PINNALLA', moon: 'KUUN PINNALLA', rock: 'PIKKUKIVELLÄ' }[s.landedOn];
+  if (s.chute === 'open') return 'LASKUVARJO AUKI';
+  return { earth: 'MAAN LÄHELLÄ', moon: 'KUUN LÄHELLÄ', rock: 'PIKKUKIVEN LÄHELLÄ' }[ref.id];
 }
 function updateUi() {
   limitWarp();
-  const s = ship || freshFlight(), o = orbit(s), d = approach(s);
-  text('alt', distance(o.altitude));
-  text('speed', `${Math.round(o.speed).toLocaleString('fi-FI')} m/s`);
-  text('fuel', `${Math.round(s.fuel[s.stage] / STAGES[s.stage].fuel * 100)} % · ${s.stage + 1}. vaihe`);
-  const docking = view === 'dock';
-  text('metric-a-label', docking ? 'ETÄISYYS PORTTIIN' : 'RADAN ALIN');
-  text('metric-b-label', docking ? 'NOPEUSERO' : 'RADAN YLIN');
-  text('metric-c-label', docking ? 'SUUNTAERO / KIERTO' : 'NOKKA / KIERTO');
-  text('metric-a', docking ? distance(d.range) : distance(o.peri));
-  text('metric-b', docking ? `${d.speed.toFixed(2)} m/s` : distance(o.apo));
-  const angle = docking ? d.alignment : wrap(s.angle - Math.atan2(s.x, s.y));
-  const spin = docking ? d.spin : s.omega - (s.y * s.vx - s.x * s.vy) / o.r ** 2;
-  text('metric-c', `${(angle * 180 / Math.PI).toFixed(1)}° / ${(spin * 180 / Math.PI).toFixed(1)}°/s`);
+  const s = ship || freshFlight(chosenTrip), m = telemetry(s);
+  text('alt', m.alt); text('speed', m.speed); text('fuel', m.fuel);
+  text('metric-a-label', m.aLabel); text('metric-b-label', m.bLabel); text('metric-c-label', m.cLabel);
+  text('metric-a', m.a); text('metric-b', m.b); text('metric-c', m.c);
   text('clock', `T+ ${duration(s.t)}`);
-  text('phase-name', s.phase === 'docked' ? 'TELAKOITU' : s.orbited ? 'KIERTORADALLA' : s.phase === 'pad' ? 'VALMIS LAUKAISUUN' : 'KÄSIN OHJATTU LENTO');
-  text('flight-tag', s.practice ? 'HARJOITUS / KÄSIOHJAUS' : 'LENNONJOHTO / 01');
-  text('power', `${s.throttle > 0 && s.throttle < .1 ? (s.throttle * 100).toFixed(1) : Math.round(s.throttle * 100)} %`);
-  $('throttle').value = s.throttle * 100;
-  text('rcs', `Suuttimien polttoaine ${Math.round(s.rcs / RCS_FULL * 100)} %`);
+  text('phase-name', stateName(s, m.ref));
+  text('flight-tag', TRIP[s.trip].name.toUpperCase());
+  const pct = Math.sqrt(s.throttle) * 100;
+  text('power', `${Math.round(s.throttle * 100)} %`);
+  if (Math.abs(+$('throttle').value - pct) > 0.5) $('throttle').value = pct;
+  text('rcs', `Suuttimet ${Math.round(s.rcs / SHIP.rcsDv * 100)} %`);
   text('warp', `Aika ×${warp}`);
-  text('warp-note', d.range <= DOCK_REALTIME_RANGE ? 'Porttiin enintään 20 m: ×1' : maxWarp() === 100 ? 'Vapaa lento: ×2/×5/×10/×100' : 'Myös ohjaten ja moottorilla: ×2/×5');
-  const live = ship && ship.phase === 'flight' && !paused;
-  $('stage').disabled = !live || s.stage !== 0 || o.altitude < 1000;
-  text('stage', s.stage === 0 ? 'Irrota 1. vaihe' : '2. vaihe käytössä');
-  $('throttle').disabled = !live || s.fuel[s.stage] === 0;
+  const live = !!ship && ship.phase === 'flight' && !paused;
+  $('throttle').disabled = !live || s.fuel === 0;
   $('cut').disabled = !live;
   $('warp').disabled = !live || maxWarp() === 1;
-  for (const b of document.querySelectorAll('[data-hold]')) {
-    const rotational = b.dataset.hold.startsWith('turn:');
-    b.disabled = !live || (s.rcs === 0 && (!rotational || s.throttle === 0));
+  const air = Math.hypot(s.x, s.y) - EARTH_R < EARTH.air.top;
+  $('chute').disabled = !live || s.chute !== 'packed' || !air || !!s.landedOn;
+  text('chute', s.chute === 'open' ? 'Varjo auki' : s.chute === 'torn' ? 'Varjo rikki' : 'Laskuvarjo');
+  for (const b of document.querySelectorAll('[data-point]')) {
+    b.disabled = !live || s.chute === 'open';
+    b.classList.toggle('selected', s.point === b.dataset.point);
   }
+  for (const b of document.querySelectorAll('[data-hold]')) {
+    const turning = b.dataset.hold.startsWith('turn:');
+    b.disabled = !live || (!turning && s.rcs === 0) || (turning && s.chute === 'open');
+  }
+  $('view-dock').hidden = s.trip !== 'asema';
+  if (view === 'dock' && s.trip !== 'asema') view = 'flight';
   for (const b of document.querySelectorAll('[data-view]')) b.classList.toggle('selected', b.dataset.view === view);
-  const [n, g] = guidance(); text('guide-step', n); text('guide', g);
+  let [n, g] = guidance(s, ship ? currentPath(s) : null);
+  if (flash && performance.now() < flashUntil) { n = '!'; g = flash; }
+  else if (s.note && s.phase === 'flight') g = `${s.note} ${g}`;
+  text('guide-step', n); text('guide', g);
 }
 const HELP = [
-  ['Sinä lennät koko matkan', `<p>Tavoite: laukaisu Maasta, vakaa kiertorata ja telakointi 400 km:n korkeudella lentävään asemaan. Yläilmakehään nouseminen ei vielä ole kiertorata.</p><ul><li>TEHO säätää päämoottoria. SEIS katkaisee sen.</li><li>↶ ↷ antavat kääntävää voimaa. Vapautus ei pysäytä kiertoa: paina vastakkaiseen suuntaan.</li><li>↑ ↓ ← → käyttävät pieniä siirtosuuttimia aluksen omissa suunnissa. Ne kuluttavat erillistä polttoainetta.</li><li>Ⅱ pysäyttää ajan. Puhelimen lukitus ja ohjeen avaaminen pysäyttävät myös lennon.</li></ul>`],
-  ['01 / Laukaisu', `<p>Pidä aluksi teho täysillä. Nouse lähes pystysuoraan 1–3 km, kallista sitten hitaasti oikealle. Tavoittele noin 20° pystystä 10 km:ssä, 40° 40 km:ssä, 65° 100 km:ssä ja 80° 200 km:ssä. Tämä on lähtöohje, ei automaattinen lentorata.</p><p>Liian nopea kallistus vie raketin tiheään ilmaan. Liian pitkä pystynousu kuluttaa polttoaineen ilman tarvittavaa vaakavauhtia. Kun 1. vaihe tyhjenee, irrota se ja nosta 2. vaiheen teho. Se ei käynnisty itsestään.</p>`],
-  ['02 / Rakenna kiertorata', `<p>400 km:n ympyräradalla tarvitaan noin 7 670 m/s vaakavauhtia. Mittarit näyttävät inertiaalisen nopeuden sekä radan alimman ja ylimmän korkeuden.</p><p>Nosta radan ylin noin 400 km:iin ja katkaise moottori. Lähellä radan ylintä kiihdytä vaakasuoraan liikesuuntaan, kunnes myös radan alin on yli 150 km. Negatiivinen alin tarkoittaa, että rata leikkaa maan. Kartta näyttää lentoradan ilman tulevia moottoripolttoja.</p>`],
-  ['02 / Kohtaa liikkuva asema', `<p>Pelkkä sama korkeus ei riitä: aseman on oltava samassa paikassa samaan aikaan. Alempi rata kiertää nopeammin ja saavuttaa edellä olevan aseman. Jos asema on jäljessä, ylemmällä radalla se saavuttaa sinut. Älä yritä lentää suoraan asemaa kohti: suora oikaisu voi viedä ilmakehään.</p><p>Esimerkki 250 km:n ympyräradalta: kun asema on noin 3° edellä, kiihdytä liikesuuntaan noin 43 m/s. Siirtoradan ylin nousee 400 km:iin. Noin 45 minuutin kuluttua, ylimmässä pisteessä, kiihdytä vielä noin 43 m/s tasataksesi radat. Tarkista todellinen kohtaaminen kartalta. Tämä arvio ei korjaa lentoa puolestasi.</p>`],
-  ['03 / Telakoi hitaasti', `<p>Asema-näkymässä oikea on aseman liikesuunta ja ylös poispäin Maasta. Lähesty vasemmalta portin vihreää linjaa pitkin, nokka oikealle. Aluksen suunnat voivat erota näytön suunnista.</p><ul><li>Keltainen viiva näyttää liikkeen asemaan nähden. Jarruta vastakkaisella suuttimella.</li><li>Renkaan etäisyys alle 1,2 m, nopeusero enintään 0,25 m/s.</li><li>Nokan suuntaero enintään 5° ja kiertoero enintään 0,6°/s.</li><li>Portti lukittuu kosketuksesta. Aseman runko ja aurinkopaneelit ovat törmäysesteitä.</li></ul>`],
-  ['Lentomalli ja tallennus', `<p>Fysiikka käyttää metrejä, sekunteja ja kiloja: pallomainen pyörivä Maa, etäisyyden neliössä heikkenevä painovoima, ilmanvastus, muuttuva massa sekä päämoottorin ja siirtosuuttimien liikemäärä. Raketti on kuvitteellinen kaksivaiheinen kantoraketti.</p><p>Rajaukset: yksi ratataso, yksinkertaistettu ilmakehä ja aerodynamiikka; ei Kuuta, nostetta, polttoaineen loiskumista eikä lämpökilpeä. Alukset ovat kuvassa suurennettuja. Tallennus säilyttää lennon; jatkaminen alkaa tauolta. Harjoitukset eivät kirjaa koko lennon saavutuksia.</p>`],
-  ['Ajan nopeutus', `<p>Aika-painike kiertää nopeudet ×1, ×2 ja ×5 myös nousussa, moottorin käydessä ja suuttimia käyttäessä. Sama fysiikka ja polttoaineenkulutus jatkuvat; reagoimiseen jää vähemmän aikaa. ×10 ja ×100 toimivat vain ilmakehän yläpuolella, moottori ja suuttimet pois, hitaalla kierrolla ja yli 5 km asemasta. Ohjaus tai näiden ehtojen päättyminen rajoittaa nopeuden ×5:een. Viimeiset 20 m porttiin lennetään aina ×1-ajalla; nopeutus ei käynnisty uudelleen itsestään.</p>`]
+  ['Ohjaus', `<ul><li><b>TEHO</b> säätää moottoria. Liukusäätimen alkupää on hienosäätöä varten. <b>SEIS</b> katkaisee moottorin.</li><li><b>↶ ↷</b> kääntävät nokkaa: ensin hitaasti, sitten nopeammin. Kun päästät irti, nokka pysyy siinä suunnassa.</li><li><b>Menosuuntaan</b>, <b>Vastasuuntaan</b> ja <b>Pystyyn</b> kääntävät nokan ja pitävät sen siinä. Ne eivät käynnistä moottoria.</li><li><b>← ↑ ↓ →</b> ovat pieniä siirtosuuttimia aluksen omiin suuntiin, hienosäätöön.</li><li><b>Laskuvarjo</b> toimii vain Maan ilmakehässä.</li></ul>`],
+  ['1 · Kiertoradalle', `<p>Nosta teho täysille ja nouse ensin suoraan ylös. Noin 1,5 km:n jälkeen kallista ↷ vähitellen: 20° pystystä alussa, 80° noin 30 km:n korkeudessa.</p><p>Kun <b>radan ylin</b> on noin 60 km, katkaise teho. Odota radan ylimpään kohtaan, paina <b>Menosuuntaan</b> ja kiihdytä, kunnes myös <b>radan alin</b> on yli 40 km. Katkaise lopuksi teho.</p>`],
+  ['2 · Kuuhun', `<p><b>Kartta</b> näyttää, mihin rata vie moottori sammuksissa. Odota kiertoradalla, kunnes Kuu on ohjeen kertoman verran edellä. Paina <b>Menosuuntaan</b> ja kiihdytä, kunnes radan ylin on noin 4900 km. Nopeuta aikaa ×1000.</p><p>Kuun lähellä paina <b>Vastasuuntaan</b> ja jarruta: Kuun kiertoradalle riittää, että radan ylin on alle 370 km.</p>`],
+  ['3 · Laskeutuminen', `<p>Jarruta <b>Vastasuuntaan</b> ja laske hiljalleen. Juuri ennen pintaa paina <b>Pystyyn</b>.</p><ul><li>Kuu: alas enintään 3 m/s, sivulle 2 m/s, kallistus 15°.</li><li>Pikkukivi: vauhti alle 1 m/s. Sen painovoima on hyvin heikko.</li><li>Maa: avaa laskuvarjo alle 20 km korkeudessa ja alle 400 m/s. Kosketus alle 10 m/s.</li></ul>`],
+  ['4 · Asema', `<p>Asema kiertää 100 km korkeudessa. Alempi rata kiertää nopeammin ja saavuttaa sen, ylempi jättää sen edelle. Kun asema on lähellä, avaa <b>Asema</b>-näkymä.</p><p>Paina <b>Vastasuuntaan</b> ja jarruta nopeusero pieneksi. Käännä nokka porttia kohti ja lähesty siirtosuuttimilla: alle 3 m, alle 0,5 m/s, nokka enintään 10° vinossa.</p>`],
+  ['Tähdet ja aika', `<p>Joka matkasta saa kolme tähteä: yksi perille pääsystä, yksi kun Δv:tä (polttoainetta) jää matkan rajan yli, yksi pehmeästä laskeutumisesta, telakoinnista tai pyöreästä radasta. Onnistunut matka avaa seuraavan. Kun Kiertoradalle on lennetty, muut matkat voi aloittaa myös valmiilta kiertoradalta.</p><p><b>Aika</b>-painike nopeuttaa lentoa: ×2 ja ×5 aina, ×10–×1000 kun moottori on sammuksissa ja pinnat kaukana. Nopeus hidastuu itsestään lähestyessä.</p>`]
 ];
 function openHelp() {
   helpReturn = panelName || 'pause-panel';
@@ -159,32 +207,43 @@ function renderHelp() {
   text('help-page', `${helpPage + 1} / ${HELP.length}`);
   $('help-prev').disabled = helpPage === 0; $('help-next').disabled = helpPage === HELP.length - 1;
 }
-$('launch').onclick = () => requestFlight('launch');
-$('practice-orbit').onclick = () => requestFlight('orbit');
-$('practice-dock').onclick = () => requestFlight('dock');
-$('replace-yes').onclick = () => startFlight(pendingKind);
+function say(message) { if (message) { flash = message; flashUntil = performance.now() + 3000; } updateUi(); }
+$('start-pad').onclick = () => requestFlight(chosenTrip, 'pad');
+$('start-orbit').onclick = () => requestFlight(chosenTrip, 'orbit');
+$('trip-back').onclick = mainMenu;
+$('replace-yes').onclick = () => startFlight(...pendingStart);
 $('replace-no').onclick = mainMenu;
 $('resume').onclick = () => {
-  const loaded = loadFlight(); if (!loaded) { mainMenu(); return; }
-  ship = loaded; lastKind = ship.practice ? (approach().range < 2000 ? 'dock' : 'orbit') : 'launch';
-  view = approach().range < 2000 ? 'dock' : ship.orbited ? 'map' : 'flight';
+  const loaded = activeSaved(); if (!loaded) { mainMenu(); return; }
+  ship = loaded; chosenTrip = ship.trip; mapWide = false;
+  view = ship.trip === 'asema' && approach().range < 2000 ? 'dock' : 'flight';
   showPanel('pause-panel');
 };
 $('pause').onclick = () => { if (ship && ship.phase === 'flight') { saveFlight(); showPanel('pause-panel'); } };
 $('continue').onclick = play;
 $('to-menu').onclick = mainMenu; $('result-menu').onclick = mainMenu;
-$('retry').onclick = () => startFlight(lastKind);
+$('retry').onclick = () => startFlight(ship.trip, ship.from);
+$('result-next').onclick = () => { const n = nextTrip(ship.trip); if (n) { readStars(); openTrip(n.id); } };
+// The slider is quadratic: its first half covers 0–25 %, for hovering and gentle burns.
 $('throttle').oninput = () => {
-  if (!paused && ship && ship.phase === 'flight') { ship.throttle = +$('throttle').value / 100; limitWarp(); updateUi(); }
+  if (!paused && ship && ship.phase === 'flight') {
+    ship.throttle = (+$('throttle').value / 100) ** 2; limitWarp(); updateUi();
+  }
 };
-$('cut').onclick = () => { if (ship) { ship.throttle = 0; updateUi(); updateSound(); } };
-$('stage').onclick = () => { stageRocket(); updateUi(); draw(); };
+$('cut').onclick = () => { if (ship) { ship.throttle = 0; $('throttle').value = 0; updateUi(); updateSound(); } };
+$('chute').onclick = () => say(openChute());
+for (const b of document.querySelectorAll('[data-point]')) b.onclick = () => {
+  if (paused || !ship || ship.phase !== 'flight') return;
+  ship.point = ship.point === b.dataset.point ? null : b.dataset.point;
+  updateUi();
+};
 $('warp').onclick = () => {
-  const rates = [1, 2, 5, 10, 100].filter(rate => canWarp(rate));
+  const rates = WARPS.filter(rate => rate <= maxWarp());
   warp = rates[(rates.indexOf(warp) + 1) % rates.length];
   updateUi();
 };
 for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => { view = b.dataset.view; updateUi(); draw(); };
+canvas.addEventListener('click', () => { if (view === 'map') { mapWide = !mapWide; draw(); } });
 function applyPointers() {
   clearHeld();
   for (const p of pointers.values()) held[p.key] = clamp(held[p.key] + p.value, -1, 1);
@@ -205,7 +264,7 @@ for (const b of document.querySelectorAll('[data-hold]')) {
 for (const event of ['pointerup', 'pointercancel']) window.addEventListener(event, e => {
   if (pointers.has(e.pointerId)) { pointers.delete(e.pointerId); applyPointers(); }
 });
-$('help').onclick = $('menu-help').onclick = openHelp;
+$('help').onclick = $('menu-help').onclick = $('pause-help').onclick = openHelp;
 $('help-prev').onclick = () => { helpPage = Math.max(0, helpPage - 1); renderHelp(); };
 $('help-next').onclick = () => { helpPage = Math.min(HELP.length - 1, helpPage + 1); renderHelp(); };
 $('help-close').onclick = () => showPanel(helpReturn);
@@ -222,4 +281,4 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) suspe
 window.addEventListener('blur', suspendFlight);
 window.addEventListener('pagehide', () => { suspendFlight(); if (ship) saveFlight(); });
 new ResizeObserver(fitCanvas).observe(canvas);
-readRecords(); mainMenu(); fitCanvas();
+readStars(); mainMenu(); fitCanvas();

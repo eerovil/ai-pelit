@@ -1,80 +1,61 @@
-# Raketti: laukaisusta kiertoradalle ja telakointiin
+# Raketti: kuusi matkaa Maan ja Kuun välillä (v3)
 
-Pelaaja ohjaa kaksivaiheista rakettia itse koko matkan. Sama kaksiulotteinen lentomalli laskee laukaisun, kiertoradan ja telakoinnin; näkymän vaihto ei siirrä alusta. Harjoituksista voi aloittaa kiertoradalla tai aseman lähellä, mutta niistä ei saa koko lennon saavutuksia.
+Pelaaja valitsee matkan valikosta: kiertorata, asema, Kuun kiertoradalle (alle 5 minuutissa), Kuuhun, Kuusta kotiin tai pieni asteroidi. Kaikki matkat lentävät samalla pienennetyllä Maa–Kuu-mallilla, jossa alus pitää nokan suunnan itse. Matka päättyy tavoitteeseen tai onnettomuuteen, ja onnistunut matka antaa 1–3 tähteä ja avaa seuraavan.
 
 ```mermaid
 flowchart TD
-    A[Valitse lento tai harjoitus] --> B{Keskeneräinen lento?}
-    B -- Kyllä --> C[Vahvista uuden lennon aloitus]
-    C --> D[Laukaisu tai harjoituksen lähtötila]
-    B -- Ei --> D
-    A --> S[Jatka tallennettua lentoa tauolta]
-    S --> E[Käsiohjaus: teho, kierto ja siirtosuuttimet]
-    D --> E
-    E --> F[Painovoima, ilmanvastus, työntö ja muuttuva massa]
-    F --> G{Osuma maahan, ylikuormitus tai kuumeneminen?}
-    G -- Kyllä --> X[Lento keskeytyy ja syy näytetään]
-    G -- Ei --> H{Radan alin yli 150 km ja ylin alle 2000 km?}
-    H -- Kyllä --> I[Kiertorata saavutettu]
-    H -- Ei --> J[Lento jatkuu]
-    I --> J
-    J --> K{Portti lähellä ja kaikki telakointiehdot täyttyvät?}
-    K -- Kyllä --> L[Telakoitu: koko lennon saavutus ilman harjoitusta]
-    K -- Ei --> M{Osuma asemaan tai porttiin?}
-    M -- Kyllä --> X
-    M -- Ei --> E
-    E --> N[Tauko, ohje tai puhelin piiloon: vapauta suuttimet]
-    N --> O[Tallenna lento puhelimeen, jos tallennus sallitaan]
-    O --> S
-    J --> O
-    E --> P{Porttiin enintään 20 m?}
-    P -- Kyllä --> R[Aika normaaliksi, ei itsestään nopeutusta]
-    P -- Ei --> U{Moottori ja suuttimet pois, yli 150 km ja yli 5 km asemasta, hidas kierto?}
-    U -- Kyllä --> Q[Valitse ×1, ×2, ×5, ×10 tai ×100]
-    U -- Ei --> V[Valitse ×1, ×2 tai ×5 myös ohjatessa]
-    Q --> W[Samat fysiikan välivaiheet, rajoita valittua nopeutta heti]
-    V --> W
-    R --> W
-    W --> F
-    class A,B,C,D,S blue
-    class E,N violet
-    class F,J,P,Q,R,U,V,W teal
-    class G,M,X rose
-    class H,I,K,L green
-    class O amber
+    A[Valitse matka valikosta] --> B{Matka auki?}
+    B -- Ei --> A
+    B -- Kyllä --> C{Kiertorata jo lennetty?}
+    C -- Kyllä --> D[Laukaisu tai aloitus kiertoradalta]
+    C -- Ei --> E[Laukaisu alustalta]
+    D --> F[Ohjaus: teho, nokan käännös, menosuuntaan, siirtosuuttimet, laskuvarjo]
+    E --> F
+    F --> G[Maan, Kuun ja asteroidin painovoima, ilmanvastus, työntö]
+    G --> H[Ennustettu rata kartalle]
+    G --> I{Osuma pintaan?}
+    I -- Kyllä --> J{Hidas, pystyssä ja jalat alla?}
+    J -- Kyllä --> K[Laskeutuminen onnistui]
+    J -- Ei --> X[Matka päättyy, syy näytetään]
+    I -- Ei --> L{Matkan tavoite täyttyy?}
+    K --> L
+    L -- Kyllä --> M[Matka onnistui: tähdet polttoaineesta ja pehmeydestä]
+    M --> N[Seuraava matka aukeaa, tähdet tallennetaan]
+    L -- Ei --> O{Asemaan osuma liian kovaa?}
+    O -- Kyllä --> X
+    O -- Ei --> P[Aikaa nopeutetaan vapaassa lennossa ×1000 asti]
+    P --> F
+    F --> Q[Tauko tai puhelin piiloon]
+    Q --> R[Tallenna keskeneräinen matka]
+    R --> A
+    class A,B,C,D,E blue
+    class F,Q violet
+    class G,H,P teal
+    class I,J,O,X rose
+    class K,L,M,N green
+    class R amber
 ```
 
 ## Colours
 
-- **blue**: lennon valinta ja jatkaminen
+- **blue**: matkan valinta ja aloitus
 - **violet**: pelaajan ohjaus ja tauko
-- **teal**: lentomalli ja ajan kuluminen
-- **rose**: vauriot ja törmäykset
-- **green**: kiertorata ja telakoinnin onnistuminen
+- **teal**: lentomalli, ennuste ja ajan nopeutus
+- **rose**: osumat ja epäonnistuminen
+- **green**: tavoitteet, tähdet ja uudet matkat
 - **amber**: puhelimen tallennus
 
 ## Boxes
 
-- **Valitse lento tai harjoitus**: `games/raketti/v2/ui.js` tarjoaa täyden laukaisun sekä erilliset kiertorata- ja telakointiharjoitukset. `physics.js:freshFlight()` antaa harjoitukselle valmiin lähtötilan, ei ohjausta lennon aikana.
-- **Keskeneräinen lento?**: `ui.js:activeSaved()` ja `requestFlight()` suojaavat olemassa olevan lennon. Uusi lento vaatii vahvistuksen ennen tallennuksen korvaamista.
-- **Vahvista uuden lennon aloitus**: `ui.js` näyttää `replace-panel`-ruudun. Peruuttaminen säilyttää aiemman lennon.
-- **Laukaisu tai harjoituksen lähtötila**: `ui.js:startFlight()` käynnistää laukaisun täydellä teholla tai harjoituksen päämoottori sammutettuna.
-- **Jatka tallennettua lentoa tauolta**: `physics.js:loadFlight()` hyväksyy vain kelvollisen tallennuksen; `ui.js` avaa sen tauolle. Jatkaminen vaatii pelaajan painalluksen.
-- **Käsiohjaus: teho, kierto ja siirtosuuttimet**: `ui.js:applyPointers()` ja tehosäädin muuttavat pelaajan käskyjä. Päämoottorin irrotus on käsin tehtävä `physics.js:stageRocket()`, joka katkaisee tehon. Tyhjä polttoaine ei tuota työntöä. Ei autopilottia tai automaattista kierron pysäytystä tyhjiössä.
-- **Painovoima, ilmanvastus, työntö ja muuttuva massa**: `physics.js:tick()` käyttää Maan keskeistä painovoimaa, pyörivää ilmakehää, yksinkertaistettua ilmanvastusta, raketin työntöä ja pyörimistä. `step()` jakaa ajan enintään 0,25 sekunnin osiin, moottorin tai suuttimien toimiessa ja alle kilometrin päässä asemasta enintään 0,02 sekuntiin.
-- **Osuma maahan, ylikuormitus tai kuumeneminen?**: `physics.js:tick()` päättää lennon maanpintaan, yli 130 kPa:n dynaamiseen paineeseen tai yli 70 MW/m²:n paineen ja nopeuden tuloon. Viimeinen on yksinkertaistettu kuumenemisraja, ei lämpömalli.
-- **Radan alin yli 150 km ja ylin alle 2000 km?**: `physics.js:orbit()` laskee radan energian ja liikemäärän perusteella. Saavutus vaatii molemmat ehdot; korkeus yksin ei riitä.
-- **Kiertorata saavutettu**: `physics.js:tick()` tallentaa saavutuksen heti, jos lento ei ole harjoitus. Harjoituksen valmis kiertoratatila ei kirjaa saavutusta.
-- **Lento jatkuu**: `ui.js:frame()` ja `physics.js:step()` jatkavat samaa fysikaalista tilaa. `draw.js` näyttää paikallisen lennon, ratakartan tai aseman koordinaatiston muuttamatta tilaa. `ui.js:guidance()` kertoo myös onko asema edellä vai jäljessä; ohjeen 250–400 km siirtorata lähtee aseman ollessa noin 3° edellä, ja sen kaksi polttoa lisäävät nopeutta noin 43 m/s kumpikin.
-- **Portti lähellä ja kaikki telakointiehdot täyttyvät?**: `physics.js:approach()` laskee nokan sijainnin ja nopeuden suhteessa liikkuvaan porttiin. `tick()` vaatii 2. vaiheen, alle 1,2 m etäisyyden, enintään 0,25 m/s nopeuseron, enintään 5° suuntaeron, enintään 0,01 rad/s kiertoeron sekä portin lähestymispuolen.
-- **Telakoitu: koko lennon saavutus ilman harjoitusta**: `physics.js:endFlight()` pysäyttää lennon, tallentaa tuloksen ja kirjaa telakoinnin vain täydestä lennosta. `ui.js:showResult()` tarjoaa uuden yrityksen.
-- **Osuma asemaan tai porttiin?**: `physics.js:stationContact()` tarkistaa koko aluksen nokasta perään ja näiden välivaiheen liikeradat aseman runkoa, paneeleita ja portin rengasta vasten. `tick()` tarkistaa onnistumisen ensin. Liian nopea, vino tai pyörivä osuma ei telakoidu, eikä alus voi hypätä esteen läpi ruutujen välissä.
-- **Lento keskeytyy ja syy näytetään**: `physics.js:endFlight()` katkaisee moottorin, vapauttaa ohjauksen ja tallentaa. `ui.js:showResult()` kertoo syyn ja tarjoaa uuden yrityksen.
-- **Tauko, ohje tai puhelin piiloon: vapauta suuttimet**: `ui.js:showPanel()` ja `suspendFlight()` pysäyttävät ajan, vapauttavat kaikki painetut suuttimet ja hiljentävät moottorin. Myös `pointercancel` ja kadonnut osoittimen kaappaus vapauttavat painalluksen.
-- **Tallenna lento puhelimeen, jos tallennus sallitaan**: `physics.js:saveFlight()` säilyttää ajan, paikan, nopeuden, asennon, kierron, polttoaineet ja vaiheen avaimella `ai-pelit:raketti:lento`. `ui.js:frame()` tallentaa kahden sekunnin välein. Tallennuksen estyminen ei pysäytä peliä. Saavutukset käyttävät erillistä `ai-pelit:raketti:saavutukset`-avainta.
-- **Porttiin enintään 20 m?**: `physics.js:maxWarp()` laskee nokan etäisyyden porttiin `approach()`-funktiolla. Enintään 20 metrin etäisyydellä suurin nopeus on ×1. Raja on toteutusoletus turvalliseen loppulähestymiseen.
-- **Moottori ja suuttimet pois, yli 150 km ja yli 5 km asemasta, hidas kierto?**: `physics.js:maxWarp()` sallii ×100 asti vain käynnissä olevassa vapaassa lennossa, kun kaikki ehdot ja alle 0,01 rad/s kierto täyttyvät. Muulloin yli 20 m portista suurin nopeus on ×5 myös nousussa ja ohjatessa.
-- **Valitse ×1, ×2, ×5, ×10 tai ×100**: `ui.js` kierrättää ajan painikkeella sallitut nopeudet. Moottorin tai suuttimien käyttö rajoittaa ×10/×100-ajan ×5:een; ×2 ja ×5 säilyvät. Käsky ei ohjaa alusta pelaajan puolesta.
-- **Valitse ×1, ×2 tai ×5 myös ohjatessa**: `ui.js` näyttää samassa painikkeessa ohjatun lennon kolme nopeutta. Vaiheen irrotus katkaisee tehon mutta säilyttää ×2/×5-ajan. Tauko, uusi lento ja tallennuksen jatkaminen alkavat ×1-ajalla.
-- **Samat fysiikan välivaiheet, rajoita valittua nopeutta heti**: `physics.js:advanceFlight()` käyttää joka välivaiheella `limitWarp()`-rajaa ja samoja `flightStepLimit()`-askelia kuin normaaliaikainen `step()`. Raja vaikuttaa saman ruudun jäljellä olevaan aikaan; voimat, polttoaine ja törmäykset lasketaan edelleen jokaisella askeleella.
-- **Aika normaaliksi, ei itsestään nopeutusta**: `physics.js:limitWarp()` vain laskee valittua nopeutta. `ui.js` kertoo 20 m:n rajan ajan painikkeen vieressä ja poistaa nopeutuspainikkeen käytöstä rajan sisällä. Loittoneminen ei nosta nopeutta itsestään.
+- **Valitse matka valikosta**: `games/raketti/v3/ui.js` (`renderTrips`) näyttää kuusi matkaa listana, kunkin arvioidun keston, tähdet ja lukon. Matkat, niiden tavoitteet ja tähtirajat ovat `games/raketti/v3/trips.js`:n `TRIPS`-listassa.
+- **Matka auki?**: `tripOpen`: Kiertoradalle on aina auki; muu matka aukeaa, kun listan edellisestä on vähintään yksi tähti.
+- **Kiertorata jo lennetty?**: `openTrip` näyttää "Aloita kiertoradalta" muilla matkoilla kuin Kiertoradalle, kun Kiertoradalle-matkasta on tähti. Valmis rata on pyöreä 80 km rata, ja polttoainetta on 4300 m/s Δv:n verran (`freshFlight(trip, 'orbit')`). Tähdet lasketaan samoin kuin alustalta.
+- **Ohjaus: teho, nokan käännös, menosuuntaan, siirtosuuttimet, laskuvarjo**: Tehon liukusäädin on neliöllinen (puoliväli = 25 %). ↶ ↷ kääntävät 15°/s ja 0,4 s jälkeen 60°/s; irrotettaessa nokka pysähtyy (`steer`). "Menosuuntaan", "Vastasuuntaan" ja "Pystyyn" kääntävät nokan lähimmän kappaleen (tai alle 20 km päässä aseman) suhteen enintään 90°/s ja pitävät sen, polttamatta moottoria. Laskuvarjo vain Maan ilmakehässä (alle 40 km); se aukeaa alle 20 km korkeudessa ja repeää yli 400 m/s vauhdissa (`openChute`).
+- **Maan, Kuun ja asteroidin painovoima, ilmanvastus, työntö**: `games/raketti/v3/physics.js` laskee kaikkien kolmen kappaleen vedon joka askeleella. Maan säde 500 km ja ilmakehä 40 km; Kuun säde 80 km, 5000 km päässä; Pikkukiven säde 3 km, 2000 km päässä. Moottori kiihdyttää enintään 20 m/s². Kappaleet ovat yhdessä `BODIES`-listassa, joten myöhempi versio voi lisätä Auringon ja Marsin.
+- **Ennustettu rata kartalle**: `predictPath` laskee radan noin 8 tuntia eteenpäin moottori sammuksissa samalla mallilla; `games/raketti/v3/draw.js` piirtää sen lähimmän kappaleen ympärille ja merkitsee kohteen lähimmän kohdan. Se näyttää, minne alus on menossa, mutta ei ohjaa.
+- **Osuma pintaan?**: `surfaceClearance` lähimmästä kappaleesta; osuma tarkistetaan joka askeleella (`touchdown`).
+- **Hidas, pystyssä ja jalat alla?**: `LANDING`: Kuussa ja Maassa ilman varjoa alas enintään 3 m/s, sivulle 2 m/s ja kallistus 15°. Pikkukivellä vauhti enintään 1 m/s ja kallistus 25°. Maahan avatulla laskuvarjolla vauhti enintään 10 m/s. Maahan laskeutuminen ennen matkan tavoitetta päättää matkan kesken.
+- **Matka onnistui: tähdet polttoaineesta ja pehmeydestä**: `tripStars`: yksi tähti perillä, toinen kun Δv:tä jää vähintään matkan `dvStar` (Kiertoradalle 4300, Asemalle 3900, Kuun kiertoradalle 3300, Kuuhun 1700, Kotiin 1000, Pikkukivelle 3100 m/s), kolmas pehmeästä (puolet rajoista), telakoinnista alle 0,25 m/s tai pyöreästä radasta (eksentrisyys ≤ 0,1).
+- **Asemaan osuma liian kovaa?**: Telakointi onnistuu, kun nokka on alle 3 m portista, nopeusero enintään 0,5 m/s ja suuntaero enintään 10° (`DOCK`). Muu kosketus aseman rakenteisiin on törmäys.
+- **Aikaa nopeutetaan vapaassa lennossa ×1000 asti**: `maxWarp`: pinnalla ×5, mutta moottori käynnissä ×1; ilmassa ×1 alle 500 m pinnasta ja alle 50 m portista. Avatun laskuvarjon alla (moottori sammuksissa) ×100 yli 300 m korkeudessa, ×5 yli 50 m. Muuten ×5 moottorin, käännön tai siirtosuuttimien aikana, kappaleen lähellä (Maa 20 km, Kuu 5 km, Pikkukivi 2 km) tai alle 5 km asemasta; ×100 lähempänä kuin Maa 300 km, Kuu 100 km, Pikkukivi 30 km; muuten ×1000. Valittu nopeus laskee itsestään.
+- **Tallenna keskeneräinen matka**: Uudet avaimet `ai-pelit:raketti:matka` (keskeneräinen lento, tarkistetaan `validFlight`illa) ja `ai-pelit:raketti:tahdet`. Vanhojen versioiden avaimia ei lueta eikä poisteta.

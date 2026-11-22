@@ -1,7 +1,7 @@
 {
   "title": "Raketti",
-  "description": "Laukaise kaksivaiheinen raketti, lennä kiertoradalle ja telakoidu avaruusasemaan. Realistinen 2D-lento ilman autopilottia.",
-  "category": "vauhti",
+  "description": "Lennä raketilla kiertoradalle, asemalle, Kuuhun ja kotiin. Kuusi matkaa, ei autopilottia.",
+  "category": "seikkailu",
   "versions": [
     {
       "n": 1,
@@ -16,6 +16,13 @@
       "note": "Ajan nopeutus ×2 ja ×5 toimii myös moottorin ja ohjauksen aikana; portin lähellä palataan normaaliaikaan.",
       "request": "Yksi lento kestää aika kauan. Nopeutus myös muulloin kuin vapaassa lennossa. Approved: selectable ×1/×2/×5 during thrust and steering, ×10/×100 for coasting, same physics/manual controls/saves; return to ×1 near docking contact, explained on screen.",
       "issue": "eerovil/ai-pelit#435"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-22",
+      "note": "Helpompi Raketti: pieni Maa ja Kuu, kuusi matkaa, nokka pysyy suunnassaan.",
+      "request": "Avaruuspeli on loppujen lopuksi kuitenkin liian realistinen, eli liian vaikea ja hidastempoinen. Pitäisi saada varmaan pienemmät taivaankappaleet, enemmän polttoainetta ja helpompi ohjaus. Pitäisikö se onn kokonaan uusi peli vai muokataanko vanhaa (voiko koodia uudelleenkäyttää)",
+      "issue": "eerovil/ai-pelit#548"
     }
   ]
 }
