@@ -88,7 +88,16 @@ def glides(page):
     middle = sp[moving[0] + 8:moving[-1] - 8]
 
     def heard(t):
-        return any(t - 0.3 <= g <= t for g in got)
+        # Messages kept coming in the last 0.3 s, none more than 0.2 s apart. Under a loaded test run the
+        # sending phone stalled for 0.25 s with no message (measured in #524's runs); the drawn runner then
+        # reaches the newest spot and waits for the next, as on a real network that goes quiet. That is the
+        # test machine's stall, not a jerk, so those frames are left out like the ones with no message at all.
+        near = [g for g in got if t - 0.3 <= g <= t]
+        if not near:
+            return False
+        before = [g for g in got if g < near[0]]
+        edges = ([before[-1]] if before else []) + near + [t]
+        return all(b - a <= 0.2 for a, b in zip(edges, edges[1:]))
     kept = [v for t, v in middle if heard(t)]
     shown = [round(v, 2) for _, v in middle]
     assert len(kept) > 0.8 * len(middle), (len(kept), len(middle))
