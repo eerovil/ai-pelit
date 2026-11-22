@@ -254,6 +254,7 @@ def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site,
                            timeout=10000)
     aino.evaluate(DRAWN, hid)
     aino.wait_for_timeout(500)
+    off0 = [p.evaluate("pz.off") for p in (host, aino)]  # how long each phone's run clock has stood, so far
     if first == "away":
         host.relay.drop(rest[0])
         aino.wait_for_function("AiPelitRooms.paused", timeout=10000)
@@ -293,7 +294,13 @@ def test_a_pause_holds_the_others_where_they_are_and_they_go_on_from_there(site,
     before = [b for t, _, _, p, b in dr if not p and went - 2 < t < went and b is not None][-10:]
     after = [b for t, _, _, p, b in dr if not p and gone + 1 < t < gone + 2.5 and b is not None]
     assert before and after, ([(round(t - went, 2), p) for t, _, _, p, _ in dr])
-    assert median(after) > median(before) - 0.08, (round(median(before), 3), [round(b, 3) for b in after])
+    # Each phone's clock stands from its first frame in the pause to its first frame after it, so a phone that draws
+    # late then (a busy machine) stands for less or more than the 1.45 s: here the host drew no frame for 0.15 s
+    # into its pause, stood 0.087 s less, and the lag moved by -0.089 s, as the two clocks really moved apart. That
+    # difference is taken off; what is left was -0.04 to 0.04 s in six runs, against 0.13 for the spots heard at once.
+    fh, fg = [p.evaluate("pz.off") - o for p, o in zip((host, aino), off0)]
+    moved = median(after) - median(before) - (fh - fg)
+    assert moved > -0.08, (round(moved, 3), round(fh, 3), round(fg, 3), round(median(before), 3), [round(b, 3) for b in after])
 
 
 def test_a_friends_fall_rolls_one_way_and_ends_upright_at_once(site, browser):
