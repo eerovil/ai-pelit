@@ -9,9 +9,7 @@ flowchart TD
     B -- Ei --> D[Alku kadulla keskustassa]
     C --> Y
     D --> Y[Tehtävä: merkitty katto 120–300 m päässä, joka viides tornin huippu]
-    Y --> E
-    C --> E
-    D --> E[Ohjaus: tikku, Hyppy, pidä Seitti, kameran veto]
+    Y --> E[Ohjaus: tikku, Hyppy, pidä Seitti, kameran veto]
     E --> F{Missä sankari on?}
     F -- Kadulla tai katolla --> G[Juoksu ja hyppy]
     F -- Seinässä kiinni --> H[Kiipeily seinää pitkin, reunalta katolle]
