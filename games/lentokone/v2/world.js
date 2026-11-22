@@ -1,5 +1,5 @@
 'use strict';
-// Lentokone v1 (#533): the world and the plane as plain numbers. Nothing here draws, so the tests
+// Lentokone v2 (#547; v1 #533): the world and the planes as plain numbers. Nothing here draws, so the tests
 // drive it directly (`step(p, dt)`).
 //
 // World: x metres east, z metres south (three.js's own axes), y metres up. A heading is in radians
@@ -17,18 +17,37 @@ function rng(seed) {
 function hash2(i, j) { let h = (i * 374761393 + j * 668265263) >>> 0; h = (h ^ (h >>> 13)) * 1274126177 >>> 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 const dirX = h => Math.sin(h), dirZ = h => -Math.cos(h);
 
-// ---- The plane: a small single-engine high-wing plane ----
-const PLANE = {
-  m: 1000, S: 16, rho: 1.225,
-  cl0: 0.35, cla: 5.2, aoaStall: 0.24,          // lift: CL = cl0 + cla * aoa, up to the stall
-  flapCl: [0, 0.3, 0.6], flapCd: [0, 0.02, 0.05],
-  cd0: 0.03, k: 0.05, gearCd: 0.012,
-  thrust: 3600, vMaxThrust: 105,                 // N at a standstill, falling to 0 at 105 m/s
-  pitchRate: 0.55, bankRate: 1.1, maxBank: 60 * DEG,
-  vRotate: 20,                                   // the nose wheel may lift from here (m/s)
-  brake: 4.5, roll: 0.03,
+// ---- The planes: v1's small single-engine high-wing plane, and v2's passenger jet (#547) ----
+// `vr` is told to the player (pull back at about this speed, km/h); `vApp` is a good approach speed.
+const PLANES = {
+  pieni: {
+    m: 1000, S: 16, rho: 1.225,
+    cl0: 0.35, cla: 5.2, aoaStall: 0.24,          // lift: CL = cl0 + cla * aoa, up to the stall
+    flapCl: [0, 0.3, 0.6], flapCd: [0, 0.02, 0.05],
+    cd0: 0.03, k: 0.05, gearCd: 0.012,
+    thrust: 3600, vMaxThrust: 105,                 // N at a standstill, falling to 0 at 105 m/s
+    pitchRate: 0.55, bankRate: 1.1, maxBank: 60 * DEG,
+    vRotate: 20,                                   // the nose wheel may lift from here (m/s)
+    brake: 4.5, roll: 0.03,
+    vr: 100, vApp: 32, vStart: 42,
+  },
+  // A game-sized airliner: twice the small plane's wing loading, so it flies about 1.5 times as fast,
+  // turns and pitches slower, and lands on every runway (Tunturikenttä's 500 m too) on hard brakes.
+  iso: {
+    m: 60000, S: 440, rho: 1.225,
+    cl0: 0.35, cla: 5.2, aoaStall: 0.24,
+    flapCl: [0, 0.35, 0.7], flapCd: [0, 0.02, 0.05],
+    cd0: 0.025, k: 0.045, gearCd: 0.012,
+    thrust: 156000, vMaxThrust: 170,
+    pitchRate: 0.38, bankRate: 0.7, maxBank: 45 * DEG,
+    vRotate: 28,
+    brake: 6.5, roll: 0.02,
+    vr: 130, vApp: 44, vStart: 58,
+  },
 };
-const VR_KMH = 100;   // told to the player: pull back at about this speed
+const PLANE = PLANES.pieni;
+const kindOf = p => PLANES[p.kind] || PLANES.pieni;
+const VR_KMH = PLANE.vr;   // v1's name for the small plane's rotate speed
 
 // ---- The airfields: one chain of six, each route flies from one to the next ----
 // A runway: its threshold (x, z), the heading it is landed and taken off along, length, width, height.
@@ -118,9 +137,10 @@ function treeAt(i, j) {
 }
 
 // ---- The plane's state ----
-function newPlane(route) {
+function newPlane(route, kind) {
   const f = FIELDS[route.from];
   return {
+    kind: PLANES[kind] ? kind : 'pieni',
     x: f.x + dirX(f.hdg) * 40, z: f.z + dirZ(f.hdg) * 40, y: f.elev,
     hdg: f.hdg, pit: 0, bank: 0, gam: 0, v: 0, aoa: 0,
     thr: 0, flaps: 1, gear: true, brake: false, sx: 0, sy: 0,
@@ -131,18 +151,19 @@ function newPlane(route) {
   };
 }
 // The retry from the approach: 5 km out on the target runway's line, on the glide path.
-function approachPlane(route) {
+function approachPlane(route, kind) {
   const f = FIELDS[route.to], d = 5000;
-  const p = newPlane(route);
+  const p = newPlane(route, kind);
   Object.assign(p, {
     x: f.x - dirX(f.hdg) * d, z: f.z - dirZ(f.hdg) * d, y: f.elev + (d + aimAt(f)) * Math.tan(GLIDE),
-    hdg: f.hdg, v: 42, thr: 0.35, flaps: 0, gear: false, ground: false, airborne: true,
+    hdg: f.hdg, v: kindOf(p).vStart, thr: 0.35, flaps: 0, gear: false, ground: false, airborne: true,
   });
   p.gam = -GLIDE * 0.5; p.pit = p.gam + trimAoa(p);
   return p;
 }
 // The angle of attack that holds the plane up at its speed.
 function trimAoa(p) {
+  const PLANE = kindOf(p);
   const q = 0.5 * PLANE.rho * p.v * p.v * PLANE.S;
   return clamp((PLANE.m * G / q - PLANE.cl0 - PLANE.flapCl[p.flaps]) / PLANE.cla, -0.1, PLANE.aoaStall - 0.02);
 }
@@ -155,6 +176,7 @@ function windOf(route, t) {
 }
 
 function forces(p) {
+  const PLANE = kindOf(p);
   const q = 0.5 * PLANE.rho * p.v * p.v * PLANE.S;
   let cl = PLANE.cl0 + PLANE.cla * p.aoa + PLANE.flapCl[p.flaps];
   const clMax = PLANE.cl0 + PLANE.cla * PLANE.aoaStall + PLANE.flapCl[p.flaps];
@@ -169,13 +191,14 @@ function forces(p) {
 function step(p, dt, route) {
   if (p.over && p.over.stopped) return;
   p.t += dt;
-  const m = PLANE.m;
+  const m = kindOf(p).m;
   if (p.ground) groundStep(p, dt, route, m);
   else airStep(p, dt, route, m);
   p.maxAgl = Math.max(p.maxAgl, p.y - groundAt(p.x, p.z));
 }
 
 function airStep(p, dt, route, m) {
+  const PLANE = kindOf(p);
   // The stick: pitch and bank rates; let go and the wings slowly level.
   p.pit += p.sy * PLANE.pitchRate * dt;
   if (Math.abs(p.sx) > 0.05) p.bank += p.sx * PLANE.bankRate * dt;
@@ -237,6 +260,7 @@ function crash(p, why) {
 }
 
 function groundStep(p, dt, route, m) {
+  const PLANE = kindOf(p);
   // Pitch on the wheels: only with speed the nose wheel lifts; with the stick let go it settles.
   const want = p.v > PLANE.vRotate ? clamp(p.sy, 0, 1) * 0.22 : 0;
   p.pit += clamp(want - p.pit, -0.3 * dt, 0.35 * dt);

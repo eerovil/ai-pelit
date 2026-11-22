@@ -1,5 +1,5 @@
 'use strict';
-// Lentokone v1 (#533): the world and the plane in 3D (three.js, the site's shared copy, #99). It only
+// Lentokone v2 (#547; v1 #533): the world and the planes in 3D (three.js, the site's shared copy, #99). It only
 // reads world.js's numbers. index.html imports three.js and calls init3d(THREE); a phone that cannot
 // draw 3D says so in the HUD.
 
@@ -29,7 +29,10 @@ function init3d(T) {
   V3.trees = treeMeshes(); scene.add(V3.trees.spruce, V3.trees.birch);
   V3.fields = FIELDS.map((f, i) => { const g = airfield(f, i); scene.add(g); return g; });
   V3.town = town(); scene.add(V3.town);
-  V3.plane = planeModel(); scene.add(V3.plane);
+  V3.planes = { pieni: planeModel(), iso: airlinerModel() };
+  scene.add(V3.planes.pieni, V3.planes.iso);
+  V3.plane = V3.planes.pieni;
+  V3.pax = paxGroup(); scene.add(V3.pax);
   V3.shadow = new THREE.Mesh(new THREE.CircleGeometry(5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }));
   V3.shadow.rotation.x = -Math.PI / 2; scene.add(V3.shadow);
   V3.guide = new THREE.Group(); scene.add(V3.guide);
@@ -243,6 +246,52 @@ function planeModel() {
   return grp;
 }
 
+// ---- The passenger jet (#547): built facing -z, wheels at y = 0, about 40 m long ----
+// Its front door is on the left (x = -2) at DOOR_Z, its sill at SILL (passengers.js).
+function airlinerModel() {
+  const grp = new THREE.Group(), body = [], W = '#f4f4f2', R = '#c8202f', B = '#1e4e9a', D = '#2a2e36', G = '#c8ccd0';
+  const cyl = (r1, r2, len, z, y, col) => { const g = new THREE.CylinderGeometry(r1, r2, len, 18); g.rotateX(Math.PI / 2); g.translate(0, y, z); body.push([g, col]); };
+  cyl(2, 2, 30, 0, 4.4, W);                                         // the cabin
+  const nose = new THREE.SphereGeometry(2, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2); nose.rotateX(-Math.PI / 2); nose.scale(1, 1, 1.7); nose.translate(0, 4.4, -15); body.push([nose, W]);
+  cyl(0.55, 2, 8, 19, 4.9, W);                                      // the tail cone (wide end forward)
+  box(body, 4.06, 0.5, 30, 0, 3.2, 0, G);                           // a grey belly
+  for (const sx of [-1, 1]) {
+    box(body, 0.08, 0.32, 30, sx * 2.0, 3.95, 0, B);                // the cheat line
+    for (let z = -12.5; z <= 12.5; z += 1.15) if (Math.abs(z - DOOR_Z) > 1) box(body, 0.08, 0.42, 0.34, sx * 2.0, 4.95, z, D);   // windows
+    box(body, 0.9, 0.5, 0.5, sx * 0.75, 5.25, -17.0, D, -0.5);      // cockpit windows
+  }
+  // The fin and the tailplane, swept back.
+  box(body, 0.35, 6.5, 4.6, 0, 8.6, 20.6, R, 0.5);
+  box(body, 0.37, 1.0, 3.0, 0, 11.2, 22.0, W, 0.5);
+  for (const sx of [-1, 1]) box(body, 5.6, 0.28, 2.4, sx * 3.2, 5.2, 20.6, W, 0, sx * -0.45);
+  // The wings, low and swept, and the engines under them.
+  for (const sx of [-1, 1]) {
+    box(body, 15.5, 0.45, 4.2, sx * 9.4, 3.1, 1.6, W, 0, sx * -0.42, sx * 0.06);
+    box(body, 1.0, 0.5, 1.6, sx * 16.8, 3.6, 5.2, R, 0, sx * -0.42);   // the wing tips
+    const eng = new THREE.CylinderGeometry(1.15, 1.0, 4.4, 16); eng.rotateX(Math.PI / 2); eng.translate(sx * 6.4, 1.9, -1.6); body.push([eng, '#d8dce0']);
+    const fan = new THREE.CircleGeometry(1.0, 16); fan.rotateY(Math.PI); fan.translate(sx * 6.4, 1.9, -3.82); body.push([fan, '#30343a']);
+    box(body, 0.4, 1.1, 2.6, sx * 6.4, 2.9, -0.8, G);                 // pylon
+  }
+  const fuse = new THREE.Mesh(merge(body), lambert());
+  grp.add(fuse);
+  // The front door: shut it sits in the side; open it swings forward along the side.
+  const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 1.0), new THREE.MeshLambertMaterial({ color: 0x1a1c20 }));
+  doorFrame.position.set(-1.99, SILL + 0.95, DOOR_Z); grp.add(doorFrame);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.9, 1.0), new THREE.MeshLambertMaterial({ color: 0xe8e8e6 }));
+  door.position.set(-2.04, SILL + 0.95, DOOR_Z); grp.add(door);
+  // Gear: two-wheel legs, folding up.
+  const gp = [];
+  for (const [x, z, h] of [[0, -13, 2.6], [-3.0, 2.6, 2.4], [3.0, 2.6, 2.4]]) {
+    box(gp, 0.25, h, 0.25, x, h / 2 + 0.5, z, '#999999');
+    for (const dx of [-0.35, 0.35]) { const wh = new THREE.CylinderGeometry(0.55, 0.55, 0.35, 12); wh.rotateZ(Math.PI / 2); wh.translate(x + dx, 0.55, z); gp.push([wh, D]); }
+  }
+  const gear = new THREE.Mesh(merge(gp), lambert()); grp.add(gear);
+  grp.rotation.order = 'YXZ';
+  grp.userData = { fuse, flaps: [], gear, prop: null, disc: null, door, doorFrame, big: true };
+  grp.visible = false;
+  return grp;
+}
+
 // Rings on the glide path of a route that has a guide line (routes 1 and 2).
 function buildGuide(route) {
   const g = V3.guide;
@@ -258,24 +307,30 @@ function buildGuide(route) {
 }
 
 // ---- Each frame ----
-function render3d(p, route, dt, still) {
+function render3d(p, route, dt, still, pax) {
   if (!V3) return false;
   const R = V3.renderer, cv = R.domElement, w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight;
   if (w !== V3.w || h !== V3.h) { V3.w = w; V3.h = h; R.setSize(w, h, false); V3.camera.aspect = w / h; V3.camera.updateProjectionMatrix(); }
   if (V3.route !== route) { V3.route = route; buildGuide(route); setLook(!!route.dusk); V3.cam = null; }
   if (!(Math.abs(p.x - V3.cx) < 800 && Math.abs(p.z - V3.cz) < 800)) buildLand(Math.round(p.x / TER_CELL) * TER_CELL, Math.round(p.z / TER_CELL) * TER_CELL);
   V3.t += dt;
+  const want = V3.planes[p.kind] || V3.planes.pieni;
+  if (V3.plane !== want) { V3.plane.visible = false; V3.plane = want; }
   const P = V3.plane, u = P.userData;
+  P.visible = true;
   P.position.set(p.x, p.y, p.z);
   P.rotation.set(p.pit, -p.hdg, -p.bank);
   if (p.over && !p.over.ok) P.rotation.z = -p.bank + 0.5;   // a crash leaves it on one wing
   u.gear.visible = p.gear;
   for (const f of u.flaps) f.rotation.x = -p.flaps * 0.35;
-  if (!still) u.prop.rotation.z += dt * (6 + p.thr * 60);
-  u.disc.material.opacity = 0.06 + p.thr * 0.2;
+  if (u.prop && !still) u.prop.rotation.z += dt * (6 + p.thr * 60);
+  if (u.disc) u.disc.material.opacity = 0.06 + p.thr * 0.2;
+  if (u.door) { const o = pax ? pax.door : 0; u.door.position.set(-2.04 - o * 0.35, SILL + 0.95, DOOR_Z - o * 1.05); }
+  drawPax(V3.pax, p, pax);
   const gnd = groundAt(p.x, p.z), agl = p.y - gnd;
   V3.shadow.position.set(p.x, gnd + 0.35, p.z);
-  V3.shadow.material.opacity = 0.28 * clamp(1 - agl / 80, 0, 1);
+  V3.shadow.scale.setScalar(u.big ? 3.4 : 1);
+  V3.shadow.material.opacity = (u.big ? 0.16 : 0.28) * clamp(1 - agl / (u.big ? 160 : 80), 0, 1);
   V3.shadow.visible = agl < 80 && !isWater(p.x, p.z) || agl < 2;
   // The glide-path lights and the windsock of each field.
   const wind = windOf(route, p.t);
@@ -287,7 +342,8 @@ function render3d(p, route, dt, still) {
     g.userData.sock.rotation.x = (Math.PI / 2 - 0.15) * (1 - clamp(ws / 8, 0, 1)) * 0.9;
   }
   const cam = V3.camera;
-  if (camView === 'cockpit') cockpitCamera(p, cam);
+  if (pax) paxCamera(p, cam);
+  else if (camView === 'cockpit') cockpitCamera(p, cam);
   else chaseCamera(p, cam, dt, still);
   V3.sky.position.copy(cam.position);
   V3.water.position.x = cam.position.x; V3.water.position.z = cam.position.z;
@@ -298,29 +354,49 @@ function render3d(p, route, dt, still) {
 
 // Behind the plane, along its heading, a little above; the horizon tilts a little with the bank.
 function chaseCamera(p, cam, dt, still) {
-  V3.plane.userData.fuse.visible = V3.plane.userData.prop.visible = true;
-  const back = LAND ? 27 : 34, up = LAND ? 6.5 : 8.5;
+  const u = V3.plane.userData, big = u.big ? 2.5 : 1;
+  u.fuse.visible = true; if (u.prop) u.prop.visible = true;
+  const back = (LAND ? 27 : 34) * big, up = (LAND ? 6.5 : 8.5) * big;
   const want = [p.x - dirX(p.hdg) * back * Math.cos(p.gam), p.y + up - Math.sin(p.gam) * back, p.z - dirZ(p.hdg) * back * Math.cos(p.gam)];
   want[1] = Math.max(want[1], groundAt(want[0], want[2]) + 2);
-  if (!V3.cam) V3.cam = want.slice();
+  if (!V3.cam) { V3.cam = want.slice(); V3.look3 = null; }
   const k = still ? 1 : Math.min(1, dt * 4);
   for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * k;
   cam.position.set(...V3.cam);
   cam.up.set(Math.cos(p.hdg) * Math.sin(p.bank * 0.35), Math.cos(p.bank * 0.35), Math.sin(p.hdg) * Math.sin(p.bank * 0.35));
-  cam.lookAt(p.x + dirX(p.hdg) * 30, p.y + 3 + Math.sin(p.gam) * 30, p.z + dirZ(p.hdg) * 30);
+  // Where it looks follows as smoothly, so the view turns from the passengers' scene to the flight.
+  const look = [p.x + dirX(p.hdg) * 30 * big, p.y + 3 * big + Math.sin(p.gam) * 30 * big, p.z + dirZ(p.hdg) * 30 * big];
+  if (!V3.look3) V3.look3 = look.slice();
+  for (let i = 0; i < 3; i++) V3.look3[i] += (look[i] - V3.look3[i]) * k;
+  cam.lookAt(...V3.look3);
   cam.fov = LAND ? 55 : 66; cam.updateProjectionMatrix();
 }
 // From the pilot's seat: the view turns and tilts with the plane; the wing is above.
 function cockpitCamera(p, cam) {
   // The fuselage and the blade would fill the view; the spinning disc stays, faint.
-  V3.plane.userData.fuse.visible = V3.plane.userData.prop.visible = false;
+  const u = V3.plane.userData;
+  u.fuse.visible = false; if (u.prop) u.prop.visible = false;
   V3.plane.updateMatrixWorld(true);
-  cam.position.set(0, 2.45, -1.0).applyMatrix4(V3.plane.matrixWorld);
+  if (u.big) cam.position.set(0, 5.3, -16.5); else cam.position.set(0, 2.45, -1.0);
+  cam.position.applyMatrix4(V3.plane.matrixWorld);
   cam.quaternion.setFromEuler(V3.plane.rotation);
   cam.rotateX(-0.06);
   cam.up.set(0, 1, 0);
   cam.fov = LAND ? 62 : 75; cam.updateProjectionMatrix();
-  V3.cam = null;
+  V3.cam = V3.look3 = null;
+}
+// The passengers' scene (#547): from ahead and left of the plane, over the bus and the stairs. The
+// chase camera takes over from here when the flight starts.
+const PAX_CAM = { port: [-30, 15, -50], land: [-25, 9, -33], at: [-10, 2.2, -9] };
+function paxCamera(p, cam) {
+  const u = V3.plane.userData;
+  u.fuse.visible = true; if (u.prop) u.prop.visible = true;
+  const toW = ([lx, ly, lz]) => [p.x + lx * Math.cos(p.hdg) - lz * Math.sin(p.hdg), p.y + ly, p.z + lx * Math.sin(p.hdg) + lz * Math.cos(p.hdg)];
+  const pos = toW(LAND ? PAX_CAM.land : PAX_CAM.port), at = toW(PAX_CAM.at);
+  pos[1] = Math.max(pos[1], groundAt(pos[0], pos[2]) + 3);
+  cam.position.set(...pos); cam.up.set(0, 1, 0); cam.lookAt(...at);
+  cam.fov = LAND ? 55 : 62; cam.updateProjectionMatrix();
+  V3.cam = pos; V3.look3 = at;
 }
 
 // A slow phone: measured over the first seconds of a flight, below 27 frames a second it draws fewer

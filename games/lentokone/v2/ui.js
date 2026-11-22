@@ -1,5 +1,6 @@
 'use strict';
-// Lentokone v1 (#533): the screen, the thumbs, the menus, the saves and the sounds, and the main loop.
+// Lentokone v2 (#547; v1 #533): the screen, the thumbs, the menus, the saves and the sounds, and the main loop.
+// v2 adds the passenger jet (picked in the menu) with its passengers boarding and leaving (passengers.js).
 
 const c = document.getElementById('c'), cx = c.getContext('2d');
 const $ = id => document.getElementById(id);
@@ -33,11 +34,12 @@ let stars = load('tahdet', []); if (!Array.isArray(stars)) stars = [];
 const best = n => Math.max(0, Math.floor(load('ennatys-' + n, 0)) || 0);
 let tutorial = !load('osattu', false);
 camView = load('kamera', 'chase') === 'cockpit' ? 'cockpit' : 'chase';
+let plane = load('kone', 'iso') === 'pieni' ? 'pieni' : 'iso';   // 'iso' the passenger jet (new in v2), 'pieni' v1's plane
 let stickStyle = load('sauva', 'lentaja') === 'suora' ? 'suora' : 'lentaja';   // 'lentaja': finger down lifts the nose
 
 // ---- Sounds (#205, aanet-5): only after the first tap, quiet (#337, #355) ----
 const S = window.AiPelitAanet;
-if (S) S.load(['moottori', 'tuuli', 'rullaus', 'halytys', 'lasku', 'kolari', 'onnistui', 'valinta', 'naksu', 'metalli', 'virhe']);
+if (S) S.load(['moottori', 'tuuli', 'rullaus', 'halytys', 'lasku', 'kolari', 'onnistui', 'valinta', 'naksu', 'metalli', 'virhe', 'askel', 'askel2']);
 let ac = null;
 function beep(f, d, vol) {
   try {
@@ -55,9 +57,11 @@ function sounds(dt) {
   if (on && !engine) { engine = S.loop('moottori', { vol: 0 }); windL = S.loop('tuuli', { vol: 0 }); wheels = S.loop('rullaus', { vol: 0 }); }
   if (!on && engine) { engine.stop(); windL.stop(); wheels.stop(); engine = windL = wheels = null; }
   if (!engine) return;
-  engine.set({ vol: 0.08 + p.thr * 0.14, rate: 0.55 + p.thr * 0.7 });
-  const v = clamp(p.v / 60, 0, 1);
-  windL.set({ vol: p.ground ? v * 0.05 : 0.03 + v * 0.12, rate: 0.8 + v * 0.4 });
+  // The jet: a deeper engine and more rushing air.
+  const big = p.kind === 'iso';
+  engine.set(big ? { vol: 0.07 + p.thr * 0.12, rate: 0.35 + p.thr * 0.4 } : { vol: 0.08 + p.thr * 0.14, rate: 0.55 + p.thr * 0.7 });
+  const v = clamp(p.v / (big ? 90 : 60), 0, 1);
+  windL.set({ vol: (p.ground ? v * 0.05 : 0.03 + v * 0.12) + (big ? p.thr * 0.06 : 0), rate: 0.8 + v * 0.4 });
   wheels.set({ vol: p.ground && p.v > 1 ? 0.04 + v * 0.16 : 0, rate: 0.7 + v * 0.6 });
   stallT -= dt;
   if (p.stall && stallT <= 0) { sfx('halytys', { vol: 0.12 }, 900); stallT = 1.1; }
@@ -73,20 +77,34 @@ function events() {
 }
 
 // ---- The flight ----
+// Modes: 'menu', 'board' (the jet's passengers walk in), 'fly', 'pause', 'deplane' (they walk out), 'end'.
 let mode = 'menu', p = null, route = ROUTES[rN - 1], endT = 0, saveT = 0, result = null;
+let paxT = 0, pax = null, stepT = 0, stepN = 0;   // the passengers' scene and its clock (#547)
 // The menu's picture: the plane on the first route's runway.
-p = newPlane(route);
+p = newPlane(route, plane);
 function startFlight(fromApproach) {
   route = ROUTES[rN - 1];
-  p = fromApproach ? approachPlane(route) : newPlane(route);
+  p = fromApproach ? approachPlane(route, plane) : newPlane(route, plane);
   // A practice landing is scored on screen only: no list, record or new route without a take-off.
   p.practice = !!fromApproach;
-  beginFlight();
+  if (p.kind === 'iso' && !fromApproach) beginBoarding();
+  else beginFlight();
 }
-function beginFlight() {
-  mode = 'fly'; endT = 0; saveT = 0; result = null; acc = 0;
+// The passengers walk from the bus up the stairs; a tap skips it. Nothing is saved until the flight.
+function beginBoarding() {
+  mode = 'board'; paxT = 0; pax = paxScene('board', 0); result = null; endT = 0;
+  hideAll(); chip(false);
+  wake();
+}
+function beginDeplaning() {
+  mode = 'deplane'; paxT = 0; pax = paxScene('deplane', 0);
+  wake();
+}
+function beginFlight(fromBoarding) {
+  mode = 'fly'; endT = 0; saveT = 0; result = null; acc = 0; pax = null;
   stick.id = thrHold.id = null; for (const b of BTNS) b.down = null;
-  if (V3) V3.cam = null;
+  // From the passengers' scene the chase camera glides from where it was.
+  if (V3 && !fromBoarding) V3.cam = null;
   hideAll();
   chip(false);
   wake();
@@ -95,7 +113,7 @@ function resumeFlight() {
   const s = load('lento', null);
   if (!s || !s.p || !ROUTES[s.r - 1]) { drop('lento'); showMenu(); return; }
   rN = s.r; route = ROUTES[rN - 1];
-  p = Object.assign(newPlane(route), s.p, { events: [], sx: 0, sy: 0, brake: false });
+  p = Object.assign(newPlane(route, s.p.kind || 'pieni'), s.p, { events: [], sx: 0, sy: 0, brake: false });
   beginFlight();
 }
 function keepFlight() {
@@ -118,13 +136,15 @@ function settleFlight() {
     stars[rN - 1] = Math.max(stars[rN - 1] || 0, o.stars); save('tahdet', stars);
     if (rN === open && open < ROUTES.length) { open++; save('auki', open); result.opened = ROUTES[open - 1].name; }
     if (tutorial) { tutorial = false; save('osattu', true); }
-    if (window.AiPelitScores) { setBoard(rN); AiPelitScores.submit(o.points); }
+    // The first score's nickname question waits for the end screen, not over the passengers.
+    if (window.AiPelitScores) { setBoard(rN); result.ask = AiPelitScores.submit(o.points, true) === true; }
   }
 }
 function endFlight() {
   settleFlight();
-  mode = 'end';
+  mode = 'end'; pax = null;
   showEnd();
+  if (result.ask && window.AiPelitScores) { result.ask = false; AiPelitScores.prompt(); }
 }
 function setBoard(n) { n = n || rN; if (window.AiPelitScores) AiPelitScores.board('reitti-' + n, ROUTES[n - 1].name); }
 
@@ -158,6 +178,7 @@ function btnAt(x, y) { return BTNS.find(bt => (!bt.show || bt.show()) && inBox(L
 function point(e) { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
+  if (mode === 'board' || mode === 'deplane') { skipPax(); return; }
   if (mode !== 'fly') return;
   const [x, y] = point(e);
   const bt = btnAt(x, y);
@@ -192,6 +213,11 @@ function readStick() {
   if (Math.abs(p.sx) < 0.08) p.sx = 0;
   if (Math.abs(p.sy) < 0.08) p.sy = 0;
 }
+// A tap during the passengers' scene skips to its end.
+function skipPax() {
+  if (mode === 'board') beginFlight(true);
+  else if (mode === 'deplane') endFlight();
+}
 function brakeHeld() { return BTNS[2].down !== null && BTNS[2].down !== undefined && p.ground; }
 
 // ---- Pause and the page going away ----
@@ -210,7 +236,9 @@ function hideAll() { for (const id of ['menu', 'end', 'pause']) $(id).hidden = t
 function chip(on) { const ch = document.getElementById('ai-pelit-tulokset-nappi'); if (ch) ch.style.display = on ? '' : 'none'; }
 function showMenu() {
   mode = 'menu'; hideAll();
-  route = ROUTES[rN - 1]; p = newPlane(route);
+  route = ROUTES[rN - 1]; p = newPlane(route, plane);
+  // The jet waits with its stairs and bus by the door.
+  pax = plane === 'iso' ? paxScene('board', 0) : null;
   const box = $('routes'); box.textContent = '';
   ROUTES.forEach((r, i) => {
     const b = document.createElement('button'), n = i + 1, locked = n > open;
@@ -228,6 +256,7 @@ function showMenu() {
   const s = load('lento', null);
   $('resume').hidden = !(s && s.p && ROUTES[s.r - 1]);
   if (!$('resume').hidden) $('resume').textContent = '▶ Jatka lentoa: ' + ROUTES[s.r - 1].name;
+  $('plane').textContent = plane === 'iso' ? '✈ Iso kone' : '🛩 Pieni kone';
   $('view').textContent = camView === 'chase' ? '📷 Takaa' : '📷 Ohjaamosta';
   $('stickBtn').textContent = stickStyle === 'lentaja' ? '🕹 Sauva: alas = nokka ylös' : '🕹 Sauva: ylös = nokka ylös';
   $('menu').hidden = false; chip(true);
@@ -258,6 +287,7 @@ function showEnd() {
 }
 $('go').onclick = () => { sfx('valinta', { vol: 0.25 }); drop('lento'); startFlight(false); };
 $('resume').onclick = () => resumeFlight();
+$('plane').onclick = () => { plane = plane === 'iso' ? 'pieni' : 'iso'; save('kone', plane); sfx('valinta', { vol: 0.25 }); showMenu(); };
 $('view').onclick = () => { camView = camView === 'chase' ? 'cockpit' : 'chase'; save('kamera', camView); showMenu(); };
 $('stickBtn').onclick = () => { stickStyle = stickStyle === 'lentaja' ? 'suora' : 'lentaja'; save('sauva', stickStyle); showMenu(); };
 $('next').onclick = () => { rN = Math.min(open, rN + 1); save('reitti', rN); setBoard(rN); startFlight(false); };
@@ -283,6 +313,7 @@ function drawHUD() {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   cx.clearRect(0, 0, W, H);
   if (no3d) { cx.fillStyle = '#4f8fd8'; cx.fillRect(0, 0, W, H); shadowText('Tämä puhelin ei osaa piirtää 3D-kuvaa.', W / 2, H * 0.2, 15, '#fff', 'center'); }
+  if (mode === 'board' || mode === 'deplane') { drawPaxHUD(); return; }
   if (mode !== 'fly' && mode !== 'pause') return;
   const g = guidance(p, route), gnd = groundAt(p.x, p.z), agl = Math.max(0, p.y - gnd);
   // Top strip: speed, height, climb; the way to go under it.
@@ -314,10 +345,21 @@ function drawHUD() {
   else if (p.over) shadowText(p.over.why, W / 2, H * 0.3, 26, '#ff7a6a', 'center', 900);
   drawControls();
 }
+// The passengers' scene: who is aboard, and that a tap skips it.
+function drawPaxHUD() {
+  if (!pax) return;
+  // On a narrow phone the banner would run under the "‹ Pelit" chip: put it below the chip.
+  const on = mode === 'board', y = L.hudY + 22 + (W < 420 ? 40 : 0);
+  cx.fillStyle = 'rgba(10,20,40,.45)'; rrect(W / 2 - 130, y - 18, 260, 58, 14); cx.fill();
+  shadowText(on ? 'Matkustajat nousevat kyytiin' : 'Matkustajat poistuvat', W / 2, y - 2, 16, '#fff', 'center', 800);
+  shadowText('🧳 ' + pax.aboard + ' / ' + PAX.n + ' koneessa', W / 2, y + 22, 15, '#ffd84a', 'center', 800);
+  shadowText('Napauta: ohita', W / 2, H - SAFE_B - 34, 14, '#cfe0ff', 'center', 700);
+}
 // First flights: what to do next.
 function hint(g, agl) {
   const up = stickStyle === 'lentaja' ? 'vedä sauvaa alas' : 'työnnä sauvaa ylös';
-  if (p.ground && !p.airborne) return p.thr < 0.9 ? 'Kaasu täysille: oikea peukalo ylös' : p.v * 3.6 < VR_KMH - 5 ? 'Vauhti kasvaa… nokka ylös ' + VR_KMH + ' km/h' : VR_KMH + ' km/h: ' + up + '!';
+  const vr = kindOf(p).vr;
+  if (p.ground && !p.airborne) return p.thr < 0.9 ? 'Kaasu täysille: oikea peukalo ylös' : p.v * 3.6 < vr - 5 ? 'Vauhti kasvaa… nokka ylös ' + vr + ' km/h' : vr + ' km/h: ' + up + '!';
   if (p.ground && p.touch) return 'Pidä Jarru pohjassa';
   if (agl < 80 && p.gear && !g.lined) return 'Nosta telineet';
   if (!g.lined) return 'Lennä keltaisen nuolen suuntaan';
@@ -362,15 +404,28 @@ function frame(now) {
     while (acc >= DT) { step(p, DT, route); acc -= DT; }
     events();
     if (g0Lost()) { p.over = { ok: false, why: 'Eksyit liian kauas', stopped: true }; }
-    if (p.over) { settleFlight(); endT += dt; if (endT > (p.over.ok ? 1.8 : 2.4)) endFlight(); }
+    if (p.over) {
+      settleFlight(); endT += dt;
+      // The jet's passengers walk out after a landing, before the end screen.
+      if (endT > (p.over.ok ? 1.8 : 2.4)) { if (p.over.ok && p.kind === 'iso') beginDeplaning(); else endFlight(); }
+    }
     else { saveT += dt; if (saveT > 1) { saveT = 0; keepFlight(); } }
     tune(dt * 1000);
   }
+  if (mode === 'board' || mode === 'deplane') paxStep(dt);
   sounds(dt);
-  const moving = mode === 'fly';
-  render3d(p, route, dt, !moving);
+  const moving = mode === 'fly' || mode === 'board' || mode === 'deplane';
+  render3d(p, route, dt, !moving, pax);
   drawHUD();
   if (moving || still++ < 2 || (!V3 && !no3d)) raf = requestAnimationFrame(frame);
+}
+function paxStep(dt) {
+  paxT += dt;
+  pax = paxScene(mode, paxT);
+  // Quiet steps while someone walks.
+  stepT -= dt;
+  if (stepT <= 0 && pax.pax.some(q => q && q.leg < 2)) { stepT = 0.32; sfx(stepN++ % 2 ? 'askel2' : 'askel', { vol: 0.05, rate: 1.2 }); }
+  if (pax.done) { if (mode === 'board') beginFlight(true); else endFlight(); }
 }
 function g0Lost() { return !p.over && guidance(p, route).lost; }
 resize();

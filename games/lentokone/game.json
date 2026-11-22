@@ -1,6 +1,6 @@
 {
   "title": "Lentokone",
-  "description": "Nouse kiitoradalta, lennä toiselle kentälle ja laskeudu pehmeästi. 3D-lentopeli.",
+  "description": "Nouse kiitoradalta, lennä toiselle kentälle ja laskeudu pehmeästi pienkoneella tai matkustajakoneella. 3D-lentopeli.",
   "category": "vauhti",
   "versions": [
     {
@@ -9,6 +9,13 @@
       "note": "Ensimmäinen versio: viisi reittiä kentältä toiselle, nousu, lento ja pisteytetty laskeutuminen 3D:nä.",
       "request": "Lentokonepeli. Lähtö kiitoradalta, lentäminen ja laskeutuminen toiselle kiitoradalle. 3d",
       "issue": "eerovil/ai-pelit#533"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-22",
+      "note": "Iso matkustajakone: matkustajat nousevat bussista portaita kyytiin ennen lähtöä ja poistuvat laskeutumisen jälkeen; pienkone valittavissa yhä.",
+      "request": "Iso matkustajakone: ennen lähtöä matkustajat nousevat koneeseen (animaatio) ja laskeutumisen jälkeen poistuvat siitä.",
+      "issue": "eerovil/ai-pelit#547"
     }
   ]
 }

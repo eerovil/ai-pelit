@@ -1,6 +1,8 @@
-"""Lentokone v1 (#533): a 3D flight from one airfield's runway to another's. Take-off by touch, every
-route flown and landed by a scripted pilot, the landing judge, the stall, the approach retry, saves,
-turning the phone, the menus' fit, a phone with no 3D, and lazy play that never lands."""
+"""Lentokone v2 (#547; v1 #533): a 3D flight from one airfield's runway to another's. Take-off by touch,
+every route flown and landed by a scripted pilot, the landing judge, the stall, the approach retry,
+saves, turning the phone, the menus' fit, a phone with no 3D, and lazy play that never lands.
+v2's passenger jet: the plane choice, the passengers boarding and leaving, and every route flown in it.
+The tests from v1 fly the small plane (`plane="pieni"`); the jet's are at the end."""
 import shutil
 
 import pytest
@@ -24,7 +26,7 @@ function pilot(p, route, st) {
     const r = onRunway(from, p.x, p.z);
     p.thr = 1; p.flaps = 1;
     p.sx = clamp(-r.c * 0.08 - wrapAngle(p.hdg - from.hdg) * 3, -1, 1);
-    p.sy = p.v > 27 ? 0.9 : 0;
+    p.sy = p.v > kindOf(p).vr / 3.6 - 1 ? 0.9 : 0;
     return;
   }
   if (p.ground) {   // landed: brake on the line
@@ -41,7 +43,7 @@ function pilot(p, route, st) {
     let hi = 0;
     for (let d = 0; d <= 2500; d += 250) hi = Math.max(hi, groundAt(p.x + dirX(p.hdg) * d, p.z + dirZ(p.hdg) * d));
     altWant = Math.max(hi + 130, Math.max(from.elev, to.elev) + 220);
-    hw = g.rel; vWant = 58;
+    hw = g.rel; vWant = kindOf(p).vApp * 1.8;
     steerBank(hw * 1.2);
   } else {
     const r = onRunway(to, p.x, p.z);
@@ -54,7 +56,7 @@ function pilot(p, route, st) {
     p.gear = true;
     p.flaps = g.runwayDist < 2500 ? 2 : 1;
     altWant = to.elev + Math.max(0, -(r.a - (to.len < 700 ? 110 : 220))) * Math.tan(GLIDE);
-    vWant = to.len < 700 ? 29 : 32;
+    vWant = kindOf(p).vApp - (to.len < 700 ? 3 : 0);
   }
   let gw = clamp((altWant - p.y) * 0.012, -0.11, 0.1);
   if (g.lined && agl < 10) { gw = -0.025; vWant = 0; }
@@ -70,11 +72,14 @@ function flyRoute(route, start, maxT) {
 """
 
 
-def open_game(site, context, width=360, height=740):
+def open_game(site, context, width=360, height=740, plane="pieni"):
     if not (site.games / "lentokone").exists():
         shutil.copytree(ROOT / "games" / "lentokone", site.games / "lentokone")
         site.build()
     page = context.new_page()
+    # v1's tests fly the small plane; a fresh phone gets the jet (plane=None).
+    if plane:
+        page.add_init_script(f"localStorage.setItem('ai-pelit:lentokone:kone', JSON.stringify('{plane}'))")
     page.set_viewport_size({"width": width, "height": height})
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
@@ -371,4 +376,207 @@ def test_a_phone_with_no_3d_says_so(site, context):
     page.wait_for_function("no3d", timeout=20000)
     page.wait_for_function("__said.includes('Tämä puhelin ei osaa piirtää 3D-kuvaa.')", timeout=5000)
     assert page.locator("#go").is_visible()
+    assert page.errors == []
+
+
+# ---- v2: the passenger jet and its passengers (#547) ----
+
+def board_now(page):
+    """Runs the boarding on to its end at once; the next frame starts the flight."""
+    page.evaluate("() => { paxT = 1000; }")
+    page.wait_for_function("mode === 'fly'", timeout=8000)
+
+
+def test_a_fresh_phone_gets_the_jet_and_the_choice_is_kept(site, context):
+    page = open_game(site, context, plane=None)
+    assert page.locator("#plane").inner_text() == "✈ Iso kone"
+    assert page.evaluate("p.kind") == "iso"
+    page.click("#plane")
+    assert page.locator("#plane").inner_text() == "🛩 Pieni kone"
+    assert page.evaluate("p.kind") == "pieni"
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:kone')") == '"pieni"'
+    page.reload()
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    assert page.locator("#plane").inner_text() == "🛩 Pieni kone"
+    # The small plane takes off at once, as in v1.
+    go(page)
+    assert page.evaluate("p.kind") == "pieni"
+    assert page.errors == []
+
+
+def test_the_passengers_board_before_the_take_off(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    assert page.evaluate("pax.aboard") == 0
+    assert page.evaluate("V3.pax.visible && V3.planes.iso.visible && !V3.planes.pieni.visible")
+    # Walking: some on the way, counted in as they pass the door; the plane waits on the runway.
+    page.evaluate("() => { paxT = 4; }")
+    page.wait_for_function("pax.pax.filter(Boolean).length > 3", timeout=5000)
+    mid = page.evaluate("pax.aboard")
+    assert 0 <= mid < 16
+    assert page.evaluate("p.ground && p.v === 0 && p.thr === 0")
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:lento')") is None
+    page.wait_for_function(f"pax.aboard > {mid}", timeout=8000)
+    page.wait_for_function("mode === 'fly'", timeout=20000)
+    assert page.evaluate("pax === null && !V3.pax.visible")
+    # The throttle works at once.
+    t = page.evaluate("L.thr")
+    x, y = t["x"] + t["w"] / 2, t["y"] + t["h"] - 10
+    page.evaluate(TOUCH, ["pointerdown", 2, x, y])
+    page.evaluate(TOUCH, ["pointermove", 2, x, y - t["h"]])
+    page.evaluate(TOUCH, ["pointerup", 2, x, y - t["h"]])
+    assert page.evaluate("p.thr") == 1
+    assert page.errors == []
+
+
+def test_a_tap_skips_the_boarding(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    page.evaluate(TOUCH, ["pointerdown", 4, 180, 400])
+    page.evaluate(TOUCH, ["pointerup", 4, 180, 400])
+    page.wait_for_function("mode === 'fly'", timeout=3000)
+    # The tap that skipped is not the stick.
+    assert page.evaluate("stick.id === null && p.sx === 0 && p.sy === 0")
+    assert page.errors == []
+
+
+def test_the_passenger_scene_counts_everyone_in_and_out(site, context):
+    page = open_game(site, context)
+    res = page.evaluate("""() => { const out = {};
+      for (const kind of ['board', 'deplane']) {
+        const seen = []; let t = 0, s;
+        do { s = paxScene(kind, t); seen.push([s.aboard, s.door, s.pax.filter(Boolean).length, s.bus, s.stairs]); t += 0.05; } while (!s.done && t < 60);
+        out[kind] = { seen, t };
+      }
+      return out; }""")
+    for kind, first, last in (("board", 0, 16), ("deplane", 16, 0)):
+        seen, t = res[kind]["seen"], res[kind]["t"]
+        assert 8 < t < 20, (kind, t)
+        aboard = [a[0] for a in seen]
+        assert aboard[0] == first and aboard[-1] == last
+        assert all((b >= a) if kind == "board" else (b <= a) for a, b in zip(aboard, aboard[1:]))
+        assert max(a[2] for a in seen) >= 5          # several walk at once
+        assert seen[-1][2] == 0                      # nobody left outside
+    # The door is open while they pass, shut after the boarding; the stairs are at the door then.
+    board = res["board"]["seen"]
+    assert all(s[1] == 1 and s[4] == 0 for s in board if s[2] > 0)
+    assert board[-1][1] == 0 and board[-1][4] < -10
+    deplane = res["deplane"]["seen"]
+    assert deplane[0][3] > 30 and deplane[0][1] == 0     # the bus is still coming, the door shut
+    assert all(s[1] == 1 and s[4] == 0 for s in deplane if s[2] > 0)
+
+
+def test_the_jet_lifts_off_near_its_rotate_speed(site, context):
+    page = open_game(site, context, plane="iso")
+    res = page.evaluate("""() => { const r = ROUTES[0], q = newPlane(r, 'iso'); q.thr = 1; let t = 0;
+      while (q.ground && t < 120) { q.sy = q.v * 3.6 > kindOf(q).vr - 5 ? 0.9 : 0; step(q, DT, r); t += DT; }
+      return { v: q.v * 3.6, t, ground: q.ground, run: onRunway(FIELDS[0], q.x, q.z).a }; }""")
+    assert not res["ground"]
+    assert 115 < res["v"] < 150, res
+    assert res["run"] < FIELDS_MIN_TAKEOFF, res
+    # It flies heavier than the small plane: slower to bank.
+    rates = page.evaluate("[PLANES.iso.bankRate < PLANES.pieni.bankRate, PLANES.iso.vApp > PLANES.pieni.vApp]")
+    assert all(rates)
+
+
+# The shortest runway any route takes off from (Saarikenttä, 900 m), less a margin.
+FIELDS_MIN_TAKEOFF = 700
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 4, 5])
+def test_every_route_can_be_flown_and_landed_in_the_jet(site, context, n):
+    page = open_game(site, context, plane="iso")
+    res = page.evaluate(f"""() => {{ const r = ROUTES[{n - 1}], q = flyRoute(r, newPlane(r, 'iso'));
+      const a = flyRoute(r, approachPlane(r, 'iso'));
+      return {{ over: q.over, t: q.t, onTo: runwayAt(q.x, q.z, 0) === r.to, appr: a.over }}; }}""")
+    o = res["over"]
+    assert o and o["ok"], o
+    assert o["stop"] == 100, o           # stops on the runway, the short Tunturikenttä too
+    assert res["onTo"] and res["t"] < 400
+    assert res["appr"] and res["appr"]["ok"], res["appr"]
+    assert page.errors == []
+
+
+def test_lazy_play_never_lands_the_jet(site, context):
+    page = open_game(site, context, plane="iso")
+    res = page.evaluate("""() => ROUTES.map(r => { const q = newPlane(r, 'iso'); let t = 0;
+      for (; t < 900 && !(q.over && q.over.stopped) && !guidance(q, r).lost; t += DT) { q.thr = 1; q.sx = q.sy = 0; step(q, DT, r); }
+      return q.over && q.over.ok; })""")
+    assert not any(res), res
+
+
+def test_the_passengers_leave_after_a_landing_and_the_end_screen_follows(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    board_now(page)
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'deplane'", timeout=8000)
+    # The landing is saved before anyone walks out.
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:auki')") == "2"
+    assert int(page.evaluate("localStorage.getItem('ai-pelit:lentokone:ennatys-1')")) > 0
+    assert page.evaluate("pax.aboard") == 16
+    assert page.locator("#end").is_hidden()
+    page.evaluate("() => { paxT = 5; }")
+    page.wait_for_function("pax.aboard < 16", timeout=8000)
+    page.wait_for_function("mode === 'end'", timeout=20000)
+    assert page.locator("#endTitle").inner_text() == "Laskeutuminen onnistui!"
+    assert page.locator("#next").is_visible()
+    # The first score's nickname question shows over the end screen, not over the passengers.
+    assert page.locator("#ai-pelit-tulokset").is_visible()
+    page.locator("#ai-pelit-tulokset button", has_text="Sulje").click()
+    # "Seuraava lento" boards again, at the next field.
+    page.click("#next")
+    page.wait_for_function("mode === 'board' && route === ROUTES[1]", timeout=8000)
+    assert page.errors == []
+
+
+def test_a_tap_skips_the_leaving_and_a_reload_keeps_the_landing(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    board_now(page)
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'deplane'", timeout=8000)
+    page.evaluate(TOUCH, ["pointerdown", 5, 180, 400])
+    page.evaluate(TOUCH, ["pointerup", 5, 180, 400])
+    page.wait_for_function("mode === 'end'", timeout=3000)
+    page.reload()
+    page.wait_for_function("V3 || no3d", timeout=20000)
+    assert not page.locator("#resume").is_visible()
+    assert not page.locator("#routes button").nth(1).is_disabled()
+    assert page.errors == []
+
+
+def test_a_practice_landing_in_the_jet_skips_the_boarding(site, context):
+    page = open_game(site, context, plane="iso")
+    page.evaluate("() => startFlight(true)")
+    assert page.evaluate("mode === 'fly' && !p.ground && p.kind === 'iso' && p.practice")
+    assert land_now(page)["ok"]
+    page.wait_for_function("mode === 'deplane'", timeout=8000)
+    assert page.evaluate("localStorage.getItem('ai-pelit:lentokone:ennatys-1')") is None
+    assert page.errors == []
+
+
+def test_a_saved_v1_flight_resumes_in_the_small_plane(site, context):
+    page = open_game(site, context, plane="iso")
+    page.evaluate("""() => { const q = approachPlane(ROUTES[0]); delete q.kind; delete q.events;
+      localStorage.setItem('ai-pelit:lentokone:lento', JSON.stringify({ r: 1, p: q })); showMenu(); }""")
+    page.click("#resume")
+    page.wait_for_function("mode === 'fly'", timeout=8000)
+    assert page.evaluate("p.kind") == "pieni"
+    assert page.errors == []
+
+
+def test_turning_the_phone_keeps_the_boarding(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    page.evaluate("() => { paxT = 3; }")
+    turn(page, {"width": 740, "height": 360})
+    page.wait_for_function("LAND", timeout=5000)
+    assert page.evaluate("mode") == "board"
+    assert page.evaluate("paxT") > 3
     assert page.errors == []
