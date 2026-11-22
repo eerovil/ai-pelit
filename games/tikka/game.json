@@ -51,6 +51,13 @@
       "note": "Heitto on vaikeampi: käsi tärisee ensin, rauhoittuu hetkeksi ja väsyy sitten, ja tähtäin karkaa kohteesta joka tikan jälkeen; tuloslistat alkavat alusta.",
       "request": "Tikkapeli liian helppo",
       "issue": "eerovil/ai-pelit#400"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-22",
+      "note": "Kaverin tähtäin liikkuu moninpelissä tasaisesti eikä enää hypi.",
+      "request": "Moninpelissä heittäjän tähtäyspiste tulee muille 10 kertaa sekunnissa (`a`-viesti) ja hyppii. Piirrä toisen pelaajan tähtäys `lib/sulava-1`:n kautta, niin että se liikkuu tasaisesti (kuten #480:ssa).\n\nJatkoa #480:lle.",
+      "issue": "eerovil/ai-pelit#539"
     }
   ]
 }
