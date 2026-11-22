@@ -167,9 +167,9 @@ def test_the_place_shown_is_the_races(site, browser):
 
 def test_a_stalled_frame_on_the_friends_phone_never_draws_them_back(site, browser):
     """A busy phone (here the host) misses frames: its runner moves at most 0.05 s a frame, so after a stalled frame
-    it has gone less far than the wall clock says. Its spots are stamped on the game's own clock (gameT), which
-    moves the same way: stamped on the wall clock, the other phone guessed the runner on at full speed through the
-    stall and then drew it back (-3.4 m/s)."""
+    it has gone less far than the wall clock says. Its spots are stamped on a clock (gameT) that moves the same way
+    and catches up with the wall clock slowly: stamped on the wall clock, the other phone guessed the runner on at
+    full speed through the stall and then drew it back (-3.4 m/s)."""
     host, guest = phones(site, browser)
     i = host.evaluate("race.runners.indexOf(me)")
     guest.evaluate(SAMPLE, i)
