@@ -89,6 +89,8 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
     const sea = new T.Mesh(new T.PlaneGeometry(90, 90), seaM);
     sea.rotation.x = -Math.PI / 2; sea.receiveShadow = true; sea.visible = false; scene.add(sea);
     const SKY = new T.Color('#f2a27a');
+    // On the roof stage the lava sea fades into the sky before its edge (#526, D10).
+    const roofFog = new T.Fog(SKY, 18, 44);
     const SILL_Y = 1.7, SILL_Z = Z0 + 0.22;
     function buildRoom(lv) {
       if (roomG) scene.remove(roomG);
@@ -481,6 +483,7 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       // The balloon shows whenever the fallen kids sit in it (poseKid(): the sill on screen is under the lava).
       if (balloon) balloon.visible = seaOn || !(cut < 2 && cut * FLOOR_H + SILL_Y > L + 0.25);
       if (w.house) scene.background = seaOn ? SKY : houseBg;
+      scene.fog = seaOn ? roofFog : null;
       // The lava: comes up through the floor at the start, then rises and moves slowly.
       const fade = on ? Math.min(1, rt / 0.6) : 0;
       lava.visible = fade > 0 && !seaOn; lavaM.opacity = fade;

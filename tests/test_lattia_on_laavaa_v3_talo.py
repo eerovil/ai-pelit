@@ -47,6 +47,7 @@ def test_the_lava_climbs_the_house_in_stages_and_the_rooms_keep_theirs(site, con
     r = page.evaluate("""() => { const h = newWorld(HOUSE_LV, [], 1), o = newWorld(1, [], 1);
       return { h: [10, 39.9, 58, 77, 99, 118, 137, 160].map(t => lavaAt(t, h)), o: [10, 30, 200].map(t => lavaAt(t, o)),
                name: ROOMS[HOUSE_LV - 1].name, lv: HOUSE_LV, statics: [1, 2, 3].map(n => newWorld(n, [], 1).statics.length),
+               kept: newWorld(HOUSE_LV, [], 1).pieces.filter(p => p.order >= 3 && p.floor < 2).map(p => [p.floor, p.wobAt]),
                bots: [1, 2, 3].every(n => solids(newWorld(n, [], 4), 5).every(s => s.bot === 0)) }; }""")
     assert r["lv"] == 4 and r["name"] == "Koko talo"
     h = r["h"]
@@ -62,6 +63,8 @@ def test_the_lava_climbs_the_house_in_stages_and_the_rooms_keep_theirs(site, con
     assert r["o"] == pytest.approx([0.02, 0.045, 0.45])
     assert r["statics"] == [0, 0, 0]
     assert r["bots"]
+    # The pieces on the way to the stairs wobble and sink too, in a later turn once the lava climbs.
+    assert all(w >= (42 if f == 0 else 102) and w < 200 for f, w in r["kept"]), r["kept"]
     assert page.errors == []
 
 

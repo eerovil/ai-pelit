@@ -23,13 +23,13 @@ const HOUSE_FLOATS = [['raft', 1.6, 1.4], ['boat', 1.5, 1.0], ['door', 1.9, 0.9]
 ROOMS.push({
   name: 'Koko talo', wall: '#e6d7bd', floorWood: '#a8743f', floatAt: 135, cpu: 1,
   floors: [
-    { y: 0, start: 10, gap: 2.6, keep: 3, wall: '#e6d7bd', floorWood: '#a8743f' },
-    { y: FLOOR_H, start: 76, gap: 2.8, keep: 3, wall: '#b9d8e8', floorWood: '#c99a62' },
+    { y: 0, start: 10, gap: 2.6, keep: 3, keepAt: HOUSE.climb[0] + 2, wall: '#e6d7bd', floorWood: '#a8743f' },
+    { y: FLOOR_H, start: 76, gap: 2.8, keep: 3, keepAt: HOUSE.climb[1] + 2, wall: '#b9d8e8', floorWood: '#c99a62' },
     { y: FLOOR_H * 2, start: 134, gap: 2.4, wall: null, floorWood: '#8d8f94' },
   ],
   // [kind, x, z, w, d, h (above its floor), order, floor]. On a floor with a staircase up, pieces
-  // of order `keep` and over never sink by themselves: the lava climbing to the next floor takes
-  // them. So a way to the stairs is still there when the door opens: downstairs the sofa, the table,
+  // of order `keep` and over wobble and sink in their own later turn, from `keepAt`, once the lava
+  // has started up the stairs (the pouf in front of the stairs last). So a way to the stairs is still there when the door opens: downstairs the sofa, the table,
   // a pouf, the chest and the stool to the pouf in front of the stairs (order 4); upstairs the bed,
   // the toy boxes, the desk and its chair and a beanbag, from the landing to the second staircase.
   pieces: [

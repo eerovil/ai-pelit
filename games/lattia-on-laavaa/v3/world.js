@@ -102,12 +102,13 @@ function newWorld(level, players, seed) {
   // seconds after the one before, a little sooner each time. Each floor of the house has its own.
   const order = pieces.slice().sort((a, b) => a.key - b.key);
   (R.floors || [R]).forEach((F, f) => {
-    let t = F.start;
-    order.filter(p => p.floor === f).forEach((p, k) => {
-      // A piece the lava climbing the house takes (talo.js `keep`) never sinks by itself.
-      if (F.keep !== undefined && p.order >= F.keep) { p.wobAt = p.sinkAt = Infinity; return; }
-      p.wobAt = t; p.sinkAt = t + WOBBLE; t += Math.max(2.2, F.gap - k * 0.12);
-    });
+    // Pieces on the way to the house's stairs (talo.js `keep`) have a later turn of their own,
+    // from `keepAt`, once the lava is climbing the stairs.
+    const kept = p => F.keep !== undefined && p.order >= F.keep;
+    for (const [list, t0] of [[order.filter(p => p.floor === f && !kept(p)), F.start], [order.filter(p => p.floor === f && kept(p)), F.keepAt]]) {
+      let t = t0;
+      list.forEach((p, k) => { p.wobAt = t; p.sinkAt = t + WOBBLE; t += Math.max(2.2, F.gap - k * 0.12); });
+    }
   });
   const w = {
     level, seed, rt: -COUNT, kids: [], pieces, ph: 'count', over: false, winner: null, draw: false, graceAt: null,
