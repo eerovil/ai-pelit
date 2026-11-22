@@ -1,4 +1,4 @@
-"""Pulkkamäki v5 (#480): a friend's sled glides down the hill on the other phones' screens, drawn from lib/sulava-1
+"""Pulkkamäki v6 (#480): a friend's sled glides down the hill on the other phones' screens, drawn from lib/sulava-1
 between the spots their phone sends, instead of being carried on the way it was going between messages (v2's
 coast()). The rules (the finish, the end) keep the newest spot heard; only the drawing lags."""
 
@@ -13,7 +13,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/pulkkamaki/v5/"
+URL = "games/pulkkamaki/v6/"
 
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
