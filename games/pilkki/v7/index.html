@@ -1113,6 +1113,8 @@ function snapshot() {
 }
 function netStep(dt) {
   if ((net.meT -= dt) <= 0) { net.meT = 1; sendMe(); }
+  // Starting to walk after a rest sends at once, not when the rest's one-second wait is over.
+  if (!standing() && net.stillT >= AT_SETTLE) net.atT = 0;
   net.stillT = standing() ? net.stillT + dt : 0;
   if ((net.atT -= dt) <= 0) { net.atT = net.stillT < AT_SETTLE ? AT_WALK : AT_REST; sendAt(); }
   if (R.isHost && (net.sendT -= dt) <= 0) { net.sendT = 0.5; net.board[R.me] = myEntry(); R.send(snapshot()); }

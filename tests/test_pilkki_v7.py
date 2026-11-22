@@ -510,9 +510,12 @@ def test_a_friend_walking_glides_on_every_phone(room):
     for p in (host, ville):
         p.wait_for_function("others().some(o => o.name === 'Aino' && Math.abs(o.x - LAKE_W / 2) < 0.2)", timeout=4000)
     # Then she walks 12 m: the host hears her spots straight, Ville through the host.
+    # She has stood a while and has just sent her spot, so her next rest send is a second away:
+    # starting to walk sends at once all the same.
+    aino.wait_for_function("net.stillT > 0.7")
     for p in (host, ville):
         p.evaluate(WATCH, "Aino")
-    aino.evaluate("me.tx = LAKE_W / 2 + 12")
+    aino.evaluate("net.atT = 0.99; me.tx = LAKE_W / 2 + 12")
     for p in (host, ville):
         p.wait_for_function("window.__done", timeout=8000)
         seen = p.evaluate("window.__seen")
