@@ -8,7 +8,7 @@ along the circle's tangent. The camera then follows the boot out over the field,
 Keihäänheitto. The meet is the shared athletics library's (`public/lib/yleisurheilu-12/kisa.js`):
 twelve throwers alone against the computer, or 2–8 phones in a room with the computer filling the
 rest; three rounds, then the best eight throw three more.
-v2 (#480) passes `glide` to the meet (`lib/sulava-1`): on a friend's turn the phone watching draws the swing (the arm's angle `a`, glided as a running angle, `unwound()` from the sent angle, the swing's way `dir` and its `turn`, which the let-go `rel` carries too, so a fast thumb never turns it backwards; no jump; a thumb lifted early, a `p` saying `ready`, is `glide.snap`, so the boot hangs at once and is not glided back round) gliding between the spots their phone sends, and the let-go (`rel`) where the glide ends.
+v2 (#480) passes `glide` to the meet (`lib/sulava-1`): on a friend's turn the phone watching draws the swing (the arm's angle `a`, glided as the running angle the phone on turn sends with each `p` and `rel` (`th.w`, kept by `setA()`: every change of the boot's angle, the thumb's jumps too, moves it by the same step, so wrapped it is the boot's angle; it starts at the hanging angle each turn), so a fast thumb or one that turns back is never drawn a lap off; no jump; a thumb lifted early, a `p` saying `ready`, is `glide.snap`, so the boot hangs at once and is not glided back round) gliding between the spots their phone sends, and the let-go (`rel`) where the glide ends.
 
 ```mermaid
 flowchart TD
