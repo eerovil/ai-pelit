@@ -3,7 +3,7 @@ import math
 import pytest
 from conftest import ROOT, turn
 
-URL = 'games/minigolf/v3/'
+URL = 'games/minigolf/v4/'
 PLAN = """() => {
  window.planShot = (hole, start, target) => {
    const h=HOLES[hole], goal=target||h.cup, base=Math.atan2(goal[1]-start.y,goal[0]-start.x);
