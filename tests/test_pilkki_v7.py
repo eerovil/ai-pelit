@@ -497,7 +497,7 @@ WATCH = """(name) => {
   window.__done = false;
   (function look() {
     const o = others().find(q => q.name === name);
-    if (o) seen.push([o.x, o.y]);
+    if (o) seen.push([o.x, o.y, performance.now() / 1000]);
     if (performance.now() - t0 < 3500) requestAnimationFrame(look); else window.__done = true;
   })();
 }"""
@@ -519,11 +519,13 @@ def test_a_friend_walking_glides_on_every_phone(room):
     for p in (host, ville):
         p.wait_for_function("window.__done", timeout=8000)
         seen = p.evaluate("window.__seen")
-        steps = [abs(b[0] - a[0]) + abs(b[1] - a[1]) for a, b in zip(seen, seen[1:])]
-        moving = [d for d in steps if d > 1e-4]
-        # Many small steps (6 m/s is a tenth of a metre a frame), never a jump of a metre.
+        steps = [(math.hypot(b[0] - a[0], b[1] - a[1]), b[2] - a[2]) for a, b in zip(seen, seen[1:])]
+        moving = [d for d, _ in steps if d > 1e-4]
+        # Many small steps, never much faster than her walk (6 m/s); a jump is far faster.
+        # Measured per second, as a busy test machine may skip frames.
         assert len(moving) > 40, len(moving)
-        assert max(steps) < 0.5, max(steps)
+        fastest = max(d / max(dt, 1 / 60) for d, dt in steps)
+        assert fastest < 15, fastest
         assert abs(seen[-1][0] - (aino.evaluate("LAKE_W / 2") + 12)) < 0.05
     # Standing, she sends her spot only once a second.
     sent = aino.evaluate("""() => new Promise(done => {
