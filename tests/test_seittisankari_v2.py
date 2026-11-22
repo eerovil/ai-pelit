@@ -172,3 +172,52 @@ def test_turning_the_phone_keeps_the_hero(site, context):
     page.wait_for_function("!LAND && W === 360")
     assert page.evaluate("mode === 'play' && world === w0")
     assert page.errors == []
+
+
+ON_GOAL = """() => { const b = CITY[world.goal], h = world.hero;
+  Object.assign(h, { x: (b.x0 + b.x1) / 2, y: b.h, z: (b.z0 + b.z1) / 2, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null }); }"""
+
+
+def test_the_city_marks_a_roof_to_go_to_with_a_flag_and_tells_how_far(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("CITY[world.goal]")
+    r = page.evaluate("""(() => { const b = CITY[world.goal], h = world.hero, t = roofTop(b);
+      return { d: Math.hypot(t.x - h.x, t.z - h.z), hgt: b.h, tower: !!b.tower, flag: world.flag && world.flag.x === t.x && world.flag.y === b.h }; })()""")
+    assert 120 <= r["d"] <= 300 and 20 <= r["hgt"] <= 150 and not r["tower"] and r["flag"]
+    assert page.errors == []
+
+
+def test_standing_on_the_roof_counts_it_and_every_fifth_is_the_tower(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("CITY[world.goal]")
+    seen = []
+    for n in range(1, 6):
+        g0 = page.evaluate("world.goal")
+        page.evaluate(ON_GOAL)
+        page.wait_for_function(f"world.done === {n} && world.goal !== {g0}")
+        seen.append(page.evaluate("[!!CITY[world.goal].tower, world.gt < 1]"))
+        assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}tehtavat'))") == n
+    # After the fourth roof the fifth target is the tower; after it, a roof again.
+    assert [s[0] for s in seen] == [False, False, False, True, False]
+    assert page.evaluate("world.got && !world.got.tower") is not None
+    assert page.errors == []
+
+
+def test_the_marked_roof_and_the_count_survive_a_reload_and_v1s_save_still_opens(site, context):
+    page = open_game(site, context)
+    # v1 saved only the hero's spot: v2 opens it and marks a roof.
+    page.evaluate(f"localStorage.setItem('{KEY}kierros', JSON.stringify({{ h: {{ x: 300, y: 0, z: -250, yaw: 0, st: 'air' }} }}))")
+    go(page)
+    page.wait_for_function("CITY[world.goal]")
+    assert abs(page.evaluate("world.hero.x") - 300) < 3
+    page.evaluate(ON_GOAL)
+    page.wait_for_function("world.done === 1")
+    g = page.evaluate("world.goal")
+    page.click("#quit")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("[world.goal, world.done]") == [g, 1]
+    assert page.errors == []
