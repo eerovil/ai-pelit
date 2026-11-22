@@ -28,7 +28,7 @@ flowchart TD
 
 ## Boxes
 
-- **Aika edellisestä ruudusta 0–100 ms?**: `catchUp(e)` in each game's `index.html`, for example `games/moukari/v14/index.html`: `e.timeStamp` and the frame's time are on the same clock. A tap the frame already passed, or a time gap after a pause, moves nothing.
+- **Aika edellisestä ruudusta 0–100 ms?**: `catchUp(e)` in each game's `index.html`, for example `games/moukari/v14/index.html` (Saappaanheitto v1, #503, on the thumb's lift in `spinEnd()`): `e.timeStamp` and the frame's time are on the same clock. A tap the frame already passed, or a time gap after a pause, moves nothing.
 - **Peli liikkuu tasavälein askelin?**: Trampoliini and Sormiskeitti run fixed physics steps; the others step by the time since the last frame.
 - **Peli etenee napautuksen hetkeen**: `step()` runs with the time up to the tap, at most 50 ms at a go (`update()` in Piano), and the frame's last time is set to the tap's, so no time is counted twice.
 - **Kokonaiset askeleet ajetaan, loppuaika jää muistiin**: `catchUp(e)` in `games/trampoliini/v11/index.html` and `games/sormiskeitti/v10/index.html`. The physics step stays as it was, so flights do not change.

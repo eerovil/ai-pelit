@@ -204,7 +204,7 @@ def webgl_renderer() -> str:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        b = p.chromium.launch(args=GPU_ARGS)
+        b = p.chromium.launch(args=GPU_ARGS + AUDIO_ARGS)
         try:
             return b.new_page().evaluate("""() => {
                 const g = document.createElement('canvas').getContext('webgl');
@@ -325,6 +325,18 @@ def _playwright():
         yield p
 
 
+# Waits in a game's own frame poll on a clock, not on the frame's animation frames (Playwright's
+# default). Under a loaded test run Chromium drew an empty frame no frame for seconds, so a wait
+# never looked again although the frame's sound was running 50 ms after the tap (#512).
+FRAME_POLL = 50
+
+# The tests' Chromium plays to a fake sound output, not the host's sound server (#512). On the
+# AgentDeck host it played to Eero's PulseAudio; while that server was busy, a page's
+# AudioContext.resume() after a tap never settled and the context stayed 'suspended' for good
+# (test_ios_aani's last wait failed 4 times in 180 runs with the server under load, 0 in 180 with
+# this flag). Contexts still run, and their clocks still move, on the fake output.
+AUDIO_ARGS = ["--disable-audio-output"]
+
 # Chromium draws WebGL through Vulkan already, but headless it picks SwiftShader, software on the
 # processor. These flags let it pick the graphics card (#248): on the AgentDeck host's GTX 1660
 # SUPER three 3D test files took 1 min 12 s of processor time instead of 20 min 52 s. With no card
@@ -362,7 +374,7 @@ def keep_rooms_in_game(b):
 
 @pytest.fixture(scope="module")
 def browser(_playwright):
-    b = keep_rooms_in_game(_playwright.chromium.launch(args=GPU_ARGS))
+    b = keep_rooms_in_game(_playwright.chromium.launch(args=GPU_ARGS + AUDIO_ARGS))
     yield b
     b.close()
 

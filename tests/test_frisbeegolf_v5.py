@@ -3,7 +3,7 @@ import json
 import math
 
 import pytest
-from conftest import ROOT, turn, GPU_ARGS
+from conftest import ROOT, turn, AUDIO_ARGS, GPU_ARGS
 from test_rooms_lib import Relay
 
 URL = 'games/frisbeegolf/v5/'
@@ -498,7 +498,7 @@ def test_legacy_round_keeps_personal_result_without_new_board_score(site, browse
 
 def test_room_speaking_label_clears_landscape_roster(site, _playwright):
     site.build(ROOT / 'games')
-    browser = _playwright.chromium.launch(args=GPU_ARGS + [
+    browser = _playwright.chromium.launch(args=GPU_ARGS + AUDIO_ARGS + [
         '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'])
     relay, contexts = Relay(), []
     def phone(name):

@@ -29,7 +29,8 @@ them) draws the podium, the official and the spectators as the shared front-faci
 around: down while the medal is hung, the winner up after the cheer, the others towards the winner.
 `yleisurheilu-11/` (#469, the same seven events' next versions: Korkeushyppy v16, Pituushyppy v19,
 Seiväshyppy v17, Keihäs v18, Kuula v12, Moukari v14, Mäkihyppy v13) has the official hang each medal
-with its own arms (`figure()`'s `reach`), not with two extra arms beside its own.
+with its own arms (`figure()`'s `reach`), not with two extra arms beside its own. Saappaanheitto v1
+(#503), a new throwing event, loads it too.
 The next change goes in `yleisurheilu-12/`.
 
 ```mermaid

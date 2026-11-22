@@ -12,7 +12,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-SLUGS = ["pituushyppy", "keihas", "kuula", "moukari", "korkeushyppy", "seivashyppy", "makihyppy"]
+SLUGS = ["pituushyppy", "keihas", "kuula", "moukari", "korkeushyppy", "seivashyppy", "makihyppy", "saappaanheitto"]
 
 
 def newest(slug):
