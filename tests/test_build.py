@@ -87,6 +87,14 @@ def test_every_game_names_a_known_category_and_an_event_takes_its_groups(tmp_pat
     with pytest.raises(build.GameError, match="needs a category"):
         build.build_catalog(tmp_path)
     make_game(tmp_path, "maali", [game_page("a")])
+    # An event's own category, when written, must be a real one too: the group does not cover for it.
+    for bad in ([], {}, ""):
+        meta = json.loads((tmp_path / "hyppy" / "game.json").read_text())
+        meta["category"] = bad
+        (tmp_path / "hyppy" / "game.json").write_text(json.dumps(meta))
+        with pytest.raises(build.GameError, match="category"):
+            build.build_catalog(tmp_path)
+    make_game(tmp_path, "hyppy", [game_page("a")], group="yleisurheilu")
     make_game(tmp_path, "temput", [game_page("a")])
     with pytest.raises(build.GameError, match="category's address"):
         build.build_catalog(tmp_path)

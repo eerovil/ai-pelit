@@ -142,7 +142,9 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     # A list or an object in game.json would raise TypeError in the `in` tests below.
     if group is not None and (not isinstance(group, str) or group not in GROUPS):
         raise GameError(f"{slug}: game.json names an unknown group {group!r} (GROUPS in scripts/build.py)")
-    category = meta.get("category") or (group if group in CATEGORIES else None)
+    # Key presence, not truthiness: a written but empty or malformed category is refused, not
+    # quietly replaced by the group's.
+    category = meta["category"] if "category" in meta else (group if group in CATEGORIES else None)
     if category is None:
         raise GameError(f"{slug}: game.json needs a category, one of {', '.join(CATEGORIES)} (CATEGORIES in scripts/build.py)")
     if not isinstance(category, str) or category not in CATEGORIES:
