@@ -71,7 +71,9 @@
 <!-- v4 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v6 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v10 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<!-- v14 (#480): the jumper on another phone glides down the in-run and through the air (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
 <!-- v5 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v7 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -424,6 +426,12 @@ const K = AiPelitKisa.meet({
   init: c => { c.seed = Math.floor(Math.random() * 1e6); },
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'fin'], watch: watchFrom, none: 'ei pisteitä',
+  // v14 (#480): a friend's jump is drawn a moment back, gliding between the spots their phone sends (x, y on the
+  // hill), instead of easing after each one; the landing (fin) is the flight's last spot, on the hill where they
+  // touched down, so the slide down the outrun starts where the glide ends. They move about 2 m between two spots.
+  glide: { keys: ['x', 'y'], jump: 25,
+    spot: m => m.t === 'p' && Array.isArray(m.a) ? { x: m.a[1], y: m.a[2] }
+      : m.t === 'fin' && m.r && typeof m.r.d === 'number' ? { x: landX(m), y: hillY(landX(m)) } : null },
   // The week's points go on their own high-score list (a meet saved by v1 on v1's).
   started: () => { menu.classList.add('hidden'); scoreList(); },
   // v12 (#469): everyone in their own outfit on the podium, as in the air.
@@ -607,7 +615,9 @@ function landed() {
   a.leads = !!st && !!me && st.id !== me.id && K.F.sum(me) + a.res.p > K.bestOf(st);
   a.longest = a.res.d > (K.load('pisin', 0) || 0) && landing !== 'fall';
   if (a.longest) K.save('pisin', a.res.d);
-  if (isNet()) K.send({ t: 'fin', r: a.res });
+  // v14 (#480): with the spot it touched down at (x), where the friends' glide ends; the result's distance is
+  // floored to the half metre, so a spot read from it could sit behind the last spot in the air.
+  if (isNet()) K.send({ t: 'fin', r: a.res, x: r2(a.x) });
   landSound(a);
 }
 function landSound(a) {
@@ -627,33 +637,27 @@ function slide(a, dt) {
 }
 
 // Another phone's jumper, as its phone sends it: where it is (p) and the result (fin).
-let watchT = 0;
+// Where a friend touched down: the spot their phone sends with the result (v14), else read from the distance.
+const landX = m => Number.isFinite(m.x) ? m.x : xAtDist(m.r.d);
 function watchFrom(m) {
   if (!th || th.mine || !K.comp || th.id !== m.id) return;
   if (m.t === 'p' && Array.isArray(m.a)) {
     const [ph, px, py, vx, vy, pos, v, fallen, tele] = m.a;
     if (th.phase === 'land' && ph !== 'land') return;
     if (th.phase !== ph && ph !== 'land') { th.phase = ph; th.t = 0; if (ph === 'fly') { S.play('suhahdus', { vol: 0.3 }); } }
-    Object.assign(th, { tx: px, ty: py, vx, vy, pos, v, fallen: !!fallen, tele: tele ? 1 : null });
-    if (th.x === undefined || Math.hypot(th.x - px, th.y - py) > 25) { th.x = px; th.y = py; }
-    watchT = 0;
+    // v14 (#480): where its phone said; the glide (draw()) is what moves it smoothly.
+    Object.assign(th, { x: px, y: py, vx, vy, pos, v, fallen: !!fallen, tele: tele ? 1 : null });
   }
   if (m.t === 'fin' && m.r && typeof m.r.d === 'number' && th.phase !== 'land') {
     th.res = m.r; th.phase = 'land'; th.t = 0; th.fallen = m.r.landing === 'fall';
     th.v = Math.hypot(th.vx || 0, th.vy || 0) || 20;
-    th.x = xAtDist(m.r.d); th.y = hillY(th.x);
+    th.x = landX(m); th.y = hillY(th.x);
     landSound(th);
   }
 }
 function watchStep(dt) {
   const a = th;
   if (a.phase === 'land') return slide(a, dt);
-  if (a.tx === undefined) return;
-  // Between messages the jumper goes on at its speed, and eases onto where its phone said.
-  watchT += dt;
-  const ahead = Math.min(0.15, watchT);
-  const tx = a.tx + (a.vx || 0) * ahead, ty = a.ty + (a.vy || 0) * ahead, k = Math.min(1, dt * 12);
-  a.x += (tx - a.x) * k; a.y += (ty - a.y) * k;
   if (a.phase === 'fly') a.ft += dt;
 }
 
@@ -680,7 +684,18 @@ function frame(now) {
 // ---------- Drawing ----------
 let flash = { 1: 0, 2: 0, 3: 0 }, camX = 0, camY = 0, camS = 16, camInit = true;
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v14 (#480): a friend's jumper is drawn where the meet's track has it (K.glide()), and put back after; the camera
+// follows the drawn jumper. The slide down the outrun too, from the spots their phone goes on sending: a landing
+// heard late, after the glide guessed on along the flight, then eases back instead of hopping onto its spot.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && th.phase !== 'wait');
+  const kx = th ? th.x : 0, ky = th ? th.y : 0;
+  // In the air never below the snow: when the landing comes late, the glide goes on along the flight, steeper
+  // than the hill, until it is heard. Landed, on the snow.
+  if (sw) { th.x = g.x; th.y = th.phase === 'fly' ? Math.max(g.y, hillY(g.x)) : th.phase === 'land' ? hillY(g.x) : g.y; }
+  try { drawFrame(dt); } finally { if (sw) { th.x = kx; th.y = ky; } }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#122640'; x.fillRect(0, 0, W, H); }
   x.save();

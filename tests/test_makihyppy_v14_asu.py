@@ -4,10 +4,10 @@ The same "👕 Asu" choice as the other events (data-share="yleisurheilu"), worn
 friends with `fit`, and drawn on the podium; the computer's jumpers keep the plain kit.
 """
 
-from test_makihyppy_v13_viikko import HELPERS, open_game as open_week
+from test_makihyppy_v14_viikko import HELPERS, open_game as open_week
 import yleisurheilu_asut as A
 
-URL = "games/makihyppy/v13/"
+URL = "games/makihyppy/v14/"
 
 
 def test_picking_saves_for_every_event(site, context):
