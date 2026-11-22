@@ -1,6 +1,6 @@
 # Pingis: one rally, from the serve to the point
 
-How a game and one rally of Pingis play (v1, #502). Table tennis in 3D, the camera behind the
+How a game and one rally of Pingis play (v2; v1 #502, the pause #531). Table tennis in 3D, the camera behind the
 player's own end; the bat follows the finger, and how the finger moves when the ball meets the bat
 decides the shot. One game to 11 with a two-point lead, against the computer on three levels or
 against a friend's phone in a room (see `moninpeli.md`), where each phone plays its own end and
@@ -41,10 +41,13 @@ flowchart TD
   R -- Ei --> A
   R -- Yksin --> T[Voitot tasolle, keskeneräinen peli pois]
   R -- Kaverin kanssa --> U[Tulos molemmille kerran, takaisin huoneeseen]
+  S1 -.-> Z{⏸ kesken pelin?}
+  Z -- Jatka peliä --> A
+  Z -- Lopeta peli --> Z1[Valikkoon, keskeneräinen peli pois, ei voittoa eikä tappiota]
   X[Kaveri poissa] --> Y[Pallo pysähtyy; paluun jälkeen sama syöttö uudestaan ilman pistettä]
   Y --> A
   class S1,S2,H,U,X,Y violet
-  class S,B,J,E,F,K,N,R amber
+  class S,B,J,E,F,K,N,R,Z amber
   class L1,L2,L3 teal
   class P1,P2,Q green
 ```
@@ -58,8 +61,10 @@ flowchart TD
 
 ## Boxes
 
-- **Kone pelaa toista päätä valitulla tasolla**: `cpuBrain()`, `cpuThink()` and `cpuServes()` in `games/pingis/v1/ai.js`, with the level's reaction time, speed, aim error and misses from `LEVELS` in `world.js` (Helppo, Keskitaso, Vaikea).
-- **Huone, 2 puhelinta: tekijä on isäntä ja pitää pisteet**: `netStart()` in `games/pingis/v1/net.js`; the host is side 0, the friend side 1, and each phone's camera is behind its own end (`placeCamera()` in `draw3d.js`). The friend's bat glides through `lib/sulava-1` (`glide()`).
+- **Kone pelaa toista päätä valitulla tasolla**: `cpuBrain()`, `cpuThink()` and `cpuServes()` in `games/pingis/v2/ai.js`, with the level's reaction time, speed, aim error and misses from `LEVELS` in `world.js` (Helppo, Keskitaso, Vaikea).
+- **Huone, 2 puhelinta: tekijä on isäntä ja pitää pisteet**: `netStart()` in `games/pingis/v2/net.js`; the host is side 0, the friend side 1, and each phone's camera is behind its own end (`placeCamera()` in `draw3d.js`). The friend's bat glides through `lib/sulava-1` (`glide()`).
+- **⏸ kesken pelin?**: alone only (`mode === 'play'` and no `net`), the ⏸ button in the top-right corner, or the page being hidden (`visibilitychange`), calls `pauseGame()` in `ui.js`: `mode` becomes `'paused'`, so `frame()` stops calling `playFrame()` and the ball stays where it was. In a room the button is not shown; the "‹ Pelit" chip is the way out there.
+- **Valikkoon, keskeneräinen peli pois, ei voittoa eikä tappiota**: `quitGame()` drops `ai-pelit:pingis:kesken` and calls `showMenu()`; `ai-pelit:pingis:voitot` is not touched. `resumeGame()` (Jatka peliä) sets `mode` back to `'play'`.
 - **Syöttäjä pitää palloa mailan päällä**: `heldBall()` in `ui.js`; the server is `serverAt()` in `world.js`.
 - **Nopea veto ylös?**: `myBat()` in `ui.js` measures the bat's speed over the last 80 ms; a quick push up calls `tryServe()`. The touch-down itself never counts (`bats[view].jump`).
 - **Syöttö: pomppu omalla puolella, sitten toisella**: `serveLaunch()` in `world.js` solves both hops, so every serve clears the net and lands on both halves.
