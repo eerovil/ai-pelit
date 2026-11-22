@@ -172,12 +172,16 @@ function heardSpot(sl, st, jump) {
 // The tracks' clock, on the host (its stamps) and on a guest (arrivals, the drawn moment): it stands
 // still while the room is paused (RM.paused), as the host's world does and sends nothing, so a
 // moving seal is not guessed on and pulled back when the round goes on. netTick() reads it every
-// frame, so a pause is seen as it starts and its length is left out once it ends.
+// frame, so a pause is seen as it starts and its length is left out once it ends. It goes on 1 ms
+// past the paused moment: the first frame after the pause then draws a later moment than the paused
+// ones, so the track eases the states held through it in (sulava's at() eases only when its clock
+// moved on); read in the same millisecond (whole ms in Safari and Firefox), the seal would hop the
+// whole way to them in one frame.
 const pz = { off: 0, at: null };
 function netClock() {
   const t = AiPelitSulava.now();
   if (net && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
+  if (pz.at !== null) { pz.off += t - pz.at - 0.001; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
 }
 function heldOn(a) {

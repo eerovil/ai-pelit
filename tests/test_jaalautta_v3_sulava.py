@@ -346,3 +346,83 @@ def test_after_a_pause_heard_first_the_friend_s_seal_is_drawn_behind_its_newest_
     post = [b for t, b in dl if go_at + 1 <= t <= go_at + 2]
     assert len(pre) > 20 and len(post) > 20, (len(pre), len(post))
     assert mean(post) > mean(pre) - 0.05, (mean(pre), mean(post), min(post))
+
+
+# On the host: its seal goes round a circle of radius 4 at 8 units/s by the real clock while `window.__run` is
+# on; while `window.__hold` is on its states wait (a stalled link), and `window.__let()` sends the waiting ones.
+STALL = """() => { const mv = window.moveSeal, send = AiPelitRooms.send.bind(AiPelitRooms), q = [];
+  window.__hold = false;
+  AiPelitRooms.send = (m, to) => { if (window.__hold) q.push([m, to]); else send(m, to); };
+  window.__let = () => { for (const [m, to] of q.splice(0)) send(m, to); };
+  window.moveSeal = (w, sl, h) => {
+    if (sl !== me) return mv(w, sl, h);
+    if (!window.__run) { sl.vx = sl.vy = 0; window.__t0 = null; return; }
+    const t = performance.now() / 1000;
+    if (window.__t0 == null) window.__t0 = t - window.__a / 2;
+    window.__a = 2 * (t - window.__t0);
+    Object.assign(sl, { x: 4 * Math.cos(window.__a), y: 4 * Math.sin(window.__a), vx: -8 * Math.sin(window.__a),
+      vy: 8 * Math.cos(window.__a), face: window.__a + Math.PI / 2 });
+  }; }"""
+# On a guest: each frame of seal `i`, [real time, x, y drawn, paused, the track's drawn moment], and each state
+# heard, [stamp, x, y].
+WATCH_EASE = """(i) => { window.__fe = []; window.__sts = []; const d = window.draw;
+  AiPelitRooms.on('message', m => { if (m.t === 's') window.__sts.push([m.st, m.sk[i][6], m.sk[i][7]]); });
+  window.draw = dt => { const sl = world.seals[i];
+    window.__fe.push([performance.now() / 1000, sl.x, sl.y, !!window.__pz, sl.tr ? sl.tr.time : null]); d(dt); }; }"""
+
+
+@pytest.mark.parametrize("clock", ["chromium", "whole-ms", "frame"], ids=["chromium-clock", "whole-ms-clock", "frame-clock"])
+def test_states_landing_after_a_guest_paused_are_eased_in_after_the_pause(pair, clock):
+    """The link stalls for 0.6 s, longer than the track guesses past its newest state, so the guest draws the
+    seal standing short of where it is; then the guest pauses, the stalled states land and wait (held), and the
+    host pauses too. Once the pause ends the drawing eases to the spot the states say (the track's 0.1 s), on at
+    most 1.2 times the seal's speed: never the whole gap in one frame. Also on a clock in whole milliseconds
+    (Safari's, Firefox's), where the first frame after the pause would read the paused moment again whenever the
+    frame takes under a millisecond, as on a quick phone. On this loaded machine a frame mostly takes longer, so
+    the frame clock (whole milliseconds, read once at the start of each frame) is that quick phone every time."""
+    host, guest, i = pair
+    for p in (host, guest):
+        p.evaluate(PAUSE)
+    if clock == "whole-ms":
+        guest.evaluate("""() => { const n = performance.now.bind(performance);
+          AiPelitSulava.now = () => Math.floor(n()) / 1000; }""")
+    if clock == "frame":
+        guest.evaluate("""() => { let f = Math.floor(performance.now()) / 1000;
+          const tick = ts => { f = Math.floor(ts) / 1000; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+          AiPelitSulava.now = () => f; }""")
+    host.evaluate(STALL)
+    host.evaluate("window.__run = true")
+    guest.wait_for_timeout(1200)
+    guest.evaluate(WATCH_EASE, i)
+    guest.wait_for_timeout(300)
+    host.evaluate("window.__hold = true")
+    guest.wait_for_timeout(600)
+    guest.evaluate("window.__pz = true")
+    host.evaluate("() => { window.__let(); window.__pz = true; }")  # they land with the guest paused
+    guest.wait_for_timeout(500)
+    guest.evaluate("window.__pz = false")
+    host.evaluate("() => { window.__hold = false; window.__t0 = null; window.__pz = false; }")
+    guest.wait_for_timeout(800)
+    host.evaluate("window.__run = false")
+    fe, sts = guest.evaluate("[window.__fe, window.__sts]")
+    sts.sort()
+
+    def truth(t):
+        """Where the states put the seal at the host's moment t."""
+        for (t0, x0, y0), (t1, x1, y1) in zip(sts, sts[1:]):
+            if t0 <= t <= t1 and t1 > t0:
+                f = (t - t0) / (t1 - t0)
+                return x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+        return None
+    first = next(k for k, e in enumerate(fe) if e[3])
+    last = max(k for k, e in enumerate(fe) if e[3])
+    held = fe[last]
+    assert all(math.hypot(e[1] - held[1], e[2] - held[2]) < 0.01 for e in fe[first:last + 1]), fe[first:last + 1]
+    want = truth(fe[first][4])
+    assert want, (fe[first][4], sts[0][0], sts[-1][0])
+    gap = math.hypot(want[0] - held[1], want[1] - held[2])
+    assert gap > 1, gap  # the stall left the drawing standing short
+    t1 = held[0]
+    over = [(round(t - t1, 3), round(math.hypot(x - held[1], y - held[2]), 2)) for t, x, y, *_ in fe[last + 1:last + 7]
+            if math.hypot(x - held[1], y - held[2]) > gap * (1 - math.exp(-(t - t1) / 0.1)) + 1.2 * 8 * (t - t1) + 0.3]
+    assert not over, (over, gap)
