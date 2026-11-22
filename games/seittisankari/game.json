@@ -1,0 +1,14 @@
+{
+  "title": "Seittisankari",
+  "description": "Kiipeä pilvenpiirtäjiin ja heilu talolta toiselle seitillä: tehtäviä kaupungin katoilla, yksin tai kavereiden kanssa.",
+  "category": "seikkailu",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-22",
+      "note": "Ensimmäinen versio: kaupunki 3D:nä, seinille kiipeily, seittiheilunta ja seitsemän tehtävää.",
+      "request": "Samanlainen peli kuten Spiderman 1 ps1. Eli kiipeillään pilvenpiirtäjissä seitillä",
+      "issue": "eerovil/ai-pelit#529"
+    }
+  ]
+}
