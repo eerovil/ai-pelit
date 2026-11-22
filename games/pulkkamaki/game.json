@@ -15,6 +15,13 @@
       "note": "Kesken jääneen otteen pisteet säilyvät, kun puhelin palaa huoneeseen tai tietokone ottaa pulkan, eikä pulkka kaadu.",
       "request": "Pulkkamäki v1:n katselmoinnin korjaukset: ote irtoaa ja pisteet säilyvät, kun pulkka vaihtaa ohjaajaa ilmassa.",
       "issue": "eerovil/ai-pelit#475"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-21",
+      "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }
