@@ -503,6 +503,8 @@
       data-max="6"
       data-voice-corner="bottom-right"
     ></script>
+    <!-- v4 (#540): a watching phone draws the shooter's aim from lib/sulava-1, gliding -->
+    <script src="../../../lib/sulava-1/sulava.js"></script>
     <script>
       "use strict";
       const $ = (id) => document.getElementById(id),
@@ -557,8 +559,7 @@
         roomRound = 0,
         roomHost = "",
         match = null,
-        shooting = 0,
-        aimTo = null;
+        shooting = 0;
       const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
       function load(k, d) {
         try {
@@ -757,6 +758,8 @@
         d.y += d.vy * t - 1.5 * t * t;
         const aim = direction(d);
         round.aim = { yaw: aim.yaw, pitch: aim.pitch + 0.04 };
+        // The sight jumps to the new target on the watching phones too, without a glide (room.js).
+        if (online && !round.watch) liveAim(true, true);
       }
       function call() {
         if (!round || screen !== "play" || round.phase !== "ready") return;
@@ -808,6 +811,8 @@
         });
         flash = 0.14;
         sound("lahto", 0.19, 0.8);
+        // The aim the shot left at goes first, so a watcher's sight is there when its ring appears.
+        liveAim(true);
         live("shot", { shot: round.shots[round.shots.length - 1] });
         keep();
         hud();
@@ -928,11 +933,6 @@
           const h = Math.min(dt, 1 / 120);
           dt -= h;
           flash = Math.max(0, flash - h);
-          if (round.watch && aimTo) {
-            const k = Math.min(1, h * 14);
-            round.aim.yaw += (aimTo.yaw - round.aim.yaw) * k;
-            round.aim.pitch += (aimTo.pitch - round.aim.pitch) * k;
-          }
           for (const p of effects) {
             p.life -= h;
             p.x += p.vx * h;
@@ -1248,9 +1248,14 @@
       }
       function frame(now) {
         raf = 0;
+        // A watching phone's aim and held messages go first, so the disc they launch steps this frame.
+        if (online) watchTick();
         catchUp(now);
+        // A watcher's gap ending in step() starts the next target with its start sight: the track's goes back.
+        if (online) watchAim();
         draw();
-        if (active() && !document.hidden) raf = requestAnimationFrame(frame);
+        // watchTick() may have woken a frame already (a held disc launched): only one loop runs.
+        if (!raf && (active() || watchBusy()) && !document.hidden) raf = requestAnimationFrame(frame);
       }
       c.addEventListener("pointerdown", (e) => {
         if (screen !== "play" || pointer !== null || round.phase === "gap" ||

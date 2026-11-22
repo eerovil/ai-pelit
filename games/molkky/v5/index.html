@@ -66,6 +66,7 @@
      and with the loudest sounds quieter -->
 <!-- v4 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), ctx = c.getContext('2d');
@@ -348,6 +349,24 @@ function shaken(a) { const k = a.d / LINE; return { x: a.x + gauss() * 0.01 * k,
 let phase = 'menu', phaseT = 0, world = newWorld(setUp()), players = [], score = [], misses = [], outs = [], turn = 0, throwN = 0;
 let aim = { x: 0, d: LINE - 0.3, st: 0 }, aimShown = false, slope = 0, myStyle = 0, cpu = null, msg = null, raised = false, winner = -1, recorded = null;
 let net = { on: false, round: '', sendT: 0, setup: null, away: [], th: '' };
+// v5 (#538): what this phone only hears about is drawn from tracks (lib/sulava-1), a moment in the
+// past and gliding between the spots heard: another player's aim (its spots stamped by the thrower's
+// own clock), and on a guest the kalikka and the pins, which the host sends 25 times a second.
+const SM = { aim: null, k: null, pins: [] }, smNow = () => r3(AiPelitSulava.now());
+// The aim stops when the thrower stops dragging and nothing more is sent, so it never goes on past
+// its newest spot (extra 0): it would stay there, past where the thrower holds it.
+const aimTrack = () => SM.aim || (SM.aim = AiPelitSulava.track({ keys: ['x', 'd'], extra: 0 }));
+// The spin only grows (it is never wrapped), and a fast roll turns it more than half a turn between
+// two snapshots, so it glides straight, not the short way round as an angle.
+const stickTrack = () => SM.k || (SM.k = AiPelitSulava.track({ keys: ['x', 'y', 'z', 'yaw', 'spin', 'air'], angles: ['yaw'], jump: 1 }));
+// A pin's tip direction (h) and wobble lag with it, so it never rocks before the kalikka is drawn there.
+const pinTrack = i => SM.pins[i] || (SM.pins[i] = AiPelitSulava.track({ keys: ['x', 'y', 'a', 'h', 'wob'], angles: ['h'], jump: 1 }));
+// The throw's sounds wait the same moment: each snapshot's events play once the kalikka is drawn at its stamp.
+const heldSounds = [];
+function soundsDrawn() {
+  const drawnT = world.k && SM.k && SM.k.time !== null ? SM.k.time : Infinity;
+  while (heldSounds.length && heldSounds[0][0] <= drawnT) sounds(heldSounds.shift()[1]);
+}
 const myId = () => net.on ? R.me : 'me';
 // Who throws now: alone 'me' or 'cpu'; in a room each phone in turn, and the computer for a
 // phone that was let go.
@@ -364,6 +383,7 @@ const meIndex = () => players.findIndex(p => p.id === myId());
 function newGame(resume) {
   recorded = null;
   net = { on: false, round: '', sendT: 0, setup: null, away: [], th: '' };
+  SM.aim = SM.k = null; SM.pins = []; heldSounds.length = 0;
   menu.classList.add('hidden');
   const lv = resume ? resume.lv : level;
   players = [{ id: 'me', name: 'Sinä' }, { id: 'cpu', name: foeName(lv), cpu: true }];
@@ -389,7 +409,7 @@ function toAim() {
   const mx = up.reduce((s, p) => s + p.x, 0) / up.length, my = up.reduce((s, p) => s + p.y, 0) / up.length;
   slope = mx / (my - Y0);
   aim = { x: slope * (LINE - 0.3 - Y0), d: LINE - 0.3, st: myStyle };
-  drag.id = null;
+  drag.id = null; net.aimT = null; if (SM.aim) SM.aim.reset();
   keepGame();
 }
 // The game alone is saved before every throw, so a reload or a trip to the shelf does not lose it.
@@ -512,6 +532,7 @@ function setupFor(round, list) {
 }
 function applySetup(s) {
   net = { on: true, round: s.round, sendT: 0, setup: s, away: [], th: '' };
+  SM.aim = SM.k = null; SM.pins = []; heldSounds.length = 0;
   players = s.pl.map(p => ({ id: p.id, name: p.name }));
   score = players.map(() => 0); misses = players.map(() => 0); outs = players.map(() => false);
   turn = s.first || 0; throwN = 0; winner = -1;
@@ -521,47 +542,58 @@ const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000
 const STATES = ['up', 'fall', 'lean', 'down'];
 function snapshot() {
   const k = world.k;
-  return { t: 's', round: net.round, ph: phase, pt: r2(phaseT), tu: turn, n: throwN, th: thrower(), sc: score, mi: misses, ou: outs, wn: winner,
+  // a's fifth is the aim's stamp: the thrower's own clock when a guest aims, the host's otherwise.
+  const th = thrower(), aimT = th !== myId() && th !== 'cpu' && net.aimT ? net.aimT : smNow();
+  return { t: 's', round: net.round, ts: smNow(), ph: phase, pt: r2(phaseT), tu: turn, n: throwN, th, sc: score, mi: misses, ou: outs, wn: winner,
     p: world.pins.map(p => [r3(p.x), r3(p.y), STATES.indexOf(p.s), r2(p.a), r2(Math.atan2(p.dy, p.dx)), r2(p.wob)]),
     k: k ? [r3(k.x), r3(k.y), r3(k.z), r2(k.vx), r2(k.vy), r2(k.vz), r2(k.yaw), r2(k.spin), k.st, k.air ? 1 : 0, k.rest ? 1 : 0] : 0,
-    a: [r3(aim.x), r2(aim.d), aim.st, aimShown ? 1 : 0], m: msg, rz: raised ? 1 : 0, ev: world.ev };
+    a: [r3(aim.x), r2(aim.d), aim.st, aimShown ? 1 : 0, aimT], m: msg, rz: raised ? 1 : 0, ev: world.ev };
 }
 function applySnapshot(s) {
-  const was = phase, wasN = throwN;
+  const was = phase, wasN = throwN, thWas = net.th;
   phase = s.ph; phaseT = s.pt; turn = s.tu; throwN = s.n; net.th = s.th; score = s.sc; misses = s.mi; outs = s.ou; winner = s.wn; msg = s.m; raised = !!s.rz;
+  // A new throw, or a new thrower within it (a phone let go or back): the aim heard starts afresh.
+  if ((phase !== was || throwN !== wasN || s.th !== thWas) && SM.aim) SM.aim.reset();
   if (phase !== was || throwN !== wasN) {
+    if (throwN !== wasN) heldSounds.length = 0;
     if (phase === 'aim') { drag.id = null; if (s.th === R.me) { aim = { x: s.a[0], d: s.a[1], st: myStyle }; slope = s.a[0] / (s.a[1] - Y0); } heard = { hit: 0, fall: 0, land: 0 }; }
     if (phase === 'fly' && was !== 'fly') { S.play('suhahdus', { vol: 0.35, rate: 0.9 }); heard = { hit: 0, fall: 0, land: 0 }; }
     if (phase === 'show' && msg) { if (msg.win) S.play('onnistui', { vol: 0.3 }); }
   }
-  // Keep the pins' drawn places, and move them towards where the host says they are.
+  // The pins glide through the host's spots while they move (the throw and its points, until they
+  // are stood up again); otherwise, and at a new throw's first snapshot, they stand where the host says, at once.
+  const moving = phase === 'fly' || (phase === 'show' && !raised);
   s.p.forEach((q, i) => {
-    const p = world.pins[i];
-    p.tx = q[0]; p.ty = q[1]; p.s = STATES[q[2]]; p.ta = q[3]; p.dx = Math.cos(q[4]); p.dy = Math.sin(q[4]); p.wob = q[5];
-    if (phase !== 'fly') { p.x = p.tx; p.y = p.ty; p.a = p.ta; }
+    const p = world.pins[i], tr = pinTrack(i), spot = { x: q[0], y: q[1], a: q[3], h: q[4], wob: q[5] };
+    p.tx = q[0]; p.ty = q[1]; p.s = STATES[q[2]]; p.ta = q[3];
+    if (moving && throwN === wasN) tr.push(s.ts, spot);
+    else { tr.snap(s.ts, spot); p.x = p.tx; p.y = p.ty; p.a = p.ta; p.dx = Math.cos(q[4]); p.dy = Math.sin(q[4]); p.wob = q[5]; }
   });
   if (s.k) {
-    const q = s.k, k = world.k || (world.k = {});
-    Object.assign(k, { x: q[0], y: q[1], z: q[2], vx: q[3], vy: q[4], vz: q[5], yaw: q[6], spin: q[7], st: q[8], air: !!q[9], rest: !!q[10] });
-  } else world.k = null;
-  if (phase === 'fly') sounds(s.ev);
+    const q = s.k, fresh = !world.k || throwN !== wasN, k = world.k || (world.k = {});
+    Object.assign(k, { vx: q[3], vy: q[4], vz: q[5], st: q[8], rest: !!q[10] });
+    const spot = { x: q[0], y: q[1], z: q[2], yaw: q[6], spin: q[7], air: q[9] };
+    if (fresh) { stickTrack().snap(s.ts, spot); Object.assign(k, spot, { air: !!q[9] }); }
+    else stickTrack().push(s.ts, spot);
+  } else { world.k = null; if (SM.k) SM.k.reset(); }
+  if (phase === 'fly') heldSounds.push([s.ts, s.ev]);
   // The thrower's own aim stays its own while it drags.
-  if (!(s.th === R.me && phase === 'aim')) { aim = { x: s.a[0], d: s.a[1], st: s.a[2] }; aimShown = !!s.a[3]; }
+  if (!(s.th === R.me && phase === 'aim')) {
+    aim = { x: s.a[0], d: s.a[1], st: s.a[2] }; aimShown = !!s.a[3];
+    if (phase === 'aim' && aimShown) aimTrack().push(s.a[4], { x: s.a[0], d: s.a[1] });
+  }
 }
 function guestUpdate(dt) {
-  const q = Math.min(1, dt * 25);
-  for (const p of world.pins) {
-    if (p.tx === undefined) continue;
-    p.x += (p.tx - p.x) * q; p.y += (p.ty - p.y) * q; p.a += (p.ta - p.a) * q;
-  }
-  const k = world.k;
-  if (k && !k.rest) {
-    k.x += k.vx * dt; k.y += k.vy * dt;
-    if (k.air) { k.vz -= G * dt; k.z = Math.max(KR, k.z + k.vz * dt); }
-  }
+  world.pins.forEach((p, i) => {
+    const o = SM.pins[i] && SM.pins[i].at();
+    if (o) { p.x = o.x; p.y = o.y; p.a = o.a; p.dx = Math.cos(o.h); p.dy = Math.sin(o.h); p.wob = o.wob; }
+  });
+  const k = world.k, o = k && SM.k && SM.k.at();
+  if (o) { k.x = o.x; k.y = o.y; k.z = o.z; k.yaw = o.yaw; k.spin = o.spin; k.air = o.air > 0.5; }
+  soundsDrawn();
   if ((net.sendT -= dt) <= 0) {
     net.sendT = 0.1;
-    if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st });
+    if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st, ts: smNow() });
   }
 }
 function hostEnd() {
@@ -598,7 +630,11 @@ R.on('message', (m, from) => {
     if (m.round !== net.round || !net.setup) return;
     if ((m.t === 'aim' || m.t === 'throw') && phase === 'aim' && m.n === throwN && thrower() === from) {
       if (m.t === 'throw') doThrow(m);
-      else { aim = { x: +m.x || 0, d: +m.d || LINE, st: m.st ? 1 : 0 }; aimShown = true; }
+      else {
+        aim = { x: +m.x || 0, d: +m.d || LINE, st: m.st ? 1 : 0 }; aimShown = true;
+        net.aimT = +m.ts || smNow();
+        aimTrack().push(net.aimT, { x: aim.x, d: aim.d });
+      }
     }
     return;
   }
@@ -615,8 +651,11 @@ R.on('message', (m, from) => {
 // A phone that comes back gets the game as it is: the players, then the running stream.
 R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
 // The computer throws for a phone let go with "Jatka ilman heitä", and gives its turns back.
-R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') cpu = null; });
-R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; } });
+// A new thrower within the throw: the aim heard from the one before is forgotten (v5).
+// Only when the thrower really changes: a watching phone let go or back keeps the aim gliding.
+const newThrower = was => { if (thrower() !== was) { net.aimT = null; if (SM.aim) SM.aim.reset(); } };
+R.on('continue', ids => { const th = thrower(); for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') { cpu = null; newThrower(th); } });
+R.on('back', id => { const th = thrower(); net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; newThrower(th); } });
 R.on('lobby', () => { phase = 'room'; });
 R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
 R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });
@@ -691,7 +730,7 @@ c.addEventListener('pointerdown', e => {
     slope = g[0] / (g[1] - Y0);
     aim.d = Math.max(D_MIN, Math.min(D_MAX, g[1] - 0.25)); aim.x = slope * (aim.d - Y0); aimShown = true;
     S.play('valinta', { vol: 0.3 });
-    if (net.on && !R.isHost) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st });
+    if (net.on && !R.isHost) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st, ts: smNow() });
   }
 });
 c.addEventListener('pointermove', e => {
@@ -944,6 +983,13 @@ function toScreen(wx, wy, wz) {
   V3.v.set(wx, wz, -wy).project(V3.camera);
   return [(V3.v.x + 1) / 2 * W, (1 - V3.v.y) / 2 * H, V3.v.z];
 }
+// Another phone's aim glides (v5, #538); this phone's own, and the computer's on the host that moves
+// it, are drawn as they are.
+function drawnAim() {
+  const th = thrower();
+  if (!net.on || th === myId() || (R.isHost && th === 'cpu') || !SM.aim) return aim;
+  return SM.aim.at() || aim;
+}
 function draw3d() {
   if (!V3) return;
   const { camera, pinMeshes, stick, ring, aimLine } = V3;
@@ -979,9 +1025,10 @@ function draw3d() {
   const showAim = phase === 'aim' && aimShown;
   ring.visible = aimLine.visible = showAim;
   if (showAim) {
-    ring.position.set(aim.x, 0.004, -aim.d);
+    const a = drawnAim();
+    ring.position.set(a.x, 0.004, -a.d);
     const pos = aimLine.geometry.attributes.position;
-    pos.setXYZ(0, 0, 0, -Y0); pos.setXYZ(1, aim.x, 0, -aim.d); pos.needsUpdate = true;
+    pos.setXYZ(0, 0, 0, -Y0); pos.setXYZ(1, a.x, 0, -a.d); pos.needsUpdate = true;
     aimLine.computeLineDistances();
   }
   V3.renderer.render(V3.scene, camera);

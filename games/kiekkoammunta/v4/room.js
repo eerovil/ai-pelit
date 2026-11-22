@@ -3,13 +3,25 @@
 // its own discs with the same code as a round alone, so a shot never waits for the network, tells
 // the host after each target, and sends what it does as `live` messages for the others to draw.
 // A lost `live` costs only a moment of the picture: `state` and `entry` carry everything that counts.
+// v4 (#540): a watching phone draws the shooter's aim from lib/sulava-1, a moment in the past, and
+// holds the disc launches, shots and hits until that moment, so the sight and the discs stay together.
 "use strict";
 // The first target of each of a player's five turns, then the end of the list. Skeet's doubles
 // make its turns 4, 5, 5, 5 and 6 discs.
 const TURNS = { trap: [0, 5, 10, 15, 20, 25], skeet: [0, 3, 6, 10, 13, 17] };
 let roomMode = load("huonelaji", "trap") === "skeet" ? "skeet" : "trap",
   roomEl = null,
-  lastAim = 0;
+  lastAim = 0,
+  sentAim = null,
+  aimTimer = 0;
+// A watching phone: the shooter's aim (one track per turn, `trackSeq`), the other `live` messages
+// waiting for the drawn moment to reach them (`held`), and when the last aim came (`aimHeard`).
+let aimTrack = null,
+  trackSeq = 0,
+  held = [],
+  aimHeard = -9,
+  aimNow = null,
+  flushTimer = 0;
 const cur = () => match.players[match.turn];
 const mine = () => cur().id === R.me;
 const turnEnd = () => TURNS[match.mode][match.lap + 1];
@@ -23,15 +35,60 @@ function sendState(to) {
   if (online && R.isHost && match)
     R.send({ t: "state", round: roomRound, match }, to);
 }
+// Every `live` carries the shooter's own clock (`at`), which the watchers' track learns to follow.
 function live(k, data) {
   if (online && match && round && !round.watch)
-    R.send({ t: "live", k, round: roomRound, seq: shooting, ...data });
+    R.send({ t: "live", k, round: roomRound, seq: shooting, at: AiPelitSulava.now(), ...data });
 }
-function liveAim() {
-  const now = performance.now();
-  if (!online || now - lastAim < 100) return;
+// At most ten aims a second while the finger moves, and one more once it stops: without that last
+// one a watching phone would carry the sight on at its last speed and leave it past where it stopped.
+// `jump` (a new target) is drawn there at once instead of gliding from the last target's aim.
+function liveAim(force, jump) {
+  if (!online || !round || round.watch) return;
+  clearTimeout(aimTimer);
+  aimTimer = 0;
+  const now = performance.now(),
+    wait = 100 - (now - lastAim);
+  if (!force && wait > 0) {
+    aimTimer = setTimeout(liveAim, wait, true);
+    return;
+  }
+  const same = sentAim && sentAim.yaw === round.aim.yaw && sentAim.pitch === round.aim.pitch;
   lastAim = now;
-  live("aim", { aim: round.aim });
+  sentAim = { yaw: round.aim.yaw, pitch: round.aim.pitch };
+  live("aim", jump ? { aim: sentAim, jump: true } : { aim: sentAim });
+  if (!same) aimTimer = setTimeout(liveAim, 110, true);
+}
+// A watching phone, each frame: the aim the track draws now, and the messages whose moment it reached.
+function watchTick() {
+  if (!aimTrack) return;
+  aimNow = aimTrack.at();
+  const t = aimTrack.time;
+  while (held.length && (t === null || !(held[0].at > t))) play(held.shift());
+  watchAim();
+  // rAF stops on a hidden page, and between draws: the held hits still land, on a timer.
+  clearTimeout(flushTimer);
+  flushTimer = held.length ? setTimeout(watchTick, 40) : 0;
+}
+// The sampled aim goes on the round last: a held `fly` (syncView, view, prepare) and a watcher's gap
+// ending in step() both reset round.aim to a target's start, which would show for one frame.
+function watchAim() {
+  if (aimNow && round && round.watch && round.seq === trackSeq) {
+    round.aim.yaw = aimNow.yaw;
+    round.aim.pitch = aimNow.pitch;
+  }
+}
+// Keep drawing while the sight may still glide: its delay, the guess past the last aim, the easing.
+function watchBusy() {
+  return online && (held.length > 0 || AiPelitSulava.now() - aimHeard < 1.2);
+}
+function dropTrack() {
+  aimTrack = null;
+  aimNow = null;
+  trackSeq = 0;
+  held = [];
+  clearTimeout(flushTimer);
+  flushTimer = 0;
 }
 // This phone's turn: tell the host how far it got. The results are the whole list, so a message
 // lost while the phone was off the network is made up for by the next one.
@@ -111,7 +168,6 @@ function view() {
     seq: match.seq,
   };
   shooting = own ? match.seq : 0;
-  aimTo = null;
   prepare();
   showPlay();
   if (own && wasWatching) sound("onnistui", 0.06);
@@ -136,8 +192,30 @@ function syncView(force) {
   }
   view();
 }
+// A `live` from the phone on turn: its aim goes on the track at once, the rest waits for its moment.
 function hear(m) {
+  if (mine()) return;
+  if (!Number.isFinite(m.at)) m.at = null;
+  if (m.seq !== trackSeq) {
+    // A new turn, and a new phone's clock: what the last turn still held is drawn now.
+    while (held.length) play(held.shift());
+    aimTrack = AiPelitSulava.track({ keys: ["yaw", "pitch"] });
+    aimNow = null;
+    trackSeq = m.seq;
+  }
+  if (m.aim && Number.isFinite(m.aim.yaw) && Number.isFinite(m.aim.pitch)) {
+    const aim = { yaw: m.aim.yaw, pitch: m.aim.pitch };
+    if (m.jump) aimTrack.snap(m.at, aim);
+    else aimTrack.push(m.at, aim);
+    aimHeard = AiPelitSulava.now();
+  }
+  if (m.k !== "aim") held.push(m);
+  watchTick();
+  wake();
+}
+function play(m) {
   if (m.k === "fly") {
+    if (!match || m.seq !== match.seq) return;
     if (!Array.isArray(m.discs) || m.discs.length > 2 || !m.discs.every((d) =>
         d && ["x", "y", "z", "vx", "vy", "vz", "age"].every((k) => Number.isFinite(d[k]))))
       return;
@@ -147,11 +225,7 @@ function hear(m) {
     round.discs = m.discs.map((d) => ({ ...d }));
     round.message = "";
   }
-  if (!round || !round.watch || screen !== "play") return;
-  if (m.aim && Number.isFinite(m.aim.yaw) && Number.isFinite(m.aim.pitch)) {
-    if (m.k === "fly") round.aim = { yaw: m.aim.yaw, pitch: m.aim.pitch };
-    aimTo = { yaw: m.aim.yaw, pitch: m.aim.pitch };
-  }
+  if (!round || !round.watch || screen !== "play" || round.seq !== m.seq) return;
   if (m.k === "shot" && m.shot && Number.isFinite(m.shot.delay)) {
     round.shots.push({ ...m.shot });
     round.ammo = Math.max(0, round.ammo - 1);
@@ -269,7 +343,7 @@ function leaveRound() {
   match = null;
   round = null;
   shooting = 0;
-  aimTo = null;
+  dropTrack();
   $("who").hidden = true;
   $("again").textContent = "Uudestaan";
   $("toMenu").hidden = false;
@@ -318,7 +392,7 @@ if (R) {
     match = null;
     round = null;
     shooting = 0;
-    aimTo = null;
+    dropTrack();
     pointer = null;
     effects = [];
     if (R.isHost) {
