@@ -1,0 +1,13 @@
+{
+  "title": "Pingis",
+  "description": "Pöytätennistä 3D:nä: maila seuraa sormea, pelaa konetta tai kaveria vastaan yksitoista pisteeseen.",
+  "versions": [
+    {
+      "n": 1,
+      "date": "2026-11-21",
+      "note": "Ensimmäinen versio: 3D-pöytä oman pään takaa, maila sormella, kolme konetasoa ja kaksinpeli kaverin puhelinta vastaan.",
+      "request": "Pingis",
+      "issue": "eerovil/ai-pelit#502"
+    }
+  ]
+}
