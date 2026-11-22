@@ -634,6 +634,8 @@ function quiet() {
 // trains in their own colours on the same track (they ride through each other). The host runs the
 // start, the end (everyone in, or 40 s after the first) and the computer's car for a friend who is
 // away, and sends the race ten times a second. The first to the finish wins.
+// v7 (#480): the other trains are drawn from lib/sulava-1, a moment back, gliding between the spots heard
+// (drawnS()); the rules (places, the end) keep the newest spot heard, no longer carried on at its speed.
 const RM = window.AiPelitRooms;
 const COLORS = ['#e2574c', '#3f8ad8', '#3fa65a', '#e0a526', '#9a5cc6', '#e07ab0'];
 const LATE = 40;
@@ -649,7 +651,8 @@ function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'cd', sendT: 0, clock: 0, firstFin: null, res: null, order: '',
     soloLevel: net ? net.soloLevel : game.level, heard: false,
     cars: s.players.map((p, i) => ({ id: p.id, name: p.name, color: COLORS[i % COLORS.length], kind: p.id === RM.me ? 'me' : 'net',
-      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null })) };
+      s: 4, v: 0, fin: null, at: null, energy: 1, took: [], over: 0, check: 4, crash: null,
+      tr: AiPelitSulava.track({ keys: ['s'], jump: 30 }), ts: null, src: '', held: null, lag: null })) };
   show(null);
   if (s.host && !s.over) { net.cfg = { level: game.level }; netLevel(); startRide(); }
   else { game.mode = 'netwait'; $('odota').classList.remove('hidden'); document.body.classList.add('riding'); }
@@ -660,14 +663,61 @@ function copyCarState(k, car, crash) {
   k.s = car.s; k.v = car.v; k.energy = car.energy; k.took = [...car.took];
   k.over = car.over; k.check = car.check; k.crash = crash;
 }
+// The moment the rules' step being run stands for (a long frame is ridden in steps), else now: a spot's stamp.
+let stepAt = null;
+const stamp = () => stepAt ?? netClock();
 const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0,
-  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0];
+  r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0,
+  k.kind === 'net' && RM.isHost ? k.ts : null];
+// v7 (#480): [12] is a friend's own stamp (their phone's AiPelitSulava.now() when it sent the spot), sent on by
+// the host as it came; null for the host's own car and the computer's, whose stamp is the message's `st`.
+const stampOf = m => Number.isFinite(m.st) ? m.st : null;
+// A spot heard for another train. Its source is 'f' (the friend's clock) or 'h' (the host's): when it changes
+// (the computer took over or gave back), or the train was put back after a derail, its track starts again there.
+// Heard while paused: the phones hear a pause a moment apart, so another phone's last spots, sent before it heard
+// the pause, can come after this phone did. Their stamps are ahead of the held clock (netClock()), and on the
+// track they would move the drawn moment on mid-pause; they wait in k.held and go on once the race goes on.
+function heardSpot(k, st, src, wasCrash) {
+  const spot = { s: k.s }, snap = src !== k.src || (wasCrash && !k.crash);
+  k.src = src;
+  // Read first: with no frame run during the pause (a hidden page), this is what sees it start.
+  const a = netClock();
+  if (RM.paused) { if (snap || !k.held) k.held = []; k.held.push([st, spot, snap]); return; }
+  if (snap) k.tr.snap(st, spot, a); else k.tr.push(st, spot, a);
+  k.lag = st === null ? null : a - st;  // how late the last spot heard came, for heldOn()
+}
+// The tracks' clock, on every phone (the stamps it sends, arrivals, the drawn moment): it stands still while the
+// room is paused (RM.paused), as the race does (step()), so a moving train is not guessed on mid-pause and pulled
+// back when the race goes on. frame() reads it every frame, so a pause is seen as it starts and left out once it ends.
+const pz = { off: 0, at: null };
+function netClock() {
+  const t = AiPelitSulava.now();
+  if (RM && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
+  return t - pz.off;
+}
+function heldOn(a) {
+  if (!net) return;
+  for (const k of net.cars) {
+    if (!k.held) continue;
+    // The clock reads the same at both ends of the pause, so a held spot would count as coming as early as it
+    // did, ahead of its stamp, and the track would draw the train past its newest spot on a guess for a while.
+    // Each goes on no sooner than its stamp plus the lag of the last spot heard before the pause (as Kaahari v7).
+    for (const [st, spot, snap] of k.held) {
+      if (snap || k.lag == null || st === null) { k.tr.snap(st, spot, a); k.lag = st === null ? null : a - st; }
+      else k.tr.push(st, spot, Math.max(a, st + k.lag));
+    }
+    k.held = null;
+  }
+}
+// Where another train is drawn: a moment back on its track; the host's computer cars where its rules put them.
+function drawnS(k) { return k.kind !== 'me' && !(RM.isHost && k.kind === 'cpu') && k.tr.size() ? k.tr.at(netClock()).s : k.s; }
 function synced(k) {
   if (k.kind === 'me') copyCarState(k, game.car, crashState());
   return k;
 }
 function hostState() {
-  return { t: 's', round: net.round, cfg: net.cfg, ph: net.phase, cd: r2(game.count || 0), clock: r2(net.clock), c: net.cars.map(k => pack(synced(k))) };
+  return { t: 's', round: net.round, st: stamp(), cfg: net.cfg, ph: net.phase, cd: r2(game.count || 0), clock: r2(net.clock), c: net.cars.map(k => pack(synced(k))) };
 }
 function arrive(k) {
   if (k.fin === null || k.at !== null) return;
@@ -693,7 +743,7 @@ function netTick(dt) {
         copyCarState(k, k.car, k.crash);
         if (k.car.fin !== null) { k.fin = r2(k.car.fin); k.cpuFin = true; arrive(k); }
       }
-    } else if (net.phase === 'run' && k.fin === null && !k.crash) k.s = Math.min(game.track.len - 1, k.s + k.v * dt);
+    }
   }
   // The places, for the HUD: finished by their time on the race clock, the rest by how far they are.
   const list = net.cars.map(synced).slice().sort((a, b) => (a.fin === null) - (b.fin === null) || (a.fin !== null ? a.fin - b.fin || (a.at ?? 0) - (b.at ?? 0) : b.s - a.s));
@@ -712,7 +762,7 @@ function netTick(dt) {
     return;
   }
   if ((game.mode === 'ride' || game.mode === 'crash' || game.mode === 'done') && net.sendT <= 0 && !net.res) {
-    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, c: pack(synced(meK())) });
+    net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: stamp(), c: pack(synced(meK())) });
   }
 }
 function guestState(m) {
@@ -729,8 +779,11 @@ function guestState(m) {
     const k = net.cars[i];
     if (!k) return;
     if (k.kind !== 'me') {
+      const wasCrash = !!k.crash;
       k.s = a[0]; k.v = a[1]; k.fin = a[2]; k.at = a[3];
       k.energy = a[6] ?? 1; k.took = a[7] || []; k.over = a[8] || 0; k.check = a[9] ?? a[0]; k.crash = a[10] || null;
+      const own = Number.isFinite(a[12]);
+      heardSpot(k, own ? a[12] : stampOf(m), own ? 'f' : 'h', wasCrash);
       return;
     }
     k.at = a[3] ?? k.at;
@@ -845,9 +898,16 @@ if (RM) {
       k.handback = false;
       // A finish the host has heard stands, whatever a reloaded phone sends after it.
       if (k.fin === null) {
+        const wasCrash = !!k.crash;
         k.s = m.c[0]; k.v = m.c[1]; k.fin = m.c[2];
         k.energy = m.c[6] ?? 1; k.took = m.c[7] || []; k.over = m.c[8] || 0; k.check = m.c[9] ?? m.c[0];
         k.crash = m.c[10] || null;
+        k.ts = stampOf(m); heardSpot(k, k.ts, 'f', wasCrash);
+      } else if (m.c[2] !== null && m.c[0] >= k.s) {
+        // Past the line the train brakes to a stop: its spot still moves on every screen, while
+        // the finish time and place heard first stand.
+        k.s = m.c[0]; k.v = m.c[1];
+        k.ts = stampOf(m); heardSpot(k, k.ts, 'f', false);
       }
       arrive(k);
       return;
@@ -860,7 +920,7 @@ if (RM) {
     else if (lastEnd && lastEnd.round === RM.round) RM.send(lastEnd, id);
   });
   RM.on('continue', ids => { if (net) net.cars.forEach(k => { if (ids.includes(k.id) && k.kind === 'net') cpuTakes(k); }); });
-  RM.on('back', id => { if (net) net.cars.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; } }); });
+  RM.on('back', id => { if (net) net.cars.forEach(k => { if (k.id === id && k.kind === 'cpu') { k.kind = 'net'; k.handback = true; k.tr.reset(); k.ts = k.held = k.lag = null; k.src = ''; } }); });
   RM.on('lobby', toSolo);
   RM.on('leave', toSolo);
   RM.on('menu', toSolo);
@@ -887,9 +947,13 @@ function wire() {
   // A slow phone's long frame is ridden in 50 ms steps, so its clock keeps real time and a race
   // between fast and slow phones stays fair. Only a gap over a second (the page was hidden) is cut.
   (function frame(now) {
-    let rest = Math.min(1, Math.max(0, (now - last) / 1000));
+    let rest = Math.min(1, Math.max(0, (now - last) / 1000)), at = now / 1000 - rest;
     last = now;
-    while (rest > 1e-6) { const dt = Math.min(0.05, rest); step(dt); rest -= dt; }
+    netClock();  // sees a pause start and end as they happen; the steps' stamps leave the pauses out
+    at -= pz.off;
+    // Each step's spots are stamped with that step's own moment (#480), so a long frame's spots keep their pace.
+    while (rest > 1e-6) { const dt = Math.min(0.05, rest); at += dt; stepAt = at; step(dt); rest -= dt; }
+    stepAt = null;
     requestAnimationFrame(frame);
   })(last);
 }
