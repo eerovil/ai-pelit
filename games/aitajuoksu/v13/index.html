@@ -334,13 +334,13 @@ R.on('start', s => {
 const r2 = n => Math.round(n * 100) / 100;
 const pack = r => [r2(r.x), r2(r.y), r2(r.v), r.hits, r.down, r.fin, r.kind === 'cpu' ? 1 : 0, r2(r.vy), r.foot, r2(r.stum), r.card];
 function unpack(r, a) { r.x = a[0]; r.y = a[1]; r.v = a[2]; r.hits = a[3]; r.down = a[4]; r.fin = a[5]; r.vy = a[7]; r.foot = a[8]; r.stum = a[9]; }
-// v13 (#480): `st` is the host's clock as it sends; `sts` a friend's own stamp of the spot it sent, passed on
+// v13 (#480): `st` is the host's game clock (gameT) as it sends; `sts` a friend's own stamp of the spot it sent, passed on
 // with that spot as it came (`hx`, `hy`; not where the host has carried it on since), so each runner's track
 // glides on the clock of the phone that moved it.
 const sent = r => { const a = pack(r); if (r.kind === 'net' && r.hx !== null) { a[0] = r2(r.hx); a[1] = r2(r.hy); } return a; };
 function hostState() {
   return { t: 's', round: race.round, k: [race.dist, race.hurdles ? 1 : 0], ph: race.phase, cd: race.cdT, clock: race.clock, fs: race.fs, r: race.runners.map(sent), o: race.runners.map(r => r.asu || ''),
-    st: AiPelitSulava.now(), sts: race.runners.map(r => r.kind === 'net' ? r.st : null) };
+    st: Math.round(gameT * 1000) / 1000, sts: race.runners.map(r => r.kind === 'net' ? r.st : null) };
 }
 // A spot just heard for a runner this phone draws (already unpacked into it), stamped by the phone `src` that
 // moved it. A new source (the computer took the runner over, or gave it back) has another clock: start afresh.
@@ -416,7 +416,7 @@ function guestTick(dt) {
   const was = me.sentFin;
   if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !was))) {
     race.sendT = 1 / 12; me.sentFin = me.fin !== null;
-    R.send({ t: 'p', round: race.round, r: pack(me), o: me.asu || '', st: AiPelitSulava.now() });
+    R.send({ t: 'p', round: race.round, r: pack(me), o: me.asu || '', st: Math.round(gameT * 1000) / 1000 });
   }
 }
 
@@ -452,8 +452,14 @@ function afterResults() {
 
 // ---------- The loop ----------
 let lastT = performance.now();
+// The phone's game clock, the stamp it sends with its spots (#480): the runners move by dt, held to 0.05 s
+// a frame, so after a stalled frame they have moved less than the wall clock says. Stamped on the wall
+// clock, the other phones would have guessed them on at full speed through the stall and then drawn them
+// back; on this clock a spot's stamp always matches how far its runner went.
+let gameT = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  gameT += dt;
   if (race) tick(dt);
   draw();
   requestAnimationFrame(frame);
