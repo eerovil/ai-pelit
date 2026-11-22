@@ -1,5 +1,5 @@
 'use strict';
-// Lattia on laavaa v2: the fingers, the menus, the saves, the sounds, the 2D layer over the 3D
+// Lattia on laavaa v3: the fingers, the menus, the saves, the sounds, the 2D layer over the 3D
 // picture (time, buttons, stick, names) and the main loop. Alone the phone runs the whole round;
 // with friends net.js does.
 
@@ -182,7 +182,7 @@ function shoveBtn() {
 // ---- Menus (DOM, over the canvas) ----
 const $ = id => document.getElementById(id);
 function hideAll() { for (const id of ['menu', 'end']) $(id).hidden = true; }
-const ROOM_NOTES = ['Sohva, nojatuoli ja kirjahylly', 'Sänky, säkkituolit ja lelulaatikot', 'Pöytä, tuolit ja jääkaappi'];
+const ROOM_NOTES = ['Sohva, nojatuoli ja kirjahylly', 'Sänky, säkkituolit ja lelulaatikot', 'Pöytä, tuolit ja jääkaappi', 'Portaita ylös katolle asti'];
 function showMenu() {
   mode = 'menu'; world = null; me = null; seen = null;
   hideAll(); $('menu').hidden = false;
@@ -256,13 +256,22 @@ function drawHUD(w, clock) {
     shadowText('Voitit kierroksen!', W / 2, midY - 30, 28, '#ffd166', 'center', 900);
     shadowText('Kestä niin kauan kuin pystyt', W / 2, midY + 6, 16, '#fff', 'center', 700);
   }
-  if (w.ph === 'play' && w.rt >= w.floatAt && w.rt < w.floatAt + 3) shadowText('Tavarat kelluvat – hyppää kyytiin!', W / 2, midY + 70, 17, '#ffe7c2', 'center', 800);
+  if (w.ph === 'play' && w.rt >= w.floatAt && w.rt < w.floatAt + 3) shadowText(w.house ? 'Talo jäi laavan alle – hyppää lautalle!' : 'Tavarat kelluvat – hyppää kyytiin!', W / 2, midY + 70, 17, '#ffe7c2', 'center', 800);
+  // Koko talo (#526): the doors of the stairs open, then the lava climbs them.
+  if (w.house && w.ph === 'play') {
+    for (let n = 0; n < 2; n++) {
+      if (w.rt >= HOUSE.open[n] && w.rt < HOUSE.climb[n] + 3) {
+        shadowText(w.rt < HOUSE.climb[n] ? 'Ovi aukesi!' : 'Laava nousee!', W / 2, midY - 36, 30, '#ff7a1a', 'center', 900);
+        shadowText(n ? 'Portaita ylös katolle!' : 'Portaita ylös yläkertaan!', W / 2, midY, 19, '#ffe7c2', 'center', 800);
+      }
+    }
+  }
   if (me && me.out && (mode === 'netplay')) shadowText('Laavaan! Katsot muita', W / 2, midY, 24, '#ffd166', 'center', 900);
   // Names over friends' kids.
   if (net && window.L3D && L3D.project) {
     cx.font = '600 11px system-ui'; cx.textAlign = 'center'; cx.textBaseline = 'bottom';
     for (const k of w.kids) {
-      if (k === me || k.out) continue;
+      if (k === me || k.out || k.dy >= (L3D.cutY || Infinity)) continue;
       const p = L3D.project(k.dx, k.dy + KID_H + 0.45, k.dz);
       if (!p) continue;
       cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillText(k.name, p[0] + 1, p[1] + 1);

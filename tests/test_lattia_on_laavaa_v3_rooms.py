@@ -11,7 +11,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/lattia-on-laavaa/v2/"
+URL = "games/lattia-on-laavaa/v3/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 KID = "world.kids.find(k => k.id === {})"
@@ -84,7 +84,7 @@ def place(page, x, z, y, face=0):
 def test_three_phones_play_the_hosts_room_and_end_on_one_result(kids):
     host, g1, g2 = room(kids, 3)
     # The host picks the room on the room screen; a guest sees who does.
-    host.wait_for_function("document.querySelectorAll('#lol-room button').length === 3")
+    host.wait_for_function("document.querySelectorAll('#lol-room button').length === 4")
     assert "valitsee huoneen" in g1.locator("#lol-room").inner_text()
     host.click("#lol-room button[data-r='2']")
     assert "on" in host.locator("#lol-room button[data-r='2']").get_attribute("class")
@@ -271,3 +271,14 @@ def test_the_host_keeps_a_guests_shove_cooldown_even_across_a_reload(kids):
     host.evaluate(sh)
     assert host.evaluate("tries") == 2   # one more once the cooldown is over, and only one
     assert host.errors == guest.errors == []
+
+
+def test_the_host_picks_koko_talo_and_every_phone_builds_the_house(kids):
+    host, g1 = room(kids, 2)
+    host.wait_for_function("document.querySelectorAll('#lol-room button').length === 4")
+    host.click("#lol-room button[data-r='4']")
+    start([host, g1])
+    for p in (host, g1):
+        assert p.evaluate("world.level === 4 && world.house && world.statics.length > 0")
+    assert host.evaluate("world.seed") == g1.evaluate("world.seed")
+    assert host.errors == g1.errors == []
