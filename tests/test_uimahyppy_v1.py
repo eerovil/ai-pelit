@@ -97,6 +97,8 @@ def test_the_judges_like_a_straight_open_entry_from_high(real, context):
         back: judge(3.5 * Math.PI, 0, 0, HMAX, fixed),
         twist: judge(3 * Math.PI, 2 * Math.PI, 0, HMAX, fixed),
         feet: judge(0, 0, 0, HMAX, fixed),
+        spun: judge(0, 4 * Math.PI, 0, HMAX, fixed),
+        lots: judge(Math.PI, 3 * Math.PI, 0, HMAX, fixed),
         hard: judge(5 * Math.PI, 0, 0, HMAX, fixed),
       };
     }""")
@@ -112,6 +114,10 @@ def test_the_judges_like_a_straight_open_entry_from_high(real, context):
     assert r["twist"]["tw"] == 2 and r["twist"]["dd"] == 2.4 and r["twist"]["name"] == "1½ voltin hyppy, 1 kierre"
     assert r["twist"]["pts"] > c["pts"]
     assert r["feet"]["name"] == "Suora hyppy" and r["feet"]["dd"] == 1.0
+    # #521 helper check: a twist counts only with a somersault to go with it (a half twist per half
+    # somersault), so holding Kierre down a straight fall earns nothing.
+    assert r["spun"]["tw"] == 4 and r["spun"]["dd"] == 1.0
+    assert r["lots"]["tw"] == 3 and r["lots"]["dd"] == 1.6  # ½ somersault: only ½ twist counts
     assert r["hard"]["dd"] == 2.6 and r["hard"]["name"] == "2½ voltin hyppy"
     # The highest and lowest judge are left out.
     mid = page.evaluate("""() => { let i = 0; const seq = [0.9, 0.1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
@@ -287,11 +293,14 @@ def test_kierre_held_twists(real, context):
     page.mouse.down()
     page.mouse.up()
     page.wait_for_function("th.phase === 'dive'", polling=5)
+    page.evaluate("flipHeld = true")   # as a second thumb on Voltti would
     page.mouse.move(*button(page, "kierre"))
     page.mouse.down()
     page.wait_for_timeout(300)
-    w = page.evaluate("th.d.w")
+    w, k = page.evaluate("[th.d.w, th.d.k]")
     assert w > 1
+    # A twist needs a straight body: with Voltti held too, the diver is open while Kierre is.
+    assert k < 0.05
     page.mouse.up()
     page.wait_for_function("th.phase === 'water'", timeout=5000)
     r = page.evaluate("[th.d.w, th.res.tw]")

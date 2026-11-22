@@ -132,11 +132,13 @@ const heightName = h => String(h.m).replace('.', ',') + ' m ' + (h.board ? 'laut
 const spin = k => W_OPEN / (1 - (1 - W_OPEN / W_TUCK) * k);
 // The judging of an entry: the angle a (radians of forward somersault, 0 upright), the twist w, the
 // tuck k left at the entry, and the bounce h the dive left from (the judges like height). Returns the dive's name, difficulty, the five judges and the points.
-const ser = (a, w, k) => ({ halves: Math.max(0, Math.round(a / Math.PI)), tw: Math.round(Math.abs(w) / Math.PI) });
+const ser = (a, w) => ({ halves: Math.max(0, Math.round(a / Math.PI)), tw: Math.round(Math.abs(w) / Math.PI) });
 function judge(a, w, k, h = HMAX, rnd = Math.random) {
-  const { halves, tw } = ser(a, w, k);
+  const { halves, tw } = ser(a, w);
   const err = Math.abs(a - halves * Math.PI) / DEG, twErr = Math.abs(Math.abs(w) - tw * Math.PI) / DEG;
-  const dd = Math.round((1 + 0.3 * halves + 0.2 * tw + (halves % 2 ? 0.1 : 0)) * 10) / 10;
+  // A twist adds to the difficulty only with a somersault to go with it: at most a half twist for
+  // each half somersault, so holding Kierre down a straight fall earns nothing (#521 helper check).
+  const dd = Math.round((1 + 0.3 * halves + 0.2 * Math.min(tw, halves) + (halves % 2 ? 0.1 : 0)) * 10) / 10;
   let base, why = '';
   if (err > 60) {
     // Flat on the water: on the belly when the body faces down, on the back otherwise.
@@ -260,9 +262,9 @@ const diver = id => K.thrower(id);
 const COLORS = K.COLORS;
 
 // The computer dives around its skill, now and then flat on the water, and never past what a very
-// good player reaches (from the 3 m board a clean 2½ somersaults from the highest bounce, about 75).
+// good player reaches (from the 3 m board a clean 2½ somersaults from the highest bounce, about 66).
 // Higher up there is time for more, so its points grow with the height as the player's best do
-// (measured by simulating every hold: about 59, 66, 70, 76 and 76+ points at the five heights).
+// (measured by simulating every hold and twist: about 63, 68, 70, 76 and 80 points at the five heights).
 const CPU_MAX = 75, CPU_HEIGHT = [0.9, 1, 1.06, 1.14, 1.2];
 function cpuMark(t, c) {
   if (Math.random() < 0.05) return Math.round((3 + Math.random() * 9) * 100) / 100;
@@ -385,7 +387,8 @@ function volttiGo(a) {
   a.b.go = true;
 }
 function stepDive(a, dt) {
-  const d = a.d, held = ptr !== null || flipHeld;
+  // A twist needs a straight body: while Kierre is held the diver opens, and the somersault slows.
+  const d = a.d, held = (ptr !== null || flipHeld) && !twistHeld;
   d.k += Math.max(-dt / TUCK_T, Math.min(dt / TUCK_T, (held ? 1 : 0) - d.k));
   // Open, the body steers a little towards a clean entry (straight up or down), so a near miss counts.
   const near = Math.max(0, Math.round(d.a / Math.PI)) * Math.PI;
@@ -527,7 +530,7 @@ function drawScene() {
   x.fillStyle = wall; x.fillRect(0, 0, w, OY);
   x.fillStyle = 'rgba(255,255,255,.16)';
   const winW = Math.max(26, 1.2 * S), gap = winW * 2.2;
-  for (let k = 0, px = ((sx(-20) % gap) + gap) % gap - gap; px < w; k++, px += gap) x.fillRect(px, sy(BOARD_Y + 4.6), winW, 3.4 * S);
+  for (let px = ((sx(-20) % gap) + gap) % gap - gap; px < w; px += gap) x.fillRect(px, sy(BOARD_Y + 4.6), winW, 3.4 * S);
   x.fillStyle = '#d9e4ea'; x.fillRect(0, sy(DECK), w, DECK * S);
   // The friends watching stand on the far side, drawn before the diver so they never cover it.
   K.drawFans(x, { left: 12, right: w - 12, bottom: sy(DECK) + 2, h: 40, walk: true });
@@ -565,7 +568,7 @@ function drawPlatform() {
   x.strokeStyle = '#c9d3da'; x.lineWidth = 3;
   x.beginPath(); x.moveTo(sx(-3.4), top); x.lineTo(sx(-3.4), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), top); x.stroke();
   // The height, painted on the pillar.
-  x.fillStyle = 'rgba(30,50,70,.75)'; x.font = '800 ' + Math.max(11, Math.round(0.28 * S)) + 'px system-ui'; x.textAlign = 'center';
+  x.fillStyle = 'rgba(30,50,70,.75)'; x.font = '800 ' + Math.max(11, Math.round(0.28 * S)) + 'px system-ui';
   x.textAlign = 'right'; x.fillText(String(BOARD_Y).replace('.', ',') + ' m', sx(-1.6) - 8, top + slab + Math.max(14, 0.6 * S));
 }
 // The springboard (1 m or 3 m): fixed on its stand back to the fulcrum, bending past it, its tip down by dip.
@@ -690,7 +693,7 @@ function drawHud() {
     x.fillStyle = h > 0.8 ? '#7ee081' : h > 0.45 ? '#ffd166' : '#ff9a8b'; rr(bx, by, Math.max(12, bw * Math.min(1, h)), 12, 6); x.fill();
   } else if (th && (th.phase === 'dive') && th.d) {
     x.textAlign = 'left'; x.font = '800 15px system-ui'; x.fillStyle = '#8ee3ff';
-    const { halves, tw } = ser(th.d.a, th.d.w, 0);
+    const { halves, tw } = ser(th.d.a, th.d.w);
     x.fillText('↻ ' + (halves ? half(halves) : '0') + (tw ? '  ⟲ ' + half(tw) : ''), land ? 230 : 20, land ? top + 24 : top + 50);
   } else if (t) {
     x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
