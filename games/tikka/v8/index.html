@@ -87,6 +87,8 @@
      and with the loudest sounds quieter -->
 <!-- v6 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<!-- v8 (#539): the thrower's sight glides on the other phones (lib/sulava-1, as in #480) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -177,7 +179,7 @@ let players = [], cur = 0, round = 1, dartsLeft = 3, turnStart = 0, turnDarts = 
 let stuck = [];          // darts in the board this turn: {x, y, p}
 let flying = null;       // {x, y, t, p}
 let aim = { x: 0, y: 0 };
-let seen = null;         // in a room: where another phone's player aims {x, y}
+let seen = null;         // in a room: where another phone's player aims, a lib/sulava-1 track (v8)
 let hold = null;         // the finger: {id, lx, ly, t}
 let wob = 0;             // time for the hand's sway
 let pause = 0, banner = null, after = null;
@@ -248,6 +250,7 @@ function startAim() { return Object.assign({}, players[cur].aim || offAim({ x: 0
 function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
 function throwAt(tx, ty) {
   flying = { x: tx, y: ty, t: 0, p: cur };
+  seen = null;   // the next dart's sight starts somewhere else: no glide across (v8)
   dartsLeft--;
   if (!players[cur].ai) { thrown++; players[cur].aim = { x: aim.x, y: aim.y }; }
   sound('whoosh');
@@ -393,6 +396,14 @@ function release(tx, ty) {
 // host sends every dart's flight ('f') and the whole game after each change ('g'). Whoever is
 // throwing sends where they aim ('a'), so every phone sees the sight move.
 const r1 = n => Math.round(n * 10) / 10;
+// The thrower's sight on the other phones (v8, #539): each 'a' carries the sending phone's clock
+// (s), and the sight is drawn from lib/sulava-1 a moment back, gliding between the spots instead
+// of jumping to each one as it arrives. A new turn or dart (seen = null) starts a new track.
+const stamp = () => Math.round(AiPelitSulava.now() * 1000) / 1000;
+function see(m) {
+  if (!seen) seen = AiPelitSulava.track({ keys: ['x', 'y'] });
+  seen.push(typeof m.s === 'number' ? m.s : null, { x: +m.x || 0, y: +m.y || 0 });
+}
 function state() {
   return { t: 'g', round: net.round, mode, cur, rnd: round, left: dartsLeft, ts: turnStart,
     ps: players.map(p => [p.score, p.tens, p.ai ? 1 : 0]),
@@ -432,7 +443,7 @@ R.on('message', (m, from) => {
       if (pause > 0 || players[cur] !== p) return;
       throwAt(+m.x || 0, +m.y || 0);
     }
-    if (m.t === 'a' && p && p.id === from) { seen = { x: m.x, y: m.y }; R.send(m); }
+    if (m.t === 'a' && p && p.id === from) { see(m); R.send(m); }   // forwarded with the friend's own stamp
     return;
   }
   if (m.t === 'g') adopt(m);
@@ -441,7 +452,7 @@ R.on('message', (m, from) => {
     if (players[m.p] && players[m.p].id === R.me && ownFlying > 0) ownFlying--;
     else { if (flying) stuck.push({ x: flying.x, y: flying.y, p: flying.p }); flying = { x: m.x, y: m.y, t: 0, p: m.p }; seen = null; sound('whoosh'); }
   }
-  if (m.t === 'a' && !mine()) seen = { x: m.x, y: m.y };
+  if (m.t === 'a' && !mine()) see(m);
   if (m.t === 'end') netFinish(m);
 });
 R.on('hello', id => { if (net && net.host && phase === 'play') R.send(state(), id); });
@@ -513,7 +524,7 @@ function step(dt) {
     if (aimSend <= 0) {
       aimSend = 0.1;
       const w = sway(hold ? hold.t : HAND.settled);
-      R.send({ t: 'a', round: net.round, x: r1(aim.x + w.x), y: r1(aim.y + w.y) });
+      R.send({ t: 'a', round: net.round, x: r1(aim.x + w.x), y: r1(aim.y + w.y), s: stamp() });
     }
   }
   if (flying) {
@@ -618,7 +629,7 @@ function drawDart(px, py, p, scale) {
 function drawSight() {
   let at;
   if (hold) { const w = sway(hold.t); at = { x: aim.x + w.x, y: aim.y + w.y }; }
-  else if (seen && !mine()) at = seen;
+  else if (seen && !mine()) { at = seen.at(); if (!at) return; }
   else if (bot) { const w = sway(HAND.settled); at = { x: aim.x + w.x, y: aim.y + w.y }; }
   else if (mine()) at = aim;
   else return;
