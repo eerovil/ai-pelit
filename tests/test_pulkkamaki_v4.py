@@ -1,11 +1,12 @@
-"""Pulkkamäki v3 (#475, #480): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves."""
+"""Pulkkamäki v4 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
+the steep hills with drops, no trick begun too late, the hand push."""
 import shutil
 
 import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v3/"
+URL = "games/pulkkamaki/v4/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
@@ -40,8 +41,8 @@ def test_the_menu_opens_the_first_hill_only(site, context):
     page = open_game(site, context)
     assert page.evaluate("!!V3")
     hills = page.locator("#hills button")
-    assert hills.count() == 3
-    assert [hills.nth(i).is_disabled() for i in range(3)] == [False, True, True]
+    assert hills.count() == 5
+    assert [hills.nth(i).is_disabled() for i in range(5)] == [False, True, True, True, True]
     assert "🔒" in hills.nth(1).inner_text()
     assert page.locator("#friends").is_visible()
     assert page.errors == []
@@ -161,14 +162,14 @@ def test_the_record_and_opened_hills_survive_a_reload(site, context):
     page.reload()
     page.wait_for_function("V3 || no3d", timeout=20000)
     hills = page.locator("#hills button")
-    assert [hills.nth(i).is_disabled() for i in range(3)] == [False, False, True]
+    assert [hills.nth(i).is_disabled() for i in range(5)] == [False, False, True, True, True]
     assert "3100" in hills.nth(0).inner_text()
     assert page.evaluate("hillN") == 2
     assert page.errors == []
 
 
 # Each hill run through by the computer's best sledder and by a sled nobody touches, in game time.
-RUNS = """() => [1, 2, 3].map(n => {
+RUNS = """() => HILLS.map((_, i) => i + 1).map(n => {
   const h = buildHill(n), out = [];
   for (const brain of [cpuBrain(CPU_SKILL[2], 11), null]) {
     const sl = newSled('t', 't'); placeSled(h, sl, 0); sl.cpu = brain;
@@ -188,7 +189,7 @@ def test_every_hill_can_be_finished_and_doing_nothing_scores_little(site, contex
         assert best[0], (n, runs)   # a good run reaches the bottom
         assert 30 <= best[1] <= 120, (n, runs)   # about a minute down
         assert idle[2] < best[2] / 4, (n, runs)
-        if n < 3:
+        if n < len(runs):
             assert best[2] >= opens[n], (n, runs)   # the next hill can be opened
     assert page.errors == []
 
@@ -239,4 +240,116 @@ def test_a_handover_lets_go_of_a_grab_and_counts_it_only_when_long_enough(site, 
       return [short, long];
     }""")
     assert got == [[False, 0, "front", 0, True], [False, 0, "front,grab", 0, True]]
+    assert page.errors == []
+
+
+def test_the_new_hills_have_steep_stretches_and_drops_that_throw_a_fast_sled(site, context):
+    page = open_game(site, context)
+    got = page.evaluate("""() => [4, 5].map(n => {
+      const h = buildHill(n);
+      // The steepest metre of the track, and the drops.
+      let steepest = 0;
+      for (let s = 1; s < h.len; s++) steepest = Math.max(steepest, h.base[s - 1] - h.base[s]);
+      // A fast sled straight at each drop flies off it.
+      const flies = h.drops.map(d => {
+        const sl = newSled('t', 't'); sl.s = d.s - 3; sl.x = 0; sl.y = groundAt(h, sl.s, 0); sl.v = 14;
+        for (let t = 0; t < 1 && !sl.air; t += DT) step(h, sl, DT);
+        return sl.air && sl.s < d.s + 2;
+      });
+      return [h.drops.length, steepest, flies];
+    })""")
+    for drops, steepest, flies in got:
+        assert drops >= 5
+        assert steepest >= 2   # a 4 m drop in 2 m
+        assert all(flies), flies
+    assert page.errors == []
+
+
+def test_the_steep_stretches_keep_the_sled_on_the_snow(site, context):
+    # Down each new hill straight and fast: the sled leaves the snow only at a jump's lip or a drop,
+    # never on a steep stretch by itself (the lip test before v4 would have thrown it all the way).
+    page = open_game(site, context)
+    got = page.evaluate("""() => [4, 5].map(n => {
+      const h = buildHill(n), off = [], steep = HILLS[n - 1].steep;
+      const sl = newSled('t', 't'); placeSled(h, sl, 0.3); sl.v = 12;
+      sl.onEvent = e => { if (e === 'jump') off.push(sl.s); };
+      for (let t = 0; t < 150 && !sl.fin; t += DT) { sl.yaw = 0; sl.x = 0.3; step(h, sl, DT); }   // clear of every jump's side edge
+      const lip = s => h.drops.some(d => s > d.s - 1 && s < d.s + 2) || h.kicks.some(k => Math.abs(0.3 - k.x) <= k.w / 2 && s > k.s + k.len - 1 && s < k.s + k.len + 1);
+      return [sl.fin, off.filter(s => !lip(s)), steep.length];
+    })""")
+    for fin, stray, steep in got:
+        assert fin
+        assert stray == []
+        assert steep >= 3
+    assert page.errors == []
+
+
+def test_a_swipe_too_near_the_landing_starts_no_trick(site, context):
+    page = open_game(site, context)
+    go(page)
+    # Off a jump: just after the lip there is time for a flip; just before the snow, none.
+    page.evaluate("(() => { const k = hill.kicks[0]; me.s = k.s - 25; me.x = k.x; me.y = groundAt(hill, me.s, me.x); me.v = 13; me.yaw = 0; })()")
+    page.wait_for_function("me.air", timeout=6000)
+    page.evaluate("() => { mode = 'pause'; }")   # held still while the test moves it
+    left = page.evaluate("timeToLand(hill, me)")
+    assert left > TRICK_FRONT_DONE + 0.05, left
+    # Moved to its last fifth of a second in the air, a swipe is refused and says so.
+    page.evaluate("""() => { while (timeToLand(hill, me) > 0.2) { me.vy -= G * DT; me.s += me.v * DT; me.y += me.vy * DT; } mode = 'run'; }""")
+    page.evaluate(TOUCH, ["pointerdown", 180, 500])
+    page.evaluate(TOUCH, ["pointermove", 180, 430])
+    page.evaluate(TOUCH, ["pointerup", 180, 430])
+    assert page.evaluate("me.trick") is None
+    assert page.evaluate("lateT") > 0
+    page.wait_for_function("!me.air", timeout=6000)
+    assert page.evaluate("me.fallT") == 0
+    # The same rule in the numbers: a flip fits only with LAND_DONE of it left before the snow,
+    # a second one only after what is left of the first, and no grab in the last moment.
+    got = page.evaluate("""() => {
+      const sl = newSled('t', 't'); sl.air = true; sl.s = 100; sl.x = 0; sl.v = 0;   // straight down: t = √(2h / G)
+      const at = t => { sl.y = groundAt(hill, sl.s, sl.x) + 0.5 * G * t * t; sl.vy = 0; };
+      at(0.3); const late = startTrick(sl, 'front', hill), grabLate = setGrab(sl, true, hill);
+      at(1.2); const early = startTrick(sl, 'front', hill), second = startTrick(sl, 'back', hill);
+      return [late, grabLate, early, second, sl.queue];
+    }""")
+    assert got == [False, False, True, False, None]
+    assert page.errors == []
+
+
+TRICK_FRONT_DONE = 0.72 * 0.8
+
+
+def test_a_stopped_sled_is_pushed_on_with_the_hands(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("() => { me.v = 0.6; me.fallT = 0; }")
+    page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    page.evaluate(TOUCH, ["pointerdown", 180, 500])
+    page.evaluate(TOUCH, ["pointerup", 180, 500])
+    v = page.evaluate("me.v")
+    assert v > 1.8, v
+    assert page.evaluate("me.pushT") > 0
+    # Pushes add up to a slow start and no more; a sled going well is not pushed.
+    got = page.evaluate("""() => {
+      const sl = newSled('t', 't'); sl.v = 0.6;
+      const a = []; for (let i = 0; i < 4; i++) a.push(pushOff(sl));
+      const top = sl.v; sl.v = 8; const fast = pushOff(sl);
+      sl.v = 0.6; sl.air = true; const air = pushOff(sl);
+      return [a, top, fast, air];
+    }""")
+    assert got[0] == [True, True, False, False]
+    assert 3 <= got[1] <= 4.2
+    assert got[2:] == [False, False]
+    assert page.errors == []
+
+
+def test_a_hand_push_is_sent_to_the_other_phones(site, context):
+    # The arms of a push go with the sled's message (net.js pack/unpack), so friends see it too.
+    page = open_game(site, context)
+    got = page.evaluate("""() => {
+      const a = newSled('a', 'a'); a.v = 0.6; pushOff(a);
+      const b = newSled('b', 'b'); unpack(b, pack(a));
+      const c = newSled('c', 'c'); unpack(c, pack(newSled('d', 'd')));
+      return [b.pushT, c.pushT];
+    }""")
+    assert got == [0.35, 0]
     assert page.errors == []

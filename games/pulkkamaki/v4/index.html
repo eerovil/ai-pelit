@@ -33,8 +33,9 @@
   body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 14px);gap:10px 28px}
   body.land .screen>.head{flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:8px}
   body.land h1{font-size:32px}
-  body.land #hills{gap:7px}
-  body.land button.hill{padding:8px 12px}
+  body.land #hills{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  body.land button.hill{padding:5px 9px;font-size:15px;flex-direction:column;align-items:flex-start;gap:0}
+  body.land button.hill small{font-size:12px}
 </style>
 </head>
 <body>
@@ -44,7 +45,7 @@
 <div id="menu" class="screen" hidden>
   <div class="head">
     <h1>Pulkkamäki</h1>
-    <p class="sub">Vedä sormea sivulle: pulkka kääntyy. Hyppyristä ilmaan ja pyyhkäise temppu. Laskeudu suorana!</p>
+    <p class="sub">Vedä sormea sivulle: pulkka kääntyy. Hyppyristä ilmaan ja pyyhkäise temppu. Laskeudu suorana! Pysähtynyt pulkka liikkuu napauttamalla.</p>
   </div>
   <div class="col">
     <div id="hills" class="col"></div>

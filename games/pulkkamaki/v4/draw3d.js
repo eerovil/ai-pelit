@@ -476,7 +476,9 @@ function poseRig(rig, hill, sl, look) {
   const gk = (u.gk || 0) + ((grab ? 1 : 0) - (u.gk || 0)) * 0.3; u.gk = gk;
   P.torso.rotation.x = -1.35 * gk; P.torso.position.y = 0.22 + 0.3 * gk; P.torso.position.z = 0.22 - 0.1 * gk;
   P.legs.rotation.x = 0.0; P.legs.position.y = 0.32 * gk; P.legs.position.z = 0.5 * gk;
-  P.arms.forEach((a, i) => { const sx = i ? 1 : -1; a.rotation.x = -0.2 - 2.6 * gk + (sl.air && !grab ? -0.9 : 0); a.rotation.z = sx * (0.35 - 0.2 * gk); });
+  // A hand push (#517): both arms reach down to the snow and back.
+  const push = sl.pushT > 0 ? Math.sin((1 - sl.pushT / 0.35) * Math.PI) : 0;
+  P.arms.forEach((a, i) => { const sx = i ? 1 : -1; a.rotation.x = -0.2 - 2.6 * gk + (sl.air && !grab ? -0.9 : 0) + 1.1 * push; a.rotation.z = sx * (0.35 - 0.2 * gk + 0.25 * push); });
   // Shadow: on the snow under the sled.
   const gy = groundAt(hill, sl.s, sl.x), sh = u.shadow;
   sh.position.set(X, gy + 0.04, Z);
@@ -549,7 +551,10 @@ function chaseCamera(hill, me, cam, dt, still) {
   want[1] = Math.max(want[1], groundAt(hill, bs, bx) + 1.4);
   if (!V3.cam) V3.cam = want.slice();
   const k = still ? 1 : Math.min(1, dt * 6);
-  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? Math.min(1, dt * 3.5) || 1 : k);
+  // Height follows softly, but the faster the further off it is (#517: down a drop or a steep
+  // stretch the sled falls metres in a moment, and a slow camera lost it under the screen's edge).
+  const ky = still ? 1 : Math.min(1, dt * (3.5 + 1.5 * Math.abs(want[1] - V3.cam[1])));
+  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? ky : k);
   cam.position.set(...V3.cam);
   const ls = d.s + 9, lx = d.x + Math.sin(dir) * 9;
   cam.lookAt(...hillPoint(hill, ls, lx, Math.max(d.y - 1.5, groundAt(hill, ls, lx)) + 0.6));
