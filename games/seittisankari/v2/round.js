@@ -8,6 +8,7 @@ const LX = k => lotX(C0 + k), BX = (i, j) => boxAt(C0 + i, C0 + j);
 const T_BOX = boxAt(TOWER.i, TOWER.j);            // the tower, the city's tallest
 const START = { x: LX(2) + 20, z: LX(2) + 20 };   // a street crossing beside the tower
 const GOAL_NEAR = 120, GOAL_FAR = 300;            // how far the next roof is from the hero, m
+const TOWER_FAR = 600;                            // the tower is the fifth only when this near
 
 // Standing on a building's roof (a hero, or another phone's hero as the host sees it).
 const onTop = (h, b) => h.st === 'ground' && h.y >= b.h - 0.1 && h.x > b.x0 - 1 && h.x < b.x1 + 1 && h.z > b.z0 - 1 && h.z < b.z1 + 1;
@@ -16,17 +17,22 @@ function newWorld() {
   const w = { t: 0, flag: null, goal: -1, gt: 0, done: 0, got: 0, hero: newHero(START.x, 0, START.z, 0) };
   return w;
 }
-// The next roof: every fifth the tower, else a building of 20–150 m 120–300 m from the hero,
-// inside the city's edge. `r` is a random number source (Math.random in play).
+// The next roof: every fifth the tower (when it is within TOWER_FAR), else a building of
+// 20–150 m 120–300 m from the hero, inside the city's edge. `r` is a random number source
+// (Math.random in play). Never the roof just reached, so one landing counts once.
 function pickTarget(w, r) {
-  if ((w.done + 1) % 5 === 0 && T_BOX !== CITY[w.goal]) return T_BOX.id;
-  const h = w.hero, ok = [];
+  const h = w.hero, far = b => { const t = roofTop(b); return Math.hypot(t.x - h.x, t.z - h.z); };
+  if ((w.done + 1) % 5 === 0 && T_BOX.id !== w.goal && far(T_BOX) <= TOWER_FAR) return T_BOX.id;
+  const ok = [];
+  let near = -1, nearD = Infinity;
   for (const b of CITY) {
     if (b.tower || b.h < 20 || b.h > 150 || b.id === w.goal) continue;
-    const t = roofTop(b), d = Math.hypot(t.x - h.x, t.z - h.z);
+    const t = roofTop(b), d = far(b);
     if (d >= GOAL_NEAR && d <= GOAL_FAR && Math.max(Math.abs(t.x), Math.abs(t.z)) < EDGE - 20) ok.push(b.id);
+    if (d >= GOAL_NEAR && d < nearD) { near = b.id; nearD = d; }
   }
-  return ok.length ? ok[Math.floor(r() * ok.length)] : T_BOX.id;
+  if (ok.length) return ok[Math.floor(r() * ok.length)];
+  return near >= 0 ? near : (T_BOX.id !== w.goal ? T_BOX.id : CITY.find(b => b.id !== w.goal).id);
 }
 function setGoal(w, id) {
   w.goal = id; w.gt = 0;

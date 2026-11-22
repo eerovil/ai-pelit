@@ -185,6 +185,12 @@ def test_the_city_marks_a_roof_to_go_to_with_a_flag_and_tells_how_far(site, cont
     r = page.evaluate("""(() => { const b = CITY[world.goal], h = world.hero, t = roofTop(b);
       return { d: Math.hypot(t.x - h.x, t.z - h.z), hgt: b.h, tower: !!b.tower, flag: world.flag && world.flag.x === t.x && world.flag.y === b.h }; })()""")
     assert 120 <= r["d"] <= 300 and 20 <= r["hgt"] <= 150 and not r["tower"] and r["flag"]
+    # What the player reads: the goal and its distance, upright and sideways.
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    for size in ({"width": 360, "height": 740}, {"width": 740, "height": 360}):
+        turn(page, size)
+        page.evaluate("__said.length = 0")
+        page.wait_for_function("__said.some(t => /^Mene merkitylle katolle! \\d+ m$/.test(t))")
     assert page.errors == []
 
 
@@ -194,14 +200,21 @@ def test_standing_on_the_roof_counts_it_and_every_fifth_is_the_tower(site, conte
     page.wait_for_function("CITY[world.goal]")
     seen = []
     for n in range(1, 6):
+        if n == 4:  # end the fourth downtown, so the tower is near enough to be the fifth
+            page.evaluate("setGoal(world, BX(1, 1).id)")
         g0 = page.evaluate("world.goal")
         page.evaluate(ON_GOAL)
         page.wait_for_function(f"world.done === {n} && world.goal !== {g0}")
-        seen.append(page.evaluate("[!!CITY[world.goal].tower, world.gt < 1]"))
+        seen.append(page.evaluate("[!!CITY[world.goal].tower, world.gt < 1, !!world.got && world.got.tower]"))
         assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}tehtavat'))") == n
     # After the fourth roof the fifth target is the tower; after it, a roof again.
     assert [s[0] for s in seen] == [False, False, False, True, False]
-    assert page.evaluate("world.got && !world.got.tower") is not None
+    assert all(s[1] for s in seen)                                   # each new roof's clock starts at 0
+    assert [s[2] for s in seen] == [False, False, False, False, True]  # "Tornin huipulla!"
+    # Over the roof after a swing, the close-by hint points down, not up.
+    page.evaluate("const b = CITY[world.goal], t = roofTop(b); Object.assign(world.hero, { x: t.x, z: t.z, y: b.h + 30, st: 'air', vx: 0, vy: 0, vz: 0 })")
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    page.wait_for_function("__said.some(t => /↓ \\d+ m$/.test(t))")
     assert page.errors == []
 
 

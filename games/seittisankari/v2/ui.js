@@ -179,7 +179,8 @@ function drawGoal(w, top) {
     const t = roofTop(b), dx = t.x - h.x, dz = t.z - h.z, d = Math.round(Math.hypot(dx, dz));
     const y = LAND ? top + 26 : top + 66;   // upright, under ⏸ Valikko
     const say = b.tower ? 'Tornin huipulle! ' : 'Mene merkitylle katolle! ';
-    shadowText(say + (d > 15 ? d + ' m' : '↑ ' + Math.max(0, Math.round(b.h - h.y)) + ' m'), W / 2, y, 15, '#fff', 'center', 800);
+    const up = Math.round(b.h - h.y);   // close by: how far up (or down, after a swing over it)
+    shadowText(say + (d > 15 ? d + ' m' : (up < 0 ? '↓ ' + -up : '↑ ' + up) + ' m'), W / 2, y, 15, '#fff', 'center', 800);
     if (d > 15) drawArrow(W / 2, y + 32, angDiff(cam.yaw, Math.atan2(dx, dz)));
   }
   if (w.got) {
