@@ -612,3 +612,62 @@ def test_a_paused_match_goes_on_from_where_the_guest_drew_it(site, browser, firs
     assert len(ahead) <= 3, ahead
     errors = [e for p in (host, guest, ville) for e in p.errors]
     assert not errors, errors
+
+
+# On the host: while `window.__hold`, its snapshots wait (a stalled link); `window.__release()` sends them all.
+HOLD = """() => { window.__hold = false; const q = []; const send = AiPelitRooms.send.bind(AiPelitRooms);
+  AiPelitRooms.send = (m, to) => { if (m.t === 's' && window.__hold) { q.push([m, to]); return; } send(m, to); };
+  window.__release = () => { for (const [m, to] of q.splice(0)) send(m, to); }; }"""
+
+
+@pytest.mark.parametrize("ms", [False, True], ids=["chromium-clock", "whole-ms-clock"])
+def test_spots_landing_in_a_guests_pause_after_a_stall_do_not_hop_the_drawing(site, browser, ms):
+    """A computer player runs at 5 m/s when the link stalls for 0.5 s: the guest draws them on past the newest
+    spot on a guess (lib/sulava-1 goes on 0.25 s, then stands), short of where they are. Then the room pauses on
+    both phones and the stalled spots land. The guest's clock stands in a pause, and the track eases a correction
+    only when its clock has moved on since the frame before: the drawing must still stand all through the pause,
+    and after it ease onto the spots, not cover the gap in one frame. Also on a clock that counts whole
+    milliseconds (Safari's and Firefox's). It holds because update() draws no track while paused, so the paused
+    moment netClock() returns again after the pause is a frame later than the last drawn one (Areena v9 hopped
+    where its drawing read the paused moment twice)."""
+    host, guest = phones(site, browser)
+    if ms:
+        guest.evaluate("""() => { const n = performance.now.bind(performance);
+          AiPelitSulava.now = () => Math.floor(n()) / 1000; }""")
+    for pg in (host, guest):
+        pg.evaluate(PAUSE)
+    host.evaluate(QUIET)
+    host.evaluate("players[4].x = -12; players[4].y = -5")
+    guest.wait_for_function("Math.abs(players[4].x + 12) < 0.05 && players[4].tr.size() > 3", timeout=5000)
+    host.evaluate(HOLD)
+    host.evaluate(STALLS)
+    guest.evaluate(PZREC, 4)
+    host.evaluate("window.__cpuRun = 4; window.__run = true")
+    guest.wait_for_timeout(800)
+    host.evaluate("window.__hold = true")
+    guest.wait_for_timeout(500)
+    clock = "(performance.timeOrigin + performance.now()) / 1000"
+    guest.evaluate(f"window.__pzAt = {clock}; window.__pz = true")
+    host.evaluate("window.__pz = true; window.__release()")
+    guest.wait_for_timeout(500)
+    host.evaluate("window.__hold = false; window.__pz = false")
+    guest.evaluate(f"window.__goAt = {clock}; window.__pz = false")
+    guest.wait_for_timeout(1000)
+    guest.evaluate("window.__pzStop = true")
+    pr, pz_at, go_at = guest.evaluate("[window.__pr, window.__pzAt, window.__goAt]")
+    stalls = host.evaluate("window.__stall")
+    # The stall outran the guess: when the pause came, the drawn moment was over 0.25 s past the newest spot.
+    at_pz = [f for f in pr if f[0] < pz_at][-1]
+    assert at_pz[3] - at_pz[4] > 0.3, at_pz
+    held = [f for f in pr if pz_at <= f[0] <= go_at]
+    assert len(held) > 3, len(held)
+    assert max(f[1] for f in held) - min(f[1] for f in held) < 0.01, [(round(f[0] - pz_at, 3), round(f[1], 2)) for f in held]
+    # After it, each frame steps at the player's speed (5 m/s, 7 with the catching up), plus the eased gap (0.1 s).
+    gap = 5 * (at_pz[3] - at_pz[4] - 0.25)
+    after = [f for f in pr if f[0] > go_at - 0.05]
+    hops = [(round(t1 - go_at, 3), round(x1 - x0, 2)) for (t0, x0, *_), (t1, x1, *_) in zip(after, after[1:])
+            if not any(st <= t1 <= st + 0.35 for st in stalls)
+            and (x1 - x0 < -0.1 or x1 - x0 > 0.1 + 7 * (t1 - t0) + gap * (1 - math.exp(-(t1 - t0) / 0.1)))]
+    assert not hops, (hops, round(gap, 2), [(round(f[0] - go_at, 3), round(f[1], 2)) for f in pr if f[0] > pz_at - 0.2][:40])
+    assert pr[-1][1] > held[-1][1] + 2  # and it ran on
+    assert not host.errors + guest.errors
