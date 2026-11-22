@@ -183,6 +183,9 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
           slab(floorG[st.floor], '#f3ede0', st.x, mid, st.z, st.w, mid - st.bot, st.d);
           slab(floorG[st.floor + 1], '#f3ede0', st.x, st.top, st.z, st.w, st.top - mid - SLAB, st.d);
           slab(floorG[st.floor + 1], '#8a5a34', st.x, st.top + 0.04, st.z, st.w + 0.06, 0.08, st.d);
+        } else if (st.kind === 'guard') {
+          slab(floorG[st.floor], '#f3ede0', st.x, st.top, st.z, st.w, st.top - st.bot, st.d);
+          slab(floorG[st.floor], '#8a5a34', st.x, st.top + 0.04, st.z, st.w + 0.06, 0.08, st.d + 0.06);
         } else if (st.kind === 'door') {
           // Hinged on the wall side; swings out into the room when it opens.
           const left = st.stair === 0, piv = new T.Group(), hx = left ? st.x - st.w / 2 : st.x + st.w / 2;
@@ -397,7 +400,7 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
     // ---- Each frame ----
     function poseKid(g, k, rt, clock, w, cut) {
       const u = g.userData, P = u.parts, L = lavaAt(rt, w);
-      let x = k.dx, y = k.dy, z = k.dz, face = k.df, sit = false;
+      let x = k.dx, y = k.dy, z = k.dz, face = k.df, sit = false, ball = false;
       if (k.out) {
         const t = rt - k.outRt;
         if (t < 0.9) { x = k.fellX; z = k.fellZ; y = L - t * 1.2; }
@@ -410,11 +413,12 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
           if (w.house) {
             const fy = cut * FLOOR_H;
             if (cut < 2 && fy + SILL_Y > L + 0.25) y += fy;
-            else { x = BALLOON.x + (n - (m - 1) / 2) * 0.42; y = BALLOON.y + 0.39 - 0.42; z = BALLOON.z + 0.35; }
+            else { ball = true; x = BALLOON.x + (n - (m - 1) / 2) * 0.42; y = BALLOON.y + 0.39 - 0.42; z = BALLOON.z + 0.35; }
           }
         }
       }
-      g.visible = y > L - 1.1 && y < (cut < 2 ? (cut + 1) * FLOOR_H - SLAB : Infinity);
+      // The balloon hangs above any cut: the kids in it always show.
+      g.visible = ball || (y > L - 1.1 && y < (cut < 2 ? (cut + 1) * FLOOR_H - SLAB : Infinity));
       g.position.set(x, y, z);
       g.rotation.y = -face;
       const sp = Math.hypot(k.vx, k.vz), air = !k.ground && !k.out && Math.abs(k.vy) > 0.3;
@@ -474,7 +478,8 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       const seaOn = !!(w.house && (cut === 2 || L > FLOOR_H * 2 - 0.2) && on);
       sea.visible = seaOn; lava.position.y = L;
       if (skyG) skyG.visible = seaOn;
-      if (balloon) balloon.visible = seaOn || L > FLOOR_H + SILL_Y - 0.3;
+      // The balloon shows whenever the fallen kids sit in it (poseKid(): the sill on screen is under the lava).
+      if (balloon) balloon.visible = seaOn || !(cut < 2 && cut * FLOOR_H + SILL_Y > L + 0.25);
       if (w.house) scene.background = seaOn ? SKY : houseBg;
       // The lava: comes up through the floor at the start, then rises and moves slowly.
       const fade = on ? Math.min(1, rt / 0.6) : 0;

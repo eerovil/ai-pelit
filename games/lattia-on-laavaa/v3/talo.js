@@ -37,7 +37,7 @@ ROOMS.push({
     ['armchair', 3.4, -3.6, 1.4, 1.3, 0.75, 2, 0], ['tvbench', 0.6, -4.5, 2.2, 0.7, 0.55, 2, 0],
     ['table', 0, -1.0, 2.2, 1.2, 0.6, 3, 0], ['shelf', 6.2, -2.2, 0.9, 2.6, 1.6, 2, 0],
     ['pouf', -2.2, 1.0, 0.9, 0.9, 0.5, 3, 0], ['pouf', 2.4, 1.2, 0.9, 0.9, 0.5, 1, 0],
-    ['chest', -5.5, -0.9, 0.8, 1.4, 0.6, 3, 0], ['cushion', -0.2, 2.6, 1.0, 1.0, 0.25, 0, 0],
+    ['chest', -5.2, -0.9, 0.8, 1.4, 0.6, 3, 0], ['cushion', -0.2, 2.6, 1.0, 1.0, 0.25, 0, 0],
     ['cushion', 4.6, 2.8, 1.0, 1.0, 0.25, 0, 0], ['sidetable', 5.3, 0.6, 0.8, 0.8, 0.65, 1, 0],
     ['stool', -4.6, 1.6, 0.7, 0.7, 0.55, 3, 0], ['pouf', 1.8, 3.6, 0.8, 0.8, 0.45, 0, 0],
     ['pouf', -6.35, 4.1, 1.0, 1.0, 0.45, 4, 0],
@@ -114,8 +114,10 @@ function houseStatics() {
     const top = f * FLOOR_H, bot = top - SLAB, sx = STAIR_X[f - 1], sx0 = sx - STAIR_W / 2, sx1 = sx + STAIR_W / 2;
     if (f === 1) add('floor', sx1, X1, Z0, Z1, bot, top, { floor: f });
     else add('floor', X0, sx0, Z0, Z1, bot, top, { floor: f });
-    add('floor', sx0, sx1, Z0, STAIR_Z0, bot, top, { floor: f, landing: f - 1 });
+    add('floor', sx0, sx1, Z0, STAIR_Z0, bot, top, { floor: f });
     add('floor', sx0, sx1, STAIR_Z1, Z1, bot, top, { floor: f });
+    // A rail across the hole's front edge too, so the strip in front of it is no way down.
+    add('guard', sx0, sx1, STAIR_Z1 - RAIL_W, STAIR_Z1, top, top + RAIL_H, { wall: true, floor: f });
   }
   STATICS = L;
   return L;

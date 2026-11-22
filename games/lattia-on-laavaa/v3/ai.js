@@ -135,7 +135,8 @@ function stairRoute(w, k, b, cur, sol) {
   const sx = STAIR_X[n];
   // On the stairs (or right over them): straight up to the landing; the steps are walked.
   if (cur && cur.kind === 'step' && cur.stair === n) return { walk: true, x: sx, z: (Z0 + STAIR_Z0) / 2 };
-  const step1 = sol.find(s => s.kind === 'step' && s.stair === n && s.step === 1);
+  // The lowest step the lava has left: the bottom ones go under first.
+  const step1 = sol.filter(s => s.kind === 'step' && s.stair === n).sort((a, b) => a.step - b.step)[0];
   // In the air on the way to the stairs: keep heading for what it jumped at.
   if (!cur && b.target && sol.some(s => s.id === b.target)) return {};
   const front = sol.find(s => s.id[0] === 'p' && w.pieces[+s.id.slice(1)].order === 4 && w.pieces[+s.id.slice(1)].floor === n);
