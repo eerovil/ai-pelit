@@ -4,7 +4,7 @@ figure there on every phone.
 
 The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v20, games/keihas/v19, games/kuula/v13, games/korkeushyppy/v17,
-games/seivashyppy/v18, games/moukari/v15, games/makihyppy/v13, games/saappaanheitto/v2,
+games/seivashyppy/v18, games/moukari/v15, games/makihyppy/v14, games/saappaanheitto/v2,
 games/uimahyppy/v1.
 """
 
@@ -21,7 +21,7 @@ EVENTS = {
     "korkeushyppy/v17": "drawAthlete",
     "seivashyppy/v18": "drawRunner",
     "moukari/v15": "drawThrower",
-    "makihyppy/v13": "drawJumper",
+    "makihyppy/v14": "drawJumper",
     "saappaanheitto/v2": "drawAthlete",
     "uimahyppy/v1": "drawDiverAt",
 }
