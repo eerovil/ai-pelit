@@ -1,6 +1,7 @@
 {
   "title": "Pasianssi",
   "description": "Klassinen pasianssi: siirrä kaikki kortit maapinoihin.",
+  "category": "rauhalliset",
   "versions": [
     {
       "n": 1,

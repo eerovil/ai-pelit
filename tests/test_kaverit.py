@@ -311,8 +311,8 @@ def test_an_invite_into_another_game_opened_from_the_shelf_keeps_the_way_up(phon
     bertta = phones("Bertta", None, player=B)
     bertta.evaluate("localStorage.setItem('ai-pelit:_kaverit:on', 'true')")
     bertta.reload()
-    bertta.wait_for_selector('.card[data-slug="toinen"]')
-    bertta.click('.card[data-slug="toinen"] .button.play')
+    bertta.wait_for_selector('.shelf-row[data-slug="toinen"]')
+    bertta.click('.shelf-row[data-slug="toinen"] .button.play')
     bertta.wait_for_url(re.compile(r".*/games/toinen/v1/$"))
     bertta.wait_for_function("window.AiPelitKaverit && AiPelitKaverit.state")
     host = phones("Aino", player=A)
@@ -477,8 +477,8 @@ def test_a_request_on_a_games_page_comes_as_a_banner(phones):
     phones.api.names.update({A: "Aino", B: "Bertta", "c" * 32: "Ceci"})
     phones.api.friends.add(frozenset((A, B)))
     shelf = phones("Aino", None, player=A)
-    shelf.wait_for_selector('.card[data-slug="huonetesti"]')
-    shelf.click('.card[data-slug="huonetesti"] .card-main')
+    shelf.wait_for_selector('.shelf-row[data-slug="huonetesti"]')
+    shelf.click('.shelf-row[data-slug="huonetesti"] .shelf-row-main')
     shelf.wait_for_selector(".game-head")
     # Ceci asks while Aino reads a game's page; her next "now playing" brings it as a banner.
     phones.api.requests.add(("c" * 32, pid_of(A)))
@@ -515,7 +515,7 @@ def test_an_old_invite_can_be_sent_again_while_the_room_is_open(phones):
 def test_a_taken_nickname_on_the_friends_page_keeps_the_field(phones):
     phones.api.taken.add("aino")
     shelf = phones(None, None, player=A)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.click(".friends-link")
     shelf.fill(".friends-name", "Aino")
     shelf.locator(".friends-form button").click()
@@ -545,7 +545,7 @@ def press_save_across_a_refresh(page):
 def test_a_refresh_mid_tap_keeps_the_nickname_save(phones):
     phones.api.taken.add("aino")
     shelf = phones(None, None, player=A)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.click(".friends-link")
     shelf.wait_for_selector(".friends-none")
     shelf.fill(".friends-name", "Aino")
@@ -564,7 +564,7 @@ def test_a_refresh_mid_tap_keeps_the_nickname_save(phones):
 def test_a_late_notification_state_keeps_the_nickname_form(phones):
     """The switch's state waits on the service worker; when it lands late, it redraws only its row (#443)."""
     shelf = phones(None, None, player=A)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.evaluate("""() => {
       const real = navigator.serviceWorker.ready;
       const late = new Promise(ok => { window.__pushGo = () => real.then(ok); });
@@ -596,7 +596,7 @@ def hold_name_saves(page):
 def test_a_refresh_while_the_nickname_saves_keeps_the_form(phones):
     phones.api.taken.add("aino")
     shelf = phones(None, None, player=A)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.click(".friends-link")
     shelf.wait_for_selector(".friends-none")
     held = hold_name_saves(shelf)
@@ -632,7 +632,7 @@ def touch(page, kind, box=None):
 def test_a_late_notification_state_mid_touch_on_a_390_px_phone_keeps_the_nickname_save(phones):
     """The switch's late answer lands while a finger is on "Tallenna": the tap still saves (#443)."""
     shelf = phones(None, None, player=A, width=390, height=844)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.evaluate("""() => {
       const real = navigator.serviceWorker.ready;
       const late = new Promise(ok => { window.__pushGo = () => real.then(ok); });
@@ -655,7 +655,7 @@ def test_a_late_notification_state_mid_touch_on_a_390_px_phone_keeps_the_nicknam
 def test_a_refresh_mid_touch_on_a_390_px_phone_keeps_the_nickname_save(phones):
     phones.api.taken.add("aino")
     shelf = phones(None, None, player=A, width=390, height=844)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.click(".friends-link")
     shelf.wait_for_selector(".friends-none")
     for name in ("Aino", "Aino2"):
@@ -675,7 +675,7 @@ def test_a_refresh_mid_touch_on_a_390_px_phone_keeps_the_nickname_save(phones):
 
 def test_a_redraw_held_by_a_cancelled_touch_still_comes(phones):
     shelf = phones(None, None, player=A)
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.click(".friends-link")
     shelf.wait_for_selector(".friends-none")
     box = shelf.locator(".friends-form button").bounding_box()
@@ -730,7 +730,7 @@ def test_a_name_rejected_while_the_friends_page_is_open_offers_a_new_one(phones)
     shelf = phones("Aino", None, player=A)
     registered(shelf, "Aino")
     shelf.reload()
-    shelf.wait_for_selector(".card")
+    shelf.wait_for_selector(".shelf-row")
     shelf.click(".friends-link")
     shelf.wait_for_selector(".friends-none, .friend")
     assert shelf.locator(".friends-name").count() == 0

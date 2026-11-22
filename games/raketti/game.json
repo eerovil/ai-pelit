@@ -1,6 +1,7 @@
 {
   "title": "Raketti",
   "description": "Laukaise kaksivaiheinen raketti, lennä kiertoradalle ja telakoidu avaruusasemaan. Realistinen 2D-lento ilman autopilottia.",
+  "category": "vauhti",
   "versions": [
     {
       "n": 1,

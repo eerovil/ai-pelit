@@ -71,10 +71,10 @@ def test_the_shelf_shows_how_many_play_now_and_nothing_offline(site, context):
     fake.now = {"pomppu": 2}
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector('.card[data-slug="pomppu"] .now:text("● 2")')
-    assert page.locator('.card[data-slug="pomppu"] .now').get_attribute("aria-label") == "2 pelaa nyt"
+    page.wait_for_selector('.shelf-row[data-slug="pomppu"] .now:text("● 2")')
+    assert page.locator('.shelf-row[data-slug="pomppu"] .now').get_attribute("aria-label") == "2 pelaa nyt"
     # A game nobody plays now shows nothing.
-    assert page.locator('.card[data-slug="hyppy"] .now').inner_text() == ""
+    assert page.locator('.shelf-row[data-slug="hyppy"] .now').inner_text() == ""
     # The game's own page shows it too.
     page.goto(f"{site.url}#/pomppu")
     page.wait_for_selector('.game-head .now:text("● 2")')
@@ -83,12 +83,13 @@ def test_the_shelf_shows_how_many_play_now_and_nothing_offline(site, context):
     fake.online = False
     page.goto(site.url)
     page.reload()
-    page.wait_for_selector(".card")
+    page.wait_for_selector(".shelf-row")
     page.wait_for_timeout(300)
-    assert page.locator('.card[data-slug="pomppu"] .now').inner_text() == ""
+    assert page.locator('.shelf-row[data-slug="pomppu"] .now').inner_text() == ""
 
 
-def test_a_group_card_adds_up_its_games(site, context):
+def test_each_event_shows_its_own_count(site, context):
+    # #523: no group card adds them up any more; each athletics event is its own row.
     make_game(site.games, "keihas", [game_page("v1")], group="yleisurheilu")
     make_game(site.games, "kuula", [game_page("v1")], group="yleisurheilu")
     site.build()
@@ -96,7 +97,8 @@ def test_a_group_card_adds_up_its_games(site, context):
     fake.now = {"keihas": 1, "kuula": 3}
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector('.card[data-slug="yleisurheilu"] .now:text("● 4")')
+    page.wait_for_selector('.shelf-row[data-slug="kuula"] .now:text("● 3")')
+    assert page.locator('.shelf-row[data-slug="keihas"] .now').inner_text() == "● 1"
 
 
 def test_a_page_hidden_and_shown_again_says_it_left_and_is_back(site, context):
@@ -129,16 +131,16 @@ def test_the_number_follows_on_a_390_px_phone_without_a_reload(site, browser):
         page = context.new_page()
         page.clock.install()
         page.goto(site.url)
-        page.wait_for_selector('.card[data-slug="pomppu"] .now:text("● 1")')
+        page.wait_for_selector('.shelf-row[data-slug="pomppu"] .now:text("● 1")')
         # Two more start playing, then everyone stops: the shelf follows on its 20-second reads.
         fake.now = {"pomppu": 3}
         page.clock.run_for(21000)
-        page.wait_for_selector('.card[data-slug="pomppu"] .now:text("● 3")')
+        page.wait_for_selector('.shelf-row[data-slug="pomppu"] .now:text("● 3")')
         fake.now = {}
         page.clock.run_for(21000)
-        page.wait_for_function("document.querySelector('.card[data-slug=\"pomppu\"] .now').textContent === ''")
+        page.wait_for_function("document.querySelector('.shelf-row[data-slug=\"pomppu\"] .now').textContent === ''")
         # The card's line stays inside the card at 390 px.
-        box = page.locator('.card[data-slug="pomppu"]').bounding_box()
+        box = page.locator('.shelf-row[data-slug="pomppu"]').bounding_box()
         assert box["x"] + box["width"] <= 390
     finally:
         context.close()

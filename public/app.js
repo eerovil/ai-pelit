@@ -1,5 +1,6 @@
 // The shelf: lists every game from catalog.json and every version of one game.
-// Routes are the hash: "" or "#/" is the shelf, "#/<slug>" is one game or one group of games.
+// Routes are the hash: "" or "#/" is the shelf, "#/<slug>" is one game; a category's key (an old
+// group page) opens the shelf with that category's button on.
 (function () {
   'use strict';
 
@@ -48,153 +49,126 @@
     ]);
   }
 
-  function gameCard(game) {
+  // The shelf (#523): every game is one short row, athletics events too. Above the rows, the
+  // games this phone played last, a search box and buttons: Kaikki, Uudet, Päivitetyt, then the
+  // categories (CATEGORIES in scripts/build.py). Everything runs on the phone from catalog.json.
+  function shelfRow(game) {
     var v = latest(game);
-    return el('li', { class: 'card', 'data-slug': game.slug }, [
-      el('a', { class: 'card-main', href: '#/' + game.slug }, [
-        thumb(game, 'thumb', 72, 96),
-        el('div', {}, [
-          el('h2', { text: game.title }),
-          el('p', { class: 'desc', text: game.description }),
-          metaLine(game),
-          el('p', { class: 'top-score', 'data-top': game.slug, text: topText(game.slug) }),
-        ]),
+    return el('li', { class: 'shelf-row', 'data-slug': game.slug }, [
+      el('a', { class: 'shelf-row-main', href: '#/' + game.slug }, [
+        thumb(game, 'thumb small', 36, 48),
+        el('div', {}, [el('h2', { text: game.title }), metaLine(game)]),
       ]),
       el('a', { class: 'button play', href: playUrl(game.slug, v.n), 'aria-label': 'Pelaa ' + game.title, text: '▶' }),
     ]);
   }
 
-  // Shelf groups (#153): one card on the shelf, where its newest game would be, opens a page of
-  // its games. The build lists only groups that have games (scripts/build.py GROUPS).
-  function findGroup(slug) {
-    return (catalog.groups || []).filter(function (g) { return g.slug === slug; })[0];
+  function isCategory(slug) {
+    return (catalog.categories || []).some(function (c) { return c.slug === slug; });
   }
 
-  function members(slug) {
-    return catalog.games.filter(function (g) { return g.group === slug; });
+  // The buttons: two orders over every game, then one per category, which lists most played first.
+  var NEW = 'uudet', UPDATED = 'paivitetyt';
+  function shelfButtons() {
+    return [['', 'Kaikki'], [NEW, 'Uudet'], [UPDATED, 'Päivitetyt']].concat(
+      (catalog.categories || []).map(function (c) { return [c.slug, c.title]; }));
   }
 
-  function groupCard(group) {
-    var games = members(group.slug);
-    return el('li', { class: 'card group', 'data-slug': group.slug }, [
-      el('a', { class: 'card-main', href: '#/' + group.slug }, [
-        thumb(games[0], 'thumb stack', 72, 96),
-        el('div', {}, [
-          el('h2', { text: group.title }),
-          el('p', { class: 'desc', text: games.map(function (g) { return g.title; }).join(', ') }),
-          el('p', { class: 'muted meta' }, [
-            document.createTextNode(games.length + ' peliä'),
-            el('span', { class: 'plays', text: playsText(group.slug) }),
-            nowBadge(group.slug),
-          ]),
-        ]),
-      ]),
-      el('a', { class: 'button play open', href: '#/' + group.slug, 'aria-label': 'Avaa ' + group.title, text: '›' }),
-    ]);
-  }
-
-  // The shelf's order (#279): most played first (the default), newest version first (the
-  // catalog's own order, scripts/build.py), or by name. The choice is kept on the phone.
-  var SORTS = [['suosituimmat', 'Suosituimmat'], ['paivitetyt', 'Päivitetyt'], ['a-o', 'A–Ö']];
-  var SORT_KEY = 'ai-pelit:_hylly:jarjestys';
-  var sortBy = SORTS[0][0];
+  // The search text and the button last until the app closes, so back from a game finds the
+  // same list and a new start shows every game.
+  var FIND_KEY = 'ai-pelit:_hylly:haku';
+  var find = { q: '', cat: '' };
   try {
-    var savedSort = localStorage.getItem(SORT_KEY);
-    if (SORTS.some(function (s) { return s[0] === savedSort; })) sortBy = savedSort;
+    var savedFind = JSON.parse(sessionStorage.getItem(FIND_KEY));
+    if (savedFind && typeof savedFind.q === 'string' && typeof savedFind.cat === 'string') find = savedFind;
   } catch (e) {}
-
-  function playCount(slug) {
-    return findGroup(slug)
-      ? members(slug).reduce(function (sum, g) { return sum + (plays[g.slug] || 0); }, 0)
-      : plays[slug] || 0;
+  function keepFind() {
+    try { sessionStorage.setItem(FIND_KEY, JSON.stringify(find)); } catch (e) {}
   }
 
-  // Shelf items (a game, or a group where its newest game would be) in the chosen order. Ties
-  // keep the catalog's order, newest first.
-  function sorted(items) {
+  function playCount(slug) { return plays[slug] || 0; }
+
+  // The games the chosen button shows, in its order: Uudet by release (the first version, not an
+  // update), Päivitetyt by the newest version (the catalog's own order, scripts/build.py), and
+  // the rest most played first. Ties keep the catalog's order.
+  function shelfGames() {
     var at = {};
-    catalog.games.forEach(function (g, i) {
-      if (!(g.slug in at)) at[g.slug] = i;
-      if (g.group && !(g.group in at)) at[g.group] = i;
+    catalog.games.forEach(function (g, i) { at[g.slug] = i; });
+    var q = find.q.trim().toLocaleLowerCase('fi');
+    var games = catalog.games.filter(function (g) {
+      if (find.cat && find.cat !== NEW && find.cat !== UPDATED && g.category !== find.cat) return false;
+      return !q || (g.title + ' ' + g.description).toLocaleLowerCase('fi').indexOf(q) >= 0;
     });
-    return items.slice().sort(function (a, b) {
-      if (sortBy === 'suosituimmat') {
+    return games.sort(function (a, b) {
+      if (find.cat === NEW) {
+        var r = (b.released || 0) - (a.released || 0);
+        if (r) return r;
+      } else if (find.cat !== UPDATED) {
         var d = playCount(b.slug) - playCount(a.slug);
         if (d) return d;
-      } else if (sortBy === 'a-o') {
-        var c = a.title.localeCompare(b.title, 'fi');
-        if (c) return c;
       }
       return at[a.slug] - at[b.slug];
     });
   }
 
-  function shelfItems() {
-    var items = [], shown = {};
-    catalog.games.forEach(function (game) {
-      var group = game.group && findGroup(game.group);
-      if (!group) { items.push(game); return; }
-      if (shown[group.slug]) return;
-      shown[group.slug] = true;
-      items.push(group);
-    });
-    return items;
-  }
-
   function fillShelf(list) {
-    list.replaceChildren.apply(list, sorted(shelfItems()).map(function (item) {
-      return findGroup(item.slug) ? groupCard(item) : gameCard(item);
-    }));
+    var games = shelfGames();
+    list.replaceChildren.apply(list, games.length ? games.map(shelfRow)
+      : [el('li', { class: 'muted no-hits', text: 'Ei osumia.' })]);
   }
 
-  // A small menu in the header, on the shelf only, so the shelf gets no taller.
-  function sortPicker() {
-    var select = el('select', { class: 'sort', 'aria-label': 'Järjestys' });
-    SORTS.forEach(function (s) { select.appendChild(el('option', { value: s[0], text: s[1] })); });
-    select.value = sortBy;
-    select.addEventListener('change', function () {
-      sortBy = select.value;
-      try { localStorage.setItem(SORT_KEY, sortBy); } catch (e) {}
-      var list = view.querySelector('.cards');
-      if (list) fillShelf(list);
+  // The games this phone opened last (#523), newest first: public/back.js keeps the list.
+  var RECENT_KEY = 'ai-pelit:_hylly:viimeksi';
+  function recentRow() {
+    var slugs = [];
+    try { slugs = JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) {}
+    var tiles = (Array.isArray(slugs) ? slugs : []).map(gameOf).filter(Boolean).slice(0, 8).map(function (g) {
+      return el('a', { class: 'recent', href: playUrl(g.slug, latest(g).n), 'data-slug': g.slug, 'aria-label': 'Pelaa ' + g.title }, [
+        el('span', { class: 'recent-pic' }, [thumb(g, 'thumb', 92, 123), el('span', { class: 'recent-play', text: '▶' })]),
+        el('span', { class: 'recent-name', text: g.title }),
+      ]);
     });
-    return select;
-  }
-
-  function showSortPicker(on) {
-    var old = document.querySelector('.top .sort');
-    if (old) old.remove();
-    if (on) statusEl.parentNode.insertBefore(sortPicker(), statusEl);
+    if (!tiles.length) return null;
+    return el('section', { class: 'recent-games' }, [
+      el('h2', { text: 'Viimeksi pelatut' }),
+      el('div', { class: 'recent-row' }, tiles),
+    ]);
   }
 
   function renderShelf() {
     document.title = 'AI-pelit';
-    var list = el('ul', { class: 'cards' });
+    if (find.cat && !shelfButtons().some(function (b) { return b[0] === find.cat; })) find.cat = '';
+    var list = el('ul', { class: 'shelf-rows' });
+    var search = el('input', { class: 'shelf-search', type: 'search', placeholder: '🔍 Etsi peliä', 'aria-label': 'Etsi peliä', enterkeyhint: 'search', autocomplete: 'off' });
+    search.value = find.q;
+    search.addEventListener('input', function () { find.q = search.value; keepFind(); fillShelf(list); });
+    // Enter only closes the keyboard: the list already shows the hits.
+    search.addEventListener('keydown', function (e) { if (e.key === 'Enter') search.blur(); });
+    var buttons = el('div', { class: 'shelf-buttons' });
+    shelfButtons().forEach(function (b) {
+      var btn = el('button', { type: 'button', class: 'shelf-button', 'data-cat': b[0], 'aria-pressed': String(find.cat === b[0]), text: b[1] });
+      btn.addEventListener('click', function () {
+        find.cat = b[0];
+        keepFind();
+        Array.prototype.forEach.call(buttons.children, function (o) { o.setAttribute('aria-pressed', String(o === btn)); });
+        fillShelf(list);
+      });
+      buttons.appendChild(btn);
+    });
     fillShelf(list);
-    showSortPicker(catalog.games.length > 1);
     var rooms = el('section', { class: 'open-rooms', hidden: '' });
     var playing = el('section', { class: 'friends-playing', hidden: '' });
-    view.replaceChildren(playing, rooms, catalog.games.length ? list : el('p', { class: 'muted', text: 'Ei vielä pelejä.' }));
+    view.replaceChildren.apply(view, [playing, rooms].concat(catalog.games.length
+      ? [recentRow(), search, buttons, list].filter(Boolean)
+      : [el('p', { class: 'muted', text: 'Ei vielä pelejä.' })]));
+    // The chosen button in sight, when it is far along the row.
+    var on = buttons.querySelector('[aria-pressed="true"]');
+    if (on && on.offsetLeft + on.offsetWidth > buttons.clientWidth) buttons.scrollLeft = on.offsetLeft - 16;
     drawPlaying();
     showRooms(rooms);
     showWaitingNames();
     loadPlays();
     loadPlaying();
-    loadTops();
-  }
-
-  function renderGroup(group) {
-    document.title = group.title + ' · AI-pelit';
-    showSortPicker(false);
-    view.replaceChildren(
-      el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
-      el('h1', { text: group.title }),
-      el('p', { class: 'group-desc', text: group.description }),
-      el('ul', { class: 'cards' }, sorted(members(group.slug)).map(gameCard))
-    );
-    loadPlays();
-    loadPlaying();
-    loadTops();
   }
 
   // Every game's public rooms on the shelf (#203): the rooms whose host switched 🌍 Julkinen on
@@ -241,39 +215,7 @@
       });
   }
 
-  // High scores outside the games (#25): each card shows its game's no. 1, all from one request,
-  // kept on the phone like the play counts. public/scores.js knows how each game's score reads.
-  var TOPS_KEY = 'ai-pelit:_tulokset:ykkoset';
-  var tops = {};
-  try { tops = JSON.parse(localStorage.getItem(TOPS_KEY)) || {}; } catch (e) {}
   var scores = window.AiPelitScores;
-
-  function topText(slug) {
-    var t = tops[slug];
-    if (!t || !scores) return '';
-    var g = scores.games[slug];
-    // A game with named lists (Tikanheitto) shows its first list's no. 1 with the list's name.
-    if (g && g.lists) {
-      var named = g.lists.filter(function (l) { return l[0] === t.board; })[0];
-      return named ? '🏆 ' + named[1] + ': ' + t.name + ' · ' + scores.scoreText(slug, t.score) : '';
-    }
-    var prefix = g && g.boardPrefix || 'taso-';
-    // A no. 1 kept from a list the shelf no longer shows is not shown as this one's. This also
-    // hides Vuoristorata v5's cached `elamys-N` points after v6 returned to `taso-N` times.
-    if (g && g.boards ? !t.board || !t.board.startsWith(prefix) : t.board && t.board !== 'main') return '';
-    return '🏆 ' + (g && g.boards ? 'Taso ' + t.board.slice(prefix.length) + ': ' : '') + t.name + ' · ' + scores.scoreText(slug, t.score);
-  }
-
-  function loadTops() {
-    if (!scores) return;
-    scores.top().then(function (b) {
-      tops = b.games || {};
-      try { localStorage.setItem(TOPS_KEY, JSON.stringify(tops)); } catch (e) {}
-      Array.prototype.forEach.call(view.querySelectorAll('.top-score[data-top]'), function (p) {
-        p.textContent = topText(p.getAttribute('data-top'));
-      });
-    }).catch(function () {});
-  }
 
   // A game's page: its top 10, and the player's own place under it. Hiihto has a list per course,
   // Tikanheitto named lists (Mökkitikka first, then Pistekisa) picked with a button each.
@@ -440,8 +382,7 @@
   try { plays = JSON.parse(localStorage.getItem(PLAYS_KEY)) || {}; } catch (e) {}
 
   function playsText(slug) {
-    // A group's card counts all its games together.
-    var n = catalog ? playCount(slug) : plays[slug];
+    var n = playCount(slug);
     if (!n) return '';
     return ' · pelattu ' + n + (n === 1 ? ' kerran' : ' kertaa');
   }
@@ -455,19 +396,17 @@
         plays = b.games;
         try { localStorage.setItem(PLAYS_KEY, JSON.stringify(plays)); } catch (e) {}
         // New counts can change the most-played order: the shelf follows them.
-        var list = view.querySelector('.cards');
-        if (changed && sortBy === 'suosituimmat' && list) {
+        // Only the list is redrawn, so the search box keeps its text and the keyboard.
+        var list = view.querySelector('.shelf-rows');
+        if (changed && list && catalog) {
           var before = Array.prototype.map.call(list.children, function (c) { return c.getAttribute('data-slug'); }).join();
-          var group = location.hash.match(/^#\/([a-z0-9-]+)/);
-          var items = group ? members(group[1]) : shelfItems();
-          if (sorted(items).map(function (i) { return i.slug; }).join() !== before) {
-            if (group) list.replaceChildren.apply(list, sorted(items).map(gameCard));
-            else fillShelf(list);
+          if (shelfGames().map(function (g) { return g.slug; }).join() !== before) {
+            fillShelf(list);
             return;
           }
         }
-        Array.prototype.forEach.call(view.querySelectorAll('.card[data-slug] .plays'), function (span) {
-          span.textContent = playsText(span.closest('.card').getAttribute('data-slug'));
+        Array.prototype.forEach.call(view.querySelectorAll('[data-slug] .plays'), function (span) {
+          span.textContent = playsText(span.closest('[data-slug]').getAttribute('data-slug'));
         });
       })
       .catch(function () {});
@@ -479,7 +418,6 @@
   // number would be wrong, so offline nothing shows.
   var playing = {}, playingTimer = 0;
   function nowCount(slug) {
-    if (catalog && findGroup(slug)) return members(slug).reduce(function (sum, g) { return sum + (playing[g.slug] || 0); }, 0);
     return playing[slug] || 0;
   }
   function nowBadge(slug) {
@@ -522,15 +460,12 @@
 
   function renderGame(slug) {
     var game = catalog.games.filter(function (g) { return g.slug === slug; })[0];
-    showSortPicker(false);
     if (!game) {
       view.replaceChildren(el('p', { text: 'Peliä ei löytynyt.' }), el('a', { href: '#/', text: '‹ Kaikki pelit' }));
       return;
     }
     document.title = game.title + ' · AI-pelit';
     var v = latest(game);
-    // A game in a group goes up to the group's page, the others to the shelf.
-    var group = game.group && findGroup(game.group);
     // Every version's note as the game's history; only the newest is kept and played (#346).
     var versions = el('ol', { class: 'versions', reversed: '' });
     game.versions.slice().reverse().forEach(function (ver) {
@@ -544,9 +479,7 @@
       ].filter(Boolean)));
     });
     view.replaceChildren.apply(view, [
-      group
-        ? el('a', { class: 'back', href: '#/' + group.slug, 'data-up': '', text: '‹ ' + group.title })
-        : el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
+      el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('div', { class: 'game-head' }, [
         thumb(game, 'thumb big', 120, 160),
         el('div', {}, [el('h1', { text: game.title }), el('p', { text: game.description }), metaLine(game)]),
@@ -563,13 +496,20 @@
   function render() {
     if (!catalog) return;
     var m = location.hash.match(/^#\/([a-z0-9-]+)/);
-    var group = m && findGroup(m[1]);
+    // An old address of a shelf group or a category (#/yleisurheilu, #523) is the shelf with
+    // that button on, in the old page's place.
+    if (m && isCategory(m[1]) && !gameOf(m[1])) {
+      find = { q: '', cat: m[1] };
+      keepFind();
+      history.replaceState(history.state, '', '#/');
+      m = null;
+    }
     // The friends page reads every 10 s. The front page of a phone with a nickname but no friends
     // yet reads every 30 s, so the first request shows there too; with friends, the "now playing"
     // message every 30 s brings requests already.
     if (friends) {
-      // Requests show on the front page and the friends page themselves; on a game's or a
-      // group's page they come as kaverit.js's banner.
+      // Requests show on the front page and the friends page themselves; on a game's page they
+      // come as kaverit.js's banner.
       friends.quietRequests = !m || m[1] === 'kaverit';
       friends.quietInvites = !m || m[1] === 'kaverit';
       friends.drawBanner();
@@ -578,7 +518,7 @@
     }
     if (m && m[1] === 'kaverit' && friends) return renderFriends();
     pushNow = null; pushError = ''; // the friends page reads the notification switch again
-    if (group) renderGroup(group); else if (m) renderGame(m[1]); else renderShelf();
+    if (m) renderGame(m[1]); else renderShelf();
   }
 
   // Friends (#324), from public/kaverit.js: the friends page (#/kaverit), and on the shelf's
@@ -697,7 +637,6 @@
     // Every redraw waits while the nickname form is pressed (see namePress).
     if (namePress) { nameRedraw = true; return; }
     document.title = 'Kaverit · AI-pelit';
-    showSortPicker(false);
     var st = friends.state, parts = [
       el('a', { class: 'back', href: '#/', text: '‹ Kaikki pelit' }),
       el('h1', { text: '👫 Kaverit' }),
@@ -817,7 +756,7 @@
     } else if (game) {
       e.preventDefault();
       var url = new URL(href, location.href);
-      // A game opened from the shelf or a group's page gets its own page between them, so back
+      // A game opened from the shelf gets its own page between them, so back
       // from it goes there.
       if (location.hash !== '#/' + game[1]) goDown('#/' + game[1]);
       // back.js reads this and steps back here from the chip instead of opening the page anew.
@@ -827,13 +766,7 @@
   });
   // A room code typed in game A that belongs to game B (rooms.js) steps back here to A's page and
   // leaves this note: A's page becomes B's, and B opens over it, so back from B goes to B's page.
-  // When B's page belongs under another parent than A's (a shelf group, #153), the history below
-  // it is made B's own: shelf → B's group → B's page, or shelf → B's page.
-  function parentOf(hash) {
-    var game = catalog.games.filter(function (g) { return '#/' + g.slug === hash; })[0];
-    return game && game.group && findGroup(game.group) ? '#/' + game.group : '#/';
-  }
-
+  // Every game's page is right over the shelf (#523: no group pages any more).
   function openFromRoom() {
     var to = null;
     try {
@@ -843,38 +776,13 @@
     if (!to || to.from !== location.hash || !/^#\/[a-z0-9-]+$/.test(to.page)) return;
     var url = new URL(to.game, location.href);
     if (url.origin !== location.origin) return;
-    function open() {
+    // The page draws from the catalog, which may still be on its way.
+    (catalogReady || (catalogReady = loadCatalog())).then(function () {
+      if (!catalog) return;
+      history.replaceState({ up: true }, '', to.page);
       render();
       try { sessionStorage.setItem('ai-pelit:_ylos', url.pathname); } catch (err) {}
       location.assign(url.href);
-    }
-    // Over the page below, which is the shelf: B's group's page first, when it has one.
-    function onShelf(dest) {
-      if (dest === '#/') history.replaceState({ up: true }, '', to.page);
-      else { history.replaceState({ up: true }, '', dest); history.pushState({ up: true }, '', to.page); }
-      open();
-    }
-    // The groups come from the catalog, which may still be on its way.
-    (catalogReady || (catalogReady = loadCatalog())).then(function () {
-      if (!catalog) return;
-      var from = parentOf(to.from), dest = parentOf(to.page);
-      if (from === dest) {
-        history.replaceState({ up: true }, '', to.page);
-        open();
-      } else if (from === '#/') {
-        onShelf(dest);
-      } else if (history.state && history.state.up) {
-        // A's group page is just below: step back to it, and build B's way up over the shelf.
-        window.addEventListener('popstate', function once() {
-          window.removeEventListener('popstate', once);
-          onShelf(dest);
-        });
-        history.back();
-      } else {
-        // Nothing of ours below: B's page takes A's place, and its back link goes up by address.
-        history.replaceState({ up: false }, '', to.page);
-        open();
-      }
     });
   }
   window.addEventListener('pageshow', function (e) { if (e.persisted) { openFromRoom(); render(); } });

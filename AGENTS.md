@@ -39,9 +39,14 @@ player sees is Finnish unless the request says otherwise.
   `python3 scripts/make_thumb.py <slug> <screenshot.png>`. It writes `games/<slug>/thumb.webp`.
   A new game needs one (the build refuses a game without it); retake it in a new version when the
   game looks different.
-- A game of a kind the shelf gathers (#153; so far "yleisurheilu": athletics events, each its
-  own game) adds `"group": "<key>"` to its `game.json`. The shelf then shows it inside that
-  group's card. Groups are listed in `GROUPS` in `scripts/build.py`; a new one is added there.
+- A new game picks its shelf category (#523): `"category": "<key>"` in its `game.json`, one of
+  `CATEGORIES` in `scripts/build.py` (kaverikaaos, talvi, yleisurheilu, pallo, temput, vauhti,
+  seikkailu, rauhalliset); the build refuses a game without one. The shelf's buttons filter by it.
+  A new category is added there, only when no key fits.
+- An athletics event (#153) adds `"group": "yleisurheilu"` instead (`GROUPS` in
+  `scripts/build.py`), which gives it its category. The shelf shows every game as its own row
+  (#523), so a group no longer gathers games on the shelf; `#/yleisurheilu` opens the shelf with
+  that button on.
 - Ottelu (#168), the athletics match, was removed whole (#469, Eero's choice): nobody played it.
   `scripts/removed_games.py` names it, so `check_immutable.py` let its folders go,
   `catalog.json` lists it under `removed`, `_redirects` and `public/sw.js` send its addresses to
@@ -103,7 +108,7 @@ request, with the version that taught it (#181, Eero's choice).
    `ai-pelit:<slug>:<name>` (keys starting `ai-pelit:_` belong to the shared scripts). All versions of a game share those keys: a new version must read
    the previous version's saved data (or migrate it in place) and never rename, reset or clear
    it. Never touch another game's keys.
-6. **game.json** — `title`, one-line `description`, optional `group`, and per version `n` (rising, never reused),
+6. **game.json** — `title`, one-line `description`, `category` (or a `group` that gives one), and per version `n` (rising, never reused),
    `date` (YYYY-MM-DD, the merge day), `note` (one Finnish sentence: what changed), `request`
    (the issue text) and `issue` (`eerovil/ai-pelit#<n>`). An older entry may still carry
    `"ottelu": false` as history (Ottelu is gone, #469); a new one needs none.
@@ -121,8 +126,8 @@ high-score lists (#25), then play counts (#26).
   change to it needs no new version: `GAMES` in `public/scores.js` (how a score reads, and
   where the game saves its level, which is sent with each score and shown beside it) and
   `GAMES` in `server/api.js` (which way is better, which lists). Scores wait on the phone while
-  offline, and a round that beats neither the score nor the level is not sent. The shelf shows
-  each game's no. 1 on its card and its top 10 on its page (`data-shelf`). Nicknames are one
+  offline, and a round that beats neither the score nor the level is not sent. A game's page in the
+  shelf shows its top 10 (`data-shelf`); the shelf's rows show no score (#523). Nicknames are one
   per phone, and show on lists only once approved at `/yllapito/`. A live check on the real site
   names its phones "Testi", "Testi1", "Testi A"... ("Testi" and up to 8 more letters, digits or
   spaces, #380): the server keeps such names off `/yllapito/` and out of the spam limits, and

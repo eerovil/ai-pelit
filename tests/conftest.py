@@ -252,7 +252,7 @@ def game_page(title: str, body: str = "", script: str = "") -> str:
 
 
 def make_game(games: Path, slug: str, pages: list[str], title: str | None = None, dates=None, group: str | None = None,
-              only_newest: bool = True) -> None:
+              only_newest: bool = True, category: str | None = "rauhalliset") -> None:
     """A game with a version per page. Only the newest has a folder (#346): an older one's is removed."""
     d = games / slug
     d.mkdir(parents=True, exist_ok=True)
@@ -268,6 +268,8 @@ def make_game(games: Path, slug: str, pages: list[str], title: str | None = None
     meta = {"title": title or slug.capitalize(), "description": f"Peli {slug}", "versions": versions}
     if group:
         meta["group"] = group
+    if category and group not in build.CATEGORIES:
+        meta["category"] = category  # a grouped game takes its group's category (#523)
     (d / "game.json").write_text(json.dumps(meta))
     (d / build.THUMB).write_bytes(THUMB)
 

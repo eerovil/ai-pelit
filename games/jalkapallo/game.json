@@ -1,6 +1,7 @@
 {
   "title": "Jalkapallo",
   "description": "Jalkapalloa ylhäältä katsottuna, 3 vs 3: tietokonetta tai kavereita vastaan.",
+  "category": "pallo",
   "versions": [
     {
       "n": 1,

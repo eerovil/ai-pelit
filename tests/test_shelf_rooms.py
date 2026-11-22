@@ -13,14 +13,14 @@ def answer_rooms(context, rooms):
 
 
 def test_the_shelf_lists_open_rooms_on_the_newest_version_and_a_tap_joins(site, context):
-    make_game(site.games, "pallo", [game_page("v1"), game_page("v2")], title="Pallo")
+    make_game(site.games, "pallopeli", [game_page("v1"), game_page("v2")], title="Pallo")
     make_game(site.games, "hyppy", [game_page("v1")], title="Hyppy", group="yleisurheilu")
     site.build()
     answer_rooms(context, [
         {"code": "KISA", "game": "hyppy", "v": 1, "n": 2, "max": 8},
-        {"code": "PELI", "game": "pallo", "v": 2, "n": 1, "max": 5},
-        {"code": "VANH", "game": "pallo", "v": 1, "n": 1, "max": 5},  # an older version (#346): its host has an old copy
-        {"code": "UUSI", "game": "pallo", "v": 4, "n": 1, "max": 5},  # a version the shelf lacks
+        {"code": "PELI", "game": "pallopeli", "v": 2, "n": 1, "max": 5},
+        {"code": "VANH", "game": "pallopeli", "v": 1, "n": 1, "max": 5},  # an older version (#346): its host has an old copy
+        {"code": "UUSI", "game": "pallopeli", "v": 4, "n": 1, "max": 5},  # a version the shelf lacks
         {"code": "MUUT", "game": "eiole", "v": 1, "n": 1, "max": 5},  # a game the shelf lacks
     ])
     page = context.new_page()
@@ -34,34 +34,34 @@ def test_the_shelf_lists_open_rooms_on_the_newest_version_and_a_tap_joins(site, 
     assert page.evaluate("document.documentElement.scrollWidth") <= 360
     # A tap opens the game with the room's code; back goes to the game's page, then the shelf.
     page.click('.room[data-code="PELI"] a')
-    page.wait_for_url("**/games/pallo/v2/?huone=PELI")
+    page.wait_for_url("**/games/pallopeli/v2/?huone=PELI")
     page.go_back()
-    page.wait_for_url(f"{site.url}#/pallo")
+    page.wait_for_url(f"{site.url}#/pallopeli")
     page.go_back()
     page.wait_for_url(site.url)
 
 
 def test_no_open_rooms_or_no_connection_shows_nothing(site, context):
-    make_game(site.games, "pallo", [game_page("v1")])
+    make_game(site.games, "pallopeli", [game_page("v1")])
     site.build()
     answer_rooms(context, [])
     page = context.new_page()
     page.goto(site.url)
-    page.wait_for_selector(".card")
+    page.wait_for_selector(".shelf-row")
     page.wait_for_timeout(300)
     assert page.locator(".open-rooms").is_hidden()
     context.unroute("**/api/rooms")
     context.route("**/api/rooms", lambda route: route.abort())
     page.reload()
-    page.wait_for_selector(".card")
+    page.wait_for_selector(".shelf-row")
     page.wait_for_timeout(300)
     assert page.locator(".open-rooms").is_hidden()
 
 
 def test_the_list_updates_while_the_shelf_shows_and_after_a_round_trip(site, context):
-    make_game(site.games, "pallo", [game_page("v1")], title="Pallo")
+    make_game(site.games, "pallopeli", [game_page("v1")], title="Pallo")
     site.build()
-    rooms = [{"code": "PELI", "game": "pallo", "v": 1, "n": 1, "max": 5}]
+    rooms = [{"code": "PELI", "game": "pallopeli", "v": 1, "n": 1, "max": 5}]
     reads = []
 
     def answer(route):
@@ -73,14 +73,14 @@ def test_the_list_updates_while_the_shelf_shows_and_after_a_round_trip(site, con
     page.goto(site.url)
     page.wait_for_selector('.room[data-code="PELI"]')
     # Another phone's room opens, and this one fills up: the next read, 10 s later, shows it.
-    rooms[:] = [{"code": "UUSI", "game": "pallo", "v": 1, "n": 2, "max": 5}]
+    rooms[:] = [{"code": "UUSI", "game": "pallopeli", "v": 1, "n": 2, "max": 5}]
     page.clock.run_for(10_500)
     page.wait_for_selector('.room[data-code="UUSI"]')
     assert page.locator(".room").count() == 1
     # Away on a game's page the list is not read; back on the shelf it is read again at once,
     # and only one refresh keeps going (no second timer from the earlier shelf).
-    page.click('.card[data-slug="pallo"] .card-main')
-    page.wait_for_url(f"{site.url}#/pallo")
+    page.click('.shelf-row[data-slug="pallopeli"] .shelf-row-main')
+    page.wait_for_url(f"{site.url}#/pallopeli")
     before = len(reads)
     page.clock.run_for(30_000)
     assert len(reads) == before
@@ -109,14 +109,14 @@ def test_a_long_game_name_in_the_list_fits_the_phone(site, context, width):
 
 
 def test_the_list_goes_when_the_connection_does(site, context):
-    make_game(site.games, "pallo", [game_page("v1")])
+    make_game(site.games, "pallopeli", [game_page("v1")])
     site.build()
     online = [True]
 
     def answer(route):
         if online[0]:
             route.fulfill(status=200, content_type="application/json",
-                          body=json.dumps({"rooms": [{"code": "PELI", "game": "pallo", "v": 1, "n": 1, "max": 5}]}))
+                          body=json.dumps({"rooms": [{"code": "PELI", "game": "pallopeli", "v": 1, "n": 1, "max": 5}]}))
         else:
             route.abort()
     context.route("**/api/rooms", answer)

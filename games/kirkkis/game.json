@@ -1,6 +1,7 @@
 {
   "title": "Kirkkis",
   "description": "Kirkonrotta pihalla: piiloudu tai etsi, ja jokainen näkee vain oman näkökenttänsä.",
+  "category": "kaverikaaos",
   "versions": [
     {
       "n": 1,

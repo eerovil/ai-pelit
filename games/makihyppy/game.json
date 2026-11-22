@@ -1,6 +1,7 @@
 {
   "title": "Mäkihyppy",
   "description": "Laske vauhtimäki, ponnista nokalta, pidä lentoasento ja tee telemark: mäkikisa tietokonetta vastaan tai kavereiden kanssa.",
+  "category": "talvi",
   "versions": [
     {
       "n": 1,

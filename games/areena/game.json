@@ -1,6 +1,7 @@
 {
   "title": "Areena",
   "description": "Taistelu miekalla ja jousella: tekoälyä vastaan tai 2–8 kaverin kanssa.",
+  "category": "kaverikaaos",
   "versions": [
     {
       "n": 1,
