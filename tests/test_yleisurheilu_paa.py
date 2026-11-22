@@ -37,7 +37,7 @@ def landed_poses(page):
 
 @pytest.mark.parametrize("arch,bar,ok", [((0.35, 0.55), 1.5, True), ((None, None), 2.2, False)])
 def test_the_high_jumper_cheers_or_drops_its_chin_on_the_mat(site, context, arch, bar, ok):
-    page, errors = open_game(site, context, "games/korkeushyppy/v16/")
+    page, errors = open_game(site, context, "games/korkeushyppy/v17/")
     page.evaluate("""([a, k, bar]) => {
       th.bar = bar; th.phase = 'run'; th.x = -1.1; th.v = 12; takeOff(1.1, 12); th.f.archT = a; th.f.kickT = k;
       for (let i = 0; i < 2000 && !(th.phase === 'land' && th.t > 0.6); i++) { step(1 / 60); draw(); }
@@ -50,7 +50,7 @@ def test_the_high_jumper_cheers_or_drops_its_chin_on_the_mat(site, context, arch
 def test_the_vaulter_lifts_its_chin_on_the_pole_and_cheers_or_drops_it_on_the_mat(site, context):
     seen = {}
     for v, tau in ((10, 1.8), (8, 1.8), (6, 1.8), (10, 1.2), (10, 2.4)):
-        page, errors = open_game(site, context, "games/seivashyppy/v17/")
+        page, errors = open_game(site, context, "games/seivashyppy/v18/")
         res = page.evaluate("""([v, tau]) => {
           th.phase = 'run'; th.x = TAKEOFF; th.v = v; plantNow(TAKEOFF, v); th.held = true;
           for (let i = 0; i < 3000 && !(th.phase === 'land' && th.t > 0.6); i++) {

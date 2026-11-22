@@ -226,7 +226,7 @@ high-score lists (#25), then play counts (#26).
   gives an event's side-view head its tilt for `run`, `takeoff`, `air`, `land`, `cheer` and `idle`,
   and `sideHead()` draws it (Pituushyppy v18 is the model).
 - **Athletics meets (#165).** A field event (a throw or a jump, group `yleisurheilu`) loads
-  `<script src="../../../lib/yleisurheilu-11/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
+  `<script src="../../../lib/yleisurheilu-12/kisa.js"></script>` (the newest folder) after `rooms.js` and calls
   `AiPelitKisa.meet({...})`: the library runs the field of twelve, the turns, the standings and
   the results board, the saves and the whole room (host, turns, rejoining, the computer taking an
   away phone's turns), so a new event gets playing with friends without room code of its own. The
@@ -248,7 +248,7 @@ high-score lists (#25), then play counts (#26).
   the tap's y too. From `yleisurheilu-9/` (#395) nobody runs after it (Eero's choice): the whole row only
   slides with the background, a little slower than it (0.8 of its speed), and stops when it stops, so it may
   leave the screen until the next turn; legs move only on a tapped walk. From `yleisurheilu-10/` (#469) the podium and the spectators are
-  `AiPelitOutfits.figure()`, facing out, with heads that look around and cheer; from `yleisurheilu-11/` the official hangs the medals with its own arms (`figure()`'s `reach`). Moukarinheitto, seen
+  `AiPelitOutfits.figure()`, facing out, with heads that look around and cheer; from `yleisurheilu-11/` the official hangs the medals with its own arms (`figure()`'s `reach`); from `yleisurheilu-12/` (#480) the game passes `glide` (and loads `lib/sulava-1` before it), and the friend on turn glides on the phones watching (Pituushyppy v20 is the model). Moukarinheitto, seen
   from above, uses it too, with no `scroll`, so its row stays where it is. The bar-height format (high jump, pole vault)
   is `korkeus.js` beside `kisa.js`, loaded after it from the same folder (Korkeushyppy v2 from
   `yleisurheilu-1/`). A new format may be added beside them as a new file.

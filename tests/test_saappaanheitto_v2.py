@@ -6,7 +6,7 @@ import math
 from conftest import turn
 from test_hiljaiset_aanet import cheer_is_quiet, opens_and_plays_with_the_quiet_library, real  # noqa: F401
 
-URL = "games/saappaanheitto/v1"
+URL = "games/saappaanheitto/v2"
 
 
 def test_it_opens_and_plays_with_the_quiet_library(real, context):

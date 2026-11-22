@@ -72,7 +72,9 @@
 <!-- v10 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v12 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v15 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<!-- v19 (#480): the thrower on another phone glides through the run-up (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
 <!-- v11 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v13 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones,
@@ -203,6 +205,9 @@ const K = AiPelitKisa.meet({
   spread: [4, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 3,
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä heittoa',
+  // v19 (#480): a friend's run-up is drawn a moment back, gliding between the spots their phone sends; the
+  // release (rel, or a foul's) starts at the run-up's last spot, so the throw starts where the glide ends.
+  glide: { keys: ['x'], jump: 4, spot: m => m.t === 'p' || m.t === 'rel' ? { x: m.a[0] } : null },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   // v5 (#176): the medal ceremony at the end, the throwers in their outfits, a chime per medal.
   look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
@@ -372,7 +377,14 @@ function frame(now) {
 // ---------- Drawing ----------
 let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3;
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v19 (#480): a friend's thrower in the run-up is drawn where the meet's track has it (K.glide()), and put back after.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'run' || th.phase === 'aim'));
+  const kept = th ? th.x : 0;
+  if (sw) th.x = g.x;
+  try { drawFrame(dt); } finally { if (sw) th.x = kept; }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();

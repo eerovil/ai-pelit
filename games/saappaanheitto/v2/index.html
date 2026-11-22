@@ -70,7 +70,9 @@
     vihreällä kaarella. Kolme heittoa, kahdeksan parasta saa kolme lisää.</p>
 </div>
 <script src="../../../rooms.js" data-game="saappaanheitto" data-min="2" data-max="8"></script>
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<!-- v2 (#480): the thrower on another phone swings the boot round smoothly (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="../../../outfits.js" data-game="saappaanheitto" data-share="yleisurheilu"></script>
 <script>
@@ -201,6 +203,13 @@ const K = AiPelitKisa.meet({
   spread: [3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 2.5,
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä heittoa',
+  // v2 (#480): a friend's swing is drawn a moment back, the boot's arm angle gliding between the spots their phone
+  // sends; the release (rel) is the swing's last angle, so the boot leaves the hand where the glide ends. The angle
+  // sent wraps at ±π and the thumb may go either way at any speed, so the phone on turn also sends its own running
+  // angle (th.w, setA()), and the track glides that, as Moukari's; draw() wraps it back. No jump distance: the one
+  // real jump, a thumb lifted before half a lap (the boot hangs again, a 'p' of phase 'ready'), is a snap.
+  glide: { keys: ['a'], spot: m => m.t === 'p' ? { a: run(m.a[0], m.a[5]) } : m.t === 'rel' ? { a: run(m.a[0], m.a[4]) } : null,
+    snap: m => m.t === 'p' && m.a[2] === 'ready' },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   look: r => looks({ fit: r.fit, col: r.col }) || plain(r.col),
   chime: i => {
@@ -219,9 +228,15 @@ function cpuMark(t) {
   do m = Math.floor((t.skill + K.gauss() * 3) * 100) / 100; while (m > CPU_MAX);
   return Math.max(8, m);
 }
+// v2 (#480): the boot's running angle on the phone on turn (th.w): every change of the boot's angle, the thumb's
+// jumps too, moves it by the same step taken the short way round, so wrapped it is always th.a, and a turn starts
+// it at th.a. `turn` keeps its own count of the laps. A watching phone glides the running angle it is sent.
+function setA(v) { th.w += wrapR(v - th.a); th.a = v; }
+const run = (a, w) => Number.isFinite(w) ? w : a;
+const wrapA = v => Math.atan2(Math.sin(v), Math.cos(v));
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {
-  th = { seq, id: t.id, mine, phase: 'wait', t: 0, a: -Math.PI / 2 - 0.15, dir: -1, turn: 0, v: 0,
+  th = { seq, id: t.id, mine, phase: 'wait', t: 0, a: -Math.PI / 2 - 0.15, w: -Math.PI / 2 - 0.15, dir: -1, turn: 0, v: 0,
     moves: [], boot: null, mark: null, why: '', sendT: 0, idle: 0, lap: 0 };
   blend = 0; spinPtr = null;
 }
@@ -262,7 +277,7 @@ function step(dt) {
       if (laps(a) >= SLIP) return outcome(-1, 'Käsi väsyi: saapas lipsahti');
       if (isNet() && a.idle > TURN_MAX) return outcome(-1, 'Aika loppui');
       a.sendT -= dt;
-      if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; K.send({ t: 'p', a: [r3(a.a), r2(a.v), a.phase, a.dir, r2(a.turn)] }); }
+      if (isNet() && a.sendT <= 0) { a.sendT = 1 / 12; K.send({ t: 'p', a: [r3(a.a), r2(a.v), a.phase, a.dir, r2(a.turn), r3(a.w)] }); }
     }
     // A whoosh each lap, as the boot passes the bottom, brighter the faster it goes.
     const n = Math.floor(laps(a));
@@ -304,7 +319,7 @@ function spinStart(e) {
   const p = ringAngle(e.clientX, e.clientY);
   spinPtr = e.pointerId; lastFa = p.d > ring.r * 0.3 ? p.ang : null;
   th.phase = 'spin'; th.t = 0; th.turn = 0; th.v = 0; th.moves = []; th.lap = 0; th.idle = 0;
-  if (lastFa !== null) th.a = lastFa;
+  if (lastFa !== null) setA(lastFa);
 }
 // Each move of the thumb turns the boot to the thumb's angle. Near the ring's middle the angle
 // jumps about, so those points are left out; so is a jump of more than a quarter turn.
@@ -317,7 +332,7 @@ function spinMove(px, py, t) {
     // turn counts how far the arm has gone, either way, so going back never takes laps away.
     if (Math.abs(d) < Math.PI / 2) { th.turn += Math.abs(d); th.moves.push([t, d]); th.idle = 0; }
   }
-  lastFa = p.ang; th.a = p.ang;
+  lastFa = p.ang; setA(p.ang);
 }
 function spinEnd(e) {
   if (e.pointerId !== spinPtr) return;
@@ -327,10 +342,10 @@ function spinEnd(e) {
   spinMove(e.clientX, e.clientY, clock);
   if (Math.abs(th.turn) < MIN_TURN) {
     // A thumb lifted before half a lap: a slip, the boot hangs again.
-    th.phase = 'ready'; th.a = -Math.PI / 2 - 0.15; th.v = 0; th.turn = 0; th.dir = -1;
+    th.phase = 'ready'; th.a = th.w = -Math.PI / 2 - 0.15; th.v = 0; th.turn = 0; th.dir = -1;
     say('Pyöritä ympyrää!', '#ffd166');
     // The phones watching put the boot back to hanging too.
-    if (isNet()) K.send({ t: 'p', a: [r3(th.a), 0, 'ready', th.dir, 0] });
+    if (isNet()) K.send({ t: 'p', a: [r3(th.a), 0, 'ready', th.dir, 0, r3(th.w)] });
     return;
   }
   letGo();
@@ -339,7 +354,7 @@ function letGo() {
   // Rounded as it goes over the room, so every phone flies the very same boot.
   const a = r3(th.a), v = r2(th.v), dir = th.dir;
   throwNow(a, v, dir);
-  if (isNet()) K.send({ t: 'rel', a: [a, v, dir] });
+  if (isNet()) K.send({ t: 'rel', a: [a, v, dir, r2(th.turn), r3(th.w)] });   // [4] (#480): the running angle, for the glide
 }
 function throwNow(ang, v, dir) {
   const a = th;
@@ -366,7 +381,7 @@ function outcome(mark, why) {
   th.dropped = why !== 'Aika loppui';
   if (th.mine) {
     S.play('virhe', { vol: 0.5 }) || tone(160, 0.3, 'sawtooth', 0.06, 70);
-    if (isNet()) K.send({ t: 'rel', a: [r3(th.a), 0, th.dir], why });
+    if (isNet()) K.send({ t: 'rel', a: [r3(th.a), 0, th.dir, r2(th.turn), r3(th.w)], why });
   }
 }
 function report(mark) { K.report(th.seq, mark); }
@@ -409,7 +424,14 @@ function frame(now) {
 // ---------- Drawing ----------
 let blend = 0, camX = -3, camS = 60;
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v2 (#480): a friend's swinging arm is drawn where the meet's track has it (K.glide()), and put back after.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'spin'));
+  const kept = th ? th.a : 0;
+  if (sw) th.a = wrapA(g.a);
+  try { drawFrame(dt); } finally { if (sw) th.a = kept; }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();

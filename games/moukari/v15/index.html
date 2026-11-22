@@ -71,7 +71,9 @@
 <script src="../../../rooms.js" data-game="moukari" data-min="2" data-max="8"></script>
 <!-- v7 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v9 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
+<!-- v15 (#480): the thrower on another phone spins on smoothly between the spots it sends (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
 <script src="../../../outfits.js" data-game="moukari" data-share="yleisurheilu"></script>
 <!-- v8 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -231,6 +233,11 @@ const K = AiPelitKisa.meet({
   spread: [4, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7], jitter: 3,
   cpu: cpuMark, turn: newTurn, clear: () => { th = null; }, menu: showMenu,
   live: ['p', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä heittoa',
+  // v15 (#480): a friend's spin is drawn a moment back, gliding between the spots their phone sends. The
+  // hammer's angle a counts up over every lap (0..TAU*LAPS, the thrower's place and the wire follow it), so it
+  // is a plain key, not a wrapping angle. It turns at most about 13 rad/s (1.3 rad in 0.1 s), so 4 rad is a jump.
+  // The release (rel, a foul's too) is the spin's last spot, so the throw leaves where the glide ends.
+  glide: { keys: ['a'], jump: 4, spot: m => m.t === 'p' || m.t === 'rel' ? { a: m.a[0] } : null },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   // v3 (#176): the medal ceremony at the end, a chime per medal; v6 (#311): in their outfits.
   look: r => kit(r.fit, r.col),
@@ -434,7 +441,14 @@ function frame(now) {
 // ---------- Drawing ----------
 let flash = { 1: 0, 2: 0 }, blend = 0, cam = { s: 30, y: 1.6 };
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v15 (#480): a friend's hammer in the spin is drawn where the meet's track has it (K.glide()), and put back after.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && th.phase === 'spin');
+  const kept = th ? th.a : 0;
+  if (sw) th.a = g.a;
+  try { drawFrame(dt); } finally { if (sw) th.a = kept; }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();
