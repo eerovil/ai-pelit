@@ -74,6 +74,7 @@ export const GAMES = {
   tikka: { order: 'high', boards: /^(main|mokki|mokki2|kisa2)$/, first: 'mokki2' }, // the harder throw (v7) on 'mokki2' and 'kisa2'; v1-v6's scores stay on 'mokki' and 'main'
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
   saappaanheitto: { order: 'high', boards: /^main$/ }, // longest boot throw in metres
+  uimahyppy: { order: 'high', boards: /^main$/ }, // diving: the judges' points of five dives summed
   pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
   makihyppy: { order: 'high', boards: /^(main|viikko|viikko2)$/, first: 'viikko2' }, // most points in a ski-jumping week of two hills (v9, 'viikko2'), of four (v2–v8, 'viikko'), or a meet of two jumps (v1, 'main')
   moukari: { order: 'high', boards: /^main$/ }, // longest hammer throw in metres

@@ -30,9 +30,10 @@ around: down while the medal is hung, the winner up after the cheer, the others 
 `yleisurheilu-11/` (#469, the same seven events' next versions: Korkeushyppy v16, Pituushyppy v19,
 Seiväshyppy v17, Keihäs v18, Kuula v12, Moukari v14, Mäkihyppy v13) has the official hang each medal
 with its own arms (`figure()`'s `reach`), not with two extra arms beside its own. Saappaanheitto v1
-(#503), a new throwing event, loads it too.
+(#503), a new throwing event, loads it too, and so does Uimahyppy v1 (#516), diving, whose
+`points()` format sums each diver's five dives.
 `yleisurheilu-12/` (#480: Pituushyppy v20, Keihäs v19, Kuula v13, Moukari v15, Korkeushyppy v17,
-Seiväshyppy v18, Saappaanheitto v2; Mäkihyppy stays on `-11/`) adds the `glide` option: the phone
+Seiväshyppy v18, Saappaanheitto v2; Mäkihyppy and Uimahyppy stay on `-11/`) adds the `glide` option: the phone
 watching draws the friend on turn gliding between their run-up spots, from `lib/sulava-1`
 (`sulava-liike.md`), instead of jumping to each spot as it comes.
 The next change goes in `yleisurheilu-13/`.

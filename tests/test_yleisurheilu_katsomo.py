@@ -4,7 +4,8 @@ figure there on every phone.
 
 The events' versions (on yleisurheilu-9 from #395, Moukarinheitto still on yleisurheilu-7):
 games/pituushyppy/v20, games/keihas/v19, games/kuula/v13, games/korkeushyppy/v17,
-games/seivashyppy/v18, games/moukari/v15, games/makihyppy/v13, games/saappaanheitto/v2.
+games/seivashyppy/v18, games/moukari/v15, games/makihyppy/v13, games/saappaanheitto/v2,
+games/uimahyppy/v1.
 """
 
 import json
@@ -22,6 +23,7 @@ EVENTS = {
     "moukari/v15": "drawThrower",
     "makihyppy/v13": "drawJumper",
     "saappaanheitto/v2": "drawAthlete",
+    "uimahyppy/v1": "drawDiverAt",
 }
 # The events in a stadium: the friends stand behind the boards in front of the stands.
 STADIUM = {"pituushyppy/v20", "keihas/v19", "kuula/v13", "korkeushyppy/v17", "seivashyppy/v18"}
