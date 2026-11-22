@@ -2,7 +2,7 @@
 sight leaves the target after each dart, and the harder game has its own bests and lists."""
 
 from conftest import turn
-from test_tikka_v7 import RUN, open_plain, room, start
+from test_tikka_v8 import RUN, open_plain, room, start
 
 # Plays whole games through the real touch handlers. Each dart holds for `held` seconds; with
 # `aimAt` the finger has brought the sight there, without it the finger never moved.

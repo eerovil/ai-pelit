@@ -30,6 +30,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-22",
+      "note": "Kavereiden kanssa toisen pelaajan tähtäys, lentävä kalikka ja kaatuvat keilat liikkuvat katsojan puhelimessa tasaisesti eivätkä hypi.",
+      "request": "Moninpelissä toisen pelaajan tähtäys tulee viesteinä ja hyppii, ja lentävä keila tulee isännältä 25 kertaa sekunnissa. Piirrä toisen pelaajan tähtäys ja lentävä keila katsojien puhelimissa `lib/sulava-1`:n kautta, niin että ne liikkuvat tasaisesti (kuten #480:ssa).\n\nJatkoa #480:lle.",
+      "issue": "eerovil/ai-pelit#538"
     }
   ]
 }
