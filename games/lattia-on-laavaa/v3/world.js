@@ -1,5 +1,8 @@
 'use strict';
-// Lattia on laavaa v2 (#505; v1 #488): the rules, in plain numbers, with no drawing.
+// Lattia on laavaa v3 (#526; v2 #505, v1 #488): the rules, in plain numbers, with no drawing.
+// v3: a fourth room, Koko talo (talo.js): one round up the stairs to the upstairs room, then to
+// the roof, then on things drifting across the lava sea. Solids now have a bottom (`bot`), so
+// floors can stack: a kid's head stops at a ceiling, and a floor above does not push a kid aside.
 // v2: easier (slower furniture and lava, weaker computer kids), a shove stops at the edge of what
 // the shover stands on, and a kid that reaches a piece's side a little below its top climbs up.
 //
@@ -92,18 +95,27 @@ function rng(seed) {
 // ---- A new round ----
 function newWorld(level, players, seed) {
   const R = ROOMS[level - 1], r = rng(seed);
-  const pieces = R.pieces.map(([kind, x, z, w, d, h, order], i) => ({ i, kind, x, z, w, d, h0: h, order, key: order + r() * 0.9 }));
+  // A piece's eighth field is its floor in Koko talo (talo.js): its height counts from that floor.
+  const fy = f => R.floors ? R.floors[f].y : 0;
+  const pieces = R.pieces.map(([kind, x, z, w, d, h, order, floor], i) => ({ i, kind, x, z, w, d, h0: fy(floor || 0) + h, bot: fy(floor || 0), floor: floor || 0, order, key: order + r() * 0.9 }));
   // The sinking order: by class, shuffled within it by the seed. Each starts wobbling `gap`
-  // seconds after the one before, a little sooner each time.
+  // seconds after the one before, a little sooner each time. Each floor of the house has its own.
   const order = pieces.slice().sort((a, b) => a.key - b.key);
-  let t = R.start;
-  order.forEach((p, k) => { p.wobAt = t; p.sinkAt = t + WOBBLE; t += Math.max(2.2, R.gap - k * 0.12); });
+  (R.floors || [R]).forEach((F, f) => {
+    // Pieces on the way to the house's stairs (talo.js `keep`) have a later turn of their own,
+    // from `keepAt`, once the lava is climbing the stairs.
+    const kept = p => F.keep !== undefined && p.order >= F.keep;
+    for (const [list, t0] of [[order.filter(p => p.floor === f && !kept(p)), F.start], [order.filter(p => p.floor === f && kept(p)), F.keepAt]]) {
+      let t = t0;
+      list.forEach((p, k) => { p.wobAt = t; p.sinkAt = t + WOBBLE; t += Math.max(2.2, F.gap - k * 0.12); });
+    }
+  });
   const w = {
     level, seed, rt: -COUNT, kids: [], pieces, ph: 'count', over: false, winner: null, draw: false, graceAt: null,
-    floatAt: R.floatAt, floatsCache: { k0: 0 },
+    floatAt: R.floatAt, floatsCache: { k0: 0 }, house: !!R.floors, statics: R.floors ? houseStatics() : [],
   };
-  // Spawns: on the pieces that sink last, spread round them.
-  const spots = order.slice().reverse().filter(p => p.h0 < 1.5);
+  // Spawns: on the pieces that sink last, spread round them (downstairs in the house).
+  const spots = order.slice().reverse().filter(p => p.h0 < 1.5 && p.floor === 0);
   players.forEach((p, i) => {
     const pc = spots[i % spots.length], n = Math.floor(i / spots.length);
     const k = newKid(p, i);
@@ -125,8 +137,11 @@ function newKid(p, i) {
 
 // ---- What the room is like at time rt ----
 // The lava's height: the floor itself until 25 s, then slowly up to 0.45 m by about 111 s
-// (v1: from 20 s, by 80 s).
-function lavaAt(rt) { return rt < 25 ? 0.02 : Math.min(0.45, 0.02 + (rt - 25) * 0.005); }
+// (v1: from 20 s, by 80 s). In Koko talo it climbs the house in stages (houseLava() in talo.js).
+function lavaAt(rt, w) {
+  if (w && w.house) return houseLava(rt);
+  return rt < 25 ? 0.02 : Math.min(0.45, 0.02 + (rt - 25) * 0.005);
+}
 // A piece's top at rt; 'gone' once it is under the lava.
 function topOf(p, rt) { return rt < p.sinkAt ? p.h0 : p.h0 - (rt - p.sinkAt) * SINK_V; }
 function wobbleOf(p, rt) { return rt >= p.wobAt ? Math.min(1, (rt - p.wobAt) / WOBBLE) : 0; }
@@ -145,7 +160,8 @@ function floatStart(w, k) {
 }
 function floatOf(w, k) {
   const r = rng((w.seed ^ (k * 2654435761)) >>> 0);
-  const fk = FLOAT_KINDS[Math.floor(r() * FLOAT_KINDS.length)];
+  const kinds = w.house ? HOUSE_FLOATS : FLOAT_KINDS;
+  const fk = kinds[Math.floor(r() * kinds.length)];
   const fromLeft = r() < 0.5, lane = Z0 + 1.2 + r() * (ROOM_D - 2.4);
   const speed = 0.7 + Math.min(1.0, k * 0.02) + r() * 0.4;
   const life = (ROOM_W + 2) / speed, size = Math.max(0.62, 1 - k * 0.006);
@@ -163,23 +179,26 @@ function floatsAt(w, rt) {
   for (; floatStart(w, k) <= rt; k++) {
     const f = floatOf(w, k), a = rt - f.t0;
     if (a > f.life) continue;
-    const L = lavaAt(rt), bob = Math.sin(rt * 2.2 + k) * 0.03;
+    const L = lavaAt(rt, w), bob = Math.sin(rt * 2.2 + k) * 0.03;
     // The last two seconds of its way it sinks.
     const sink = Math.max(0, a - (f.life - 2)) / 2;
     out.push({ k, kind: f.kind, x: f.x0 + f.dir * f.speed * a, z: f.z + f.drift * a, w: f.w, d: f.d, top: L + 0.18 - sink * 0.3 + bob, vx: f.dir * f.speed, vz: f.drift, sink });
   }
   return out;
 }
-// Everything a kid can stand on at rt: pieces and floats alike, as boxes with a top and a speed.
+// Everything a kid can stand on at rt: pieces and floats alike, as boxes with a top, a bottom
+// and a speed. In the house also its steps, floors and walls (`wall`: never stood on), and each
+// staircase's door until it opens.
 function solids(w, rt) {
-  const L = lavaAt(rt), list = [];
+  const L = lavaAt(rt, w), list = [];
   for (const p of w.pieces) {
     const top = topOf(p, rt);
     if (top <= L + 0.03) continue;
     // A wobbling piece shakes a little under the feet; it does not throw anyone off.
-    list.push({ id: 'p' + p.i, x: p.x, z: p.z, w: p.w, d: p.d, top, vx: 0, vz: 0 });
+    list.push({ id: 'p' + p.i, x: p.x, z: p.z, w: p.w, d: p.d, top, bot: Math.min(p.bot, top - 0.05), vx: 0, vz: 0 });
   }
-  for (const f of floatsAt(w, rt)) if (f.top > L + 0.03) list.push({ id: 'f' + f.k, x: f.x, z: f.z, w: f.w, d: f.d, top: f.top, vx: f.vx, vz: f.vz });
+  for (const s of w.statics) if (s.top > L + 0.03 && !(s.openAt !== undefined && rt >= s.openAt)) list.push(s);
+  for (const f of floatsAt(w, rt)) if (f.top > L + 0.03) list.push({ id: 'f' + f.k, x: f.x, z: f.z, w: f.w, d: f.d, top: f.top, bot: 0, vx: f.vx, vz: f.vz });
   return list;
 }
 const inside = (s, x, z, m) => Math.abs(x - s.x) <= s.w / 2 + m && Math.abs(z - s.z) <= s.d / 2 + m;
@@ -250,14 +269,21 @@ function moveKid(w, k, dt, sol) {
   for (const s of sol) {
     if (s.top <= oy + STEP_UP || !inside(s, k.x, k.z, KID_R * 0.8)) continue;
     if (k.y >= s.top - 0.05) continue;
+    // Wholly under it (a floor above, #526): no side to touch.
+    if (oy + KID_H <= s.bot + 0.001) continue;
     const wasX = Math.abs(ox - s.x) > s.w / 2 + KID_R * 0.8 - 0.001;
     if (wasX) { k.x = ox; k.vx = 0; } else { k.z = oz; k.vz = 0; }
+  }
+  // A ceiling (#526): a head rising into the bottom of a floor above stops there.
+  for (const s of sol) {
+    if (s.bot < 0.5 || oy + KID_H > s.bot + 0.001 || k.y + KID_H <= s.bot || !inside(s, k.x, k.z, -0.15)) continue;
+    k.y = s.bot - KID_H; k.vy = Math.min(0, k.vy);
   }
   if (!k.ground && !stun) climb(k, sol, ix, iz, pvx, pvz);
   // The ground: the highest top under the kid's middle (a little wider, so an edge holds).
   let best = null;
   for (const s of sol) {
-    if (!inside(s, k.x, k.z, 0.12)) continue;
+    if (s.wall || !inside(s, k.x, k.z, 0.12)) continue;
     if (s.top > Math.max(oy, k.y) + STEP_UP) continue;
     if (!best || s.top > best.top) best = s;
   }
@@ -280,12 +306,14 @@ function climb(k, sol, ix, iz, vx, vz) {
   let best = null, bx = 0, bz = 0;
   for (const s of sol) {
     const rise = s.top - k.y;
-    if (rise <= 0 || rise > CLIMB) continue;
+    if (s.wall || rise <= 0 || rise > CLIMB) continue;
     // The point of the box nearest the kid, and how far the kid's middle is from it.
     const cx = clamp(k.x, s.x - s.w / 2, s.x + s.w / 2), cz = clamp(k.z, s.z - s.d / 2, s.z + s.d / 2);
     const dx = cx - k.x, dz = cz - k.z, d = Math.hypot(dx, dz);
     // Over it already (d = 0) is a landing, the ground's to take.
     if (d > KID_R + CLIMB_REACH || d < 1e-6) continue;
+    // Never through a wall or a shut door (#526).
+    if (sol.some(o => o.wall && o.top > k.y && o.bot < k.y + KID_H && [0.25, 0.5, 0.75, 1].some(t => inside(o, k.x + dx * t, k.z + dz * t, 0)))) continue;
     // Towards it: by the stick or by the kid's own speed (a jump that fell just short).
     if ((ix * dx + iz * dz) / d < 0.2 && ((vx - s.vx) * dx + (vz - s.vz) * dz) / d < 0.3) continue;
     if (!best || s.top > best.top) { best = s; bx = cx; bz = cz; }
@@ -315,7 +343,7 @@ function bump(w, mine) {
   }
 }
 // Touching the lava: is this kid out now? Its own phone asks this of its own kid.
-function inLava(w, k) { return !k.out && k.y <= lavaAt(w.rt) + 0.01 && !k.ground; }
+function inLava(w, k) { return !k.out && k.y <= lavaAt(w.rt, w) + 0.01 && !k.ground; }
 function fall(w, k, rt) {
   if (k.out) return;
   k.out = true; k.outRt = rt === undefined ? w.rt : rt; k.fellX = k.x; k.fellZ = k.z;

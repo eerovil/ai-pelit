@@ -1,5 +1,7 @@
 'use strict';
-// Lattia on laavaa v2: the computer's kids (#488). Each looks round every so often (its reaction
+// Lattia on laavaa v3: the computer's kids (#488). In Koko talo (#526) they also go up the stairs
+// once a staircase's door opens: to the piece in front of it, onto the bottom step, and up.
+// v2: Each looks round every so often (its reaction
 // time), picks the piece that will last longest within a jump, runs at it and jumps at the edge.
 // It aims a little off (its error), and now and then shoves a kid in front of it.
 const SKILL = [
@@ -14,10 +16,14 @@ function cpuBrain(level, seed) {
 }
 // How long a thing to stand on will still be there, s.
 function lifeLeft(w, s, rt) {
+  // A step or a floor of the house lasts until the lava reaches its top.
+  if (s.id[0] === 's') return Math.max(0, lavaWhen(w, s.top - 0.03) - rt);
   if (s.id[0] === 'p') {
     const p = w.pieces[+s.id.slice(1)];
-    if (rt < p.wobAt) return p.wobAt - rt + WOBBLE + 1;
-    return Math.max(0, (topOf(p, rt) - lavaAt(rt)) / SINK_V + Math.max(0, p.sinkAt - rt));
+    // In the house the rising lava may come first.
+    const drown = w.house ? Math.max(0, lavaWhen(w, p.h0 - 0.03) - rt) : Infinity;
+    if (rt < p.wobAt) return Math.min(drown, p.wobAt - rt + WOBBLE + 1);
+    return Math.min(drown, Math.max(0, (topOf(p, rt) - lavaAt(rt, w)) / SINK_V + Math.max(0, p.sinkAt - rt)));
   }
   const f = floatOf(w, +s.id.slice(1));
   return Math.max(0, f.life - 2 - (rt - f.t0));
@@ -27,6 +33,11 @@ function gapTo(k, s) {
   const dx = Math.max(0, Math.abs(k.x - s.x) - s.w / 2), dz = Math.max(0, Math.abs(k.z - s.z) - s.d / 2);
   return Math.hypot(dx, dz);
 }
+// The gap between two boxes, along the floor.
+function boxGap(a, s) {
+  const dx = Math.max(0, Math.abs(a.x - s.x) - (a.w + s.w) / 2), dz = Math.max(0, Math.abs(a.z - s.z) - (a.d + s.d) / 2);
+  return Math.hypot(dx, dz);
+}
 // One frame of thinking: sets the kid's stick and jump. Returns true when it wants to shove.
 function cpuThink(w, k, b, dt, sol) {
   k.jump = false;
@@ -34,12 +45,24 @@ function cpuThink(w, k, b, dt, sol) {
   const rt = w.rt;
   const cur = k.ground ? sol.find(s => s.id === k.gpId) : null;
   b.t -= dt;
+  // Up the stairs in the house: on a step, walk on up; on the way, the route picks the target.
+  const route = w.house ? stairRoute(w, k, b, cur, sol) : null;
+  if (route && route.walk) {
+    const dx = route.x - k.x, dz = route.z - k.z, d = Math.hypot(dx, dz) || 1;
+    k.ix = dx / d; k.iz = dz / d;
+    return false;
+  }
+  if (route) b.t = Math.max(b.t, 0.05);
   if (b.t <= 0) {
     b.t = b.react * (0.7 + b.r() * 0.6);
     const curLife = cur ? lifeLeft(w, cur, rt) : 0;
     let best = null, bs = -Infinity;
     for (const s of sol) {
       if (cur && s.id === cur.id) continue;
+      // Walls and doors are never stood on; steps are only for the way up (stairRoute()).
+      if (s.wall || s.kind === 'step') continue;
+      // Never back down a floor of the house: the way down is shut by the stair walls.
+      if (w.house && floorOfY(s.top - 0.05) < floorOfY(k.y + 0.05)) continue;
       const gap = gapTo(k, s), rise = s.top - k.y;
       if (rise > 1.25) continue;
       // Out of a jump's reach: only as a place to head for, its edge first (see below).
@@ -100,4 +123,40 @@ function cpuThink(w, k, b, dt, sol) {
     if (o) return true;
   }
   return false;
+}
+
+// The way up in Koko talo (#526): once the door of the staircase on this kid's floor is open,
+// head for the piece in front of it (the last of its floor to sink), jump onto the bottom step,
+// then walk up to the landing. Returns null when there is no way up to take, {walk, x, z} on the
+// stairs, or {} after setting the brain's target.
+function stairRoute(w, k, b, cur, sol) {
+  const n = floorOfY(k.y + 0.05);
+  if (n > 1 || w.rt < HOUSE.open[n]) return null;
+  const sx = STAIR_X[n];
+  // On the stairs (or right over them): straight up to the landing; the steps are walked.
+  if (cur && cur.kind === 'step' && cur.stair === n) return { walk: true, x: sx, z: (Z0 + STAIR_Z0) / 2 };
+  // The lowest step the lava has left: the bottom ones go under first.
+  const step1 = sol.filter(s => s.kind === 'step' && s.stair === n).sort((a, b) => a.step - b.step)[0];
+  // In the air on the way to the stairs: keep heading for what it jumped at.
+  if (!cur && b.target && sol.some(s => s.id === b.target)) return {};
+  const front = sol.find(s => s.id[0] === 'p' && w.pieces[+s.id.slice(1)].order === 4 && w.pieces[+s.id.slice(1)].floor === n);
+  let goal = cur && front && cur.id === front.id ? step1 : front || step1;
+  if (!goal) return null;
+  // Out of a jump's reach: hop to whatever is nearest the goal and nearer than here (within a
+  // jump of the edge of where it stands; cpuThink() runs to that edge first).
+  const reach = s => cur ? Math.min(gapTo(k, s), boxGap(cur, s)) : gapTo(k, s);
+  if (reach(goal) > b.look) {
+    const dist = s => Math.hypot(s.x - goal.x, s.z - goal.z);
+    const here = cur ? dist(cur) : Math.hypot(k.x - goal.x, k.z - goal.z);
+    let best = null, bd = here - 0.3;
+    for (const s of sol) {
+      if (s === cur || s.wall || s.kind === 'step' || s.top - k.y > 1.25 || floorOfY(s.top - 0.05) !== n) continue;
+      if (reach(s) > b.look || lifeLeft(w, s, w.rt) < 1.5 || dist(s) >= bd) continue;
+      best = s; bd = dist(s);
+    }
+    if (!best) return null;
+    goal = best;
+  }
+  b.target = goal.id;
+  return {};
 }

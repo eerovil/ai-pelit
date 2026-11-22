@@ -16,6 +16,13 @@
       "note": "Helpompi: huonekalut ja laava hitaampia ja tietokoneen lapset heikompia, tönäisy ei enää vie tönäisijää itseään reunan yli, ja vähän vajaaksi jäävästä hypystä kiipeää huonekalun päälle.",
       "request": "Lattia on laavaa v2 (lattia-on-laavaa): helpompi, tönäisy ei pudota itseä, kiipeäminen huonekalun reunalta\n\nEeron palaute v1:stä (#488, chatissa):\n\n- Peli on vähän liian vaikea.\n- Tönäisyssä tippuu itse pakosti.\n- Hahmo voisi kiivetä huonekalun päälle, jos hyppy osuu vähän ohi reunalle.",
       "issue": "eerovil/ai-pelit#505"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-22",
+      "note": "Uusi Koko talo: yksi pitkä kierros portaita ylös yläkertaan ja katolle, ja kun talo on laavan alla, ajelehtivien tavaroiden päällä.",
+      "request": "Lattia on laavaa: voisi jatkua rappusia ylös yläkertaan ja sitte katolle ja sitten jotain ohikulkevia ajelehtevia juttuja",
+      "issue": "eerovil/ai-pelit#526"
     }
   ]
 }
