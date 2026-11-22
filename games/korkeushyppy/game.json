@@ -114,6 +114,13 @@
       "note": "Palkintojenjaossa mitalit ripustava toimitsija pitelee nauhaa omilla käsillään.",
       "request": "Se joka laittaa mitalit kaulaan tuossa, niin ne kädet ei ole ne samat kädet kuin mitkä sillä normaalisti on. Millä se laittaa ne mitalit, niin se on vähän oudon näköinen.",
       "issue": "eerovil/ai-pelit#469"
+    },
+    {
+      "n": 17,
+      "date": "2026-11-22",
+      "note": "Kaverin vauhdinotto näkyy sulavana eikä nyi.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }

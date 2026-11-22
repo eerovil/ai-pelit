@@ -92,6 +92,7 @@ v14 (#399): passing many heights takes two taps, and the bar rises 20 cm at a ti
 v16 (#469) plays exactly as v15; only the drawing is new. The head bobs in the run-up, goes back over the bar and cheers after a clearance (`headTilt(a)` → `AiPelitOutfits.headPose()`, drawn by `AiPelitOutfits.sideHead()`). It runs on `public/lib/yleisurheilu-10/`, whose podium and spectators draw the shared front-facing figure.
 
 v17 (#469) plays exactly as v16 on `yleisurheilu-11/`: the podium's official hangs the medals with its own arms.
+v18 (#480) loads `yleisurheilu-12/` and `lib/sulava-1`, and passes `glide` to the meet: on a friend's turn the phone watching draws the run-up (`x`) gliding between the spots their phone sends, and the plant (`pl`) and release where the glide ends (`draw()` swaps `K.glide()` in around `drawFrame()`), instead of jumping to each spot as it came.
 
 ## Colours
 

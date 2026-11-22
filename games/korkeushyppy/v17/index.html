@@ -72,8 +72,10 @@
 <!-- v7 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v9 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v12 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-11/korkeus.js"></script>
+<!-- v17 (#480): the jumper on another phone glides through the run-up (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-12/korkeus.js"></script>
 <script src="../../../outfits.js" data-game="korkeushyppy" data-share="yleisurheilu"></script>
 <!-- v8 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -269,7 +271,7 @@ AU.load(['valinta', 'askel', 'askel2', 'ponnistus', 'suhahdus', 'rima', 'onnistu
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-11/korkeus.js): the bar rises; at each height everyone
+// in its bar-height format (lib/yleisurheilu-12/korkeus.js): the bar rises; at each height everyone
 // still in takes a first attempt in the drawn order, then those who failed a second, then a third;
 // a pass is allowed, three failures in a row and you are out. K.comp is the meet: a jumper is {id,
 // name, p, bot, skill (the height the computer clears half the time), first (the height index it
@@ -306,6 +308,10 @@ const K = AiPelitKisa.meet({
   spread: [4, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7].map(k => k * 0.015), jitter: 0.03,
   cpu: t => cpuTry(t, barNow()), turn: newTurn, clear: () => { th = null; passTo = 0; }, menu: showMenu, fmt,
   live: ['p', 'up', 'tap', 'done'], watch: watchFrom, none: 'ei hyväksyttyä tulosta',
+  // v17 (#480): a friend's run-up is drawn a moment back, gliding between the spots their phone sends; the
+  // take-off (up, a[0] the distance before the bar) is the run-up's last spot, so the jump starts where the
+  // glide ends. An 'up' with a reason (a run past, a pass) carries the spot itself.
+  glide: { keys: ['x'], jump: 3.5, spot: m => m.t === 'p' ? { x: m.a[0] } : m.t === 'up' ? { x: m.why ? m.a[0] : -m.a[0] } : null },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   // v3 (#176): the medal ceremony at the end, a chime per medal; v6 (#311): in their outfits.
   look: r => kit(r.fit, r.col),
@@ -488,7 +494,14 @@ function frame(now) {
 // ---------- Drawing ----------
 let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3;
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v17 (#480): a friend's jumper in the run-up is drawn where the meet's track has it (K.glide()), and put back after.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'run'));
+  const kept = th ? th.x : 0;
+  if (sw) th.x = g.x;
+  try { drawFrame(dt); } finally { if (sw) th.x = kept; }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();

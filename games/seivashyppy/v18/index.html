@@ -72,8 +72,10 @@
 <!-- v8 (#330): yleisurheilu-6 and aanet-3, so "📣 Kannusta" cheers with a short "jee!" -->
 <!-- v10 (#341): yleisurheilu-7, so the cheering friends stand in the background and a tap walks your own -->
 <!-- v13 (#395): yleisurheilu-9, so the friends watching stand still and only slide with the background -->
-<script src="../../../lib/yleisurheilu-11/kisa.js"></script>
-<script src="../../../lib/yleisurheilu-11/korkeus.js"></script>
+<!-- v18 (#480): the vaulter on another phone glides through the run-up (lib/sulava-1, yleisurheilu-12) -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="../../../lib/yleisurheilu-12/kisa.js"></script>
+<script src="../../../lib/yleisurheilu-12/korkeus.js"></script>
 <script src="../../../outfits.js" data-game="seivashyppy" data-share="yleisurheilu"></script>
 <!-- v9 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
@@ -175,7 +177,7 @@ function unlock() { if (!ac) { try { ac = new (window.AudioContext || window.web
 
 // ---------- The competition ----------
 // v2 (#165): the meet, its saves and playing it with friends are the shared athletics library's,
-// in its bar-height format (lib/yleisurheilu-11/korkeus.js). The real rules: the bar rises 10 cm at a
+// in its bar-height format (lib/yleisurheilu-12/korkeus.js). The real rules: the bar rises 10 cm at a
 // time; at each height everyone still trying takes a first attempt in the drawn order, then those
 // who failed a second, then a third. A vaulter may pass any height, even after failing at it; three
 // failures in a row and they are out. K.comp is the meet: a vaulter is {id, name, p, bot, skill (the
@@ -207,6 +209,10 @@ const K = AiPelitKisa.meet({
   spread: [0.3, 0.2, 0.1, 0.05, 0, -0.1, -0.15, -0.2, -0.3, -0.4, -0.5], jitter: 0.16,
   cpu: cpuTry, turn: newTurn, clear: () => { th = null; passTo = 0; }, menu: showMenu, fmt,
   live: ['p', 'pl', 'rel'], watch: watchFrom, none: 'ei hyväksyttyä tulosta',
+  // v18 (#480): a friend's run-up is drawn a moment back, gliding between the spots their phone sends; the plant
+  // (pl), the pole's spots and the let-go (rel) all carry the run-up's last spot first, so the vault starts where
+  // the glide ends. At most 12 m/s, a vaulter moves about 1.2 m between two spots, so 4 m is a jump.
+  glide: { keys: ['x'], jump: 4, spot: m => m.t === 'p' || m.t === 'pl' || m.t === 'rel' ? { x: m.a[0] } : null },
   fit: () => outfit.id, started: () => menu.classList.add('hidden'),
   // v3 (#176): the medal ceremony at the end, a chime per medal; v7 (#311): in their outfits.
   look: r => kit(r.fit, r.col),
@@ -449,7 +455,14 @@ function frame(now) {
 // ---------- Drawing ----------
 let flash = { 1: 0, 2: 0, 3: 0 }, blend = 0, camX = START - 3, passBox = null, pickBoxes = [];
 function rr(x0, y0, w, h, r) { x.beginPath(); x.roundRect(x0, y0, w, h, r); }
+// v18 (#480): a friend's vaulter in the run-up is drawn where the meet's track has it (K.glide()), and put back after.
 function draw(dt = 0) {
+  const g = K.glide(), sw = !!(g && th && !th.mine && (th.phase === 'ready' || th.phase === 'run'));
+  const kept = th ? th.x : 0;
+  if (sw) th.x = g.x;
+  try { drawFrame(dt); } finally { if (sw) th.x = kept; }
+}
+function drawFrame(dt) {
   x.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (land) { x.fillStyle = '#15233b'; x.fillRect(0, 0, W, H); }
   x.save();
