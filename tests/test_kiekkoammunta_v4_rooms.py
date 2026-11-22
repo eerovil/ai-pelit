@@ -75,6 +75,8 @@ def on_turn(pages):
 def wait_turn(pages, seq):
     for p in pages:
         p.wait_for_function(f'match&&(match.over||match.seq>={seq})', polling=50)
+        # A watcher holds the shooter's shots and hits until its late-drawn sight reaches them (#540).
+        p.wait_for_function('!held.length', polling=50)
         p.evaluate("for(let i=0;i<200&&round&&screen==='play'&&['flight','gap'].includes(round.phase);i++)step(1/60)")
 
 
@@ -152,9 +154,10 @@ def test_host_chooses_skeet_and_a_watcher_sees_the_same_discs(phones):
     guest.wait_for_function("round.phase==='flight'", polling=50)
     assert guest.evaluate('round.discs.map(d=>[d.kind,d.slot])') == host.evaluate('round.discs.map(d=>[d.kind,d.slot])')
     host.evaluate('step(.3);drag(30,-10);lastAim=0;drag(1,0)')
-    guest.wait_for_function('aimTo&&Math.abs(aimTo.yaw-%r)<1e-6' % host.evaluate('round.aim.yaw'), polling=50)
+    # The watcher's sight glides there (watchTick() is its frame; this page's rAF is off) and stops
+    # where the shooter's stopped, from the one more aim sent once the finger stops.
     was = guest.evaluate('round.aim.yaw')
-    guest.evaluate('step(.3)')
+    guest.wait_for_function('watchTick(),Math.abs(round.aim.yaw-%r)<1e-6' % host.evaluate('round.aim.yaw'), polling=50)
     assert guest.evaluate('round.aim.yaw') != was
     # A hit is the shooter's to say: the watcher's own step shows the ring and nothing more.
     host.mouse.up()
@@ -164,6 +167,41 @@ def test_host_chooses_skeet_and_a_watcher_sees_the_same_discs(phones):
     res = host.evaluate('round.results[0]')
     other.wait_for_function('round.results[0]===%s' % json.dumps(res), polling=50)
     assert host.evaluate('round.phase') == 'gap'
+    assert not guest.errors
+
+
+def test_the_watchers_see_the_shooters_aim_glide(phones):
+    # #540: the aim comes ten times a second, at uneven gaps; a watcher draws it through lib/sulava-1,
+    # so each frame moves the sight a little and never back, not one jump per message.
+    host, guest = room(phones, 2)
+    per = host.evaluate('2/scale*1.6')
+    guest.evaluate("""window.seen=[];window.tick=setInterval(()=>{watchTick();seen.push(round.aim.yaw)},16)""")
+    # The shooter's finger moves the same way every 16 ms for a second, then stops.
+    host.evaluate("""new Promise(done=>{let n=0;const id=setInterval(()=>{drag(2,0);
+        if(++n===60){clearInterval(id);done()}},16)})""")
+    end = host.evaluate('round.aim.yaw')
+    guest.wait_for_function('Math.abs(round.aim.yaw-%r)<1e-6' % end, polling=50)
+    seen = guest.evaluate('clearInterval(tick),seen')
+    steps = [b - a for a, b in zip(seen, seen[1:])]
+    moving = [d for d in steps if d > 1e-9]
+    assert len(moving) > 30, steps
+    # One message's move is six drags; a frame moves about one, and never back.
+    assert max(steps) < 3 * per, (max(steps) / per, steps)
+    assert min(steps) > -0.2 * per, (min(steps) / per, steps)
+    assert not guest.errors
+
+
+def test_a_watcher_holds_the_disc_until_its_sight_is_there(phones):
+    # The disc launches on a watcher when its sight, drawn a moment late, reaches the launch.
+    host, guest = room(phones, 2)
+    guest.evaluate("R.on('message',m=>{if(m.k==='fly')window.flyAt=performance.now()})")
+    guest.evaluate("window.launched=0;"
+                   "setInterval(()=>{if(!launched&&round.phase==='flight')launched=performance.now()},5)")
+    host.evaluate('call()')
+    guest.wait_for_function("round.phase==='flight'", polling=50)
+    late = guest.evaluate('launched-flyAt')
+    assert 30 <= late <= 400, late
+    assert guest.evaluate('round.discs.length') == 1
     assert not guest.errors
 
 
