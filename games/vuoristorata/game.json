@@ -50,6 +50,13 @@
       "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
       "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
       "issue": "eerovil/ai-pelit#480"
+    },
+    {
+      "n": 8,
+      "date": "2026-11-22",
+      "note": "Kaverin juna jatkaa tauon jälkeen sulavasti, ei hyppää.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }

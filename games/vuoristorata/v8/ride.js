@@ -693,7 +693,10 @@ const pz = { off: 0, at: null };
 function netClock() {
   const t = AiPelitSulava.now();
   if (RM && RM.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
-  if (pz.at !== null) { pz.off += t - pz.at; pz.at = null; heldOn(t - pz.off); }
+  // v8 (#480): the clock goes on 1 ms past where it stood, not at the same moment. A track eases in the spots
+  // that came since its last drawing only when its clock has moved on from it (sulava-1's at()); at the very
+  // moment it stood, the held spots were drawn at once, and a train that drove on in the pause hopped there.
+  if (pz.at !== null) { pz.off += t - pz.at - 0.001; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
 }
 function heldOn(a) {
