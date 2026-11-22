@@ -9,6 +9,13 @@
       "note": "Ensimmäinen versio: 3D-pöytä oman pään takaa, maila sormella, kolme konetasoa ja kaksinpeli kaverin puhelinta vastaan.",
       "request": "Pingis",
       "issue": "eerovil/ai-pelit#502"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-22",
+      "note": "Pelin aikana oikean yläkulman ⏸-napista pääsee tauolle, ja sieltä pelin voi lopettaa kesken.",
+      "request": "Pingis: anna lopettaa peli kesken. Lisää moninpeli",
+      "issue": "eerovil/ai-pelit#531"
     }
   ]
 }
