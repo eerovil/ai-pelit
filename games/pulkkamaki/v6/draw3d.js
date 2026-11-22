@@ -194,7 +194,7 @@ function terrain(hill) {
     const s = s0 + i * ds, cx = centreX(hill, s), b = baseAt(hill, Math.max(0, s)) + (s < 0 ? -s * 0.1 : 0);
     for (let j = 0; j < cols; j++) {
       const x = xs[j], k = (i * cols + j) * 3;
-      pos[k] = cx + x; pos[k + 1] = b + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1); pos[k + 2] = -s;
+      pos[k] = cx + x; pos[k + 1] = b + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1) + bermAt(hill, Math.max(0, s), x); pos[k + 2] = -s;
       c.copy(track).lerp(soft, clamp((Math.abs(x) - hill.width / 2) / 4, 0, 1));
       if (Math.abs(x) <= hill.width / 2 + WALL + 1 && tunnelAt(hill, s)) c.lerp(under, 0.55);   // in a tunnel's shade (v6)
       col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
@@ -258,8 +258,8 @@ function kickers(hill) {
   const quad = (a, b, d, e, hex) => { tri(a, b, d, hex); tri(b, e, d, hex); };
   for (const k of hill.kicks) {
     const N = 10, L = k.x - k.w / 2, R = k.x + k.w / 2;
-    const top = (u, x) => { const s = k.s + u * k.len; return hillPoint(hill, s, x, baseAt(hill, s) + k.h * u * u); };
-    const bot = (u, x) => { const s = k.s + u * k.len; return hillPoint(hill, s, x, baseAt(hill, s) - 0.05); };
+    const top = (u, x) => { const s = k.s + u * k.len; return hillPoint(hill, s, x, snowAt(hill, s, x) + k.h * u * u); };
+    const bot = (u, x) => { const s = k.s + u * k.len; return hillPoint(hill, s, x, snowAt(hill, s, x) - 0.05); };
     for (let i = 0; i < N; i++) {
       const u0 = i / N, u1 = (i + 1) / N;
       quad(top(u0, L), top(u0, R), top(u1, L), top(u1, R), '#f4f8ff');
@@ -305,7 +305,8 @@ function spruceGeometry() {
 function spruces(hill) {
   const r = rng(hill.n * 101), list = [];
   for (const o of hill.obst) if (o.kind === 'kuusi') list.push([o.s, o.x, 1]);
-  const mound = (s, x) => (hill.tunnels || []).some(t => s > t.s - 3 && s < t.s + t.len + 3 && Math.abs(x) < hill.width / 2 + MOUND + 2);
+  const mound = (s, x) => (hill.tunnels || []).some(t => s > t.s - 3 && s < t.s + t.len + 3 && Math.abs(x) < hill.width / 2 + MOUND + 2) ||
+    (bermAt(hill, s, x) > 0.2 && Math.abs(x) < hill.width / 2 + 14);   // and none up a berm, where a sled may ride (v6)
   for (let s = -30; s < hill.total; s += 3) {
     // x is measured straight across, so on a bend the same x is nearer the track: further out there (v6).
     const wide = 1 / Math.cos(courseDir(hill, s));
@@ -317,7 +318,7 @@ function spruces(hill) {
   for (let i = list.length - 1; i >= 0; i--) if (list[i][2] !== 1 && mound(list[i][0], list[i][1])) list.splice(i, 1);
   const m = new THREE.InstancedMesh(spruceGeometry(), lambert(), list.length), o = new THREE.Object3D(), lights = [];
   list.forEach(([s, x, k], i) => {
-    const [X, Y, Z] = hillPoint(hill, s, x, baseAt(hill, Math.max(0, s)) + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1) - 0.1);
+    const [X, Y, Z] = hillPoint(hill, s, x, baseAt(hill, Math.max(0, s)) + bankAt(hill, x) * (Math.abs(x) > 30 ? 0.6 : 1) + bermAt(hill, Math.max(0, s), x) - 0.1);
     o.position.set(X, Y, Z); o.scale.setScalar(k); o.rotation.y = r() * TAU; o.updateMatrix(); m.setMatrixAt(i, o.matrix);
     if (Math.abs(x) < 26 && r() < 0.45) {
       for (let j = 0; j < 14; j++) {
@@ -334,7 +335,7 @@ function spruces(hill) {
 function rocksAndSnowmen(hill) {
   const parts = [];
   for (const o of hill.obst) {
-    const y = baseAt(hill, o.s) + bankAt(hill, o.x), [X, , Z] = hillPoint(hill, o.s, o.x, 0);
+    const y = snowAt(hill, o.s, o.x), [X, , Z] = hillPoint(hill, o.s, o.x, 0);
     if (o.kind === 'kivi') {
       const g = new THREE.DodecahedronGeometry(0.9); g.scale(1, 0.65, 1); g.translate(X, y + 0.35, Z); parts.push([g, '#5d6475']);
       const cap = new THREE.SphereGeometry(0.75, 8, 4, 0, TAU, 0, Math.PI / 2); cap.scale(1, 0.4, 1); cap.translate(X, y + 0.7, Z); parts.push([cap, '#eef3ff']);
@@ -355,7 +356,8 @@ function lanterns(hill) {
   for (let s = 10; s < hill.len + 40; s += 24) {
     if ((hill.tunnels || []).some(t => s > t.s - 3 && s < t.s + t.len + 3)) continue;   // the tunnel has its own lamps
     for (const side of [-1, 1]) {
-      const x = side * (hill.width / 2 + 1.2), y = baseAt(hill, s) + bankAt(hill, x), [X, , Z] = hillPoint(hill, s, x, 0);
+      if (bermAt(hill, s, side * (hill.width / 2 + 1.2)) > 0.3) continue;   // nor up a berm (v6)
+      const x = side * (hill.width / 2 + 1.2), y = snowAt(hill, s, x), [X, , Z] = hillPoint(hill, s, x, 0);
       const g = new THREE.CylinderGeometry(0.06, 0.08, 1.6, 6); g.translate(X, y + 0.8, Z); parts.push([g, '#2a2a33']);
       const b = new THREE.BoxGeometry(0.3, 0.36, 0.3); b.translate(X, y + 1.75, Z); parts.push([b, '#3a3a44']);
       lights.push([X, y + 1.75, Z]);
@@ -446,7 +448,7 @@ function gifts(hill) {
     const bow = new THREE.TorusGeometry(0.14 * k, 0.05 * k, 6, 10); bow.translate(0, 0.38 * k, 0); parts.push([bow, '#fff3c0']);
     const m = new THREE.Mesh(merge(parts), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x222222 }));
     const [X, , Z] = hillPoint(hill, gf.s, gf.x, 0);
-    m.position.set(X, baseAt(hill, gf.s) + bankAt(hill, gf.x) + gf.up, Z);
+    m.position.set(X, snowAt(hill, gf.s, gf.x) + gf.up, Z);
     m.userData.y0 = m.position.y; m.userData.ph = gf.id * 1.7;
     grp.add(m); grp.userData.byId[gf.id] = m;
   }
@@ -532,6 +534,10 @@ function poseRig(rig, hill, sl, look) {
   const slope = sl.air ? Math.atan2(sl.vy, Math.max(1, sl.v)) * 0.6 : Math.atan(groundAt(hill, sl.s + 0.5, sl.x) - groundAt(hill, sl.s - 0.5, sl.x));
   u.slope = (u.slope === undefined ? slope : u.slope + (slope - u.slope) * 0.25);
   rig.rotation.x = u.slope;
+  // Sideways on a berm (v6) the sled leans with the snow.
+  const side = sl.air ? 0 : Math.atan((groundAt(hill, sl.s, sl.x + 0.3) - groundAt(hill, sl.s, sl.x - 0.3)) / 0.6) * Math.cos(sl.yaw);
+  u.side = (u.side === undefined ? side : u.side + (side - u.side) * 0.25);
+  rig.rotation.z = u.side;
   u.pivot.position.y = 0.45; u.lean.position.y = -0.45;
   u.pivot.rotation.set(-sl.flip, sl.spin, sl.tilt + sl.roll);   // a front flip takes the nose down
   const P = u.P, grab = sl.grab;

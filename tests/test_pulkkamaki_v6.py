@@ -426,3 +426,36 @@ def test_a_tunnels_walls_keep_the_sled_in_and_its_roof_keeps_it_low(site, contex
     assert got["over"] < 0, got   # under the roof all the time
     assert got["high"] > 6, got
     assert page.errors == []
+
+
+def test_a_fast_sled_rides_up_the_outer_curve_of_a_bend_and_back(site, context):
+    # Eero, v6: "Voisko olla mahdollista että mutkassa voi nousta sinne ulkokurviin ylös".
+    page = open_game(site, context)
+    got = page.evaluate("""() => [6, 7].map(n => {
+      const h = buildHill(n);
+      // The highest berm with no jump or drop near it, and which side it is on.
+      const near = s => h.kicks.some(k => Math.abs(k.s - s) < 45) || h.drops.some(d => Math.abs(d.s - s) < 45);
+      let at = 0;
+      for (let s = 60; s < h.len - 40; s++) if (!near(s) && Math.abs(h.berm[s]) > Math.abs(h.berm[at])) at = s;
+      const out = Math.sign(h.berm[at]);
+      // Fast, nobody steering, a little towards the outside: it rides up the outer curve.
+      const sl = newSled('t', 't'); sl.s = at - 20; sl.x = 0; sl.y = groundAt(h, sl.s, sl.x); sl.v = 20;
+      sl.yaw = out * 0.2;
+      let up = 0, back = false, flew = false, t = 0;
+      for (; t < 5 && !back; t += DT) {
+        step(h, sl, DT);
+        flew = flew || sl.air;
+        up = Math.max(up, sl.y - baseAt(h, sl.s));
+        back = up > 1 && Math.abs(sl.x) < h.width / 2 - 1;
+      }
+      // The inner side of the bend stays flat, and the old hills have no berms.
+      const inner = bermAt(h, at, -out * h.width / 2);
+      return { berm: Math.abs(h.berm[at]), up, back, flew, fell: sl.fallT > 0, inner,
+        old: Math.max(...[1, 2, 3, 4, 5].map(k => Math.max(...buildHill(k).berm.map(Math.abs)))) };
+    })""")
+    for g in got:
+        assert g["berm"] > 1, g
+        assert g["up"] > 1, g   # it rides up the outer curve
+        assert g["back"] and not g["fell"] and not g["flew"], g   # and comes back down onto the track, on the snow
+        assert g["inner"] == 0 and g["old"] == 0, g
+    assert page.errors == []
