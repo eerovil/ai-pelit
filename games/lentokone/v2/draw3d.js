@@ -4,6 +4,20 @@
 // draw 3D says so in the HUD.
 
 let THREE = null, V3 = null, no3d = false, camView = 'chase';   // 'chase' behind, 'cockpit' inside
+// Looking around (#547, Eero's ask): a finger drag turns the view by `yaw` (around the plane, radians)
+// and `pitch` (up); `held` while the finger is down. A moment after it lifts, the view glides back.
+const LOOK = { yaw: 0, pitch: 0, held: false, idle: 0 };
+const LOOK_BACK = 1.2;   // s after the finger lifts before the view turns back
+function lookStep(dt) {
+  if (LOOK.held) { LOOK.idle = 0; return; }
+  LOOK.idle += dt;
+  if (LOOK.idle < LOOK_BACK) return;
+  const k = Math.min(1, dt * 2.5);
+  LOOK.yaw -= LOOK.yaw * k; LOOK.pitch -= LOOK.pitch * k;
+  if (Math.abs(LOOK.yaw) < 1e-3) LOOK.yaw = 0;
+  if (Math.abs(LOOK.pitch) < 1e-3) LOOK.pitch = 0;
+}
+function lookReset() { LOOK.yaw = LOOK.pitch = 0; LOOK.held = false; LOOK.idle = 0; }
 
 const TER_N = 160, TER_CELL = 60;           // the land: 9.6 km square round the plane, rebuilt as it flies
 const TREE_R = 2600, TREE_MAX = 3200;       // trees within this distance
@@ -342,6 +356,7 @@ function render3d(p, route, dt, still, pax) {
     g.userData.sock.rotation.x = (Math.PI / 2 - 0.15) * (1 - clamp(ws / 8, 0, 1)) * 0.9;
   }
   const cam = V3.camera;
+  if (!still && !pax) lookStep(dt);
   if (pax) paxCamera(p, cam);
   else if (camView === 'cockpit') cockpitCamera(p, cam);
   else chaseCamera(p, cam, dt, still);
@@ -357,15 +372,17 @@ function chaseCamera(p, cam, dt, still) {
   const u = V3.plane.userData, big = u.big ? 2.5 : 1;
   u.fuse.visible = true; if (u.prop) u.prop.visible = true;
   const back = (LAND ? 27 : 34) * big, up = (LAND ? 6.5 : 8.5) * big;
-  const want = [p.x - dirX(p.hdg) * back * Math.cos(p.gam), p.y + up - Math.sin(p.gam) * back, p.z - dirZ(p.hdg) * back * Math.cos(p.gam)];
+  // Looking around turns the camera about the plane: `h` the way it looks, the pitch raising it.
+  const h = p.hdg + LOOK.yaw, flat = back * Math.cos(p.gam) * Math.cos(LOOK.pitch);
+  const want = [p.x - dirX(h) * flat, p.y + up - Math.sin(p.gam) * back + Math.sin(LOOK.pitch) * back, p.z - dirZ(h) * flat];
   want[1] = Math.max(want[1], groundAt(want[0], want[2]) + 2);
   if (!V3.cam) { V3.cam = want.slice(); V3.look3 = null; }
-  const k = still ? 1 : Math.min(1, dt * 4);
+  const k = still ? 1 : Math.min(1, dt * (LOOK.held || LOOK.yaw ? 10 : 4));
   for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * k;
   cam.position.set(...V3.cam);
   cam.up.set(Math.cos(p.hdg) * Math.sin(p.bank * 0.35), Math.cos(p.bank * 0.35), Math.sin(p.hdg) * Math.sin(p.bank * 0.35));
   // Where it looks follows as smoothly, so the view turns from the passengers' scene to the flight.
-  const look = [p.x + dirX(p.hdg) * 30 * big, p.y + 3 * big + Math.sin(p.gam) * 30 * big, p.z + dirZ(p.hdg) * 30 * big];
+  const look = [p.x + dirX(h) * 30 * big, p.y + 3 * big + Math.sin(p.gam) * 30 * big, p.z + dirZ(h) * 30 * big];
   if (!V3.look3) V3.look3 = look.slice();
   for (let i = 0; i < 3; i++) V3.look3[i] += (look[i] - V3.look3[i]) * k;
   cam.lookAt(...V3.look3);
@@ -381,6 +398,8 @@ function cockpitCamera(p, cam) {
   cam.position.applyMatrix4(V3.plane.matrixWorld);
   cam.quaternion.setFromEuler(V3.plane.rotation);
   cam.rotateX(-0.06);
+  // Turning the head: around the plane's own up, then up or down.
+  cam.rotateY(-LOOK.yaw); cam.rotateX(LOOK.pitch);
   cam.up.set(0, 1, 0);
   cam.fov = LAND ? 62 : 75; cam.updateProjectionMatrix();
   V3.cam = V3.look3 = null;
@@ -392,7 +411,11 @@ function paxCamera(p, cam) {
   const u = V3.plane.userData;
   u.fuse.visible = true; if (u.prop) u.prop.visible = true;
   const toW = ([lx, ly, lz]) => [p.x + lx * Math.cos(p.hdg) - lz * Math.sin(p.hdg), p.y + ly, p.z + lx * Math.sin(p.hdg) + lz * Math.cos(p.hdg)];
-  const pos = toW(LAND ? PAX_CAM.land : PAX_CAM.port), at = toW(PAX_CAM.at);
+  // Looking around circles the camera about the stairs, and raises it.
+  const [ox, oy, oz] = LAND ? PAX_CAM.land : PAX_CAM.port, [ax, , az] = PAX_CAM.at;
+  const cy = Math.cos(LOOK.yaw), sy = Math.sin(LOOK.yaw), dx = ox - ax, dz = oz - az, r = Math.hypot(dx, dz);
+  const lx = ax + (dx * cy - dz * sy) * Math.cos(LOOK.pitch), lz = az + (dx * sy + dz * cy) * Math.cos(LOOK.pitch);
+  const pos = toW([lx, oy + Math.sin(LOOK.pitch) * r, lz]), at = toW(PAX_CAM.at);
   pos[1] = Math.max(pos[1], groundAt(pos[0], pos[2]) + 3);
   cam.position.set(...pos); cam.up.set(0, 1, 0); cam.lookAt(...at);
   cam.fov = LAND ? 55 : 62; cam.updateProjectionMatrix();

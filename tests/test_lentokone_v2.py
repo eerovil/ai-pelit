@@ -610,3 +610,83 @@ def test_no_one_walks_out_after_a_roll_off_the_runway(site, context):
     page.evaluate("() => { p.over.stop = 0; p.pit = 0.1; }")
     page.wait_for_function("mode === 'end'", timeout=8000)
     assert page.errors == []
+
+
+def drag(page, pid, x, y, dx, dy, steps=6):
+    page.evaluate(TOUCH, ["pointerdown", pid, x, y])
+    for i in range(1, steps + 1):
+        page.evaluate(TOUCH, ["pointermove", pid, x + dx * i / steps, y + dy * i / steps])
+    page.evaluate(TOUCH, ["pointerup", pid, x + dx, y + dy])
+
+
+@pytest.mark.parametrize("plane", ["iso", "pieni"])
+def test_a_drag_on_the_free_screen_looks_around_and_the_view_comes_back(site, context, plane):
+    page = open_game(site, context, plane=plane)
+    page.click("#go")
+    if plane == "iso":
+        page.wait_for_function("mode === 'board'", timeout=8000)
+        board_now(page)
+    else:
+        page.wait_for_function("mode === 'fly'", timeout=8000)
+    # The right side above the throttle is free: a drag there turns the view, not the plane.
+    page.evaluate(TOUCH, ["pointerdown", 7, 300, 250])
+    for i in range(1, 7):
+        page.evaluate(TOUCH, ["pointermove", 7, 300 - 25 * i, 250])
+    page.wait_for_timeout(300)
+    held = page.evaluate("({ yaw: LOOK.yaw, held: LOOK.held, stick: stick.id, sx: p.sx, thr: p.thr })")
+    assert held["held"] and held["stick"] is None and held["sx"] == 0 and held["thr"] == 0
+    assert abs(held["yaw"]) > 1.2
+    cam = page.evaluate("[V3.camera.position.x - p.x, V3.camera.position.z - p.z]")
+    page.evaluate(TOUCH, ["pointerup", 7, 150, 250])
+    # The camera is no longer straight behind the plane (which looks along -z on the first runway).
+    assert abs(cam[0]) > 5, cam
+    # The stick works while looking: a second finger on the left.
+    page.wait_for_function("!LOOK.held && LOOK.yaw === 0", timeout=8000)
+    assert page.errors == []
+
+
+def test_looking_around_in_the_cockpit_turns_the_head(site, context):
+    page = open_game(site, context, plane="pieni")
+    page.click("#view")
+    page.click("#go")
+    page.wait_for_function("mode === 'fly'", timeout=8000)
+    page.wait_for_timeout(200)
+    ahead = page.evaluate("(() => { const v = new V3.camera.position.constructor(); V3.camera.getWorldDirection(v); return [v.x, v.z]; })()")
+    page.evaluate(TOUCH, ["pointerdown", 8, 300, 250])
+    page.evaluate(TOUCH, ["pointermove", 8, 200, 250])
+    page.wait_for_timeout(200)
+    side = page.evaluate("(() => { const v = new V3.camera.position.constructor(); V3.camera.getWorldDirection(v); return [v.x, v.z]; })()")
+    page.evaluate(TOUCH, ["pointerup", 8, 200, 250])
+    assert ahead[0] * side[0] + ahead[1] * side[1] < 0.8, (ahead, side)
+    assert page.errors == []
+
+
+def test_a_drag_during_the_boarding_looks_around_and_a_tap_still_skips(site, context):
+    page = open_game(site, context, plane="iso")
+    page.click("#go")
+    page.wait_for_function("mode === 'board'", timeout=8000)
+    before = page.evaluate("[V3.camera.position.x, V3.camera.position.z]")
+    drag(page, 9, 250, 400, -150, 0)
+    page.wait_for_timeout(200)
+    assert page.evaluate("mode") == "board"
+    after = page.evaluate("[V3.camera.position.x, V3.camera.position.z]")
+    assert abs(after[0] - before[0]) + abs(after[1] - before[1]) > 10
+    # The boarding view stays where it was turned; a tap skips, and the flight looks ahead.
+    page.wait_for_timeout(1500)
+    assert abs(page.evaluate("LOOK.yaw")) > 1
+    page.evaluate(TOUCH, ["pointerdown", 10, 180, 400])
+    page.evaluate(TOUCH, ["pointerup", 10, 182, 401])
+    page.wait_for_function("mode === 'fly'", timeout=3000)
+    assert page.evaluate("LOOK.yaw === 0 && LOOK.pitch === 0")
+    assert page.errors == []
+
+
+def test_the_glide_path_lights_are_said_in_words(site, context):
+    page = open_game(site, context)
+    words = page.evaluate("[0, 1, 2, 3, 4].map(n => glideWords([0, 1, 2, 3].map(i => i < n))[0])")
+    assert words == ["Liian matalalla – nouse ⬆", "Vähän matalalla", "Oikea liukupolku ✓", "Vähän korkealla", "Liian korkealla – laskeudu ⬇"]
+    # On the approach, on the path: the strip says so.
+    page.evaluate("() => startFlight(true)")
+    page.wait_for_timeout(300)
+    assert page.evaluate("glideWords(papi(p, FIELDS[route.to]))[0]") == "Oikea liukupolku ✓"
+    assert page.errors == []

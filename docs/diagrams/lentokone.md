@@ -67,10 +67,15 @@ flowchart TD
 - **Matkustajat nousevat kyytiin bussista portaita**: `beginBoarding()` in `ui.js`, drawn from
   `paxScene('board', t)` in `passengers.js`: 16 passengers walk from a yellow bus to wheeled stairs and
   in at the jet's front door, counted "🧳 N / 16 koneessa"; the door shuts, the bus drives off and the
-  stairs pull back (about 13 s). A tap anywhere ("Napauta: ohita") skips to the flight. Flying the
+  stairs pull back (about 13 s). A tap anywhere ("Napauta: ohita · vedä: katso ympärille") skips to the flight; a drag turns the view instead. Flying the
   same route again in the jet after a crash or a restart ("Alusta" on the end screen, ⏸'s restart)
   skips it: the passengers are still aboard. Nothing is
   saved during it, and turning the phone keeps it.
+- **Kone kiitoradan päässä, moottori käy**: looking around (`LOOK` in `draw3d.js`): a finger put down
+  on the free part of the screen (not the stick's left side below the top strip, the throttle or a
+  button), or anywhere during the passengers' scenes, turns the view about the plane as it drags (the
+  cockpit view turns the head). A moment (1.2 s, `LOOK_BACK`) after it lifts, the flight's view glides
+  back behind the plane; the passengers' view stays where it was turned. A new flight starts looking ahead.
 - **Kaasu täysille, vauhti kasvaa**: the throttle is a slider on the right; a finger dragged up or
   down from anywhere on it moves it from where it was. On the ground the stick's side movement
   steers the nose wheel, and "Jarru" (shown only on the ground) brakes while held.
@@ -93,7 +98,9 @@ flowchart TD
 - **Lähestyminen: telineet alas, laipat, kaasu pienelle**: four lights at the aim point, 220 m past
   the threshold (110 m on the short runway; `aimAt()` in `world.js`), where the 3° glide path meets
   the ground (`PAPI_ANGLES` 3.5°, 3.17°, 2.83°, 2.5°; two white and two red on it), also drawn as
-  four dots ("Liukupolku") in the strip within 4.5 km. Yellow rings every 300 m out to 3 km, centred
+  four dots ("Liukupolku") in the strip within 4.5 km, with the same in words under them (`glideWords()`
+  in `ui.js`, from how many are white: 0 "Liian matalalla – nouse ⬆", 1 "Vähän matalalla", 2 "Oikea
+  liukupolku ✓", 3 "Vähän korkealla", 4 "Liian korkealla – laskeudu ⬇"). Yellow rings every 300 m out to 3 km, centred
   14 m above that path, mark it on the first two routes; "Telineet alas!" warns inside 2.5 km with
   the gear up.
 - **Koskettaa maata**: `touchDown()` in `world.js`. A touch ends the flight with its reason when

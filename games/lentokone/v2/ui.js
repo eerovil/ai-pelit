@@ -95,17 +95,20 @@ function startFlight(fromApproach) {
 // The passengers walk from the bus up the stairs; a tap skips it. Nothing is saved until the flight.
 function beginBoarding() {
   mode = 'board'; paxT = 0; pax = paxScene('board', 0); result = null; endT = 0;
+  lookReset(); lookHold.id = null;
   hideAll(); chip(false);
   wake();
 }
 function beginDeplaning() {
   mode = 'deplane'; paxT = 0; pax = paxScene('deplane', 0);
+  lookReset(); lookHold.id = null;
   p.pit = 0; p.bank = 0;   // level on its wheels, so the door meets the stairs
   wake();
 }
 function beginFlight(fromBoarding) {
   mode = 'fly'; endT = 0; saveT = 0; result = null; acc = 0; pax = null;
-  stick.id = thrHold.id = null; for (const b of BTNS) b.down = null;
+  stick.id = thrHold.id = lookHold.id = null; for (const b of BTNS) b.down = null;
+  lookReset();
   // From the passengers' scene the chase camera glides from where it was.
   if (V3 && !fromBoarding) V3.cam = null;
   hideAll();
@@ -179,25 +182,43 @@ function layout() {
 const inBox = (bx, x, y) => bx && x >= bx.x && x <= bx.x + bx.w && y >= bx.y && y <= bx.y + bx.h;
 function btnAt(x, y) { return BTNS.find(bt => (!bt.show || bt.show()) && inBox(L[bt.id], x, y)); }
 function point(e) { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+// Looking around (#547): a finger on the free part of the screen, or anywhere during the passengers'
+// scene (where a tap that does not move skips it), turns the view as it drags.
+const lookHold = { id: null, x: 0, y: 0, moved: 0 };
+function startLook(e, x, y) {
+  lookHold.id = e.pointerId; lookHold.x = x; lookHold.y = y; lookHold.moved = 0; LOOK.held = true; wake();
+}
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
-  if (mode === 'board' || mode === 'deplane') { skipPax(); return; }
-  if (mode !== 'fly') return;
   const [x, y] = point(e);
+  if (mode === 'board' || mode === 'deplane') { if (lookHold.id === null) startLook(e, x, y); return; }
+  if (mode !== 'fly') return;
   const bt = btnAt(x, y);
-  if (p.over) return;
-  if (bt) { bt.down = e.pointerId; wake(); return; }
-  if (inBox(L.zoneThr, x, y) && thrHold.id === null) { thrHold.id = e.pointerId; thrHold.y = y; thrHold.t0 = p.thr; return; }
-  if (x < W * 0.6 && y > SAFE_T + 60 && stick.id === null) { stick.id = e.pointerId; stick.x0 = stick.x = x; stick.y0 = stick.y = y; readStick(); }
+  if (bt && !p.over) { bt.down = e.pointerId; wake(); return; }
+  if (!p.over && inBox(L.zoneThr, x, y) && thrHold.id === null) { thrHold.id = e.pointerId; thrHold.y = y; thrHold.t0 = p.thr; return; }
+  if (!p.over && x < W * 0.6 && y > SAFE_T + 60 && stick.id === null) { stick.id = e.pointerId; stick.x0 = stick.x = x; stick.y0 = stick.y = y; readStick(); return; }
+  if (lookHold.id === null && !bt) startLook(e, x, y);
 });
 c.addEventListener('pointermove', e => {
-  if (mode !== 'fly') return;
   const [x, y] = point(e);
+  if (e.pointerId === lookHold.id) {
+    const dx = x - lookHold.x, dy = y - lookHold.y;
+    lookHold.x = x; lookHold.y = y; lookHold.moved += Math.abs(dx) + Math.abs(dy);
+    LOOK.yaw = (LOOK.yaw + dx * 0.012 + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    LOOK.pitch = clamp(LOOK.pitch + dy * 0.008, -0.35, 0.9);
+    return;
+  }
+  if (mode !== 'fly') return;
   if (e.pointerId === stick.id) { stick.x = x; stick.y = y; readStick(); }
   else if (e.pointerId === thrHold.id) p.thr = clamp(thrHold.t0 + (thrHold.y - y) / L.thr.h, 0, 1);
 });
 function lift(e) {
   const [x, y] = point(e);
+  if (e.pointerId === lookHold.id) {
+    lookHold.id = null; LOOK.held = false;
+    if (e.type === 'pointerup' && lookHold.moved < 12) skipPax();
+    return;
+  }
   if (e.pointerId === stick.id) { stick.id = null; p.sx = p.sy = 0; }
   if (e.pointerId === thrHold.id) thrHold.id = null;
   for (const bt of BTNS) if (bt.down === e.pointerId) {
@@ -217,7 +238,7 @@ function readStick() {
   if (Math.abs(p.sy) < 0.08) p.sy = 0;
 }
 // A tap during the passengers' scene skips to its end.
-function skipPax() {
+function skipPax() {   // does nothing outside the scene
   if (mode === 'board') beginFlight(true);
   else if (mode === 'deplane') endFlight();
 }
@@ -227,7 +248,7 @@ function brakeHeld() { return BTNS[2].down !== null && BTNS[2].down !== undefine
 function pause() {
   if (mode !== 'fly' || p.over) return;
   mode = 'pause'; keepFlight();
-  stick.id = thrHold.id = null; p.sx = p.sy = 0;
+  stick.id = thrHold.id = lookHold.id = null; LOOK.held = false; p.sx = p.sy = 0;
   $('pause').hidden = false; chip(true);
   wake();
 }
@@ -337,6 +358,10 @@ function drawHUD() {
   if (lit && g.runwayDist < 4500) {
     shadowText('Liukupolku', ax - 50, ay + 24, 11, '#cfe0ff', 'left', 600);
     lit.forEach((on, i) => { cx.fillStyle = on ? '#ffffff' : '#ff3a3a'; cx.beginPath(); cx.arc(ax + 30 + i * 16, ay + 24, 6, 0, TAU); cx.fill(); });
+    // In words too (#547, Eero: the dots alone were not clear): white means above the path, red below.
+    const [txt, col] = glideWords(lit);
+    // Sideways the hint line sits just below: the words go beside the dots there.
+    if (LAND) shadowText(txt, ax + 100, ay + 24, 13, col, 'left', 800); else shadowText(txt, ax - 50, ay + 44, 13, col, 'left', 800);
   }
   // Warnings.
   let warn = '';
@@ -348,6 +373,10 @@ function drawHUD() {
   else if (p.over) shadowText(p.over.why, W / 2, H * 0.3, 26, '#ff7a6a', 'center', 900);
   drawControls();
 }
+// The glide-path lights in words: how many are white says how high the plane is on the path.
+const GLIDE_WORDS = [['Liian matalalla – nouse ⬆', '#ff8a7a'], ['Vähän matalalla', '#ffd84a'], ['Oikea liukupolku ✓', '#7aff9a'],
+  ['Vähän korkealla', '#ffd84a'], ['Liian korkealla – laskeudu ⬇', '#ff8a7a']];
+function glideWords(lit) { return GLIDE_WORDS[lit.filter(Boolean).length]; }
 // The passengers' scene: who is aboard, and that a tap skips it.
 function drawPaxHUD() {
   if (!pax) return;
@@ -356,7 +385,7 @@ function drawPaxHUD() {
   cx.fillStyle = 'rgba(10,20,40,.45)'; rrect(W / 2 - 130, y - 18, 260, 58, 14); cx.fill();
   shadowText(on ? 'Matkustajat nousevat kyytiin' : 'Matkustajat poistuvat', W / 2, y - 2, 16, '#fff', 'center', 800);
   shadowText('🧳 ' + pax.aboard + ' / ' + PAX.n + ' koneessa', W / 2, y + 22, 15, '#ffd84a', 'center', 800);
-  shadowText('Napauta: ohita', W / 2, H - SAFE_B - 34, 14, '#cfe0ff', 'center', 700);
+  shadowText('Napauta: ohita · vedä: katso ympärille', W / 2, H - SAFE_B - 34, 14, '#cfe0ff', 'center', 700);
 }
 // First flights: what to do next.
 function hint(g, agl) {
@@ -368,7 +397,7 @@ function hint(g, agl) {
   if (!g.lined) return 'Lennä keltaisen nuolen suuntaan';
   if (g.runwayDist > 1500) return 'Telineet alas, laipat 2, kaasu pienelle';
   if (agl < 12) return 'Loivenna juuri ennen maata';
-  return 'Pidä valot: kaksi valkoista, kaksi punaista';
+  return 'Valot: 2 valkoista, 2 punaista = oikein';
 }
 function drawControls() {
   if (mode !== 'fly') return;
