@@ -370,8 +370,8 @@ function timeToLand(hill, sl) {
 
 // ---- The computer's sledders ----
 // One aims at the jumps ahead, steers round what is in its way, and in the air does a trick when
-// it thinks there is time; it misjudges now and then (`err`), though from v4 (#517) a trick too late
-// for the landing is refused it as it is a player, and it falls like anyone on a tree, a rock or a snowman.
+// it thinks there is time; it misjudges now and then (`err`), and falls like anyone. The cut-off for a
+// late trick (#517) is the player's only: the computer keeps its mistakes, as in v3.
 function cpuBrain(skill, seed) { return { skill, r: rng(seed), aim: 0, aimFor: -1, think: 0 }; }
 function cpuDrive(hill, sl, dt) {
   const b = sl.cpu;
@@ -383,7 +383,7 @@ function cpuDrive(hill, sl, dt) {
         const left = timeToLand(hill, sl) * (1 + (b.r() < b.skill.err ? 0.5 : 0) - 0.05);
         const types = ['front', 'back', 'spinL', 'spinR'];
         const type = types[Math.floor(b.r() * 4)];
-        if (left > TRICKS[type].dur * 1.05) startTrick(sl, type, hill);
+        if (left > TRICKS[type].dur * 1.05) startTrick(sl, type);
       }
     }
     return;

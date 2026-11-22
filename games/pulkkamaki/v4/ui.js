@@ -169,7 +169,7 @@ c.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, p);
   if (!p.air) steerFinger = e.pointerId;
   // A sled nearly stopped on the snow: each touch is a push with the hands (#517).
-  if (mode === 'run' && me && !p.air && !(net && window.AiPelitRooms && AiPelitRooms.paused) && pushOff(me)) teach.pushed = true;
+  if (mode === 'run' && me && !p.air && !(net && window.AiPelitRooms && AiPelitRooms.paused)) pushOff(me);
 });
 c.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId);
@@ -198,7 +198,7 @@ function airGesture(p, now, up) {
   if (d >= SWIPE) {
     const type = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'spinL' : 'spinR') : (dy < 0 ? 'front' : 'back');
     if (startTrick(me, type, hill)) { p.used = true; teach.swiped = true; }
-    else if (me.fallT <= 0 && !me.fin && !me.grab) { p.used = true; lateT = 0.8; }   // too near the landing (#517)
+    else if (me.fallT <= 0 && !me.fin && !me.grab && !me.trick) { p.used = true; lateT = 0.8; }   // too near the landing (#517)
   }
 }
 function checkHolds(now) {
@@ -320,12 +320,12 @@ function drawHUD() {
   // The trick going on now, while in the air.
   if (me.air && me.trick) shadowText(TRICKS[me.trick.type].name + '…', W / 2, H * 0.2, 17, '#cfe0ff', 'center', 700);
   if (me.air && me.grab) {
-    const warn = timeToLand(hill, me) < 0.45;
+    const warn = timeToLand(hill, me) < GRAB_LATE;
     shadowText(warn ? 'Päästä irti!' : 'Teräsmies…', W / 2, H * 0.2, warn ? 24 : 17, warn ? '#ff6a6a' : '#cfe0ff', 'center', 800);
   }
   if (lateT > 0 && me.air && !me.trick && !me.grab) shadowText('Ei ehdi!', W / 2, H * 0.2, 20, '#ffb0b0', 'center', 800);
   // Nearly stopped: the hands push the sled on.
-  if (mode === 'run' && runT > 1 && canPush(me) && me.v < 2.2) shadowText('Napauta: työnnä käsillä', W / 2, H * 0.62, 18, '#fff', 'center', 800);
+  if (mode === 'run' && runT > 1 && canPush(me) && me.v < 2.2 && !(net && window.AiPelitRooms && AiPelitRooms.paused)) shadowText('Napauta: työnnä käsillä', W / 2, H * 0.62, 18, '#fff', 'center', 800);
   // The first runs teach the controls.
   if (tutorial && mode === 'run') {
     let t = '';
