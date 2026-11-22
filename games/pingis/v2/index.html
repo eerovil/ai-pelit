@@ -33,6 +33,11 @@
   body.land button.big{padding:11px}
   body.land .col{gap:6px}
   body.land #menu .col button:not(.lvl){padding:9px 14px}
+  #pause{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);width:48px;height:48px;padding:0;
+    border-radius:14px;background:rgba(10,20,40,.6);font-size:20px;line-height:48px;text-align:center;z-index:5}
+  #pause[hidden]{display:none}
+  #pauseTitle{font-size:34px;font-weight:900;margin:0;text-align:center}
+  #pauseScore{font-size:20px;font-weight:700;margin:0;text-align:center;opacity:.92}
 </style>
 </head>
 <body>
@@ -59,6 +64,17 @@
   <div class="col">
     <button id="again" class="big">Uusi peli</button>
     <button id="toMenu">Valikkoon</button>
+  </div>
+</div>
+<button id="pause" hidden aria-label="Tauko">⏸</button>
+<div id="paused" class="screen" hidden>
+  <div class="head">
+    <p id="pauseTitle">Tauko</p>
+    <p id="pauseScore"></p>
+  </div>
+  <div class="col">
+    <button id="resume" class="big">Jatka peliä</button>
+    <button id="quit">Lopeta peli</button>
   </div>
 </div>
 <script src="../../../rooms.js" data-game="pingis" data-min="2" data-max="2"></script>
