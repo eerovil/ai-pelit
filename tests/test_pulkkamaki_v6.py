@@ -1,4 +1,4 @@
-"""Pulkkamäki v5 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
+"""Pulkkamäki v6 (#475, #480, #517): a 3D sledding hill, alone. Steering, a trick off a jump, a whole run, saves,
 the steep hills with drops, no trick begun too late, the hand push."""
 import shutil
 
@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v5/"
+URL = "games/pulkkamaki/v6/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
