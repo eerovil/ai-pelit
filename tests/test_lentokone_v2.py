@@ -7,7 +7,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/lentokone/v1/"
+URL = "games/lentokone/v2/"
 # A finger on the play area: [type, pointer id, x, y].
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
