@@ -491,6 +491,47 @@ def test_friends_see_each_other_on_the_ice_and_fish_each_other_s_holes(room):
     assert host.errors == guest.errors == []
 
 
+# v7 (#536): a friend walking is drawn gliding, frame by frame, not jumping once a second.
+WATCH = """(name) => {
+  const seen = window.__seen = [], t0 = performance.now();
+  window.__done = false;
+  (function look() {
+    const o = others().find(q => q.name === name);
+    if (o) seen.push([o.x, o.y]);
+    if (performance.now() - t0 < 3500) requestAnimationFrame(look); else window.__done = true;
+  })();
+}"""
+
+
+def test_a_friend_walking_glides_on_every_phone(room):
+    host, [aino, ville] = room("Eero", "Aino", "Ville")
+    # Aino stands in the middle of the lake, the others see her there.
+    aino.evaluate("stand(LAKE_W / 2, LAKE_H / 2)")
+    for p in (host, ville):
+        p.wait_for_function("others().some(o => o.name === 'Aino' && Math.abs(o.x - LAKE_W / 2) < 0.2)", timeout=4000)
+    # Then she walks 12 m: the host hears her spots straight, Ville through the host.
+    for p in (host, ville):
+        p.evaluate(WATCH, "Aino")
+    aino.evaluate("me.tx = LAKE_W / 2 + 12")
+    for p in (host, ville):
+        p.wait_for_function("window.__done", timeout=8000)
+        seen = p.evaluate("window.__seen")
+        steps = [abs(b[0] - a[0]) + abs(b[1] - a[1]) for a, b in zip(seen, seen[1:])]
+        moving = [d for d in steps if d > 1e-4]
+        # Many small steps (6 m/s is a tenth of a metre a frame), never a jump of a metre.
+        assert len(moving) > 40, len(moving)
+        assert max(steps) < 0.5, max(steps)
+        assert abs(seen[-1][0] - (aino.evaluate("LAKE_W / 2") + 12)) < 0.05
+    # Standing, she sends her spot only once a second.
+    sent = aino.evaluate("""() => new Promise(done => {
+      let n = 0; const send = R.send;
+      R.send = (m, to) => { if (m.t === 'at') n++; return send(m, to); };
+      setTimeout(() => { R.send = send; done(n); }, 2500);
+    })""")
+    assert 1 <= sent <= 3, sent
+    assert host.errors == aino.errors == ville.errors == []
+
+
 # ---------- Screens ----------
 
 @pytest.mark.parametrize("size", [(740, 360), (640, 360), (360, 640), (390, 844)])
