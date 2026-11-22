@@ -88,7 +88,7 @@ export const GAMES = {
   pulkkamaki: { order: 'high', boards: /^maki-[1-7]$/, first: 'maki-1' }, // most points in one run down a hill (#475)
   jaalautta: { order: 'high', boards: /^main$/ }, // matches won alone against the computer (#478)
   pomppukeppi: { order: 'high', boards: /^kentta-[1-3]$/, first: 'kentta-1' }, // most points in one erä alone, per board (#482)
-  'lattia-on-laavaa': { order: 'high', boards: /^huone-[1-3]$/, first: 'huone-1' }, // longest time alone on one's feet per room, tenths of a second (#488)
+  'lattia-on-laavaa': { order: 'high', boards: /^huone-[1-4]$/, first: 'huone-1' }, // longest time alone on one's feet per room, tenths of a second (#488)
 };
 
 const ID = /^[a-f0-9]{32}$/;

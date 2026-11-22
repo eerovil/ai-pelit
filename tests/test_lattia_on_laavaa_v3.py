@@ -1,4 +1,4 @@
-"""Lattia on laavaa v2 (#505; v1 #488): kids jumping from furniture to furniture over a lava floor, alone
+"""Lattia on laavaa v3 (#526; v2 #505, v1 #488): kids jumping from furniture to furniture over a lava floor, alone
 against the computer's kids.
 
 The rules are tested on fresh worlds built in the page (world.js and ai.js are plain functions),
@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/lattia-on-laavaa/v2/"
+URL = "games/lattia-on-laavaa/v3/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 KEY = "ai-pelit:lattia-on-laavaa:"
@@ -58,9 +58,10 @@ def go(page):
 def test_the_menu_opens_the_first_room_only_and_draws_in_3d(site, context):
     page = open_game(site, context)
     rooms = page.locator("#rooms button")
-    assert rooms.count() == 3
-    assert [rooms.nth(i).is_disabled() for i in range(3)] == [False, True, True]
+    assert rooms.count() == 4
+    assert [rooms.nth(i).is_disabled() for i in range(4)] == [False, True, True, True]
     assert "🔒" in rooms.nth(2).inner_text()
+    assert "Koko talo" in rooms.nth(3).inner_text()
     assert page.locator("#friends").is_visible()
     page.wait_for_function("window.L3D && L3D.build && !L3D.failed")
     assert page.errors == []
@@ -287,7 +288,7 @@ def test_a_solo_win_opens_the_next_room_and_the_time_is_the_score(site, context)
     page.reload()
     page.wait_for_function("mode === 'menu'")
     rooms = page.locator("#rooms button")
-    assert [rooms.nth(i).is_disabled() for i in range(3)] == [False, False, True]
+    assert [rooms.nth(i).is_disabled() for i in range(4)] == [False, False, True, True]
     assert "Paras 0:20,5" in rooms.nth(0).inner_text()
     # A lost round: no room opens and the record stays.
     page.evaluate("() => { window.sent = []; AiPelitScores.submit = s => { sent.push(s); }; }")
@@ -309,7 +310,7 @@ def test_saves_from_before_are_read_and_kept(site, context):
       localStorage.setItem('{KEY}paras-2', '33.3'); localStorage.setItem('{KEY}voitot', '4');""")
     page = open_game(site, context)
     rooms = page.locator("#rooms button")
-    assert [rooms.nth(i).is_disabled() for i in range(3)] == [False, False, False]
+    assert [rooms.nth(i).is_disabled() for i in range(4)] == [False, False, False, True]
     assert "on" in rooms.nth(2).get_attribute("class")
     assert "0:33,3" in rooms.nth(1).inner_text()
     go(page)
@@ -320,7 +321,7 @@ def test_saves_from_before_are_read_and_kept(site, context):
 @pytest.mark.parametrize("size", [{"width": 360, "height": 740}, {"width": 740, "height": 360}, {"width": 360, "height": 640}])
 def test_the_menu_end_and_buttons_fit_upright_and_sideways(site, context, size):
     page = open_game(site, context, size["width"], size["height"])
-    for sel in ("#go", "#friends", "#rooms button >> nth=2"):
+    for sel in ("#go", "#friends", "#rooms button >> nth=3"):
         box = page.locator(sel).bounding_box()
         assert box["y"] >= 0 and box["y"] + box["height"] <= size["height"], (sel, box)
     go(page)
