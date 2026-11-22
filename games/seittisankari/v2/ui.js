@@ -1,5 +1,5 @@
 'use strict';
-// Seittisankari v1 (#529): the fingers, the camera, the menus, the saves, the sounds, the 2D
+// Seittisankari v2 (#529): the fingers, the camera, the menus, the saves, the sounds, the 2D
 // layer over the 3D picture (goal, time, stick, buttons) and the main loop.
 
 const c = document.getElementById('c'), cx = c.getContext('2d');
@@ -37,8 +37,13 @@ const cam = { yaw: 0, pitch: 0.3, manualT: 9 };
 // phone goes on, rule 5).
 function startFree() {
   world = newWorld();
-  const q = (load('kierros', null) || {}).h;
-  if (q) restore(world, q);
+  // v2 keeps its round under its own key, so a cached v1 (which writes `kierros` as {h}) can
+  // never overwrite the marked roof; v1's spot is read only when v2 has saved none.
+  const k = load('kierros2', null) || load('kierros', null) || {};
+  if (k.h) restore(world, k.h);
+  // v2's missions: the roof marked last time, its clock, and how many are done (v1 saved none).
+  world.done = Math.max(0, load('tehtavat', 0) | 0);
+  if (CITY[k.g]) { setGoal(world, k.g); world.gt = Math.max(0, +k.gt || 0); }
   cam.yaw = world.hero.yaw; cam.pitch = 0.3; cam.manualT = 9;
   mode = 'play'; acc = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null;
   hideAll();
@@ -47,7 +52,8 @@ function startFree() {
 function saveRound() {
   if (!world || mode !== 'play') return;
   const h = world.hero;
-  save('kierros', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz } });
+  save('kierros2', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz },
+    g: world.goal, gt: Math.round(world.gt * 10) / 10 });
 }
 function restore(w, q) {
   const h = w.hero;
@@ -162,8 +168,29 @@ let hintT = load('ohje', 0) ? 99 : 0;   // the controls, told once on the phone'
 function drawHUD(w) {
   const h = w.hero, top = SAFE_T + 22;
   shadowText('↑ ' + Math.round(h.y) + ' m', W - SAFE_R - 14, top, 16, '#e8f4ff', 'right', 800);
+  drawGoal(w, top);
   if (hintT < 16) drawHints();
   drawControls(h);
+}
+// The mission: where to go, how far, an arrow toward it as the camera looks, the count done.
+function drawGoal(w, top) {
+  const b = CITY[w.goal], h = w.hero;
+  shadowText('✔ ' + w.done, LAND ? SAFE_L + 120 : W / 2 - 70, top, 16, '#9ff7c9', 'center', 900);
+  shadowText(fmt(w.gt), LAND ? SAFE_L + 190 : W / 2 + 20, top, 18, '#fff', 'center', 900);
+  if (b) {
+    const t = roofTop(b), dx = t.x - h.x, dz = t.z - h.z, d = Math.round(Math.hypot(dx, dz));
+    const y = LAND ? top + 26 : top + 66;   // upright, under ⏸ Valikko
+    const say = b.tower ? 'Tornin huipulle! ' : 'Mene merkitylle katolle! ';
+    const up = Math.round(b.h - h.y);   // close by: how far up (or down, after a swing over it)
+    shadowText(say + (d > 15 ? d + ' m' : (up < 0 ? '↓ ' + -up : '↑ ' + up) + ' m'), W / 2, y, 15, '#fff', 'center', 800);
+    if (d > 15) drawArrow(W / 2, y + 32, angDiff(cam.yaw, Math.atan2(dx, dz)));
+  }
+  if (w.got) {
+    cx.globalAlpha = Math.min(1, w.got.show * 2);
+    shadowText(w.got.tower ? 'Tornin huipulla!' : 'Perillä!', W / 2, H * 0.36, 30, '#ffd166', 'center', 900);
+    shadowText(fmt(w.got.t) + ' · uusi kohde merkitty', W / 2, H * 0.36 + 30, 15, '#fff', 'center', 800);
+    cx.globalAlpha = 1;
+  }
 }
 function drawHints() {
   const lines = hintT < 8 ? ['Juokse seinää päin: tartut siihen', 'Tikku ylös: kiipeä'] : ['Pidä Seitti pohjassa: heilu', 'Päästä irti heilahduksen huipulla'];
@@ -263,7 +290,7 @@ function tick(dt) {
   const w = world, h = w.hero, st0 = h.st, lands0 = h.lands || 0;
   stepHero(h, input(), dt);
   stepCam(h, dt);
-  stepRound(w, dt);
+  if (stepRound(w, dt)) { save('tehtavat', w.done); saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); }
   if (h.st === 'swing' && st0 !== 'swing') sfx('suhahdus', { vol: 0.25, rate: 1.3 });
   if ((h.lands || 0) > lands0) sfx('tomahdys', { vol: 0.15 });
   if (h.jumped) { h.jumped = false; sfx('pop', { vol: 0.2 }); }
