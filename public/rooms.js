@@ -720,7 +720,7 @@
         if (p.pc !== pc || !p.talking) return;
         if (pc.inBytes !== n) { pc.inBytes = n; p.inAt = Date.now(); }
         if (Date.now() - p.inAt > HEAL_SILENT) return broken(id, p);
-        if (p.audio && p.audio.paused) p.audio.play().catch(function () {});
+        if (p.audio && p.audio.paused) start(p.audio);
       }, function () { p.checking = false; });
     });
   }
@@ -738,20 +738,35 @@
   // Another phone's sound: its own hidden player, silent while muted here.
   function hear(id, p, stream) {
     if (!p.audio) {
-      p.audio = document.createElement('audio');
-      p.audio.autoplay = true; p.audio.setAttribute('playsinline', '');
-      p.audio.style.display = 'none';
-      document.body.appendChild(p.audio);
+      var a = p.audio = document.createElement('audio');
+      a.autoplay = true; a.setAttribute('playsinline', '');
+      a.style.display = 'none';
+      // Chromium sometimes fails a call's player with a decode error as its sound starts, which
+      // pauses it until the next check a second later (#512): load the call's sound again and
+      // start it, at most once a second (heal() keeps trying after that).
+      a.addEventListener('error', function () {
+        if (Date.now() - (a.retried || 0) < 1000) return;
+        a.retried = Date.now();
+        setTimeout(function () {
+          if (p.audio === a && a.srcObject && a.paused) { a.srcObject = a.srcObject; start(a); }
+        }, 100);
+      });
+      a.addEventListener('playing', function () { a.held = false; });
+      document.body.appendChild(a);
     }
     p.audio.srcObject = stream;
     p.audio.muted = !!voice.muted[id];
-    p.audio.play().catch(function () {});
+    start(p.audio);
+  }
+  // held: the phone refused to play it with no tap on the page yet, so the room asks for a tap.
+  function start(a) {
+    a.play().catch(function (e) { if (e && e.name === 'NotAllowedError') a.held = true; });
   }
   // A phone may block sound that starts by itself: the next tap anywhere starts it. Coming back
   // from another app, Android has paused it: it starts again.
   function replay() {
     if (SHELL) return SHELL.replay();
-    Object.keys(voice.peers).forEach(function (id) { var a = voice.peers[id].audio; if (a && a.paused) a.play().catch(function () {}); });
+    Object.keys(voice.peers).forEach(function (id) { var a = voice.peers[id].audio; if (a && a.paused) start(a); });
   }
   document.addEventListener('pointerdown', replay, true);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) replay(); });
@@ -916,8 +931,9 @@
     if (!text && on) {
       var who = speakers();
       // The phone held the sound back (no tap on this page yet): a tap anywhere lets it play.
+      // Only a refusal counts, not a player that paused on an error and starts again (#512).
       // The hint goes on its own line, so a narrow phone shows it whole (#333).
-      var held = Object.keys(voice.peers).some(function (id) { var a = voice.peers[id].audio; return a && a.paused && voice.peers[id].talking; });
+      var held = Object.keys(voice.peers).some(function (id) { var a = voice.peers[id].audio; return a && a.paused && a.held && voice.peers[id].talking; });
       if (who.length) text = '🔊 ' + who.join(', ') + (held ? '\nNapauta ruutua' : '');
     }
     var k = on + cls + text + chipAt;
