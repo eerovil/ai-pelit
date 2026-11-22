@@ -120,8 +120,10 @@ def test_the_stick_web_and_jump_take_touches_and_a_second_thumb_beside_seitti_ju
     wx, wy = b["web"]["x"], b["web"]["y"]
     page.evaluate(TOUCH, ["pointerdown", 2, wx, wy])
     assert page.evaluate("webPtr") == 2
-    page.evaluate(TOUCH, ["pointerdown", 3, wx - b["web"]["r"] - 8, wy])   # right beside the held Seitti
-    assert page.evaluate("jumpQ") and page.evaluate("webPtr") == 2
+    # Right beside the held Seitti. Read jumpQ in the same task as the touch: the next frame
+    # takes the jump and clears it, which a busy host reached between two evaluate calls.
+    got = page.evaluate(f"(a) => {{ ({TOUCH})(a); return [jumpQ, webPtr]; }}", ["pointerdown", 3, wx - b["web"]["r"] - 8, wy])
+    assert got == [True, 2]
     for i in (1, 2, 3):
         page.evaluate(TOUCH, ["pointerup", i, 0, 0])
     assert page.evaluate("[stick, webPtr]") == [None, None]
@@ -135,7 +137,7 @@ def test_the_hero_is_where_it_was_after_a_reload_and_the_hints_show_once(site, c
     page.evaluate("() => { const h = world.hero; h.x = 300; h.z = -250; h.y = 0; h.st = 'ground'; hintT = 15.9; }")
     page.wait_for_function(f"localStorage.getItem('{KEY}ohje') === '1'")
     page.click("#quit")
-    saved = page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}kierros')).h")
+    saved = page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}kierros2')).h")
     assert abs(saved["x"] - 300) < 3 and abs(saved["z"] + 250) < 3
     page.reload()
     page.wait_for_function("mode === 'menu'")
@@ -174,6 +176,11 @@ def test_turning_the_phone_keeps_the_hero(site, context):
     assert page.errors == []
 
 
+def angdiff(a, b):
+    import math
+    return (a - b + math.pi) % (2 * math.pi) - math.pi
+
+
 ON_GOAL = """() => { const b = CITY[world.goal], h = world.hero;
   Object.assign(h, { x: (b.x0 + b.x1) / 2, y: b.h, z: (b.z0 + b.z1) / 2, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null }); }"""
 
@@ -191,6 +198,13 @@ def test_the_city_marks_a_roof_to_go_to_with_a_flag_and_tells_how_far(site, cont
         turn(page, size)
         page.evaluate("__said.length = 0")
         page.wait_for_function("__said.some(t => /^Mene merkitylle katolle! \\d+ m$/.test(t))")
+    # The arrow points at the roof as the camera looks: turn the camera, the arrow turns back.
+    page.evaluate("window.__arrow = []; const da = drawArrow; drawArrow = function (x, y, a) { __arrow.push(a); return da.apply(this, arguments); }")
+    for yaw in (0.0, 1.5):
+        got = page.evaluate(f"""new Promise(ok => {{ cam.yaw = {yaw}; cam.manualT = 99; __arrow.length = 0;
+          requestAnimationFrame(() => requestAnimationFrame(() => {{ const t = roofTop(CITY[world.goal]), h = world.hero;
+            ok([__arrow[__arrow.length - 1], angDiff(cam.yaw, Math.atan2(t.x - h.x, t.z - h.z))]); }})); }})""")
+        assert got[0] is not None and abs(angdiff(got[0], got[1])) < 0.05
     assert page.errors == []
 
 
@@ -228,9 +242,14 @@ def test_the_marked_roof_and_the_count_survive_a_reload_and_v1s_save_still_opens
     page.evaluate(ON_GOAL)
     page.wait_for_function("world.done === 1")
     g = page.evaluate("world.goal")
+    page.evaluate("world.gt = 42")
     page.click("#quit")
+    # A cached v1 opened in between writes its own {h} under `kierros`: v2's round stays.
+    page.evaluate(f"localStorage.setItem('{KEY}kierros', JSON.stringify({{ h: {{ x: -400, y: 0, z: 400, yaw: 0, st: 'air' }} }}))")
     page.reload()
     page.wait_for_function("mode === 'menu'")
     go(page)
     assert page.evaluate("[world.goal, world.done]") == [g, 1]
+    assert 42 <= page.evaluate("world.gt") < 45     # the roof's clock goes on, not from 0
+    assert page.evaluate("world.hero.x") > -300     # v2's own spot, not v1's
     assert page.errors == []

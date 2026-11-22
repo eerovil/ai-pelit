@@ -37,7 +37,9 @@ const cam = { yaw: 0, pitch: 0.3, manualT: 9 };
 // phone goes on, rule 5).
 function startFree() {
   world = newWorld();
-  const k = load('kierros', null) || {};
+  // v2 keeps its round under its own key, so a cached v1 (which writes `kierros` as {h}) can
+  // never overwrite the marked roof; v1's spot is read only when v2 has saved none.
+  const k = load('kierros2', null) || load('kierros', null) || {};
   if (k.h) restore(world, k.h);
   // v2's missions: the roof marked last time, its clock, and how many are done (v1 saved none).
   world.done = Math.max(0, load('tehtavat', 0) | 0);
@@ -50,7 +52,7 @@ function startFree() {
 function saveRound() {
   if (!world || mode !== 'play') return;
   const h = world.hero;
-  save('kierros', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz },
+  save('kierros2', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz },
     g: world.goal, gt: Math.round(world.gt * 10) / 10 });
 }
 function restore(w, q) {
