@@ -2,8 +2,8 @@
 (cheerSound), not kisa.js's "jee!" (#330, which this file replaces) nor a shouting crowd. From #355
 on aanet-5, whose chime is softer, at 0.08 (Eero found it too loud at 0.25).
 
-games/pituushyppy/v19, games/keihas/v18, games/kuula/v12, games/moukari/v14, games/korkeushyppy/v16,
-games/seivashyppy/v17, games/makihyppy/v13, games/saappaanheitto/v1.
+games/pituushyppy/v20, games/keihas/v19, games/kuula/v13, games/moukari/v15, games/korkeushyppy/v17,
+games/seivashyppy/v18, games/makihyppy/v13, games/saappaanheitto/v2.
 """
 
 import json
@@ -13,7 +13,7 @@ import pytest
 from conftest import ROOT
 from test_yleisurheilu_vuorot import MARK, on_turn, room
 
-EVENTS = ["pituushyppy/v19", "keihas/v18", "kuula/v12", "moukari/v14", "korkeushyppy/v16", "seivashyppy/v17", "makihyppy/v13", "saappaanheitto/v1"]
+EVENTS = ["pituushyppy/v20", "keihas/v19", "kuula/v13", "moukari/v15", "korkeushyppy/v17", "seivashyppy/v18", "makihyppy/v13", "saappaanheitto/v2"]
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
 

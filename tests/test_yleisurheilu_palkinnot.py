@@ -11,8 +11,8 @@ import pytest
 
 from conftest import ROOT
 
-EVENTS = ["korkeushyppy/v16", "pituushyppy/v19", "seivashyppy/v17", "keihas/v18", "kuula/v12",
-          "moukari/v14", "makihyppy/v13", "saappaanheitto/v1"]
+EVENTS = ["korkeushyppy/v17", "pituushyppy/v20", "seivashyppy/v18", "keihas/v19", "kuula/v13",
+          "moukari/v15", "makihyppy/v13", "saappaanheitto/v2"]
 
 pytestmark = pytest.mark.games(*sorted({e.split("/")[0] for e in EVENTS}))
 
@@ -140,7 +140,7 @@ def test_the_officials_arms_never_stretch_or_snap(site, context, size, places):
     carried no higher than the official's arms reach."""
     site.build(ROOT / "games")
     page = context.new_page()
-    page.goto(site.url + "games/pituushyppy/v19/")
+    page.goto(site.url + "games/pituushyppy/v20/")
     page.wait_for_function("typeof K !== 'undefined' && K.drawPodium && window.AiPelitOutfits", timeout=5000)
     seen = page.evaluate(SWEEP, [*size, places])
     on = [s for s in seen if s]
@@ -164,7 +164,7 @@ def test_the_official_reaches_every_medallist_of_a_shared_place(site, context, p
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(site.url + "games/korkeushyppy/v16/")
+    page.goto(site.url + "games/korkeushyppy/v17/")
     page.wait_for_function("typeof K !== 'undefined' && K.drawPodium && window.AiPelitOutfits", timeout=5000)
     MEDAL_T, HANG = [4.6, 3.5, 2.4], 0.9
     for size in ([360, 740], [740, 360]):
