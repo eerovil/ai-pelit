@@ -696,6 +696,8 @@ function netClock() {
   // v8 (#480): the clock goes on 1 ms past where it stood, not at the same moment. A track eases in the spots
   // that came since its last drawing only when its clock has moved on from it (sulava-1's at()); at the very
   // moment it stood, the held spots were drawn at once, and a train that drove on in the pause hopped there.
+  // This holds while the step is at least the clock's own tick (whole ms on Safari and Firefox) and heldOn()
+  // runs here, before the frame's first drawing after the pause (drawnS() reads the clock after this call).
   if (pz.at !== null) { pz.off += t - pz.at - 0.001; pz.at = null; heldOn(t - pz.off); }
   return t - pz.off;
 }
@@ -703,7 +705,7 @@ function heldOn(a) {
   if (!net) return;
   for (const k of net.cars) {
     if (!k.held) continue;
-    // The clock reads the same at both ends of the pause, so a held spot would count as coming as early as it
+    // The clock reads about the same at both ends of the pause (1 ms on, see netClock()), so a held spot would count as coming as early as it
     // did, ahead of its stamp, and the track would draw the train past its newest spot on a guess for a while.
     // Each goes on no sooner than its stamp plus the lag of the last spot heard before the pause (as Kaahari v7).
     for (const [st, spot, snap] of k.held) {
