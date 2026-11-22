@@ -10,6 +10,8 @@ v3 (#337, `aanet-4`) has no crowd: a win is the quiet `onnistui` blip at 0.3, a 
 
 v4 (#355) loads `aanet-5`, where the sounds Eero still found too loud are swapped for softer ones he picked by ear, or play quieter (the winning and losing tunes); nothing else changed.
 
+v5 (#538) loads `lib/sulava-1` (see `sulava-liike.md`): what a phone only hears about is drawn a moment back, gliding between the spots heard, instead of as each spot comes. Every phone watching a friend aim draws the ring and the line from a track (`SM.aim`, keys `x`, `d`, `extra` 0 so it stops where the finger left it; `drawnAim()` in `games/molkky/v5/index.html`), stamped with the thrower's own clock (`ts` in `aim`, passed on as the fifth of `s`'s `a`); the thrower's own aim, and the computer's on the host, are drawn as they are. A guest draws the kalikka (`SM.k`, with its turn and spin) and the pins (`SM.pins`) from tracks fed by the host's `s` and its stamp (`ts`) while the throw and its points last; when the pins are stood up, or a new throw starts, they are placed at once (`snap`). v4 drew a friend's aim at each spot as it came, carried the kalikka on at its speed until the next `s`, and chased each pin's newest spot. The rules and the host's own screen keep the newest spot.
+
 ```mermaid
 flowchart TD
   S{Miten pelataan?}
@@ -69,7 +71,7 @@ flowchart TD
 
 - **Miten pelataan?**: the menu in `games/molkky/v2/index.html` (v1 is the same game with the v1 limits below): **Pelaa yksin** (`newGame()`), **Jatka peliä** when a game alone was left unfinished (saved before every throw as `ai-pelit:molkky:peli` by `keepGame()` and `scoreThrow()`), or **👥 Pelaa kavereiden kanssa** (`AiPelitRooms.open()`).
 - **Huone: 2–6 puhelinta, jokainen oma pelaajansa**: `setupFor()` on the host lists the players in the room's order and picks who throws first; `nextTurn()` skips a player who is out.
-- **Huoneen tekijä pyörittää peliä, heittäjän puhelin lähettää tähtäyksen ja heiton**: the host runs the physics and sends `s` (`snapshot()`) about 8–25 times a second; the thrower's phone sends `aim` while it drags and `throw` when it lets go. A phone let go with "Jatka ilman heitä" is thrown for by the computer (`net.away`); a phone that comes back gets the setup and the game as it is (`on('hello')`).
+- **Huoneen tekijä pyörittää peliä, heittäjän puhelin lähettää tähtäyksen ja heiton**: the host runs the physics and sends `s` (`snapshot()`) about 8–25 times a second; the thrower's phone sends `aim` while it drags and `throw` when it lets go. From v5 the other phones draw the aim, the kalikka and the pins gliding between those spots (`lib/sulava-1`). A phone let go with "Jatka ilman heitä" is thrown for by the computer (`net.away`); a phone that comes back gets the setup and the game as it is (`on('hello')`).
 - **Keilat pystyyn: 1 ja 2 edessä, 7 9 8 takana**: `setUp()` places the pins of `FORM` touching each other, the front row at `LINE` (3.5 m).
 - **Napauta keilaa tai nurmea: tähtäys sinne**: `pinAt()` picks the pin under the finger (within 30 px), else `groundAt()` the grass under it; the aim's direction (`slope`) turns there. From v2 the camera steps back until every pin is on the screen (`seesAll()` in `camGoal()`), so pins spread to the sides can still be seen and tapped.
 - **Pysty osuu yhteen keilaan, Vaaka kaataa monta**: the two buttons set `aim.st`; upright the kalikka travels along its way (narrow), crosswise across it (22.5 cm wide), and it rolls further after landing.
