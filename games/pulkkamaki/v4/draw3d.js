@@ -551,7 +551,10 @@ function chaseCamera(hill, me, cam, dt, still) {
   want[1] = Math.max(want[1], groundAt(hill, bs, bx) + 1.4);
   if (!V3.cam) V3.cam = want.slice();
   const k = still ? 1 : Math.min(1, dt * 6);
-  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? Math.min(1, dt * 3.5) || 1 : k);
+  // Height follows softly, but the faster the further off it is (#517: down a drop or a steep
+  // stretch the sled falls metres in a moment, and a slow camera lost it under the screen's edge).
+  const ky = still ? 1 : Math.min(1, dt * (3.5 + 1.5 * Math.abs(want[1] - V3.cam[1])));
+  for (let i = 0; i < 3; i++) V3.cam[i] += (want[i] - V3.cam[i]) * (i === 1 ? ky : k);
   cam.position.set(...V3.cam);
   const ls = d.s + 9, lx = d.x + Math.sin(dir) * 9;
   cam.lookAt(...hillPoint(hill, ls, lx, Math.max(d.y - 1.5, groundAt(hill, ls, lx)) + 0.6));
