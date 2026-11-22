@@ -50,7 +50,6 @@ function startSpot(i, n, mode, goal, a) {
   if (Math.abs(snap(x) - x) < Math.abs(snap(z) - z)) { x = snap(x); z += off; } else { z = snap(z); x += off; }
   return { x: clamp(x, -EDGE, EDGE), z: clamp(z, -EDGE, EDGE), yaw: Math.atan2(t.x - x, t.z - z) };
 }
-const onTop = (h, b) => h.st === 'ground' && h.y >= b.h - 0.1 && h.x > b.x0 - 1 && h.x < b.x1 + 1 && h.z > b.z0 - 1 && h.z < b.z1 + 1;
 
 // ---- Smooth drawing of the others ----
 function trackOf(p) {

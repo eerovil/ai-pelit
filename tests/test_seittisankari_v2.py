@@ -1,4 +1,4 @@
-"""Seittisankari v1 (#529): a masked hero who climbs skyscrapers and swings between them on a web,
+"""Seittisankari v2 (#529): a masked hero who climbs skyscrapers and swings between them on a web,
 in a city of about 1.7 km across. v1 is the free city and playing with friends (Eero's choice).
 
 The movement is tested on heroes stepped in the page (world.js is plain functions), the screen and
@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/seittisankari/v1/"
+URL = "games/seittisankari/v2/"
 KEY = "ai-pelit:seittisankari:"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
@@ -120,8 +120,10 @@ def test_the_stick_web_and_jump_take_touches_and_a_second_thumb_beside_seitti_ju
     wx, wy = b["web"]["x"], b["web"]["y"]
     page.evaluate(TOUCH, ["pointerdown", 2, wx, wy])
     assert page.evaluate("webPtr") == 2
-    page.evaluate(TOUCH, ["pointerdown", 3, wx - b["web"]["r"] - 8, wy])   # right beside the held Seitti
-    assert page.evaluate("jumpQ") and page.evaluate("webPtr") == 2
+    # Right beside the held Seitti. Read jumpQ in the same task as the touch: the next frame
+    # takes the jump and clears it, which a busy host reached between two evaluate calls.
+    got = page.evaluate(f"(a) => {{ ({TOUCH})(a); return [jumpQ, webPtr]; }}", ["pointerdown", 3, wx - b["web"]["r"] - 8, wy])
+    assert got == [True, 2]
     for i in (1, 2, 3):
         page.evaluate(TOUCH, ["pointerup", i, 0, 0])
     assert page.evaluate("[stick, webPtr]") == [None, None]
@@ -135,7 +137,7 @@ def test_the_hero_is_where_it_was_after_a_reload_and_the_hints_show_once(site, c
     page.evaluate("() => { const h = world.hero; h.x = 300; h.z = -250; h.y = 0; h.st = 'ground'; hintT = 15.9; }")
     page.wait_for_function(f"localStorage.getItem('{KEY}ohje') === '1'")
     page.click("#quit")
-    saved = page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}kierros')).h")
+    saved = page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}kierros2')).h")
     assert abs(saved["x"] - 300) < 3 and abs(saved["z"] + 250) < 3
     page.reload()
     page.wait_for_function("mode === 'menu'")
@@ -171,4 +173,83 @@ def test_turning_the_phone_keeps_the_hero(site, context):
     turn(page, {"width": 360, "height": 740})
     page.wait_for_function("!LAND && W === 360")
     assert page.evaluate("mode === 'play' && world === w0")
+    assert page.errors == []
+
+
+def angdiff(a, b):
+    import math
+    return (a - b + math.pi) % (2 * math.pi) - math.pi
+
+
+ON_GOAL = """() => { const b = CITY[world.goal], h = world.hero;
+  Object.assign(h, { x: (b.x0 + b.x1) / 2, y: b.h, z: (b.z0 + b.z1) / 2, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null }); }"""
+
+
+def test_the_city_marks_a_roof_to_go_to_with_a_flag_and_tells_how_far(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("CITY[world.goal]")
+    r = page.evaluate("""(() => { const b = CITY[world.goal], h = world.hero, t = roofTop(b);
+      return { d: Math.hypot(t.x - h.x, t.z - h.z), hgt: b.h, tower: !!b.tower, flag: world.flag && world.flag.x === t.x && world.flag.y === b.h }; })()""")
+    assert 120 <= r["d"] <= 300 and 20 <= r["hgt"] <= 150 and not r["tower"] and r["flag"]
+    # What the player reads: the goal and its distance, upright and sideways.
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    for size in ({"width": 360, "height": 740}, {"width": 740, "height": 360}):
+        turn(page, size)
+        page.evaluate("__said.length = 0")
+        page.wait_for_function("__said.some(t => /^Mene merkitylle katolle! \\d+ m$/.test(t))")
+    # The arrow points at the roof as the camera looks: turn the camera, the arrow turns back.
+    page.evaluate("window.__arrow = []; const da = drawArrow; drawArrow = function (x, y, a) { __arrow.push(a); return da.apply(this, arguments); }")
+    for yaw in (0.0, 1.5):
+        got = page.evaluate(f"""new Promise(ok => {{ cam.yaw = {yaw}; cam.manualT = 99; __arrow.length = 0;
+          requestAnimationFrame(() => requestAnimationFrame(() => {{ const t = roofTop(CITY[world.goal]), h = world.hero;
+            ok([__arrow[__arrow.length - 1], angDiff(cam.yaw, Math.atan2(t.x - h.x, t.z - h.z))]); }})); }})""")
+        assert got[0] is not None and abs(angdiff(got[0], got[1])) < 0.05
+    assert page.errors == []
+
+
+def test_standing_on_the_roof_counts_it_and_every_fifth_is_the_tower(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("CITY[world.goal]")
+    seen = []
+    for n in range(1, 6):
+        if n == 4:  # end the fourth downtown, so the tower is near enough to be the fifth
+            page.evaluate("setGoal(world, BX(1, 1).id)")
+        g0 = page.evaluate("world.goal")
+        page.evaluate(ON_GOAL)
+        page.wait_for_function(f"world.done === {n} && world.goal !== {g0}")
+        seen.append(page.evaluate("[!!CITY[world.goal].tower, world.gt < 1, !!world.got && world.got.tower]"))
+        assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}tehtavat'))") == n
+    # After the fourth roof the fifth target is the tower; after it, a roof again.
+    assert [s[0] for s in seen] == [False, False, False, True, False]
+    assert all(s[1] for s in seen)                                   # each new roof's clock starts at 0
+    assert [s[2] for s in seen] == [False, False, False, False, True]  # "Tornin huipulla!"
+    # Over the roof after a swing, the close-by hint points down, not up.
+    page.evaluate("const b = CITY[world.goal], t = roofTop(b); Object.assign(world.hero, { x: t.x, z: t.z, y: b.h + 30, st: 'air', vx: 0, vy: 0, vz: 0 })")
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    page.wait_for_function("__said.some(t => /↓ \\d+ m$/.test(t))")
+    assert page.errors == []
+
+
+def test_the_marked_roof_and_the_count_survive_a_reload_and_v1s_save_still_opens(site, context):
+    page = open_game(site, context)
+    # v1 saved only the hero's spot: v2 opens it and marks a roof.
+    page.evaluate(f"localStorage.setItem('{KEY}kierros', JSON.stringify({{ h: {{ x: 300, y: 0, z: -250, yaw: 0, st: 'air' }} }}))")
+    go(page)
+    page.wait_for_function("CITY[world.goal]")
+    assert abs(page.evaluate("world.hero.x") - 300) < 3
+    page.evaluate(ON_GOAL)
+    page.wait_for_function("world.done === 1")
+    g = page.evaluate("world.goal")
+    page.evaluate("world.gt = 42")
+    page.click("#quit")
+    # A cached v1 opened in between writes its own {h} under `kierros`: v2's round stays.
+    page.evaluate(f"localStorage.setItem('{KEY}kierros', JSON.stringify({{ h: {{ x: -400, y: 0, z: 400, yaw: 0, st: 'air' }} }}))")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("[world.goal, world.done]") == [g, 1]
+    assert 42 <= page.evaluate("world.gt") < 45     # the roof's clock goes on, not from 0
+    assert page.evaluate("world.hero.x") > -300     # v2's own spot, not v1's
     assert page.errors == []
