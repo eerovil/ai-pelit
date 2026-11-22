@@ -28,15 +28,17 @@ flowchart TD
   L --> O{Harjoituslasku?}
   O -- Ei, lento alusta --> M[Seuraava lento aukeaa, ennätys, tuloslista]
   O -- Kyllä --> P[Vain pisteet näkyvät]
-  M --> S{Iso kone?}
+  M --> S{Iso kone ja pysähtyi radalle?}
   P --> S
   S -- Kyllä --> T[Matkustajat poistuvat portaita bussiin]
-  T --> N
-  S -- Ei --> N
+  T --> V[Loppuruutu]
+  S -- Ei --> V
+  V -- Seuraava lento tai Lennä uudelleen --> Q
+  V -- Harjoituslaskun jälkeen: Harjoittele laskeutumista --> I
   X --> N{Yritä uudelleen}
-  N -- Alusta --> B
+  N -- Alusta: matkustajat yhä kyydissä --> B
   N -- Harjoittele laskeutumista --> I
-  class A,B,C,E,F,I,K,R,T blue
+  class A,B,C,E,F,I,K,R,T,V blue
   class D,G,J,N,O,Q,S amber
   class H,X rose
   class L,M,P green
@@ -66,7 +68,7 @@ flowchart TD
   `paxScene('board', t)` in `passengers.js`: 16 passengers walk from a yellow bus to wheeled stairs and
   in at the jet's front door, counted "🧳 N / 16 koneessa"; the door shuts, the bus drives off and the
   stairs pull back (about 13 s). A tap anywhere ("Napauta: ohita") skips to the flight. Flying the
-  same route again in the jet after a crash or a restart ("Lennä uudelleen", "Alusta", ⏸'s restart)
+  same route again in the jet after a crash or a restart ("Alusta" on the end screen, ⏸'s restart)
   skips it: the passengers are still aboard. Nothing is
   saved during it, and turning the phone keeps it.
 - **Kaasu täysille, vauhti kasvaa**: the throttle is a slider on the right; a finger dragged up or
@@ -118,12 +120,17 @@ flowchart TD
   (`reitti-<N>`, `scores.js`), which opens over the end screen after a new score; "🏆 Tuloslista"
   opens it again (in the jet only after the passengers have left). Buttons: "Seuraava lento", "Lennä uudelleen", "Valikkoon". A crash also drops the
   saved flight at once, so a reload during its banner does not offer it again.
-- **Iso kone?** (after a landing): a landing in the jet that ended well and stopped on the runway
+- **Iso kone ja pysähtyi radalle?**: a landing in the jet that ended well and stopped on the runway
   (`p.over.ok` and `p.over.stop === 100`, a practice landing too) leaves the passengers out after the
   1.8 s banner, the plane set level; a crash or a roll off the runway goes straight to the end screen.
+- **Loppuruutu**: after a landing (`showEnd()` in `ui.js`), "Seuraava lento" (when the next route is
+  open) and "Lennä uudelleen" call `startFlight(false)`, which in the jet boards new passengers again
+  (the landing let the last ones out); after a practice landing "Harjoittele laskeutumista" too.
 - **Matkustajat poistuvat portaita bussiin**: `beginDeplaning()` in `ui.js`, `paxScene('deplane', t)`:
   the bus comes from behind, the stairs drive to the door, it opens and the 16 walk down into the bus,
   which drives away; then the end screen. The landing was already saved; a tap skips it.
-- **Yritä uudelleen**: after a crash or a practice landing "Alusta" flies the route again from the runway, and
+- **Yritä uudelleen**: after a crash the end screen's "Alusta" flies the route again from the runway,
+  skipping the boarding in the jet (`aboard` in `startFlight()`: the passengers never got off; ⏸'s
+  restart does the same), and
   "Harjoittele laskeutumista" starts 5 km out on the runway's line on the glide path (about 270 m),
   151 km/h in the small plane and 209 km/h in the jet (`vStart`), gear up and flaps 0, so landing can be practised without flying the whole route.
