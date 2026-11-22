@@ -24,7 +24,7 @@ document.addEventListener('fullscreenchange', resize);
 const KEY = 'ai-pelit:pulkkamaki:';
 function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
-let open = clamp(Math.floor(load('auki', 1)) || 1, 1, 3);   // hills opened
+let open = clamp(Math.floor(load('auki', 1)) || 1, 1, HILLS.length);   // hills opened
 let hillN = clamp(Math.floor(load('maki', 1)) || 1, 1, open);
 const best = n => Math.max(0, Math.floor(load('ennatys-' + n, 0)) || 0);
 let tutorial = !load('osattu', false);
@@ -97,6 +97,7 @@ function onMyEvent(e, pts) {
   else if (e === 'land') sfx('lumi', { vol: 0.5 });
   else if (e === 'trick') { sfx('lasku', { vol: 0.45 }); sfx('onnistui', { vol: 0.3, delay: 0.05 }, 880); }
   else if (e === 'fall') sfx('tomahdys', { vol: 0.6 }, 140);
+  else if (e === 'push') sfx('lumi', { vol: 0.25, rate: 1.3 });
   else if (e === 'gift') sfx('kello', { vol: 0.18, rate: 1.2 }, 1320);
   else if (e === 'finish') finishLine();
 }
@@ -145,7 +146,7 @@ function saveRun(n, pts) {
   const was = best(n);
   if (pts > was) save('ennatys-' + n, pts);
   let opened = 0;
-  if (n < 3 && n === open && pts >= HILLS[n].open) { open = n + 1; save('auki', open); opened = n + 1; }
+  if (n < HILLS.length && n === open && pts >= HILLS[n].open) { open = n + 1; save('auki', open); opened = n + 1; }
   if (pts > 0 && window.AiPelitScores) { setBoard(n); AiPelitScores.submit(pts); }
   if (tutorial && pts >= 300) { tutorial = false; save('osattu', true); }
   return { record: pts > was, was, opened };
@@ -167,6 +168,8 @@ c.addEventListener('pointerdown', e => {
   const p = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: e.timeStamp, air: !!(me && me.air), used: false, grab: false };
   pointers.set(e.pointerId, p);
   if (!p.air) steerFinger = e.pointerId;
+  // A sled nearly stopped on the snow: each touch is a push with the hands (#517).
+  if (mode === 'run' && me && !p.air && pushOff(me)) teach.pushed = true;
 });
 c.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId);
@@ -194,14 +197,16 @@ function airGesture(p, now, up) {
   const dx = p.x - p.x0, dy = p.y - p.y0, d = Math.hypot(dx, dy);
   if (d >= SWIPE) {
     const type = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'spinL' : 'spinR') : (dy < 0 ? 'front' : 'back');
-    if (startTrick(me, type)) { p.used = true; teach.swiped = true; }
+    if (startTrick(me, type, hill)) { p.used = true; teach.swiped = true; }
+    else if (me.fallT <= 0 && !me.fin) { p.used = true; lateT = 0.8; }   // too near the landing (#517)
   }
 }
 function checkHolds(now) {
   for (const p of pointers.values()) {
     if (p.used || p.grab || !p.air || !me || !me.air) continue;
     if (Math.hypot(p.x - p.x0, p.y - p.y0) < SWIPE && now - p.t0 >= HOLD * 1000) {
-      if (setGrab(me, true)) { p.grab = true; p.used = true; }
+      if (setGrab(me, true, hill)) { p.grab = true; p.used = true; }
+      else if (me.fallT <= 0 && !me.fin && !me.trick) { p.used = true; lateT = 0.8; }
     }
   }
 }
@@ -211,7 +216,8 @@ function steerInput() {
   me.steer = p && !p.air ? steerOf(p) : 0;
   if (p && Math.abs(me.steer) > 0.3) teach.steered = true;
 }
-const teach = { steered: false, swiped: false };
+const teach = { steered: false, swiped: false, pushed: false };
+let lateT = 0;   // "Ei ehdi!" shown this long after a swipe too near the landing
 
 // ---- Menus (DOM, over the canvas) ----
 const $ = id => document.getElementById(id);
@@ -317,6 +323,9 @@ function drawHUD() {
     const warn = timeToLand(hill, me) < 0.45;
     shadowText(warn ? 'Päästä irti!' : 'Teräsmies…', W / 2, H * 0.2, warn ? 24 : 17, warn ? '#ff6a6a' : '#cfe0ff', 'center', 800);
   }
+  if (lateT > 0 && me.air && !me.trick && !me.grab) shadowText('Ei ehdi!', W / 2, H * 0.2, 20, '#ffb0b0', 'center', 800);
+  // Nearly stopped: the hands push the sled on.
+  if (mode === 'run' && runT > 1 && canPush(me) && me.v < 2.2) shadowText('Napauta: työnnä käsillä', W / 2, H * 0.62, 18, '#fff', 'center', 800);
   // The first runs teach the controls.
   if (tutorial && mode === 'run') {
     let t = '';
@@ -344,6 +353,7 @@ function wake() { still = 0; if (!raf) { last = 0; raf = requestAnimationFrame(f
 function frame(now) {
   raf = 0;
   const dt = last ? Math.min(0.1, (now - last) / 1000) : 1 / 60; last = now;
+  if (lateT > 0) lateT = Math.max(0, lateT - dt);
   if (net) {
     // With friends (net.js): the host's clock, everyone's sleds.
     if (mode === 'run') { checkHolds(performance.now()); steerInput(); tune(dt * 1000); }

@@ -1,5 +1,5 @@
 'use strict';
-// Pulkkamäki v1 (#475): the hills and the sleds as plain numbers. Nothing here draws or talks to
+// Pulkkamäki v1 (#475), v4 (#517): the hills and the sleds as plain numbers. Nothing here draws or talks to
 // the network, so the tests drive it directly (`step(sled, dt)`).
 //
 // A place on a hill is (s, x): s metres down the hill along its centre line, x metres across it
@@ -8,6 +8,7 @@
 
 const G = 9.81, TAU = Math.PI * 2;
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function smooth(u) { return u * u * (3 - 2 * u); }
 function rng(seed) {
   let s = (seed >>> 0) || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
@@ -54,6 +55,26 @@ const HILLS = [
       [475, -2, 1.8, 7, 5], [560, 3, 2.8, 8.5, 5], [650, -2, 2.6, 8, 5], [740, 2, 3.0, 9, 5], [840, 0, 3.2, 9, 6]],
     trees: 46, rocks: 14, snowmen: 8, gifts: 28,
   },
+  // v4 (#517): hills with really steep stretches and drops. `steep`: [s, length, extra drop per
+  // metre], eased in and out over its ends so the sled stays on the snow; `drop`: [s, height], a
+  // cliff 2 m long (s even, so the drawn ground has a row at both ends) that throws a fast sled
+  // into the air.
+  {
+    name: 'Rotko', len: 820, grad: 0.22, wave: 0.05, width: 16, open: 3000, seed: 41,
+    bend: [[70, 0.0048, 0.6], [16, 0.012, 2.4]],
+    steep: [[150, 40, 0.55], [330, 50, 0.7], [600, 60, 0.8]],
+    drop: [[120, 3.5], [270, 5], [460, 6], [560, 4], [770, 7]],
+    kick: [[80, 0, 1.4, 6, 7], [220, 3, 1.8, 7, 6], [400, -3, 2.0, 7, 6], [510, 2, 2.2, 7.5, 6], [680, -2, 2.4, 8, 6]],
+    trees: 30, rocks: 10, snowmen: 6, gifts: 24,
+  },
+  {
+    name: 'Jyrkänne', len: 960, grad: 0.26, wave: 0.06, width: 15, open: 4000, seed: 53,
+    bend: [[85, 0.0055, 1.4], [20, 0.015, 0.4]],
+    steep: [[100, 50, 0.8], [260, 70, 1.0], [470, 50, 0.9], [640, 80, 1.1], [840, 50, 0.8]],
+    drop: [[90, 4], [150, 6], [300, 8], [370, 5], [520, 6], [700, 9], [780, 10]],
+    kick: [[200, 2, 1.8, 7, 6], [430, -2, 2.2, 7.5, 6], [600, 3, 2.4, 8, 5], [880, 0, 3.0, 9, 6]],
+    trees: 40, rocks: 12, snowmen: 8, gifts: 28,
+  },
 ];
 const RUNOUT = 90;   // the flat at the bottom, past the finish line
 
@@ -69,13 +90,20 @@ function buildHill(n) {
     // Steeper and gentler stretches; the run-out flattens out and rises a little to stop the sleds.
     let g = H.grad + H.wave * Math.sin(s * 0.017 + H.seed);
     if (s < 30) g *= 0.5 + s / 60;
+    for (const [a, l, d] of H.steep || []) {
+      const u = (s - a) / l, e = 0.25;   // the first and last quarter ease in and out
+      if (u > 0 && u < 1) g += d * (u < e ? smooth(u / e) : u > 1 - e ? smooth((1 - u) / e) : 1);
+    }
+    for (const [a, d] of H.drop || []) if (s >= a && s < a + 2) g += d / 2;
     if (s > H.len) g = g * Math.max(0, 1 - (s - H.len) / 30) - 0.03 * Math.min(1, (s - H.len) / 40);
     h -= g;
   }
   const kicks = H.kick.map(([s, x, ht, len, w], i) => ({ i, s, x, h: ht, len, w }));
-  const hill = { n, name: H.name, len: H.len, width: H.width, open: H.open, bend: H.bend, base, total, kicks, obst: [], gifts: [] };
-  // Keep the jumps' run-ups and landings clear.
-  const clear = (s, x) => kicks.some(k => s > k.s - 28 && s < k.s + k.len + 26 && Math.abs(x - k.x) < k.w / 2 + 3);
+  const drops = (H.drop || []).map(([s, d]) => ({ s, h: d }));
+  const hill = { n, name: H.name, len: H.len, width: H.width, open: H.open, bend: H.bend, base, total, kicks, drops, obst: [], gifts: [] };
+  // Keep the jumps' run-ups and landings clear, and the snow before and below each drop.
+  const clear = (s, x) => kicks.some(k => s > k.s - 28 && s < k.s + k.len + 26 && Math.abs(x - k.x) < k.w / 2 + 3) ||
+    drops.some(d => s > d.s - 12 && s < d.s + 30);
   const place = (count, kind, rad) => {
     for (let i = 0, tries = 0; i < count && tries < 2000; tries++) {
       const s = 40 + r() * (H.len - 60), x = (r() * 2 - 1) * (H.width / 2 - 1.5);
@@ -130,14 +158,25 @@ function placeSled(hill, sl, lane) {
 }
 
 // Starts a trick in the air ('front', 'back', 'spinL', 'spinR'); one more may wait for it.
-function startTrick(sl, type) {
+// Given the hill, a trick that could not get far enough round before the landing is refused (#517:
+// a swipe just before touching down no longer starts a trick that ends in a fall).
+function startTrick(sl, type, hill) {
   if (!sl.air || sl.fallT > 0 || sl.fin || sl.grab) return false;
+  if (hill && !trickFits(hill, sl, type)) return false;
   if (sl.trick) { if (!sl.queue) sl.queue = type; return true; }
   sl.trick = { type, t: 0 };
   return true;
 }
-function setGrab(sl, on) {
+// Time a trick needs before the landing: what is left of the one turning now, and LAND_DONE of the new one.
+function trickFits(hill, sl, type) {
+  const now = sl.trick ? Math.max(0, TRICKS[sl.trick.type].dur - sl.trick.t) : 0;
+  return timeToLand(hill, sl) >= now + TRICKS[type].dur * LAND_DONE;
+}
+// The grab is not begun either when the landing is too near to let go in time (the "Päästä irti!" warning).
+const GRAB_LATE = 0.45;
+function setGrab(sl, on, hill) {
   if (on && (!sl.air || sl.trick || sl.fallT > 0 || sl.fin)) return false;
+  if (on && hill && timeToLand(hill, sl) < GRAB_LATE) return false;
   if (!on && sl.grab && sl.air) {
     if (sl.grabT >= GRAB_MIN) sl.jump.push({ type: 'grab', pts: Math.round((TRICKS.grab.pts + GRAB_PER_S * sl.grabT) / 10) * 10 });
     sl.grabT = 0;
@@ -161,6 +200,17 @@ function trickDone(sl) {
   sl.flip = 0; sl.spin = 0;
   sl.trick = null;
   if (sl.queue) { sl.trick = { type: sl.queue, t: 0 }; sl.queue = null; }
+}
+
+// A hand push (#517): a sled nearly stopped on the snow gets going again, a push at a time.
+const PUSH_BELOW = 3, PUSH_DV = 1.6, PUSH_MAX = 4.2;
+function canPush(sl) { return !sl.air && !sl.fin && sl.fallT <= 0 && sl.v < PUSH_BELOW; }
+function pushOff(sl) {
+  if (!canPush(sl)) return false;
+  sl.v = Math.min(PUSH_MAX, sl.v + PUSH_DV);
+  sl.pushT = 0.35;   // the arms shown pushing
+  if (sl.onEvent) sl.onEvent('push');
+  return true;
 }
 
 function fall(sl, why) {
@@ -210,6 +260,7 @@ const TURN_RATE = 1.4, MAX_YAW = 1.3;   // rad/s at the finger's full reach; the
 function step(hill, sl, dt) {
   sl.t += dt;
   if (sl.pop) sl.pop.t += dt;
+  if (sl.pushT > 0) sl.pushT = Math.max(0, sl.pushT - dt);
   if (sl.fallT > 0) sl.fallT = Math.max(0, sl.fallT - dt);
   const steer = sl.fin || sl.fallT > 0 ? 0 : sl.steer;
   for (const id in sl.hitWait) if ((sl.hitWait[id] -= dt) <= 0) delete sl.hitWait[id];
@@ -248,12 +299,15 @@ function step(hill, sl, dt) {
     sl.v = Math.max(sl.fin ? 0 : 0.6, sl.v + a * dt);
     // The banks push a sled back towards the track.
     sl.vxb += -gx * G * 0.8 * dt; sl.vxb *= Math.max(0, 1 - dt * 2.5);
-    const py = sl.y;
+    const py = sl.y, ps = sl.s, px = sl.x;
     sl.s += sl.v * Math.cos(sl.yaw) * dt;
     sl.x += (sl.v * Math.sin(sl.yaw) + sl.vxb) * dt;
     const gy = groundAt(hill, sl.s, sl.x);
-    // Off a lip: the ground drops away from under the sled, which flies on as it was going.
-    if (gy < g0 - Math.max(0.12, sl.v * dt * 0.6) && sl.v > 2) {
+    // Off a lip: the ground drops away from under the sled, which flies on as it was going. It is
+    // measured from where the slope behind would have gone (#517), so a long steep stretch keeps the
+    // sled on the snow and only a sudden break (a lip, a drop) throws it.
+    const went = Math.hypot(sl.s - ps, sl.x - px);
+    if (gy < g0 + along * went - 0.06 && sl.v > 2) {
       const climb = along;   // the ramp's slope just before the lip
       const ang = Math.atan(-climb), sp = sl.v;
       sl.v = sp * Math.cos(Math.atan(climb));
@@ -327,11 +381,14 @@ function cpuDrive(hill, sl, dt) {
         const left = timeToLand(hill, sl) * (1 + (b.r() < b.skill.err ? 0.5 : 0) - 0.05);
         const types = ['front', 'back', 'spinL', 'spinR'];
         const type = types[Math.floor(b.r() * 4)];
-        if (left > TRICKS[type].dur * 1.05) startTrick(sl, type);
+        if (left > TRICKS[type].dur * 1.05) startTrick(sl, type, hill);
       }
     }
     return;
   }
+  // Nearly stopped: push with the hands, as a player would.
+  b.push = (b.push || 0) - dt;
+  if (canPush(sl) && sl.v < 1.5 && b.push <= 0) { b.push = 0.4; pushOff(sl); }
   // Aim: the next jump within reach, else the middle of the track, then dodge what is ahead.
   const k = hill.kicks.find(k => k.s > sl.s + 4 && k.s < sl.s + 110);
   if (k && b.aimFor !== k.i) { b.aimFor = k.i; b.aim = k.x + (b.r() * 2 - 1) * (k.w / 2 - 1.2) * (1 - b.skill.aim); }

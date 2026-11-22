@@ -1,4 +1,4 @@
-"""Pulkkamäki v3 with friends (#475, #480): everyone down the same hill at once, the host keeps the end."""
+"""Pulkkamäki v4 with friends (#475, #480): everyone down the same hill at once, the host keeps the end."""
 import json
 import shutil
 
@@ -7,7 +7,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/pulkkamaki/v3/"
+URL = "games/pulkkamaki/v4/"
 # My sled straight to just above the finish line, so the run ends in seconds.
 NEAR_END = "(() => { me.s = hill.len - 4; me.x = centreX(hill, me.s); me.y = groundAt(hill, me.s, me.x); me.v = 12; me.yaw = 0; me.air = false; })()"
 # The host's computer sledders the same way.

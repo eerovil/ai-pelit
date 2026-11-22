@@ -476,7 +476,9 @@ function poseRig(rig, hill, sl, look) {
   const gk = (u.gk || 0) + ((grab ? 1 : 0) - (u.gk || 0)) * 0.3; u.gk = gk;
   P.torso.rotation.x = -1.35 * gk; P.torso.position.y = 0.22 + 0.3 * gk; P.torso.position.z = 0.22 - 0.1 * gk;
   P.legs.rotation.x = 0.0; P.legs.position.y = 0.32 * gk; P.legs.position.z = 0.5 * gk;
-  P.arms.forEach((a, i) => { const sx = i ? 1 : -1; a.rotation.x = -0.2 - 2.6 * gk + (sl.air && !grab ? -0.9 : 0); a.rotation.z = sx * (0.35 - 0.2 * gk); });
+  // A hand push (#517): both arms reach down to the snow and back.
+  const push = sl.pushT > 0 ? Math.sin((1 - sl.pushT / 0.35) * Math.PI) : 0;
+  P.arms.forEach((a, i) => { const sx = i ? 1 : -1; a.rotation.x = -0.2 - 2.6 * gk + (sl.air && !grab ? -0.9 : 0) + 1.1 * push; a.rotation.z = sx * (0.35 - 0.2 * gk + 0.25 * push); });
   // Shadow: on the snow under the sled.
   const gy = groundAt(hill, sl.s, sl.x), sh = u.shadow;
   sh.position.set(X, gy + 0.04, Z);
