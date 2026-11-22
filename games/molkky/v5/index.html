@@ -357,7 +357,14 @@ const SM = { aim: null, k: null, pins: [] }, smNow = () => r3(AiPelitSulava.now(
 // its newest spot (extra 0): it would stay there, past where the thrower holds it.
 const aimTrack = () => SM.aim || (SM.aim = AiPelitSulava.track({ keys: ['x', 'd'], extra: 0 }));
 const stickTrack = () => SM.k || (SM.k = AiPelitSulava.track({ keys: ['x', 'y', 'z', 'yaw', 'spin', 'air'], angles: ['yaw', 'spin'], jump: 1 }));
-const pinTrack = i => SM.pins[i] || (SM.pins[i] = AiPelitSulava.track({ keys: ['x', 'y', 'a'], jump: 1 }));
+// A pin's tip direction (h) and wobble lag with it, so it never rocks before the kalikka is drawn there.
+const pinTrack = i => SM.pins[i] || (SM.pins[i] = AiPelitSulava.track({ keys: ['x', 'y', 'a', 'h', 'wob'], angles: ['h'], jump: 1 }));
+// The throw's sounds wait the same moment: each snapshot's events play once the kalikka is drawn at its stamp.
+const heldSounds = [];
+function soundsDrawn() {
+  const drawnT = world.k && SM.k && SM.k.time !== null ? SM.k.time : Infinity;
+  while (heldSounds.length && heldSounds[0][0] <= drawnT) sounds(heldSounds.shift()[1]);
+}
 const myId = () => net.on ? R.me : 'me';
 // Who throws now: alone 'me' or 'cpu'; in a room each phone in turn, and the computer for a
 // phone that was let go.
@@ -374,7 +381,7 @@ const meIndex = () => players.findIndex(p => p.id === myId());
 function newGame(resume) {
   recorded = null;
   net = { on: false, round: '', sendT: 0, setup: null, away: [], th: '' };
-  SM.aim = SM.k = null; SM.pins = [];
+  SM.aim = SM.k = null; SM.pins = []; heldSounds.length = 0;
   menu.classList.add('hidden');
   const lv = resume ? resume.lv : level;
   players = [{ id: 'me', name: 'Sinä' }, { id: 'cpu', name: foeName(lv), cpu: true }];
@@ -523,7 +530,7 @@ function setupFor(round, list) {
 }
 function applySetup(s) {
   net = { on: true, round: s.round, sendT: 0, setup: s, away: [], th: '' };
-  SM.aim = SM.k = null; SM.pins = [];
+  SM.aim = SM.k = null; SM.pins = []; heldSounds.length = 0;
   players = s.pl.map(p => ({ id: p.id, name: p.name }));
   score = players.map(() => 0); misses = players.map(() => 0); outs = players.map(() => false);
   turn = s.first || 0; throwN = 0; winner = -1;
@@ -541,10 +548,12 @@ function snapshot() {
     a: [r3(aim.x), r2(aim.d), aim.st, aimShown ? 1 : 0, aimT], m: msg, rz: raised ? 1 : 0, ev: world.ev };
 }
 function applySnapshot(s) {
-  const was = phase, wasN = throwN;
+  const was = phase, wasN = throwN, thWas = net.th;
   phase = s.ph; phaseT = s.pt; turn = s.tu; throwN = s.n; net.th = s.th; score = s.sc; misses = s.mi; outs = s.ou; winner = s.wn; msg = s.m; raised = !!s.rz;
+  // A new throw, or a new thrower within it (a phone let go or back): the aim heard starts afresh.
+  if ((phase !== was || throwN !== wasN || s.th !== thWas) && SM.aim) SM.aim.reset();
   if (phase !== was || throwN !== wasN) {
-    if (SM.aim) SM.aim.reset();
+    if (throwN !== wasN) heldSounds.length = 0;
     if (phase === 'aim') { drag.id = null; if (s.th === R.me) { aim = { x: s.a[0], d: s.a[1], st: myStyle }; slope = s.a[0] / (s.a[1] - Y0); } heard = { hit: 0, fall: 0, land: 0 }; }
     if (phase === 'fly' && was !== 'fly') { S.play('suhahdus', { vol: 0.35, rate: 0.9 }); heard = { hit: 0, fall: 0, land: 0 }; }
     if (phase === 'show' && msg) { if (msg.win) S.play('onnistui', { vol: 0.3 }); }
@@ -553,10 +562,10 @@ function applySnapshot(s) {
   // are stood up again); otherwise they stand where the host says, at once.
   const moving = phase === 'fly' || (phase === 'show' && !raised);
   s.p.forEach((q, i) => {
-    const p = world.pins[i], tr = pinTrack(i), spot = { x: q[0], y: q[1], a: q[3] };
-    p.tx = q[0]; p.ty = q[1]; p.s = STATES[q[2]]; p.ta = q[3]; p.dx = Math.cos(q[4]); p.dy = Math.sin(q[4]); p.wob = q[5];
+    const p = world.pins[i], tr = pinTrack(i), spot = { x: q[0], y: q[1], a: q[3], h: q[4], wob: q[5] };
+    p.tx = q[0]; p.ty = q[1]; p.s = STATES[q[2]]; p.ta = q[3];
     if (moving) tr.push(s.ts, spot);
-    else { tr.snap(s.ts, spot); p.x = p.tx; p.y = p.ty; p.a = p.ta; }
+    else { tr.snap(s.ts, spot); p.x = p.tx; p.y = p.ty; p.a = p.ta; p.dx = Math.cos(q[4]); p.dy = Math.sin(q[4]); p.wob = q[5]; }
   });
   if (s.k) {
     const q = s.k, fresh = !world.k || throwN !== wasN, k = world.k || (world.k = {});
@@ -565,7 +574,7 @@ function applySnapshot(s) {
     if (fresh) { stickTrack().snap(s.ts, spot); Object.assign(k, spot, { air: !!q[9] }); }
     else stickTrack().push(s.ts, spot);
   } else { world.k = null; if (SM.k) SM.k.reset(); }
-  if (phase === 'fly') sounds(s.ev);
+  if (phase === 'fly') heldSounds.push([s.ts, s.ev]);
   // The thrower's own aim stays its own while it drags.
   if (!(s.th === R.me && phase === 'aim')) {
     aim = { x: s.a[0], d: s.a[1], st: s.a[2] }; aimShown = !!s.a[3];
@@ -575,10 +584,11 @@ function applySnapshot(s) {
 function guestUpdate(dt) {
   world.pins.forEach((p, i) => {
     const o = SM.pins[i] && SM.pins[i].at();
-    if (o) { p.x = o.x; p.y = o.y; p.a = o.a; }
+    if (o) { p.x = o.x; p.y = o.y; p.a = o.a; p.dx = Math.cos(o.h); p.dy = Math.sin(o.h); p.wob = o.wob; }
   });
   const k = world.k, o = k && SM.k && SM.k.at();
   if (o) { k.x = o.x; k.y = o.y; k.z = o.z; k.yaw = o.yaw; k.spin = o.spin; k.air = o.air > 0.5; }
+  soundsDrawn();
   if ((net.sendT -= dt) <= 0) {
     net.sendT = 0.1;
     if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r3(aim.x), d: r2(aim.d), st: aim.st, ts: smNow() });
@@ -639,8 +649,10 @@ R.on('message', (m, from) => {
 // A phone that comes back gets the game as it is: the players, then the running stream.
 R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
 // The computer throws for a phone let go with "Jatka ilman heitä", and gives its turns back.
-R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') cpu = null; });
-R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; } });
+// A new thrower within the throw: the aim heard from the one before is forgotten (v5).
+const newThrower = () => { net.aimT = null; if (SM.aim) SM.aim.reset(); };
+R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') { cpu = null; newThrower(); } });
+R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; newThrower(); } });
 R.on('lobby', () => { phase = 'room'; });
 R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
 R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });
