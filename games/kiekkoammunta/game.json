@@ -23,6 +23,13 @@
       "note": "Moninpeli: 2–6 puhelinta ampuu samassa huoneessa vuorotellen, noin viisi kiekkoa vuorossa.",
       "request": "Ja missä moninpeli. Vuorotellen, vaikka 3 kiekkoa per vuoro. Tai ehkä vähän enemmän",
       "issue": "eerovil/ai-pelit#339"
+    },
+    {
+      "n": 4,
+      "date": "2026-11-22",
+      "note": "Moninpelissä ampujan tähtäys liikkuu katsojien puhelimissa tasaisesti eikä hypi.",
+      "request": "Moninpelissä ampujan tähtäys tulee katsojille 10 kertaa sekunnissa (`live`-viesti, `aim`) ja hyppii. Piirrä ampujan tähtäys (ja tarvittaessa lentävät kiekot) katsojien puhelimissa `lib/sulava-1`:n kautta, niin että ne liikkuvat tasaisesti (kuten #480:ssa).\n\nJatkoa #480:lle.",
+      "issue": "eerovil/ai-pelit#540"
     }
   ]
 }
