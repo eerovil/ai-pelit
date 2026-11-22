@@ -33,10 +33,9 @@ SLIDE = """() => new Promise(done => {
 
 
 def steps(page):
-    """How far the drawn sight moved each frame, in the second half of the slide (mm)."""
-    drawn = page.evaluate("drawn")
-    xs = [x for _, x in drawn[len(drawn) // 2:]]
-    return [b - a for a, b in zip(xs, xs[1:])]
+    """Each frame's move of the drawn sight in the second half of the slide: (ms since the last, mm)."""
+    drawn = page.evaluate("drawn")[len(page.evaluate("drawn")) // 2:]
+    return [(b[0] - a[0], b[1] - a[1]) for a, b in zip(drawn, drawn[1:])]
 
 
 def check_glides(thrower, watcher):
@@ -46,8 +45,12 @@ def check_glides(thrower, watcher):
     assert len(moves) > 40, moves
     # 60 mm/s is 1 mm a frame at 60 frames a second. Jumping to each 'a' spot ten times a second
     # draws about 6 mm once and nothing on the five frames between.
-    assert max(moves) < 3.5, moves
-    assert sum(1 for d in moves if abs(d) < 0.05) < len(moves) / 5, moves
+    # A frame that came late (a busy test machine) rightly moves further, so only frames that came
+    # on time (under 40 ms) are held to it.
+    timely = [d for ms, d in moves if ms < 40]
+    assert len(timely) > 30, moves
+    assert max(timely) < 3.5, moves
+    assert sum(1 for d in timely if abs(d) < 0.05) < len(timely) / 5, moves
     # It is a moment behind, not far off: by the end it is nearly where the thrower aims.
     last = watcher.evaluate("drawn[drawn.length - 1][1]")
     assert 40 < last <= 70.5, last
