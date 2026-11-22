@@ -61,6 +61,8 @@
      and with the loudest sounds quieter -->
 <!-- v4 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<!-- v5 (#480): the stones and the aim another phone moves are drawn from lib/sulava-1, gliding -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -272,6 +274,7 @@ function startEnd() {
 function toAim() {
   phase = 'aim'; phaseT = 0; sweep = 0; cpu = null; aimShown = false;
   aim = { x: 0, w: 0.55, spin: mySpin };
+  net.aimTs = null; aimAnew();
   drag.id = null;
   camGoal('house');
   keepMatch();
@@ -401,47 +404,111 @@ function applySetup(s) {
   myTeam = s.teams[1].some(p => p.id === R.me) ? 1 : 0;
 }
 const r2 = v => Math.round(v * 100) / 100;
+// Smooth movement (#480): a stone or the aim that another phone moves is drawn a moment back, gliding
+// between the spots heard (lib/sulava-1). Each spot carries the clock of the phone that moved it: the
+// thrower's own for a friend's aim ('f', which the host sends on as it came), the host's for the stones
+// and for the host's or the computer's aim ('h'). A change of clock starts the track again, and so
+// does a new throw or end. The phone's own aim is never smoothed, and the newest spot is what every
+// rule reads: only drawing uses the one a moment back.
+const stampOf = m => Number.isFinite(m.ck) ? m.ck : null;
+const aimTr = AiPelitSulava.track({ keys: ['x', 'w'] });
+let aimSrc = '';
+// A spot heard for a track (the aim's or a stone's). Heard while paused: the phones hear a pause a moment apart,
+// so another phone's last spots, sent before it heard the pause, can come after this phone did (and its first
+// ones after the pause before this phone goes on). Their stamps are ahead of the held clock (netClock()): on the
+// track they would move the drawn moment on mid-pause, so they wait in tr.held until the match goes on.
+function heard(tr, st, spot, snap) {
+  const a = netClock();  // read first: with no frame drawn in the pause (a hidden page), this sees it end
+  if (R.paused) { if (snap || !tr.held) tr.held = []; tr.held.push([st, spot, snap]); return; }
+  if (snap) tr.snap(st, spot, a); else tr.push(st, spot, a);
+  tr.lag = st === null ? null : a - st;  // how late the last spot came, for heldOn()
+}
+function heardAim(st, src) {
+  heard(aimTr, st, { x: aim.x, w: aim.w }, src !== aimSrc);
+  aimSrc = src;
+}
+// Starts the aim's track again (a new throw, or its thrower changed hands).
+function aimAnew() { aimTr.reset(); aimTr.held = aimTr.lag = null; aimSrc = ''; }
+// The tracks' clock, on every phone (the stamps it sends, arrivals, the drawn moment): it stands still while the
+// room is paused (R.paused), as the match does (update()), so a sliding stone or a friend's aim is not guessed on
+// past its last spot mid-pause and pulled back when the match goes on. loop() reads it every frame, so a pause is
+// seen as it starts and left out once it ends (Kaahari v7 and Vuoristorata v8 are the models).
+const pz = { off: 0, at: null };
+function netClock() {
+  const t = AiPelitSulava.now();
+  if (R.paused) { if (pz.at === null) pz.at = t; return pz.at - pz.off; }
+  // It goes on 1 ms past the paused moment: a track eases in the spots that came since its last drawing only when
+  // its clock has moved on from it (sulava-1's at()), and on a clock of whole milliseconds the first read after
+  // the pause can give the paused moment again, so the held spots would be drawn at once, a hop.
+  if (pz.at !== null) { pz.off += t - pz.at - 0.001; pz.at = null; heldOn(t - pz.off); }
+  return t - pz.off;
+}
+function heldOn(a) {
+  for (const tr of [aimTr, ...stones.map(q => q.tr)]) {
+    if (!tr || !tr.held) continue;
+    // The clock reads about the same at both ends of the pause, so a held spot would count as coming as early as
+    // it did, ahead of its stamp, and the track would draw past its newest spot on a guess for a while. Each goes
+    // on no sooner than its stamp plus the lag of the last spot heard before the pause.
+    for (const [st, spot, snap] of tr.held) {
+      if (snap || tr.lag == null || st === null) { tr.snap(st, spot, a); tr.lag = st === null ? null : a - st; }
+      else tr.push(st, spot, Math.max(a, st + tr.lag));
+    }
+    tr.held = null;
+  }
+}
+// The aim this phone draws: its own as it is, the host's computer's as its rules move it, else the track.
+function aimDrawn() {
+  if (!net.on || myTurn() || (R.isHost && thrower() === 'cpu') || !aimTr.size()) return aim;
+  const o = aimTr.at(netClock());
+  return { x: o.x, w: o.w, spin: aim.spin };
+}
 function snapshot() {
-  return { t: 's', round: net.round, ph: phase, pt: r2(phaseT), e: end, sc: score, en: ends, hm: hammer, n: throwN, th: thrower(),
+  return { t: 's', round: net.round, ck: netClock(), ph: phase, pt: r2(phaseT), e: end, sc: score, en: ends, hm: hammer, n: throwN, th: thrower(),
     st: stones.map(s => [s.t, r2(s.x), r2(s.y), r2(s.vx), r2(s.vy), s.out ? 1 : 0, r2(s.rot), s.sw ? 1 : 0]),
-    a: [r2(aim.x), r2(aim.w), aim.spin, aimShown ? 1 : 0], sw: r2(sweepOf(turnTeam())), h: hitsSeen, m: endMsg,
+    a: [r2(aim.x), r2(aim.w), aim.spin, aimShown ? 1 : 0, net.aimTs], sw: r2(sweepOf(turnTeam())), h: hitsSeen, m: endMsg,
     tx: texts.map(t => [r2(t.x), r2(t.y), t.s, t.c, r2(t.t)]) };
 }
 function applySnapshot(s) {
-  const was = phase, wasN = throwN;
+  const was = phase, wasN = throwN, wasE = end;
   phase = s.ph; phaseT = s.pt; end = s.e; score = s.sc; ends = s.en; hammer = s.hm; throwN = s.n; net.th = s.th; endMsg = s.m;
   if (phase !== was || throwN !== wasN) {
+    // A new throw: the aim starts again where the thrower holds it. The stones keep their tracks: the thrown
+    // one is new (its first spot starts its track), and a new end lays out new stones.
+    aimAnew();
     camGoal(phase === 'slide' ? 'stone' : 'house');
     if (phase === 'aim') { drag.id = null; if (s.th === R.me) aim = { x: 0, w: 0.55, spin: mySpin }; }
     if (phase === 'slide') S.play('suhahdus', { vol: 0.35, rate: 0.7 });
     if (phase === 'endshow' && endMsg) { if (endMsg.t === myTeam && endMsg.n) S.play('onnistui', { vol: 0.3 }); }
   }
-  // Keep the stones' drawn places, and move them towards where the host says they are.
-  const old = stones;
+  // The stones are where the host says (the newest spot); each one's track glides its drawing there.
+  // A new end lays out new stones, so none of the last end's tracks goes on.
+  const old = end === wasE ? stones : [], st = stampOf(s);
   stones = s.st.map((q, i) => {
     const o = old[i] && old[i].t === q[0] ? old[i] : stone(q[0], q[1], q[2]);
-    o.tx = q[1]; o.ty = q[2]; o.vx = q[3]; o.vy = q[4]; o.out = !!q[5]; o.rot = q[6]; o.sw = !!q[7]; o.m = !!(q[3] || q[4]);
+    o.x = q[1]; o.y = q[2]; o.vx = q[3]; o.vy = q[4]; o.out = !!q[5]; o.rot = q[6]; o.sw = !!q[7]; o.m = !!(q[3] || q[4]);
     if (o.out && !o.fade) o.fade = 0.01;
+    if (!o.tr) o.tr = AiPelitSulava.track({ keys: ['x', 'y', 'rot'], angles: ['rot'], jump: 3 });
+    heard(o.tr, st, { x: o.x, y: o.y, rot: o.rot }, false);
     return o;
   });
   // The thrower's own aim stays its own while it drags.
-  if (!(s.th === R.me && phase === 'aim')) { aim = { x: s.a[0], w: s.a[1], spin: s.a[2] }; aimShown = !!s.a[3]; }
+  if (!(s.th === R.me && phase === 'aim')) {
+    aim = { x: s.a[0], w: s.a[1], spin: s.a[2] }; aimShown = !!s.a[3];
+    const own = Number.isFinite(s.a[4]);
+    heardAim(own ? s.a[4] : st, own ? 'f' : 'h');
+  }
   net.shownSweep = s.sw;
   if (s.h > hitsSeen) clack();
   hitsSeen = s.h;
   texts = s.tx.map(t => ({ x: t[0], y: t[1], s: t[2], c: t[3], t: t[4] }));
 }
 function guestUpdate(dt) {
-  for (const s of stones) {
-    if (s.tx === undefined) continue;
-    s.tx += s.vx * dt; s.ty += s.vy * dt;
-    const k = Math.min(1, dt * 14); s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k;
-    if (s.out && s.fade < 1) s.fade += dt * 2;
-  }
+  // v5: no carrying on at the stones' speed and chasing it; drawing glides between the host's spots.
+  for (const s of stones) if (s.out && s.fade < 1) s.fade += dt * 2;
   if ((net.sendT -= dt) <= 0) {
     net.sendT = 0.1;
     if (phase === 'slide' && turnTeam() === myTeam) R.send({ t: 'sw', round: net.round, s: r2(sweep) });
-    if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r2(aim.x), w: r2(aim.w), spin: aim.spin });
+    if (myTurn() && drag.id !== null) R.send({ t: 'aim', round: net.round, n: throwN, x: r2(aim.x), w: r2(aim.w), spin: aim.spin, ck: netClock() });
   }
 }
 function hostEnd() {
@@ -482,7 +549,10 @@ R.on('message', (m, from) => {
       net.sw[from] = { s: Math.max(0, Math.min(1, +m.s || 0)), t, at: performance.now() };
     } else if ((m.t === 'aim' || m.t === 'throw') && phase === 'aim' && m.n === throwN && thrower() === from) {
       if (m.t === 'throw') doThrow(m);
-      else { aim = { x: +m.x || 0, w: +m.w || 0, spin: m.spin < 0 ? -1 : 1 }; aimShown = true; }
+      else {
+        aim = { x: +m.x || 0, w: +m.w || 0, spin: m.spin < 0 ? -1 : 1 }; aimShown = true;
+        net.aimTs = stampOf(m); heardAim(net.aimTs, 'f');
+      }
     }
     return;
   }
@@ -498,8 +568,24 @@ R.on('message', (m, from) => {
 // A phone that comes back gets the match as it is: the teams, then the running stream.
 R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
 // The computer throws for a phone let go with "Jatka ilman heitä", and gives its turns back.
-R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') cpu = null; });
-R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; } });
+// The phone whose turn it is (on the host), away or not: its aim's track changes hands only when it is the one
+// let go or given back.
+function seatId() {
+  const ph = net.setup.teams[turnTeam()], p = ph[Math.floor(throwN / 2) % ph.length];
+  return p ? p.id : null;
+}
+R.on('continue', ids => {
+  for (const id of ids) if (!net.away.includes(id)) net.away.push(id);
+  if (phase !== 'aim') return;
+  cpu = null;
+  if (ids.includes(seatId())) { net.aimTs = null; aimAnew(); }
+});
+R.on('back', id => {
+  net.away = net.away.filter(q => q !== id);
+  if (phase !== 'aim') return;
+  cpu = null; phaseT = 0;
+  if (id === seatId()) { net.aimTs = null; aimAnew(); }
+});
 R.on('lobby', () => { phase = 'room'; });
 R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
 R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });
@@ -616,6 +702,9 @@ function up(e) {
   if (e.pointerId !== drag.id) return;
   drag.id = null;
   const a = dragAim();
+  // v5: the aim as the finger left it, so the other phones' broom ends there and not at the last of the 10 a
+  // second sent while it dragged.
+  if (net.on && !R.isHost && myTurn()) R.send({ t: 'aim', round: net.round, n: throwN, x: r2(aim.x), w: r2(aim.w), spin: aim.spin, ck: netClock() });
   // A short pull lets go of nothing: the aim waits for a real throw.
   if (a.pull < 18 || !myTurn()) { aimShown = false; return; }
   aim.x = a.x; aim.w = a.w;
@@ -706,6 +795,7 @@ function drawSweepers(s, amount) {
 // The skip's broom where the throw aims, the line to it, and where it would stop if it went straight.
 function drawAim() {
   if (phase !== 'aim' || !aimShown) return;
+  const aim = aimDrawn();
   const col = COLORS[turnTeam()][0];
   x.setLineDash([8, 8]); x.strokeStyle = 'rgba(30,60,100,.55)'; x.lineWidth = 2;
   line(0, 0, aim.x * (END / TEE), END);
@@ -842,16 +932,29 @@ function draw() {
   drawHud(); drawMessages(); drawPad();
 }
 
+// On a guest the stones are drawn a moment back on their tracks (the camera follows what is drawn),
+// then put back on the host's newest spots for everything else.
+function stonesDrawn() {
+  if (!net.on || R.isHost) return [];
+  return stones.filter(s => s.tr && s.tr.size()).map(s => {
+    const k = [s, s.x, s.y, s.rot], o = s.tr.at(netClock());
+    s.x = o.x; s.y = o.y; s.rot = o.rot;
+    return k;
+  });
+}
 let prev = 0, acc = 0;
 function loop(t) {
   fitCheck();
+  netClock();  // sees a pause start and end as they happen, before anything is drawn
   const dt = Math.min(0.05, (t - prev) / 1000 || 0); prev = t;
   // Whole steps of the world, the same size as the computer's tries.
   acc += dt;
   const n = Math.floor(acc / DT); acc -= n * DT;
   if (n) update(n * DT);
+  const kept = stonesDrawn();
   follow(dt);
   draw();
+  for (const [s, sx, sy, sr] of kept) { s.x = sx; s.y = sy; s.rot = sr; }
   sound();
   requestAnimationFrame(loop);
 }
