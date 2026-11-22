@@ -450,6 +450,61 @@ def test_a_guest_that_reloads_mid_game_gets_it_back(room):
     assert guest.errors == []
 
 
+
+# ---------- v5 (#538): what a phone only hears about glides ----------
+
+def test_a_friends_aim_glides_on_the_host_and_on_a_watching_phone(room):
+    host, [aino, iida] = room("Eero", "Aino", "Iida")
+    host.evaluate("turn = 1; toAim()")
+    aino.wait_for_function("myTurn()")
+    iida.wait_for_function("phase === 'aim' && !myTurn() && nameOf(turn) === 'Aino'")
+    # Aino's aim messages carry her own clock, and the host passes that stamp on.
+    aino.evaluate("aimShown = true; aim.x = 0; aim.d = 2.5; AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0, d: 2.5, st: 0, ts: AiPelitSulava.now() })")
+    host.wait_for_function("aimShown && aim.d === 2.5", timeout=3000)
+    iida.wait_for_function("aimShown && aim.d === 2.5", timeout=3000)
+    # Each watching phone notes, every 10 ms, the newest aim it heard and the one it draws.
+    for p in (host, iida):
+        p.evaluate("window.seen = []; setInterval(() => seen.push([aim.d, drawnAim().d]), 10)")
+    aino.wait_for_timeout(150)
+    aino.evaluate("AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0, d: 3.5, st: 0, ts: AiPelitSulava.now() })")
+    for p in (host, iida):
+        p.wait_for_function("seen.length && Math.abs(seen[seen.length - 1][1] - 3.5) < 0.01", timeout=3000)
+        seen = p.evaluate("seen")
+        # Once 3.5 m was heard, the drawn aim was still on its way there from 2.5 m, and it went
+        # forward only, in small steps rather than one jump.
+        after = [d for heard, d in seen if heard == 3.5]
+        assert after[0] < 3.45, seen
+        assert all(b >= a - 1e-6 for a, b in zip(after, after[1:])), seen
+        drawn = [d for _, d in seen]
+        assert max(b - a for a, b in zip(drawn, drawn[1:])) < 0.6, seen
+    # Aino's own aim is drawn as it is.
+    assert aino.evaluate("drawnAim() === aim") is True
+    assert host.errors == aino.errors == iida.errors == []
+
+
+def test_the_kalikka_and_the_pins_glide_on_a_guest(room):
+    host, [guest] = room("Eero", "Aino")
+    host.evaluate("turn = 0; toAim(); doThrow({ x: 0, d: 3.35, st: 1 }, true)")
+    guest.wait_for_function("phase === 'fly' && world.k !== null", timeout=3000)
+    # Each frame the guest draws the kalikka between two spots heard, a moment back: never past
+    # the newest spot, and moving a little every frame rather than in the host's 25 steps a second.
+    ys = guest.evaluate("""() => new Promise(done => {
+      const out = [];
+      const f = () => { out.push([world.k ? world.k.y : null, SM.k ? SM.k.size() : 0]); if (out.length < 40) requestAnimationFrame(f); else done(out); };
+      requestAnimationFrame(f);
+    })""")
+    moving = [y for y, n in ys if y is not None and n > 1]
+    assert len(moving) > 10, ys
+    steps = [b - a for a, b in zip(moving, moving[1:])]
+    assert all(s >= -1e-6 for s in steps), steps
+    # Few frames stand still while the kalikka flies (headless frames come about every 16 ms).
+    assert sum(1 for s in steps if abs(s) < 1e-6) < len(steps) / 3, steps
+    host.evaluate("run(() => phase === 'fly')")
+    guest.wait_for_function("phase === 'show'", timeout=3000)
+    # Once still, every pin ends where the host has it.
+    guest.wait_for_function("""world.pins.every((p, i) => Math.abs(p.x - p.tx) < 1e-3 && Math.abs(p.y - p.ty) < 1e-3)""", timeout=3000)
+    assert host.errors == guest.errors == []
+
 # ---------- Screens ----------
 
 @pytest.mark.parametrize("size", [(740, 360), (640, 360), (360, 640), (390, 844)])
