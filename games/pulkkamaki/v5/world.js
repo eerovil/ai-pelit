@@ -204,12 +204,14 @@ function trickDone(sl) {
 }
 
 // A hand push (#517): a slow sled on the snow gets going, a push at a time. From v5 a few quick
-// pushes bring it up to a good speed (10 m/s), not only off a standstill.
-const PUSH_BELOW = 10, PUSH_DV = 2.5, PUSH_MAX = 10;
-function canPush(sl) { return !sl.air && !sl.fin && sl.fallT <= 0 && sl.v < PUSH_BELOW; }
-function pushOff(sl) {
-  if (!canPush(sl)) return false;
-  sl.v = Math.min(PUSH_MAX, sl.v + PUSH_DV);
+// pushes bring it up to a good speed (10 m/s), not only off a standstill; off the course, in the
+// deep snow, only to v4's 4.2 m/s, so leaving the course still costs its speed.
+const PUSH_BELOW = 10, PUSH_DV = 2.5, PUSH_MAX = 10, PUSH_OFF_MAX = 4.2;
+function pushTop(sl, hill) { return hill && Math.abs(sl.x) > hill.width / 2 ? PUSH_OFF_MAX : PUSH_MAX; }
+function canPush(sl, hill) { return !sl.air && !sl.fin && sl.fallT <= 0 && sl.v < Math.min(PUSH_BELOW, pushTop(sl, hill)); }
+function pushOff(sl, hill) {
+  if (!canPush(sl, hill)) return false;
+  sl.v = Math.min(pushTop(sl, hill), sl.v + PUSH_DV);
   sl.pushT = 0.35;   // the arms shown pushing
   if (sl.onEvent) sl.onEvent('push');
   return true;
@@ -391,7 +393,7 @@ function cpuDrive(hill, sl, dt) {
   }
   // Nearly stopped: push with the hands, as a player would.
   b.push = (b.push || 0) - dt;
-  if (canPush(sl) && sl.v < 1.5 && b.push <= 0) { b.push = 0.4; pushOff(sl); }
+  if (canPush(sl, hill) && sl.v < 1.5 && b.push <= 0) { b.push = 0.4; pushOff(sl, hill); }
   // Aim: the next jump within reach, else the middle of the track, then dodge what is ahead.
   const k = hill.kicks.find(k => k.s > sl.s + 4 && k.s < sl.s + 110);
   if (k && b.aimFor !== k.i) { b.aimFor = k.i; b.aim = k.x + (b.r() * 2 - 1) * (k.w / 2 - 1.2) * (1 - b.skill.aim); }

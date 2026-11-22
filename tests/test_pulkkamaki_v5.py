@@ -340,6 +340,22 @@ def test_a_stopped_sled_is_pushed_on_with_the_hands(site, context):
     assert got[0] == [True, True, True, True, False, False]
     assert got[1] == 10
     assert got[2:] == [False, False]
+    # Off the course, in the deep snow, pushes stop at v4's 4.2 m/s, so leaving the course still costs its speed.
+    off = page.evaluate("""() => {
+      const sl = newSled('t', 't'); placeSled(hill, sl, 0); sl.x = hill.width; sl.v = 0.6;
+      for (let i = 0; i < 6; i++) pushOff(sl, hill);
+      return sl.v;
+    }""")
+    assert off == 4.2
+    # A steering drag on the snow is no push, nor is a long press: only a short tap is (v5).
+    page.evaluate("() => { me.v = 4; me.fallT = 0; me.air = false; }")
+    page.evaluate(TOUCH, ["pointerdown", 180, 500])
+    page.evaluate(TOUCH, ["pointermove", 260, 500])
+    page.evaluate(TOUCH, ["pointerup", 260, 500])
+    page.evaluate(TOUCH, ["pointerdown", 180, 500])
+    page.wait_for_timeout(400)
+    page.evaluate(TOUCH, ["pointerup", 180, 500])
+    assert page.evaluate("me.v") < 5.5   # the hill adds well under a push (+2.5) in the 0.4 s
     assert page.errors == []
 
 
