@@ -148,16 +148,20 @@ def test_a_clean_two_and_a_half_needs_the_highest_bounce(real, context):
 
 def test_the_computer_never_dives_past_a_good_players_best(real, context):
     page, _ = open_game(real, context)
-    marks = page.evaluate("Array.from({ length: 20000 }, () => cpuMark({ skill: 62 }, { round: 2 }))")
-    assert max(marks) <= 75
-    assert max(marks) > 74
-    assert min(marks) >= 3
+    # The player's best clean dive at each height, judges of no scatter (simulated every hold and
+    # twist, #521 review), and the computer's caps under them.
+    best = [66, 74.1, 78, 84, 84]
+    caps = page.evaluate("CPU_CAP")
+    assert all(c < b for c, b in zip(caps, best)) and len(caps) == 5
+    for r in range(1, 6):
+        marks = page.evaluate(f"Array.from({{ length: 20000 }}, () => cpuMark({{ skill: 62 }}, {{ round: {r} }}))")
+        assert max(marks) <= caps[r - 1] and min(marks) >= 3
+        assert max(marks) > caps[r - 1] - 1.5
     low = page.evaluate("Array.from({ length: 5000 }, () => cpuMark({ skill: 30 }, { round: 2 }))")
     assert 27 < sum(low) / len(low) < 31
     # Higher up it scores more, as the player can: the 10 m platform's dives a fifth more.
     high = page.evaluate("Array.from({ length: 5000 }, () => cpuMark({ skill: 30 }, { round: 5 }))")
     assert 34 < sum(high) / len(high) < 38
-    assert max(page.evaluate("Array.from({ length: 20000 }, () => cpuMark({ skill: 62 }, { round: 1 }))")) <= 67.5
 
 
 def test_each_dive_is_from_higher_up(real, context):

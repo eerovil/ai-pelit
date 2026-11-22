@@ -262,15 +262,16 @@ const diver = id => K.thrower(id);
 const COLORS = K.COLORS;
 
 // The computer dives around its skill, now and then flat on the water, and never past what a very
-// good player reaches (from the 3 m board a clean 2½ somersaults from the highest bounce, about 66).
-// Higher up there is time for more, so its points grow with the height as the player's best do
-// (measured by simulating every hold and twist: about 63, 68, 70, 76 and 80 points at the five heights).
-const CPU_MAX = 75, CPU_HEIGHT = [0.9, 1, 1.06, 1.14, 1.2];
+// good player reaches. Higher up there is time for more, so its points grow with the height as the
+// player's best do: simulating every hold and twist with judges of no scatter, the best clean dive
+// scores about 66, 74, 78, 84 and 84 at the five heights. Each height's cap stays a little under it,
+// so a perfect dive always beats the computer (#521 review).
+const CPU_CAP = [63, 70, 74, 80, 80], CPU_HEIGHT = [0.9, 1, 1.06, 1.14, 1.2];
 function cpuMark(t, c) {
   if (Math.random() < 0.05) return Math.round((3 + Math.random() * 9) * 100) / 100;
-  const f = CPU_HEIGHT[HEIGHTS.indexOf(heightOf((c || K.comp || {}).round))] || 1;
+  const i = Math.max(0, HEIGHTS.indexOf(heightOf((c || K.comp || {}).round)));
   let m;
-  do m = Math.round((t.skill * f + K.gauss() * 7) * 100) / 100; while (m > CPU_MAX * f);
+  do m = Math.round((t.skill * CPU_HEIGHT[i] + K.gauss() * 7) * 100) / 100; while (m > CPU_CAP[i]);
   return Math.max(4, m);
 }
 // A new turn: this phone draws it, and runs it when it is its own.
