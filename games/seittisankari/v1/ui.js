@@ -27,7 +27,7 @@ function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v ==
 function save(k, v) { try { if (v === null) localStorage.removeItem(KEY + k); else localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
 // ---- Sounds (aanet-5, quiet: #337, #355) ----
 const S = window.AiPelitAanet;
-if (S) S.load(['suhahdus', 'askel', 'askel2', 'tomahdys', 'hyppy', 'pop', 'valinta', 'voitto', 'tappio']);
+if (S) S.load(['suhahdus', 'tomahdys', 'pop', 'valinta', 'voitto', 'tappio']);
 const sfx = (name, opts) => S && S.play(name, opts);
 
 // ---- The round ----
@@ -219,7 +219,7 @@ function drawNetHUD(w) {
     shadowText(p.name, q[0], q[1], 13, p.col, 'center', 800);
   }
   if (RM.paused) shadowText('Odotetaan kaveria…', W / 2, H * 0.4, 18, '#ffd166', 'center', 900);
-  if (net.me) drawControls(w.hero);
+  if (net.me) { if (hintT < 16) drawHints(); drawControls(w.hero); }
   else shadowText('Katsot kierrosta', W / 2, H - SAFE_B - 40, 16, '#fff', 'center', 800);
 }
 function drawArrow(x, y, a) {

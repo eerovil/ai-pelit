@@ -45,7 +45,7 @@ const goalBox = () => net && net.mode === 'kilpa' ? CITY[net.goal] || null : nul
 function startSpot(i, n, mode, goal, a) {
   const t = roofTop(goal || T_BOX), rad = mode === 'kilpa' ? RACE_R : 30;
   let x = t.x + Math.cos(a) * rad, z = t.z + Math.sin(a) * rad;
-  const snap = v => Math.round((v - 20) / LOT) * LOT + 20;   // street lines sit at lotX(k) + 20
+  const snap = v => Math.round(v / LOT) * LOT;   // streets run between the lots, on whole 40s (lotX(k) + 20)
   const off = (i - (n - 1) / 2) * 1.5;
   if (Math.abs(snap(x) - x) < Math.abs(snap(z) - z)) { x = snap(x); z += off; } else { z = snap(z); x += off; }
   return { x: clamp(x, -EDGE, EDGE), z: clamp(z, -EDGE, EDGE), yaw: Math.atan2(t.x - x, t.z - z) };
@@ -182,6 +182,7 @@ function netTick(dt) {
       if (M.limit && net.rt >= M.limit) { hostEnd(); return; }
     } else net.rt += STEP;
     if (me) localClaims(STEP);
+    if (me && hintT < 16) { hintT += STEP; if (hintT >= 16) save('ohje', 1); }
   }
   if (acc > STEP) acc = 0;
   net.sendT -= dt;

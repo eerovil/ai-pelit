@@ -78,9 +78,22 @@ def test_every_phone_races_to_the_same_roof_from_the_same_spot(phone):
         d = p.evaluate("Math.hypot(world.hero.x - roofTop(goalBox()).x, world.hero.z - roofTop(goalBox()).z)")
         assert 180 < d < 260
         assert p.evaluate("world.flag && world.flag.x === roofTop(goalBox()).x")
-        # Nobody starts inside a building.
-        assert p.evaluate("supportAt(world.hero.x, world.hero.z, 0.4)") == 0
     assert all(p.errors == [] for p in pages)
+
+
+def test_every_start_spot_is_on_a_street_for_any_roof_and_side(phone):
+    host = phone("Testi1")
+    # The spots as startSpot() gives them, before a frame could push a hero out of a wall.
+    bad = host.evaluate("""(() => { const r = rng(7), bad = [];
+      const ok = CITY.filter(b => !b.tower && b.h >= 30 && b.h <= 140 &&
+        Math.max(Math.abs((b.x0 + b.x1) / 2), Math.abs((b.z0 + b.z1) / 2)) < EDGE - RACE_R - 20);
+      for (let k = 0; k < 400; k++) {
+        const g = ok[Math.floor(r() * ok.length)], a = r() * TAU;
+        for (const [mode, goal] of [['kilpa', g], ['vapaa', null]])
+          for (let i = 0; i < 8; i++) { const s = startSpot(i, 8, mode, goal, a);
+            if (supportAt(s.x, s.z, 0.5) > 0) bad.push([mode, k, i, s.x, s.z]); }
+      } return bad; })()""")
+    assert bad == []
 
 
 def test_the_guest_on_the_roof_wins_and_every_phone_ends_on_one_result(phone):

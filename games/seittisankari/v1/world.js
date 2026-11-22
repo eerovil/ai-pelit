@@ -13,7 +13,7 @@ function rng(seed) {
 
 // ---- The city: a 42 × 42 grid of lots (about 1.7 km across), streets between ----
 // Eero asked for a city about 50 times bigger (#529). The old 6 × 6 downtown sits in the middle,
-// built first from the same seed, so its tower and the missions' buildings stay as they were;
+// built first from the same seed, so its tower stays where it was;
 // the rest thins out toward the edge, with a few smaller clusters of high-rises and some parks.
 const LOT = 40, GRID = 42, EDGE = LOT * GRID / 2 - 6;
 const C0 = (GRID - 6) / 2;                         // the downtown's first lot
@@ -84,7 +84,6 @@ function newHero(x, y, z, yaw) {
     anchor: null, rope: 0, wallCd: 0, jumped: false, webbed: 0, steps: 0 };
 }
 
-// Where a web shot now would stick: a point high on a building's side ahead of the camera.
 // `fx, fz` is the direction the player looks (or flies). Null when nothing is in reach.
 // Where a web sticks: up in the sky ahead of where the camera looks, like the old 3D hero games
 // (Eero's choice on #529). No building is needed, so a swing always goes the way the camera
@@ -253,5 +252,4 @@ function stepWall(h, inp, dt, mx, mz) {
   }
   // Down to the street.
   if (h.y <= 0) { h.y = 0; h.st = 'ground'; h.box = null; h.x += h.nx * 0.05; h.z += h.nz * 0.05; h.wallCd = 0.4; return; }
-  // Another building's roof right under the hero (a low neighbour): stand on it.
 }
