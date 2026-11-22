@@ -1,4 +1,4 @@
-"""Seittisankari v1 (#529): a masked hero who climbs skyscrapers and swings between them on a web,
+"""Seittisankari v2 (#529): a masked hero who climbs skyscrapers and swings between them on a web,
 in a city of about 1.7 km across. v1 is the free city and playing with friends (Eero's choice).
 
 The movement is tested on heroes stepped in the page (world.js is plain functions), the screen and
@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/seittisankari/v1/"
+URL = "games/seittisankari/v2/"
 KEY = "ai-pelit:seittisankari:"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
