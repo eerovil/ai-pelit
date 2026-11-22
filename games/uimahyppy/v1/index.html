@@ -10,6 +10,20 @@
   /* A fixed box, not 100dvh (AGENTS.md rule 4). */
   canvas{display:block;position:fixed;top:0;bottom:0;left:0;right:0;width:100%;height:100%;touch-action:none}
   #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #pad{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:8px 10px calc(env(safe-area-inset-bottom,0px) + 10px);box-sizing:border-box;touch-action:none}
+  #pad button{flex:1;height:64px;border:0;border-radius:16px;font:800 18px system-ui,sans-serif;color:#fff;background:#3d5a80;box-shadow:0 4px 0 #24364f;touch-action:none;padding:0}
+  #pad button.on{transform:translateY(3px);box-shadow:0 1px 0 #24364f;background:#ee6c4d}
+  #pad button[data-act=kierre]{flex:.8;background:#7b5ea7;box-shadow:0 4px 0 #4b3570}
+  #pad button[data-act=kierre].on{box-shadow:0 1px 0 #4b3570;background:#b388eb}
+  #pad.off{visibility:hidden}
+  /* Sideways (rule 4): the two buttons in the lower corners, the middle of the screen stays the scene. */
+  @media (orientation:landscape){
+    #pad{top:0;display:grid;grid-template-columns:116px 1fr 116px;grid-template-rows:1fr 58px;gap:10px;
+      padding:0 calc(env(safe-area-inset-right,0px) + 10px) calc(env(safe-area-inset-bottom,0px) + 10px) calc(env(safe-area-inset-left,0px) + 10px);pointer-events:none}
+    #pad button{height:auto;pointer-events:auto}
+    #pad button[data-act=kierre]{grid-area:2/1}
+    #pad button[data-act=voltti]{grid-area:2/3}
+  }
   #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 48px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;background:rgba(10,30,52,.88);text-align:center;touch-action:manipulation}
   #menu.hidden{display:none}
   #menu h1{margin:0;font-size:34px;letter-spacing:1px;color:#8ee3ff;text-shadow:0 3px 0 #1b5d85}
@@ -54,6 +68,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="safe"></div>
+<div id="pad" class="off"><button data-act="kierre">🌀 Kierre</button><button data-act="voltti">↻ Voltti</button></div>
 <div id="menu">
   <h1>Uimahyppy</h1>
   <p id="result"></p>
@@ -63,12 +78,12 @@
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
   <button id="asu">👕 Asu</button>
   <p id="stats"></p>
-  <p class="help">Napauta ruutua tahdissa, kun hyppääjä painaa ponnahduslaudan alas: pompu kasvaa. Pidä sormi
-    pohjassa, niin hän ponnistaa ja menee kerälle voltteihin; liu'uta sormea sivulle kierteeseen. Nosta sormi,
-    niin hän avautuu suoraksi: osu veteen pystysuorassa. Tuomarit pisteyttävät, vaikeampi hyppy kertoo pisteet.
-    Kolme hyppyä, kahdeksan parasta saa kaksi lisää.</p>
-  <p class="help side">Napauta tahdissa pomppuihin, pidä pohjassa voltteihin (sormi sivulle: kierre) ja nosta
-    sormi ennen vettä. Osu veteen pystysuorassa. Viisi hyppyä, pisteet lasketaan yhteen.</p>
+  <p class="help">Viisi hyppyä, joka kerta korkeammalta: 1 m ja 3 m ponnahduslauta, sitten 5 m, 7,5 m ja 10 m
+    taso. Laudalla pidä sormi ruudulla ja nosta se, kun lauta on alimmillaan: pompu kasvaa. ↻ Voltti laudalla
+    ponnistaa hyppyyn. Ilmassa pidä Voltti (tai ruutu) pohjassa kerälle voltteihin, 🌀 Kierre pohjassa kiertää.
+    Päästä ennen vettä ja osu pystysuoraan. Tuomarien pisteet lasketaan yhteen.</p>
+  <p class="help side">Laudalla nosta sormi tahdissa pomppuihin, ↻ Voltti ponnistaa. Ilmassa Voltti pohjassa:
+    voltit, 🌀 Kierre: kierre. Päästä ennen vettä. Viisi hyppyä, yhä korkeammalta.</p>
 </div>
 <script src="../../../rooms.js" data-game="uimahyppy" data-min="2" data-max="8"></script>
 <script src="../../../lib/yleisurheilu-11/kisa.js"></script>
@@ -79,32 +94,39 @@
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
 window.x2d = x;
-const menu = document.getElementById('menu');
+const menu = document.getElementById('menu'), pad = document.getElementById('pad');
 const R = window.AiPelitRooms;
 
 const FOES = ['Loiske-Lasse', 'Pulahdus-Pia', 'Voltti-Ville', 'Kerä-Kaisa', 'Kierre-Kalle', 'Aalto-Anni', 'Molski-Matti',
   'Polski-Paula', 'Hyppy-Heikki', 'Sukellus-Sanna', 'Vesi-Veikko', 'Lauta-Liisa', 'Pisara-Pekka'];
 
 // ---------- The dive ----------
-// Seen from the side, metres: x forward (the springboard's tip at 0, the pool beyond it), y up from
-// the water. The diver stands at the tip of a 3 m springboard. Each tap while the board is pressed
-// down (the feet on it) bounces higher, best at the board's lowest moment; a tap off the beat
-// bounces lower. A finger held down through the end of a press is the take-off: the diver leaves
-// the board forward and tucks while the finger stays down, spinning fast; lifting it opens the body
-// straight, which slows the spin to a third (the spin's momentum is kept, as a real diver's is).
-// Sliding the held finger sideways twists. The judges look at the entry: straight up and down, open,
-// the twist finished. The dive's difficulty comes from the somersaults and twists done.
+// Seen from the side, metres: x forward (the board's or the platform's tip at 0, the pool beyond
+// it), y up from the water. Each dive of the meet is from higher up (#516, Eero's choice): the 1 m
+// and the 3 m springboard, then the 5, 7.5 and 10 m platforms. On a springboard the diver bounces as
+// on Trampoliini (Eero's wish): a finger down on the screen bends the knees and its lift is the push,
+// best at the board's lowest moment; a push on the beat bounces higher, none lower. "↻ Voltti" on
+// the board is the take-off. From a platform there is no bounce: Voltti (or a tap) jumps off. In the
+// air Voltti or a finger on the screen held tucks the body, spinning fast; let go, it opens straight,
+// which slows the spin to a seventh (the spin's momentum is kept, as a real diver's is). "🌀 Kierre"
+// held twists. The judges look at the entry: straight up and down, open, the twist finished. The
+// dive's difficulty comes from the somersaults and twists done.
 const TAU = Math.PI * 2, DEG = Math.PI / 180, G = 9.81;
-const BOARD_Y = 3, FULCRUM = -2.4, BACK = -4.8, WALL = -1.6, DECK = 0.35;  // the board, the pool's edge
-const FOOT_X = -0.18, HIP = 1.0;               // where the diver stands on the board; hip above the feet
-const H0 = 0.3, HMAX = 1.5, GAIN = 0.42;       // m: the first hop, the highest, what a perfect tap adds
-const TC = 0.3, WIN = 0.22, HOLD = 0.16, LATE = 0.15;   // s: a press of the board, the tap's window, a hold
+const HEIGHTS = [{ m: 1, board: true }, { m: 3, board: true }, { m: 5 }, { m: 7.5 }, { m: 10 }];
+let BOARD_Y = 3, BOARD = true;                 // this dive's height, and whether it is a springboard
+const FULCRUM = -2.4, BACK = -4.8, WALL = -1.6, DECK = 0.35;  // the board, the pool's edge
+const FOOT_X = -0.18, HIP = 1.0;               // where the diver stands on the tip; hip above the feet
+const HMAX = 1.5, VMAX = Math.sqrt(2 * G * HMAX);   // m: the highest bounce, and its speed off the board
+const V_MIN = 2.4, V_HOP = 3, V_STAND = 2.6, V_PLAT = 4.3;   // m/s: the lowest bounce, the first hop, a dive from standing, off a platform
+const CONTACT = 0.3, EARLY = 0.12, PUSH = 1.2;  // s on the board; how early a push still counts; m/s a perfect push adds
 const VX = 1.15;                               // m/s forward at the take-off
 const W_OPEN = 1.5, W_TUCK = 11;             // rad/s of spin open and tucked
 const TUCK_T = 0.15, HELP = 8, HELP_MAX = 2.2;   // s to tuck; the open body's pull to a clean entry
-const TWIST_W = 3 * Math.PI, DRAG_PX = 60, DEAD_PX = 14;   // rad/s of twist at a full drag
+const TWIST_W = 3 * Math.PI;                   // rad/s of twist while Kierre is held
 const ENTRY_Y = 0.15;                          // the hip this close to the water: in
 const BOARD_T = 3.5, WATER_T = 2.8, TURN_MAX = 45;   // s
+const heightOf = round => HEIGHTS[Math.max(0, Math.min(HEIGHTS.length - 1, (round || 1) - 1))];
+const heightName = h => String(h.m).replace('.', ',') + ' m ' + (h.board ? 'lauta' : 'taso');
 
 // The spin at a tuck of k (0 open, 1 tucked): the body's inertia falls as it tucks.
 const spin = k => W_OPEN / (1 - (1 - W_OPEN / W_TUCK) * k);
@@ -136,9 +158,12 @@ function diveName(halves, tw) {
 }
 
 // ---------- Layout ----------
-// The whole screen is the scene, and while it is your dive a finger anywhere on it is the control.
+// The scene fills the screen above the control pad. It is as tall as this dive needs (the water,
+// the board or platform, the highest bounce and the diver over it) and at least 6 m across; on its
+// side a 10 m platform would make the diver tiny, so there the camera follows the diver down instead.
 let W, H, DPR, safeT = 0, safeB = 0, safeL = 0, safeR = 0, hudTop, sceneB, ctrlTop;
-let land = false, SX = 0, SW = 0, S = 60, OX = 0, OY = 0;
+let land = false, SX = 0, SW = 0, S = 60, OX = 0, OY = 0, camY = 0, view = null;
+const MIN_S = 34;   // px a metre at the least, on its side
 function resize() {
   const r = c.getBoundingClientRect();
   DPR = window.devicePixelRatio || 1;
@@ -150,17 +175,32 @@ function resize() {
   land = W > H * 1.15;
   SX = safeL; SW = W - safeL - safeR;
   hudTop = safeT + (land ? 40 : 44); sceneB = H - safeB;
-  ctrlTop = sceneB - 60;   // the scene has no control pad; the meet's cheer button sits below this
-  // About 8 m high (1.3 m of it under the water) and at least 6 m across, the dive in the middle. On
-  // its side the phone has little height: a one-line score bar and less water under the surface.
-  const top = hudTop + (land ? 40 : 70), avail = sceneB - top, tall = land ? 7.2 : 8.2, under = land ? 0.5 : 1.3;
-  S = Math.min(SW / 6, avail / tall);
-  const spare = avail - tall * S;
-  OY = top + (tall - under) * S + spare * 0.45;
-  OX = SW / 2 - 0.6 * S;
+  // The pad's top upright; on its side its buttons sit in the corners, under this line (the meet's
+  // cheer button sits there too while the pad is away).
+  ctrlTop = land ? sceneB - 60 : sceneB - 82;
+  frameScene();
 }
 addEventListener('resize', resize);
-const sx = m => OX + m * S, sy = h => OY - h * S;
+// Fits this dive's height on the screen: S px a metre, the water's line OY when the camera is down.
+function frameScene() {
+  if (!W) return;
+  const top = hudTop + (land ? 40 : 70), bottom = land ? sceneB : ctrlTop, avail = bottom - top;
+  const under = land ? 0.4 : 1.0, tall = BOARD_Y + HIP + (BOARD ? HMAX : V_PLAT * V_PLAT / (2 * G)) + 1.0 + under;
+  S = Math.min(SW / 6, avail / tall);
+  let spare = avail - tall * S;
+  if (land && S < MIN_S) { S = MIN_S; spare = 0; }
+  view = { top, avail, under, tall };
+  OY = top + (Math.min(tall, avail / S) - under) * S + Math.max(0, spare) * 0.45;
+  OX = SW / 2 - 0.6 * S;
+}
+// Where the camera wants to be: down at the water, or up with the diver when the scene does not fit.
+function camAim() {
+  if (!view || view.tall * S <= view.avail + 1) return 0;
+  const p = th && pose(th), y = p ? p.y : BOARD_Y + HIP, seen = view.avail / S;
+  // The diver's hip a little under the middle, so the messages above stay clear of it.
+  return Math.max(0, Math.min(view.tall - seen, y - seen * 0.4 + view.under));
+}
+const sx = m => OX + m * S, sy = h => OY - (h - camY) * S;
 
 // ---------- Sound (only after the first tap) ----------
 let ac = null;
@@ -220,19 +260,25 @@ const diver = id => K.thrower(id);
 const COLORS = K.COLORS;
 
 // The computer dives around its skill, now and then flat on the water, and never past what a very
-// good player reaches (a clean 2½ somersaults from the highest bounce, about 75).
-const CPU_MAX = 75;
-function cpuMark(t) {
+// good player reaches (from the 3 m board a clean 2½ somersaults from the highest bounce, about 75).
+// Higher up there is time for more, so its points grow with the height as the player's best do
+// (measured by simulating every hold: about 59, 66, 70, 76 and 76+ points at the five heights).
+const CPU_MAX = 75, CPU_HEIGHT = [0.9, 1, 1.06, 1.14, 1.2];
+function cpuMark(t, c) {
   if (Math.random() < 0.05) return Math.round((3 + Math.random() * 9) * 100) / 100;
+  const f = CPU_HEIGHT[HEIGHTS.indexOf(heightOf((c || K.comp || {}).round))] || 1;
   let m;
-  do m = Math.round((t.skill + K.gauss() * 7) * 100) / 100; while (m > CPU_MAX);
+  do m = Math.round((t.skill * f + K.gauss() * 7) * 100) / 100; while (m > CPU_MAX * f);
   return Math.max(4, m);
 }
 // A new turn: this phone draws it, and runs it when it is its own.
 function newTurn(t, mine, seq) {
   th = { seq, id: t.id, mine, phase: 'wait', t: 0, idle: 0, b: null, d: null, res: null, drops: [], sendT: 0, sent: false,
     track: mine ? null : AiPelitSulava.track({ keys: ['x', 'y', 'a', 'w', 'k', 'd'], extra: 0.1 }), seen: null };
-  ptr = null;
+  ptr = null; flipHeld = false; twistHeld = false; bend = 0;
+  const h = heightOf(K.comp && K.comp.round);
+  th.hgt = h; BOARD_Y = h.m; BOARD = !!h.board;
+  frameScene(); camY = camAim();
 }
 
 // ---------- One dive ----------
@@ -258,6 +304,8 @@ function step(dt) {
   }
   if (!a.mine) return;
   if (isNet() && a.idle > TURN_MAX && (a.phase === 'ready' || a.phase === 'bounce')) return timeOut();
+  // A finger on the screen bends the knees (Trampoliini's squat), quickly down and quicker back up.
+  bend += ((ptr !== null && (a.phase === 'ready' || a.phase === 'bounce') ? 1 : 0) - bend) * Math.min(1, dt * (ptr !== null ? 14 : 20));
   if (a.phase === 'bounce') stepBounce(a, dt);
   else if (a.phase === 'dive') stepDive(a, dt);
   a.sendT -= dt;
@@ -269,50 +317,82 @@ function step(dt) {
 }
 const r2 = n => Math.round(n * 100) / 100, r3 = n => Math.round(n * 1000) / 1000;
 
-// The board under the feet: pressed down while they are on it, deeper the higher the hop came from.
+// The bounce, as on Trampoliini: the board is pressed down for CONTACT s each landing, deeper the
+// faster the diver came down. The push is the lift of the finger on the screen (or Voltti), best
+// half way through the press; a push up to EARLY s before the landing counts from its moment.
+let bend = 0;   // 0..1, the knees bent by a finger on the screen
 function startBounce(a) {
   a.phase = 'bounce'; a.t = 0; a.idle = 0;
-  a.b = { air: false, fy: 0, vy: 0, tc: 0, h: H0, contactAt: clock, leaveAt: -1, pressAt: clock, first: true, q: 0, dip: 0 };
+  a.b = { air: true, fy: 0, vy: V_HOP, tc: 0, vin: V_HOP, push: null, early: null, go: false, dip: 0, v: V_HOP };
+  A.play('jousi', { vol: 0.2, rate: 0.9 }) || tone(260, 0.08, 'sine', 0.04);
+}
+const timeToBoard = b => (b.vy + Math.sqrt(Math.max(0, b.vy * b.vy + 2 * G * b.fy))) / G;
+function pushQuality(t) {
+  const err = Math.abs(t - CONTACT / 2);
+  return err < 0.05 ? 1 : Math.max(0, 1 - (err - 0.05) / 0.2);
+}
+// A push now (the finger's lift, or Voltti): on the board it counts at once, just before the landing
+// it counts from its moment. Returns true when it counted.
+function push(a) {
+  const b = a.b;
+  if (!b) return false;
+  if (!b.air) { if (b.push === null) b.push = b.tc; return true; }
+  const t = timeToBoard(b);
+  if (t <= EARLY && b.vy < 0) { b.early = -t; return true; }
+  return false;
 }
 function stepBounce(a, dt) {
   const b = a.b;
   if (!b.air) {
     b.tc += dt;
-    b.dip = 0.12 + 0.16 * b.h / HMAX;
-    if (b.tc < TC) { b.fy = -b.dip * Math.sin(Math.PI * b.tc / TC); return; }
-    // The press is over: how well the last tap hit the board's lowest moment sets the next hop.
-    const pressed = b.pressAt > b.leaveAt;
-    const q = b.first ? 0 : pressed ? Math.max(0, 1 - Math.abs(b.pressAt - (b.contactAt + TC / 2)) / WIN) : 0;
-    const h = b.first ? H0 : pressed ? Math.max(H0 * 0.7, Math.min(HMAX, b.h + GAIN * q - 0.12)) : Math.max(0.15, b.h * 0.5);
-    if (!b.first && pressed) say(q > 0.75 ? 'Hyvä tahti!' : b.pressAt < b.contactAt + TC / 2 ? 'Aikaisin' : 'Myöhässä', q > 0.75 ? '#7ee081' : '#ffd166');
-    b.first = false; b.q = q;
-    b.air = true; b.fy = 0; b.h = h; b.vy = Math.sqrt(2 * G * h); b.leaveAt = clock; b.tc = 0;
-    A.play('jousi', { vol: 0.25, rate: 0.9 + 0.3 * h / HMAX }) || tone(220 + 160 * h, 0.08, 'sine', 0.04);
-    if (ptr !== null && clock - pressT >= HOLD) return takeOff(a);
+    b.dip = 0.08 + 0.22 * Math.min(1, b.vin / VMAX);
+    if (b.tc < CONTACT) { b.fy = -b.dip * Math.sin(Math.PI * b.tc / CONTACT); return; }
+    // The press is over: the push sets the next hop.
+    let v;
+    if (b.push === null) v = b.vin * 0.82;
+    else {
+      const q = pushQuality(b.push);
+      v = b.vin * 0.9 + PUSH * q;
+      if (v >= VMAX - 0.01) say('Huippukorkeus!', '#7ee081');
+      else if (q >= 0.95) say('Täydellinen ponnistus!', '#7ee081');
+      else if (q < 0.6) say(b.push < CONTACT / 2 ? 'Liian aikaisin' : 'Liian myöhään', '#ffd166');
+    }
+    v = Math.max(V_MIN, Math.min(VMAX, v));
+    b.v = v; b.air = true; b.fy = 0; b.vy = v; b.tc = 0;
+    A.play('jousi', { vol: 0.25, rate: 0.9 + 0.3 * v / VMAX }) || tone(220 + 60 * v, 0.08, 'sine', 0.04);
+    if (b.go) return takeOff(a, v);
     return;
   }
   b.vy -= G * dt; b.fy += b.vy * dt;
-  // A finger that went down for a tap and stayed: the take-off, just after leaving the board.
-  if (ptr !== null && pressT > b.leaveAt - TC && clock - pressT >= HOLD && clock - b.leaveAt <= LATE) return takeOff(a);
-  if (b.fy <= 0) { b.air = false; b.fy = 0; b.tc = 0; b.contactAt = clock; }
+  if (b.fy <= 0) {
+    b.air = false; b.fy = 0; b.tc = 0; b.vin = Math.abs(b.vy);
+    b.push = b.early; b.early = null;
+  }
 }
-function takeOff(a) {
-  const b = a.b, p = pose(a);
+// Off the board or the platform, forward, at the speed up v.
+function takeOff(a, v) {
+  const p = pose(a);
   a.phase = 'dive'; a.t = 0; pop = null;
-  a.d = { x: p.x, y: p.y, vx: VX, vy: b.vy, a: 0.1, w: 0, k: 0, h: b.h };
-  A.play('suhahdus', { vol: 0.5, rate: 0.9 + 0.3 * b.h / HMAX }) || tone(440, 0.12, 'sine', 0.04, 220);
+  a.d = { x: p.x, y: BOARD_Y + HIP, vx: VX, vy: v, a: 0.1, w: 0, k: 0, h: BOARD ? v * v / (2 * G) : HMAX };
+  A.play('suhahdus', { vol: 0.5, rate: 0.9 + 0.3 * Math.min(1, v / VMAX) }) || tone(440, 0.12, 'sine', 0.04, 220);
+}
+// ↻ Voltti before the dive: on the board it is the take-off at the end of this press (and its push,
+// when it comes on the board or just before it). Standing, or on a platform, it jumps off at once.
+function volttiGo(a) {
+  if (a.phase === 'ready') return takeOff(a, BOARD ? V_STAND : V_PLAT);
+  if (a.phase !== 'bounce' || !a.b) return;
+  push(a);
+  a.b.go = true;
 }
 function stepDive(a, dt) {
-  const d = a.d, held = ptr !== null;
+  const d = a.d, held = ptr !== null || flipHeld;
   d.k += Math.max(-dt / TUCK_T, Math.min(dt / TUCK_T, (held ? 1 : 0) - d.k));
   // Open, the body steers a little towards a clean entry (straight up or down), so a near miss counts.
   const near = Math.max(0, Math.round(d.a / Math.PI)) * Math.PI;
   const help = Math.max(-HELP_MAX, Math.min(HELP_MAX, (near - d.a) * HELP)) * (1 - d.k);
   d.a += Math.max(0, spin(d.k) + help) * dt;
-  if (held) {
-    const dx = curX - pressX, m = Math.abs(dx) < DEAD_PX ? 0 : Math.max(-1, Math.min(1, (dx - Math.sign(dx) * DEAD_PX) / DRAG_PX));
-    d.w += m * TWIST_W * dt;
-  } else {
+  if (twistHeld) d.w += TWIST_W * dt;
+  else {
     // Let go, the twist finishes its half turn (or goes back to it).
     const to = Math.round(d.w / Math.PI) * Math.PI - d.w;
     d.w += Math.max(-TWIST_W * dt, Math.min(TWIST_W * dt, to));
@@ -322,7 +402,8 @@ function stepDive(a, dt) {
 }
 // Into the water: the judges' points, the splash; the phones watching get the same.
 function enter(a, res) {
-  a.phase = 'water'; a.t = 0; a.res = res; ptr = null;
+  a.phase = 'water'; a.t = 0; a.res = res; ptr = null; flipHeld = twistHeld = false;
+  pad.querySelectorAll('button').forEach(b => b.classList.remove('on'));
   const d = a.d || { x: 1.5, y: ENTRY_Y, a: res.halves * Math.PI, w: 0, k: 0 };
   a.d = Object.assign({}, d, { vy: -3, vx: 0.3 });
   splash(a, d.x, res.splash);
@@ -364,16 +445,19 @@ function pose(a) {
     const s = a.track.at();
     if (s) return { x: s.x, y: s.y, a: s.a, w: s.w, k: s.k, d: s.d, ph: a.phase };
   }
+  // The knees bend with a finger on the screen (bend), and as the board presses down (d).
+  const sq = a.mine ? bend : 0;
   if (a.phase === 'bounce' && a.b) {
-    const b = a.b, d = b.air ? 0 : b.dip * Math.sin(Math.PI * Math.min(1, b.tc / TC));
-    return { x: FOOT_X, y: BOARD_Y + (b.air ? b.fy : -d * 0.88) + HIP - (b.air ? 0 : d * 0.6), a: 0, w: 0, k: 0, d, ph: 'bounce', fy: b.air ? b.fy : 0, h: b.h };
+    const b = a.b, d = b.air ? 0 : b.dip * Math.sin(Math.PI * Math.min(1, b.tc / CONTACT));
+    return { x: FOOT_X, y: BOARD_Y + (b.air ? b.fy : -d * 0.88) + HIP - (b.air ? 0 : d * 0.6) - sq * 0.22, a: 0, w: 0, k: 0, d, knee: Math.min(0.6, d * 2.2 + sq * 0.5), ph: 'bounce',
+      fy: b.air ? b.fy : 0, h: b.v * b.v / (2 * G) };
   }
   if ((a.phase === 'dive' || a.phase === 'water') && a.d) {
     // The board shakes a moment after the take-off.
     const d = a.phase === 'dive' ? 0.18 * Math.cos(a.t * 26) * Math.exp(-a.t * 5) : 0;
     return { x: a.d.x, y: a.d.y, a: a.d.a, w: a.d.w, k: a.d.k, d, ph: a.phase };
   }
-  return { x: FOOT_X, y: BOARD_Y + HIP, a: 0, w: 0, k: 0, d: 0, ph: 'ready' };
+  return { x: FOOT_X, y: BOARD_Y + HIP - sq * 0.22, a: 0, w: 0, k: 0, d: 0, knee: sq * 0.5, ph: 'ready' };
 }
 
 // Another phone's diver, as its phone sends it: where it is (p) and its entry with the points (end).
@@ -412,6 +496,9 @@ let idleAt = '', draws = 0;
 function frame(now) {
   const dt = Math.min(0.05, Math.max(0, now - lastT) / 1000); lastT = Math.max(lastT, now);
   step(dt);
+  camY += (camAim() - camY) * Math.min(1, dt * 5);
+  const show = !!(th && th.mine && (th.phase === 'ready' || th.phase === 'bounce' || th.phase === 'dive') && !K.ending && menu.classList.contains('hidden'));
+  if (show === pad.classList.contains('off')) pad.classList.toggle('off', !show);
   const still = !menu.classList.contains('hidden') && !K.ending ? W + 'x' + H + outfit.id : '';
   if (!still || still !== idleAt) { draw(); draws++; }
   idleAt = still;
@@ -433,18 +520,18 @@ function draw() {
   }
 }
 function drawScene() {
-  const w = SW;
+  const w = SW, OY = sy(0);
   // The hall: a wall with tall windows, the stands' rail, the far side of the pool.
   const wall = x.createLinearGradient(0, 0, 0, OY);
   wall.addColorStop(0, '#2d5c86'); wall.addColorStop(1, '#a9cfe6');
   x.fillStyle = wall; x.fillRect(0, 0, w, OY);
   x.fillStyle = 'rgba(255,255,255,.16)';
   const winW = Math.max(26, 1.2 * S), gap = winW * 2.2;
-  for (let k = 0, px = ((sx(-20) % gap) + gap) % gap - gap; px < w; k++, px += gap) x.fillRect(px, sy(7.6), winW, 3.4 * S);
+  for (let k = 0, px = ((sx(-20) % gap) + gap) % gap - gap; px < w; k++, px += gap) x.fillRect(px, sy(BOARD_Y + 4.6), winW, 3.4 * S);
   x.fillStyle = '#d9e4ea'; x.fillRect(0, sy(DECK), w, DECK * S);
   // The friends watching stand on the far side, drawn before the diver so they never cover it.
   K.drawFans(x, { left: 12, right: w - 12, bottom: sy(DECK) + 2, h: 40, walk: true });
-  drawBoard(pose(th) ? pose(th).d : 0);
+  if (BOARD) drawBoard(pose(th) ? pose(th).d : 0); else drawPlatform();
   // The water, with the depth darkening and the lane line on the bottom.
   const water = x.createLinearGradient(0, OY, 0, sceneB);
   water.addColorStop(0, 'rgba(64,170,220,.92)'); water.addColorStop(1, 'rgba(18,84,140,.98)');
@@ -468,7 +555,20 @@ function drawScene() {
   if (th && th.phase === 'wait') drawStandings(false);
   if (K.comp && K.comp.wait && !th && !K.ending) message('Odotetaan…', '#fff');
 }
-// The 3 m springboard: fixed on its stand back to the fulcrum, bending past it, its tip down by dip.
+// A concrete platform: its slab out to the tip at 0, on a pillar from the deck, a rail at the back.
+function drawPlatform() {
+  const top = sy(BOARD_Y), slab = Math.max(6, 0.3 * S);
+  x.fillStyle = '#9aa7b0'; x.fillRect(sx(-3.4), top + slab, 1.3 * S, sy(DECK) - top - slab);
+  x.fillStyle = '#7d8a94'; x.fillRect(sx(-3.4) + 1.3 * S - 4, top + slab, 4, sy(DECK) - top - slab);
+  x.fillStyle = '#b8c3ca'; x.fillRect(sx(-3.6), top, 3.6 * S, slab);
+  x.fillStyle = '#2e6fa8'; x.fillRect(sx(-3.6), top - Math.max(2, 0.05 * S), 3.6 * S, Math.max(2, 0.05 * S));
+  x.strokeStyle = '#c9d3da'; x.lineWidth = 3;
+  x.beginPath(); x.moveTo(sx(-3.4), top); x.lineTo(sx(-3.4), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), sy(BOARD_Y + 1)); x.lineTo(sx(-1.6), top); x.stroke();
+  // The height, painted on the pillar.
+  x.fillStyle = 'rgba(30,50,70,.75)'; x.font = '800 ' + Math.max(11, Math.round(0.42 * S)) + 'px system-ui'; x.textAlign = 'center';
+  x.fillText(String(BOARD_Y).replace('.', ',') + ' m', sx(-2.75), top + slab + Math.max(14, 0.6 * S));
+}
+// The springboard (1 m or 3 m): fixed on its stand back to the fulcrum, bending past it, its tip down by dip.
 function drawBoard(dip) {
   const by = y => sy(y);
   x.fillStyle = '#8a98a3'; x.fillRect(sx(BACK - 0.4), by(BOARD_Y - 0.1), (FULCRUM - BACK + 0.8) * S, by(DECK) - by(BOARD_Y - 0.1));
@@ -490,11 +590,11 @@ function drawDiverAt(a, p) {
   const t = diver(a.id), o = looks(t) || plain(t ? t.col : COLORS[0]);
   const name = t ? (a.mine ? '▼ Sinä' : t.name) : '';
   let armA, knee = 0;
-  if (p.ph === 'ready' || a.phase === 'wait') armA = Math.PI - 0.1;
+  if (p.ph === 'ready' || a.phase === 'wait') { armA = Math.PI - 0.1 - (p.knee || 0) * 0.8; knee = p.knee || 0; }
   else if (p.ph === 'bounce') {
     // Arms up as the hop rises, swung down and back as the board is pressed.
     const up = p.fy !== undefined ? Math.min(1, p.fy / Math.max(0.2, p.h || 0.4)) : Math.max(0, (p.y - BOARD_Y - HIP) / 0.8);
-    armA = Math.PI - 0.4 - up * (Math.PI - 0.6); knee = Math.min(0.5, (p.d || 0) * 2.2);
+    armA = Math.PI - 0.4 - up * (Math.PI - 0.6); knee = p.knee !== undefined ? p.knee : Math.min(0.5, (p.d || 0) * 2.2);
   } else armA = 0;
   drawDiver(x, o, sx(p.x), sy(p.y), S, p.a, p.w, p.k, armA, knee, a.mine, a.phase === 'water' ? 1 - Math.min(0.75, a.t * 0.5) : 1);
   if (name && p.ph !== 'dive' && a.phase !== 'water' && !(a.mine && p.ph === 'bounce')) {
@@ -578,33 +678,32 @@ function drawHud() {
   x.fillStyle = 'rgba(10,20,40,.6)'; rr(8, top, W - 16, land ? 36 : 64, 12); x.fill();
   const me = K.mine(), ROUNDS = K.F.ROUNDS;
   x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = '800 16px system-ui';
-  x.fillText('Hyppy ' + Math.min(comp.round, ROUNDS) + '/' + ROUNDS, 20, top + 24);
+  x.fillText('Hyppy ' + Math.min(comp.round, ROUNDS) + '/' + ROUNDS + (land && th && th.hgt ? ' · ' + heightName(th.hgt) : ''), 20, top + 24);
+  if (!land && th && th.hgt) { x.font = '800 14px system-ui'; x.fillStyle = '#8ee3ff'; x.fillText(heightName(th.hgt), W - 20 - x.measureText(heightName(th.hgt)).width, top + 51); x.fillStyle = '#fff'; }
   x.textAlign = 'right'; x.font = '700 14px system-ui';
   if (me) x.fillText(me.marks.length ? 'Yht. ' + fmtP(K.F.total(me)) + ' · ' + K.placeOf(me) + '.' : 'Ei hyppyä vielä', W - 20, top + 24);
   const t = th && diver(th.id);
   if (th && th.mine && th.phase === 'bounce') {
     // The bounce's height: green once it is high.
-    const bx = land ? 150 : 20, bw = land ? W - 150 - 230 : W - 40 - 92, by = land ? top + 12 : top + 40, h = th.b.h / HMAX;
+    const bx = land ? 230 : 20, bw = land ? W - 230 - 200 : W - 40 - 92, by = land ? top + 12 : top + 40, h = (th.b.v / VMAX) ** 2;
     x.fillStyle = 'rgba(255,255,255,.2)'; rr(bx, by, bw, 12, 6); x.fill();
     x.fillStyle = h > 0.8 ? '#7ee081' : h > 0.45 ? '#ffd166' : '#ff9a8b'; rr(bx, by, Math.max(12, bw * Math.min(1, h)), 12, 6); x.fill();
-    x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '800 14px system-ui';
-    if (!land) x.fillText('Pomppu', W - 20, by + 11);
   } else if (th && (th.phase === 'dive') && th.d) {
     x.textAlign = 'left'; x.font = '800 15px system-ui'; x.fillStyle = '#8ee3ff';
     const { halves, tw } = ser(th.d.a, th.d.w, 0);
-    x.fillText('↻ ' + (halves ? half(halves) : '0') + (tw ? '  ⟲ ' + half(tw) : ''), land ? 150 : 20, land ? top + 24 : top + 50);
+    x.fillText('↻ ' + (halves ? half(halves) : '0') + (tw ? '  ⟲ ' + half(tw) : ''), land ? 230 : 20, land ? top + 24 : top + 50);
   } else if (t) {
     x.textAlign = 'left'; x.font = '700 15px system-ui'; x.fillStyle = '#ffd166';
-    x.fillText(th.mine ? 'Sinun vuorosi' : 'Hyppää: ' + t.name, land ? 150 : 20, land ? top + 24 : top + 50);
+    x.fillText(th.mine ? 'Sinun vuorosi' : 'Hyppää: ' + t.name, land ? 230 : 20, land ? top + 24 : top + 50);
   }
   if (!th) return;
   if (th.phase === 'ready' && th.mine) {
-    message('Sinun vuorosi!', '#ffd166');
-    hint('Napauta: pomppu · pidä: hyppy', '#fff');
+    if (!land) message('Sinun vuorosi!', '#ffd166');
+    hint(BOARD ? 'Paina ruutua ja nosta: pomppu' : '↻ Voltti: hyppää tasolta', '#fff');
   } else if (th.phase === 'bounce' && th.mine) {
-    hint(th.b.h > HMAX * 0.8 ? 'Pidä sormi pohjassa: hyppy!' : 'Napauta, kun lauta painuu', '#fff');
+    hint(th.b.go ? 'Ponnistus seuraavasta' : th.b.v > VMAX * 0.9 ? '↻ Voltti laudalla: hyppy!' : 'Nosta sormi, kun lauta on alhaalla', '#fff');
   } else if (th.phase === 'dive' && th.mine) {
-    hint(ptr !== null ? 'Nosta sormi ennen vettä' : 'Pidä pohjassa: kerälle', '#fff');
+    hint(ptr !== null || flipHeld ? 'Päästä ennen vettä' : '↻ pohjassa: kerälle · 🌀 kierre', '#fff');
   } else if (th.phase === 'water' && th.res && th.t > 0.4) {
     const r = th.res;
     message(fmtP(r.pts), r.why ? '#ff9a8b' : '#fff');
@@ -634,11 +733,17 @@ function small(s, col) {
   x.textAlign = 'center'; x.font = '800 17px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
   const y = hudTop + (land ? 100 : 134); x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
 }
-// The how-to line during your own dive; on its side it goes down over the water, clear of the diver.
+// The how-to line during your own dive, clear of the diver: upright low over the water, on its side to
+// the right under the score bar.
 function hint(s, col) {
-  if (!land) return small(s, col);
+  if (!land) {
+    // Upright, low over the water, under the dive.
+    x.textAlign = 'center'; x.font = '800 17px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
+    const y = ctrlTop - 16; x.strokeText(s, SW / 2, y); x.fillStyle = col; x.fillText(s, SW / 2, y);
+    return;
+  }
   x.textAlign = 'center'; x.font = '800 16px system-ui'; x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,.5)';
-  const y = sceneB - 10; x.strokeText(s, SW / 2 + 140, y); x.fillStyle = col; x.fillText(s, SW / 2 + 140, y);
+  const y = hudTop + 60; x.strokeText(s, SW / 2 + 170, y); x.fillStyle = col; x.fillText(s, SW / 2 + 170, y);
 }
 function tiny(s, col) {
   x.textAlign = 'center'; x.font = '800 16px system-ui'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.5)';
@@ -650,23 +755,26 @@ function drawStandings(final) {
 }
 
 // ---------- Input ----------
-// While it is your dive a finger anywhere on the scene is the control: a tap bounces, a hold dives
-// and tucks, sliding it sideways twists, lifting it opens. One finger at a time.
-let ptr = null, pressT = -9, pressX = 0, curX = 0;
+// While it is your dive: a finger on the screen bends the knees and its lift pushes off the board
+// (on the first one, the first hop); in the air it tucks like Voltti. One finger at a time on the
+// screen; the two buttons each take their own.
+let ptr = null, flipHeld = false, twistHeld = false;
 function press(e) {
   unlock();
   if (!th || !th.mine) return;
   if (th.phase === 'wait' && !isNet()) { th.t = BOARD_T; return; }   // alone, a tap skips the standings
   if (ptr !== null) return;
   if (th.phase !== 'ready' && th.phase !== 'bounce' && th.phase !== 'dive') return;
-  ptr = e.pointerId; pressT = clock; pressX = curX = e.clientX; th.idle = 0;
-  if (th.phase === 'ready') startBounce(th);
-  else if (th.phase === 'bounce') th.b.pressAt = clock;
+  ptr = e.pointerId; th.idle = 0;
 }
 function release(e) {
   if (e.pointerId !== ptr) return;
   catchUp(e);
   ptr = null;
+  if (!th || !th.mine) return;
+  // The lift: the first hop (or, from a platform, a jump off), or a push.
+  if (th.phase === 'ready') { if (BOARD) startBounce(th); else takeOff(th, V_PLAT); }
+  else if (th.phase === 'bounce') push(th);
 }
 c.addEventListener('pointerdown', e => {
   e.preventDefault();
@@ -676,9 +784,30 @@ c.addEventListener('pointerdown', e => {
   press(e);
   if (ptr === e.pointerId) { try { c.setPointerCapture(e.pointerId); } catch (err) {} }
 });
-c.addEventListener('pointermove', e => { if (e.pointerId === ptr) curX = e.clientX; });
 addEventListener('pointerup', release);
 addEventListener('pointercancel', release);
+pad.querySelectorAll('button').forEach(btn => {
+  const act = btn.dataset.act;
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    unlock(); catchUp(e);
+    try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+    btn.classList.add('on');
+    if (!th || !th.mine) return;
+    th.idle = 0;
+    if (act === 'voltti') { flipHeld = true; if (th.phase === 'ready' || th.phase === 'bounce') volttiGo(th); }
+    else twistHeld = true;
+  });
+  const up = e => {
+    if (!btn.classList.contains('on')) return;
+    catchUp(e);
+    btn.classList.remove('on');
+    if (act === 'voltti') flipHeld = false; else twistHeld = false;
+  };
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+});
 
 // ---------- Menu ----------
 function showMenu(result, cls) {

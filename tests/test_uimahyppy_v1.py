@@ -1,6 +1,8 @@
-"""Uimahyppy v1 (#516): springboard diving. Taps in time with the board bounce the diver higher, a
-held finger takes off and tucks into somersaults, sliding it sideways twists, lifting it opens before
-the water; five judges score the entry and the meet (kisa.js) sums every dive's points."""
+"""Uimahyppy v1 (#516): diving from a higher board or platform each dive (1 m, 3 m, 5 m, 7.5 m, 10 m).
+On a springboard the diver bounces as on Trampoliini: a finger on the screen bends the knees and its
+lift pushes, best at the board's lowest moment. "↻ Voltti" takes off; in the air it (or a finger)
+held tucks into somersaults, "🌀 Kierre" held twists, letting go opens before the water. Five judges
+score the entry and the meet (kisa.js) sums every dive's points."""
 
 import math
 
@@ -27,8 +29,9 @@ def open_game(real, context):
     return page, errors
 
 
-def my_turn(page):
-    """Starts a meet alone and runs it on to this phone's first dive, the diver ready on the board."""
+def my_turn(page, height=None):
+    """Starts a meet alone and runs it on to this phone's first dive, the diver ready on the board
+    (or on HEIGHTS[height], as a later round would put it)."""
     page.click("#go")
     page.wait_for_function("th !== null")
     for _ in range(60):
@@ -36,35 +39,46 @@ def my_turn(page):
             break
         page.evaluate("if (th && !th.mine && th.phase !== 'water') th.t = 99")
         page.wait_for_timeout(250)
+    if height is not None:
+        page.evaluate(f"(h => {{ th.hgt = h; BOARD_Y = h.m; BOARD = !!h.board; frameScene(); }})(HEIGHTS[{height}])")
     page.evaluate("th.t = 99")
     page.wait_for_function("th.phase === 'ready'")
 
 
-def bounce(page, taps, size):
-    """Starts the bounce with one tap, then taps once in the middle of each press of the board."""
+def button(page, act):
+    box = page.locator(f"#pad [data-act={act}]").bounding_box()
+    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+
+def bounce(page, pushes, size, at=0.15, start=True):
+    """Starts the bounce with one lift of the finger, then holds the finger through each landing and
+    lifts it `at` s into the press of the board (its middle is 0.15). Returns the speeds off the board."""
     w, h = size
-    page.mouse.move(w / 2, h / 2)
-    page.mouse.down()
-    page.wait_for_timeout(40)
-    page.mouse.up()
-    heights = []
-    for _ in range(taps):
-        page.wait_for_function("th.b && !th.b.air && th.b.tc > 0.1", polling=5)
+    page.mouse.move(w / 2, h / 3)
+    if start:
         page.mouse.down()
-        page.wait_for_timeout(40)
+        page.wait_for_timeout(60)
+        page.mouse.up()
+    speeds = []
+    for _ in range(pushes):
+        page.wait_for_function("th.b && !th.b.air", polling=5)
+        page.mouse.down()
+        page.wait_for_function(f"th.b.air || th.b.tc >= {at}", polling=5)
         page.mouse.up()
         page.wait_for_function("th.b.air", polling=5)
-        heights.append(page.evaluate("th.b.h"))
-    return heights
+        speeds.append(page.evaluate("th.b.v"))
+    return speeds
 
 
 def dive(page, size, somersaults=1.5):
-    """Bounces high, takes off on a held finger and opens near the given somersaults."""
-    bounce(page, 6, size)
-    page.wait_for_function("th.b && !th.b.air && th.b.tc > 0.1", polling=5)
+    """Bounces high, takes off with Voltti held and lets go near the given somersaults."""
+    if page.evaluate("BOARD"):
+        bounce(page, 5, size)
+        page.wait_for_function("th.b && !th.b.air && th.b.tc > 0.1", polling=5)
+    page.mouse.move(*button(page, "voltti"))
     page.mouse.down()
     page.wait_for_function("th.phase === 'dive'", polling=5)
-    page.wait_for_function(f"th.d.a > {somersaults * 2} * Math.PI - 1.2 || th.d.y < 1.5", polling=5)
+    page.wait_for_function(f"th.d.a > {somersaults * 2} * Math.PI - 1.2 || th.d.y < 2", polling=5)
     page.mouse.up()
     page.wait_for_function("th.phase === 'water'", timeout=5000)
     return page.evaluate("th.res")
@@ -115,8 +129,8 @@ def test_a_clean_two_and_a_half_needs_the_highest_bounce(real, context):
         const a = { phase: 'dive', t: 0, d: { x: FOOT_X, y: BOARD_Y + HIP, vx: VX, vy: Math.sqrt(2 * G * h), a: 0.1, w: 0, k: 0, h }, drops: [], mine: false };
         const saved = enter; let res = null;
         enter = (_, r) => { res = r; a.phase = 'water'; };
-        for (let t = 0; a.phase === 'dive' && t < 5; t += 1 / 60) { ptr = t < hold ? 1 : null; stepDive(a, 1 / 60); }
-        enter = saved; ptr = null;
+        for (let t = 0; a.phase === 'dive' && t < 5; t += 1 / 60) { flipHeld = t < hold; stepDive(a, 1 / 60); }
+        enter = saved; flipHeld = false;
         return res;
       };
       const best = h => { let b = null; for (let hold = 0; hold < 1.6; hold += 0.01) { const r = fly(h, hold); if (r && r.halves === 5 && r.err < 20 && (!b || r.pts > b.pts)) b = r; } return b; };
@@ -126,14 +140,53 @@ def test_a_clean_two_and_a_half_needs_the_highest_bounce(real, context):
     assert r["low"] is None
 
 
-def test_the_computer_never_dives_past_75_points(real, context):
+def test_the_computer_never_dives_past_a_good_players_best(real, context):
     page, _ = open_game(real, context)
-    marks = page.evaluate("Array.from({ length: 20000 }, () => cpuMark({ skill: 62 }))")
+    marks = page.evaluate("Array.from({ length: 20000 }, () => cpuMark({ skill: 62 }, { round: 2 }))")
     assert max(marks) <= 75
     assert max(marks) > 74
     assert min(marks) >= 3
-    low = page.evaluate("Array.from({ length: 5000 }, () => cpuMark({ skill: 30 }))")
+    low = page.evaluate("Array.from({ length: 5000 }, () => cpuMark({ skill: 30 }, { round: 2 }))")
     assert 27 < sum(low) / len(low) < 31
+    # Higher up it scores more, as the player can: the 10 m platform's dives a fifth more.
+    high = page.evaluate("Array.from({ length: 5000 }, () => cpuMark({ skill: 30 }, { round: 5 }))")
+    assert 34 < sum(high) / len(high) < 38
+    assert max(page.evaluate("Array.from({ length: 20000 }, () => cpuMark({ skill: 62 }, { round: 1 }))")) <= 67.5
+
+
+def test_each_dive_is_from_higher_up(real, context):
+    # Eero's choice: the 1 m and the 3 m springboard, then the 5, 7.5 and 10 m platforms.
+    page, errors = open_game(real, context)
+    page.click("#go")
+    page.wait_for_function("th !== null")
+    seen = page.evaluate("""() => [1, 2, 3, 4, 5].map(r => { const h = heightOf(r); return [h.m, !!h.board, heightName(h)]; })""")
+    assert seen == [[1, True, "1 m lauta"], [3, True, "3 m lauta"], [5, False, "5 m taso"],
+                    [7.5, False, "7,5 m taso"], [10, False, "10 m taso"]]
+    # The turn takes its height from the meet's round, on every phone the same.
+    assert page.evaluate("[th.hgt.m, BOARD_Y, BOARD]") == [1, 1, True]
+    page.evaluate("K.comp.round = 4; newTurn(K.mine(), false, K.comp.seq)")
+    assert page.evaluate("[th.hgt.m, BOARD_Y, BOARD]") == [7.5, 7.5, False]
+    # The whole 10 m dive fits upright: the top of the jump above the water, under the score bar.
+    page.evaluate("K.comp.round = 5; newTurn(K.mine(), false, K.comp.seq)")
+    assert page.evaluate("camAim() === 0 && sy(BOARD_Y + HIP + 1.9) > hudTop + 64 && sy(0) < ctrlTop - 10")
+    assert errors == []
+
+
+def test_a_platform_dive_has_no_bounce(real, context):
+    page, errors = open_game(real, context)
+    my_turn(page, height=4)
+    # Voltti jumps straight off into the tuck.
+    page.mouse.move(*button(page, "voltti"))
+    page.mouse.down()
+    page.wait_for_function("th.phase === 'dive'", polling=5)
+    assert page.evaluate("th.b") is None
+    page.wait_for_timeout(250)
+    assert page.evaluate("th.d.k") > 0.9
+    page.mouse.up()
+    page.wait_for_function("th.phase === 'water'", timeout=5000)
+    # From 10 m the judges do not mark it down for height, as they do a low bounce.
+    assert page.evaluate("th.res.halves") >= 1
+    assert errors == []
 
 
 def test_the_meet_sums_every_dive(real, context):
@@ -158,20 +211,27 @@ def test_the_meet_sums_every_dive(real, context):
     assert errors == []
 
 
-def test_taps_in_time_bounce_higher_and_a_hold_dives(real, context):
+def test_pushes_in_time_bounce_higher_and_voltti_dives(real, context):
     page, errors = open_game(real, context)
     my_turn(page)
-    heights = bounce(page, 5, (360, 740))
-    assert heights[-1] > heights[0] + 0.8, heights
-    assert all(b >= a for a, b in zip(heights, heights[1:])), heights
-    res = None
+    # A finger on the screen bends the knees before the push.
+    page.mouse.move(180, 250)
+    page.mouse.down()
+    page.wait_for_timeout(150)
+    assert page.evaluate("bend") > 0.8 and page.evaluate("pose(th).knee") > 0.3
+    page.mouse.up()
+    page.wait_for_function("th.phase === 'bounce'")
+    speeds = bounce(page, 4, (360, 740))
+    assert speeds[-1] > speeds[0] + 1.2, speeds
+    assert all(b >= a for a, b in zip(speeds, speeds[1:])), speeds
     page.wait_for_function("th.b && !th.b.air && th.b.tc > 0.1", polling=5)
+    page.mouse.move(*button(page, "voltti"))
     page.mouse.down()
     page.wait_for_function("th.phase === 'dive'", polling=5)
     assert page.evaluate("th.d.h") > 1.2
     page.wait_for_timeout(250)
-    assert page.evaluate("th.d.k") > 0.9   # tucked while the finger stays down
-    page.wait_for_function("th.d.a > 3 * Math.PI - 1.2 || th.d.y < 1.5", polling=5)
+    assert page.evaluate("th.d.k") > 0.9   # tucked while Voltti stays down
+    page.wait_for_function("th.d.a > 3 * Math.PI - 1.2 || th.d.y < 1.2", polling=5)
     page.mouse.up()
     page.wait_for_timeout(200)
     assert page.evaluate("th.phase === 'water' || th.d.k < 0.1")
@@ -184,27 +244,51 @@ def test_taps_in_time_bounce_higher_and_a_hold_dives(real, context):
     assert errors == []
 
 
-def test_taps_off_the_beat_or_none_bounce_lower(real, context):
+def test_pushes_off_the_beat_or_none_bounce_lower(real, context):
     page, errors = open_game(real, context)
     my_turn(page)
-    bounce(page, 4, (360, 740))
-    high = page.evaluate("th.b.h")
-    # No tap on the next press: the hop halves.
+    top = bounce(page, 4, (360, 740))[-1]
+    # No push on the next press: the bounce dies down.
     page.wait_for_function("th.b && !th.b.air", polling=5)
     page.wait_for_function("th.b.air", polling=5)
-    assert page.evaluate("th.b.h") < high * 0.6
+    none = page.evaluate("th.b.v")
+    assert none < top * 0.85
     assert page.evaluate("th.phase") == "bounce"
+    # A push at the very start of the press is too early, and says so: it adds less than one on the beat.
+    early = bounce(page, 1, (360, 740), at=0, start=False)[0]
+    assert early < none * 0.9 + 1.2 * 0.7
+    assert page.evaluate("pop && pop.text") == "Liian aikaisin"
+    r = page.evaluate("[pushQuality(0.15), pushQuality(0.11), pushQuality(0.0), pushQuality(0.3)]")
+    assert r[0] == 1 and r[1] == 1 and r[2] < 0.6 and r[3] < 0.6
     assert errors == []
 
 
-def test_sliding_the_held_finger_twists(real, context):
+def test_a_push_just_before_the_landing_counts(real, context):
+    # As on Trampoliini: up to 0.12 s before the feet are back on the board, a push counts from its moment.
     page, errors = open_game(real, context)
     my_turn(page)
-    bounce(page, 5, (360, 740))
-    page.wait_for_function("th.b && !th.b.air && th.b.tc > 0.1", polling=5)
+    r = page.evaluate("""() => {
+      startBounce(th);
+      const b = th.b;
+      b.vy = -3; b.fy = 0.2;   // 0.06 s from the board
+      const early = push(th), at = b.early;
+      b.vy = -3; b.fy = 2; b.early = null;   // far above it: no push
+      const far = push(th);
+      return { early, at, far };
+    }""")
+    assert r["early"] is True and -0.12 < r["at"] < 0 and r["far"] is False
+    assert errors == []
+
+
+def test_kierre_held_twists(real, context):
+    page, errors = open_game(real, context)
+    my_turn(page, height=2)
+    page.mouse.move(*button(page, "voltti"))
     page.mouse.down()
+    page.mouse.up()
     page.wait_for_function("th.phase === 'dive'", polling=5)
-    page.mouse.move(180 + 90, 370, steps=4)
+    page.mouse.move(*button(page, "kierre"))
+    page.mouse.down()
     page.wait_for_timeout(300)
     w = page.evaluate("th.d.w")
     assert w > 1
@@ -222,10 +306,24 @@ def test_on_its_side_it_fits_and_dives(real, context):
     page.wait_for_timeout(300)
     assert page.evaluate("document.getElementById('menu').scrollHeight <= innerHeight")
     my_turn(page)
-    # The whole dive fits between the score bar and the bottom: the top of the highest hop, the water.
-    assert page.evaluate("sy(BOARD_Y + HIP + HMAX + 0.8) > hudTop + 36 && OY < sceneB - 10")
+    # The 1 m dive fits between the score bar and the bottom: the top of the highest hop, the water.
+    assert page.evaluate("sy(BOARD_Y + HIP + HMAX + 0.8) > hudTop + 36 && sy(0) < sceneB - 10")
+    # The buttons sit in the lower corners, clear of the middle.
+    vb, kb = (page.locator(f"#pad [data-act={a}]").bounding_box() for a in ("voltti", "kierre"))
+    assert kb["x"] < 40 and vb["x"] + vb["width"] > 700 and vb["y"] > 250 and vb["width"] < 130
     res = dive(page, (740, 360))
     assert res["pts"] > 0
+    # From the 10 m platform the camera follows the diver down, so it is not drawn tiny.
+    page.wait_for_function("K.mine().marks.length === 1", timeout=8000)
+    page.evaluate("K.comp.round = 5; newTurn(K.mine(), true, K.comp.seq); th.t = 99")
+    page.wait_for_function("th.phase === 'ready'")
+    page.wait_for_timeout(400)
+    assert page.evaluate("S >= MIN_S && camY > 3")
+    y0 = page.evaluate("sy(pose(th).y)")
+    assert page.evaluate("hudTop + 40") < y0 < 300
+    res = dive(page, (740, 360))
+    page.wait_for_timeout(600)
+    assert page.evaluate("camY") < 0.5
     turn(page, {"width": 360, "height": 740})
     page.wait_for_timeout(300)
     assert page.evaluate("!land && K.comp !== null")
@@ -273,7 +371,7 @@ def test_a_watching_phone_draws_the_same_dive(real, context):
     assert errors == []
 
 
-def test_a_second_finger_does_not_take_the_dive(real, context):
+def test_a_second_finger_does_not_push(real, context):
     page, errors = open_game(real, context)
     my_turn(page)
     r = page.evaluate("""() => {
@@ -281,9 +379,11 @@ def test_a_second_finger_does_not_take_the_dive(real, context):
       press({ pointerId: 8, clientX: 200, clientY: 300 });
       const kept = ptr;
       release({ pointerId: 8, timeStamp: performance.now() });
-      return { kept, ptr, phase: th.phase };
+      const still = th.phase;
+      release({ pointerId: 7, timeStamp: performance.now() });
+      return { kept, ptr, still, phase: th.phase };
     }""")
-    assert r == {"kept": 7, "ptr": 7, "phase": "bounce"}
+    assert r == {"kept": 7, "ptr": None, "still": "ready", "phase": "bounce"}
     assert errors == []
 
 
