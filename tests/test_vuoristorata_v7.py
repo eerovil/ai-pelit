@@ -8,7 +8,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/vuoristorata/v6/"
+URL = "games/vuoristorata/v7/"
 KEY = "ai-pelit:vuoristorata:"
 
 
@@ -378,10 +378,11 @@ def test_the_computer_rides_for_a_friend_who_drops_off(site, browser):
             " return k.s >= 120 && k.v > 0 && k.v < 2 && k.energy < .9 && k.took.includes(id); }",
             arg=[pickup],
         )
-        accepted_speed = host.evaluate("""() => { net.phase = 'hold';
-            return net.cars.find(k => k.kind === 'net').v; }""")
+        host.evaluate("net.phase = 'hold'")
         relay.drop(guest)
         host.wait_for_function("AiPelitRooms.paused", timeout=8000)
+        # Read the speed the host took last only now: a spot still on its way at the hold may land after it.
+        accepted_speed = host.evaluate("net.cars.find(k => k.kind === 'net').v")
         # The host carries on without Aino: the computer takes her car to the finish.
         host.click("#aipr-goOn")
         host.wait_for_function("net.cars.some(k => k.kind === 'cpu')", timeout=5000)

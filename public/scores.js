@@ -64,7 +64,7 @@
     // Fastest wife-carrying run in seconds, drops' penalties included; level: 'taso', the level the player is on.
     eukonkanto: { order: 'low', score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('eukonkanto', 'taso'); } },
     // Fastest run through the obstacle course in seconds; level: 'taso', the level the player is on.
-    kaaosrata: { order: 'low', lists: [['main', 'Puomipuisto'], ['hihna8', 'Hihnatehdas'], ['laatat8', 'Laattalaakso'], ['finaali8', 'Kaaosfinaali'], ['hihna7', 'Hihnatehdas v7'], ['laatat7', 'Laattalaakso v7'], ['finaali7', 'Kaaosfinaali v7'], ['hihna', 'Hihnatehdas v6'], ['laatat', 'Laattalaakso v6'], ['finaali', 'Kaaosfinaali v6']], score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('kaaosrata', 'taso'); } },
+    kaaosrata: { order: 'low', lists: [['main10', 'Puomipuisto'], ['hihna10', 'Hihnatehdas'], ['laatat10', 'Laattalaakso'], ['finaali10', 'Kaaosfinaali'], ['main', 'Puomipuisto v1–9'], ['hihna8', 'Hihnatehdas v8–9'], ['laatat8', 'Laattalaakso v8–9'], ['finaali8', 'Kaaosfinaali v8–9'], ['hihna7', 'Hihnatehdas v7'], ['laatat7', 'Laattalaakso v7'], ['finaali7', 'Kaaosfinaali v7'], ['hihna', 'Hihnatehdas v6'], ['laatat', 'Laattalaakso v6'], ['finaali', 'Kaaosfinaali v6']], score: function (s) { return fixed(s, 2) + ' s'; }, level: function () { return saved('kaaosrata', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
     trampoliini: { order: 'high', score: function (s) { return s + ' p'; }, level: function () { return saved('trampoliini', 'taso'); } },
     // Most points in one go at a level; level: 'taso', the level the player is on.
@@ -78,6 +78,8 @@
     tikka: { order: 'high', score: function (s) { return s + ' p'; }, lists: [['mokki2', 'Mökkitikka'], ['kisa2', 'Pistekisa'], ['mokki', 'Vanha Mökkitikka'], ['main', 'Vanha Pistekisa']] },
     // Longest javelin throw in metres; level: 'taso', the level the player is on.
     keihas: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('keihas', 'taso'); } },
+    // Longest boot throw in metres; level: 'taso', the level the player is on.
+    saappaanheitto: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('saappaanheitto', 'taso'); } },
     // Longest legal long jump in metres; level: 'taso', the level the player is on.
     pituushyppy: { order: 'high', score: function (s) { return fixed(s, 2) + ' m'; }, level: function () { return saved('pituushyppy', 'taso'); } },
     // Most points in a ski-jumping meet; level: 'taso', the level the player is on. Named lists, the

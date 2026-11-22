@@ -61,9 +61,11 @@ export const GAMES = {
   // '<100|200|400>-tasainen' (no hurdles).
   aitajuoksu: { order: 'low', boards: /^(main|(200|400)-aidat|(100|200|400)-tasainen)$/ },
   eukonkanto: { order: 'low', boards: /^main$/ }, // fastest wife-carrying run, seconds, drops' +15 s included
-  kaaosrata: { order: 'low', boards: /^(main|(hihna|laatat|finaali)[78]?)$/, first: 'main',
-    boardVersions: { hihna: [6, 6], laatat: [6, 6], finaali: [6, 6], hihna7: [7, 7], laatat7: [7, 7], finaali7: [7, 7],
-      hihna8: [8, Infinity], laatat8: [8, Infinity], finaali8: [8, Infinity] } }, // fastest obstacle course, seconds
+  // v10 (#493): the 3D courses with heights have their own lists ('main10'...), the shelf's first.
+  kaaosrata: { order: 'low', boards: /^(main|(hihna|laatat|finaali)[78]?|(main|hihna|laatat|finaali)10)$/, first: 'main10',
+    boardVersions: { main: [1, 9], hihna: [6, 6], laatat: [6, 6], finaali: [6, 6], hihna7: [7, 7], laatat7: [7, 7], finaali7: [7, 7],
+      hihna8: [8, 9], laatat8: [8, 9], finaali8: [8, 9],
+      main10: [10, Infinity], hihna10: [10, Infinity], laatat10: [10, Infinity], finaali10: [10, Infinity] } }, // fastest obstacle course, seconds
   trampoliini: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   orava: { order: 'high', boards: /^main$/ }, // most points in one go at a level
   skuutti: { order: 'high', boards: /^main$/ }, // most points in one minute's run
@@ -71,6 +73,7 @@ export const GAMES = {
   // Most points in 10 rounds: Mökkitikka 'mokki' (v2's main mode, the shelf's), Pistekisa 'main' (v1 on).
   tikka: { order: 'high', boards: /^(main|mokki|mokki2|kisa2)$/, first: 'mokki2' }, // the harder throw (v7) on 'mokki2' and 'kisa2'; v1-v6's scores stay on 'mokki' and 'main'
   keihas: { order: 'high', boards: /^main$/ }, // longest javelin throw in metres
+  saappaanheitto: { order: 'high', boards: /^main$/ }, // longest boot throw in metres
   pituushyppy: { order: 'high', boards: /^main$/ }, // longest legal long jump in metres
   makihyppy: { order: 'high', boards: /^(main|viikko|viikko2)$/, first: 'viikko2' }, // most points in a ski-jumping week of two hills (v9, 'viikko2'), of four (v2–v8, 'viikko'), or a meet of two jumps (v1, 'main')
   moukari: { order: 'high', boards: /^main$/ }, // longest hammer throw in metres
