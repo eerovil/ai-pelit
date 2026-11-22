@@ -9,6 +9,13 @@
       "note": "Ensimmäinen versio: saapasta pyöritetään sivulta kuvattuna pystyympyrää peukalolla piirtäen, ja se lentää irti päästäessä kaaren tangentin suuntaan; kuuden kierroksen arvokisa yksin tai 2–8 kaverin kanssa.",
       "request": "Uusi peli yleisurheiluryhmään: saappaanheitto (jaettu pyynnöstä #501, yksi Work per peli).\n\nEeron valinnat (#501):\n- Heitto tehdään pyörittämällä (\"joku pyörittäminen\"): pelaaja pyörittää saapasta, esim. piirtämällä peukalolla ympyröitä ruudulle, jolloin vauhti kasvaa, ja päästää irti oikealla hetkellä, jotta saapas lentää sektoriin.\n- Arvokisa kuten muissa heittolajeissa (lib/yleisurheilu-*/kisa.js): tietokonetta vastaan tai kavereiden kanssa.",
       "issue": "eerovil/ai-pelit#503"
+    },
+    {
+      "n": 2,
+      "date": "2026-11-22",
+      "note": "Kaverin vauhdinotto näkyy sulavana eikä nyi.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }
