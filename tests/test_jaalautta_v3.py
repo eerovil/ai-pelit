@@ -8,7 +8,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/jaalautta/v2/"
+URL = "games/jaalautta/v3/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 # One whole match of four computer seals; seal 0 plays by `policy`: 'cpu' (with `skill`, or the

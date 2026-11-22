@@ -15,6 +15,13 @@
       "note": "Jäälautta kolmiulotteisena (three.js), ja ⏸-tauko, josta pelin voi lopettaa kesken.",
       "request": "Tee prototyyppi 3d versio tästä. Tarvii napin jolla lopettaa pelin kesken. 3d ylhäältä is best",
       "issue": "eerovil/ai-pelit#478"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-21",
+      "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
+      "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
+      "issue": "eerovil/ai-pelit#480"
     }
   ]
 }
