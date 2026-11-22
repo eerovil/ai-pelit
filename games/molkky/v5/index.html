@@ -356,7 +356,9 @@ const SM = { aim: null, k: null, pins: [] }, smNow = () => r3(AiPelitSulava.now(
 // The aim stops when the thrower stops dragging and nothing more is sent, so it never goes on past
 // its newest spot (extra 0): it would stay there, past where the thrower holds it.
 const aimTrack = () => SM.aim || (SM.aim = AiPelitSulava.track({ keys: ['x', 'd'], extra: 0 }));
-const stickTrack = () => SM.k || (SM.k = AiPelitSulava.track({ keys: ['x', 'y', 'z', 'yaw', 'spin', 'air'], angles: ['yaw', 'spin'], jump: 1 }));
+// The spin only grows (it is never wrapped), and a fast roll turns it more than half a turn between
+// two snapshots, so it glides straight, not the short way round as an angle.
+const stickTrack = () => SM.k || (SM.k = AiPelitSulava.track({ keys: ['x', 'y', 'z', 'yaw', 'spin', 'air'], angles: ['yaw'], jump: 1 }));
 // A pin's tip direction (h) and wobble lag with it, so it never rocks before the kalikka is drawn there.
 const pinTrack = i => SM.pins[i] || (SM.pins[i] = AiPelitSulava.track({ keys: ['x', 'y', 'a', 'h', 'wob'], angles: ['h'], jump: 1 }));
 // The throw's sounds wait the same moment: each snapshot's events play once the kalikka is drawn at its stamp.
@@ -559,12 +561,12 @@ function applySnapshot(s) {
     if (phase === 'show' && msg) { if (msg.win) S.play('onnistui', { vol: 0.3 }); }
   }
   // The pins glide through the host's spots while they move (the throw and its points, until they
-  // are stood up again); otherwise they stand where the host says, at once.
+  // are stood up again); otherwise, and at a new throw's first snapshot, they stand where the host says, at once.
   const moving = phase === 'fly' || (phase === 'show' && !raised);
   s.p.forEach((q, i) => {
     const p = world.pins[i], tr = pinTrack(i), spot = { x: q[0], y: q[1], a: q[3], h: q[4], wob: q[5] };
     p.tx = q[0]; p.ty = q[1]; p.s = STATES[q[2]]; p.ta = q[3];
-    if (moving) tr.push(s.ts, spot);
+    if (moving && throwN === wasN) tr.push(s.ts, spot);
     else { tr.snap(s.ts, spot); p.x = p.tx; p.y = p.ty; p.a = p.ta; p.dx = Math.cos(q[4]); p.dy = Math.sin(q[4]); p.wob = q[5]; }
   });
   if (s.k) {
@@ -650,9 +652,10 @@ R.on('message', (m, from) => {
 R.on('hello', id => { if (net.on && net.setup && phase !== 'done') { R.send(net.setup, id); R.send(snapshot(), id); } });
 // The computer throws for a phone let go with "Jatka ilman heitä", and gives its turns back.
 // A new thrower within the throw: the aim heard from the one before is forgotten (v5).
-const newThrower = () => { net.aimT = null; if (SM.aim) SM.aim.reset(); };
-R.on('continue', ids => { for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') { cpu = null; newThrower(); } });
-R.on('back', id => { net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; newThrower(); } });
+// Only when the thrower really changes: a watching phone let go or back keeps the aim gliding.
+const newThrower = was => { if (thrower() !== was) { net.aimT = null; if (SM.aim) SM.aim.reset(); } };
+R.on('continue', ids => { const th = thrower(); for (const id of ids) if (!net.away.includes(id)) net.away.push(id); if (phase === 'aim') { cpu = null; newThrower(th); } });
+R.on('back', id => { const th = thrower(); net.away = net.away.filter(q => q !== id); if (phase === 'aim') { cpu = null; phaseT = 0; newThrower(th); } });
 R.on('lobby', () => { phase = 'room'; });
 R.on('leave', () => { phase = 'menu'; net.on = false; showMenu(); });
 R.on('menu', () => { phase = 'menu'; net.on = false; showMenu(); });

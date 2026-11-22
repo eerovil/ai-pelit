@@ -548,6 +548,52 @@ def test_a_new_thrower_mid_aim_forgets_the_friends_aim_on_the_host(room):
     third.wait_for_function("Math.abs(drawnAim().d - aim.d) < 0.3", timeout=3000)
     assert host.errors == third.errors == []
 
+def test_a_fast_roll_spins_the_kalikka_forward_on_a_guest(room):
+    host, [guest] = room("Eero", "Aino")
+    # A rolling kalikka turns its spin by more than half a turn between two snapshots: drawn
+    # between them it keeps turning forward, never back the short way round.
+    spins = guest.evaluate("""() => {
+      SM.k = null; const tr = stickTrack(), at = { x: 0, y: 0, z: 0, yaw: 0, air: 0 };
+      tr.snap(0, { ...at, spin: 0 }, 0);
+      for (let i = 1; i <= 6; i++) tr.push(i * 0.04, { ...at, spin: i * 4 }, i * 0.04);
+      const out = [];
+      for (let a = 0.05; a < 0.4; a += 0.01) out.push(tr.at(a).spin);
+      return out;
+    }""")
+    assert all(b >= a - 1e-6 for a, b in zip(spins, spins[1:])), spins
+    assert spins[0] >= -1e-6 and spins[-1] > 4, spins
+
+
+def test_a_new_throws_first_snapshot_stands_the_pins_at_once_on_a_guest(room):
+    host, [guest] = room("Eero", "Aino")
+    host.evaluate("turn = 0; toAim(); doThrow({ x: 0, d: 3.35, st: 1 }, true)")
+    guest.wait_for_function("phase === 'fly' && SM.pins.length && SM.pins[0].size() > 1", timeout=3000)
+    # The next throw's first word comes straight as the throw (no aim heard between): its pins are
+    # placed where the host says, not glided on from the last throw.
+    assert guest.evaluate("""() => {
+      const s = snapshot(); s.n = throwN + 1; s.ph = 'fly'; s.k = 0;
+      s.p = s.p.map((q, i) => [i * 0.1, 3, 0, 0, 0, 0]);
+      applySnapshot(s);
+      return SM.pins.every(t => t.size() === 1) && world.pins.every((p, i) => p.x === i * 0.1 && p.y === 3);
+    }""") is True
+    assert guest.errors == []
+
+
+def test_a_watching_phone_let_go_keeps_the_friends_aim_gliding_on_the_host(room):
+    host, [guest, third] = room("Eero", "Aino", "Iida")
+    host.evaluate("turn = 1; toAim()")
+    guest.wait_for_function("myTurn()")
+    guest.evaluate("AiPelitRooms.send({ t: 'aim', round: net.round, n: throwN, x: 0.3, d: 2.2, st: 0, ts: AiPelitSulava.now() })")
+    host.wait_for_function("aimShown && aim.d === 2.2 && SM.aim && SM.aim.size() > 0", timeout=3000)
+    t = host.evaluate("net.aimT")
+    room.relay.drop(third)
+    host.wait_for_function("AiPelitRooms.waiting.length === 1")
+    host.click("#aipr-goOn")
+    host.wait_for_function("net.away.length === 1")
+    # Aino still throws: her aim track and stamp stay.
+    assert host.evaluate("[thrower() !== 'cpu', net.aimT, SM.aim.size() > 0]") == [True, t, True]
+    assert host.errors == []
+
 # ---------- Screens ----------
 
 @pytest.mark.parametrize("size", [(740, 360), (640, 360), (360, 640), (390, 844)])
