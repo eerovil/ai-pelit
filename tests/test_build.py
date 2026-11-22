@@ -80,6 +80,9 @@ def test_every_game_names_a_known_category_and_an_event_takes_its_groups(tmp_pat
     make_game(tmp_path, "maali", [game_page("a")], category="urheilu")
     with pytest.raises(build.GameError, match="unknown category 'urheilu'"):
         build.build_catalog(tmp_path)
+    make_game(tmp_path, "maali", [game_page("a")], category=["pallo"])
+    with pytest.raises(build.GameError, match="unknown category"):
+        build.build_catalog(tmp_path)
     make_game(tmp_path, "maali", [game_page("a")], category=None)
     with pytest.raises(build.GameError, match="needs a category"):
         build.build_catalog(tmp_path)

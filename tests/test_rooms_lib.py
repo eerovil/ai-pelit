@@ -535,7 +535,7 @@ def test_back_from_a_room_in_another_game_goes_to_that_games_page_then_the_shelf
     for name, code, url, page in [("Iida", small_code, r".*/games/pieni/v1/$", "pieni")]:
         away = phones(name, "huonetesti/v2/")
         away.goto(site.url)
-        away.click('.card[data-slug="huonetesti"] .card-main')
+        away.click('.shelf-row[data-slug="huonetesti"] .shelf-row-main')
         away.click('.version[data-n="2"] a')
         away.wait_for_url(re.compile(r".*/games/huonetesti/v2/$"))
         away.click("#multi")
@@ -548,7 +548,7 @@ def test_back_from_a_room_in_another_game_goes_to_that_games_page_then_the_shelf
         away.wait_for_url(f"{site.url}#/{page}")
         away.wait_for_selector(".version")
         away.go_back()
-        away.wait_for_selector('.card[data-slug="huonetesti"]')
+        away.wait_for_selector('.shelf-row[data-slug="huonetesti"]')
         assert away.url == site.url
         assert away.errors == []
 

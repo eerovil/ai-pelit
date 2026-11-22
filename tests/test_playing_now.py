@@ -144,3 +144,26 @@ def test_the_number_follows_on_a_390_px_phone_without_a_reload(site, browser):
         assert box["x"] + box["width"] <= 390
     finally:
         context.close()
+
+
+def test_the_number_keeps_following_after_a_search_with_no_hits(site, browser):
+    # A search that hides every row must not end the shelf's 20-second reads (a helper check on #524).
+    make_game(site.games, "pomppu", [game_page("v1")])
+    site.build()
+    context = browser.new_context(viewport={"width": 360, "height": 740})
+    try:
+        fake = playing_on(context)
+        fake.now = {"pomppu": 1}
+        page = context.new_page()
+        page.clock.install()
+        page.goto(site.url)
+        page.wait_for_selector('.shelf-row[data-slug="pomppu"] .now:text("● 1")')
+        page.fill(".shelf-search", "xyz")
+        page.wait_for_selector(".shelf-row", state="detached")
+        page.clock.run_for(21000)
+        page.fill(".shelf-search", "")
+        fake.now = {"pomppu": 4}
+        page.clock.run_for(21000)
+        page.wait_for_selector('.shelf-row[data-slug="pomppu"] .now:text("● 4")')
+    finally:
+        context.close()

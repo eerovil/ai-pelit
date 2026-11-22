@@ -436,7 +436,8 @@
       .then(function () {
         var badges = view.querySelectorAll('[data-now]');
         Array.prototype.forEach.call(badges, function (old) { old.replaceWith(nowBadge(old.getAttribute('data-now'))); });
-        if (!badges.length) return;
+        // The shelf keeps reading even with no rows on it: a search with no hits may be cleared.
+        if (!badges.length && !view.querySelector('.shelf-rows')) return;
         playingTimer = setTimeout(function () {
           if (document.visibilityState === 'visible') loadPlaying();
         }, 20000);

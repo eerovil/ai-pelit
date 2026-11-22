@@ -139,12 +139,13 @@ def load_game(game_dir: Path, lib_dir: Path = LIB_DIR) -> dict:
     room_match = ROOM_MAX_RE.search(room_script.group(0)) if room_script else None
     room_max = int(room_match.group(1)) if room_match else 5
     group = meta.get("group")
-    if group is not None and group not in GROUPS:
+    # A list or an object in game.json would raise TypeError in the `in` tests below.
+    if group is not None and (not isinstance(group, str) or group not in GROUPS):
         raise GameError(f"{slug}: game.json names an unknown group {group!r} (GROUPS in scripts/build.py)")
     category = meta.get("category") or (group if group in CATEGORIES else None)
     if category is None:
         raise GameError(f"{slug}: game.json needs a category, one of {', '.join(CATEGORIES)} (CATEGORIES in scripts/build.py)")
-    if category not in CATEGORIES:
+    if not isinstance(category, str) or category not in CATEGORIES:
         raise GameError(f"{slug}: game.json names an unknown category {category!r} (CATEGORIES in scripts/build.py)")
     return {
         "slug": slug,
