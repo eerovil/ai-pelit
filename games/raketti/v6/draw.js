@@ -159,7 +159,7 @@ const PART_SPOT = { paneeli: -0.22, tankki: 0, tehdas: 0.22, asunto: -0.25, kasv
 // lands there.
 function drawBase(s, now) {
   drawBaseOn(s, now, MOON, BASE, landingAim(s) !== undefined, 'moon');
-  drawBaseOn(s, now, MARS, MARS_BASE, marsAim(s) !== undefined && s.tanked, 'mars');
+  drawBaseOn(s, now, MARS, MARS_BASE, marsAim(s) !== undefined && (s.tanked || TRIP[s.trip].fromMars), 'mars');
 }
 function drawBaseOn(s, now, b, base, aim, on) {
   const m = bodyAt(b, s.t), r = b.radius * cam.scale;

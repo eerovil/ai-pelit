@@ -70,10 +70,9 @@ h2 { margin: 0; font-size: 28px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
   /* Sideways the title and resume sit left of the trips. */
-  #menu:not([hidden]) { width: min(700px, 100%); display: grid; grid-template-columns: 200px 1fr; grid-auto-rows: min-content; align-content: center; column-gap: 14px; }
+  #menu:not([hidden]) { width: min(760px, 100%); display: grid; grid-template-columns: 170px 1fr; grid-auto-rows: min-content; align-content: center; column-gap: 14px; }
   #menu > :not(#trips) { grid-column: 1; }
   #trips { grid-column: 2; grid-row: 1 / span 6; grid-template-columns: 1fr 1fr 1fr; }
-  #menu:not([hidden]) { width: min(760px, 100%); grid-template-columns: 170px 1fr; }
   h1 { font-size: 26px; }
   .panel { padding: 12px; gap: 8px; }
   #hint { bottom: calc(12px + env(safe-area-inset-bottom)); font-size: 19px; padding: 8px 18px; }

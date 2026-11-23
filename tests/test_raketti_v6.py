@@ -165,6 +165,38 @@ def test_the_trip_home_starts_in_the_mars_base_fills_up_and_waits_for_its_window
     assert page.errors == []
 
 
+def test_the_trip_home_brings_a_ship_off_mars_before_its_tank_is_full_back_to_the_base(site, context):
+    # A lift-off before "Tankataan" ends must not send a near-empty ship toward Earth (#553 review).
+    page = open_game(site, context)
+    r = page.evaluate("""() => { cancelAnimationFrame(frameId); frameId = 0;
+      begin(freshFlight('marsista')); cancelAnimationFrame(frameId); frameId = 0;
+      Object.assign(ship, { landedOn: { id: 'mars', a: 0.9 }, refuel: false });
+      const beside = hint(ship, null);
+      const m = bodyAt(MARS, ship.t);
+      Object.assign(ship, { landedOn: null, x: m.x + Math.sin(0.9) * 45, y: m.y + Math.cos(0.9) * 45, vx: m.vx, vy: m.vy });
+      const up = hint(ship, predictPath(ship));
+      ship.tanked = true; ship.dv = SHIP.dv;
+      const full = hint(ship, predictPath(ship));
+      return { beside: beside.word, dir: beside.dir, up: up.word, full: full.word }; }""")
+    assert r['beside'] == 'Hyppää' and r['dir'] < 0.9, r
+    assert r['up'] != 'Kohti Maata', r
+    assert r['full'] != 'Hyppää', r
+    assert page.errors == []
+
+
+def test_a_new_flight_forgets_the_last_ones_brake_and_burn(site, context):
+    # Seuraava or Retry starts again at t = 0: a stamp at 600 s from the last trip must not hold
+    # the next one's first brake on (#553 review).
+    page = open_game(site, context)
+    r = page.evaluate("""() => { cancelAnimationFrame(frameId); frameId = 0;
+      baseBrakeAt = 600; burn = { word: 'Jarruta', gap: 3, seen: [{ t: 600, gap: 3 }] };
+      begin(freshFlight('asunto')); cancelAnimationFrame(frameId); frameId = 0;
+      return { stamp: baseBrakeAt, burn }; }""")
+    assert r['stamp'] is None or r['stamp'] < -1e300, r
+    assert r['burn'] is None, r
+    assert page.errors == []
+
+
 def test_the_finished_base_fills_the_mars_ship(site, context):
     page = open_game(site, context)
     unbuilt = land_on_moon(page, 'mars', 0.1, False)

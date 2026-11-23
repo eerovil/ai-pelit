@@ -35,8 +35,8 @@ function atMarsBase(a) { return Math.abs(wrap(a - MARS_BASE.a)) < MARS_BASE.zone
 // Where on the Moon this trip should land, if anywhere in particular: a Moon part's base, or the
 // Moon base's fuel on the way to Mars.
 function landingAim(s) { return partOn(TRIP[s.trip]) === 'moon' || (TRIP[s.trip].far && !TRIP[s.trip].fromMars && !s.tanked) ? BASE.a : undefined; }
-// Where on Mars: the Mars base, for its parts.
-function marsAim(s) { return partOn(TRIP[s.trip]) === 'mars' ? MARS_BASE.a : undefined; }
+// Where on Mars: the Mars base, for its parts, and on the trip home until the tank is full.
+function marsAim(s) { return partOn(TRIP[s.trip]) === 'mars' || (TRIP[s.trip].fromMars && !s.tanked) ? MARS_BASE.a : undefined; }
 function tripOpen(id) {
   const i = TRIPS.findIndex(t => t.id === id);
   return i === 0 || (i > 0 && (stars[TRIPS[i - 1].id] || 0) >= 1);
@@ -448,7 +448,8 @@ function nextMove(s, path) {
     if (wait > 0) return { word: 'Odota', wait, window: true };
   }
   if (s.landedOn) return { word: 'Vedä ylös', dir: s.landedOn.a, power: 1 };
-  if (TRIP[s.trip].fromMars) return homeHint(s, path);
+  // Off Mars before the tank is full: back down into the base to fill up.
+  if (TRIP[s.trip].fromMars) return s.tanked || refBody(s) !== MARS ? homeHint(s, path) : marsHint(s, path);
   if (!(TRIP[s.trip].far && s.tanked) && !(s.trip === 'kotiin' && refBody(s) === MOON)) {
     const lost = lostHint(s, refBody(s) === ROCK && s.trip !== 'kivi' ? EARTH : refBody(s));
     if (lost) return lost;
