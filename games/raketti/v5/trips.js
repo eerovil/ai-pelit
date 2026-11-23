@@ -316,9 +316,11 @@ function matchHint(word, s, vx, vy) {
   return { word, dir: angleOf(dx, dy), power: clamp(gap / SHIP.acc * 2, 0.15, 1), gap };
 }
 // Flying the wrong way round Earth: turn round into a circle the right way at this height.
+// Low down it climbs too while it turns, as the ship falls while its speed round is gone (#548:
+// the slow cargo rocket hit the ground turning at 15 m); it never pushes down.
 function turnRoundHint(s) {
-  const o = orbitAround(EARTH, s), v = Math.sqrt(EARTH.mu / o.r);
-  return matchHint('Käänny', s, o.y / o.r * v, -o.x / o.r * v);
+  const o = orbitAround(EARTH, s), v = Math.sqrt(EARTH.mu / o.r), up = Math.max(o.vr, clamp((40 - o.alt) * 0.5, 0, 12));
+  return matchHint('Käänny', s, o.y / o.r * v + up * o.x / o.r, -o.x / o.r * v + up * o.y / o.r);
 }
 // Flying away from Earth: a speed that falls back to a low point 40 m up, the right way round, and
 // from outside Earth's pull (which does not reach out there) toward Earth too.
@@ -326,7 +328,9 @@ function comeBackHint(s) {
   const o = orbitAround(EARTH, s), r = o.r, rp = EARTH.radius + 40, out = r > EARTH.sphere * 0.85;
   // The first trip takes either way round: keep the ship's own.
   const way = s.trip === 'kiertorata' ? sideOf(o) : 1;
-  const k = out ? 8 : 0, vt = r > rp ? rp * Math.sqrt((k * k + 2 * EARTH.mu * (1 / rp - 1 / r)) / (r * r - rp * rp)) : Math.sqrt(EARTH.mu / r);
+  // Keep the fall it already has (#548: aiming for none, a ship falling home hovered until its tank
+  // was empty); out past 85 % of the pull, fall at 8 m/s at least.
+  const k = Math.max(out ? 8 : 0, -o.vr), vt = r > rp ? rp * Math.sqrt((k * k + 2 * EARTH.mu * (1 / rp - 1 / r)) / (r * r - rp * rp)) : Math.sqrt(EARTH.mu / r);
   return matchHint(r > EARTH.sphere ? 'Kohti Maata' : 'Jarruta', s, -k * o.x / r + way * vt * o.y / r, -k * o.y / r - way * vt * o.x / r);
 }
 function lostHint(s, ref) {
@@ -435,8 +439,13 @@ function nextMove(s, path) {
     const c = path && path.closest.earth;
     if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s, path);
     if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
+    // Only the speed round Earth goes, so the ship keeps falling; once its orbit comes down to the
+    // ground it waits (#548: braking the fall too, a ship far out, whose 90 s path does not reach
+    // Earth, stopped and hovered until its tank was empty).
     const o = orbitAround(EARTH, s);
-    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.6 };
+    if (o.peri < 10 && o.vr < 0) return { word: 'Odota', mark: pathExtreme(path, false) };
+    const out = o.vr / o.r;
+    return { word: 'Jarruta', dir: angleOf(-(o.vx - out * o.x), -(o.vy - out * o.y)), power: 0.6 };
   }
   const nearStation = trip === 'asema' && stationRelative(s).dist < 30;
   if (ref === EARTH && !nearStation && orbitAround(EARTH, s).peri < ORBIT_GOAL.earth.peri) return ascentHint(s, path);
@@ -456,10 +465,14 @@ function nextMove(s, path) {
   const o = orbitAround(MOON, s), pro = angleOf(o.vx, o.vy), low = pathExtreme(path, false);
   if (home) {
     const c = path && path.closest.earth;
-    if (o.alt < 4) return { word: 'Ylös', dir: angleOf(o.x, o.y), power: 1 };
+    // Up clear of the ground first (#548: turning toward Earth 4 m up, the ship fell back on the Moon).
+    if (o.alt < 4 || (currentWord === 'Ylös' && o.alt < 15)) return { word: 'Ylös', dir: angleOf(o.x, o.y), power: 1 };
     if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
-    const m = bodyAt(MOON, s.t);
-    return { word: 'Kohti Maata', dir: angleOf(-m.vx, -m.vy), power: 1 };
+    // Against the Moon's way round; low down, never into the ground (#548: from a landing on the
+    // Moon's far side, that push took the ship straight back down).
+    const m = bodyAt(MOON, s.t), mv = Math.hypot(m.vx, m.vy), ux = -m.vx / mv, uy = -m.vy / mv;
+    const rx = o.x / o.r, ry = o.y / o.r, lift = o.alt < 30 ? Math.max(0, 0.5 - (ux * rx + uy * ry)) : 0;
+    return { word: 'Kohti Maata', dir: angleOf(ux + lift * rx, uy + lift * ry), power: 1 };
   }
   const aim = landingAim(s);
   if (aim !== undefined) return baseHint(s, path, o, aim);

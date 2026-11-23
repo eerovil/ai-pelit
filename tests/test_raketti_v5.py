@@ -503,19 +503,25 @@ LOST = {
 
 
 @pytest.mark.parametrize('start', list(LOST))
-@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kivi', 'paneeli'])
+# Every trip that flies in Earth's pull; the cargo trips fly the slower cargo rocket, and
+# "kotiin+moon" is Kuusta kotiin lost on its way home, the Moon already visited.
+@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kivi', 'paneeli',
+                                  'tankki', 'tehdas', 'kotiin', 'kotiin+moon'])
 def test_the_hints_bring_a_lost_ship_back_on_its_way(site, context, trip, start):
     page = open_game(site, context)
+    home = trip.endswith('+moon')
+    trip = trip.split('+')[0]
+    state = dict(LOST[start], **({'visited': ['earth', 'moon']} if home else {}))
     # The owner's reports: from a wrong-way orbit on the station trip, or after pushing so hard the
     # ship left Earth's orbit, the hint said "Odota" for ever and never what to do.
     r = page.evaluate("""([trip, start]) => { const words = new Set(); const real = window.hint;
         window.hint = (s, p) => { const h = real(s, p); words.add(h.word); return h; };
         try { return Object.assign(follow(trip, { start }), { words: [...words] }); } finally { window.hint = real; } }""",
-                      [trip, LOST[start]])
+                      [trip, state])
     assert r['phase'] == 'done', r
     # A far climb takes minutes to fall back (a tap skips such a wait in the game).
-    assert r['t'] < 600, r
-    if start.startswith('wrong') and trip != 'kiertorata':
+    assert r['t'] < 900, r
+    if start.startswith('wrong') and trip != 'kiertorata' and not home:
         assert 'Käänny' in r['words'], r
     if start == 'out-past-earth':
         assert 'Kohti Maata' in r['words'], r
