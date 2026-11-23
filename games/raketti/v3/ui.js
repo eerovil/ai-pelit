@@ -186,7 +186,9 @@ document.addEventListener('visibilitychange', () => {
   }
   updateSound();
 });
-addEventListener('pagehide', () => { if (ship && ship.phase === 'flight') saveFlight(); });
+// Not from the menu: the menu already saved the flight left there, and the flight drawn behind a
+// first menu was never started.
+addEventListener('pagehide', () => { if (ship && ship.phase === 'flight' && $('menu').hidden) saveFlight(); });
 
 stars = readStars();
 ship = readFlight() || freshFlight('kiertorata');

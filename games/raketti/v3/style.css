@@ -64,4 +64,10 @@ h2 { margin: 0; font-size: 28px; }
   h1 { font-size: 26px; }
   .panel { padding: 12px; gap: 8px; }
   #hint { bottom: calc(12px + env(safe-area-inset-bottom)); font-size: 19px; padding: 8px 18px; }
+  /* Sideways the result's stars and list sit left of its buttons, so it fits 360 px high. */
+  #result:not([hidden]) { width: min(620px, 100%); display: grid; grid-template-columns: 1fr 1fr; align-content: center; column-gap: 16px; }
+  #result > :not(button) { grid-column: 1; }
+  #result > button { grid-column: 2; }
+  #result-title { grid-row: 1; } #result-stars { grid-row: 2; font-size: 34px; } #result-reason { grid-row: 3; } #result-list { grid-row: 4 / span 2; }
+  #result-next { grid-row: 1 / span 2; align-self: end; } #retry { grid-row: 3; } #result-menu { grid-row: 4; align-self: start; }
 }
