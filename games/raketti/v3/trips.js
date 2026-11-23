@@ -91,7 +91,21 @@ function landingHint(b, s, path) {
   }
   if (alt > 3 && speed < limit && !braking) {
     const f = bodyAt(b, s.t);
-    const start = hits && path.points.find(q => Math.hypot(q.vx, q.vy) > landingLimit(b, Math.hypot(q.x - f.x, q.y - f.y) - b.radius));
+    // Where on the path the speed passes the limit, found between the path's points so the mark
+    // stays put while the ship flies on (#548: snapping to a point made it shake).
+    const over = q => Math.hypot(q.vx, q.vy) - landingLimit(b, Math.hypot(q.x - f.x, q.y - f.y) - b.radius);
+    let start = null;
+    if (hits) {
+      const pts = path.points.filter(q => q.vx !== undefined);
+      for (let i = 0; i < pts.length; i++) {
+        const e = over(pts[i]);
+        if (e <= 0) continue;
+        if (i === 0) { start = pts[0]; break; }
+        const e0 = over(pts[i - 1]);
+        start = mixPoints(pts[i - 1], pts[i], -e0 / (e - e0));
+        break;
+      }
+    }
     if (start) return { word: 'Odota', mark: start, wait: Math.max(0, start.t - s.t), speed: b };
     return { word: 'Odota', speed: b };
   }
@@ -163,9 +177,15 @@ function pathPointAt(s, path, t) {
     const a = (o.peri + o.apo) / 2 + EARTH.radius, period = TAU * Math.sqrt(a ** 3 / EARTH.mu);
     t = s.t + ((t - s.t) % period);
   }
-  let best = null;
-  for (const q of pts) if (!best || Math.abs(q.t - t) < Math.abs(best.t - t)) best = q;
-  return best && Math.abs(best.t - t) < 1 ? best : null;
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i].t >= t) return pts[i - 1].t <= t ? mixPoints(pts[i - 1], pts[i], (t - pts[i - 1].t) / (pts[i].t - pts[i - 1].t)) : null;
+  }
+  return null;
+}
+// A point part way (k from 0 to 1) between two path points.
+function mixPoints(a, b, k) {
+  const m = (u, v) => u === undefined || v === undefined ? undefined : u + (v - u) * k;
+  return { x: m(a.x, b.x), y: m(a.y, b.y), t: m(a.t, b.t), vx: m(a.vx, b.vx), vy: m(a.vy, b.vy) };
 }
 function nextMove(s, path) {
   if (!s) return { word: '' };
