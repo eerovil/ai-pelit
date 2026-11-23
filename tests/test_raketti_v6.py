@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = 'games/raketti/v5/'
+URL = 'games/raketti/v6/'
 TRIP_IDS = ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kotiin', 'kivi', 'paneeli', 'tankki', 'tehdas', 'mars']
 
 # Test helpers only, never shipped. follow(trip) flies a fresh flight by the hints with the frame
