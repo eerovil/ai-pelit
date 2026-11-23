@@ -3,48 +3,40 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#091522">
+<meta name="theme-color" content="#050b14">
 <title>Raketti</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main id="app">
-  <header><span id="flight-tag">KIERTORADALLE</span><button id="pause" aria-label="Keskeytä lento">Ⅱ</button></header>
-  <section id="telemetry" aria-label="Lentomittarit">
-    <div><span>KORKEUS</span><strong id="alt">0 m</strong></div>
-    <div><span>NOPEUS</span><strong id="speed">0 m/s</strong></div>
-    <div><span>POLTTOAINE</span><strong id="fuel">100 %</strong></div>
-    <div><span id="metric-a-label">RADAN ALIN</span><strong id="metric-a">—</strong></div>
-    <div><span id="metric-b-label">RADAN YLIN</span><strong id="metric-b">—</strong></div>
-    <div><span id="metric-c-label">Δv JÄLJELLÄ</span><strong id="metric-c">—</strong></div>
-  </section>
-  <div id="scene"><canvas id="c" aria-label="Raketin lento"></canvas>
-    <div id="scene-label"><span id="phase-name">MAAN PINNALLA</span><span id="clock">T+ 00:00</span></div>
-    <nav id="views" aria-label="Näkymä"><button data-view="flight" class="selected">Lento</button><button data-view="map">Kartta</button><button data-view="dock" id="view-dock" hidden>Asema</button></nav>
-  </div>
-  <section id="guidance" aria-live="polite"><span id="guide-step">1</span><p id="guide">Valitse matka.</p></section>
-  <section id="controls" aria-label="Ohjaus">
-    <div class="control-top"><label for="throttle">TEHO <b id="power">0 %</b></label><input id="throttle" type="range" min="0" max="100" step="0.5" value="0" aria-label="Moottorin teho"><button id="cut">SEIS</button><button id="chute">Laskuvarjo</button></div>
-    <div class="point-row"><button data-point="pro">Menosuuntaan</button><button data-point="retro">Vastasuuntaan</button><button data-point="up">Pystyyn</button></div>
-    <div class="control-bottom">
-      <div class="turn-pad"><span>KÄÄNNÄ NOKKAA</span><div><button data-hold="turn:-1" aria-label="Käännä vasemmalle">↶</button><button data-hold="turn:1" aria-label="Käännä oikealle">↷</button></div></div>
-      <div class="translation"><span>SIIRTOSUUTTIMET</span><div><button data-hold="side:-1" aria-label="Siirrä aluksen vasemmalle">←</button><button data-hold="forward:1" aria-label="Siirrä eteen">↑</button><button data-hold="forward:-1" aria-label="Siirrä taakse">↓</button><button data-hold="side:1" aria-label="Siirrä aluksen oikealle">→</button></div></div>
-    </div>
-    <footer><span id="rcs">Suuttimet 100 %</span><button id="warp">Aika ×1</button><button id="help">Ohje</button></footer>
-  </section>
-</main>
+<canvas id="c" aria-label="Raketin lento"></canvas>
+<header id="hud">
+  <span id="trip-name"></span>
+  <span id="fuel" aria-label="Polttoaine"><i id="fuel-bar"></i></span>
+  <button id="pause" aria-label="Tauko">Ⅱ</button>
+</header>
+<p id="hint" aria-live="polite"></p>
 <div id="overlay" class="overlay">
   <section class="panel" id="menu">
-    <div class="menu-head"><div class="eyebrow">MAA · KUU · PIKKUKIVI</div><h1>RAKETTI<span>Kuusi matkaa. Sinä ohjaat.</span></h1>
-      <p id="star-total" class="detail"></p>
-      <div class="menu-actions"><button id="resume" class="primary" hidden>Jatka lentoa</button><button id="menu-help">Ohjeet</button></div></div>
+    <h1>RAKETTI</h1>
+    <p class="tip">Vedä sormella sinne, minne haluat lentää.</p>
+    <p id="star-total"></p>
+    <button id="resume" class="primary" hidden>Jatka</button>
     <div id="trips" aria-label="Matkat"></div>
   </section>
-  <section class="panel" id="trip-panel" hidden><div class="eyebrow">MATKA</div><h2 id="trip-title"></h2><p id="trip-goal"></p><p id="trip-stars" class="stars-line"></p><p id="trip-star-rule" class="detail"></p><button id="start-pad" class="primary">Laukaise alustalta</button><button id="start-orbit">Aloita kiertoradalta</button><button id="trip-back">Takaisin</button></section>
-  <section class="panel" id="pause-panel" hidden><div class="eyebrow">TAUKO</div><h2>Lento odottaa</h2><p>Lento tallentuu puhelimeen. Voit jatkaa myöhemmin valikosta.</p><button id="continue" class="primary">Jatka lentoa</button><button id="pause-help">Ohjeet</button><button id="to-menu">Valikkoon</button></section>
-  <section class="panel" id="result" hidden><div class="eyebrow" id="result-label"></div><h2 id="result-title"></h2><p id="result-reason"></p><div id="result-stars"><p id="result-star-big" class="stars-line"></p><ul id="result-list"></ul></div><p id="result-stats" class="detail"></p><button id="result-next" class="primary">Seuraava matka</button><button id="retry">Uusi yritys</button><button id="result-menu">Valikkoon</button></section>
-  <section class="panel help-panel" id="help-panel" hidden><div class="eyebrow">OHJEET · EI AUTOPILOTTIA</div><h2 id="help-title"></h2><div id="help-body"></div><div class="help-nav"><button id="help-prev">←</button><span id="help-page"></span><button id="help-next">→</button><button id="help-close" class="primary">Sulje</button></div></section>
-  <section class="panel" id="replace-panel" hidden><h2>Aloitetaanko uusi lento?</h2><p>Uusi lento korvaa keskeneräisen lennon.</p><button id="replace-yes" class="primary">Aloita uusi lento</button><button id="replace-no">Takaisin</button></section>
+  <section class="panel" id="pause-panel" hidden>
+    <h2>Tauko</h2>
+    <button id="continue" class="primary">Jatka</button>
+    <button id="to-menu">Valikkoon</button>
+  </section>
+  <section class="panel" id="result" hidden>
+    <h2 id="result-title"></h2>
+    <p id="result-stars" class="stars"></p>
+    <p id="result-reason"></p>
+    <ul id="result-list"></ul>
+    <button id="result-next" class="primary">Seuraava matka</button>
+    <button id="retry">Uudestaan</button>
+    <button id="result-menu">Valikkoon</button>
+  </section>
 </div>
 <script src="physics.js"></script>
 <script src="trips.js"></script>
