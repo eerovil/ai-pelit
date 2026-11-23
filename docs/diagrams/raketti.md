@@ -1,61 +1,65 @@
-# Raketti: kuusi matkaa Maan ja Kuun välillä (v3)
+# Raketti: kymmenen matkaa, Kuun tukikohta ja Mars (v3)
 
-Pelaaja valitsee matkan valikosta: kiertorata, asema, Kuun kiertoradalle (alle 5 minuutissa), Kuuhun, Kuusta kotiin tai pieni asteroidi. Kaikki matkat lentävät samalla pienennetyllä Maa–Kuu-mallilla, jossa alus pitää nokan suunnan itse. Matka päättyy tavoitteeseen tai onnettomuuteen, ja onnistunut matka antaa 1–3 tähteä ja avaa seuraavan.
+Pelaaja valitsee matkan valikosta ja lentää yhdellä sormella: veto näyttää suunnan ja pituus tehon. Vihje ruudun alalaidassa kertoo seuraavan liikkeen, ja odotuksen voi kelata napautuksella. Kolme matkaa rakentavat Kuun tukikohdan osa kerrallaan, ja valmis tukikohta tankkaa Mars-matkan aluksen. Onnistunut matka antaa 1–3 tähteä ja avaa seuraavan.
 
 ```mermaid
 flowchart TD
     A[Valitse matka valikosta] --> B{Matka auki?}
     B -- Ei --> A
-    B -- Kyllä --> C{Kiertorata jo lennetty?}
-    C -- Kyllä --> D[Laukaisu tai aloitus kiertoradalta]
-    C -- Ei --> E[Laukaisu alustalta]
-    D --> F[Ohjaus: teho, nokan käännös, menosuuntaan, siirtosuuttimet, laskuvarjo]
-    E --> F
-    F --> G[Maan, Kuun ja asteroidin painovoima, ilmanvastus, työntö]
-    G --> H[Ennustettu rata kartalle]
-    G --> I{Osuma pintaan?}
-    I -- Kyllä --> J{Hidas, pystyssä ja jalat alla?}
-    J -- Kyllä --> K[Laskeutuminen onnistui]
-    J -- Ei --> X[Matka päättyy, syy näytetään]
-    I -- Ei --> L{Matkan tavoite täyttyy?}
-    K --> L
-    L -- Kyllä --> M[Matka onnistui: tähdet polttoaineesta ja pehmeydestä]
-    M --> N[Seuraava matka aukeaa, tähdet tallennetaan]
-    L -- Ei --> O{Asemaan osuma liian kovaa?}
-    O -- Kyllä --> X
-    O -- Ei --> P[Aikaa nopeutetaan vapaassa lennossa ×1000 asti]
-    P --> F
-    F --> Q[Tauko tai puhelin piiloon]
-    Q --> R[Tallenna keskeneräinen matka]
-    R --> A
-    class A,B,C,D,E blue
-    class F,Q violet
-    class G,H,P teal
-    class I,J,O,X rose
-    class K,L,M,N green
-    class R amber
+    B -- Kyllä --> C[Lähtö alustalta matkan raketilla]
+    C --> D[Sormen veto: suunta ja teho]
+    D --> E[Yhden kappaleen veto, askel 1/120 s]
+    E --> F[Ennustettu rata ja vihje]
+    F --> G{Odota ja aika tiedossa?}
+    G -- Kyllä, napautus --> H[Kelaus odotuksen loppuun]
+    H --> E
+    G -- Ei --> I[Hidastus hienoihin liikkeisiin]
+    I --> D
+    E --> J{Osuma pintaan?}
+    J -- Liian kova --> X[Rysähti, syy näytetään]
+    J -- Pehmeä --> K{Tukikohdassa ja se on valmis?}
+    K -- Kyllä --> L[Tankkaus täyteen]
+    L --> D
+    K -- Ei --> M{Matkan tavoite täyttyy?}
+    E --> M
+    M -- Ei --> D
+    M -- Kyllä --> N[Perillä: tähdet polttoaineesta ja pehmeydestä]
+    N --> O[Seuraava matka aukeaa, tähdet tallennetaan]
+    D --> P[Tauko tai puhelin piiloon]
+    P --> Q[Tallenna keskeneräinen matka]
+    Q --> A
+    class A,B,C blue
+    class D,P violet
+    class E,F,G,H,I teal
+    class J,X rose
+    class K,L,M,N,O green
+    class Q amber
 ```
 
 ## Colours
 
 - **blue**: matkan valinta ja aloitus
 - **violet**: pelaajan ohjaus ja tauko
-- **teal**: lentomalli, ennuste ja ajan nopeutus
+- **teal**: lentomalli, vihjeet, kelaus ja hidastus
 - **rose**: osumat ja epäonnistuminen
-- **green**: tavoitteet, tähdet ja uudet matkat
+- **green**: tukikohta, tavoitteet, tähdet ja uudet matkat
 - **amber**: puhelimen tallennus
 
 ## Boxes
 
-- **Valitse matka valikosta**: `games/raketti/v3/ui.js` (`renderTrips`) näyttää kuusi matkaa listana, kunkin arvioidun keston, tähdet ja lukon. Matkat, niiden tavoitteet ja tähtirajat ovat `games/raketti/v3/trips.js`:n `TRIPS`-listassa.
-- **Matka auki?**: `tripOpen`: Kiertoradalle on aina auki; muu matka aukeaa, kun listan edellisestä on vähintään yksi tähti.
-- **Kiertorata jo lennetty?**: `openTrip` näyttää "Aloita kiertoradalta" muilla matkoilla kuin Kiertoradalle, kun Kiertoradalle-matkasta on tähti. Valmis rata on pyöreä 80 km rata, ja polttoainetta on 4300 m/s Δv:n verran (`freshFlight(trip, 'orbit')`). Tähdet lasketaan samoin kuin alustalta.
-- **Ohjaus: teho, nokan käännös, menosuuntaan, siirtosuuttimet, laskuvarjo**: Tehon liukusäädin on neliöllinen (puoliväli = 25 %). ↶ ↷ kääntävät 15°/s ja 0,4 s jälkeen 60°/s oikeaa aikaa, myös aikaa nopeutettaessa; irrotettaessa nokka pysähtyy (`steer`). "Menosuuntaan", "Vastasuuntaan" ja "Pystyyn" kääntävät nokan lähimmän kappaleen (tai alle 20 km päässä aseman) suhteen enintään 90°/s ja pitävät sen, polttamatta moottoria. Laskuvarjo vain Maan ilmakehässä (alle 40 km) ja vain alus pudotessa; se aukeaa alle 20 km korkeudessa ja repeää yli 400 m/s vauhdissa (`openChute`).
-- **Maan, Kuun ja asteroidin painovoima, ilmanvastus, työntö**: `games/raketti/v3/physics.js` laskee kaikkien kolmen kappaleen vedon joka askeleella. Maan säde 500 km ja ilmakehä 40 km; Kuun säde 80 km, 5000 km päässä; Pikkukiven säde 3 km, 2000 km päässä. Moottori kiihdyttää enintään 20 m/s². Kappaleet ovat yhdessä `BODIES`-listassa, joten myöhempi versio voi lisätä Auringon ja Marsin.
-- **Ennustettu rata kartalle**: `predictPath` laskee radan noin 8 tuntia eteenpäin moottori sammuksissa samalla mallilla; `games/raketti/v3/draw.js` piirtää sen lähimmän kappaleen ympärille ja merkitsee kohteen lähimmän kohdan. Se näyttää, minne alus on menossa, mutta ei ohjaa.
-- **Osuma pintaan?**: `surfaceClearance` lähimmästä kappaleesta; osuma tarkistetaan joka askeleella (`touchdown`).
-- **Hidas, pystyssä ja jalat alla?**: `LANDING`: Kuussa ja Maassa ilman varjoa alas enintään 3 m/s, sivulle 2 m/s ja kallistus 15°. Pikkukivellä vauhti enintään 1 m/s ja kallistus 25°. Maahan avatulla laskuvarjolla vauhti enintään 10 m/s. Maahan laskeutuminen ennen matkan tavoitetta päättää matkan kesken.
-- **Matka onnistui: tähdet polttoaineesta ja pehmeydestä**: `tripStars`: yksi tähti perillä, toinen kun Δv:tä jää vähintään matkan `dvStar` (Kiertoradalle 4300, Asemalle 3900, Kuun kiertoradalle 3300, Kuuhun 1700, Kotiin 1000, Pikkukivelle 3100 m/s), kolmas pehmeästä (puolet rajoista), telakoinnista alle 0,25 m/s tai pyöreästä radasta (eksentrisyys ≤ 0,1).
-- **Asemaan osuma liian kovaa?**: Telakointi onnistuu, kun nokka on alle 3 m portista, nopeusero enintään 0,5 m/s ja suuntaero enintään 10° (`DOCK`). Muu kosketus aseman rakenteisiin on törmäys.
-- **Aikaa nopeutetaan vapaassa lennossa ×1000 asti**: `maxWarp`: pinnalla ×5, mutta moottori käynnissä ×1; ilmassa ×1 alle 500 m pinnasta ja alle 50 m portista. Avatun laskuvarjon alla (moottori sammuksissa) ×100 yli 300 m korkeudessa, ×5 yli 50 m. Muuten ×5 moottorin, käännön tai siirtosuuttimien aikana, kappaleen lähellä (Maa 20 km, Kuu 5 km, Pikkukivi 2 km) tai alle 5 km asemasta; ×100 lähempänä kuin Maa 300 km, Kuu 100 km, Pikkukivi 30 km; muuten ×1000. Valittu nopeus laskee itsestään.
-- **Tallenna keskeneräinen matka**: Uudet avaimet `ai-pelit:raketti:matka` (keskeneräinen lento, tarkistetaan `validFlight`illa) ja `ai-pelit:raketti:tahdet`. Vanhojen versioiden avaimia ei lueta eikä poisteta.
+- **Valitse matka valikosta**: `games/raketti/v3/ui.js` (`renderMenu`) näyttää kymmenen matkaa listana tähtineen, lukitut 🔒-merkillä, ja tähtien summan. Matkat, tavoitteet ja polttoainerajat ovat `games/raketti/v3/trips.js`:n `TRIPS`-listassa: Kiertoradalle, Avaruusasemalle, Kuun kiertoradalle, Kuuhun, Kuusta kotiin, Pikkukivelle, Aurinkopaneeli Kuuhun, Polttoainetankki Kuuhun, Polttoainetehdas Kuuhun ja Marsiin. Keskeneräisen lennon voi jatkaa "Jatka: <matka>" -napista.
+- **Matka auki?**: `tripOpen`: Kiertoradalle on aina auki; muu matka aukeaa, kun listan edellisestä on vähintään yksi tähti. Marsiin aukeaa siis vasta, kun koko tukikohta on rakennettu.
+- **Lähtö alustalta matkan raketilla**: `freshFlight` panee aluksen Maan huipulle. Matkan raketti on `ROCKETS`-listasta (`physics.js`): Raketti (työntö 32, polttoaine 340 m/s), Kiitäjä aurinkopaneelille (38, 340) tai Rahtiraketti tankille ja tehtaalle (21, 400, kääntyy hitaasti). Mars-matka lähtee 40 % täydellä tankilla.
+- **Sormen veto: suunta ja teho**: `setStick` (`ui.js`): vedon suunta kääntää nokkaa (raketin `turn` rad/s), ja teho kasvaa vedon pituuden neliönä 8 px:n kuolleen alueen jälkeen, täysi 80 px:ssä. Moottori työntää vain, kun nokka on alle 60° vedon suunnasta. Pinnalta alus nousee vasta, kun työntö ylös voittaa painovoiman.
+- **Yhden kappaleen veto, askel 1/120 s**: `step` (`physics.js`) laskee velocity Verlet -askeleen. Vain yksi kappale vetää kerrallaan (`refAt`): Kuun (125), Pikkukiven (24) tai Marsin (500) piirin sisällä se, Maan piirissä (1100) Maa, muualla Aurinko. Maan säde 60, Kuun 16 (420 päässä), Pikkukiven 4 (250 päässä), Marsin 30.
+- **Ennustettu rata ja vihje**: `predictPath` laskee radan 90 s eteenpäin (Mars-matkalla tankkauksen jälkeen 600 s) lähimmän kappaleen kehyksessä. `hint` (`trips.js`) antaa sanan, suunnan, tehon ja merkin radalle; aloitettu jarrutus tai laskeutumisen työntö jatkuu loppuun, ettei sana vaihdu edestakaisin. Laskeutumisvihje ei koskaan työnnä kohti maata.
+- **Odota ja aika tiedossa?**: `canSkip`: sana on "Odota", odotusta on vähintään 2,5 s (tai aika ei ole tiedossa), eikä alus seiso pinnalla, paitsi Kuussa odottamassa Mars-ikkunaa. Vihje näyttää ajan (`waitText`: "12 s" tai "2 min 05 s") ja ⏩.
+- **Kelaus odotuksen loppuun**: `warpStep`: odotus kuluu noin 1,5 sekunnissa (enintään 400-kertaisesti) ja pysähtyy 0,6 s ennen loppua; tuntematon odotus kulkee 8-kertaisesti (Mars-matkalla 40). Uusi veto tai napautus lopettaa kelauksen.
+- **Hidastus hienoihin liikkeisiin**: `wantsSlow` ja `frame` (`ui.js`): aika kulkee 0,35-kertaisesti korjauksissa, telakoinnissa, laskeutumisen viimeisillä 20 metrillä, pienissä työnnöissä ja odotuksen viimeisellä 1,5 sekunnilla, ja 0,5-kertaisesti moottorin käydessä. Nokka kääntyy ruudulla yhtä nopeasti.
+- **Osuma pintaan?**: `contact` (`physics.js`): yli kappaleen `land`-nopeuden (Maa 6, Kuu 5, Pikkukivi 3, Mars 5 m/s) on törmäys; puolet siitä tai alle on pehmeä. Asemaan telakoituu alle 3 m:stä enintään 3 m/s, pehmeästi 1,5 m/s.
+- **Tukikohdassa ja se on valmis?**: `atBase` ja `baseReady` (`trips.js`): tukikohta on Kuun huipulla ±0,4 rad, ja se on valmis, kun kaikilla kolmella osamatkalla on tähti. Valmiiseen tukikohtaan laskeutunut alus tankataan 120 m/s sekunnissa (`REFUEL`), ja täyden tankin jälkeen `tanked` on tosi. Tukikohdan vieressä vihje on "Hyppää".
+- **Matkan tavoite täyttyy?**: `goalMet`: kiertoradat (Maa: matalin 10, korkein 150; Kuu: 3 ja 80) sekunnin liitolla, telakointi, laskeutuminen oikeaan kappaleeseen, Kotiin vasta Kuussa käytyä, osamatkat vain tukikohdan alueelle, Marsiin laskeutuminen.
+- **Perillä: tähdet polttoaineesta ja pehmeydestä**: `starParts`: tähti perillä, toinen kun polttoainetta jää matkan `fuel`-osuus, kolmas pehmeästä laskusta tai telakoinnista tai pyöreästä radasta (eksentrisyys ≤ 0,25).
+- **Seuraava matka aukeaa, tähdet tallennetaan**: `endFlight` tallentaa paremmat tähdet avaimeen `ai-pelit:raketti:tahdet`; tulospaneelin "Seuraava matka" avaa seuraavan, jos se on auki.
+- **Tauko tai puhelin piiloon**: Ⅱ-nappi tai sivun piiloutuminen pysäyttää lennon ja näyttää taukopaneelin.
+- **Tallenna keskeneräinen matka**: `saveFlight` kahden sekunnin välein, tauolla ja sivulta poistuttaessa (ei valikosta, joka on jo tallentanut) avaimeen `ai-pelit:raketti:matka`. `readFlight` jatkaa vain lennon, jonka kaikki luvut ovat järkeviä, joten v2:n tallennuksia ei lueta.
