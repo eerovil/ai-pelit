@@ -106,15 +106,30 @@ function updateHud() {
   $('trip-name').textContent = TRIP[ship.trip].name;
   $('fuel-bar').style.width = `${Math.round(fuelShare() * 100)}%`;
   $('fuel').classList.toggle('low', fuelShare() < 0.15);
-  const h = currentHint, skip = canSkip(h);
+  const h = currentHint, letGo = !!h && h.word === 'Odota' && ship.thrust > 0 && !warp, skip = canSkip(h) && !letGo;
   // While a wait is skipped the button says so (a tap stops it); otherwise one ⏩ offers the skip.
   let text = h ? (warp && skip ? 'Kelataan' : h.word) : '';
+  // A burn shows how much of it is left as a bar draining in the hint, and says when it is nearly
+  // done; once done, a push still held is told to stop (#548: burns went past their end).
+  const near = nearEnd(h);
+  if (near) text += ' – melkein';
+  if (letGo) text = 'Päästä irti';
   if (text && slow < 0.8) text = `🐢 ${text}`;
-  if (h && h.word === 'Odota' && h.wait >= 1.5) text += ` ${waitText(h.wait)}`;
+  if (h && h.word === 'Odota' && h.wait >= 1.5 && !letGo) text += ` ${waitText(h.wait)}`;
   if (skip && !warp) text += ' ⏩';
   if ($('hint').textContent !== text) $('hint').textContent = text;
   $('hint').classList.toggle('go', !!h && h.dir !== undefined);
   $('hint').classList.toggle('skip', skip);
+  $('hint').classList.toggle('burn', !!h && h.left !== undefined);
+  $('hint').classList.toggle('near', near);
+  $('hint').classList.toggle('stop', letGo);
+  if (h && h.left !== undefined) $('hint').style.setProperty('--left', `${Math.round(h.left * 100)}%`);
+}
+// A burn is nearly done when a quarter of it is left, or under NEAR_SECONDS of game time at the
+// push held now (time then runs at its slowest, so that is about END_SECONDS on screen).
+const NEAR_END = 0.25, NEAR_SECONDS = 0.1;
+function nearEnd(h) {
+  return !!h && h.left !== undefined && (h.left < NEAR_END || (h.ends !== undefined && h.ends < NEAR_SECONDS));
 }
 function showResult() {
   const s = ship, ok = s.phase === 'done';
@@ -147,6 +162,15 @@ function wantsSlow(h, s = ship) {
   if (h.word === 'Hiljaa alas') return nearestSurface(s).alt < 20;
   return h.dir !== undefined && (h.power ?? 1) < 0.5;
 }
+// Slower still while the engine burns, so a short push is easy to judge (#548), and a burn's end
+// takes at least END_SECONDS of real time however short it is in game time (#548: most burns
+// last a few tenths of a second, so players went past their end).
+const END_SECONDS = 1.5, SLOWEST = 0.06;
+function timeScale(h) {
+  let k = wantsSlow(h) ? 0.35 : ship.thrust > 0 ? 0.5 : 1;
+  if (h && h.ends !== undefined) k = Math.min(k, Math.max(SLOWEST, h.ends / END_SECONDS));
+  return k;
+}
 function warpStep(dt) {
   // Any wait passes in about two seconds (Mars's are minutes long); never run past its end.
   const w = currentHint && currentHint.wait;
@@ -162,9 +186,9 @@ function frame(now) {
 function tick(now) {
   const dt = Math.min(0.05, Math.max(0, (now - (lastFrame || now)) / 1000)); lastFrame = now;
   if (ship && !paused && ship.phase === 'flight') {
-    // Slower still while the engine burns, so a short push is easy to judge (#548).
-    const target = warp ? 1 : wantsSlow(currentHint) ? 0.35 : ship.thrust > 0 ? 0.5 : 1;
-    slow += (target - slow) * (1 - Math.exp(-dt * 5));
+    const target = warp ? 1 : timeScale(currentHint);
+    // Down at once (a burn's end must not run past while easing), back up gently.
+    slow += (target - slow) * (1 - Math.exp(-dt * (target < slow ? 20 : 5)));
     acc += warp ? warpStep(dt) : dt * slow;
     turnScale = warp ? 1 : 1 / slow;
     while (acc >= STEP && ship.phase === 'flight') {

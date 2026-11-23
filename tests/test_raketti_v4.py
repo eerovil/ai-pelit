@@ -405,3 +405,72 @@ def test_the_game_stops_drawing_while_nothing_moves(site, context):
     page.wait_for_timeout(400)
     assert page.evaluate(count) == b
     assert page.errors == []
+
+
+
+# Each burn the hints ask for, as followed: its word, how long it ran, the share of it the hint
+# showed left at its first and last moment, and the real seconds it took on screen, whole and
+# from "melkein" on (#548: burns last tenths of a second, and players went past their end).
+BURNS = r"""
+window.burns = function (trip) {
+  const runs = []; let cur = null;
+  const real = hint;
+  window.hint = function (s, p) {
+    const h = real(s, p);
+    const key = h.left !== undefined ? h.word : null;
+    if (cur && cur.word !== key) { cur.next = h.word; runs.push(cur); cur = null; }
+    if (key) {
+      if (!cur) cur = { word: key, from: s.t, first: h.left, real: 0, tail: 0 };
+      cur.to = s.t; cur.last = h.left;
+      const k = timeScale(h);
+      cur.real += STEP / k;
+      if (nearEnd(h)) cur.tail += STEP / k;
+    }
+    return h;
+  };
+  try { follow(trip); } finally { window.hint = real; }
+  if (cur) runs.push(cur);
+  return runs.map(r => ({ ...r, long: r.to - r.from }));
+};
+"""
+
+
+@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'mars'])
+def test_a_burn_shows_how_much_is_left_and_ends_slowly(site, context, trip):
+    page = open_game(site, context)
+    page.add_script_tag(content=BURNS)
+    runs = page.evaluate('trip => burns(trip)', trip)
+    # A burn that ends by itself, not handed on to another push or begun already done.
+    ends = [r for r in runs if r['long'] >= 0.1 and r['first'] == 1 and r.get('next') in ('Odota', 'Päästä irti', 'Valmis!')]
+    assert ends, runs
+    for r in ends:
+        # The bar starts full and is about empty when the word changes.
+        assert r['last'] < 0.2, r
+        # However short in game time, its end lasts most of a second or more on screen (a push of
+        # a few hundredths of a second, all of it its end, runs at the slowest time, SLOWEST).
+        assert r['tail'] > 0.75, r
+        # It never crawls: at most a few seconds more than at the fine moves' own pace (0.35).
+        assert r['real'] < r['long'] / 0.35 + 8, r
+    assert page.errors == []
+
+
+def test_the_hint_says_when_a_burn_is_nearly_done_and_when_to_let_go(site, context):
+    page = open_game(site, context)
+    # Fly the first trip by the hints until its "Sivulle" burn is nearly done, the push still held.
+    r = page.evaluate("""() => { follow('kiertorata', { until: () => { const h = hint(ship, path);
+        return h.word === 'Sivulle' && nearEnd(h); } });
+      stick.power = 1; ship.thrust = 1; currentHint = hint(ship, path); updateHud();
+      const el = document.querySelector('#hint');
+      const out = { text: el.textContent, near: el.classList.contains('near'), bar: el.style.getPropertyValue('--left'),
+        scale: timeScale(currentHint) };
+      // The burn done and the push still held: the hint says to let go.
+      currentHint = { word: 'Odota' }; updateHud();
+      out.stop = el.textContent; out.red = el.classList.contains('stop');
+      ship.thrust = 0; updateHud(); out.after = el.textContent;
+      return out; }""")
+    assert r['text'].endswith('Sivulle – melkein') and r['near'], r
+    assert 0 <= int(r['bar'].rstrip('%')) < 40, r
+    assert r['scale'] < 0.35, r
+    assert r['stop'].endswith('Päästä irti') and r['red'], r
+    assert 'Päästä irti' not in r['after'], r
+    assert page.errors == []

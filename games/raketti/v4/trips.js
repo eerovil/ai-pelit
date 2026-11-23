@@ -97,6 +97,14 @@ function landingLimit(b, alt) {
 }
 // When the last gentle push toward the ground was shown (flight seconds).
 var descentAt = -1;
+// The speed at distance r from b's middle, flying level, whose orbit's other end is rOther away.
+function apseSpeed(b, r, rOther) { return Math.sqrt(b.mu * Math.max(0, 2 / r - 2 / (r + rOther))); }
+// What a brake near the Moon still has to take off its speed (m/s): down to an orbit the trip
+// takes, round enough for the Moon-orbit trip, within its highest point for a landing.
+function moonBrakeGap(o, trip) {
+  const want = trip === 'kuu-kierto' ? Math.sqrt(MOON.mu * 1.2 / o.r) : apseSpeed(MOON, o.r, ORBIT_GOAL.moon.apo + MOON.radius);
+  return o.speed - want;
+}
 // Landing on b. Falling costs nothing, so the hint waits while the ship is slow enough for its
 // height and brakes only once it is not (#548: braking early wasted fuel), marking on the path
 // where the braking starts. A path that misses b is first bent down to it.
@@ -128,7 +136,7 @@ function landingHint(b, s, path, aim) {
   })();
   const pushingDown = (currentWord === 'Hiljaa alas' || currentWord === 'Kohti tukikohtaa') && alt < 25;
   if (alt > 3 && path && path.frame === b && (!hits || grazes) && !braking && !pushingDown) {
-    return { word: 'Jarruta', dir: angleOf(vx, vy) + Math.PI, power: 0.4, speed: b };
+    return { word: 'Jarruta', dir: angleOf(vx, vy) + Math.PI, power: 0.4, speed: b, gap: Math.abs(x * vy - y * vx) / (alt + b.radius) - apseSpeed(b, alt + b.radius, b.radius) };
   }
   // Falling where it should not: steer toward the spot (a sideways push) rather than wait.
   const err = aim !== undefined && hits ? wrap(aim - angleOf(path.hit.x - p.x, path.hit.y - p.y)) : 0;
@@ -192,14 +200,14 @@ function transferHint(s, path, target, r2, n2, close, id) {
   if (pass && left > 2 && o.apo + R > r2 * 0.85 && (c.d > close * 2 || correcting) && c.d > close * 0.5
     && currentWord !== 'Kiihdytä' && currentWord !== 'Jarruta') {
     const dx = c.at.x - c.x, dy = c.at.y - c.y, miss = c.d - close * 0.4;
-    return { word: 'Korjaa', dir: angleOf(dx, dy), power: clamp(miss / left / SHIP.acc * 4, 0.05, 1), ghost: { id, t: c.t } };
+    return { word: 'Korjaa', dir: angleOf(dx, dy), power: clamp(miss / left / SHIP.acc * 4, 0.05, 1), ghost: { id, t: c.t }, gap: c.d - close };
   }
   const boosting = currentWord === 'Kiihdytä' && o.apo + R < r2;
   if (pass && !boosting && o.apo + R > r2 * 0.85) return { word: 'Odota', mark: { x: c.x, y: c.y }, ghost: { id, t: c.t } };
   if (o.apo + R < r2 * 0.92 || boosting) {
     const wait = ((aheadOf(target, s, side) - transferLead(o.r, r2, n2)) % TAU + TAU) % TAU;
     if (wait < 0.12 || boosting) {
-      return { word: 'Kiihdytä', dir: pro, power: clamp((r2 - o.apo - R) / 60, 0.15, 1) };
+      return { word: 'Kiihdytä', dir: pro, power: clamp((r2 - o.apo - R) / 60, 0.15, 1), gap: apseSpeed(EARTH, o.r, r2) - o.speed };
     }
     return { word: 'Odota', target: id, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - n2) };
   }
@@ -209,7 +217,7 @@ function transferHint(s, path, target, r2, n2, close, id) {
   // Braking at the high point makes the ship's own spot the high point.
   const want = phasingPeri(s, o, atTop || currentWord === 'Jarruta' ? { x: s.x, y: s.y, t: s.t } : top, BODY[id], n2);
   if (want && o.peri + R > want + (currentWord === 'Jarruta' ? 1 : 6) && (atTop || currentWord === 'Jarruta')) {
-    return { word: 'Jarruta', dir: pro + Math.PI, power: clamp((o.peri + R - want) / 100, 0.05, 0.4) };
+    return { word: 'Jarruta', dir: pro + Math.PI, power: clamp((o.peri + R - want) / 100, 0.05, 0.4), gap: o.peri + R - want - 1 };
   }
   if (want && o.peri + R > want + 6) return { word: 'Odota', mark: top, target: id };
   return { word: 'Odota', target: id, wait: meetWait(s, o, path, BODY[id], close) };
@@ -254,16 +262,38 @@ function ascentHint(s, path) {
   const o = orbitAround(EARTH, s), up = angleOf(o.x, o.y), side = sideOf(o);
   if (o.alt < 5 && o.apo < 25) return { word: 'Ylös', dir: up, power: 1 };
   if (o.apo < 40) return { word: 'Vinosti ylös', dir: up + side * 1.05, power: 1 };
-  if (o.vr < 1.5 || o.alt > o.apo - 3 || (s.thrust > 0 && o.alt > o.apo - 12)) return { word: 'Sivulle', dir: up + side * Math.PI / 2, power: 1 };
+  if (o.vr < 1.5 || o.alt > o.apo - 3 || (s.thrust > 0 && o.alt > o.apo - 12)) return { word: 'Sivulle', dir: up + side * Math.PI / 2, power: 1, gap: apseSpeed(EARTH, o.r, ORBIT_GOAL.earth.peri + EARTH.radius) - Math.abs(o.h) / o.r };
   return { word: 'Odota', mark: pathExtreme(path, true) };
 }
 // The hint, and for a wait, how many seconds until the next thing to do (when that is known:
 // a window opening, the path's high or low point, the closest pass). A tap on "Odota" skips it.
 // The word of the hint before this one, so a burn once begun goes on to its end.
 var currentWord = '';
+// The burn under way: its word and how far it had to go when it began (#548: players could not
+// tell a burn was nearly done and pushed past its end).
+var burn = null;
+// The game seconds of push the burn's rate is measured over.
+const RATE_SPAN = 0.1;
 function hint(s = ship, path = null) {
   const h = nextMove(s, path);
   currentWord = h.word;
+  // How much of a burn is left, from 1 when it begins to 0 at its end. Each burn hint gives `gap`,
+  // what it still has to do in its own measure (m/s of push where it can, else metres).
+  // How fast the gap has closed over the last moment of push gives the game seconds until the
+  // burn ends at the push held now. Over a moment, not a frame, as a gap read off the path moves
+  // only when the path is drawn again (#548: rates from frame to frame made a correction crawl).
+  if (h.dir !== undefined && Number.isFinite(h.gap)) {
+    if (!burn || burn.word !== h.word || h.gap > burn.gap) burn = { word: h.word, gap: Math.max(h.gap, 1e-6), seen: [] };
+    if (!(s.thrust > 0)) burn.seen = [];
+    else {
+      burn.seen.push({ t: s.t, gap: h.gap });
+      while (burn.seen.length > 2 && s.t - burn.seen[1].t > RATE_SPAN) burn.seen.shift();
+    }
+    // Until the gap has moved, a push in m/s per second closes a gap in m/s at that rate.
+    const f = burn.seen[0], seen = f && s.t > f.t ? (f.gap - h.gap) / (s.t - f.t) : 0, rate = seen > 0 ? seen : s.thrust;
+    h.left = clamp(h.gap / burn.gap, 0, 1);
+    if (rate > 0) h.ends = Math.max(0, h.gap) / rate;
+  } else burn = null;
   if (h.word === 'Odota' && h.wait === undefined) {
     const t = h.ghost ? h.ghost.t : h.mark ? h.mark.t : undefined;
     if (t !== undefined) h.wait = Math.max(0, t - s.t);
@@ -319,7 +349,7 @@ function nextMove(s, path) {
     if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s, path);
     if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
     const o = orbitAround(EARTH, s);
-    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.6 };
+    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.6, gap: c ? c.d - 20 : undefined };
   }
   const nearStation = trip === 'asema' && stationRelative(s).dist < 30;
   if (ref === EARTH && !nearStation && orbitAround(EARTH, s).peri < ORBIT_GOAL.earth.peri) return ascentHint(s, path);
@@ -337,7 +367,7 @@ function nextMove(s, path) {
     if (o.alt < 4) return { word: 'Ylös', dir: angleOf(o.x, o.y), power: 1 };
     if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
     const m = bodyAt(MOON, s.t);
-    return { word: 'Kohti Maata', dir: angleOf(-m.vx, -m.vy), power: 1 };
+    return { word: 'Kohti Maata', dir: angleOf(-m.vx, -m.vy), power: 1, gap: c ? c.d - 20 : undefined };
   }
   const aim = landingAim(s);
   if (aim !== undefined) return baseHint(s, path, o, aim);
@@ -346,11 +376,11 @@ function nextMove(s, path) {
   if (trip === 'kuu-kierto' && orbitReady(MOON, s) && (o.e <= 0.2 || (o.alt > o.peri + 6 && currentWord !== 'Jarruta'))) return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
   if (trip !== 'kuu-kierto' && (o.alt < 25 || (o.closed && o.apo <= ORBIT_GOAL.moon.apo))) return landingHint(MOON, s, path);
   if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && o.alt > 15 && trip === 'kuu-kierto') {
-    return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5 };
+    return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5, gap: ORBIT_GOAL.moon.peri + 4 - o.peri };
   }
   // A brake begun near the low point goes on past it (#548: stopping as soon as the orbit closed
   // made it brake in bursts, each one moving the low point a little lower).
-  if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1 };
+  if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, gap: moonBrakeGap(o, trip) };
   return { word: 'Odota', mark: low };
 }
 // To the Moon base: into a low orbit first, then down when the base lies the right way ahead,
@@ -360,16 +390,16 @@ function baseHint(s, path, o, aim) {
   if (hits || o.alt < 6 || (o.closed && o.apo < 8)) return landingHint(MOON, s, path, aim);
   if (!orbitReady(MOON, s)) {
     if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && o.alt > 15) {
-      return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5 };
+      return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5, gap: ORBIT_GOAL.moon.peri + 4 - o.peri };
     }
     // A brake begun at the low point goes on until the orbit is round enough.
-    if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1 };
+    if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, gap: moonBrakeGap(o, s.trip) };
     return { word: 'Odota', mark: pathExtreme(path, false) };
   }
   // How far round the base is, the way the ship goes.
   const side = sideOf(o), ahead = ((side * wrap(aim - angleOf(o.x, o.y))) % TAU + TAU) % TAU;
   const from = BASE_LEAD + 0.5, to = BASE_LEAD - 0.5;
-  if ((ahead < from && ahead > to) || (s.thrust > 0 && ahead > 0.6)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, base: true };
+  if ((ahead < from && ahead > to) || (s.thrust > 0 && ahead > 0.6)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, base: true, gap: Math.abs(o.h) / o.r - apseSpeed(MOON, o.r, MOON.radius) };
   const rate = Math.abs(o.h) / (o.r * o.r);
   return { word: 'Odota', base: true, wait: ((ahead - from) % TAU + TAU) % TAU / rate };
 }
@@ -388,11 +418,11 @@ function stationHint(s, path) {
   const o = orbitAround(EARTH, s), st = stationAt(s.t), side = sideOf(o);
   if (o.apo + EARTH.radius < STATION.r - 2) {
     const wait = ((aheadOf(st, s, side) - transferLead(o.r, STATION.r, STATION.n)) % TAU + TAU) % TAU;
-    if (wait < 0.12 || s.thrust > 0) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.3 };
+    if (wait < 0.12 || s.thrust > 0) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.3, gap: apseSpeed(EARTH, o.r, STATION.r - 2) - o.speed };
     return { word: 'Odota', station: true, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - STATION.n) };
   }
   if (o.apo + EARTH.radius > STATION.r + 6 && o.alt < o.peri + 6) {
-    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3 };
+    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3, gap: o.speed - apseSpeed(EARTH, o.r, STATION.r + 6) };
   }
   return { word: 'Odota', station: true, mark: pathExtreme(path, true) };
 }
@@ -454,7 +484,8 @@ function marsHint(s, path) {
       if (o.alt < 2) return { word: 'Ylös', dir: up, power: 0.5 };
       if (o.alt < 40 && Math.cos(wrap(dir - up)) < 0.3) dir = up + Math.sign(wrap(dir - up)) * (o.alt < 8 ? 1 : 1.27);
     }
-    return { word: 'Kohti Marsia', dir, power: sun ? 0.5 : clamp(need / SHIP.acc * 2, 0.1, 1), far: true };
+    return { word: 'Kohti Marsia', dir, power: sun ? 0.5 : clamp(need / SHIP.acc * 2, 0.1, 1), far: true,
+      gap: sun ? MARS.helio.r * 0.97 - sun.apo - SUN.radius : need };
   }
   // Corrections only out round the Sun: near Earth a push bends the way out too much to judge.
   const pass = c && c.t < last - 1;
@@ -463,7 +494,7 @@ function marsHint(s, path) {
   if (pass && c.d < close) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t }, ghost: { id: 'mars', t: c.t } };
   if (pass && left > 8 && (c.d > close * 2 || correcting) && c.d > close * 0.5) {
     const miss = c.d - close * 0.4;
-    return { word: 'Korjaa', dir: angleOf(c.at.x - c.x, c.at.y - c.y), power: clamp(miss / left / SHIP.acc * 1.5, 0.05, 0.6), ghost: { id: 'mars', t: c.t } };
+    return { word: 'Korjaa', dir: angleOf(c.at.x - c.x, c.at.y - c.y), power: clamp(miss / left / SHIP.acc * 1.5, 0.05, 0.6), ghost: { id: 'mars', t: c.t }, gap: c.d - close };
   }
   if (pass) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t }, ghost: { id: 'mars', t: c.t } };
   return { word: 'Odota', far: true };
