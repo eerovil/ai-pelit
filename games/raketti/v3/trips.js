@@ -108,9 +108,12 @@ function landingHint(b, s, path, aim) {
   // and "Kohti tukikohtaa" took turns several times a second near the base).
   // Toward a spot, only once above it: before that the path's end is steered to it.
   const above = aim === undefined || Math.abs(wrap(aim - angleOf(x, y))) < BASE.zone;
+  // A push too small to bother with is left out, with a gap between starting and stopping
+  // (#548: on the rock the push needed sat at the line and the word changed every frame).
+  const least = currentWord === 'Hiljaa alas' || currentWord === 'Kohti tukikohtaa' ? 0.005 : 0.03;
   if (above && alt < 25 && s.t >= descentAt && s.t - descentAt < 1.5) {
     const push = landingPush(b, s, aim);
-    if (push.power < 0.03) return { word: 'Odota', speed: b };
+    if (push.power < least) return { word: 'Odota', speed: b };
     descentAt = s.t;
     return { word: 'Hiljaa alas', dir: push.dir, power: push.power, speed: b, base: aim !== undefined };
   }
@@ -156,7 +159,7 @@ function landingHint(b, s, path, aim) {
     return { word: 'Odota', speed: b };
   }
   const push = landingPush(b, s, aim);
-  if (push.power < 0.03 && !braking) return { word: 'Odota', speed: b };
+  if (push.power < least && !braking) return { word: 'Odota', speed: b };
   descentAt = s.t;
   // Still beside the spot, the gentle way down keeps the word of the steer toward it.
   return { word: above ? 'Hiljaa alas' : 'Kohti tukikohtaa', dir: push.dir, power: push.power, speed: b, base: aim !== undefined };
@@ -338,13 +341,16 @@ function nextMove(s, path) {
   }
   const aim = landingAim(s);
   if (aim !== undefined) return baseHint(s, path, o, aim);
-  // A long oval counts too, but the hint brakes on at the low point for a rounder one.
-  if (trip === 'kuu-kierto' && orbitReady(MOON, s) && (o.apo < 35 || o.alt > o.peri + 6)) return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
+  // A long oval counts too, but the hint brakes on at the low point until it is round enough for
+  // the star (#548: stopping at a fixed height made a near-round orbit brake in short bursts).
+  if (trip === 'kuu-kierto' && orbitReady(MOON, s) && (o.e <= 0.2 || (o.alt > o.peri + 6 && currentWord !== 'Jarruta'))) return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
   if (trip !== 'kuu-kierto' && (o.alt < 25 || (o.closed && o.apo <= ORBIT_GOAL.moon.apo))) return landingHint(MOON, s, path);
   if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && o.alt > 15 && trip === 'kuu-kierto') {
     return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5 };
   }
-  if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && !o.closed && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1 };
+  // A brake begun near the low point goes on past it (#548: stopping as soon as the orbit closed
+  // made it brake in bursts, each one moving the low point a little lower).
+  if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1 };
   return { word: 'Odota', mark: low };
 }
 // To the Moon base: into a low orbit first, then down when the base lies the right way ahead,
