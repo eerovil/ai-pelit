@@ -1,4 +1,4 @@
-"""Raketti v3 (#548): tiny bodies, one finger, short trips, the Moon base and Mars.
+"""Raketti v4 (#548): tiny bodies, one finger, short trips, the Moon base and Mars.
 
 Every trip is flown here by following the game's own hints (FOLLOW below): the stick is set to
 the hint's direction and power, exactly what a drag along the arrow does. The game itself has no
@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = 'games/raketti/v3/'
+URL = 'games/raketti/v4/'
 TRIP_IDS = ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kotiin', 'kivi', 'paneeli', 'tankki', 'tehdas', 'mars']
 
 # Test helpers only, never shipped. follow(trip) flies a fresh flight by the hints with the frame
