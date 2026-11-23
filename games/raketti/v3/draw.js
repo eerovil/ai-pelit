@@ -48,7 +48,12 @@ function moveCamera(dt, h) {
   const t = cameraTarget(ship, path, h), usable = Math.max(1, view.h - view.top - view.bottom - 80);
   const wide = Math.max(1, view.w - 160);
   const scale = (t.aspect ? usable : Math.min(usable, wide)) / (2 * t.half);
-  if (!camReady) { cam = { x: t.x, y: t.y, scale }; camReady = true; return; }
+  // The camera eases along in the frame of the body the ship is near, so a fast body (Mars
+  // round the Sun) stays still on screen instead of shaking with each frame's length (#548).
+  const ref = refBody(ship), a = bodyAt(ref, ship.t);
+  if (!camReady) { cam = { x: t.x, y: t.y, scale, ref, ax: a.x, ay: a.y }; camReady = true; return; }
+  if (cam.ref === ref) { cam.x += a.x - cam.ax; cam.y += a.y - cam.ay; }
+  cam.ref = ref; cam.ax = a.x; cam.ay = a.y;
   const k = 1 - Math.exp(-dt * 4);
   cam.x += (t.x - cam.x) * k; cam.y += (t.y - cam.y) * k;
   cam.scale = Math.exp(Math.log(cam.scale) + (Math.log(scale) - Math.log(cam.scale)) * k);
