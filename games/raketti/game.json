@@ -30,6 +30,13 @@
       "note": "Polton jäljellä oleva osa näkyy vihjeessä tyhjenevänä palkkina, loppu hidastuu ja \"Päästä irti\" kertoo, kun poltto on valmis.",
       "request": "Semmone vielä että saisi olla selkeämpi, ollaanko lähes tehty burn jo loppuun. Nyt menee herkästi yli",
       "issue": "eerovil/ai-pelit#548"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-23",
+      "note": "Väärään suuntaan kiertävä tai liikaa kiihdyttänyt alus saa vihjeen kääntyä tai jarruttaa, niin perille pääsee aina ohjeita seuraamalla.",
+      "request": "Bugi löytyi. Jos lähtee level 2 kiertoradaalle väärään suuntaan, niin ikinä ei ohjeita noudattamalla pysty pääsemään sinne. Ohjeet sanovat koko ajan, että odota. Se ei kerro mitä pitää tehdä. Sama ongelma tulee jos kaasuttaa ihan liikaa ja lähtee pois maapallonkierto radalta kokonaan niin se ei mitään sano että mitä voisi tehdä tai että...",
+      "issue": "eerovil/ai-pelit#548"
     }
   ]
 }

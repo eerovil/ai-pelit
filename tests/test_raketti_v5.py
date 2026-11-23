@@ -1,4 +1,4 @@
-"""Raketti v4 (#548): tiny bodies, one finger, short trips, the Moon base and Mars.
+"""Raketti v5 (#548): tiny bodies, one finger, short trips, the Moon base and Mars.
 
 Every trip is flown here by following the game's own hints (FOLLOW below): the stick is set to
 the hint's direction and power, exactly what a drag along the arrow does. The game itself has no
@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = 'games/raketti/v4/'
+URL = 'games/raketti/v5/'
 TRIP_IDS = ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kotiin', 'kivi', 'paneeli', 'tankki', 'tehdas', 'mars']
 
 # Test helpers only, never shipped. follow(trip) flies a fresh flight by the hints with the frame
@@ -20,6 +20,7 @@ window.follow = function (trip, opts = {}) {
   cancelAnimationFrame(frameId); frameId = 0;
   for (const t of TRIPS) stars[t.id] = stars[t.id] || 1;
   begin(freshFlight(trip)); cancelAnimationFrame(frameId); frameId = 0;
+  if (opts.start) Object.assign(ship, { landedOn: null }, opts.start);
   let last = '', hw, since = 0; const quick = [];
   for (let i = 0; i < 120 * 2000 && ship.phase === 'flight'; i++) {
     if (opts.until && opts.until()) break;
@@ -480,4 +481,48 @@ def test_the_hint_says_when_a_burn_is_nearly_done_and_when_to_let_go(site, conte
     assert r['stop'].endswith('Päästä irti') and r['red'], r
     assert r['own'].endswith('Päästä irti') and r['ownRed'], r
     assert 'Päästä irti' not in r['after'], r
+    assert page.errors == []
+
+
+# Where a player can take the ship off the trip's way (#548, v5): an orbit the wrong way round, and
+# a push so hard the ship climbs away or flies out past Earth's pull. Each start is (x, y, vx, vy)
+# round Earth; clockwise (+vx at the top) is the way the station and the Moon go.
+def circle(r, way):
+    v = (50400 / r) ** 0.5
+    return {'x': 0, 'y': r, 'vx': way * v, 'vy': 0, 'angle': 1.5708 * way}
+
+
+LOST = {
+    'wrong-low': circle(75, -1),
+    'wrong-high': circle(130, -1),
+    # Round, but far above every target: the Moon and rock trips start over from a low orbit.
+    'high-circle': circle(600, 1),
+    'climbing-away': {'x': 0, 'y': 90, 'vx': 15, 'vy': 50, 'angle': 0.3},
+    'out-past-earth': {'x': -500, 'y': 1200, 'vx': -5, 'vy': 20, 'angle': 0},
+}
+
+
+@pytest.mark.parametrize('start', list(LOST))
+# Every trip that flies in Earth's pull; the cargo trips fly the slower cargo rocket, and
+# "kotiin+moon" is Kuusta kotiin lost on its way home, the Moon already visited.
+@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kivi', 'paneeli',
+                                  'tankki', 'tehdas', 'kotiin', 'kotiin+moon'])
+def test_the_hints_bring_a_lost_ship_back_on_its_way(site, context, trip, start):
+    page = open_game(site, context)
+    home = trip.endswith('+moon')
+    trip = trip.split('+')[0]
+    state = dict(LOST[start], **({'visited': ['earth', 'moon']} if home else {}))
+    # The owner's reports: from a wrong-way orbit on the station trip, or after pushing so hard the
+    # ship left Earth's orbit, the hint said "Odota" for ever and never what to do.
+    r = page.evaluate("""([trip, start]) => { const words = new Set(); const real = window.hint;
+        window.hint = (s, p) => { const h = real(s, p); words.add(h.word); return h; };
+        try { return Object.assign(follow(trip, { start }), { words: [...words] }); } finally { window.hint = real; } }""",
+                      [trip, state])
+    assert r['phase'] == 'done', r
+    # A far climb takes minutes to fall back (a tap skips such a wait in the game).
+    assert r['t'] < 900, r
+    if start.startswith('wrong') and trip != 'kiertorata' and not home:
+        assert 'Käänny' in r['words'], r
+    if start == 'out-past-earth':
+        assert 'Kohti Maata' in r['words'], r
     assert page.errors == []

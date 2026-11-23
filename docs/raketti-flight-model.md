@@ -5,7 +5,8 @@ owner found v2 too realistic: too hard and too slow. They chose a new version (v
 bodies seen in one view that zooms by itself, a one-finger drag stick, short trips with no time
 warp, then a Moon base built one part a trip and a real journey to Mars. There is still no
 autopilot: the player flies every push, and the hint at the bottom says what to do next. v4 (#548)
-shows how much of each burn is left and slows its end (see "Steps and time").
+shows how much of each burn is left and slows its end (see "Steps and time"). v5 (#548) brings a ship
+back on its way from wherever the player took it (see "Getting lost").
 
 ## The world
 
@@ -59,6 +60,41 @@ now says how much of it is left (a bar draining in the hint, "– melkein" near 
 that its end takes about 1.5 s on screen (never slower than 0.06). A wait with a
 known length ("Odota 12 s") can be skipped with a tap: the flight then runs faster until a second
 before its end (Mars's waits are minutes long). There is no other time warp.
+
+## Getting lost
+
+Until v5 the hints knew only the way a trip is meant to go. An orbit the wrong way round never met
+the station or the Moon, and a push so hard the ship flew off left the hint saying "Odota" for ever
+(the owner's reports on #548). v5 checks for these first, on every trip in Earth's or the Sun's pull
+(not on Mars's leg once tanked, nor inside the Moon's sphere on the way home from it):
+
+- Flying away (past 85 % of Earth's sphere, or climbing on a way that does not come back below it):
+  "Jarruta" toward a speed that falls back to a low point 40 m up, the right way round (on the first
+  trip the way it already goes), keeping the fall it already has; out past Earth's sphere (where
+  Earth does not pull at all) "Kohti Maata", which also closes in at 8 m/s at least.
+- The wrong way round Earth (clockwise is the way the station and the Moon go): "Käänny", a push
+  to a circle the right way round at this height, climbing too below 40 m (never pushing down), as a
+  slow rocket falls while its speed round is gone. The first trip accepts either way, and so does
+  the fall home once the Moon is visited (only the landing counts there). The climb from the pad
+  then turns sideways the right way too.
+- On the first trip, a high point over 150 m: "Jarruta" at the low point until it is low enough
+  (when the low point is high too, at the high point first).
+  Each wait for the low point counts down from the orbit's own time to it, also when the 90 s path
+  does not reach it yet.
+- On the way to the Moon or the rock, a high point 12 % past the target's height with no pass
+  coming, or no meeting within a dozen rounds: "Jarruta" at the high point until the low point is
+  40 m up, then at the low point until the high point is down too and the orbit is round, from
+  which the timed push starts the trip again.
+- Taking off from the Moon for home: "Ylös" until 15 m up, and below 30 m "Kohti Maata" never
+  points into the ground. On the way down to Earth, "Jarruta" takes away only the speed round
+  Earth, so the fall goes on, and the hint waits once the orbit reaches the ground.
+- On the way to the station, an orbit at its height that goes round as fast as it (so the two never
+  meet): "Jarruta" at the high point, to a low point that brings the ship back there a whole number
+  of rounds on as the station arrives, as the Moon trips already did.
+- Low over the Moon and already slow, with the low point under the goal: "Sivulle" at full push,
+  not a brake that only hovers until the fuel is gone.
+
+The rest of each trip's hints then take over as before.
 
 ## Mars
 
