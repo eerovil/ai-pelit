@@ -39,14 +39,23 @@ function stationAt(t) {
   const a = STATION.phase + STATION.n * t, r = STATION.r, w = r * STATION.n;
   return { x: r * Math.sin(a), y: r * Math.cos(a), vx: w * Math.cos(a), vy: -w * Math.sin(a) };
 }
+// One body pulls at a time (#548: an orbit must not drift by itself). Inside the Moon's or the
+// rock's sphere the ship falls around it as if it stood still, carried along with it (the pull
+// Earth gives the body itself); everywhere else only Earth pulls.
+function pull(b, x, y) {
+  const r2 = x * x + y * y, k = -b.mu / (r2 * Math.sqrt(r2));
+  return { ax: k * x, ay: k * y };
+}
 function gravity(x, y, t) {
-  let ax = 0, ay = 0;
   for (const b of BODIES) {
-    const p = bodyAt(b, t), dx = x - p.x, dy = y - p.y, r2 = dx * dx + dy * dy, r = Math.sqrt(r2);
-    const k = -b.mu / (r2 * r);
-    ax += k * dx; ay += k * dy;
+    if (b === EARTH) continue;
+    const p = bodyAt(b, t), dx = x - p.x, dy = y - p.y;
+    if (dx * dx + dy * dy < b.sphere * b.sphere) {
+      const own = pull(b, dx, dy), carry = pull(EARTH, p.x, p.y);
+      return { ax: own.ax + carry.ax, ay: own.ay + carry.ay };
+    }
   }
-  return { ax, ay };
+  return pull(EARTH, x, y);
 }
 // The body whose numbers count: the Moon or the rock inside their sphere, otherwise Earth.
 function refBody(s = ship) {

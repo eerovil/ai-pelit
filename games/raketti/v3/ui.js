@@ -91,10 +91,11 @@ function updateHud() {
   $('fuel-bar').style.width = `${Math.round(fuelShare() * 100)}%`;
   $('fuel').classList.toggle('low', fuelShare() < 0.15);
   const h = currentHint, skip = canSkip(h);
-  let text = h ? h.word : '';
+  // While a wait is skipped the button says so (a tap stops it); otherwise one ⏩ offers the skip.
+  let text = h ? (warp && skip ? 'Kelataan' : h.word) : '';
   if (text && slow < 0.8) text = `🐢 ${text}`;
   if (h && h.word === 'Odota' && h.wait >= 1.5) text += ` ${Math.ceil(h.wait)} s`;
-  if (skip) text += warp ? ' ⏩⏩' : ' ⏩';
+  if (skip && !warp) text += ' ⏩';
   if ($('hint').textContent !== text) $('hint').textContent = text;
   $('hint').classList.toggle('go', !!h && h.dir !== undefined);
   $('hint').classList.toggle('skip', skip);
@@ -140,7 +141,9 @@ function frame(now) {
   frameId = requestAnimationFrame(frame);
   const dt = Math.min(0.05, Math.max(0, (now - (lastFrame || now)) / 1000)); lastFrame = now;
   if (ship && !paused && ship.phase === 'flight') {
-    slow += ((warp || !wantsSlow(currentHint) ? 1 : 0.35) - slow) * (1 - Math.exp(-dt * 5));
+    // Slower still while the engine burns, so a short push is easy to judge (#548).
+    const target = warp ? 1 : wantsSlow(currentHint) ? 0.35 : ship.thrust > 0 ? 0.5 : 1;
+    slow += (target - slow) * (1 - Math.exp(-dt * 5));
     acc += warp ? warpStep(dt) : dt * slow;
     while (acc >= STEP && ship.phase === 'flight') {
       step(STEP); acc -= STEP;
