@@ -122,7 +122,23 @@ function hint(s = ship, path = null) {
     const t = h.ghost ? h.ghost.t : h.mark ? h.mark.t : undefined;
     if (t !== undefined) h.wait = Math.max(0, t - s.t);
   }
+  // Mark on the drawn path where the ship will be when the wait ends.
+  if (h.word === 'Odota' && h.wait !== undefined && !h.mark && path) h.mark = pathPointAt(s, path, s.t + h.wait);
   return h;
+}
+// The path's point at time t; past its end, on a closed orbit, a whole round earlier.
+function pathPointAt(s, path, t) {
+  const pts = path.points;
+  if (!pts.length) return null;
+  if (t > pts[pts.length - 1].t && path.frame === EARTH) {
+    const o = orbitAround(EARTH, s);
+    if (!o.closed) return null;
+    const a = (o.peri + o.apo) / 2 + EARTH.radius, period = TAU * Math.sqrt(a ** 3 / EARTH.mu);
+    t = s.t + ((t - s.t) % period);
+  }
+  let best = null;
+  for (const q of pts) if (!best || Math.abs(q.t - t) < Math.abs(best.t - t)) best = q;
+  return best && Math.abs(best.t - t) < 1 ? best : null;
 }
 function nextMove(s, path) {
   if (!s) return { word: '' };

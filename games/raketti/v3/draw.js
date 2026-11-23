@@ -130,7 +130,20 @@ function drawHint(s, h, now) {
   if (h.ghost) drawBody(BODY[h.ghost.id], h.ghost.t, 0.35);
   if (h.target) { const b = BODY[h.target], q = bodyAt(b, s.t); ring(sx(q.x), sy(q.y), Math.max(b.radius * cam.scale, 3) + 8 + 6 * pulse(now), 'rgba(255,214,90,.8)', 2); }
   if (h.station) { const st = stationAt(s.t); ring(sx(st.x), sy(st.y), 14 + 5 * pulse(now), 'rgba(255,214,90,.8)', 2); }
-  if (h.mark) ring(sx(h.mark.x), sy(h.mark.y), 7 + 5 * pulse(now), '#ffd65a', 3);
+  if (h.mark) {
+    const x = sx(h.mark.x), y = sy(h.mark.y);
+    ring(x, y, 7 + 5 * pulse(now), '#ffd65a', 3);
+    ctx.save(); ctx.fillStyle = '#ffd65a'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();
+    if (h.word === 'Odota' && h.wait >= 1.5) {
+      // The wait's seconds beside the spot, as on the button.
+      ctx.font = '700 14px system-ui,sans-serif'; ctx.textBaseline = 'middle';
+      const text = `${Math.ceil(h.wait)} s`, w = ctx.measureText(text).width;
+      const tx = clamp(x + 16, 6, view.w - w - 6), ty = clamp(y - 14, view.top + 10, view.h - view.bottom - 10);
+      ctx.fillStyle = 'rgba(8,18,28,.75)'; ctx.fillRect(tx - 4, ty - 10, w + 8, 20);
+      ctx.fillStyle = '#ffd65a'; ctx.fillText(text, tx, ty + 1);
+    }
+    ctx.restore();
+  }
   if (h.dir === undefined || s.phase !== 'flight') return;
   // The arrow: drag this way, this hard. It brightens while the finger agrees.
   const agree = stick.power > 0 && Math.abs(wrap(stick.angle - h.dir)) < 0.35;
