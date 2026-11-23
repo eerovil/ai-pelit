@@ -28,12 +28,16 @@ function cameraTarget(s, p, h) {
     for (const q of p.points) add(q.x, q.y);
   }
   if (h && (h.target || h.ghost)) {
-    const b = BODY[(h.target || h.ghost.id)], q = bodyAt(b, h.ghost ? h.ghost.t : s.t);
+    const b = BODY[(h.target || h.ghost.id)], q = h.ghost ? ghostAt(b, h.ghost.t, p, s.t) : bodyAt(b, s.t);
     add(q.x, q.y, b.radius * 1.5);
   }
   if (h && h.station) { const st = stationAt(s.t); add(st.x, st.y, 2); }
-  const limit = MOON.orbit.r + MOON.sphere;
-  x0 = Math.max(x0, -limit); x1 = Math.min(x1, limit); y0 = Math.max(y0, -limit); y1 = Math.min(y1, limit);
+  // Round Earth, at most the Moon's way round it; out round the Sun, everything.
+  const frame = p ? p.frame : EARTH;
+  if (frame !== SUN && frame !== MARS) {
+    const far = TRIP[s.trip].far && s.tanked, limit = far ? EARTH.sphere * 1.3 : MOON.orbit.r + MOON.sphere;
+    x0 = Math.max(x0, -limit); x1 = Math.min(x1, limit); y0 = Math.max(y0, -limit); y1 = Math.min(y1, limit);
+  }
   const aspect = Math.max(1, view.w - 160) / Math.max(1, view.h - view.top - view.bottom - 80);
   const halfW = (x1 - x0) / 2 * 1.12, halfH = (y1 - y0) / 2 * 1.12;
   return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, half: Math.max(halfH, halfW / aspect, 8), aspect };
@@ -49,6 +53,13 @@ function moveCamera(dt, h) {
   cam.x += (t.x - cam.x) * k; cam.y += (t.y - cam.y) * k;
   cam.scale = Math.exp(Math.log(cam.scale) + (Math.log(scale) - Math.log(cam.scale)) * k);
 }
+// Where body b is at time t, in the frame the path is drawn in (its body where it is now).
+function ghostAt(b, t, p, now) {
+  const q = bodyAt(b, t);
+  if (!p || p.frame === EARTH) return q;
+  const f = bodyAt(p.frame, t), f0 = bodyAt(p.frame, now);
+  return { x: q.x - f.x + f0.x, y: q.y - f.y + f0.y };
+}
 function sx(x) { return view.w / 2 + (x - cam.x) * cam.scale; }
 function sy(y) { return view.top + (view.h - view.top - view.bottom) / 2 - (y - cam.y) * cam.scale; }
 
@@ -63,12 +74,29 @@ function resize() {
   view.top = land ? 48 : 56; view.bottom = land ? 70 : 110;
 }
 
-function drawBody(b, t, alpha = 1) {
-  const p = bodyAt(b, t), x = sx(p.x), y = sy(p.y), r = Math.max(b.radius * cam.scale, 3);
+function drawBody(b, t, alpha = 1, at = null) {
+  const p = at || bodyAt(b, t), x = sx(p.x), y = sy(p.y), r = Math.max(b.radius * cam.scale, b === SUN ? 8 : 3);
   if (x + r < -50 || x - r > view.w + 50 || y + r < -50 || y - r > view.h + 50) return;
   ctx.save(); ctx.globalAlpha = alpha;
+  // A body drawn smaller than its own size gets its name beside it, on the Mars trip.
+  const e = b === MOON && bodyAt(EARTH, t), hidden = e && Math.hypot(sx(e.x) - x, sy(e.y) - y) < 40;
+  if (TRIP[ship.trip].far && b.radius * cam.scale < 6 && alpha === 1 && b !== ROCK && !hidden) {
+    ctx.font = '600 12px system-ui,sans-serif'; ctx.fillStyle = 'rgba(237,244,247,.75)'; ctx.textBaseline = 'middle';
+    ctx.fillText(b.name, x + r + 5, y);
+  }
   ctx.beginPath(); ctx.arc(x, y, r, 0, TAU);
-  if (b === EARTH) {
+  if (b === SUN) {
+    const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.6);
+    g.addColorStop(0, '#fff6c8'); g.addColorStop(0.55, '#ffd34d'); g.addColorStop(1, 'rgba(255,170,40,0)');
+    ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, TAU); ctx.fillStyle = g; ctx.fill();
+  } else if (b === MARS) {
+    ctx.fillStyle = '#c8603a'; ctx.fill(); ctx.save(); ctx.clip(); ctx.fillStyle = '#a24a2c';
+    for (const [a, d, s] of [[0.9, 0.45, 0.22], [2.8, 0.55, 0.18], [4.6, 0.35, 0.26]]) {
+      ctx.beginPath(); ctx.arc(x + Math.sin(a) * r * d, y - Math.cos(a) * r * d, r * s, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = '#f1e6dc'; ctx.beginPath(); ctx.arc(x, y - r, r * 0.35, 0, TAU); ctx.fill();
+    ctx.restore();
+  } else if (b === EARTH) {
     const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
     g.addColorStop(0, '#5aa8f0'); g.addColorStop(1, '#1f4f9a'); ctx.fillStyle = g; ctx.fill();
     ctx.save(); ctx.clip(); ctx.fillStyle = '#3f9b55';
@@ -110,7 +138,7 @@ function drawBase(s, now) {
   if (r < 6) return;
   const trip = TRIP[s.trip];
   // The zone to land in, glowing on a part trip.
-  if (trip.part) {
+  if (landingAim(s) !== undefined) {
     const a0 = BASE.a - BASE.zone, a1 = BASE.a + BASE.zone;
     ctx.save(); ctx.beginPath(); ctx.arc(sx(m.x), sy(m.y), r + 2, a0 - Math.PI / 2, a1 - Math.PI / 2);
     ctx.strokeStyle = `rgba(255,214,90,${0.5 + 0.4 * pulse(now)})`; ctx.lineWidth = Math.max(3, cam.scale * 0.3); ctx.stroke(); ctx.restore();
@@ -167,7 +195,7 @@ function drawPath(s, p, h, now) {
 }
 function drawHint(s, h, now) {
   if (!h) return;
-  if (h.ghost) drawBody(BODY[h.ghost.id], h.ghost.t, 0.35);
+  if (h.ghost) drawBody(BODY[h.ghost.id], h.ghost.t, 0.35, ghostAt(BODY[h.ghost.id], h.ghost.t, path, s.t));
   if (h.target) { const b = BODY[h.target], q = bodyAt(b, s.t); ring(sx(q.x), sy(q.y), Math.max(b.radius * cam.scale, 3) + 8 + 6 * pulse(now), 'rgba(255,214,90,.8)', 2); }
   if (h.station) { const st = stationAt(s.t); ring(sx(st.x), sy(st.y), 14 + 5 * pulse(now), 'rgba(255,214,90,.8)', 2); }
   if (h.mark) {
@@ -177,7 +205,7 @@ function drawHint(s, h, now) {
     if (h.word === 'Odota' && h.wait >= 1.5) {
       // The wait's seconds beside the spot, as on the button.
       ctx.font = '700 14px system-ui,sans-serif'; ctx.textBaseline = 'middle';
-      const text = `${Math.ceil(h.wait)} s`, w = ctx.measureText(text).width;
+      const text = waitText(h.wait), w = ctx.measureText(text).width;
       const tx = clamp(x + 16, 6, view.w - w - 6), ty = clamp(y - 14, view.top + 10, view.h - view.bottom - 10);
       ctx.fillStyle = 'rgba(8,18,28,.75)'; ctx.fillRect(tx - 4, ty - 10, w + 8, 20);
       ctx.fillStyle = '#ffd65a'; ctx.fillText(text, tx, ty + 1);
@@ -228,6 +256,12 @@ function draw(h, now = performance.now()) {
   if (!ship) return;
   // Faint circles where the Moon, the rock and the station travel.
   for (const b of [MOON, ROCK]) ring(sx(0), sy(0), b.orbit.r * cam.scale, 'rgba(255,255,255,.08)', 1);
+  if (TRIP[ship.trip].far) {
+    // Earth's and Mars's ways round the Sun.
+    const sun = bodyAt(SUN, ship.t);
+    ring(sx(sun.x), sy(sun.y), AU * cam.scale, 'rgba(120,180,255,.16)', 1);
+    ring(sx(sun.x), sy(sun.y), MARS.helio.r * cam.scale, 'rgba(230,120,80,.2)', 1);
+  }
   if (ship.trip === 'asema') ring(sx(0), sy(0), STATION.r * cam.scale, 'rgba(127,182,232,.2)', 1, [3, 5]);
   for (const b of BODIES) drawBody(b, ship.t);
   drawBase(ship, now);

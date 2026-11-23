@@ -1,24 +1,34 @@
 'use strict';
 // Raketti v3 (#548, rethought on 2026-11-23): a toy Earth–Moon system small enough that a whole
 // orbit fits on a phone's screen, flown with one finger. Units are game metres and seconds; nothing
-// is to real scale. One Earth orbit takes about 20 s and the Moon is about a minute away, so the
-// game has no time warp at all.
+// is to real scale. One Earth orbit takes about 20 s and the Moon is about a minute away; Mars,
+// the last trip, about five minutes. A wait can be skipped (the hint button runs time faster).
 const TAU = Math.PI * 2;
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 function wrap(a) { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; }
 
-// Every body is in this one list (a later version can add the Sun and Mars). g is the surface
-// gravity, so mu = g × radius². Moons move on fixed circles around Earth; `sphere` is how far
-// out a body's own numbers (its orbit, its landing hints) are read against it.
+// Every body is in this one list. g is the surface gravity, so mu = g × radius². Moons move on
+// fixed circles around Earth, Earth and Mars on fixed circles around the Sun (#548: the Mars trip);
+// the world is drawn and counted from Earth's middle, so the Sun moves round Earth. `sphere` is how
+// far out a body pulls: inside it, that body alone (and the pull that carries the body itself).
+const AU = 8000, YEAR = 420; // Earth's distance from the Sun and its year, in game metres and seconds
 const BODIES = [
-  { id: 'earth', name: 'Maa', radius: 60, g: 14, sphere: Infinity, land: 6 },
+  { id: 'earth', name: 'Maa', radius: 60, g: 14, sphere: 1100, land: 6 },
   { id: 'moon', name: 'Kuu', radius: 16, g: 9.5, sphere: 125, land: 5, orbit: { r: 420, phase: 2.2 } },
   { id: 'rock', name: 'Pikkukivi', radius: 4, g: 0.5, sphere: 24, land: 3, orbit: { r: 250, phase: 4.4 } },
+  { id: 'sun', name: 'Aurinko', radius: 320, g: 0, sphere: Infinity, land: 0 },
+  { id: 'mars', name: 'Mars', radius: 30, g: 7, sphere: 500, land: 5, helio: { r: AU * 1.524, phase: 0 } },
 ];
 const BODY = {};
 for (const b of BODIES) { b.mu = b.g * b.radius ** 2; BODY[b.id] = b; }
-const EARTH = BODY.earth, MOON = BODY.moon, ROCK = BODY.rock;
+const EARTH = BODY.earth, MOON = BODY.moon, ROCK = BODY.rock, SUN = BODY.sun, MARS = BODY.mars;
+SUN.mu = TAU * TAU * AU ** 3 / YEAR ** 2; SUN.g = SUN.mu / SUN.radius ** 2;
+// Earth round the Sun: the Sun sits below Earth at the start.
+const EARTH_HELIO = { r: AU, phase: 0, n: TAU / YEAR };
 for (const b of BODIES) if (b.orbit) b.orbit.n = Math.sqrt(EARTH.mu / b.orbit.r ** 3);
+for (const b of BODIES) if (b.helio) b.helio.n = Math.sqrt(SUN.mu / b.helio.r ** 3);
+// Where Mars starts, ahead of Earth round the Sun: its window opens about 150 s in.
+MARS.helio.phase = 2.32;
 // The station circles 40 m above Earth; touching it slowly docks.
 const STATION = { r: 100, phase: 0.9, dock: 3, speed: 3 };
 STATION.n = Math.sqrt(EARTH.mu / STATION.r ** 3);
@@ -42,46 +52,51 @@ const SAVE_KEY = 'ai-pelit:raketti:matka', STARS_KEY = 'ai-pelit:raketti:tahdet'
 
 var ship = null, stick = { on: false, angle: 0, power: 0 }, paused = true, stars = {};
 
+// A circle's spot and speed at time t.
+function onCircle(c, t) {
+  const a = c.phase + c.n * t, r = c.r, w = r * c.n;
+  return { x: r * Math.sin(a), y: r * Math.cos(a), vx: w * Math.cos(a), vy: -w * Math.sin(a), ax: -c.n * c.n * r * Math.sin(a), ay: -c.n * c.n * r * Math.cos(a) };
+}
+// Where a body is (and how it moves) as seen from Earth's middle.
 function bodyAt(b, t) {
-  if (!b.orbit) return { x: 0, y: 0, vx: 0, vy: 0 };
-  const a = b.orbit.phase + b.orbit.n * t, r = b.orbit.r, w = r * b.orbit.n;
-  return { x: r * Math.sin(a), y: r * Math.cos(a), vx: w * Math.cos(a), vy: -w * Math.sin(a) };
+  if (b.orbit) return onCircle(b.orbit, t);
+  if (b === EARTH) return { x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0 };
+  const e = onCircle(EARTH_HELIO, t);
+  if (b === SUN) return { x: -e.x, y: -e.y, vx: -e.vx, vy: -e.vy, ax: -e.ax, ay: -e.ay };
+  const h = onCircle(b.helio, t);
+  return { x: h.x - e.x, y: h.y - e.y, vx: h.vx - e.vx, vy: h.vy - e.vy, ax: h.ax - e.ax, ay: h.ay - e.ay };
 }
 function stationAt(t) {
   const a = STATION.phase + STATION.n * t, r = STATION.r, w = r * STATION.n;
   return { x: r * Math.sin(a), y: r * Math.cos(a), vx: w * Math.cos(a), vy: -w * Math.sin(a) };
 }
-// One body pulls at a time (#548: an orbit must not drift by itself). Inside the Moon's or the
-// rock's sphere the ship falls around it as if it stood still, carried along with it (the pull
-// Earth gives the body itself); everywhere else only Earth pulls.
+// One body pulls at a time (#548: an orbit must not drift by itself). Inside the Moon's, the
+// rock's or Mars's sphere the ship falls around it as if it stood still, carried along with it;
+// inside Earth's sphere only Earth pulls; further out only the Sun.
 function pull(b, x, y) {
   const r2 = x * x + y * y, k = -b.mu / (r2 * Math.sqrt(r2));
   return { ax: k * x, ay: k * y };
 }
+// The small bodies whose sphere the ship can be in, nearest first in the list.
+const SMALL = BODIES.filter(b => b !== EARTH && b !== SUN);
 function gravity(x, y, t) {
-  for (const b of BODIES) {
-    if (b === EARTH) continue;
+  const b = refAt(x, y, t), p = bodyAt(b, t), own = pull(b, x - p.x, y - p.y);
+  return { ax: own.ax + p.ax, ay: own.ay + p.ay };
+}
+function refAt(x, y, t) {
+  for (const b of SMALL) {
     const p = bodyAt(b, t), dx = x - p.x, dy = y - p.y;
-    if (dx * dx + dy * dy < b.sphere * b.sphere) {
-      const own = pull(b, dx, dy), carry = pull(EARTH, p.x, p.y);
-      return { ax: own.ax + carry.ax, ay: own.ay + carry.ay };
-    }
+    if (dx * dx + dy * dy < b.sphere * b.sphere) return b;
   }
-  return pull(EARTH, x, y);
+  return x * x + y * y < EARTH.sphere * EARTH.sphere ? EARTH : SUN;
 }
-// The body whose numbers count: the Moon or the rock inside their sphere, otherwise Earth.
-function refBody(s = ship) {
-  for (const b of BODIES) {
-    if (b === EARTH) continue;
-    const p = bodyAt(b, s.t);
-    if (Math.hypot(s.x - p.x, s.y - p.y) < b.sphere) return b;
-  }
-  return EARTH;
-}
+// The body whose numbers count: the one whose sphere the ship is in.
+function refBody(s = ship) { return refAt(s.x, s.y, s.t); }
 // The body whose surface is nearest, and the height above it.
 function nearestSurface(s = ship) {
   let best = { body: EARTH, alt: Infinity };
   for (const b of BODIES) {
+    if (b === SUN) continue;
     const p = bodyAt(b, s.t), alt = Math.hypot(s.x - p.x, s.y - p.y) - b.radius;
     if (alt < best.alt) best = { body: b, alt };
   }
@@ -110,7 +125,7 @@ function stationRelative(s = ship) {
 function freshFlight(trip = 'kiertorata') {
   // The pad stands on top of Earth; the ship stands on it with its nose up.
   const r = ROCKETS[TRIP[trip].rocket || 'raketti'], dv = r.dv * (TRIP[trip].tank || 1);
-  return { trip, t: 0, x: 0, y: EARTH.radius + r.size, vx: 0, vy: 0, angle: 0, dv, refuel: false,
+  return { trip, t: 0, x: 0, y: EARTH.radius + r.size, vx: 0, vy: 0, angle: 0, dv, refuel: false, tanked: false,
     thrust: 0, coast: 0, phase: 'flight', landedOn: { id: 'earth', a: 0 }, visited: ['earth'],
     touch: null, reason: '', stars: 0, docked: false };
 }
@@ -169,7 +184,10 @@ function step(dt = STEP) {
   if (s.landedOn) {
     const b = BODY[s.landedOn.id], up = s.landedOn.a;
     s.t += dt;
-    if (s.refuel && s.dv < SHIP.dv) { s.dv = Math.min(SHIP.dv, s.dv + REFUEL * dt); s.coast = 0; }
+    if (s.refuel) {
+      if (s.dv < SHIP.dv) { s.dv = Math.min(SHIP.dv, s.dv + REFUEL * dt); s.coast = 0; }
+      if (s.dv >= SHIP.dv) s.tanked = true;
+    }
     if (tx * Math.sin(up) + ty * Math.cos(up) > b.g) {
       s.landedOn = null; s.refuel = false;
       const p = bodyAt(b, s.t), r = b.radius + SHIP.size + 0.05;
@@ -190,33 +208,38 @@ function step(dt = STEP) {
 }
 
 // The path ahead with the engine off, in the same physics. Points are drawn in the frame of the
-// body the ship is near (its motion taken out), so an orbit around the Moon shows as a loop.
+// body the ship is near (its motion taken out), so an orbit around the Moon shows as a loop, and
+// so are the closest passes. Out round the Sun the steps are longer and the path goes further
+// (#548: the Mars trip takes minutes); `exit` is where it first leaves Earth's sphere.
 function predictPath(s = ship, horizon = 90, dt = 0.05) {
   const frame = refBody(s), f0 = bodyAt(frame, s.t);
-  const out = { frame, points: [], hit: null, closest: {} };
+  const out = { frame, points: [], hit: null, closest: {}, exit: null };
   if (!s || s.landedOn || s.phase !== 'flight') return out;
-  let x = s.x, y = s.y, vx = s.vx, vy = s.vy, t = s.t;
-  for (let i = 0; i * dt < horizon; i++) {
-    const g0 = gravity(x, y, t);
-    x += vx * dt + 0.5 * g0.ax * dt * dt; y += vy * dt + 0.5 * g0.ay * dt * dt; t += dt;
+  if (TRIP[s.trip].far && (s.tanked || frame === SUN || frame === MARS)) horizon = 600;
+  let x = s.x, y = s.y, vx = s.vx, vy = s.vy, t = s.t, n = 0;
+  const end = s.t + horizon;
+  while (t < end) {
+    const g0 = gravity(x, y, t), ref = refAt(x, y, t), h = ref === SUN ? 0.5 : dt;
+    x += vx * h + 0.5 * g0.ax * h * h; y += vy * h + 0.5 * g0.ay * h * h; t += h;
     const g1 = gravity(x, y, t);
-    vx += 0.5 * (g0.ax + g1.ax) * dt; vy += 0.5 * (g0.ay + g1.ay) * dt;
-    const f = bodyAt(frame, t);
-    if (i % 2 === 0) out.points.push({ x: x - f.x + f0.x, y: y - f.y + f0.y, t, vx: vx - f.vx, vy: vy - f.vy });
+    vx += 0.5 * (g0.ax + g1.ax) * h; vy += 0.5 * (g0.ay + g1.ay) * h;
+    const f = bodyAt(frame, t), px = x - f.x + f0.x, py = y - f.y + f0.y;
+    if (n++ % 2 === 0 || ref === SUN) out.points.push({ x: px, y: py, t, vx: vx - f.vx, vy: vy - f.vy });
+    if (!out.exit && x * x + y * y >= EARTH.sphere * EARTH.sphere) out.exit = { x, y, vx, vy, t };
     for (const b of BODIES) {
+      if (b === SUN) continue;
       const p = bodyAt(b, t), d = Math.hypot(x - p.x, y - p.y) - b.radius;
       const c = out.closest[b.id];
-      if (!c || d < c.d) out.closest[b.id] = { d, t, x, y, at: p };
+      if (!c || d < c.d) out.closest[b.id] = { d, t, x: px, y: py, at: { x: p.x - f.x + f0.x, y: p.y - f.y + f0.y } };
       if (d < SHIP.size) {
-        out.hit = { body: b.id, x: x - f.x + f0.x, y: y - f.y + f0.y, t };
-        out.points.push({ x: out.hit.x, y: out.hit.y, t });
+        out.hit = { body: b.id, x: px, y: py, t };
+        out.points.push({ x: px, y: py, t });
         return out;
       }
     }
   }
   return out;
 }
-
 function fuelShare(s = ship) { return s.dv / SHIP.dv; }
 function endFlight(reason, success = false) {
   const s = ship;
@@ -251,9 +274,9 @@ function readFlight() {
     if (!s || typeof s !== 'object' || !TRIP[s.trip] || s.phase !== 'flight') return null;
     for (const k of ['t', 'x', 'y', 'vx', 'vy', 'angle', 'dv', 'coast']) if (!Number.isFinite(s[k])) return null;
     const rocket = ROCKETS[TRIP[s.trip].rocket || 'raketti'];
-    if (s.t < 0 || s.dv < 0 || s.dv > rocket.dv || Math.hypot(s.x, s.y) > 5000) return null;
+    if (s.t < 0 || s.dv < 0 || s.dv > rocket.dv || Math.hypot(s.x, s.y) > 40000) return null;
     if (!Array.isArray(s.visited) || s.visited.some(v => !BODY[v])) return null;
     if (s.landedOn !== null && !(s.landedOn && BODY[s.landedOn.id] && Number.isFinite(s.landedOn.a))) return null;
-    return Object.assign(freshFlight(s.trip), s, { thrust: 0, refuel: !!s.refuel });
+    return Object.assign(freshFlight(s.trip), s, { thrust: 0, refuel: !!s.refuel, tanked: !!s.tanked });
   } catch (_) { return null; }
 }

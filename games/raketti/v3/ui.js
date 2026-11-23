@@ -51,6 +51,11 @@ function updateSound() {
   sound.gain.gain.setTargetAtTime(v, sound.ac.currentTime, 0.05);
 }
 
+// A wait in seconds, or minutes and seconds when it is long.
+function waitText(w) {
+  const n = Math.ceil(w);
+  return n < 100 ? `${n} s` : `${Math.floor(n / 60)} min ${String(n % 60).padStart(2, '0')} s`;
+}
 function starText(n) { return '★'.repeat(n) + '☆'.repeat(3 - n); }
 function showPanel(id) {
   $('overlay').hidden = !id;
@@ -81,7 +86,7 @@ function openMenu() {
 }
 function begin(s) {
   useRocket(TRIP[s.trip].rocket);
-  ship = s; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
+  ship = s; descentAt = -1; currentWord = ''; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
   releaseStick(); showPanel(null); updateHud(); saveFlight(); play();
 }
 function startFlight(trip) { begin(freshFlight(trip)); }
@@ -95,7 +100,7 @@ function updateHud() {
   // While a wait is skipped the button says so (a tap stops it); otherwise one ⏩ offers the skip.
   let text = h ? (warp && skip ? 'Kelataan' : h.word) : '';
   if (text && slow < 0.8) text = `🐢 ${text}`;
-  if (h && h.word === 'Odota' && h.wait >= 1.5) text += ` ${Math.ceil(h.wait)} s`;
+  if (h && h.word === 'Odota' && h.wait >= 1.5) text += ` ${waitText(h.wait)}`;
   if (skip && !warp) text += ' ⏩';
   if ($('hint').textContent !== text) $('hint').textContent = text;
   $('hint').classList.toggle('go', !!h && h.dir !== undefined);
@@ -120,8 +125,8 @@ function showResult() {
 
 // A wait can be skipped when it is long enough to bother, or its length is not known.
 function canSkip(h) {
-  return !!h && h.word === 'Odota' && !!ship && ship.phase === 'flight' && !paused && !ship.landedOn
-    && (h.wait === undefined || h.wait >= 2.5);
+  return !!h && h.word === 'Odota' && !!ship && ship.phase === 'flight' && !paused
+    && (!ship.landedOn || h.window) && (h.wait === undefined || h.wait >= 2.5);
 }
 // Time slows for the fine moves: the last metres of a landing, docking, a course correction,
 // a gentle push, and the moment a wait ends, so a small drag has time to do a small thing.
@@ -133,10 +138,10 @@ function wantsSlow(h, s = ship) {
   return h.dir !== undefined && (h.power ?? 1) < 0.5;
 }
 function warpStep(dt) {
-  // Any wait passes in about two seconds; never run past the moment the wait ends.
+  // Any wait passes in about two seconds (Mars's are minutes long); never run past its end.
   const w = currentHint && currentHint.wait;
-  if (w === undefined) return dt * 8;
-  return Math.min(dt * clamp(w / 1.5, 4, 40), Math.max(0, w - 0.6));
+  if (w === undefined) return dt * (TRIP[ship.trip].far ? 40 : 8);
+  return Math.min(dt * clamp(w / 1.5, 4, 400), Math.max(0, w - 0.6));
 }
 function frame(now) {
   frameId = requestAnimationFrame(frame);
