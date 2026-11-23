@@ -366,3 +366,42 @@ def test_stars_won_in_another_tab_are_kept(site, context):
     assert out['phase'] == 'done' and out['stars'] == 3, out
     assert out['saved']['kiertorata'] == 3 and out['saved']['asema'] == 2, out
     assert page.errors == []
+
+
+def test_mars_needs_the_moon_base_fuel_first(site, context):
+    page = open_game(site, context)
+    out = page.evaluate("""() => {
+      begin(freshFlight('mars')); cancelAnimationFrame(frameId); frameId = 0;
+      ship.landedOn = { id: 'mars', a: 0 }; ship.visited = ['earth', 'moon', 'mars'];
+      const without = goalMet(ship); ship.tanked = true; return [without, goalMet(ship)]; }""")
+    assert out == [False, True]
+
+
+def test_the_game_stops_drawing_while_nothing_moves(site, context):
+    # A still game must not draw every frame (docs/making-games.md): menus and the pause panel rest.
+    page = open_game(site, context)
+    count = "frames"
+    page.wait_for_timeout(300)
+    a = page.evaluate(count); page.wait_for_timeout(500)
+    assert page.evaluate(count) == a, 'the first menu keeps drawing'
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    a = page.evaluate(count); page.wait_for_timeout(500)
+    assert page.evaluate(count) > a + 5, 'a flight must draw'
+    page.locator('#pause').click()
+    page.wait_for_timeout(100)
+    a = page.evaluate(count); page.wait_for_timeout(500)
+    assert page.evaluate(count) == a, 'the pause panel keeps drawing'
+    page.locator('#continue').click()
+    a = page.evaluate(count); page.wait_for_timeout(500)
+    assert page.evaluate(count) > a + 5, 'Jatka must start the loop again'
+    # A resize behind the menu (the phone turned) redraws it once, then rests.
+    page.locator('#pause').click(); page.locator('#to-menu').click()
+    page.wait_for_timeout(100)
+    a = page.evaluate(count)
+    page.evaluate("document.getElementById('c').style.width = '300px'")
+    page.wait_for_timeout(300)
+    b = page.evaluate(count)
+    assert a < b <= a + 3, (a, b)
+    page.wait_for_timeout(400)
+    assert page.evaluate(count) == b
+    assert page.errors == []

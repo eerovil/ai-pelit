@@ -44,7 +44,7 @@ function goalMet(s = ship) {
     case 'kivi': return !!s.landedOn && s.landedOn.id === 'rock';
     case 'paneeli': case 'tankki': case 'tehdas':
       return !!s.landedOn && s.landedOn.id === 'moon' && atBase(s.landedOn.a);
-    case 'mars': return !!s.landedOn && s.landedOn.id === 'mars';
+    case 'mars': return !!s.landedOn && s.landedOn.id === 'mars' && s.tanked; // the goal says: fill up at the base first
   }
   return false;
 }

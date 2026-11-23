@@ -153,8 +153,13 @@ function warpStep(dt) {
   if (w === undefined) return dt * (TRIP[ship.trip].far ? 40 : 8);
   return Math.min(dt * clamp(w / 1.5, 4, 400), Math.max(0, w - 0.6));
 }
+// A still game must not draw every frame (docs/making-games.md): the loop runs while a flight
+// moves or its end is shown, then draws once more and stops; play() starts it again.
 function frame(now) {
-  frameId = requestAnimationFrame(frame);
+  frameId = 0;
+  try { tick(now); } finally { if (!paused && !frameId) frameId = requestAnimationFrame(frame); }
+}
+function tick(now) {
   const dt = Math.min(0.05, Math.max(0, (now - (lastFrame || now)) / 1000)); lastFrame = now;
   if (ship && !paused && ship.phase === 'flight') {
     // Slower still while the engine burns, so a short push is easy to judge (#548).
@@ -185,7 +190,7 @@ function play() { if (!frameId) { lastFrame = 0; frameId = requestAnimationFrame
 
 $('hint').onclick = () => { if (canSkip(currentHint)) { stick.power = 0; warp = !warp; updateHud(); } };
 $('pause').onclick = () => { if (ship && ship.phase === 'flight') { paused = true; releaseStick(); saveFlight(); showPanel('pause-panel'); } };
-$('continue').onclick = () => { paused = false; showPanel(null); };
+$('continue').onclick = () => { paused = false; showPanel(null); play(); };
 $('to-menu').onclick = openMenu;
 $('resume').onclick = () => { const s = readFlight(); if (s) begin(s); };
 $('retry').onclick = () => startFlight(ship.trip);
@@ -205,3 +210,5 @@ stars = readStars();
 ship = readFlight() || freshFlight('kiertorata');
 useRocket(TRIP[ship.trip].rocket);
 renderMenu(); showPanel('menu'); play();
+// Turning the phone or resizing redraws the still scene behind a menu once.
+if (window.ResizeObserver) new ResizeObserver(() => play()).observe(canvas);
