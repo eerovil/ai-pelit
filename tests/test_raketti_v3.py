@@ -289,7 +289,7 @@ FITS = """sel => { const r = document.querySelector(sel).getBoundingClientRect()
   return r.width > 0 && r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1; }"""
 
 
-@pytest.mark.parametrize('width,height', [(360, 640), (360, 740), (740, 360)])
+@pytest.mark.parametrize('width,height', [(360, 640), (360, 740), (390, 844), (740, 360)])
 def test_menus_and_flight_fit_the_screen(site, browser, width, height):
     context = browser.new_context(viewport={'width': width, 'height': height}, is_mobile=True, has_touch=True)
     page = open_game(site, context)
@@ -354,3 +354,15 @@ def test_v2_saves_are_left_alone(site, browser):
         assert page.evaluate("k => localStorage.getItem(k)", k) == v
     assert page.errors == []
     context.close()
+
+
+
+def test_stars_won_in_another_tab_are_kept(site, context):
+    page = open_game(site, context)
+    # Another tab (or phone window) finishes Avaruusasemalle after this one loaded its stars.
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify({kiertorata: 1, asema: 2}))")
+    # follow() opens every trip at one star in this tab's memory; the other tab's two must win.
+    out = page.evaluate("follow('kiertorata')")
+    assert out['phase'] == 'done' and out['stars'] == 3, out
+    assert out['saved']['kiertorata'] == 3 and out['saved']['asema'] == 2, out
+    assert page.errors == []
