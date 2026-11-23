@@ -495,13 +495,15 @@ def circle(r, way):
 LOST = {
     'wrong-low': circle(75, -1),
     'wrong-high': circle(130, -1),
+    # Round, but far above every target: the Moon and rock trips start over from a low orbit.
+    'high-circle': circle(600, 1),
     'climbing-away': {'x': 0, 'y': 90, 'vx': 15, 'vy': 50, 'angle': 0.3},
     'out-past-earth': {'x': -500, 'y': 1200, 'vx': -5, 'vy': 20, 'angle': 0},
 }
 
 
 @pytest.mark.parametrize('start', list(LOST))
-@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuuhun'])
+@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kivi', 'paneeli'])
 def test_the_hints_bring_a_lost_ship_back_on_its_way(site, context, trip, start):
     page = open_game(site, context)
     # The owner's reports: from a wrong-way orbit on the station trip, or after pushing so hard the

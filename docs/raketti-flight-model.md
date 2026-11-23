@@ -66,18 +66,22 @@ before its end (Mars's waits are minutes long). There is no other time warp.
 Until v5 the hints knew only the way a trip is meant to go. An orbit the wrong way round never met
 the station or the Moon, and a push so hard the ship flew off left the hint saying "Odota" for ever
 (the owner's reports on #548). v5 checks for these first, on every trip in Earth's or the Sun's pull
-(not on Mars's leg once tanked, nor on the way home from the Moon):
+(not on Mars's leg once tanked, nor inside the Moon's sphere on the way home from it):
 
 - Flying away (past 85 % of Earth's sphere, or climbing on a way that does not come back below it):
-  "Jarruta" toward a speed that falls back to a low point 40 m up, the right way round, and out past
+  "Jarruta" toward a speed that falls back to a low point 40 m up, the right way round (on the first
+  trip the way it already goes), and out past
   Earth's sphere (where Earth does not pull at all) "Kohti Maata", which also closes in at 8 m/s.
 - The wrong way round Earth (clockwise is the way the station and the Moon go): "Käänny", a push
-  to a circle the right way round at this height. The first trip accepts either way. The climb from
+  to a circle the right way round at this height. The first trip accepts either way, and so does the
+  fall home once the Moon is visited (only the landing counts there). The climb from
   the pad then turns sideways the right way too.
 - On the first trip, a high point over 150 m: "Jarruta" at the low point until it is low enough.
+  Each wait for the low point counts down from the orbit's own time to it, also when the 90 s path
+  does not reach it yet.
 - On the way to the Moon or the rock, a high point 12 % past the target's height with no pass
-  coming, or no meeting within a dozen rounds: "Jarruta" at the low point into a round low orbit,
-  from which the timed push starts the trip again.
+  coming, or no meeting within a dozen rounds: "Jarruta" at the low point down to a low point 40 m
+  up, then again there until the orbit is round and low, from which the timed push starts the trip again.
 - On the way to the station, an orbit at its height that goes round as fast as it (so the two never
   meet): "Jarruta" at the high point, to a low point that brings the ship back there a whole number
   of rounds on as the station arrives, as the Moon trips already did.

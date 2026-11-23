@@ -267,14 +267,34 @@ function meetAhead(s, o, path, b, close) {
   }
   return best;
 }
-// Off the way to a target (#548): brake at the low point into a round low orbit, from which the
+// Seconds until a closed orbit round Earth is at its low point.
+function untilLow(o) {
+  const a = (o.peri + o.apo) / 2 + EARTH.radius, e = o.e;
+  if (!o.closed || !(e > 1e-3)) return 0;
+  const n = Math.sqrt(EARTH.mu / a ** 3), E = Math.acos(clamp((1 - o.r / a) / e, -1, 1)), M = E - e * Math.sin(E);
+  return o.vr < 0 ? M / n : (TAU - M) / n;
+}
+// Brake at an end of the orbit until its other end is rOther from Earth's middle: at the high
+// point while the low point is above rOther (lowering it), else at the low point. Otherwise wait
+// for that end. The wait comes from the orbit, as the end may lie past the path's end (#548: the
+// wait then read as the path's length and did not count down). Braking at an end keeps the ship
+// at that end, so the burn holds until it is done.
+function brakeAtLow(s, path, o, rOther, extra) {
+  const gap = o.speed - apseSpeed(EARTH, o.r, rOther), atHigh = o.peri + EARTH.radius > rOther + 15;
+  const near = atHigh ? o.alt > o.apo - 6 : o.alt < o.peri + 6 || (currentWord === 'Jarruta' && o.alt < o.peri + 20);
+  if (gap > 0 && near) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.5, gap };
+  let wait = untilLow(o);
+  if (atHigh && o.closed) {
+    const a = (o.peri + o.apo) / 2 + EARTH.radius, period = TAU * Math.sqrt(a ** 3 / EARTH.mu);
+    wait = (wait + period / 2) % period;
+  }
+  const last = path && path.points.length ? path.points[path.points.length - 1].t - s.t : 0;
+  return Object.assign({ word: 'Odota', wait, mark: wait < last - 1 ? pathExtreme(path, atHigh) : undefined }, extra);
+}
+// Off the way to a target (#548): down to a low point 40 m up, and there round, from where the
 // timed push toward the target starts again.
 function startOverHint(s, path, o, id) {
-  const gap = o.speed - Math.sqrt(EARTH.mu / o.r);
-  if (gap > 0 && (o.alt < o.peri + 6 || (currentWord === 'Jarruta' && o.alt < o.peri + 20))) {
-    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.5, gap };
-  }
-  return { word: 'Odota', mark: pathExtreme(path, false), target: id };
+  return brakeAtLow(s, path, o, Math.min(o.r, EARTH.radius + 40), { target: id });
 }
 // From the pad into a low orbit around Earth.
 function ascentHint(s, path) {
@@ -304,8 +324,10 @@ function turnRoundHint(s) {
 // from outside Earth's pull (which does not reach out there) toward Earth too.
 function comeBackHint(s) {
   const o = orbitAround(EARTH, s), r = o.r, rp = EARTH.radius + 40, out = r > EARTH.sphere * 0.85;
+  // The first trip takes either way round: keep the ship's own.
+  const way = s.trip === 'kiertorata' ? sideOf(o) : 1;
   const k = out ? 8 : 0, vt = r > rp ? rp * Math.sqrt((k * k + 2 * EARTH.mu * (1 / rp - 1 / r)) / (r * r - rp * rp)) : Math.sqrt(EARTH.mu / r);
-  return matchHint(r > EARTH.sphere ? 'Kohti Maata' : 'Jarruta', s, -k * o.x / r + vt * o.y / r, -k * o.y / r - vt * o.x / r);
+  return matchHint(r > EARTH.sphere ? 'Kohti Maata' : 'Jarruta', s, -k * o.x / r + way * vt * o.y / r, -k * o.y / r - way * vt * o.x / r);
 }
 function lostHint(s, ref) {
   if (ref !== EARTH && ref !== SUN) return null;
@@ -316,7 +338,9 @@ function lostHint(s, ref) {
     if (h.gap > (currentWord === h.word ? 0.3 : 1)) return h;
     if (ref === SUN) return { word: 'Odota' };
   }
-  if (ref === EARTH && s.trip !== 'kiertorata' && o.speed > 2 && (rightWay(o) < -1 || currentWord === 'Käänny')) {
+  // Either way round is fine on the first trip, and on the way home, which only lands.
+  const home = s.trip === 'kotiin' && s.visited.includes('moon');
+  if (ref === EARTH && s.trip !== 'kiertorata' && !home && o.speed > 2 && (rightWay(o) < -1 || currentWord === 'Käänny')) {
     const h = turnRoundHint(s);
     if (rightWay(o) < -1 || h.gap > 0.5) return h;
   }
@@ -420,11 +444,7 @@ function nextMove(s, path) {
     if (trip === 'kiertorata') {
       // Too high for the goal: brake at the low point until the high point is low enough.
       const o = orbitAround(EARTH, s), top = ORBIT_GOAL.earth.apo + EARTH.radius - 15;
-      if (o.closed && o.apo > ORBIT_GOAL.earth.apo) {
-        const gap = o.speed - apseSpeed(EARTH, o.r, top);
-      if (gap > 0 && (o.alt < o.peri + 6 || (currentWord === 'Jarruta' && o.alt < o.peri + 20))) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.5, gap };
-        return { word: 'Odota', mark: pathExtreme(path, false) };
-      }
+      if (o.closed && o.apo > ORBIT_GOAL.earth.apo) return brakeAtLow(s, path, o, top);
       return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
     }
     if (trip === 'asema') return stationHint(s, path);
@@ -465,11 +485,13 @@ function baseHint(s, path, o, aim) {
   if (hits || o.alt < 6 || (o.closed && o.apo < 8)) return landingHint(MOON, s, path, aim);
   if (!orbitReady(MOON, s)) {
     const slow = moonBrakeGap(o, s.trip) <= 0;
-    if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && (o.alt > 15 || slow)) {
+    // The margin holds only for a push already going sideways: a brake's own thrust must not turn
+    // it into "Sivulle" and back each frame (#548).
+    if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 && currentWord === 'Sivulle' ? 4 : 0) && (o.alt > 15 || slow)) {
       return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: o.alt > 15 ? 0.5 : 1, gap: ORBIT_GOAL.moon.peri + 4 - o.peri, metres: true };
     }
     // A brake begun at the low point goes on until the orbit is round enough.
-    if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, gap: moonBrakeGap(o, s.trip) };
+    if (!slow && (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20))) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, gap: moonBrakeGap(o, s.trip) };
     return { word: 'Odota', mark: pathExtreme(path, false) };
   }
   // How far round the base is, the way the ship goes.
