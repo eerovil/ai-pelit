@@ -422,6 +422,7 @@ window.burns = function (trip) {
     if (key) {
       if (!cur) cur = { word: key, from: s.t, first: h.left, real: 0, tail: 0 };
       cur.to = s.t; cur.last = h.left;
+      // The target scale; the game eases toward it (down within a few frames).
       const k = timeScale(h);
       cur.real += STEP / k;
       if (nearEnd(h)) cur.tail += STEP / k;
@@ -435,7 +436,7 @@ window.burns = function (trip) {
 """
 
 
-@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'mars'])
+@pytest.mark.parametrize('trip', TRIP_IDS)
 def test_a_burn_shows_how_much_is_left_and_ends_slowly(site, context, trip):
     page = open_game(site, context)
     page.add_script_tag(content=BURNS)
@@ -443,6 +444,8 @@ def test_a_burn_shows_how_much_is_left_and_ends_slowly(site, context, trip):
     # A burn that ends by itself, not handed on to another push or begun already done.
     ends = [r for r in runs if r['long'] >= 0.1 and r['first'] == 1 and r.get('next') in ('Odota', 'Päästä irti', 'Valmis!')]
     assert ends, runs
+    # Never an empty bar, "melkein" and the slowest time from a burn's first moment.
+    assert all(r['first'] > 0 for r in runs), runs
     for r in ends:
         # The bar starts full and is about empty when the word changes.
         assert r['last'] < 0.2, r
@@ -466,11 +469,15 @@ def test_the_hint_says_when_a_burn_is_nearly_done_and_when_to_let_go(site, conte
       // The burn done and the push still held: the hint says to let go.
       currentHint = { word: 'Odota' }; updateHud();
       out.stop = el.textContent; out.red = el.classList.contains('stop');
+      // On the first trip the hint itself says it, held on past the end of "Sivulle".
+      for (let i = 0; i < 240 && currentHint.word === 'Sivulle'; i++) { step(STEP); currentHint = hint(ship, path = predictPath(ship)); }
+      updateHud(); out.own = el.textContent; out.ownRed = el.classList.contains('stop');
       ship.thrust = 0; updateHud(); out.after = el.textContent;
       return out; }""")
     assert r['text'].endswith('Sivulle – melkein') and r['near'], r
     assert 0 <= int(r['bar'].rstrip('%')) < 40, r
     assert r['scale'] < 0.35, r
     assert r['stop'].endswith('Päästä irti') and r['red'], r
+    assert r['own'].endswith('Päästä irti') and r['ownRed'], r
     assert 'Päästä irti' not in r['after'], r
     assert page.errors == []

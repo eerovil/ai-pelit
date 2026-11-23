@@ -106,7 +106,7 @@ function updateHud() {
   $('trip-name').textContent = TRIP[ship.trip].name;
   $('fuel-bar').style.width = `${Math.round(fuelShare() * 100)}%`;
   $('fuel').classList.toggle('low', fuelShare() < 0.15);
-  const h = currentHint, letGo = !!h && h.word === 'Odota' && ship.thrust > 0 && !warp, skip = canSkip(h) && !letGo;
+  const h = currentHint, letGo = !!h && ((h.word === 'Odota' && ship.thrust > 0) || h.word === 'Päästä irti') && !warp, skip = canSkip(h) && !letGo;
   // While a wait is skipped the button says so (a tap stops it); otherwise one ⏩ offers the skip.
   let text = h ? (warp && skip ? 'Kelataan' : h.word) : '';
   // A burn shows how much of it is left as a bar draining in the hint, and says when it is nearly
