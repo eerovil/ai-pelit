@@ -88,15 +88,55 @@ function drawBody(b, t, alpha = 1) {
   } else { ctx.fillStyle = '#9c7f62'; ctx.fill(); }
   ctx.restore();
 }
+// The base's parts, drawn standing on the ground (y up from 0) in a box `u` metres to a unit.
+function drawPart(id, u) {
+  if (id === 'paneeli') {
+    ctx.fillStyle = '#9aa3ad'; ctx.fillRect(-0.08 * u, -0.9 * u, 0.16 * u, 0.9 * u);
+    ctx.fillStyle = '#3d7fd6'; ctx.fillRect(-1.1 * u, -1.25 * u, 2.2 * u, 0.42 * u);
+    ctx.strokeStyle = '#a9d1ff'; ctx.lineWidth = Math.max(1, 0.05 * u); ctx.strokeRect(-1.1 * u, -1.25 * u, 2.2 * u, 0.42 * u);
+  } else if (id === 'tankki') {
+    ctx.fillStyle = '#eef2f5'; ctx.beginPath(); ctx.ellipse(0, -0.75 * u, 0.75 * u, 0.75 * u, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#e2574c'; ctx.fillRect(-0.75 * u, -0.82 * u, 1.5 * u, 0.14 * u);
+  } else if (id === 'tehdas') {
+    ctx.fillStyle = '#c9b27a'; ctx.fillRect(-0.9 * u, -1 * u, 1.8 * u, 1 * u);
+    ctx.fillStyle = '#8b7b55'; ctx.fillRect(0.35 * u, -1.6 * u, 0.3 * u, 0.6 * u);
+    ctx.fillStyle = '#ffd65a'; ctx.fillRect(-0.6 * u, -0.7 * u, 0.4 * u, 0.3 * u);
+  }
+}
+// Where each part stands in the base, as an angle off its middle (radians round the Moon).
+const PART_SPOT = { paneeli: -0.22, tankki: 0, tehdas: 0.22 };
+function drawBase(s, now) {
+  const m = bodyAt(MOON, s.t), r = MOON.radius * cam.scale;
+  if (r < 6) return;
+  const trip = TRIP[s.trip];
+  // The zone to land in, glowing on a part trip.
+  if (trip.part) {
+    const a0 = BASE.a - BASE.zone, a1 = BASE.a + BASE.zone;
+    ctx.save(); ctx.beginPath(); ctx.arc(sx(m.x), sy(m.y), r + 2, a0 - Math.PI / 2, a1 - Math.PI / 2);
+    ctx.strokeStyle = `rgba(255,214,90,${0.5 + 0.4 * pulse(now)})`; ctx.lineWidth = Math.max(3, cam.scale * 0.3); ctx.stroke(); ctx.restore();
+  }
+  for (const id of Object.keys(PART_SPOT)) {
+    if (!baseBuilt(id) && !(ship.phase === 'done' && ship.trip === id)) continue;
+    const a = BASE.a + PART_SPOT[id];
+    ctx.save(); ctx.translate(sx(m.x + Math.sin(a) * MOON.radius), sy(m.y + Math.cos(a) * MOON.radius)); ctx.rotate(a);
+    drawPart(id, Math.max(1.2 * cam.scale, 3)); ctx.restore();
+  }
+}
+// The rockets: Raketti white and red; Kiitäjä slim and blue; Rahtiraketti wide and grey. A part
+// on its way rides on the nose.
 function drawShip(s) {
-  const x = sx(s.x), y = sy(s.y), len = Math.max(16, SHIP.size * 2.4 * cam.scale);
+  const kind = TRIP[s.trip].rocket || 'raketti', x = sx(s.x), y = sy(s.y), len = Math.max(16, SHIP.size * 2.4 * cam.scale);
+  const wide = kind === 'rahti' ? 1.35 : kind === 'kiitaja' ? 0.8 : 1;
   ctx.save(); ctx.translate(x, y); ctx.rotate(s.angle);
   if (s.thrust > 0) {
     const f = len * (0.4 + 0.6 * s.thrust / SHIP.acc) * (0.85 + Math.random() * 0.3);
-    ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.moveTo(-len * 0.18, len * 0.4); ctx.lineTo(0, len * 0.4 + f); ctx.lineTo(len * 0.18, len * 0.4); ctx.fill();
+    ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.moveTo(-len * 0.18 * wide, len * 0.4); ctx.lineTo(0, len * 0.4 + f); ctx.lineTo(len * 0.18 * wide, len * 0.4); ctx.fill();
   }
-  ctx.fillStyle = '#f3f6f8'; ctx.beginPath(); ctx.moveTo(0, -len * 0.55); ctx.lineTo(len * 0.22, len * 0.25); ctx.lineTo(-len * 0.22, len * 0.25); ctx.fill();
-  ctx.fillStyle = '#e2574c'; ctx.beginPath(); ctx.moveTo(len * 0.22, len * 0.25); ctx.lineTo(len * 0.34, len * 0.45); ctx.lineTo(-len * 0.34, len * 0.45); ctx.lineTo(-len * 0.22, len * 0.25); ctx.fill();
+  ctx.fillStyle = kind === 'rahti' ? '#c3cad1' : '#f3f6f8';
+  ctx.beginPath(); ctx.moveTo(0, -len * 0.55); ctx.lineTo(len * 0.22 * wide, len * 0.25); ctx.lineTo(-len * 0.22 * wide, len * 0.25); ctx.fill();
+  ctx.fillStyle = kind === 'kiitaja' ? '#3d9be0' : kind === 'rahti' ? '#e89a3c' : '#e2574c';
+  ctx.beginPath(); ctx.moveTo(len * 0.22 * wide, len * 0.25); ctx.lineTo(len * 0.34 * wide, len * 0.45); ctx.lineTo(-len * 0.34 * wide, len * 0.45); ctx.lineTo(-len * 0.22 * wide, len * 0.25); ctx.fill();
+  if (TRIP[s.trip].part && s.phase !== 'done') { ctx.translate(0, -len * 0.42); drawPart(s.trip, len * 0.24); }
   ctx.restore();
 }
 function drawStation(s) {
@@ -190,6 +230,7 @@ function draw(h, now = performance.now()) {
   for (const b of [MOON, ROCK]) ring(sx(0), sy(0), b.orbit.r * cam.scale, 'rgba(255,255,255,.08)', 1);
   if (ship.trip === 'asema') ring(sx(0), sy(0), STATION.r * cam.scale, 'rgba(127,182,232,.2)', 1, [3, 5]);
   for (const b of BODIES) drawBody(b, ship.t);
+  drawBase(ship, now);
   if (ship.trip === 'asema') drawStation(ship);
   drawPath(ship, path, h, now);
   drawHint(ship, h, now);

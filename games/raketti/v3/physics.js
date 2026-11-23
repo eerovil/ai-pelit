@@ -22,9 +22,20 @@ for (const b of BODIES) if (b.orbit) b.orbit.n = Math.sqrt(EARTH.mu / b.orbit.r 
 // The station circles 40 m above Earth; touching it slowly docks.
 const STATION = { r: 100, phase: 0.9, dock: 3, speed: 3 };
 STATION.n = Math.sqrt(EARTH.mu / STATION.r ** 3);
-// The ship: engine up to 32 m/s² (over twice Earth's pull), 260 m/s of fuel (Δv), and a nose
-// that turns 9 rad/s toward the finger. `size` is how far its legs reach from its middle.
-const SHIP = { acc: 32, dv: 340, turn: 14, size: 0.8 };
+// The rockets: engine push (m/s²; Earth pulls 14), fuel as Δv (m/s), how fast the nose turns
+// toward the finger (rad/s) and how far its legs reach from its middle. Each trip names its
+// rocket; a cargo rocket carrying a big part of the Moon base pushes and turns slower (#548).
+const ROCKETS = {
+  raketti: { name: 'Raketti', acc: 32, dv: 340, turn: 14, size: 0.8 },
+  kiitaja: { name: 'Kiitäjä', acc: 38, dv: 340, turn: 18, size: 0.7 },
+  rahti: { name: 'Rahtiraketti', acc: 21, dv: 400, turn: 5, size: 1.1 },
+};
+// The rocket of the flight on screen.
+const SHIP = Object.assign({}, ROCKETS.raketti);
+function useRocket(id) { Object.assign(SHIP, ROCKETS[id] || ROCKETS.raketti); }
+// The Moon base stands on top of the Moon (the Moon never turns), in a zone this wide (radians).
+const BASE = { a: 0, zone: 0.4 };
+const REFUEL = 120; // m/s of Δv a second while the ship stands at a finished base
 var turnScale = 1;
 const STEP = 1 / 120;
 const SAVE_KEY = 'ai-pelit:raketti:matka', STARS_KEY = 'ai-pelit:raketti:tahdet';
@@ -98,7 +109,8 @@ function stationRelative(s = ship) {
 
 function freshFlight(trip = 'kiertorata') {
   // The pad stands on top of Earth; the ship stands on it with its nose up.
-  return { trip, t: 0, x: 0, y: EARTH.radius + SHIP.size, vx: 0, vy: 0, angle: 0, dv: SHIP.dv,
+  const r = ROCKETS[TRIP[trip].rocket || 'raketti'], dv = r.dv * (TRIP[trip].tank || 1);
+  return { trip, t: 0, x: 0, y: EARTH.radius + r.size, vx: 0, vy: 0, angle: 0, dv, refuel: false,
     thrust: 0, coast: 0, phase: 'flight', landedOn: { id: 'earth', a: 0 }, visited: ['earth'],
     touch: null, reason: '', stars: 0, docked: false };
 }
@@ -119,6 +131,8 @@ function contact(s) {
       return;
     }
     s.landedOn = { id: b.id, a }; s.angle = a;
+    // A finished base fills the tank of a ship that lands in it.
+    if (b === MOON && atBase(a) && baseReady()) s.refuel = true;
     if (!s.visited.includes(b.id)) s.visited.push(b.id);
     sitOn(s, b, a);
     return;
@@ -155,8 +169,9 @@ function step(dt = STEP) {
   if (s.landedOn) {
     const b = BODY[s.landedOn.id], up = s.landedOn.a;
     s.t += dt;
+    if (s.refuel && s.dv < SHIP.dv) { s.dv = Math.min(SHIP.dv, s.dv + REFUEL * dt); s.coast = 0; }
     if (tx * Math.sin(up) + ty * Math.cos(up) > b.g) {
-      s.landedOn = null;
+      s.landedOn = null; s.refuel = false;
       const p = bodyAt(b, s.t), r = b.radius + SHIP.size + 0.05;
       s.x = p.x + r * Math.sin(up); s.y = p.y + r * Math.cos(up);
       s.vx = p.vx + Math.sin(up) * 0.5; s.vy = p.vy + Math.cos(up) * 0.5;
@@ -235,9 +250,10 @@ function readFlight() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (!s || typeof s !== 'object' || !TRIP[s.trip] || s.phase !== 'flight') return null;
     for (const k of ['t', 'x', 'y', 'vx', 'vy', 'angle', 'dv', 'coast']) if (!Number.isFinite(s[k])) return null;
-    if (s.t < 0 || s.dv < 0 || s.dv > SHIP.dv || Math.hypot(s.x, s.y) > 5000) return null;
+    const rocket = ROCKETS[TRIP[s.trip].rocket || 'raketti'];
+    if (s.t < 0 || s.dv < 0 || s.dv > rocket.dv || Math.hypot(s.x, s.y) > 5000) return null;
     if (!Array.isArray(s.visited) || s.visited.some(v => !BODY[v])) return null;
     if (s.landedOn !== null && !(s.landedOn && BODY[s.landedOn.id] && Number.isFinite(s.landedOn.a))) return null;
-    return Object.assign(freshFlight(s.trip), s, { thrust: 0 });
+    return Object.assign(freshFlight(s.trip), s, { thrust: 0, refuel: !!s.refuel });
   } catch (_) { return null; }
 }

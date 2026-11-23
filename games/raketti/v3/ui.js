@@ -80,6 +80,7 @@ function openMenu() {
   renderMenu(); showPanel('menu');
 }
 function begin(s) {
+  useRocket(TRIP[s.trip].rocket);
   ship = s; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
   releaseStick(); showPanel(null); updateHud(); saveFlight(); play();
 }
@@ -184,4 +185,5 @@ addEventListener('pagehide', () => { if (ship && ship.phase === 'flight') saveFl
 
 stars = readStars();
 ship = readFlight() || freshFlight('kiertorata');
+useRocket(TRIP[ship.trip].rocket);
 renderMenu(); showPanel('menu'); play();
