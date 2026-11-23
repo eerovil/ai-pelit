@@ -1,33 +1,73 @@
 # Raketti flight model
 
-Raketti v2 follows the approved manual, two-dimensional launch → orbit → docking mission. The player chose maximum realism, a 2D view, and no autopilot. Earth, a coplanar station at 400 km, two stages, coasting time acceleration and resumable flight were assumptions in the approved scope. The practice starts are an implementation assumption: they make the three stages learnable without repeatedly spending eight minutes on launch, and never earn full-flight achievements.
+Raketti v3 (#548) replaces v2's real-scale Earth with tiny bodies, one finger and short trips. The
+owner found v2 too realistic: too hard and too slow. They chose a new version (v2 deleted), tiny
+bodies seen in one view that zooms by itself, a one-finger drag stick, short trips with no time
+warp, then a Moon base built one part a trip and a real journey to Mars. There is still no
+autopilot: the player flies every push, and the hint at the bottom says what to do next.
 
-The mission starts on a rotating Earth. The station starts at −0.20336 radians from the launch meridian, a launch window that brings the handbook ascent close to the station near its next apoapsis; a different manual ascent still needs the player to correct phasing. Nothing steers, stages, fires an engine or matches station velocity for the player. Instruments calculate the current orbit and explain the next task; the test-only scripted pilot is never shipped with the game.
+## The world
 
-## Equations and references
+Game metres and seconds, in a 2D frame centred on Earth: +y is up from the launch pad, angles run
+clockwise from straight up, as a drag on the screen does. Earth stands still; the Moon and the rock
+circle it; Earth circles the Sun, so in this frame the Sun and Mars move round Earth.
 
-All state uses metres, seconds and kilograms in Earth-centred inertial coordinates. The gravitational parameter is 3.986004418 × 10¹⁴ m³/s²; the spherical Earth radius is 6,371,000 m. Positive x points east at launch, positive y points outward from Earth's centre; angles run clockwise from positive y.
+| Body | Radius | Surface pull | Where | Sphere | Safe landing |
+|---|---|---|---|---|---|
+| Earth (Maa) | 60 | 14 | middle | 1100 | 6 m/s |
+| Moon (Kuu) | 16 | 9.5 | 420 from Earth | 125 | 5 m/s |
+| Rock (Pikkukivi) | 4 | 0.5 | 250 from Earth | 24 | 3 m/s |
+| Sun (Aurinko) | 320 | — | Earth circles it at AU = 8000, year 420 s | everywhere else | — |
+| Mars | 30 | 7 | 1.524 AU from the Sun | 500 | 5 m/s |
 
-- Central gravity: **a = −μ r / |r|³**. The station moves on a circular orbit with **v = √(μ/r)** and **n = √(μ/r³)**. Orbital energy and angular momentum determine periapsis and apoapsis; reaching altitude alone does not mean reaching orbit. [NASA: Flight to Orbit](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/flight-to-orbit/).
-- Propellant consumption: **ṁ = F / (Isp g₀)**, with thrust limited to the remaining fuel. Dry and propellant mass contribute to acceleration; staging discards the first stage. [NASA: Ideal Rocket Equation](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ideal-rocket-equation/).
-- Atmospheric drag: **D = ½ ρ v² Cd A**, opposing velocity relative to the co-rotating atmosphere. [NASA: Drag Equation](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/drag-equation/).
-- Manual turning applies torque divided by the vehicle's moment of inertia. There is no vacuum damping. Translation thrusters act in body coordinates and consume a separate propellant supply.
-- Docking compares nose position and velocity to the station's moving port, including the rotational velocity of each. Capture needs <1.2 m separation, ≤0.25 m/s relative speed, ≤5° alignment error and ≤0.01 rad/s relative spin, approached from the port's front. These are gameplay engineering assumptions, not a claim about an actual docking system. The entire vehicle segment and the previous/current nose, centre and tail trajectories are checked against station solids and the port ring, so fast contact cannot skip an obstacle between ticks.
+The station circles 100 from Earth's middle; it docks within 3 m at up to 3 m/s. The Moon base
+stands on top of the Moon (it never turns) and takes a landing within ±0.4 rad of it.
 
-The fictional launch vehicle starts at 500 tonnes. Stage 1 carries 295 tonnes propellant and 35 tonnes dry mass, with 7 MN thrust and 300–335 s specific impulse. Stage 2 carries 140 tonnes propellant, 29 tonnes dry mass including payload, and 1 tonne RCS propellant, with 1.9 MN thrust and 450 s specific impulse. There is enough delta-v for orbital insertion and rendezvous; consumption and the discarded mass are simulated rather than awarded at milestones.
+## Pull: one body at a time
 
-## Numerical and physical limits
+Inside the Moon's, the rock's or Mars's sphere only that body pulls, and the ship is carried along
+with it; inside Earth's sphere only Earth; further out only the Sun (patched conics). So an orbit
+never drifts by itself, and the numbers the hints read (lowest and highest point) are exact.
 
-Velocity Verlet uses at most 0.25 s coasting steps, reduced to 0.02 s under thrust, during turning or within 1 km of the station. Time acceleration still runs every substep. The player can choose ×1, ×2 and ×5 during launch, thrust and steering. ×10 and ×100 remain available only above 150 km, beyond 5 km from the station, with engines and thrusters off and angular speed below 0.01 rad/s. Outside those coasting conditions a higher selected rate drops to ×5, not back up automatically. Within 20 m of the port it returns to real time; this cutoff is an implementation assumption for final contact, stated on screen. Pausing and resuming use ×1. Existing v1 saves and achievements use the same keys and shape unchanged.
+## Rockets
 
-This is a planar, spherical-Earth two-body simulation, not a validated aerospace training simulator. It omits the Moon, non-spherical gravity, lift, propellant slosh and real engine operating limits. The atmosphere is a scale-height exponential with an altitude cutoff. Passive aerodynamic stability, dynamic-pressure failure and a heat proxy are deliberately simplified. Graphics enlarge the craft; the instruments and collision model use metres. The craft has no re-entry heat shield.
+Each trip names its rocket (`ROCKETS` in `physics.js`): push in m/s², fuel as Δv in m/s, and how
+fast the nose turns toward the finger.
 
-## Flight verification
+| Rocket | Push | Fuel | Turn | Trips |
+|---|---|---|---|---|
+| Raketti | 32 | 340 | 14 rad/s | the first six, Mars (40 % full at the start) |
+| Kiitäjä | 38 | 340 | 18 rad/s | the solar panel |
+| Rahtiraketti | 21 | 400 | 5 rad/s | the fuel tank and the fuel factory |
 
-`tests/test_raketti_v2.py` contains a test-only pilot which operates the same DOM controls as a player. Its reference launch starts nearly vertical, aims about 20° from vertical at 10 km, 40° at 40 km, 65° at 100 km and 80° at 200 km, stages manually, and performs orbital insertion. This is a feasibility check rather than an autopilot available to the player. The full non-practice mission test continues that launch through a coast, main-engine rendezvous and RCS docking in both orientations, using only the manual DOM controls and physics steps. Separate checks exercise repeat practice docking, high-speed and tail-first contacts, an orbit period, fuel consumption, immediate warp cancellation, saves, offline play and touch layouts.
+## Control
 
-## Faster flight (v2)
+The finger's drag from where it touched is the stick: its direction is where the nose turns, and its
+length the push, as the square of the drag past an 8 px dead zone, full at 80 px. The engine pushes
+only once the nose is within 60° of the drag, less the further off it is. A ship standing on a body
+lifts off only when its push up beats the pull.
 
-Chosen by the owner: acceleration also while not coasting; selectable ×1/×2/×5 under thrust and steering; ×10/×100 for coasting; manual controls, unchanged physics and existing saves; real time near docking contact, with the limit visible.
+## Steps and time
 
-Assumed (change if the build shows better; say so in the pull request): the final-contact cutoff is 20 m nose-to-port distance; disallowed ×10/×100 is capped at ×5; manual staging preserves ×2/×5. The time button cycles through the currently permitted rates.
+Velocity Verlet with the push held over each fixed 1/120 s step. Time runs at 1 normally, eases to
+0.5 while the engine burns and to 0.35 for fine moves (a correction, the last metres of a landing or
+docking, the end of a wait); the nose turns as fast on screen however slow time runs. A wait with a
+known length ("Odota 12 s") can be skipped with a tap: the flight then runs faster until a second
+before its end (Mars's waits are minutes long). There is no other time warp.
+
+## Mars
+
+The Mars trip starts with 40 % of a tank, flies to the Moon base and fills up there at 120 m/s a
+second (the base must be built; only this trip refuels there). Its window opens about 150 s in; the hint counts it down. From the
+Moon it pushes out along Earth's own way round the Sun, so the ship leaves Earth's sphere onto a
+half-ellipse out to Mars's circle; out round the Sun small corrections bend the path past Mars,
+and it lands there like on the Moon. A whole trip followed by the hints takes about 9 minutes.
+
+## Stars and saves
+
+A trip gives a star for arriving, one for fuel left over its limit, and one for a soft finish (a
+landing at half the safe speed or slower, a docking at 1.5 m/s or slower, an orbit with eccentricity
+0.25 or less). A trip opens once the one before it has a star; Mars therefore opens after the whole
+base. The flight in progress is saved under `ai-pelit:raketti:matka`, and stars under
+`ai-pelit:raketti:tahdet`. A saved flight is resumed only when every number in it makes sense, so
+v2's saves (another shape) are left unread.

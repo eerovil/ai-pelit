@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#050b14">
+<title>Raketti</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c" aria-label="Raketin lento"></canvas>
+<header id="hud">
+  <span id="trip-name"></span>
+  <span id="fuel" aria-label="Polttoaine"><i id="fuel-bar"></i></span>
+  <button id="pause" aria-label="Tauko">Ⅱ</button>
+</header>
+<p id="hint" aria-live="polite"></p>
+<div id="overlay" class="overlay">
+  <section class="panel" id="menu">
+    <h1>RAKETTI</h1>
+    <p class="tip">Vedä sormella sinne, minne haluat lentää.</p>
+    <p id="star-total"></p>
+    <button id="resume" class="primary" hidden>Jatka</button>
+    <div id="trips" aria-label="Matkat"></div>
+  </section>
+  <section class="panel" id="pause-panel" hidden>
+    <h2>Tauko</h2>
+    <button id="continue" class="primary">Jatka</button>
+    <button id="to-menu">Valikkoon</button>
+  </section>
+  <section class="panel" id="replace-panel" hidden>
+    <h2>Uusi matka?</h2>
+    <p id="replace-text" class="tip"></p>
+    <button id="replace-yes" class="primary">Aloita uusi</button>
+    <button id="replace-no">Takaisin</button>
+  </section>
+  <section class="panel" id="result" hidden>
+    <h2 id="result-title"></h2>
+    <p id="result-stars" class="stars"></p>
+    <p id="result-reason"></p>
+    <ul id="result-list"></ul>
+    <button id="result-next" class="primary">Seuraava matka</button>
+    <button id="retry">Uudestaan</button>
+    <button id="result-menu">Valikkoon</button>
+  </section>
+</div>
+<script src="physics.js"></script>
+<script src="trips.js"></script>
+<script src="draw.js"></script>
+<script src="ui.js"></script>
+<script src="../../../back.js"></script>
+</body>
+</html>
