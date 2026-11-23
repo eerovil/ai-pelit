@@ -69,7 +69,28 @@ function landingPush(b, s) {
   const ax = (ux * want - vx) * 2.5 + ux * g, ay = (uy * want - vy) * 2.5 + uy * g;
   return { dir: angleOf(ax, ay), power: clamp(Math.hypot(ax, ay) / SHIP.acc, 0, 1) };
 }
-function landingHint(b, s) {
+// The fastest the ship may move this high above b and still stop gently with part of its push.
+function landingLimit(b, alt) {
+  const g = b.mu / (b.radius + Math.max(0, alt)) ** 2;
+  return b.land / 6 + Math.sqrt(2 * 0.3 * (SHIP.acc - g) * Math.max(0, alt - 3));
+}
+// Landing on b. Falling costs nothing, so the hint waits while the ship is slow enough for its
+// height and brakes only once it is not (#548: braking early wasted fuel), marking on the path
+// where the braking starts. A path that misses b is first bent down to it.
+function landingHint(b, s, path) {
+  const p = bodyAt(b, s.t), x = s.x - p.x, y = s.y - p.y, alt = Math.hypot(x, y) - b.radius;
+  const vx = s.vx - p.vx, vy = s.vy - p.vy, speed = Math.hypot(vx, vy), limit = landingLimit(b, alt);
+  const braking = s.thrust > 0 && speed > limit * 0.75;
+  const hits = path && path.frame === b && path.hit && path.hit.body === b.id;
+  if (alt > 3 && path && path.frame === b && !hits && !braking) {
+    return { word: 'Jarruta', dir: angleOf(vx, vy) + Math.PI, power: 0.4, speed: b };
+  }
+  if (alt > 3 && speed < limit && !braking) {
+    const f = bodyAt(b, s.t);
+    const start = hits && path.points.find(q => Math.hypot(q.vx, q.vy) > landingLimit(b, Math.hypot(q.x - f.x, q.y - f.y) - b.radius));
+    if (start) return { word: 'Odota', mark: start, wait: Math.max(0, start.t - s.t), speed: b };
+    return { word: 'Odota', speed: b };
+  }
   const push = landingPush(b, s);
   return { word: 'Hiljaa alas', dir: push.dir, power: push.power, speed: b };
 }
@@ -149,7 +170,7 @@ function nextMove(s, path) {
   const ref = refBody(s), trip = s.trip, home = trip === 'kotiin' && s.visited.includes('moon');
   if (ref === EARTH && home) {
     const c = path && path.closest.earth;
-    if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s);
+    if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s, path);
     if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
     const o = orbitAround(EARTH, s);
     return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.6 };
@@ -162,7 +183,7 @@ function nextMove(s, path) {
     if (trip === 'kivi') return transferHint(s, path, bodyAt(ROCK, s.t), ROCK.orbit.r, ROCK.orbit.n, 6, 'rock');
     return transferHint(s, path, bodyAt(MOON, s.t), MOON.orbit.r, MOON.orbit.n, 25, 'moon');
   }
-  if (ref === ROCK) return landingHint(ROCK, s);
+  if (ref === ROCK) return landingHint(ROCK, s, path);
   // Near the Moon.
   const o = orbitAround(MOON, s), pro = angleOf(o.vx, o.vy), low = pathExtreme(path, false);
   if (home) {
@@ -174,7 +195,7 @@ function nextMove(s, path) {
   }
   // A long oval counts too, but the hint brakes on at the low point for a rounder one.
   if (trip === 'kuu-kierto' && orbitReady(MOON, s) && (o.apo < 35 || o.alt > o.peri + 6)) return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
-  if (trip !== 'kuu-kierto' && (o.alt < 25 || (o.closed && o.apo <= ORBIT_GOAL.moon.apo))) return landingHint(MOON, s);
+  if (trip !== 'kuu-kierto' && (o.alt < 25 || (o.closed && o.apo <= ORBIT_GOAL.moon.apo))) return landingHint(MOON, s, path);
   if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && o.alt > 15 && trip === 'kuu-kierto') {
     return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5 };
   }

@@ -45,7 +45,7 @@ function moveCamera(dt, h) {
   const wide = Math.max(1, view.w - 160);
   const scale = (t.aspect ? usable : Math.min(usable, wide)) / (2 * t.half);
   if (!camReady) { cam = { x: t.x, y: t.y, scale }; camReady = true; return; }
-  const k = 1 - Math.exp(-dt * 3);
+  const k = 1 - Math.exp(-dt * 4);
   cam.x += (t.x - cam.x) * k; cam.y += (t.y - cam.y) * k;
   cam.scale = Math.exp(Math.log(cam.scale) + (Math.log(scale) - Math.log(cam.scale)) * k);
 }
@@ -60,7 +60,7 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   view.w = w; view.h = h;
   const land = w > h;
-  view.top = land ? 48 : 56; view.bottom = land ? 64 : 96;
+  view.top = land ? 48 : 56; view.bottom = land ? 70 : 110;
 }
 
 function drawBody(b, t, alpha = 1) {

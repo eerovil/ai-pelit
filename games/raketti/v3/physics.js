@@ -181,7 +181,7 @@ function predictPath(s = ship, horizon = 90, dt = 0.05) {
     const g1 = gravity(x, y, t);
     vx += 0.5 * (g0.ax + g1.ax) * dt; vy += 0.5 * (g0.ay + g1.ay) * dt;
     const f = bodyAt(frame, t);
-    if (i % 2 === 0) out.points.push({ x: x - f.x + f0.x, y: y - f.y + f0.y, t });
+    if (i % 2 === 0) out.points.push({ x: x - f.x + f0.x, y: y - f.y + f0.y, t, vx: vx - f.vx, vy: vy - f.vy });
     for (const b of BODIES) {
       const p = bodyAt(b, t), d = Math.hypot(x - p.x, y - p.y) - b.radius;
       const c = out.closest[b.id];
