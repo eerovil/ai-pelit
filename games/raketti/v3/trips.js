@@ -100,7 +100,7 @@ function transferHint(s, path, target, r2, n2, close, id) {
     if (wait < 0.12 || s.thrust > 0 && o.apo > 60) {
       return { word: 'Kiihdytä', dir: pro, power: clamp((r2 - o.apo - EARTH.radius) / 60, 0.15, 1) };
     }
-    return { word: 'Odota', target: id };
+    return { word: 'Odota', target: id, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - n2) };
   }
   // Far off: lower the high point again at the low point and wait for the next window.
   if (o.alt < o.peri + 10) return { word: 'Jarruta', dir: pro + Math.PI, power: 0.5 };
@@ -114,7 +114,17 @@ function ascentHint(s, path) {
   if (o.vr < 1.5 || o.alt > o.apo - 3 || (s.thrust > 0 && o.alt > o.apo - 12)) return { word: 'Sivulle', dir: up + side * Math.PI / 2, power: 1 };
   return { word: 'Odota', mark: pathExtreme(path, true) };
 }
+// The hint, and for a wait, how many seconds until the next thing to do (when that is known:
+// a window opening, the path's high or low point, the closest pass). A tap on "Odota" skips it.
 function hint(s = ship, path = null) {
+  const h = nextMove(s, path);
+  if (h.word === 'Odota' && h.wait === undefined) {
+    const t = h.ghost ? h.ghost.t : h.mark ? h.mark.t : undefined;
+    if (t !== undefined) h.wait = Math.max(0, t - s.t);
+  }
+  return h;
+}
+function nextMove(s, path) {
   if (!s) return { word: '' };
   if (s.phase === 'done') return { word: 'Valmis!' };
   if (s.phase === 'crashed') return { word: 'Rysähti!' };
@@ -123,7 +133,7 @@ function hint(s = ship, path = null) {
   if (ref === EARTH && home) {
     const c = path && path.closest.earth;
     if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s);
-    if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y } };
+    if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
     const o = orbitAround(EARTH, s);
     return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.6 };
   }
@@ -141,7 +151,7 @@ function hint(s = ship, path = null) {
   if (home) {
     const c = path && path.closest.earth;
     if (o.alt < 4) return { word: 'Ylös', dir: angleOf(o.x, o.y), power: 1 };
-    if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y } };
+    if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
     const m = bodyAt(MOON, s.t);
     return { word: 'Kohti Maata', dir: angleOf(-m.vx, -m.vy), power: 1 };
   }
@@ -167,7 +177,7 @@ function stationHint(s, path) {
   if (o.apo + EARTH.radius < STATION.r - 2) {
     const wait = ((aheadOf(st, s, side) - transferLead(o.r, STATION.r, STATION.n)) % TAU + TAU) % TAU;
     if (wait < 0.12 || s.thrust > 0) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.3 };
-    return { word: 'Odota', station: true };
+    return { word: 'Odota', station: true, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - STATION.n) };
   }
   if (o.apo + EARTH.radius > STATION.r + 6 && o.alt < o.peri + 6) {
     return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3 };
