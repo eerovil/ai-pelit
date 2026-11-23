@@ -73,7 +73,7 @@ function landingHint(b, s) {
   const push = landingPush(b, s);
   return { word: 'Hiljaa alas', dir: push.dir, power: push.power, speed: b };
 }
-// Lowest or highest point of the path drawn, in the frame it is drawn in.
+// The path's next lowest or highest point, in the frame it is drawn in.
 function pathExtreme(path, high) {
   if (!path || !path.points.length) return null;
   const f = bodyAt(path.frame, ship ? ship.t : 0);
@@ -81,6 +81,7 @@ function pathExtreme(path, high) {
   for (const p of path.points) {
     const r = Math.hypot(p.x - f.x, p.y - f.y);
     if (high ? r > bestR : r < bestR) { bestR = r; best = p; }
+    else if (Math.abs(r - bestR) > 0.5) break; // the first high (or low) point, not one rounds later
   }
   return best;
 }

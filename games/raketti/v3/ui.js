@@ -5,7 +5,8 @@ const $ = id => document.getElementById(id);
 // of the drag past a small dead zone, so a short drag is fine control).
 const STICK_RANGE = 80, STICK_DEAD = 8;
 // warp: a skipped wait runs the flight faster until the next thing to do.
-var warp = false, frameId = 0, lastFrame = 0, acc = 0, frames = 0, saveTimer = 0, currentHint = null, endShownAt = 0, sound = null;
+// slow: how fast the flight runs (1 normal), eased down for fine moves.
+var warp = false, slow = 1, frameId = 0, lastFrame = 0, acc = 0, frames = 0, saveTimer = 0, currentHint = null, endShownAt = 0, sound = null;
 
 function setStick(dx, dy) {
   const len = Math.hypot(dx, dy), k = len > STICK_RANGE ? STICK_RANGE / len : 1;
@@ -79,7 +80,7 @@ function openMenu() {
   renderMenu(); showPanel('menu');
 }
 function begin(s) {
-  ship = s; paused = false; warp = false; camReady = false; path = null; endShownAt = 0; acc = 0;
+  ship = s; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
   releaseStick(); showPanel(null); updateHud(); saveFlight(); play();
 }
 function startFlight(trip) { begin(freshFlight(trip)); }
@@ -91,6 +92,7 @@ function updateHud() {
   $('fuel').classList.toggle('low', fuelShare() < 0.15);
   const h = currentHint, skip = canSkip(h);
   let text = h ? h.word : '';
+  if (text && slow < 0.8) text = `🐢 ${text}`;
   if (h && h.word === 'Odota' && h.wait >= 1.5) text += ` ${Math.ceil(h.wait)} s`;
   if (skip) text += warp ? ' ⏩⏩' : ' ⏩';
   if ($('hint').textContent !== text) $('hint').textContent = text;
@@ -119,6 +121,15 @@ function canSkip(h) {
   return !!h && h.word === 'Odota' && !!ship && ship.phase === 'flight' && !paused && !ship.landedOn
     && (h.wait === undefined || h.wait >= 2.5);
 }
+// Time slows for the fine moves: the last metres of a landing, docking, a course correction,
+// a gentle push, and the moment a wait ends, so a small drag has time to do a small thing.
+function wantsSlow(h, s = ship) {
+  if (!h || !s || s.phase !== 'flight' || s.landedOn) return false;
+  if (h.word === 'Korjaa' || h.word === 'Kohti asemaa') return true;
+  if (h.word === 'Odota') return h.station && stationRelative(s).dist < 30 || (h.wait !== undefined && h.wait < 1.5);
+  if (h.word === 'Hiljaa alas') return nearestSurface(s).alt < 20;
+  return h.dir !== undefined && (h.power ?? 1) < 0.5;
+}
 function warpStep(dt) {
   // Any wait passes in about two seconds; never run past the moment the wait ends.
   const w = currentHint && currentHint.wait;
@@ -129,7 +140,8 @@ function frame(now) {
   frameId = requestAnimationFrame(frame);
   const dt = Math.min(0.05, Math.max(0, (now - (lastFrame || now)) / 1000)); lastFrame = now;
   if (ship && !paused && ship.phase === 'flight') {
-    acc += warp ? warpStep(dt) : dt;
+    slow += ((warp || !wantsSlow(currentHint) ? 1 : 0.35) - slow) * (1 - Math.exp(-dt * 5));
+    acc += warp ? warpStep(dt) : dt * slow;
     while (acc >= STEP && ship.phase === 'flight') {
       step(STEP); acc -= STEP;
       if (ship.phase === 'flight' && goalMet(ship)) endFlight(TRIP[ship.trip].goal, true);
