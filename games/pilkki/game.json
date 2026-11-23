@@ -44,6 +44,13 @@
       "note": "Kovimmat äänet on vaihdettu pehmeämpiin tai hiljennetty.",
       "request": "Osa äänistä on häiritseviä edelleen. Esim cheer",
       "issue": "eerovil/ai-pelit#355"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-22",
+      "note": "Kaverit liukuvat jäällä tasaisesti eivätkä hypi paikasta toiseen.",
+      "request": "Moninpelissä muiden kalastajien paikka tulee vain kerran sekunnissa (`me`-viesti), joten kaveri hyppää jäällä paikasta toiseen. Piirrä muut kalastajat `lib/sulava-1`:n kautta niin, että he liukuvat tasaisesti (kuten #480:ssa, mallina Last Signal v17). Lähetystiheyttä voi tarvittaessa nostaa.\n\nJatkoa #480:lle.",
+      "issue": "eerovil/ai-pelit#536"
     }
   ]
 }

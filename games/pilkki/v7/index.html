@@ -74,6 +74,8 @@
      and with the loudest sounds quieter -->
 <!-- v6 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
+<!-- v7 (#536): the friends on the ice glide between the spots their phones send -->
+<script src="../../../lib/sulava-1/sulava.js"></script>
 <script>
 'use strict';
 const c = document.getElementById('c'), x = c.getContext('2d');
@@ -615,7 +617,7 @@ const WALK = 6;  // m/s on the ice
 let fish = [], jigD = 0, jigGoal = null, jigKick = 0, lastDepth = 2, drill = 0;
 let beat = 0, lastTwitch = -9, playT = 0, target = null, biter = null, fight = null, landed = null;
 let myG = 0, myN = 0, myBig = null, rivals = [], texts = [], baitOpen = false, hookedOnce = false;
-let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {}, pSeq: 0, pReceived: 0, parts: null };
+let net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {}, pSeq: 0, pReceived: 0, parts: null, glide: {}, atT: 0, stillT: 0 };
 const playing = () => ['ice', 'drill', 'jig', 'bite', 'fight', 'caught', 'snap', 'bait'].includes(phase);
 // Each version keeps its unfinished contest under its own key (v1 'kisa', v2 'kisa2'): the saved
 // fish differ, so one version never reads another's.
@@ -630,7 +632,7 @@ function newRival(name, a) { const [px, py] = shorePoint(a); return { name, g: 0
 const hole = (px, py, by, known) => ({ x: px, y: py, depth: depthAt(px, py), known: !!known || radar !== 'ei', drilled: true, by });
 
 function newContest(resume) {
-  net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {}, pSeq: 0, pReceived: 0, parts: null };
+  net = { on: false, round: '', setup: null, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {}, pSeq: 0, pReceived: 0, parts: null, glide: {}, atT: 0, stillT: 0 };
   menu.classList.add('hidden');
   seed = resume ? resume.seed : Math.floor(Math.random() * 1e9);
   lake = makeLake(seed);
@@ -1069,7 +1071,7 @@ function setupFor(round, list) {
   return { t: 'setup', round, seed: Math.floor(Math.random() * 1e9), players, starts: players.map((_, i) => shorePoint(a + i / players.length * Math.PI * 2).map(r1)) };
 }
 function applySetup(s) {
-  net = { on: true, round: s.round, setup: s, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {}, pSeq: 0, pReceived: 0, parts: null };
+  net = { on: true, round: s.round, setup: s, board: {}, sendT: 0, meT: 0, pT: 0, away: [], closing: 0, claims: {}, pending: {}, pSeq: 0, pReceived: 0, parts: null, glide: {}, atT: 0, stillT: 0 };
   seed = s.seed; lake = makeLake(seed); holes = []; left = CONTEST; seen.clear();
   // The host sends each guest its own complete, bounded fish snapshots.
   if (R.isHost) stockPond(); else pond = [];
@@ -1086,11 +1088,35 @@ function sendMe() {
   if (R.isHost) net.board[R.me] = myEntry();
   else R.send(Object.assign({ t: 'me', round: net.round }, whereAmI()));
 }
+// v7 (#536): the angler's spot on its own, ten times a second while it walks and for a moment
+// after it stops (so the last spots say it stood still), then once a second. Each carries this
+// phone's clock, and every phone draws the others from lib/sulava-1 a moment back, gliding
+// between the spots instead of jumping to each once a second. The host passes a guest's spot on
+// to all with the guest's own clock; 'me' still brings the holes once a second.
+const r2 = v => Math.round(v * 100) / 100;
+const stamp = () => Math.round(AiPelitSulava.now() * 1000) / 1000;
+const stampOf = v => v !== null && v !== '' && Number.isFinite(+v) ? +v : null;
+const AT_WALK = 0.1, AT_REST = 1, AT_SETTLE = 0.6;
+function sendAt() {
+  const m = { t: 'at', round: net.round, x: r2(me.x), y: r2(me.y), st: stamp() };
+  if (R.isHost) m.id = R.me;
+  R.send(m);
+}
+// A friend's spot, heard (a jump of more than 8 m, such as a new start, is drawn at once).
+function glideTo(id, m) {
+  if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
+  const tr = net.glide[id] || (net.glide[id] = AiPelitSulava.track({ keys: ['x', 'y'], jump: 8 }));
+  tr.push(stampOf(m.st), { x: +m.x, y: +m.y });
+}
 function snapshot() {
   return { t: 's', round: net.round, left: Math.round(left * 10) / 10, b: net.board, away: net.away };
 }
 function netStep(dt) {
   if ((net.meT -= dt) <= 0) { net.meT = 1; sendMe(); }
+  // Starting to walk after a rest sends at once, not when the rest's one-second wait is over.
+  if (!standing() && net.stillT >= AT_SETTLE) net.atT = 0;
+  net.stillT = standing() ? net.stillT + dt : 0;
+  if ((net.atT -= dt) <= 0) { net.atT = net.stillT < AT_SETTLE ? AT_WALK : AT_REST; sendAt(); }
   if (R.isHost && (net.sendT -= dt) <= 0) { net.sendT = 0.5; net.board[R.me] = myEntry(); R.send(snapshot()); }
   if (R.isHost && (net.pT -= dt) <= 0) { net.pT = 1; for (const p of net.setup.players) if (p.id !== R.me) sendPond(p.id); }
 }
@@ -1140,6 +1166,11 @@ R.on('message', (m, from) => {
       const had = net.board[from] || { g: 0, n: 0, big: null, fish: [] };
       const h = Array.isArray(m.h) ? m.h.filter(q => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).slice(0, 60).map(q => [+q[0], +q[1]]) : had.h || [];
       net.board[from] = Object.assign({}, had, { x: isFinite(m.x) ? +m.x : had.x, y: isFinite(m.y) ? +m.y : had.y, h });
+    } else if (m.t === 'at' && net.on && m.round === net.round && net.setup && net.setup.players.some(p => p.id === from)) {
+      if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
+      glideTo(from, m);
+      net.board[from] = Object.assign({}, net.board[from] || { g: 0, n: 0, big: null, fish: [] }, { x: m.x, y: m.y });
+      R.send({ t: 'at', round: m.round, id: from, x: m.x, y: m.y, st: stampOf(m.st) });
     } else if ((m.t === 'claim' || m.t === 'free' || m.t === 'caught') && net.on && m.round === net.round && phase !== 'done') hostFish(m, from);
     return;
   }
@@ -1147,6 +1178,8 @@ R.on('message', (m, from) => {
   if (m.t === 'setup') {
     if (net.on && net.round === m.round) return;
     applySetup(m);
+  } else if (m.t === 'at' && net.on && m.round === net.round) {
+    if (m.id !== R.me) glideTo(m.id, m);
   } else if (m.t === 'p' && net.on && m.round === net.round) receivePond(m);
   else if (m.t === 'gone' && net.on && m.round === net.round) {
     const f = pond.find(q => q.id === m.id);
@@ -1642,7 +1675,10 @@ function others() {
   const out = [];
   (net.setup ? net.setup.players : []).forEach((p, i) => {
     const b = net.board[p.id];
-    if (p.id !== R.me && b && isFinite(b.x)) out.push({ x: b.x, y: b.y, name: p.name, col: COLS[i % COLS.length] });
+    // v7: drawn where its glide is, or where the host's list last had it before the first spot.
+    const g = p.id !== R.me && net.glide[p.id] ? net.glide[p.id].at() : null;
+    if (g) out.push({ x: g.x, y: g.y, name: p.name, col: COLS[i % COLS.length] });
+    else if (p.id !== R.me && b && isFinite(b.x)) out.push({ x: b.x, y: b.y, name: p.name, col: COLS[i % COLS.length] });
   });
   return out;
 }
