@@ -202,6 +202,12 @@ function transferHint(s, path, target, r2, n2, close, id) {
     const dx = c.at.x - c.x, dy = c.at.y - c.y, miss = c.d - close * 0.4;
     return { word: 'Korjaa', dir: angleOf(dx, dy), power: clamp(miss / left / SHIP.acc * 4, 0.05, 1), ghost: { id, t: c.t }, gap: c.d - close, metres: true };
   }
+  // Far higher than the target goes, with no pass coming: down to a low orbit, and from there again.
+  // A brake begun near the low point (only this one is) goes on until the orbit is round.
+  if (!pass && o.closed && (o.apo + R > r2 * 1.12 || (currentWord === 'Jarruta' && o.alt < o.peri + 20 && o.alt < o.apo - 12))) {
+    const h = startOverHint(s, path, o, id);
+    if (o.apo + R > r2 * 1.12 || h.word === 'Jarruta') return h;
+  }
   const boosting = currentWord === 'Kiihdytä' && o.apo + R < r2;
   if (pass && !boosting && o.apo + R > r2 * 0.85) return { word: 'Odota', mark: { x: c.x, y: c.y }, ghost: { id, t: c.t } };
   if (o.apo + R < r2 * 0.92 || boosting) {
@@ -220,7 +226,11 @@ function transferHint(s, path, target, r2, n2, close, id) {
     return { word: 'Jarruta', dir: pro + Math.PI, power: clamp((o.peri + R - want) / 100, 0.05, 0.4), gap: o.peri + R - want - 1, metres: true };
   }
   if (want && o.peri + R > want + 6) return { word: 'Odota', mark: top, target: id };
-  return { word: 'Odota', target: id, wait: meetWait(s, o, path, BODY[id], close) };
+  // No meeting within a dozen rounds, and the low point too low to brake for one (#548: after a far
+  // climb the ship waited for a meeting that never came): down to a low orbit, and from there again.
+  const meet = meetAhead(s, o, path, BODY[id], close);
+  if (meet && meet.d > close * 4 && !pass) return startOverHint(s, path, o, id);
+  return { word: 'Odota', target: id, wait: meet ? Math.max(0, meet.t - s.t) : undefined };
 }
 // The low point (distance from Earth's middle) that makes the ship's rounds just as long that,
 // a whole number of rounds on, it is back at its high point as the target gets there.
@@ -242,12 +252,12 @@ function phasingPeri(s, o, top, b, n2) {
   const a = Math.cbrt(EARTH.mu * (best.p / TAU) ** 2);
   return 2 * a - rTop;
 }
-// Seconds until a round when the ship at its high point and the target are close, if one
-// comes within a dozen rounds.
-function meetWait(s, o, path, b, close) {
-  if (!o.closed) return undefined;
+// The round (its time t and the distance d) when the ship at its high point and the target come
+// closest, within a dozen rounds.
+function meetAhead(s, o, path, b, close) {
+  if (!o.closed) return null;
   const top = pathExtreme(path, true);
-  if (!top || top.t === undefined) return undefined;
+  if (!top || top.t === undefined) return null;
   const a = (o.peri + o.apo) / 2 + EARTH.radius, period = TAU * Math.sqrt(a ** 3 / EARTH.mu);
   let best = null;
   for (let k = 0; k < 12; k++) {
@@ -255,15 +265,62 @@ function meetWait(s, o, path, b, close) {
     if (!best || d < best.d) best = { d, t };
     if (d < close * 4) break;
   }
-  return Math.max(0, best.t - s.t);
+  return best;
+}
+// Off the way to a target (#548): brake at the low point into a round low orbit, from which the
+// timed push toward the target starts again.
+function startOverHint(s, path, o, id) {
+  const gap = o.speed - Math.sqrt(EARTH.mu / o.r);
+  if (gap > 0 && (o.alt < o.peri + 6 || (currentWord === 'Jarruta' && o.alt < o.peri + 20))) {
+    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.5, gap };
+  }
+  return { word: 'Odota', mark: pathExtreme(path, false), target: id };
 }
 // From the pad into a low orbit around Earth.
 function ascentHint(s, path) {
-  const o = orbitAround(EARTH, s), up = angleOf(o.x, o.y), side = sideOf(o);
+  // The way round the station and the Moon go, except on the first trip, where any orbit counts
+  // (#548: an orbit the wrong way round never met them).
+  const o = orbitAround(EARTH, s), up = angleOf(o.x, o.y), side = s.trip === 'kiertorata' ? sideOf(o) : 1;
   if (o.alt < 5 && o.apo < 25) return { word: 'Ylös', dir: up, power: 1 };
   if (o.apo < 40) return { word: 'Vinosti ylös', dir: up + side * 1.05, power: 1 };
-  if (o.vr < 1.5 || o.alt > o.apo - 3 || (s.thrust > 0 && o.alt > o.apo - 12)) return { word: 'Sivulle', dir: up + side * Math.PI / 2, power: 1, gap: apseSpeed(EARTH, o.r, ORBIT_GOAL.earth.peri + EARTH.radius) - Math.abs(o.h) / o.r };
+  if (o.vr < 1.5 || o.alt > o.apo - 3 || (s.thrust > 0 && o.alt > o.apo - 12)) return { word: 'Sivulle', dir: up + side * Math.PI / 2, power: 1, gap: apseSpeed(EARTH, o.r, ORBIT_GOAL.earth.peri + EARTH.radius) + side * o.h / o.r };
   return { word: 'Odota', mark: pathExtreme(path, true) };
+}
+// ---- Back on the way (#548: an orbit the wrong way round, or a push so hard the ship flew off,
+// left the hint saying "Odota" for ever). ----
+// The speed round Earth (m/s) the ship has the right way, clockwise as the station and the Moon go.
+function rightWay(o) { return -o.h / o.r; }
+// A push toward a speed (vx, vy round Earth): the hint turns the ship and pushes until it has it.
+function matchHint(word, s, vx, vy) {
+  const dx = vx - s.vx, dy = vy - s.vy, gap = Math.hypot(dx, dy);
+  return { word, dir: angleOf(dx, dy), power: clamp(gap / SHIP.acc * 2, 0.15, 1), gap };
+}
+// Flying the wrong way round Earth: turn round into a circle the right way at this height.
+function turnRoundHint(s) {
+  const o = orbitAround(EARTH, s), v = Math.sqrt(EARTH.mu / o.r);
+  return matchHint('Käänny', s, o.y / o.r * v, -o.x / o.r * v);
+}
+// Flying away from Earth: a speed that falls back to a low point 40 m up, the right way round, and
+// from outside Earth's pull (which does not reach out there) toward Earth too.
+function comeBackHint(s) {
+  const o = orbitAround(EARTH, s), r = o.r, rp = EARTH.radius + 40, out = r > EARTH.sphere * 0.85;
+  const k = out ? 8 : 0, vt = r > rp ? rp * Math.sqrt((k * k + 2 * EARTH.mu * (1 / rp - 1 / r)) / (r * r - rp * rp)) : Math.sqrt(EARTH.mu / r);
+  return matchHint(r > EARTH.sphere ? 'Kohti Maata' : 'Jarruta', s, -k * o.x / r + vt * o.y / r, -k * o.y / r - vt * o.x / r);
+}
+function lostHint(s, ref) {
+  if (ref !== EARTH && ref !== SUN) return null;
+  const o = orbitAround(EARTH, s), R = EARTH.radius, far = EARTH.sphere * 0.85;
+  // Away: past Earth's pull, or on a way that does not come back, or comes back only from beyond it.
+  if (o.r > far || (o.vr > 0 && (!o.closed || o.apo + R > far))) {
+    const h = comeBackHint(s);
+    if (h.gap > (currentWord === h.word ? 0.3 : 1)) return h;
+    if (ref === SUN) return { word: 'Odota' };
+  }
+  if (ref === EARTH && s.trip !== 'kiertorata' && o.speed > 2 && (rightWay(o) < -1 || currentWord === 'Käänny')) {
+    const h = turnRoundHint(s);
+    if (rightWay(o) < -1 || h.gap > 0.5) return h;
+  }
+  return null;
 }
 // The hint, and for a wait, how many seconds until the next thing to do (when that is known:
 // a window opening, the path's high or low point, the closest pass). A tap on "Odota" skips it.
@@ -338,6 +395,10 @@ function nextMove(s, path) {
     if (wait > 0) return { word: 'Odota', wait, window: true };
   }
   if (s.landedOn) return { word: 'Vedä ylös', dir: s.landedOn.a, power: 1 };
+  if (!(TRIP[s.trip].far && s.tanked) && !(s.trip === 'kotiin' && refBody(s) === MOON)) {
+    const lost = lostHint(s, refBody(s) === ROCK && s.trip !== 'kivi' ? EARTH : refBody(s));
+    if (lost) return lost;
+  }
   if (TRIP[s.trip].far && (s.tanked || refBody(s) === SUN || refBody(s) === MARS)) return marsHint(s, path);
   // Passing the rock on another trip is just part of the way round Earth.
   const trip = s.trip, ref = refBody(s) === ROCK && trip !== 'kivi' ? EARTH : refBody(s), home = trip === 'kotiin' && s.visited.includes('moon');
@@ -356,7 +417,16 @@ function nextMove(s, path) {
   const nearStation = trip === 'asema' && stationRelative(s).dist < 30;
   if (ref === EARTH && !nearStation && orbitAround(EARTH, s).peri < ORBIT_GOAL.earth.peri) return ascentHint(s, path);
   if (ref === EARTH) {
-    if (trip === 'kiertorata') return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
+    if (trip === 'kiertorata') {
+      // Too high for the goal: brake at the low point until the high point is low enough.
+      const o = orbitAround(EARTH, s), top = ORBIT_GOAL.earth.apo + EARTH.radius - 15;
+      if (o.closed && o.apo > ORBIT_GOAL.earth.apo) {
+        const gap = o.speed - apseSpeed(EARTH, o.r, top);
+      if (gap > 0 && (o.alt < o.peri + 6 || (currentWord === 'Jarruta' && o.alt < o.peri + 20))) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.5, gap };
+        return { word: 'Odota', mark: pathExtreme(path, false) };
+      }
+      return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
+    }
     if (trip === 'asema') return stationHint(s, path);
     if (trip === 'kivi') return transferHint(s, path, bodyAt(ROCK, s.t), ROCK.orbit.r, ROCK.orbit.n, 6, 'rock');
     return transferHint(s, path, bodyAt(MOON, s.t), MOON.orbit.r, MOON.orbit.n, 25, 'moon');
@@ -377,8 +447,11 @@ function nextMove(s, path) {
   // the star (#548: stopping at a fixed height made a near-round orbit brake in short bursts).
   if (trip === 'kuu-kierto' && orbitReady(MOON, s) && (o.e <= 0.2 || (o.alt > o.peri + 6 && currentWord !== 'Jarruta'))) return { word: s.thrust > 0 ? 'Päästä irti' : 'Odota' };
   if (trip !== 'kuu-kierto' && (o.alt < 25 || (o.closed && o.apo <= ORBIT_GOAL.moon.apo))) return landingHint(MOON, s, path);
-  if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && o.alt > 15 && trip === 'kuu-kierto') {
-    return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5, gap: ORBIT_GOAL.moon.peri + 4 - o.peri, metres: true };
+  // Low down and already slow, a brake only hovers (#548: a ship that came in low braked on until
+  // its fuel ran out): sideways then too, at full push.
+  const slow = moonBrakeGap(o, trip) <= 0;
+  if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && (o.alt > 15 || slow) && trip === 'kuu-kierto') {
+    return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: o.alt > 15 ? 0.5 : 1, gap: ORBIT_GOAL.moon.peri + 4 - o.peri, metres: true };
   }
   // A brake begun near the low point goes on past it (#548: stopping as soon as the orbit closed
   // made it brake in bursts, each one moving the low point a little lower).
@@ -391,8 +464,9 @@ function baseHint(s, path, o, aim) {
   const pro = angleOf(o.vx, o.vy), hits = path && path.hit && path.hit.body === 'moon';
   if (hits || o.alt < 6 || (o.closed && o.apo < 8)) return landingHint(MOON, s, path, aim);
   if (!orbitReady(MOON, s)) {
-    if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && o.alt > 15) {
-      return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: 0.5, gap: ORBIT_GOAL.moon.peri + 4 - o.peri, metres: true };
+    const slow = moonBrakeGap(o, s.trip) <= 0;
+    if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 ? 4 : 0) && (o.alt > 15 || slow)) {
+      return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: o.alt > 15 ? 0.5 : 1, gap: ORBIT_GOAL.moon.peri + 4 - o.peri, metres: true };
     }
     // A brake begun at the low point goes on until the orbit is round enough.
     if (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, gap: moonBrakeGap(o, s.trip) };
@@ -408,6 +482,8 @@ function baseHint(s, path, o, aim) {
 // How far ahead of the ship (radians round the Moon) the base is when a full brake from a low
 // orbit should start, so the ship comes down about on it.
 const BASE_LEAD = 1.9;
+// The station as a body moving on its circle, for phasingPeri.
+const STATION_BODY = { orbit: STATION };
 // Station: a transfer to its height, then close in slowly with the arrow.
 function stationHint(s, path) {
   const d = stationRelative(s);
@@ -424,9 +500,18 @@ function stationHint(s, path) {
     return { word: 'Odota', station: true, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - STATION.n) };
   }
   if (o.apo + EARTH.radius > STATION.r + 6 && o.alt < o.peri + 6) {
-    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3, gap: o.speed - apseSpeed(EARTH, o.r, STATION.r + 6) };
+    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3, gap: o.speed - apseSpeed(EARTH, o.r, STATION.r + 2) };
   }
-  return { word: 'Odota', station: true, mark: pathExtreme(path, true) };
+  // Up at the station's height but going round about as fast as it, so the two never meet (#548:
+  // an orbit like the station's, the station elsewhere on it): brake at the high point to a low
+  // point that brings the ship back there, a whole number of rounds on, as the station gets there.
+  const top = pathExtreme(path, true), braking = currentWord === 'Jarruta', atTop = o.alt > o.apo - 4 || (o.closed && o.e < 0.05);
+  const want = phasingPeri(s, o, atTop || braking ? { x: s.x, y: s.y, t: s.t } : top, STATION_BODY, STATION.n);
+  if (want && o.peri + EARTH.radius > want + (braking ? 1 : 6)) {
+    if (atTop || braking) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: clamp((o.peri + EARTH.radius - want) / 100, 0.05, 0.4), gap: o.peri + EARTH.radius - want - 1, metres: true, station: true };
+    return { word: 'Odota', station: true, mark: top };
+  }
+  return { word: 'Odota', station: true, mark: top };
 }
 
 // ---- Mars (#548) ----

@@ -20,6 +20,7 @@ window.follow = function (trip, opts = {}) {
   cancelAnimationFrame(frameId); frameId = 0;
   for (const t of TRIPS) stars[t.id] = stars[t.id] || 1;
   begin(freshFlight(trip)); cancelAnimationFrame(frameId); frameId = 0;
+  if (opts.start) Object.assign(ship, { landedOn: null }, opts.start);
   let last = '', hw, since = 0; const quick = [];
   for (let i = 0; i < 120 * 2000 && ship.phase === 'flight'; i++) {
     if (opts.until && opts.until()) break;
@@ -480,4 +481,40 @@ def test_the_hint_says_when_a_burn_is_nearly_done_and_when_to_let_go(site, conte
     assert r['stop'].endswith('Päästä irti') and r['red'], r
     assert r['own'].endswith('Päästä irti') and r['ownRed'], r
     assert 'Päästä irti' not in r['after'], r
+    assert page.errors == []
+
+
+# Where a player can take the ship off the trip's way (#548, v5): an orbit the wrong way round, and
+# a push so hard the ship climbs away or flies out past Earth's pull. Each start is (x, y, vx, vy)
+# round Earth; clockwise (+vx at the top) is the way the station and the Moon go.
+def circle(r, way):
+    v = (50400 / r) ** 0.5
+    return {'x': 0, 'y': r, 'vx': way * v, 'vy': 0, 'angle': 1.5708 * way}
+
+
+LOST = {
+    'wrong-low': circle(75, -1),
+    'wrong-high': circle(130, -1),
+    'climbing-away': {'x': 0, 'y': 90, 'vx': 15, 'vy': 50, 'angle': 0.3},
+    'out-past-earth': {'x': -500, 'y': 1200, 'vx': -5, 'vy': 20, 'angle': 0},
+}
+
+
+@pytest.mark.parametrize('start', list(LOST))
+@pytest.mark.parametrize('trip', ['kiertorata', 'asema', 'kuuhun'])
+def test_the_hints_bring_a_lost_ship_back_on_its_way(site, context, trip, start):
+    page = open_game(site, context)
+    # The owner's reports: from a wrong-way orbit on the station trip, or after pushing so hard the
+    # ship left Earth's orbit, the hint said "Odota" for ever and never what to do.
+    r = page.evaluate("""([trip, start]) => { const words = new Set(); const real = window.hint;
+        window.hint = (s, p) => { const h = real(s, p); words.add(h.word); return h; };
+        try { return Object.assign(follow(trip, { start }), { words: [...words] }); } finally { window.hint = real; } }""",
+                      [trip, LOST[start]])
+    assert r['phase'] == 'done', r
+    # A far climb takes minutes to fall back (a tap skips such a wait in the game).
+    assert r['t'] < 600, r
+    if start.startswith('wrong') and trip != 'kiertorata':
+        assert 'Käänny' in r['words'], r
+    if start == 'out-past-earth':
+        assert 'Kohti Maata' in r['words'], r
     assert page.errors == []
