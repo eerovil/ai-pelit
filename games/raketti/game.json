@@ -23,6 +23,13 @@
       "note": "Helpompi Raketti: pienet kappaleet, ohjaus yhdellä sormella, kymmenen lyhyttä matkaa, Kuun tukikohta ja matka Marsiin.",
       "request": "Avaruuspeli on loppujen lopuksi kuitenkin liian realistinen, eli liian vaikea ja hidastempoinen. Pitäisi saada varmaan pienemmät taivaankappaleet, enemmän polttoainetta ja helpompi ohjaus. Pitäisikö se onn kokonaan uusi peli vai muokataanko vanhaa (voiko koodia uudelleenkäyttää)",
       "issue": "eerovil/ai-pelit#548"
+    },
+    {
+      "n": 4,
+      "date": "2026-11-23",
+      "note": "Polton jäljellä oleva osa näkyy vihjeessä tyhjenevänä palkkina, loppu hidastuu ja \"Päästä irti\" kertoo, kun poltto on valmis.",
+      "request": "Semmone vielä että saisi olla selkeämpi, ollaanko lähes tehty burn jo loppuun. Nyt menee herkästi yli",
+      "issue": "eerovil/ai-pelit#548"
     }
   ]
 }

@@ -4,7 +4,8 @@ Raketti v3 (#548) replaces v2's real-scale Earth with tiny bodies, one finger an
 owner found v2 too realistic: too hard and too slow. They chose a new version (v2 deleted), tiny
 bodies seen in one view that zooms by itself, a one-finger drag stick, short trips with no time
 warp, then a Moon base built one part a trip and a real journey to Mars. There is still no
-autopilot: the player flies every push, and the hint at the bottom says what to do next.
+autopilot: the player flies every push, and the hint at the bottom says what to do next. v4 (#548)
+shows how much of each burn is left and slows its end (see "Steps and time").
 
 ## The world
 
@@ -51,7 +52,11 @@ lifts off only when its push up beats the pull.
 
 Velocity Verlet with the push held over each fixed 1/120 s step. Time runs at 1 normally, eases to
 0.5 while the engine burns and to 0.35 for fine moves (a correction, the last metres of a landing or
-docking, the end of a wait); the nose turns as fast on screen however slow time runs. A wait with a
+docking, the end of a wait); the nose turns as fast on screen however slow time runs. Most burns
+last only a few tenths of a second of game time, so players went past their end: each burn hint
+now says how much of it is left (a bar draining in the hint, "– melkein" near the end, a red
+"Päästä irti" once it is done and the engine still runs), and time slows further while it burns so
+that its end takes about 1.5 s on screen (never slower than 0.06). A wait with a
 known length ("Odota 12 s") can be skipped with a tap: the flight then runs faster until a second
 before its end (Mars's waits are minutes long). There is no other time warp.
 

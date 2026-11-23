@@ -33,6 +33,10 @@ button.primary { background: #e2574c; border-color: #ff8a7d; font-weight: 700; }
 }
 #hint:empty { display: none; }
 #hint.go { color: #ffd65a; border-color: #ffd65a; }
+#hint.burn { background: linear-gradient(90deg, rgba(255, 214, 90, .3) var(--left, 100%), rgba(10, 22, 34, .82) var(--left, 100%)); }
+#hint.near { color: #ff9b4a; border-color: #ff9b4a; background: linear-gradient(90deg, rgba(255, 155, 74, .45) var(--left, 100%), rgba(10, 22, 34, .82) var(--left, 100%)); animation: near .35s ease-in-out infinite alternate; }
+#hint.stop { color: #fff; border-color: #ff6a5a; background: rgba(160, 40, 30, .9); }
+@keyframes near { to { transform: translateX(-50%) scale(1.08); } }
 #hint.skip { pointer-events: auto; cursor: pointer; border-color: #8fd0ff; color: #bfe6ff; }
 .overlay {
   position: fixed; top: 0; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: center;
