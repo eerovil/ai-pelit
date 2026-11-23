@@ -1,6 +1,6 @@
 {
   "title": "Raketti",
-  "description": "Lennä raketilla asemalle ja Kuuhun, rakenna Kuuhun tukikohta ja jatka Marsiin. Kymmenen lyhyttä matkaa.",
+  "description": "Lennä raketilla asemalle ja Kuuhun, rakenna tukikohdat Kuuhun ja Marsiin ja palaa kotiin. Neljätoista lyhyttä matkaa.",
   "category": "seikkailu",
   "versions": [
     {
@@ -36,6 +36,13 @@
       "date": "2026-11-23",
       "note": "Väärään suuntaan kiertävä tai liikaa kiihdyttänyt alus saa vihjeen kääntyä tai jarruttaa, niin perille pääsee aina ohjeita seuraamalla.",
       "request": "Bugi löytyi. Jos lähtee level 2 kiertoradaalle väärään suuntaan, niin ikinä ei ohjeita noudattamalla pysty pääsemään sinne. Ohjeet sanovat koko ajan, että odota. Se ei kerro mitä pitää tehdä. Sama ongelma tulee jos kaasuttaa ihan liikaa ja lähtee pois maapallonkierto radalta kokonaan niin se ei mitään sano että mitä voisi tehdä tai että...",
+      "issue": "eerovil/ai-pelit#548"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-23",
+      "note": "Marsiin rakennetaan tukikohta isolla raketilla: asuinmoduuli, kasvihuone ja polttoainetehdas, ja valmiista tukikohdasta tankataan matka Marsista kotiin.",
+      "request": "Rakennetaan myös marsiin beissi.",
       "issue": "eerovil/ai-pelit#548"
     }
   ]

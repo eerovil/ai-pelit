@@ -14,17 +14,29 @@ const TRIPS = [
   { id: 'tehdas', name: 'Polttoainetehdas Kuuhun', goal: 'Vie tehdas Kuun tukikohtaan', fuel: 0.4, rocket: 'rahti', part: true },
   // Mars (#548): a part-full tank from Earth, filled at the Moon base, then minutes round the Sun.
   { id: 'mars', name: 'Marsiin', goal: 'Tankkaa Kuussa ja laskeudu Marsiin', fuel: 0.5, tank: 0.4, far: true },
+  // The Mars base (v6): each part flies the Mars trip in the big rocket, down into the base on top
+  // of Mars. The finished base fills the tank for the way home.
+  { id: 'asunto', name: 'Asuinmoduuli Marsiin', goal: 'Vie asuinmoduuli Marsin tukikohtaan', fuel: 0.4, tank: 0.4, far: true, rocket: 'jatti', part: true, on: 'mars' },
+  { id: 'kasvihuone', name: 'Kasvihuone Marsiin', goal: 'Vie kasvihuone Marsin tukikohtaan', fuel: 0.4, tank: 0.4, far: true, rocket: 'jatti', part: true, on: 'mars' },
+  { id: 'marstehdas', name: 'Polttoainetehdas Marsiin', goal: 'Vie tehdas Marsin tukikohtaan', fuel: 0.4, tank: 0.4, far: true, rocket: 'jatti', part: true, on: 'mars' },
+  { id: 'marsista', name: 'Marsista kotiin', goal: 'Tankkaa Marsissa ja laskeudu Maahan', fuel: 0.3, tank: 0.1, far: true, rocket: 'jatti', fromMars: true },
 ];
 const TRIP = Object.fromEntries(TRIPS.map(t => [t.id, t]));
 // An orbit counts once its lowest point is this high and its highest this low (heights in m).
-const ORBIT_GOAL = { earth: { peri: 10, apo: 150 }, moon: { peri: 3, apo: 80 } };
+// Mars's (v6) is where its parts circle before coming down into its base.
+const ORBIT_GOAL = { earth: { peri: 10, apo: 150 }, moon: { peri: 3, apo: 80 }, mars: { peri: 5, apo: 80 } };
 
-// The parts built so far: a part trip flown once.
+// The parts built so far: a part trip flown once. A part goes to the Moon base, or `on` Mars.
 function baseBuilt(id) { return (stars[id] || 0) >= 1; }
-function baseReady() { return TRIPS.every(t => !t.part || baseBuilt(t.id)); }
+function partOn(t) { return t.part ? t.on || 'moon' : null; }
+function baseReady(on = 'moon') { return TRIPS.every(t => partOn(t) !== on || baseBuilt(t.id)); }
 function atBase(a) { return Math.abs(wrap(a - BASE.a)) < BASE.zone; }
-// Where on the Moon this trip should land, if anywhere in particular.
-function landingAim(s) { return TRIP[s.trip].part || (TRIP[s.trip].far && !s.tanked) ? BASE.a : undefined; }
+function atMarsBase(a) { return Math.abs(wrap(a - MARS_BASE.a)) < MARS_BASE.zone; }
+// Where on the Moon this trip should land, if anywhere in particular: a Moon part's base, or the
+// Moon base's fuel on the way to Mars.
+function landingAim(s) { return partOn(TRIP[s.trip]) === 'moon' || (TRIP[s.trip].far && !TRIP[s.trip].fromMars && !s.tanked) ? BASE.a : undefined; }
+// Where on Mars: the Mars base, for its parts, and on the trip home until the tank is full.
+function marsAim(s) { return partOn(TRIP[s.trip]) === 'mars' || (TRIP[s.trip].fromMars && !s.tanked) ? MARS_BASE.a : undefined; }
 function tripOpen(id) {
   const i = TRIPS.findIndex(t => t.id === id);
   return i === 0 || (i > 0 && (stars[TRIPS[i - 1].id] || 0) >= 1);
@@ -45,6 +57,9 @@ function goalMet(s = ship) {
     case 'paneeli': case 'tankki': case 'tehdas':
       return !!s.landedOn && s.landedOn.id === 'moon' && atBase(s.landedOn.a);
     case 'mars': return !!s.landedOn && s.landedOn.id === 'mars' && s.tanked; // the goal says: fill up at the base first
+    case 'asunto': case 'kasvihuone': case 'marstehdas':
+      return !!s.landedOn && s.landedOn.id === 'mars' && s.tanked && atMarsBase(s.landedOn.a);
+    case 'marsista': return !!s.landedOn && s.landedOn.id === 'earth';
   }
   return false;
 }
@@ -101,8 +116,11 @@ var descentAt = -1;
 function apseSpeed(b, r, rOther) { return Math.sqrt(b.mu * Math.max(0, 2 / r - 2 / (r + rOther))); }
 // What a brake near the Moon still has to take off its speed (m/s): down to an orbit the trip
 // takes, round enough for the Moon-orbit trip, within its highest point for a landing.
-function moonBrakeGap(o, trip) {
-  const want = trip === 'kuu-kierto' ? Math.sqrt(MOON.mu * 1.2 / o.r) : apseSpeed(MOON, o.r, ORBIT_GOAL.moon.apo + MOON.radius);
+function moonBrakeGap(o, trip, b = MOON) {
+  // Mars's brake aims well inside its goal (v6): one aimed at the goal's edge ended there, and the
+  // next turn round needed another short brake, and another.
+  const apo = b === MARS ? ORBIT_GOAL.mars.apo * 0.7 : ORBIT_GOAL[b.id].apo;
+  const want = trip === 'kuu-kierto' ? Math.sqrt(MOON.mu * 1.2 / o.r) : apseSpeed(b, o.r, apo + b.radius);
   return o.speed - want;
 }
 // Landing on b. Falling costs nothing, so the hint waits while the ship is slow enough for its
@@ -418,11 +436,20 @@ function nextMove(s, path) {
   if (s.landedOn && s.landedOn.id === 'moon' && landingAim(s) !== undefined && !atBase(s.landedOn.a)) {
     return { word: 'Hyppää', dir: s.landedOn.a + Math.sign(wrap(landingAim(s) - s.landedOn.a)) * 0.6, power: 1, base: true };
   }
+  if (s.landedOn && s.landedOn.id === 'mars' && marsAim(s) !== undefined && !atMarsBase(s.landedOn.a)) {
+    return { word: 'Hyppää', dir: s.landedOn.a + Math.sign(wrap(MARS_BASE.a - s.landedOn.a)) * 0.6, power: 1, base: true };
+  }
   if (TRIP[s.trip].far && s.tanked && s.landedOn && s.landedOn.id === 'moon') {
     const wait = marsWait(s.t);
     if (wait > 0) return { word: 'Odota', wait, window: true };
   }
+  if (TRIP[s.trip].fromMars && s.tanked && s.landedOn && s.landedOn.id === 'mars') {
+    const wait = homeWait(s.t);
+    if (wait > 0) return { word: 'Odota', wait, window: true };
+  }
   if (s.landedOn) return { word: 'Vedä ylös', dir: s.landedOn.a, power: 1 };
+  // Off Mars before the tank is full: back down into the base to fill up.
+  if (TRIP[s.trip].fromMars) return s.tanked || refBody(s) !== MARS ? homeHint(s, path) : marsHint(s, path);
   if (!(TRIP[s.trip].far && s.tanked) && !(s.trip === 'kotiin' && refBody(s) === MOON)) {
     const lost = lostHint(s, refBody(s) === ROCK && s.trip !== 'kivi' ? EARTH : refBody(s));
     if (lost) return lost;
@@ -493,30 +520,53 @@ function nextMove(s, path) {
 }
 // To the Moon base: into a low orbit first, then down when the base lies the right way ahead,
 // steering the last metres into it.
-function baseHint(s, path, o, aim) {
-  const pro = angleOf(o.vx, o.vy), hits = path && path.hit && path.hit.body === 'moon';
-  if (hits || o.alt < 6 || (o.closed && o.apo < 8)) return landingHint(MOON, s, path, aim);
-  if (!orbitReady(MOON, s)) {
-    const slow = moonBrakeGap(o, s.trip) <= 0;
+// The same way down into the Mars base (v6), with b = MARS.
+function baseHint(s, path, o, aim, b = MOON) {
+  const pro = angleOf(o.vx, o.vy), hits = path && path.hit && path.hit.body === b.id;
+  // Mars's low orbit may pass 5 m up (v6): its base brake, not the landing, starts there.
+  if (hits || o.alt < (b === MARS ? 3 : 6) || (b === MARS && o.peri < 0) || (o.closed && o.apo < 8)) return landingHint(b, s, path, aim);
+  const pro0 = pro + Math.PI, down = Math.abs(o.h) / o.r - apseSpeed(b, o.r, b.radius);
+  // Mars's base brake begins from an orbit only just above its lowest (v6): it goes on to its end,
+  // not back to the low orbit's own checks as soon as the lowest point dips.
+  if (b === MARS && currentWord === 'Jarruta' && s.t - baseBrakeAt < 0.2 && down > 0) {
+    baseBrakeAt = s.t;
+    return { word: 'Jarruta', dir: pro0, power: 1, base: true, gap: down };
+  }
+  // Mars's capture brake, aimed inside the goal, runs to its end even once the goal is met.
+  const capture = b === MARS && currentWord === 'Jarruta' && s.thrust > 0 && s.t - baseBrakeAt > 0.2 && o.alt > 10;
+  if (!orbitReady(b, s) || (capture && moonBrakeGap(o, s.trip, b) > 0)) {
+    const slow = moonBrakeGap(o, s.trip, b) <= 0;
     // The margin holds only for a push already going sideways: a brake's own thrust must not turn
     // it into "Sivulle" and back each frame (#548).
-    if (o.peri < ORBIT_GOAL.moon.peri + (s.thrust > 0 && currentWord === 'Sivulle' ? 4 : 0) && (o.alt > 15 || slow)) {
-      return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: o.alt > 15 ? 0.5 : 1, gap: ORBIT_GOAL.moon.peri + 4 - o.peri, metres: true };
+    const g = ORBIT_GOAL[b.id];
+    if (o.peri < g.peri + (s.thrust > 0 && currentWord === 'Sivulle' ? 4 : 0) && (o.alt > 15 || slow)) {
+      return { word: 'Sivulle', dir: angleOf(o.x, o.y) + sideOf(o) * Math.PI / 2, power: o.alt > 15 ? 0.5 : 1, gap: g.peri + 4 - o.peri, metres: true };
     }
     // A brake begun at the low point goes on until the orbit is round enough.
-    if (!slow && (o.alt < o.peri + 6 || o.alt < 10 || (currentWord === 'Jarruta' && o.alt < o.peri + 20))) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, gap: moonBrakeGap(o, s.trip) };
+    // Mars's arrival comes in slowly from high above it (v6): a brake begun before the low point
+    // only moves the low point further down and on, so it waits for the low point itself; once
+    // begun, the ship's spot is the new high point, and the brake goes on in one burn.
+    const going = currentWord === 'Jarruta' && (o.alt < o.peri + 20 || (b === MARS && o.alt > o.apo - 20));
+    const low = o.alt < o.peri + 6 && (b !== MARS || o.vr > -0.3);
+    // Mars's last trims are a few tenths of a m/s: a gentler push, so they do not end in a frame.
+    const gap = moonBrakeGap(o, s.trip, b), power = b === MARS ? clamp(gap / SHIP.acc * 3, 0.1, 1) : 1;
+    if (!slow && (low || o.alt < 10 || going)) return { word: 'Jarruta', dir: pro + Math.PI, power, gap };
     return { word: 'Odota', mark: pathExtreme(path, false) };
   }
   // How far round the base is, the way the ship goes.
   const side = sideOf(o), ahead = ((side * wrap(aim - angleOf(o.x, o.y))) % TAU + TAU) % TAU;
-  const from = BASE_LEAD + 0.5, to = BASE_LEAD - 0.5;
-  if ((ahead < from && ahead > to) || (s.thrust > 0 && ahead > 0.6)) return { word: 'Jarruta', dir: pro + Math.PI, power: 1, base: true, gap: Math.abs(o.h) / o.r - apseSpeed(MOON, o.r, MOON.radius) };
+  const lead = b === MARS ? MARS_BASE_LEAD : BASE_LEAD, from = lead + 0.5, to = lead - 0.5;
+  if ((ahead < from && ahead > to) || (b === MOON && s.thrust > 0 && ahead > 0.6)) {
+    baseBrakeAt = s.t;
+    return { word: 'Jarruta', dir: pro0, power: 1, base: true, gap: down };
+  }
   const rate = Math.abs(o.h) / (o.r * o.r);
   return { word: 'Odota', base: true, wait: ((ahead - from) % TAU + TAU) % TAU / rate };
 }
 // How far ahead of the ship (radians round the Moon) the base is when a full brake from a low
 // orbit should start, so the ship comes down about on it.
-const BASE_LEAD = 1.9;
+const BASE_LEAD = 1.9, MARS_BASE_LEAD = 1.9;
+let baseBrakeAt = -Infinity;
 // The station as a body moving on its circle, for phasingPeri.
 const STATION_BODY = { orbit: STATION };
 // Station: a transfer to its height, then close in slowly with the arrow.
@@ -586,7 +636,7 @@ function leavingSpeed(s) {
 // out to Mars's circle; then small corrections until the path passes Mars, and down onto it.
 function marsHint(s, path) {
   const ref = refBody(s), close = 150;
-  if (ref === MARS) return landingHint(MARS, s, path);
+  if (ref === MARS) return marsAim(s) === undefined ? landingHint(MARS, s, path) : baseHint(s, path, orbitAround(MARS, s), marsAim(s), MARS);
   const c = path && path.closest.mars, last = path && path.points.length ? path.points[path.points.length - 1].t : s.t;
   // The push still missing: from the estimate while pushing, from the path after it.
   const vE = EARTH_HELIO.r * EARTH_HELIO.n, sun = ref === SUN ? orbitAround(SUN, s) : null;
@@ -619,5 +669,79 @@ function marsHint(s, path) {
     return { word: 'Korjaa', dir: angleOf(c.at.x - c.x, c.at.y - c.y), power: clamp(miss / left / SHIP.acc * 1.5, 0.05, 0.6), ghost: { id: 'mars', t: c.t }, gap: c.d - close, metres: true };
   }
   if (pass) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t }, ghost: { id: 'mars', t: c.t } };
+  return { word: 'Odota', far: true };
+}
+
+// ---- From Mars home (v6) ----
+// Earth ahead of Mars round the Sun (radians) when the ship should lift off from the Mars base: a
+// half-ellipse from Mars's circle in to Earth's, started HOME_DEPART seconds later, out of Mars's sphere.
+const HOME_DEPART = 45;
+const HOME_TIME = Math.PI * Math.sqrt(((AU + MARS.helio.r) / 2) ** 3 / SUN.mu);
+const EARTH_LEAD = ((Math.PI + MARS.helio.n * HOME_DEPART - EARTH_HELIO.n * (HOME_DEPART + HOME_TIME)) % TAU + TAU) % TAU;
+// The speed (m/s) the ship must leave Mars with, against Mars's way round the Sun, to fall in to
+// Earth's circle.
+const HOME_SPEED = MARS.helio.r * MARS.helio.n - Math.sqrt(SUN.mu * (2 / MARS.helio.r - 2 / (AU + MARS.helio.r)));
+function earthAhead(t) {
+  return ((EARTH_HELIO.phase + EARTH_HELIO.n * t - MARS.helio.phase - MARS.helio.n * t - EARTH_LEAD) % TAU + TAU) % TAU;
+}
+// Seconds until the window home opens; 0 while it is open (a few seconds past the best moment).
+function homeWait(t) {
+  const late = earthAhead(t);
+  if (late < 0.06) return 0;
+  return (TAU - late) / (EARTH_HELIO.n - MARS.helio.n);
+}
+// The trip home starts this long before its window opens: time to fill the tank.
+const HOME_LEAD_TIME = 20;
+function homeStart() { return homeWait(0) + (homeWait(0) < HOME_LEAD_TIME ? TAU / (EARTH_HELIO.n - MARS.helio.n) : 0) - HOME_LEAD_TIME; }
+// How fast the ship will leave Mars, from its energy now.
+function leavingMars(s) {
+  const o = orbitAround(MARS, s);
+  return Math.sqrt(Math.max(0, o.speed ** 2 - 2 * MARS.mu / o.r));
+}
+// Up off Mars and out of its sphere against its way round the Sun, so the ship falls in to Earth's
+// circle; then small corrections until the path passes Earth, and down onto it as from the Moon.
+function homeHint(s, path) {
+  // Aimed at Earth's sphere, not at Earth: inside it Earth's pull bends the path so much that the
+  // closest pass jumps (a path that hits Earth ends there), and the landing hints take over there.
+  const ref = refBody(s), close = 600;
+  const c = path && path.closest.earth, last = path && path.points.length ? path.points[path.points.length - 1].t : s.t;
+  if (ref === MARS) {
+    const o = orbitAround(MARS, s), up = angleOf(o.x, o.y), need = HOME_SPEED - leavingMars(s);
+    if (need > (currentWord === 'Kohti Maata' ? 0 : 1)) {
+      // Against Mars's way round the Sun; near the ground, never into it.
+      const m = onCircle(MARS.helio, s.t);
+      let dir = angleOf(-m.vx, -m.vy);
+      if (o.alt < 3) return { word: 'Ylös', dir: up, power: 1 };
+      if (o.alt < 40 && Math.cos(wrap(dir - up)) < 0.3) dir = up + Math.sign(wrap(dir - up)) * (o.alt < 10 ? 1 : 1.27);
+      return { word: 'Kohti Maata', dir, power: clamp(need / SHIP.acc * 2, 0.1, 1), far: true, gap: need };
+    }
+    return { word: 'Odota', far: true };
+  }
+  if (ref === EARTH) {
+    if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s, path);
+    if (c && c.d < 20) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t } };
+    const o = orbitAround(EARTH, s);
+    if (o.peri < 10 && o.vr < 0) return { word: 'Odota', mark: pathExtreme(path, false) };
+    // Only the speed round Earth goes, so the ship keeps falling in (as from the Moon).
+    const out = o.vr / o.r;
+    return { word: 'Jarruta', dir: angleOf(-(o.vx - out * o.x), -(o.vy - out * o.y)), power: 0.6 };
+  }
+  // Round the Sun: down to Earth's circle first, then corrections until the path passes Earth.
+  // A path that meets Earth ends there: it passes Earth all the same.
+  const onEarth = path && path.hit && path.hit.body === 'earth';
+  if (onEarth) return { word: 'Odota', mark: { x: path.hit.x, y: path.hit.y, t: path.hit.t }, ghost: { id: 'earth', t: path.hit.t } };
+  const sun = orbitAround(SUN, s), near = c && c.t < last - 1 && c.d < 3000;
+  const high = sun.peri + SUN.radius - AU * 1.03;
+  // Once the path passes Earth, corrections go on until it does again: no flipping back.
+  if (!near && currentWord !== 'Korjaa' && (high > 0 || (currentWord === 'Kohti Maata' && high > -AU * 0.02))) {
+    return { word: 'Kohti Maata', dir: angleOf(-sun.vx, -sun.vy), power: 0.5, far: true, gap: high + AU * 0.02, metres: true };
+  }
+  const pass = c && c.t < last - 1, left = c ? c.t - s.t : 0, correcting = currentWord === 'Korjaa';
+  if (pass && c.d < close) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t }, ghost: { id: 'earth', t: c.t } };
+  if (pass && left > 8 && (c.d > close * 2 || correcting) && c.d > close * 0.5) {
+    const miss = c.d - close * 0.4;
+    return { word: 'Korjaa', dir: angleOf(c.at.x - c.x, c.at.y - c.y), power: clamp(miss / left / SHIP.acc * 1.5, 0.05, 0.6), ghost: { id: 'earth', t: c.t }, gap: c.d - close, metres: true };
+  }
+  if (pass) return { word: 'Odota', mark: { x: c.x, y: c.y, t: c.t }, ghost: { id: 'earth', t: c.t } };
   return { word: 'Odota', far: true };
 }
