@@ -145,6 +145,7 @@ function frame(now) {
     const target = warp ? 1 : wantsSlow(currentHint) ? 0.35 : ship.thrust > 0 ? 0.5 : 1;
     slow += (target - slow) * (1 - Math.exp(-dt * 5));
     acc += warp ? warpStep(dt) : dt * slow;
+    turnScale = warp ? 1 : 1 / slow;
     while (acc >= STEP && ship.phase === 'flight') {
       step(STEP); acc -= STEP;
       if (ship.phase === 'flight' && goalMet(ship)) endFlight(TRIP[ship.trip].goal, true);

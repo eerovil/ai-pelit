@@ -24,7 +24,8 @@ const STATION = { r: 100, phase: 0.9, dock: 3, speed: 3 };
 STATION.n = Math.sqrt(EARTH.mu / STATION.r ** 3);
 // The ship: engine up to 32 m/s² (over twice Earth's pull), 260 m/s of fuel (Δv), and a nose
 // that turns 9 rad/s toward the finger. `size` is how far its legs reach from its middle.
-const SHIP = { acc: 32, dv: 340, turn: 9, size: 0.8 };
+const SHIP = { acc: 32, dv: 340, turn: 14, size: 0.8 };
+var turnScale = 1;
 const STEP = 1 / 120;
 const SAVE_KEY = 'ai-pelit:raketti:matka', STARS_KEY = 'ai-pelit:raketti:tahdet';
 
@@ -136,9 +137,14 @@ function step(dt = STEP) {
   const s = ship;
   if (!s || s.phase !== 'flight') return;
   let thrust = 0;
+  // The nose follows the finger as soon as it moves, before the engine starts, and turns as fast
+  // on the screen however slow time runs (turnScale, set by the frame loop).
+  const aiming = stick.power > 0 || (stick.on && Math.hypot(stick.dx || 0, stick.dy || 0) > 3);
+  if (aiming) {
+    const err = wrap(stick.angle - s.angle), turn = SHIP.turn * turnScale * dt;
+    s.angle = wrap(s.angle + clamp(err, -turn, turn));
+  }
   if (stick.power > 0) {
-    const err = wrap(stick.angle - s.angle);
-    s.angle = wrap(s.angle + clamp(err, -SHIP.turn * dt, SHIP.turn * dt));
     const off = Math.abs(wrap(stick.angle - s.angle));
     if (s.dv > 0 && off < Math.PI / 3) thrust = SHIP.acc * stick.power * Math.cos(off);
   }

@@ -66,7 +66,11 @@ function landingPush(b, s) {
   // the ship up against gravity; the last metres slow to a gentle touch.
   const want = -(b.land / 6 + Math.sqrt(2 * 0.2 * (SHIP.acc - g) * Math.max(0, alt - 3)));
   const vx = s.vx - p.vx, vy = s.vy - p.vy;
-  const ax = (ux * want - vx) * 2.5 + ux * g, ay = (uy * want - vy) * 2.5 + uy * g;
+  let ax = (ux * want - vx) * 2.5 + ux * g, ay = (uy * want - vy) * 2.5 + uy * g;
+  // Never push toward the ground (#548): gravity speeds the fall for free, so only the sideways
+  // part of a push that points down is kept.
+  const down = ax * ux + ay * uy;
+  if (down < 0) { ax -= ux * down; ay -= uy * down; }
   return { dir: angleOf(ax, ay), power: clamp(Math.hypot(ax, ay) / SHIP.acc, 0, 1) };
 }
 // The fastest the ship may move this high above b and still stop gently with part of its push.
@@ -92,6 +96,7 @@ function landingHint(b, s, path) {
     return { word: 'Odota', speed: b };
   }
   const push = landingPush(b, s);
+  if (push.power < 0.03 && !braking) return { word: 'Odota', speed: b };
   return { word: 'Hiljaa alas', dir: push.dir, power: push.power, speed: b };
 }
 // The path's next lowest or highest point, in the frame it is drawn in.
@@ -112,7 +117,7 @@ function transferHint(s, path, target, r2, n2, close, id) {
   const pro = angleOf(o.vx, o.vy), c = path && path.closest[id];
   if (c && c.d < close) return { word: 'Odota', mark: { x: c.x, y: c.y }, ghost: { id, t: c.t } };
   const left = c ? c.t - s.t : 0;
-  if (c && c.d < Math.min(close * 12, 120) && left > 2 && o.apo + EARTH.radius > r2 * 0.85 && !(s.thrust > 0 && o.apo + EARTH.radius < r2)) {
+  if (c && c.d < Math.min(close * 12, 200) && left > 2 && o.apo + EARTH.radius > r2 * 0.85 && !(s.thrust > 0 && o.apo + EARTH.radius < r2 && o.alt < o.peri + 15)) {
     // On the way but missing: nudge the path toward where the target will be.
     const dx = c.at.x - c.x, dy = c.at.y - c.y, miss = c.d - close * 0.4;
     return { word: 'Korjaa', dir: angleOf(dx, dy), power: clamp(miss / left / SHIP.acc * 4, 0.05, 1), ghost: { id, t: c.t } };
@@ -124,8 +129,8 @@ function transferHint(s, path, target, r2, n2, close, id) {
     }
     return { word: 'Odota', target: id, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - n2) };
   }
-  // Far off: lower the high point again at the low point and wait for the next window.
-  if (o.alt < o.peri + 10) return { word: 'Jarruta', dir: pro + Math.PI, power: 0.5 };
+  // Far too high: lower the high point again at the low point and wait for the next window.
+  if (o.apo + EARTH.radius > r2 * 1.15 && o.alt < o.peri + 10) return { word: 'Jarruta', dir: pro + Math.PI, power: 0.5 };
   return { word: 'Odota', target: id };
 }
 // From the pad into a low orbit around Earth.
@@ -167,7 +172,13 @@ function nextMove(s, path) {
   if (s.phase === 'done') return { word: 'Valmis!' };
   if (s.phase === 'crashed') return { word: 'Rysähti!' };
   if (s.landedOn) return { word: 'Vedä ylös', dir: s.landedOn.a, power: 1 };
-  const ref = refBody(s), trip = s.trip, home = trip === 'kotiin' && s.visited.includes('moon');
+  // Passing the rock on another trip is just part of the way round Earth.
+  const trip = s.trip, ref = refBody(s) === ROCK && trip !== 'kivi' ? EARTH : refBody(s), home = trip === 'kotiin' && s.visited.includes('moon');
+  if (trip !== 'kivi' && path && path.hit && path.hit.body === 'rock' && path.hit.t - s.t > 2) {
+    // About to hit the rock on the way elsewhere: a small push to the side misses it.
+    const o = orbitAround(EARTH, s);
+    return { word: 'Korjaa', dir: angleOf(o.vx, o.vy) + Math.PI / 2, power: 0.3 };
+  }
   if (ref === EARTH && home) {
     const c = path && path.closest.earth;
     if (orbitAround(EARTH, s).alt < 80 || (path && path.hit && path.hit.body === 'earth')) return landingHint(EARTH, s, path);
