@@ -6,7 +6,9 @@ bodies seen in one view that zooms by itself, a one-finger drag stick, short tri
 warp, then a Moon base built one part a trip and a real journey to Mars. There is still no
 autopilot: the player flies every push, and the hint at the bottom says what to do next. v4 (#548)
 shows how much of each burn is left and slows its end (see "Steps and time"). v5 (#548) brings a ship
-back on its way from wherever the player took it (see "Getting lost").
+back on its way from wherever the player took it (see "Getting lost"). v6 (#548) builds a base on
+Mars, one part a trip in a big new rocket, and the finished base fills the tank for the trip home
+(see "The Mars base").
 
 ## The world
 
@@ -41,6 +43,7 @@ fast the nose turns toward the finger.
 | Raketti | 32 | 340 | 14 rad/s | the first six, Mars (40 % full at the start) |
 | Kiitäjä | 38 | 340 | 18 rad/s | the solar panel |
 | Rahtiraketti | 21 | 400 | 5 rad/s | the fuel tank and the fuel factory |
+| Jättiraketti | 24 | 420 | 6 rad/s | the Mars base's three parts (40 % full), Marsista kotiin |
 
 ## Control
 
@@ -104,11 +107,26 @@ Moon it pushes out along Earth's own way round the Sun, so the ship leaves Earth
 half-ellipse out to Mars's circle; out round the Sun small corrections bend the path past Mars,
 and it lands there like on the Moon. A whole trip followed by the hints takes about 9 minutes.
 
+## The Mars base
+
+Three trips (Asuinmoduuli, Kasvihuone, Polttoainetehdas Marsiin) each fly one part of the base in
+the Jättiraketti: the Mars trip's way, refuelled at the Moon base, but the part must come down in
+the Mars base (Mars's top, ±0.4 rad; beside it the hint says "Hyppää"). Coming in to Mars, the hint
+first brakes into a low orbit (lowest 5 m, highest 80 m) at the arrival's lowest point, aiming the
+highest point at 56 m in one burn (a burn aimed at 80 ended on the edge and needed trim after trim), then brakes it all at once 1.9 rad
+before the base, as for the Moon base. Each takes about 10 minutes.
+
+Marsista kotiin opens once the whole base is built. It starts landed in the Mars base with 10 % of
+a tank and 20 s before its window home: the base fills the tank, the hint counts the window down,
+then "Kohti Maata" pushes against Mars's own way round the Sun until the ship has about 10.7 m/s
+less than Mars there, which drops it onto a half-ellipse in to Earth's circle. Corrections bend it
+past Earth, and the landing is the one home from the Moon. About 6 minutes.
+
 ## Stars and saves
 
 A trip gives a star for arriving, one for fuel left over its limit, and one for a soft finish (a
 landing at half the safe speed or slower, a docking at 1.5 m/s or slower, an orbit with eccentricity
 0.25 or less). A trip opens once the one before it has a star; Mars therefore opens after the whole
-base. The flight in progress is saved under `ai-pelit:raketti:matka`, and stars under
+Moon base, and the trip home from Mars after the whole Mars base. The flight in progress is saved under `ai-pelit:raketti:matka`, and stars under
 `ai-pelit:raketti:tahdet`. A saved flight is resumed only when every number in it makes sense, so
 v2's saves (another shape) are left unread.

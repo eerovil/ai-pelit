@@ -134,32 +134,54 @@ function drawPart(id, u) {
     ctx.fillStyle = '#c9b27a'; ctx.fillRect(-0.9 * u, -1 * u, 1.8 * u, 1 * u);
     ctx.fillStyle = '#8b7b55'; ctx.fillRect(0.35 * u, -1.6 * u, 0.3 * u, 0.6 * u);
     ctx.fillStyle = '#ffd65a'; ctx.fillRect(-0.6 * u, -0.7 * u, 0.4 * u, 0.3 * u);
+  } else if (id === 'asunto') {
+    // The living module: a white drum on its side with round windows.
+    ctx.fillStyle = '#eef2f5'; ctx.beginPath(); ctx.ellipse(0, -0.6 * u, 1.05 * u, 0.6 * u, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#7fb6e8';
+    for (const x of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.arc(x * u, -0.65 * u, 0.15 * u, 0, TAU); ctx.fill(); }
+  } else if (id === 'kasvihuone') {
+    // The greenhouse: a glass dome with plants in it.
+    ctx.fillStyle = '#3f9b55';
+    for (const x of [-0.45, 0, 0.45]) { ctx.beginPath(); ctx.arc(x * u, -0.18 * u, 0.22 * u, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = 'rgba(190,235,255,.45)'; ctx.beginPath(); ctx.arc(0, 0, 0.95 * u, Math.PI, TAU); ctx.fill();
+    ctx.strokeStyle = '#dff4ff'; ctx.lineWidth = Math.max(1, 0.05 * u); ctx.stroke();
+  } else if (id === 'marstehdas') {
+    // The fuel factory: a block with two tanks and a chimney.
+    ctx.fillStyle = '#b9c1c8'; ctx.fillRect(-1 * u, -0.8 * u, 2 * u, 0.8 * u);
+    ctx.fillStyle = '#e2574c'; ctx.fillRect(-0.85 * u, -1.35 * u, 0.5 * u, 0.55 * u); ctx.fillRect(-0.25 * u, -1.35 * u, 0.5 * u, 0.55 * u);
+    ctx.fillStyle = '#6d757c'; ctx.fillRect(0.55 * u, -1.7 * u, 0.25 * u, 0.9 * u);
   }
 }
-// Where each part stands in the base, as an angle off its middle (radians round the Moon).
-const PART_SPOT = { paneeli: -0.22, tankki: 0, tehdas: 0.22 };
+// Where each part stands in the base, as an angle off its middle (radians round the Moon; on Mars
+// the middle stays free for the rocket to land on).
+const PART_SPOT = { paneeli: -0.22, tankki: 0, tehdas: 0.22, asunto: -0.25, kasvihuone: 0.22, marstehdas: 0.45 };
+// Both bases: the Moon's, and Mars's (v6), each with the zone to land in glowing when the trip
+// lands there.
 function drawBase(s, now) {
-  const m = bodyAt(MOON, s.t), r = MOON.radius * cam.scale;
+  drawBaseOn(s, now, MOON, BASE, landingAim(s) !== undefined, 'moon');
+  drawBaseOn(s, now, MARS, MARS_BASE, marsAim(s) !== undefined && s.tanked, 'mars');
+}
+function drawBaseOn(s, now, b, base, aim, on) {
+  const m = bodyAt(b, s.t), r = b.radius * cam.scale;
   if (r < 6) return;
-  const trip = TRIP[s.trip];
-  // The zone to land in, glowing on a part trip.
-  if (landingAim(s) !== undefined) {
-    const a0 = BASE.a - BASE.zone, a1 = BASE.a + BASE.zone;
+  if (aim) {
+    const a0 = base.a - base.zone, a1 = base.a + base.zone;
     ctx.save(); ctx.beginPath(); ctx.arc(sx(m.x), sy(m.y), r + 2, a0 - Math.PI / 2, a1 - Math.PI / 2);
     ctx.strokeStyle = `rgba(255,214,90,${0.5 + 0.4 * pulse(now)})`; ctx.lineWidth = Math.max(3, cam.scale * 0.3); ctx.stroke(); ctx.restore();
   }
-  for (const id of Object.keys(PART_SPOT)) {
-    if (!baseBuilt(id) && !(ship.phase === 'done' && ship.trip === id)) continue;
-    const a = BASE.a + PART_SPOT[id];
-    ctx.save(); ctx.translate(sx(m.x + Math.sin(a) * MOON.radius), sy(m.y + Math.cos(a) * MOON.radius)); ctx.rotate(a);
-    drawPart(id, Math.max(1.2 * cam.scale, 3)); ctx.restore();
+  for (const t of TRIPS) {
+    if (partOn(t) !== on || (!baseBuilt(t.id) && !(ship.phase === 'done' && ship.trip === t.id))) continue;
+    // Round a big body the same few metres are a smaller angle.
+    const a = base.a + PART_SPOT[t.id] * MOON.radius / b.radius;
+    ctx.save(); ctx.translate(sx(m.x + Math.sin(a) * b.radius), sy(m.y + Math.cos(a) * b.radius)); ctx.rotate(a);
+    drawPart(t.id, Math.max(1.2 * cam.scale, 3)); ctx.restore();
   }
 }
-// The rockets: Raketti white and red; Kiitäjä slim and blue; Rahtiraketti wide and grey. A part
-// on its way rides on the nose.
+// The rockets: Raketti white and red; Kiitäjä slim and blue; Rahtiraketti wide and grey;
+// Jättiraketti widest, white and purple, with a band round it. A part on its way rides on the nose.
 function drawShip(s) {
   const kind = TRIP[s.trip].rocket || 'raketti', x = sx(s.x), y = sy(s.y), len = Math.max(16, SHIP.size * 2.4 * cam.scale);
-  const wide = kind === 'rahti' ? 1.35 : kind === 'kiitaja' ? 0.8 : 1;
+  const wide = kind === 'jatti' ? 1.5 : kind === 'rahti' ? 1.35 : kind === 'kiitaja' ? 0.8 : 1;
   ctx.save(); ctx.translate(x, y); ctx.rotate(s.angle);
   if (s.thrust > 0) {
     const f = len * (0.4 + 0.6 * s.thrust / SHIP.acc) * (0.85 + Math.random() * 0.3);
@@ -167,8 +189,9 @@ function drawShip(s) {
   }
   ctx.fillStyle = kind === 'rahti' ? '#c3cad1' : '#f3f6f8';
   ctx.beginPath(); ctx.moveTo(0, -len * 0.55); ctx.lineTo(len * 0.22 * wide, len * 0.25); ctx.lineTo(-len * 0.22 * wide, len * 0.25); ctx.fill();
-  ctx.fillStyle = kind === 'kiitaja' ? '#3d9be0' : kind === 'rahti' ? '#e89a3c' : '#e2574c';
+  ctx.fillStyle = kind === 'kiitaja' ? '#3d9be0' : kind === 'rahti' ? '#e89a3c' : kind === 'jatti' ? '#8a5cd6' : '#e2574c';
   ctx.beginPath(); ctx.moveTo(len * 0.22 * wide, len * 0.25); ctx.lineTo(len * 0.34 * wide, len * 0.45); ctx.lineTo(-len * 0.34 * wide, len * 0.45); ctx.lineTo(-len * 0.22 * wide, len * 0.25); ctx.fill();
+  if (kind === 'jatti') ctx.fillRect(-len * 0.11 * wide, -len * 0.05, len * 0.22 * wide, len * 0.08);
   if (TRIP[s.trip].part && s.phase !== 'done') { ctx.translate(0, -len * 0.42); drawPart(s.trip, len * 0.24); }
   ctx.restore();
 }

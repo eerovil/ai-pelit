@@ -39,12 +39,16 @@ const ROCKETS = {
   raketti: { name: 'Raketti', acc: 32, dv: 340, turn: 14, size: 0.8 },
   kiitaja: { name: 'Kiitäjä', acc: 38, dv: 340, turn: 18, size: 0.7 },
   rahti: { name: 'Rahtiraketti', acc: 21, dv: 400, turn: 5, size: 1.1 },
+  // The big rocket that carries the Mars base's parts and flies home from Mars (v6).
+  jatti: { name: 'Jättiraketti', acc: 24, dv: 420, turn: 6, size: 1.2 },
 };
 // The rocket of the flight on screen.
 const SHIP = Object.assign({}, ROCKETS.raketti);
 function useRocket(id) { Object.assign(SHIP, ROCKETS[id] || ROCKETS.raketti); }
 // The Moon base stands on top of the Moon (the Moon never turns), in a zone this wide (radians).
 const BASE = { a: 0, zone: 0.4 };
+// The Mars base (v6) stands on top of Mars, which never turns either, in a zone as wide.
+const MARS_BASE = { a: 0, zone: 0.4 };
 const REFUEL = 120; // m/s of Δv a second while the ship stands at a finished base
 var turnScale = 1;
 const STEP = 1 / 120;
@@ -122,9 +126,17 @@ function stationRelative(s = ship) {
 function freshFlight(trip = 'kiertorata') {
   // The pad stands on top of Earth; the ship stands on it with its nose up.
   const r = ROCKETS[TRIP[trip].rocket || 'raketti'], dv = r.dv * (TRIP[trip].tank || 1);
-  return { trip, t: 0, x: 0, y: EARTH.radius + r.size, vx: 0, vy: 0, angle: 0, dv, refuel: false, tanked: false,
+  const s = { trip, t: 0, x: 0, y: EARTH.radius + r.size, vx: 0, vy: 0, angle: 0, dv, refuel: false, tanked: false,
     thrust: 0, coast: 0, phase: 'flight', landedOn: { id: 'earth', a: 0 }, visited: ['earth'],
     touch: null, reason: '', stars: 0, docked: false };
+  // The way home from Mars (v6) starts in the Mars base with a near-empty tank, which the base
+  // fills, a little before the window home opens.
+  if (TRIP[trip].fromMars) {
+    const p = bodyAt(MARS, s.t = homeStart()), rr = MARS.radius + r.size;
+    Object.assign(s, { landedOn: { id: 'mars', a: MARS_BASE.a }, visited: ['mars'], refuel: true, angle: MARS_BASE.a,
+      x: p.x + rr * Math.sin(MARS_BASE.a), y: p.y + rr * Math.cos(MARS_BASE.a), vx: p.vx, vy: p.vy });
+  }
+  return s;
 }
 
 // Sitting on a body: the ship rides along with it until the engine pushes it off.
@@ -144,7 +156,8 @@ function contact(s) {
     }
     s.landedOn = { id: b.id, a }; s.angle = a;
     // A finished base fills the tank of a ship that lands in it.
-    if (b === MOON && TRIP[s.trip].far && atBase(a) && baseReady()) s.refuel = true;
+    if (b === MOON && TRIP[s.trip].far && !TRIP[s.trip].fromMars && atBase(a) && baseReady()) s.refuel = true;
+    if (b === MARS && TRIP[s.trip].fromMars && atMarsBase(a)) s.refuel = true;
     if (!s.visited.includes(b.id)) s.visited.push(b.id);
     sitOn(s, b, a);
     return;

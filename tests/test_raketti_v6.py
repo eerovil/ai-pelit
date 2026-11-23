@@ -1,4 +1,4 @@
-"""Raketti v5 (#548): tiny bodies, one finger, short trips, the Moon base and Mars.
+"""Raketti v6 (#548): tiny bodies, one finger, short trips, the Moon base, Mars and its base.
 
 Every trip is flown here by following the game's own hints (FOLLOW below): the stick is set to
 the hint's direction and power, exactly what a drag along the arrow does. The game itself has no
@@ -11,7 +11,8 @@ import pytest
 from conftest import ROOT, turn
 
 URL = 'games/raketti/v6/'
-TRIP_IDS = ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kotiin', 'kivi', 'paneeli', 'tankki', 'tehdas', 'mars']
+TRIP_IDS = ['kiertorata', 'asema', 'kuu-kierto', 'kuuhun', 'kotiin', 'kivi', 'paneeli', 'tankki', 'tehdas', 'mars',
+            'asunto', 'kasvihuone', 'marstehdas', 'marsista']
 
 # Test helpers only, never shipped. follow(trip) flies a fresh flight by the hints with the frame
 # loop stopped, and counts words that changed again within 0.3 s (flicker).
@@ -20,11 +21,13 @@ window.follow = function (trip, opts = {}) {
   cancelAnimationFrame(frameId); frameId = 0;
   for (const t of TRIPS) stars[t.id] = stars[t.id] || 1;
   begin(freshFlight(trip)); cancelAnimationFrame(frameId); frameId = 0;
+  const t0 = ship.t;
   if (opts.start) Object.assign(ship, { landedOn: null }, opts.start);
   let last = '', hw, since = 0; const quick = [];
   for (let i = 0; i < 120 * 2000 && ship.phase === 'flight'; i++) {
     if (opts.until && opts.until()) break;
     if (i % 6 === 0 && (i % 120 === 0 || !(last === 'Odota' && (hw === undefined || hw > 4)))) path = predictPath(ship);
+    else carryPath(path, ship.t); // as the game's frame does: the path moves on with its body
     const h = hint(ship, path); hw = h.wait;
     if (h.word !== last) { if (last && ship.t - since < 0.3) quick.push([since, last, h.word]); since = ship.t; last = h.word; }
     if (h.dir !== undefined) { stick.angle = h.dir; stick.power = h.power ?? 1; } else stick.power = 0;
@@ -32,7 +35,7 @@ window.follow = function (trip, opts = {}) {
     if (ship.phase === 'flight' && goalMet(ship)) endFlight(TRIP[ship.trip].goal, true);
   }
   stick.power = 0;
-  return { phase: ship.phase, reason: ship.reason, t: ship.t, stars: ship.stars, fuel: fuelShare(),
+  return { phase: ship.phase, reason: ship.reason, t: ship.t - t0, stars: ship.stars, fuel: fuelShare(),
     touch: ship.touch, quick, saved: JSON.parse(localStorage.getItem('ai-pelit:raketti:tahdet') || '{}') };
 };
 """
@@ -57,9 +60,11 @@ def reopen(page):
 
 
 # The longest each trip may take in game seconds when the hints are followed (Mars's is a real
-# journey round the Sun, #548: about 5-10 minutes).
+# journey round the Sun, #548: about 5-10 minutes). Marsista kotiin counts from its own start,
+# a little before its window home opens.
 LIMIT = {'kiertorata': 15, 'asema': 90, 'kuu-kierto': 70, 'kuuhun': 80, 'kotiin': 150, 'kivi': 110,
-         'paneeli': 100, 'tankki': 120, 'tehdas': 120, 'mars': 600}
+         'paneeli': 100, 'tankki': 120, 'tehdas': 120, 'mars': 600,
+         'asunto': 660, 'kasvihuone': 660, 'marstehdas': 660, 'marsista': 520}
 
 
 @pytest.mark.parametrize('trip', TRIP_IDS)
@@ -115,6 +120,51 @@ def test_a_part_lands_only_in_the_base(site, context):
     assert page.errors == []
 
 
+def land_on_mars(page, trip, a, tanked):
+    return page.evaluate("""([trip, a, tanked]) => { cancelAnimationFrame(frameId); frameId = 0;
+      begin(freshFlight(trip)); cancelAnimationFrame(frameId); frameId = 0;
+      const p = bodyAt(MARS, ship.t), r = MARS.radius + SHIP.size + 0.002;
+      Object.assign(ship, { landedOn: null, tanked, visited: ['earth', 'moon', 'mars'], x: p.x + r * Math.sin(a),
+        y: p.y + r * Math.cos(a), vx: p.vx - Math.sin(a), vy: p.vy - Math.cos(a) });
+      step(STEP); const met = goalMet(ship), h = hint(ship, null);
+      return { met, word: h.word, landed: ship.landedOn && ship.landedOn.id, rocket: SHIP.name }; }""", [trip, a, tanked])
+
+
+@pytest.mark.parametrize('trip', ['asunto', 'kasvihuone', 'marstehdas'])
+def test_a_mars_base_part_lands_only_in_the_mars_base(site, context, trip):
+    page = open_game(site, context)
+    outside = land_on_mars(page, trip, 1.2, True)
+    assert outside['landed'] == 'mars' and outside['met'] is False and outside['word'] == 'Hyppää', outside
+    inside = land_on_mars(page, trip, 0.1, True)
+    assert inside['met'] is True, inside
+    # The big rocket flies every part (Eero's choice), and needs the Moon base's fuel on the way.
+    assert inside['rocket'] == 'Jättiraketti'
+    assert land_on_mars(page, trip, 0.1, False)['met'] is False
+    # The base on Mars draws beside the landed ship.
+    page.evaluate('draw(hint(ship, null))')
+    assert page.errors == []
+
+
+def test_the_trip_home_starts_in_the_mars_base_fills_up_and_waits_for_its_window(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""() => { cancelAnimationFrame(frameId); frameId = 0;
+      begin(freshFlight('marsista')); cancelAnimationFrame(frameId); frameId = 0;
+      const out = { landed: ship.landedOn && ship.landedOn.id, base: atMarsBase(ship.landedOn.a), rocket: SHIP.name,
+        first: hint(ship, null).word, low: ship.dv < SHIP.dv };
+      for (let i = 0; i < 120 * 20 && !ship.tanked; i++) step(STEP);
+      const h = hint(ship, null);
+      Object.assign(out, { tanked: ship.tanked, full: ship.dv === SHIP.dv, word: h.word, window: h.window,
+        wait: h.wait, skip: canSkip(h), open: homeWait(ship.t + h.wait + 1) });
+      return out; }""")
+    assert r['landed'] == 'mars' and r['base'] and r['rocket'] == 'Jättiraketti', r
+    assert r['low'] and r['first'] == 'Tankataan', r
+    assert r['tanked'] and r['full'], r
+    assert r['word'] == 'Odota' and r['window'] is True and r['skip'] is True, r
+    assert 0 < r['wait'] < 30, r
+    assert r['open'] == 0, r
+    assert page.errors == []
+
+
 def test_the_finished_base_fills_the_mars_ship(site, context):
     page = open_game(site, context)
     unbuilt = land_on_moon(page, 'mars', 0.1, False)
@@ -134,6 +184,13 @@ def test_trips_unlock_in_order_mars_after_the_whole_base(site, context):
     assert page.locator('.trip[data-trip="mars"]').is_disabled()
     assert page.locator('.trip[data-trip="mars"] b').inner_text().startswith('🔒')
     assert page.evaluate('Object.keys(readStars()).length') == 8
+    # The Mars base's parts follow Mars one by one, and the trip home needs the whole base (v6).
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify("
+                  "{kiertorata: 3, asema: 2, 'kuu-kierto': 1, kuuhun: 1, kotiin: 1, kivi: 2, paneeli: 1, tankki: 1,"
+                  " tehdas: 1, mars: 2, asunto: 1, kasvihuone: 1}))")
+    reopen(page)
+    assert page.locator('.trip[data-trip="marstehdas"]').is_enabled()
+    assert page.locator('.trip[data-trip="marsista"]').is_disabled()
     page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify({kiertorata: 9, asema: 1.5}))")
     assert page.evaluate('readStars()') == {}
     assert page.errors == []
