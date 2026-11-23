@@ -197,6 +197,36 @@ CAMERA = """frames => {
       return [devs[Math.floor(devs.length * 0.9)], pts.length, ship.phase, devs[Math.floor(devs.length * 0.5)], devs[devs.length - 1]]; }"""
 
 
+
+def test_the_path_round_the_moon_holds_still(site, context):
+    # The path is worked out every 4th frame; in between it must move with the Moon, or round
+    # the Moon it jumps back each time and shakes (#548). The ship coasts, so the path is fixed.
+    page = open_game(site, context)
+    out = page.evaluate("""() => {
+      // Tanked for Mars in a round orbit 8 m above the Moon, as on the owner's phone.
+      follow('kiertorata'); begin(freshFlight('mars')); cancelAnimationFrame(frameId); frameId = 0;
+      const m0 = bodyAt(MOON, ship.t), r = MOON.radius + 8, v = Math.sqrt(MOON.mu / r);
+      Object.assign(ship, { x: m0.x, y: m0.y + r, vx: m0.vx + v, vy: m0.vy, landedOn: null, tanked: true, dv: ROCKETS.raketti.dv, visited: ['earth', 'moon'] });
+      camReady = false; paused = false; lastFrame = 0; acc = 0; stick.power = 0; let now = 1000; const pts = [], devs = [];
+      // Where the path says the ship will be at one fixed time: the same spot round the Moon each frame.
+      const T = ship.t + 20, at = () => { const ps = path.points, i = ps.findIndex(p => p.t >= T), a = ps[i - 1], b = ps[i], u = (T - a.t) / (b.t - a.t);
+        return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }; };
+      for (let f = 0; f < 240 && ship.phase === 'flight'; f++) {
+        now += (f % 3 === 0 ? 0.033 : 0.012) * 1000;
+        frame(now); cancelAnimationFrame(frameId); frameId = 0;
+        const q = at(), m = bodyAt(MOON, ship.t);
+        if (f > 20 && path.frame === MOON) pts.push([sx(q.x) - sx(m.x), sy(q.y) - sy(m.y), now]);
+      }
+      for (let i = 1; i + 1 < pts.length; i++) {
+        const [a, b, c] = [pts[i - 1], pts[i], pts[i + 1]], u = (b[2] - a[2]) / Math.max(1e-9, c[2] - a[2]);
+        devs.push(Math.hypot(b[0] - a[0] - (c[0] - a[0]) * u, b[1] - a[1] - (c[1] - a[1]) * u));
+      }
+      devs.sort((p, q) => p - q);
+      return [devs[Math.floor(devs.length * 0.9)], pts.length, cam.scale]; }""")
+    assert out[1] > 150, out
+    assert out[0] < 0.5, out
+    assert page.errors == []
+
 def test_the_stick_grows_as_the_square_of_the_drag(site, context):
     page = open_game(site, context)
     page.locator('.trip[data-trip="kiertorata"]').click()
@@ -215,7 +245,7 @@ def test_the_stick_grows_as_the_square_of_the_drag(site, context):
 
 def test_flight_resumes_after_reload_and_turning(site, context):
     page = open_game(site, context)
-    page.evaluate("follow('kuuhun', { until: () => ship.t > 20 }); saveFlight()")
+    page.evaluate("follow('kuuhun', { until: () => ship.t > 20 }); saveFlight(); saveStars()")
     before = page.evaluate('[ship.t, ship.x, ship.y]')
     reopen(page)
     assert page.locator('#resume').inner_text() == 'Jatka: Kuuhun'
@@ -239,15 +269,19 @@ def test_looking_at_the_menu_saves_no_flight(site, context):
 
 
 @pytest.mark.parametrize('mutation', [
-    "s.x = null", "s.trip = 'ufo'", "s.dv = 1e9", "s.visited = ['pluto']", "s.landedOn = { id: 'moon', a: 'x' }",
-    "s.x = 1e6", "Object.assign(s, { throttle: 1, point: 'pro', fuel: 3 }); delete s.dv",
+    "", "s.x = null", "s.trip = 'ufo'", "s.dv = 1e9", "s.visited = ['pluto']", "s.landedOn = { id: 'moon', a: 'x' }",
+    "s.x = 1e6", "s.vx = 1e200", "Object.assign(s, { throttle: 1, point: 'pro', fuel: 3 }); delete s.dv",
+    "localStorage.removeItem('ai-pelit:raketti:tahdet')",
 ])
 def test_corrupt_or_old_saves_are_not_resumed(site, context, mutation):
     page = open_game(site, context)
+    # kuuhun is open, so only the mutation (a lost star store locks it again) makes the save unusable.
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify({kiertorata: 1, asema: 1, 'kuu-kierto': 1}))")
     page.evaluate(f"""() => {{ const s = freshFlight('kuuhun'); {mutation};
       localStorage.setItem('ai-pelit:raketti:matka', JSON.stringify(s)); }}""")
     reopen(page)
-    assert page.locator('#resume').is_hidden()
+    # The unchanged save resumes, which shows the others fail for their own reason.
+    assert page.locator('#resume').is_visible() == (mutation == "")
     assert page.errors == []
 
 
@@ -264,7 +298,6 @@ def test_menus_and_flight_fit_the_screen(site, browser, width, height):
     reopen(page)
     for sel in ['#menu', '.trip[data-trip="kiertorata"]', '#star-total']:
         assert page.evaluate(FITS, sel), (sel, width, height)
-    page.locator('.trip[data-trip="mars"]').scroll_into_view_if_needed()
     page.locator('.trip[data-trip="mars"]').click()
     page.wait_for_function("document.querySelector('#hint').textContent !== ''")
     for sel in ['#hint', '#pause', '#fuel', '#trip-name', '#c']:
@@ -272,10 +305,52 @@ def test_menus_and_flight_fit_the_screen(site, browser, width, height):
     page.locator('#pause').click()
     for sel in ['#continue', '#to-menu']:
         assert page.evaluate(FITS, sel), (sel, width, height)
+    # Back in the menu with a flight to resume: every trip still shows without scrolling.
+    page.locator('#to-menu').click()
+    for sel in ['#resume'] + [f'.trip[data-trip="{t}"]' for t in LIMIT]:
+        assert page.evaluate(FITS, sel), (sel, width, height)
+    assert page.evaluate("(m => m.scrollHeight <= m.clientHeight + 1)(document.querySelector('#menu'))")
     page.evaluate("follow('kiertorata'); paused = false; endShownAt = 0; play()")
     page.wait_for_selector('#result:not([hidden])')
     for sel in ['#result', '#result-next', '#retry', '#result-menu']:
         assert page.evaluate(FITS, sel), (sel, width, height)
     assert page.evaluate('document.documentElement.scrollHeight <= innerHeight + 1')
+    assert page.errors == []
+    context.close()
+
+
+def test_a_new_trip_asks_before_replacing_a_saved_one(site, browser):
+    context = browser.new_context(viewport={'width': 360, 'height': 740}, is_mobile=True, has_touch=True)
+    page = open_game(site, context)
+    page.evaluate("localStorage.setItem('ai-pelit:raketti:tahdet', JSON.stringify({kiertorata: 1}))")
+    reopen(page)
+    page.locator('.trip[data-trip="asema"]').click()
+    page.wait_for_function("document.querySelector('#hint').textContent !== ''")
+    page.locator('#pause').click()
+    page.locator('#to-menu').click()
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    assert page.locator('#replace-panel').is_visible()
+    assert 'Avaruusasemalle' in page.locator('#replace-text').text_content()
+    page.locator('#replace-no').click()
+    assert page.locator('#menu').is_visible()
+    assert page.evaluate("JSON.parse(localStorage.getItem('ai-pelit:raketti:matka')).trip") == 'asema'
+    page.locator('.trip[data-trip="kiertorata"]').click()
+    page.locator('#replace-yes').click()
+    page.wait_for_function("ship && ship.trip === 'kiertorata' && $('menu').hidden")
+    assert page.errors == []
+    context.close()
+
+
+def test_v2_saves_are_left_alone(site, browser):
+    context = browser.new_context(viewport={'width': 360, 'height': 740}, is_mobile=True, has_touch=True)
+    page = open_game(site, context)
+    old = {'ai-pelit:raketti:lento': '{"trip":"kuuhun","x":1}', 'ai-pelit:raketti:saavutukset': '{"kuuhun":3}'}
+    for k, v in old.items():
+        page.evaluate("([k, v]) => localStorage.setItem(k, v)", [k, v])
+    reopen(page)
+    page.evaluate("follow('kiertorata')")
+    reopen(page)
+    for k, v in old.items():
+        assert page.evaluate("k => localStorage.getItem(k)", k) == v
     assert page.errors == []
     context.close()

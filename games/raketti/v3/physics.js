@@ -66,10 +66,7 @@ function bodyAt(b, t) {
   const h = onCircle(b.helio, t);
   return { x: h.x - e.x, y: h.y - e.y, vx: h.vx - e.vx, vy: h.vy - e.vy, ax: h.ax - e.ax, ay: h.ay - e.ay };
 }
-function stationAt(t) {
-  const a = STATION.phase + STATION.n * t, r = STATION.r, w = r * STATION.n;
-  return { x: r * Math.sin(a), y: r * Math.cos(a), vx: w * Math.cos(a), vy: -w * Math.sin(a) };
-}
+function stationAt(t) { return onCircle(STATION, t); }
 // One body pulls at a time (#548: an orbit must not drift by itself). Inside the Moon's, the
 // rock's or Mars's sphere the ship falls around it as if it stood still, carried along with it;
 // inside Earth's sphere only Earth pulls; further out only the Sun.
@@ -147,7 +144,7 @@ function contact(s) {
     }
     s.landedOn = { id: b.id, a }; s.angle = a;
     // A finished base fills the tank of a ship that lands in it.
-    if (b === MOON && atBase(a) && baseReady()) s.refuel = true;
+    if (b === MOON && TRIP[s.trip].far && atBase(a) && baseReady()) s.refuel = true;
     if (!s.visited.includes(b.id)) s.visited.push(b.id);
     sitOn(s, b, a);
     return;
@@ -211,15 +208,25 @@ function step(dt = STEP) {
 // body the ship is near (its motion taken out), so an orbit around the Moon shows as a loop, and
 // so are the closest passes. Out round the Sun the steps are longer and the path goes further
 // (#548: the Mars trip takes minutes); `exit` is where it first leaves Earth's sphere.
+// A path is worked out only every few frames, drawn where its body was then. Between those
+// frames, carry it along with its body, or round the moving Moon it jumps back each time (#548).
+function carryPath(p, now) {
+  if (!p || p.frame === EARTH || now === p.now) return;
+  const a = bodyAt(p.frame, p.now), b = bodyAt(p.frame, now), dx = b.x - a.x, dy = b.y - a.y;
+  p.now = now;
+  for (const q of p.points) { q.x += dx; q.y += dy; }
+  if (p.hit) { p.hit.x += dx; p.hit.y += dy; }
+  for (const c of Object.values(p.closest)) { c.x += dx; c.y += dy; c.at.x += dx; c.at.y += dy; }
+}
 function predictPath(s = ship, horizon = 90, dt = 0.05) {
   const frame = refBody(s), f0 = bodyAt(frame, s.t);
-  const out = { frame, points: [], hit: null, closest: {}, exit: null };
+  const out = { frame, now: s ? s.t : 0, points: [], hit: null, closest: {}, exit: null };
   if (!s || s.landedOn || s.phase !== 'flight') return out;
   if (TRIP[s.trip].far && (s.tanked || frame === SUN || frame === MARS)) horizon = 600;
   let x = s.x, y = s.y, vx = s.vx, vy = s.vy, t = s.t, n = 0;
   const end = s.t + horizon;
   while (t < end) {
-    const g0 = gravity(x, y, t), ref = refAt(x, y, t), h = ref === SUN ? 0.5 : dt;
+    const g0 = gravity(x, y, t), ref = refAt(x, y, t), h = ref === SUN ? 0.5 : ref === EARTH && horizon > 90 ? 0.15 : dt;
     x += vx * h + 0.5 * g0.ax * h * h; y += vy * h + 0.5 * g0.ay * h * h; t += h;
     const g1 = gravity(x, y, t);
     vx += 0.5 * (g0.ax + g1.ax) * h; vy += 0.5 * (g0.ay + g1.ay) * h;
@@ -247,6 +254,8 @@ function endFlight(reason, success = false) {
   stick.on = false; stick.power = 0;
   if (success) {
     s.stars = tripStars(s);
+    // Stars another tab won meanwhile are kept.
+    for (const [id, n] of Object.entries(readStars())) stars[id] = Math.max(stars[id] || 0, n);
     if (s.stars > (stars[s.trip] || 0)) { stars[s.trip] = s.stars; saveStars(); }
   }
   saveFlight();
@@ -274,7 +283,8 @@ function readFlight() {
     if (!s || typeof s !== 'object' || !TRIP[s.trip] || s.phase !== 'flight') return null;
     for (const k of ['t', 'x', 'y', 'vx', 'vy', 'angle', 'dv', 'coast']) if (!Number.isFinite(s[k])) return null;
     const rocket = ROCKETS[TRIP[s.trip].rocket || 'raketti'];
-    if (s.t < 0 || s.dv < 0 || s.dv > rocket.dv || Math.hypot(s.x, s.y) > 40000) return null;
+    if (s.t < 0 || s.dv < 0 || s.dv > rocket.dv || Math.hypot(s.x, s.y) > 40000 || Math.hypot(s.vx, s.vy) > 2000) return null;
+    if (!tripOpen(s.trip)) return null; // its stars were lost: no way round the lock
     if (!Array.isArray(s.visited) || s.visited.some(v => !BODY[v])) return null;
     if (s.landedOn !== null && !(s.landedOn && BODY[s.landedOn.id] && Number.isFinite(s.landedOn.a))) return null;
     return Object.assign(freshFlight(s.trip), s, { thrust: 0, refuel: !!s.refuel, tanked: !!s.tanked });

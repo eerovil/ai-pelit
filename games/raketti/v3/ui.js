@@ -33,7 +33,8 @@ for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 
 // A soft engine hum through Web Audio, made on the first touch.
 function startSound() {
-  if (sound) return;
+  // A phone call or a locked screen suspends the sound; a touch brings it back.
+  if (sound) { if (sound.ac && sound.ac.state === 'suspended') sound.ac.resume(); return; }
   try {
     const ac = new (window.AudioContext || window.webkitAudioContext)();
     const buf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate), d = buf.getChannelData(0);
@@ -69,8 +70,9 @@ function renderMenu() {
     b.innerHTML = `<span><b></b><small></small></span><i></i>`;
     b.querySelector('b').textContent = open ? t.name : `🔒 ${t.name}`;
     b.querySelector('small').textContent = t.goal;
+    b.setAttribute('aria-label', `${t.name}: ${t.goal}`);
     b.querySelector('i').textContent = open ? starText(stars[t.id] || 0) : '';
-    b.onclick = () => startFlight(t.id);
+    b.onclick = () => askStart(t.id);
     list.appendChild(b);
   }
   const saved = readFlight();
@@ -90,6 +92,14 @@ function begin(s) {
   releaseStick(); showPanel(null); updateHud(); saveFlight(); play();
 }
 function startFlight(trip) { begin(freshFlight(trip)); }
+// From the menu, a new trip asks first when it would replace a flight left half-way.
+function askStart(trip) {
+  const saved = readFlight();
+  if (!saved) { startFlight(trip); return; }
+  $('replace-text').textContent = `Uusi matka korvaa keskeneräisen: ${TRIP[saved.trip].name}.`;
+  $('replace-yes').onclick = () => startFlight(trip);
+  showPanel('replace-panel');
+}
 
 function updateHud() {
   if (!ship) return;
@@ -159,7 +169,7 @@ function frame(now) {
     saveTimer += dt;
     if (saveTimer > 2) { saveTimer = 0; saveFlight(); }
   }
-  if (ship && (frames++ % 4 === 0 || !path || warp)) path = predictPath(ship);
+  if (ship && (frames++ % 4 === 0 || !path || warp)) path = predictPath(ship); else if (ship) carryPath(path, ship.t);
   currentHint = ship ? hint(ship, path) : null;
   if (warp && !canSkip(currentHint)) warp = false;
   if (warp && currentHint.wait !== undefined && currentHint.wait < 1) warp = false;
@@ -180,12 +190,13 @@ $('to-menu').onclick = openMenu;
 $('resume').onclick = () => { const s = readFlight(); if (s) begin(s); };
 $('retry').onclick = () => startFlight(ship.trip);
 $('result-menu').onclick = openMenu;
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && ship && ship.phase === 'flight' && !paused) {
-    paused = true; releaseStick(); saveFlight(); showPanel('pause-panel');
-  }
+$('replace-no').onclick = () => { renderMenu(); showPanel('menu'); };
+function pauseAway() {
+  if (ship && ship.phase === 'flight' && !paused) { paused = true; releaseStick(); saveFlight(); showPanel('pause-panel'); }
   updateSound();
-});
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseAway(); else updateSound(); });
+addEventListener('blur', pauseAway);
 // Not from the menu: the menu already saved the flight left there, and the flight drawn behind a
 // first menu was never started.
 addEventListener('pagehide', () => { if (ship && ship.phase === 'flight' && $('menu').hidden) saveFlight(); });

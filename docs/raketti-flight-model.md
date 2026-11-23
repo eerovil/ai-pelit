@@ -58,7 +58,7 @@ before its end (Mars's waits are minutes long). There is no other time warp.
 ## Mars
 
 The Mars trip starts with 40 % of a tank, flies to the Moon base and fills up there at 120 m/s a
-second (the base must be built). Its window opens about 150 s in; the hint counts it down. From the
+second (the base must be built; only this trip refuels there). Its window opens about 150 s in; the hint counts it down. From the
 Moon it pushes out along Earth's own way round the Sun, so the ship leaves Earth's sphere onto a
 half-ellipse out to Mars's circle; out round the Sun small corrections bend the path past Mars,
 and it lands there like on the Moon. A whole trip followed by the hints takes about 9 minutes.
