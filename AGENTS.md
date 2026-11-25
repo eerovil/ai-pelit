@@ -505,7 +505,7 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 - Before editing again after an approval, read the pull request's state: if it merged, branch from
   `origin/main` and never push the deleted branch again.
 - Copy the six `classDef` colour lines of AgentDeck's diagram guide
-  (`GET $AGENTDECK_URL/api/guide/prototype`) into the first diagram comment on the issue: the
+  ("Diagrams" in `GET $AGENTDECK_URL/api/live-prototype/guide`) into the first diagram comment on the issue: the
   files in `docs/diagrams/` hold only the `class` lines.
 
 ## Running it locally
