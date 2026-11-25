@@ -70,7 +70,8 @@ request, with the version that taught it (#181, Eero's choice).
    `scripts/check_immutable.py`: it fails a pull request that edits a published folder, deletes
    one in part or without a newer one, changes an entry, or reuses a number. It compares with
    where the branch left the ref it is given (`git merge-base HEAD <ref>`, the ref itself when git
-   cannot tell), so a version `main` published since is not blamed on the branch (#555).
+   cannot tell), so a version `main` published since is not blamed on the branch (#555); a new
+   version's number is still checked against the ref's tip too.
    `scripts/build.py` serves only the newest folder and writes `_redirects`, which sends an older
    version's address (a link, a home-screen shortcut, a room code) to the newest. `public/sw.js`
    drops a phone's cached copy of an older version. `games/<slug>/thumb.webp` is outside the
@@ -459,7 +460,7 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
   for the new head. `main` moves often here (many Works at once), and another Work often takes
   the same version number, so merge `origin/main` right before you mark the pull request ready (then commit every doc
   and diagram edit, run `python3 scripts/build.py` and `python3 scripts/check_immutable.py
-  origin/main`, and queue one verification job; a release landing on `main` mid-run fails it)
+  origin/main`, and queue one verification job)
   and again after each review pass, and on a long-running pull request before each push. Before
   you build, check open pull requests and sibling Works for the same game's next number. A pull
   request that needs another open version change merges it in before review and again once it lands.

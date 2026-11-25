@@ -4,9 +4,11 @@
 
 The base is where the branch left the given ref (`git merge-base HEAD origin/main`), so versions
 main published since are not blamed on the branch (#555); the ref itself when git cannot tell.
+A new version's number is still checked against the ref's tip as well, so a number main took
+since is not used again.
 A published version is a `games/<slug>/v<N>/` folder that exists at the base. Its files
 may not change, and its entry in game.json may not change either; new versions are appended.
-A shared library's file under `public/lib/` (three.js, #99) that exists at the base ref may not
+A shared library's file under `public/lib/` (three.js, #99) that exists at the base may not
 change either: games load it from there for good, so a new release goes in a new folder.
 
 Only each game's newest version is kept (#346, Eero's choice). A new version is the newest
@@ -38,7 +40,20 @@ def folders_now(slug: str, cwd: str | None) -> set[int]:
     return {int(n[1:]) for n in os.listdir(d) if re.fullmatch(r"v\d+", n)} if os.path.isdir(d) else set()
 
 
-def problems(base: str, cwd: str | None = None, removed=REMOVED) -> list[str]:
+def numbers_at(ref: str, cwd: str | None) -> dict[str, set[int]]:
+    """Every version number each game has had at `ref`: its game.json entries and its folders."""
+    had: dict[str, set[int]] = {}
+    for p in git("ls-tree", "-r", "--name-only", ref, "--", "games", cwd=cwd).splitlines():
+        parts = p.split("/")
+        if len(parts) == 3 and parts[2] == "game.json":
+            vs = json.loads(git("show", f"{ref}:{p}", cwd=cwd))["versions"]
+            had.setdefault(parts[1], set()).update(v["n"] for v in vs if isinstance(v.get("n"), int))
+        elif len(parts) > 3 and re.fullmatch(r"v\d+", parts[2]):
+            had.setdefault(parts[1], set()).add(int(parts[2][1:]))
+    return had
+
+
+def problems(base: str, cwd: str | None = None, removed=REMOVED, tip: str | None = None) -> list[str]:
     found = []
     # A removed game goes whole: nothing of it is left under games/<slug>/.
     gone = {s for s in removed if not os.path.exists(f"{cwd or '.'}/games/{s}")}
@@ -77,14 +92,16 @@ def problems(base: str, cwd: str | None = None, removed=REMOVED) -> list[str]:
                 found.append(f"{path}: published versions' entries changed; only append new ones")
     # A number is never used again: phones keep an old version in their offline cache for good,
     # so a new version at the same address would never reach them.
-    for p in sorted(published):
-        if p.endswith("/game.json") and p.count("/") == 2:
-            slug = p.split("/")[1]
-            had = {v.get("n") for v in json.loads(git("show", f"{base}:{p}", cwd=cwd))["versions"]}
-            had |= {int(d.split("/")[2][1:]) for d in published_dirs if d.split("/")[1] == slug}
-            for k in sorted(folders_now(slug, cwd)):
-                if f"games/{slug}/v{k}/" not in published_dirs and k <= max(had, default=0):
-                    found.append(f"games/{slug}/v{k}/: a new version takes a number above v{max(had)}, never an old one")
+    # The numbers the base ref took after the branch left it (`tip`, #555) count too.
+    numbers = numbers_at(base, cwd)
+    if tip and tip != base:
+        for slug, ns in numbers_at(tip, cwd).items():
+            numbers.setdefault(slug, set()).update(ns)
+    for slug in sorted(numbers):
+        had = numbers[slug]
+        for k in sorted(folders_now(slug, cwd)):
+            if f"games/{slug}/v{k}/" not in published_dirs and k <= max(had, default=0):
+                found.append(f"games/{slug}/v{k}/: a new version takes a number above v{max(had)}, never an old one")
     lib = git("diff", "--name-status", "--no-renames", base, "--", "public/lib", cwd=cwd).splitlines()
     for line in lib:
         status, path = line.split("\t", 1)
@@ -98,8 +115,8 @@ def merge_base(ref: str, cwd: str | None = None) -> str:
 
     Comparing with `ref`'s current tip would blame the branch for every version `ref` published
     since: a release landing on main while a branch's check runs failed it. On a pull request in
-    CI, HEAD is GitHub's merge commit, whose merge base with the base branch is its tip, so CI
-    compares as before.
+    CI, HEAD is GitHub's merge commit, whose merge base with the base branch is the tip it was
+    built on, so CI compares as before. `problems()` also reads the numbers at `ref`'s tip.
     """
     try:
         return git("merge-base", "HEAD", ref, cwd=cwd).strip() or ref
@@ -110,11 +127,12 @@ def merge_base(ref: str, cwd: str | None = None) -> str:
 def main() -> int:
     ref = sys.argv[1] if len(sys.argv) > 1 else "origin/main"
     base = merge_base(ref)
-    found = problems(base)
+    found = problems(base, tip=ref)
     for p in found:
         print(f"check_immutable: {p}", file=sys.stderr)
     if not found:
-        print(f"check_immutable: no published version changed since {ref} (merge base {base[:12]})")
+        since = f"merge base {base[:12]}" if base != ref else "no merge base found, compared with it"
+        print(f"check_immutable: no published version changed since {ref} ({since})")
     return 1 if found else 0
 
 
