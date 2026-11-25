@@ -5,7 +5,8 @@ import subprocess
 import pytest
 
 import build
-from check_immutable import problems
+import check_immutable
+from check_immutable import merge_base, problems
 from conftest import ROOT, THUMB, game_page, make_game
 
 
@@ -403,3 +404,71 @@ def test_a_new_library_release_is_a_new_folder(repo):
     git(repo, "commit", "-qm", "lib")
     add_lib(repo, "kirjasto-r2", "export const a = 2;\n")
     assert problems("main", cwd=str(repo)) == []
+
+
+def test_a_branch_from_an_older_main_is_not_blamed_for_main_s_newer_release(repo):
+    # #555: main publishes v2 while a branch made from its v1 is checked; the branch changed nothing.
+    git(repo, "checkout", "-qb", "haara")
+    make_game(repo / "games", "toinen", [game_page("c")])
+    publish(repo, "toinen v1")
+    git(repo, "checkout", "-q", "main")
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    publish(repo, "peli v2")
+    git(repo, "checkout", "-q", "haara")
+    assert problems("main", cwd=str(repo)), "main's tip blames the branch for main's own v2"
+    assert problems(merge_base("main", cwd=str(repo)) or "main", cwd=str(repo)) == []
+    # An edit to a version published before the branch left main still fails.
+    (repo / "games" / "peli" / "v1" / "index.html").write_text(game_page("muutettu"))
+    assert "make a new version" in problems(merge_base("main", cwd=str(repo)) or "main", cwd=str(repo))[0]
+
+
+def test_merge_base_is_none_when_git_cannot_tell(repo):
+    assert merge_base("ei-tallaista", cwd=str(repo)) is None
+
+
+def test_main_names_the_merge_base_also_when_it_is_the_given_sha(repo, monkeypatch, capsys):
+    # The review on #556: an ancestor SHA given straight is its own merge base, found, not a fallback.
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("sys.argv", ["check_immutable.py", sha])
+    assert check_immutable.main() == 0
+    out = capsys.readouterr().out
+    assert f"merge base {sha[:12]}" in out and "no merge base" not in out
+
+
+def test_main_falls_back_to_the_ref_with_no_merge_base(repo, monkeypatch, capsys):
+    # An orphan branch shares no history with HEAD: compared with the ref itself, and said so.
+    git(repo, "checkout", "-q", "--orphan", "irti")
+    git(repo, "commit", "-qm", "irti")
+    git(repo, "checkout", "-q", "main")
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("sys.argv", ["check_immutable.py", "irti"])
+    check_immutable.main()
+    assert "no merge base found" in capsys.readouterr().out
+
+
+def test_a_number_main_took_since_the_branch_left_is_still_refused(repo):
+    # #555: the merge base does not hide a number main published after the branch left it.
+    git(repo, "checkout", "-qb", "haara")
+    git(repo, "checkout", "-q", "main")
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    publish(repo, "peli v2 on main")
+    git(repo, "checkout", "-q", "haara")
+    make_game(repo / "games", "peli", [game_page("a"), game_page("oma")])
+    base = merge_base("main", cwd=str(repo))
+    assert problems(base, cwd=str(repo)) == []
+    assert any("never an old one" in p for p in problems(base, cwd=str(repo), tip="main"))
+
+
+def test_main_compares_with_the_merge_base(repo, monkeypatch, capsys):
+    git(repo, "checkout", "-qb", "haara")
+    git(repo, "checkout", "-q", "main")
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    publish(repo, "peli v2 on main")
+    git(repo, "checkout", "-q", "haara")
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("sys.argv", ["check_immutable.py", "main"])
+    assert check_immutable.main() == 0
+    assert "merge base" in capsys.readouterr().out
+    (repo / "games" / "peli" / "v1" / "index.html").write_text(game_page("muutettu"))
+    assert check_immutable.main() == 1
