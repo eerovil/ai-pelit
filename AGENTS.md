@@ -113,6 +113,18 @@ request, with the version that taught it (#181, Eero's choice).
    (the issue text) and `issue` (`eerovil/ai-pelit#<n>`). An older entry may still carry
    `"ottelu": false` as history (Ottelu is gone, #469); a new one needs none.
 
+7. **Pin what the owner said.** Pin every behaviour the owner stated in a test before the first
+   push, and ask before building or dropping a mechanic the approved spec does not have.
+8. **One step, several events.** When one step can cross several events (meter full, obstacle,
+   landing, finish), resolve them in time order inside the step, one exactly at the step's end
+   included. Computer players and meters move only after the start. Test each ordering.
+9. **Scores you can reach.** Measure the best possible score with the real judge spread, and set
+   a computer opponent's cap per case from a simulation.
+10. **Shared global scope.** A game's classic scripts share one global scope: grep the version
+   folder before adding a top-level name. Before changing a save key's shape, read "Progress and
+   saves" in `docs/making-games.md`: use a new key and import the old one.
+11. **Gestures.** Track the largest displacement during a touch, not where it ends.
+
 ## Online extras
 
 The site runs on Cloudflare Pages, so `/api/` on the same address is Pages Functions
@@ -300,6 +312,12 @@ high-score lists (#25), then play counts (#26).
   serves `https://<branch>.ai-pelit.pages.dev` on the `ai-pelit-preview` database. There is no
   Node on this host; run it in `podman run … docker.io/library/node:22`.
 
+Before a room-game design, read `public/rooms.js` for a host reload (`_lobby` ends the round),
+pause, hello and score caps. Give throws and taps a play number and say what the pause stops.
+The host enforces limits from its own clock. Stamp live messages with the capped per-frame clock
+that moves the figure, send the sender's running signed angle, and add a stall test. Commit a
+counter only after the play is confirmed, and reset it per match.
+
 ## 3D games (three.js)
 
 A game that wants real 3D (a camera, lights, solid shapes) uses three.js from the site's shared
@@ -340,6 +358,9 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
   play and step the pixel ratio down, then the shadows off (`tune()` in Hiihto v7).
 - `tests/fixtures/three-demo.html` is a complete small example (a lit, spinning cube), and
   `tests/test_lib_three.py` shows how to check a 3D game draws (headless Chromium has WebGL).
+
+A test whose game loads `lib/three` is marked `alone` even when its phones draw 2D; check the
+marking (`tests/conftest.py`) before the first queued run.
 
 ## Sound effects
 
@@ -453,6 +474,27 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 - `games/<slug>/thumb.webp` shows the current version mid-play.
 - The use-case walkthrough is: open the shelf, open the game, play one round, go back.
 
+- Order before ready: merge `origin/main`, commit every doc and diagram edit, run
+  `python3 scripts/build.py` and `python3 scripts/check_immutable.py origin/main`, then queue
+  one verification job. A release landing on `main` mid-run fails it: merge and run again.
+- There is no `package-lock.json`: run `npm test` in the `node:22` container, never `npm ci`.
+  Run the container step once by hand before you queue it.
+- When a game gains hills, trips, boards or a version number, grep `tests/`, `docs/`,
+  `game.json` and the diagrams for the old count, "only" wording and the old version name, and
+  fix them in the same commit.
+- In a browser test, set state, read it and trigger the action in one `page.evaluate` call; after
+  a send, wait with `wait_for_function` instead of asserting at once.
+- Drive timing tests at a fixed pace and take bounds from the frame's own time. Reproduce a
+  CI-only failure with `taskset -c 0,1 … -n 4` from the exact failing line, and change one factor
+  at a time (audio backend, CPU). A failure only under load can be a real bug: do not loosen the
+  test.
+- A change to a shared file such as `public/rooms.js` also needs a game that uses it played at
+  360 × 740, with the screenshots on the issue, before `pre-review-done`.
+- A review finding in one game or trip is checked in every sibling game and trip, and fixed in
+  the same pull request.
+- See a new test fail without the fix, from the owner's exact state. Run each new parametrized
+  case alone before you queue the suite.
+
 ## Taking over a pull request, and specs
 
 - When you take over a pull request another Work started, read every earlier review comment and
@@ -460,11 +502,18 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 - On a spec-only issue, end the turn that posts the spec with the approval question in the
   question box in that same turn, not with a prose summary.
 
+- Before editing on after an approval, read the pull request's state: if it merged, branch from
+  `origin/main` and never push the deleted branch again.
+- Copy the six `classDef` lines into the first diagram comment on the issue.
+
 ## Running it locally
 
     python3 scripts/build.py && python3 -m http.server -d _site 8000
 
 The site is served from the root of its own name, and uses only relative links.
+
+Check the port is free with `ss -ltnp`, serve the worktree's own `_site` by absolute path, and
+rebuild after every source edit. Run Playwright scripts with `python3 -P`, not `-I`.
 
 A prototype for Eero's phone is served with `python3 scripts/serve_prototype.py <port>`, never
 plain `http.server` (#181): the service worker (`public/sw.js`) keeps a played version folder in
