@@ -2,7 +2,9 @@
 
     python3 scripts/check_immutable.py origin/main
 
-A published version is a `games/<slug>/v<N>/` folder that exists at the base ref. Its files
+The base is where the branch left the given ref (`git merge-base HEAD origin/main`), so versions
+main published since are not blamed on the branch (#555); the ref itself when git cannot tell.
+A published version is a `games/<slug>/v<N>/` folder that exists at the base. Its files
 may not change, and its entry in game.json may not change either; new versions are appended.
 A shared library's file under `public/lib/` (three.js, #99) that exists at the base ref may not
 change either: games load it from there for good, so a new release goes in a new folder.
@@ -91,13 +93,28 @@ def problems(base: str, cwd: str | None = None, removed=REMOVED) -> list[str]:
     return found
 
 
+def merge_base(ref: str, cwd: str | None = None) -> str:
+    """The commit this branch left `ref` at, or `ref` itself when git cannot tell (#555).
+
+    Comparing with `ref`'s current tip would blame the branch for every version `ref` published
+    since: a release landing on main while a branch's check runs failed it. On a pull request in
+    CI, HEAD is GitHub's merge commit, whose merge base with the base branch is its tip, so CI
+    compares as before.
+    """
+    try:
+        return git("merge-base", "HEAD", ref, cwd=cwd).strip() or ref
+    except subprocess.CalledProcessError:
+        return ref
+
+
 def main() -> int:
-    base = sys.argv[1] if len(sys.argv) > 1 else "origin/main"
+    ref = sys.argv[1] if len(sys.argv) > 1 else "origin/main"
+    base = merge_base(ref)
     found = problems(base)
     for p in found:
         print(f"check_immutable: {p}", file=sys.stderr)
     if not found:
-        print(f"check_immutable: no published version changed since {base}")
+        print(f"check_immutable: no published version changed since {ref} (merge base {base[:12]})")
     return 1 if found else 0
 
 

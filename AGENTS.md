@@ -68,7 +68,9 @@ request, with the version that taught it (#181, Eero's choice).
    only a new address brings it new code. A new version moves the old folder away whole (above),
    and its `game.json` entry stays as the game's history, shown on the game's page. CI runs
    `scripts/check_immutable.py`: it fails a pull request that edits a published folder, deletes
-   one in part or without a newer one, changes an entry, or reuses a number.
+   one in part or without a newer one, changes an entry, or reuses a number. It compares with
+   where the branch left the ref it is given (`git merge-base HEAD <ref>`, the ref itself when git
+   cannot tell), so a version `main` published since is not blamed on the branch (#555).
    `scripts/build.py` serves only the newest folder and writes `_redirects`, which sends an older
    version's address (a link, a home-screen shortcut, a room code) to the newest. `public/sw.js`
    drops a phone's cached copy of an older version. `games/<slug>/thumb.webp` is outside the
@@ -402,7 +404,7 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 
 - `python3 -m pytest -q --changed-since origin/main`, `npm test` and `python3 scripts/build.py`
   pass. On a PR also `python3 scripts/check_immutable.py origin/main`, after fetching and merging
-  `origin/main`: against a main that has moved on, other Works' releases read as your changes.
+  `origin/main`, so it also sees a number another Work has taken since.
   The full browser suite
   never runs, not in CI and not by you (#65, Eero's choice): with `--changed-since` a game's own
   tests run only when the change touches `games/<slug>/` or that game's test file (#37), and a

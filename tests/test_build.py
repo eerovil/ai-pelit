@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 import build
-from check_immutable import problems
+from check_immutable import merge_base, problems
 from conftest import ROOT, THUMB, game_page, make_game
 
 
@@ -403,3 +403,23 @@ def test_a_new_library_release_is_a_new_folder(repo):
     git(repo, "commit", "-qm", "lib")
     add_lib(repo, "kirjasto-r2", "export const a = 2;\n")
     assert problems("main", cwd=str(repo)) == []
+
+
+def test_a_branch_from_an_older_main_is_not_blamed_for_main_s_newer_release(repo):
+    # #555: main publishes v2 while a branch made from its v1 is checked; the branch changed nothing.
+    git(repo, "checkout", "-qb", "haara")
+    make_game(repo / "games", "toinen", [game_page("c")])
+    publish(repo, "toinen v1")
+    git(repo, "checkout", "-q", "main")
+    make_game(repo / "games", "peli", [game_page("a"), game_page("b")])
+    publish(repo, "peli v2")
+    git(repo, "checkout", "-q", "haara")
+    assert problems("main", cwd=str(repo)), "main's tip blames the branch for main's own v2"
+    assert problems(merge_base("main", cwd=str(repo)), cwd=str(repo)) == []
+    # An edit to a version published before the branch left main still fails.
+    (repo / "games" / "peli" / "v1" / "index.html").write_text(game_page("muutettu"))
+    assert "make a new version" in problems(merge_base("main", cwd=str(repo)), cwd=str(repo))[0]
+
+
+def test_merge_base_falls_back_to_the_ref(repo):
+    assert merge_base("ei-tallaista", cwd=str(repo)) == "ei-tallaista"
