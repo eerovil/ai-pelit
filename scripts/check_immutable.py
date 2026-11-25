@@ -110,8 +110,8 @@ def problems(base: str, cwd: str | None = None, removed=REMOVED, tip: str | None
     return found
 
 
-def merge_base(ref: str, cwd: str | None = None) -> str:
-    """The commit this branch left `ref` at, or `ref` itself when git cannot tell (#555).
+def merge_base(ref: str, cwd: str | None = None) -> str | None:
+    """The commit this branch left `ref` at, or None when git cannot tell (#555).
 
     Comparing with `ref`'s current tip would blame the branch for every version `ref` published
     since: a release landing on main while a branch's check runs failed it. On a pull request in
@@ -119,19 +119,21 @@ def merge_base(ref: str, cwd: str | None = None) -> str:
     built on, so CI compares as before. `problems()` also reads the numbers at `ref`'s tip.
     """
     try:
-        return git("merge-base", "HEAD", ref, cwd=cwd).strip() or ref
+        return git("merge-base", "HEAD", ref, cwd=cwd).strip() or None
     except subprocess.CalledProcessError:
-        return ref
+        return None
 
 
 def main() -> int:
     ref = sys.argv[1] if len(sys.argv) > 1 else "origin/main"
-    base = merge_base(ref)
+    found_base = merge_base(ref)
+    # No merge base (an unknown ref, unrelated history): compare with the ref itself, as before.
+    base = found_base or ref
     found = problems(base, tip=ref)
     for p in found:
         print(f"check_immutable: {p}", file=sys.stderr)
     if not found:
-        since = f"merge base {base[:12]}" if base != ref else "no merge base found, compared with it"
+        since = f"merge base {found_base[:12]}" if found_base else "no merge base found, compared with it"
         print(f"check_immutable: no published version changed since {ref} ({since})")
     return 1 if found else 0
 
