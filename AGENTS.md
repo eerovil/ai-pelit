@@ -121,8 +121,9 @@ request, with the version that taught it (#181, Eero's choice).
 9. **Scores you can reach.** Measure the best possible score with the real judge spread, and set
    a computer opponent's cap per case from a simulation.
 10. **Shared global scope.** A game's classic scripts share one global scope: grep the version
-   folder before adding a top-level name. Before changing a save key's shape, read "Progress and
-   saves" in `docs/making-games.md`: use a new key and import the old one.
+   folder before adding a top-level name. Before changing the shape of a saved unfinished round,
+   read "Progress and saves" in `docs/making-games.md`: it gets a new key, while lasting saves
+   stay shared (rule 5).
 11. **Gestures.** Track the largest displacement during a touch, not where it ends.
 
 ## Online extras
@@ -359,8 +360,8 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 - `tests/fixtures/three-demo.html` is a complete small example (a lit, spinning cube), and
   `tests/test_lib_three.py` shows how to check a 3D game draws (headless Chromium has WebGL).
 
-A test whose game loads `lib/three` is marked `alone` even when its phones draw 2D; check the
-marking (`tests/conftest.py`) before the first queued run.
+A test whose game loads `lib/three` is marked `alone` even when its phones draw 2D, unless the
+file sets a `games` marker (`tests/conftest.py`); check the marking before the first queued run.
 
 ## Sound effects
 
@@ -454,7 +455,9 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
   mergeable,mergeStateStatus` once. If it says `CONFLICTING` or `DIRTY`, merge `origin/main` into
   the branch (never rebase pushed commits), fix the conflict, push, and register the wake-on again
   for the new head. `main` moves often here (many Works at once), and another Work often takes
-  the same version number, so merge `origin/main` right before you mark the pull request ready
+  the same version number, so merge `origin/main` right before you mark the pull request ready (then commit every doc
+  and diagram edit, run `python3 scripts/build.py` and `python3 scripts/check_immutable.py
+  origin/main`, and queue one verification job; a release landing on `main` mid-run fails it)
   and again after each review pass, and on a long-running pull request before each push. Before
   you build, check open pull requests and sibling Works for the same game's next number. A pull
   request that needs another open version change merges it in before review and again once it lands.
@@ -474,9 +477,6 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 - `games/<slug>/thumb.webp` shows the current version mid-play.
 - The use-case walkthrough is: open the shelf, open the game, play one round, go back.
 
-- Order before ready: merge `origin/main`, commit every doc and diagram edit, run
-  `python3 scripts/build.py` and `python3 scripts/check_immutable.py origin/main`, then queue
-  one verification job. A release landing on `main` mid-run fails it: merge and run again.
 - There is no `package-lock.json`: run `npm test` in the `node:22` container, never `npm ci`.
   Run the container step once by hand before you queue it.
 - When a game gains hills, trips, boards or a version number, grep `tests/`, `docs/`,
@@ -489,7 +489,7 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
   at a time (audio backend, CPU). A failure only under load can be a real bug: do not loosen the
   test.
 - A change to a shared file such as `public/rooms.js` also needs a game that uses it played at
-  360 × 740, with the screenshots on the issue, before `pre-review-done`.
+  360 × 740, with the screenshots on the issue, before you mark the pull request ready.
 - A review finding in one game or trip is checked in every sibling game and trip, and fixed in
   the same pull request.
 - See a new test fail without the fix, from the owner's exact state. Run each new parametrized
@@ -502,9 +502,11 @@ cheer plays the chime at 0.08 (Pituushyppy v14). A new sound is about as soft as
 - On a spec-only issue, end the turn that posts the spec with the approval question in the
   question box in that same turn, not with a prose summary.
 
-- Before editing on after an approval, read the pull request's state: if it merged, branch from
+- Before editing again after an approval, read the pull request's state: if it merged, branch from
   `origin/main` and never push the deleted branch again.
-- Copy the six `classDef` lines into the first diagram comment on the issue.
+- Copy the six `classDef` colour lines of AgentDeck's diagram guide
+  (`GET $AGENTDECK_URL/api/guide/prototype`) into the first diagram comment on the issue: the
+  files in `docs/diagrams/` hold only the `class` lines.
 
 ## Running it locally
 
