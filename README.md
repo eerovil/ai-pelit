@@ -28,7 +28,7 @@ https://pelit.vilpponen.fi/
   (playing with friends in a live room) and `yllapito/` (approving nicknames).
 - `functions/`, `server/`, `migrations/` — the site's `/api/` on Cloudflare Pages Functions and D1;
   `scripts/cloudflare_setup.py` sets them up. `rooms/` is the Worker that holds the live game
-  rooms (a Durable Object per room code). See "Online extras" in AGENTS.md.
+  rooms (a Durable Object per room code). See [docs/agents/online-extras.md](docs/agents/online-extras.md) and [rooms.md](docs/agents/rooms.md).
 - `scripts/build.py` builds `_site/` with `catalog.json`; `scripts/check_immutable.py` guards
   published versions. A merge to `main` deploys to Cloudflare Pages, project `ai-pelit` (`.github/workflows/ci.yml`).
 - [docs/diagrams/ai-pelit.md](docs/diagrams/ai-pelit.md) draws the whole flow;

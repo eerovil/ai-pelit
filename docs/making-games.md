@@ -62,7 +62,7 @@ the version that taught it, so you can read the code that fixed it.
 - **Sound follows the game, not the finger.** Piano v5 plays each note when the song reaches it;
   a tap does not play it. Short sounds, only after the first tap (Web Audio rule in AGENTS.md).
 - **Real sounds over beeps.** A thud or a footstep from the shared library
-  (`lib/aanet-5/`, "Sound effects" in AGENTS.md) tells the player what happened better than a
+  (`lib/aanet-5/`, [agents/sound.md](agents/sound.md)) tells the player what happened better than a
   tone. Pituushyppy v7: the sand. Each sound stands alone: a file that fails to load must not
   silence another event or its beep, so test the partly loaded cases too.
 - **No crowd noise, no loud sounds (#337, Eero's choice).** No applause, shouting crowd, crowd's
@@ -143,7 +143,7 @@ the version that taught it, so you can read the code that fixed it.
 
 ## 3D
 
-- Use the shared three.js and the "3D games" part of AGENTS.md. Keep the game's rules in plain
+- Use the shared three.js and [agents/3d-games.md](agents/3d-games.md). Keep the game's rules in plain
   numbers and draw them with three.js, so tests can drive the game without WebGL.
 - A slow phone runs short of pixels, not shapes: step down the pixel ratio, then the shadows.
 
@@ -185,7 +185,7 @@ here in the same pull request (AGENTS.md says so), naming the version that taugh
   frame (`fitCheck()` in Yöajo v2's `ui.js`); listen to `fullscreenchange` too.
 - **A prototype the phone never updates.** Yöajo v4's prototype (#181): `sw.js` served the played
   version folder from its cache, so Eero saw no edit and could not clear it on the phone. Serve a
-  prototype with `scripts/serve_prototype.py` (AGENTS.md, "Running it locally").
+  prototype with `scripts/serve_prototype.py` ([agents/local.md](agents/local.md)).
 - **The iPhone's silent switch mutes Web Audio** (#381, reported by Eero; the same as stemmanauhat-cf#100): Safari treats a page's Web Audio as ringer sound. `back.js` sets `navigator.audioSession.type = 'playback'` (iOS 17 and later) for every game, so a game needs nothing; one that records sets `'play-and-record'` first, as `rooms.js` does. The phone also stops the sound on a lock, a call or another app, in a state (`interrupted`) a check for `'suspended'` misses; `back.js` resumes it on the next tap and when the page is back (Piano v10).
 - **A held button selects text on an iPhone** (#457, Raketti v2's thrusters): Safari reads only `-webkit-user-select`, so `user-select:none` alone left the page's text selectable on a long press. `back.js` now turns selection and the copy callout off in every game (text fields keep it), so a game needs nothing, and a game's own `user-select:text` cannot turn it back on.
 - **A still game must not draw every frame.** Pasianssi v1 (#382) heated the phone: redrawing the whole table 60 times a second with nothing moving took 45–48 % of the test phone's processor, against 29 % on its home screen, and no test or screenshot showed it. A game that waits for the player draws only when something changes (`ask()` in Pasianssi v2), and watches the canvas's size with a `ResizeObserver` instead of a check every frame. An easing that only ever gets nearer (a camera, Puhelinkoppi v9) must land on its target, or it never rests.
