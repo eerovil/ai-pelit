@@ -1,6 +1,6 @@
 # Live rooms (multiplayer), voice and smooth movement
 
-Read before you design, build or change a game played with friends, or touch `public/rooms.js` or `rooms/`.
+Read before you design, build or change a game played with friends, or touch `public/rooms.js`, `rooms/`, the room's voice or `public/lib/sulava-*/`.
 
 Moved here unchanged from `AGENTS.md` (#558), which keeps a short form and links here. "Rule N" means the numbered rules in [rules.md](rules.md); a section named in quotes is listed in [AGENTS.md](../../AGENTS.md).
 

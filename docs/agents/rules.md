@@ -9,7 +9,7 @@ Moved here unchanged from `AGENTS.md` (#558), which keeps a short form and links
 1. **A published version never changes; only the newest is kept.** Never edit a
    `games/<slug>/v<N>/` folder or its `game.json` entry once it is on `main`; a fix is a new
    version (#346, Eero's choice). The phone's offline cache keeps a version folder for good, so
-   only a new address brings it new code. A new version moves the old folder away whole (above),
+   only a new address brings it new code. A new version moves the old folder away whole ([requests.md](requests.md)),
    and its `game.json` entry stays as the game's history, shown on the game's page. CI runs
    `scripts/check_immutable.py`: it fails a pull request that edits a published folder, deletes
    one in part or without a newer one, changes an entry, or reuses a number. It compares with

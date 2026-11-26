@@ -82,21 +82,23 @@ The site is Cloudflare Pages; `/api/` is Pages Functions (`functions/api/[[path]
 `scores.js`, `rooms.js`, `kaverit.js`, `outfits.js`) serve every published version: change them
 only in ways all of those keep working with. Read the file before you use or change its part:
 
-- [docs/agents/online-extras.md](docs/agents/online-extras.md): high scores (`scores.js`), play
+- When a game or change uses one of these, [docs/agents/online-extras.md](docs/agents/online-extras.md): high scores (`scores.js`), play
   counts, outfits (`outfits.js`), feedback, friends, a schema change (a new migration, applied by
   hand right before the merge), `npm test` (only in the `node:22` container) and a preview deploy.
-- [docs/agents/rooms.md](docs/agents/rooms.md): live rooms with friends (`rooms.js`, the room
+- Before you design, build or change a game played with friends,
+  [docs/agents/rooms.md](docs/agents/rooms.md): "Live rooms" (the whole `rooms.js` API, the room
   page, voice, public rooms, turns, switching games), smooth movement (`lib/sulava-*`), and what
   to read before a room-game design. A small fix for a rare network race is yours to make
   without asking (#284).
-- [docs/agents/athletics.md](docs/agents/athletics.md): an athletics event's meet, podium and
+- For an athletics event (group `yleisurheilu`), [docs/agents/athletics.md](docs/agents/athletics.md): its meet, podium and
   spectators (`lib/yleisurheilu-*/kisa.js`, `korkeus.js`).
 
 ## 3D games (three.js)
 
 A 3D game imports three.js from the newest `public/lib/three-r*/`, never a copy and never
-hand-made projection maths; its tests are marked `alone` and run only on this host. Read
-[docs/agents/3d-games.md](docs/agents/3d-games.md) first.
+hand-made projection maths; its tests are marked `alone` and run only on this host. A published library
+folder never changes (rule 1). Read [docs/agents/3d-games.md](docs/agents/3d-games.md) first: the
+starter scene, add-ons, turning a 2D game into 3D, and slow phones.
 
 ## Sound effects
 
@@ -140,4 +142,5 @@ The short list; every step, and what to do when one fails, is in
 
 Rebuild after every source edit. A prototype for Eero's phone is served with
 `python3 scripts/serve_prototype.py <port>`, never plain `http.server` (#181). Ports, the service
-worker and `tailscale serve`: [docs/agents/local.md](docs/agents/local.md).
+worker and `tailscale serve`: read [docs/agents/local.md](docs/agents/local.md) before you serve
+the site on this host.
