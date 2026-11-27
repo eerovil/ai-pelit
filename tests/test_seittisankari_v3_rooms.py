@@ -166,3 +166,19 @@ def test_the_others_see_a_pulling_heros_web(phone):
       h.anchor = { x: h.x, y: h.y + 300, z: h.z, box: -1 }; }""")
     host.wait_for_function("""net.players.some(p => p !== net.me && p.st === 'pull' && p.a && p.a.y > 100)""", timeout=8000)
     assert host.errors == [] and guest.errors == []
+
+
+def test_a_room_draws_the_veto_crosshair_and_hint(phone):
+    # Helper check on #562: the room's screen drew neither, and the hint was marked seen unseen.
+    host, guest = room(phone, 2)
+    start([host, guest])
+    r = guest.evaluate("""() => {
+      const calls = { aim: 0, hint: 0 }, a = drawAim, d = drawHints3;
+      drawAim = h => { calls.aim++; return a(h); }; drawHints3 = () => { calls.hint++; return d(); };
+      hintT = 99; hint3T = 0;
+      drawNetHUD(world);
+      drawAim = a; drawHints3 = d;
+      return calls;
+    }""")
+    assert r == {"aim": 1, "hint": 1}
+    assert host.errors == [] and guest.errors == []

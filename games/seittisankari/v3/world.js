@@ -178,6 +178,7 @@ function webJump(h) {
 function stepPull(h, inp, dt) {
   const p = h.pull, t = pullSpot(p);
   h.pullT = (h.pullT || 0) + dt;
+  if (inp.web) h.webbed = 1;            // Seitti held through the pull needs a new press to swing
   if (inp.jump) {                       // let go: the speed carries on (a slingshot)
     h.st = 'air'; h.pull = null; h.anchor = null; h.jumped = true; h.wallCd = 0.2;
     return;
@@ -195,7 +196,10 @@ function stepPull(h, inp, dt) {
   h.yaw = Math.atan2(dx, dz);
   h.x += h.vx * dt; h.y += h.vy * dt; h.z += h.vz * dt;
   collide(h, 0, 0, 0);                  // a building in the way is grabbed like any wall
-  if (h.st !== 'pull') { h.pull = null; h.anchor = null; }
+  if (h.st !== 'pull') {
+    h.pull = null; h.anchor = null;
+    if (h.st === 'ground') { h.vx = h.vz = 0; h.slideT = 0; }   // set down on a roof: no slide off it
+  }
 }
 
 function carryMomentum(h, a) {
@@ -229,6 +233,11 @@ function stepHero(h, inp, dt) {
     h.st = 'pull'; h.pull = inp.pull; h.pullT = 0; h.box = null;
     const t = pullSpot(inp.pull); h.anchor = { x: inp.pull.x, y: inp.pull.y, z: inp.pull.z, box: inp.pull.box };
     h.wallCd = 0; h.webbed = inp.web ? 1 : 0;
+    // The roof the shot is made from is not in the way: a shot down at a lower wall or roof leaves it.
+    h.pullFrom = null;
+    if (h.st === 'pull' && h.y > 0) eachNear(h.x, h.z, R, b => {
+      if (Math.abs(b.h - h.y) < 0.05 && h.x > b.x0 - R && h.x < b.x1 + R && h.z > b.z0 - R && h.z < b.z1 + R) { h.pullFrom = b; return true; }
+    });
     if (t) h.yaw = Math.atan2(t.x - h.x, t.z - h.z);
   }
   if (h.st === 'pull') return stepPull(h, inp, dt);
@@ -320,11 +329,14 @@ function collide(h, mx, mz, mm) {
   eachNear(h.x, h.z, R + 1, b => { nb.push(b); });
   for (const b of nb) {
     if (h.y >= b.h - 0.001 || h.y + HERO_H <= 0) continue;
+    if (h.st === 'pull' && b === h.pullFrom) continue;
     if (h.x <= b.x0 - R || h.x >= b.x1 + R || h.z <= b.z0 - R || h.z >= b.z1 + R) continue;
     const pen = [h.x - (b.x0 - R), (b.x1 + R) - h.x, h.z - (b.z0 - R), (b.z1 + R) - h.z];
     const top = b.h - h.y;
     const m = Math.min(...pen);
-    if (top < 0.7 && h.vy <= 0.5 && top <= m + 0.5) {      // landed on the roof
+    // A pull to this roof that clips its edge on the way goes on up onto it.
+    const toRoof = h.st === 'pull' && h.pull && h.pull.kind === 'roof' && CITY[h.pull.box] === b && top < 2.5;
+    if (toRoof || (top < 0.7 && h.vy <= 0.5 && top <= m + 0.5)) {      // landed on the roof
       h.y = b.h; if (h.vy < 0) h.vy = 0;
       if (h.st !== 'ground') land(h);
       continue;
@@ -339,7 +351,7 @@ function collide(h, mx, mz, mm) {
   if (h.st !== 'wall') {
     // A pull along or up from the street goes on; it lands only coming down (#560).
     const s = supportAt(h.x, h.z, R * 0.5);
-    if (h.y <= s && h.st !== 'ground' && !(h.st === 'pull' && h.vy >= 0)) { h.y = s; if (h.vy < 0) h.vy = 0; land(h); }
+    if (h.y <= s && h.st !== 'ground' && !(h.st === 'pull' && (h.vy >= 0 || (h.pullFrom && s === h.pullFrom.h)))) { h.y = s; if (h.vy < 0) h.vy = 0; land(h); }
     else if (h.st === 'ground' && h.y > s + 0.05) h.st = 'air';
     else if (h.st === 'ground') h.y = s;
   }
@@ -353,7 +365,7 @@ function land(h) {
 }
 function grabWall(h, b, nx, nz) {
   h.st = 'wall'; h.box = b; h.nx = nx; h.nz = nz; h.anchor = null;
-  h.vx = h.vy = h.vz = 0;
+  h.vx = h.vy = h.vz = 0; h.slideT = 0; h.pull = null;
   h.yaw = Math.atan2(-nx, -nz);
 }
 

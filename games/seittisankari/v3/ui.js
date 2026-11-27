@@ -316,7 +316,7 @@ function drawNetHUD(w) {
     shadowText(p.name, q[0], q[1], 13, p.col, 'center', 800);
   }
   if (RM.paused) shadowText('Odotetaan kaveria…', W / 2, H * 0.4, 18, '#ffd166', 'center', 900);
-  if (net.me) { if (hintT < 16) drawHints(); drawControls(w.hero); }
+  if (net.me) { if (hintT < 16) drawHints(); else if (hint3T < 9) drawHints3(); drawAim(w.hero); drawControls(w.hero); }
   else shadowText('Katsot kierrosta', W / 2, H - SAFE_B - 40, 16, '#fff', 'center', 800);
 }
 function drawArrow(x, y, a) {

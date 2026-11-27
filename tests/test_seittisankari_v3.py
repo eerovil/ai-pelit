@@ -328,6 +328,53 @@ def test_a_web_shot_at_a_roof_lands_the_hero_on_it(site, context):
     assert r["end"]["st"] == "ground" and r["end"]["y"] == r["top"] and r["on"]
 
 
+def test_a_web_shot_down_from_a_roof_reaches_a_lower_wall(site, context):
+    # Helper check on #562: the pull used to land back on the roof it started from.
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + PULL + """
+      for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) {
+        const b = BX(i, j), c = BX(i, j + 1);
+        if (!b || !c || c.h > b.h - 12 || c.z0 - b.z1 > 40) continue;
+        const x = (Math.max(b.x0, c.x0) + Math.min(b.x1, c.x1)) / 2;
+        if (!(x > b.x0 + 1 && x < b.x1 - 1 && x > c.x0 + 1 && x < c.x1 - 1)) continue;
+        const h = newHero(x, b.h, b.z1 - 1, 0);
+        for (let p = 0.1; p < 1.4; p += 0.05) {
+          const hit = aimPull(h, 0, p);
+          if (!hit || hit.kind !== 'wall' || CITY[hit.box] !== c) continue;
+          return { found: true, hit, end: shoot(h, hit), roof: b.h, z0: c.z0 };
+        }
+      }
+      return { found: false };
+    })()""")
+    assert r["found"]
+    end = r["end"]
+    assert end["st"] == "wall" and end["y"] < r["roof"] - 5, r
+    assert abs(end["z"] - r["z0"]) < 1, r
+
+
+def test_seitti_held_through_a_web_pull_needs_a_new_press_to_swing(site, context):
+    # Helper check on #562: a Seitti press during the pull used to start a swing on arrival.
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + FRONT + """
+      const hit = aimPull(h, 0, -0.6), held = { ix: 0, iy: 0, jump: false, web: true, yaw: 0 };
+      stepHero(h, Object.assign(""" + NONE + """, { pull: hit }), STEP);
+      for (let i = 0; i < 600 && h.st === 'pull'; i++) stepHero(h, held, STEP);
+      const arrived = h.st;
+      for (let i = 0; i < 30; i++) stepHero(h, held, STEP);
+      return [arrived, h.st];
+    })()""")
+    assert r == ["wall", "wall"]
+
+
+def test_a_wall_grab_ends_the_landing_slide(site, context):
+    # Helper check on #562: a slide left over from a landing froze the stick after a climb.
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + FRONT + """
+      h.slideT = 0.5; grabWall(h, b, 0, -1); return h.slideT;
+    })()""")
+    assert r == 0
+
+
 def test_a_web_shot_at_the_sky_the_street_or_too_far_misses(site, context):
     page = open_game(site, context)
     r = page.evaluate("""(() => {

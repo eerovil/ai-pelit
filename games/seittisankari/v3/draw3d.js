@@ -246,7 +246,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       }
       // Let go of the web: a backflip with the jump (Eero, #560). Read from the state change alone,
       // so friends' heroes flip on every phone too.
-      if (m.lastSt === 'swing' && h.st === 'air') m.flip = 0;
+      if ((m.lastSt === 'swing' || m.lastSt === 'pull') && h.st === 'air') m.flip = 0;   // a jump off a Veto pull too
       if (h.st !== 'air') m.flip = -1;
       m.lastSt = h.st;
       const flipping = m.flip >= 0;
