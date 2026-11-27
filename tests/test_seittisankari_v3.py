@@ -110,6 +110,23 @@ def test_a_swing_keeps_the_falls_speed_and_makes_none_out_of_nothing(site, conte
     assert r["eMax"] <= r["e0"] + 1           # no speed out of nothing
 
 
+def test_a_new_web_keeps_the_momentum_of_the_last_swing(site, context):
+    # Eero, #560: each new web keeps the speed from the swing before; it never resets.
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const h = newHero(LX(2) + 20, 130, LX(2) + 20, 0); h.st = 'air'; h.vz = 30; h.vy = 6;
+      const inp = web => ({ ix: 0, iy: 0, jump: false, web, yaw: 0 });
+      const v0 = Math.hypot(h.vx, h.vy, h.vz);
+      stepHero(h, inp(true), STEP);
+      const swung = h.st === 'swing';
+      let vMin = 99;
+      for (let i = 0; i < 24; i++) { stepHero(h, inp(true), STEP); vMin = Math.min(vMin, Math.hypot(h.vx, h.vy, h.vz)); }
+      return { swung, v0, vMin };
+    })()""")
+    assert r["swung"]
+    assert r["vMin"] > r["v0"] * 0.95, r      # the catch turns the speed, it does not brake it
+
+
 def test_the_stick_web_and_jump_take_touches_and_a_second_thumb_beside_seitti_jumps(site, context):
     page = open_game(site, context)
     go(page)
@@ -520,3 +537,30 @@ def test_the_swing_web_waits_a_second_after_letting_go(site, context):
     early = [st for ms, st in r if ms < 950]
     assert early and all(st != "swing" for st in early), r
     assert r[-1][1] == "swing" and r[-1][0] < 1150, r
+
+
+def test_a_fast_landing_keeps_its_speed_a_moment_and_a_jump_takes_it_along(site, context):
+    # Eero, #560: landing from the web keeps the speed a short while on the ground, and a jump
+    # straight away keeps it in the air.
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const fall = () => { const h = newHero(LX(2) + 20, 3, LX(2) + 20, 0); h.st = 'air'; h.vz = 25; h.vy = -5;
+        let i = 0; while (h.st !== 'ground' && i++ < 200) stepHero(h, { ix: 0, iy: 0, jump: false, web: false, yaw: 0 }, STEP); return h; };
+      const idle = { ix: 0, iy: 0, jump: false, web: false, yaw: 0 };
+      const sp = h => Math.hypot(h.vx, h.vz);
+      let h = fall(); const atLand = sp(h);
+      for (let i = 0; i < 36; i++) stepHero(h, idle, STEP);      // 0.3 s on the ground, no stick
+      const after03 = sp(h);
+      for (let i = 0; i < 84; i++) stepHero(h, idle, STEP);      // 1 s: the slide is over
+      const after1 = sp(h);
+      h = fall();
+      for (let i = 0; i < 24; i++) stepHero(h, idle, STEP);      // 0.2 s, then jump
+      stepHero(h, Object.assign({}, idle, { jump: true }), STEP);
+      const inAir = []; for (let i = 0; i < 60; i++) { stepHero(h, idle, STEP); inAir.push(h.st === 'air' ? sp(h) : null); }
+      return { atLand, after03, after1, inAir };
+    })()""")
+    assert r["atLand"] > 20
+    assert r["after03"] > 18          # still sliding
+    assert r["after1"] < 2            # then stops without the stick, as before
+    air = [v for v in r["inAir"] if v is not None]
+    assert len(air) > 30 and min(air) > 18

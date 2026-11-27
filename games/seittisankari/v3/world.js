@@ -188,7 +188,7 @@ function stepPull(h, inp, dt) {
     const b = CITY[p.box];
     if (p.kind === 'wall' && b && h.y > 0) grabWall(h, b, p.nx, p.nz);
     else land(h);
-    h.vx = h.vy = h.vz = 0;
+    h.vx = h.vy = h.vz = 0; h.slideT = 0;
     return;
   }
   h.vx = dx / d * PULL_SPEED; h.vy = dy / d * PULL_SPEED; h.vz = dz / d * PULL_SPEED;
@@ -196,6 +196,21 @@ function stepPull(h, inp, dt) {
   h.x += h.vx * dt; h.y += h.vy * dt; h.z += h.vz * dt;
   collide(h, 0, 0, 0);                  // a building in the way is grabbed like any wall
   if (h.st !== 'pull') { h.pull = null; h.anchor = null; }
+}
+
+function carryMomentum(h, a) {
+  const dx = h.x - a.x, dy = h.y - a.y, dz = h.z - a.z, d = Math.hypot(dx, dy, dz) || 1;
+  const ux = dx / d, uy = dy / d, uz = dz / d;
+  const v = Math.hypot(h.vx, h.vy, h.vz), vr = h.vx * ux + h.vy * uy + h.vz * uz;
+  if (vr <= 0 || v < 0.5) return;                   // already along or toward the web
+  let tx = h.vx - ux * vr, ty = h.vy - uy * vr, tz = h.vz - uz * vr, tm = Math.hypot(tx, ty, tz);
+  if (tm < 0.3 * v) {
+    // Moving almost straight away from the web point: swing on the way the web points, level.
+    tx = a.fx - ux * (a.fx * ux + a.fz * uz); ty = -uy * (a.fx * ux + a.fz * uz); tz = a.fz - uz * (a.fx * ux + a.fz * uz);
+    tm = Math.hypot(tx, ty, tz);
+    if (tm < 1e-6) return;
+  }
+  h.vx = tx / tm * v; h.vy = ty / tm * v; h.vz = tz / tm * v;
 }
 
 // The input for one step: stick (ix right, iy down, -1..1), held buttons, the camera's yaw.
@@ -227,6 +242,9 @@ function stepHero(h, inp, dt) {
     if (a) {
       h.anchor = a; h.rope = Math.hypot(a.x - h.x, a.y - h.y, a.z - h.z);
       // Nothing is added: the swing keeps the hero's own speed and gravity does the rest (Eero, #529).
+      // Momentum carries into the new web (Eero, #560): the part of the speed that would stretch
+      // the rope, which its catch used to brake away, turns along the swing instead, the same size.
+      carryMomentum(h, a);
       if (h.st === 'wall') h.wallCd = 0.3;
       if (h.st === 'ground') h.vy = Math.max(h.vy, 6);    // off the street
       h.yaw = Math.atan2(a.fx, a.fz);
@@ -240,11 +258,23 @@ function stepHero(h, inp, dt) {
   if (h.st === 'wall') return stepWall(h, inp, dt, mx, mz);
 
   if (h.st === 'ground') {
-    // Run: speed follows the stick quickly; a fast landing keeps some of its speed.
-    const k = Math.min(1, dt * (mm > 0.1 ? 8 : 10));
-    h.vx += (mx * RUN - h.vx) * k; h.vz += (mz * RUN - h.vz) * k;
-    if (mm > 0.1) h.yaw = Math.atan2(mx, mz);
-    if (inp.jump) { h.vy = JUMP; h.st = 'air'; h.jumped = true; }
+    if (h.slideT > 0) {
+      // Just landed fast (#560): the speed carries on a moment, slowing a little, and the stick
+      // only bends its way. A jump now takes the speed into the air.
+      h.slideT -= dt;
+      const sp = Math.hypot(h.vx, h.vz) * Math.max(0, 1 - SLIDE_DRAG * dt);
+      let ux = h.vx, uz = h.vz;
+      if (mm > 0.1) { const k = Math.min(1, dt * 3); ux += (mx / mm * sp - ux) * k; uz += (mz / mm * sp - uz) * k; }
+      const um = Math.hypot(ux, uz) || 1;
+      h.vx = ux / um * sp; h.vz = uz / um * sp;
+      if (sp > 0.1) h.yaw = Math.atan2(h.vx, h.vz);
+    } else {
+      // Run: speed follows the stick quickly.
+      const k = Math.min(1, dt * (mm > 0.1 ? 8 : 10));
+      h.vx += (mx * RUN - h.vx) * k; h.vz += (mz * RUN - h.vz) * k;
+      if (mm > 0.1) h.yaw = Math.atan2(mx, mz);
+    }
+    if (inp.jump) { h.vy = JUMP; h.st = 'air'; h.jumped = true; h.slideT = 0; }
   } else {
     h.vy -= G * dt;
     // A little steering in the air, more while swinging (pumping).
@@ -314,7 +344,13 @@ function collide(h, mx, mz, mm) {
     else if (h.st === 'ground') h.y = s;
   }
 }
-function land(h) { h.st = 'ground'; h.anchor = null; h.vy = 0; h.lands = (h.lands || 0) + 1; }
+// A landing faster than a run slides on for SLIDE_T (Eero, #560: the speed lasts a moment on the
+// ground, and a jump straight away keeps it in the air).
+const SLIDE_T = 0.5, SLIDE_DRAG = 0.6;
+function land(h) {
+  h.st = 'ground'; h.anchor = null; h.vy = 0; h.lands = (h.lands || 0) + 1;
+  h.slideT = Math.hypot(h.vx, h.vz) > RUN ? SLIDE_T : 0;
+}
 function grabWall(h, b, nx, nz) {
   h.st = 'wall'; h.box = b; h.nx = nx; h.nz = nz; h.anchor = null;
   h.vx = h.vy = h.vz = 0;
