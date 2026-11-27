@@ -363,6 +363,8 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       }
       for (const [id, m] of crookM) if (!seen.has(id)) {
         scene.remove(m.g); if (m.shadow) scene.remove(m.shadow); if (m.web && m.web.isLine) scene.remove(m.web); if (m.cocoon) scene.remove(m.cocoon);
+        // Free what each crook made for itself (the shared parts stay): a long session must not fill the phone.
+        for (const o of [m.beam, m.shadow, m.web && m.web.isLine ? m.web : null]) if (o) { o.geometry.dispose(); o.material.dispose(); }
         crookM.delete(id);
       }
     }

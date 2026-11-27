@@ -813,3 +813,40 @@ def test_a_robber_mission_left_open_starts_again_and_each_hint_shows_once(site, 
     assert page.evaluate("world.kind") == "auto" and page.evaluate("world.gt") < 5
     page.wait_for_function("window.L3D && L3D.ready")
     assert page.errors == []
+
+
+def test_back_to_back_catches_keep_both_groups_and_the_tower_is_never_where_the_hero_stands(site, context):
+    # Helper checks on #563: robbers caught, then the car caught under 10 s later, kept the
+    # robbers' cocoons; and a tower turn starting with the hero on the tower top was free.
+    page = open_game(site, context)
+    r = page.evaluate("(() => { const [w, r] = (" + AT + """)(1);
+      w.crooks.forEach(catchCrook); stepRound(w, STEP, r);
+      const after1 = [w.kind, w.gone.length];
+      for (let i = 0; i < 120 * 5; i++) stepRound(w, STEP, r);       // 5 s later the car is caught too
+      w.crooks.forEach(catchCrook); stepRound(w, STEP, r);
+      const after2 = [w.kind, w.gone.map(k => k.type).sort().join()];
+      for (let i = 0; i < 120 * 11; i++) stepRound(w, STEP, r);
+      const t = roofTop(T_BOX);
+      Object.assign(w.hero, { x: t.x, y: T_BOX.h, z: t.z, st: 'ground', vx: 0, vy: 0, vz: 0 });
+      w.done = 3; w.goal = -1; startMission(w, r);
+      return { after1, after2, gone: w.gone, onTower: w.goal === T_BOX.id, done: w.done, step: stepRound(w, STEP, r) };
+    })()""")
+    assert r["after1"] == ["auto", 3]
+    assert r["after2"] == ["torni", "auto,rosvo,rosvo,rosvo"]
+    assert r["gone"] is None                                  # and all of them go after 10 s
+    assert r["onTower"] is False and r["step"] is False       # a roof elsewhere, not a free tower
+
+
+def test_v3s_plain_roof_saved_on_the_towers_turn_is_kept(site, context):
+    # Helper checks on #563: a v3 save at count 3 (v4's tower turn) marked a plain roof; v4 keeps
+    # it and its clock instead of starting over (rule 5).
+    page = open_game(site, context)
+    g = page.evaluate("CITY.find(b => !b.tower && b.h > 20 && b.h < 150).id")
+    page.evaluate(f"""localStorage.setItem('{KEY}tehtavat', '3');
+      localStorage.setItem('{KEY}kierros2', JSON.stringify({{ h: {{ x: 0, y: 0, z: 0, yaw: 0, st: 'ground' }}, g: {g}, gt: 20 }}))""")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("[world.kind, world.goal]") == ["torni", g]
+    assert page.evaluate("world.gt") >= 20
+    assert page.errors == []

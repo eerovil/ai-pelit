@@ -28,7 +28,8 @@ function newWorld() {
 // (Math.random in play). Never the roof just reached, so one landing counts once.
 function pickTarget(w, r, tower) {
   const h = w.hero, far = b => { const t = roofTop(b); return Math.hypot(t.x - h.x, t.z - h.z); };
-  if (tower && T_BOX.id !== w.goal && far(T_BOX) <= TOWER_FAR) return T_BOX.id;
+  // Not while the hero already stands on its top: a car caught from up there is no free tower.
+  if (tower && T_BOX.id !== w.goal && !onTop(h, T_BOX) && far(T_BOX) <= TOWER_FAR) return T_BOX.id;
   const ok = [];
   let near = -1, nearD = Infinity;
   for (const b of CITY) {
@@ -71,7 +72,8 @@ function stepRound(w, dt, r) {
   const done = isCrook(w.kind) ? w.crooks.length > 0 && w.crooks.every(k => k.caught) : onTop(w.hero, CITY[w.goal]);
   if (!done) return false;
   w.got = { t: w.gt, kind: w.kind, tower: w.kind === 'torni' && !!CITY[w.goal] && !!CITY[w.goal].tower, show: 2.5 };
-  if (isCrook(w.kind)) { w.gone = w.crooks; w.goneT = 10; w.crooks = []; }   // the caught ones stay a moment
+  // The caught ones stay a moment, the last mission's ones too when it ended under 10 s ago.
+  if (isCrook(w.kind)) { w.gone = (w.gone || []).concat(w.crooks); w.goneT = 10; w.crooks = []; }
   w.done++;
   startMission(w, r);
   return true;
