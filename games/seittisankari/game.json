@@ -20,8 +20,8 @@
     {
       "n": 3,
       "date": "2026-11-27",
-      "note": "Vetoseitti: pidä Veto pohjassa, tähtää ja päästä irti, niin seitti vetää sinut seinään tai katolle, myös ilmasta; seitissä roikkuessa voi hypätä.",
-      "request": "Seittisankari peliin uusi ominaisuus, että voit... Tähdätään ja ampua seittiä johonkin kohtaan. Jos ammut seinään, niin se sitten vetää sen hahmon siihen seinään. Ja tehdään silleen, että myös ilmassa voi ampua tehdä sitten. — Lisätään myös että voi hypätä kun roikkuu seitissä",
+      "note": "Vetoseitti: pidä Veto pohjassa, tähtää ja päästä irti, niin seitti vetää sinut seinään tai katolle, myös ilmasta; seitistä irti päästessä sankari hyppää voltilla, ja hypyt ovat kolme kertaa korkeampia.",
+      "request": "Seittisankari peliin uusi ominaisuus, että voit... Tähdätään ja ampua seittiä johonkin kohtaan. Jos ammut seinään, niin se sitten vetää sen hahmon siihen seinään. Ja tehdään silleen, että myös ilmassa voi ampua tehdä sitten. — Lisätään myös että voi hypätä kun roikkuu seitissä. — Yleinen hyppykorkeus kolme kertaa korkeampi. — Aina kun päästään irti seitistä, se hyppää automaattisesti ja tekee takaperin voltin. — Kun käyttää vetoa seinässä kiipeillessä, se suuntaa oletuksella suoraan taaksepäin.",
       "issue": "eerovil/ai-pelit#560"
     }
   ]
