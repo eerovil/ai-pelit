@@ -132,6 +132,17 @@ function newHeli(h, r) {
   heliLeg(k, r);
   return k;
 }
+// The nearest roof (not the tower) below a caught helicopter that it can fly over to at its own
+// height; null when there is none, and it comes down where it is.
+function heliRoof(k) {
+  let best = null, bestD = Infinity;
+  eachNear(k.x, k.z, 160, b => {
+    if (b.tower || b.h > k.y - HELI_CLEAR) return;
+    const t = roofTop(b), d = Math.hypot(t.x - k.x, t.z - k.z);
+    if (d < bestD && heliClear(k.x, k.y, k.z, t.x, k.y, t.z)) { best = b; bestD = d; }
+  });
+  return best;
+}
 function heliClear(x0, y0, z0, x1, y1, z1) {
   const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 4);
   for (let i = 0; i <= n; i++) {
@@ -172,9 +183,12 @@ function stepCrook(k, h, dt, r) {
     k.x = (k.a + k.da * k.s / STREET) * STREET; k.z = (k.c + k.dc * k.s / STREET) * STREET;
     k.yaw = Math.atan2(k.da, k.dc);
   } else {
-    if (k.caught) {                          // tied down: sinks onto what is under it
-      const floor = supportAt(k.x, k.z, 3);
-      k.y = Math.max(floor, k.y - 12 * dt);
+    if (k.caught) {                          // tied down: flown over the nearest roof below it, then set down (D6)
+      if (!('land' in k)) k.land = heliRoof(k);
+      const b = k.land, t = b && roofTop(b), d = t ? Math.hypot(t.x - k.x, t.z - k.z) : 0;
+      if (d > 0.05) { const m = Math.min(d, 12 * dt); k.x += (t.x - k.x) / d * m; k.z += (t.z - k.z) / d * m; return; }
+      if (t) { k.x = t.x; k.z = t.z; }
+      k.y = Math.max(supportAt(k.x, k.z, 3), k.y - 12 * dt);
       return;
     }
     if (!k.to) { heliLeg(k, r); return; }

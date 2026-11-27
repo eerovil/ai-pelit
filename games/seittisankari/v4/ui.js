@@ -43,11 +43,13 @@ function startFree() {
   if (k.h) restore(world, k.h);
   // v2's missions: the roof marked last time, its clock, and how many are done (v1 saved none).
   world.done = Math.max(0, load('tehtavat', 0) | 0);
-  // v4 (#561): the mission's kind follows the count; a roof's turn keeps the marked roof, and a
-  // robber mission left open starts again with new robbers, its clock going on.
+  // v4 (#561): the mission's kind follows the count. A marked roof left open is kept with its
+  // clock, whatever the count's turn: v4 saves no roof (g = -1) while crooks are out, so a saved
+  // roof is a roof mission, v3's too (its count may fall on a crook turn). A robber mission left
+  // open starts again with new robbers, its clock going on.
   const kind = kindFor(world.done), t4 = load('tehtava4', null) || {};
-  if (!isCrook(kind) && CITY[k.g]) {   // also v3's plain roof saved on the tower's turn
-    world.kind = kind; setGoal(world, k.g); world.gt = Math.max(0, +k.gt || 0);
+  if (CITY[k.g]) {
+    world.kind = isCrook(kind) ? 'katto' : kind; setGoal(world, k.g); world.gt = Math.max(0, +k.gt || 0);
   } else {
     startMission(world);
     if (t4.k === kind) world.gt = Math.max(0, +t4.gt || 0);

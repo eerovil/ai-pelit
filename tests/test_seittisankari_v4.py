@@ -837,16 +837,49 @@ def test_back_to_back_catches_keep_both_groups_and_the_tower_is_never_where_the_
     assert r["onTower"] is False and r["step"] is False       # a roof elsewhere, not a free tower
 
 
-def test_v3s_plain_roof_saved_on_the_towers_turn_is_kept(site, context):
-    # Helper checks on #563: a v3 save at count 3 (v4's tower turn) marked a plain roof; v4 keeps
-    # it and its clock instead of starting over (rule 5).
+@pytest.mark.parametrize("count,kind", [(1, "katto"), (2, "katto"), (3, "torni"), (4, "katto"), (8, "torni")])
+def test_v3s_marked_roof_is_kept_whatever_turn_its_count_falls_on(site, context, count, kind):
+    # Helper checks and review on #563: a v3 save marks a plain roof at any count, also on v4's
+    # robber, car, tower and helicopter turns; v4 keeps it and its clock (rule 5).
     page = open_game(site, context)
     g = page.evaluate("CITY.find(b => !b.tower && b.h > 20 && b.h < 150).id")
-    page.evaluate(f"""localStorage.setItem('{KEY}tehtavat', '3');
+    page.evaluate(f"""localStorage.setItem('{KEY}tehtavat', '{count}');
       localStorage.setItem('{KEY}kierros2', JSON.stringify({{ h: {{ x: 0, y: 0, z: 0, yaw: 0, st: 'ground' }}, g: {g}, gt: 20 }}))""")
     page.reload()
     page.wait_for_function("mode === 'menu'")
     go(page)
-    assert page.evaluate("[world.kind, world.goal]") == ["torni", g]
+    assert page.evaluate("[world.kind, world.goal, world.crooks.length]") == [kind, g, 0]
     assert page.evaluate("world.gt") >= 20
+    # Reaching it counts once and the next turn's mission follows.
+    page.evaluate(ON_GOAL)
+    page.wait_for_function(f"world.done === {count + 1}")
+    assert page.evaluate("[world.kind, world.got.kind]") == [["katto", "rosvot", "auto", "torni", "heli"][(count + 1) % 5], kind]
+    # A v4 crook mission saves no roof, so a reload starts its crooks again.
+    if page.evaluate("isCrook(world.kind)"):
+        page.click("#quit")
+        assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}kierros2')).g") == -1
+        go(page)
+        assert page.evaluate("[isCrook(world.kind), world.crooks.length > 0]") == [True, True]
+    assert page.errors == []
+
+
+def test_a_caught_helicopter_over_a_street_lands_on_the_nearest_roof(site, context):
+    # Review on #563, spec D6: one hit ties it down and it comes down onto the nearest roof.
+    page = open_game(site, context)
+    r = page.evaluate("(() => { const [w, r] = (" + AT + """)(4, 11);
+      const k = w.crooks[0];
+      Object.assign(k, { x: 80, z: 100, y: 80, to: null });       // over the street x = 80
+      const under = supportAt(k.x, k.z, 3);
+      let best = null, bd = 1e9;
+      for (const b of CITY) { if (b.tower || b.h > k.y - HELI_CLEAR) continue; const t = roofTop(b), d = Math.hypot(t.x - k.x, t.z - k.z);
+        if (d < bd && heliClear(k.x, k.y, k.z, t.x, k.y, t.z)) { best = b; bd = d; } }
+      catchCrook(k); stepRound(w, STEP, r);
+      let lo = 1e9; for (let i = 0; i < 10 / STEP; i++) { stepRound(w, STEP, r); if (w.gone) lo = Math.min(lo, k.y - supportAt(k.x, k.z, 3)); }
+      const t = roofTop(best);
+      return { under, best: best.id, land: k.land && k.land.id, at: Math.hypot(k.x - t.x, k.z - t.z), y: k.y, h: best.h, lo, d: bd };
+    })()""")
+    assert r["under"] == 0                                 # the street is under it when caught
+    assert r["land"] == r["best"] and r["d"] < 60          # the nearest roof it can reach
+    assert r["at"] < 0.1 and r["y"] == r["h"] > 0          # set down on that roof
+    assert r["lo"] >= 0                                    # never inside a building on the way
     assert page.errors == []
