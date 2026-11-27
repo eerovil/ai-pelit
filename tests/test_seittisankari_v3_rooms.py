@@ -1,4 +1,4 @@
-"""Seittisankari v2 with friends (#529): the host runs the round, each phone moves its own hero.
+"""Seittisankari v3 with friends (#529, #560): the host runs the round, each phone moves its own hero.
 The race is to a random building's roof (Eero's choice), everyone from the same spot; the host
 decides who stood on it first."""
 import json
@@ -155,3 +155,14 @@ def test_touches_during_a_pause_do_nothing_when_it_ends(phone):
       { pointerId: 3, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))""", [b["jump"]["x"], b["jump"]["y"]])
     assert host.evaluate("[jumpQ, webPtr, stick]") == [False, None, None]
     assert host.errors == []
+
+
+def test_the_others_see_a_pulling_heros_web(phone):
+    # Veto (#560): a pull sends its state and its web's end like a swing does.
+    host, guest = room(phone, 2)
+    start([host, guest])
+    guest.evaluate("""() => { const h = world.hero;
+      h.st = 'pull'; h.pull = { x: h.x, y: h.y + 300, z: h.z, kind: 'roof', box: -1, nx: 0, nz: 0 }; h.pullT = 0;
+      h.anchor = { x: h.x, y: h.y + 300, z: h.z, box: -1 }; }""")
+    host.wait_for_function("""net.players.some(p => p !== net.me && p.st === 'pull' && p.a && p.a.y > 100)""", timeout=8000)
+    assert host.errors == [] and guest.errors == []

@@ -1,4 +1,4 @@
-"""Seittisankari v2 (#529): a masked hero who climbs skyscrapers and swings between them on a web,
+"""Seittisankari v3 (#529, #560): a masked hero who climbs skyscrapers and swings between them on a web,
 in a city of about 1.7 km across. v1 is the free city and playing with friends (Eero's choice).
 
 The movement is tested on heroes stepped in the page (world.js is plain functions), the screen and
@@ -156,10 +156,12 @@ def test_the_menu_and_buttons_fit_upright_and_sideways(site, context, size):
         assert box["y"] >= 0 and box["y"] + box["height"] <= size["height"], (sel, box)
     go(page)
     b = page.evaluate("buttons()")
-    for k in ("web", "jump"):
+    for k in ("web", "jump", "pull"):
         x, y, r = b[k]["x"], b[k]["y"], b[k]["r"]
         assert r <= x <= size["width"] - r and r <= y <= size["height"] - r, (k, b[k])
-    assert page.evaluate("Math.hypot(buttons().web.x - buttons().jump.x, buttons().web.y - buttons().jump.y)") > b["web"]["r"] + b["jump"]["r"]
+    for k1, k2 in (("web", "jump"), ("web", "pull"), ("jump", "pull")):    # Veto (#560) overlaps neither
+        p, q = b[k1], b[k2]
+        assert ((p["x"] - q["x"]) ** 2 + (p["y"] - q["y"]) ** 2) ** 0.5 > p["r"] + q["r"] + 8, (k1, k2)
     assert page.errors == []
 
 
@@ -253,3 +255,241 @@ def test_the_marked_roof_and_the_count_survive_a_reload_and_v1s_save_still_opens
     assert 42 <= page.evaluate("world.gt") < 45     # the roof's clock goes on, not from 0
     assert page.evaluate("world.hero.x") > -300     # v2's own spot, not v1's
     assert page.errors == []
+
+
+# ---- v3 (#560): Veto, a web shot where the player aims that pulls the hero there ----
+# A hero on the street in front of BX(1, 0)'s south wall, facing it (+z).
+FRONT = "const b = BX(1, 0), h = newHero((b.x0 + b.x1) / 2, 0, b.z0 - 6, 0);"
+NONE = "({ ix: 0, iy: 0, jump: false, web: false, yaw: 0 })"
+# Shoot `hit` this step, then step until the hero holds a wall or stands (or 5 s pass).
+PULL = """const shoot = (h, hit) => { stepHero(h, Object.assign(""" + NONE + """, { pull: hit }), STEP);
+  const seen = new Set([h.st]); let t = STEP;
+  while (t < 5 && h.st !== 'wall' && h.st !== 'ground') { stepHero(h, """ + NONE + """, STEP); seen.add(h.st); t += STEP; }
+  return { st: h.st, x: h.x, y: h.y, z: h.z, t, seen: [...seen] }; };"""
+
+
+def test_a_web_shot_at_a_wall_pulls_the_hero_there_and_it_holds_on(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + FRONT + PULL + """
+      const hit = aimPull(h, 0, -0.6);                       // looking up at the wall ahead
+      return { hit, end: shoot(h, hit), z0: b.z0 };
+    })()""")
+    hit, end = r["hit"], r["end"]
+    assert hit["kind"] == "wall" and hit["nz"] == -1 and hit["y"] > 3
+    assert "pull" in end["seen"] and end["st"] == "wall"
+    assert abs(end["y"] - (hit["y"] - 1.4)) < 0.5 and abs(end["z"] - (r["z0"] - 0.4)) < 0.1
+    assert end["t"] < 1.5                                      # 30 m/s
+
+
+def test_the_web_shot_works_in_the_air_falling_and_while_swinging(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + PULL + """
+      const b = BX(1, 0), out = {};
+      // Falling past the wall's middle.
+      let h = newHero((b.x0 + b.x1) / 2, b.h * 0.7, b.z0 - 6, 0); h.st = 'air'; h.vy = -15;
+      out.fall = shoot(h, aimPull(h, 0, -0.3));
+      // Swinging: on the web, then shoot.
+      h = newHero((b.x0 + b.x1) / 2, b.h * 0.7, b.z0 - 6, 0); h.st = 'air';
+      stepHero(h, { ix: 0, iy: 0, jump: false, web: true, yaw: 0 }, STEP);
+      out.swung = h.st;
+      out.swing = shoot(h, aimPull(h, 0, -0.3));
+      return out;
+    })()""")
+    assert r["swung"] == "swing"
+    for k in ("fall", "swing"):
+        assert r[k]["st"] == "wall" and "pull" in r[k]["seen"], (k, r[k])
+
+
+def test_a_web_shot_at_a_roof_lands_the_hero_on_it(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + PULL + """
+      const b = BX(1, 0), h = newHero((b.x0 + b.x1) / 2, b.h + 20, b.z0 - 10, 0); h.st = 'air';
+      const hit = aimPull(h, 0, 0.9);                        // looking down onto the roof
+      return { hit, end: shoot(h, hit), on: supportAt(h.x, h.z, 0) === b.h, top: b.h };
+    })()""")
+    assert r["hit"]["kind"] == "roof"
+    assert r["end"]["st"] == "ground" and r["end"]["y"] == r["top"] and r["on"]
+
+
+def test_a_web_shot_at_the_sky_the_street_or_too_far_misses(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const b = BX(1, 0), h = newHero((b.x0 + b.x1) / 2, 0, b.z0 - 6, Math.PI);
+      return {
+        sky: aimPull(Object.assign(newHero(0, 400, 0, 0), { st: 'air' }), 0, -0.5),
+        street: aimPull(Object.assign(newHero((b.x0 + b.x1) / 2, 30, b.z0 - 6, Math.PI), { st: 'air' }), Math.PI, 1.4),   // steeply down at the street
+      };
+    })()""")
+    assert r["sky"] is None and r["street"] is None
+    # Without a hit nothing changes: the hero is not pulled.
+    st = page.evaluate("(() => {" + FRONT + """ h.vx = 3;
+      stepHero(h, Object.assign(""" + NONE + """, { pull: null }), STEP); return [h.st, h.vx > 2]; })()""")
+    assert st == ["ground", True]
+
+
+def test_the_reach_is_60_metres(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      // Straight along the camera's level line from far away: hit only within PULL_MAX.
+      const b = BX(1, 0), x = (b.x0 + b.x1) / 2, out = [];
+      for (const d of [20, 55, 65, 90]) {
+        const h = newHero(x + 0.9, 0, b.z0 - d, 0);           // + AIM_SIDE: the ray starts over the right shoulder
+        const r = aimRay(h, 0, 0), hit = aimPull(h, 0, 0);
+        out.push([d, hit ? Math.hypot(hit.x - r.ox, hit.y - r.oy, hit.z - r.oz) : null, hit && hit.box === b.id]);
+      }
+      return { out, max: PULL_MAX };
+    })()""")
+    assert r["max"] == 60
+    for d, dist, own in r["out"]:
+        if dist is not None:
+            assert dist <= 60
+        if d <= 55:
+            assert dist is not None
+        if d >= 65:
+            assert not own, (d, dist)
+
+
+def test_hyppy_during_a_pull_lets_go_and_keeps_the_speed(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + FRONT + """
+      const hit = aimPull(h, 0, -0.6);
+      stepHero(h, Object.assign(""" + NONE + """, { pull: hit }), STEP);
+      for (let i = 0; i < 6; i++) stepHero(h, """ + NONE + """, STEP);
+      const v0 = Math.hypot(h.vx, h.vy, h.vz), st0 = h.st;
+      stepHero(h, Object.assign(""" + NONE + """, { jump: true }), STEP);
+      return [st0, h.st, v0, Math.hypot(h.vx, h.vy, h.vz)];
+    })()""")
+    assert r[0] == "pull" and r[1] == "air"
+    assert r[2] > 25 and r[3] > 25
+
+
+def test_hyppy_while_hanging_on_the_web_jumps_off_upward(site, context):
+    # Eero, #560: "voi hypätä kun roikkuu seitissä".
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const h = newHero(LX(2) + 20, 120, LX(2) + 20, 0); h.st = 'air'; h.vy = -12;
+      stepHero(h, { ix: 0, iy: 0, jump: false, web: true, yaw: 0 }, STEP);
+      const st0 = h.st, vy0 = h.vy;
+      stepHero(h, { ix: 0, iy: 0, jump: true, web: true, yaw: 0 }, STEP);
+      const st1 = h.st, vy1 = h.vy;
+      // Seitti still held: no new swing until it is let go and pressed again.
+      for (let i = 0; i < 10; i++) stepHero(h, { ix: 0, iy: 0, jump: false, web: true, yaw: 0 }, STEP);
+      return { st0, st1, vy0, vy1, st2: h.st, jump: JUMP };
+    })()""")
+    assert r["st0"] == "swing" and r["st1"] == "air" and r["st2"] == "air"
+    assert r["vy1"] >= r["jump"] - 0.5 and r["vy1"] > r["vy0"]
+
+
+def test_holding_veto_aims_with_the_same_finger_and_lifting_it_shoots(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("""() => { const b = BX(1, 0), h = world.hero;
+      Object.assign(h, { x: (b.x0 + b.x1) / 2, y: 0, z: b.z0 - 6, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null, yaw: 0 });
+      cam.yaw = 0; cam.pitch = 0.3; }""")
+    b = page.evaluate("buttons()")
+    x, y = b["pull"]["x"], b["pull"]["y"]
+    page.evaluate(TOUCH, ["pointerdown", 4, x, y])
+    assert page.evaluate("pullPtr && pullPtr.id") == 4
+    # Slide up 150 px: the camera tilts to look up, past the plain drag's limit.
+    for k in range(1, 16):
+        page.evaluate(TOUCH, ["pointermove", 4, x, y - 10 * k])
+    pitch = page.evaluate("cam.pitch")
+    assert pitch < -0.35 and pitch >= -1.0
+    page.wait_for_timeout(300)
+    assert page.evaluate("cam.pitch") == pitch                 # the camera stays where the finger put it
+    assert page.evaluate("!!aimPull(world.hero, cam.yaw, cam.pitch)")
+    page.evaluate(TOUCH, ["pointerup", 4, x, y - 150])
+    page.wait_for_function("world.hero.st === 'pull' || world.hero.st === 'wall'")
+    page.wait_for_function("world.hero.st === 'wall'", timeout=5000)
+    assert page.evaluate("[pullPtr, pullQ]") == [None, None]
+    assert page.errors == []
+
+
+def test_a_missed_shot_does_nothing_and_the_hero_keeps_running(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("""() => { const h = world.hero; Object.assign(h, { x: 0, y: 400, z: 0, vx: 0, vy: 0, vz: 0, st: 'air', anchor: null });
+      cam.yaw = 0; cam.pitch = -0.3; }""")
+    b = page.evaluate("buttons()")
+    got = page.evaluate(f"""(p) => {{ const T = {TOUCH}; T(['pointerdown', 4, p.x, p.y]); T(['pointerup', 4, p.x, p.y]);
+      return [pullQ, !!missFx, world.hero.st]; }}""", b["pull"])
+    assert got == [None, True, "air"]
+    assert page.errors == []
+
+
+def test_a_spot_saved_mid_pull_opens_as_a_fall_and_the_veto_hint_shows_once(site, context):
+    page = open_game(site, context)
+    page.evaluate(f"localStorage.setItem('{KEY}ohje', '1')")    # saw v1/v2's hints already
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("hintT") == 99 and page.evaluate("hint3T") < 9
+    page.evaluate("""() => { const b = BX(1, 0), h = world.hero;
+      Object.assign(h, { x: (b.x0 + b.x1) / 2, y: 0, z: b.z0 - 6, st: 'ground' });
+      pullQ = aimPull(h, 0, -0.6); }""")
+    page.wait_for_function("world.hero.st === 'pull'")
+    page.evaluate("saveRound()")
+    assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}kierros2')).h.st") == "air"
+    page.evaluate("hint3T = 8.95")
+    page.wait_for_function(f"localStorage.getItem('{KEY}ohje3') === '1'")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("hint3T") == 99
+    assert page.evaluate("world.hero.st") in ("air", "ground", "wall")
+    assert page.errors == []
+
+
+def test_a_jump_goes_three_times_as_high_as_before(site, context):
+    # Eero, #560: "yleinen hyppykorkeus ... kolme kertaa korkeampi" (v2: about 2 m).
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const top = start => { let m = 0; for (let i = 0; i < 600; i++) { stepHero(start, { ix: 0, iy: 0, jump: i === 0, web: false, yaw: 0 }, STEP); m = Math.max(m, start.y); if (start.st === 'ground' && i > 2) break; } return m; };
+      const b = BX(1, 0), out = {};
+      out.street = top(newHero(LX(2) + 20, 0, LX(2) + 20, 0));
+      // Off a wall: push off it, up as high.
+      const h = newHero((b.x0 + b.x1) / 2, 10, b.z0 - 0.4, 0); Object.assign(h, { st: 'wall', box: b, nx: 0, nz: -1 });
+      out.wall = top(h) - 10;
+      return out;
+    })()""")
+    v2 = 10.5 ** 2 / (2 * 28)
+    assert 2.8 * v2 < r["street"] < 3.2 * v2, r
+    assert r["wall"] > 2.8 * v2, r
+
+
+def test_veto_on_a_wall_aims_straight_back_and_keeps_the_camera_out_of_the_building(site, context):
+    # Eero, #560: pressing Veto while climbing put the camera inside the building.
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("""() => { const b = BX(1, 0), h = world.hero;
+      Object.assign(h, { x: (b.x0 + b.x1) / 2, y: 12, z: b.z0 - 0.4, vx: 0, vy: 0, vz: 0, st: 'wall', box: b, nx: 0, nz: -1, anchor: null });
+      cam.yaw = 0.3; cam.pitch = 0.5; }""")
+    b = page.evaluate("buttons()")
+    page.evaluate(TOUCH, ["pointerdown", 4, b["pull"]["x"], b["pull"]["y"]])
+    # Eero, #560: on a wall the aim starts straight back from it (the wall faces -z), level.
+    yaw, pitch = page.evaluate("[cam.yaw, cam.pitch]")
+    assert abs(angdiff(yaw, 3.141592653589793)) < 1e-6 and pitch == 0
+    page.wait_for_timeout(800)
+    c = page.evaluate("L3D.camAt()")
+    assert page.evaluate("([x, y, z]) => !insideCity(x, y, z, 0.05)", c), c
+    hit = page.evaluate("aimPull(world.hero, cam.yaw, cam.pitch)")
+    assert hit and hit["box"] != page.evaluate("BX(1, 0).id")      # aims at the building across, not its own
+    assert page.errors == []
+
+
+def test_letting_go_of_the_web_always_jumps(site, context):
+    # Eero, #560: "aina kun päästään irti seitistä, niin se hyppää automaattisesti" (with a backflip,
+    # drawn in draw3d.js from the swing-to-air change).
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const h = newHero(LX(2) + 20, 120, LX(2) + 20, 0); h.st = 'air'; h.vy = -12;
+      const inp = web => ({ ix: 0, iy: 0, jump: false, web, yaw: 0 });
+      stepHero(h, inp(true), STEP);
+      for (let i = 0; i < 30; i++) stepHero(h, inp(true), STEP);
+      const st0 = h.st, vy0 = h.vy, jumped0 = h.jumped;
+      stepHero(h, inp(false), STEP);
+      return { st0, st1: h.st, vy0, vy1: h.vy, jumped: h.jumped && !jumped0, jump: JUMP, g: G, dt: STEP };
+    })()""")
+    assert r["st0"] == "swing" and r["st1"] == "air" and r["jumped"]
+    assert r["vy1"] >= r["jump"] - r["g"] * r["dt"] - 1e-6
+    assert r["vy1"] > r["vy0"]

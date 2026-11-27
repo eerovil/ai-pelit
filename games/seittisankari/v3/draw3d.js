@@ -183,6 +183,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     // The pose: a target angle (x, y, z) for each joint; the joints turn toward it, so a change of
     // state (a web caught, a wall grabbed) blends in a moment instead of snapping.
     // Signs: a joint's +x turns its limb backward; a leg forward and up is -x, a knee bends with +x.
+    const FLIP_T = 0.7;
     function poseHero(m, h, dt) {
       m.g.visible = true;
       m.g.position.set(h.x, h.y, h.z);
@@ -190,7 +191,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       const P = m.P, J = m.tgt;
       const set = (k, x, y, z) => { J[k] = [x, y || 0, z || 0]; };
       let bodyX = 0, bodyZ = 0, bodyY = 0, bodyPz = 0, rate = 12;
-      if (h.st === 'swing' && h.anchor) {
+      if ((h.st === 'swing' || h.st === 'pull') && h.anchor) {
         // Along the rope, the web hand up to it, legs pulled up under the body (Eero, #529).
         tmpA.set(h.anchor.x - h.x, h.anchor.y - h.y - 1, h.anchor.z - h.z).normalize();
         tmpB.set(h.vx, 0, h.vz); if (tmpB.lengthSq() < 0.01) tmpB.set(Math.sin(h.yaw), 0, Math.cos(h.yaw));
@@ -243,20 +244,39 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
           bodyX = clamp(-h.vy / 40, -0.5, 0.5);
         }
       }
+      // Let go of the web: a backflip with the jump (Eero, #560). Read from the state change alone,
+      // so friends' heroes flip on every phone too.
+      if (m.lastSt === 'swing' && h.st === 'air') m.flip = 0;
+      if (h.st !== 'air') m.flip = -1;
+      m.lastSt = h.st;
+      const flipping = m.flip >= 0;
+      if (flipping) {                         // tucked: knees to the chest, arms round the shins
+        set('legL', -1.6, 0, -0.1); set('kneeL', 2.3); set('legR', -1.6, 0, 0.1); set('kneeR', 2.3);
+        set('armL', -1.2, 0, -0.2); set('elbL', -0.8); set('armR', -1.2, 0, 0.2); set('elbR', -0.8);
+        rate = 20;
+      }
       const f = Math.min(1, dt * rate);
       for (const k of JOINTS) {
         const t = J[k] || [0, 0, 0], r = P[k].rotation;
         r.set(r.x + (t[0] - r.x) * f, r.y + (t[1] - r.y) * f, r.z + (t[2] - r.z) * f);
       }
       const br = m.body.rotation, bp = m.body.position;
-      br.set(br.x + (bodyX - br.x) * f, 0, br.z + (bodyZ - br.z) * f);
-      bp.set(0, bp.y + (bodyY - bp.y) * f, bp.z + (bodyPz - bp.z) * f);
+      // The body's own pose blends in m.b (the flip is laid on top, so it never blends away).
+      const B = m.b || (m.b = { x: 0, z: 0, py: 0, pz: 0 });
+      B.x += (bodyX - B.x) * f; B.z += (bodyZ - B.z) * f; B.py += (bodyY - B.py) * f; B.pz += (bodyPz - B.pz) * f;
+      br.set(B.x, 0, B.z); bp.set(0, B.py, B.pz);
+      if (flipping) {
+        m.flip += dt;
+        const p = Math.min(1, m.flip / FLIP_T), e = p * p * (3 - 2 * p), a = -TAU * e, c = 0.9;   // round the hips, head back first
+        br.x += a; bp.y += c - c * Math.cos(a); bp.z -= c * Math.sin(a);
+        if (p >= 1) m.flip = -1;
+      }
       // Shadow on whatever is under the hero.
       const s = supportAt(h.x, h.z, 0);
       m.shadow.visible = h.st !== 'wall';
       m.shadow.position.set(h.x, s + 0.05, h.z);
       const hgt = h.y - s; m.shadow.scale.setScalar(clamp(1 - hgt / 40, 0.3, 1)); m.shadow.material.opacity = clamp(0.35 - hgt / 120, 0.08, 0.35);
-      m.web.visible = h.st === 'swing' && !!h.anchor;
+      m.web.visible = (h.st === 'swing' || h.st === 'pull') && !!h.anchor;
       if (m.web.visible) {
         const p = m.web.geometry.attributes.position;
         // The web leaves the hero's right glove (Eero, #529).
@@ -273,16 +293,20 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
 
     // ---- The camera: behind the hero, kept out of the buildings ----
     const camPos = new T.Vector3(), look = new T.Vector3();
-    const inside = (x, y, z) => y < 0.3 || eachNear(x, z, 0.3, b => x > b.x0 - 0.3 && x < b.x1 + 0.3 && z > b.z0 - 0.3 && z < b.z1 + 0.3 && y < b.h + 0.3);
-    let camDist = 7;
-    function place(h, cv, dt) {
-      const wantD = h.st === 'wall' ? 8.5 : h.st === 'swing' ? 9 : 7;
-      camDist += (wantD - camDist) * Math.min(1, dt * 3);
+    const inside = (x, y, z) => insideCity(x, y, z, 0.3);
+    let camDist = 7, aimK = 0;
+    // Aiming with Veto (#560): closer, and over the right shoulder, so the crosshair is clear.
+    function place(h, cv, dt, aiming) {
+      aimK += ((aiming ? 1 : 0) - aimK) * Math.min(1, dt * 10);
+      const wantD = aiming ? 4.5 : h.st === 'wall' ? 8.5 : h.st === 'swing' || h.st === 'pull' ? 9 : 7;
+      camDist += (wantD - camDist) * Math.min(1, dt * (aiming ? 8 : 3));
       const p = cv.pitch, cp = Math.cos(p);
-      look.set(h.x, h.y + 1.5, h.z);
+      const e = aimEye(h, cv.yaw, aimK);
+      look.set(e.x, h.y + 1.5, e.z);
       let d = camDist;
       const dx = -Math.sin(cv.yaw) * cp, dy = Math.sin(p), dz = -Math.cos(cv.yaw) * cp;
-      for (let s = 0.6; s <= camDist; s += 0.3) if (inside(look.x + dx * s, look.y + dy * s, look.z + dz * s)) { d = Math.max(0.6, s - 0.4); break; }
+      // Stop in front of a wall, not in it: from close by, in small steps (#560: aiming on a wall).
+      for (let s = 0.2; s <= camDist; s += 0.2) if (inside(look.x + dx * s, look.y + dy * s, look.z + dz * s)) { d = Math.max(0.1, s - 0.2); break; }
       camPos.set(look.x + dx * d, look.y + dy * d, look.z + dz * d);
       cam.position.copy(camPos); cam.lookAt(look.x, look.y + 0.4, look.z);
     }
@@ -293,6 +317,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       rd.setSize(w, h, false); cam.aspect = w / h; cam.fov = w > h ? 62 : 72; cam.updateProjectionMatrix();
     }
     L3D.resize = resize; resize();
+    L3D.camAt = () => [camPos.x, camPos.y, camPos.z];   // for the tests
     const pv = new T.Vector3();
     L3D.project = (x, y, z) => {
       pv.set(x, y, z).project(cam);
@@ -311,7 +336,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       const w = s.w, now = performance.now() / 1000;
       flag.visible = !!(w && w.flag); if (flag.visible) { flag.position.set(w.flag.x, w.flag.y, w.flag.z); flag.children[1].rotation.y = Math.sin(now * 3) * 0.3; }
       const h = s.hero;
-      if (h) place(h, s.cam, dt);
+      if (h) place(h, s.cam, dt, !!s.aiming);
       rd.render(scene, cam);
       L3D.ready = true;
       // A slow phone: fewer pixels (#103's lesson).

@@ -16,6 +16,13 @@
       "note": "Tehtäviä kaupungissa: mene merkitylle katolle, nuoli näyttää suunnan, ja joka viides kohde on tornin huippu.",
       "request": "Tähän sitten jotain tehtäviä. Eli käytännössä \"mene tänne\". Ja näkyy nuoli minne pitää menä",
       "issue": "eerovil/ai-pelit#529"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-27",
+      "note": "Vetoseitti: pidä Veto pohjassa, tähtää ja päästä irti, niin seitti vetää sinut seinään tai katolle, myös ilmasta; seitissä roikkuessa voi hypätä.",
+      "request": "Seittisankari peliin uusi ominaisuus, että voit... Tähdätään ja ampua seittiä johonkin kohtaan. Jos ammut seinään, niin se sitten vetää sen hahmon siihen seinään. Ja tehdään silleen, että myös ilmassa voi ampua tehdä sitten. — Lisätään myös että voi hypätä kun roikkuu seitissä",
+      "issue": "eerovil/ai-pelit#560"
     }
   ]
 }

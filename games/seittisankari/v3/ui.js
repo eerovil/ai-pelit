@@ -45,7 +45,7 @@ function startFree() {
   world.done = Math.max(0, load('tehtavat', 0) | 0);
   if (CITY[k.g]) { setGoal(world, k.g); world.gt = Math.max(0, +k.gt || 0); }
   cam.yaw = world.hero.yaw; cam.pitch = 0.3; cam.manualT = 9;
-  mode = 'play'; acc = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null;
+  mode = 'play'; acc = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null; pullPtr = null; pullQ = null;
   hideAll();
   saveRound();
 }
@@ -63,16 +63,20 @@ function restore(w, q) {
 }
 
 // ---- The fingers ----
-// Left half: a floating stick. Right half: Seitti (held) and Hyppy, and a drag anywhere else
-// turns the camera.
+// Left half: a floating stick. Right half: Seitti (held), Hyppy and Veto, and a drag anywhere
+// else turns the camera. Veto (#560) is held to aim: the same finger turns the camera, and lifting
+// it shoots the web along the camera's centre line.
 const STICK = 52;
-let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null;
+let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null;
 function buttons() {
-  const r = LAND ? 46 : 50, rj = LAND ? 34 : 38;
+  const r = LAND ? 46 : 50, rj = LAND ? 34 : 38, rp = LAND ? 32 : 34;
   const web = { x: W - SAFE_R - r - (LAND ? 26 : 20), y: H - SAFE_B - r - (LAND ? 20 : 30), r };
   const jump = LAND ? { x: web.x - r - rj - 20, y: web.y + 10, r: rj } : { x: web.x - 30, y: web.y - r - rj - 26, r: rj };
-  return { web, jump };
+  // Upright: left of Seitti, on its row; sideways: above it.
+  const pull = LAND ? { x: web.x + 4, y: web.y - r - rp - 22, r: rp } : { x: web.x - r - rp - 16, y: web.y + 14, r: rp };
+  return { web, jump, pull };
 }
+const PITCH_AIM = -1.0;   // aiming may look much higher than the camera's own drag (#560)
 const gapTo = (b, e) => Math.hypot(e.clientX - b.x, e.clientY - b.y) - b.r;
 const playing = () => (mode === 'play' && !!world) ||
   (mode === 'netplay' && world && typeof net !== 'undefined' && net && !net.res && !!net.me && !RM.paused);
@@ -85,8 +89,15 @@ c.addEventListener('pointerdown', e => {
   try { c.setPointerCapture(e.pointerId); } catch (_) {}   // its lift comes here even off the canvas
   // With Seitti held, a second thumb on or beside it jumps.
   const b = buttons(), dw = webPtr === null ? gapTo(b.web, e) : Infinity, dj = Math.min(gapTo(b.jump, e), webPtr === null ? Infinity : gapTo(b.web, e));
-  if (Math.min(dw, dj) < 22) {
-    if (dw <= dj) webPtr = e.pointerId;
+  const dp = pullPtr === null ? gapTo(b.pull, e) : Infinity;
+  if (Math.min(dw, dj, dp) < 22) {
+    if (dp < dw && dp < dj) {
+      pullPtr = { id: e.pointerId, x: e.clientX, y: e.clientY }; cam.manualT = 0;
+      // On a wall the aim starts straight back from it, level (Eero, #560).
+      const h = world.hero;
+      if (h.st === 'wall') { cam.yaw = Math.atan2(h.nx, h.nz); cam.pitch = 0; }
+    }
+    else if (dw <= dj) webPtr = e.pointerId;
     else { jumpQ = true; jumpFlash = 0.15; }
     return;
   }
@@ -100,6 +111,10 @@ c.addEventListener('pointermove', e => {
     stick.x = e.clientX; stick.y = e.clientY;
     const dx = stick.x - stick.x0, dy = stick.y - stick.y0, d = Math.hypot(dx, dy);
     if (d > STICK * 1.6) { stick.x0 = stick.x - dx / d * STICK * 1.6; stick.y0 = stick.y - dy / d * STICK * 1.6; }
+  } else if (pullPtr && e.pointerId === pullPtr.id) {
+    cam.yaw -= (e.clientX - pullPtr.x) * 0.008;
+    cam.pitch = clamp(cam.pitch + (e.clientY - pullPtr.y) * 0.006, PITCH_AIM, 1.1);
+    pullPtr.x = e.clientX; pullPtr.y = e.clientY; cam.manualT = 0;
   } else if (lookPtr && e.pointerId === lookPtr.id) {
     cam.yaw -= (e.clientX - lookPtr.x) * 0.008;
     cam.pitch = clamp(cam.pitch + (e.clientY - lookPtr.y) * 0.006, -0.35, 1.1);
@@ -110,6 +125,16 @@ function lift(e) {
   if (stick && e.pointerId === stick.id) stick = null;
   if (lookPtr && e.pointerId === lookPtr.id) lookPtr = null;
   if (e.pointerId === webPtr) webPtr = null;
+  if (pullPtr && e.pointerId === pullPtr.id) {
+    pullPtr = null;
+    // Shoot: a hit pulls the hero there; a miss is a web flying out and nothing else.
+    if (world && playing()) {
+      const h = world.hero, hit = e.type === 'pointerup' ? aimPull(h, cam.yaw, cam.pitch) : null;
+      if (hit) pullQ = hit;
+      else if (e.type === 'pointerup') { const r = aimRay(h, cam.yaw, cam.pitch); missFx = { t: 0.3, x: r.ox + r.dx * 15, y: r.oy + r.dy * 15, z: r.oz + r.dz * 15 }; }
+      sfx('suhahdus', { vol: 0.22, rate: hit ? 1.6 : 1.9 });
+    }
+  }
 }
 c.addEventListener('pointerup', lift);
 c.addEventListener('pointercancel', lift);
@@ -123,14 +148,15 @@ function stickInput() {
 }
 function input() {
   const [ix, iy] = stickInput();
-  const inp = { ix, iy, jump: jumpQ, web: webPtr !== null, yaw: cam.yaw };
-  jumpQ = false;
+  const inp = { ix, iy, jump: jumpQ, web: webPtr !== null, yaw: cam.yaw, pull: pullQ };
+  jumpQ = false; pullQ = null;
   return inp;
 }
 // The camera turns itself behind where the hero goes, unless the player just turned it.
 function angDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
 function stepCam(h, dt) {
   cam.manualT += dt;
+  if (pullPtr) cam.manualT = 0;          // aiming: the camera stays where the finger put it
   if (cam.manualT < 1.5) return;
   let want = null, rate = 0;
   if (h.st === 'wall') { want = Math.atan2(-h.nx, -h.nz); rate = 3; }
@@ -139,7 +165,7 @@ function stepCam(h, dt) {
     if (sp > 3) { want = Math.atan2(h.vx, h.vz); rate = h.st === 'ground' ? 1.6 : 1.2; }
   }
   if (want !== null) cam.yaw += angDiff(cam.yaw, want) * Math.min(1, dt * rate);
-  const wantP = h.st === 'wall' ? 0.05 : h.st === 'swing' ? 0.22 : 0.3;
+  const wantP = h.st === 'wall' ? 0.05 : h.st === 'swing' || h.st === 'pull' ? 0.22 : 0.3;
   if (cam.manualT > 2.5) cam.pitch += (wantP - cam.pitch) * Math.min(1, dt * 1.5);
 }
 
@@ -165,11 +191,19 @@ function shadowText(t, x, y, size, col, align, weight) {
 }
 let aimNow = null;
 let hintT = load('ohje', 0) ? 99 : 0;   // the controls, told once on the phone's first visit
+// v3's Veto and the jump off the web, told once more to phones that saw the old hints (#560).
+let hint3T = load('ohje3', 0) ? 99 : 0;
+function stepHint3(dt) {
+  if (hintT < 16 || hint3T >= 9) return;
+  hint3T += dt; if (hint3T >= 9) save('ohje3', 1);
+}
 function drawHUD(w) {
   const h = w.hero, top = SAFE_T + 22;
   shadowText('↑ ' + Math.round(h.y) + ' m', W - SAFE_R - 14, top, 16, '#e8f4ff', 'right', 800);
   drawGoal(w, top);
   if (hintT < 16) drawHints();
+  else if (hint3T < 9) drawHints3();
+  drawAim(h);
   drawControls(h);
 }
 // The mission: where to go, how far, an arrow toward it as the camera looks, the count done.
@@ -197,6 +231,32 @@ function drawHints() {
   shadowText(lines[0], W / 2, H * 0.3, 15, '#fff', 'center', 700);
   shadowText(lines[1], W / 2, H * 0.3 + 20, 15, '#fff', 'center', 700);
 }
+function drawHints3() {
+  const lines = ['Pidä Veto pohjassa ja tähtää liu\'uttamalla', 'Päästä irti: seitti vetää sinut seinään', 'Seitistä irti: hyppy ja voltti'];
+  lines.forEach((t, i) => shadowText(t, W / 2, H * 0.3 + i * 20, 15, '#fff', 'center', 700));
+}
+// While Veto is held: a crosshair where the web would go, green on a wall or roof in reach,
+// grey when it would miss. A missed shot draws a short web flying out.
+function drawAim(h) {
+  if (missFx && window.L3D && L3D.project) {
+    const a = L3D.project(h.x, h.y + 1.4, h.z), b = L3D.project(missFx.x, missFx.y, missFx.z);
+    if (a && b) {
+      cx.globalAlpha = Math.min(1, missFx.t * 4); cx.strokeStyle = '#fff'; cx.lineWidth = 2;
+      cx.beginPath(); cx.moveTo(a[0], a[1]); cx.lineTo(b[0], b[1]); cx.stroke(); cx.globalAlpha = 1;
+    }
+  }
+  if (!pullPtr || !window.L3D || !L3D.project) return;
+  const hit = aimPull(h, cam.yaw, cam.pitch), r = aimRay(h, cam.yaw, cam.pitch);
+  const p = hit ? L3D.project(hit.x, hit.y, hit.z) : L3D.project(r.ox + r.dx * PULL_MAX, r.oy + r.dy * PULL_MAX, r.oz + r.dz * PULL_MAX);
+  const [x, y] = p || [W / 2, H / 2];
+  const col = hit ? '#5dff9a' : 'rgba(200,210,220,.85)';
+  cx.strokeStyle = 'rgba(10,20,40,.55)'; cx.lineWidth = 6;
+  cx.beginPath(); cx.arc(x, y, 16, 0, TAU); cx.stroke();
+  cx.strokeStyle = col; cx.lineWidth = 3;
+  cx.beginPath(); cx.arc(x, y, 16, 0, TAU); cx.stroke();
+  cx.beginPath(); cx.moveTo(x - 26, y); cx.lineTo(x - 8, y); cx.moveTo(x + 8, y); cx.lineTo(x + 26, y);
+  cx.moveTo(x, y - 26); cx.lineTo(x, y - 8); cx.moveTo(x, y + 8); cx.lineTo(x, y + 26); cx.stroke();
+}
 function drawControls(h) {
   if (stick) {
     cx.strokeStyle = 'rgba(255,255,255,.45)'; cx.lineWidth = 3;
@@ -213,6 +273,9 @@ function drawControls(h) {
   cx.fillStyle = jumpFlash > 0 ? 'rgba(255,255,255,.95)' : 'rgba(255,140,60,.85)';
   cx.beginPath(); cx.arc(b.jump.x, b.jump.y, b.jump.r, 0, TAU); cx.fill(); cx.stroke();
   shadowText('Hyppy', b.jump.x, b.jump.y, 15, '#fff', 'center', 900);
+  cx.fillStyle = pullPtr ? 'rgba(255,255,255,.95)' : 'rgba(150,90,230,.85)';
+  cx.beginPath(); cx.arc(b.pull.x, b.pull.y, b.pull.r, 0, TAU); cx.fill(); cx.stroke();
+  shadowText('Veto', b.pull.x, b.pull.y, 15, pullPtr ? '#3b1a6e' : '#fff', 'center', 900);
 }
 
 // ---- In a room: the others' heroes, names over them, the round's clock and score ----
@@ -279,7 +342,9 @@ function frame(now) {
     while (acc >= STEP) { acc -= STEP; tick(STEP); }
     saveT += dt; if (saveT > 2) { saveT = 0; saveRound(); }
     if (hintT < 16) { hintT += dt; if (hintT >= 16) save('ohje', 1); }
+    stepHint3(dt);
   }
+  if (missFx) { missFx.t -= dt; if (missFx.t <= 0) missFx = null; }
   if (mode === 'netplay' && typeof netTick === 'function') netTick(dt);
   draw(dt);
   document.body.classList.toggle('playing', mode === 'play' || mode === 'netplay');
@@ -292,6 +357,7 @@ function tick(dt) {
   stepCam(h, dt);
   if (stepRound(w, dt)) { save('tehtavat', w.done); saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); }
   if (h.st === 'swing' && st0 !== 'swing') sfx('suhahdus', { vol: 0.25, rate: 1.3 });
+  if (st0 === 'pull' && h.st === 'wall') sfx('tomahdys', { vol: 0.12, rate: 1.3 });
   if ((h.lands || 0) > lands0) sfx('tomahdys', { vol: 0.15 });
   if (h.jumped) { h.jumped = false; sfx('pop', { vol: 0.2 }); }
 }
@@ -304,7 +370,7 @@ function draw(dt) {
     const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
     aimNow = h.st !== 'swing' && playing() ? aimAnchor(h, fx, fz) : null;
     const heroes = mode === 'netplay' && net ? netHeroes(dt) : [{ id: 'me', col: '#1fb5a8', h }];
-    s = { w: world, hero: h, heroes, cam, playing: playing() };
+    s = { w: world, hero: h, heroes, cam, playing: playing(), aiming: !!pullPtr };
   } else {
     // Behind the menu: the city turning slowly.
     menuT += dt; cam.yaw = menuT * 0.08; cam.pitch = 0.5;

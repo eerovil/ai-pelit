@@ -77,7 +77,8 @@ function supportAt(x, z, r) {
 
 // ---- The hero ----
 const R = 0.4, HERO_H = 1.7;
-const RUN = 10, CLIMB = 6, JUMP = 10.5, G = 28, WEB_MAX = 45, ROPE_MIN = 5, VMAX = 48, REEL_LOW = 20, LOW_ARC = 8,
+// Jumps go 3 times as high as v2's 2 m (Eero, #560): speed × √3, gravity unchanged.
+const RUN = 10, CLIMB = 6, JUMP = 18.2, G = 28, WEB_MAX = 45, ROPE_MIN = 5, VMAX = 48, REEL_LOW = 20, LOW_ARC = 8,
   ROPE_K = 9, ROPE_DAMP = 1.2, ROPE_STRETCH = 30;   // the web gives a little, like a stiff bungee (Eero, #529)
 function newHero(x, y, z, yaw) {
   return { x, y, z, vx: 0, vy: 0, vz: 0, st: 'ground', yaw: yaw || 0, nx: 0, nz: 0, box: null,
@@ -109,8 +110,93 @@ function aimAnchor(h, fx, fz) {
   return { x, y, z, box: -1, fx, fz };
 }
 
+// ---- Veto (#560): aim, shoot a web at a wall or roof, and be pulled there ----
+// The aim is the camera's centre line past the hero: from the point the camera looks at while
+// aiming (over the hero's right shoulder, see place() in draw3d.js), along the camera's yaw and
+// pitch, so the crosshair is not hidden behind the hero. The first building on
+// it within PULL_MAX is the hit; the street or open sky is a miss (null).
+const PULL_MAX = 60, PULL_SPEED = 30, PULL_EYE = 1.9, AIM_SIDE = 0.9, AIM_OUT = 1.8;
+// A point inside a building (or under the street), with a margin: the camera keeps out of them.
+const insideCity = (x, y, z, m) => y < m || eachNear(x, z, m, b => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m && y < b.h + m);
+// The point the camera looks at, `k` of the way to aiming (0..1, y at the hero's feet): over the
+// right shoulder, and on a wall also out from it, so a camera turned away from the wall to aim is
+// not inside the building (Eero, #560). Back to the hero when that point would be in a building.
+function aimEye(h, yaw, k) {
+  let x = h.x - Math.cos(yaw) * AIM_SIDE * k, z = h.z + Math.sin(yaw) * AIM_SIDE * k;
+  if (h.st === 'wall') { x += h.nx * AIM_OUT * k; z += h.nz * AIM_OUT * k; }
+  if (k > 0 && insideCity(x, h.y + 1.5, z, 0.3)) {
+    x = h.x; z = h.z;
+    if (h.st === 'wall') { x += h.nx * AIM_OUT * k; z += h.nz * AIM_OUT * k; }
+    if (insideCity(x, h.y + 1.5, z, 0.3)) { x = h.x; z = h.z; }
+  }
+  return { x, z };
+}
+function aimRay(h, yaw, pitch) {
+  const cp = Math.cos(pitch), e = aimEye(h, yaw, 1);
+  return { ox: e.x, oy: h.y + PULL_EYE, oz: e.z, dx: Math.sin(yaw) * cp, dy: -Math.sin(pitch), dz: Math.cos(yaw) * cp };
+}
+function aimPull(h, yaw, pitch) {
+  const r = aimRay(h, yaw, pitch);
+  let best = null, bt = PULL_MAX;
+  // The street ends the ray too.
+  if (r.dy < 0) bt = Math.min(bt, -r.oy / r.dy);
+  eachNear(r.ox + r.dx * PULL_MAX / 2, r.oz + r.dz * PULL_MAX / 2, PULL_MAX / 2 + 2, b => {
+    // Slab test: where the ray enters the box, and through which face.
+    let t0 = 0, t1 = bt, face = null;
+    for (const [o, d, lo, hi, f] of [[r.ox, r.dx, b.x0, b.x1, 'x'], [r.oy, r.dy, 0, b.h, 'y'], [r.oz, r.dz, b.z0, b.z1, 'z']]) {
+      if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) return; continue; }
+      let a = (lo - o) / d, c = (hi - o) / d;
+      if (a > c) { const q = a; a = c; c = q; }
+      if (a > t0) { t0 = a; face = f; }
+      if (c < t1) t1 = c;
+      if (t0 > t1) return;
+    }
+    if (!face || t0 >= bt) return;     // starts inside, or something nearer was hit
+    bt = t0;
+    const x = r.ox + r.dx * t0, y = r.oy + r.dy * t0, z = r.oz + r.dz * t0;
+    if (face === 'y') best = { x, y: b.h, z, kind: 'roof', box: b.id, nx: 0, nz: 0 };
+    else {
+      const nx = face === 'x' ? (r.dx > 0 ? -1 : 1) : 0, nz = face === 'z' ? (r.dz > 0 ? -1 : 1) : 0;
+      best = { x, y, z, kind: 'wall', box: b.id, nx, nz };
+    }
+  });
+  if (best && Math.hypot(best.x - r.ox, best.y - r.oy, best.z - r.oz) > PULL_MAX) return null;
+  return best;
+}
+// Where the hero ends: beside the wall, hands at the hit (a little under it), or on the roof.
+function pullSpot(p) {
+  if (p.kind === 'roof') return { x: p.x, y: p.y, z: p.z };
+  return { x: p.x + p.nx * (R + 0.02), y: Math.max(0, p.y - 1.4), z: p.z + p.nz * (R + 0.02) };
+}
+// Off the web with a jump: up-speed added, at least a plain jump's (#560).
+function webJump(h) {
+  h.st = 'air'; h.anchor = null; h.vy = Math.max(h.vy + JUMP * 0.8, JUMP); h.jumped = true;
+}
+function stepPull(h, inp, dt) {
+  const p = h.pull, t = pullSpot(p);
+  h.pullT = (h.pullT || 0) + dt;
+  if (inp.jump) {                       // let go: the speed carries on (a slingshot)
+    h.st = 'air'; h.pull = null; h.anchor = null; h.jumped = true; h.wallCd = 0.2;
+    return;
+  }
+  const dx = t.x - h.x, dy = t.y - h.y, dz = t.z - h.z, d = Math.hypot(dx, dy, dz);
+  if (d <= PULL_SPEED * dt + 0.05 || h.pullT > 4) {
+    h.x = t.x; h.y = t.y; h.z = t.z; h.pull = null; h.anchor = null;
+    const b = CITY[p.box];
+    if (p.kind === 'wall' && b && h.y > 0) grabWall(h, b, p.nx, p.nz);
+    else land(h);
+    h.vx = h.vy = h.vz = 0;
+    return;
+  }
+  h.vx = dx / d * PULL_SPEED; h.vy = dy / d * PULL_SPEED; h.vz = dz / d * PULL_SPEED;
+  h.yaw = Math.atan2(dx, dz);
+  h.x += h.vx * dt; h.y += h.vy * dt; h.z += h.vz * dt;
+  collide(h, 0, 0, 0);                  // a building in the way is grabbed like any wall
+  if (h.st !== 'pull') { h.pull = null; h.anchor = null; }
+}
+
 // The input for one step: stick (ix right, iy down, -1..1), held buttons, the camera's yaw.
-// in = { ix, iy, jump (pressed this step), web (held), yaw }
+// in = { ix, iy, jump (pressed this step), web (held), yaw, pull (a hit from aimPull, shot this step) }
 function stepHero(h, inp, dt) {
   h.steps++;
   const fx = Math.sin(inp.yaw), fz = Math.cos(inp.yaw);   // camera forward
@@ -118,6 +204,17 @@ function stepHero(h, inp, dt) {
   const mx = rx * inp.ix - fx * inp.iy, mz = rz * inp.ix - fz * inp.iy;   // wanted move, length ≤ 1
   const mm = Math.hypot(mx, mz);
   if (h.wallCd > 0) h.wallCd -= dt;
+
+  // Veto shot: from any state, straight to the hit.
+  if (inp.pull) {
+    h.st = 'pull'; h.pull = inp.pull; h.pullT = 0; h.box = null;
+    const t = pullSpot(inp.pull); h.anchor = { x: inp.pull.x, y: inp.pull.y, z: inp.pull.z, box: inp.pull.box };
+    h.wallCd = 0; h.webbed = inp.web ? 1 : 0;
+    if (t) h.yaw = Math.atan2(t.x - h.x, t.z - h.z);
+  }
+  if (h.st === 'pull') return stepPull(h, inp, dt);
+  // Hyppy while hanging on the web: let go with a jump up (Eero, #560).
+  if (h.st === 'swing' && inp.jump) webJump(h);
 
   // Web pressed: start a swing (from any state) when there is a point to stick to.
   if (inp.web && h.st !== 'swing' && !h.webbed) {
@@ -133,9 +230,8 @@ function stepHero(h, inp, dt) {
     }
   }
   if (!inp.web) h.webbed = 0;
-  if (h.st === 'swing' && !inp.web) {
-    h.st = 'air'; h.anchor = null;
-  }
+  // Letting go of the web always jumps (Eero, #560), with a backflip (draw3d.js).
+  if (h.st === 'swing' && !inp.web) webJump(h);
 
   if (h.st === 'wall') return stepWall(h, inp, dt, mx, mz);
 
@@ -204,11 +300,12 @@ function collide(h, mx, mz, mm) {
     const into = h.vx * nx + h.vz * nz;
     if (into < 0) { h.vx -= nx * into; h.vz -= nz * into; }
     const pushes = mm > 0.3 && (mx * nx + mz * nz) / mm < -0.5;
-    if (h.wallCd <= 0 && (h.st === 'air' || h.st === 'swing' || pushes)) grabWall(h, b, nx, nz);
+    if (h.wallCd <= 0 && (h.st === 'air' || h.st === 'swing' || h.st === 'pull' || pushes)) grabWall(h, b, nx, nz);
   }
   if (h.st !== 'wall') {
+    // A pull along or up from the street goes on; it lands only coming down (#560).
     const s = supportAt(h.x, h.z, R * 0.5);
-    if (h.y <= s && (h.st !== 'ground')) { h.y = s; if (h.vy < 0) h.vy = 0; land(h); }
+    if (h.y <= s && h.st !== 'ground' && !(h.st === 'pull' && h.vy >= 0)) { h.y = s; if (h.vy < 0) h.vy = 0; land(h); }
     else if (h.st === 'ground' && h.y > s + 0.05) h.st = 'air';
     else if (h.st === 'ground') h.y = s;
   }
