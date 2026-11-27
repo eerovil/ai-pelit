@@ -5,6 +5,9 @@
 // v4 (#561): robbers to catch with the web, in a fixed order of five missions: a roof, robbers on
 // a roof, a getaway car, the tower's top, a getaway helicopter (the approved spec). A web hit
 // catches one; nothing ever gets away.
+// v5 (#565): the story (story.js) gives its own list of missions per chapter, two new kinds
+// (pelasta: reach a window cleaner hanging on a wall; boss: Varjo's helicopter, three hits) and,
+// in chapters 5–8, a time limit per mission; when it runs out the mission starts again.
 
 // The downtown, the old 6 × 6 middle of the city: LX and BX count its lots.
 const LX = k => lotX(C0 + k), BX = (i, j) => boxAt(C0 + i, C0 + j);
@@ -13,29 +16,47 @@ const START = { x: LX(2) + 20, z: LX(2) + 20 };   // a street crossing beside th
 const GOAL_NEAR = 120, GOAL_FAR = 300;            // how far the next roof is from the hero, m
 const KINDS = ['katto', 'rosvot', 'auto', 'torni', 'heli'];
 const kindFor = done => KINDS[((done | 0) % KINDS.length + KINDS.length) % KINDS.length];
-const isCrook = k => k === 'rosvot' || k === 'auto' || k === 'heli';
+const isCrook = k => k === 'rosvot' || k === 'auto' || k === 'heli' || k === 'pelasta' || k === 'boss' || k === 'pakenevat' || k === 'putoava';
+// Missions of several marked roofs in a row (v5, #565): Varjo's three bombs, and the money bag
+// picked up from one roof and carried to another.
+const ROOFS_N = { pommit: 3, paketti: 2 };
+// The time limits of the story's later chapters, s (#565: at least twice a measured run, rule 9).
+// No clock on a getaway car: the test bot missed it in 2 of 5 runs within 120 s (#565).
+const LIMITS = { rosvot: 120, heli: 150, pelasta: 90, boss: 240, pakenevat: 150, pommit: 150 };
+// The mission now: in the story its chapter's step, else v4's cycle by the count.
+function missionFor(w) {
+  if (w.story && typeof STORY !== 'undefined') {
+    const ch = STORY[w.story.ch], st = ch && ch.steps[w.story.step];
+    if (st) return Object.assign({ lim: ch.lim && LIMITS[st.k] || 0 }, st);
+  }
+  return { k: kindFor(w.done), lim: 0 };
+}
 
 // Standing on a building's roof (a hero, or another phone's hero as the host sees it).
 const onTop = (h, b) => h.st === 'ground' && h.y >= b.h - 0.1 && h.x > b.x0 - 1 && h.x < b.x1 + 1 && h.z > b.z0 - 1 && h.z < b.z1 + 1;
 
 function newWorld() {
   return { t: 0, flag: null, goal: -1, gt: 0, done: 0, got: 0, kind: null, crooks: [], gone: null, goneT: 0,
-    hero: newHero(START.x, 0, START.z, 0) };
+    story: null, ct: 0, lim: 0, fail: null, chDone: false, radio: null, seq: 0, part: null, hero: newHero(START.x, 0, START.z, 0) };
 }
 // The next roof: the tower on its turn however far (spec D1, review on #563), else a building of
 // 20–150 m 120–300 m from the hero, inside the city's edge. `r` is a random number source
 // (Math.random in play). Never the roof just reached, so one landing counts once.
-function pickTarget(w, r, tower) {
+// The story's first chapter (#565) asks for a low roof close by (o.near) and a high one (o.high).
+function pickTarget(w, r, tower, o) {
   const h = w.hero, far = b => { const t = roofTop(b); return Math.hypot(t.x - h.x, t.z - h.z); };
+  o = o || {};
+  const dMin = o.near ? 30 : GOAL_NEAR, dMax = o.near ? 110 : GOAL_FAR;
+  const hMin = o.high ? 90 : 20, hMax = o.near ? 45 : 150;
   // Not while the hero already stands on its top: a car caught from up there is no free tower.
   if (tower && T_BOX.id !== w.goal && !onTop(h, T_BOX)) return T_BOX.id;
   const ok = [];
   let near = -1, nearD = Infinity;
   for (const b of CITY) {
-    if (b.tower || b.h < 20 || b.h > 150 || b.id === w.goal) continue;
+    if (b.tower || b.h < hMin || b.h > hMax || b.id === w.goal || (o.not && o.not.includes(b.id))) continue;
     const t = roofTop(b), d = far(b);
-    if (d >= GOAL_NEAR && d <= GOAL_FAR && Math.max(Math.abs(t.x), Math.abs(t.z)) < EDGE - 20) ok.push(b.id);
-    if (d >= GOAL_NEAR && d < nearD) { near = b.id; nearD = d; }
+    if (d >= dMin && d <= dMax && Math.max(Math.abs(t.x), Math.abs(t.z)) < EDGE - 20) ok.push(b.id);
+    if (d >= (o.near ? dMin : GOAL_NEAR) && d < nearD) { near = b.id; nearD = d; }
   }
   if (ok.length) return ok[Math.floor(r() * ok.length)];
   return near >= 0 ? near : (T_BOX.id !== w.goal ? T_BOX.id : CITY.find(b => b.id !== w.goal).id);
@@ -44,39 +65,76 @@ function setGoal(w, id) {
   w.goal = id; w.gt = 0;
   w.flag = CITY[id] ? roofTop(CITY[id]) : null;
 }
-// The mission for `w.done` (done % 5 in KINDS): a roof to stand on, or crooks to catch.
+// The mission for `w.done` (done % 5 in KINDS), or the story's step: a roof to stand on, or
+// crooks to catch (or window cleaners to reach).
 function startMission(w, r) {
   r = r || Math.random;
-  w.kind = kindFor(w.done); w.gt = 0;
-  if (!isCrook(w.kind)) { w.crooks = []; setGoal(w, pickTarget(w, r, w.kind === 'torni')); return; }
+  const m = missionFor(w);
+  w.kind = m.k; w.gt = 0; w.lim = m.lim; w.fail = null; w.seq = 0; w.part = null; w.used = null;
+  if (w.story && m.say) w.radio = { who: m.say[0], text: m.say[1], t: 6 };
+  if (!isCrook(w.kind)) { w.crooks = []; setGoal(w, pickTarget(w, r, w.kind === 'torni', m)); return; }
   const last = w.goal;
   w.goal = -1; w.flag = null;
-  if (w.kind === 'rosvot') {
+  if (w.kind === 'rosvot' || w.kind === 'pakenevat') {
     // Three robbers on a roof picked like a mission roof; the flag and its light mark the roof.
     const b = CITY[pickTarget(Object.assign({}, w, { goal: last }), r, false)];
     w.crooks = [0, 1, 2].map(() => newRobber(b, r));
+    if (w.kind === 'pakenevat') for (const k of w.crooks) { k.flee = true; k.cd = 0; }
     w.flag = roofTop(b); w.crookBox = b.id;
   } else if (w.kind === 'auto') w.crooks = [newCar(w.hero, r)];
+  else if (w.kind === 'pelasta') w.crooks = [newCleaner(w.hero, r)];
+  else if (w.kind === 'putoava') w.crooks = [newFaller(w.hero, r)];
+  else if (w.kind === 'boss') w.crooks = [newBoss(w.hero, r)];
   else w.crooks = [newHeli(w.hero, r)];
 }
-// One step: the clock, the crooks, and the roof reached or the last crook caught.
+// One step: the clock, the crooks, and the roof reached or the last crook caught. Returns true
+// when the mission was done in this step; 'fail' when its time limit ran out first (v5, #565:
+// done wins a step that also crosses the limit, rule 8). Nothing moves after a fail or the
+// story chapter's end until the game starts the next one.
 function stepRound(w, dt, r) {
   r = r || Math.random;
+  if (w.fail) return false;
+  if (w.chDone) {   // the chapter is over: only the caught ones settle, and its "done" shows
+    if (w.gone) for (const k of w.gone) stepCrook(k, w.hero, dt, r);
+    if (w.got && (w.got.show -= dt) <= 0) w.got = 0;
+    return false;
+  }
   w.t += dt;
   if (!w.kind || (!isCrook(w.kind) && !CITY[w.goal])) startMission(w, r);
-  w.gt += dt;
+  w.gt += dt; w.ct += dt;
+  if (w.radio && (w.radio.t -= dt) <= 0) w.radio = null;
   for (const k of w.crooks) stepCrook(k, w.hero, dt, r);
+  for (const k of w.crooks) if (k.type === 'apu' && !k.caught && reachCleaner(w.hero, k)) rescue(k);
   if (w.gone) { for (const k of w.gone) stepCrook(k, w.hero, dt, r); if ((w.goneT -= dt) <= 0) w.gone = null; }
   if (w.got && (w.got.show -= dt) <= 0) w.got = 0;
+  if (w.part && (w.part.show -= dt) <= 0) w.part = null;
+  // A falling person reached the street (v5): the police net took him, and the mission starts again.
+  if (w.crooks.some(k => k.lost)) { w.fail = { kind: w.kind }; w.crooks = []; w.flag = null; w.goal = -1; w.radio = null; return 'fail'; }
+  // A roof of several in a row: the next one, under the same clock.
+  if (ROOFS_N[w.kind] && w.seq < ROOFS_N[w.kind] - 1 && onTop(w.hero, CITY[w.goal])) {
+    // A roof not used yet in this row, and the clock goes on.
+    const gt = w.gt, used = (w.used || []).concat(w.goal);
+    w.seq++; w.part = { kind: w.kind, show: 2 }; w.used = used;
+    setGoal(w, pickTarget(w, r, false, { not: used })); w.gt = gt;
+  }
   const done = isCrook(w.kind) ? w.crooks.length > 0 && w.crooks.every(k => k.caught) : onTop(w.hero, CITY[w.goal]);
-  if (!done) return false;
+  if (!done) {
+    if (w.lim && w.gt >= w.lim) { w.fail = { kind: w.kind }; w.crooks = []; w.flag = null; w.goal = -1; w.radio = null; return 'fail'; }
+    return false;
+  }
   w.got = { t: w.gt, kind: w.kind, tower: w.kind === 'torni' && !!CITY[w.goal] && !!CITY[w.goal].tower, show: 2.5 };
   // The caught ones stay a moment, the last mission's ones too when it ended under 10 s ago.
   if (isCrook(w.kind)) { w.gone = (w.gone || []).concat(w.crooks); w.goneT = 10; w.crooks = []; }
-  w.done++;
+  if (w.story) {
+    // The story: its next step, or the chapter's end (the game shows its closing card).
+    w.story.step++;
+    if (!STORY[w.story.ch] || w.story.step >= STORY[w.story.ch].steps.length) { w.chDone = true; w.flag = null; w.goal = -1; w.kind = null; return true; }
+  } else w.done++;
   startMission(w, r);
   return true;
 }
+// After a fail (v5, #565): the same mission again, fresh, its clock from zero; the chapter's clock goes on.
+function retryMission(w, r) { w.fail = null; w.gone = null; startMission(w, r); }
 
 // ---- The crooks. Each is { id, type, x, y, z, yaw, caught, ct (seconds since caught) } ----
 let crookN = 0;
@@ -84,8 +142,9 @@ const ROB_SPEED = 1.6, ROB_EDGE = 1.5;
 const CAR_SPEED = 20, CAR_NEAR = 150, CAR_FAR = 250, STREET = LOT;   // streets every 40 m, at x = 40k
 const HELI_SPEED = 15, HELI_LOW = 70, HELI_HIGH = 90, HELI_CLEAR = 8, HELI_AREA = 700;
 // How big each is to the web: the aim hits it this far from its middle (D3: 1.5 m past its body).
-const CROOK_R = { rosvo: 0.4 + 1.5, auto: 2.2 + 1.5, heli: 4 + 1.5 };
-const CROOK_MID = { rosvo: 0.9, auto: 0.8, heli: 1.5 };
+const CROOK_R = { rosvo: 0.4 + 1.5, auto: 2.2 + 1.5, heli: 4 + 1.5, boss: 6 + 1.5, putoava: 0.4 + 1.5 };
+const CROOK_MID = { rosvo: 0.9, auto: 0.8, heli: 1.5, apu: 0.9, boss: 2.2, putoava: 0.9 };
+const BOSS_HITS = 3, RESCUE_R = 3;
 
 function newRobber(b, r) {
   const x0 = b.x0 + ROB_EDGE, x1 = b.x1 - ROB_EDGE, z0 = b.z0 + ROB_EDGE, z1 = b.z1 - ROB_EDGE;
@@ -160,10 +219,105 @@ function heliLeg(k, r) {
   }
   k.len = k.to ? Math.hypot(k.to.x - k.x, k.to.y - k.y, k.to.z - k.z) : 0;
 }
+// ---- v5 (#565): window cleaners on walls, and Varjo's helicopter ----
+// A cleaner hangs on a wall of a building at least 40 m high, 120–300 m from the hero, 20–60 m up,
+// facing out of the wall (nx, nz). Reaching within RESCUE_R m saves him: the web lifts him onto the roof.
+function newCleaner(h, r) {
+  const ok = CITY.filter(b => !b.tower && b.h >= 40 && Math.max(Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.z0), Math.abs(b.z1)) < EDGE - 20 &&
+    (d => d >= GOAL_NEAR && d <= GOAL_FAR)(Math.hypot((b.x0 + b.x1) / 2 - h.x, (b.z0 + b.z1) / 2 - h.z)));
+  const b = ok.length ? ok[Math.floor(r() * ok.length)] : T_BOX;
+  const f = Math.floor(r() * 4), u = r(), y = 20 + r() * (Math.min(60, b.h - 6) - 20);
+  const [nx, nz] = [[1, 0], [-1, 0], [0, 1], [0, -1]][f];
+  const x = nx ? (nx > 0 ? b.x1 + 0.45 : b.x0 - 0.45) : b.x0 + 2 + u * (b.x1 - b.x0 - 4);
+  const z = nz ? (nz > 0 ? b.z1 + 0.45 : b.z0 - 0.45) : b.z0 + 2 + u * (b.z1 - b.z0 - 4);
+  return { id: ++crookN, type: 'apu', box: b.id, x, y, z, nx, nz, yaw: Math.atan2(-nx, -nz), caught: false, ct: 0 };
+}
+const reachCleaner = (h, k) => Math.hypot(h.x - k.x, h.y - k.y, h.z - k.z) < RESCUE_R;
+function rescue(k) {
+  const b = CITY[k.box];
+  k.caught = true; k.ct = 0;
+  k.x = clamp(k.x - k.nx * 2, b.x0 + 1, b.x1 - 1); k.z = clamp(k.z - k.nz * 2, b.z0 + 1, b.z1 - 1); k.y = b.h;
+  k.yaw = Math.atan2(k.nx, k.nz);
+}
+// A fleeing robber (v5): with the hero within FLEE_NEAR m, he leaps to a roof nearby (its middle
+// FLEE_MIN–FLEE_MAX m off, at most FLEE_DH m higher or lower, the one farthest from the hero), and
+// rests FLEE_REST s before he can flee again. A leap takes LEAP_T s; a web hit in the air counts.
+const FLEE_NEAR = 25, FLEE_MIN = 15, FLEE_MAX = 50, FLEE_DH = 25, FLEE_REST = 5, LEAP_T = 1.2;
+function fleeFrom(k, h, r) {
+  if (k.cd > 0) return false;
+  if (Math.hypot(h.x - k.x, h.z - k.z) > FLEE_NEAR || Math.abs(h.y - k.y) > 15) return false;
+  const cur = CITY[k.box];
+  let best = null, bd = -1;
+  eachNear(k.x, k.z, FLEE_MAX + 20, b => {
+    if (b === cur || b.tower || b.h < 15 || Math.abs(b.h - cur.h) > FLEE_DH) return;
+    const t = roofTop(b), d = Math.hypot(t.x - k.x, t.z - k.z);
+    if (d < FLEE_MIN || d > FLEE_MAX) return;
+    const away = Math.hypot(t.x - h.x, t.z - h.z);
+    if (away > bd) { bd = away; best = b; }
+  });
+  if (!best) { k.cd = 1; return false; }
+  const t = roofTop(best);
+  const x1 = clamp(t.x + (r() - 0.5) * 4, best.x0 + ROB_EDGE, best.x1 - ROB_EDGE), z1 = clamp(t.z + (r() - 0.5) * 4, best.z0 + ROB_EDGE, best.z1 - ROB_EDGE);
+  k.jump = { x0: k.x, y0: k.y, z0: k.z, x1, y1: best.h, z1, t: 0, box: best.id };
+  k.yaw = Math.atan2(x1 - k.x, z1 - k.z); k.vx = k.vz = 0;
+  return true;
+}
+function stepLeap(k, dt) {
+  const j = k.jump;
+  j.t = Math.min(1, j.t + dt / LEAP_T);
+  k.x = j.x0 + (j.x1 - j.x0) * j.t; k.z = j.z0 + (j.z1 - j.z0) * j.t;
+  k.y = j.y0 + (j.y1 - j.y0) * j.t + Math.sin(j.t * Math.PI) * (6 + Math.abs(j.y1 - j.y0) * 0.3);
+  if (j.t >= 1) { k.box = j.box; k.y = j.y1; k.jump = null; k.cd = FLEE_REST; k.wx = k.wz = 0; k.wait = 0.3; }
+}
+// A falling person (v5): hangs from a roof's edge (a building 50–150 m high, 120–300 m from the
+// hero) until the hero is within FALL_NEAR m, then slides down the wall at FALL_V m/s. A web on
+// him while he falls catches him, and the web lets him down to the street. At the street first:
+// `lost`, the police net (the mission starts again).
+const FALL_NEAR = 70, FALL_V = 5;
+function newFaller(h, r) {
+  const ok = CITY.filter(b => !b.tower && b.h >= 50 && b.h <= 150 && Math.max(Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.z0), Math.abs(b.z1)) < EDGE - 20 &&
+    (d => d >= GOAL_NEAR && d <= GOAL_FAR)(Math.hypot((b.x0 + b.x1) / 2 - h.x, (b.z0 + b.z1) / 2 - h.z)));
+  const b = ok.length ? ok[Math.floor(r() * ok.length)] : T_BOX;
+  // The side facing the hero, so he sees him fall.
+  const t = roofTop(b), dx = h.x - t.x, dz = h.z - t.z;
+  const [nx, nz] = Math.abs(dx) > Math.abs(dz) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dz) || 1];
+  const x = nx ? (nx > 0 ? b.x1 + 0.45 : b.x0 - 0.45) : t.x, z = nz ? (nz > 0 ? b.z1 + 0.45 : b.z0 - 0.45) : t.z;
+  return { id: ++crookN, type: 'putoava', box: b.id, x, y: b.h - 1.9, z, nx, nz, yaw: Math.atan2(-nx, -nz), caught: false, ct: 0, falling: false, lost: false };
+}
+function stepFaller(k, h, dt) {
+  if (k.caught) { k.y = Math.max(0, k.y - 3 * dt); return; }
+  if (!k.falling) { if (Math.hypot(h.x - k.x, h.z - k.z) < FALL_NEAR) k.falling = true; return; }
+  k.y = Math.max(0, k.y - FALL_V * dt);
+  if (k.y <= 0.5) k.lost = true;
+}
+// Varjo's helicopter: v4's helicopter, bigger, with three hits to take. After the first two it
+// breaks free and flies 150–250 m off at once.
+function newBoss(h, r) {
+  const k = newHeli(h, r);
+  k.type = 'boss'; k.hp = BOSS_HITS; k.hitT = 0;
+  return k;
+}
+function bossLeg(k, r) {
+  k.from = { x: k.x, y: k.y, z: k.z }; k.to = null; k.s = 0; k.v = HELI_SPEED;
+  for (let i = 0; i < 60 && !k.to; i++) {
+    const a = r() * TAU, d = 150 + r() * 100;
+    const x = clamp(k.x + Math.sin(a) * d, -HELI_AREA, HELI_AREA), z = clamp(k.z + Math.cos(a) * d, -HELI_AREA, HELI_AREA);
+    const y = HELI_LOW + r() * (HELI_HIGH - HELI_LOW);
+    if (Math.hypot(x - k.x, z - k.z) > 140 && heliClear(k.x, k.y, k.z, x, y, z)) k.to = { x, y, z };
+  }
+  if (!k.to) return heliLeg(k, r);
+  k.yaw = Math.atan2(k.to.x - k.x, k.to.z - k.z);   // it turns away at once, so the flight starts now
+  k.len = Math.hypot(k.to.x - k.x, k.to.y - k.y, k.to.z - k.z);
+}
 function stepCrook(k, h, dt, r) {
   if (k.caught) k.ct += dt;
+  if (k.type === 'apu') return;
+  if (k.hitT > 0) k.hitT -= dt;
+  if (k.type === 'putoava') return stepFaller(k, h, dt);
   if (k.type === 'rosvo') {
+    if (k.jump) return stepLeap(k, dt);       // mid-jump to the next roof, caught or not
     if (k.caught) return;
+    if (k.flee && fleeFrom(k, h, r)) return;
     const b = CITY[k.box];
     if (k.wait > 0) { k.wait -= dt; k.vx = k.vz = 0; return; }
     const dx = k.wx - k.x, dz = k.wz - k.z, d = Math.hypot(dx, dz);
@@ -210,7 +364,8 @@ function aimCrook(h, yaw, pitch, crooks) {
   const wallT = wall ? Math.hypot(wall.x - r.ox, wall.y - r.oy, wall.z - r.oz) : Infinity;
   let best = null, bt = Infinity;
   for (const k of crooks) {
-    if (k.caught) continue;
+    if (k.caught || k.type === 'apu') continue;   // a window cleaner is reached, never webbed
+    if (k.type === 'putoava' && !k.falling) continue;   // a person still holding on is not webbed off
     const cx = k.x - r.ox, cy = k.y + CROOK_MID[k.type] - r.oy, cz = k.z - r.oz;
     const t = cx * r.dx + cy * r.dy + cz * r.dz, rad = CROOK_R[k.type];
     if (t <= 0 || t > PULL_MAX) continue;
@@ -220,4 +375,9 @@ function aimCrook(h, yaw, pitch, crooks) {
   }
   return best;
 }
-function catchCrook(k) { if (k && !k.caught) { k.caught = true; k.ct = 0; return true; } return false; }
+function catchCrook(k, r) {
+  if (!k || k.caught || k.type === 'apu' || (k.type === 'putoava' && !k.falling)) return false;
+  if (k.type === 'boss' && k.hp > 1) { k.hp--; k.hitT = 1.2; bossLeg(k, r || Math.random); return true; }
+  if (k.type === 'boss') k.hp = 0;
+  k.caught = true; k.ct = 0; return true;
+}

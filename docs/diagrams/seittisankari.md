@@ -1,6 +1,6 @@
 # Seittisankari: kiipeily ja seittiheilunta pilvenpiirtäjissä
 
-3D-peli (#529). v1 toi vapaan kaupungin ja kavereiden kanssa pelaamisen (Eeron valinta), v2 tehtävät ("mene tänne", nuoli näyttää suunnan), v3 vetoseitin (#560: tähtää, ammu seinään ja vedä itsesi sinne, myös ilmasta), v4 rosvojen kiinnioton (#561: katon rosvot, karkuriauto ja karkurihelikopteri ammutaan seitillä): pelaaja juoksee kadulla ja katoilla, kiipeää minkä tahansa talon seinää pitkin ja heilahtaa seitillä talosta toiseen noin 1,7 km leveässä kaupungissa. Kavereiden kanssa kisataan satunnaisen talon katolle samasta lähtöpaikasta, tai liikutaan vapaasti yhdessä.
+3D-peli (#529). v1 toi vapaan kaupungin ja kavereiden kanssa pelaamisen (Eeron valinta), v2 tehtävät ("mene tänne", nuoli näyttää suunnan), v3 vetoseitin (#560: tähtää, ammu seinään ja vedä itsesi sinne, myös ilmasta), v4 rosvojen kiinnioton (#561: katon rosvot, karkuriauto ja karkurihelikopteri ammutaan seitillä), v5 tarinan (#565: kahdeksan lukua, välivideot, Komisario Kallio ja jengipomo Varjo): pelaaja juoksee kadulla ja katoilla, kiipeää minkä tahansa talon seinää pitkin ja heilahtaa seitillä talosta toiseen noin 1,7 km leveässä kaupungissa. Kavereiden kanssa kisataan satunnaisen talon katolle samasta lähtöpaikasta, tai liikutaan vapaasti yhdessä.
 
 ```mermaid
 flowchart TD
@@ -8,6 +8,17 @@ flowchart TD
     B -- Kyllä --> C[Jatka samasta kohdasta]
     B -- Ei --> D[Alku kadulla keskustassa]
     C --> Y
+    A --> SA[Tarina: lukulista, avautuu luku kerrallaan]
+    SA --> SB[Välivideo kaupungissa: Kallio katolla, Varjo tornissa, lopuksi tehtävän kohde]
+    SB --> SC[Luvun tehtävä vuorollaan, radiorepliikki]
+    SC --> E
+    SC --> SD{Aika loppui tai putoaja kadulla?}
+    SD -- Kyllä --> SE[Liian myöhään: Yritä uudelleen tai Valikkoon]
+    SE --> SC
+    ZA --> SF{Tarinassa: luvun viimeinen tehtävä?}
+    SF -- Ei, tehtävällä oma välivideo --> SB
+    SF -- Ei --> SC
+    SF -- Kyllä --> SG[Luku valmis: tallennus heti, välivideo, aika ja ennätys, Seuraava luku]
     D --> Y[Tehtävä vuorollaan: katto, katon rosvot, karkuriauto, tornin huippu, karkurihelikopteri]
     Y --> E[Ohjaus: tikku, Hyppy, pidä Seitti, Veto, kameran veto]
     E --> P1[Pidä Veto: tähtäin, sormen liu'utus kääntää kameraa]
@@ -52,6 +63,7 @@ flowchart TD
     class P1,P2,P3,P4,P5 teal
     class R,S,U,V,W,X green
     class T amber
+    class SA,SB,SC,SD,SE,SF,SG rose
 ```
 
 ## Colours
@@ -60,7 +72,7 @@ flowchart TD
 - **violet**: pelaajan ohjaus, juoksu ja kiipeily
 - **teal**: seitti, heilunta ja lento
 - **green**: kavereiden kanssa: kisa katolle
-- **rose**: yksin pelattavat tehtävät (v2, rosvot v4)
+- **rose**: yksin pelattavat tehtävät (v2, rosvot v4, tarina v5)
 - **amber**: tallennus
 
 ## Boxes
@@ -86,3 +98,10 @@ flowchart TD
 - **Kaikki samasta lähtöpaikasta, 220 m merkitystä katosta**: `pickGoal()` arpoo talon (30–140 m, ei torni, kaukana reunasta), `startSpot()` laittaa kaikki samaan katukohtaan riviin 1,5 m välein kadun suuntaan. Vapaassa tilassa sama paikka 30 m tornista. Katolla on lippu ja keltainen valopylväs, ja ruudulla nuoli osoittaa sinne.
 - **Tekijä hyväksyy: voittaja, sama tulos kaikille**: katolla seisova puhelin pyytää voittoa 0,5 s välein; tekijä hyväksyy, jos sankari on sen omassa näkymässä katon päällä (`hostClaim()`), eikä kierros ole tauolla tai ohi. Tulos lähtee kaikille `deliver()`-viestinä.
 - **Tulos: aika tai korkeus**: katolle ehtineet ajan mukaan, muut korkeuden mukaan (`standings()`).
+- **Tarina: lukulista, avautuu luku kerrallaan**: v5 (#565). Valikon ensimmäinen nappi "📖 Tarina · Luku N/8" avaa lukulistan (`showChapters()` tiedostossa `games/seittisankari/v5/story.js`): lukitut 🔒, läpäistyt ✔ ja paras aika, kesken oleva "· jatka". Eteneminen `ai-pelit:seittisankari:tarina` = `{done, best, cur}` ja sankarin paikka `tarina-kierros`; vapaan kaupungin tallennuksiin ei kosketa.
+- **Välivideo kaupungissa: Kallio katolla, Varjo tornissa, lopuksi tehtävän kohde**: `playCut()` ja `cutView()` tiedostossa `story.js`, hahmot ja kamera `drawCut()` tiedostossa `games/seittisankari/v5/draw3d.js`. Luvun alussa ensin kaupunki ylhäältä ja luvun nimi, sitten Kallion ja sankarin repliikit lähimmällä matalalla katolla tai Varjon repliikit tornin huipulla musta helikopteri takanaan, lopuksi kamera tehtävän kohteeseen ja tehtävän radiorepliikki. Napautus näyttää seuraavan repliikin, "Ohita ⏭" hyppää loppuun; peli seisoo välivideon ajan (tila `cut`), myös aikaraja. Ilman 3D:tä sama puhe kortilla.
+- **Luvun tehtävä vuorollaan, radiorepliikki**: `STORY` tiedostossa `story.js`, `missionFor()` ja `startMission()` tiedostossa `games/seittisankari/v5/round.js`. Uudet tehtävät: ikkunanpesijän pelastus (seinällä, 3 m päähän), putoaja (roikkuu katon reunalla ja putoaa 5 m/s, kun sankari on 70 m päässä; Veto nappaa), loikkivat rosvot (25 m päässä loikkaavat 15–50 m toiselle katolle), Varjon kolme pommia ja rahasäkki (katot peräkkäin saman kellon alla, `ROOFS_N`), Varjon helikopteri (kolme osumaa, karkaa 150–250 m kahden ensimmäisen jälkeen). Radiorepliikki 6 s ruudun yläosassa, ruudulla "Luku N" ja lukujen 5–8 aikaraja (`LIMITS`, punainen alle 15 s).
+- **Aika loppui tai putoaja kadulla?**: `stepRound()` palauttaa `'fail'`; jos tehtävä valmistuu samalla askeleella, valmis voittaa (sääntö 8).
+- **Liian myöhään: Yritä uudelleen tai Valikkoon**: `storyFail()` ja `retryMission()` tiedostossa `story.js`/`round.js`: sama tehtävä alusta, luvun kello jatkaa.
+- **Tarinassa: luvun viimeinen tehtävä?**: tehtävällä, jolla on oma välivideo (`cut` luvun `steps`-listassa), video alkaa 1,5 s valmistumisen jälkeen (`cutQ` tiedostossa `ui.js`).
+- **Luku valmis: tallennus heti, välivideo, aika ja ennätys, Seuraava luku**: `storyRecord()` ja `storyEnd()` tiedostossa `story.js`; 2,5 s jälkeen loppuvideo (viimeisessä luvussa Varjo seitissä tornissa), sitten "Luku N valmis!" tai "Kaupunki on turvassa!", aika, ennätys ja `#next`.

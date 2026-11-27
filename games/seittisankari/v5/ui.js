@@ -1,5 +1,5 @@
 'use strict';
-// Seittisankari v2 (#529), v4 (#561): the fingers, the camera, the menus, the saves, the sounds, the 2D
+// Seittisankari v2 (#529), v4 (#561), v5 (#565, the story in story.js): the fingers, the camera, the menus, the saves, the sounds, the 2D
 // layer over the 3D picture (goal, time, stick, buttons) and the main loop.
 
 const c = document.getElementById('c'), cx = c.getContext('2d');
@@ -60,7 +60,9 @@ function startFree() {
   saveRound();
 }
 function saveRound() {
-  if (!world || mode !== 'play') return;
+  if (!world || (mode !== 'play' && mode !== 'card' && mode !== 'cut')) return;
+  if (world.story) return saveStoryRound();   // the story keeps its own saves (story.js)
+  if (mode !== 'play') return;
   const h = world.hero;
   save('kierros2', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz },
     g: world.goal, gt: Math.round(world.gt * 10) / 10 });
@@ -153,7 +155,7 @@ function lift(e) {
       const h = world.hero, up = e.type === 'pointerup';
       const crook = up ? aimCrook(h, cam.yaw, cam.pitch, world.crooks) : null;
       const hit = up && !crook ? aimPull(h, cam.yaw, cam.pitch) : null;
-      if (crook) { catchCrook(crook); catchFx = { t: 0.45, k: crook }; sfx('tomahdys', { vol: 0.2, rate: 0.8 }); }
+      if (crook) { catchCrook(crook); if (crook.type === 'boss') sfx('pop', { vol: 0.25, rate: 0.7 }); catchFx = { t: 0.45, k: crook }; sfx('tomahdys', { vol: 0.2, rate: 0.8 }); }
       else if (hit) pullQ = hit;
       else if (e.type === 'pointerup') { const r = aimRay(h, cam.yaw, cam.pitch); missFx = { t: 0.3, x: r.ox + r.dx * 15, y: r.oy + r.dy * 15, z: r.oz + r.dz * 15 }; }
       sfx('suhahdus', { vol: 0.22, rate: hit ? 1.6 : 1.9 });
@@ -200,17 +202,20 @@ function stepCam(h, dt) {
 
 // ---- Menus (DOM over the canvas) ----
 const $ = id => document.getElementById(id);
-function hideAll() { for (const id of ['menu', 'end']) $(id).hidden = true; }
+function hideAll() { for (const id of ['menu', 'end', 'chapters', 'card', 'cut']) $(id).hidden = true; }
 const fmt = t => { t = Math.max(0, t); const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1).replace('.', ','); };
 function showMenu() {
   mode = 'menu'; world = null;
   hideAll(); $('menu').hidden = false;
   $('friends').hidden = !window.AiPelitRooms;
+  if (typeof storyLabel === 'function') $('story').textContent = storyLabel();
 }
 $('friends').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (window.AiPelitRooms) AiPelitRooms.open(); });
 $('free').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); startFree(); });
 $('toMenu').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); if (result && result.net) backRoom(); else showMenu(); });
 $('quit').addEventListener('click', () => { sfx('valinta', { vol: 0.3 }); saveRound(); showMenu(); });
+// v5: the end screen's "next chapter" button shows only after a story chapter.
+$('next').hidden = true;
 
 // ---- The 2D layer ----
 function shadowText(t, x, y, size, col, align, weight) {
@@ -242,6 +247,7 @@ function drawHUD(w) {
   const h = w.hero, top = SAFE_T + 22;
   shadowText('↑ ' + Math.round(h.y) + ' m', W - SAFE_R - 14, top, 16, '#e8f4ff', 'right', 800);
   drawGoal(w, top);
+  if (w.story) drawRadio(w, top);
   if (hintT < 16) drawHints();
   else if (hint3T < 9) drawHints3();
   else if (HINT4[w.kind] && !hint4[w.kind] && !w.got) HINT4[w.kind].forEach((t, i) => shadowText(t, W / 2, H * 0.3 + i * 20, 15, '#fff', 'center', 700));
@@ -251,17 +257,28 @@ function drawHUD(w) {
 // The mission: where to go, how far, an arrow toward it as the camera looks, the count done.
 function drawGoal(w, top) {
   const b = CITY[w.goal], h = w.hero;
-  shadowText('✔ ' + w.done, LAND ? SAFE_L + 120 : W / 2 - 70, top, 16, '#9ff7c9', 'center', 900);
-  shadowText(fmt(w.gt), LAND ? SAFE_L + 190 : W / 2 + 20, top, 18, '#fff', 'center', 900);
+  // The story (v5) shows its chapter instead of the count, and a mission with a time limit counts down.
+  shadowText(w.story ? 'Luku ' + (w.story.ch + 1) : '✔ ' + w.done, LAND ? SAFE_L + 120 : W / 2 - 70, top, 16, '#9ff7c9', 'center', 900);
+  const rest = w.lim ? Math.max(0, w.lim - w.gt) : 0;
+  shadowText(fmt(w.lim ? rest : w.gt), LAND ? SAFE_L + 190 : W / 2 + 20, top, 18, w.lim && rest < 15 ? '#ff6b6b' : w.lim ? '#ffd166' : '#fff', 'center', 900);
   // Where to: the marked roof, or the nearest crook not caught yet (v4, #561).
   let t = null, say = '';
   if (isCrook(w.kind)) {
     const left = w.crooks.filter(k => !k.caught);
     const k = left.reduce((p, q) => !p || Math.hypot(q.x - h.x, q.z - h.z) < Math.hypot(p.x - h.x, p.z - h.z) ? q : p, null);
     if (k) t = { x: k.x, y: k.y, z: k.z };
-    say = w.kind === 'rosvot' ? 'Ota rosvot kiinni! ' + (w.crooks.length - left.length) + '/' + w.crooks.length + ' · '
-      : w.kind === 'auto' ? 'Pysäytä karkuriauto! ' : 'Pysäytä karkurihelikopteri! ';
-  } else if (b) { t = roofTop(b); say = b.tower ? 'Tornin huipulle! ' : 'Mene merkitylle katolle! '; }
+    const fall = w.crooks[0] && w.crooks[0].type === 'putoava' ? w.crooks[0] : null;
+    say = w.kind === 'rosvot' || w.kind === 'pakenevat' ? 'Ota rosvot kiinni! ' + (w.crooks.length - left.length) + '/' + w.crooks.length + ' · '
+      : w.kind === 'auto' ? 'Pysäytä karkuriauto! ' : w.kind === 'pelasta' ? 'Pelasta ikkunanpesijä! '
+      : fall ? (fall.falling ? 'Hän putoaa! Ota kiinni Vedolla! ' : 'Mene katon reunalla roikkujan luo! ')
+      : w.kind === 'boss' ? 'Varjon helikopteri ' + (BOSS_HITS - (w.crooks[0] ? w.crooks[0].hp : 0)) + '/' + BOSS_HITS + ' · '
+      : 'Pysäytä karkurihelikopteri! ';
+  } else if (b) {
+    t = roofTop(b);
+    say = w.kind === 'pommit' ? 'Pura pommi ' + (w.seq + 1) + '/' + ROOFS_N.pommit + '! '
+      : w.kind === 'paketti' ? (w.seq ? 'Vie säkki merkitylle katolle! ' : 'Hae rahasäkki katolta! ')
+      : b.tower ? 'Tornin huipulle! ' : 'Mene merkitylle katolle! ';
+  }
   if (t) {
     const dx = t.x - h.x, dz = t.z - h.z, d = Math.round(Math.hypot(dx, dz));
     const y = LAND ? top + 26 : top + 66;   // upright, under ⏸ Valikko
@@ -271,9 +288,14 @@ function drawGoal(w, top) {
   }
   if (w.got) {
     cx.globalAlpha = Math.min(1, w.got.show * 2);
-    const big = { rosvot: 'Rosvot kiinni!', auto: 'Karkuriauto pysäytetty!', heli: 'Helikopteri pysäytetty!' }[w.got.kind];
+    const big = { rosvot: 'Rosvot kiinni!', auto: 'Karkuriauto pysäytetty!', heli: 'Helikopteri pysäytetty!', pelasta: 'Pelastettu!', boss: 'Varjo kiinni!',
+      pakenevat: 'Rosvot kiinni!', putoava: 'Kiinni otettu!', pommit: 'Pommit purettu!', paketti: 'Säkki perillä!' }[w.got.kind];
     shadowText(big || (w.got.tower ? 'Tornin huipulla!' : 'Perillä!'), W / 2, H * 0.36, big ? 26 : 30, '#ffd166', 'center', 900);
     shadowText(fmt(w.got.t) + ' · uusi tehtävä', W / 2, H * 0.36 + 30, 15, '#fff', 'center', 800);
+  } else if (w.part) {
+    shadowText(w.part.kind === 'pommit' ? 'Pommi purettu!' : 'Säkki haettu!', W / 2, H * 0.36, 24, '#ffd166', 'center', 900);
+  } else if (w.kind === 'boss' && w.crooks[0] && w.crooks[0].hitT > 0) {
+    shadowText('Osui! Kopteri riistäytyi irti!', W / 2, H * 0.36, 20, '#ffd166', 'center', 900);
     cx.globalAlpha = 1;
   }
 }
@@ -400,7 +422,10 @@ function frame(now) {
   if (jumpFlash > 0) jumpFlash -= dt;
   if (mode === 'play' && world) {
     acc += dt;
-    while (acc >= STEP) { acc -= STEP; tick(STEP); }
+    while (acc >= STEP && mode === 'play') { acc -= STEP; tick(STEP); }
+    // A story chapter's last mission: its "done" shows a moment before the closing card (v5).
+    if (mode === 'play' && world.chDone && (world.endT -= dt) <= 0) storyEnd();
+    else if (mode === 'play' && world.cutQ && (world.cutT -= dt) <= 0) storyCut(world);
     saveT += dt; if (saveT > 2) { saveT = 0; saveRound(); }
     if (hintT < 16) { hintT += dt; if (hintT >= 16) save('ohje', 1); }
     stepHint3(dt);
@@ -418,7 +443,14 @@ function tick(dt) {
   const w = world, h = w.hero, st0 = h.st, lands0 = h.lands || 0;
   stepHero(h, input(), dt);
   stepCam(h, dt);
-  if (stepRound(w, dt)) { save('tehtavat', w.done); saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); hint4T = 0; }
+  const got = stepRound(w, dt);
+  if (got === 'fail') { sfx('tappio', { vol: 0.25 }); storyFail(); return; }
+  if (got) {
+    if (!w.story) save('tehtavat', w.done);
+    if (w.chDone) { w.endT = 2.5; storyRecord(w); saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); return; }
+    saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); hint4T = 0;
+    if (w.story && STORY[w.story.ch].steps[w.story.step].cut) { w.cutQ = true; w.cutT = 1.5; }
+  }
   if (h.st === 'swing' && st0 !== 'swing') sfx('suhahdus', { vol: 0.25, rate: 1.3 });
   if (st0 === 'pull' && h.st === 'wall') sfx('tomahdys', { vol: 0.12, rate: 1.3 });
   if ((h.lands || 0) > lands0) sfx('tomahdys', { vol: 0.15 });
@@ -434,6 +466,7 @@ function draw(dt) {
     aimNow = h.st !== 'swing' && playing() ? aimAnchor(h, fx, fz) : null;
     const heroes = mode === 'netplay' && net ? netHeroes(dt) : [{ id: 'me', col: '#1fb5a8', h }];
     s = { w: world, hero: h, heroes, cam, playing: playing(), aiming: !!pullPtr };
+    if (mode === 'cut' && typeof cutView === 'function') { const c = cutView(dt); if (c) { s.cut = c; s.heroes = []; } }
   } else {
     // Behind the menu: the city turning slowly.
     menuT += dt; cam.yaw = menuT * 0.08; cam.pitch = 0.5;

@@ -31,6 +31,37 @@
   body.land h1{font-size:30px}
   body.land .col{gap:4px}
   body.land button.big{padding:9px}
+  #chList{display:grid;grid-template-columns:1fr;gap:6px}
+  #chList button{font-size:15px;padding:9px 12px;text-align:left}
+  #chList button.next{background:#1fb5a8;box-shadow:0 3px 0 #0f6f68}
+  #card{background:linear-gradient(rgba(8,24,48,.55),rgba(8,24,48,.82))}
+  #cardTitle{margin:0;font-size:26px;font-weight:900;text-align:center;color:#ffd166;text-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #cardLines{display:flex;flex-direction:column;gap:10px;width:100%;max-width:330px}
+  #cardLines .ln{display:flex;gap:10px;align-items:flex-start;background:rgba(8,24,48,.6);border-radius:12px;padding:9px 11px;font-size:16px;line-height:1.3}
+  #cardLines .av{flex:0 0 34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;color:#fff}
+  #cardLines b{display:block;font-size:13px}
+  body.land #chList{grid-template-columns:1fr 1fr;gap:4px 6px}
+  body.land #chList button{padding:7px 10px;font-size:14px}
+  body.land #cardLines{max-width:400px;gap:6px}
+  body.land #cardLines .ln{padding:6px 10px;font-size:15px}
+  #cut{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;
+    padding:calc(env(safe-area-inset-top,0px) + 54px) calc(env(safe-area-inset-right,0px) + 14px) calc(env(safe-area-inset-bottom,0px) + 22px) calc(env(safe-area-inset-left,0px) + 14px);
+    box-sizing:border-box;background:linear-gradient(rgba(0,0,0,.55),transparent 18%,transparent 62%,rgba(0,0,0,.6));border-top:0}
+  #cut[hidden]{display:none}
+  #cut::before,#cut::after{content:'';position:fixed;left:0;right:0;height:38px;background:#000}
+  #cut::before{top:0}#cut::after{bottom:0}
+  #cutTitle{position:absolute;top:calc(env(safe-area-inset-top,0px) + 96px);left:0;right:0;margin:0;text-align:center;font-size:24px;font-weight:900;color:#ffd166;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+  #cut.wide #cutTitle{top:40%;font-size:30px}
+  #cutSkip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 50px);right:calc(env(safe-area-inset-right,0px) + 10px);padding:6px 12px;font-size:14px;z-index:1}
+  #cutLine{display:flex;gap:10px;align-items:flex-start;width:100%;max-width:360px;background:rgba(8,24,48,.82);border-radius:14px;padding:11px 13px;font-size:17px;line-height:1.3;z-index:1}
+  #cutLine[hidden]{display:none}
+  #cutAv{flex:0 0 36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px}
+  #cutWho{display:block;font-size:13px}
+  #cutTap{margin:0 0 20px;font-size:14px;font-weight:700;opacity:.85;z-index:1}
+  body.land #cutTitle{top:calc(env(safe-area-inset-top,0px) + 50px)}
+  body.land #cut.wide #cutTitle{top:38%}
+  body.land #cutTap{margin-bottom:12px}
+  body.land #cutLine{max-width:440px;padding:8px 12px;font-size:16px}
   body.land #quit{top:calc(env(safe-area-inset-top,0px) + 44px)}
 </style>
 </head>
@@ -45,6 +76,7 @@
     <p class="sub">Kiipeä pilvenpiirtäjiin, heilu seitillä talolta toiselle ja ehdi merkityille katoille.</p>
   </div>
   <div class="col">
+    <button id="story" class="big">📖 Tarina</button>
     <button id="free" class="big">▶ Kaupunkiin</button>
     <button id="friends">👥 Pelaa kavereiden kanssa</button>
   </div>
@@ -55,8 +87,33 @@
     <p id="endNote"></p>
   </div>
   <div class="col">
+    <button id="next" class="big" hidden></button>
     <button id="toMenu" class="big">Takaisin huoneeseen</button>
   </div>
+</div>
+<div id="chapters" class="screen" hidden>
+  <div class="head">
+    <h1>Tari<span>na</span></h1>
+    <p id="chSub" class="sub"></p>
+  </div>
+  <div class="col">
+    <div id="chList"></div>
+    <button id="chBack">‹ Takaisin</button>
+  </div>
+</div>
+<div id="card" class="screen" hidden>
+  <div class="head"><p id="cardTitle"></p></div>
+  <div id="cardLines"></div>
+  <div class="col">
+    <button id="cardGo" class="big"></button>
+    <button id="cardAlt" hidden></button>
+  </div>
+</div>
+<div id="cut" hidden>
+  <p id="cutTitle"></p>
+  <button id="cutSkip">Ohita ⏭</button>
+  <div id="cutLine"><span id="cutAv"></span><div><b id="cutWho"></b><span id="cutText"></span></div></div>
+  <p id="cutTap"></p>
 </div>
 <script src="../../../rooms.js" data-game="seittisankari" data-min="2" data-max="8"></script>
 <script src="../../../lib/sulava-1/sulava.js"></script>
@@ -69,6 +126,7 @@ window.S3D_LIB = import('../../../lib/three-r187/three.module.js');
 </script>
 <script src="draw3d.js"></script>
 <script src="ui.js"></script>
+<script src="story.js"></script>
 <script src="net.js"></script>
 <script src="../../../back.js"></script>
 </body>
