@@ -191,12 +191,19 @@ function landingHint(b, s, path, aim) {
   return { word: above ? 'Hiljaa alas' : 'Kohti tukikohtaa', dir: push.dir, power: push.power, speed: b, base: aim !== undefined };
 }
 // The path's next lowest or highest point, in the frame it is drawn in.
-function pathExtreme(path, high) {
+// With `ahead`, the next one the ship comes to, not the one it is just leaving (v7: on the
+// station trip, rising from the low point, "Odota" waited for that low point, 0 s away, so the
+// game stayed in slow motion and the wait could not be skipped).
+function pathExtreme(path, high, ahead = false) {
   if (!path || !path.points.length) return null;
   const f = bodyAt(path.frame, ship ? ship.t : 0);
-  let best = null, bestR = high ? -Infinity : Infinity;
+  let best = null, bestR = high ? -Infinity : Infinity, leaving = ahead, lastR;
   for (const p of path.points) {
     const r = Math.hypot(p.x - f.x, p.y - f.y);
+    if (leaving) {
+      if (lastR === undefined || (high ? r < lastR : r > lastR)) { lastR = r; continue; }
+      leaving = false;
+    }
     if (high ? r > bestR : r < bestR) { bestR = r; best = p; }
     else if (Math.abs(r - bestR) > 0.5) break; // the first high (or low) point, not one rounds later
   }
@@ -474,7 +481,7 @@ function nextMove(s, path) {
     const out = o.vr / o.r;
     return { word: 'Jarruta', dir: angleOf(-(o.vx - out * o.x), -(o.vy - out * o.y)), power: 0.6 };
   }
-  const nearStation = trip === 'asema' && stationRelative(s).dist < 30;
+  const nearStation = trip === 'asema' && stationClose(s);
   // Up at the station's height, a low point under the orbit goal is the station hint's to raise
   // (v7: a brake past its aim handed the ship to the climb's "Sivulle", which pushed it back up,
   // and the station hint braked again, over and over). A climb already under way goes on.
@@ -573,17 +580,95 @@ function baseHint(s, path, o, aim, b = MOON) {
 const BASE_LEAD = 1.9, MARS_BASE_LEAD = 1.9;
 let baseBrakeAt = -Infinity;
 // Station: a transfer to its height, then close in slowly with the arrow.
-function stationHint(s, path) {
-  const d = stationRelative(s);
-  if (d.dist < 30) {
-    // Slow enough that a push let go of late still docks under the station's limit, and a push
-    // that ends a little early (v7: at up to 2.4 m/s and stopping only 0.1 m/s short, a late
-    // let-go hit the station too fast, and the arrow came and went several times a second).
-    const want = Math.min(STATION.speed * 0.6, 0.15 * d.dist + 0.3);
-    const ax = d.dx / d.dist * want - d.vx, ay = d.dy / d.dist * want - d.vy, need = Math.hypot(ax, ay);
-    if (need < (currentWord === 'Kohti asemaa' ? 0.25 : 0.9)) return { word: 'Odota', station: true };
-    return { word: 'Kohti asemaa', dir: angleOf(ax, ay), power: clamp(need / 8, 0.05, 1), station: true };
+// Close enough to aim at the station: within 30 m, or 45 m while an aimed push's flight to it is
+// under way.
+function stationClose(s) {
+  const d = stationRelative(s).dist;
+  return d < 30 || (!!approach && approach.tArr > s.t - 1 && d < 45);
+}
+function crossesStation(o) {
+  const R = EARTH.radius;
+  return o.peri + R < STATION.r + 8 && (!o.closed || o.apo + R > STATION.r - 8);
+}
+// The last metres to the station: one push in one direction that sends the ship falling to the
+// station, slowly enough to dock, then a wait while it gets there. A few tens of metres up here
+// curve the ship's way a lot, so "straight at the station" turned while the push was held (v7:
+// "Kohti asemaa" changed direction in the middle of a push, and passing over the station it threw
+// the orbit 65 m up). The push is worked out on the ship's own falling path, and its direction
+// stays put until it is done; a push held too long or let go of early is mended by one more.
+let approach = null;
+const APPROACH = { times: [4, 5, 6, 8, 10, 13, 16], arrive: 1.8, settle: 1.5, done: 0.03 };
+function approachHint(s) {
+  const going = !!approach && currentWord === 'Kohti asemaa' && approach.tArr > s.t + 0.3
+    && (approach.pushed || s.t - approach.t0 < 0.4);
+  if (going) {
+    if (s.thrust > 0) approach.pushed = true;
+    const p = interceptPush(s, approach.tArr);
+    const gap = p ? p.ux * Math.sin(approach.dir) + p.uy * Math.cos(approach.dir) : 0;
+    if (gap > APPROACH.done) return { word: 'Kohti asemaa', dir: approach.dir, power: clamp(gap / 8, 0.05, 1), gap, station: true };
+    approach.ended = s.t;
   }
+  const dock = coastDock(s);
+  if (dock && dock.speed < STATION.speed - 0.4) return { word: 'Odota', station: true, wait: dock.t - s.t };
+  // Just after a push, while it is being let go of: no new one at once.
+  if (approach && (s.t - approach.ended < APPROACH.settle || (s.thrust > 0 && !going))) {
+    return { word: 'Odota', station: true, wait: Math.max(0, approach.tArr - s.t) };
+  }
+  let best = null;
+  for (const T of APPROACH.times) {
+    const p = interceptPush(s, s.t + T);
+    if (!p) continue;
+    const score = p.dv + 0.1 * T + (p.arrive > APPROACH.arrive ? 10 + p.arrive : 0);
+    if (!best || score < best.score) best = Object.assign(p, { T, score });
+  }
+  if (!best) return { word: 'Odota', station: true };
+  approach = { tArr: s.t + best.T, dir: angleOf(best.ux, best.uy), t0: s.t, pushed: false, ended: -Infinity };
+  if (best.dv < 0.15) { approach.ended = s.t; return { word: 'Odota', station: true, wait: best.T }; }
+  return { word: 'Kohti asemaa', dir: approach.dir, power: clamp(best.dv / 8, 0.05, 1), gap: best.dv, station: true };
+}
+// Falling round Earth from (x, y) at (vx, vy) for T game seconds; `each` sees every step and may
+// stop it by returning true.
+function coast(x, y, vx, vy, t, T, each) {
+  const n = Math.max(1, Math.round(T * 60)), dt = T / n;
+  for (let k = 0; k < n; k++) {
+    let a = pull(EARTH, x, y);
+    vx += a.ax * dt / 2; vy += a.ay * dt / 2; x += vx * dt; y += vy * dt;
+    a = pull(EARTH, x, y); vx += a.ax * dt / 2; vy += a.ay * dt / 2; t += dt;
+    if (each && each(x, y, vx, vy, t)) break;
+  }
+  return { x, y, vx, vy, t };
+}
+// When (and how fast) the ship, left alone, reaches the station within `T` game seconds.
+function coastDock(s, T = 20) {
+  let hit = null;
+  coast(s.x, s.y, s.vx, s.vy, s.t, T, (x, y, vx, vy, t) => {
+    const q = stationAt(t);
+    if (Math.hypot(x - q.x, y - q.y) < STATION.dock - 0.3) hit = { t, speed: Math.hypot(vx - q.vx, vy - q.vy) };
+    return !!hit;
+  });
+  return hit;
+}
+// The push (m/s across, ux, and up, uy) after which the ship falls to the station's middle at
+// game time tArr, its size, and how fast the ship then meets the station.
+function interceptPush(s, tArr) {
+  const T = tArr - s.t, q = stationAt(tArr);
+  if (T <= 0) return null;
+  const end = (ux, uy) => coast(s.x, s.y, s.vx + ux, s.vy + uy, s.t, T);
+  let ux = 0, uy = 0;
+  for (let i = 0; i < 4; i++) {
+    const e = end(ux, uy), ex = e.x - q.x, ey = e.y - q.y;
+    if (Math.hypot(ex, ey) < 0.05) break;
+    const h = 0.1, a = end(ux + h, uy), b = end(ux, uy + h);
+    const j11 = (a.x - e.x) / h, j21 = (a.y - e.y) / h, j12 = (b.x - e.x) / h, j22 = (b.y - e.y) / h, det = j11 * j22 - j12 * j21;
+    if (Math.abs(det) < 1e-9) return null;
+    ux -= (j22 * ex - j12 * ey) / det; uy -= (j11 * ey - j21 * ex) / det;
+  }
+  const e = end(ux, uy);
+  if (Math.hypot(e.x - q.x, e.y - q.y) > 0.5) return null;
+  return { ux, uy, dv: Math.hypot(ux, uy), arrive: Math.hypot(e.vx - q.vx, e.vy - q.vy) };
+}
+function stationHint(s, path) {
+  if (stationClose(s)) return approachHint(s);
   const o = orbitAround(EARTH, s), st = stationAt(s.t), side = sideOf(o);
   if (o.apo + EARTH.radius < STATION.r - 2) {
     // Just under the station's height, both go round about as fast, so the moment for a timed
@@ -592,16 +677,24 @@ function stationHint(s, path) {
     const near = o.apo + EARTH.radius > STATION.r - 14;
     const wait = ((aheadOf(st, s, side) - transferLead(o.r, STATION.r, STATION.n)) % TAU + TAU) % TAU;
     if (near && (o.alt < o.peri + 4 || currentWord === 'Kiihdytä' || o.e < 0.05)) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.15, gap: STATION.r - 2 - (o.apo + EARTH.radius), metres: true };
-    if (near) return { word: 'Odota', station: true, mark: pathExtreme(path, false) };
-    if (wait < 0.12 || s.thrust > 0) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.3, gap: apseSpeed(EARTH, o.r, STATION.r - 2) - o.speed };
+    if (near) return stationWait(s, path, pathExtreme(path, false, true));
+    if (wait < 0.12 || s.thrust > 0) {
+      const gap = apseSpeed(EARTH, o.r, STATION.r - 2) - o.speed;
+      return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: clamp(gap / 6, 0.05, 0.3), gap };
+    }
     return { word: 'Odota', station: true, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - STATION.n) };
   }
   const R = EARTH.radius, hiOff = Math.abs(o.apo + R - STATION.r), loOff = Math.abs(o.peri + R - STATION.r);
   // Neither the high nor the low point at the station's height: at the low point, brake the high
   // point down to it.
   if (hiOff > 6 && loOff > 6) {
-    if (o.alt < o.peri + 6) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3, gap: o.speed - apseSpeed(EARTH, o.r, STATION.r + 2) };
-    return { word: 'Odota', station: true, mark: pathExtreme(path, false) };
+    // As strong as the brake is big (v7: 0.3 m/s asked for at 0.3, let go of a little late, put
+    // the low point under the ground).
+    if (o.alt < o.peri + 6) {
+      const gap = o.speed - apseSpeed(EARTH, o.r, STATION.r + 2);
+      return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: clamp(gap / 6, 0.05, 0.3), gap };
+    }
+    return stationWait(s, path, pathExtreme(path, false, true));
   }
   // One end of the orbit at the station's height, the station elsewhere on its circle (#548: an
   // orbit like the station's never meets it): there, brake or push to make the other end lower or
@@ -610,18 +703,23 @@ function stationHint(s, path) {
   // from the orbit as it is, so a push held too long or let go late only picks another meeting
   // (v7: a brake past its aim left a low point no meeting fitted, and the hints went round in a
   // loop until the tank was empty).
-  const high = hiOff <= loOff, end = pathExtreme(path, high);
+  const high = hiOff <= loOff, end = pathExtreme(path, high, true);
   const going = !!phaseBurn && phaseBurn.word === currentWord && s.t - phaseBurn.t < 0.5;
   const there = (high ? o.alt > o.apo - 4 : o.alt < o.peri + 4) || (o.closed && o.e < 0.05);
-  const plan = stationMeetings(o, high, there || going ? { x: s.x, y: s.y, t: s.t } : end);
+  const at = there || going ? { x: s.x, y: s.y, t: s.t } : end, plan = stationMeetings(o, high, at);
   if (going && (!plan || plan.miss < STATION_MEET.end)) { phaseBurn = null; phaseEnd = s.t; }
-  if (!plan || plan.miss < (going ? STATION_MEET.end : STATION_MEET.start)) return { word: 'Odota', station: true, mark: end };
+  if (!plan || plan.miss < (going ? STATION_MEET.end : STATION_MEET.start)) return stationWait(s, path, end, plan ? at.t + plan.when : undefined);
   // Not straight after a burn, while the push is still being let go of (v7: a burn ended, and a
   // late let-go asked at once for one back the other way, and so on).
   // One burn at each pass (on a round orbit, each part of a round), unless the low point is too
   // low for comfort.
-  const settling = s.t - phaseEnd < Math.max(STATION_MEET.settle, TAU / 3 * Math.sqrt(((o.peri + o.apo) / 2 + R) ** 3 / EARTH.mu)) || (s.thrust > 0 && !going);
-  if (!going && (!there || (settling && o.peri > ORBIT_GOAL.earth.peri))) return { word: 'Odota', station: true, mark: end };
+  // Too low a low point gets only the short pause (v7: with none, a brake pushed twice as hard as
+  // asked was answered at once by a push back, again twice too hard, and so on).
+  const round = o.peri > ORBIT_GOAL.earth.peri ? TAU / 3 * Math.sqrt(((o.peri + o.apo) / 2 + R) ** 3 / EARTH.mu) : 0;
+  const settleEnd = phaseEnd + Math.max(STATION_MEET.settle, round);
+  const settling = s.t < settleEnd || (s.thrust > 0 && !going);
+  if (!going && !there) return stationWait(s, path, end);
+  if (!going && settling) return stationWait(s, path, end, s.thrust > 0 ? undefined : settleEnd);
   // A burn under way keeps its way, lower or higher, and aims at the best meeting that way.
   const down = going ? phaseBurn.word === 'Jarruta' : null;
   let best = null;
@@ -640,10 +738,25 @@ let phaseBurn = null, phaseEnd = -Infinity;
 // How close (metres along the station's circle) a coming meeting must be for the hint to wait
 // for it: closer than `start` before a burn, and a burn goes on until it is closer than `end`.
 // After a burn, the next waits `settle` game seconds and a third of a round at least.
-const STATION_MEET = { start: 12, end: 3, settle: 1.5, above: 40, below: 20, round: 4 };
+// Waiting on the station trip: until the ship comes within reach of the station on its drawn
+// path (on an orbit that comes to the station's height; passing over or under it is no meeting), else until `until` (game seconds) or the point `mark`. Never a wait of a moment that
+// never passes (v7: on a round orbit the next high point is always "now", so the game ran in slow
+// motion, the wait could not be skipped, and a meeting minutes away looked like nothing happening).
+function stationWait(s, path, mark, until) {
+  if (path && crossesStation(orbitAround(EARTH, s))) {
+    for (const p of path.points) {
+      const q = stationAt(p.t);
+      if (Math.hypot(p.x - q.x, p.y - q.y) < 25) return { word: 'Odota', station: true, wait: Math.max(0, p.t - s.t), mark: p };
+    }
+  }
+  if (until !== undefined && until > s.t) return { word: 'Odota', station: true, wait: until - s.t };
+  if (mark && mark.t !== undefined && mark.t - s.t > 1) return { word: 'Odota', station: true, mark };
+  return { word: 'Odota', station: true };
+}
+const STATION_MEET = { start: 12, end: 3, settle: 1.5, above: 40, below: 35, round: 4 };
 // The meetings with the station from the ship's end of the orbit at the station's height (high
 // end or low end; at the point `at`). `other`, how far the other end is from Earth's middle now;
-// `meets`, the other ends (`other`) that bring ship and station back there together a whole
+// `when`, game seconds from `at` to that closest meeting; `meets`, the other ends (`other`) that bring ship and station back there together a whole
 // number of rounds on, with a `cost` (metres of change, and `round` more for each round); `miss`,
 // how far apart the two get there on the orbit as it is now, within its next four rounds.
 function stationMeetings(o, high, at) {
@@ -654,9 +767,10 @@ function stationMeetings(o, high, at) {
   const period = a => TAU * Math.sqrt(a ** 3 / EARTH.mu);
   const pMin = period((R + STATION_MEET.below + rAt) / 2), pMax = period(rAt + STATION_MEET.above / 2);
   const pNow = period((o.peri + o.apo) / 2 + R), meets = [];
-  let miss = Infinity;
+  let miss = Infinity, when;
   for (let k = 1; k <= 4; k++) {
-    miss = Math.min(miss, STATION.r * Math.abs(wrap(n * k * pNow - gap)));
+    const d = STATION.r * Math.abs(wrap(n * k * pNow - gap));
+    if (d < miss) { miss = d; when = k * pNow; }
     for (let m = 0; m <= 4; m++) {
       const p = (gap + m * TAU) / n / k;
       if (p < pMin || p > pMax) continue;
@@ -664,7 +778,7 @@ function stationMeetings(o, high, at) {
       meets.push({ other: c, cost: Math.abs(c - other) + STATION_MEET.round * k });
     }
   }
-  return { miss, meets, other };
+  return { miss, when, meets, other };
 }
 
 // ---- Mars (#548) ----

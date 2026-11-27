@@ -89,7 +89,7 @@ function openMenu() {
 function begin(s) {
   useRocket(TRIP[s.trip].rocket);
   // The hint's memory of the last flight goes too: a brake's stamp or a burn from it must not carry on.
-  ship = s; descentAt = -1; currentWord = ''; baseBrakeAt = -Infinity; burn = null; phaseBurn = null; phaseEnd = -Infinity; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
+  ship = s; descentAt = -1; currentWord = ''; baseBrakeAt = -Infinity; burn = null; phaseBurn = null; phaseEnd = -Infinity; approach = null; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
   releaseStick(); showPanel(null); updateHud(); saveFlight(); play();
 }
 function startFlight(trip) { begin(freshFlight(trip)); }
@@ -158,15 +158,17 @@ function canSkip(h) {
 // a gentle push, and the moment a wait ends, so a small drag has time to do a small thing.
 function wantsSlow(h, s = ship) {
   if (!h || !s || s.phase !== 'flight' || s.landedOn) return false;
-  if (h.word === 'Korjaa' || h.word === 'Kohti asemaa') return true;
-  if (h.word === 'Odota') return h.station && stationRelative(s).dist < 30 || (h.wait !== undefined && h.wait < 1.5);
+  // Docking slows only for its last metres (v7: from 30 m in slow motion it took a minute).
+  if (h.word === 'Korjaa') return true;
+  if (h.word === 'Kohti asemaa') return stationRelative(s).dist < STATION_SLOW;
+  if (h.word === 'Odota') return h.station && stationRelative(s).dist < STATION_SLOW || (h.wait !== undefined && h.wait < 1.5);
   if (h.word === 'Hiljaa alas') return nearestSurface(s).alt < 20;
   return h.dir !== undefined && (h.power ?? 1) < 0.5;
 }
 // Slower still while the engine burns, so a short push is easy to judge (#548), and a burn's end
 // takes at least END_SECONDS of real time however short it is in game time (#548: most burns
 // last a few tenths of a second, so players went past their end).
-const END_SECONDS = 1.5, SLOWEST = 0.06;
+const END_SECONDS = 1.5, SLOWEST = 0.06, STATION_SLOW = 12;
 function timeScale(h) {
   let k = wantsSlow(h) ? 0.35 : ship.thrust > 0 ? 0.5 : 1;
   if (h && h.ends !== undefined) k = Math.min(k, Math.max(SLOWEST, h.ends / END_SECONDS));
