@@ -44,6 +44,13 @@
       "note": "Marsiin rakennetaan tukikohta isolla raketilla: asuinmoduuli, kasvihuone ja polttoainetehdas, ja valmiista tukikohdasta tankataan matka Marsista kotiin.",
       "request": "Rakennetaan myös marsiin beissi.",
       "issue": "eerovil/ai-pelit#548"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-27",
+      "note": "Avaruusasemalle-matkan ohjeet vievät nyt perille, vaikka jarruttaisi tai kiihdyttäisi vähän liikaa tai myöhässä.",
+      "request": "Raketti tehtävä 2 missä pitää saada asema kiinni, ei toimi. Jos vaikka aloitat siitä että kiertorata on sama kuin asemalla, niin ohjeita seuraamalla et pääse perille",
+      "issue": "eerovil/ai-pelit#548"
     }
   ]
 }
