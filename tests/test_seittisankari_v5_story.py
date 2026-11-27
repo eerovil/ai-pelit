@@ -30,7 +30,7 @@ FINISH = """(w => {
     h.x = t.x; h.y = t.y; h.z = t.z; h.st = 'ground'; h.vx = h.vy = h.vz = 0;
   } else for (const k of w.crooks) {
     if (k.type === 'apu') { h.x = k.x; h.y = k.y; h.z = k.z; }
-    else { if (k.type === 'putoava') k.falling = true; while (!k.caught) catchCrook(k); }
+    else { if (k.type === 'putoava') k.falling = true; while (!k.caught) { k.esc = false; catchCrook(k); } }   // (skips Varjo's escape flights)
   }
 })"""
 
@@ -199,12 +199,19 @@ def test_varjos_helicopter_takes_three_hits_and_breaks_free_after_each(site, con
     r = page.evaluate("""(() => {
       const w = newWorld(); w.story = { ch: 7, step: 1 }; startMission(w, rng(5));
       const k = w.crooks[0], out = { type: k.type, lim: w.lim, hits: [] };
+      // Hits in a row before it moves: only the first counts.
+      const w2 = newWorld(); w2.story = { ch: 7, step: 1 }; startMission(w2, rng(5));
+      const k2 = w2.crooks[0];
+      out.rapid = [catchCrook(k2, rng(1)), catchCrook(k2, rng(2)), catchCrook(k2, rng(3))].concat([k2.hp, k2.caught]);
       for (let n = 0; n < 3; n++) {
         const x0 = k.x, z0 = k.z;
         catchCrook(k, rng(n + 2));
         const to = k.to ? Math.hypot(k.to.x - x0, k.to.z - z0) : 0;
         let done = false;
         for (let i = 0; i < 600; i++) done = stepRound(w, STEP, rng(n)) || done;   // 5 s
+        // A hit while it breaks free does not count.
+        if (n < 2) out.mid = (out.mid || []).concat(catchCrook(k, rng(9)));
+        for (let i = 0; i < 6000 && k.esc; i++) done = stepRound(w, STEP, rng(n)) || done;
         out.hits.push({ hp: k.hp, caught: k.caught, to, moved: Math.hypot(k.x - x0, k.z - z0), done, chDone: w.chDone });
       }
       return out;
@@ -220,6 +227,7 @@ def test_varjos_helicopter_takes_three_hits_and_breaks_free_after_each(site, con
         assert not h["caught"] and not h["done"]
         assert h["to"] >= 140 and h["moved"] > 40          # it flies off at once
     assert [h["hp"] for h in r["hits"]] == [2, 1, 0]
+    assert r["rapid"] == [True, False, False, 2, False] and r["mid"] == [False, False]
     assert r["hits"][2]["caught"] and r["hits"][2]["done"] and r["hits"][2]["chDone"]
 
 

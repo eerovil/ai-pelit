@@ -155,7 +155,7 @@ function lift(e) {
       const h = world.hero, up = e.type === 'pointerup';
       const crook = up ? aimCrook(h, cam.yaw, cam.pitch, world.crooks) : null;
       const hit = up && !crook ? aimPull(h, cam.yaw, cam.pitch) : null;
-      if (crook) { catchCrook(crook); if (crook.type === 'boss') sfx('pop', { vol: 0.25, rate: 0.7 }); catchFx = { t: 0.45, k: crook }; sfx('tomahdys', { vol: 0.2, rate: 0.8 }); }
+      if (crook && catchCrook(crook)) { if (crook.type === 'boss') sfx('pop', { vol: 0.25, rate: 0.7 }); catchFx = { t: 0.45, k: crook }; sfx('tomahdys', { vol: 0.2, rate: 0.8 }); }
       else if (hit) pullQ = hit;
       else if (e.type === 'pointerup') { const r = aimRay(h, cam.yaw, cam.pitch); missFx = { t: 0.3, x: r.ox + r.dx * 15, y: r.oy + r.dy * 15, z: r.oz + r.dz * 15 }; }
       sfx('suhahdus', { vol: 0.22, rate: hit ? 1.6 : 1.9 });

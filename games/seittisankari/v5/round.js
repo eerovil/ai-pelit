@@ -367,7 +367,7 @@ function stepCrook(k, h, dt, r) {
     k.s = Math.min(k.len, k.s + k.v * dt);
     const f = k.len ? k.s / k.len : 1;
     k.x = k.from.x + dx * f; k.y = k.from.y + (k.to.y - k.from.y) * f; k.z = k.from.z + dz * f;
-    if (k.s >= k.len) heliLeg(k, r);
+    if (k.s >= k.len) { k.esc = false; heliLeg(k, r); }
   }
 }
 // The crook the aim would web: on the aim line within PULL_MAX, nearer than the building it hits
@@ -391,7 +391,8 @@ function aimCrook(h, yaw, pitch, crooks) {
 }
 function catchCrook(k, r) {
   if (!k || k.caught || k.type === 'apu' || (k.type === 'putoava' && !k.falling)) return false;
-  if (k.type === 'boss' && k.hp > 1) { k.hp--; k.hitT = 1.2; bossLeg(k, r || Math.random); return true; }
+  if (k.type === 'boss' && k.esc) return false;    // breaking free: no hit counts until its escape flight is over
+  if (k.type === 'boss' && k.hp > 1) { k.hp--; k.hitT = 1.2; k.esc = true; bossLeg(k, r || Math.random); return true; }
   if (k.type === 'boss') k.hp = 0;
   k.caught = true; k.ct = 0; return true;
 }
