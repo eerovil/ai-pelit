@@ -883,3 +883,17 @@ def test_a_caught_helicopter_over_a_street_lands_on_the_nearest_roof(site, conte
     assert r["at"] < 0.1 and r["y"] == r["h"] > 0          # set down on that roof
     assert r["lo"] >= 0                                    # never inside a building on the way
     assert page.errors == []
+
+
+def test_the_towers_turn_is_the_tower_even_from_far_away(site, context):
+    # Review on #563, spec D1: the fourth mission is the tower top, also when the car was caught
+    # more than 600 m from it (v3 gave a plain roof past 600 m).
+    page = open_game(site, context)
+    r = page.evaluate("(() => { const [w, r] = (" + AT + """)(2);
+      const t = roofTop(T_BOX), x = t.x > 0 ? -700 : 700, z = t.z > 0 ? -700 : 700;
+      Object.assign(w.hero, { x, y: 0, z, st: 'ground', vx: 0, vy: 0, vz: 0 });
+      w.crooks.forEach(catchCrook); stepRound(w, STEP, r);
+      return { kind: w.kind, tower: w.goal === T_BOX.id, d: Math.hypot(t.x - x, t.z - z) };
+    })()""")
+    assert r["kind"] == "torni" and r["tower"] and r["d"] > 600
+    assert page.errors == []

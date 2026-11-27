@@ -11,7 +11,6 @@ const LX = k => lotX(C0 + k), BX = (i, j) => boxAt(C0 + i, C0 + j);
 const T_BOX = boxAt(TOWER.i, TOWER.j);            // the tower, the city's tallest
 const START = { x: LX(2) + 20, z: LX(2) + 20 };   // a street crossing beside the tower
 const GOAL_NEAR = 120, GOAL_FAR = 300;            // how far the next roof is from the hero, m
-const TOWER_FAR = 600;                            // the tower is its turn's roof only when this near
 const KINDS = ['katto', 'rosvot', 'auto', 'torni', 'heli'];
 const kindFor = done => KINDS[((done | 0) % KINDS.length + KINDS.length) % KINDS.length];
 const isCrook = k => k === 'rosvot' || k === 'auto' || k === 'heli';
@@ -23,13 +22,13 @@ function newWorld() {
   return { t: 0, flag: null, goal: -1, gt: 0, done: 0, got: 0, kind: null, crooks: [], gone: null, goneT: 0,
     hero: newHero(START.x, 0, START.z, 0) };
 }
-// The next roof: the tower on its turn (when it is within TOWER_FAR), else a building of
+// The next roof: the tower on its turn however far (spec D1, review on #563), else a building of
 // 20–150 m 120–300 m from the hero, inside the city's edge. `r` is a random number source
 // (Math.random in play). Never the roof just reached, so one landing counts once.
 function pickTarget(w, r, tower) {
   const h = w.hero, far = b => { const t = roofTop(b); return Math.hypot(t.x - h.x, t.z - h.z); };
   // Not while the hero already stands on its top: a car caught from up there is no free tower.
-  if (tower && T_BOX.id !== w.goal && !onTop(h, T_BOX) && far(T_BOX) <= TOWER_FAR) return T_BOX.id;
+  if (tower && T_BOX.id !== w.goal && !onTop(h, T_BOX)) return T_BOX.id;
   const ok = [];
   let near = -1, nearD = Infinity;
   for (const b of CITY) {
