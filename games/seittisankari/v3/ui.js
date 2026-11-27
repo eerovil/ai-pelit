@@ -88,8 +88,11 @@ c.addEventListener('pointerdown', e => {
   e.preventDefault();
   try { c.setPointerCapture(e.pointerId); } catch (_) {}   // its lift comes here even off the canvas
   // With Seitti held, a second thumb on or beside it jumps.
-  const b = buttons(), dw = webPtr === null ? gapTo(b.web, e) : Infinity, dj = Math.min(gapTo(b.jump, e), webPtr === null ? Infinity : gapTo(b.web, e));
-  const dp = pullPtr === null ? gapTo(b.pull, e) : Infinity;
+  // In the stick's half only a button itself counts, not the 22 px around it (#562 review: Veto's
+  // margin took a thumb meant for the floating stick).
+  const left = e.clientX < W / 2, gap = bt => { const g = gapTo(bt, e); return left && g > 0 ? Infinity : g; };
+  const b = buttons(), dw = webPtr === null ? gap(b.web) : Infinity, dj = Math.min(gap(b.jump), webPtr === null ? Infinity : gap(b.web));
+  const dp = pullPtr === null ? gap(b.pull) : Infinity;
   if (Math.min(dw, dj, dp) < 22) {
     if (dp < dw && dp < dj) {
       pullPtr = { id: e.pointerId, x: e.clientX, y: e.clientY }; cam.manualT = 0;
@@ -103,7 +106,6 @@ c.addEventListener('pointerdown', e => {
     return;
   }
   // Left half: the stick; right half: the camera. A finger whose side is taken does the other job.
-  const left = e.clientX < W / 2;
   if ((left && !stick) || (!left && lookPtr && !stick)) stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
   else if (!lookPtr) lookPtr = { id: e.pointerId, x: e.clientX, y: e.clientY };
 });

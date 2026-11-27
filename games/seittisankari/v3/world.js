@@ -166,7 +166,8 @@ function aimPull(h, yaw, pitch) {
 // Where the hero ends: beside the wall, hands at the hit (a little under it), or on the roof.
 function pullSpot(p) {
   if (p.kind === 'roof') return { x: p.x, y: p.y, z: p.z };
-  return { x: p.x + p.nx * (R + 0.02), y: Math.max(0, p.y - 1.4), z: p.z + p.nz * (R + 0.02) };
+  // A hit low on a wall still ends on the wall: just above the street, not standing on it.
+  return { x: p.x + p.nx * (R + 0.02), y: Math.max(0.1, p.y - 1.4), z: p.z + p.nz * (R + 0.02) };
 }
 // Off the web with a jump: up-speed added, at least a plain jump's (#560).
 // Then a second before the next swing (Eero, #560): each jump off the web adds height, and

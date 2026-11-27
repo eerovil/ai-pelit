@@ -469,6 +469,38 @@ def test_holding_veto_aims_with_the_same_finger_and_lifting_it_shoots(site, cont
     assert page.errors == []
 
 
+def test_a_thumb_beside_veto_on_the_left_half_is_the_stick(site, context):
+    # #562 review: at 360 px Veto's 22 px margin reached into the stick's half and took the thumb.
+    page = open_game(site, context)
+    go(page)
+    b = page.evaluate("buttons()")
+    w = page.evaluate("W")
+    p = b["pull"]
+    x, y = p["x"] - p["r"] - 10, p["y"]                  # just outside Veto, in its old margin
+    assert x < w / 2
+    page.evaluate(TOUCH, ["pointerdown", 7, x, y])
+    assert page.evaluate("[pullPtr, !!stick && stick.id]") == [None, 7]
+    page.evaluate(TOUCH, ["pointerup", 7, x, y])
+    # Veto itself still answers on its left part, and its margin on the right half too.
+    page.evaluate(TOUCH, ["pointerdown", 8, p["x"] - p["r"] + 4, y])
+    assert page.evaluate("pullPtr && pullPtr.id") == 8
+    page.evaluate(TOUCH, ["pointerup", 8, 0, 0])
+    assert p["x"] > w / 2                                  # just above Veto, in the right half
+    page.evaluate(TOUCH, ["pointerdown", 9, p["x"], y - p["r"] - 10])
+    assert page.evaluate("pullPtr && pullPtr.id") == 9
+    assert page.errors == []
+
+
+def test_a_web_shot_low_on_a_wall_grabs_the_wall(site, context):
+    # #562 review: a hit under 1.4 m used to end standing on the street.
+    page = open_game(site, context)
+    r = page.evaluate("(() => {" + FRONT + PULL + """
+      h.x += 0; const hit = { x: h.x, y: 0.8, z: b.z0, kind: 'wall', box: b.id, nx: 0, nz: -1 };
+      return shoot(h, hit);
+    })()""")
+    assert r["st"] == "wall" and r["y"] > 0, r
+
+
 def test_a_missed_shot_does_nothing_and_the_hero_keeps_running(site, context):
     page = open_game(site, context)
     go(page)
