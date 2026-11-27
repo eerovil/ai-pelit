@@ -73,10 +73,10 @@ function restore(w, q) {
 
 // ---- The fingers ----
 // Left half: a floating stick. Right half: Seitti (held), Hyppy and Veto, and a drag anywhere
-// else turns the camera. Veto (#560) is held to aim: the same finger turns the camera, and lifting
+// else turns the camera, and so does sliding the held Seitti (#561). Veto (#560) is held to aim: the same finger turns the camera, and lifting
 // it shoots the web along the camera's centre line.
 const STICK = 52;
-let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null, aimTurn = null, catchFx = null;
+let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null, aimTurn = null, catchFx = null, webAt = null;
 function buttons() {
   const r = LAND ? 46 : 50, rj = LAND ? 34 : 38, rp = LAND ? 32 : 34;
   const web = { x: W - SAFE_R - r - (LAND ? 26 : 20), y: H - SAFE_B - r - (LAND ? 20 : 30), r };
@@ -110,7 +110,7 @@ c.addEventListener('pointerdown', e => {
       const h = world.hero;
       aimTurn = h.st === 'wall' ? { yaw: Math.atan2(h.nx, h.nz), pitch: 0 } : null;
     }
-    else if (dw <= dj) webPtr = e.pointerId;
+    else if (dw <= dj) { webPtr = e.pointerId; webAt = { x: e.clientX, y: e.clientY }; }
     else { jumpQ = true; jumpFlash = 0.15; }
     return;
   }
@@ -128,6 +128,11 @@ c.addEventListener('pointermove', e => {
     cam.yaw += dy; cam.pitch = clamp(cam.pitch + dp, PITCH_AIM, 1.1);
     if (aimTurn) { aimTurn.yaw += dy; aimTurn.pitch = clamp(aimTurn.pitch + dp, PITCH_AIM, 1.1); }   // the finger aims on top of the turn
     pullPtr.x = e.clientX; pullPtr.y = e.clientY; cam.manualT = 0;
+  } else if (webAt && e.pointerId === webPtr) {
+    // Sliding the held Seitti turns the camera like a drag, the web still held (Eero, #561).
+    cam.yaw -= (e.clientX - webAt.x) * 0.008;
+    cam.pitch = clamp(cam.pitch + (e.clientY - webAt.y) * 0.006, -0.35, 1.1);
+    webAt.x = e.clientX; webAt.y = e.clientY; cam.manualT = 0;
   } else if (lookPtr && e.pointerId === lookPtr.id) {
     cam.yaw -= (e.clientX - lookPtr.x) * 0.008;
     cam.pitch = clamp(cam.pitch + (e.clientY - lookPtr.y) * 0.006, -0.35, 1.1);
@@ -137,7 +142,7 @@ c.addEventListener('pointermove', e => {
 function lift(e) {
   if (stick && e.pointerId === stick.id) stick = null;
   if (lookPtr && e.pointerId === lookPtr.id) lookPtr = null;
-  if (e.pointerId === webPtr) webPtr = null;
+  if (e.pointerId === webPtr) { webPtr = null; webAt = null; }
   if (pullPtr && e.pointerId === pullPtr.id) {
     pullPtr = null;
     // Shoot: a robber in the aim is caught (v4, #561) and the hero stays; else a hit pulls the

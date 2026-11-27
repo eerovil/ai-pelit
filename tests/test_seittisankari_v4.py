@@ -482,6 +482,25 @@ def test_holding_veto_aims_with_the_same_finger_and_lifting_it_shoots(site, cont
     assert page.errors == []
 
 
+def test_sliding_the_held_seitti_turns_the_camera_and_keeps_the_web(site, context):
+    # Eero on #561: with Seitti held, moving the finger turns the camera, a bit like Veto.
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("() => { cam.yaw = 0; cam.pitch = 0.3; }")
+    b = page.evaluate("buttons()")
+    x, y = b["web"]["x"], b["web"]["y"]
+    page.evaluate(TOUCH, ["pointerdown", 6, x, y])
+    assert page.evaluate("webPtr") == 6
+    for k in range(1, 11):                                  # 100 px left and 50 px up
+        page.evaluate(TOUCH, ["pointermove", 6, x - 10 * k, y - 5 * k])
+    yaw, pitch = page.evaluate("[cam.yaw, cam.pitch]")
+    assert abs(yaw - 0.8) < 0.01 and abs(pitch - 0.0) < 0.01
+    assert page.evaluate("webPtr") == 6                     # the web is still held
+    page.evaluate(TOUCH, ["pointerup", 6, x - 100, y - 50])
+    assert page.evaluate("[webPtr, webAt]") == [None, None]
+    assert page.errors == []
+
+
 def test_a_thumb_beside_veto_on_the_left_half_is_the_stick(site, context):
     # #562 review: at 360 px Veto's 22 px margin reached into the stick's half and took the thumb.
     page = open_game(site, context)
