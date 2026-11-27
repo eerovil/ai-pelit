@@ -615,3 +615,86 @@ def test_the_hints_bring_a_lost_ship_back_on_its_way(site, context, trip, start)
     if start == 'out-past-earth':
         assert 'Kohti Maata' in r['words'], r
     assert page.errors == []
+
+
+# A player, not a robot (#548, v7): the stick follows the hint `delay` real seconds late (the
+# game's own slow motion counted), at `f` times the asked strength. Starts on the station's own
+# circle, the station `phi` radians away round it, or from any state given.
+FLY_LATE = r"""
+window.flyLate = function (opts) {
+  cancelAnimationFrame(frameId); frameId = 0;
+  for (const t of TRIPS) stars[t.id] = stars[t.id] || 1;
+  begin(freshFlight('asema')); cancelAnimationFrame(frameId); frameId = 0;
+  if (opts.phi !== undefined) {
+    const st = stationAt(ship.t), c = Math.cos(opts.phi), s = Math.sin(opts.phi);
+    Object.assign(ship, { landedOn: null, x: st.x * c - st.y * s, y: st.x * s + st.y * c, vx: st.vx * c - st.vy * s, vy: st.vx * s + st.vy * c });
+  } else Object.assign(ship, { landedOn: null }, opts.start);
+  const t0 = ship.t, q = [];
+  let real = 0, slowK = 1, push = null, turned = 0, stillSince = null, still = 0, first = null;
+  for (let i = 0; i < 120 * 900 && ship.phase === 'flight'; i++) {
+    if (i % 4 === 0) path = predictPath(ship); else carryPath(path, ship.t);
+    const h = hint(ship, path); currentHint = h;
+    if (!first) first = { word: h.word, wait: h.wait };
+    // One push toward the station keeps its direction from when the player starts it to its end
+    // (before that, the arrow may still follow a player slow to start, or a late let-go of the
+    // push before).
+    if (h.word === 'Kohti asemaa' && (push !== null || (approach && approach.pushed))) { if (push === null) push = h.dir; turned = Math.max(turned, Math.abs(wrap(h.dir - push))); }
+    else if (h.word !== 'Kohti asemaa') push = null;
+    // A wait about to end, far from the station, must end (the slow motion stays while it lasts).
+    const brief = h.word === 'Odota' && h.wait !== undefined && h.wait < 1 && stationRelative(ship).dist > STATION_SLOW;
+    if (brief) { if (stillSince === null) stillSince = ship.t; still = Math.max(still, ship.t - stillSince); } else stillSince = null;
+    const k = timeScale(h); slowK += (k - slowK) * (k < slowK ? 1 : 1 - Math.exp(-STEP / slowK * 5));
+    turnScale = 1 / slowK; real += STEP / slowK;
+    q.push({ real, a: h.dir, p: h.dir !== undefined ? Math.min(1, (h.power ?? 1) * opts.f) : 0 });
+    while (q.length > 1 && q[1].real <= real - opts.delay) q.shift();
+    const act = q[0].real <= real - opts.delay ? q[0] : null;
+    if (act && act.p > 0) { stick.angle = act.a; stick.power = act.p; } else stick.power = 0;
+    step(STEP);
+    if (ship.phase === 'flight' && goalMet(ship)) endFlight('ok', true);
+  }
+  stick.power = 0; turnScale = 1;
+  return { phase: ship.phase, reason: ship.reason, t: ship.t - t0, real, turned, still, first, fuel: fuelShare() };
+};
+"""
+
+
+@pytest.mark.parametrize('delay,f', [(0, 1), (0.3, 1), (0.5, 2), (0.5, 0.5), (0.3, 3)])
+def test_the_station_is_reached_from_its_own_orbit_by_a_late_or_rough_player(site, context, delay, f):
+    # The owner's report (#548): "Jos vaikka aloitat siitä että kiertorata on sama kuin asemalla,
+    # niin ohjeita seuraamalla et pääse perille".
+    page = open_game(site, context)
+    page.add_script_tag(content=FLY_LATE)
+    for phi in [-2.5, -1.5, -0.4, 0.4, 1.5, 2.3, 3.1]:
+        r = page.evaluate('o => flyLate(o)', {'phi': phi, 'delay': delay, 'f': f})
+        assert r['phase'] == 'done', (phi, r)
+        assert r['t'] < 600, (phi, r)
+        # "Kohti asemaa" is one push in one direction (v7, the owner: "On omituista ylipäätään jos
+        # kesken burnin joutuu vaihtamaan suuntaa").
+        assert r['turned'] < 0.01, (phi, r)
+        assert r['still'] < 3, (phi, r)
+    assert page.errors == []
+
+
+def test_passing_over_the_station_the_hints_wait_for_real_and_still_dock(site, context):
+    # The owner's flight (v7 prototype): 33 m from the station on an orbit 16-51 m above it, rising.
+    # "Odota" waited for the low point just passed, 0 s away, in slow motion that could not be
+    # skipped; before that "Kohti asemaa" had thrown the orbit 65 m up.
+    page = open_game(site, context)
+    page.add_script_tag(content=FLY_LATE)
+    start = page.evaluate("""() => {
+        const R = EARTH.radius, rp = 55.8 + R, ra = 91 + R, r = 70.4 + R, a = (rp + ra) / 2, T = 56.8;
+        const v = Math.sqrt(EARTH.mu * (2 / r - 1 / a)), vt = Math.sqrt(EARTH.mu * a * (1 - ((ra - rp) / (ra + rp)) ** 2)) / r;
+        const vr = Math.sqrt(Math.max(0, v * v - vt * vt)), st = stationAt(T);
+        let best = null;
+        for (let k = 0; k < 3600; k++) {
+            const th = k / 3600 * 2 * Math.PI, ux = Math.cos(th), uy = Math.sin(th), d = Math.hypot(st.x - ux * r, st.y - uy * r);
+            const way = st.x * st.vy - st.y * st.vx > 0 ? 1 : -1;
+            if (!best || Math.abs(d - 33) < best.e) best = { e: Math.abs(d - 33), x: ux * r, y: uy * r, vx: -uy * way * vt + ux * vr, vy: ux * way * vt + uy * vr };
+        }
+        return { t: T, x: best.x, y: best.y, vx: best.vx, vy: best.vy };
+    }""")
+    r = page.evaluate('o => flyLate(o)', {'start': start, 'delay': 0.3, 'f': 1})
+    assert r['first']['word'] != 'Odota' or r['first']['wait'] > 2, r
+    assert r['phase'] == 'done', r
+    assert r['turned'] < 0.01 and r['still'] < 3, r
+    assert page.errors == []

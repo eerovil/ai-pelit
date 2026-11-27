@@ -690,8 +690,11 @@ function stationHint(s, path) {
   if (hiOff > 6 && loOff > 6) {
     // As strong as the brake is big (v7: 0.3 m/s asked for at 0.3, let go of a little late, put
     // the low point under the ground).
-    if (o.alt < o.peri + 6) {
-      const gap = o.speed - apseSpeed(EARTH, o.r, STATION.r + 2);
+    // A brake under way goes on to its end, though it already moved the low point (v7: from a
+    // far round orbit each brake stopped at once, the next came half a round later, and the ship
+    // drifted into the Moon's pull).
+    const gap = o.speed - apseSpeed(EARTH, o.r, STATION.r + 2);
+    if ((o.alt < o.peri + 6 && gap > 0.05) || (currentWord === 'Jarruta' && gap > 0)) {
       return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: clamp(gap / 6, 0.05, 0.3), gap };
     }
     return stationWait(s, path, pathExtreme(path, false, true));
@@ -707,8 +710,12 @@ function stationHint(s, path) {
   const going = !!phaseBurn && phaseBurn.word === currentWord && s.t - phaseBurn.t < 0.5;
   const there = (high ? o.alt > o.apo - 4 : o.alt < o.peri + 4) || (o.closed && o.e < 0.05);
   const at = there || going ? { x: s.x, y: s.y, t: s.t } : end, plan = stationMeetings(o, high, at);
-  if (going && (!plan || plan.miss < STATION_MEET.end)) { phaseBurn = null; phaseEnd = s.t; }
-  if (!plan || plan.miss < (going ? STATION_MEET.end : STATION_MEET.start)) return stationWait(s, path, end, plan ? at.t + plan.when : undefined);
+  // A meeting counts only on an orbit of the kind they are planned on (v7: a brake from 540 m up
+  // stopped half way, at a far end that met the station by chance minutes later, and the ship
+  // waited until the Moon pulled it away).
+  const miss = plan && plan.other >= R + STATION_MEET.below - 1 && plan.other <= STATION.r + STATION_MEET.above + 1 ? plan.miss : Infinity;
+  if (going && (!plan || miss < STATION_MEET.end)) { phaseBurn = null; phaseEnd = s.t; }
+  if (!plan || miss < (going ? STATION_MEET.end : STATION_MEET.start)) return stationWait(s, path, end, plan ? at.t + plan.when : undefined);
   // Not straight after a burn, while the push is still being let go of (v7: a burn ended, and a
   // late let-go asked at once for one back the other way, and so on).
   // One burn at each pass (on a round orbit, each part of a round), unless the low point is too
