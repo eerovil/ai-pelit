@@ -22,7 +22,7 @@ const isCrook = k => k === 'rosvot' || k === 'auto' || k === 'heli' || k === 'pe
 const ROOFS_N = { pommit: 3, paketti: 2 };
 // The time limits of the story's later chapters, s (#565: at least twice a measured run, rule 9).
 // No clock on a getaway car: the test bot missed it in 2 of 5 runs within 120 s (#565).
-const LIMITS = { rosvot: 120, heli: 150, pelasta: 90, boss: 240, pakenevat: 150, pommit: 150 };
+const LIMITS = { rosvot: 120, heli: 150, pelasta: 90, boss: 240, pakenevat: 150, pommit: 150, putoava: 90, auto: 400 };
 // The mission now: in the story its chapter's step, else v4's cycle by the count.
 function missionFor(w) {
   if (w.story && typeof STORY !== 'undefined') {
@@ -292,9 +292,22 @@ function stepFaller(k, h, dt) {
 }
 // Varjo's helicopter: v4's helicopter, bigger, with three hits to take. After the first two it
 // breaks free and flies 150–250 m off at once.
+// Varjo's helicopter takes off from above the tower's top (BOSS_UP m over it) and flies its
+// first 150–250 m leg away at once, as after each hit.
+// Its legs start high over the tower, so each is checked at the height it flies at each point.
+const BOSS_UP = 30;
+function heliClearDown(x0, y0, z0, x1, y1, z1) {
+  const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 4);
+  for (let i = 0; i <= n; i++) {
+    const f = i / (n || 1);
+    if (supportAt(x0 + (x1 - x0) * f, z0 + (z1 - z0) * f, HELI_CLEAR) > y0 + (y1 - y0) * f - HELI_CLEAR) return false;
+  }
+  return true;
+}
 function newBoss(h, r) {
-  const k = newHeli(h, r);
+  const k = newHeli(h, r), t = CITY.find(b => b.tower);
   k.type = 'boss'; k.hp = BOSS_HITS; k.hitT = 0;
+  if (t) { const p = roofTop(t); k.x = p.x; k.y = t.h + BOSS_UP; k.z = p.z; bossLeg(k, r); }
   return k;
 }
 function bossLeg(k, r) {
@@ -303,7 +316,7 @@ function bossLeg(k, r) {
     const a = r() * TAU, d = 150 + r() * 100;
     const x = clamp(k.x + Math.sin(a) * d, -HELI_AREA, HELI_AREA), z = clamp(k.z + Math.cos(a) * d, -HELI_AREA, HELI_AREA);
     const y = HELI_LOW + r() * (HELI_HIGH - HELI_LOW);
-    if (Math.hypot(x - k.x, z - k.z) > 140 && heliClear(k.x, k.y, k.z, x, y, z)) k.to = { x, y, z };
+    if (Math.hypot(x - k.x, z - k.z) > 140 && heliClearDown(k.x, k.y, k.z, x, y, z)) k.to = { x, y, z };
   }
   if (!k.to) return heliLeg(k, r);
   k.yaw = Math.atan2(k.to.x - k.x, k.to.z - k.z);   // it turns away at once, so the flight starts now

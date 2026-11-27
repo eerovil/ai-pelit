@@ -78,7 +78,7 @@ def test_every_chapter_runs_its_missions_in_order_and_no_early_chapter_has_a_lim
     assert all(c["done"] and c["said"] and c["cuts"] for c in r)
     assert all(lim == 0 for c in r[:4] for lim in c["lims"])
     # Chapters 5–8: every crook or rescue mission has its limit, a roof none.
-    limits = {"rosvot": 120, "heli": 150, "pelasta": 90, "boss": 240, "pakenevat": 150, "pommit": 150}
+    limits = {"rosvot": 120, "heli": 150, "pelasta": 90, "boss": 240, "pakenevat": 150, "pommit": 150, "putoava": 90, "auto": 400}
     for c in r[4:]:
         assert c["lims"] == [limits.get(k, 0) for k in c["kinds"]]
 
@@ -210,6 +210,12 @@ def test_varjos_helicopter_takes_three_hits_and_breaks_free_after_each(site, con
       return out;
     })()""")
     assert r["type"] == "boss" and r["lim"] == 240
+    # It takes off from right above the tower's top, its first leg 150-250 m away.
+    starts = page.evaluate("""[1, 2, 3, 4, 5, 6, 7, 8].map(n => { const w = newWorld(); w.story = { ch: 7, step: 1 }; startMission(w, rng(n));
+      const k = w.crooks[0], t = CITY.find(b => b.tower), p = roofTop(t);
+      return { d: Math.hypot(k.x - p.x, k.z - p.z), up: k.y - t.h, leg: k.to && Math.hypot(k.to.x - k.x, k.to.z - k.z) }; })""")
+    for s in starts:
+        assert s["d"] < 1 and 20 <= s["up"] <= 40 and 140 <= s["leg"] <= 260, starts
     for h in r["hits"][:2]:
         assert not h["caught"] and not h["done"]
         assert h["to"] >= 140 and h["moved"] > 40          # it flies off at once
@@ -217,10 +223,11 @@ def test_varjos_helicopter_takes_three_hits_and_breaks_free_after_each(site, con
     assert r["hits"][2]["caught"] and r["hits"][2]["done"] and r["hits"][2]["chDone"]
 
 
-def test_a_mission_out_of_time_fails_and_starts_again_but_done_wins_the_same_step(site, context):
+@pytest.mark.parametrize("ch,step,kind,n", [(5, 0, "pakenevat", 3), (6, 1, "auto", 1), (4, 1, "putoava", 1)])
+def test_a_mission_out_of_time_fails_and_starts_again_but_done_wins_the_same_step(site, context, ch, step, kind, n):
     page = open_game(site, context)
     r = page.evaluate("""(finish => {
-      const w = newWorld(); w.story = { ch: 5, step: 0 }; startMission(w, rng(3));
+      const w = newWorld(); w.story = { ch: CH, step: STEP_I }; startMission(w, rng(3));
       w.gt = w.lim - STEP / 2; w.ct = 50;
       const fail = stepRound(w, STEP, rng(3));
       const after = { fail: w.fail && w.fail.kind, crooks: w.crooks.length };
@@ -231,12 +238,12 @@ def test_a_mission_out_of_time_fails_and_starts_again_but_done_wins_the_same_ste
       w.gt = w.lim - STEP / 2; finish(w);
       const both = stepRound(w, STEP, rng(5));
       return { fail, after, still, again, both, step: w.story.step };
-    })(""" + FINISH + ")")
-    assert r["fail"] == "fail" and r["after"] == {"fail": "pakenevat", "crooks": 0}
+    })""".replace("CH", str(ch)).replace("STEP_I", str(step)) + "(" + FINISH + ")")
+    assert r["fail"] == "fail" and r["after"] == {"fail": kind, "crooks": 0}
     assert r["still"] is False
-    assert r["again"]["kind"] == "pakenevat" and r["again"]["gt"] == 0 and r["again"]["crooks"] == 3 and r["again"]["fail"] is None
+    assert r["again"]["kind"] == kind and r["again"]["gt"] == 0 and r["again"]["crooks"] == n and r["again"]["fail"] is None
     assert r["again"]["ct"] > 50                               # the chapter's clock counts every try
-    assert r["both"] is True and r["step"] == 1
+    assert r["both"] is True and r["step"] == step + 1
 
 
 def test_out_of_time_shows_a_card_to_try_again(site, context):
@@ -355,8 +362,8 @@ BOT = """((ch, step, seed) => {
 })"""
 
 
-# The falling person (chapter 5's step 2) has no clock: he fails by himself when he reaches the street.
-@pytest.mark.parametrize("ch,step", [(4, 0), (4, 2), (5, 0), (5, 1), (6, 0), (6, 2), (7, 1)])
+# The falling person also fails by himself when he reaches the street (test_a_falling_person_...).
+@pytest.mark.parametrize("ch,step", [(4, 0), (4, 1), (4, 2), (5, 0), (5, 1), (6, 0), (6, 1), (6, 2), (7, 1)])
 def test_each_time_limit_is_at_least_twice_a_quick_players_time(site, context, ch, step):
     page = open_game(site, context)
     times = page.evaluate(f"[1, 2, 3, 4, 5].map(s => ({BOT})({ch}, {step}, s * 11))")
@@ -505,4 +512,18 @@ def test_a_row_of_roofs_and_other_chapters_keep_their_place_when_leaving(site, c
     page.evaluate("story.done = 2; story.best = {}; storySave()")
     saved = json.loads(page.evaluate(f"localStorage.getItem('{KEY}tarina')"))
     assert saved["done"] == 7 and saved["best"]["0"] == 50
+    # Two tabs taking turns: each saves only its own chapter's place.
+    page.evaluate("""(() => {
+      const t = JSON.parse(localStorage.getItem(KEY_T));
+      t.curs[2] = Object.assign({}, t.curs[2], { step: 1, ct: 77 });   // the other tab moved chapter 3 on
+      localStorage.setItem(KEY_T, JSON.stringify(t));
+      saveStoryRound();                                                   // this tab (chapter 7) saves
+    })()""".replace("KEY_T", f"'{KEY}tarina'"))
+    saved = json.loads(page.evaluate(f"localStorage.getItem('{KEY}tarina')"))
+    assert saved["curs"]["2"]["step"] == 1 and saved["curs"]["2"]["ct"] == 77 and saved["curs"]["6"]["seq"] == 1
+    # The other tab finishes chapter 3; this tab saving again does not bring its place back.
+    page.evaluate("""(() => { const t = JSON.parse(localStorage.getItem(KEY_T)); delete t.curs[2];
+      localStorage.setItem(KEY_T, JSON.stringify(t)); saveStoryRound(); })()""".replace("KEY_T", f"'{KEY}tarina'"))
+    saved = json.loads(page.evaluate(f"localStorage.getItem('{KEY}tarina')"))
+    assert "2" not in saved["curs"] and "6" in saved["curs"]
     assert page.errors == []

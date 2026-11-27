@@ -102,11 +102,16 @@ function storyLoad() {
   return { done: clamp(t.done | 0, 0, STORY.length), best: t.best && typeof t.best === 'object' ? t.best : {}, curs };
 }
 let story = storyLoad();
-// Saving merges with what is stored, so a second open tab cannot lose a chapter or a best time.
-function storySave() {
+// Saving merges with what is stored, so a second open tab cannot lose a chapter, a best time or
+// another chapter's place: only chapter `ch` (the one this tab just played, started or finished)
+// takes this tab's place; every other chapter keeps the stored one.
+function storySave(ch) {
   const t = storyLoad();
   story.done = Math.max(story.done, t.done);
   for (const k in t.best) if (!(story.best[k] <= t.best[k])) story.best[k] = t.best[k];
+  const curs = t.curs;
+  if (ch != null) { if (story.curs[ch]) curs[ch] = story.curs[ch]; else delete curs[ch]; }
+  story.curs = curs;
   save('tarina', story);
 }
 // The chapter now being played, and the hero's spot, as the round goes (every 2 s and on leaving).
@@ -116,7 +121,7 @@ function saveStoryRound() {
   // Each chapter keeps its own place, so starting another chapter never loses one half played.
   if (!w.chDone) story.curs[w.story.ch] = { step: w.story.step, gt: w.fail ? 0 : Math.round(w.gt * 10) / 10, ct: Math.round(w.ct * 10) / 10,
     g: w.goal, seq: w.fail ? 0 : w.seq, used: w.fail ? null : w.used, h: spot };
-  storySave();
+  storySave(w.story.ch);
   save('tarina-kierros', { h: spot });
 }
 
@@ -174,7 +179,7 @@ function playChapter(i) {
   }
   // A new start: the first chapter on the street by the tower, the others where the hero was.
   world = storyWorld(i, i ? load('tarina-kierros', null) : null);
-  story.curs[i] = { step: 0, gt: 0, ct: 0, g: -1 }; storySave();
+  story.curs[i] = { step: 0, gt: 0, ct: 0, g: -1 }; storySave(i);
   startMission(world);
   playCut('Luku ' + (i + 1) + ' · ' + STORY[i].name, STORY[i].intro, goPlay, { wide: true, go: 'Aloita ▶' });
 }
@@ -214,7 +219,7 @@ function storyRecord(w) {
   const i = w.story.ch, t = Math.round(w.ct * 10) / 10;
   const best = story.best[i], rec = !best || t < best;
   if (rec) story.best[i] = t;
-  story.done = Math.max(story.done, i + 1); delete story.curs[i]; storySave();
+  story.done = Math.max(story.done, i + 1); delete story.curs[i]; storySave(i);
   lastCh = i; w.endRes = { t, rec, best };
 }
 function storyEnd() {
