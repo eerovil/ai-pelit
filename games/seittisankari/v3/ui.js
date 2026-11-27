@@ -67,7 +67,7 @@ function restore(w, q) {
 // else turns the camera. Veto (#560) is held to aim: the same finger turns the camera, and lifting
 // it shoots the web along the camera's centre line.
 const STICK = 52;
-let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null;
+let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null, aimTurn = null;
 function buttons() {
   const r = LAND ? 46 : 50, rj = LAND ? 34 : 38, rp = LAND ? 32 : 34;
   const web = { x: W - SAFE_R - r - (LAND ? 26 : 20), y: H - SAFE_B - r - (LAND ? 20 : 30), r };
@@ -93,9 +93,10 @@ c.addEventListener('pointerdown', e => {
   if (Math.min(dw, dj, dp) < 22) {
     if (dp < dw && dp < dj) {
       pullPtr = { id: e.pointerId, x: e.clientX, y: e.clientY }; cam.manualT = 0;
-      // On a wall the aim starts straight back from it, level (Eero, #560).
+      // On a wall the aim turns straight back from it, level (Eero, #560): a quick swing of the
+      // camera, not a jump, so the player sees where it turned (stepCam).
       const h = world.hero;
-      if (h.st === 'wall') { cam.yaw = Math.atan2(h.nx, h.nz); cam.pitch = 0; }
+      aimTurn = h.st === 'wall' ? { yaw: Math.atan2(h.nx, h.nz), pitch: 0 } : null;
     }
     else if (dw <= dj) webPtr = e.pointerId;
     else { jumpQ = true; jumpFlash = 0.15; }
@@ -112,8 +113,9 @@ c.addEventListener('pointermove', e => {
     const dx = stick.x - stick.x0, dy = stick.y - stick.y0, d = Math.hypot(dx, dy);
     if (d > STICK * 1.6) { stick.x0 = stick.x - dx / d * STICK * 1.6; stick.y0 = stick.y - dy / d * STICK * 1.6; }
   } else if (pullPtr && e.pointerId === pullPtr.id) {
-    cam.yaw -= (e.clientX - pullPtr.x) * 0.008;
-    cam.pitch = clamp(cam.pitch + (e.clientY - pullPtr.y) * 0.006, PITCH_AIM, 1.1);
+    const dy = -(e.clientX - pullPtr.x) * 0.008, dp = (e.clientY - pullPtr.y) * 0.006;
+    cam.yaw += dy; cam.pitch = clamp(cam.pitch + dp, PITCH_AIM, 1.1);
+    if (aimTurn) { aimTurn.yaw += dy; aimTurn.pitch = clamp(aimTurn.pitch + dp, PITCH_AIM, 1.1); }   // the finger aims on top of the turn
     pullPtr.x = e.clientX; pullPtr.y = e.clientY; cam.manualT = 0;
   } else if (lookPtr && e.pointerId === lookPtr.id) {
     cam.yaw -= (e.clientX - lookPtr.x) * 0.008;
@@ -156,6 +158,11 @@ function input() {
 function angDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
 function stepCam(h, dt) {
   cam.manualT += dt;
+  if (aimTurn && pullPtr) {              // Veto on a wall: swing round in about 0.3 s
+    const k = Math.min(1, dt * 12), dYaw = angDiff(cam.yaw, aimTurn.yaw);
+    cam.yaw += dYaw * k; cam.pitch += (aimTurn.pitch - cam.pitch) * k;
+    if (Math.abs(dYaw) < 0.002 && Math.abs(aimTurn.pitch - cam.pitch) < 0.002) { cam.yaw = aimTurn.yaw; cam.pitch = aimTurn.pitch; aimTurn = null; }
+  } else aimTurn = null;
   if (pullPtr) cam.manualT = 0;          // aiming: the camera stays where the finger put it
   if (cam.manualT < 1.5) return;
   let want = null, rate = 0;
@@ -265,7 +272,7 @@ function drawControls(h) {
     cx.fillStyle = 'rgba(255,255,255,.6)'; cx.beginPath(); cx.arc(stick.x0 + ix * STICK, stick.y0 + iy * STICK, 20, 0, TAU); cx.fill();
   }
   const b = buttons();
-  const canWeb = !!aimNow || h.st === 'swing';   // the sky holds a web, except high over the roofs
+  const canWeb = (!!aimNow && !(h.webCd > 0)) || h.st === 'swing';   // the sky holds a web, except high over the roofs; not in the second after a jump off it
   cx.fillStyle = webPtr !== null ? 'rgba(255,255,255,.95)' : canWeb ? 'rgba(30,170,160,.88)' : 'rgba(60,80,90,.55)';
   cx.beginPath(); cx.arc(b.web.x, b.web.y, b.web.r, 0, TAU); cx.fill();
   cx.strokeStyle = 'rgba(255,255,255,.75)'; cx.lineWidth = 3; cx.stroke();

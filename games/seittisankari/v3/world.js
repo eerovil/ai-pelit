@@ -169,8 +169,11 @@ function pullSpot(p) {
   return { x: p.x + p.nx * (R + 0.02), y: Math.max(0, p.y - 1.4), z: p.z + p.nz * (R + 0.02) };
 }
 // Off the web with a jump: up-speed added, at least a plain jump's (#560).
+// Then a second before the next swing (Eero, #560): each jump off the web adds height, and
+// pressing again and again climbed to the sky.
+const WEB_CD = 1;
 function webJump(h) {
-  h.st = 'air'; h.anchor = null; h.vy = Math.max(h.vy + JUMP * 0.8, JUMP); h.jumped = true;
+  h.st = 'air'; h.anchor = null; h.vy = Math.max(h.vy + JUMP * 0.8, JUMP); h.jumped = true; h.webCd = WEB_CD;
 }
 function stepPull(h, inp, dt) {
   const p = h.pull, t = pullSpot(p);
@@ -204,6 +207,7 @@ function stepHero(h, inp, dt) {
   const mx = rx * inp.ix - fx * inp.iy, mz = rz * inp.ix - fz * inp.iy;   // wanted move, length ≤ 1
   const mm = Math.hypot(mx, mz);
   if (h.wallCd > 0) h.wallCd -= dt;
+  if (h.webCd > 0) h.webCd -= dt;
 
   // Veto shot: from any state, straight to the hit.
   if (inp.pull) {
@@ -217,7 +221,7 @@ function stepHero(h, inp, dt) {
   if (h.st === 'swing' && inp.jump) webJump(h);
 
   // Web pressed: start a swing (from any state) when there is a point to stick to.
-  if (inp.web && h.st !== 'swing' && !h.webbed) {
+  if (inp.web && h.st !== 'swing' && !h.webbed && !(h.webCd > 0)) {
     const a = aimAnchor(h, fx, fz);
     h.webbed = 1;
     if (a) {

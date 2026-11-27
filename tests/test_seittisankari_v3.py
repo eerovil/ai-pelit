@@ -465,8 +465,11 @@ def test_veto_on_a_wall_aims_straight_back_and_keeps_the_camera_out_of_the_build
       Object.assign(h, { x: (b.x0 + b.x1) / 2, y: 12, z: b.z0 - 0.4, vx: 0, vy: 0, vz: 0, st: 'wall', box: b, nx: 0, nz: -1, anchor: null });
       cam.yaw = 0.3; cam.pitch = 0.5; }""")
     b = page.evaluate("buttons()")
-    page.evaluate(TOUCH, ["pointerdown", 4, b["pull"]["x"], b["pull"]["y"]])
-    # Eero, #560: on a wall the aim starts straight back from it (the wall faces -z), level.
+    # Eero, #560: on a wall the aim turns straight back from it (the wall faces -z), level, and
+    # the camera swings there instead of jumping: read in the same task as the touch.
+    yaw0 = page.evaluate(f"(a) => {{ ({TOUCH})(a); return cam.yaw; }}", ["pointerdown", 4, b["pull"]["x"], b["pull"]["y"]])
+    assert abs(angdiff(yaw0, 3.141592653589793)) > 2          # not turned yet
+    page.wait_for_function("aimTurn === null", timeout=3000)
     yaw, pitch = page.evaluate("[cam.yaw, cam.pitch]")
     assert abs(angdiff(yaw, 3.141592653589793)) < 1e-6 and pitch == 0
     page.wait_for_timeout(800)
@@ -493,3 +496,27 @@ def test_letting_go_of_the_web_always_jumps(site, context):
     assert r["st0"] == "swing" and r["st1"] == "air" and r["jumped"]
     assert r["vy1"] >= r["jump"] - r["g"] * r["dt"] - 1e-6
     assert r["vy1"] > r["vy0"]
+
+
+def test_the_swing_web_waits_a_second_after_letting_go(site, context):
+    # Eero, #560: "sekunnin cooldown", so pressing Seitti again and again cannot climb to the sky.
+    page = open_game(site, context)
+    r = page.evaluate("""(() => {
+      const h = newHero(LX(2) + 20, 120, LX(2) + 20, 0); h.st = 'air';
+      const inp = web => ({ ix: 0, iy: 0, jump: false, web, yaw: 0 });
+      for (let i = 0; i < 30; i++) stepHero(h, inp(true), STEP);
+      stepHero(h, inp(false), STEP);                       // let go: a jump
+      const out = [];
+      let t = 0;
+      while (t < 1.3) {                                     // press every 0.1 s
+        stepHero(h, inp(true), STEP); out.push([Math.round(t * 1000), h.st]);
+        if (h.st === 'swing') break;
+        stepHero(h, inp(false), STEP);
+        for (let i = 0; i < 10; i++) stepHero(h, inp(false), STEP);
+        t += 12 * STEP;
+      }
+      return out;
+    })()""")
+    early = [st for ms, st in r if ms < 950]
+    assert early and all(st != "swing" for st in early), r
+    assert r[-1][1] == "swing" and r[-1][0] < 1150, r
