@@ -315,6 +315,7 @@ function stepCrook(k, h, dt, r) {
   if (k.hitT > 0) k.hitT -= dt;
   if (k.type === 'putoava') return stepFaller(k, h, dt);
   if (k.type === 'rosvo') {
+    if (k.cd > 0) k.cd -= dt;               // the rest after a leap runs out
     if (k.jump) return stepLeap(k, dt);       // mid-jump to the next roof, caught or not
     if (k.caught) return;
     if (k.flee && fleeFrom(k, h, r)) return;

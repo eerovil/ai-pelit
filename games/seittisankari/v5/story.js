@@ -97,16 +97,27 @@ const FAIL_SAY = {
 // ---- Progress ----
 function storyLoad() {
   const t = load('tarina', null) || {};
-  return { done: clamp(t.done | 0, 0, STORY.length), best: t.best && typeof t.best === 'object' ? t.best : {}, cur: t.cur && STORY[t.cur.ch] ? t.cur : null };
+  const curs = {};
+  if (t.curs && typeof t.curs === 'object') for (const k in t.curs) if (STORY[k] && t.curs[k]) curs[k] = t.curs[k];
+  return { done: clamp(t.done | 0, 0, STORY.length), best: t.best && typeof t.best === 'object' ? t.best : {}, curs };
 }
 let story = storyLoad();
-function storySave() { save('tarina', story); }
+// Saving merges with what is stored, so a second open tab cannot lose a chapter or a best time.
+function storySave() {
+  const t = storyLoad();
+  story.done = Math.max(story.done, t.done);
+  for (const k in t.best) if (!(story.best[k] <= t.best[k])) story.best[k] = t.best[k];
+  save('tarina', story);
+}
 // The chapter now being played, and the hero's spot, as the round goes (every 2 s and on leaving).
 function saveStoryRound() {
   const w = world, h = w.hero;
-  if (!w.chDone) story.cur = { ch: w.story.ch, step: w.story.step, gt: w.fail ? 0 : Math.round(w.gt * 10) / 10, ct: Math.round(w.ct * 10) / 10, g: w.goal };
+  const spot = { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz };
+  // Each chapter keeps its own place, so starting another chapter never loses one half played.
+  if (!w.chDone) story.curs[w.story.ch] = { step: w.story.step, gt: w.fail ? 0 : Math.round(w.gt * 10) / 10, ct: Math.round(w.ct * 10) / 10,
+    g: w.goal, seq: w.fail ? 0 : w.seq, used: w.fail ? null : w.used, h: spot };
   storySave();
-  save('tarina-kierros', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz } });
+  save('tarina-kierros', { h: spot });
 }
 
 // ---- The chapter list ----
@@ -116,7 +127,7 @@ function showChapters() {
   story = storyLoad();
   const list = $('chList'); list.textContent = '';
   STORY.forEach((c, i) => {
-    const b = document.createElement('button'), open = i <= story.done, now = story.cur && story.cur.ch === i;
+    const b = document.createElement('button'), open = i <= story.done, now = !!story.curs[i];
     b.className = 'ch' + (open && i === Math.min(story.done, STORY.length - 1) || now ? ' next' : '');
     b.disabled = !open;
     const best = story.best[i];
@@ -145,13 +156,17 @@ function goPlay() {
   saveRound();
 }
 function playChapter(i) {
-  const cur = story.cur;
-  if (cur && cur.ch === i) {
-    // Going on where the player left: the same step and clocks; a marked roof is kept, crooks start fresh.
-    world = storyWorld(i, load('tarina-kierros', null));
+  const cur = story.curs[i];
+  if (cur) {
+    // Going on where the player left: the same step and clocks; a marked roof (and how many of a
+    // row of roofs are done) is kept, crooks start fresh.
+    world = storyWorld(i, cur.h ? { h: cur.h } : load('tarina-kierros', null));
     world.story.step = clamp(cur.step | 0, 0, STORY[i].steps.length - 1); world.ct = Math.max(0, +cur.ct || 0);
     const m = missionFor(world);
-    if (!isCrook(m.k) && CITY[cur.g]) { world.kind = m.k; world.lim = m.lim; setGoal(world, cur.g); }
+    if (!isCrook(m.k) && CITY[cur.g]) {
+      world.kind = m.k; world.lim = m.lim; setGoal(world, cur.g);
+      if (ROOFS_N[m.k]) { world.seq = clamp(cur.seq | 0, 0, ROOFS_N[m.k] - 1); world.used = Array.isArray(cur.used) ? cur.used.filter(g => CITY[g]) : null; }
+    }
     else startMission(world);
     world.gt = Math.max(0, +cur.gt || 0);
     goPlay();
@@ -159,7 +174,7 @@ function playChapter(i) {
   }
   // A new start: the first chapter on the street by the tower, the others where the hero was.
   world = storyWorld(i, i ? load('tarina-kierros', null) : null);
-  story.cur = { ch: i, step: 0, gt: 0, ct: 0, g: -1 }; storySave();
+  story.curs[i] = { step: 0, gt: 0, ct: 0, g: -1 }; storySave();
   startMission(world);
   playCut('Luku ' + (i + 1) + ' · ' + STORY[i].name, STORY[i].intro, goPlay, { wide: true, go: 'Aloita ▶' });
 }
@@ -199,7 +214,7 @@ function storyRecord(w) {
   const i = w.story.ch, t = Math.round(w.ct * 10) / 10;
   const best = story.best[i], rec = !best || t < best;
   if (rec) story.best[i] = t;
-  story.done = Math.max(story.done, i + 1); story.cur = null; storySave();
+  story.done = Math.max(story.done, i + 1); delete story.curs[i]; storySave();
   lastCh = i; w.endRes = { t, rec, best };
 }
 function storyEnd() {

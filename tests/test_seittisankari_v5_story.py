@@ -121,7 +121,7 @@ def test_a_chapter_opens_with_its_cutscene_plays_to_the_end_and_unlocks_the_next
         page.wait_for_function(f"world.story.step === {step + 1} || world.chDone")
     # The chapter is saved as done at once, before its closing cutscene.
     saved = json.loads(page.evaluate(f"localStorage.getItem('{KEY}tarina')"))
-    assert saved["done"] == 1 and saved["cur"] is None and saved["best"]["0"] > 0
+    assert saved["done"] == 1 and "0" not in saved["curs"] and saved["best"]["0"] > 0
     page.wait_for_function("mode === 'cut'", timeout=6000)
     assert page.locator("#cutTitle").inner_text() == "Luku 1 valmis!"
     assert page.evaluate("cut.shots.map(s => s.k)") == ["roof"]
@@ -396,6 +396,21 @@ def test_leaping_robbers_jump_to_another_roof_when_the_hero_comes_near(site, con
     for c in leaps:
         assert 10 <= c["d"] <= 55 and c["dh"] <= 25 and c["moved"] and c["onRoof"] and c["arc"], c
         assert c["cd"] > 4 and c["caught"], c          # a rest after landing; a web still catches him
+    # After the rest runs out he leaps again.
+    again = page.evaluate("""(() => {
+      for (let s = 1; s <= 10; s++) {
+        const w = newWorld(); w.story = { ch: 1, step: 1 }; startMission(w, rng(s));
+        const k = w.crooks[0], h = w.hero;
+        let n = 0, was = false;
+        for (let i = 0; i < 1200 && n < 2; i++) {
+          h.x = k.x + 10; h.z = k.z; h.y = k.y; h.st = 'air';
+          stepRound(w, STEP, rng(s + i)); if (k.jump && !was) n++; was = !!k.jump;
+        }
+        if (n >= 2) return true;
+      }
+      return false;
+    })()""")
+    assert again
 
 
 def test_a_falling_person_falls_when_the_hero_comes_and_is_caught_or_lost(site, context):
@@ -457,3 +472,37 @@ def test_three_bombs_and_the_money_bag_are_roofs_in_a_row_under_one_clock(site, 
     assert bag["kind"] == "paketti" and bag["lim"] == 0
     assert len(bag["goals"]) == 2 and bag["goals"][0] != bag["goals"][1] and bag["got"] is True
     assert bag["parts"][0] == "paketti"
+
+
+def test_a_row_of_roofs_and_other_chapters_keep_their_place_when_leaving(site, context):
+    page = open_game(site, context)
+    page.evaluate(f"localStorage.setItem('{KEY}tarina', JSON.stringify({{done: 7, best: {{0: 50}}}}))")
+    page.click("#story")
+    page.click("#chList button >> nth=6")
+    page.click("#cutSkip")
+    page.wait_for_function("mode === 'play' && world.kind === 'pommit'")
+    # One bomb defused, then away.
+    g = page.evaluate("""(() => { const w = world, t = roofTop(CITY[w.goal]); w.hero.x = t.x; w.hero.y = t.y; w.hero.z = t.z; w.hero.st = 'ground';
+      const g0 = w.goal; stepRound(w, STEP, rng(1)); return [g0, w.goal, w.seq]; })()""")
+    assert g[2] == 1 and g[1] != g[0]
+    page.click("#quit")
+    # Another chapter started in between does not lose chapter 7.
+    page.click("#story")
+    page.click("#chList button >> nth=2")
+    page.click("#cutSkip")
+    page.wait_for_function("mode === 'play'")
+    page.click("#quit")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    page.click("#story")
+    rows = [t for t, _ in chapter_list(page)]
+    assert rows[6].endswith("· jatka") and rows[2].endswith("· jatka")
+    page.click("#chList button >> nth=6")
+    page.wait_for_function("mode === 'play'")
+    r = page.evaluate("[world.kind, world.seq, world.goal, world.used]")
+    assert r[0] == "pommit" and r[1] == 1 and r[2] == g[1] and r[3] == [g[0]]
+    # A stale copy saved by another tab keeps the best times and the chapters done.
+    page.evaluate("story.done = 2; story.best = {}; storySave()")
+    saved = json.loads(page.evaluate(f"localStorage.getItem('{KEY}tarina')"))
+    assert saved["done"] == 7 and saved["best"]["0"] == 50
+    assert page.errors == []
