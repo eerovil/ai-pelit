@@ -600,7 +600,7 @@ let approach = null;
 const APPROACH = { times: [4, 5, 6, 8, 10, 13, 16], arrive: 1.8, settle: 1.5, done: 0.03 };
 function approachHint(s) {
   const going = !!approach && currentWord === 'Kohti asemaa' && approach.tArr > s.t + 0.3
-    && (approach.pushed || s.t - approach.t0 < 0.4);
+    && (approach.pushed || s.t - approach.t0 < 0.4 || s.thrust > 0);
   if (going) {
     if (s.thrust > 0) approach.pushed = true;
     const p = interceptPush(s, approach.tArr);
@@ -623,7 +623,9 @@ function approachHint(s) {
   }
   if (!best) return { word: 'Odota', station: true };
   approach = { tArr: s.t + best.T, dir: angleOf(best.ux, best.uy), t0: s.t, pushed: false, ended: -Infinity };
-  if (best.dv < 0.15) { approach.ended = s.t; return { word: 'Odota', station: true, wait: best.T }; }
+  // Nothing to push only when the ship would also meet the station gently (a fast meeting with no
+  // push asked for would crash).
+  if (best.dv < 0.15 && best.arrive <= APPROACH.arrive) { approach.ended = s.t; return { word: 'Odota', station: true, wait: best.T }; }
   return { word: 'Kohti asemaa', dir: approach.dir, power: clamp(best.dv / 8, 0.05, 1), gap: best.dv, station: true };
 }
 // Falling round Earth from (x, y) at (vx, vy) for T game seconds; `each` sees every step and may

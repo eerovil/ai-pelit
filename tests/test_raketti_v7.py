@@ -698,3 +698,27 @@ def test_passing_over_the_station_the_hints_wait_for_real_and_still_dock(site, c
     assert r['phase'] == 'done', r
     assert r['turned'] < 0.01 and r['still'] < 3, r
     assert page.errors == []
+
+
+def test_a_push_started_just_as_the_aim_would_be_redone_is_kept(site, context):
+    # Review of v7: a push begun in the frame the 0.4 s wait for it ran out showed "Odota" until the
+    # player let go. Any push on the shown arrow is the one asked for, however late it starts.
+    page = open_game(site, context)
+    r = page.evaluate("""() => {
+        cancelAnimationFrame(frameId); frameId = 0;
+        begin(freshFlight('asema')); cancelAnimationFrame(frameId); frameId = 0;
+        const st = stationAt(ship.t), phi = 0.25, c = Math.cos(phi), s = Math.sin(phi);
+        Object.assign(ship, { landedOn: null, x: st.x * c - st.y * s, y: st.x * s + st.y * c, vx: st.vx * c - st.vy * s, vy: st.vx * s + st.vy * c });
+        path = predictPath(ship);
+        const h0 = hint(ship, path); currentHint = h0;
+        stick.power = 0;
+        while (ship.t - approach.t0 < 0.4 + STEP / 2) step(STEP);
+        ship.angle = h0.dir; stick.angle = h0.dir; stick.power = 1; step(STEP);
+        const h1 = hint(ship, path);
+        stick.power = 0;
+        return { w0: h0.word, d0: h0.dir, w1: h1.word, d1: h1.dir, pushed: approach.pushed, thrust: ship.thrust };
+    }""")
+    assert r['w0'] == 'Kohti asemaa', r
+    assert r['thrust'] > 0, r
+    assert r['w1'] == 'Kohti asemaa' and r['d1'] == r['d0'] and r['pushed'], r
+    assert page.errors == []

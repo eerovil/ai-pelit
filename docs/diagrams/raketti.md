@@ -1,4 +1,4 @@
-# Raketti: neljätoista matkaa, Kuun ja Marsin tukikohdat (v7)
+# Raketti: neljätoista matkaa, Kuun ja Marsin tukikohdat (v6)
 
 Pelaaja valitsee matkan valikosta ja lentää yhdellä sormella: veto näyttää suunnan ja pituus tehon. Vihje ruudun alalaidassa kertoo seuraavan liikkeen, ja odotuksen voi kelata napautuksella. Kolme matkaa rakentavat Kuun tukikohdan osa kerrallaan, ja valmis tukikohta tankkaa Mars-matkan aluksen. Kolme seuraavaa rakentavat Jättiraketilla Marsin tukikohdan, ja valmis Marsin tukikohta tankkaa matkan Marsista kotiin. Onnistunut matka antaa 1–3 tähteä ja avaa seuraavan.
 
