@@ -94,6 +94,10 @@ the station or the Moon, and a push so hard the ship flew off left the hint sayi
 - On the way to the station, an orbit at its height that goes round as fast as it (so the two never
   meet): "Jarruta" at the high point, to a low point that brings the ship back there a whole number
   of rounds on as the station arrives, as the Moon trips already did.
+- Within 30 m of the station (v7, #548): one push, "Kohti asemaa", aimed so that the ship then
+  coasts under gravity into the station's middle in 4 to 16 s. Its direction stays the same for the
+  whole push, and its strength follows what is left of it. Then "Odota" with the real wait until it
+  docks. A late or too strong push gets a short pause and a new aim, never a turn mid-push.
 - Low over the Moon and already slow, with the low point under the goal: "Sivulle" at full push,
   not a brake that only hovers until the fuel is gone.
 
