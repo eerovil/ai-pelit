@@ -586,7 +586,13 @@ function stationHint(s, path) {
   }
   const o = orbitAround(EARTH, s), st = stationAt(s.t), side = sideOf(o);
   if (o.apo + EARTH.radius < STATION.r - 2) {
+    // Just under the station's height, both go round about as fast, so the moment for a timed
+    // climb can be minutes away and drifts (v7: "Odota" for ever, an orbit a few metres under the
+    // station's): climb now, and the meeting is lined up from up there.
+    const near = o.apo + EARTH.radius > STATION.r - 14;
     const wait = ((aheadOf(st, s, side) - transferLead(o.r, STATION.r, STATION.n)) % TAU + TAU) % TAU;
+    if (near && (o.alt < o.peri + 4 || currentWord === 'Kiihdytä' || o.e < 0.05)) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.15, gap: STATION.r - 2 - (o.apo + EARTH.radius), metres: true };
+    if (near) return { word: 'Odota', station: true, mark: pathExtreme(path, false) };
     if (wait < 0.12 || s.thrust > 0) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.3, gap: apseSpeed(EARTH, o.r, STATION.r - 2) - o.speed };
     return { word: 'Odota', station: true, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - STATION.n) };
   }
