@@ -16,6 +16,13 @@
       "note": "Tehtäviä kaupungissa: mene merkitylle katolle, nuoli näyttää suunnan, ja joka viides kohde on tornin huippu.",
       "request": "Tähän sitten jotain tehtäviä. Eli käytännössä \"mene tänne\". Ja näkyy nuoli minne pitää menä",
       "issue": "eerovil/ai-pelit#529"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-27",
+      "note": "Vetoseitti: pidä Veto pohjassa, tähtää ja päästä irti, niin seitti vetää sinut seinään tai katolle, myös ilmasta; seitistä irti päästessä sankari hyppää voltilla, vauhti jatkuu seitistä toiseen, ja hypyt ovat kolme kertaa korkeampia.",
+      "request": "Seittisankari peliin uusi ominaisuus, että voit... Tähdätään ja ampua seittiä johonkin kohtaan. Jos ammut seinään, niin se sitten vetää sen hahmon siihen seinään. Ja tehdään silleen, että myös ilmassa voi ampua tehdä sitten. — Lisätään myös että voi hypätä kun roikkuu seitissä. — Yleinen hyppykorkeus kolme kertaa korkeampi. — Aina kun päästään irti seitistä, se hyppää automaattisesti ja tekee takaperin voltin. — Kun käyttää vetoa seinässä kiipeillessä, se suuntaa oletuksella suoraan taaksepäin. — Vedon kamera liikkuu seinässä pehmeästi, ei heti. — Roikkumisseittiin noin sekunnin cooldown. — Seitistä laskeutuessa liikeenergia säilyy hetken maassa, ja heti hypätessä se säilyy ilmassa. — Uusi seitti pitää edellisen swingin liikeenergian (momentumi).",
+      "issue": "eerovil/ai-pelit#560"
     }
   ]
 }
