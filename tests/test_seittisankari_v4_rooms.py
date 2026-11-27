@@ -1,4 +1,4 @@
-"""Seittisankari v2 with friends (#529): the host runs the round, each phone moves its own hero.
+"""Seittisankari v3 with friends (#529, #560): the host runs the round, each phone moves its own hero.
 The race is to a random building's roof (Eero's choice), everyone from the same spot; the host
 decides who stood on it first."""
 import json
@@ -9,7 +9,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/seittisankari/v2/"
+URL = "games/seittisankari/v4/"
 READY = "mode === 'netplay' && net && net.ready && world && world.hero"
 ON_ROOF = """() => { const b = goalBox(), t = roofTop(b), h = world.hero;
   Object.assign(h, { x: t.x, y: b.h, z: t.z, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null }); }"""
@@ -122,6 +122,7 @@ def test_the_free_mode_has_no_goal_and_starts_by_the_tower(phone):
     for p in (host, guest):
         assert p.evaluate("net.mode") == "vapaa"
         assert p.evaluate("world.flag") is None and p.evaluate("goalBox()") is None
+        assert not p.evaluate("world.crooks && world.crooks.length")   # robber missions are solo (v4, #561)
         assert p.evaluate("Math.hypot(world.hero.x - roofTop(T_BOX).x, world.hero.z - roofTop(T_BOX).z)") < 60   # 30 m out, then onto the street
     assert host.errors == [] and guest.errors == []
 
@@ -155,3 +156,30 @@ def test_touches_during_a_pause_do_nothing_when_it_ends(phone):
       { pointerId: 3, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))""", [b["jump"]["x"], b["jump"]["y"]])
     assert host.evaluate("[jumpQ, webPtr, stick]") == [False, None, None]
     assert host.errors == []
+
+
+def test_the_others_see_a_pulling_heros_web(phone):
+    # Veto (#560): a pull sends its state and its web's end like a swing does.
+    host, guest = room(phone, 2)
+    start([host, guest])
+    guest.evaluate("""() => { const h = world.hero;
+      h.st = 'pull'; h.pull = { x: h.x, y: h.y + 300, z: h.z, kind: 'roof', box: -1, nx: 0, nz: 0 }; h.pullT = 0;
+      h.anchor = { x: h.x, y: h.y + 300, z: h.z, box: -1 }; }""")
+    host.wait_for_function("""net.players.some(p => p !== net.me && p.st === 'pull' && p.a && p.a.y > 100)""", timeout=8000)
+    assert host.errors == [] and guest.errors == []
+
+
+def test_a_room_draws_the_veto_crosshair_and_hint(phone):
+    # Helper check on #562: the room's screen drew neither, and the hint was marked seen unseen.
+    host, guest = room(phone, 2)
+    start([host, guest])
+    r = guest.evaluate("""() => {
+      const calls = { aim: 0, hint: 0 }, a = drawAim, d = drawHints3;
+      drawAim = h => { calls.aim++; return a(h); }; drawHints3 = () => { calls.hint++; return d(); };
+      hintT = 99; hint3T = 0;
+      drawNetHUD(world);
+      drawAim = a; drawHints3 = d;
+      return calls;
+    }""")
+    assert r == {"aim": 1, "hint": 1}
+    assert host.errors == [] and guest.errors == []

@@ -150,15 +150,22 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     }
 
     // ---- The hero (and friends' heroes): hoodie, mask, white gloves; built once per colour ----
-    function makeHero(col) {
+    // A robber (v4, #561) is the same body in a striped shirt, a face with a black eye mask and a beanie.
+    function makeHero(col, robber) {
       const g = new T.Group(), body = new T.Group(); g.add(body);
       const P = {};
       part(body, box, col, 0, 1.12, 0, 0.5, 0.62, 0.3);
       part(body, box, '#26324a', 0, 0.86, 0, 0.46, 0.14, 0.28);             // belt and hips
-      part(body, ball, col, 0, 1.48, -0.1, 0.24, 0.12, 0.16);               // hood behind the head
-      part(body, ball, '#1b1f2e', 0, 1.56, 0, 0.2, 0.22, 0.2);               // masked head
-      part(body, ball, '#ffffff', -0.08, 1.6, 0.16, 0.06, 0.04, 0.03);       // mask eyes
-      part(body, ball, '#ffffff', 0.08, 1.6, 0.16, 0.06, 0.04, 0.03);
+      if (robber) {
+        part(body, ball, '#e2b48c', 0, 1.56, 0, 0.19, 0.21, 0.19);           // face
+        part(body, box, '#111111', 0, 1.6, 0.06, 0.4, 0.07, 0.3);             // eye mask
+        part(body, ball, '#222222', 0, 1.68, 0, 0.2, 0.12, 0.2);              // beanie
+      } else {
+        part(body, ball, col, 0, 1.48, -0.1, 0.24, 0.12, 0.16);             // hood behind the head
+        part(body, ball, '#1b1f2e', 0, 1.56, 0, 0.2, 0.22, 0.2);             // masked head
+        part(body, ball, '#ffffff', -0.08, 1.6, 0.16, 0.06, 0.04, 0.03);     // mask eyes
+        part(body, ball, '#ffffff', 0.08, 1.6, 0.16, 0.06, 0.04, 0.03);
+      }
       // Joints: shoulder → elbow → glove, hip → knee → shoe. Each is a group turned by the pose.
       const joint = (par, x, y) => { const j = new T.Group(); j.position.set(x, y, 0); par.add(j); return j; };
       for (const [k, x] of [['L', -0.33], ['R', 0.33]]) {
@@ -183,6 +190,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     // The pose: a target angle (x, y, z) for each joint; the joints turn toward it, so a change of
     // state (a web caught, a wall grabbed) blends in a moment instead of snapping.
     // Signs: a joint's +x turns its limb backward; a leg forward and up is -x, a knee bends with +x.
+    const FLIP_T = 0.7;
     function poseHero(m, h, dt) {
       m.g.visible = true;
       m.g.position.set(h.x, h.y, h.z);
@@ -190,7 +198,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       const P = m.P, J = m.tgt;
       const set = (k, x, y, z) => { J[k] = [x, y || 0, z || 0]; };
       let bodyX = 0, bodyZ = 0, bodyY = 0, bodyPz = 0, rate = 12;
-      if (h.st === 'swing' && h.anchor) {
+      if ((h.st === 'swing' || h.st === 'pull') && h.anchor) {
         // Along the rope, the web hand up to it, legs pulled up under the body (Eero, #529).
         tmpA.set(h.anchor.x - h.x, h.anchor.y - h.y - 1, h.anchor.z - h.z).normalize();
         tmpB.set(h.vx, 0, h.vz); if (tmpB.lengthSq() < 0.01) tmpB.set(Math.sin(h.yaw), 0, Math.cos(h.yaw));
@@ -243,20 +251,39 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
           bodyX = clamp(-h.vy / 40, -0.5, 0.5);
         }
       }
+      // Let go of the web: a backflip with the jump (Eero, #560). Read from the state change alone,
+      // so friends' heroes flip on every phone too.
+      if ((m.lastSt === 'swing' || m.lastSt === 'pull') && h.st === 'air') m.flip = 0;   // a jump off a Veto pull too
+      if (h.st !== 'air') m.flip = -1;
+      m.lastSt = h.st;
+      const flipping = m.flip >= 0;
+      if (flipping) {                         // tucked: knees to the chest, arms round the shins
+        set('legL', -1.6, 0, -0.1); set('kneeL', 2.3); set('legR', -1.6, 0, 0.1); set('kneeR', 2.3);
+        set('armL', -1.2, 0, -0.2); set('elbL', -0.8); set('armR', -1.2, 0, 0.2); set('elbR', -0.8);
+        rate = 20;
+      }
       const f = Math.min(1, dt * rate);
       for (const k of JOINTS) {
         const t = J[k] || [0, 0, 0], r = P[k].rotation;
         r.set(r.x + (t[0] - r.x) * f, r.y + (t[1] - r.y) * f, r.z + (t[2] - r.z) * f);
       }
       const br = m.body.rotation, bp = m.body.position;
-      br.set(br.x + (bodyX - br.x) * f, 0, br.z + (bodyZ - br.z) * f);
-      bp.set(0, bp.y + (bodyY - bp.y) * f, bp.z + (bodyPz - bp.z) * f);
+      // The body's own pose blends in m.b (the flip is laid on top, so it never blends away).
+      const B = m.b || (m.b = { x: 0, z: 0, py: 0, pz: 0 });
+      B.x += (bodyX - B.x) * f; B.z += (bodyZ - B.z) * f; B.py += (bodyY - B.py) * f; B.pz += (bodyPz - B.pz) * f;
+      br.set(B.x, 0, B.z); bp.set(0, B.py, B.pz);
+      if (flipping) {
+        m.flip += dt;
+        const p = Math.min(1, m.flip / FLIP_T), e = p * p * (3 - 2 * p), a = -TAU * e, c = 0.9;   // round the hips, head back first
+        br.x += a; bp.y += c - c * Math.cos(a); bp.z -= c * Math.sin(a);
+        if (p >= 1) m.flip = -1;
+      }
       // Shadow on whatever is under the hero.
       const s = supportAt(h.x, h.z, 0);
       m.shadow.visible = h.st !== 'wall';
       m.shadow.position.set(h.x, s + 0.05, h.z);
       const hgt = h.y - s; m.shadow.scale.setScalar(clamp(1 - hgt / 40, 0.3, 1)); m.shadow.material.opacity = clamp(0.35 - hgt / 120, 0.08, 0.35);
-      m.web.visible = h.st === 'swing' && !!h.anchor;
+      m.web.visible = (h.st === 'swing' || h.st === 'pull') && !!h.anchor;
       if (m.web.visible) {
         const p = m.web.geometry.attributes.position;
         // The web leaves the hero's right glove (Eero, #529).
@@ -271,18 +298,93 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     const beam = new T.Mesh(new T.CylinderGeometry(2.5, 2.5, 400, 16, 1, true), new T.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.35, depthWrite: false, side: T.DoubleSide, fog: false }));
     beam.position.y = 200; flag.add(beam);
 
+    // ---- The crooks (v4, #561): robbers, a getaway car and a getaway helicopter ----
+    const stripes = new T.MeshStandardMaterial({ roughness: 0.8, map: canvasTex(16, 32, (g, w, h) => {
+      for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#f2f2f2' : '#1c1c1c'; g.fillRect(0, k * h / 8, w, h / 8); }
+    }) });
+    const webM = mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.25 });
+    // A red light over each car or helicopter still at large, seen from across the city.
+    const crookBeam = () => new T.Mesh(new T.CylinderGeometry(1.2, 1.2, 300, 12, 1, true), new T.MeshBasicMaterial({ color: '#ff4d4d', transparent: true, opacity: 0.3, depthWrite: false, side: T.DoubleSide, fog: false }));
+    function makeCar() {
+      const g = new T.Group();
+      part(g, box, '#d32f2f', 0, 0.7, 0, 1.9, 0.7, 4.4);
+      part(g, box, '#28323e', 0, 1.3, -0.3, 1.6, 0.55, 2.2);
+      part(g, box, '#ffef9a', 0.6, 0.75, 2.21, 0.35, 0.18, 0.02, { emissive: '#ffe066', emissiveIntensity: 0.8 });
+      part(g, box, '#ffef9a', -0.6, 0.75, 2.21, 0.35, 0.18, 0.02, { emissive: '#ffe066', emissiveIntensity: 0.8 });
+      for (const [x, z] of [[-0.95, 1.4], [0.95, 1.4], [-0.95, -1.4], [0.95, -1.4]]) {
+        const wh = part(g, cyl, '#151515', x, 0.38, z, 0.38, 0.28, 0.38); wh.rotation.z = Math.PI / 2;
+      }
+      const web = new T.Group(); g.add(web);   // strands over the car once it is caught
+      for (const z of [-1.4, 0, 1.4]) part(web, box, webM, 0, 1.0, z, 2.1, 1.3, 0.12);
+      part(web, box, webM, 0, 1.62, -0.3, 0.12, 0.06, 4.2);
+      const beam = crookBeam(); beam.position.y = 150; g.add(beam);
+      return { g, web, beam };
+    }
+    function makeHeli() {
+      const g = new T.Group();
+      part(g, ball, '#3b4049', 0, 1.5, 0.4, 1.5, 1.4, 2.6);
+      part(g, ball, '#9fd0ff', 0, 1.8, 2.0, 1.0, 0.8, 1.0, { roughness: 0.2 });
+      part(g, box, '#3b4049', 0, 1.8, -3.6, 0.35, 0.35, 4);
+      part(g, box, '#3b4049', 0, 2.4, -5.4, 0.1, 1.2, 0.8);
+      for (const x of [-1.1, 1.1]) part(g, box, '#222', x, 0.1, 0.4, 0.12, 0.12, 4);
+      const rotor = new T.Group(); rotor.position.set(0, 3.1, 0.4); g.add(rotor);
+      part(rotor, box, '#1a1a1a', 0, 0, 0, 10, 0.06, 0.35); part(rotor, box, '#1a1a1a', 0, 0, 0, 0.35, 0.06, 10);
+      part(g, cyl, '#1a1a1a', 0, 2.8, 0.4, 0.15, 0.6, 0.15);
+      const tail = new T.Group(); tail.position.set(0.25, 2.4, -5.5); g.add(tail);
+      part(tail, box, '#1a1a1a', 0, 0, 0, 0.05, 1.6, 0.18);
+      const web = new T.Group(); g.add(web);
+      for (const z of [-1, 0.4, 1.8]) part(web, box, webM, 0, 1.5, z, 3.2, 3.0, 0.15);
+      const beam = crookBeam(); beam.position.y = 150; g.add(beam);
+      return { g, rotor, tail, web, beam };
+    }
+    const crookM = new Map();                   // crook id → its meshes
+    function cocoon() { const m = part(scene, ball, webM, 0, 0, 0, 0.42, 0.95, 0.42); m.visible = false; return m; }
+    function drawCrooks(list, hero, dt) {
+      const seen = new Set();
+      for (const k of list) {
+        let m = crookM.get(k.id);
+        if (!m) {
+          if (k.type === 'rosvo') { m = makeHero(stripes, true); m.cocoon = cocoon(); }
+          else { m = k.type === 'auto' ? makeCar() : makeHeli(); scene.add(m.g); }
+          crookM.set(k.id, m);
+        }
+        seen.add(k.id);
+        if (k.type === 'rosvo') {
+          poseHero(m, { x: k.x, y: k.y, z: k.z, vx: k.caught ? 0 : k.vx, vy: 0, vz: k.caught ? 0 : k.vz, st: 'ground', yaw: k.yaw, anchor: null }, dt);
+          m.cocoon.visible = k.caught; m.cocoon.position.set(k.x, k.y + 0.95, k.z);
+        } else {
+          m.g.position.set(k.x, k.y, k.z); m.g.rotation.y = k.yaw;
+          // The light fades out close by, where it would only hide the view (seen at 360 × 740).
+          const near = hero ? Math.hypot(k.x - hero.x, k.z - hero.z) : 999;
+          m.web.visible = k.caught; m.beam.visible = !k.caught && near > 30;
+          m.beam.material.opacity = 0.3 * clamp((near - 30) / 60, 0, 1);
+          if (m.rotor) { const spin = k.caught ? Math.max(0, 1 - k.ct / 3) : 1; m.rotor.rotation.y += dt * 28 * spin; m.tail.rotation.x += dt * 40 * spin; }
+        }
+      }
+      for (const [id, m] of crookM) if (!seen.has(id)) {
+        scene.remove(m.g); if (m.shadow) scene.remove(m.shadow); if (m.web && m.web.isLine) scene.remove(m.web); if (m.cocoon) scene.remove(m.cocoon);
+        // Free what each crook made for itself (the shared parts stay): a long session must not fill the phone.
+        for (const o of [m.beam, m.shadow, m.web && m.web.isLine ? m.web : null]) if (o) { o.geometry.dispose(); o.material.dispose(); }
+        crookM.delete(id);
+      }
+    }
+
     // ---- The camera: behind the hero, kept out of the buildings ----
     const camPos = new T.Vector3(), look = new T.Vector3();
-    const inside = (x, y, z) => y < 0.3 || eachNear(x, z, 0.3, b => x > b.x0 - 0.3 && x < b.x1 + 0.3 && z > b.z0 - 0.3 && z < b.z1 + 0.3 && y < b.h + 0.3);
-    let camDist = 7;
-    function place(h, cv, dt) {
-      const wantD = h.st === 'wall' ? 8.5 : h.st === 'swing' ? 9 : 7;
-      camDist += (wantD - camDist) * Math.min(1, dt * 3);
+    const inside = (x, y, z) => insideCity(x, y, z, 0.3);
+    let camDist = 7, aimK = 0;
+    // Aiming with Veto (#560): closer, and over the right shoulder, so the crosshair is clear.
+    function place(h, cv, dt, aiming) {
+      aimK += ((aiming ? 1 : 0) - aimK) * Math.min(1, dt * 10);
+      const wantD = aiming ? 4.5 : h.st === 'wall' ? 8.5 : h.st === 'swing' || h.st === 'pull' ? 9 : 7;
+      camDist += (wantD - camDist) * Math.min(1, dt * (aiming ? 8 : 3));
       const p = cv.pitch, cp = Math.cos(p);
-      look.set(h.x, h.y + 1.5, h.z);
+      const e = aimEye(h, cv.yaw, aimK);
+      look.set(e.x, h.y + 1.5, e.z);
       let d = camDist;
       const dx = -Math.sin(cv.yaw) * cp, dy = Math.sin(p), dz = -Math.cos(cv.yaw) * cp;
-      for (let s = 0.6; s <= camDist; s += 0.3) if (inside(look.x + dx * s, look.y + dy * s, look.z + dz * s)) { d = Math.max(0.6, s - 0.4); break; }
+      // Stop in front of a wall, not in it: from close by, in small steps (#560: aiming on a wall).
+      for (let s = 0.2; s <= camDist; s += 0.2) if (inside(look.x + dx * s, look.y + dy * s, look.z + dz * s)) { d = Math.max(0.1, s - 0.2); break; }
       camPos.set(look.x + dx * d, look.y + dy * d, look.z + dz * d);
       cam.position.copy(camPos); cam.lookAt(look.x, look.y + 0.4, look.z);
     }
@@ -293,6 +395,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       rd.setSize(w, h, false); cam.aspect = w / h; cam.fov = w > h ? 62 : 72; cam.updateProjectionMatrix();
     }
     L3D.resize = resize; resize();
+    L3D.camAt = () => [camPos.x, camPos.y, camPos.z];   // for the tests
     const pv = new T.Vector3();
     L3D.project = (x, y, z) => {
       pv.set(x, y, z).project(cam);
@@ -310,8 +413,9 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       for (const [id, m] of heroes) if (!seen.has(id)) { m.g.visible = false; m.shadow.visible = false; m.web.visible = false; }
       const w = s.w, now = performance.now() / 1000;
       flag.visible = !!(w && w.flag); if (flag.visible) { flag.position.set(w.flag.x, w.flag.y, w.flag.z); flag.children[1].rotation.y = Math.sin(now * 3) * 0.3; }
+      drawCrooks(w ? [...(w.crooks || []), ...(w.gone || [])] : [], s.hero, dt);
       const h = s.hero;
-      if (h) place(h, s.cam, dt);
+      if (h) place(h, s.cam, dt, !!s.aiming);
       rd.render(scene, cam);
       L3D.ready = true;
       // A slow phone: fewer pixels (#103's lesson).

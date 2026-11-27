@@ -75,7 +75,7 @@ function newNet(s) {
 function playerOf(id) { return net.players.find(p => p.id === id); }
 function netStart(s) {
   net = newNet(s);
-  hideAll(); stick = null; webPtr = null; lookPtr = null; result = null;
+  hideAll(); stick = null; webPtr = null; lookPtr = null; pullPtr = null; pullQ = null; result = null;
   world = null;
   if (s.host && !s.over) {
     net.mode = netMode;
@@ -109,7 +109,7 @@ function hostState() {
   return { t: 's', round: net.round, seq: ++hostSeq, mode: net.mode, g: net.goal, rt: r2(net.rt), over: net.over,
     names: net.players.map(p => [p.id, p.name, p.col]), h: net.players.map(heroRow) };
 }
-const ST = { g: 'ground', a: 'air', w: 'wall', s: 'swing' };
+const ST = { g: 'ground', a: 'air', w: 'wall', s: 'swing', p: 'pull' };   // pull: Veto (#560)
 function readRow(p, a) {
   p.stamp = +a[1] || 0; p.x = +a[2] || 0; p.y = +a[3] || 0; p.z = +a[4] || 0; p.f = +a[5] || 0;
   p.st = ST[a[6]] || 'air'; p.a = Array.isArray(a[7]) ? { x: +a[7][0], y: +a[7][1], z: +a[7][2] } : null;
@@ -161,7 +161,7 @@ function netTick(dt) {
   if (!net || !net.ready || net.res || !world) return;
   // Every hero stands, the clock too; touches are ignored (playing()) and any held or queued
   // one is dropped, so nothing made during the pause acts when it ends.
-  if (RM.paused) { acc = 0; stick = null; webPtr = null; lookPtr = null; jumpQ = false; return; }
+  if (RM.paused) { acc = 0; stick = null; webPtr = null; lookPtr = null; jumpQ = false; pullPtr = null; pullQ = null; return; }
   acc += dt;
   let steps = 0;
   const me = net.me, h = world.hero;
@@ -184,6 +184,7 @@ function netTick(dt) {
     } else net.rt += STEP;
     if (me) localClaims(STEP);
     if (me && hintT < 16) { hintT += STEP; if (hintT >= 16) save('ohje', 1); }
+    if (me) stepHint3(STEP);
   }
   if (acc > STEP) acc = 0;
   net.sendT -= dt;
