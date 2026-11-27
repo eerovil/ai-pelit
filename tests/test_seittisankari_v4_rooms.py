@@ -122,6 +122,7 @@ def test_the_free_mode_has_no_goal_and_starts_by_the_tower(phone):
     for p in (host, guest):
         assert p.evaluate("net.mode") == "vapaa"
         assert p.evaluate("world.flag") is None and p.evaluate("goalBox()") is None
+        assert not p.evaluate("world.crooks && world.crooks.length")   # robber missions are solo (v4, #561)
         assert p.evaluate("Math.hypot(world.hero.x - roofTop(T_BOX).x, world.hero.z - roofTop(T_BOX).z)") < 60   # 30 m out, then onto the street
     assert host.errors == [] and guest.errors == []
 

@@ -227,23 +227,33 @@ def test_the_city_marks_a_roof_to_go_to_with_a_flag_and_tells_how_far(site, cont
     assert page.errors == []
 
 
-def test_standing_on_the_roof_counts_it_and_every_fifth_is_the_tower(site, context):
+# Finish the mission now: stand on its roof, or catch every crook.
+FINISH = """() => { if (isCrook(world.kind)) world.crooks.forEach(catchCrook); else (""" + ON_GOAL + """)(); }"""
+
+
+def test_the_missions_come_in_order_roof_robbers_car_tower_helicopter(site, context):
+    # v4 (#561), the approved spec: a roof, robbers on a roof, a getaway car, the tower, a helicopter.
     page = open_game(site, context)
     go(page)
-    page.wait_for_function("CITY[world.goal]")
-    seen = []
-    for n in range(1, 6):
-        if n == 4:  # end the fourth downtown, so the tower is near enough to be the fifth
-            page.evaluate("setGoal(world, BX(1, 1).id)")
-        g0 = page.evaluate("world.goal")
-        page.evaluate(ON_GOAL)
-        page.wait_for_function(f"world.done === {n} && world.goal !== {g0}")
-        seen.append(page.evaluate("[!!CITY[world.goal].tower, world.gt < 1, !!world.got && world.got.tower]"))
+    page.wait_for_function("world.kind")
+    seen = [page.evaluate("world.kind")]
+    for n in range(1, 11):
+        if seen[-1] == "auto":  # by the downtown, so the tower is near enough for its turn
+            page.evaluate("const b = BX(1, 1); Object.assign(world.hero, { x: (b.x0 + b.x1) / 2, y: b.h, z: (b.z0 + b.z1) / 2, st: 'ground', vx: 0, vy: 0, vz: 0 })")
+        page.evaluate(FINISH)
+        page.wait_for_function(f"world.done === {n}")
+        r = page.evaluate("""[world.kind, world.gt < 1, world.got && world.got.kind, !!CITY[world.goal] && !!CITY[world.goal].tower,
+          world.crooks.length, !!world.flag]""")
+        seen.append(r[0])
+        assert r[1]                                                    # each new mission's clock starts at 0
+        assert r[2] == seen[-2]                                        # "Perillä!", "Rosvot kiinni!", ...
         assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}tehtavat'))") == n
-    # After the fourth roof the fifth target is the tower; after it, a roof again.
-    assert [s[0] for s in seen] == [False, False, False, True, False]
-    assert all(s[1] for s in seen)                                   # each new roof's clock starts at 0
-    assert [s[2] for s in seen] == [False, False, False, False, True]  # "Tornin huipulla!"
+        if r[0] == "torni":
+            assert r[3]
+        if r[0] in ("katto", "torni", "rosvot"):
+            assert r[5]                                                # the flag and its light mark the roof
+        assert r[4] == {"rosvot": 3, "auto": 1, "heli": 1}.get(r[0], 0)
+    assert seen == ["katto", "rosvot", "auto", "torni", "heli"] * 2 + ["katto"]
     # Over the roof after a swing, the close-by hint points down, not up.
     page.evaluate("const b = CITY[world.goal], t = roofTop(b); Object.assign(world.hero, { x: t.x, z: t.z, y: b.h + 30, st: 'air', vx: 0, vy: 0, vz: 0 })")
     page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
@@ -260,6 +270,9 @@ def test_the_marked_roof_and_the_count_survive_a_reload_and_v1s_save_still_opens
     assert abs(page.evaluate("world.hero.x") - 300) < 3
     page.evaluate(ON_GOAL)
     page.wait_for_function("world.done === 1")
+    assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}tehtavat'))") == 1
+    # v4: the second mission is robbers; on to the sixth, a roof again, to keep its roof.
+    page.evaluate("world.done = 5; save('tehtavat', 5); startMission(world)")
     g = page.evaluate("world.goal")
     page.evaluate("world.gt = 42")
     page.click("#quit")
@@ -268,7 +281,7 @@ def test_the_marked_roof_and_the_count_survive_a_reload_and_v1s_save_still_opens
     page.reload()
     page.wait_for_function("mode === 'menu'")
     go(page)
-    assert page.evaluate("[world.goal, world.done]") == [g, 1]
+    assert page.evaluate("[world.goal, world.done, world.kind]") == [g, 5, "katto"]
     assert 42 <= page.evaluate("world.gt") < 45     # the roof's clock goes on, not from 0
     assert page.evaluate("world.hero.x") > -300     # v2's own spot, not v1's
     assert page.errors == []
@@ -643,3 +656,141 @@ def test_a_fast_landing_keeps_its_speed_a_moment_and_a_jump_takes_it_along(site,
     assert r["after1"] < 2            # then stops without the stick, as before
     air = [v for v in r["inAir"] if v is not None]
     assert len(air) > 30 and min(air) > 18
+
+
+# ---- v4 (#561): robbers on a roof, a getaway car and a getaway helicopter, caught with the web ----
+# A world at mission `n` (0 = the first), started from the hero's spot by the tower with a fixed seed.
+AT = """(n, seed) => { const w = newWorld(); w.done = n; const r = rng(seed || 7); startMission(w, r); return [w, r]; }"""
+
+
+def test_the_robbers_walk_on_their_roof_and_three_web_hits_catch_them(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => { const [w, r] = (" + AT + """)(1);
+      const b = CITY[w.crookBox], h = w.hero, t = roofTop(b);
+      const out = { n: w.crooks.length, d: Math.hypot(t.x - h.x, t.z - h.z), hgt: b.h, flag: w.flag.x === t.x && w.flag.y === b.h };
+      let off = 0, moved = 0; const x0 = w.crooks.map(k => k.x);
+      for (let i = 0; i < 60 / STEP; i++) {
+        stepRound(w, STEP, r);
+        for (const k of w.crooks) if (k.y !== b.h || k.x < b.x0 || k.x > b.x1 || k.z < b.z0 || k.z > b.z1) off++;
+      }
+      moved = Math.min(...w.crooks.map((k, i) => Math.abs(k.x - x0[i])));
+      catchCrook(w.crooks[0]); catchCrook(w.crooks[1]); stepRound(w, STEP, r);
+      out.two = [w.done, w.kind];
+      const third = w.crooks[2]; catchCrook(third); stepRound(w, STEP, r);
+      Object.assign(out, { off, moved, three: [w.done, w.kind], gone: !!w.gone && w.gone.includes(third) });
+      return out; })()""")
+    assert r["n"] == 3 and 120 <= r["d"] <= 300 and 20 <= r["hgt"] <= 150 and r["flag"]
+    assert r["off"] == 0 and r["moved"] > 0.5      # they walk about, never off the roof
+    assert r["two"] == [1, "rosvot"]               # two caught is not yet done
+    assert r["three"] == [2, "auto"] and r["gone"]
+
+
+def test_the_getaway_car_drives_the_streets_and_one_web_hit_stops_it(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => { const [w, r] = (" + AT + """)(2);
+      const k = w.crooks[0], h = w.hero;
+      const out = { d0: Math.hypot(k.x - h.x, k.z - h.z), inside: 0, outside: 0, path: 0, turns: 0 };
+      let px = k.x, pz = k.z, pyaw = k.yaw;
+      for (let i = 0; i < 120 / STEP; i++) {
+        stepRound(w, STEP, r);
+        if (supportAt(k.x, k.z, 1.0) > 0) out.inside++;
+        if (Math.abs(k.x) > EDGE || Math.abs(k.z) > EDGE) out.outside++;
+        out.path += Math.hypot(k.x - px, k.z - pz); px = k.x; pz = k.z;
+        if (k.yaw !== pyaw) { out.turns++; pyaw = k.yaw; }
+      }
+      catchCrook(k); stepRound(w, STEP, r);
+      const done = [w.done, w.kind];
+      for (let i = 0; i < 3 / STEP; i++) stepRound(w, STEP, r);
+      const x1 = k.x, z1 = k.z;
+      for (let i = 0; i < 2 / STEP; i++) stepRound(w, STEP, r);
+      Object.assign(out, { done, still: x1 === k.x && z1 === k.z && k.v === 0, street: supportAt(k.x, k.z, 1.0) === 0 });
+      return out; })()""")
+    assert 150 <= r["d0"] <= 250
+    assert r["inside"] == 0 and r["outside"] == 0          # on the streets, never in a building
+    assert 19 * 120 < r["path"] < 21 * 120                 # 20 m/s
+    assert r["turns"] >= 3
+    assert r["done"] == [3, "torni"]                       # one hit is enough
+    assert r["still"] and r["street"]                      # skidded to a stop on its street
+
+
+def test_the_getaway_helicopter_flies_high_and_one_hit_brings_it_down(site, context):
+    page = open_game(site, context)
+    r = page.evaluate("(() => { const [w, r] = (" + AT + """)(4, 11);
+      const k = w.crooks[0], h = w.hero;
+      const out = { d0: Math.hypot(k.x - h.x, k.z - h.z), lo: 1e9, hi: -1e9, hit: 0, far: 0, path: 0 };
+      let px = k.x, pz = k.z;
+      for (let i = 0; i < 120 / STEP; i++) {
+        stepRound(w, STEP, r);
+        out.lo = Math.min(out.lo, k.y); out.hi = Math.max(out.hi, k.y);
+        if (supportAt(k.x, k.z, 4) > k.y - 2) out.hit++;
+        if (Math.abs(k.x) > 700 || Math.abs(k.z) > 700) out.far++;
+        out.path += Math.hypot(k.x - px, k.z - pz); px = k.x; pz = k.z;
+      }
+      catchCrook(k); stepRound(w, STEP, r);
+      out.done = [w.done, w.kind];
+      for (let i = 0; i < 9 / STEP; i++) stepRound(w, STEP, r);
+      out.down = k.y - supportAt(k.x, k.z, 3); out.shown = !!w.gone;
+      return out; })()""")
+    assert 140 <= r["d0"] <= 260
+    assert r["lo"] >= 70 and r["hi"] <= 90 and r["hit"] == 0 and r["far"] == 0
+    assert r["path"] > 800                                 # it keeps flying (15 m/s, with turns)
+    assert r["done"] == [5, "katto"]
+    assert r["down"] == 0 and r["shown"]                   # set down on what is under it, still seen
+
+
+def test_aiming_at_a_robber_turns_the_ring_red_and_letting_go_catches_him(site, context):
+    page = open_game(site, context)
+    go(page)
+    page.evaluate(f"localStorage.setItem('{KEY}ohje4', '{{}}')")
+    page.evaluate("""() => { const b = BX(1, 0), h = world.hero;
+      Object.assign(h, { x: (b.x0 + b.x1) / 2, y: 0, z: b.z0 - 14, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null, yaw: 0 });
+      world.kind = 'rosvot'; world.goal = -1;
+      const k = newRobber(b, rng(1)); Object.assign(k, { x: h.x, y: 0, z: b.z0 - 6, wait: 1e9 }); world.crooks = [k];
+      window.__k = k; cam.yaw = 0; cam.manualT = 0;
+      const r = aimRay(h, 0, 0); cam.pitch = Math.atan2(r.oy - CROOK_MID.rosvo, k.z - r.oz); }""")
+    assert page.evaluate("aimCrook(world.hero, cam.yaw, cam.pitch, world.crooks) === __k")
+    # 3 m to his side the aim goes past him to the wall behind.
+    assert page.evaluate("""(() => { const k = __k, x = k.x; k.x += 3; const a = [aimCrook(world.hero, cam.yaw, cam.pitch, world.crooks), !!aimPull(world.hero, cam.yaw, cam.pitch)]; k.x = x; return a; })()""") == [None, True]
+    b = page.evaluate("buttons()")["pull"]
+    page.evaluate("() => { window.__ring = []; const sk = CanvasRenderingContext2D.prototype.stroke; CanvasRenderingContext2D.prototype.stroke = function () { __ring.push(this.strokeStyle); return sk.apply(this, arguments); }; }")
+    page.evaluate(TOUCH, ["pointerdown", 4, b["x"], b["y"]])
+    page.wait_for_function("__ring.includes('#ff4d4d')")
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    page.wait_for_function("__said.some(t => /^Ota rosvot kiinni! 0\\/1 · ↑ 0 m$/.test(t))")
+    got = page.evaluate(f"(a) => {{ ({TOUCH})(a); return [__k.caught, pullQ, world.hero.st, !!catchFx]; }}", ["pointerup", 4, b["x"], b["y"]])
+    assert got == [True, None, "ground", True]           # caught, and the hero stays where he is
+    page.wait_for_function("world.done === 1")
+    assert page.errors == []
+
+
+def test_a_robber_mission_left_open_starts_again_and_each_hint_shows_once(site, context):
+    page = open_game(site, context)
+    page.evaluate(f"""localStorage.setItem('{KEY}ohje', '1'); localStorage.setItem('{KEY}ohje3', '1');
+      localStorage.setItem('{KEY}tehtavat', '2'); localStorage.setItem('{KEY}tehtava4', JSON.stringify({{ k: 'auto', gt: 30 }}))""")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("[world.kind, world.crooks.length, world.crooks[0].type, world.crooks[0].caught]") == ["auto", 1, "auto", False]
+    assert page.evaluate("world.gt") >= 30
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    page.wait_for_function("__said.includes('Karkuriauto pakenee kaduilla!')")
+    page.wait_for_function("__said.some(t => /^Pysäytä karkuriauto! \\d+ m$/.test(t))")
+    page.evaluate("hint4T = 6.95")
+    page.wait_for_function(f"JSON.parse(localStorage.getItem('{KEY}ohje4') || '{{}}').auto === 1")
+    page.click("#quit")
+    assert page.evaluate(f"JSON.parse(localStorage.getItem('{KEY}tehtava4')).k") == "auto"
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    page.evaluate("window.__said = []; const st = shadowText; shadowText = function (t) { __said.push(String(t)); return st.apply(this, arguments); }")
+    page.wait_for_timeout(300)
+    assert not page.evaluate("__said.includes('Karkuriauto pakenee kaduilla!')")
+    # A saved kind that is not this mission's turn starts the clock from 0.
+    page.click("#quit")
+    page.evaluate(f"localStorage.setItem('{KEY}tehtava4', JSON.stringify({{ k: 'heli', gt: 30 }}))")
+    page.reload()
+    page.wait_for_function("mode === 'menu'")
+    go(page)
+    assert page.evaluate("world.kind") == "auto" and page.evaluate("world.gt") < 5
+    page.wait_for_function("window.L3D && L3D.ready")
+    assert page.errors == []

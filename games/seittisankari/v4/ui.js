@@ -1,5 +1,5 @@
 'use strict';
-// Seittisankari v2 (#529): the fingers, the camera, the menus, the saves, the sounds, the 2D
+// Seittisankari v2 (#529), v4 (#561): the fingers, the camera, the menus, the saves, the sounds, the 2D
 // layer over the 3D picture (goal, time, stick, buttons) and the main loop.
 
 const c = document.getElementById('c'), cx = c.getContext('2d');
@@ -43,9 +43,17 @@ function startFree() {
   if (k.h) restore(world, k.h);
   // v2's missions: the roof marked last time, its clock, and how many are done (v1 saved none).
   world.done = Math.max(0, load('tehtavat', 0) | 0);
-  if (CITY[k.g]) { setGoal(world, k.g); world.gt = Math.max(0, +k.gt || 0); }
+  // v4 (#561): the mission's kind follows the count; a roof's turn keeps the marked roof, and a
+  // robber mission left open starts again with new robbers, its clock going on.
+  const kind = kindFor(world.done), t4 = load('tehtava4', null) || {};
+  if (!isCrook(kind) && CITY[k.g] && (kind === 'katto' || CITY[k.g].tower || t4.k === kind)) {
+    world.kind = kind; setGoal(world, k.g); world.gt = Math.max(0, +k.gt || 0);
+  } else {
+    startMission(world);
+    if (t4.k === kind) world.gt = Math.max(0, +t4.gt || 0);
+  }
   cam.yaw = world.hero.yaw; cam.pitch = 0.3; cam.manualT = 9;
-  mode = 'play'; acc = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null; pullPtr = null; pullQ = null;
+  mode = 'play'; acc = 0; result = null; stick = null; webPtr = null; jumpQ = false; lookPtr = null; pullPtr = null; pullQ = null; catchFx = null;
   hideAll();
   saveRound();
 }
@@ -54,6 +62,7 @@ function saveRound() {
   const h = world.hero;
   save('kierros2', { h: { x: h.x, y: h.y, z: h.z, yaw: h.yaw, st: h.st === 'wall' ? 'wall' : 'air', box: h.box ? h.box.id : -1, nx: h.nx, nz: h.nz },
     g: world.goal, gt: Math.round(world.gt * 10) / 10 });
+  save('tehtava4', { k: world.kind, gt: Math.round(world.gt * 10) / 10 });
 }
 function restore(w, q) {
   const h = w.hero;
@@ -67,7 +76,7 @@ function restore(w, q) {
 // else turns the camera. Veto (#560) is held to aim: the same finger turns the camera, and lifting
 // it shoots the web along the camera's centre line.
 const STICK = 52;
-let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null, aimTurn = null;
+let stick = null, webPtr = null, jumpQ = false, jumpFlash = 0, lookPtr = null, pullPtr = null, pullQ = null, missFx = null, aimTurn = null, catchFx = null;
 function buttons() {
   const r = LAND ? 46 : 50, rj = LAND ? 34 : 38, rp = LAND ? 32 : 34;
   const web = { x: W - SAFE_R - r - (LAND ? 26 : 20), y: H - SAFE_B - r - (LAND ? 20 : 30), r };
@@ -131,10 +140,14 @@ function lift(e) {
   if (e.pointerId === webPtr) webPtr = null;
   if (pullPtr && e.pointerId === pullPtr.id) {
     pullPtr = null;
-    // Shoot: a hit pulls the hero there; a miss is a web flying out and nothing else.
+    // Shoot: a robber in the aim is caught (v4, #561) and the hero stays; else a hit pulls the
+    // hero there; a miss is a web flying out and nothing else.
     if (world && playing()) {
-      const h = world.hero, hit = e.type === 'pointerup' ? aimPull(h, cam.yaw, cam.pitch) : null;
-      if (hit) pullQ = hit;
+      const h = world.hero, up = e.type === 'pointerup';
+      const crook = up ? aimCrook(h, cam.yaw, cam.pitch, world.crooks) : null;
+      const hit = up && !crook ? aimPull(h, cam.yaw, cam.pitch) : null;
+      if (crook) { catchCrook(crook); catchFx = { t: 0.45, k: crook }; sfx('tomahdys', { vol: 0.2, rate: 0.8 }); }
+      else if (hit) pullQ = hit;
       else if (e.type === 'pointerup') { const r = aimRay(h, cam.yaw, cam.pitch); missFx = { t: 0.3, x: r.ox + r.dx * 15, y: r.oy + r.dy * 15, z: r.oz + r.dz * 15 }; }
       sfx('suhahdus', { vol: 0.22, rate: hit ? 1.6 : 1.9 });
     }
@@ -206,12 +219,25 @@ function stepHint3(dt) {
   if (hintT < 16 || hint3T >= 9) return;
   hint3T += dt; if (hint3T >= 9) save('ohje3', 1);
 }
+// v4's robber missions: two lines the first time each kind starts (#561).
+const HINT4 = {
+  rosvot: ['Rosvoja katolla!', 'Pidä Veto pohjassa, tähtää rosvoon, päästä irti'],
+  auto: ['Karkuriauto pakenee kaduilla!', 'Pidä Veto pohjassa, tähtää autoon, päästä irti'],
+  heli: ['Karkurihelikopteri lentää korkealla!', 'Mene ylös ja tähtää Vedolla siihen'],
+};
+let hint4 = load('ohje4', null) || {}, hint4T = 0;
+function stepHint4(w, dt) {
+  if (hintT < 16 || hint3T < 9 || !HINT4[w.kind] || hint4[w.kind] || w.got) return;
+  hint4T += dt;
+  if (hint4T >= 7) { hint4[w.kind] = 1; hint4T = 0; save('ohje4', hint4); }
+}
 function drawHUD(w) {
   const h = w.hero, top = SAFE_T + 22;
   shadowText('↑ ' + Math.round(h.y) + ' m', W - SAFE_R - 14, top, 16, '#e8f4ff', 'right', 800);
   drawGoal(w, top);
   if (hintT < 16) drawHints();
   else if (hint3T < 9) drawHints3();
+  else if (HINT4[w.kind] && !hint4[w.kind] && !w.got) HINT4[w.kind].forEach((t, i) => shadowText(t, W / 2, H * 0.3 + i * 20, 15, '#fff', 'center', 700));
   drawAim(h);
   drawControls(h);
 }
@@ -220,18 +246,27 @@ function drawGoal(w, top) {
   const b = CITY[w.goal], h = w.hero;
   shadowText('✔ ' + w.done, LAND ? SAFE_L + 120 : W / 2 - 70, top, 16, '#9ff7c9', 'center', 900);
   shadowText(fmt(w.gt), LAND ? SAFE_L + 190 : W / 2 + 20, top, 18, '#fff', 'center', 900);
-  if (b) {
-    const t = roofTop(b), dx = t.x - h.x, dz = t.z - h.z, d = Math.round(Math.hypot(dx, dz));
+  // Where to: the marked roof, or the nearest crook not caught yet (v4, #561).
+  let t = null, say = '';
+  if (isCrook(w.kind)) {
+    const left = w.crooks.filter(k => !k.caught);
+    const k = left.reduce((p, q) => !p || Math.hypot(q.x - h.x, q.z - h.z) < Math.hypot(p.x - h.x, p.z - h.z) ? q : p, null);
+    if (k) t = { x: k.x, y: k.y, z: k.z };
+    say = w.kind === 'rosvot' ? 'Ota rosvot kiinni! ' + (w.crooks.length - left.length) + '/' + w.crooks.length + ' · '
+      : w.kind === 'auto' ? 'Pysäytä karkuriauto! ' : 'Pysäytä karkurihelikopteri! ';
+  } else if (b) { t = roofTop(b); say = b.tower ? 'Tornin huipulle! ' : 'Mene merkitylle katolle! '; }
+  if (t) {
+    const dx = t.x - h.x, dz = t.z - h.z, d = Math.round(Math.hypot(dx, dz));
     const y = LAND ? top + 26 : top + 66;   // upright, under ⏸ Valikko
-    const say = b.tower ? 'Tornin huipulle! ' : 'Mene merkitylle katolle! ';
-    const up = Math.round(b.h - h.y);   // close by: how far up (or down, after a swing over it)
+    const up = Math.round(t.y - h.y);   // close by: how far up (or down, after a swing over it)
     shadowText(say + (d > 15 ? d + ' m' : (up < 0 ? '↓ ' + -up : '↑ ' + up) + ' m'), W / 2, y, 15, '#fff', 'center', 800);
     if (d > 15) drawArrow(W / 2, y + 32, angDiff(cam.yaw, Math.atan2(dx, dz)));
   }
   if (w.got) {
     cx.globalAlpha = Math.min(1, w.got.show * 2);
-    shadowText(w.got.tower ? 'Tornin huipulla!' : 'Perillä!', W / 2, H * 0.36, 30, '#ffd166', 'center', 900);
-    shadowText(fmt(w.got.t) + ' · uusi kohde merkitty', W / 2, H * 0.36 + 30, 15, '#fff', 'center', 800);
+    const big = { rosvot: 'Rosvot kiinni!', auto: 'Karkuriauto pysäytetty!', heli: 'Helikopteri pysäytetty!' }[w.got.kind];
+    shadowText(big || (w.got.tower ? 'Tornin huipulla!' : 'Perillä!'), W / 2, H * 0.36, big ? 26 : 30, '#ffd166', 'center', 900);
+    shadowText(fmt(w.got.t) + ' · uusi tehtävä', W / 2, H * 0.36 + 30, 15, '#fff', 'center', 800);
     cx.globalAlpha = 1;
   }
 }
@@ -254,11 +289,21 @@ function drawAim(h) {
       cx.beginPath(); cx.moveTo(a[0], a[1]); cx.lineTo(b[0], b[1]); cx.stroke(); cx.globalAlpha = 1;
     }
   }
+  if (catchFx && window.L3D && L3D.project) {   // the web flying to a caught crook
+    const k = catchFx.k, a = L3D.project(h.x, h.y + 1.4, h.z), b = L3D.project(k.x, k.y + CROOK_MID[k.type], k.z);
+    if (a && b) {
+      cx.globalAlpha = Math.min(1, catchFx.t * 4); cx.strokeStyle = '#fff'; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.moveTo(a[0], a[1]); cx.lineTo(b[0], b[1]); cx.stroke(); cx.globalAlpha = 1;
+    }
+  }
   if (!pullPtr || !window.L3D || !L3D.project) return;
-  const hit = aimPull(h, cam.yaw, cam.pitch), r = aimRay(h, cam.yaw, cam.pitch);
-  const p = hit ? L3D.project(hit.x, hit.y, hit.z) : L3D.project(r.ox + r.dx * PULL_MAX, r.oy + r.dy * PULL_MAX, r.oz + r.dz * PULL_MAX);
+  // A crook in the aim: the ring turns red on him (v4, #561).
+  const crook = world && aimCrook(h, cam.yaw, cam.pitch, world.crooks);
+  const hit = crook ? null : aimPull(h, cam.yaw, cam.pitch), r = aimRay(h, cam.yaw, cam.pitch);
+  const p = crook ? L3D.project(crook.x, crook.y + CROOK_MID[crook.type], crook.z)
+    : hit ? L3D.project(hit.x, hit.y, hit.z) : L3D.project(r.ox + r.dx * PULL_MAX, r.oy + r.dy * PULL_MAX, r.oz + r.dz * PULL_MAX);
   const [x, y] = p || [W / 2, H / 2];
-  const col = hit ? '#5dff9a' : 'rgba(200,210,220,.85)';
+  const col = crook ? '#ff4d4d' : hit ? '#5dff9a' : 'rgba(200,210,220,.85)';
   cx.strokeStyle = 'rgba(10,20,40,.55)'; cx.lineWidth = 6;
   cx.beginPath(); cx.arc(x, y, 16, 0, TAU); cx.stroke();
   cx.strokeStyle = col; cx.lineWidth = 3;
@@ -352,8 +397,10 @@ function frame(now) {
     saveT += dt; if (saveT > 2) { saveT = 0; saveRound(); }
     if (hintT < 16) { hintT += dt; if (hintT >= 16) save('ohje', 1); }
     stepHint3(dt);
+    stepHint4(world, dt);
   }
   if (missFx) { missFx.t -= dt; if (missFx.t <= 0) missFx = null; }
+  if (catchFx) { catchFx.t -= dt; if (catchFx.t <= 0) catchFx = null; }
   if (mode === 'netplay' && typeof netTick === 'function') netTick(dt);
   draw(dt);
   document.body.classList.toggle('playing', mode === 'play' || mode === 'netplay');
@@ -364,7 +411,7 @@ function tick(dt) {
   const w = world, h = w.hero, st0 = h.st, lands0 = h.lands || 0;
   stepHero(h, input(), dt);
   stepCam(h, dt);
-  if (stepRound(w, dt)) { save('tehtavat', w.done); saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); }
+  if (stepRound(w, dt)) { save('tehtavat', w.done); saveRound(); sfx('valinta', { vol: 0.35, rate: 1.2 }); hint4T = 0; }
   if (h.st === 'swing' && st0 !== 'swing') sfx('suhahdus', { vol: 0.25, rate: 1.3 });
   if (st0 === 'pull' && h.st === 'wall') sfx('tomahdys', { vol: 0.12, rate: 1.3 });
   if ((h.lands || 0) > lands0) sfx('tomahdys', { vol: 0.15 });
