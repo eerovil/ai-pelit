@@ -150,15 +150,22 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     }
 
     // ---- The hero (and friends' heroes): hoodie, mask, white gloves; built once per colour ----
-    function makeHero(col) {
+    // A robber (v4, #561) is the same body in a striped shirt, a face with a black eye mask and a beanie.
+    function makeHero(col, robber) {
       const g = new T.Group(), body = new T.Group(); g.add(body);
       const P = {};
       part(body, box, col, 0, 1.12, 0, 0.5, 0.62, 0.3);
       part(body, box, '#26324a', 0, 0.86, 0, 0.46, 0.14, 0.28);             // belt and hips
-      part(body, ball, col, 0, 1.48, -0.1, 0.24, 0.12, 0.16);               // hood behind the head
-      part(body, ball, '#1b1f2e', 0, 1.56, 0, 0.2, 0.22, 0.2);               // masked head
-      part(body, ball, '#ffffff', -0.08, 1.6, 0.16, 0.06, 0.04, 0.03);       // mask eyes
-      part(body, ball, '#ffffff', 0.08, 1.6, 0.16, 0.06, 0.04, 0.03);
+      if (robber) {
+        part(body, ball, '#e2b48c', 0, 1.56, 0, 0.19, 0.21, 0.19);           // face
+        part(body, box, '#111111', 0, 1.6, 0.06, 0.4, 0.07, 0.3);             // eye mask
+        part(body, ball, '#222222', 0, 1.68, 0, 0.2, 0.12, 0.2);              // beanie
+      } else {
+        part(body, ball, col, 0, 1.48, -0.1, 0.24, 0.12, 0.16);             // hood behind the head
+        part(body, ball, '#1b1f2e', 0, 1.56, 0, 0.2, 0.22, 0.2);             // masked head
+        part(body, ball, '#ffffff', -0.08, 1.6, 0.16, 0.06, 0.04, 0.03);     // mask eyes
+        part(body, ball, '#ffffff', 0.08, 1.6, 0.16, 0.06, 0.04, 0.03);
+      }
       // Joints: shoulder → elbow → glove, hip → knee → shoe. Each is a group turned by the pose.
       const joint = (par, x, y) => { const j = new T.Group(); j.position.set(x, y, 0); par.add(j); return j; };
       for (const [k, x] of [['L', -0.33], ['R', 0.33]]) {
@@ -291,6 +298,77 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     const beam = new T.Mesh(new T.CylinderGeometry(2.5, 2.5, 400, 16, 1, true), new T.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.35, depthWrite: false, side: T.DoubleSide, fog: false }));
     beam.position.y = 200; flag.add(beam);
 
+    // ---- The crooks (v4, #561): robbers, a getaway car and a getaway helicopter ----
+    const stripes = new T.MeshStandardMaterial({ roughness: 0.8, map: canvasTex(16, 32, (g, w, h) => {
+      for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#f2f2f2' : '#1c1c1c'; g.fillRect(0, k * h / 8, w, h / 8); }
+    }) });
+    const webM = mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.25 });
+    // A red light over each car or helicopter still at large, seen from across the city.
+    const crookBeam = () => new T.Mesh(new T.CylinderGeometry(1.2, 1.2, 300, 12, 1, true), new T.MeshBasicMaterial({ color: '#ff4d4d', transparent: true, opacity: 0.3, depthWrite: false, side: T.DoubleSide, fog: false }));
+    function makeCar() {
+      const g = new T.Group();
+      part(g, box, '#d32f2f', 0, 0.7, 0, 1.9, 0.7, 4.4);
+      part(g, box, '#28323e', 0, 1.3, -0.3, 1.6, 0.55, 2.2);
+      part(g, box, '#ffef9a', 0.6, 0.75, 2.21, 0.35, 0.18, 0.02, { emissive: '#ffe066', emissiveIntensity: 0.8 });
+      part(g, box, '#ffef9a', -0.6, 0.75, 2.21, 0.35, 0.18, 0.02, { emissive: '#ffe066', emissiveIntensity: 0.8 });
+      for (const [x, z] of [[-0.95, 1.4], [0.95, 1.4], [-0.95, -1.4], [0.95, -1.4]]) {
+        const wh = part(g, cyl, '#151515', x, 0.38, z, 0.38, 0.28, 0.38); wh.rotation.z = Math.PI / 2;
+      }
+      const web = new T.Group(); g.add(web);   // strands over the car once it is caught
+      for (const z of [-1.4, 0, 1.4]) part(web, box, webM, 0, 1.0, z, 2.1, 1.3, 0.12);
+      part(web, box, webM, 0, 1.62, -0.3, 0.12, 0.06, 4.2);
+      const beam = crookBeam(); beam.position.y = 150; g.add(beam);
+      return { g, web, beam };
+    }
+    function makeHeli() {
+      const g = new T.Group();
+      part(g, ball, '#3b4049', 0, 1.5, 0.4, 1.5, 1.4, 2.6);
+      part(g, ball, '#9fd0ff', 0, 1.8, 2.0, 1.0, 0.8, 1.0, { roughness: 0.2 });
+      part(g, box, '#3b4049', 0, 1.8, -3.6, 0.35, 0.35, 4);
+      part(g, box, '#3b4049', 0, 2.4, -5.4, 0.1, 1.2, 0.8);
+      for (const x of [-1.1, 1.1]) part(g, box, '#222', x, 0.1, 0.4, 0.12, 0.12, 4);
+      const rotor = new T.Group(); rotor.position.set(0, 3.1, 0.4); g.add(rotor);
+      part(rotor, box, '#1a1a1a', 0, 0, 0, 10, 0.06, 0.35); part(rotor, box, '#1a1a1a', 0, 0, 0, 0.35, 0.06, 10);
+      part(g, cyl, '#1a1a1a', 0, 2.8, 0.4, 0.15, 0.6, 0.15);
+      const tail = new T.Group(); tail.position.set(0.25, 2.4, -5.5); g.add(tail);
+      part(tail, box, '#1a1a1a', 0, 0, 0, 0.05, 1.6, 0.18);
+      const web = new T.Group(); g.add(web);
+      for (const z of [-1, 0.4, 1.8]) part(web, box, webM, 0, 1.5, z, 3.2, 3.0, 0.15);
+      const beam = crookBeam(); beam.position.y = 150; g.add(beam);
+      return { g, rotor, tail, web, beam };
+    }
+    const crookM = new Map();                   // crook id → its meshes
+    function cocoon() { const m = part(scene, ball, webM, 0, 0, 0, 0.42, 0.95, 0.42); m.visible = false; return m; }
+    function drawCrooks(list, hero, dt) {
+      const seen = new Set();
+      for (const k of list) {
+        let m = crookM.get(k.id);
+        if (!m) {
+          if (k.type === 'rosvo') { m = makeHero(stripes, true); m.cocoon = cocoon(); }
+          else { m = k.type === 'auto' ? makeCar() : makeHeli(); scene.add(m.g); }
+          crookM.set(k.id, m);
+        }
+        seen.add(k.id);
+        if (k.type === 'rosvo') {
+          poseHero(m, { x: k.x, y: k.y, z: k.z, vx: k.caught ? 0 : k.vx, vy: 0, vz: k.caught ? 0 : k.vz, st: 'ground', yaw: k.yaw, anchor: null }, dt);
+          m.cocoon.visible = k.caught; m.cocoon.position.set(k.x, k.y + 0.95, k.z);
+        } else {
+          m.g.position.set(k.x, k.y, k.z); m.g.rotation.y = k.yaw;
+          // The light fades out close by, where it would only hide the view (seen at 360 × 740).
+          const near = hero ? Math.hypot(k.x - hero.x, k.z - hero.z) : 999;
+          m.web.visible = k.caught; m.beam.visible = !k.caught && near > 30;
+          m.beam.material.opacity = 0.3 * clamp((near - 30) / 60, 0, 1);
+          if (m.rotor) { const spin = k.caught ? Math.max(0, 1 - k.ct / 3) : 1; m.rotor.rotation.y += dt * 28 * spin; m.tail.rotation.x += dt * 40 * spin; }
+        }
+      }
+      for (const [id, m] of crookM) if (!seen.has(id)) {
+        scene.remove(m.g); if (m.shadow) scene.remove(m.shadow); if (m.web && m.web.isLine) scene.remove(m.web); if (m.cocoon) scene.remove(m.cocoon);
+        // Free what each crook made for itself (the shared parts stay): a long session must not fill the phone.
+        for (const o of [m.beam, m.shadow, m.web && m.web.isLine ? m.web : null]) if (o) { o.geometry.dispose(); o.material.dispose(); }
+        crookM.delete(id);
+      }
+    }
+
     // ---- The camera: behind the hero, kept out of the buildings ----
     const camPos = new T.Vector3(), look = new T.Vector3();
     const inside = (x, y, z) => insideCity(x, y, z, 0.3);
@@ -335,6 +413,7 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       for (const [id, m] of heroes) if (!seen.has(id)) { m.g.visible = false; m.shadow.visible = false; m.web.visible = false; }
       const w = s.w, now = performance.now() / 1000;
       flag.visible = !!(w && w.flag); if (flag.visible) { flag.position.set(w.flag.x, w.flag.y, w.flag.z); flag.children[1].rotation.y = Math.sin(now * 3) * 0.3; }
+      drawCrooks(w ? [...(w.crooks || []), ...(w.gone || [])] : [], s.hero, dt);
       const h = s.hero;
       if (h) place(h, s.cam, dt, !!s.aiming);
       rd.render(scene, cam);
