@@ -30,6 +30,13 @@
       "note": "Rosvojen kiinniotto: ammu seitillä katon rosvot, karkuriauto ja karkurihelikopteri.",
       "request": "Sitten olis rosvojen kiinniotto tehtäviä. Pitää ampua seitillä jotkut jota on katolla. Toinen tehtävä, pitää ampua karkuri auto seitillä. Ja karkuri helikopteri",
       "issue": "eerovil/ai-pelit#561"
+    },
+    {
+      "n": 5,
+      "date": "2026-11-27",
+      "note": "Tarina: kahdeksan luvun kampanja, jossa Komisario Kallio ja jengipomo Varjo, uusina tehtävinä seinällä roikkuvien pelastus ja Varjon helikopteri, ja myöhemmissä luvuissa aikarajat.",
+      "request": "Tää on tosi hyvä. Pitäsi tehdä tästä tarinallinen campaign",
+      "issue": "eerovil/ai-pelit#565"
     }
   ]
 }
