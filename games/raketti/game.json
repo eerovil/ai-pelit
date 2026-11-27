@@ -48,7 +48,7 @@
     {
       "n": 7,
       "date": "2026-11-27",
-      "note": "Avaruusasemalle-matkan ohjeet vievät nyt perille, vaikka jarruttaisi tai kiihdyttäisi vähän liikaa tai myöhässä.",
+      "note": "Avaruusasemalle-matkan ohjeet vievät nyt perille, vaikka jarruttaisi tai kiihdyttäisi vähän liikaa tai myöhässä, ja asemaa kohti työnnetään yhdellä työnnöllä samaan suuntaan.",
       "request": "Raketti tehtävä 2 missä pitää saada asema kiinni, ei toimi. Jos vaikka aloitat siitä että kiertorata on sama kuin asemalla, niin ohjeita seuraamalla et pääse perille",
       "issue": "eerovil/ai-pelit#548"
     }
