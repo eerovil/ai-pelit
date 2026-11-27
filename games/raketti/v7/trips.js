@@ -475,7 +475,12 @@ function nextMove(s, path) {
     return { word: 'Jarruta', dir: angleOf(-(o.vx - out * o.x), -(o.vy - out * o.y)), power: 0.6 };
   }
   const nearStation = trip === 'asema' && stationRelative(s).dist < 30;
-  if (ref === EARTH && !nearStation && orbitAround(EARTH, s).peri < ORBIT_GOAL.earth.peri) return ascentHint(s, path);
+  // Up at the station's height, a low point under the orbit goal is the station hint's to raise
+  // (v7: a brake past its aim handed the ship to the climb's "Sivulle", which pushed it back up,
+  // and the station hint braked again, over and over). A climb already under way goes on.
+  const eo = ref === EARTH ? orbitAround(EARTH, s) : null;
+  const stationHigh = trip === 'asema' && !!eo && eo.closed && eo.apo + EARTH.radius > STATION.r - 8 && (eo.peri > 2 || eo.alt > eo.apo - 4) && !['Sivulle', 'Vinosti ylös', 'Ylös'].includes(currentWord);
+  if (ref === EARTH && !nearStation && !stationHigh && eo.peri < ORBIT_GOAL.earth.peri) return ascentHint(s, path);
   if (ref === EARTH) {
     if (trip === 'kiertorata') {
       // Too high for the goal: brake at the low point until the high point is low enough.
@@ -567,16 +572,17 @@ function baseHint(s, path, o, aim, b = MOON) {
 // orbit should start, so the ship comes down about on it.
 const BASE_LEAD = 1.9, MARS_BASE_LEAD = 1.9;
 let baseBrakeAt = -Infinity;
-// The station as a body moving on its circle, for phasingPeri.
-const STATION_BODY = { orbit: STATION };
 // Station: a transfer to its height, then close in slowly with the arrow.
 function stationHint(s, path) {
   const d = stationRelative(s);
   if (d.dist < 30) {
-    const want = Math.min(2.4, 0.2 * d.dist + 0.3);
+    // Slow enough that a push let go of late still docks under the station's limit, and a push
+    // that ends a little early (v7: at up to 2.4 m/s and stopping only 0.1 m/s short, a late
+    // let-go hit the station too fast, and the arrow came and went several times a second).
+    const want = Math.min(STATION.speed * 0.6, 0.15 * d.dist + 0.3);
     const ax = d.dx / d.dist * want - d.vx, ay = d.dy / d.dist * want - d.vy, need = Math.hypot(ax, ay);
-    if (need < (s.thrust > 0 ? 0.1 : 0.7)) return { word: 'Odota', station: true };
-    return { word: 'Kohti asemaa', dir: angleOf(ax, ay), power: clamp(need / 6, 0.05, 1), station: true };
+    if (need < (currentWord === 'Kohti asemaa' ? 0.25 : 0.9)) return { word: 'Odota', station: true };
+    return { word: 'Kohti asemaa', dir: angleOf(ax, ay), power: clamp(need / 8, 0.05, 1), station: true };
   }
   const o = orbitAround(EARTH, s), st = stationAt(s.t), side = sideOf(o);
   if (o.apo + EARTH.radius < STATION.r - 2) {
@@ -584,19 +590,75 @@ function stationHint(s, path) {
     if (wait < 0.12 || s.thrust > 0) return { word: 'Kiihdytä', dir: angleOf(o.vx, o.vy), power: 0.3, gap: apseSpeed(EARTH, o.r, STATION.r - 2) - o.speed };
     return { word: 'Odota', station: true, wait: wait / Math.abs(Math.sqrt(EARTH.mu / o.r ** 3) - STATION.n) };
   }
-  if (o.apo + EARTH.radius > STATION.r + 6 && o.alt < o.peri + 6) {
-    return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3, gap: o.speed - apseSpeed(EARTH, o.r, STATION.r + 2) };
+  const R = EARTH.radius, hiOff = Math.abs(o.apo + R - STATION.r), loOff = Math.abs(o.peri + R - STATION.r);
+  // Neither the high nor the low point at the station's height: at the low point, brake the high
+  // point down to it.
+  if (hiOff > 6 && loOff > 6) {
+    if (o.alt < o.peri + 6) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: 0.3, gap: o.speed - apseSpeed(EARTH, o.r, STATION.r + 2) };
+    return { word: 'Odota', station: true, mark: pathExtreme(path, false) };
   }
-  // Up at the station's height but going round about as fast as it, so the two never meet (#548:
-  // an orbit like the station's, the station elsewhere on it): brake at the high point to a low
-  // point that brings the ship back there, a whole number of rounds on, as the station gets there.
-  const top = pathExtreme(path, true), braking = currentWord === 'Jarruta', atTop = o.alt > o.apo - 4 || (o.closed && o.e < 0.05);
-  const want = phasingPeri(s, o, atTop || braking ? { x: s.x, y: s.y, t: s.t } : top, STATION_BODY, STATION.n);
-  if (want && o.peri + EARTH.radius > want + (braking ? 1 : 6)) {
-    if (atTop || braking) return { word: 'Jarruta', dir: angleOf(o.vx, o.vy) + Math.PI, power: clamp((o.peri + EARTH.radius - want) / 100, 0.05, 0.4), gap: o.peri + EARTH.radius - want - 1, metres: true, station: true };
-    return { word: 'Odota', station: true, mark: top };
+  // One end of the orbit at the station's height, the station elsewhere on its circle (#548: an
+  // orbit like the station's never meets it): there, brake or push to make the other end lower or
+  // higher, so the ship goes round just as much slower or faster that, a whole number of rounds
+  // on, it is back there as the station gets there. The meeting is worked out afresh each time
+  // from the orbit as it is, so a push held too long or let go late only picks another meeting
+  // (v7: a brake past its aim left a low point no meeting fitted, and the hints went round in a
+  // loop until the tank was empty).
+  const high = hiOff <= loOff, end = pathExtreme(path, high);
+  const going = !!phaseBurn && phaseBurn.word === currentWord && s.t - phaseBurn.t < 0.5;
+  const there = (high ? o.alt > o.apo - 4 : o.alt < o.peri + 4) || (o.closed && o.e < 0.05);
+  const plan = stationMeetings(o, high, there || going ? { x: s.x, y: s.y, t: s.t } : end);
+  if (going && (!plan || plan.miss < STATION_MEET.end)) { phaseBurn = null; phaseEnd = s.t; }
+  if (!plan || plan.miss < (going ? STATION_MEET.end : STATION_MEET.start)) return { word: 'Odota', station: true, mark: end };
+  // Not straight after a burn, while the push is still being let go of (v7: a burn ended, and a
+  // late let-go asked at once for one back the other way, and so on).
+  // One burn at each pass (on a round orbit, each part of a round), unless the low point is too
+  // low for comfort.
+  const settling = s.t - phaseEnd < Math.max(STATION_MEET.settle, TAU / 3 * Math.sqrt(((o.peri + o.apo) / 2 + R) ** 3 / EARTH.mu)) || (s.thrust > 0 && !going);
+  if (!going && (!there || (settling && o.peri > ORBIT_GOAL.earth.peri))) return { word: 'Odota', station: true, mark: end };
+  // A burn under way keeps its way, lower or higher, and aims at the best meeting that way.
+  const down = going ? phaseBurn.word === 'Jarruta' : null;
+  let best = null;
+  for (const c of plan.meets) {
+    if (down === true && c.other > plan.other - 0.5 || down === false && c.other < plan.other + 0.5) continue;
+    if (!best || c.cost < best.cost) best = c;
   }
-  return { word: 'Odota', station: true, mark: top };
+  if (!best) { phaseBurn = null; phaseEnd = s.t; return { word: 'Odota', station: true, mark: end }; }
+  const brake = best.other < plan.other, gap = Math.abs(plan.other - best.other);
+  phaseBurn = { word: brake ? 'Jarruta' : 'Kiihdytä', t: s.t };
+  return { word: phaseBurn.word, dir: angleOf(o.vx, o.vy) + (brake ? Math.PI : 0), power: clamp(gap / 100, 0.05, 0.4), gap: gap - 0.5, metres: true, station: true };
+}
+// The phasing burn under way on the station trip (its word and when it was last asked for), and
+// when the last one ended.
+let phaseBurn = null, phaseEnd = -Infinity;
+// How close (metres along the station's circle) a coming meeting must be for the hint to wait
+// for it: closer than `start` before a burn, and a burn goes on until it is closer than `end`.
+// After a burn, the next waits `settle` game seconds and a third of a round at least.
+const STATION_MEET = { start: 12, end: 3, settle: 1.5, above: 40, below: 20, round: 4 };
+// The meetings with the station from the ship's end of the orbit at the station's height (high
+// end or low end; at the point `at`). `other`, how far the other end is from Earth's middle now;
+// `meets`, the other ends (`other`) that bring ship and station back there together a whole
+// number of rounds on, with a `cost` (metres of change, and `round` more for each round); `miss`,
+// how far apart the two get there on the orbit as it is now, within its next four rounds.
+function stationMeetings(o, high, at) {
+  if (!at || at.t === undefined || !o.closed) return null;
+  const R = EARTH.radius, n = STATION.n, rAt = high ? o.apo + R : o.peri + R, other = high ? o.peri + R : o.apo + R;
+  const q = stationAt(at.t), side = sideOf(o);
+  const gap = ((side * wrap(angleOf(at.x, at.y) - angleOf(q.x, q.y))) % TAU + TAU) % TAU;
+  const period = a => TAU * Math.sqrt(a ** 3 / EARTH.mu);
+  const pMin = period((R + STATION_MEET.below + rAt) / 2), pMax = period(rAt + STATION_MEET.above / 2);
+  const pNow = period((o.peri + o.apo) / 2 + R), meets = [];
+  let miss = Infinity;
+  for (let k = 1; k <= 4; k++) {
+    miss = Math.min(miss, STATION.r * Math.abs(wrap(n * k * pNow - gap)));
+    for (let m = 0; m <= 4; m++) {
+      const p = (gap + m * TAU) / n / k;
+      if (p < pMin || p > pMax) continue;
+      const c = 2 * Math.cbrt(EARTH.mu * (p / TAU) ** 2) - rAt;
+      meets.push({ other: c, cost: Math.abs(c - other) + STATION_MEET.round * k });
+    }
+  }
+  return { miss, meets, other };
 }
 
 // ---- Mars (#548) ----

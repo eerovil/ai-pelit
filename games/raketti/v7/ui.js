@@ -89,7 +89,7 @@ function openMenu() {
 function begin(s) {
   useRocket(TRIP[s.trip].rocket);
   // The hint's memory of the last flight goes too: a brake's stamp or a burn from it must not carry on.
-  ship = s; descentAt = -1; currentWord = ''; baseBrakeAt = -Infinity; burn = null; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
+  ship = s; descentAt = -1; currentWord = ''; baseBrakeAt = -Infinity; burn = null; phaseBurn = null; phaseEnd = -Infinity; paused = false; warp = false; slow = 1; camReady = false; path = null; endShownAt = 0; acc = 0;
   releaseStick(); showPanel(null); updateHud(); saveFlight(); play();
 }
 function startFlight(trip) { begin(freshFlight(trip)); }
