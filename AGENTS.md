@@ -128,8 +128,6 @@ The short list; every step, and what to do when one fails, is in
 - Play it yourself at 360 × 740 in Playwright; screenshots of the shelf and the game mid-play go
   on the issue. A change to a shared file needs a game that uses it played the same way. The
   walkthrough: open the shelf, open the game, play one round, go back.
-- For each changed file, grep the `## Boxes` sections in `docs/diagrams/` and update every box
-  that names it; say in the pull request when none applies.
 - A test you did not touch keeps failing: reproduce it on unchanged `origin/main` and find the
   cause. No retry commits, no guessed timing fix, no calling it flaky.
 - A merge to `main` deploys at once. Wait with a commit wake-on named `deploy-cloudflare`, then
