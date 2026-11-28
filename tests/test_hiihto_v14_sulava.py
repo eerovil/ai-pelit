@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/hiihto/v13/"
+URL = "games/hiihto/v14/"
 
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;
