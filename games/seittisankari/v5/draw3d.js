@@ -298,6 +298,16 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
     const beam = new T.Mesh(new T.CylinderGeometry(2.5, 2.5, 400, 16, 1, true), new T.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.35, depthWrite: false, side: T.DoubleSide, fog: false }));
     beam.position.y = 200; flag.add(beam);
 
+    // v5 (#565): Varjo's bomb and the money bag.
+    const bomb = new T.Group(); things.add(bomb);
+    part(bomb, ball, '#1b1b22', 0, 0.6, 0, 0.6, 0.6, 0.6);
+    part(bomb, box, '#555', 0, 1.2, 0, 0.18, 0.25, 0.18);
+    part(bomb, ball, '#ff3030', 0, 1.4, 0, 0.14, 0.14, 0.14, { emissive: '#ff2020', emissiveIntensity: 1.2 });
+    const bag = new T.Group(); things.add(bag);
+    part(bag, ball, '#c9a56b', 0, 0.45, 0, 0.45, 0.5, 0.45);
+    part(bag, box, '#8a6a3a', 0, 0.95, 0, 0.18, 0.12, 0.18);
+    part(bag, box, '#2e7d32', 0, 0.5, 0.42, 0.3, 0.3, 0.02, { emissive: '#2e7d32', emissiveIntensity: 0.3 });
+
     // ---- The crooks (v4, #561): robbers, a getaway car and a getaway helicopter ----
     const stripes = new T.MeshStandardMaterial({ roughness: 0.8, map: canvasTex(16, 32, (g, w, h) => {
       for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#f2f2f2' : '#1c1c1c'; g.fillRect(0, k * h / 8, w, h / 8); }
@@ -320,9 +330,9 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       const beam = crookBeam(); beam.position.y = 150; g.add(beam);
       return { g, web, beam };
     }
-    function makeHeli() {
+    function makeHeli(body) {
       const g = new T.Group();
-      part(g, ball, '#3b4049', 0, 1.5, 0.4, 1.5, 1.4, 2.6);
+      part(g, ball, body || '#3b4049', 0, 1.5, 0.4, 1.5, 1.4, 2.6);
       part(g, ball, '#9fd0ff', 0, 1.8, 2.0, 1.0, 0.8, 1.0, { roughness: 0.2 });
       part(g, box, '#3b4049', 0, 1.8, -3.6, 0.35, 0.35, 4);
       part(g, box, '#3b4049', 0, 2.4, -5.4, 0.1, 1.2, 0.8);
@@ -345,6 +355,12 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
         let m = crookM.get(k.id);
         if (!m) {
           if (k.type === 'rosvo') { m = makeHero(stripes, true); m.cocoon = cocoon(); }
+          else if (k.type === 'apu') m = makeHero('#f2f2f2');   // v5 (#565): a window cleaner in a white overall
+          else if (k.type === 'putoava') m = makeHero('#ffb347');   // v5: a person in an orange coat
+          else if (k.type === 'boss') {                          // v5: Varjo's helicopter, black and half again as big
+            m = makeHeli('#15151c'); m.g.scale.setScalar(1.5); scene.add(m.g);
+            const bm = m.beam.material; bm.color.set('#b07bff');
+          }
           else { m = k.type === 'auto' ? makeCar() : makeHeli(); scene.add(m.g); }
           crookM.set(k.id, m);
         }
@@ -352,11 +368,18 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
         if (k.type === 'rosvo') {
           poseHero(m, { x: k.x, y: k.y, z: k.z, vx: k.caught ? 0 : k.vx, vy: 0, vz: k.caught ? 0 : k.vz, st: 'ground', yaw: k.yaw, anchor: null }, dt);
           m.cocoon.visible = k.caught; m.cocoon.position.set(k.x, k.y + 0.95, k.z);
+        } else if (k.type === 'putoava') {
+          // Holding on to the edge as a climber does, then falling with arms and legs out.
+          poseHero(m, { x: k.x, y: k.y, z: k.z, vx: 0, vy: k.falling && !k.caught ? -5 : 0, vz: 0, st: k.falling ? 'air' : 'wall', nx: k.nx, nz: k.nz, yaw: k.yaw, anchor: null }, dt);
+          if (k.caught) { m.web.visible = true; m.web.geometry.setFromPoints([new T.Vector3(k.x, k.y + 1.6, k.z), new T.Vector3(k.x + k.nx * 0.5, CITY[k.box].h, k.z + k.nz * 0.5)]); }
+        } else if (k.type === 'apu') {
+          // On the wall he hangs as a climber does, still; saved, he stands on the roof.
+          poseHero(m, { x: k.x, y: k.y, z: k.z, vx: 0, vy: 0, vz: 0, st: k.caught ? 'ground' : 'wall', nx: k.nx, nz: k.nz, yaw: k.yaw, anchor: null }, dt);
         } else {
           m.g.position.set(k.x, k.y, k.z); m.g.rotation.y = k.yaw;
           // The light fades out close by, where it would only hide the view (seen at 360 × 740).
           const near = hero ? Math.hypot(k.x - hero.x, k.z - hero.z) : 999;
-          m.web.visible = k.caught; m.beam.visible = !k.caught && near > 30;
+          m.web.visible = k.caught || k.hitT > 0; m.beam.visible = !k.caught && near > 30;
           m.beam.material.opacity = 0.3 * clamp((near - 30) / 60, 0, 1);
           if (m.rotor) { const spin = k.caught ? Math.max(0, 1 - k.ct / 3) : 1; m.rotor.rotation.y += dt * 28 * spin; m.tail.rotation.x += dt * 40 * spin; }
         }
@@ -366,6 +389,33 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
         // Free what each crook made for itself (the shared parts stay): a long session must not fill the phone.
         for (const o of [m.beam, m.shadow, m.web && m.web.isLine ? m.web : null]) if (o) { o.geometry.dispose(); o.material.dispose(); }
         crookM.delete(id);
+      }
+    }
+
+    // v5 (#565): the cutscenes' people and Varjo's helicopter, where story.js puts them.
+    const cutM = new Map();
+    function drawCut(c, dt) {
+      const seen = new Set();
+      for (const a of c ? c.actors : []) {
+        let m = cutM.get(a.id);
+        if (!m) {
+          if (a.heli) { m = makeHeli('#15151c'); m.g.scale.setScalar(1.5); scene.add(m.g); }
+          else { m = makeHero(a.col); m.cocoon = cocoon(); }
+          cutM.set(a.id, m);
+        }
+        seen.add(a.id);
+        if (a.heli) {
+          m.g.visible = true; m.g.position.set(a.x, a.y, a.z); m.g.rotation.y = a.yaw;
+          m.web.visible = false; m.beam.visible = false;
+          m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 40;
+        } else {
+          poseHero(m, { x: a.x, y: a.y, z: a.z, vx: 0, vy: 0, vz: 0, st: 'ground', yaw: a.yaw, anchor: null }, dt);
+          m.cocoon.visible = !!a.caught; m.cocoon.position.set(a.x, a.y + 0.95, a.z);
+        }
+      }
+      for (const [id, m] of cutM) if (!seen.has(id)) {
+        m.g.visible = false;
+        for (const o of [m.shadow, m.web, m.beam, m.cocoon]) if (o) o.visible = false;
       }
     }
 
@@ -412,10 +462,18 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       }
       for (const [id, m] of heroes) if (!seen.has(id)) { m.g.visible = false; m.shadow.visible = false; m.web.visible = false; }
       const w = s.w, now = performance.now() / 1000;
+      // v5: Varjo's bomb blinks on its roof instead of the flag; the money bag sits on its roof,
+      // then rides along with the hero.
+      const kind = w && w.kind;
+      bomb.visible = kind === 'pommit' && !!w.flag; if (bomb.visible) { bomb.position.set(w.flag.x, w.flag.y, w.flag.z); bomb.children[2].visible = Math.sin(now * 8) > 0; }
+      bag.visible = kind === 'paketti' && !!w.flag;
+      if (bag.visible) { if (w.seq) bag.position.set(s.hero.x, s.hero.y + 0.5, s.hero.z); else bag.position.set(w.flag.x + 1.2, w.flag.y, w.flag.z); }
       flag.visible = !!(w && w.flag); if (flag.visible) { flag.position.set(w.flag.x, w.flag.y, w.flag.z); flag.children[1].rotation.y = Math.sin(now * 3) * 0.3; }
       drawCrooks(w ? [...(w.crooks || []), ...(w.gone || [])] : [], s.hero, dt);
+      drawCut(s.cut, dt);
       const h = s.hero;
-      if (h) place(h, s.cam, dt, !!s.aiming);
+      if (s.cut) { cam.position.set(s.cut.cam[0], s.cut.cam[1], s.cut.cam[2]); cam.lookAt(s.cut.look[0], s.cut.look[1], s.cut.look[2]); camPos.copy(cam.position); }
+      else if (h) place(h, s.cam, dt, !!s.aiming);
       rd.render(scene, cam);
       L3D.ready = true;
       // A slow phone: fewer pixels (#103's lesson).
