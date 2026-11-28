@@ -8,7 +8,7 @@ import pytest
 from conftest import ROOT, turn
 from test_rooms_lib import Relay
 
-URL = "games/vuoristorata/v8/"
+URL = "games/vuoristorata/v9/"
 KEY = "ai-pelit:vuoristorata:"
 
 
@@ -243,7 +243,7 @@ def test_the_menu_and_the_end_screen_fit_without_scrolling(site, browser, size):
     ctx, page = open_page(site, browser, size)
     try:
         assert page.evaluate("document.documentElement.scrollHeight") == size[1]
-        for sel in ["#menu h1", "#menu .help", "#taso", "#aja", "#kaverit", "#ai-pelit-back"]:
+        for sel in ["#menu h1", "#menu .help", "#taso", "#aja", "#kaverit", "#asu", "#ai-pelit-back"]:
             inside(page, sel)
         assert not overlaps(inside(page, "#menu h1"), inside(page, "#ai-pelit-back"))
         page.click("#aja")

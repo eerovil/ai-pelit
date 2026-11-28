@@ -66,7 +66,8 @@ Every 3D game shares one outfit choice and one set (#568, Eero's choice); the ne
    friends from `AiPelitOutfits.get(id)`; their name colours stay the game's own.
 
 `tests/fixtures/asut3d-demo.html` is the smallest whole use, Seittisankari v6 the model with its
-own body joints (`figure()`), Pulkkamäki v7 the model with its own body (`head()`, `cape()`).
+own body joints (`figure()`), Pulkkamäki v7 the model with its own body (`head()`, `cape()`), Vuoristorata v9 a seated rider (`figure()` with bent legs) and
+first-person sleeves in the outfit's colours.
 A fix to the library is the next folder (rule 1).
 
 A test whose game loads `lib/three` is marked `alone` even when its phones draw 2D, unless the

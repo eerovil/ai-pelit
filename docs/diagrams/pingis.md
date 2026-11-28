@@ -1,6 +1,6 @@
 # Pingis: one rally, from the serve to the point
 
-How a game and one rally of Pingis play (v2; v1 #502, the pause #531). Table tennis in 3D, the camera behind the
+How a game and one rally of Pingis play (v3; v1 #502, the pause #531, the shared 3D outfit #573). Table tennis in 3D, the camera behind the
 player's own end; the bat follows the finger, and how the finger moves when the ball meets the bat
 decides the shot. One game to 11 with a two-point lead, against the computer on three levels or
 against a friend's phone in a room (see `moninpeli.md`), where each phone plays its own end and
@@ -61,8 +61,8 @@ flowchart TD
 
 ## Boxes
 
-- **Kone pelaa toista päätä valitulla tasolla**: `cpuBrain()`, `cpuThink()` and `cpuServes()` in `games/pingis/v2/ai.js`, with the level's reaction time, speed, aim error and misses from `LEVELS` in `world.js` (Helppo, Keskitaso, Vaikea).
-- **Huone, 2 puhelinta: tekijä on isäntä ja pitää pisteet**: `netStart()` in `games/pingis/v2/net.js`; the host is side 0, the friend side 1, and each phone's camera is behind its own end (`placeCamera()` in `draw3d.js`). The friend's bat glides through `lib/sulava-1` (`glide()`).
+- **Kone pelaa toista päätä valitulla tasolla**: `cpuBrain()`, `cpuThink()` and `cpuServes()` in `games/pingis/v3/ai.js`, with the level's reaction time, speed, aim error and misses from `LEVELS` in `world.js` (Helppo, Keskitaso, Vaikea).
+- **Huone, 2 puhelinta: tekijä on isäntä ja pitää pisteet**: `netStart()` in `games/pingis/v3/net.js`; the host is side 0, the friend side 1, and each phone's camera is behind its own end (`placeCamera()` in `draw3d.js`). The friend's bat glides through `lib/sulava-1` (`glide()`).
 - **⏸ kesken pelin?**: alone only, before the last point (`canPause()`: `mode === 'play'`, no `net`, not `game.over`), the ⏸ button in the top-right corner, or the page being hidden (`visibilitychange`), calls `pauseGame()` in `ui.js`; a saved game reopened (`readSolo()`) starts on the pause screen too: `mode` becomes `'paused'`, so `frame()` stops calling `playFrame()` and the ball stays where it was. In a room the button is not shown; the "‹ Pelit" chip is the way out there.
 - **Valikkoon, keskeneräinen peli pois, ei voittoa eikä tappiota**: `quitGame()` drops `ai-pelit:pingis:kesken` and calls `showMenu()`; `ai-pelit:pingis:voitot` is not touched. 
 - **Peli jatkuu siitä mihin jäi**: `resumeGame()` sets `mode` back to `'play'`; the ball goes on from where it stopped, and the bat jumps to the finger without a swing (`bats[view].jump`).
