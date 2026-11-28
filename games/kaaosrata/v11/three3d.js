@@ -175,15 +175,18 @@ window.K3D = { ready: false, failed: false, fail() { K3D.failed = true; const b 
     // v11 (#571): a person wears the 3D games' shared outfit, a figure from lib/asut3d-1 (its materials are the
     // library's own and stay), as tall as a jellybean; it is built again when the outfit changes.
     // A figure's few unit shapes are the library's, shared by every figure; the rest (a hair cap, a beanie...) are
-    // made for each one and given back with it. The shared ones are those found in two figures built alike.
+    // made for each one and given back with it. The shared ones are those found in two figures built alike; which of
+    // them a figure uses depends on its outfit (a cone only for Harry's hair, a witch's hat...), so each new outfit is
+    // learned before its first figure, and before any figure is given back (#578's review).
     const FIG = 0.7;
-    let kitGeo = null;
+    const kitGeo = new Set(), learned = new Set();
     const geos = fig => { const out = new Set(); fig.traverse(m => { if (m.isMesh) out.add(m.geometry); }); return out; };
     function freeFigure(fig) { for (const gm of geos(fig)) if (!kitGeo.has(gm)) gm.dispose(); }
     function newFigure(dress) {
-      if (!kitGeo) {
+      if (!learned.has(dress.id)) {
+        learned.add(dress.id);
         const a = AiPelitAsut3d.figure(T, dress), b = AiPelitAsut3d.figure(T, dress), inB = geos(b);
-        kitGeo = new Set([...geos(a)].filter(gm => inB.has(gm)));
+        for (const gm of geos(a)) if (inB.has(gm)) kitGeo.add(gm);
         freeFigure(a); freeFigure(b);
       }
       return AiPelitAsut3d.figure(T, dress);

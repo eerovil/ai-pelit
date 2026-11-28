@@ -161,3 +161,32 @@ def test_a_lost_outfit_message_is_sent_again_before_the_start(site, browser):
     gid = guest.evaluate("AiPelitRooms.me")
     host.wait_for_function(f"race.phase !== 'run' && K3D.looks()['{gid}'] === 'harry'", timeout=4000)
     assert all(p.errors == [] for p in pages)
+
+
+def test_a_rebuilt_figure_never_frees_a_shape_another_runner_still_draws(site, context):
+    """Review of #578: the library's unit cone and cylinder are shared by every figure but appear only in some outfits
+    (Harry's hair, the witch's hat). Learned from the first outfit alone, a Harry figure rebuilt freed the cone the
+    witch still drew. With people in several outfits at once, one changing and then a new race, nothing still drawn is
+    freed."""
+    context.add_init_script(f"localStorage.setItem('{SHARED}', '\"haalari\"')")
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("K3D.looks().me === 'haalari'", timeout=5000)
+    page.evaluate("""() => K3D_LIB.then(T => { window.__gone = new Set(); const d = T.BufferGeometry.prototype.dispose;
+      T.BufferGeometry.prototype.dispose = function () { window.__gone.add(this); return d.call(this); }; })""")
+    people = """(ids) => ids.forEach((o, i) => { const r = race.runners[i + 1]; r.bot = false; r.o = o; })"""
+    page.evaluate(people, ["harry", "noita", "tonttu"])
+    page.wait_for_function("(() => { const l = K3D.looks(); return l.b0 === 'harry' && l.b1 === 'noita' && l.b2 === 'tonttu'; })()",
+                           timeout=5000)
+    bad = "K3D.shapes().filter(g => window.__gone.has(g)).length"
+    page.evaluate("race.runners[1].o = 'punainen'")   # Harry changes: his figure is freed
+    page.wait_for_function("K3D.looks().b0 === 'punainen'", timeout=5000)
+    page.wait_for_timeout(200)
+    assert page.evaluate(bad) == 0
+    page.evaluate("soloRace()")
+    page.evaluate(people, ["noita", "harry", "lumiukko"])
+    page.wait_for_function("K3D.looks().b2 === 'lumiukko'", timeout=5000)
+    page.wait_for_timeout(200)
+    assert page.evaluate(bad) == 0
+    assert page.evaluate("window.__gone.size") > 0
+    assert page.errors == []
