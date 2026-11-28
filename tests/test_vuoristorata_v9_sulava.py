@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 
 import pytest
 
-from test_vuoristorata_v8 import room_of
+from test_vuoristorata_v9 import room_of
 
 # A phone network: each message leaves 0-90 ms late, in order, as on a busy mobile connection.
 JITTER = """() => { const send = AiPelitRooms.send.bind(AiPelitRooms); let free = 0, seed = 3;

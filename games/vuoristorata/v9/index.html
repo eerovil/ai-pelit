@@ -98,6 +98,9 @@
 <!-- v4 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="../../../lib/sulava-1/sulava.js"></script>
+<!-- v9 (#574): the shared 3D outfit -->
+<script src="../../../outfits.js" data-game="vuoristorata" data-share="3d"></script>
+<script src="../../../lib/asut3d-1/asut3d.js"></script>
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -123,6 +126,7 @@
   <p id="ennatys"></p>
   <button class="go" id="aja">Aja!</button>
   <button class="alt" id="kaverit">👥 Pelaa kavereiden kanssa</button>
+  <button class="alt" id="asu">👕 Asu</button>
 </div>
 
 <div class="screen hidden" id="loppu">
@@ -366,28 +370,61 @@ if (renderer) {
   nose.rotation.set(0, Math.PI / 2, Math.PI / 2); nose.position.set(0, -1.5, -3.3);
   const bar = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.045, 8, 20, Math.PI), mat(0xffd23f));
   bar.position.set(0, -0.86, -1.25); bar.rotation.x = -Math.PI / 2 + 0.35;
-  const handGeo = new THREE.SphereGeometry(0.08, 10, 8), handMat = mat(0xf0c8a0);
-  const hands = [-0.36, 0.36].map(x => { const h = new THREE.Mesh(handGeo, handMat); h.position.set(x, -0.84, -1.3); return h; });
-  front.add(body, nose, bar, ...hands);
+  front.add(body, nose, bar);
   camera.add(front);
+  // v9 (#574): the rider's own arms on the lap bar, in the outfit's sleeves and hands (or mittens).
+  const handGeo = new THREE.SphereGeometry(0.08, 10, 8), sleeveGeo = new THREE.BoxGeometry(0.13, 0.13, 0.62);
+  let arms = null;
+  function dressArms() {
+    if (arms) { front.remove(arms); arms.traverse(m => m.material && m.material.dispose()); }
+    const o = outfit || {};
+    const hand = mat(new THREE.Color(o.mitt || (o.head === 'skull' ? o.skin : null) || o.skin || '#f0c8a0').getHex());
+    const sleeve = mat(new THREE.Color(o.top || '#2f6fd0').getHex());
+    arms = new THREE.Group(); arms.userData.outfit = o.id || null;
+    for (const x of [-0.25, 0.25]) {
+      const h = new THREE.Mesh(handGeo, hand); h.position.set(x, -0.76, -1.52);
+      const a = new THREE.Mesh(sleeveGeo, sleeve); a.position.set(x * 1.2, -0.9, -1.2); a.rotation.set(0.45, -x * 0.5, 0);
+      arms.add(h, a);
+    }
+    front.add(arms);
+  }
+  dressArms();
 
-  const trainGeo = new THREE.BoxGeometry(1.5, 0.8, 2.2), headGeo = new THREE.SphereGeometry(0.28, 12, 9);
+  // The trains: two cars, the rider seated in the front one in their outfit (v9, #574; was two
+  // round heads a car). A friend's comes from the id their phone sends, mine from my own pick.
+  const trainGeo = new THREE.BoxGeometry(1.5, 0.8, 2.2);
   const trains = new Map();
-  function trainFor(k) {
+  function seated(o) {
+    const f = AiPelitAsut3d.figure(THREE, o || {}), J = f.userData.joints;
+    J.legL.rotation.x = J.legR.rotation.x = -Math.PI / 2;
+    J.kneeL.rotation.x = J.kneeR.rotation.x = Math.PI / 2;
+    // Hands up on the bar ahead.
+    J.armL.rotation.x = J.armR.rotation.x = -1.1;
+    J.elbL.rotation.x = J.elbR.rotation.x = -0.5;
+    f.scale.setScalar(0.75); f.rotation.y = Math.PI; f.position.set(0, 0.14, 0.25);
+    return f;
+  }
+  function drop(g) {
+    scene.remove(g);
+    g.traverse(m => { if (m.material && m.userData.own) m.material.dispose(); });
+  }
+  function trainFor(k, o) {
+    const id = o ? o.id || null : null;
     let t = trains.get(k.id);
+    if (t && t.userData.outfit !== id) { drop(t); t = null; }
     if (!t) {
       const g = new THREE.Group();
-      const m = mat(new THREE.Color(k.color).getHex());
-      for (const dz of [0, 2.5]) {
-        const car = new THREE.Mesh(trainGeo, m); car.position.set(0, 0.45, dz); g.add(car);
-        for (const x of [-0.35, 0.35]) { const h = new THREE.Mesh(headGeo, handMat); h.position.set(x, 1.1, dz + 0.2); g.add(h); }
-      }
+      const m = mat(new THREE.Color(k.color).getHex()); m.userData.own = true;
+      for (const dz of [0, 2.5]) { const car = new THREE.Mesh(trainGeo, m); car.position.set(0, 0.45, dz); g.add(car); }
+      if (window.AiPelitAsut3d) g.add(seated(o));
+      g.userData.outfit = id;
       g.matrixAutoUpdate = false;
       scene.add(g);
       t = g; trains.set(k.id, t);
     }
     return t;
   }
+  addEventListener('asu', dressArms);
 
   // ---- The camera: in the front seat, along the track's frame ----
   const P = new THREE.Vector3(), F = new THREE.Vector3(), U = new THREE.Vector3(), R = new THREE.Vector3(), look = new THREE.Vector3();
@@ -399,6 +436,8 @@ if (renderer) {
     R.crossVectors(F, U);
   }
   let shake = 0, crashSpin = 0;
+  const ME = { id: 'me', color: '#d8343a' }, tgt = new THREE.Vector3();
+  const smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
   function place(dt) {
     const car = game.car;
     if (game.mode === 'crash') {
@@ -418,6 +457,22 @@ if (renderer) {
     document.getElementById('valko').style.opacity = 0;
     frameAt(car.s);
     camera.position.copy(P).addScaledVector(U, 1.25);
+    // v9 (#574): in the countdown the camera first stands ahead of the train, looking back at my
+    // rider in their outfit, then glides into the seat for the start.
+    const back = game.mode === 'count' ? smooth((game.count - 0.5) / 1.2) : 0;
+    const t = trainFor(ME, outfit);
+    t.visible = back > 0.12;
+    front.visible = !t.visible;
+    if (t.visible) t.matrix.copy(frameMatrix(at(game.track, car.s).a, 0, 0, 0, 1, 1, 1));
+    if (back > 0) {
+      camera.position.addScaledVector(F, 3.2 * back).addScaledVector(U, 0.55 * back).addScaledVector(R, 0.6 * back);
+      look.copy(P).addScaledVector(F, 12).addScaledVector(U, 0.9);
+      tgt.copy(P).addScaledVector(U, 1.75);
+      look.lerp(tgt, back);
+      camera.up.copy(U);
+      camera.lookAt(look);
+      return;
+    }
     // Over a limit the car shakes, harder the closer it is to going.
     shake = game.mode === 'ride' ? car.warn : 0;
     if (shake > 0) camera.position.addScaledVector(R, (Math.random() - 0.5) * 0.12 * shake).addScaledVector(U, (Math.random() - 0.5) * 0.12 * shake);
@@ -471,7 +526,7 @@ if (renderer) {
     if (net) {
       for (const k of net.cars) {
         if (k.kind === 'me') continue;
-        const t = trainFor(k); seen.add(k.id);
+        const t = trainFor(k, outfitOf(k.o)); seen.add(k.id);
         const ks = drawnS(k);  // v7 (#480): a moment back, gliding between the spots heard
         t.visible = Math.abs(ks - game.car.s) > 3.5;
         if (t.visible) {
@@ -480,12 +535,18 @@ if (renderer) {
         }
       }
     }
-    for (const [id, t] of trains) if (!seen.has(id)) t.visible = false;
+    for (const [id, t] of trains) if (!seen.has(id) && id !== 'me') t.visible = false;
     tune(dt);
     renderer.render(scene, camera);
     window.drawn = true;
   });
-  Object.assign(window, { camera, renderer, scene });
+  // For the tests: the outfit each rider is drawn in.
+  const looks = () => {
+    const r = { me: arms.userData.outfit };
+    for (const [id, t] of trains) if (id !== 'me' && t.visible !== undefined) r[id] = t.userData.outfit;
+    return r;
+  };
+  Object.assign(window, { camera, renderer, scene, VR3D: { looks, seatRider: () => trains.has('me') && trains.get('me').visible ? trains.get('me').userData.outfit : null } });
 }
 </script>
 <script src="../../../scores.js" data-game="vuoristorata" data-order="low" data-corner="top-right"></script>
