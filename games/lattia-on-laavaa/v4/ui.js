@@ -193,7 +193,11 @@ function shoveBtn() {
 
 // ---- Menus (DOM, over the canvas) ----
 const $ = id => document.getElementById(id);
-function hideAll() { for (const id of ['menu', 'end']) $(id).hidden = true; }
+// A round starting (the host's start on a guest too) closes the outfit picker over the play area.
+function hideAll() {
+  for (const id of ['menu', 'end']) $(id).hidden = true;
+  if (window.AiPelitOutfits && AiPelitOutfits.isOpen && AiPelitOutfits.isOpen()) AiPelitOutfits.close();
+}
 const ROOM_NOTES = ['Sohva, nojatuoli ja kirjahylly', 'Sänky, säkkituolit ja lelulaatikot', 'Pöytä, tuolit ja jääkaappi', 'Portaita ylös katolle asti'];
 function showMenu() {
   mode = 'menu'; world = null; me = null; seen = null;

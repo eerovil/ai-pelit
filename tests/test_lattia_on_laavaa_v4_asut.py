@@ -52,7 +52,11 @@ def test_in_a_room_every_phone_sees_each_players_own_outfit(kids):
     for p, o in ((host, "vampyyri"), (guest, "harry")):
         assert p.locator("#lol-asu").is_visible()
         p.click("#lol-asu"); p.click(f"[data-asu={o}]"); p.evaluate("AiPelitOutfits.close()")
+    # The picker left open on the guest's room screen closes when the host starts the round.
+    guest.click("#lol-asu")
+    assert guest.evaluate("AiPelitOutfits.isOpen()")
     start([host, guest])
+    assert not guest.evaluate("AiPelitOutfits.isOpen()")
     hid, gid = json.dumps(host.evaluate("AiPelitRooms.me")), json.dumps(guest.evaluate("AiPelitRooms.me"))
     for p in (host, guest):
         p.wait_for_function(f"L3D.kidOutfit({hid}) === 'vampyyri' && L3D.kidOutfit({gid}) === 'harry'", timeout=8000)
@@ -65,4 +69,10 @@ def test_in_a_room_every_phone_sees_each_players_own_outfit(kids):
     host.evaluate(f"net.recs.get({gid}).drive = true")
     guest.evaluate("AiPelitOutfits.open()"); guest.click("[data-asu=harry]"); guest.evaluate("AiPelitOutfits.close()")
     host.wait_for_function(f"L3D.kidOutfit({gid}) === 'harry'", timeout=8000)
+    # A pick whose message was lost (the phone away): the host's snapshot still has the old one,
+    # so the guest tells it again.
+    guest.evaluate("() => { window.realSend = RM.send; RM.send = (m, to) => m.t === 'o' ? null : realSend(m, to); }")
+    guest.evaluate("AiPelitOutfits.open()"); guest.click("[data-asu=noita]"); guest.evaluate("AiPelitOutfits.close()")
+    guest.evaluate("() => { RM.send = realSend; }")
+    host.wait_for_function(f"L3D.kidOutfit({gid}) === 'noita'", timeout=8000)
     assert host.errors == [] and guest.errors == []

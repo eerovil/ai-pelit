@@ -116,7 +116,9 @@ function guestState(m) {
     if (!k || k.id !== a[0]) return;
     k.name = a[1]; k.col = a[2]; k.kind = a[3] === 1 ? 'cpu' : 'net';
     const outRt = a[13];
-    // A friend's outfit as the host has it; my own kid wears my pick, here at once.
+    // A friend's outfit as the host has it; my own kid wears my pick, here at once. When the host
+    // still has another for mine (a pick lost while away), it is told again, once a second at most.
+    if (k === me && outfitStr(a[18]) !== outfitId() && performance.now() - (net.oT || 0) > 1000) { net.oT = performance.now(); sendOutfit(); }
     k.o = k === me ? outfitId() : outfitStr(a[18]);
     if (k === me) {
       net.cpuMine = a[3] === 2;
