@@ -38,7 +38,7 @@ let outfit = null;
 if (window.AiPelitAsut3d && window.AiPelitOutfits) {
   outfit = AiPelitAsut3d.setup({
     default: 'haalari', button: 'asu',
-    change(o) { outfit = o; if (me) me.o = o.id; },
+    change(o) { outfit = o; if (me) me.o = o.id; if (typeof sendOutfit === 'function') sendOutfit(); },
   });
 } else { const b = document.getElementById('asu'); if (b) b.hidden = true; }
 const outfitId = () => outfit ? outfit.id : '';

@@ -209,6 +209,11 @@ function guestStep(dt) {
   if (run.length && w.ph === 'play' && inLava(w, me)) fall(w, me);
 }
 
+// A pick while the computer drives my kid (no spots go then): told to the host on its own (v4).
+function sendOutfit() {
+  if (RM && net && !net.res && !RM.isHost && world) RM.send({ t: 'o', round: net.round, w: outfitId() });
+}
+
 // ---- The host hears a guest ----
 function hostSpot(m, from) {
   const k = world.kids.find(o => o.id === from), rec = net.recs.get(from);
@@ -325,6 +330,7 @@ if (RM) {
       if (!world || net.res) return;
       if (m.t === 'p') hostSpot(m, from);
       else if (m.t === 'sh') hostShove(m, from);
+      else if (m.t === 'o') { const k = world.kids.find(o => o.id === from); if (k) k.o = outfitStr(m.w); }
       return;
     }
     if (m.t === 's') guestState(m);

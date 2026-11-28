@@ -338,6 +338,17 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       const o = AiPelitOutfits.get(oid);
       return o && o.id === oid ? o : null;
     }
+    // One head (and chest, cape) per outfit, cloned for each kid: clones share the geometries, so a
+    // new round or a new pick makes no new ones (the library builds fresh geometry for some heads).
+    const dress = new Map();
+    function dressOf(o) {
+      let D = dress.get(o.id);
+      if (!D) {
+        D = { head: AiPelitAsut3d.head(T, o), chest: AiPelitAsut3d.torso(T, o, { w: 0.36, h: 0.34, d: 0.24 }), cape: AiPelitAsut3d.cape(T, o, { w: 0.32, h: 0.5 }) };
+        dress.set(o.id, D);
+      }
+      return { head: D.head.clone(), chest: D.chest && D.chest.clone(), cape: D.cape && D.cape.clone() };
+    }
     function kidModel(col, oid) {
       const g = new T.Group(), body = new T.Group(); g.add(body);
       const o = outfitOf(oid);
@@ -349,10 +360,9 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       const parts = { ll: leg(-1), lr: leg(1), al: arm(-1), ar: arm(1) };
       part(body, box, shirt, 0, 0.58, 0, 0.24, 0.34, 0.36);
       if (o) {
-        const hd = AiPelitAsut3d.head(T, o); hd.scale.setScalar(0.16); hd.position.set(0, 0.88, 0); hd.rotation.y = Math.PI / 2; body.add(hd);
-        const ch = AiPelitAsut3d.torso(T, o, { w: 0.36, h: 0.34, d: 0.24 });
+        const D = dressOf(o), hd = D.head, ch = D.chest, cp = D.cape;
+        hd.scale.setScalar(0.16); hd.position.set(0, 0.88, 0); hd.rotation.y = Math.PI / 2; body.add(hd);
         if (ch) { ch.position.y = 0.58; ch.rotation.y = Math.PI / 2; body.add(ch); }
-        const cp = AiPelitAsut3d.cape(T, o, { w: 0.32, h: 0.5 });
         if (cp) { cp.position.set(-0.14, 0.74, 0); cp.rotation.y = Math.PI / 2; body.add(cp); }
         body.traverse(m => { if (m.isMesh) m.castShadow = true; });
       } else {
@@ -560,6 +570,7 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
     const v = new T.Vector3();
     // The outfit each kid is drawn in ('' its own colours), for the tests (v4, #572).
     L3D.kidOutfit = id => kids.has(id) ? kids.get(id).userData.outfit : null;
+    L3D.kidGeos = id => { const g = kids.get(id), u = []; if (g) g.traverse(m => { if (m.isMesh) u.push(m.geometry.uuid); }); return u; };
     L3D.kidHead = id => { const g = kids.get(id); let n = 0; if (g) g.userData.body.children.forEach(c => { if (c.isGroup && c.scale.x < 0.2 && c.scale.x > 0.15) c.traverse(m => { if (m.isMesh) n++; }); }); return n; };
     L3D.tilt = i => pieces[i] ? [pieces[i].userData.inner.rotation.x, pieces[i].userData.inner.rotation.z] : null;
     L3D.project = (x, y, z) => {

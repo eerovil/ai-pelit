@@ -38,6 +38,12 @@ def test_the_asu_button_changes_the_shared_choice_and_dresses_the_kid_mid_round(
     # A pick in another 3D game while this page was out of view: the kid changes when it is back.
     page.evaluate(f"localStorage.setItem('{SHARED}', '\"harry\"'); document.dispatchEvent(new Event('visibilitychange'))")
     page.wait_for_function("me.o === 'harry' && L3D.kidOutfit('me') === 'harry'")
+    # The head's geometries are made once per outfit: the next round's kid shares them.
+    first = page.evaluate("L3D.kidGeos('me')")
+    assert len(first) >= 3
+    page.evaluate("soloRound()")
+    page.wait_for_function("L3D.kidOutfit('me') === 'harry'")
+    assert page.evaluate("L3D.kidGeos('me')") == first
     assert page.errors == []
 
 
@@ -55,4 +61,8 @@ def test_in_a_room_every_phone_sees_each_players_own_outfit(kids):
     guest.wait_for_function(f"L3D.kidOutfit({hid}) === 'muumio'", timeout=8000)
     guest.evaluate("AiPelitOutfits.open()"); guest.click("[data-asu=sankari]"); guest.evaluate("AiPelitOutfits.close()")
     host.wait_for_function(f"L3D.kidOutfit({gid}) === 'sankari'", timeout=8000)
+    # While the computer drives the guest's kid no spots go, so a pick is told to the host by itself.
+    host.evaluate(f"net.recs.get({gid}).drive = true")
+    guest.evaluate("AiPelitOutfits.open()"); guest.click("[data-asu=harry]"); guest.evaluate("AiPelitOutfits.close()")
+    host.wait_for_function(f"L3D.kidOutfit({gid}) === 'harry'", timeout=8000)
     assert host.errors == [] and guest.errors == []
