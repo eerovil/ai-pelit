@@ -83,7 +83,8 @@ function netStart(s) {
     const a0 = Math.random() * TAU;
     net.players = s.players.slice(0, 8).map((p, i) => {
       const sp = startSpot(i, Math.min(8, s.players.length), net.mode, goalBox(), a0);
-      return { id: p.id, name: p.name, col: HERO_COLS[i % HERO_COLS.length], x: sp.x, y: 0, z: sp.z, f: sp.yaw, st: 'ground', a: null, stamp: 0, top: false };
+      // o: the outfit's id (v6, #568): the host's own from its picker, a guest's from its first `p`.
+      return { id: p.id, name: p.name, col: HERO_COLS[i % HERO_COLS.length], o: p.id === RM.me && outfit ? outfit.id : null, x: sp.x, y: 0, z: sp.z, f: sp.yaw, st: 'ground', a: null, stamp: 0, top: false };
     });
     beginLocal();
     RM.send(hostState());
@@ -107,7 +108,7 @@ function heroRow(p) {
 }
 function hostState() {
   return { t: 's', round: net.round, seq: ++hostSeq, mode: net.mode, g: net.goal, rt: r2(net.rt), over: net.over,
-    names: net.players.map(p => [p.id, p.name, p.col]), h: net.players.map(heroRow) };
+    names: net.players.map(p => [p.id, p.name, p.col, p.o || null]), h: net.players.map(heroRow) };
 }
 const ST = { g: 'ground', a: 'air', w: 'wall', s: 'swing', p: 'pull' };   // pull: Veto (#560)
 function readRow(p, a) {
@@ -124,8 +125,10 @@ function guestState(m) {
     net.mode = NET_MODES.some(o => o.key === m.mode) ? m.mode : 'vapaa';
     net.goal = CITY[m.g | 0] && m.g >= 0 ? m.g | 0 : -1;
     if (net.mode === 'kilpa' && net.goal < 0) net.mode = 'vapaa';
-    net.players = m.names.map(([id, name, col]) => ({ id, name, col, x: 0, y: 0, z: 0, f: 0, st: 'ground', a: null, stamp: 0 }));
+    net.players = m.names.map(([id, name, col]) => ({ id, name, col, o: null, x: 0, y: 0, z: 0, f: 0, st: 'ground', a: null, stamp: 0 }));
   }
+  // Outfits from every snapshot (v6): the first may come before the host has heard ours.
+  for (const row of m.names || []) { const p = playerOf(row[0]); if (p && p.id !== RM.me && typeof row[3] === 'string') p.o = row[3]; }
   // The clock: eased to the host's, taken when far off.
   const d = m.rt - net.rt;
   if (first || Math.abs(d) > 0.5) net.rt = m.rt; else net.rt += d * 0.2;
@@ -191,7 +194,7 @@ function netTick(dt) {
   if (net.sendT > 0) return;
   net.sendT = 0.1;
   if (RM.isHost) RM.send(hostState());
-  else if (me) RM.send({ t: 'p', round: net.round, h: heroRow(me) });
+  else if (me) RM.send({ t: 'p', round: net.round, h: heroRow(me), o: outfit ? outfit.id : null });
 }
 function localClaims(dt) {
   const h = world.hero;
@@ -206,6 +209,7 @@ function hostSpot(m, from) {
   const p = playerOf(from);
   if (!p || !Array.isArray(m.h) || m.h[0] !== from) return;
   readRow(p, m.h);
+  if (typeof m.o === 'string') p.o = m.o;
   p.x = clamp(p.x, -EDGE, EDGE); p.z = clamp(p.z, -EDGE, EDGE);
   const t = trackOf(p); if (t) t.push(p.stamp, { x: p.x, y: p.y, z: p.z, f: p.f });
 }

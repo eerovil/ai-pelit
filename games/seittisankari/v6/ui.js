@@ -30,6 +30,17 @@ const S = window.AiPelitAanet;
 if (S) S.load(['suhahdus', 'tomahdys', 'pop', 'valinta', 'voitto', 'tappio']);
 const sfx = (name, opts) => S && S.play(name, opts);
 
+// ---- The outfit (v6, #568): one choice for every 3D game, the teal hero suit by default ----
+// AiPelitAsut3d.setup wires the menu's "👕 Asu" button; without the libraries the button hides and
+// the hero keeps the v5 look. In a room the player's own record carries its id (net.js).
+let outfit = window.AiPelitAsut3d ? AiPelitAsut3d.setup({
+  default: 'sankari', button: 'asu',
+  change(o) { outfit = o; if (typeof net !== 'undefined' && net && net.me) net.me.o = o.id; },
+}) : null;
+if (!outfit) document.getElementById('asu').hidden = true;
+// A friend's outfit from the id their phone sent (the default until it has been heard).
+const outfitOf = id => (window.AiPelitOutfits && outfit ? AiPelitOutfits.get(id) : null);
+
 // ---- The round ----
 let mode = 'menu', world = null, acc = 0, result = null, saveT = 0;
 const cam = { yaw: 0, pitch: 0.3, manualT: 9 };
@@ -365,8 +376,8 @@ function drawControls(h) {
 function netHeroes(dt) {
   const out = [];
   for (const p of net.players) {
-    if (p.id === RM.me && net.me) out.push({ id: p.id, col: p.col, h: world.hero });
-    else out.push({ id: p.id, col: p.col, h: drawnHero(p, dt) });
+    if (p.id === RM.me && net.me) out.push({ id: p.id, col: p.col, o: outfit, h: world.hero });
+    else out.push({ id: p.id, col: p.col, o: outfitOf(p.o), h: drawnHero(p, dt) });
   }
   return out;
 }
@@ -464,7 +475,7 @@ function draw(dt) {
     const h = world.hero;
     const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
     aimNow = h.st !== 'swing' && playing() ? aimAnchor(h, fx, fz) : null;
-    const heroes = mode === 'netplay' && net ? netHeroes(dt) : [{ id: 'me', col: '#1fb5a8', h }];
+    const heroes = mode === 'netplay' && net ? netHeroes(dt) : [{ id: 'me', col: '#1fb5a8', o: outfit, h }];
     s = { w: world, hero: h, heroes, cam, playing: playing(), aiming: !!pullPtr };
     if (mode === 'cut' && typeof cutView === 'function') { const c = cutView(dt); if (c) { s.cut = c; s.heroes = []; } }
   } else {

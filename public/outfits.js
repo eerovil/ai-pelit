@@ -35,6 +35,11 @@
 // both keys, so the game's older versions (which read only their own) follow it too.
 // AiPelitOutfits.yleisurheilu is the athletics events' common everyday set: pass it as `outfits`,
 // so an id picked in one event is found in every other.
+//
+// The 3D games (#568) share one choice with data-share="3d" and pass AiPelitOutfits.kolmiD (their
+// common everyday set, Pulkkamäki's winter wear and two masked hero suits; head 'naamio' is the hero
+// mask), usually through AiPelitAsut3d.setup() in lib/asut3d-*/, which also builds the 3D pieces.
+// A pick that could not be saved (full or blocked storage) is still worn for the page's life.
 // Later versions load this same file, so it must stay compatible with every version that uses it.
 (function () {
   'use strict';
@@ -42,22 +47,23 @@
   var GAME = (script && script.getAttribute('data-game')) || '';
   var SHARE = (script && script.getAttribute('data-share')) || '';
   // The athletics events (#469) show the shared front figure in the picker; other games their own.
-  var FIGURE = SHARE === 'yleisurheilu';
+  var FIGURE = SHARE === 'yleisurheilu' || SHARE === '3d';
   var OWN = 'ai-pelit:_asut:' + GAME;
   var KEY = SHARE ? 'ai-pelit:_asut:' + SHARE : OWN;
   // The games whose own earlier choice a group takes over, in order (#311): those that had
   // outfits before the group shared one, the longest-dressed first.
-  var SHARED_FROM = { yleisurheilu: ['keihas', 'aitajuoksu', 'kuula'] };
+  var SHARED_FROM = { yleisurheilu: ['keihas', 'aitajuoksu', 'kuula'], '3d': ['pulkkamaki'] };
   function adopt() {
     if (!SHARE || load(KEY, null) !== null) return;
     var from = (SHARED_FROM[SHARE] || []).concat([GAME]);
     for (var i = 0; i < from.length; i++) {
       var o = byId(load('ai-pelit:_asut:' + from[i], ''));
-      if (o) { save(KEY, o.id); return; }
+      // Storage full: still worn on this page, as a pick that could not be saved is.
+      if (o) { if (!save(KEY, o.id)) unsaved = o; return; }
     }
   }
   function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
-  function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 
   // ---- The Halloween costumes, the same in every game ----
   var HALLOWEEN = [
@@ -107,6 +113,20 @@
     { id: 'neon', name: 'Neon', skin: '#8d5a3b', hair: '#161616', top: '#1a1a1a', bottom: '#1a1a1a', shoe: '#c8ff2e', stripe: '#c8ff2e', cape: null, head: null },
   ];
 
+  // ---- The 3D games' everyday set (#568), one for all of them ----
+  // Pulkkamäki's winter wear first (the ids it had on its own, so its riders keep their pick), then
+  // the hero suits, whose head is the mask ('naamio': `mask` the mask, `mitt` the gloves). `pipo` and
+  // `tupsu` are a beanie and its bobble; a game without a beanie ignores them.
+  var KOLMID = [
+    { id: 'haalari', name: 'Toppahaalari', skin: '#f0c8a0', hair: '#5a3418', top: '#2f6fd0', bottom: '#2f6fd0', shoe: '#1a1a22', pipo: '#d42a2a', tupsu: '#ffffff', stripe: '#ffd23a', cape: null, head: null },
+    { id: 'punainen', name: 'Punainen', skin: '#e8b48f', hair: '#2a1a10', top: '#d42a2a', bottom: '#2a2a33', shoe: '#2a2a33', pipo: '#ffffff', tupsu: '#d42a2a', cape: null, head: null },
+    { id: 'vihrea', name: 'Vihreä', skin: '#c98a62', hair: '#111111', top: '#27a35a', bottom: '#1b3a2a', shoe: '#111', pipo: '#ffd23a', tupsu: '#27a35a', stripe: '#ffffff', cape: null, head: null },
+    { id: 'liila', name: 'Liila', skin: '#f6d4bb', hair: '#d4611c', top: '#8a4ad4', bottom: '#f4f6fa', shoe: '#8a4ad4', pipo: '#f4f6fa', tupsu: '#8a4ad4', cape: null, head: null },
+    { id: 'musta', name: 'Musta', skin: '#8d5a3b', hair: '#161616', top: '#1e1e22', bottom: '#1e1e22', shoe: '#c8ff2e', pipo: '#c8ff2e', tupsu: '#1e1e22', stripe: '#c8ff2e', cape: null, head: null },
+    { id: 'sankari', name: 'Sankari', emoji: '🕸️', skin: '#e2b48c', hair: '#1b1f2e', top: '#1fb5a8', bottom: '#26324a', shoe: '#f4f4f4', mitt: '#f4f4f4', mask: '#1b1f2e', cape: null, head: 'naamio' },
+    { id: 'yosankari', name: 'Yösankari', emoji: '🌙', skin: '#e2b48c', hair: '#2a2a30', top: '#22222a', bottom: '#2a2a30', shoe: '#ffd23a', mitt: '#ffd23a', mask: '#2a2a30', stripe: '#ffd23a', cape: null, head: 'naamio' },
+  ];
+
   // Around Halloween (20 October to 2 November) the costumes come first.
   function season(d) {
     d = d || new Date();
@@ -122,13 +142,16 @@
   }
 
   var outfits = [], drawFn = null, changeFn = null;
+  // A pick whose save failed (#568): worn until the page closes. A pick that was saved clears it, so
+  // an open page always follows the saved key, which another game may have changed since.
+  var unsaved = null;
   function byId(id) {
     for (var i = 0; i < outfits.length; i++) if (outfits[i].id === id) return outfits[i];
     return null;
   }
   // A Christmas costume is worn only in its season; the saved choice stays for the next one.
   function current() {
-    var o = byId(load(KEY, ''));
+    var o = unsaved || byId(load(KEY, ''));
     if (o && o.joulu && !jouluSeason()) o = null;
     return o || outfits[0] || null;
   }
@@ -250,6 +273,11 @@
       c.beginPath(); c.arc(r * 0.4, r * 0.05, r * 0.42, 0.1 * Math.PI, 0.6 * Math.PI); c.stroke();
       c.beginPath(); c.arc(0, 0, r * 0.84, 0, 7); c.setLineDash([r * 0.18, r * 0.14]); c.stroke(); c.setLineDash([]);
       circle(r * 0.62, r * 0.32, r * 0.1, '#e0242a');
+    } else if (kind === 'naamio') {
+      // The hero mask (#568): a dark head, the hood's edge behind it, a white lens.
+      circle(-r * 0.2, 0, r * 1.02, '#1fb5a8');
+      circle(0, 0, r, '#1b1f2e');
+      c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(r * 0.5, -r * 0.1, r * 0.26, r * 0.17, -0.2, 0, 7); c.fill();
     } else if (kind === 'harry' || kind === 'ron' || kind === 'hermione') {
       wizard(c, kind, r, circle, tri);
     } else {
@@ -448,6 +476,11 @@
       eyes('#ffffff', 0.12);
       mouth('#ffffff');
       [-1, 1].forEach(function (d) { circle(fx + d * r * 0.55, fy + r * 0.25, r * 0.1, '#e0242a'); });
+    } else if (kind === 'naamio') {
+      // The hero mask (#568): the hood in the suit's colour, the dark mask, two white lenses.
+      circle(0, r * 0.05, r * 1.12, L.top || '#1fb5a8');
+      circle(fx * 0.3, 0, r, L.mask || '#1b1f2e');
+      [-1, 1].forEach(function (d) { c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(fx + d * r * 0.38, fy - r * 0.08, r * 0.28, r * 0.19, d * 0.35, 0, 7); c.fill(); });
     } else if (kind === 'harry' || kind === 'ron' || kind === 'hermione') {
       var skin = { harry: '#f1c9a5', ron: '#f6d4bb', hermione: '#efc39e' }[kind];
       var hair = { harry: '#1d1712', ron: '#d4611c', hermione: '#6b3f1f' }[kind];
@@ -636,7 +669,7 @@
     b.appendChild(cv);
     b.appendChild(el('span', 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' + (innerHeight < 500 ? ';font-size:11px' : ''), (o.emoji && innerHeight >= 500 ? o.emoji + ' ' : '') + o.name));
     b.onclick = function () {
-      save(KEY, o.id);
+      unsaved = save(KEY, o.id) ? null : o;
       if (KEY !== OWN) save(OWN, o.id);
       if (changeFn) { try { changeFn(o); } catch (e) {} }
       fill(grid);
@@ -730,6 +763,7 @@
     joulu: JOULU,
     jouluSeason: jouluSeason,
     yleisurheilu: YLEISURHEILU,
+    kolmiD: KOLMID,
     tylypahka: TYLYPAHKA,
     season: season,
     head: head,

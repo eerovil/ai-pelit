@@ -45,5 +45,29 @@ renderer.setAnimationLoop(() => renderer.render(scene, camera));
 - `tests/fixtures/three-demo.html` is a complete small example (a lit, spinning cube), and
   `tests/test_lib_three.py` shows how to check a 3D game draws (headless Chromium has WebGL).
 
+## Outfits in a 3D game
+
+Every 3D game shares one outfit choice and one set (#568, Eero's choice); the newest
+`public/lib/asut3d-<N>/asut3d.js` builds the outfit's 3D pieces. To dress a player:
+
+1. Load `<script src="../../../outfits.js" data-game="<slug>" data-share="3d"></script>` and
+   `<script src="../../../lib/asut3d-1/asut3d.js"></script>` before the game's own scripts.
+2. `let outfit = AiPelitAsut3d.setup({ default: '<id>', button: '<menu button or its box>',
+   change(o) { outfit = o; /* rebuild the player */ } })`. It returns the worn outfit, puts the
+   default first, and wires (or, given a box, makes) the "👕 Asu" button. The cards show the
+   shared front figure, the same in every 3D game. `change` also runs when the page comes back
+   into view wearing another outfit (picked in another 3D game meanwhile).
+3. A game with no body of its own takes `AiPelitAsut3d.figure(THREE, outfit)`: a 1.8-tall person,
+   feet at y 0, facing +z, with the joints in `userData.joints`. A game with its own body takes
+   `head(THREE, o)` (radius 1, facing +z: every costume's head, the hero mask, a face with hair or
+   a beanie), `cape(THREE, o, { w, h })` and `torso(THREE, o, { w, h, d, round })` (ribs, a stripe);
+   each of the last two is null when the outfit has none.
+4. Rebuild the player when `outfit.id` changes. In a room, send the id with the player and build
+   friends from `AiPelitOutfits.get(id)`; their name colours stay the game's own.
+
+`tests/fixtures/asut3d-demo.html` is the smallest whole use, Seittisankari v6 the model with its
+own body joints (`figure()`), Pulkkamäki v7 the model with its own body (`head()`, `cape()`).
+A fix to the library is the next folder (rule 1).
+
 A test whose game loads `lib/three` is marked `alone` even when its phones draw 2D, unless the
 file sets a `games` marker (`tests/conftest.py`); check the marking before the first queued run.

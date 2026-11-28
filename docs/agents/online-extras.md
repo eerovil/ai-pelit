@@ -45,6 +45,10 @@ high-score lists (#25), then play counts (#26).
   preview; other games' pickers show their own `draw`. `AiPelitOutfits.headPose(state, t)`
   gives an event's side-view head its tilt for `run`, `takeoff`, `air`, `land`, `cheer` and `idle`,
   and `sideHead()` draws it (Pituushyppy v18 is the model).
+  A 3D game adds `data-share="3d"` and dresses its player through `lib/asut3d-1` (#568): one
+  choice for every 3D game (`ai-pelit:_asut:3d`, taking over a Pulkkamäki rider's pick) and one
+  set, `AiPelitOutfits.kolmiD` (Pulkkamäki's winter wear and Seittisankari's two hero suits, with
+  the costumes); see "Outfits in a 3D game" in [3d-games.md](3d-games.md).
 
 - **Feedback (#184).** Each game's page in the shelf has "💬 Anna palautetta": a player whose
   nickname the admin approved writes what to fix, and `POST /api/feedback` keeps it (private,

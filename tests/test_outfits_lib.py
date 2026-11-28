@@ -384,3 +384,96 @@ def test_a_game_can_leave_the_christmas_costumes_out_or_ask_for_them(site, brows
     page.goto(site.url + game + "/")
     assert page.evaluate("AiPelitOutfits.list().some(o => o.joulu)") is has
     ctx.close()
+
+
+# ---- The 3D games (#568): one choice, the common set, the hero mask ----
+KOLMID_PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<body><script src="../outfits.js" data-game="%s" data-share="3d"></script>
+<script>var changed = []; AiPelitOutfits.setup({ outfits: AiPelitOutfits.kolmiD, change: function (o) { changed.push(o.id); } });</script></body>"""
+
+
+def kolmid_page(site, ctx, slug):
+    (site.root / slug).mkdir(exist_ok=True)
+    (site.root / slug / "index.html").write_text(KOLMID_PAGE % slug)
+    page = ctx.new_page()
+    page.goto(site.url + slug + "/")
+    return page
+
+
+def test_the_3d_games_share_one_choice_and_take_over_pulkkamakis(site, browser):
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    ctx.add_init_script("if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', 1); localStorage.setItem('ai-pelit:_asut:pulkkamaki', '\"liila\"'); }")
+    page = kolmid_page(site, ctx, "peli-a")
+    # A rider's earlier Pulkkamäki pick becomes every 3D game's.
+    assert page.evaluate("AiPelitOutfits.current().id") == "liila"
+    assert page.evaluate("AiPelitOutfits.list().filter(o => !o.halloween && !o.tylypahka && !o.joulu).map(o => o.id)") \
+        == ["haalari", "punainen", "vihrea", "liila", "musta", "sankari", "yosankari"]
+    page.evaluate("AiPelitOutfits.open()")
+    page.click("[data-asu=vampyyri]")
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:3d')") == '"vampyyri"'
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:peli-a')") == '"vampyyri"'
+    # The cards draw the shared front figure, as the athletics events' do.
+    assert page.locator("[data-asu=sankari] canvas").count() == 1
+    other = kolmid_page(site, ctx, "peli-b")
+    assert other.evaluate("AiPelitOutfits.current().id") == "vampyyri"
+    ctx.close()
+
+
+def test_an_open_3d_game_follows_a_pick_made_in_another(site, browser):
+    # The design review's note: a page left open (another tab, or back from the cache) wears the
+    # newest saved pick, not the one it remembers.
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    a = kolmid_page(site, ctx, "peli-a")
+    b = kolmid_page(site, ctx, "peli-b")
+    a.evaluate("AiPelitOutfits.open()"); a.click("[data-asu=noita]")
+    assert b.evaluate("AiPelitOutfits.current().id") == "noita"
+    b.evaluate("AiPelitOutfits.open()"); b.click("[data-asu=harry]")
+    assert a.evaluate("AiPelitOutfits.current().id") == "harry"
+    ctx.close()
+
+
+def test_a_pick_that_cannot_be_saved_is_still_worn(site, browser):
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    ctx.add_init_script("Storage.prototype.setItem = function () { throw new Error('täynnä'); };")
+    page = kolmid_page(site, ctx, "peli-a")
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.evaluate("AiPelitOutfits.open()")
+    page.click("[data-asu=haamu]")
+    assert page.evaluate("changed") == ["haamu"]
+    assert page.evaluate("AiPelitOutfits.current().id") == "haamu"
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:3d')") is None
+    assert errors == []
+    ctx.close()
+
+
+def test_the_hero_mask_draws_from_the_front_and_the_side(site, browser):
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    page = kolmid_page(site, ctx, "peli-a")
+    px = page.evaluate("""(() => { const c = document.createElement('canvas'); c.width = c.height = 100;
+        const g = c.getContext('2d'), o = AiPelitOutfits.get('sankari');
+        AiPelitOutfits.frontHead(g, o, 50, 50, 30, {});
+        const at = (x, y) => Array.from(g.getImageData(x, y, 1, 1).data.slice(0, 3));
+        const front = [at(50, 72), at(39, 47)];
+        g.clearRect(0, 0, 100, 100); AiPelitOutfits.head(g, 'naamio', 50, 50, 30, 1);
+        return front.concat([at(65, 47)]); })()""")
+    mask, lens, side_lens = px
+    assert max(mask) < 60          # the dark mask, not a face
+    assert min(lens) > 230         # a white lens
+    assert min(side_lens) > 230
+    ctx.close()
+
+
+def test_a_taken_over_pick_that_cannot_be_saved_is_still_worn(site, browser):
+    # Review of #569: storage full on the first 3D page, the rider's Pulkkamäki pick is still worn.
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    ctx.add_init_script("localStorage.setItem('ai-pelit:_asut:pulkkamaki', '\"liila\"'); Storage.prototype.setItem = function () { throw new Error('täynnä'); };")
+    page = kolmid_page(site, ctx, "peli-a")
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:3d')") is None
+    assert page.evaluate("AiPelitOutfits.current().id") == "liila"
+    ctx.close()

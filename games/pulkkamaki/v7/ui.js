@@ -32,6 +32,9 @@ camView = load('kamera', 'fp') === 'back' ? 'back' : 'fp';
 function viewLabel() { $('view').textContent = camView === 'fp' ? '📷 Silmistä' : '📷 Takaa'; }
 
 // ---- Outfits (#158): our own winter wear, the Christmas costumes first in November and December ----
+// v7 (#568): one choice for every 3D game (lib/asut3d-1): this same winter wear is the 3D games'
+// common set (AiPelitOutfits.kolmiD), now with the Halloween and Tylypahka costumes too. OUTFITS
+// stays for a phone without the libraries.
 const OUTFITS = [
   { id: 'haalari', name: 'Toppahaalari', skin: '#f0c8a0', hair: '#5a3418', top: '#2f6fd0', bottom: '#2f6fd0', shoe: '#1a1a22', pipo: '#d42a2a', tupsu: '#ffffff', stripe: '#ffd23a', cape: null, head: null },
   { id: 'punainen', name: 'Punainen', skin: '#e8b48f', hair: '#2a1a10', top: '#d42a2a', bottom: '#2a2a33', shoe: '#2a2a33', pipo: '#ffffff', tupsu: '#d42a2a', cape: null, head: null },
@@ -40,11 +43,18 @@ const OUTFITS = [
   { id: 'musta', name: 'Musta', skin: '#8d5a3b', hair: '#161616', top: '#1e1e22', bottom: '#1e1e22', shoe: '#c8ff2e', pipo: '#c8ff2e', tupsu: '#1e1e22', stripe: '#c8ff2e', cape: null, head: null },
 ];
 let outfit = OUTFITS[0];
-if (window.AiPelitOutfits) {
+if (window.AiPelitAsut3d && window.AiPelitOutfits) {
+  outfit = AiPelitAsut3d.setup({
+    default: 'haalari',
+    // In a room the player's own record carries the id the host sends to everyone (net.js);
+    // a pick made in another 3D game also comes here when the page is back in view.
+    change(o) { outfit = o; if (me) me.outfit = o; if (net && myRec()) myRec().o = o.id; wake(); },
+  }) || outfit;
+} else if (window.AiPelitOutfits) {
   outfit = AiPelitOutfits.setup({
     outfits: OUTFITS, halloween: false, tylypahka: false,
     draw(g, o, w, h) { drawCard(g, o, w, h); },
-    change(o) { outfit = o; if (me) me.outfit = o; wake(); },
+    change(o) { outfit = o; if (me) me.outfit = o; if (net && myRec()) myRec().o = o.id; wake(); },
   });
 }
 // The picker's card: the rider in the sled, from the side.

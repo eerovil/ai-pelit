@@ -313,7 +313,7 @@ function cutView(dt) {
   const vx = top.x + 2.5, vz = top.z + 3;
   const actors = [
     { id: 'kallio', col: CUT_COL.K, x: roof.x - 0.9, y: roof.y, z: roof.z, yaw: Math.PI / 2 },
-    { id: 'sankari', col: '#1fb5a8', x: roof.x + 0.9, y: roof.y, z: roof.z, yaw: -Math.PI / 2 },
+    { id: 'sankari', col: '#1fb5a8', o: outfit, x: roof.x + 0.9, y: roof.y, z: roof.z, yaw: -Math.PI / 2 },
     { id: 'varjo', col: CUT_COL.V, x: vx, y: top.y, z: vz, yaw: Math.PI / 2, caught: cut.caught },
   ];
   if (!cut.caught) actors.push({ id: 'kopteri', heli: true, x: top.x - 4, y: top.y + 4.5 + Math.sin(t * 1.6) * 0.4, z: top.z - 0.5, yaw: Math.PI / 2 });

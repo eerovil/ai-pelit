@@ -44,6 +44,13 @@
       "note": "Kaksi uutta mutkaista mäkeä, Mutkamäki ja Luolasto, joissa lasketaan tunneleiden läpi ja mutkissa voi nousta ulkokurvin vallille.",
       "request": "Lisää kenttiä. Voisi olla tunneleita jne. Mutkia voisi olla. Voisko olla mahdollista että mutkassa voi nousta sinne ulkokurviin ylös",
       "issue": "eerovil/ai-pelit#517"
+    },
+    {
+      "n": 7,
+      "date": "2026-11-28",
+      "note": "Asut yhteisiä muiden 3D-pelien kanssa, ja mukana myös Halloween- ja Tylypahka-asut 3D-päineen.",
+      "request": "3d-peleihin yhtenäinen pukusysteemi (seittisankari myös)",
+      "issue": "eerovil/ai-pelit#568"
     }
   ]
 }

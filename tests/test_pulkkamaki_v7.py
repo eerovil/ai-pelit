@@ -6,7 +6,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/pulkkamaki/v6/"
+URL = "games/pulkkamaki/v7/"
 # A touch on the play area, as a finger makes it.
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
@@ -298,7 +298,9 @@ def test_a_swipe_too_near_the_landing_starts_no_trick(site, context):
     left = page.evaluate("timeToLand(hill, me)")
     assert left > TRICK_FRONT_DONE + 0.05, left
     # Moved to its last fifth of a second in the air, a swipe is refused and says so.
-    page.evaluate("""() => { while (timeToLand(hill, me) > 0.2) { me.vy -= G * DT; me.s += me.v * DT; me.y += me.vy * DT; } mode = 'run'; }""")
+    page.evaluate("""() => { while (timeToLand(hill, me) > 0.2) { me.vy -= G * DT; me.s += me.v * DT; me.y += me.vy * DT; } mode = 'run'; wake(); }""")
+    # wake(): a paused game stops drawing after three frames, and a busy host takes longer than that
+    # between the pause above and here, so setting the mode alone left the sled hanging in the air.
     page.evaluate(TOUCH, ["pointerdown", 180, 500])
     page.evaluate(TOUCH, ["pointermove", 180, 430])
     page.evaluate(TOUCH, ["pointerup", 180, 430])

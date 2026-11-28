@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from test_seittisankari_v5 import KEY, open_game
+from test_seittisankari_v6 import KEY, open_game
 
 KINDS = [
     ["katto", "katto", "katto"],
