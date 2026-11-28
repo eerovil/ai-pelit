@@ -489,7 +489,7 @@ const meK = () => net.skiers.find(k => k.kind === 'me');
 // others are drawn in theirs; the names keep the room's colours. Without the libraries, v13's look.
 let outfit = null;
 if (window.AiPelitAsut3d && window.AiPelitOutfits) {
-  outfit = AiPelitAsut3d.setup({ default: 'haalari', change(o) { outfit = o; if (net) meK().o = o.id; } });
+  outfit = AiPelitAsut3d.setup({ default: 'haalari', change(o) { outfit = o; if (net) { meK().o = o.id; net.readyT = 0; } } });
 }
 // An outfit as the skier's colours: the coat, the trousers, the mittens and the hat's bobble.
 function outfitLook(of) {
@@ -600,10 +600,12 @@ function netTick(dt, n) {
     return;
   }
   if (net.phase === 'run') net.clock += dt;
-  // A guest: its wax until the host has it, then its skier ten times a second.
-  if (mode === 'ready' && net.phase === 'wax') {
+  // A guest: its wax until the host has it, then its skier ten times a second. v14 (#570): the
+  // whole wax phase, so the others see its outfit while it still picks, with no wax (-1, which the
+  // host takes as none) until it has picked one.
+  if (net.phase === 'wax') {
     net.readyT -= dt;
-    if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: P.wax, o: outfit ? outfit.id : null }); }
+    if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: mode === 'ready' ? P.wax : -1, o: outfit ? outfit.id : null }); }
   }
   if ((mode === 'race' || mode === 'done') && net.sendT <= 0 && !net.res) {
     net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), s: pack(synced(meK())) });

@@ -189,3 +189,23 @@ def test_a_skier_far_ahead_drops_the_outfits_pieces_like_its_other_small_parts(s
     # Far (40 m or more): its own head and hat in the outfit's colours; near: the outfit's pieces.
     assert got == [[False, True, True], [True, False, False], [False, True, True]]
     assert page.errors == []
+
+
+def test_a_guest_still_picking_a_wax_is_seen_in_their_outfit(site, browser):
+    host, guest, third = phones(site, browser, ["vampyyri", "punainen", "sankari"])
+    gid = guest.evaluate("AiPelitRooms.me")
+    for watch in (host, third):
+        watch.wait_for_function(f"net.skiers.find(k => k.id === {json.dumps(gid)}).o === 'punainen'", timeout=8000)
+        assert friend(watch, guest) == "punainen"
+    # A change while still on the wax screen reaches them too, and starts nothing.
+    tap(guest, "asu")
+    guest.wait_for_selector("#ai-pelit-asut")
+    guest.click("[data-asu=harry]")
+    guest.evaluate("AiPelitOutfits.close()")
+    for watch in (host, third):
+        watch.wait_for_function(f"net.skiers.find(k => k.id === {json.dumps(gid)}).o === 'harry'", timeout=8000)
+        assert friend(watch, guest) == "harry"
+    assert host.evaluate(f"net.skiers.find(k => k.id === {json.dumps(gid)}).wax") == -1
+    assert all(p.evaluate("mode") == "wax" for p in (host, guest, third))
+    errors = [e for p in (host, guest, third) for e in p.errors]
+    assert not errors, errors
