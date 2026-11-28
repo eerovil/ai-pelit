@@ -54,8 +54,9 @@ Every 3D game shares one outfit choice and one set (#568, Eero's choice); the ne
    `<script src="../../../lib/asut3d-1/asut3d.js"></script>` before the game's own scripts.
 2. `let outfit = AiPelitAsut3d.setup({ default: '<id>', button: '<menu button or its box>',
    change(o) { outfit = o; /* rebuild the player */ } })`. It returns the worn outfit, puts the
-   default first, and wires (or, given a box, makes) the "👕 Asu" button. Pass `draw` to show the
-   game's own picture on the cards instead of the shared front figure.
+   default first, and wires (or, given a box, makes) the "👕 Asu" button. The cards show the
+   shared front figure, the same in every 3D game. `change` also runs when the page comes back
+   into view wearing another outfit (picked in another 3D game meanwhile).
 3. A game with no body of its own takes `AiPelitAsut3d.figure(THREE, outfit)`: a 1.8-tall person,
    feet at y 0, facing +z, with the joints in `userData.joints`. A game with its own body takes
    `head(THREE, o)` (radius 1, facing +z: every costume's head, the hero mask, a face with hair or

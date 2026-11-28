@@ -12,7 +12,8 @@
 //     default: 'haalari',            // the id worn by a phone that never picked (from kolmiD)
 //     button: 'asu',                 // a <button> id or element to open the picker with; given a
 //                                    // container instead, a "👕 Asu" button is made inside it
-//     change(o) { outfit = o; ... }, // a pick: rebuild the player's figure
+//     change(o) { outfit = o; ... }, // a pick, here or in another 3D game while this page was
+//                                    // out of view: rebuild the player's figure
 //   });
 //
 // and with three.js loaded:
@@ -227,7 +228,7 @@
       J['arm' + key] = sh; J['elb' + key] = el;
       var hip = joint(body, x * 0.42, 0.84); put(k, hip, k.box, bottom, 0, -0.21, 0, 0.2, 0.44, 0.22);
       var kn = joint(hip, 0, -0.42); put(k, kn, k.box, bottom, 0, -0.2, 0, 0.18, 0.42, 0.2);
-      put(k, kn, k.box, shoe, 0, -0.42, 0.05, 0.19, 0.08, 0.3);
+      put(k, kn, k.box, shoe, 0, -0.38, 0.05, 0.19, 0.08, 0.3);   // the sole at y 0
       J['leg' + key] = hip; J['knee' + key] = kn;
     });
     g.userData.joints = J;
@@ -242,7 +243,7 @@
     if (!O) return null;
     var list = (opts.outfits || O.kolmiD).slice();
     for (var i = 1; i < list.length; i++) if (list[i].id === opts.default) { list.unshift(list.splice(i, 1)[0]); break; }
-    var cur = O.setup({ outfits: list, draw: opts.draw, change: opts.change,
+    var cur = O.setup({ outfits: list, change: function (o) { worn = o.id; if (opts.change) opts.change(o); },
       halloween: opts.halloween, joulu: opts.joulu, tylypahka: opts.tylypahka });
     var b = typeof opts.button === 'string' ? document.getElementById(opts.button) : opts.button;
     if (b && b.tagName !== 'BUTTON') {
@@ -252,6 +253,17 @@
       b.appendChild(nb); b = nb;
     }
     if (b) b.addEventListener('click', function () { O.open(); });
+    // A page left open follows a pick made in another 3D game meanwhile (another tab, or back
+    // from the browser's page cache), and a Christmas costume past its season: `change` gets
+    // the worn outfit whenever the page comes back into view and it is not the one last given.
+    var worn = cur && cur.id, user = opts.change;
+    function follow() {
+      if (document.visibilityState === 'hidden') return;
+      var o = O.current();
+      if (o && o.id !== worn) { worn = o.id; if (user) user(o); }
+    }
+    window.addEventListener('pageshow', follow);
+    document.addEventListener('visibilitychange', follow);
     return cur;
   }
 

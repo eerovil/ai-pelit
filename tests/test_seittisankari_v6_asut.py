@@ -1,6 +1,9 @@
 """Seittisankari v6 (#568): the hero wears the outfit picked in any 3D game (lib/asut3d-1), in the
 city, in the story's cutscenes and on friends' phones."""
 import json
+import shutil
+
+from conftest import ROOT
 
 from test_seittisankari_v6 import go, open_game
 from test_seittisankari_v6_rooms import phone, room, start  # noqa: F401  (phone is a fixture)
@@ -40,6 +43,24 @@ def test_a_pick_is_saved_for_every_3d_game_and_redresses_the_hero(site, context)
     page.evaluate("AiPelitOutfits.open()")
     page.click("[data-asu=yosankari]")
     page.wait_for_function("L3D.looks().me === 'yosankari'")
+    assert page.errors == []
+
+
+def test_an_open_game_follows_a_pick_made_in_another_3d_game(site, context):
+    shutil.copytree(ROOT / "games" / "pulkkamaki", site.games / "pulkkamaki")
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("L3D.ready && L3D.looks().me === 'sankari'", timeout=20000)
+    other = context.new_page()
+    other.goto(site.url + "games/pulkkamaki/v7/")
+    other.wait_for_function("window.AiPelitOutfits && outfit")
+    other.evaluate("AiPelitOutfits.open()")
+    other.click("[data-asu=muumio]")
+    other.close()
+    # Back in view (another tab, or the page cache): the hero, and what friends are sent, follow.
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    assert page.evaluate("outfit.id") == "muumio"
+    page.wait_for_function("L3D.looks().me === 'muumio'")
     assert page.errors == []
 
 

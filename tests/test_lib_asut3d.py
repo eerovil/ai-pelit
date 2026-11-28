@@ -58,7 +58,7 @@ def test_a_figure_has_every_joint_and_draws_in_the_outfit(site, context):
                              "legL", "legR", "kneeL", "kneeR"])
     # About 1.8 tall (2 with a beanie), the soles at y 0.
     lo, hi = page.evaluate("(() => { const b = new THREE.Box3().setFromObject(fig); return [b.min.y, b.max.y]; })()")
-    assert abs(lo) < 0.06 and 1.7 < hi < 2.0
+    assert abs(lo) < 0.005 and 1.7 < hi < 2.0
     # The middle of the picture is the blue overall.
     img = Image.open(io.BytesIO(page.screenshot())).convert("RGB")
     r, g, b = img.getpixel((img.width // 2, img.height // 2))

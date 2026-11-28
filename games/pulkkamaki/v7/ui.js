@@ -46,7 +46,6 @@ let outfit = OUTFITS[0];
 if (window.AiPelitAsut3d && window.AiPelitOutfits) {
   outfit = AiPelitAsut3d.setup({
     default: 'haalari',
-    draw(g, o, w, h) { drawCard(g, o, w, h); },
     change(o) { outfit = o; if (me) me.outfit = o; wake(); },
   }) || outfit;
 } else if (window.AiPelitOutfits) {
