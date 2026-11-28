@@ -93,6 +93,13 @@
       "note": "Kavereiden liike on nyt sulavaa, ei nykivää.",
       "request": "Moninpelikoodia voisi katsoa, saisiko sulavammaksi liikettä",
       "issue": "eerovil/ai-pelit#480"
+    },
+    {
+      "n": 14,
+      "date": "2026-11-28",
+      "note": "Hiihtäjä pukeutuu samaan asuun kuin muissa 3D-peleissä, ja asun voi vaihtaa 👕 Asu -napista.",
+      "request": "Yhteinen 3D-asu myös tähän peliin, samalla tavalla kuin Seittisankari v6:ssa ja Pulkkamäki v7:ssä (#568).\n\n- Pelaajan hiihtäjä pukeutuu samaan asuun, joka on valittu muissa 3D-peleissä (yksi valinta kaikille 3D-peleille, `ai-pelit:_asut:3d`).\n- Pelissä on 👕 Asu -nappi, josta asun voi vaihtaa; vaihto näkyy myös muissa 3D-peleissä.\n- Kaverihuoneessa muut näkevät kunkin pelaajan oman asun.\n- Käytä jaettua kirjastoa `public/lib/asut3d-1/` (ohje: docs/agents/3d-games.md, \"Outfits in a 3D game\").",
+      "issue": "eerovil/ai-pelit#570"
     }
   ]
 }
