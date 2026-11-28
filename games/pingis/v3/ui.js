@@ -1,5 +1,5 @@
 'use strict';
-// Pingis v2: the screen, the finger, the menus, the saves, the sounds and the main loop, and the
+// Pingis v2 (v3: the outfit): the screen, the finger, the menus, the saves, the sounds and the main loop, and the
 // rally itself (who serves, each step of the ball, a hit, a point) for one phone. Alone this phone
 // judges both ends; with friends net.js decides which end it judges (`judgeHere`) and what a
 // launch or a point does (`hooks`). The 3D hall is drawn by draw3d.js on the canvas #g under
@@ -30,6 +30,23 @@ const KEY = 'ai-pelit:pingis:';
 function load(k, d) { try { const v = localStorage.getItem(KEY + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch (e) {} }
 function drop(k) { try { localStorage.removeItem(KEY + k); } catch (e) {} }
+// ---- The outfit (v3, #573): one choice for every 3D game (ai-pelit:_asut:3d, lib/asut3d-1) ----
+// AiPelitAsut3d.setup wires the menu's "👕 Asu" button; without the libraries the button hides and
+// the players are v2's plain figures. The computer wears the blue snowsuit, or the red one when I
+// do; a friend wears the outfit their phone sends with its bat (net.js, `o`).
+let outfit = window.AiPelitAsut3d ? AiPelitAsut3d.setup({
+  default: 'punainen', button: 'asu',
+  change(o) { outfit = o; wake(); },
+}) : null;
+if (!outfit) document.getElementById('asu').hidden = true;
+const outfitOf = id => (window.AiPelitOutfits && outfit ? AiPelitOutfits.get(id) : null);
+const cpuOutfit = () => outfitOf(outfit && outfit.id === 'haalari' ? 'punainen' : 'haalari');
+function outfitsNow() {
+  const out = [null, null], foe = net && net.foeO ? outfitOf(net.foeO) : cpuOutfit();
+  out[view] = outfit; out[1 - view] = foe;
+  return out;
+}
+
 let level = clamp(Math.floor(load('taso', 0)) || 0, 0, LEVELS.length - 1);
 // Games won and lost against the computer, per level: { "0": [won, lost], ... }.
 let record = load('voitot', {});
@@ -377,7 +394,10 @@ function scene() {
     if (game.ph === 'serve' && !f) ball = heldBall();
     else if (f) { ball = f.ball; moving = !f.held && !f.ball.dead && !f.over; }
   }
-  return { view, bats: bats || [{ x: 0, y: 0.15, z: HL + 0.4 }, { x: 0, y: 0.15, z: -HL - 0.4 }], ball, moving };
+  // In the menu the camera looks from the far end at my own player, so the outfit shows (#573).
+  const menu = mode === 'menu';
+  // The menu poses my player at the rest spot, not where the last game's bat was left.
+  return { menu, view: menu ? 1 - view : view, bats: (!menu && bats) || [{ x: 0, y: 0.15, z: HL + 0.4 }, { x: 0, y: 0.15, z: -HL - 0.4 }], ball, moving, outfits: outfitsNow() };
 }
 function draw(dt) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);

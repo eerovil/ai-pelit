@@ -11,7 +11,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/lattia-on-laavaa/v3/"
+URL = "games/lattia-on-laavaa/v4/"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
 KID = "world.kids.find(k => k.id === {})"
@@ -145,6 +145,9 @@ def test_a_guests_shove_pushes_the_host_and_through_the_host_another_guest(kids)
     g1.evaluate("() => { me.face = 0; shoveBtn(); }")
     host.wait_for_function("me.pushedAt > 0", timeout=5000)
     host.wait_for_function(f"{KID.format(gid1)}.shoves === 1", timeout=5000)
+    # The host's kid flew off but may land on the same piece, beside where the second guest is
+    # put next, and bump it away (#572's first verification run): it falls out of the way first.
+    host.evaluate("() => fall(world, me)")
     # The second guest in front of the first: the host tells the second phone to fly.
     g2.evaluate("() => { window.pushes = 0; const ap = applyPush; applyPush = (k, i) => { if (k === me) pushes++; ap(k, i); }; }")
     g1.wait_for_function("me.cd <= 0", timeout=5000)

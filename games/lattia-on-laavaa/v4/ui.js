@@ -1,5 +1,5 @@
 'use strict';
-// Lattia on laavaa v3: the fingers, the menus, the saves, the sounds, the 2D layer over the 3D
+// Lattia on laavaa v4: the fingers, the menus, the saves, the sounds, the 2D layer over the 3D
 // picture (time, buttons, stick, names) and the main loop. Alone the phone runs the whole round;
 // with friends net.js does.
 
@@ -30,6 +30,18 @@ let open = clamp(Math.floor(load('auki', 1)) || 1, 1, ROOMS.length);      // roo
 let roomN = clamp(Math.floor(load('huone', 1)) || 1, 1, open);
 const best = ROOMS.map((_, i) => Math.max(0, +load('paras-' + (i + 1), 0) || 0));   // seconds survived
 let tutorial = !load('osattu', false);
+
+// ---- The outfit (v4, #572): one choice for every 3D game (lib/asut3d-1, ai-pelit:_asut:3d) ----
+// The phone's own kid wears it; in a room the id goes with the kid to every phone (net.js). A pick
+// made here, or in another 3D game while this page was out of view, dresses the kid at once.
+let outfit = null;
+if (window.AiPelitAsut3d && window.AiPelitOutfits) {
+  outfit = AiPelitAsut3d.setup({
+    default: 'haalari', button: 'asu',
+    change(o) { outfit = o; if (me) me.o = o.id; if (typeof sendOutfit === 'function') sendOutfit(); },
+  });
+} else { const b = document.getElementById('asu'); if (b) b.hidden = true; }
+const outfitId = () => outfit ? outfit.id : '';
 
 // ---- Sounds (#205, aanet-5): only after the first tap, quiet (#337, #355) ----
 const S = window.AiPelitAanet;
@@ -69,7 +81,7 @@ let net = null;      // the round with friends (net.js), null alone
 let soloWon = false; // alone: every computer kid fell before me
 const FILL_TO = 6;
 function soloRound() {
-  const players = [{ id: 'me', name: 'Sinä', kind: 'me', col: 0 }];
+  const players = [{ id: 'me', name: 'Sinä', kind: 'me', col: 0, o: outfitId() }];
   for (let i = 1; i < FILL_TO; i++) players.push({ id: 'cpu' + i, name: CPU_NAMES[(i + roomN * 3) % CPU_NAMES.length], kind: 'cpu', col: i });
   world = newWorld(roomN, players, (Date.now() % 1e9) >>> 0);
   me = world.kids[0];
@@ -181,7 +193,11 @@ function shoveBtn() {
 
 // ---- Menus (DOM, over the canvas) ----
 const $ = id => document.getElementById(id);
-function hideAll() { for (const id of ['menu', 'end']) $(id).hidden = true; }
+// A round starting (the host's start on a guest too) closes the outfit picker over the play area.
+function hideAll() {
+  for (const id of ['menu', 'end']) $(id).hidden = true;
+  if (window.AiPelitOutfits && AiPelitOutfits.isOpen && AiPelitOutfits.isOpen()) AiPelitOutfits.close();
+}
 const ROOM_NOTES = ['Sohva, nojatuoli ja kirjahylly', 'Sänky, säkkituolit ja lelulaatikot', 'Pöytä, tuolit ja jääkaappi', 'Portaita ylös katolle asti'];
 function showMenu() {
   mode = 'menu'; world = null; me = null; seen = null;

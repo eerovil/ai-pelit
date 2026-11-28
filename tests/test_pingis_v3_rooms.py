@@ -7,7 +7,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/pingis/v2/"
+URL = "games/pingis/v3/"
 # A bat that goes where the ball will cross its line, on a timer, as a finger would.
 AUTO = """() => { clearInterval(window.auto); window.auto = setInterval(() => {
   if (!net || !game || !bats) return;
