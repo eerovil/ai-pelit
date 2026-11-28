@@ -176,3 +176,16 @@ def test_a_picked_outfit_casts_shadows_and_an_unknown_friend_id_keeps_the_room_c
     assert page.evaluate("(() => { const w = V3.rigs.get(P).wear; let all = true; w.parts.forEach(p => p.traverse(m => { if (m.isMesh && !m.castShadow) all = false; })); return all; })()")
     assert page.evaluate("[friendOutfit({ o: 'ei-tallaista' }), friendOutfit({ o: null }), friendOutfit({ o: 'harry' }).id]") == [None, None, "harry"]
     assert page.errors == []
+
+
+def test_a_skier_far_ahead_drops_the_outfits_pieces_like_its_other_small_parts(site, context):
+    context.add_init_script(f"localStorage.setItem('{SHARED}', '\"harry\"')")
+    page = open_game(site, context)
+    page.wait_for_function("typeof V3 === 'object' && V3 && V3.scene")
+    got = page.evaluate("""(() => { const r = makeRig(), at = [0, 1, 0], hd = [0, 1.6, 0], out = [];
+      for (const fine of [false, true, false]) { r.fine = fine; wear(r, outfit, at, [0, 1.4, 0], hd, 0);
+        out.push([r.wear.parts.some(p => p.visible), r.head.visible, r.hat.visible]); }
+      return out; })()""")
+    # Far (40 m or more): its own head and hat in the outfit's colours; near: the outfit's pieces.
+    assert got == [[False, True, True], [True, False, False], [False, True, True]]
+    assert page.errors == []

@@ -1248,11 +1248,14 @@ function wear(r, of, hip, sh, head, fa) {
       for (const p of r.wear.parts) { r.root.add(p); p.traverse(m => { m.castShadow = !!r.cast; }); }
     }
   }
-  const on = !!r.wear;
-  r.head.visible = r.hat.visible = r.pom.visible = !on;
+  // A skier 40 m or more ahead drops the outfit's pieces like its other small parts (v9: an old
+  // phone runs out of time for them) and wears its own head and hat in the outfit's colours.
+  const on = !!r.wear, near = r.fine !== false, full = on && near;
+  r.head.visible = r.hat.visible = r.pom.visible = !full;
   if (on) r.hair.visible = false;
-  if (r.extra) r.extra.brim.visible = !on && r.fine !== false;
-  if (!on) return;
+  if (r.extra) r.extra.brim.visible = !on && near;
+  if (on) for (const p of r.wear.parts) p.visible = near;
+  if (!full) return;
   const w = r.wear;
   w.head.position.set(...head); w.head.scale.setScalar(0.125);
   w.head.rotation.set(0, 0, -1.4 * fa);
