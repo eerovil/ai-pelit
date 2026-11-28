@@ -3,7 +3,7 @@ and the things drifting on the lava sea. The rules on worlds built in the page, 
 played. Loads lib/three, so `alone` (scripts/host-tests.sh)."""
 import pytest
 
-from test_lattia_on_laavaa_v3 import KEY, go, open_game
+from test_lattia_on_laavaa_v4 import KEY, go, open_game
 
 # One kid alone in Koko talo at rt, standing at (x, y, z); steps it `secs` seconds with the stick
 # at (ix, iz) and the jump button `jump`, and returns the highest and the last place it was.
