@@ -52,7 +52,7 @@ function netStart(s) {
   net = {
     round: s.round, host, r: -1, p: 0, g: 'p', gNext: 'p', stale: false, wasP: false, wantReplay: false,
     names: people.map(p => p.name || 'Pelaaja'), guest: people[1] ? people[1].id : null,
-    res: null, served: false, sendT: 0, tracks: [null, null], helped: false, note: null, lastRally: null,
+    res: null, foeO: null, served: false, sendT: 0, tracks: [null, null], helped: false, note: null, lastRally: null,
   };
   hooks = { launched: netLaunched, point: netPoint, next: netNext };
   judgeHere = side => net.host ? (side === 0 || net.g === 'c') : (side === 1 && net.g === 'p' && !net.stale);
@@ -138,7 +138,11 @@ function takeLaunch(m) {
 }
 function hostHeard(m, from) {
   if (from !== net.guest || !game) return;
-  if (m.t === 'b') { if (net.g === 'p' && Array.isArray(m.a)) glide(1, m.st, m.a[0], m.a[1]); return; }
+  if (m.t === 'b') {
+    if (typeof m.o === 'string') net.foeO = m.o;
+    if (net.g === 'p' && Array.isArray(m.a)) glide(1, m.st, m.a[0], m.a[1]);
+    return;
+  }
   if (m.t === 'sync') {
     if (m.r >= net.r) net.wantReplay = true;
     else if (net.lastRally) RM.send(net.lastRally, from);
@@ -160,6 +164,7 @@ function guestHeard(m) {
   if (m.t === 'end') { netEnd(m); return; }
   if (!game) return;
   if (m.t === 'b') {
+    if (typeof m.o === 'string') net.foeO = m.o;
     if (!Array.isArray(m.a)) return;
     glide(0, m.st, m.a[0], m.a[1]);
     if (net.g === 'c') glide(1, m.st, m.a[2], m.a[3]);
@@ -214,8 +219,10 @@ function netTick(dt) {
   if (net.sendT <= 0) {
     net.sendT = 0.05;
     const st = r3(suNow()), b0 = bats[0], b1 = bats[1];
-    if (net.host) RM.send({ t: 'b', round: net.round, st, a: [r3(b0.x), r3(b0.z), r3(b1.x), r3(b1.z)] });
-    else if (mine && !net.stale) RM.send({ t: 'b', round: net.round, st, a: [r3(b1.x), r3(b1.z)] });
+    // v3 (#573): each phone's bat carries its own outfit id, `o`, so the other phone dresses it.
+    const o = outfit ? outfit.id : undefined;
+    if (net.host) RM.send({ t: 'b', round: net.round, st, o, a: [r3(b0.x), r3(b0.z), r3(b1.x), r3(b1.z)] });
+    else if (mine && !net.stale) RM.send({ t: 'b', round: net.round, st, o, a: [r3(b1.x), r3(b1.z)] });
   }
 }
 

@@ -1,7 +1,7 @@
 """Pingis v2 (#531): a game alone can be paused and quit mid-way."""
 import json
 
-from test_pingis_v2 import go, open_game, saved
+from test_pingis_v3 import go, open_game, saved
 
 
 def test_pause_stops_the_ball_and_resume_goes_on(site, context):

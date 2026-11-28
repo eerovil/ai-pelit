@@ -21,13 +21,13 @@ function init3d(T) {
   sun.position.set(1.5, 6, 2);
   scene.add(sun);
   V3 = { renderer, scene, camera, w: 0, h: 0, view: -1, t: 0, frames: 0, ms: 0, tuned: false, v: new THREE.Vector3(), ray: new THREE.Raycaster(), plane: null };
+  V3.down = new THREE.Vector3(0, -1, 0);
   V3.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.12);
   hall(scene);
   scene.add(table());
   V3.bats = [batRig('#d8282f'), batRig('#2c5fd0')];
-  V3.figs = [figure('#e8463a'), figure('#3a74e8')];
+  V3.figs = [null, null];
   for (const b of V3.bats) scene.add(b.g);
-  for (const f of V3.figs) scene.add(f.g);
   const ballMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#ffa63d'), emissive: new THREE.Color('#5a3000') });
   V3.ball = new THREE.Mesh(new THREE.SphereGeometry(0.03, 16, 12), ballMat);
   V3.trail = [0, 1, 2, 3, 4].map(k => {
@@ -101,20 +101,52 @@ function batRig(col) {
   g.add(blade, edge, handle);
   return { g, blade };
 }
-// The other player: a simple figure behind their bat (body, head, the bat arm).
-function figure(col) {
+// A player behind their bat, dressed in an outfit of the 3D games' shared set (v3, #573:
+// lib/asut3d-1, the person of AiPelitAsut3d.figure(): 1.8 tall, feet at y 0, facing +z). `g` is
+// turned to face the net and stands on the floor; `id` is the outfit it wears. Without the
+// library it is v2's simple figure in the outfit's top colour.
+function dressFig(side, o) {
+  const id = o ? o.id : null, old = V3.figs[side];
+  if (old && old.id === id) return old;
+  if (old) V3.scene.remove(old.g);
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.62, 12), lambert(col));
-  body.position.y = 0.1;
-  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.5, 10), lambert('#2a2a36'));
-  legs.position.y = -0.45;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 10), lambert('#f0c8a0'));
-  head.position.y = 0.56;
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.135, 14, 10, 0, TAU, 0, 1.3), lambert('#5a3a1e'));
-  hair.position.y = 0.58;
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), lambert(col));
-  g.add(body, legs, head, hair, arm);
-  return { g, arm };
+  let J = null;
+  if (window.AiPelitAsut3d && o) {
+    const p = AiPelitAsut3d.figure(THREE, o);
+    J = p.userData.joints;
+    J.armL.rotation.x = -0.5; J.elbL.rotation.x = -0.6;   // the free hand up a little
+    g.add(p);
+  } else {
+    const col = (o && o.top) || (side === 0 ? '#e8463a' : '#3a74e8');
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.62, 12), lambert(col));
+    body.position.y = 1.15;
+    const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.84, 10), lambert('#2a2a36'));
+    legs.position.y = 0.42;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 10), lambert('#f0c8a0'));
+    head.position.y = 1.6;
+    g.add(body, legs, head);
+  }
+  const f = { g, J, id, side };
+  V3.figs[side] = f;
+  V3.scene.add(g);
+  return f;
+}
+// The bat arm (armR, at x 0.33 of a figure that faces +z) points at the bat.
+const SHOULDER = { x: 0.33, y: 1.38 };
+function poseFig(f, b) {
+  const s = sgn(f.side), face = f.side === 0 ? Math.PI : 0;   // side 0 (+z end) looks towards -z
+  // The bat arm's shoulder in world x, turned with the figure.
+  const sx = f.side === 0 ? -SHOULDER.x : SHOULDER.x;
+  f.g.position.set((b.x - sx) * 0.85, FLOOR, b.z + s * 0.48);
+  f.g.rotation.y = face;
+  if (!f.J) return;
+  // The bat in the figure's own frame (it is only turned about y), from the shoulder.
+  const wx = b.x - f.g.position.x, wy = b.y - FLOOR - SHOULDER.y, wz = b.z - f.g.position.z;
+  const c = Math.cos(face), sn = Math.sin(face);
+  const lx = c * wx - sn * wz, lz = sn * wx + c * wz;
+  const d = V3.v.set(lx - SHOULDER.x, wy, lz).normalize();
+  f.J.armR.quaternion.setFromUnitVectors(V3.down, d);
+  f.J.elbR.rotation.x = -0.15;
 }
 
 // The camera behind `side`'s end, far enough back that the near end of the table fits the width.
@@ -130,9 +162,13 @@ function placeCamera(side, aspect) {
 function render3d(st, dt) {
   const R = V3.renderer, cv = R.domElement, cw = cv.clientWidth || innerWidth, ch = cv.clientHeight || innerHeight;
   V3.t += dt;
-  if (cw !== V3.w || ch !== V3.h || V3.view !== st.view) {
-    V3.w = cw; V3.h = ch; V3.view = st.view; R.setSize(cw, ch, false);
+  if (cw !== V3.w || ch !== V3.h || V3.view !== st.view || V3.menu !== !!st.menu) {
+    V3.w = cw; V3.h = ch; V3.view = st.view; V3.menu = !!st.menu; R.setSize(cw, ch, false);
     placeCamera(st.view, cw / ch);
+    // The menu (#573) shows my player at the far end above its buttons: the picture slides up
+    // (portrait) or left (sideways), into the room the menu leaves free.
+    if (st.menu) V3.camera.setViewOffset(cw, ch, cw > ch ? cw * 0.3 : 0, cw > ch ? 0 : ch * 0.2, cw, ch);
+    else V3.camera.clearViewOffset();
   }
   const ball = st.ball;
   [0, 1].forEach(side => {
@@ -140,15 +176,10 @@ function render3d(st, dt) {
     rig.g.position.set(b.x, b.y, b.z);
     // The face looks at the net, tilted by the swing.
     rig.g.rotation.set(-s * 0.25 - clamp(b.swing || 0, -1, 1) * 0.5 * s, side === 0 ? 0 : Math.PI, clamp(-b.vx * 0.15, -0.5, 0.5));
-    const fig = V3.figs[side], show = side !== st.view;
+    // Each player wears their outfit (st.outfits); the one behind the camera is not drawn.
+    const fig = dressFig(side, st.outfits[side]), show = side !== st.view;
     fig.g.visible = show;
-    if (show) {
-      const fx = b.x - s * 0.22 * (side === 0 ? -1 : 1);
-      fig.g.position.set(fx * 0.8, -0.05, b.z + s * 0.45);
-      fig.g.rotation.y = side === 0 ? 0 : Math.PI;
-      fig.arm.position.set((b.x - fig.g.position.x) / 2, 0.15, -s * 0.2 * (side === 0 ? 1 : -1));
-      fig.arm.rotation.set(Math.PI / 2.6 * (side === 0 ? 1 : -1), 0, 0);
-    }
+    if (show) poseFig(fig, b);
   });
   V3.ball.visible = V3.shadow.visible = !!ball;
   if (ball) {
