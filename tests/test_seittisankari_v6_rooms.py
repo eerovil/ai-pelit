@@ -9,7 +9,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/seittisankari/v5/"
+URL = "games/seittisankari/v6/"
 READY = "mode === 'netplay' && net && net.ready && world && world.hero"
 ON_ROOF = """() => { const b = goalBox(), t = roofTop(b), h = world.hero;
   Object.assign(h, { x: t.x, y: b.h, z: t.z, vx: 0, vy: 0, vz: 0, st: 'ground', anchor: null }); }"""

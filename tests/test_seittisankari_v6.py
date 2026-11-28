@@ -10,7 +10,7 @@ import pytest
 
 from conftest import ROOT, turn
 
-URL = "games/seittisankari/v5/"
+URL = "games/seittisankari/v6/"
 KEY = "ai-pelit:seittisankari:"
 TOUCH = """([t, id, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""

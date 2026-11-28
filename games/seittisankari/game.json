@@ -37,6 +37,13 @@
       "note": "Tarina: kahdeksan luvun kampanja välivideoineen, jossa Komisario Kallio ja jengipomo Varjo, uusina tehtävinä pelastukset, putoaja, loikkivat rosvot, pommit, rahasäkki ja Varjon helikopteri, ja myöhemmissä luvuissa aikarajat.",
       "request": "Tää on tosi hyvä. Pitäsi tehdä tästä tarinallinen campaign",
       "issue": "eerovil/ai-pelit#565"
+    },
+    {
+      "n": 6,
+      "date": "2026-11-28",
+      "note": "Asut: valitse sankarille asu, myös Halloween-, joulu- ja Tylypahka-asut, ja sama valinta näkyy kaikissa 3D-peleissä ja kavereille huoneessa.",
+      "request": "3d-peleihin yhtenäinen pukusysteemi (seittisankari myös)",
+      "issue": "eerovil/ai-pelit#568"
     }
   ]
 }
