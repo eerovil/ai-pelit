@@ -1,6 +1,9 @@
 """Pulkkamäki v7 (#568): the rider wears the outfit shared by every 3D game (lib/asut3d-1). v6's
 choice carries over, and the costume heads are the shared library's."""
+import json
+
 from test_pulkkamaki_v7 import go, open_game
+from test_pulkkamaki_v7_rooms import room, sledders, start  # noqa: F401  (sledders is a fixture)
 
 SHARED = "ai-pelit:_asut:3d"
 
@@ -44,3 +47,19 @@ def test_a_vampire_rider_has_a_cape_and_a_skeleton_ribs(site, context):
     plain = got[2][1]
     assert plain == 4 and got[0][1] == plain + 1 and got[1][1] == plain + 1
     assert page.errors == []
+
+
+def test_in_a_room_each_pick_reaches_the_other_phone_the_hosts_too(sledders):
+    # Review of #569: the host's own record carries the id it sends, so a host's pick (here, or
+    # in another 3D game while the page was out of view) must update it, not only its own sled.
+    host, guest = room(sledders)
+    start([host, guest])
+    hid, gid = host.evaluate("AiPelitRooms.me"), guest.evaluate("AiPelitRooms.me")
+    host.evaluate("AiPelitOutfits.open()"); host.click("[data-asu=vampyyri]")
+    guest.wait_for_function(f"recOf({json.dumps(hid)}).sl.outfit.id === 'vampyyri'", timeout=8000)
+    guest.evaluate("AiPelitOutfits.open()"); guest.click("[data-asu=harry]")
+    host.wait_for_function(f"recOf({json.dumps(gid)}).sl.outfit.id === 'harry'", timeout=8000)
+    # A pick made in another game reaches the room once the host's page is back in view.
+    host.evaluate("localStorage.setItem('ai-pelit:_asut:3d', '\"muumio\"'); document.dispatchEvent(new Event('visibilitychange'))")
+    guest.wait_for_function(f"recOf({json.dumps(hid)}).sl.outfit.id === 'muumio'", timeout=8000)
+    assert host.errors == [] and guest.errors == []

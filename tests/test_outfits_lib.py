@@ -466,3 +466,14 @@ def test_the_hero_mask_draws_from_the_front_and_the_side(site, browser):
     assert min(lens) > 230         # a white lens
     assert min(side_lens) > 230
     ctx.close()
+
+
+def test_a_taken_over_pick_that_cannot_be_saved_is_still_worn(site, browser):
+    # Review of #569: storage full on the first 3D page, the rider's Pulkkamäki pick is still worn.
+    site.build()
+    ctx = browser.new_context(viewport={"width": 360, "height": 740})
+    ctx.add_init_script("localStorage.setItem('ai-pelit:_asut:pulkkamaki', '\"liila\"'); Storage.prototype.setItem = function () { throw new Error('täynnä'); };")
+    page = kolmid_page(site, ctx, "peli-a")
+    assert page.evaluate("localStorage.getItem('ai-pelit:_asut:3d')") is None
+    assert page.evaluate("AiPelitOutfits.current().id") == "liila"
+    ctx.close()

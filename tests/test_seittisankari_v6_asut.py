@@ -103,4 +103,10 @@ def test_friends_see_each_others_outfits_and_the_name_colours_stay(phone):
     guest.evaluate("AiPelitOutfits.open()")
     guest.click("[data-asu=noita]")
     host.wait_for_function(f"L3D.looks()['{gid}'] === 'noita'", timeout=10000)
+    # And the host's, here or in another 3D game while its page was out of view.
+    host.evaluate("AiPelitOutfits.open()")
+    host.click("[data-asu=haamu]")
+    guest.wait_for_function(f"L3D.looks()['{hid}'] === 'haamu'", timeout=10000)
+    host.evaluate("localStorage.setItem('ai-pelit:_asut:3d', '\"muumio\"'); document.dispatchEvent(new Event('visibilitychange'))")
+    guest.wait_for_function(f"L3D.looks()['{hid}'] === 'muumio'", timeout=10000)
     assert all(p.errors == [] for p in pages)

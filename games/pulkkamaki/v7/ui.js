@@ -46,13 +46,15 @@ let outfit = OUTFITS[0];
 if (window.AiPelitAsut3d && window.AiPelitOutfits) {
   outfit = AiPelitAsut3d.setup({
     default: 'haalari',
-    change(o) { outfit = o; if (me) me.outfit = o; wake(); },
+    // In a room the player's own record carries the id the host sends to everyone (net.js);
+    // a pick made in another 3D game also comes here when the page is back in view.
+    change(o) { outfit = o; if (me) me.outfit = o; if (net && myRec()) myRec().o = o.id; wake(); },
   }) || outfit;
 } else if (window.AiPelitOutfits) {
   outfit = AiPelitOutfits.setup({
     outfits: OUTFITS, halloween: false, tylypahka: false,
     draw(g, o, w, h) { drawCard(g, o, w, h); },
-    change(o) { outfit = o; if (me) me.outfit = o; wake(); },
+    change(o) { outfit = o; if (me) me.outfit = o; if (net && myRec()) myRec().o = o.id; wake(); },
   });
 }
 // The picker's card: the rider in the sled, from the side.

@@ -58,7 +58,8 @@
     var from = (SHARED_FROM[SHARE] || []).concat([GAME]);
     for (var i = 0; i < from.length; i++) {
       var o = byId(load('ai-pelit:_asut:' + from[i], ''));
-      if (o) { save(KEY, o.id); return; }
+      // Storage full: still worn on this page, as a pick that could not be saved is.
+      if (o) { if (!save(KEY, o.id)) unsaved = o; return; }
     }
   }
   function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }

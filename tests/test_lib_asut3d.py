@@ -57,7 +57,9 @@ def test_a_figure_has_every_joint_and_draws_in_the_outfit(site, context):
     assert joints == sorted(["body", "head", "armL", "armR", "elbL", "elbR", "handL", "handR",
                              "legL", "legR", "kneeL", "kneeR"])
     # About 1.8 tall (2 with a beanie), the soles at y 0.
-    lo, hi = page.evaluate("(() => { const b = new THREE.Box3().setFromObject(fig); return [b.min.y, b.max.y]; })()")
+    # Measured with the waving arm (the demo's animation) down at the side.
+    lo, hi = page.evaluate("""(() => { fig.userData.joints.armR.rotation.z = 0; fig.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(fig); return [b.min.y, b.max.y]; })()""")
     assert abs(lo) < 0.005 and 1.7 < hi < 2.0
     # The middle of the picture is the blue overall.
     img = Image.open(io.BytesIO(page.screenshot())).convert("RGB")

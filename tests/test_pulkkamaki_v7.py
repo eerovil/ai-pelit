@@ -298,7 +298,9 @@ def test_a_swipe_too_near_the_landing_starts_no_trick(site, context):
     left = page.evaluate("timeToLand(hill, me)")
     assert left > TRICK_FRONT_DONE + 0.05, left
     # Moved to its last fifth of a second in the air, a swipe is refused and says so.
-    page.evaluate("""() => { while (timeToLand(hill, me) > 0.2) { me.vy -= G * DT; me.s += me.v * DT; me.y += me.vy * DT; } mode = 'run'; }""")
+    page.evaluate("""() => { while (timeToLand(hill, me) > 0.2) { me.vy -= G * DT; me.s += me.v * DT; me.y += me.vy * DT; } mode = 'run'; wake(); }""")
+    # wake(): a paused game stops drawing after three frames, and a busy host takes longer than that
+    # between the pause above and here, so setting the mode alone left the sled hanging in the air.
     page.evaluate(TOUCH, ["pointerdown", 180, 500])
     page.evaluate(TOUCH, ["pointermove", 180, 430])
     page.evaluate(TOUCH, ["pointerup", 180, 430])
