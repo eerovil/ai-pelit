@@ -330,20 +330,39 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
     }
 
     // ---- Kids ----
-    function kidModel(col) {
+    // v4 (#572): a kid a person plays wears that person's outfit from the 3D games' shared set
+    // (lib/asut3d-1, `oid` its id); the computer's kids, or a phone without the library, wear the
+    // kid's own colours as before. The kid faces +x; the library's pieces face +z.
+    function outfitOf(oid) {
+      if (!oid || !window.AiPelitAsut3d || !window.AiPelitOutfits) return null;
+      const o = AiPelitOutfits.get(oid);
+      return o && o.id === oid ? o : null;
+    }
+    function kidModel(col, oid) {
       const g = new T.Group(), body = new T.Group(); g.add(body);
-      const shirt = KID_COLORS[col % KID_COLORS.length], hair = HAIR[col % HAIR.length];
-      const skin = '#f2c9a0', pants = '#33415c';
-      const leg = s => { const piv = new T.Group(); piv.position.set(0, 0.42, s * 0.1); body.add(piv); part(piv, box, pants, 0, -0.2, 0, 0.13, 0.42, 0.13); part(piv, box, '#222', 0.03, -0.4, 0, 0.18, 0.06, 0.14); return piv; };
-      const arm = s => { const piv = new T.Group(); piv.position.set(0, 0.72, s * 0.22); body.add(piv); part(piv, box, shirt, 0, -0.14, 0, 0.1, 0.3, 0.1); part(piv, ball, skin, 0, -0.32, 0, 0.06, 0.06, 0.06); return piv; };
+      const o = outfitOf(oid);
+      const shirt = o ? o.top || '#2f6fd0' : KID_COLORS[col % KID_COLORS.length], hair = HAIR[col % HAIR.length];
+      const skin = o ? o.skin || '#f0c8a0' : '#f2c9a0', pants = o ? o.bottom || '#26324a' : '#33415c';
+      const shoe = o ? o.shoe || '#222' : '#222', hand = o ? o.mitt || skin : skin;
+      const leg = s => { const piv = new T.Group(); piv.position.set(0, 0.42, s * 0.1); body.add(piv); part(piv, box, pants, 0, -0.2, 0, 0.13, 0.42, 0.13); part(piv, box, shoe, 0.03, -0.4, 0, 0.18, 0.06, 0.14); return piv; };
+      const arm = s => { const piv = new T.Group(); piv.position.set(0, 0.72, s * 0.22); body.add(piv); part(piv, box, shirt, 0, -0.14, 0, 0.1, 0.3, 0.1); part(piv, ball, hand, 0, -0.32, 0, 0.06, 0.06, 0.06); return piv; };
       const parts = { ll: leg(-1), lr: leg(1), al: arm(-1), ar: arm(1) };
       part(body, box, shirt, 0, 0.58, 0, 0.24, 0.34, 0.36);
-      part(body, ball, skin, 0, 0.86, 0, 0.16, 0.16, 0.16);
-      part(body, ball, hair, -0.03, 0.92, 0, 0.165, 0.12, 0.165);
-      part(body, ball, '#1a1a1a', 0.14, 0.88, -0.06, 0.025, 0.03, 0.025);
-      part(body, ball, '#1a1a1a', 0.14, 0.88, 0.06, 0.025, 0.03, 0.025);
+      if (o) {
+        const hd = AiPelitAsut3d.head(T, o); hd.scale.setScalar(0.16); hd.position.set(0, 0.88, 0); hd.rotation.y = Math.PI / 2; body.add(hd);
+        const ch = AiPelitAsut3d.torso(T, o, { w: 0.36, h: 0.34, d: 0.24 });
+        if (ch) { ch.position.y = 0.58; ch.rotation.y = Math.PI / 2; body.add(ch); }
+        const cp = AiPelitAsut3d.cape(T, o, { w: 0.32, h: 0.5 });
+        if (cp) { cp.position.set(-0.14, 0.74, 0); cp.rotation.y = Math.PI / 2; body.add(cp); }
+        body.traverse(m => { if (m.isMesh) m.castShadow = true; });
+      } else {
+        part(body, ball, skin, 0, 0.86, 0, 0.16, 0.16, 0.16);
+        part(body, ball, hair, -0.03, 0.92, 0, 0.165, 0.12, 0.165);
+        part(body, ball, '#1a1a1a', 0.14, 0.88, -0.06, 0.025, 0.03, 0.025);
+        part(body, ball, '#1a1a1a', 0.14, 0.88, 0.06, 0.025, 0.03, 0.025);
+      }
       scene.add(g);
-      g.userData = { body, parts };
+      g.userData = { body, parts, outfit: o ? o.id : '' };
       return g;
     }
     const meMark = new T.Mesh(new T.ConeGeometry(0.12, 0.22, 12), new T.MeshBasicMaterial({ color: '#ffd84a' }));
@@ -526,7 +545,9 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       const ids = new Set();
       for (const k of w.kids) {
         let g = kids.get(k.id);
-        if (!g || g.userData.col !== k.col) { if (g) scene.remove(g); g = kidModel(k.col); g.userData.col = k.col; kids.set(k.id, g); }
+        // Rebuilt when the kid's colour or outfit changes (a pick mid-round, a friend's arriving).
+        const oid = (k.o && outfitOf(k.o)) ? k.o : '';
+        if (!g || g.userData.col !== k.col || g.userData.outfit !== oid) { if (g) scene.remove(g); g = kidModel(k.col, oid); g.userData.col = k.col; kids.set(k.id, g); }
         poseKid(g, k, rt, clock, w, cut); ids.add(k.id);
       }
       for (const [id, g] of kids) if (!ids.has(id)) { scene.remove(g); kids.delete(id); }
@@ -537,6 +558,9 @@ window.L3D = { failed: false, build() {}, draw() {}, resize() {}, project() { re
       rd.render(scene, cam);
     };
     const v = new T.Vector3();
+    // The outfit each kid is drawn in ('' its own colours), for the tests (v4, #572).
+    L3D.kidOutfit = id => kids.has(id) ? kids.get(id).userData.outfit : null;
+    L3D.kidHead = id => { const g = kids.get(id); let n = 0; if (g) g.userData.body.children.forEach(c => { if (c.isGroup && c.scale.x < 0.2 && c.scale.x > 0.15) c.traverse(m => { if (m.isMesh) n++; }); }); return n; };
     L3D.tilt = i => pieces[i] ? [pieces[i].userData.inner.rotation.x, pieces[i].userData.inner.rotation.z] : null;
     L3D.project = (x, y, z) => {
       v.set(x, y, z).project(cam);

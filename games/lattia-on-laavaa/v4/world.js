@@ -128,7 +128,7 @@ function newWorld(level, players, seed) {
 }
 function newKid(p, i) {
   return {
-    i, id: p.id, name: p.name, kind: p.kind, col: p.col === undefined ? i % KID_COLORS.length : p.col,
+    i, id: p.id, name: p.name, kind: p.kind, col: p.col === undefined ? i % KID_COLORS.length : p.col, o: p.o || '',
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, face: 0, ground: true, gpId: null,
     ix: 0, iz: 0, jump: false, jumpHeld: false, coyote: 0, buf: 0, climbT: 0, climbX: 0, climbY: 0, climbZ: 0, climbs: 0,
     cd: 0, dash: 0, stun: 0, pushedAt: -9, out: false, outRt: -1, fellX: 0, fellZ: 0, shoves: 0, own: 0,
