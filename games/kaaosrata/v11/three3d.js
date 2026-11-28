@@ -2,14 +2,15 @@
 // Kaaosrata drawn in 3D (v10, #493). three.js renders the course, the obstacles and the runners on a
 // WebGL canvas under the game's own 2D canvas, which keeps the HUD, the names, the stick, the jump
 // button and the results. It only reads the game's state (index.html, radat.js) each frame and never
-// changes it. A phone that cannot draw WebGL (K3D.failed) keeps playing on v9's 2D drawing.
+// changes it. A phone that cannot draw WebGL (K3D.failed) keeps playing on v9's 2D drawing, where nobody is dressed,
+// so v11 hides the outfit button there (K3D.fail).
 // The game's x runs across, y up the course and z is height; in three.js that is (x, z, -y).
-window.K3D = { ready: false, failed: false };
+window.K3D = { ready: false, failed: false, fail() { K3D.failed = true; const b = document.getElementById('asu'); if (b) b.hidden = true; } };
 (function () {
   const glc = document.getElementById('g');
   window.K3D_LIB.then(T => {
     let rd;
-    try { rd = new T.WebGLRenderer({ canvas: glc, antialias: true }); } catch (e) { K3D.failed = true; return; }
+    try { rd = new T.WebGLRenderer({ canvas: glc, antialias: true }); } catch (e) { K3D.fail(); return; }
     let ratio = Math.min(window.devicePixelRatio || 1, 1.5);
     rd.setPixelRatio(ratio);
     rd.shadowMap.enabled = true; rd.shadowMap.type = T.PCFSoftShadowMap;
@@ -171,12 +172,44 @@ window.K3D = { ready: false, failed: false };
     const meRing = new T.Mesh(new T.TorusGeometry(0.5, 0.05, 8, 32).rotateX(Math.PI / 2), new T.MeshBasicMaterial({ color: '#ffd166' }));
     scene.add(meRing);
     // A runner's body colour is its own material; the shapes, eyes and shadow are shared and stay.
-    function dropBody(r, o) { scene.remove(o.g, o.sh); o.mat.dispose(); bodies.delete(r); }
+    // v11 (#571): a person wears the 3D games' shared outfit, a figure from lib/asut3d-1 (its materials are the
+    // library's own and stay), as tall as a jellybean; it is built again when the outfit changes.
+    // A figure's few unit shapes are the library's, shared by every figure; the rest (a hair cap, a beanie...) are
+    // made for each one and given back with it. The shared ones are those found in two figures built alike; which of
+    // them a figure uses depends on its outfit (a cone only for Harry's hair, a witch's hat...), so each new outfit is
+    // learned before its first figure, and before any figure is given back (#578's review).
+    const FIG = 0.7;
+    const kitGeo = new Set(), learned = new Set();
+    const geos = fig => { const out = new Set(); fig.traverse(m => { if (m.isMesh) out.add(m.geometry); }); return out; };
+    function freeFigure(fig) { for (const gm of geos(fig)) if (!kitGeo.has(gm)) gm.dispose(); }
+    function newFigure(dress) {
+      if (!learned.has(dress.id)) {
+        learned.add(dress.id);
+        const a = AiPelitAsut3d.figure(T, dress), b = AiPelitAsut3d.figure(T, dress), inB = geos(b);
+        for (const gm of geos(a)) if (inB.has(gm)) kitGeo.add(gm);
+        freeFigure(a); freeFigure(b);
+      }
+      return AiPelitAsut3d.figure(T, dress);
+    }
+    function dropBody(r, o) { scene.remove(o.g, o.sh); if (o.mat) o.mat.dispose(); if (o.fig) freeFigure(o.fig); bodies.delete(r); }
     function bodyOf(r) {
       let o = bodies.get(r);
-      if (o && o.color === r.color) return o;
+      const dress = typeof outfitOf === 'function' && window.AiPelitAsut3d ? outfitOf(r) : null;
+      const key = dress ? 'asu:' + dress.id : r.color;
+      if (o && o.key === key) return o;
       if (o) dropBody(r, o);
       const g = new T.Group(), tilt = new T.Group(); g.add(tilt);
+      if (dress) {
+        const fig = newFigure(dress);
+        fig.scale.setScalar(FIG); fig.rotation.y = Math.PI; // the figure faces +z, a runner -z
+        fig.traverse(m => { if (m.isMesh) m.castShadow = true; });
+        tilt.add(fig);
+        const sh = new T.Mesh(shadowG, shadowM);
+        scene.add(g, sh);
+        o = { g, tilt, sh, eyes: [], mat: null, fig, key, head: 0, J: fig.userData.joints };
+        bodies.set(r, o);
+        return o;
+      }
       const mat = std(r.color, { roughness: 0.4 }), b = new T.Mesh(bodyG, mat); b.position.y = 0.61; b.castShadow = true; tilt.add(b);
       const eyes = [];
       for (const ex of [-0.14, 0.14]) {
@@ -185,10 +218,28 @@ window.K3D = { ready: false, failed: false };
       }
       const sh = new T.Mesh(shadowG, shadowM);
       scene.add(g, sh);
-      o = { g, tilt, sh, eyes, mat, color: r.color, head: 0 };
+      o = { g, tilt, sh, eyes, mat, key, head: 0 };
       bodies.set(r, o);
       return o;
     }
+    // A person's limbs (v11): a run cycle by the distance run (r.ph), legs tucked in the air, arms flung up when
+    // knocked about or falling. A joint's +x turns its limb backward.
+    function pose(J, r, v, down) {
+      const run = down ? Math.min(1, v / 5) : 0, s = Math.sin(r.ph * 1.4) * run;
+      const flail = r.stun > 0 || r.fall > 0;
+      J.legL.rotation.x = down ? s * 0.8 : -0.6; J.legR.rotation.x = down ? -s * 0.8 : -0.2;
+      J.kneeL.rotation.x = down ? Math.max(0, -s) * 0.9 + 0.1 : 0.9; J.kneeR.rotation.x = down ? Math.max(0, s) * 0.9 + 0.1 : 0.5;
+      if (flail) {
+        const w = Math.sin(r.ph * 3 + (r.stun + r.fall) * 25) * 0.4;
+        J.armL.rotation.set(-2.6 + w, 0, -0.3); J.armR.rotation.set(-2.6 - w, 0, 0.3);
+      } else {
+        J.armL.rotation.set(down ? -s * 0.9 : -1.2, 0, -0.08); J.armR.rotation.set(down ? s * 0.9 : -1.2, 0, 0.08);
+      }
+      J.elbL.rotation.x = J.elbR.rotation.x = -0.6 - run * 0.4;
+    }
+    // What each runner drawn wears, by id: an outfit's id, or 'bean' (for the tests and a look in the console).
+    K3D.shapes = () => { const out = []; for (const b of bodies.values()) b.g.traverse(m => { if (m.isMesh) out.push(m.geometry); }); return out; };
+    K3D.looks = () => { const out = {}; for (const [r, b] of bodies) out[r.id] = b.key.startsWith('asu:') ? b.key.slice(4) : 'bean'; return out; };
     function drawRunners(t) {
       const seen = new Set();
       meRing.visible = false;
@@ -206,6 +257,7 @@ window.K3D = { ready: false, failed: false };
         o.tilt.rotation.x = -Math.min(0.25, v * 0.03);
         for (const p of o.eyes) p.scale.set(0.055, r.stun > 0 ? 0.015 : 0.055, 0.055);
         const g = fall ? null : groundAt(r.x, r.y, t, r.z);
+        if (o.J) pose(o.J, r, v, !!g && r.z - g.h < 0.05);
         o.sh.visible = !!g;
         if (g) { o.sh.position.set(r.x, g.h + 0.02, -r.y); o.sh.scale.setScalar(1 / (1 + (r.z - g.h) * 0.4)); }
         if (r === me && !fall && g) { meRing.visible = true; meRing.position.set(r.x, g.h + 0.04, -r.y); }
@@ -279,5 +331,5 @@ window.K3D = { ready: false, failed: false };
       return { x: (v3.x + 1) / 2 * lastW, y: (1 - v3.y) / 2 * lastH };
     };
     K3D.ready = true;
-  }, () => { K3D.failed = true; });
+  }, () => { K3D.fail(); });
 })();

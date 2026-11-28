@@ -19,6 +19,8 @@
   #foe{margin:2px 0 0;font-size:16px;color:#ffc9e8}
   button{font:800 22px system-ui,sans-serif;padding:14px 30px;border:0;border-radius:16px;background:#ff7eb6;color:#3a0626;box-shadow:0 4px 0 #a3255f}
   button:active{transform:translateY(3px);box-shadow:0 1px 0 #a3255f}
+  #asu{font-size:16px;padding:9px 20px;background:#ffd166;color:#4a3000;box-shadow:0 4px 0 #b08a2a}
+  #asu[hidden]{display:none}
   #multi{font-size:18px;padding:12px 22px;background:#8ecae6;color:#0b2a3a;box-shadow:0 4px 0 #3a7894}
   #multi:active{box-shadow:0 1px 0 #3a7894}
   #stats{margin:0;font-size:14px;color:#d6c8f0}
@@ -39,7 +41,8 @@
     .help{grid-area:6/1;margin:0;max-width:340px}
     .help .more{display:none}
     #go{grid-area:1/2/3/3;align-self:end;width:100%}
-    #multi{grid-area:3/2/5/3;align-self:start;width:100%}
+    #multi{grid-area:3/2/4/3;align-self:start;width:100%}
+    #asu{grid-area:4/2/6/3;align-self:start}
   }
 </style>
 </head>
@@ -54,6 +57,7 @@
   <p id="foe"></p>
   <button id="go">Juokse!</button>
   <button id="multi">👥 Pelaa kavereiden kanssa</button>
+  <button id="asu">👕 Asu</button>
   <p id="stats"></p>
   <p class="help">Ohjaa vetämällä peukaloa ruudulla, hyppää oikean alakulman napista.
     <span class="more">Hyppää kuilujen yli ja ylemmille tasoille, ja tähtää laskeutuminen. Väistä korkeat portit ja heilurit.</span>
@@ -65,6 +69,9 @@
 <!-- v5 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
 <script src="../../../lib/aanet-5/aanet.js"></script>
 <script src="../../../lib/sulava-1/sulava.js"></script>
+<!-- v11 (#571): the 3D games' shared outfit (one choice for all of them, ai-pelit:_asut:3d) -->
+<script src="../../../outfits.js" data-game="kaaosrata" data-share="3d"></script>
+<script src="../../../lib/asut3d-1/asut3d.js"></script>
 <script src="radat.js"></script>
 <script>window.K3D_LIB = import('../../../lib/three-r187/three.module.js');</script>
 <script src="three3d.js"></script>
@@ -227,6 +234,16 @@ function runner(id, name, color, kind, bot, skill) {
     ai: { skill: skill || 0.7, k: 0, tx: null, stuck: 0, wander: 0, wx: 0, bar: 0 } };
 }
 let race = null, me = null, texts = [], beep = 0, swing = [];
+
+// ---------- The outfit (v11, #571) ----------
+// One choice for every 3D game; the menu's "👕 Asu" button changes it there too. The people (this phone's runner
+// and each friend) wear it in 3D (three3d.js); the computer's runners stay jellybeans. Without the libraries the
+// button hides and everyone is a jellybean, as in v10. In a room each phone sends its outfit's id (`o`).
+let outfit = window.AiPelitAsut3d ? AiPelitAsut3d.setup({ default: 'punainen', button: 'asu', change(o) { outfit = o; } }) : null;
+if (!outfit || (window.K3D && K3D.failed)) document.getElementById('asu').hidden = true;
+// The outfit a runner wears: mine is the one picked here, a friend's the id their phone sent (the first in the set
+// until it has been heard), a computer runner's none.
+const outfitOf = r => !outfit || r.bot ? null : r === me ? outfit : AiPelitOutfits.get(r.o);
 
 function soloRace() {
   const skill = Math.min(1, 0.3 + 0.08 * (level - 1));
@@ -501,11 +518,15 @@ function unpack(r, a) {
   [r.x, r.y, r.z, r.vx, r.vy, r.vz, r.fin, r.fall, r.cp, r.stun] = a;
   r.best = Math.max(r.best, a[11]);
 }
-function hostState() { return { t: 's', c: course.id, round: race.round, s: AiPelitSulava.now(), ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack) }; }
+function hostState() {
+  return { t: 's', c: course.id, round: race.round, s: AiPelitSulava.now(), ph: race.phase, cd: race.cdT, clock: race.clock, r: race.runners.map(pack),
+    o: race.runners.map(r => r === me ? (outfit ? outfit.id : null) : r.o || null) }; // v11: everyone's outfit
+}
 R.on('message', (m, from) => {
   if (!race || race.mode !== 'net' || m.round !== race.round) return;
   if (R.isHost) {
     const r = race.runners.find(o => o.id === from);
+    if (r && typeof m.o === 'string') r.o = m.o;
     if (m.t === 'p' && r && r.kind === 'net') {
       unpack(r, m.r);
       r.ts = stampOf(m); r.hd = m.r.slice(0, 12).concat([r.ts]);
@@ -520,6 +541,7 @@ R.on('message', (m, from) => {
     if (race.phase === 'cd') race.cdT = m.cd;
     if (m.ph === 'run' && race.phase === 'cd') { race.phase = 'run'; race.clock = m.clock; }
     if (race.phase === 'run' && Math.abs(race.clock - m.clock) > 0.2) race.clock = m.clock;
+    if (Array.isArray(m.o)) m.o.forEach((id, i) => { const r = race.runners[i]; if (r && r !== me && typeof id === 'string') r.o = id; });
     m.r.forEach((a, i) => {
       const r = race.runners[i];
       if (!r) return;
@@ -551,10 +573,16 @@ function hostTick(dt) {
 }
 function guestTick(dt) {
   race.sendT -= dt;
+  // v11: my outfit to the host, every second until the race runs (a message lost on a bad connection is sent again),
+  // and at once whenever it changes; from the start every 'p' message carries it too.
+  me.oT = (me.oT || 0) - dt;
+  if (outfit && race.phase !== 'done' && (me.sentO !== outfit.id || (race.phase !== 'run' && me.oT <= 0))) {
+    me.sentO = outfit.id; me.oT = 1; R.send({ t: 'o', round: race.round, o: outfit.id });
+  }
   const was = me.sentFin;
   if (race.phase === 'run' && (race.sendT <= 0 || (me.fin !== null && !was))) {
     race.sendT = 1 / 12; me.sentFin = me.fin !== null;
-    R.send({ t: 'p', round: race.round, s: AiPelitSulava.now(), r: pack(me) });
+    R.send({ t: 'p', round: race.round, s: AiPelitSulava.now(), r: pack(me), o: outfit ? outfit.id : undefined });
   }
 }
 

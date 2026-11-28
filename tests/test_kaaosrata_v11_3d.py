@@ -6,7 +6,7 @@ from PIL import Image
 
 from conftest import ROOT
 
-URL = 'games/kaaosrata/v10/'
+URL = 'games/kaaosrata/v11/'
 
 
 def open_game(site, context):
@@ -133,7 +133,8 @@ def test_the_race_is_drawn_in_3d_behind_the_runner(site, context):
 
 def test_a_new_race_frees_the_last_races_runner_colours(site, context):
     """Review of #500: every race makes a body material per runner; the runners of a finished race give theirs
-    back to the graphics card (the shared shapes, eyes and shadow stay)."""
+    back to the graphics card (the shared shapes, eyes and shadow stay). v11 (#571): this phone's runner wears the
+    shared 3D outfit, whose materials are the library's own and stay, so the seven jellybeans give theirs back."""
     page = open_game(site, context)
     page.wait_for_function('K3D.ready', timeout=10000)
     page.evaluate('''() => K3D_LIB.then(T => { window.__freed = 0; const d = T.MeshStandardMaterial.prototype.dispose;
@@ -142,8 +143,10 @@ def test_a_new_race_frees_the_last_races_runner_colours(site, context):
     page.wait_for_function("race && race.runners.length === 8", timeout=8000)
     page.wait_for_timeout(300)
     page.evaluate("soloRace()")
-    page.wait_for_function('window.__freed >= 8', timeout=5000)
-    assert page.evaluate('window.__freed') == 8
+    page.wait_for_function('window.__freed >= 7', timeout=5000)
+    page.wait_for_timeout(300)
+    assert page.evaluate('window.__freed') == 7
+    assert page.evaluate("K3D.looks().me") == "punainen"
     assert page.errors == []
 
 
