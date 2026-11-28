@@ -94,9 +94,13 @@ def ski_and_watch(host, run, watch, others):
     if run is not host:
         # Between frames the host keeps the friend's newest spot (ahead of where it last drew them, as they ski on),
         # and each of their spots is drawn a moment back on their clock.
-        host.evaluate("""(me) => { const k = net.skiers[me]; window.__rule = []; window.__back = [];
-          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === k.id) window.__back.push(m.st - k.tr.time); });
-          setInterval(() => { if (window.__zs.length) window.__rule.push([k.z, window.__zs[window.__zs.length - 1][1]]); }, 37); }""", me)
+        # v14 (#570): the check is the newest spot itself, the one the friend's last message brought. v13 asked
+        # for it to be 0.15 m ahead of the drawn one nine times in ten, which a late message (the track then
+        # carries the drawing on up to it, or a little past) failed on this host about one run in three, from
+        # v13's own merge on.
+        host.evaluate("""(me) => { const k = net.skiers[me]; window.__rule = []; window.__back = []; let heard = null;
+          AiPelitRooms.on('message', (m, from) => { if (m.t === 'p' && from === k.id) { heard = m.s[0]; window.__back.push(m.st - k.tr.time); } });
+          setInterval(() => { if (window.__zs.length && heard !== null) window.__rule.push([k.z, window.__zs[window.__zs.length - 1][1], heard]); }, 37); }""", me)
     z0 = run.evaluate("P.z")
     run.evaluate("window.__run = true")
     watch.wait_for_function("window.__zs.length >= 200", timeout=30000)
@@ -105,9 +109,10 @@ def ski_and_watch(host, run, watch, others):
     glides(watch)
     if run is not host:
         rule, back = host.evaluate("[window.__rule, window.__back]")
-        ahead = [kept - drawn for kept, drawn in rule if drawn > z0 + 2 and kept < z0 + 12]
-        assert len(ahead) > 30, rule
-        assert sum(a > 0.15 for a in ahead) > 0.9 * len(ahead), ahead  # the newest spot, not the drawn one
+        moving = [(kept, drawn, heard) for kept, drawn, heard in rule if drawn > z0 + 2 and kept < z0 + 12]
+        assert len(moving) > 30, rule
+        assert all(kept == heard for kept, _, heard in moving), moving  # the newest spot, not the drawn one
+        assert sum(kept != drawn for kept, drawn, _ in moving) > 0.5 * len(moving), moving  # and the drawing lags
         assert len(back) > 15 and all(b > 0.03 for b in back[5:]), back  # drawn at least 30 ms back
     errors = [e for p in (host, *others) for e in p.errors]
     assert not errors, errors
@@ -167,6 +172,10 @@ def test_the_place_on_screen_goes_by_the_newest_spot_not_the_drawn_one(site, bro
     said, like the end does: a friend who has just passed you is ahead at once."""
     host, guest = phones(site, browser)
     me = index(guest)
+    # v14 (#570): the host stands a metre on, so the friend passes them a moment after setting off, while the
+    # drawing is still a moment back. v13's host stood at the start line, and a frame with the friend drawn
+    # exactly there but heard past it only came when the run started early in the friend's send cycle.
+    host.evaluate("P.z = 1")
     host.evaluate("""(i) => { window.__pl = []; const d = window.draw, k = net.skiers[i];
       window.draw = () => { const own = synced(meK()).z; window.__pl.push([k.z, k.zNew ?? k.z, own, livePlace(),
         standings()[0].id === k.id]); d(); }; }""", me)
