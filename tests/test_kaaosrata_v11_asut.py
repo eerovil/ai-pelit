@@ -71,7 +71,36 @@ def test_the_outfit_picked_in_another_3d_game_is_worn_and_followed(site, context
     assert page.errors == []
 
 
-def room(site, browser, outfits):
+def test_a_new_race_gives_back_the_last_figures_own_shapes_and_keeps_the_shared_ones(site, context):
+    """Review of #578: each race builds a new figure; the old one's own shapes (the beanie, the hair cap) are freed,
+    the library's shared unit shapes are not, and the next figure still draws."""
+    context.add_init_script(f"localStorage.setItem('{SHARED}', '\"haalari\"')")
+    page = open_game(site, context)
+    go(page)
+    page.wait_for_function("K3D.looks().me === 'haalari'", timeout=5000)
+    page.evaluate("""() => K3D_LIB.then(T => { window.__gone = new Set(); const d = T.BufferGeometry.prototype.dispose;
+      T.BufferGeometry.prototype.dispose = function () { window.__gone.add(this); return d.call(this); }; })""")
+    page.wait_for_timeout(100)
+    for _ in range(2):
+        page.evaluate("soloRace()")
+        page.wait_for_timeout(300)
+    assert page.evaluate("window.__gone.size") >= 2
+    # Nothing still drawn was given back: no shape of any runner on the course now is among the freed ones.
+    assert page.evaluate("K3D.shapes().filter(g => window.__gone.has(g)).length") == 0
+    assert page.evaluate("K3D.looks().me") == "haalari"
+    assert page.errors == []
+
+
+def test_without_webgl_there_is_no_outfit_button(site, context):
+    """The 2D drawing a phone without WebGL plays on dresses nobody, so the button is not offered there."""
+    context.route("**/three.module.js", lambda route: route.abort())
+    page = open_game(site, context)
+    page.wait_for_function("K3D.failed", timeout=10000)
+    assert not page.locator("#asu").is_visible()
+    assert page.errors == []
+
+
+def room(site, browser, outfits, lose_first_o=False):
     """Phones in a room, each in its own outfit, the race on."""
     site.build(ROOT / "games")
     relay, pages = Relay(), []
@@ -84,6 +113,10 @@ def room(site, browser, outfits):
         page.errors = []
         page.on("pageerror", lambda e, page=page: page.errors.append(str(e)))
         relay.attach(page)
+        if lose_first_o and i:
+            # A guest's connection drops its first outfit message, as a socket down for a moment would.
+            ctx.add_init_script("""addEventListener('load', () => { const send = AiPelitRooms.send.bind(AiPelitRooms); let lost = 0;
+              AiPelitRooms.send = (m, to) => { if (m.t === 'o' && !lost++) return; send(m, to); }; })""")
         page.goto(site.url + URL)
         page.click("#multi")
         pages.append(page)
@@ -118,4 +151,13 @@ def test_friends_see_each_others_outfits(site, browser):
     host.evaluate("AiPelitOutfits.open()")
     host.click("[data-asu=haamu]")
     guest.wait_for_function(f"K3D.looks()['{hid}'] === 'haamu'", timeout=10000)
+    assert all(p.errors == [] for p in pages)
+
+
+def test_a_lost_outfit_message_is_sent_again_before_the_start(site, browser):
+    """Review of #578: a guest's outfit is sent again every second until the race runs, so a message lost on a bad
+    connection still reaches the host during the countdown."""
+    host, guest = pages = room(site, browser, ["vampyyri", "harry"], lose_first_o=True)
+    gid = guest.evaluate("AiPelitRooms.me")
+    host.wait_for_function(f"race.phase !== 'run' && K3D.looks()['{gid}'] === 'harry'", timeout=4000)
     assert all(p.errors == [] for p in pages)

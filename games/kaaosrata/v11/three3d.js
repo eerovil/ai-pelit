@@ -2,14 +2,15 @@
 // Kaaosrata drawn in 3D (v10, #493). three.js renders the course, the obstacles and the runners on a
 // WebGL canvas under the game's own 2D canvas, which keeps the HUD, the names, the stick, the jump
 // button and the results. It only reads the game's state (index.html, radat.js) each frame and never
-// changes it. A phone that cannot draw WebGL (K3D.failed) keeps playing on v9's 2D drawing.
+// changes it. A phone that cannot draw WebGL (K3D.failed) keeps playing on v9's 2D drawing, where nobody is dressed,
+// so v11 hides the outfit button there (K3D.fail).
 // The game's x runs across, y up the course and z is height; in three.js that is (x, z, -y).
-window.K3D = { ready: false, failed: false };
+window.K3D = { ready: false, failed: false, fail() { K3D.failed = true; const b = document.getElementById('asu'); if (b) b.hidden = true; } };
 (function () {
   const glc = document.getElementById('g');
   window.K3D_LIB.then(T => {
     let rd;
-    try { rd = new T.WebGLRenderer({ canvas: glc, antialias: true }); } catch (e) { K3D.failed = true; return; }
+    try { rd = new T.WebGLRenderer({ canvas: glc, antialias: true }); } catch (e) { K3D.fail(); return; }
     let ratio = Math.min(window.devicePixelRatio || 1, 1.5);
     rd.setPixelRatio(ratio);
     rd.shadowMap.enabled = true; rd.shadowMap.type = T.PCFSoftShadowMap;
@@ -173,8 +174,21 @@ window.K3D = { ready: false, failed: false };
     // A runner's body colour is its own material; the shapes, eyes and shadow are shared and stay.
     // v11 (#571): a person wears the 3D games' shared outfit, a figure from lib/asut3d-1 (its materials are the
     // library's own and stay), as tall as a jellybean; it is built again when the outfit changes.
+    // A figure's few unit shapes are the library's, shared by every figure; the rest (a hair cap, a beanie...) are
+    // made for each one and given back with it. The shared ones are those found in two figures built alike.
     const FIG = 0.7;
-    function dropBody(r, o) { scene.remove(o.g, o.sh); if (o.mat) o.mat.dispose(); bodies.delete(r); }
+    let kitGeo = null;
+    const geos = fig => { const out = new Set(); fig.traverse(m => { if (m.isMesh) out.add(m.geometry); }); return out; };
+    function freeFigure(fig) { for (const gm of geos(fig)) if (!kitGeo.has(gm)) gm.dispose(); }
+    function newFigure(dress) {
+      if (!kitGeo) {
+        const a = AiPelitAsut3d.figure(T, dress), b = AiPelitAsut3d.figure(T, dress), inB = geos(b);
+        kitGeo = new Set([...geos(a)].filter(gm => inB.has(gm)));
+        freeFigure(a); freeFigure(b);
+      }
+      return AiPelitAsut3d.figure(T, dress);
+    }
+    function dropBody(r, o) { scene.remove(o.g, o.sh); if (o.mat) o.mat.dispose(); if (o.fig) freeFigure(o.fig); bodies.delete(r); }
     function bodyOf(r) {
       let o = bodies.get(r);
       const dress = typeof outfitOf === 'function' && window.AiPelitAsut3d ? outfitOf(r) : null;
@@ -183,13 +197,13 @@ window.K3D = { ready: false, failed: false };
       if (o) dropBody(r, o);
       const g = new T.Group(), tilt = new T.Group(); g.add(tilt);
       if (dress) {
-        const fig = AiPelitAsut3d.figure(T, dress);
+        const fig = newFigure(dress);
         fig.scale.setScalar(FIG); fig.rotation.y = Math.PI; // the figure faces +z, a runner -z
         fig.traverse(m => { if (m.isMesh) m.castShadow = true; });
         tilt.add(fig);
         const sh = new T.Mesh(shadowG, shadowM);
         scene.add(g, sh);
-        o = { g, tilt, sh, eyes: [], mat: null, key, head: 0, J: fig.userData.joints };
+        o = { g, tilt, sh, eyes: [], mat: null, fig, key, head: 0, J: fig.userData.joints };
         bodies.set(r, o);
         return o;
       }
@@ -221,6 +235,7 @@ window.K3D = { ready: false, failed: false };
       J.elbL.rotation.x = J.elbR.rotation.x = -0.6 - run * 0.4;
     }
     // What each runner drawn wears, by id: an outfit's id, or 'bean' (for the tests and a look in the console).
+    K3D.shapes = () => { const out = []; for (const b of bodies.values()) b.g.traverse(m => { if (m.isMesh) out.push(m.geometry); }); return out; };
     K3D.looks = () => { const out = {}; for (const [r, b] of bodies) out[r.id] = b.key.startsWith('asu:') ? b.key.slice(4) : 'bean'; return out; };
     function drawRunners(t) {
       const seen = new Set();
@@ -313,5 +328,5 @@ window.K3D = { ready: false, failed: false };
       return { x: (v3.x + 1) / 2 * lastW, y: (1 - v3.y) / 2 * lastH };
     };
     K3D.ready = true;
-  }, () => { K3D.failed = true; });
+  }, () => { K3D.fail(); });
 })();
