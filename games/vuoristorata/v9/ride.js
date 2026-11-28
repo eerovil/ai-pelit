@@ -27,6 +27,17 @@ const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const kmh = v => Math.round(v * 3.6);
 
+// ---- The rider's outfit ----
+// v9 (#574): the rider wears the outfit picked in any 3D game (lib/asut3d-1, ai-pelit:_asut:3d);
+// the menu's "👕 Asu" button changes it for every 3D game. A friend's train carries them in their
+// own outfit (its id rides in the room's spots, pack()[13]). Without the libraries the button hides.
+let outfit = window.AiPelitAsut3d ? AiPelitAsut3d.setup({
+  default: 'haalari', button: 'asu',
+  change(o) { outfit = o; window.dispatchEvent(new Event('asu')); },
+}) : null;
+if (!outfit) $('asu').hidden = true;
+const outfitOf = id => (window.AiPelitOutfits && id && AiPelitOutfits.get(id)) || null;
+
 // ---- Saves (rule 5: ai-pelit:vuoristorata:*) ----
 function load(name, d) { try { const v = localStorage.getItem(KEY + name); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 function save(name, v) { try { localStorage.setItem(KEY + name, JSON.stringify(v)); } catch (e) {} }
@@ -668,7 +679,7 @@ let stepAt = null;
 const stamp = () => stepAt ?? netClock();
 const pack = k => [r2(k.s), r2(k.v), k.fin, k.at, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0,
   r2(k.energy ?? 1), k.took || [], r2(k.over || 0), r2(k.check ?? k.s), k.crash || null, k.handbackAck ? 1 : 0,
-  k.kind === 'net' && RM.isHost ? k.ts : null];
+  k.kind === 'net' && RM.isHost ? k.ts : null, k.kind === 'me' ? (outfit ? outfit.id : null) : k.o || null];
 // v7 (#480): [12] is a friend's own stamp (their phone's AiPelitSulava.now() when it sent the spot), sent on by
 // the host as it came; null for the host's own car and the computer's, whose stamp is the message's `st`.
 const stampOf = m => Number.isFinite(m.st) ? m.st : null;
@@ -787,6 +798,7 @@ function guestState(m) {
       const wasCrash = !!k.crash;
       k.s = a[0]; k.v = a[1]; k.fin = a[2]; k.at = a[3];
       k.energy = a[6] ?? 1; k.took = a[7] || []; k.over = a[8] || 0; k.check = a[9] ?? a[0]; k.crash = a[10] || null;
+      if (a[13]) k.o = a[13];
       const own = Number.isFinite(a[12]);
       heardSpot(k, own ? a[12] : stampOf(m), own ? 'f' : 'h', wasCrash);
       return;
@@ -901,6 +913,7 @@ if (RM) {
       if (k.handback && !m.c[11]) return;
       if (k.handback && m.c[0] < k.s - 1) return;
       k.handback = false;
+      if (m.c[13]) k.o = m.c[13];
       // A finish the host has heard stands, whatever a reloaded phone sends after it.
       if (k.fin === null) {
         const wasCrash = !!k.crash;
