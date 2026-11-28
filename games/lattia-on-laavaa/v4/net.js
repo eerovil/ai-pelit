@@ -34,6 +34,8 @@ let netRoom = 0;   // the host's pick of room for friends; 0 is the room picked 
 const r3 = n => Math.round(n * 1000) / 1000;
 const SU = window.AiPelitSulava;
 const stampNow = () => SU ? SU.now() : performance.now() / 1000;
+// An outfit id from another phone: a short string or none (draw3d.js dresses only a known id).
+const outfitStr = v => typeof v === 'string' ? v.slice(0, 40) : '';
 
 // ---- Smooth drawing of the kids other phones move ----
 const tracks = new Map();
@@ -58,11 +60,11 @@ function runsHere(k) {
 
 // ---- The host's snapshot ----
 // A kid as sent: [id, name, col, who (0 phone, 1 computer, 2 taken over), own, stamp, x, y, z,
-// vx, vy, vz, face, outRt, stun, dash, shoves, jumps].
+// vx, vy, vz, face, outRt, stun, dash, shoves, jumps, outfit id ('' none; v4, #572)].
 function pack(k) {
   const rec = net.recs.get(k.id);
   return [k.id, k.name, k.col, rec.kind === 'cpu' ? 1 : rec.drive ? 2 : 0, k.own, r3(k.stamp || 0), r3(k.x), r3(k.y), r3(k.z),
-    r3(k.vx), r3(k.vy), r3(k.vz), r3(k.face), k.out ? r3(k.outRt) : -1, r3(k.stun), r3(k.dash), k.shoves, k.jumps || 0];
+    r3(k.vx), r3(k.vy), r3(k.vz), r3(k.face), k.out ? r3(k.outRt) : -1, r3(k.stun), r3(k.dash), k.shoves, k.jumps || 0, k.o || ''];
 }
 function hostState() {
   const w = world;
@@ -77,7 +79,7 @@ function netStart(s) {
   world = null; me = null; brains = []; result = null; stick = null; jumpPtr = null; seen = null;
   if (s.host && !s.over) {
     const people = s.players.slice(0, MAX_KIDS);
-    const players = people.map((p, i) => ({ id: p.id, name: p.name, kind: p.id === RM.me ? 'me' : 'net', col: i }));
+    const players = people.map((p, i) => ({ id: p.id, name: p.name, kind: p.id === RM.me ? 'me' : 'net', col: i, o: p.id === RM.me ? outfitId() : '' }));
     for (let b = 0; players.length < FILL_TO; b++) players.push({ id: 'cpu' + b, name: CPU_NAMES[b % CPU_NAMES.length], kind: 'cpu', col: players.length });
     world = newWorld(netRoom || roomN, players, (Date.now() % 1e9) >>> 0);
     const lvl = ROOMS[world.level - 1].cpu;
@@ -97,7 +99,7 @@ function guestState(m) {
   if (net.res || !(m.seq > net.lastSeq)) return;   // an older snapshot of this round, overtaken
   net.lastSeq = m.seq;
   if (!world || world.seed !== m.seed || world.level !== m.lv || world.kids.length !== m.kids.length) {
-    world = newWorld(m.lv, m.kids.map(a => ({ id: a[0], name: a[1], col: a[2], kind: a[3] === 1 ? 'cpu' : 'net' })), m.seed);
+    world = newWorld(m.lv, m.kids.map(a => ({ id: a[0], name: a[1], col: a[2], kind: a[3] === 1 ? 'cpu' : 'net', o: outfitStr(a[18]) })), m.seed);
     world.rt = m.rt;
     me = world.kids.find(k => k.id === RM.me) || null;
     net.h = -1;
@@ -114,6 +116,10 @@ function guestState(m) {
     if (!k || k.id !== a[0]) return;
     k.name = a[1]; k.col = a[2]; k.kind = a[3] === 1 ? 'cpu' : 'net';
     const outRt = a[13];
+    // A friend's outfit as the host has it; my own kid wears my pick, here at once. When the host
+    // still has another for mine (a pick lost while away), it is told again, once a second at most.
+    if (k === me && outfitStr(a[18]) !== outfitId() && performance.now() - (net.oT || 0) > 1000) { net.oT = performance.now(); sendOutfit(); }
+    k.o = k === me ? outfitId() : outfitStr(a[18]);
     if (k === me) {
       net.cpuMine = a[3] === 2;
       if (a[4] > net.h || net.cpuMine) {
@@ -176,7 +182,7 @@ function netTick(dt) {
   if (RM.isHost) RM.send(hostState());
   else if (me && net.h >= 0 && !net.cpuMine) {
     RM.send({ t: 'p', round: net.round, h: net.h, s: r3(stampNow()), x: r3(me.x), y: r3(me.y), z: r3(me.z), vx: r3(me.vx), vy: r3(me.vy), vz: r3(me.vz),
-      f: r3(me.face), st: r3(me.stun), da: r3(me.dash), sh: me.shoves, j: me.jumps || 0, o: me.out ? r3(me.outRt) : -1 });
+      f: r3(me.face), st: r3(me.stun), da: r3(me.dash), sh: me.shoves, j: me.jumps || 0, o: me.out ? r3(me.outRt) : -1, w: outfitId() });
   }
 }
 function hostStep(dt, now) {
@@ -205,6 +211,11 @@ function guestStep(dt) {
   if (run.length && w.ph === 'play' && inLava(w, me)) fall(w, me);
 }
 
+// A pick while the computer drives my kid (no spots go then): told to the host on its own (v4).
+function sendOutfit() {
+  if (RM && net && !net.res && !RM.isHost && world) RM.send({ t: 'o', round: net.round, w: outfitId() });
+}
+
 // ---- The host hears a guest ----
 function hostSpot(m, from) {
   const k = world.kids.find(o => o.id === from), rec = net.recs.get(from);
@@ -214,6 +225,7 @@ function hostSpot(m, from) {
   Object.assign(k, { x: clamp(n(m.x), X0, X1), y: n(m.y), z: clamp(n(m.z), Z0, Z1), vx: n(m.vx), vy: n(m.vy), vz: n(m.vz), face: n(m.f), stun: n(m.st), dash: n(m.da) });
   k.shoves = Math.max(k.shoves, Math.floor(n(m.sh))); k.jumps = Math.max(k.jumps || 0, Math.floor(n(m.j)));
   k.stamp = n(m.s);
+  k.o = outfitStr(m.w);   // the guest's outfit, sent on to everyone in the snapshot
   const t = trackOf(k.id);
   if (t) t.push(k.stamp, { x: k.x, z: k.z, y: k.y, f: k.face });
   // The phone's own word that its kid fell, with when: taken as it is (never later than now).
@@ -281,7 +293,8 @@ function roomControls() {
     const css = document.createElement('style');
     css.textContent = '#lol-room{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:2px 0 4px}' +
       '#aipr #lol-room button{font-size:15px;padding:7px 12px;background:#8a3a18;box-shadow:0 3px 0 #5a2008}' +
-      '#aipr #lol-room button.on{background:#ff5a1f;box-shadow:0 3px 0 #a8300a}';
+      '#aipr #lol-room button.on{background:#ff5a1f;box-shadow:0 3px 0 #a8300a}' +
+      '#aipr #lol-asu{font-size:15px;padding:7px 14px;margin:2px 0 4px}';
     document.head.appendChild(css);
     roomEl = document.createElement('div'); roomEl.id = 'lol-room';
     roomEl.addEventListener('click', e => {
@@ -292,7 +305,16 @@ function roomControls() {
       if (n >= 1 && n <= ROOMS.length) netRoom = n;
       roomControls();
     });
-    RM.extra(roomEl);
+    // v4 (#572): the outfit can be changed in the room too; the next snapshot carries it.
+    const box = document.createElement('div');
+    box.appendChild(roomEl);
+    if (outfit && window.AiPelitOutfits) {
+      const ab = document.createElement('button');
+      ab.id = 'lol-asu'; ab.type = 'button'; ab.textContent = '👕 Asu';
+      ab.addEventListener('click', () => AiPelitOutfits.open());
+      box.appendChild(ab);
+    }
+    RM.extra(box);
   }
   const pick = netRoom || roomN;
   if (RM.isHost) roomEl.innerHTML = ROOMS.map((R, i) => `<button data-r="${i + 1}"${i + 1 === pick ? ' class="on"' : ''}>${R.name}</button>`).join('');
@@ -310,6 +332,7 @@ if (RM) {
       if (!world || net.res) return;
       if (m.t === 'p') hostSpot(m, from);
       else if (m.t === 'sh') hostShove(m, from);
+      else if (m.t === 'o') { const k = world.kids.find(o => o.id === from); if (k) k.o = outfitStr(m.w); }
       return;
     }
     if (m.t === 's') guestState(m);
