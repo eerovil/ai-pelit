@@ -17,6 +17,9 @@
 <canvas id="c"></canvas>
 <div id="safe"></div>
 <script src="../../../rooms.js" data-game="hiihto" data-min="2" data-max="6"></script>
+<!-- v14 (#570): the outfit every 3D game shares (#568), and the library that builds its 3D pieces -->
+<script src="../../../outfits.js" data-game="hiihto" data-share="3d"></script>
+<script src="../../../lib/asut3d-1/asut3d.js"></script>
 <!-- v11 (#337): aanet-4, without the crowd sounds (applause, shouting, "ooh", the cheer)
      and with the loudest sounds quieter -->
 <!-- v12 (#355): aanet-5, where the sounds Eero found too loud are softer or swapped for softer ones -->
@@ -480,6 +483,25 @@ const LATE = 60;
 let net = null, lastEnd = null;   // lastEnd: the host's last result, for a phone that reloads after it
 const meK = () => net.skiers.find(k => k.kind === 'me');
 
+// ---- The outfit (v14, #570) ----
+// One choice for every 3D game (lib/asut3d-1, #568): the player's skier wears it, and a pick here is
+// worn in the other 3D games too. In a room each skier carries its phone's outfit id (`o`), and the
+// others are drawn in theirs; the names keep the room's colours. Without the libraries, v13's look.
+let outfit = null;
+if (window.AiPelitAsut3d && window.AiPelitOutfits) {
+  outfit = AiPelitAsut3d.setup({ default: 'haalari', change(o) { outfit = o; if (net) { meK().o = o.id; net.readyT = 0; } } });
+}
+// An outfit as the skier's colours: the coat, the trousers, the mittens and the hat's bobble.
+function outfitLook(of) {
+  return { coat: of.top || '#2f6fd0', pants: of.bottom || '#26324a', hat: of.mitt || of.pipo || of.top || '#ffffff', pom: of.tupsu || of.pipo || '#ffffff', outfit: of };
+}
+// An id this phone does not know (a newer version's costume) is drawn in the room's colour: get()
+// would give the first outfit instead.
+function friendOutfit(k) {
+  const of = k.o && window.AiPelitOutfits ? AiPelitOutfits.get(k.o) : null;
+  return of && of.id === k.o ? of : null;
+}
+
 function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'wax', sendT: 0, readyT: 0, clock: 0, firstFin: null, res: null,
     soloLevel: net ? net.soloLevel : level, adopt: false,
@@ -508,7 +530,8 @@ const r2 = n => Math.round(n * 100) / 100;
 // the host with the spot as the friend sent it; null for the host's own skier and the computer's, whose time is the
 // message's `st`. Every phone draws the others from a track (`tr`), a moment back, gliding between the spots heard.
 const pack = k => [r2(k.z), k.lane, r2(k.v), k.fin, k.wax, k.fall, k.kind === 'cpu' || k.handback ? 1 : 0, k.cpuFin ? 1 : 0, k.at ?? null, k.road || null, k.clog || 0,
-  RM.isHost && k.kind === 'net' ? k.ts : null];
+  RM.isHost && k.kind === 'net' ? k.ts : null, k.o || null];
+// v14 (#570): [12] is the skier's outfit id (null: drawn in the room's colour, as in v13).
 const stampOf = m => Number.isFinite(m.st) ? m.st : null;
 // A spot heard for another phone's skier: into its track, or the track starts again when its clock changes (the
 // computer takes over a friend, or gives them back), as the two clocks cannot be compared.
@@ -525,7 +548,7 @@ function asDrawn() {
 function putBack(kept) { for (const [k, z] of kept) { k.z = z; k.zNew = null; } }
 // The newest spot heard, also while a frame draws the smoothed one: the places on screen go by it, like the rules.
 const newest = k => k.zNew ?? k.z;
-function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; k.road = a[9] ?? null; k.clog = a[10] || 0; }
+function unpack(k, a) { k.z = a[0]; k.lane = a[1]; k.v = a[2]; k.fin = a[3]; k.wax = a[4]; k.fall = a[5]; if (!RM.isHost) k.at = a[8] ?? null; k.road = a[9] ?? null; k.clog = a[10] || 0; if (typeof a[12] === 'string') k.o = a[12]; }
 // Puts a skier at a road step it was sent: the timers start again, the step rhythm is free.
 function roadFrom(p, road, clog, t) { p.road = road || undefined; p.clog = clog || 0; p.roadT = 0; if (road) p.lastKick = t - 1; }
 // The host: a skier's finish, on the race clock, the first time it is seen.
@@ -536,6 +559,7 @@ function arrive(k) {
 }
 const finOrder = k => k.at ?? k.fin;
 function synced(k) {
+  if (k.kind === 'me') k.o = outfit ? outfit.id : null;
   if (k.kind === 'me' && (mode === 'race' || mode === 'done')) { k.z = P.z; k.lane = P.lane; k.v = mode === 'race' ? P.v : 0; k.fall = P.fallT > 0 ? 1 : 0; k.road = P.road || null; k.clog = P.clog || 0; }
   else if (k.kind === 'me') k.clog = P.clog || 0;
   return k;
@@ -576,10 +600,12 @@ function netTick(dt, n) {
     return;
   }
   if (net.phase === 'run') net.clock += dt;
-  // A guest: its wax until the host has it, then its skier ten times a second.
-  if (mode === 'ready' && net.phase === 'wax') {
+  // A guest: its wax until the host has it, then its skier ten times a second. v14 (#570): the
+  // whole wax phase, so the others see its outfit while it still picks, with no wax (-1, which the
+  // host takes as none) until it has picked one.
+  if (net.phase === 'wax') {
     net.readyT -= dt;
-    if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: P.wax }); }
+    if (net.readyT <= 0) { net.readyT = 1; RM.send({ t: 'ready', round: net.round, wax: mode === 'ready' ? P.wax : -1, o: outfit ? outfit.id : null }); }
   }
   if ((mode === 'race' || mode === 'done') && net.sendT <= 0 && !net.res) {
     net.sendT = 0.1; RM.send({ t: 'p', round: net.round, st: AiPelitSulava.now(), s: pack(synced(meK())) });
@@ -702,6 +728,7 @@ if (RM) {
       const k = net.skiers.find(o => o.id === from);
       if (!k || k.kind !== 'net') return;
       if (m.t === 'ready' && k.wax < 0 && m.wax >= 0) k.wax = m.wax;
+      if (m.t === 'ready' && typeof m.o === 'string') k.o = m.o;
       if (m.t === 'p') {
         // Given back by the computer: the phone's own skier counts again once it has caught up.
         if (k.handback && m.s[0] < k.z - 1) return;
@@ -730,7 +757,7 @@ if (RM) {
 
 // ---- Input ----
 const touches = new Map();
-let ui = { wax: [], prev: null, next: null, styles: [], friends: null };
+let ui = { wax: [], prev: null, next: null, styles: [], friends: null, asu: null };
 function vButton() { return LAND ? { x: SAFE_L + 64, y: H - SAFE_B - 64, r: 38 } : { x: 56, y: H - SAFE_B - 62, r: 38 }; }
 // Skating: the left and right push pads, one in the middle of each half of the screen.
 // The rhythm meter, under the hint line.
@@ -745,6 +772,8 @@ function down(id, px, py) {
   if (mode === 'wax') {
     const i = ui.wax.findIndex(r => inRect(r, px, py)), st = ui.styles.find(r => inRect(r, px, py));
     if (i >= 0) chooseWax(i);
+    // v14 (#570): the outfit picker, on a finished tap as the friends button, also in a room.
+    else if (inRect(ui.asu, px, py)) asuTap = id;
     else if (net) return;
     else if (st) setStyle(st.style);
     // The friends button (v5) opens on a finished tap: down and up both on it. On finger-down it
@@ -782,9 +811,11 @@ function move(id, px, py) {
   const dx = px - t.x0, dy = py - t.y0;
   if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy)) { t.swiped = true; steer(dx > 0 ? 1 : -1); }
 }
-let friendsTap = null;
+let friendsTap = null, asuTap = null;
 function up(id, px, py) {
   touches.delete(id);
+  if (asuTap === id && mode === 'wax' && inRect(ui.asu, px, py) && asuOn()) AiPelitOutfits.open();
+  if (asuTap === id) asuTap = null;
   if (friendsTap === id && mode === 'wax' && !net && inRect(ui.friends, px, py) && RM) { RM.open(); roomControls(); }
   if (friendsTap === id) friendsTap = null;
 }
@@ -1195,6 +1226,53 @@ function pose(r, o) {
     if (o.snowy) feet.forEach((f, i) => { const l = r.lumps[i]; l.visible = true; l.position.set(f[0], f[1] + 0.06, f[2] + 0.05); l.scale.setScalar(0.1); });
   }
   if (r.extra) dress(r, o, hip, sh, head, hands, tips);
+  wear(r, o.outfit, hip, sh, head, fa);
+}
+
+// v14 (#570): a skier in an outfit wears its pieces from lib/asut3d-1: the outfit's head (a face
+// with hair or a beanie, a costume's head, the hero mask) in place of the skier's own head and hat,
+// a cape on the back, and the ribs or the stripe on the body. Each rig keeps the pieces it has worn,
+// as rigs pass from skier to skier (`skiers3d()`).
+function wear(r, of, hip, sh, head, fa) {
+  const id = of && window.AiPelitAsut3d ? of.id : '';
+  if (r.wearId !== id) {
+    if (r.wear) for (const p of r.wear.parts) r.root.remove(p);
+    r.wearId = id; r.wear = null;
+    if (id) {
+      const ws = r.wears || (r.wears = new Map());
+      if (!ws.has(id)) {
+        const hd = AiPelitAsut3d.head(THREE, of), cp = AiPelitAsut3d.cape(THREE, of, { w: 0.3, h: 0.62 });
+        const ch = AiPelitAsut3d.torso(THREE, of, { w: 0.36, h: 0.5, round: true });
+        ws.set(id, { id, head: hd, cape: cp, chest: ch, parts: [hd, cp, ch].filter(Boolean) });
+      }
+      r.wear = ws.get(id);
+      // The shadows as the rest of the rig casts them now (`skiers3d()` sets them only when they change).
+      for (const p of r.wear.parts) { r.root.add(p); p.traverse(m => { m.castShadow = !!r.cast; }); }
+    }
+  }
+  // A skier 40 m or more ahead drops the outfit's pieces like its other small parts (v9: an old
+  // phone runs out of time for them) and wears its own head and hat in the outfit's colours.
+  const on = !!r.wear, near = r.fine !== false, full = on && near;
+  r.head.visible = r.hat.visible = r.pom.visible = !full;
+  if (on) r.hair.visible = false;
+  if (r.extra) r.extra.brim.visible = !on && near;
+  if (on) for (const p of r.wear.parts) p.visible = near;
+  if (!full) return;
+  const w = r.wear;
+  w.head.position.set(...head); w.head.scale.setScalar(0.125);
+  w.head.rotation.set(0, 0, -1.4 * fa);
+  // The body's lean forward (the tuck lays it almost flat): the cape and the chest follow it.
+  const dy = sh[1] - hip[1], dz = sh[2] - hip[2], len = Math.hypot(sh[0] - hip[0], dy, dz) || 1;
+  if (w.cape) {
+    w.cape.visible = fa < 0.3;
+    w.cape.position.set(sh[0], sh[1] + 0.03, sh[2] - 0.21);
+    w.cape.rotation.set(Math.asin(clamp(dz / len, -1, 1)) + 0.12, 0, 0);
+  }
+  if (w.chest) {
+    w.chest.position.set((sh[0] + hip[0]) / 2, (sh[1] + hip[1]) / 2, (sh[2] + hip[2]) / 2);
+    w.chest.quaternion.copy(r.body.quaternion);
+    w.chest.scale.set(1, len / 0.5, 1);
+  }
 }
 
 // v9 (#103): the same skier as v7, finer. Bent elbows and knees with round joints, a
@@ -1271,13 +1349,15 @@ function skiers3d() {
     if (r.cast !== cast) { r.cast = cast; r.root.traverse(p => { p.castShadow = cast && !p.userData.small; }); }
     const fine = z - P.z < 40;
     if (r.fine !== fine) { r.fine = fine; for (const p of r.small) p.visible = fine; }
+    if (r.wear && r.extra) r.extra.brim.visible = false;   // v14: the outfit's own head wears no brim
   };
   // The stride swings from one side to the other over 0.32 s after each kick and stays there while
   // gliding, coming back to the middle only when the skier stops kicking (v9, #103).
   const since = P.t - P.lastKick, phP = P.side * -Math.cos(Math.PI * clamp(since / 0.32, 0, 1)) * clamp(1 - (since - 0.8) * 1.5, 0, 1);
   const bobP = since < 0.35 ? Math.sin(Math.PI * since / 0.35) : 0, colP = net ? meK().color : '#1f4fa8';
   const walk = P.road === 'walk' || P.road === 'skison' || P.road === 'clog';
-  want(P, P.z, P.x, { coat: colP, pants: '#16233f', hat: '#ffffff', pom: colP, ph: phP, bob: bobP, tuck: P.hold && !P.vMode && P.fallT <= 0 && !onRoad(P), vee: P.vMode, skate: skating() && !onRoad(P) && !(P.hold && P.fallT <= 0), fall: P.fallT > 0, blink: P.invT > 0 && P.fallT <= 0, noSkis: walk, snowy: P.road === 'clog' });
+  const lookP = outfit ? outfitLook(outfit) : { coat: colP, pants: '#16233f', hat: '#ffffff', pom: colP };
+  want(P, P.z, P.x, { ...lookP, ph: phP, bob: bobP, tuck: P.hold && !P.vMode && P.fallT <= 0 && !onRoad(P), vee: P.vMode, skate: skating() && !onRoad(P) && !(P.hold && P.fallT <= 0), fall: P.fallT > 0, blink: P.invT > 0 && P.fallT <= 0, noSkis: walk, snowy: P.road === 'clog' });
   for (const s of npcs) {
     const ph = Math.sin(s.ph * TAU);
     if (s.kind === 'mummo') want(s, s.z, s.x, { coat: s.coat, pants: '#3a3a4a', hat: s.hat, pom: '#ffffff', ph, granny: true });
@@ -1287,7 +1367,8 @@ function skiers3d() {
   if (net) for (const k of net.skiers) {
     if (k.kind === 'me') continue;
     const ph = Math.sin(k.ph * TAU), sk = skating() && k.fin === null, foot = k.road === 'walk' || k.road === 'skison' || k.road === 'clog';
-    want(k, Math.min(k.z, course.len + 30), k.x + (sk && !foot ? ph * 0.2 : 0), { coat: k.color, pants: '#1d2333', hat: k.color, pom: '#ffffff', ph, skate: sk && !k.road, vee: !skating() && gradeAt(k.z) > 0.075, fall: !!k.fall, noSkis: foot, snowy: k.road === 'clog' });
+    const of = friendOutfit(k), look = of ? outfitLook(of) : { coat: k.color, pants: '#1d2333', hat: k.color, pom: '#ffffff' };
+    want(k, Math.min(k.z, course.len + 30), k.x + (sk && !foot ? ph * 0.2 : 0), { ...look, ph, skate: sk && !k.road, vee: !skating() && gradeAt(k.z) > 0.075, fall: !!k.fall, noSkis: foot, snowy: k.road === 'clog' });
   }
   for (const [obj, r] of V3.rigs) if (!used.has(obj)) { r.root.visible = false; V3.rigs.delete(obj); V3.pool.push(r); }
 }
@@ -1531,20 +1612,31 @@ function pill(r, label, on, col) {
 }
 
 // Before the start: the style (alone), the course and its weather, and the wax for it.
+// The wax screen's top row, `w` wide from `lx`: the styles (alone) and the 👕 Asu button (v14,
+// #570). In a room, the Asu button alone; v13's room screen had no row. Returns the row's bottom
+// (where the title goes, less the gap), or where v13 put it.
+const asuOn = () => !!(outfit && window.AiPelitOutfits);
+function topRow(lx, w, y, solo) {
+  ui.asu = null;
+  const gap = 8, aw = 68, asu = asuOn();
+  if (solo) {
+    const bw = (w - (asu ? aw + gap : 0) - gap) / 2;
+    ui.styles = ['perinteinen', 'luistelu'].map((s, i) => ({ x: lx + i * (bw + gap), y, w: bw, h: 36, style: s }));
+    ui.styles.forEach(r => pill(r, STYLE_NAME[r.style], r.style === style));
+    if (asu) ui.asu = { x: lx + w - aw, y, w: aw, h: 36 };
+  } else if (asu) ui.asu = { x: lx + (w - 110) / 2, y, w: 110, h: 36 };
+  if (ui.asu) pill(ui.asu, '👕 Asu', true, '#c9b6f2');
+  return solo || asu ? y + 36 : y + (LAND ? 18 : 14) - (LAND ? 26 : 28);
+}
 function drawWax() {
   if (LAND) return drawWaxLand();
   const wx = course.weather, solo = !net, S = starsOf(), B = bestsOf(), st = S[level] || 0;
-  const ph = Math.min(H - SAFE_T - SAFE_B - 70, 372 + (st ? 18 : 0) + (solo ? 100 : 0)), pw = Math.min(W - 24, 360);
+  const ph = Math.min(H - SAFE_T - SAFE_B - 70, 372 + (st ? 18 : 0) + (solo ? 100 : asuOn() ? 50 : 0)), pw = Math.min(W - 24, 360);
   const px = (W - pw) / 2, py = SAFE_T + 50 + Math.max(0, (H - SAFE_T - SAFE_B - 70 - ph) / 2);
   panel(px, py, pw, ph);
   let y = py + 14;
   ui.styles = [];
-  if (solo) {
-    const gap = 10, bw = (pw - 32 - gap) / 2;
-    ui.styles = ['perinteinen', 'luistelu'].map((s, i) => ({ x: px + 16 + i * (bw + gap), y, w: bw, h: 36, style: s }));
-    ui.styles.forEach(r => pill(r, STYLE_NAME[r.style], r.style === style));
-    y += 36 + 28;
-  } else y += 14;
+  y = topRow(px + 16, pw - 32, y, solo) + 28;
   ui.prev = solo && level > 1 ? { x: px + 6, y: y - 20, w: 44, h: 40 } : null;
   ui.next = solo && level < maxLevel ? { x: px + pw - 50, y: y - 20, w: 44, h: 40 } : null;
   if (ui.prev) text('‹', px + 28, y, 28, '#ffd45c', 'center', 800);
@@ -1654,12 +1746,7 @@ function drawWaxLand() {
   // Left: the style, the course and its weather.
   let y = py + 14;
   ui.styles = [];
-  if (solo) {
-    const gap = 10, bw = (cw - gap) / 2;
-    ui.styles = ['perinteinen', 'luistelu'].map((s, i) => ({ x: lx + i * (bw + gap), y, w: bw, h: 36, style: s }));
-    ui.styles.forEach(r => pill(r, STYLE_NAME[r.style], r.style === style));
-    y += 36 + 26;
-  } else y += 18;
+  y = topRow(lx, cw, y, solo) + 26;
   ui.prev = solo && level > 1 ? { x: lx - 10, y: y - 20, w: 44, h: 40 } : null;
   ui.next = solo && level < maxLevel ? { x: lx + cw - 34, y: y - 20, w: 44, h: 40 } : null;
   if (ui.prev) text('‹', lx + 12, y, 28, '#ffd45c', 'center', 800);
