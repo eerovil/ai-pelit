@@ -39,10 +39,6 @@ Moved here unchanged from `AGENTS.md` (#558), which keeps a short form and links
   green. Report only the tests its output names, and its `WebGL:` line; run a 2D game's own tests
   separately. A file's name proves nothing either: `tests/test_hiljaiset_aanet.py` holds helpers and
   no test, so see a file collected (`python3 -m pytest --collect-only -q <file>`) before you cite it.
-- For each file the pull request changes (a game by `games/<slug>/`), grep the `## Boxes` sections
-  in `docs/diagrams/` and update every box that names it, before review and not from memory:
-  conditions identical to the code, exception and fallback paths as well as the normal flow, and
-  exact example versions, library paths and file names. Say in the pull request when none applies.
 - So that green verification job and the pull request's CI are the last checks before release:
   the deck merges only when both are green on the same head. A merge to `main` deploys at once
   (#65): the deploy job runs only `npm test` and the build (seconds), then the rooms Worker and
@@ -86,7 +82,7 @@ Moved here unchanged from `AGENTS.md` (#558), which keeps a short form and links
 - There is no `package-lock.json`: run `npm test` in the `node:22` container, never `npm ci`.
   Run the container step once by hand before you queue it.
 - When a game gains hills, trips, boards or a version number, grep `tests/`, `docs/`,
-  `game.json` and the diagrams for the old count, "only" wording and the old version name, and
+  `game.json` for the old count, "only" wording and the old version name, and
   fix them in the same commit.
 - In a browser test, set state, read it and trigger the action in one `page.evaluate` call; after
   a send, wait with `wait_for_function` instead of asserting at once.
@@ -110,6 +106,6 @@ Moved here unchanged from `AGENTS.md` (#558), which keeps a short form and links
 
 - Before editing again after an approval, read the pull request's state: if it merged, branch from
   `origin/main` and never push the deleted branch again.
-- Copy the six `classDef` colour lines of AgentDeck's diagram guide
+- When the owner asked for a diagram, copy the six `classDef` colour lines of AgentDeck's diagram guide
   ("Diagrams" in `GET $AGENTDECK_URL/api/live-prototype/guide`) into the first diagram comment on the issue: the
   files in `docs/diagrams/` hold only the `class` lines.
