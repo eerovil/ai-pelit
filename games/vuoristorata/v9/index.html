@@ -85,7 +85,7 @@
     .screen > :not(.vasen) { grid-column: 2; }
     .screen h1 { font-size: 34px; }
     .screen p { font-size: 15px; max-width: 360px; }
-    #menu h1 { grid-row: 1; } #menu .help { grid-row: 2 / span 3; }
+    #menu h1 { grid-row: 1; } #menu .help { grid-row: 2 / span 4; }  /* v9: span the 👕 Asu row too */
     #loppu-otsikko { grid-row: 1; } #aika { grid-row: 2; } #tahdet { grid-row: 3; } #loppu-teksti { grid-row: 4; } #tulokset { grid-row: 2 / span 3; }
     .nappi { width: 92px; height: 92px; }
     #ohjaimet { bottom: calc(env(safe-area-inset-bottom) + 14px); }
@@ -406,7 +406,7 @@ if (renderer) {
   }
   function drop(g) {
     scene.remove(g);
-    g.traverse(m => { if (m.material && m.userData.own) m.material.dispose(); });
+    g.traverse(m => { if (m.material && m.material.userData.own) m.material.dispose(); });
   }
   function trainFor(k, o) {
     const id = o ? o.id || null : null;
@@ -441,6 +441,9 @@ if (renderer) {
   function place(dt) {
     const car = game.car;
     if (game.mode === 'crash') {
+      // A crash heard while still in the countdown: back to the seat's view, my rider's train hidden.
+      if (trains.has('me')) trains.get('me').visible = false;
+      front.visible = true;
       // Off the track: flying on along the way it went, falling and tumbling, into a white-out.
       const t = game.crashT, f = game.crashFrom;
       frameAt(f.s);
