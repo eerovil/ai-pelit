@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pingis</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1c2a44;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,sans-serif;color:#fff}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+  #g{pointer-events:none}
+  #safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  .screen{position:fixed;top:0;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 52px) calc(env(safe-area-inset-right,0px) + 18px) calc(env(safe-area-inset-bottom,0px) + 18px) calc(env(safe-area-inset-left,0px) + 18px);
+    box-sizing:border-box;background:linear-gradient(rgba(10,20,44,.7),rgba(10,20,44,.3) 40%,rgba(10,20,44,.74))}
+  .screen[hidden]{display:none}
+  h1{margin:0;font-size:42px;font-weight:900;letter-spacing:.5px;text-shadow:0 3px 0 #b3261e,0 6px 14px rgba(0,0,0,.4)}
+  .sub{margin:-4px 0 4px;font-size:14px;opacity:.92;text-align:center;max-width:320px;line-height:1.35}
+  .col{display:flex;flex-direction:column;gap:9px;align-items:stretch;width:100%;max-width:330px}
+  button{font:700 17px system-ui,sans-serif;border:0;border-radius:14px;padding:13px 16px;color:#fff;background:rgba(255,255,255,.16);touch-action:manipulation}
+  button.big{background:#e0283a;font-size:21px;padding:15px;box-shadow:0 4px 0 #9a1424}
+  button.lvl{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;padding:10px 14px}
+  button.lvl small{font-weight:500;font-size:13px;opacity:.85;text-align:right}
+  button.lvl.on{background:rgba(255,166,61,.3);outline:2px solid #ffa63d}
+  #endTitle{font-size:34px;font-weight:900;margin:0;text-align:center}
+  #endScore{font-size:46px;font-weight:900;margin:0;text-align:center;letter-spacing:2px}
+  #endNote{margin:0;font-size:16px;font-weight:700;color:#ffd84a;text-align:center}
+  body.land .screen{flex-direction:row;flex-wrap:wrap;align-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 12px);gap:8px 28px}
+  body.land .screen>.head{flex:0 0 280px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  body.land h1{font-size:34px}
+  body.land #levels{gap:5px}
+  body.land button.lvl{padding:6px 12px}
+  body.land button.big{padding:11px}
+  body.land .col{gap:6px}
+  body.land #menu .col button:not(.lvl){padding:9px 14px}
+  /* v3 (#573): the menu sits low, so my player in the outfit shows above it */
+  #menu{justify-content:flex-end}
+  body.land #menu{justify-content:flex-end;align-content:center}
+  #pause{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);width:48px;height:48px;padding:0;
+    border-radius:14px;background:rgba(10,20,40,.6);font-size:20px;line-height:48px;text-align:center;z-index:5}
+  #pause[hidden]{display:none}
+  #pauseTitle{font-size:34px;font-weight:900;margin:0;text-align:center}
+  #pauseScore{font-size:20px;font-weight:700;margin:0;text-align:center;opacity:.92}
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+<div id="menu" class="screen" hidden>
+  <div class="head">
+    <h1>Pingis</h1>
+    <p class="sub">Maila seuraa sormea. Liikuta se pallon eteen: nopea veto eteenpäin lyö kovaa, sivuttain veto kääntää suuntaa. Yksitoista pistettä voittaa, kahden pisteen erolla.</p>
+  </div>
+  <div class="col">
+    <div id="levels" class="col"></div>
+    <button id="go" class="big">Pelaa!</button>
+    <button id="friends">👥 Pelaa kavereiden kanssa</button>
+    <button id="asu">👕 Asu</button>
+  </div>
+</div>
+<div id="end" class="screen" hidden>
+  <div class="head">
+    <p id="endTitle"></p>
+    <p id="endScore"></p>
+    <p id="endNote"></p>
+  </div>
+  <div class="col">
+    <button id="again" class="big">Uusi peli</button>
+    <button id="toMenu">Valikkoon</button>
+  </div>
+</div>
+<button id="pause" hidden aria-label="Tauko">⏸</button>
+<div id="paused" class="screen" hidden>
+  <div class="head">
+    <p id="pauseTitle">Tauko</p>
+    <p id="pauseScore"></p>
+  </div>
+  <div class="col">
+    <button id="resume" class="big">Jatka peliä</button>
+    <button id="quit">Lopeta peli</button>
+  </div>
+</div>
+<script src="../../../outfits.js" data-game="pingis" data-share="3d"></script>
+<script src="../../../lib/asut3d-1/asut3d.js"></script>
+<script src="../../../rooms.js" data-game="pingis" data-min="2" data-max="2"></script>
+<script src="../../../lib/aanet-5/aanet.js"></script>
+<script src="../../../lib/sulava-1/sulava.js"></script>
+<script src="world.js"></script>
+<script src="ai.js"></script>
+<script src="draw3d.js"></script>
+<script src="ui.js"></script>
+<script src="net.js"></script>
+<script type="module">
+import('../../../lib/three-r187/three.module.js').then(m => {
+  try { init3d(m); } catch (e) { no3d = true; }
+  wake();
+}, () => { no3d = true; wake(); });
+</script>
+<script src="../../../back.js"></script>
+</body>
+</html>

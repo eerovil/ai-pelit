@@ -23,6 +23,13 @@
       "note": "Uusi Koko talo: yksi pitkä kierros portaita ylös yläkertaan ja katolle, ja kun talo on laavan alla, ajelehtivien tavaroiden päällä.",
       "request": "Lattia on laavaa: voisi jatkua rappusia ylös yläkertaan ja sitte katolle ja sitten jotain ohikulkevia ajelehtevia juttuja",
       "issue": "eerovil/ai-pelit#526"
+    },
+    {
+      "n": 4,
+      "date": "2026-11-28",
+      "note": "Yhteinen 3D-asu: hyppijä pukeutuu samaan asuun kuin muissa 3D-peleissä, 👕 Asu -napista vaihtaen, ja kaverihuoneessa jokainen näkyy omassa asussaan.",
+      "request": "Lattia on laavaa v4 (lattia-on-laavaa): yhteinen 3D-asu\n\nYhteinen 3D-asu myös tähän peliin, samalla tavalla kuin Seittisankari v6:ssa ja Pulkkamäki v7:ssä (#568).\n\n- Pelaajan hyppijä pukeutuu samaan asuun, joka on valittu muissa 3D-peleissä (yksi valinta kaikille 3D-peleille, `ai-pelit:_asut:3d`).\n- Pelissä on 👕 Asu -nappi, josta asun voi vaihtaa; vaihto näkyy myös muissa 3D-peleissä.\n- Kaverihuoneessa muut näkevät kunkin pelaajan oman asun.\n- Käytä jaettua kirjastoa `public/lib/asut3d-1/` (ohje: docs/agents/3d-games.md, \"Outfits in a 3D game\").",
+      "issue": "eerovil/ai-pelit#572"
     }
   ]
 }

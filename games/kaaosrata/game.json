@@ -72,6 +72,13 @@
       "note": "Peli on nyt 3D:nä kamera juoksijan takana, ja kaikilla radoilla on korkeuseroja: rampit, askelmat, pudotukset ja nousevat hyppykivet; radoilla on uudet ennätykset ja tuloslistat.",
       "request": "Kaaosrata muutetaan 3d. Korkeuserojakin voidaan tehdä kenttiin. Valittu: kamera juoksijan takana ja yläpuolella, ohjaus ennallaan; korkeuserot kaikille neljälle radalle uusin ennätyksin ja tuloslistoin; rampit, askelmat, pudotukset ja nousevat hyppykivet.",
       "issue": "eerovil/ai-pelit#493"
+    },
+    {
+      "n": 11,
+      "date": "2026-11-28",
+      "note": "Juoksija pukeutuu samaan asuun kuin muissa 3D-peleissä, 👕 Asu -napista voi vaihtaa asun, ja kaverit näkevät toistensa asut.",
+      "request": "Yhteinen 3D-asu myös tähän peliin, samalla tavalla kuin Seittisankari v6:ssa ja Pulkkamäki v7:ssä (#568). Pelaajan juoksija pukeutuu samaan asuun, joka on valittu muissa 3D-peleissä (yksi valinta kaikille 3D-peleille, ai-pelit:_asut:3d). Pelissä on 👕 Asu -nappi, josta asun voi vaihtaa; vaihto näkyy myös muissa 3D-peleissä. Kaverihuoneessa muut näkevät kunkin pelaajan oman asun. Käytä jaettua kirjastoa public/lib/asut3d-1/.",
+      "issue": "eerovil/ai-pelit#571"
     }
   ]
 }

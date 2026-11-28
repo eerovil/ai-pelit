@@ -16,6 +16,13 @@
       "note": "Pelin aikana oikean yläkulman ⏸-napista pääsee tauolle, ja sieltä pelin voi lopettaa kesken.",
       "request": "Pingis: anna lopettaa peli kesken. Lisää moninpeli",
       "issue": "eerovil/ai-pelit#531"
+    },
+    {
+      "n": 3,
+      "date": "2026-11-28",
+      "note": "Pelaajat pukeutuvat 3D-pelien yhteiseen asuun, jonka voi vaihtaa valikon 👕 Asu -napista; kaverihuoneessa kumpikin näkee toisen oman asun.",
+      "request": "Pingis v3 (pingis): yhteinen 3D-asu\n\nYhteinen 3D-asu myös tähän peliin, samalla tavalla kuin Seittisankari v6:ssa ja Pulkkamäki v7:ssä (#568).\n\n- Pelaajan pelaaja pukeutuu samaan asuun, joka on valittu muissa 3D-peleissä (yksi valinta kaikille 3D-peleille, `ai-pelit:_asut:3d`).\n- Pelissä on 👕 Asu -nappi, josta asun voi vaihtaa; vaihto näkyy myös muissa 3D-peleissä.\n- Kaverihuoneessa muut näkevät kunkin pelaajan oman asun.\n- Käytä jaettua kirjastoa `public/lib/asut3d-1/` (ohje: docs/agents/3d-games.md, \"Outfits in a 3D game\").",
+      "issue": "eerovil/ai-pelit#573"
     }
   ]
 }
