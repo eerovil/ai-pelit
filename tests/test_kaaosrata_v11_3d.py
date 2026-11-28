@@ -6,7 +6,7 @@ from PIL import Image
 
 from conftest import ROOT
 
-URL = 'games/kaaosrata/v10/'
+URL = 'games/kaaosrata/v11/'
 
 
 def open_game(site, context):

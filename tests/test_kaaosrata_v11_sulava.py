@@ -10,7 +10,7 @@ import pytest
 from conftest import ROOT
 from test_rooms_lib import Relay
 
-URL = "games/kaaosrata/v10/"
+URL = "games/kaaosrata/v11/"
 
 # These phones draw in 2D (each test aborts three.module.js), so they need not run with the 3D tests, one game at a
 # time on the host (`alone`), where their timing failed beside the other 3D files. A games marker keeps conftest from
