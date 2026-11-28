@@ -223,6 +223,7 @@ function netTick(dt) {
     const o = outfit ? outfit.id : undefined;
     if (net.host) RM.send({ t: 'b', round: net.round, st, o, a: [r3(b0.x), r3(b0.z), r3(b1.x), r3(b1.z)] });
     else if (mine && !net.stale) RM.send({ t: 'b', round: net.round, st, o, a: [r3(b1.x), r3(b1.z)] });
+    else RM.send({ t: 'b', round: net.round, st, o });   // the computer plays my bat: still my outfit
   }
 }
 

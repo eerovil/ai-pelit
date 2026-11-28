@@ -62,3 +62,23 @@ def test_in_a_room_each_phone_sees_the_other_players_own_outfit(phones):
     host.click("[data-asu=harry]")
     guest.wait_for_function("V3.figs[0].id === 'harry'", timeout=8000)
     assert host.errors == [] and guest.errors == []
+
+
+def test_while_the_computer_plays_the_guests_bat_the_guests_pick_still_reaches_the_host(phones):
+    # Helper check of #580: a guest whose end the computer plays sends no bat, but its outfit still goes.
+    host, guest = room(phones)
+    guest.evaluate("net.g = 'c'")
+    guest.evaluate(f"localStorage.setItem('{SHARED}', '\"luuranko\"'); document.dispatchEvent(new Event('visibilitychange'))")
+    host.wait_for_function("net.foeO === 'luuranko'", timeout=8000)
+    assert host.errors == [] and guest.errors == []
+
+
+def test_the_menu_poses_my_player_at_the_rest_spot_after_a_game(site, context):
+    # Helper check of #580: the last game's bat is left where it was; the menu figure ignores it.
+    page = open_game(site, context)
+    go(page)
+    page.evaluate("bats[0].x = 0.7; bats[0].y = 0.6; showMenu()")
+    page.wait_for_function("V3.menu && V3.figs[0].g.visible")
+    x = page.evaluate("V3.figs[0].g.position.x")
+    assert abs(x - (0 + 0.33) * 0.85) < 1e-6
+    assert page.errors == []

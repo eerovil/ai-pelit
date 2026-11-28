@@ -396,7 +396,8 @@ function scene() {
   }
   // In the menu the camera looks from the far end at my own player, so the outfit shows (#573).
   const menu = mode === 'menu';
-  return { menu, view: menu ? 1 - view : view, bats: bats || [{ x: 0, y: 0.15, z: HL + 0.4 }, { x: 0, y: 0.15, z: -HL - 0.4 }], ball, moving, outfits: outfitsNow() };
+  // The menu poses my player at the rest spot, not where the last game's bat was left.
+  return { menu, view: menu ? 1 - view : view, bats: (!menu && bats) || [{ x: 0, y: 0.15, z: HL + 0.4 }, { x: 0, y: 0.15, z: -HL - 0.4 }], ball, moving, outfits: outfitsNow() };
 }
 function draw(dt) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
