@@ -164,3 +164,15 @@ def test_in_a_room_each_phone_sees_every_skier_in_their_own_outfit(site, browser
         assert friend(watch, host) == "liila"
     errors = [e for p in (host, guest, third) for e in p.errors]
     assert not errors, errors
+
+
+def test_a_picked_outfit_casts_shadows_and_an_unknown_friend_id_keeps_the_room_colour(site, context):
+    page = open_game(site, context)
+    page.wait_for_function("typeof V3 === 'object' && V3 && V3.scene")
+    page.evaluate("draw()")
+    # Picked after the rig was built: the new pieces cast shadows like the rest of the near skier.
+    page.evaluate("localStorage.setItem('ai-pelit:_asut:3d', '\"vampyyri\"'); document.dispatchEvent(new Event('visibilitychange'))")
+    assert page.evaluate(RIG % "P") == "vampyyri"
+    assert page.evaluate("(() => { const w = V3.rigs.get(P).wear; let all = true; w.parts.forEach(p => p.traverse(m => { if (m.isMesh && !m.castShadow) all = false; })); return all; })()")
+    assert page.evaluate("[friendOutfit({ o: 'ei-tallaista' }), friendOutfit({ o: null }), friendOutfit({ o: 'harry' }).id]") == [None, None, "harry"]
+    assert page.errors == []

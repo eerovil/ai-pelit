@@ -495,7 +495,12 @@ if (window.AiPelitAsut3d && window.AiPelitOutfits) {
 function outfitLook(of) {
   return { coat: of.top || '#2f6fd0', pants: of.bottom || '#26324a', hat: of.mitt || of.pipo || of.top || '#ffffff', pom: of.tupsu || of.pipo || '#ffffff', outfit: of };
 }
-const friendOutfit = k => (k.o && window.AiPelitOutfits && AiPelitOutfits.get(k.o)) || null;
+// An id this phone does not know (a newer version's costume) is drawn in the room's colour: get()
+// would give the first outfit instead.
+function friendOutfit(k) {
+  const of = k.o && window.AiPelitOutfits ? AiPelitOutfits.get(k.o) : null;
+  return of && of.id === k.o ? of : null;
+}
 
 function netStart(s) {
   net = { round: s.round, cfg: null, phase: 'wax', sendT: 0, readyT: 0, clock: 0, firstFin: null, res: null,
@@ -1239,7 +1244,8 @@ function wear(r, of, hip, sh, head, fa) {
         ws.set(id, { id, head: hd, cape: cp, chest: ch, parts: [hd, cp, ch].filter(Boolean) });
       }
       r.wear = ws.get(id);
-      for (const p of r.wear.parts) r.root.add(p);
+      // The shadows as the rest of the rig casts them now (`skiers3d()` sets them only when they change).
+      for (const p of r.wear.parts) { r.root.add(p); p.traverse(m => { m.castShadow = !!r.cast; }); }
     }
   }
   const on = !!r.wear;
