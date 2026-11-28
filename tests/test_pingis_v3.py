@@ -4,7 +4,7 @@ import shutil
 
 from conftest import ROOT, turn
 
-URL = "games/pingis/v2/"
+URL = "games/pingis/v3/"
 KEY = "ai-pelit:pingis:"
 TOUCH = """([t, x, y]) => document.getElementById('c').dispatchEvent(new PointerEvent(t,
   { pointerId: 9, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))"""
