@@ -151,7 +151,23 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
 
     // ---- The hero (and friends' heroes): hoodie, mask, white gloves; built once per colour ----
     // A robber (v4, #561) is the same body in a striped shirt, a face with a black eye mask and a beanie.
-    function makeHero(col, robber) {
+    // v6 (#568): given an outfit instead of a colour, the hero is the shared person in that outfit
+    // (lib/asut3d-1, the same joints); without the library it stays the masked hero in its top colour.
+    function heroBits(g) {
+      const shadow = new T.Mesh(new T.CircleGeometry(0.5, 20), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.3, depthWrite: false }));
+      shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
+      const web = new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3()]), new T.LineBasicMaterial({ color: '#ffffff' }));
+      web.frustumCulled = false; scene.add(web);
+      scene.add(g);
+      return { shadow, web };
+    }
+    function makeHero(look, robber) {
+      if (look && typeof look === 'object' && !look.isMaterial) {
+        if (!window.AiPelitAsut3d) return makeHero(look.top || '#1fb5a8');
+        const g = AiPelitAsut3d.figure(T, look), J = g.userData.joints;
+        return Object.assign({ g, body: J.body, P: J, phase: 0, tgt: {}, look: look.id }, heroBits(g));
+      }
+      const col = look;
       const g = new T.Group(), body = new T.Group(); g.add(body);
       const P = {};
       part(body, box, col, 0, 1.12, 0, 0.5, 0.62, 0.3);
@@ -177,14 +193,18 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
         const kn = joint(hip, 0, -0.42); part(kn, box, '#26324a', 0, -0.2, 0, 0.18, 0.42, 0.2); part(kn, box, '#f4f4f4', 0, -0.42, 0.05, 0.19, 0.08, 0.3);
         P['leg' + k] = hip; P['knee' + k] = kn;
       }
-      const shadow = new T.Mesh(new T.CircleGeometry(0.5, 20), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.3, depthWrite: false }));
-      shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
-      const web = new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3()]), new T.LineBasicMaterial({ color: '#ffffff' }));
-      web.frustumCulled = false; scene.add(web);
-      scene.add(g);
-      return { g, body, P, shadow, web, phase: 0, tgt: {} };
+      return Object.assign({ g, body, P, phase: 0, tgt: {}, look: col }, heroBits(g));
+    }
+    // What a hero is built from (an outfit's id, or a colour), and taking a built one away.
+    const lookOf = o => (o && typeof o === 'object' && !o.isMaterial ? o.id : o);
+    function dropHero(m) {
+      scene.remove(m.g, m.shadow, m.web);
+      if (m.cocoon) scene.remove(m.cocoon);
+      m.web.geometry.dispose();
     }
     const heroes = new Map();
+    // What each built hero wears, by player id (the tests read it).
+    L3D.looks = () => Object.fromEntries([...heroes, ...cutM].map(([id, m]) => [id, m.look]));
     const up = new T.Vector3(0, 1, 0), tmpA = new T.Vector3(), tmpB = new T.Vector3(), tmpC = new T.Vector3(), basis = new T.Matrix4();
     const JOINTS = ['armL', 'armR', 'elbL', 'elbR', 'legL', 'legR', 'kneeL', 'kneeR'];
     // The pose: a target angle (x, y, z) for each joint; the joints turn toward it, so a change of
@@ -398,9 +418,11 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       const seen = new Set();
       for (const a of c ? c.actors : []) {
         let m = cutM.get(a.id);
+        // The hero of a cutscene wears the outfit (v6): rebuilt when it was picked since.
+        if (m && !a.heli && m.look !== lookOf(a.o || a.col)) { dropHero(m); cutM.delete(a.id); m = null; }
         if (!m) {
           if (a.heli) { m = makeHeli('#15151c'); m.g.scale.setScalar(1.5); scene.add(m.g); }
-          else { m = makeHero(a.col); m.cocoon = cocoon(); }
+          else { m = makeHero(a.o || a.col); m.cocoon = cocoon(); }
           cutM.set(a.id, m);
         }
         seen.add(a.id);
@@ -453,11 +475,13 @@ window.L3D = { failed: false, ready: false, draw() {}, resize() {}, project() { 
       return [(pv.x + 1) / 2 * glc.clientWidth, (1 - pv.y) / 2 * glc.clientHeight];
     };
     L3D.draw = (s, dt) => {
-      // s = { w, hero, heroes: [{h, col, id}], cam, playing }
+      // s = { w, hero, heroes: [{h, col, o, id}], cam, playing }; o: the hero's outfit (v6)
       const seen = new Set();
       for (const o of s.heroes) {
         let m = heroes.get(o.id);
-        if (!m) { m = makeHero(o.col); heroes.set(o.id, m); }
+        // One hero per player (v6, #568): a player who picked another outfit gets theirs rebuilt.
+        if (m && m.look !== lookOf(o.o || o.col)) { dropHero(m); heroes.delete(o.id); m = null; }
+        if (!m) { m = makeHero(o.o || o.col); heroes.set(o.id, m); }
         poseHero(m, o.h, dt); seen.add(o.id);
       }
       for (const [id, m] of heroes) if (!seen.has(id)) { m.g.visible = false; m.shadow.visible = false; m.web.visible = false; }

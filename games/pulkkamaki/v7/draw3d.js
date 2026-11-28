@@ -485,14 +485,22 @@ function makeRig(o) {
     P.arms.push(arm);
   }
   P.head = new THREE.Group(); P.head.position.y = 0.72; P.torso.add(P.head);
-  dressHead(P.head, o, mat);
+  // v7 (#568): the shared 3D outfit pieces (lib/asut3d-1): every costume's head, a cape, the
+  // skeleton's ribs. They face +z and the rider faces -z. Without the library, v6's own head.
+  if (window.AiPelitAsut3d) {
+    const hd = AiPelitAsut3d.head(THREE, o); hd.scale.setScalar(0.15); hd.rotation.y = Math.PI; P.head.add(hd);
+    const cp = AiPelitAsut3d.cape(THREE, o, { w: 0.34, h: 0.5 });
+    if (cp) { cp.position.set(0, 0.56, 0.2); cp.rotation.x = -0.15; P.torso.add(cp); }
+    if (o.bones) { const ch = AiPelitAsut3d.torso(THREE, o, { w: 0.4, h: 0.55, round: true }); ch.rotation.y = Math.PI; ch.position.y = 0.3; P.torso.add(ch); }
+  } else dressHead(P.head, o, mat);
   rig.userData = { pivot, lean, sled, rider, P, outfit: o.id };
   // A soft dark shadow under the sled, on the snow, so the height of a jump shows.
   const sh = new THREE.Mesh(new THREE.CircleGeometry(0.75, 16), new THREE.MeshBasicMaterial({ color: 0x0a1030, transparent: true, opacity: 0.35, depthWrite: false }));
   sh.rotation.x = -Math.PI / 2; rig.userData.shadow = sh;
   return rig;
 }
-// The head: a face and a beanie, or the costume's own (the Christmas costumes, #473).
+// The head: a face and a beanie, or the costume's own (the Christmas costumes, #473). From v7 only
+// when lib/asut3d-1 did not load.
 function dressHead(h, o, mat) {
   const face = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 9), mat(o.skin || '#f0c8a0')); h.add(face);
   const eye = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
